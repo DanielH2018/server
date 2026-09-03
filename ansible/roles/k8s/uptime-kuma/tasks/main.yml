@@ -22,6 +22,36 @@
     volume_claim_storage_class: "{{ uptime_kuma_k8s_storage_class }}"
     volume_claim_size: "{{ uptime_kuma_k8s_autokuma_size }}"
 
+# The AutoKuma id (the declaration's filename) is what the status-page group rules are written
+# against, and it is invisible over Kuma's API — `monitor list` returns display names and numeric
+# ids, and the id-to-name map lives in AutoKuma's own SQLite on an RWO PVC. Rendering the
+# declarations here is the only place both halves exist at once.
+#
+# no_log because the rendered declarations carry every push token, the Discord webhook and the
+# SMTP password. Only the id and the display name reach the ConfigMap.
+- name: Read the AutoKuma declarations back as data
+  tags: [deploy]
+  no_log: true
+  ansible.builtin.set_fact:
+    kuma_declarations: >-
+      {{ dict(files.keys() | map('regex_replace', '\.json$', '') | list
+              | zip(files.values() | map('from_json') | list)) }}
+  vars:
+    files: >-
+      {{ (lookup('template', playbook_dir + '/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2')
+          | from_yaml).stringData }}
+
+# The index is built by parsing a render, so a change to how that template is shaped could leave
+# it EMPTY — and an empty index renders a valid ConfigMap, applies cleanly, and gives the sync a
+# page with no monitors on it. A census that finds nothing has to fail here rather than deploy.
+- name: Check the declaration index is populated
+  tags: [deploy]
+  ansible.builtin.assert:
+    that: kuma_declarations | length > 50
+    fail_msg: >-
+      parsed only {{ kuma_declarations | length }} AutoKuma declarations out of
+      static-monitors.yaml.j2; the status page would be rendered from an empty index
+
 - name: Deploy uptime-kuma to the cluster
   ansible.builtin.include_role:
     name: k8s/manifests
@@ -32,6 +62,8 @@
       - deployment.yaml
       - service.yaml
       - ingressroute.yaml
+      - status-page-sync-configmap.yaml
+      - status-page-sync-cronjob.yaml
     manifests_secret_files:
       - secret.yaml
       - static-monitors.yaml

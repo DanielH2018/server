@@ -459,3 +459,15 @@ stringData:
     {"type": "push", "name": "Discord Delivery", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_discord_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
   arr-autoblock.json: |
     {"type": "push", "name": "Arr Auto-Block", "interval": 600, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ arr_autoblock_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+{# Deadman for the status-page-sync CronJob in this role — the job that owns the /status/
+   containers group list. Nothing else watches a k8s Job: monitor-bridge's cluster checks
+   cover Deployments and DaemonSets only, so without this tile a sync that started failing
+   would leave the page frozen at its last good grouping with every other signal green.
+   INTERVAL IS 2x THE CRON, not chosen: kuma_status_page_sync_schedule runs every 15 min, so
+   1800s tolerates exactly one missed run before paging. Move both together.
+   The push lands at the END of the job and on BOTH paths — a run that finds nothing to change
+   is a healthy run, and the common case. #}
+{% if kuma_status_page_sync_push_token | default('') %}
+  status-page-sync.json: |
+    {"type": "push", "name": "Status Page Sync", "interval": 1800, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ kuma_status_page_sync_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+{% endif %}

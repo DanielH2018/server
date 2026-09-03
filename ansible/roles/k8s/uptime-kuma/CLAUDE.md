@@ -62,3 +62,43 @@ for AutoKuma's debug diff to find it — that prints the whole entity, so for th
 it writes the Discord webhook and the SMTP password into Loki. Both sides' source at their
 pinned versions answered it with nothing logged.
 `test_notification_configs_declare_apply_existing` guards the key.
+
+## The status page's groups are synced by a CronJob, not by AutoKuma
+
+`kuma-status-page-sync` (`templates/status-page-sync-cronjob.yaml.j2`, every 15 min) owns the
+group list of the status page at `/status/{{ kuma_status_page_slug }}` — the page Homepage's
+`uptimekuma` widget reads. The page OBJECT is hand-created and stays that way; only its
+`publicGroupList` is derived.
+
+**Do not declare it as an AutoKuma `status_page` entity, even though the entity type exists.**
+`autokuma/src/entity.rs` accepts `"type": "status_page"` and `sync.rs` creates one, but its
+`update_entity`'s `match (merge, current)` has arms for Monitor, DockerHost, Notification and
+Tag only — a status page falls through to `_ => {}`, at the pinned `2.1.0-rc.2` and on master.
+`get_managed_entities` (`autokuma/src/kuma.rs`) does load status pages into the comparison, so
+a drifted page logs `Updating status_page` on every pass and writes nothing. And with
+`AUTOKUMA__ON_DELETE=delete`, a declaration that ever went away would delete the live page.
+`test_no_status_page_is_declared_as_an_autokuma_entity` is the guard.
+
+### Why the join goes through display names
+The rules in `kuma_status_page_groups` are written against the AutoKuma id (the declaration's
+filename), which is stable and readable. That id is invisible over Kuma's API: `monitor list`
+returns display names and numeric ids, and the id-to-name map lives in AutoKuma's own SQLite on
+an RWO PVC that nothing else may mount. So `tasks/main.yml` renders `static-monitors.yaml.j2`
+back into data under `no_log` and ships `index.json` — id and display name, nothing else — and
+the pod resolves name to numeric id at run time. A duplicate display name would silently drop a
+monitor from the page, which `test_display_names_are_unique` refuses.
+
+### The sync writes only when the grouping changed
+`render_status_page.py` compares group names and their ordered monitor ids against the live
+page and writes `desired.json` only on a difference; the apply stage runs `kuma status-page
+edit` only when that file exists. Without that, every run would `saveStatusPage` into Kuma's
+SQLite — the same Longhorn volume, and the same shape, as the notification-rewrite loop above.
+It also starts from the LIVE page and replaces one key, because `saveStatusPage` writes the
+whole object and a hand-built document blanks `description`, `theme`, `published` and
+`domainNameList`.
+
+### Adding a monitor
+Add the declaration as usual. `test_every_declared_monitor_lands_in_a_named_group` fails until
+one of the group rules matches its id, so a new tile cannot quietly land in the runtime `Other`
+group. `Other` exists so a rule gap on a live cluster still shows the monitor somewhere; the
+test keeps it empty in the repo.

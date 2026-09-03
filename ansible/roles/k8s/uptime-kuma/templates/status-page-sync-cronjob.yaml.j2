@@ -1,0 +1,222 @@
+{#
+  Keeps the status page's group list matching the AutoKuma declarations. Four stages, in order,
+  because only kuma-cli can talk to Kuma and only python can decide what to say:
+
+    dump     read the live monitors and the live page          (kuma-cli)
+    render   compute the group list, write /work/desired.json  (python, only when it changed)
+    apply    write the page back                               (kuma-cli, only if that file exists)
+    beat     push the deadman heartbeat                        (python, the main container)
+
+  The heartbeat is the last CONTAINER rather than a step inside apply: an init container that
+  fails stops the pod, so the beat only happens when all three earlier stages succeeded.
+
+  Why a CronJob at all, when AutoKuma already reconciles every other Kuma entity: AutoKuma
+  CREATES a status page and never edits one — `sync.rs`'s `match (merge, current)` has arms for
+  Monitor, DockerHost, Notification and Tag and falls through for StatusPage, at the pinned tag
+  and on master. The full reasoning is in this role's CLAUDE.md.
+#}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: kuma-status-page-sync
+  namespace: {{ k8s_namespace }}
+spec:
+  schedule: "{{ kuma_status_page_sync_schedule }}"
+  timeZone: {{ tz }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: {{ kuma_status_page_sync_deadline_seconds }}
+      template:
+        metadata:
+          labels:
+            app: kuma-status-page-sync
+            netpol-baseline: enforced
+        spec:
+          restartPolicy: Never
+          enableServiceLinks: false
+          automountServiceAccountToken: false
+          priorityClassName: homelab-best-effort
+          securityContext:
+            runAsUser: {{ puid }}
+            runAsGroup: {{ pgid }}
+            fsGroup: {{ pgid }}
+          initContainers:
+{# The kuma-cli image is distroless (Dockerfile.cli builds on gcr.io/distroless/cc-debian13:debug),
+   so /busybox/sh is the only shell and /usr/local/bin/kuma the only binary — neither is on a PATH
+   worth trusting, hence the absolute paths.
+   The retry is not defensive padding: kube-router's source-pod lookup lags pod creation, so a
+   brand-new pod's first connection to a policy-fenced peer can be dropped while the same
+   connection a second later is admitted. #}
+            - name: dump
+              image: {{ kuma_cli_k8s_image }}
+              command: ["/busybox/sh", "-c"]
+              args:
+                - |
+                  set -eu
+                  attempt=1
+                  while [ "$attempt" -le 3 ]; do
+                    if /usr/local/bin/kuma monitor list > /work/monitors.json &&
+                       /usr/local/bin/kuma status-page get "$SLUG" > /work/page.json; then
+                      exit 0
+                    fi
+                    echo "kuma read failed (attempt $attempt)" >&2
+                    attempt=$((attempt + 1))
+                    sleep 5
+                  done
+                  exit 1
+              env:
+                - name: SLUG
+                  value: "{{ kuma_status_page_slug }}"
+                - name: KUMA__URL
+                  value: http://uptime-kuma.{{ k8s_namespace }}.svc.cluster.local:3001
+{# `@/path` is kuma-client's own file reference (resolve_file_ref) — it reads the file and strips
+   one trailing newline — so the admin password never appears as an env VALUE in a pod spec. Same
+   discipline, and the same mechanism, as the autokuma sidecar's. #}
+                - name: KUMA__PASSWORD
+                  value: "@/etc/kuma/kuma_password"
+                - name: KUMA__USERNAME
+                  valueFrom:
+                    secretKeyRef:
+                      name: autokuma-credentials
+                      key: username
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                runAsNonRoot: true
+                capabilities:
+                  drop:
+                    - ALL
+              volumeMounts:
+                - name: status-page-sync-work
+                  mountPath: /work
+                - name: status-page-sync-credentials
+                  mountPath: /etc/kuma
+                  readOnly: true
+              resources:
+                limits:
+                  cpu: "{{ kuma_status_page_sync_cpu_limit }}"
+                  memory: {{ kuma_status_page_sync_mem_limit }}
+                requests:
+                  cpu: "{{ kuma_status_page_sync_cpu_request }}"
+                  memory: {{ kuma_status_page_sync_mem_request }}
+            - name: render
+              image: {{ kuma_status_page_sync_image }}
+              command:
+                - python3
+                - /config/render_status_page.py
+                - --monitors=/work/monitors.json
+                - --page=/work/page.json
+                - --index=/config/index.json
+                - --rules=/config/rules.json
+                - --out=/work/desired.json
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                runAsNonRoot: true
+                capabilities:
+                  drop:
+                    - ALL
+              volumeMounts:
+                - name: status-page-sync-work
+                  mountPath: /work
+                - name: status-page-sync-config
+                  mountPath: /config
+                  readOnly: true
+              resources:
+                limits:
+                  cpu: "{{ kuma_status_page_sync_cpu_limit }}"
+                  memory: {{ kuma_status_page_sync_mem_limit }}
+                requests:
+                  cpu: "{{ kuma_status_page_sync_cpu_request }}"
+                  memory: {{ kuma_status_page_sync_mem_request }}
+{# No desired.json means the render stage found the page already grouped as declared, which is
+   the steady state. Writing it anyway would be a saveStatusPage into Kuma's SQLite on every
+   run — the shape of the notification-rewrite loop this role paid for in 2026-08. #}
+            - name: apply
+              image: {{ kuma_cli_k8s_image }}
+              command: ["/busybox/sh", "-c"]
+              args:
+                - |
+                  set -eu
+                  if [ -f /work/desired.json ]; then
+                    /usr/local/bin/kuma status-page edit /work/desired.json
+                  else
+                    echo "no change to apply"
+                  fi
+              env:
+                - name: KUMA__URL
+                  value: http://uptime-kuma.{{ k8s_namespace }}.svc.cluster.local:3001
+                - name: KUMA__PASSWORD
+                  value: "@/etc/kuma/kuma_password"
+                - name: KUMA__USERNAME
+                  valueFrom:
+                    secretKeyRef:
+                      name: autokuma-credentials
+                      key: username
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                runAsNonRoot: true
+                capabilities:
+                  drop:
+                    - ALL
+              volumeMounts:
+                - name: status-page-sync-work
+                  mountPath: /work
+                - name: status-page-sync-credentials
+                  mountPath: /etc/kuma
+                  readOnly: true
+              resources:
+                limits:
+                  cpu: "{{ kuma_status_page_sync_cpu_limit }}"
+                  memory: {{ kuma_status_page_sync_mem_limit }}
+                requests:
+                  cpu: "{{ kuma_status_page_sync_cpu_request }}"
+                  memory: {{ kuma_status_page_sync_mem_request }}
+          containers:
+            - name: beat
+              image: {{ kuma_status_page_sync_image }}
+              command: ["python3", "/config/push_heartbeat.py"]
+              env:
+                - name: KUMA_URL
+                  value: http://uptime-kuma.{{ k8s_namespace }}.svc.cluster.local:3001
+                - name: PUSH_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: autokuma-credentials
+                      key: status_page_sync_push_token
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                runAsNonRoot: true
+                capabilities:
+                  drop:
+                    - ALL
+              volumeMounts:
+                - name: status-page-sync-config
+                  mountPath: /config
+                  readOnly: true
+              resources:
+                limits:
+                  cpu: "{{ kuma_status_page_sync_cpu_limit }}"
+                  memory: {{ kuma_status_page_sync_mem_limit }}
+                requests:
+                  cpu: "{{ kuma_status_page_sync_cpu_request }}"
+                  memory: {{ kuma_status_page_sync_mem_request }}
+          volumes:
+            - name: status-page-sync-work
+              emptyDir: {}
+            - name: status-page-sync-config
+              configMap:
+                name: kuma-status-page-sync
+            - name: status-page-sync-credentials
+              secret:
+                secretName: autokuma-credentials
+                items:
+                  - key: kuma_password
+                    path: kuma_password
