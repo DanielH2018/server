@@ -149,6 +149,22 @@ data:
       - job_name: valheim-stats
         static_configs:
           - targets: ['valheim-stats.{{ k8s_namespace }}.svc:9420']
+      # Issue #996: the WAN speed test had a Kuma tile (monitor-bridge's `speedtest` check,
+      # reading the app's own REST API) but no series, so a degradation had no history — the
+      # 2026-09-03 78.8 Mbps DOWN was unanswerable as "one-off or a week-long slide". The
+      # linuxserver/speedtest-tracker image natively exposes `/prometheus`
+      # (speedtest_tracker_download_bits / _upload_bits / _ping_ms etc., labeled by server
+      # and ISP) — no sidecar or pushgateway needed, unlike the terraria-stats/valheim-stats
+      # jobs above.
+      #
+      # UNVERIFIED until both land: the app's `prometheus_enabled` Settings toggle (Settings ->
+      # Data Integration in its own UI) defaults OFF and is stored in the app's own DB, not an
+      # env var this role sets — see roles/k8s/speedtest/CLAUDE.md. Until someone flips it by
+      # hand, `/prometheus` 404s and this target reads `up == 0`, not silently empty.
+      - job_name: speedtest
+        metrics_path: /prometheus
+        static_configs:
+          - targets: ['speedtest.{{ k8s_namespace }}.svc:80']
       # ── Phase D dashboard triage (2026-08-10, PG1/PG2 — slice-7-phase-d-dashboards.md) ──
       # PG1: ported from the Docker prometheus, which scraped these cluster workloads from
       # the wrong side of the migration (through Traefik routes, over the LAN). Same job
