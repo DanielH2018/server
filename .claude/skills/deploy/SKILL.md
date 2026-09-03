@@ -142,7 +142,7 @@ sops ansible/vars/secrets.yml
 # List the services --dry-run refuses to cover
 grep -A20 "^k8s_dry_run_unsupported:" ansible/inventory/group_vars/all.yml
 
-# Trigger a GitOps tick now instead of waiting for the 30-min timer (daniel-box only).
+# Trigger a GitOps tick now instead of waiting for the 10-min timer (daniel-box only).
 # Runs the identical code path the timer runs — there is no dry-run mode.
 ./scripts/deploy_tools/gitops_tick.sh
 
@@ -153,7 +153,7 @@ uv run ansible-playbook ansible/initial_setup.yml
 
 ## Why `deploy.sh` rather than the playbook
 
-It takes `/var/lock/server-git-tree.lock` — the same lock `gitops-deploy.service` (30-min
+It takes `/var/lock/server-git-tree.lock` — the same lock `gitops-deploy.service` (10-min
 timer) and the weekly secret-rotate cron hold — so a deploy cannot interleave with the
 automated pipeline or with another Claude session. The lock guards the local git tree every
 deploy reads its templates from, which gitops-deploy rewrites with a `git pull` mid-run, so a

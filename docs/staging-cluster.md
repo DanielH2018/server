@@ -603,7 +603,7 @@ reachable only from daniel-server**, so gating cannot be a step added to `main()
   different question.
 - How does a staging failure alert, and who overrides it when staging is wrong rather than the
   merge? A gate with no override becomes a gate that gets removed.
-- How much of the 30-minute GitOps window a staging pass costs. A full prod deploy of all 54
+- How much of the 10-minute GitOps window a staging pass costs. A full prod deploy of all 54
   services measures **20m12s** (re-measured 2026-08-22 after the batching work landed;
   `deploy-time-is-83-percent-waiting`), so a five-service subset is a small fraction of the
   window rather than a doubling of it. An earlier draft of this line read 59 minutes and

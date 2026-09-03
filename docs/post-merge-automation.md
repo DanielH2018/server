@@ -146,7 +146,7 @@ instead of posting. One implementation of the settled check, two destinations.
   a master the other is still moving.
 - **Lock acquisitions are sequential, not nested.** `gitops_tick.sh` only starts the systemd unit;
   the unit's `ExecStart` holds `/var/lock/server-git-tree.lock` and `gitops_tick.sh` returns after
-  it finishes. `deploy.sh` then acquires cleanly. The 30-minute timer can still slip in between —
+  it finishes. `deploy.sh` then acquires cleanly. The 10-minute timer can still slip in between —
   that is exit 75, and `land.sh` retries with backoff rather than failing.
 - **Exit codes are resume points.** 75 = lock busy, retry. 4 = tree behind origin, pull again and
   never `--skip-staleness-check`. 2 = the tag matched nothing.
