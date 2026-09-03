@@ -19,13 +19,9 @@ REAL parser. Nothing here matches on source text.
 Run: uv run pytest ansible/tests/setup/test_pi_health_log_line_shape.py
 """
 
-import sys
-
 import pytest
-from _helpers import REPO
 from _pi_health import run
 
-sys.path.insert(0, str(REPO / "scripts" / "diagnostics"))
 from diagnostics.probe_lib.alerts import parse_syslog_down_line
 
 
