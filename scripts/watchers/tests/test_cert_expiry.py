@@ -12,6 +12,7 @@ import pytest
 
 from watchers.cert_expiry import (
     KNOWN_PUBLIC_LABELS,
+    THRESHOLD_DAYS,
     build_current,
     check_expiring,
     expiring_soon,
@@ -54,7 +55,7 @@ def test_check_expiring_is_flagged_on_a_transition_into_the_window() -> None:
     }
     finding = check_expiring(previous, current)
     assert finding is not None
-    assert "svc.example.com" in finding
+    assert finding == f"TLS cert expiring within {THRESHOLD_DAYS} days: svc.example.com"
 
 
 def test_check_expiring_reports_a_renewal_too() -> None:

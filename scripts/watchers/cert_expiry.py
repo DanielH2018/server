@@ -103,6 +103,8 @@ def fetch_leaf_not_after(
 ) -> datetime:
     """Open a TLS session against `vip` with SNI=`hostname` and return the served leaf's expiry."""
     ctx = ssl.create_default_context()
+    # TLS 1.0/1.1 stay negotiable under the default context; the edge only speaks 1.2+.
+    ctx.minimum_version = ssl.TLSVersion.TLSv1_2
     with socket.create_connection((vip, port), timeout=timeout) as sock:
         with ctx.wrap_socket(sock, server_hostname=hostname) as tls:
             cert = tls.getpeercert()
