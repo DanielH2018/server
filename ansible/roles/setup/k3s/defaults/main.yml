@@ -497,6 +497,11 @@ k3s_longhorn_weekly_volumes:
   - homelab/wg-easy-config # Thu
   - homelab/n8n-files # Fri
   - homelab/pi-peer-backup-data # Sat
+  # APPENDED, not slotted into the day-21 column: navidrome-data was omitted from every
+  # tier list at creation (#864) and defaulted to daily/B2/retain-14 (issue #946). Appending
+  # is the only safe move for an existing volume — inserting earlier would shift every
+  # entry below it to a new weekday.
+  - homelab/navidrome-data # Sun (index 21 mod 7 = 0)
 
 # Backup-plane heartbeat (templates/longhorn-backup-health.sh.j2). Pushes to a static Kuma
 # monitor rather than being polled, because monitor-bridge runs on daniel-server and cannot

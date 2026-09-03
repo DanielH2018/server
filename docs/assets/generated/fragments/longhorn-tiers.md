@@ -2,7 +2,7 @@
 | Tier | Target | Volumes | Schedule (daniel-box, UTC) | Retain |
 |---|---|---|---|---|
 | Daily | R2 (`r2`) | 4 | `30 3 * * *` | 14 |
-| Weekly | B2 (`default`) | 21, one weekday each | `30 4 * * <index mod 7>` | 2 |
+| Weekly | B2 (`default`) | 22, one weekday each | `30 4 * * <index mod 7>` | 2 |
 | None | — | 5 listed, plus the `longhorn-nobackup` StorageClass | — | — |
 
 Daily-tier volumes (`k3s_longhorn_r2_volumes`): `homelab/traefik-acme`, `homelab/authelia-config`, `homelab/home-assistant-config`, `homelab/zigbee2mqtt-data`.
