@@ -594,18 +594,18 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     it is monotonic, not flappy — while the census arm rides `PVC_CLAIMS_CONSECUTIVE`.)
   - **Loki Log Ingestion** (three-arm LogQL freshness against the cluster `loki-homelab` via
     its in-cluster Service, `down`
-    if ANY arm is silent — a silently-dead promtail→Loki pipeline (docker-proxy break,
+    if ANY arm is silent — a silently-dead Alloy→Loki pipeline (docker-proxy break,
     positions-file corruption, relabel regression) that Loki's `/ready` Kuma probe stays green
     through. **Arm 1 — file-tail union** `sum(count_over_time({job=~"authlog|syslog"}[3h]))`:
     (`check.py`'s in-code default also lists `traefik`, but `LOKI_STREAM` in
     `templates/env-secret.yaml.j2` overrides it and does not — the deployed selector is the two
     named here, so traefik's freshness is NOT covered by this arm.)
-    counts the file-tailed streams — not one, so if promtail dies they ALL fall silent together
+    counts the file-tailed streams — not one, so if Alloy dies they ALL fall silent together
     while syslog's routine volume keeps a quiet night alive (no single low-volume file trips it) —
-    over a TOLERANT window. It deliberately EXCLUDES the docker_sd stream: promtail stamps that
+    over a TOLERANT window. It deliberately EXCLUDES the docker_sd stream: Alloy stamps that
     stream `job: docker` (so a bare `{job=~".+"}` would swallow it), and it dwarfs the file-tail
     streams (~all 44 containers' stdout), so including it let a healthy container stream mask a
-    total file-tail outage — arm 1 could then only reach zero if promtail was *totally* dead, which
+    total file-tail outage — arm 1 could then only reach zero if Alloy was *totally* dead, which
     arm 2 already catches (the 2026-07-07 blind-spot review re-scoped it to file-tail-only). The
     window is wider than arm 2's because file-tail volume is low and dips overnight (a lone
     `{job="syslog"}` over 10m false-paged 2026-06-23 — a 15m35s idle gap was observed). **Arm 2 —
@@ -613,9 +613,9 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     docker_sd stream carries a `container` label, no `job`, so it's exactly the one arm 1 excludes;
     a docker_sd-specific break (docker-proxy down, the docker relabel regressing) silences every
     container log while the file-tail streams keep flowing, and a tight window catches a total
-    promtail death fast. **Arm 3 — daniel-pi** `sum(count_over_time({job="pi"}[3h]))`
+    Alloy death fast. **Arm 3 — daniel-pi** `sum(count_over_time({job="pi"}[3h]))`
     (`LOKI_PI_STREAM`, added 2026-08-25 review M-11): arms 1 and 2 only count CLUSTER streams, so
-    the Pi's own promtail could die with every cluster stream still flowing and both arms green —
+    the Pi's own Alloy could die with every cluster stream still flowing and both arms green —
     the Pi's logs simply stop arriving and nothing said so. Runs on the TOLERANT window
     (`LOKI_FILETAIL_WINDOW`, same as arm 1), for a stronger reason than arm 1's: the Pi is a
     Zero 2 W running five LAN-only containers, so its log volume is genuinely low and bursty, not

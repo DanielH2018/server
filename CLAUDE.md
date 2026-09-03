@@ -50,7 +50,7 @@ Route to the source of truth by what you're doing, before reading linearly:
 
 | If you're… | Start here |
 |---|---|
-| Adding / changing a service (k3s — the default) | `/new-k8s-service` skill · a sibling role in `ansible/roles/k8s/` · `ansible/roles/k8s/manifests/CLAUDE.md` for the shared render → apply → queue contract all 57 of them include |
+| Adding / changing a service (k3s — the default) | `/new-k8s-service` skill · a sibling role in `ansible/roles/k8s/` · `ansible/roles/k8s/manifests/CLAUDE.md` for the shared render → apply → queue contract every k8s role includes (`grep -rl k8s/manifests ansible/roles/k8s/*/tasks/` lists them) |
 | Adding / changing a Docker service (the Pi only) | `/new-container` skill (daniel-pi only — neither cluster node has Docker) |
 | Deploying or redeploying a service | `/deploy` skill · `## Common Commands` below for the exit codes |
 | Retiring a finished worktree, or `ExitWorktree` refuses to remove one | `/worktree-cleanup` skill |

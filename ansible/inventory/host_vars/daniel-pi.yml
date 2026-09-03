@@ -28,7 +28,7 @@ pi_swapfile_size: 1G
 # this is unset (the server keeps 10s/30s). Detection latency worst-case = 60s x 3 retries.
 container_healthcheck_interval: 60s
 containers_list:
-  # Read-only Docker socket proxy — serves promtail's docker_sd log discovery and glances;
+  # Read-only Docker socket proxy — serves Alloy's docker_sd log discovery and glances;
   # the hardcoded docker-proxy-lifecycle sub-proxy (restart-only) serves autoheal.
   - name: docker-proxy
     use_authelia: false
