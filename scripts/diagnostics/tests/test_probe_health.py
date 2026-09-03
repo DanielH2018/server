@@ -704,3 +704,295 @@ def test_declared_on_pi_fails_closed_on_an_unreadable_inventory(monkeypatch, tmp
     """Fail closed: an unreadable inventory must not turn a missing container into a skip."""
     monkeypatch.setattr(health, "PI_HOST_VARS", tmp_path / "gone.yml")
     assert health.declared_on_pi("wg-easy") is True
+
+
+#
+# CronJob-only roles. configarr and pi-peer-backup declare no Deployment/DaemonSet/
+# StatefulSet, only a CronJob -- until this gate existed, `probe.py health` reported "declares
+# no rollout-checkable workload" for both, which deploy_detach_notify.py's
+# NOT_APPLICABLE_MARKERS turns into a `skipped` verdict rather than a checked one. Neither
+# role's post-deploy state was ever actually read outside the deploy-time k8s/cronjob-gate
+# run. format_cronjob_health closes that gap.
+#
+
+_CRONJOB_ONLY_ROLES = frozenset({"configarr", "pi-peer-backup"})
+
+
+def test_cronjob_only_census_finds_exactly_the_known_roles():
+    """Non-vacuity pinned against a concrete set, not a lower bound -- this repo's own rule for
+    a check that finds its own subject by pattern (KNOWN_CONSUMERS in test_probe_boundaries.py
+    is the worked example). Equality rather than `>=` so a THIRD role gaining a CronJob is
+    caught here too, pointing at
+    ansible/tests/deploy/test_cronjob_only_roles_include_the_gate.py for whether it is wired up.
+    """
+    resolved = _resolved()
+    cronjob_only = {
+        role
+        for role in resolved
+        if not resolved[role] and health.role_cronjob_targets(role, _DEFAULT_NS)
+    }
+    assert cronjob_only == _CRONJOB_ONLY_ROLES
+
+
+def test_the_no_rollout_checkable_workload_set_still_matches_outside_the_cronjob_roles():
+    """The other four roles in `_ROLES_WITH_NO_WORKLOAD` (longhorn-ui, media-volume,
+    n8n-images, netpol-baseline) still reach the unchanged skip message run_health prints --
+    only configarr and pi-peer-backup were pulled onto the new CronJob path."""
+    resolved = _resolved()
+    no_workload = {role for role in resolved if not resolved[role]}
+    assert (
+        no_workload - _CRONJOB_ONLY_ROLES
+        == set(_ROLES_WITH_NO_WORKLOAD) - _CRONJOB_ONLY_ROLES
+    )
+
+
+def _cronjob(schedule="30 4 * * *"):
+    return {"spec": {"schedule": schedule}}
+
+
+def _job_doc(name, created, succeeded=0, failed=0):
+    return {
+        "metadata": {"name": name, "creationTimestamp": created},
+        "status": {"succeeded": succeeded, "failed": failed},
+    }
+
+
+def _jobs_doc(cronjob_name, *jobs):
+    """jobs: (name, created, succeeded, failed) tuples, each owned by `cronjob_name`."""
+    return {
+        "items": [
+            {
+                "metadata": {
+                    "name": name,
+                    "creationTimestamp": created,
+                    "ownerReferences": [
+                        {"kind": "CronJob", "name": cronjob_name, "controller": True}
+                    ],
+                },
+                "status": {"succeeded": succeeded, "failed": failed},
+            }
+            for name, created, succeeded, failed in jobs
+        ]
+    }
+
+
+def test_latest_owned_job_picks_the_newest_by_creation_time():
+    jobs = _jobs_doc(
+        "configarr",
+        ("configarr-29123450", "2026-08-16T04:30:00Z", 1, 0),
+        ("configarr-deploy-gate", "2026-08-16T09:00:00Z", 1, 0),
+    )
+    latest = health.latest_owned_job(jobs, "configarr")
+    assert latest["metadata"]["name"] == "configarr-deploy-gate"
+
+
+def test_latest_owned_job_ignores_a_different_cronjobs_job():
+    jobs = _jobs_doc("other", ("other-deploy-gate", "2026-08-16T11:00:00Z", 1, 0))
+    assert health.latest_owned_job(jobs, "configarr") is None
+
+
+def test_latest_owned_job_ignores_a_non_controller_owner_reference():
+    """A Job merely referencing the CronJob without `controller: true` is not one it created --
+    `kubectl create job --from=cronjob` always sets `controller: true` (verified live, see
+    roles/k8s/cronjob-gate/CLAUDE.md)."""
+    jobs = {
+        "items": [
+            {
+                "metadata": {
+                    "name": "unrelated",
+                    "creationTimestamp": "2026-08-16T11:00:00Z",
+                    "ownerReferences": [
+                        {"kind": "CronJob", "name": "configarr", "controller": False}
+                    ],
+                },
+                "status": {},
+            }
+        ]
+    }
+    assert health.latest_owned_job(jobs, "configarr") is None
+
+
+def test_latest_owned_job_is_none_with_no_jobs():
+    assert health.latest_owned_job({"items": []}, "configarr") is None
+    assert health.latest_owned_job(None, "configarr") is None
+
+
+def test_job_outcome_succeeded_from_status_count():
+    assert health._job_outcome({"status": {"succeeded": 1}}) == "succeeded"
+
+
+def test_job_outcome_succeeded_from_condition():
+    job = {"status": {"conditions": [{"type": "Complete", "status": "True"}]}}
+    assert health._job_outcome(job) == "succeeded"
+
+
+def test_job_outcome_failed():
+    assert health._job_outcome({"status": {"failed": 1}}) == "failed"
+
+
+def test_job_outcome_running_with_no_terminal_state():
+    assert health._job_outcome({"status": {}}) == "running"
+    assert health._job_outcome({}) == "running"
+
+
+def test_schedule_interval_daily():
+    assert health._schedule_interval_seconds("30 4 * * *") == 86400
+
+
+def test_schedule_interval_weekly():
+    assert health._schedule_interval_seconds("30 4 * * 0") == 7 * 86400
+
+
+def test_schedule_interval_unrecognised_shape_fails_closed_to_none():
+    """Deliberately not a cron parser -- any shape but plain daily/weekly returns None, and
+    format_cronjob_health's caller fails closed on that rather than guessing an interval."""
+    assert health._schedule_interval_seconds("*/15 * * * *") is None
+    assert health._schedule_interval_seconds("0 0 1 * *") is None
+    assert health._schedule_interval_seconds(None) is None
+    assert health._schedule_interval_seconds("") is None
+
+
+def test_cronjob_health_no_cronjob_fails():
+    text, code = health.format_cronjob_health(
+        "homelab/configarr", None, None, None, None, _NOW
+    )
+    assert code == 1
+    assert "no CronJob" in text
+
+
+def test_cronjob_health_no_job_fails():
+    text, code = health.format_cronjob_health(
+        "homelab/configarr", _cronjob(), None, None, None, _NOW
+    )
+    assert code == 1
+    assert "no evidence it has ever run" in text
+
+
+def test_cronjob_health_fresh_success_passes():
+    job = _job_doc("configarr-deploy-gate", "2026-08-16T11:00:00Z", succeeded=1)
+    text, code = health.format_cronjob_health(
+        "homelab/configarr",
+        _cronjob(),
+        job,
+        _pods(("configarr", 0, None)),
+        "2026-08-16T10:00:00Z",
+        _NOW,
+    )
+    assert code == 0
+    assert "succeeded" in text
+
+
+def test_cronjob_health_fresh_failure_fails():
+    job = _job_doc("configarr-deploy-gate", "2026-08-16T11:00:00Z", failed=1)
+    text, code = health.format_cronjob_health(
+        "homelab/configarr", _cronjob(), job, None, "2026-08-16T10:00:00Z", _NOW
+    )
+    assert code == 1
+    assert "FAILED" in text
+
+
+def test_cronjob_health_still_running_fails():
+    job = _job_doc("configarr-deploy-gate", "2026-08-16T11:59:00Z")
+    text, code = health.format_cronjob_health(
+        "homelab/configarr", _cronjob(), job, None, "2026-08-16T10:00:00Z", _NOW
+    )
+    assert code == 1
+    assert "has not finished" in text
+
+
+def test_cronjob_health_restart_in_the_jobs_pod_fails():
+    job = _job_doc("configarr-deploy-gate", "2026-08-16T11:00:00Z", succeeded=1)
+    text, code = health.format_cronjob_health(
+        "homelab/configarr",
+        _cronjob(),
+        job,
+        _pods(("configarr", 1, None)),
+        "2026-08-16T10:00:00Z",
+        _NOW,
+    )
+    assert code == 1
+    assert "restarted" in text
+
+
+def test_cronjob_health_stale_but_within_schedule_passes():
+    """No run since the deploy, but the previous run succeeded recently against a daily
+    schedule -- the fallback this gate takes when the deploy-time k8s/cronjob-gate run hasn't
+    landed yet, or hasn't been read yet."""
+    job = _job_doc("configarr-29123450", "2026-08-16T04:30:00Z", succeeded=1)
+    text, code = health.format_cronjob_health(
+        "homelab/configarr",
+        _cronjob("30 4 * * *"),
+        job,
+        _pods(("configarr", 0, None)),
+        "2026-08-16T09:00:00Z",
+        _NOW,
+    )
+    assert code == 0
+    assert "within its" in text
+
+
+def test_cronjob_health_stale_and_overdue_fails():
+    job = _job_doc("configarr-29000000", "2026-08-13T04:30:00Z", succeeded=1)
+    text, code = health.format_cronjob_health(
+        "homelab/configarr",
+        _cronjob("30 4 * * *"),
+        job,
+        _pods(("configarr", 0, None)),
+        "2026-08-16T09:00:00Z",
+        _NOW,
+    )
+    assert code == 1
+    assert "overdue" in text
+
+
+def test_cronjob_health_stale_with_unrecognised_schedule_fails_closed():
+    job = _job_doc("configarr-29000000", "2026-08-16T04:30:00Z", succeeded=1)
+    text, code = health.format_cronjob_health(
+        "homelab/configarr",
+        _cronjob("*/15 * * * *"),
+        job,
+        _pods(("configarr", 0, None)),
+        "2026-08-16T09:00:00Z",
+        _NOW,
+    )
+    assert code == 1
+    assert "failing closed" in text
+
+
+def test_cronjob_health_unreadable_job_creation_time_fails_closed():
+    job = {
+        "metadata": {"name": "configarr-deploy-gate", "creationTimestamp": "garbage"},
+        "status": {"succeeded": 1},
+    }
+    text, code = health.format_cronjob_health(
+        "homelab/configarr", _cronjob(), job, None, None, _NOW
+    )
+    assert code == 1
+    assert "failing closed" in text
+
+
+def test_cronjob_health_no_deploy_stamp_checks_the_latest_job_directly():
+    """An unreadable release stamp means "nothing to compare against", not "assume stale" --
+    the schedule fallback exists for a Job that provably predates a KNOWN deploy time, not for
+    the absence of one."""
+    job = _job_doc("configarr-deploy-gate", "2026-08-16T11:00:00Z", succeeded=1)
+    text, code = health.format_cronjob_health(
+        "homelab/configarr", _cronjob(), job, _pods(("configarr", 0, None)), None, _NOW
+    )
+    assert code == 0
+    assert "since the last deploy" in text
+
+
+def test_deploy_applied_at_reads_the_release_stamp(tmp_path, monkeypatch):
+    from diagnostics.probe_lib import releases
+
+    monkeypatch.setattr(releases, "RELEASE_DIR", tmp_path)
+    (tmp_path / "configarr.json").write_text('{"applied_at": "2026-08-16T09:00:00Z"}')
+    assert health._deploy_applied_at("configarr") == "2026-08-16T09:00:00Z"
+
+
+def test_deploy_applied_at_is_none_when_unreadable(tmp_path, monkeypatch):
+    from diagnostics.probe_lib import releases
+
+    monkeypatch.setattr(releases, "RELEASE_DIR", tmp_path)
+    assert health._deploy_applied_at("configarr") is None
