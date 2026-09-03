@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Guards that every `storageClassName: longhorn` PVC is routed to a backup tier.
 
-`homelab/navidrome-data` (added 2026-08-16, #864) landed in none of the three routing
+`homelab/navidrome-data` (added 2026-09-02, #864) landed in none of the three routing
 lists in `ansible/roles/setup/k3s/defaults/main.yml`, so `longhorn.yml:436-439` labelled
 it into recurring group `default` — daily backups to B2, retain 14 — against the
 weekly-only policy in `docs/longhorn-backup-tiering.md:27-31` (issue #946). Nothing
