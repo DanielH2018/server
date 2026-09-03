@@ -58,6 +58,12 @@ For each PR read the file list and the diff — `gh pr diff <n> --name-only`, th
 **The title's parenthetical is the fastest tell.** A title reading `Update n8n (lockstep: app +
 task runners)` names its group, and the group name is the work order.
 
+**A body naming a package the diff never touches is a triage signal, not a merge blocker.**
+#939 opened titled "Update dependency prek to v0.5.0" with prek's release notes attached, but
+its diff touched only the Vale binary pin — a second instance of the jellyfin-ani-sync class
+below, this time from a group branch Renovate reused across two unrelated deps. Retitle to
+match the diff and merge the real content.
+
 ## 2. Read the rule that produced the PR
 
 Never guess at what a bot PR left undone — the rule says so, at length:
