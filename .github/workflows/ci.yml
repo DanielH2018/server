@@ -148,7 +148,7 @@ jobs:
         run: |
           set -euo pipefail
           curl -fsSL -o /tmp/vale.tar.gz \
-            https://github.com/vale-cli/vale/releases/download/v3.18.0/vale_3.18.0_Linux_64-bit.tar.gz
+            https://github.com/vale-cli/vale/releases/download/v3.19.0/vale_3.19.0_Linux_64-bit.tar.gz
           tar xzf /tmp/vale.tar.gz -C /usr/local/bin vale
           vale --version
           vale sync
