@@ -37,10 +37,19 @@ not a wrong value (`TimeoutStartSec=45min` when the intent was 60) or a misspell
 TARGET — `--recursive-errors=no` suppresses the line that would name a target unit systemd can't
 find.
 
+Also renders `roles/setup/gitops_deploy/templates/50-gitops-deploy.rules.j2` — the polkit rule
+`test_gitops_manual_trigger.py` content-checks but whose JavaScript syntax nothing checks — and
+runs `node --check` on the output. A missing `node` SKIPS with a message rather than failing
+closed, unlike a missing `systemd-analyze`: `systemd-analyze` is this repo's only way to verify
+a unit file, so its absence must not read as "checked"; the polkit rule is one file checked by a
+tool GitHub's own runner images always carry (they run Actions itself on Node.js), so the skip
+path is a local-workstation fallback, not a gate this repo depends on being armed in CI.
+
 Run directly or via the ``validate-unit-templates`` prek hook. Exits non-zero if any unit fails
-to render, if `systemd-analyze` reports a matching diagnostic, or if `systemd-analyze` itself
-isn't available on PATH (fail loud, matching `shell_templates.py`'s policy — a missing verifier
-must not silently degrade to "renders, so it's fine").
+to render, if `systemd-analyze` reports a matching diagnostic, if the polkit rule fails to
+render, or if `node --check` flags it. Exits non-zero if `systemd-analyze` itself isn't
+available on PATH (fail loud, matching `shell_templates.py`'s policy — a missing verifier must
+not silently degrade to "renders, so it's fine").
 """
 
 from __future__ import annotations
@@ -72,6 +81,13 @@ from lib.render_guard import (
 )
 
 ROLES = ANSIBLE / "roles"
+
+# Not a *.service.j2/*.timer.j2 — a polkit rule (JavaScript), checked by this same hook because
+# it is the sibling gap the finding named: content-checked by test_gitops_manual_trigger.py, but
+# its JS syntax nowhere.
+RULES_TEMPLATE = (
+    ROLES / "setup" / "gitops_deploy" / "templates" / "50-gitops-deploy.rules.j2"
+)
 
 # A line systemd-analyze attributes to the file it's checking looks like
 # "<path>:<lineno>: <message>". A line about a followed unit ("k3s.service: Failed to open...")
@@ -179,12 +195,49 @@ def check_template(
     return None
 
 
+def check_polkit_rules(out_dir: Path, node_bin: str) -> str | None:
+    """Render `RULES_TEMPLATE` and `node --check` it. Returns an error string, or None.
+
+    Uses the same StubUndefined + gitops_deploy defaults context as the unit templates — the
+    rule only interpolates `sys_user`, which the role's own defaults carry, same as the unit
+    templates it sits beside.
+    """
+    ctx = render_context(RULES_TEMPLATE)
+    env = build_env(RULES_TEMPLATE.parent)
+    rendered, err = render_or_error(env, RULES_TEMPLATE.name, ctx)
+    if rendered is None:
+        return err
+
+    # RULES_TEMPLATE.stem drops only the trailing ".j2" ("50-gitops-deploy.rules"); appending
+    # ".js" (not ".rules") gives node a real JS extension without renaming the rule itself.
+    out_path = out_dir / (RULES_TEMPLATE.stem + ".js")
+    out_path.write_text(rendered)
+
+    proc = subprocess.run(
+        [node_bin, "--check", str(out_path)], capture_output=True, text=True
+    )
+    if proc.returncode != 0:
+        try:
+            rel = RULES_TEMPLATE.relative_to(REPO)
+        except ValueError:
+            rel = RULES_TEMPLATE  # a test fixture outside REPO, not a real repo path
+        print(f"\n----- rendered {rel} -----", file=sys.stderr)
+        dump_numbered(rendered)
+        return f"node --check: {proc.stderr.strip() or f'exited {proc.returncode}'}"
+    return None
+
+
 def main() -> int:
     """Render every discovered unit template, then `systemd-analyze verify` the output.
 
+    Also renders and `node --check`s the polkit rule (RULES_TEMPLATE) — a missing `node` skips
+    that one check with a message rather than failing the whole run closed (see module
+    docstring for why the two missing-tool cases are handled differently).
+
     Returns:
-        0 if every unit rendered clean and verified clean, 1 otherwise (including when
-        systemd-analyze is missing from PATH or no templates were found).
+        0 if every unit rendered clean and verified clean, and the polkit rule either rendered
+        clean or was skipped, 1 otherwise (including when systemd-analyze is missing from PATH
+        or no unit templates were found).
     """
     systemd_analyze_bin = shutil.which("systemd-analyze")
     if not systemd_analyze_bin:
@@ -216,6 +269,26 @@ def main() -> int:
                 print(f"  [FAIL] {rel}: {err}", file=sys.stderr)
             else:
                 print(f"  [ok]   {rel}")
+
+        try:
+            rules_rel = RULES_TEMPLATE.relative_to(REPO)
+        except ValueError:
+            rules_rel = (
+                RULES_TEMPLATE  # a test fixture outside REPO, not a real repo path
+            )
+        node_bin = shutil.which("node")
+        if not node_bin:
+            print(
+                f"  [skip] {rules_rel}: node not on PATH — polkit rule JS syntax not checked "
+                "this run"
+            )
+        else:
+            err = check_polkit_rules(out_dir, node_bin)
+            if err:
+                failures += 1
+                print(f"  [FAIL] {rules_rel}: {err}", file=sys.stderr)
+            else:
+                print(f"  [ok]   {rules_rel}")
 
     print(f"\n{len(templates)} unit template(s) checked, {failures} failure(s).")
     return 1 if failures else 0

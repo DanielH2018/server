@@ -200,6 +200,55 @@ def test_main_fails_closed_when_systemd_analyze_missing(monkeypatch):
     assert v.main() == 1
 
 
+# ── issue #948 sibling gap: 50-gitops-deploy.rules.j2 (polkit JS) is content-checked by
+# test_gitops_manual_trigger.py, but nothing checked its JavaScript syntax.
+
+
+requires_node = pytest.mark.skipif(
+    shutil.which("node") is None, reason="node not on PATH"
+)
+
+
+@requires_node
+def test_check_polkit_rules_passes_the_real_template(tmp_path):
+    err = v.check_polkit_rules(tmp_path, "node")
+    assert err is None
+
+
+@requires_node
+def test_check_polkit_rules_catches_unbalanced_braces(tmp_path, monkeypatch):
+    # The measured shape: a stray brace that survives Jinja (no `{{`/`{%`/`{#`) but leaves the
+    # rendered JS structurally broken — the class `node --check` exists to catch.
+    broken = tmp_path / "50-gitops-deploy.rules.j2"
+    broken.write_text(
+        "polkit.addRule(function (action, subject) {\n    return undefined;\n);"
+    )
+    monkeypatch.setattr(v, "RULES_TEMPLATE", broken)
+    err = v.check_polkit_rules(tmp_path, "node")
+    assert err is not None
+    assert "node --check" in err
+
+
+def test_main_skips_the_polkit_check_when_node_missing(monkeypatch):
+    real_which = v.shutil.which
+    monkeypatch.setattr(
+        v.shutil, "which", lambda name: None if name == "node" else real_which(name)
+    )
+    # A missing node must not fail the whole run closed — only a missing systemd-analyze does.
+    assert v.main() == 0
+
+
+def test_main_fails_when_node_check_flags_the_rendered_rule(tmp_path, monkeypatch):
+    broken = tmp_path / "50-gitops-deploy.rules.j2"
+    broken.write_text(
+        "polkit.addRule(function (action, subject) {\n    return undefined;\n);"
+    )
+    monkeypatch.setattr(v, "RULES_TEMPLATE", broken)
+    if shutil.which("node") is None:
+        pytest.skip("node not on PATH")
+    assert v.main() == 1
+
+
 @requires_systemd_analyze
 def test_all_real_unit_templates_render_and_verify_clean():
     # The regression guard, mirroring shell_templates.test_all_real_shell_templates_render_and_lint_clean:

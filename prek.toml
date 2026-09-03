@@ -218,7 +218,10 @@ files = "^(ansible/roles/.*\\.sh\\.j2|ansible/inventory/group_vars/all\\.yml|scr
 # typo'd directive key reached a live host with systemd loading the unit anyway and only a
 # journal warning to show for it (GitHub issue #948). systemd-analyze's own exit status is
 # ignored — it reads 0 on a typo'd key on at least one measured host — so the verdict comes
-# from scanning stderr for a diagnostic attributed to the rendered unit's own path.
+# from scanning stderr for a diagnostic attributed to the rendered unit's own path. Also
+# renders the polkit rule beside these units (50-gitops-deploy.rules.j2, JavaScript, not a
+# service/timer) and `node --check`s it — the sibling gap the same finding named: content-
+# checked by test_gitops_manual_trigger.py, but its JS syntax nowhere.
 [[repos.hooks]]
 id = "validate-unit-templates"
 name = "Validate rendered systemd unit templates (systemd-analyze verify)"
@@ -230,8 +233,9 @@ pass_filenames = false
 # change whether the rendered unit still parses (e.g. renovate_agent_oncalendar,
 # gitops_deploy_tick_interval). group_vars/all.yml is in scope for the same reason
 # validate-shell-templates includes it: host_python_version and the other cross-role fallbacks
-# it carries feed every unit's render.
-files = "^(ansible/roles/.*\\.(service|timer)\\.j2|ansible/roles/setup/.*/defaults/main\\.yml|ansible/inventory/group_vars/all\\.yml|scripts/validate/unit_templates\\.py)$"
+# it carries feed every unit's render. The polkit rule (50-gitops-deploy.rules.j2) is named
+# explicitly since it doesn't match the *.service.j2/*.timer.j2 half of this pattern.
+files = "^(ansible/roles/.*\\.(service|timer)\\.j2|ansible/roles/setup/gitops_deploy/templates/50-gitops-deploy\\.rules\\.j2|ansible/roles/setup/.*/defaults/main\\.yml|ansible/inventory/group_vars/all\\.yml|scripts/validate/unit_templates\\.py)$"
 
 # Lint the GitHub Actions workflows themselves. `check-yaml` above only proves they PARSE —
 # nothing until now checked that a job's `needs:` names a job that exists, that a `${{ }}`
