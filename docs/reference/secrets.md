@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/secrets.py
-generated_at: 2026-09-03 06:17 UTC
-generated_sha: 21556bbe
+generated_at: 2026-09-03 18:17 UTC
+generated_sha: 4ee11a94
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 21556bbe
 
 # Secrets
 
-153 secret(s) in the rotation registry (`ansible/secret_rotation.yml`).
+157 secret(s) in the rotation registry (`ansible/secret_rotation.yml`).
 
 !!! note "Names and dates only"
     This page is generated from the plaintext rotation registry. No secret VALUE is read here, and the generator never opens the encrypted store or invokes the decryption tool — a test enforces that.
@@ -131,6 +131,7 @@ rotated unattended by the weekly secret-rotate cron.
 | `daniel_box_disk_push_token` | 2026-08-28 | 2027-02-24 | 174 |
 | `docs_refresh_push_token` | 2026-08-06 | 2027-02-02 | 152 |
 | `etcd_snapshot_push_token` | 2026-08-28 | 2027-02-24 | 174 |
+| `kuma_status_page_sync_push_token` | 2026-07-08 | 2027-01-04 | 123 |
 | `live_drift_push_token` | 2026-08-15 | 2027-02-11 | 161 |
 | `longhorn_backup_push_token` | 2026-08-28 | 2027-02-24 | 174 |
 | `manifest_prune_push_token` | 2026-08-28 | 2027-02-24 | 174 |
@@ -182,10 +183,13 @@ rotated unattended by the weekly secret-rotate cron.
 | `monitor_bridge_ups_push_token` | 2026-08-30 | 2027-02-26 | 176 |
 | `pi_recovery_push_token` | 2026-08-30 | 2027-02-26 | 176 |
 | `pi_sd_health_push_token` | 2026-08-30 | 2027-02-26 | 176 |
+| `release_staleness_push_token` | 2026-04-05 | 2026-10-02 | 29 |
 | `remember_logs_push_token` | 2026-04-16 | 2026-10-13 | 40 |
+| `renovate_agent_kuma_push_token` | 2026-05-04 | 2026-10-31 | 58 |
 | `ruleset_drift_push_token` | 2026-09-01 | 2027-02-28 | 178 |
 | `secret_rotation_push_token` | 2026-08-28 | 2027-02-24 | 174 |
 | `setup_drift_push_token` | 2026-04-05 | 2026-10-02 | 29 |
+| `ups_secondary_daniel_server_push_token` | 2026-06-13 | 2026-12-10 | 98 |
 | `ups_secondary_push_token` | 2026-08-22 | 2027-02-18 | 168 |
 
 ## ignore

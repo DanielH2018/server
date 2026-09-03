@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/service_catalog.py
-generated_at: 2026-09-03 06:17 UTC
-generated_sha: 21556bbe
+generated_at: 2026-09-03 18:17 UTC
+generated_sha: 4ee11a94
 ---
 
 !!! warning "Generated file — do not edit"
@@ -52,7 +52,7 @@ generated_sha: 21556bbe
 | mosquitto | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | daily -> B2 (default group) | denylisted (dependency edges — MQTT broker for zigbee2mqtt/home-assistant; no intra-tick ordering. ALSO Recreate + its own PVC — two independent reasons) |
 | n8n | k8s | <span class="fqdn" data-host="n8n">n8n.&lt;domain&gt;</span> · <span class="fqdn" data-host="n8n.local">n8n.local.&lt;domain&gt;</span> | Authelia | weekly -> B2 (default target) | denylisted (two reasons: (1) probe-less n8n-runners sub-deployment; (2) migrating state — Recreate + RWO volume-claim PVC (n8n-data) holding the encryption key + credentials DB. COUPLING NOTE for a future promotion: n8n declares TWO claims, n8n-data and n8n-files — a revert of one without the other desyncs which workflow-referenced /files paths actually exist against the credentials/workflow state in n8n-data) |
 | n8n-images | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | eligible |
-| navidrome | k8s | <span class="fqdn" data-host="navidrome">navidrome.&lt;domain&gt;</span> · <span class="fqdn" data-host="navidrome.local">navidrome.local.&lt;domain&gt;</span> | Authelia | daily -> B2 (default group) | denylisted (parked at replicas 0 — an auto-applied image bump would never reach a pod) |
+| navidrome | k8s | <span class="fqdn" data-host="navidrome">navidrome.&lt;domain&gt;</span> · <span class="fqdn" data-host="navidrome.local">navidrome.local.&lt;domain&gt;</span> | Authelia | weekly -> B2 (default target) | denylisted (parked at replicas 0 — an auto-applied image bump would never reach a pod) |
 | netpol-baseline | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | eligible |
 | node-exporter | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | eligible |
 | nut | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | denylisted (NOT probe-less (has a readinessProbe) despite the denylist comment grouping — real reason: USB-passthrough + node-exclusive hostPort (Recreate strategy) on the UPS shutdown-chain pod, privileged:true) |
