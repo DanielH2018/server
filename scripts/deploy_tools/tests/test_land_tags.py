@@ -16,6 +16,7 @@ import sys
 from pathlib import Path
 
 import pytest
+import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -288,6 +289,181 @@ def test_docs_and_ordinary_services_are_not_self_applied():
         ["ansible/roles/setup/k3s/defaults/main.yml"],
     ):
         assert land_tags.self_applied(files) is False, files
+
+
+@pytest.fixture
+def _synthetic_setup_inventory(tmp_path):
+    """A synthetic initial_setup.yml + group_vars/host_vars.
+
+    Pins the derivation tests below the way this file's own module docstring already
+    requires for `_DECLARED` ("A fixture, not live inventory... reading containers_list
+    would make them fail whenever a service is retired"). `setup_role_hosts` had no
+    injection point for that until now; this mirrors `deploy_tags.py`'s own
+    `host_vars: Path = HOST_VARS` pattern.
+    """
+    playbook = tmp_path / "initial_setup.yml"
+    playbook.write_text(
+        yaml.safe_dump(
+            [
+                {
+                    "hosts": "x",
+                    "roles": [
+                        {"role": "config_files"},  # no when: -> every host
+                        {"role": "gitops_deploy", "when": "has_gitops"},
+                        {
+                            "role": "nut_host",
+                            "when": "inventory_hostname == ups_host or "
+                            "nut_host_secondary_armed | bool",
+                        },
+                        {
+                            "role": "optimize_pi",
+                            "when": "inventory_hostname == 'daniel-pi'",
+                        },
+                    ],
+                }
+            ]
+        )
+    )
+    all_vars = tmp_path / "all.yml"
+    all_vars.write_text(
+        yaml.safe_dump(
+            {
+                "has_gitops": False,
+                "ups_host": "daniel-server",
+                "nut_host_secondary_armed": False,
+            }
+        )
+    )
+    host_vars_dir = tmp_path / "host_vars"
+    host_vars_dir.mkdir()
+    (host_vars_dir / "daniel-box.yml").write_text(
+        yaml.safe_dump({"has_gitops": True, "nut_host_secondary_armed": True})
+    )
+    return playbook, all_vars, host_vars_dir
+
+
+def test_setup_role_hosts_reads_the_when_gate_per_host(_synthetic_setup_inventory):
+    """The derivation itself, pinned against a synthetic tree rather than live vars that can
+    be armed/disarmed (nut_host_secondary_armed, has_gitops) for reasons unrelated to this
+    logic."""
+    playbook, all_vars, host_vars_dir = _synthetic_setup_inventory
+    assert land_tags.setup_role_hosts(
+        "config_files", playbook, all_vars, host_vars_dir
+    ) == frozenset({"daniel-box", "daniel-server", "daniel-pi"})
+    assert land_tags.setup_role_hosts(
+        "gitops_deploy", playbook, all_vars, host_vars_dir
+    ) == frozenset({"daniel-box"})
+    # nut_host: `inventory_hostname == ups_host or nut_host_secondary_armed | bool` --
+    # daniel-server matches the first clause, daniel-box the second (armed there), daniel-pi
+    # neither.
+    assert land_tags.setup_role_hosts(
+        "nut_host", playbook, all_vars, host_vars_dir
+    ) == frozenset({"daniel-box", "daniel-server"})
+    assert land_tags.setup_role_hosts(
+        "optimize_pi", playbook, all_vars, host_vars_dir
+    ) == frozenset({"daniel-pi"})
+
+
+def test_setup_role_hosts_unknown_role_is_empty(_synthetic_setup_inventory):
+    """The reject half: a role not in the playbook's own `roles:` list is `plane_note`'s
+    `unroutable` territory, not this function's to guess at."""
+    playbook, all_vars, host_vars_dir = _synthetic_setup_inventory
+    assert (
+        land_tags.setup_role_hosts("not_a_real_role", playbook, all_vars, host_vars_dir)
+        == frozenset()
+    )
+
+
+def test_eval_when_does_not_crash_on_a_list_or_a_bool():
+    """`when:` as a YAML list is Ansible's implicit AND, and `when: true` is a bare bool --
+    both are legal shapes `initial_setup.yml` could carry tomorrow even though no role uses
+    them today. Neither may raise past the documented fail-open contract.
+
+    The accept half: a list whose clauses are all true evaluates true. The reject half: one
+    false clause makes the whole list false -- proving this isn't just swallowing every
+    input into True.
+    """
+    assert land_tags._eval_when(["1 == 1", "2 == 2"], "daniel-box") is True
+    assert land_tags._eval_when(["1 == 1", "1 == 2"], "daniel-box") is False
+    # A non-string, non-list value (e.g. a bare YAML bool) cannot be evaluated at all, so it
+    # fails open rather than raising -- true or false, both read as "reached".
+    assert land_tags._eval_when(True, "daniel-box") is True
+    assert land_tags._eval_when(False, "daniel-box") is True
+
+
+def test_setup_role_hosts_census_is_not_vacuous():
+    """The parse of initial_setup.yml's `roles:` list must find a known set of names, AND
+    the parse's discriminating half -- which roles carry a real `when:` -- must be non-empty
+    too.
+
+    A vacuous parse (an empty dict, a wrong key) would make every remaining-hosts note
+    silently empty -- the same shape nine guards broke across PRs #838/#846/#852/#858 and the
+    monitor-bridge move, caught only by an assertion like this one. A parse that found every
+    NAME but read every `when:` as None would be a subtler version of the same failure:
+    `setup_role_hosts` would then reach ALL THREE hosts for every role, silently re-breaking
+    #723 with every test above still green (they use a synthetic tree, not this parse).
+    """
+    roles = land_tags._initial_setup_roles()
+    assert {
+        "config_files",
+        "initial_setup",
+        "sops_setup",
+        "docker_install",
+        "hypervisor",
+        "gitops_deploy",
+        "github_cli",
+        "chezmoi_setup",
+        "claude_code",
+        "renovate_notify",
+        "renovate_agent",
+        "nut_host",
+        "optimize_pi",
+        "fake_remux",
+    } <= set(roles)
+    assert roles["initial_setup"] is None
+    assert roles["gitops_deploy"]  # a real `when:` gate, not None
+
+
+def test_remaining_setup_hosts_note_flags_pr_1002():
+    """PR #1002's real shape: `initial_setup` reaches all three hosts, the tick converges on
+    daniel-box alone, and the other two are owed a hand-run (issue #1009)."""
+    files = ["ansible/roles/setup/initial_setup/files/kuma-push-lib.sh"]
+    note = land_tags.remaining_setup_hosts_note(files, "daniel-box")
+    assert "daniel-server" in note
+    assert "daniel-pi" in note
+    assert "initial_setup" in note
+
+
+def test_remaining_setup_hosts_note_stays_empty_for_pr_723():
+    """The reject half. gitops_deploy and renovate_notify both reach daniel-box alone, so
+    flagging them here would re-break the fix #723 exists to protect -- `plane_note`'s own
+    docstring records land.sh exiting 1 with `needs-manual-apply` for this same file list
+    while the very next tick applied it (2026-09-01)."""
+    files = [
+        "ansible/roles/setup/gitops_deploy/files/deploy_logic.py",
+        "ansible/roles/setup/renovate_notify/files/renovate_notify.py",
+    ]
+    assert land_tags.remaining_setup_hosts_note(files, "daniel-box") == ""
+
+
+def test_remaining_setup_hosts_note_is_relative_to_the_given_host():
+    """A role reaching only the host asked about has nothing remaining, whichever host that
+    is -- the note is relative to `local_host`, not hardcoded to daniel-box."""
+    files = ["ansible/roles/setup/optimize_pi/tasks/main.yml"]
+    assert land_tags.remaining_setup_hosts_note(files, "daniel-pi") == ""
+    assert "daniel-pi" in land_tags.remaining_setup_hosts_note(files, "daniel-box")
+
+
+def test_an_unroutable_setup_role_has_no_remaining_hosts():
+    """`common` reaches no host through initial_setup.yml at all -- that's `plane_note`'s
+    `unroutable` case, not this function's to guess at."""
+    files = ["ansible/roles/setup/common/templates/resolv.conf.j2"]
+    assert land_tags.remaining_setup_hosts_note(files, "daniel-box") == ""
+
+
+def test_land_wires_the_remaining_setup_hosts_check():
+    assert "--remaining-setup-hosts" in _LAND_SH
+    assert "REMAINING_SETUP" in _LAND_SH
 
 
 def test_an_ordinary_service_pr_needs_no_manual_apply():

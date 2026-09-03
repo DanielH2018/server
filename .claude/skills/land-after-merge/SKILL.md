@@ -119,18 +119,35 @@ reads that from the deployer's own `behind_since` and `hold_sha` markers, since 
 service tag leaves no other evidence of being applied. A held `hold_sha` is `deploy-failed`.
 
 `needs-manual-apply` means the PR reaches something neither a deploy tag nor the tick covers,
-and the line names the command that does apply it. Three things are in that position. A
+and the line names the command that does apply it. Four things are in that position. A
 **setup role `initial_setup.yml` does not include** (`k3s` is in `k3s-bringup.yml`, `common` in
 no playbook) or a bring-up playbook, because the tick applies every other setup role itself
 and `deploy.yml` is a `containers_list` loop. A **shared k8s role** —
 `manifests`, `volume-claim`, `rollout-drain`, `volume-snapshot`, `volume-revert`,
 `image-builder`, `longhorn-api`, `cronjob-gate` — has no `containers_list` entry at all, so
 `--tags manifests` matches nothing and only a full `ansible/deploy.yml` applies it. A **rotated
-secret** is the third and has no path to match at all: a secret's value lives in no role's
-template, so `ansible/vars/secrets.yml` derives zero tags however many roles consume it. Run
-`uv run python scripts/secrets_mgmt/secret_rotation.py consumers <secret>` for who holds a stale
-copy and the repair command per plane. The other services in the same PR still deploy normally;
-the verdict is about the half that did not.
+secret** has no path to match at all: a secret's value lives in no role's template, so
+`ansible/vars/secrets.yml` derives zero tags however many roles consume it. Run `uv run python
+scripts/secrets_mgmt/secret_rotation.py consumers <secret>` for who holds a stale copy and the
+repair command per plane. The other services in the same PR still deploy normally; the verdict
+is about the half that did not.
+
+**A self-applied setup role reaching a host beyond the tick's own** is the fourth (issue #1009).
+`initial_setup.yml`'s `hosts:` is one target per run, and the tick runs it on whichever host
+`land.sh` itself executes on — so a role with no `when:` gate (`initial_setup` itself, plus
+`config_files`, `sops_setup`, `docker_install`, `hypervisor`) reaches all three hosts
+(daniel-box, daniel-server, daniel-pi), and a role's own `when:` can reach more than one (e.g.
+`nut_host`: daniel-box and daniel-server). The tick converging says only that the LOCAL host
+is current; PR #1002 changed the shared Kuma push library, the tick converged on daniel-box, and
+`land.sh` read `settled` while daniel-server and daniel-pi kept the old library for three days.
+The line names each remaining host and its exact apply command — `ssh <host> "cd
+/home/ubuntu/server && ansible-playbook ansible/initial_setup.yml --tags <tag>"` for a
+`connection=local` host, `ansible-playbook ansible/initial_setup.yml --tags <tag> -e
+target=daniel-pi` for the Pi. **This is not the same failure PR #723 hit.** #723's self-applied
+roles (`gitops_deploy`, `renovate_notify`) are gated `when: has_gitops` / `when:
+inventory_hostname == renovate_notify_host`, both true only on daniel-box, so a role reaching
+just the tick's own host still reads `settled` — reporting every self-applied role as unfinished
+was tried and reverted for exactly that PR (`plane_note`'s own docstring in `land_tags.py`).
 
 **Do not hand-poll CI and do not hand-merge.** `await_ci.py` reads the same check-runs
 endpoint the deployer reads, so its verdict and the tick's agree by construction. Hand-polling

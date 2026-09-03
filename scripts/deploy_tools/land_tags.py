@@ -30,10 +30,12 @@ import subprocess
 import sys
 from pathlib import Path
 
+import yaml
+
 # The build/roll couplings live in deploy_logic so this and `deploy_tags.py changed` widen
 # identically -- two derivations that disagree is the defect this import exists to prevent.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from lib.repo_paths import GITOPS_DEPLOY_FILES
+from lib.repo_paths import ALL_VARS, ANSIBLE, GITOPS_DEPLOY_FILES, HOST_VARS
 
 sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
@@ -44,6 +46,7 @@ from deploy_logic import (
     k8s_remediation,
     services_from_changed_paths,
     setup_role_playbook,
+    setup_role_tag,
 )
 
 # Same directory, so a direct invocation already has it on sys.path. `service_tags` is the
@@ -233,6 +236,183 @@ def self_applied(files, quiet=()) -> bool:
     )
 
 
+# The hosts land.sh's setup-role remediation ever names. daniel-stage is excluded on
+# purpose -- it is not land.sh's business (HOSTS_LAND_SH_NEVER_DEPLOYS in deploy_tags.py is
+# the same exclusion for a deploy tag), and initial_setup.yml is never run against it from
+# here.
+_HOSTS = ("daniel-box", "daniel-server", "daniel-pi")
+
+# `ansible_connection=local` in hosts.ini -- selecting one of these with `-e target=` from
+# elsewhere only picks its VARIABLES; the play still runs on whichever host you typed the
+# command on (hosts.ini's own comment, ENFORCED by
+# ansible/tests/deploy/test_local_connection_target.py). So a remaining host in this set
+# must be reached by sshing to it first. daniel-pi is the one host actually driven remotely
+# with `-e target=daniel-pi`, from wherever the play runs.
+_LOCAL_CONNECTION_HOSTS = frozenset({"daniel-box", "daniel-server"})
+
+_INITIAL_SETUP_YML = ANSIBLE / "initial_setup.yml"
+
+
+def _initial_setup_roles(playbook: Path = _INITIAL_SETUP_YML) -> dict[str, object]:
+    """{role name: its `when:` value (a string, a list, a bool, or None)}.
+
+    Read from `playbook`'s own `roles:` list -- the same source Ansible itself resolves
+    against, so this can never disagree with what a real run does. `playbook` defaults to
+    this repo's `initial_setup.yml`; a test passes a synthetic one so the derivation it pins
+    cannot drift when this repo's own gates change (mirrors `deploy_tags.py`'s
+    `host_vars: Path = HOST_VARS` pattern).
+    """
+    play = yaml.safe_load(playbook.read_text())[0]
+    roles: dict[str, object] = {}
+    for entry in play["roles"]:
+        name = entry if isinstance(entry, str) else entry["role"]
+        when = None if isinstance(entry, str) else entry.get("when")
+        roles[name] = when
+    return roles
+
+
+def _host_vars(
+    host: str, all_vars: Path = ALL_VARS, host_vars_dir: Path = HOST_VARS
+) -> dict:
+    """`all_vars` overridden by `host_vars_dir`/<host>.yml.
+
+    The same precedence Ansible resolves a `when:` variable through (a host_vars key always
+    wins over the group default). Defaults to this repo's group_vars/all.yml and host_vars/.
+    """
+    merged = dict(yaml.safe_load(all_vars.read_text()) or {})
+    hv = host_vars_dir / f"{host}.yml"
+    if hv.exists():
+        merged.update(yaml.safe_load(hv.read_text()) or {})
+    return merged
+
+
+def _eval_when(
+    expr: object, host: str, all_vars: Path = ALL_VARS, host_vars_dir: Path = HOST_VARS
+) -> bool:
+    """Best-effort read of a `when:` value for one host.
+
+    Every gate `initial_setup.yml` uses today is a bare var, an `or`/`and` of them, an
+    `inventory_hostname == <var-or-literal>` comparison, or one of those with a trailing
+    `| bool` filter -- all valid Python once `| bool` is stripped, so `eval` against the
+    host's merged vars reads them exactly as Ansible would. A YAML list is Ansible's
+    implicit AND (`when: [a, b]` means `a and b`), so it is joined before evaluating rather
+    than rejected.
+
+    Returns True -- host REACHED -- whenever evaluation cannot be trusted: a non-string,
+    non-list value (a YAML `when: true`), an unresolved name, or a Jinja construct `eval`
+    cannot parse. Wider than the truth is recoverable (an extra command an operator can
+    no-op past); narrower silently hides a real gap, which is the failure this function
+    exists to close. Same asymmetry `_quiet_paths` already applies to a broad path it cannot
+    read.
+    """
+    if isinstance(expr, list):
+        expr = " and ".join(f"({e})" for e in expr)
+    if not isinstance(expr, str):
+        return True
+    ns = dict(_host_vars(host, all_vars, host_vars_dir))
+    ns["inventory_hostname"] = host
+    py_expr = expr.replace("| bool", "").replace("|bool", "")
+    try:
+        return bool(eval(py_expr, {"__builtins__": {}}, ns))
+    except Exception:
+        return True
+
+
+def setup_role_hosts(
+    role: str,
+    playbook: Path = _INITIAL_SETUP_YML,
+    all_vars: Path = ALL_VARS,
+    host_vars_dir: Path = HOST_VARS,
+) -> frozenset[str]:
+    """Which of `_HOSTS` `initial_setup.yml` applies `role` to.
+
+    THE HOLE THIS CLOSES. `self_applied()` says a setup role is the tick's to apply, but the
+    tick only ever runs on ONE host -- the one `gitops_deploy` is armed on (`has_gitops`,
+    daniel-box only: `roles: [{role: gitops_deploy, when: has_gitops}, ...]` in
+    initial_setup.yml, and `has_gitops` is true only in daniel-box's host_vars).
+    `initial_setup.yml`'s own `hosts:` is `{{ target | default(lookup('pipe','hostname')) }}`
+    -- one host per run -- so a role with NO `when:` gate (`initial_setup` itself among them)
+    reaches every host the playbook is EVER run on, and the tick converging on daniel-box says
+    nothing about the other two. Issue #1009: PR #1002 changed
+    `roles/setup/initial_setup/files/kuma-push-lib.sh`, the tick converged, and land.sh read
+    `settled` while daniel-server and daniel-pi kept running the old library.
+
+    Returns an empty set for a role `initial_setup.yml` does not reach at all (its playbook
+    is not `ansible/initial_setup.yml`, or it is not in that playbook's `roles:` list) --
+    that is `plane_note`'s `unroutable` territory, not this function's to guess at.
+    """
+    if setup_role_playbook(role) != "ansible/initial_setup.yml":
+        return frozenset()
+    roles = _initial_setup_roles(playbook)
+    if role not in roles:
+        return frozenset()
+    when = roles[role]
+    if when is None:
+        return frozenset(_HOSTS)
+    return frozenset(h for h in _HOSTS if _eval_when(when, h, all_vars, host_vars_dir))
+
+
+def _setup_apply_command(role: str, host: str) -> str:
+    """The exact command that applies `role` on `host` via initial_setup.yml.
+
+    Mirrors `deploy_remediation._setup_commands`'s hand-written pair for the `common` role
+    (ssh-then-run for a local-connection host, `-e target=` for daniel-pi) -- generalised to
+    any role/host pair rather than that one role's two consumers.
+
+    A `_LOCAL_CONNECTION_HOSTS` remote host (daniel-server, when it is not `local_host`)
+    renders from ITS OWN checkout: `ansible_connection=local` means the play there runs as
+    its own controller against its own `/home/ubuntu/server`, and nothing keeps that current
+    -- the crons that `git pull` (secret-rotate.sh.j2, docs-refresh.sh.j2) are both `when:
+    has_gitops`, daniel-box only. Skipping the pull renders the PRE-merge tree and reports
+    `changed=0`, the exact trap `broad_remediation`'s docstring records an operator hitting
+    on 2026-09-01 -- so the pull is folded into the same command rather than left as a
+    separate step a copy-paste can drop. daniel-pi has no such hazard: `-e target=daniel-pi`
+    renders on THIS host's already-current checkout and only executes remotely over SSH.
+    """
+    tag = setup_role_tag(role)
+    if host in _LOCAL_CONNECTION_HOSTS:
+        return (
+            f'`ssh {host} "cd /home/ubuntu/server && git pull --ff-only && '
+            f'ansible-playbook ansible/initial_setup.yml --tags {tag}"`'
+        )
+    return f"`ansible-playbook ansible/initial_setup.yml --tags {tag} -e target={host}`"
+
+
+def remaining_setup_hosts_note(
+    files,
+    local_host: str,
+    quiet=(),
+    playbook: Path = _INITIAL_SETUP_YML,
+    all_vars: Path = ALL_VARS,
+    host_vars_dir: Path = HOST_VARS,
+) -> str:
+    """What a self-applied setup-role change still needs beyond `local_host`, or "" if nothing does.
+
+    `local_host` is the host the tick just ran on. Additive to `plane_note`'s `unroutable`
+    case, not a duplicate of it: that flags a role no playbook ever reaches; this flags a
+    role `initial_setup.yml` DOES reach, on hosts the tick's single run never touches.
+
+    Empty for the #723 shape -- `gitops_deploy` is `when: has_gitops`, true only on
+    daniel-box, so a PR touching only a role whose sole reached host is `local_host` stays
+    unowed to a hand, exactly as `plane_note` already keeps it.
+    """
+    quiet = set(quiet)
+    cs = services_from_changed_paths([p for p in files if p not in quiet])
+    remaining: dict[str, frozenset[str]] = {}
+    for role in cs.setup_roles:
+        hosts = setup_role_hosts(role, playbook, all_vars, host_vars_dir) - {local_host}
+        if hosts:
+            remaining[role] = hosts
+    if not remaining:
+        return ""
+    return "; ".join(
+        f"`{role}` also reaches {host} (not applied by this tick): "
+        f"{_setup_apply_command(role, host)}"
+        for role in sorted(remaining)
+        for host in sorted(remaining[role])
+    )
+
+
 def derive(
     files, changed_files: int, declared: set[str] | None = None
 ) -> tuple[list[str], str]:
@@ -284,10 +464,10 @@ def _quiet_paths(paths: list[str], range_: str) -> set[str]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Print, from a PR's file list, its deploy tags, plane note, or self-applied flag.
+    """Print one fact about a PR's file list -- tags, plane note, self-applied flag, or remaining-setup-hosts note.
 
-    Which one prints depends on `--plane`/`--self-applied`; with neither, prints the
-    derived `--tags` value. Always exits 0.
+    Which one prints depends on `--plane`/`--self-applied`/`--remaining-setup-hosts`; with
+    none of them, prints the derived `--tags` value. Always exits 0.
     """
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
@@ -304,6 +484,15 @@ def main(argv: list[str] | None = None) -> int:
         help="print `yes` if the tick applies part of this PR itself (empty otherwise)",
     )
     parser.add_argument(
+        "--remaining-setup-hosts",
+        metavar="HOST",
+        default=None,
+        help=(
+            "print what a self-applied setup role in this PR still needs beyond HOST -- "
+            "the host the tick just ran on (empty if nothing)"
+        ),
+    )
+    parser.add_argument(
         "--range",
         dest="range_",
         default="",
@@ -318,6 +507,9 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if ns.self_applied:
         print("yes" if self_applied(paths, quiet=quiet) else "")
+        return 0
+    if ns.remaining_setup_hosts is not None:
+        print(remaining_setup_hosts_note(paths, ns.remaining_setup_hosts, quiet=quiet))
         return 0
     tags, source = derive(
         [f["path"] for f in payload.get("files", [])],
