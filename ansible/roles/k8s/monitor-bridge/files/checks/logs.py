@@ -54,12 +54,33 @@ def check_loki_ingestion():
 
 
 def check_shipper_dropped():
-    """Prometheus-based log-shipper partial-loss watchdog (see shipper_dropped). Prom-dependent."""
-    count = bridge.net.prom_scalar(
+    """Prometheus-based log-shipper + Loki-distributor partial-loss watchdog. Prom-dependent.
+
+    Reads BOTH sides of the pipe (see shipper_dropped): the shippers' own client-side
+    dropped-entries counter, and Loki's server-side `loki_discarded_samples_total`, broken
+    down `by (reason)` so a fired alert can name the cause. The client-side counter alone
+    missed a 161,573-sample burst on 2026-09-03 — Loki discarded it without any shipper ever
+    attributing the loss to itself. Both queries use a `__name__` regex rather than a bare
+    metric name, the same reason SHIPPER_DROPPED_METRICS does: a counter rename on either side
+    must not silently read as "0 dropped forever".
+    """
+    client_count = bridge.net.prom_scalar(
         'sum(increase({__name__=~"%s"}[%s]))'
         % (cfg.SHIPPER_DROPPED_METRICS, cfg.SHIPPER_DROPPED_WINDOW)
     )
-    return shipper_dropped(count, cfg.SHIPPER_DROPPED_WINDOW, cfg.SHIPPER_DROPPED_MAX)
+    server_reasons = [
+        (labels.get("reason", "unknown"), value)
+        for labels, value in bridge.net.prom_vector(
+            'sum by (reason) (increase({__name__=~"%s"}[%s]))'
+            % (cfg.SHIPPER_DROPPED_SERVER_METRIC, cfg.SHIPPER_DROPPED_WINDOW)
+        )
+    ]
+    return shipper_dropped(
+        client_count,
+        server_reasons,
+        cfg.SHIPPER_DROPPED_WINDOW,
+        cfg.SHIPPER_DROPPED_MAX,
+    )
 
 
 def check_loki_reachable():

@@ -215,30 +215,59 @@ def test_run_once_graced_check_recovers_without_paging(monkeypatch):
 
 
 # ── log-shipper dropped-entries watchdog (Prometheus counter; partial log loss) ──
+# #993: the client-side shipper counter and the server-side Loki-discard counter are read
+# together, and the LARGER of the two decides the verdict — see shipper_dropped()'s docstring
+# for the measured 161,573-vs-1,027 burst that motivated this.
 
 
 @pytest.mark.parametrize(
-    ("count", "ok", "must_contain"),
+    ("client_count", "server_reasons", "ok", "must_contain"),
     [
-        pytest.param(50, True, ("ok",), id="under_threshold_is_ok"),
+        pytest.param(50, [], True, ("ok",), id="both_sides_under_threshold_is_clean"),
         pytest.param(
-            5000, False, ("5000", "partial log loss"), id="over_threshold_is_down"
+            5000,
+            [],
+            False,
+            ("5000", "partial log loss"),
+            id="client_side_alone_over_threshold_is_flagged",
         ),
-        # No series (counter never incremented) -> None -> 0 -> up.
-        pytest.param(None, True, (), id="none_is_ok"),
+        # No series on either side (counters never incremented) -> None/[] -> 0 -> up.
+        pytest.param(None, [], True, (), id="no_series_either_side_is_clean"),
         # Exactly at the threshold must NOT alert (strictly greater).
-        pytest.param(1000, True, (), id="at_threshold_is_ok"),
+        pytest.param(1000, [], True, (), id="at_threshold_is_clean"),
+        # Server-side alone crosses the threshold while the client stays clean — the #993 case:
+        # the client counted 1,027 (well under threshold) while Loki discarded 161,573
+        # server-side. The client count here must be below `threshold` on its own, or this
+        # case only proves message attribution, not that the server arm can fire by itself.
+        pytest.param(
+            50,
+            [("too_far_behind", 161608.0), ("ingester_error", 40.0)],
+            False,
+            ("161608", "too_far_behind", "server-side"),
+            id="server_side_alone_over_threshold_names_the_reason_is_flagged",
+        ),
+        # Server side has series but stays under threshold on both arms -> clean, and the
+        # reason breakdown does not leak into an ok message.
+        pytest.param(
+            50,
+            [("rate_limited", 10.0)],
+            True,
+            ("ok",),
+            id="server_side_present_but_under_threshold_is_clean",
+        ),
     ],
 )
-def test_shipper_dropped(count, ok, must_contain):
-    result_ok, msg = checks.logs.shipper_dropped(count, "1h", 1000)
+def test_shipper_dropped(client_count, server_reasons, ok, must_contain):
+    result_ok, msg = checks.logs.shipper_dropped(
+        client_count, server_reasons, "1h", 1000
+    )
     assert result_ok is ok
     for s in must_contain:
         assert s in msg
 
 
 def test_check_shipper_dropped_reads_both_shippers_counters(monkeypatch):
-    """One query over a __name__ regex, no reason filter.
+    """One scalar query over a __name__ regex, no reason filter, for the CLIENT side.
 
     Both estates ship through Alloy and share `loki_write_dropped_entries_total`, but the
     query stays a name regex: while daniel-pi ran Promtail its counter had a different name,
@@ -252,7 +281,12 @@ def test_check_shipper_dropped_reads_both_shippers_counters(monkeypatch):
         queries.append(q)
         return 5000.0
 
+    def fake_vector(q):
+        queries.append(q)
+        return []
+
     monkeypatch.setattr(bridge.net, "prom_scalar", fake_scalar)
+    monkeypatch.setattr(bridge.net, "prom_vector", fake_vector)
     ok, _ = checks.logs.check_shipper_dropped()
     assert not ok
     assert any(
@@ -262,3 +296,23 @@ def test_check_shipper_dropped_reads_both_shippers_counters(monkeypatch):
         and "reason" not in q
         for q in queries
     )
+
+
+def test_check_shipper_dropped_reads_server_side_by_reason(monkeypatch):
+    """The SERVER-side arm queries Loki's own discard counter, grouped `by (reason)` (#993).
+
+    Grouping by reason is what lets a fired alert name the cause (too_far_behind vs a
+    throughput/limit reason) instead of just a bare count.
+    """
+    monkeypatch.setattr(bridge.net, "prom_scalar", lambda q: 0.0)
+
+    def fake_vector(q):
+        assert "sum by (reason)" in q
+        assert '{__name__=~"' in q
+        assert "loki_discarded_samples_total" in q
+        return [({"reason": "too_far_behind"}, 161608.0)]
+
+    monkeypatch.setattr(bridge.net, "prom_vector", fake_vector)
+    ok, msg = checks.logs.check_shipper_dropped()
+    assert not ok
+    assert "too_far_behind" in msg
