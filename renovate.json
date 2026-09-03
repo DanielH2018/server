@@ -288,6 +288,17 @@
       "groupName": "k8s image {{depName}}"
     },
     {
+      "description": "CI toolchain + docs-lint pins under .github/workflows/** and .vale.ini are not container images, and the catch-all 'container images (non-major)' rule above has no matchFileNames scoping it away from them — it matches every custom.regex dep by default. That is how PR #939 opened titled \"Update dependency prek to v0.5.0\" on branch renovate/container-images-(non-major) while its diff carried only the Vale binary bump (2026-09 finding, issue #980): both prek (ci.yml) and vale-cli/vale (ci.yml) fell into this one shared group with no file scoping, so Renovate reused a single group branch across two unrelated deps and the surviving title no longer matched the surviving diff. Giving each dependency its own group by depName makes the branch and title self-name, so a stale one can never wear another's label. {{depName}} still groups python's ci.yml + image-smoke.yml pins together (same depName, two files) — only the shared catch-all name is removed, not that lockstep. automerge/platformAutomerge/minimumReleaseAge inherited from the catch-all rule above are unaffected; only groupName changes.",
+      "matchManagers": [
+        "custom.regex"
+      ],
+      "matchFileNames": [
+        ".github/workflows/**",
+        ".vale.ini"
+      ],
+      "groupName": "{{depName}}"
+    },
+    {
       "description": "Digest bumps on the k8s plane. 22 of 74 pins carry a @sha256 digest and 18 of those sit on a MUTABLE tag (latest, release, master-web/-collector, jvm-stable, vanilla-latest) where a VERSION bump can never be offered \u2014 only a digest one. That is ~28% of the fleet, and `matchUpdateTypes: [minor, patch]` above does not match updateType `digest`, so none of them auto-merged. Watchtower applied exactly this class automatically until it was retired 2026-08-09 with the note 'Renovate owns image updates' \u2014 leaving it manual was a regression against what it replaced, not a deliberate posture. minimumReleaseAge is 3 days rather than 7: there is no version to soak, only a re-push of the same tag, so the wait is purely to let a poisoned/yanked push be noticed. The auto-deploy denylist (roles/setup/gitops_deploy/defaults/main.yml) is the safety boundary \u2014 a denylisted service's digest PR still merges, it just never auto-deploys.",
       "matchManagers": [
         "custom.regex"

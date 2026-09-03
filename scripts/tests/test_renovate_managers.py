@@ -32,8 +32,45 @@ from _renovate import (
     _file_pattern_to_regex,
     _is_disabled_by_packagerule,
     _k8s_image_manager,
+    _minimatch_to_regex,
     _to_python_regex,
 )
+
+
+def _resolve_group_name(
+    dep_name: str,
+    rel_path: str,
+    update_type: str,
+    datasource: str,
+    rules: list[dict] = _PACKAGE_RULES,
+) -> str | None:
+    """The `groupName` Renovate would resolve for a dep, walking packageRules in order.
+
+    Later rules win a field they set, so the last matching rule with a `groupName` decides —
+    this mirrors `_is_disabled_by_packagerule`'s walk, for `groupName` instead of `enabled`.
+    """
+    group_name = None
+    for rule in rules:
+        if "matchManagers" in rule and "custom.regex" not in rule["matchManagers"]:
+            continue
+        if "matchFileNames" in rule and not any(
+            _minimatch_to_regex(g).match(rel_path) for g in rule["matchFileNames"]
+        ):
+            continue
+        if "matchDatasources" in rule and datasource not in rule["matchDatasources"]:
+            continue
+        if "matchPackageNames" in rule and not any(
+            re.search(n[1:-1], dep_name)
+            if n.startswith("/") and n.endswith("/")
+            else n == dep_name
+            for n in rule["matchPackageNames"]
+        ):
+            continue
+        if "matchUpdateTypes" in rule and update_type not in rule["matchUpdateTypes"]:
+            continue
+        if "groupName" in rule:
+            group_name = rule["groupName"]
+    return group_name
 
 
 @pytest.mark.parametrize(
@@ -355,4 +392,52 @@ def test_no_literal_image_lines_in_k8s_templates() -> None:
         "Literal `image:` line(s) in a k8s template — not a Jinja var, so the k8s-defaults "
         "customManager (which only scans defaults/main.yml) never sees it and it ages with "
         "zero update signal:\n" + "\n".join(offenders)
+    )
+
+
+@pytest.mark.parametrize(
+    ("dep_name", "rel_path", "datasource"),
+    [
+        ("prek", ".github/workflows/ci.yml", "pypi"),
+        ("vale-cli/vale", ".github/workflows/ci.yml", "github-releases"),
+        ("vale-cli/Google", ".vale.ini", "github-releases"),
+    ],
+)
+def test_ci_toolchain_pins_have_their_own_group(
+    dep_name: str, rel_path: str, datasource: str
+) -> None:
+    """A CI toolchain pin must resolve to its own group, never the container-images catch-all.
+
+    The 'container images (non-major)' packageRule has no `matchFileNames`, so it matches
+    every custom.regex dep by default — including the prek and Vale pins in ci.yml/.vale.ini,
+    none of which is a container image. #939 shipped titled for prek's v0.5.0 bump while its
+    diff carried only Vale's, because both shared that one catch-all group's branch (issue
+    #980): Renovate reuses a group's branch across whichever deps land in it, so a title
+    generated for one dep can survive a force-push that swaps in another dep's diff. Each of
+    these pins now gets its own `{{depName}}` group instead, so its branch and title always
+    name itself.
+    """
+    assert _resolve_group_name(dep_name, rel_path, "minor", datasource) == "{{depName}}"
+
+
+def test_ci_toolchain_group_resolution_catches_the_catch_all() -> None:
+    """Regression test for the exact bug the guard above now catches.
+
+    Without a file-scoped override, the broad non-major rule wins by default — proving
+    `_resolve_group_name` isn't vacuously returning the right answer for every input, the same
+    'passes on match alone' failure mode `test_disabling_currentvalue_rule_scoped_to_its_files`
+    guards against for `enabled` rules.
+    """
+    fake_rules = [
+        {
+            "matchManagers": ["custom.regex"],
+            "matchUpdateTypes": ["minor", "patch"],
+            "groupName": "container images (non-major)",
+        }
+    ]
+    assert (
+        _resolve_group_name(
+            "prek", ".github/workflows/ci.yml", "minor", "pypi", fake_rules
+        )
+        == "container images (non-major)"
     )
