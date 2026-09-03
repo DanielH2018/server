@@ -3,6 +3,7 @@ shell scripts (*.sh.j2) that the prek bash-syntax-check / shellcheck hooks can't
 tags a `.sh.j2` as {jinja, text}, never `shell`).
 """
 
+import re
 import shutil
 from pathlib import Path
 
@@ -446,6 +447,11 @@ HOME_ALLOWLIST = (
     v.ROLES / "k8s" / "crowdsec" / "templates" / "crowdsec-update-home-allowlist.sh.j2"
 )
 
+# How WIDE the retry has to be is a separate question with its own budget, and it lives in
+# ansible/tests/services/test_crowdsec_allowlist_push_retry.py. This guard only pins that a
+# count is there at all, so the two do not both have to move when the width is retuned.
+_RETRY_COUNT = re.compile(r"--retry\s+\d+")
+
 
 def test_home_allowlist_curls_all_retry():
     # The monitor this script pushes is push-type with max_retries 0, so ONE transient curl
@@ -460,10 +466,17 @@ def test_home_allowlist_curls_all_retry():
     ]
     assert lines, "no curl invocations found — did the script move or get rewritten?"
     for ln in lines:
-        assert "--retry 3" in ln, f"curl without --retry 3: {ln}"
-        # --retry-all-errors is what covers connection-refused. Measured on curl 8.5.0, bare
-        # --retry returns instantly on a refused port (exit 7); it DOES retry a DNS failure.
+        assert _RETRY_COUNT.search(ln), f"curl without a --retry count: {ln}"
+        # --retry-all-errors is what covers connection-refused, and a rollout's 404. Measured on
+        # curl 8.5.0: bare --retry returns instantly on a refused port (exit 7) and on a 404; it
+        # DOES retry a DNS failure.
         assert "--retry-all-errors" in ln, f"curl without --retry-all-errors: {ln}"
+
+
+def test_a_home_allowlist_curl_with_the_retry_flags_stripped_is_flagged():
+    stripped = 'curl -fsS --max-time 10 -G -K - --data-urlencode "status=$1"'
+    assert not _RETRY_COUNT.search(stripped)
+    assert "--retry-all-errors" not in stripped
 
 
 def test_home_allowlist_fail_logs_the_status_down_prefix():
