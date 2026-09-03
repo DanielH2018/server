@@ -48,10 +48,12 @@ class Fakes:
     hosts_rc: int = 0
     changed: str = ""
     changed_rc: int = 0
-    gate: tuple[bool, list[str]] = (True, ["sonarr: healthy"])
+    gate: tuple[bool, list[str]] = field(
+        default_factory=lambda: (True, ["sonarr: healthy"])
+    )
     plane: str = ""
     self_applied: bool = False
-    derived: tuple[list[str], str] = (["sonarr"], "pr")
+    derived: tuple[list[str], str] = field(default_factory=lambda: (["sonarr"], "pr"))
     state: dict[str, str] = field(default_factory=dict)
     lock_holder: str = "42 flock deploy"
     hostname: str = "daniel-box"

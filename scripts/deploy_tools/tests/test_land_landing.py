@@ -63,3 +63,9 @@ def test_lock_contention_is_booked_and_the_holder_named_once(landing, capsys):
 def test_tick_state_reads_hold_before_behind(landing, state, expected):
     ln, _ = landing(Fakes(state=state))
     assert ln.tick_state() == expected
+
+
+def test_fakes_defaults_are_fresh_per_instance():
+    """A list inside a tuple default is invisible to dataclasses and RUF012 alike."""
+    assert Fakes().gate[1] is not Fakes().gate[1]
+    assert Fakes().derived[0] is not Fakes().derived[0]
