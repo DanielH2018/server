@@ -74,10 +74,13 @@
 # else in the incoming range needs an operator, and nothing was deployed. `needs-manual-apply`
 # means this PR reaches something neither a deploy tag nor the tick covers — a bring-up
 # playbook, a setup role initial_setup.yml does not include, a shared k8s role with no
-# `containers_list` entry, or a rotated secret, whose value lives in no role's template at all
-# — so it is landed but not live. `deferred` means the tick applies this PR itself (a setup
-# role or the deploy plane) and has not crossed origin yet, usually because a newer merge's
-# CI is still running; the next tick does it, and nothing is wrong with this PR.
+# `containers_list` entry, a rotated secret whose value lives in no role's template at all, or
+# a self-applied setup role that reaches a host beyond the one the tick just ran on (issue
+# #1009: `initial_setup.yml` applies to one host per run, so a role with no `when:` gate —
+# `initial_setup` itself among them — is live on the tick's host and stale everywhere else) —
+# so it is landed but not live everywhere. `deferred` means the tick applies this PR itself (a
+# setup role or the deploy plane) and has not crossed origin yet, usually because a newer
+# merge's CI is still running; the next tick does it, and nothing is wrong with this PR.
 # `merge-conflict` and `pr-ci-red` are the merge wait ending early, on the two states an
 # armed auto-merge never recovers from: the PR needs a rebase, or its own CI is red. Each
 # names its own remedy, where `merge-timeout` could only say "nobody merged it yet".
@@ -413,6 +416,7 @@ git fetch -q origin "$BRANCH" || die "could not fetch origin/$BRANCH" 1
 # nothing-to-deploy after a median seven minutes of PR CI plus master CI.
 PLANE=''
 SELF_APPLIED=''
+REMAINING_SETUP=''
 NEEDS_DIFF=''
 if [ -z "$TAGS" ]; then
   pr_json=$(gh pr view "$PR" --json files,changedFiles) || die "could not read PR files" 1
@@ -453,6 +457,16 @@ if [ -z "$TAGS" ]; then
   # pending merge and says nothing about the services deploy.sh just rolled out.
   SELF_APPLIED=$(uv run python "$LAND_DIR/land_tags.py" --self-applied --range "$quiet_range" --json "$pr_json") ||
     die "self-applied classification failed" 1
+  # What a self-applied setup role in this PR still needs beyond LOCAL_HOST -- the host the
+  # tick below runs the play on. `self_applied` alone answers "does the tick apply this
+  # role", and the tick only ever runs on ONE host; initial_setup.yml applies to a single
+  # target per run, so a role with no `when:` gate (initial_setup itself among them) reaches
+  # every host the playbook is ever run on, and the tick converging here says nothing about
+  # the others (issue #1009, PR #1002: daniel-server and daniel-pi kept the old
+  # kuma-push-lib.sh for three days behind a `settled` verdict). Empty for the #723 shape,
+  # where the only self-applied roles (gitops_deploy, renovate_notify) reach LOCAL_HOST alone.
+  REMAINING_SETUP=$(uv run python "$LAND_DIR/land_tags.py" --remaining-setup-hosts "$LOCAL_HOST" --range "$quiet_range" --json "$pr_json") ||
+    die "remaining-setup-hosts classification failed" 1
   derived=$(uv run python "$LAND_DIR/land_tags.py" --json "$pr_json") ||
     die "tag derivation failed" 1
   source_kind=${derived%% *}
@@ -596,6 +610,15 @@ if [ -z "$TAGS" ]; then
       exit 75
       ;;
   esac
+  # The tick converged on LOCAL_HOST alone. A self-applied setup role with no `when:` gate
+  # (or one true elsewhere) reaches other hosts initial_setup.yml is never run on here —
+  # issue #1009.
+  if [ -n "$REMAINING_SETUP" ]; then
+    echo "  applied on $LOCAL_HOST only; it also reaches: $REMAINING_SETUP"
+    LAND_VERDICT=needs-manual-apply
+    echo "VERDICT: needs-manual-apply (PR #$PR, $MERGE_SHA — self-applied on $LOCAL_HOST only; other hosts still need it)"
+    exit 1
+  fi
   LAND_VERDICT=settled
   echo "VERDICT: settled (PR #$PR, $MERGE_SHA — no service tag; the tick applied it and converged with origin)"
   exit 0
@@ -795,6 +818,15 @@ if [ "$verdict_rc" -eq 0 ]; then
       exit 75
       ;;
   esac
+  # Services deployed, the tick converged, and — the harder version of the same silence
+  # PR #1002 hit with no service tag at all (issue #1009) — a self-applied setup role beside
+  # them reaches hosts LOCAL_HOST's run of initial_setup.yml never touches.
+  if [ -n "$REMAINING_SETUP" ]; then
+    echo "  services deployed and the tick applied on $LOCAL_HOST, but it also reaches: $REMAINING_SETUP"
+    LAND_VERDICT=needs-manual-apply
+    echo "VERDICT: needs-manual-apply (PR #$PR, $MERGE_SHA, tags: $TAGS — self-applied on $LOCAL_HOST only; other hosts still need it)"
+    exit 1
+  fi
   LAND_VERDICT=settled
   echo "VERDICT: settled (PR #$PR, $MERGE_SHA, tags: $TAGS)"
   exit 0
