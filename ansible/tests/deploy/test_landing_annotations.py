@@ -168,7 +168,8 @@ def test_lock_contention_is_recorded_in_both_retry_loops():
     """The tick loop and the deploy loop each retry on contention; each must book the wait."""
     text = _LAND_SH.read_text()
     tick_loop = _retry_loop(text, 'gitops_tick.sh"\n  tick_rc=$?')
-    deploy_loop = _retry_loop(text, 'deploy.sh --tags "$TAGS"\n  deploy_rc=$?')
+    # deploy_by_host runs one deploy.sh per host that declares a tag (issue #929).
+    deploy_loop = _retry_loop(text, "deploy_by_host\n  deploy_rc=$?")
     assert "note_lock_contention" in tick_loop, (
         "the tick retry loop does not record its lock wait"
     )

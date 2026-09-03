@@ -83,6 +83,9 @@ LAND_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 BRANCH=master
 LOCK_RETRIES=5
 LOCK_BACKOFF=60
+# deploy.yml's `hosts:` defaults to this, so a tag declared on any other host needs
+# `-e target=<host>` or the play matches no service and exits 0 (issue #929).
+LOCAL_HOST=$(hostname)
 
 #######################################
 # Stop the landing with a message on stderr.
@@ -493,11 +496,61 @@ if [ -z "$TAGS" ]; then
 fi
 
 TAGS_LABEL=$TAGS
+DEPLOYED_HOSTS=''
+
+#######################################
+# Run deploy.sh once per host that declares one of $TAGS, with -e target= for a remote one.
+#
+# A deploy reaches only the host the play runs against. PR #928 changed roles/containers/alloy,
+# a role only daniel-pi declares; `deploy.sh --tags alloy` on daniel-box matched no service,
+# exited 0, and this script printed `settled` while the Pi ran the old container (issue #929).
+# deploy_tags.py hosts says which host declares each tag, so each host gets its own deploy.
+# A host whose deploy already succeeded is skipped on a retry, so the lock and stale-tree
+# retries below resume at the host that failed rather than re-running the ones that landed.
+# Tags no host declares (a block tag) fall through to one plain deploy.sh, which validates
+# them itself.
+# Globals:
+#   TAGS, LOCAL_HOST (read); DEPLOYED_HOSTS (modified)
+# Arguments:
+#   None
+# Returns:
+#   0 when every host's deploy succeeded, else the first non-zero deploy.sh exit
+#######################################
+deploy_by_host() {
+  local by_host line host host_tags rc
+  by_host=$(uv run python scripts/deploy_tools/deploy_tags.py hosts "$TAGS") || return 1
+  if [ -z "$by_host" ]; then
+    ./scripts/deploy.sh --tags "$TAGS"
+    return $?
+  fi
+  # An array rather than `while read`, so deploy.sh keeps land.sh's own stdin: Ansible
+  # refuses to start on a non-blocking handle, and a herestring loop would hand it one.
+  local -a lines
+  mapfile -t lines <<< "$by_host"
+  for line in "${lines[@]}"; do
+    host=${line%%$'\t'*}
+    host_tags=${line#*$'\t'}
+    case " $DEPLOYED_HOSTS " in *" $host "*) continue ;; esac
+    if [ "$host" = "$LOCAL_HOST" ]; then
+      ./scripts/deploy.sh --tags "$host_tags"
+    else
+      say "$host_tags: declared on $host, deploying there with -e target=$host"
+      ./scripts/deploy.sh --tags "$host_tags" -e "target=$host"
+    fi
+    rc=$?
+    if [ "$rc" -ne 0 ]; then
+      return "$rc"
+    fi
+    DEPLOYED_HOSTS="$DEPLOYED_HOSTS $host"
+  done
+  return 0
+}
+
 deploy_rc=0
 attempt=1
 while [ "$attempt" -le "$LOCK_RETRIES" ]; do
   t_attempt=$SECONDS
-  ./scripts/deploy.sh --tags "$TAGS"
+  deploy_by_host
   deploy_rc=$?
   # 75 = the git-tree lock stayed busy (the 10-min timer, or another session). Nothing was
   # deployed, so this is a resume point rather than a failure.
@@ -561,7 +614,7 @@ while [ "$deploy_rc" -eq 4 ] && [ "$stale_attempt" -lt "$STALE_RETRIES" ]; do
     esac
   fi
   "$LAND_DIR/gitops_tick.sh"
-  ./scripts/deploy.sh --tags "$TAGS"
+  deploy_by_host
   deploy_rc=$?
 done
 

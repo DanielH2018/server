@@ -32,6 +32,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lib.repo_paths import REPO
 
+# Same directory, so a direct invocation already has it on sys.path. `tag_platforms` is the
+# reader of containers_list that says which probe can see a tag's workload.
+import deploy_tags
+
 HOST_LIB_PATH = Path("/opt/gitops-deploy/host_lib.py")
 CONFIG_ENV_PATH = Path("/etc/gitops-deploy/config.env")
 PROBE_TIMEOUT_S = 30
@@ -55,12 +59,25 @@ NOT_APPLICABLE_MARKERS = (
 )
 
 
-def check_one(tag: str, run=subprocess.run) -> tuple[str, str]:
+def check_one(
+    tag: str, run=subprocess.run, platforms: set[str] | None = None
+) -> tuple[str, str]:
     """('ok'|'unhealthy'|'skipped', first line of probe.py's output) for one service tag.
 
-    Tries the k8s route first (~50 of ~55 services live there since the 2026-08-14 Docker
-    retirement -- the same order probe.py's own run_health uses), falls back to --docker, and
-    reports 'skipped' only when BOTH say the tag isn't that kind of workload.
+    `platforms` is the set of platforms whose containers_list declares the tag, read from the
+    inventory when not given. It decides which probe may answer:
+
+      - {'docker'} probes the Pi only, and a miss there is `unhealthy`, never `skipped`. The
+        k8s probe is not consulted at all: a Docker-only tag has no role under roles/k8s/, so
+        probe.py falls back to guessing a workload by the tag's name, and a same-named cluster
+        workload answers for it. That is issue #929: `alloy` is the Pi's log shipper AND the
+        name of loki-homelab's cluster DaemonSet, so the gate read the DaemonSet's 2/2 ready
+        and reported the Pi's undeployed container healthy.
+      - {'k8s'} probes the cluster only, `skipped` when the role declares no workload.
+      - both probes both, and each side's own rule applies.
+      - neither (a block tag, a typo --skip-tag-check let through) keeps the old order: k8s
+        first, --docker second, `skipped` only when BOTH say the tag isn't that kind of
+        workload.
     """
 
     def probe(extra: list[str]) -> tuple[int, str]:
@@ -86,14 +103,38 @@ def check_one(tag: str, run=subprocess.run) -> tuple[str, str]:
         out = (res.stdout or res.stderr or "").strip()
         return res.returncode, out.splitlines()[0] if out else ""
 
+    def not_applicable(line: str) -> bool:
+        return any(marker in line for marker in NOT_APPLICABLE_MARKERS)
+
+    if platforms is None:
+        platforms = deploy_tags.tag_platforms(tag)
+
+    if platforms == {"docker"}:
+        code, line = probe(["--docker"])
+        return ("ok" if code == 0 else "unhealthy"), line
+
+    if platforms == {"k8s"}:
+        code, line = probe([])
+        if code == 0:
+            return "ok", line
+        return ("skipped" if not_applicable(line) else "unhealthy"), line
+
+    if platforms == {"docker", "k8s"}:
+        k8s_code, k8s_line = probe([])
+        docker_code, docker_line = probe(["--docker"])
+        line = f"{k8s_line}; {docker_line}"
+        if docker_code != 0 or (k8s_code != 0 and not not_applicable(k8s_line)):
+            return "unhealthy", line
+        return "ok", line
+
     code, line = probe([])
     if code == 0:
         return "ok", line
-    if any(marker in line for marker in NOT_APPLICABLE_MARKERS):
+    if not_applicable(line):
         code, line = probe(["--docker"])
         if code == 0:
             return "ok", line
-        if any(marker in line for marker in NOT_APPLICABLE_MARKERS):
+        if not_applicable(line):
             return "skipped", line
     return "unhealthy", line
 

@@ -108,6 +108,40 @@ def known_tags(host_vars: Path = HOST_VARS) -> set[str]:
     return service_tags(host_vars) | set(BLOCK_TAGS) | set(RESERVED_TAGS)
 
 
+def tags_by_host(tags, host_vars: Path = HOST_VARS) -> dict[str, list[str]]:
+    """{host: sorted tags} for every host whose containers_list declares one of `tags`.
+
+    A deploy reaches only the host it runs against: deploy.yml's `hosts:` defaults to the
+    local hostname, and `-e target=<host>` is the only way to another one. A tag alone is
+    therefore not enough to deploy from. The caller has to know WHICH host declares it and
+    add `-e target=` when that host is not the local node. Issue #929 is the failure this
+    answers: land.sh ran `--tags alloy` on daniel-box for a role only daniel-pi declares, the
+    play matched no service and exited 0, and the landing read `settled` while the Pi still
+    ran the old container.
+
+    A tag declared on two hosts (wg-easy: Docker on daniel-pi, k8s on daniel-box) lands under
+    both, so each host's copy is deployed. A tag no host declares (a block tag, a typo) lands
+    under none; `validate` is the place that refuses those.
+    """
+    wanted = set(tags)
+    by_host: dict[str, set[str]] = {}
+    for host, _platform, tag in service_records(host_vars):
+        if tag in wanted:
+            by_host.setdefault(host, set()).add(tag)
+    return {host: sorted(by_host[host]) for host in sorted(by_host)}
+
+
+def tag_platforms(tag: str, host_vars: Path = HOST_VARS) -> set[str]:
+    """The platforms (`docker`, `k8s`) whose containers_list entries carry `tag`.
+
+    Empty for a tag no host declares. The health gate reads this to pick which probe can see
+    the workload. A Docker-only tag has nothing on the cluster to check, and probing it there
+    first is how issue #929's gate found loki-homelab's same-named Alloy DaemonSet and
+    reported the Pi's undeployed container healthy.
+    """
+    return {platform for _host, platform, t in service_records(host_vars) if t == tag}
+
+
 def split_shared_roles(
     tags, host_vars: Path = HOST_VARS
 ) -> tuple[list[str], list[str]]:
@@ -456,8 +490,20 @@ def _cmd_changed(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_hosts(args: argparse.Namespace) -> int:
+    """Print `<host>\\t<comma-joined tags>` per declaring host, for a comma-joined tag list.
+
+    The shape land.sh consumes: one line per host, so a `while read host tags` loop can run
+    one deploy.sh per host and add `-e target=` when the host is not the local node.
+    """
+    tags = [t for t in args.tags.split(",") if t]
+    for host, host_tags in tags_by_host(tags).items():
+        print(f"{host}\t{','.join(host_tags)}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
-    """Dispatch to the `validate`/`list`/`describe`/`changed`/`blockers` subcommand.
+    """Dispatch to the `validate`/`list`/`describe`/`changed`/`blockers`/`hosts` subcommand.
 
     Returns that subcommand's own exit code.
     """
@@ -490,6 +536,13 @@ def main(argv: list[str] | None = None) -> int:
     )
     bl.add_argument("ref", nargs="?", default="origin/master")
     bl.set_defaults(func=_cmd_blockers)
+
+    ho = sub.add_parser(
+        "hosts",
+        help="print `<host>\\t<tags>` per host declaring one of the comma-joined tags",
+    )
+    ho.add_argument("tags")
+    ho.set_defaults(func=_cmd_hosts)
 
     args = parser.parse_args(argv)
     return args.func(args)

@@ -71,6 +71,14 @@ itself has nothing for `land.sh` to wait on, and the deployer's own tick fast-fo
 The one exception is a file list GitHub truncated, which is derived from the diff after the
 tick as before.
 
+**A Pi role deploys on the Pi.** `land.sh` runs one `deploy.sh` per host that declares a
+derived tag, read from `deploy_tags.py hosts`, and adds `-e target=daniel-pi` for the Pi's.
+The health verdict probes a tag only the Pi declares with `--docker` alone. Until 2026-09-03
+both halves ran against the local node: PR #928 (a `roles/containers/alloy` change) printed
+`settled` with the CLUSTER Alloy DaemonSet's 2/2 ready while the Pi ran the old container,
+because the play matched no service on daniel-box and the gate guessed a same-named cluster
+workload (issue #929).
+
 If another PR merges during that CI wait, the first `deploy.sh` exits 4 (the tree is behind
 origin) and `land.sh` retries, up to three times: each pass re-runs the blockers check, waits
 for master CI on the new tip (the tick defers until the TIP is green, not just your commit),
