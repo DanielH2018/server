@@ -1,0 +1,136 @@
+"""--arm-merge and --await-merge, driven directly against a fake gh.
+
+The failure the await half guards is a landing that SITS: an armed auto-merge never fires
+from CONFLICTING or from a red PR CI, and GitHub reports neither in `state`, so the loop
+burned the 2700s budget and printed merge-timeout. The accept halves matter as much: GitHub
+serves `mergeable: UNKNOWN` until it computes mergeability, and await_ci answers `pending`
+until a required check registers.
+
+Run: uv run pytest scripts/deploy_tools/tests/test_land_merge.py
+"""
+
+from __future__ import annotations
+
+import pytest
+
+from _land_fakes import Fakes
+from deploy_tools.land_lib import merge
+from deploy_tools.land_lib.outcome import Outcome
+
+_OPEN = {"state": "OPEN", "title": "Bump vale to 3.19.0"}
+
+
+def _wait(states: list[str]):
+    return [
+        {"state": s, "mergeable": m, "headRefOid": h}
+        for s, m, h in (x.split() for x in states)
+    ]
+
+
+def test_arm_merge_calls_gh_pr_merge_with_the_pr_title(landing, capsys):
+    ln, calls = landing(Fakes(gh_views={"state,title": _OPEN}), arm_merge=True)
+    merge.arm_merge(ln)
+    assert next(c for c in calls if c[0] == "gh")[1] == (
+        "pr",
+        "merge",
+        "999",
+        "--squash",
+        "--auto",
+        "--subject",
+        "Bump vale to 3.19.0",
+    )
+    assert "auto-merge armed: Bump vale to 3.19.0" in capsys.readouterr().out
+
+
+def test_arm_merge_subject_overrides_the_pr_title(landing):
+    ln, calls = landing(Fakes(gh_views={"state,title": _OPEN}), subject="Pin vale")
+    merge.arm_merge(ln)
+    assert next(c for c in calls if c[0] == "gh")[1][-1] == "Pin vale"
+
+
+def test_arm_merge_is_a_no_op_on_a_merged_pr(landing, capsys):
+    ln, calls = landing(Fakes(gh_views={"state,title": {**_OPEN, "state": "MERGED"}}))
+    merge.arm_merge(ln)
+    assert not [c for c in calls if c[0] == "gh"]
+    assert "already merged" in capsys.readouterr().out
+
+
+def test_arm_merge_dies_on_a_closed_pr(landing):
+    ln, _ = landing(Fakes(gh_views={"state,title": {**_OPEN, "state": "CLOSED"}}))
+    with pytest.raises(Outcome) as exc:
+        merge.arm_merge(ln)
+    assert exc.value.rc == 1 and "closed without merging" in exc.value.error
+
+
+@pytest.mark.parametrize(
+    "states, verdict",
+    [
+        (["OPEN CONFLICTING dead", "OPEN CONFLICTING dead"], "merge-conflict"),
+        (
+            ["OPEN CONFLICTING dead", "OPEN MERGEABLE dead", "CLOSED MERGEABLE dead"],
+            None,
+        ),
+        (["OPEN UNKNOWN dead", "OPEN UNKNOWN dead", "CLOSED UNKNOWN dead"], None),
+    ],
+)
+def test_only_a_settled_conflict_ends_the_wait(landing, states, verdict):
+    ln, _ = landing(Fakes(gh_views={"state,mergeable,headRefOid": _wait(states)}))
+    with pytest.raises(Outcome) as exc:
+        merge.await_merge(ln)
+    assert exc.value.rc == 1
+    assert exc.value.verdict == verdict
+    if verdict is None:
+        assert "closed without merging" in exc.value.error
+
+
+def test_a_red_pr_ci_ends_the_wait(landing):
+    ln, _ = landing(
+        Fakes(
+            gh_views={"state,mergeable,headRefOid": _wait(["OPEN MERGEABLE dead"])},
+            await_ci=[(1, "dead1234: CI RED")],
+        )
+    )
+    with pytest.raises(Outcome) as exc:
+        merge.await_merge(ln)
+    assert exc.value.verdict == "pr-ci-red" and "dead1234: CI RED" in exc.value.error
+
+
+@pytest.mark.parametrize("ci_rc", [75, 2])
+def test_a_ci_answer_that_is_not_red_keeps_the_wait_going(landing, ci_rc):
+    """75 is `pending`, the grace period; 2 is the disarmed gate, which checked nothing."""
+    ln, _ = landing(
+        Fakes(
+            gh_views={
+                "state,mergeable,headRefOid": _wait(
+                    ["OPEN MERGEABLE dead", "CLOSED MERGEABLE dead"]
+                )
+            },
+            await_ci=[(ci_rc, "pending")],
+        )
+    )
+    with pytest.raises(Outcome) as exc:
+        merge.await_merge(ln)
+    assert exc.value.verdict is None and "closed without merging" in exc.value.error
+
+
+def test_the_merge_budget_ends_the_wait_with_its_own_verdict(landing):
+    """Unreachable in the bash harness: LAND_MERGE_POLL=0 never advanced `waited`."""
+    ln, _ = landing(
+        Fakes(
+            gh_views={"state,mergeable,headRefOid": _wait(["OPEN MERGEABLE dead"])},
+            await_ci=[(75, "pending")],
+        ),
+        merge_timeout=1,
+        merge_poll=1,
+    )
+    with pytest.raises(Outcome) as exc:
+        merge.await_merge(ln)
+    assert (exc.value.rc, exc.value.verdict) == (75, "merge-timeout")
+
+
+def test_a_merged_pr_leaves_the_wait(landing, capsys):
+    ln, _ = landing(
+        Fakes(gh_views={"state,mergeable,headRefOid": _wait(["MERGED MERGEABLE dead"])})
+    )
+    merge.await_merge(ln)
+    assert "merged after 0s" in capsys.readouterr().out
