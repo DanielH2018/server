@@ -22,10 +22,10 @@ routed tenant of the retired Docker edge. See repo-root `CLAUDE.md` for shared c
 
 ## Notable
 - `image_builder_context_files` (not `image_builder_context`) carries `app.py` and
-  `safe_reads.py` verbatim into the build — they embed PromQL whose `{{...}}` braces a
-  Jinja template render would otherwise eat.
-- The Dockerfile path is built from `playbook_dir`, not `role_path`: those render **inside**
-  `k8s/image-builder`, where `role_path` would resolve to the wrong role (bit the first
+  `safe_reads.py` verbatim into the build — they embed PromQL whose `{{...}}` braces a Jinja
+  render would otherwise eat.
+- The Dockerfile path is built from `playbook_dir`, not `role_path`: that render happens
+  **inside** `k8s/image-builder`, where `role_path` resolves to the wrong role (bit the first
   deploy, 2026-08-13).
 
 ## Editing

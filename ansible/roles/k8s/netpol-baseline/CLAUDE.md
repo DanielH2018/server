@@ -19,19 +19,16 @@ tighter or looser allow-list than the baseline. Deploys no workload of its own.
   `homelab`'s.
 
 ## Notable
-- **Both boolean levers coerce oddly.** `netpol_baseline_enforced`/`_obs_enforced` go through
-  `| bool` on both the template's `if` and the probe tasks' `when:`, so a typo like `fasle` is
-  silently `False` on both sides: the allow-all body renders, the verifying probe skips, and
-  the deploy reports green while nothing is fenced. `tasks/main.yml`'s first task asserts both
-  values are literally `true`/`false` before anything renders, for exactly this reason.
-- **The exempt-workload list is read as an exact set, live.** A name in
-  `netpol_baseline_exempt_workloads` but absent from the cluster is a widening about to happen;
-  a name in the cluster but missing from the list is a pod fenced by nothing. The gate exists
-  because the two disagreed for ~16 hours during slice 4.5;
-  `ansible/tests/k8s/test_netpol_baseline_labels.py` pins the same set against templates.
-- **`netpol_baseline_node_cidrs` are `/32` host addresses on purpose** — the bridge IPs traffic
-  arrives with when it carries a node IP (image pulls, hostPort, host crons). A `/16` here
-  would silently cancel the whole policy.
+- **Both boolean levers coerce oddly.** They go through `| bool` on both the template `if`
+  and the probe tasks' `when:`, so a typo like `fasle` is silently `False` on both sides: the
+  allow-all body renders, the verifying probe skips, and the deploy reports green while
+  nothing is fenced. `tasks/main.yml`'s first task asserts both are literally `true`/`false`.
+- **The exempt-workload list is read as an exact set, live** — a name absent from the cluster
+  is a widening about to happen; a cluster workload missing from the list is fenced by
+  nothing. The two disagreed for ~16 hours during slice 4.5;
+  `ansible/tests/k8s/test_netpol_baseline_labels.py` pins the set against templates now.
+- **`netpol_baseline_node_cidrs` are `/32` host addresses on purpose** — a `/16` here would
+  silently cancel the whole policy.
 
 ## Editing
 Per-workload policy: `templates/networkpolicy-<name>.yaml.j2`. Deploy:

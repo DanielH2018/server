@@ -21,13 +21,11 @@ while reporting success.
 
 ## Notable
 - Skips the actual build when the rendered context is byte-identical to the last run's and
-  the registry already serves the tag — saved ~106s across the seven original callers, most
-  of them byte-identical five times out of seven. `image_builder_force=true` overrides it,
-  for a base-image CVE bump nothing in this role's own gate can see.
-- Reads the registry's pre- and post-build digest around every build, even a skipped one —
-  `image_builder_building` gates the build itself, but the digest read after it deliberately
-  does not, which is what lets a stale pod in front of an unchanged tag still surface to the
-  post-deploy drift gate (`ansible/tests/deploy/test_built_image_drift_gate.py`).
+  the registry already serves the tag — saved ~106s across the seven original callers.
+  `image_builder_force=true` overrides it, for a base-image CVE bump nothing here can see.
+- Reads the registry's pre- and post-build digest around every build, even a skipped one, so
+  a stale pod in front of an unchanged tag still surfaces to the post-deploy drift gate
+  (`ansible/tests/deploy/test_built_image_drift_gate.py`).
 
 ## Editing
 - Task logic: `tasks/main.yml` · Job/ConfigMap shape: `templates/build-job.yaml.j2`,
