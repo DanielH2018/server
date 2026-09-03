@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/crons.py
-generated_at: 2026-08-31 18:17 UTC
-generated_sha: ccc237f5
+generated_at: 2026-09-03 06:17 UTC
+generated_sha: 21556bbe
 ---
 
 !!! warning "Generated file — do not edit"
@@ -21,7 +21,7 @@ generated_sha: ccc237f5
 |---|---|---|---|---|---|
 | Claude Code telemetry health | `{{ claude_otel_health_cron_minute }} * * * *` | every host in the play | `{{ sys_user }}` | read the script | `ansible/roles/k8s/claude-otel/tasks/main.yml` |
 | Clean unused Docker images | `30 6 * * *` | conditional (has_docker) | `{{ ansible_facts.user_id }}` | yes (prune) | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
-| Clear ansible log file | `0 6 * * 0` | every host in the play | `root` | yes (truncate) | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
+| Clear ansible log file | `0 6 * * 0` | conditional (has_repo_checkout) | `root` | yes (truncate) | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
 | Cloudflare IP drift | `25 5 * * *` | conditional (traefik_k8s_manage_cloudflare_drift_check | bool) | `root` | read the script | `ansible/roles/k8s/traefik/tasks/main.yml` |
 | CrowdSec AppSec verify | `*/15 * * * *` | every host in the play | `root` | read the script | `ansible/roles/k8s/crowdsec/tasks/main.yml` |
 | CrowdSec home allowlist | `*/5 * * * *` | every host in the play | `root` | read the script | `ansible/roles/k8s/crowdsec/tasks/main.yml` |
@@ -50,7 +50,7 @@ generated_sha: ccc237f5
 | Weekly system restart | `30 7 * * 0` | every host in the play | `root` | no (read-only by its command) | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
 | configarr sync health | `{{ configarr_k8s_health_cron_minute }} * * * *` | every host in the play | `{{ sys_user }}` | read the script | `ansible/roles/k8s/configarr/tasks/main.yml` |
 | daniel-box disk health | `{{ k3s_disk_health_cron_minute }} * * * *` | every host in the play | `{{ sys_user }}` | read the script | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
-| etcd restore drill | `{{ k3s_etcd_restore_drill_cron.split()[0] }} {{ k3s_etcd_restore_drill_cron.split()[1] }} * * {{ k3s_etcd_restore_drill_cron.split()[4] }}` | every host in the play | `root` | yes (backup) | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
+| etcd restore drill | `{{ k3s_etcd_restore_drill_cron.split()[0] }} {{ k3s_etcd_restore_drill_cron.split()[1] }} * * {{ k3s_etcd_restore_drill_cron.split()[4] }}` | conditional (has_repo_checkout) | `root` | yes (backup) | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
 | fake-remux health | `{{ fake_remux_health_cron_minute }} * * * *` | every host in the play | `{{ sys_user }}` | read the script | `ansible/roles/setup/fake_remux/tasks/main.yml` |
 | fake-remux reconcile | `{{ fake_remux_replace_cron_minute }} * * * *` | every host in the play | `{{ sys_user }}` | no (read-only by its command) | `ansible/roles/setup/fake_remux/tasks/main.yml` |
 | fake-remux scan | `{{ fake_remux_scan_cron_minute }} {{ fake_remux_scan_cron_hour }} * * *` | every host in the play | `{{ sys_user }}` | no (read-only by its command) | `ansible/roles/setup/fake_remux/tasks/main.yml` |

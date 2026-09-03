@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/freshness.py
-generated_at: 2026-09-02 17:42 UTC
-generated_sha: 24c4bd31
+generated_at: 2026-09-03 06:17 UTC
+generated_sha: 21556bbe
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,14 +12,16 @@ generated_sha: 24c4bd31
 
 # Doc freshness
 
-41 hand-written page(s). *Changed* is the page's last commit; *moved* counts the repo files the page names whose last commit is later than that. A moved source does not prove the page is wrong -- it marks the page to reread next. The generated reference pages are not listed: they are rebuilt from the tree.
+42 hand-written page(s). *Changed* is the page's last commit; *moved* counts the repo files the page names whose last commit is later than that. A moved source does not prove the page is wrong -- it marks the page to reread next. The generated reference pages are not listed: they are rebuilt from the tree.
 
 | Page | Changed | Sources named | Moved since | Most recently moved |
 |---|---|---|---|---|
 | [kopia-disaster-recovery.md](../kopia-disaster-recovery.md) | 2026-08-30 | 12 | 8 | `docs/longhorn-disaster-recovery.md` (2026-09-02) |
 | [adr/0003-sops-with-age-for-secrets-at-rest.md](../adr/0003-sops-with-age-for-secrets-at-rest.md) | 2026-08-24 | 4 | 3 | `ansible/vars/secrets.yml` (2026-09-02) |
+| [post-merge-automation.md](../post-merge-automation.md) | 2026-09-02 | 21 | 3 | `scripts/deploy_tools/deploy_detach_notify.py` (2026-09-03) |
 | [adr/0015-d2-for-hand-authored-diagrams.md](../adr/0015-d2-for-hand-authored-diagrams.md) | 2026-09-01 | 2 | 2 | `scripts/docs/build_docs.py` (2026-09-02) |
 | [deploying.md](../deploying.md) | 2026-09-01 | 2 | 2 | `scripts/deploy.sh` (2026-09-02) |
+| [staging-phase-c.md](../staging-phase-c.md) | 2026-09-02 | 16 | 2 | `docs/staging-cluster.md` (2026-09-03) |
 | [email-to-rss.md](../email-to-rss.md) | 2026-08-15 | 1 | 1 | `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2` (2026-09-02) |
 | [adr/0002-k3s-over-docker-compose-for-the-cluster-nodes.md](../adr/0002-k3s-over-docker-compose-for-the-cluster-nodes.md) | 2026-08-24 | 1 | 1 | `scripts/diagnostics/probe.py` (2026-09-02) |
 | [adr/0005-traefik-is-the-edge-with-ingressroute-crds.md](../adr/0005-traefik-is-the-edge-with-ingressroute-crds.md) | 2026-08-24 | 1 | 1 | `ansible/templates/ingressroute.yml.j2` (2026-09-02) |
@@ -27,6 +29,7 @@ generated_sha: 24c4bd31
 | [adr/0009-networkpolicy-default-deny-ingress.md](../adr/0009-networkpolicy-default-deny-ingress.md) | 2026-08-24 | 1 | 1 | `ansible/roles/k8s/netpol-baseline/defaults/main.yml` (2026-09-02) |
 | [adr/0014-kopia-retired-longhorn-owns-the-b2-credentials.md](../adr/0014-kopia-retired-longhorn-owns-the-b2-credentials.md) | 2026-08-24 | 1 | 1 | `docs/kopia-disaster-recovery.md` (2026-08-30) |
 | [adr/0012-zero-downtime-deploys-gate-on-rollout-and-restarts.md](../adr/0012-zero-downtime-deploys-gate-on-rollout-and-restarts.md) | 2026-08-25 | 1 | 1 | `scripts/diagnostics/probe.py` (2026-09-02) |
+| [networkpolicy-slice-answers.md](../networkpolicy-slice-answers.md) | 2026-09-02 | 18 | 1 | `ansible/roles/k8s/claude-otel/templates/prometheus.yaml.j2` (2026-09-03) |
 | [adr/0001-mkdocs-site-with-generated-reference.md](../adr/0001-mkdocs-site-with-generated-reference.md) | 2026-09-02 | 4 | 0 | — |
 | [adr/0004-authelia-is-the-single-sign-on-layer.md](../adr/0004-authelia-is-the-single-sign-on-layer.md) | 2026-09-02 | 0 | 0 | — |
 | [adr/0006-longhorn-for-cluster-storage.md](../adr/0006-longhorn-for-cluster-storage.md) | 2026-09-02 | 1 | 0 | — |
@@ -34,6 +37,7 @@ generated_sha: 24c4bd31
 | [adr/0010-pull-based-gitops-over-argo-and-flux.md](../adr/0010-pull-based-gitops-over-argo-and-flux.md) | 2026-09-02 | 3 | 0 | — |
 | [adr/0011-one-lock-serialises-every-deploy-path.md](../adr/0011-one-lock-serialises-every-deploy-path.md) | 2026-09-02 | 3 | 0 | — |
 | [adr/0013-daniel-pi-stays-on-docker.md](../adr/0013-daniel-pi-stays-on-docker.md) | 2026-09-02 | 1 | 0 | — |
+| [adr/0016-code-scanning-stays-on-default-setup.md](../adr/0016-code-scanning-stays-on-default-setup.md) | 2026-09-02 | 6 | 0 | — |
 | [adr/index.md](../adr/index.md) | 2026-09-02 | 1 | 0 | — |
 | [anilist-integration.md](../anilist-integration.md) | 2026-09-02 | 3 | 0 | — |
 | [b2-api-drain-scoping.md](../b2-api-drain-scoping.md) | 2026-09-02 | 4 | 0 | — |
@@ -49,11 +53,8 @@ generated_sha: 24c4bd31
 | [longhorn-disaster-recovery.md](../longhorn-disaster-recovery.md) | 2026-09-02 | 13 | 0 | — |
 | [longhorn-upgrade.md](../longhorn-upgrade.md) | 2026-09-02 | 7 | 0 | — |
 | [networkpolicy-default-deny.md](../networkpolicy-default-deny.md) | 2026-09-02 | 8 | 0 | — |
-| [networkpolicy-slice-answers.md](../networkpolicy-slice-answers.md) | 2026-09-02 | 18 | 0 | — |
-| [post-merge-automation.md](../post-merge-automation.md) | 2026-09-02 | 21 | 0 | — |
 | [secret-rotation.md](../secret-rotation.md) | 2026-09-02 | 4 | 0 | — |
 | [security-tools.md](../security-tools.md) | 2026-09-02 | 3 | 0 | — |
-| [staging-cluster.md](../staging-cluster.md) | 2026-09-02 | 26 | 0 | — |
-| [staging-phase-c.md](../staging-phase-c.md) | 2026-09-02 | 13 | 0 | — |
 | [uptime-robot-monitors.md](../uptime-robot-monitors.md) | 2026-09-02 | 4 | 0 | — |
 | [wireguard-private-homelab-access.md](../wireguard-private-homelab-access.md) | 2026-09-02 | 2 | 0 | — |
+| [staging-cluster.md](../staging-cluster.md) | 2026-09-03 | 31 | 0 | — |
