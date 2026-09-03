@@ -76,12 +76,19 @@ PUSH_URL="https://uptime-kuma.local.{{ domain }}/api/push/{{ monitor_bridge_home
 # pushes in 45 episodes, and 37 of those episodes were a single run. Those are the ones this
 # window is for.
 #
-# DECIDED: this stays off /usr/local/lib/kuma-push-lib.sh, alone among the health crons. Two
-# reasons. The retry semantics above are measured against THIS monitor (push-type, max_retries 0,
-# 18 transitions in 3 days), where the library's 30s backoff was measured against its ten OTHER
-# callers. And the library STOPS on a 4xx by design, which is exactly the status this path
-# produces during a rollout — adopting it would swap a retry that fires for one that cannot. The
-# library's actual security property — the token-bearing URL reaching curl on stdin as a config
+# DECIDED (amended 2026-09-03, issue #1010 — contradicts the "library STOPS on a 4xx by
+# design" half of this marker as it read before): this still stays off
+# /usr/local/lib/kuma-push-lib.sh, alone among the health crons, but for only the first of the
+# original two reasons now. The retry semantics above are measured against THIS monitor
+# (push-type, max_retries 0, 18 transitions in 3 days; a 63s window sized to 2x the observed
+# 31s outage), where the library's fixed 30s-times-two backoff was measured against its ten
+# OTHER callers and sized to a looser 300s cron floor. The second original reason — that the
+# library stopped on every 4xx, including the 404 this path actually produces, so adopting it
+# "would swap a retry that fires for one that cannot" — is no longer true: issue #1010 fixed the
+# library to retry a 404 and stop only on 401/403. That removes the correctness reason to stay
+# off it, but the sizing reason stands on its own, so this script keeps its own tuned curl
+# flags rather than moving onto the shared library. The library's actual security property —
+# the token-bearing URL reaching curl on stdin as a config
 # file rather than as an argv element, because /proc is mounted without hidepid and this runs
 # every 5 minutes — is reproduced inline below, and
 # ansible/tests/setup/test_cron_scripts_publish_via_pr.py enforces it here with no exemption.

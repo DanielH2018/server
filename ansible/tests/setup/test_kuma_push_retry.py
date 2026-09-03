@@ -1,4 +1,4 @@
-"""Guards for `kuma_push`'s retry (kuma-push-lib.sh), issue #994.
+"""Guards for `kuma_push`'s retry (kuma-push-lib.sh), issues #994 and #1010.
 
 The static Kuma monitors run `max_retries: 0`, so a single dropped push leaves the tile STALE
 rather than red until the next cycle — the loss is invisible. Measured on daniel-box over the
@@ -6,16 +6,28 @@ rather than red until the next cycle — the loss is invisible. Measured on dani
 uptime-kuma rollouts. Every one of those checks had computed `status=up` and thrown the verdict
 away.
 
-The fix retries once, after a fixed backoff, on anything that isn't Kuma answering with a
-permanent 4xx. That "anything else" is deliberately two cases, not one: curl itself failing
-before a response exists (couldn't connect / timeout / TLS), AND a 5xx *response* — uptime-kuma's
-Deployment is `strategy: Recreate` on two RWO Longhorn PVCs, so a restart has a real window with
-zero ready endpoints, and Traefik (which stays up throughout) answers that with an HTTP 503, not
-a dropped connection. A classifier keyed on curl's blanket `-f` exit code cannot tell a 503 from
-a 401, and would pass every test that only checks connection-level failures while firing on none
-of the actual rollout pushes — the "green and inert" shape this repo has paid for twice
-(repo-root CLAUDE.md, "A new check ships with a proof it can go RED"). Each behaviour below is
-therefore guarded by an accept/reject pair.
+#994 shipped a retry that stopped on ANY 4xx, on the premise that an uptime-kuma `Recreate`
+rollout reaches Traefik as a 503 (a real window with zero ready endpoints, from the Recreate
+strategy on two RWO Longhorn PVCs). #1010 measured that premise wrong: Traefik's KubernetesCRD
+provider drops a router entirely once its service has no endpoints, rather than keeping the
+route and answering through it with a 503 — so a rollout's dropped pushes arrive as Traefik's
+own 404 (empty RouterName, OriginStatus 0), not a 5xx. Over the 3 days to 2026-09-03, non-200
+responses to `/api/push/` were 88 x 404 against 5 x 503, 5 x 500 and 2 x 403 — the #994 retry was
+therefore inert against the DOMINANT case it was written for, while passing every test below
+(this module's own prior docstring asserted the 503 premise as settled fact — the guard
+confirmed the wrong thing instead of catching it, the "green and inert" shape repo-root
+CLAUDE.md names).
+
+The fix (#1010) retries on anything that isn't Kuma answering with a genuine permanent
+rejection — HTTP 401 or 403 — and stops only on those. Everything else retries: curl itself
+failing before a response exists (couldn't connect / timeout / TLS), a 5xx *response*, and any
+OTHER 4xx, in particular the 404 above. A no-router 404 and a bad-token 404 are indistinguishable
+to curl, so a genuinely bad token now burns the retry budget before its log line appears — the
+same trade the sibling cron `crowdsec-update-home-allowlist.sh.j2` already accepted. The retry
+budget also grew from two attempts to three: a single 30s backoff is under the 31s longest
+endpoint-less window #1010 measured, so a lone retry could still land inside the outage; three
+attempts at a fixed 30s backoff put the second retry at t=60s, ~2x that window. Each behaviour
+below is therefore guarded by an accept/reject pair.
 """
 
 import subprocess
@@ -100,22 +112,35 @@ def test_503_then_success_delivers_the_beat(tmp_path):
     assert sleeps == [30]
 
 
-def test_persistent_failure_gives_up_after_one_retry(tmp_path):
-    # ACCEPT (the other half of the pair above): a genuinely-down Kuma retries exactly once,
-    # not forever — the retry budget must not let a cron overlap its own next run.
-    result, calls, sleeps, logs = _run_push(tmp_path, [("000", 7), ("503", 0)])
+def test_404_then_success_delivers_the_beat(tmp_path):
+    # ACCEPT: THE regression #1010 exists to fix. A Traefik router drop (empty RouterName,
+    # OriginStatus 0) during an uptime-kuma rollout answers 404, not 503 — curl connects fine
+    # (curl_rc=0), it's the HTTP status that says "not yet." The #994 classifier stopped on
+    # this exact code, which is why the retry was inert for 88 of 100 non-200 rollout responses.
+    result, calls, sleeps, _logs = _run_push(tmp_path, [("404", 0), ("200", 0)])
+    assert "rc=0 ok=1" in result.stdout
+    assert calls == 2
+    assert sleeps == [30]
+
+
+def test_persistent_failure_gives_up_after_three_attempts(tmp_path):
+    # ACCEPT (the other half of the pair above): a genuinely-down Kuma retries twice more, not
+    # forever — the retry budget must not let a cron overlap its own next run.
+    result, calls, sleeps, logs = _run_push(
+        tmp_path, [("000", 7), ("503", 0), ("404", 0)]
+    )
     assert (
         "rc=0 ok=0" in result.stdout
     )  # kuma_push always returns 0 — a push failure is not a cron failure
-    assert calls == 2
-    assert sleeps == [30]
+    assert calls == 3
+    assert sleeps == [30, 30]
     assert any("push failed" in line for line in logs)
 
 
 def test_401_is_not_retried(tmp_path):
-    # REJECT: the case the fix must NOT touch. A 4xx is Kuma answering with a permanent
-    # rejection (bad token or similar) — no amount of retrying fixes it. Second slot is a
-    # would-be success (200) precisely so a regression that retries anyway is caught by
+    # REJECT: the case the fix must NOT touch. A 401/403 is Kuma answering with a genuine
+    # permanent rejection (bad token or similar) — no amount of retrying fixes it. Second slot
+    # is a would-be success (200) precisely so a regression that retries anyway is caught by
     # `calls == 1`/`sleeps == []`, not masked by a coincidental final failure on both counts.
     result, calls, sleeps, logs = _run_push(tmp_path, [("401", 0), ("200", 0)])
     assert "rc=0 ok=0" in result.stdout
@@ -125,9 +150,10 @@ def test_401_is_not_retried(tmp_path):
     assert any("push failed" in line for line in logs)
 
 
-def test_404_is_not_retried(tmp_path):
-    # REJECT, second 4xx instance so the case above isn't pinned to 401 specifically.
-    result, calls, sleeps, _logs = _run_push(tmp_path, [("404", 0)])
+def test_403_is_not_retried(tmp_path):
+    # REJECT, second permanent-rejection instance so the case above isn't pinned to 401
+    # specifically.
+    result, calls, sleeps, _logs = _run_push(tmp_path, [("403", 0), ("200", 0)])
     assert "rc=0 ok=0" in result.stdout
     assert calls == 1
     assert sleeps == []
@@ -147,16 +173,37 @@ def test_retries_survive_a_set_dash_e_caller(tmp_path):
 
 
 def test_retry_budget_is_well_under_the_fastest_affected_cron_period():
-    # THE derivation. Two attempts at --max-time 10 plus one 30s backoff is the worst case;
+    # THE derivation. Three attempts at --max-time 10 plus two 30s backoffs is the worst case;
     # the fastest cron this fix touches is the CrowdSec home-allowlist updater at */5 (300s,
-    # ansible/roles/k8s/crowdsec/tasks/main.yml). Stated as a floor so a future change to
-    # either constant has to argue with the arithmetic, not just read as "still small."
+    # ansible/roles/k8s/crowdsec/tasks/main.yml). Stated as a floor, and the attempt count is
+    # derived from the file text rather than a bare literal, so a future change to any of the
+    # three constants has to argue with the arithmetic, not just read as "still small."
     text = LIB.read_text()
     assert "retry_delay_s=30" in text
     assert "--max-time 10" in text
-    worst_case_s = 30 + 2 * 10
+    assert "for attempt in 1 2 3" in text
+    attempts = 3
+    backoffs = attempts - 1
+    worst_case_s = backoffs * 30 + attempts * 10
     fastest_cron_period_s = 5 * 60
     assert worst_case_s < fastest_cron_period_s
+
+
+def test_retry_window_covers_close_to_twice_the_observed_outage():
+    # The #1010 derivation for going from two attempts to three: a single 30s backoff (60s
+    # short of 2x the 31s outage) is under the 31s longest endpoint-less window measured
+    # 2026-09-03, so a lone retry could still land inside a live outage. Two 30s backoffs land
+    # the last attempt at t=60s — under the observed outage's exact double (62s) but within 2s
+    # of it, the same order-of-magnitude margin the crowdsec sibling script sized its own retry
+    # window to (ansible/tests/services/test_crowdsec_allowlist_push_retry.py). Asserted as a
+    # floor rather than the bare "2x" the file's comments use loosely, so this stays accurate if
+    # either constant moves.
+    observed_outage_s = 31
+    attempts = 3
+    backoffs = attempts - 1
+    coverage_s = backoffs * 30
+    assert coverage_s > observed_outage_s
+    assert coverage_s >= 1.9 * observed_outage_s
 
 
 def test_kuma_push_still_never_fails_the_cron():
