@@ -5,6 +5,8 @@ maintenance spend is recorded here, into a local ledger, so it is not reconstruc
 memory after the fact.
 """
 
+from datetime import datetime, timezone
+
 import pytest
 
 from diagnostics.probe_lib import b2_ledger as ledger
@@ -116,3 +118,158 @@ def test_record_then_read_round_trips(tmp_path, monkeypatch):
     tools = ledger.read_b2_ledger()
     assert tools["drain"]["class_b"] == 59
     assert tools["b2-budget"]["class_c"] == 5
+
+
+# `probe.py b2-deletions`: charging a deletion that already happened. The two backup targets are
+# real — `default` is B2, `r2` is Cloudflare R2 — and only the first is capped at 2,500 Class C a
+# day, so the R2 line below is the input the filter must REJECT.
+B2_TARGET = "s3://daniel-server-kopia@us-east-005/longhorn"
+R2_TARGET = "s3://daniel-box@auto/longhorn"
+
+
+def _delete_line(target, backup, volume, verb="Complete"):
+    return (
+        f'time="..." level=info msg="{verb} deleting backup {target}'
+        f'?backup={backup}&volume={volume}" '
+        'func="engineapi.(*BackupTargetClient).BackupDelete" file="backups.go:310"'
+    )
+
+
+VOL_A = "pvc-c2ca0afb-74f0-4507-a29a-3cf40aac175d"
+VOL_B = "pvc-f7c223ec-c5fc-49d4-a0ab-c33f934dffbb"
+DELETE_LOG = [
+    (1, _delete_line(B2_TARGET, "backup-0ab05217dd5a4501", VOL_A, verb="Start")),
+    (2, _delete_line(B2_TARGET, "backup-0ab05217dd5a4501", VOL_A)),
+    (3, _delete_line(R2_TARGET, "backup-962e1433223643a6", VOL_B)),
+    (4, _delete_line(B2_TARGET, "backup-2f90667ec84442dc", VOL_A)),
+]
+
+
+def test_parse_backup_deletions_counts_each_b2_deletion_once():
+    """`Start` and `Complete` name the same backup ID, so counting both doubles every deletion."""
+    found = ledger.parse_backup_deletions(DELETE_LOG, B2_TARGET)
+    assert [d["backup"] for d in found] == [
+        "backup-0ab05217dd5a4501",
+        "backup-2f90667ec84442dc",
+    ]
+    assert all(d["volume"] == VOL_A for d in found)
+
+
+def test_parse_backup_deletions_skips_the_r2_target():
+    """R2's caps are monthly and vast. Charging an R2 deletion against B2's daily Class C cap
+    would inflate the ledger against a cap that does not govern it."""
+    found = ledger.parse_backup_deletions(DELETE_LOG, R2_TARGET)
+    assert [d["backup"] for d in found] == ["backup-962e1433223643a6"]
+
+
+def test_parse_backup_deletions_claims_nothing_without_a_target():
+    """A blank backupTargetURL is a real state — `k3s_longhorn_backup_armed: false` enforces one.
+    Matching everything then would charge both stores to B2."""
+    assert ledger.parse_backup_deletions(DELETE_LOG, "") == []
+
+
+def test_price_deletions_reports_an_unknown_volume_as_unpriced_not_free():
+    """A silent zero is indistinguishable from a free deletion, and the transactions were spent."""
+    priced, unpriced = ledger.price_deletions(
+        [
+            {"stamp": 1, "backup": "backup-a", "volume": VOL_A},
+            {"stamp": 2, "backup": "backup-b", "volume": VOL_B},
+        ],
+        {VOL_A: 337},
+    )
+    assert [(d["backup"], d["class_c"]) for d in priced] == [("backup-a", 337)]
+    assert [d["backup"] for d in unpriced] == ["backup-b"]
+
+
+def test_format_backup_deletions_exits_non_zero_only_when_something_is_unpriced():
+    clean, code = ledger.format_backup_deletions(
+        [{"backup": "backup-a", "volume": VOL_A, "class_c": 337}],
+        [],
+        0,
+        "26h",
+        "2026-09-03T12:19:32Z",
+    )
+    assert code == 0
+    assert "337 Class C" in clean
+    flagged, code = ledger.format_backup_deletions(
+        [], [{"backup": "backup-b", "volume": VOL_B}], 0, "26h", ""
+    )
+    assert code == 1
+    assert "UNPRICED" in flagged
+
+
+def test_prune_snapshot_round_trips(tmp_path, monkeypatch):
+    monkeypatch.setattr(ledger, "B2_LEDGER_DIR", str(tmp_path))
+    ledger.write_prune_snapshot({VOL_A: {"prune": 337, "blocks": 260}, VOL_B: {}})
+    measured_at, prices = ledger.read_prune_snapshot()
+    assert prices == {VOL_A: 337}
+    assert measured_at.endswith("Z")
+
+
+def test_read_prune_snapshot_returns_empty_when_none_was_ever_written(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(ledger, "B2_LEDGER_DIR", str(tmp_path))
+    assert ledger.read_prune_snapshot() == ("", {})
+
+
+def test_recorded_deletion_ids_dedupes_across_two_ledger_days(tmp_path, monkeypatch):
+    """A deletion just before 00:00 UTC is recorded in one day's file and re-seen by the next
+    run, whose file is a different one — so a single-day read would charge it twice."""
+    monkeypatch.setattr(ledger, "B2_LEDGER_DIR", str(tmp_path))
+    (tmp_path / "2026-09-02.tsv").write_text(
+        "2026-09-02T23:58:00Z\tb2-deletions\t0\t0\t337\tbackup-old vol=%s priced from x\n"
+        % VOL_A
+    )
+    (tmp_path / "2026-09-03.tsv").write_text(
+        "2026-09-03T00:10:00Z\tb2-deletions\t0\t0\t12\tbackup-new vol=%s priced from x\n"
+        % VOL_A
+        + "2026-09-03T00:11:00Z\tb2-budget\t0\t0\t2\t1 pages\n"
+    )
+    assert ledger.recorded_deletion_ids(["2026-09-03", "2026-09-02"]) == {
+        "backup-old",
+        "backup-new",
+    }
+
+
+def test_recorded_deletion_ids_ignores_other_tools_lines(tmp_path, monkeypatch):
+    """b2-budget's note carries no backup ID, but a future tool's might — the tool column is
+    what decides, not the note's shape."""
+    monkeypatch.setattr(ledger, "B2_LEDGER_DIR", str(tmp_path))
+    (tmp_path / "2026-09-03.tsv").write_text(
+        "2026-09-03T00:10:00Z\tsome-drain\t0\t0\t9\tremoved backup-notmine\n"
+    )
+    assert ledger.recorded_deletion_ids(["2026-09-03"]) == set()
+
+
+def test_spend_is_charged_to_the_utc_day_it_happened_on(tmp_path, monkeypatch):
+    """B2's caps reset per UTC day. A deletion at 23:50 UTC discovered by the next morning's run
+    consumed yesterday's cap, so charging it to the run's own day misattributes it."""
+    monkeypatch.setattr(ledger, "B2_LEDGER_DIR", str(tmp_path))
+    late = int(
+        datetime(2026, 9, 2, 23, 50, tzinfo=timezone.utc).timestamp() * 1_000_000_000
+    )
+    assert ledger.deletion_utc_day(late) == "2026-09-02"
+    ledger.record_b2_spend(
+        ledger.LEDGER_DELETIONS_TOOL,
+        class_c=51,
+        note="backup-late",
+        day=ledger.deletion_utc_day(late),
+    )
+    assert (
+        ledger.read_b2_ledger("2026-09-02")[ledger.LEDGER_DELETIONS_TOOL]["class_c"]
+        == 51
+    )
+    assert ledger.read_b2_ledger("2026-09-03") == {}
+
+
+def test_ledger_days_spanning_covers_every_file_the_window_reached():
+    """The dedupe read has to cover each day the window could have written into, or a deletion
+    charged to an earlier file is charged again on the next run."""
+    now = datetime(2026, 9, 3, 12, 10, tzinfo=timezone.utc)
+    assert ledger.ledger_days_spanning(3600, _now=now) == ["2026-09-03", "2026-09-02"]
+    assert ledger.ledger_days_spanning(26 * 3600, _now=now) == [
+        "2026-09-03",
+        "2026-09-02",
+        "2026-09-01",
+    ]

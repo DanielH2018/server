@@ -152,6 +152,31 @@ re-derives the projection from one listing of the live bucket (~10 Class C) and 
 a shard is over budget. Nothing else announces the drift, because the cost grows quietly with
 stored blocks rather than with anything a deploy touches.
 
+### What a deletion cost, after it happened
+
+`probe.py b2-deletions` charges each completed backup deletion to the B2 ledger. It reads the
+`Complete deleting backup` lines longhorn-manager writes (`backups.go:310`) out of Loki, filters
+them to the B2 BackupTarget, and prices each one at its volume's `1 + lv1 + lv2` block-tree walk.
+It reads Loki and the Kubernetes API only, so it spends nothing on B2 and is safe on a timer.
+
+Two crons run it (`roles/setup/k3s/tasks/health-crons.yml`): the accounting pass at 07:10, then
+the `b2-budget` listing at 07:20. **That order is the constraint.** A deletion can only be priced
+by a listing taken before it — afterwards the tree is smaller than the one the deletion walked —
+so each pass charges against the previous day's listing and the listing then refreshes for
+tomorrow. The recorded figure is therefore a floor, and it is a model rather than a measurement:
+the tree each deletion walked is gone.
+
+A deletion whose volume is absent from the snapshot is reported UNPRICED and the command exits 1.
+That is the one state to act on — the transactions were spent and no later run can recover the
+figure. It still gets a ledger line, at zero Class C with UNPRICED in the note, so the ledger
+records that the deletion happened rather than omitting it entirely. Both crons pipe their output
+through `logger`, so each run’s summary is searchable in Loki; cron discards the exit code.
+
+Deletions against the `r2` BackupTarget are skipped. R2's caps are monthly and vast, and charging
+one against B2's 2,500/day Class C cap would inflate the ledger against a cap that does not
+govern it. The target name is read from the BackupTarget CRs rather than inferred from the region
+component of the target URL.
+
 ## The storage cap is a second axis (2026-09-02)
 
 Everything above prices a backup in transactions. B2's free tier also caps **stored bytes at

@@ -129,6 +129,66 @@
     cron_file: longhorn-trim
   become: true
 
+- name: Schedule the after-the-fact B2 deletion accounting
+  tags: [backup-health]
+  when: has_repo_checkout
+  # Charges each completed backup deletion to the B2 ledger, from longhorn-manager's own logs.
+  # Until 2026-09-03 the ledger recorded only the two read-only listing probes, so the one
+  # operation it exists to capture wrote no line at all: a deletion walks the volume's whole
+  # block tree at ~1.28 Class C per stored block, which is what sets the daily cap. The pair of
+  # valheim-config deletions on 2026-09-03 12:39 UTC left the ledger reading 26 Class C for the
+  # day, and by the time anyone looked the tree that would have priced them was gone.
+  #
+  # After the trim sweep at 06:10 and well clear of both prune windows (03:30 daily, 04:30
+  # weekly), so the day's deletions have all completed. Same UTC day as those windows under
+  # either DST offset, which matters because the ledger is keyed on the UTC day B2's counters
+  # reset on. Reads Loki and the Kubernetes API only — it spends nothing on B2 itself.
+  ansible.builtin.cron:
+    name: "B2 deletion accounting"
+    hour: "{{ k3s_b2_deletion_accounting_cron_hour }}"
+    minute: "{{ k3s_b2_deletion_accounting_cron_minute }}"
+    user: "{{ sys_user }}"
+    # PATH and KUBECONFIG for the reason the infra-map cron sets them: cron inherits neither,
+    # and without KUBECONFIG the read-only kubectl falls back to a root-owned k3s.yaml — so the
+    # BackupTarget lookup that decides B2-versus-R2 fails only ever when unattended.
+    #
+    # Piped through `logger` so each run's summary reaches Loki. That is this cron's required
+    # evidence: an UNPRICED deletion means transactions were spent that no later run can price,
+    # and cron discards both the exit code and stdout. The ledger carries the same fact as a
+    # zero line with UNPRICED in its note, so the two surfaces agree.
+    job: >-
+      cd /home/{{ sys_user }}/server &&
+      PATH=/usr/local/bin:/usr/bin:/bin KUBECONFIG=/home/{{ sys_user }}/.kube/config
+      /home/{{ sys_user }}/.local/bin/uv run --quiet python
+      scripts/diagnostics/probe.py b2-deletions 2>&1 | logger -t b2-deletions
+    cron_file: b2-deletion-accounting
+  become: true
+
+- name: Schedule the B2 block-tree listing that prices the next day's deletions
+  tags: [backup-health]
+  when: has_repo_checkout
+  # Ten minutes AFTER the accounting pass above, and the order is the whole point. A deletion
+  # can only be priced by a listing taken BEFORE it — afterwards the tree is smaller than the
+  # one it walked — so today's pass charges against yesterday's listing and this refreshes for
+  # tomorrow. Running it first would silently understate every charge.
+  #
+  # This one does spend B2: one paged listing, measured at 2-3 Class C per run against the
+  # 2,500/day cap. It was manual-only until now, which is why nothing had a price to charge
+  # against. It also refreshes the per-shard budget projection as a side effect.
+  ansible.builtin.cron:
+    name: "B2 backup budget listing"
+    hour: "{{ k3s_b2_budget_cron_hour }}"
+    minute: "{{ k3s_b2_budget_cron_minute }}"
+    user: "{{ sys_user }}"
+    job: >-
+      cd /home/{{ sys_user }}/server &&
+      PATH=/usr/local/bin:/usr/bin:/bin KUBECONFIG=/home/{{ sys_user }}/.kube/config
+      /home/{{ sys_user }}/.local/bin/uv run --quiet python
+      scripts/diagnostics/probe.py b2-budget --retain {{ k3s_longhorn_weekly_backup_retain }}
+      2>&1 | logger -t b2-budget
+    cron_file: b2-budget-listing
+  become: true
+
 - name: Schedule the Longhorn restore drill
   tags: [backup-health]
   # Runs as ROOT, unlike the heartbeat beside it. The drill creates and deletes Volume/PV/PVC

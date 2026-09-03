@@ -541,6 +541,17 @@ k3s_longhorn_backup_health_cron_minute: "*/10"
 k3s_longhorn_trim_cron_hour: "6"
 k3s_longhorn_trim_cron_minute: "10"
 
+# The B2 deletion ledger's two crons (tasks/health-crons.yml). 07:10 charges the day's completed
+# deletions, 07:20 re-lists the block tree so tomorrow's charges have a price. That ORDER is the
+# constraint, not the hour: a deletion can only be priced by a listing taken before it, because
+# afterwards the tree is smaller than the one the deletion walked. Both sit after the 06:10 trim
+# and clear of both prune windows, and both land on the same UTC day as those windows under
+# either DST offset — the ledger is keyed on the UTC day B2's counters reset on.
+k3s_b2_deletion_accounting_cron_hour: "7"
+k3s_b2_deletion_accounting_cron_minute: "10"
+k3s_b2_budget_cron_hour: "7"
+k3s_b2_budget_cron_minute: "20"
+
 # How old a stranded snapshot must be before the reaper (templates/longhorn-reap-orphan-snapshots.sh.j2)
 # will offer it. A tier move leaves a window where the new job has not run yet, so a snapshot from
 # two days ago may still be a volume's most useful local restore point even though the job that

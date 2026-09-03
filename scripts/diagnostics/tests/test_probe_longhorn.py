@@ -312,3 +312,31 @@ def test_volume_shard_labels_reads_only_the_exact_label_group():
         }
     )
     assert longhorn.volume_shard_labels(_run=run) == {}
+
+
+def _target_run(returncode, stdout):
+    class Result:
+        pass
+
+    Result.returncode = returncode
+    Result.stdout = stdout
+    Result.stderr = ""
+    return lambda argv: Result()
+
+
+def test_backup_target_url_reads_the_cr():
+    run = _target_run(
+        0, json.dumps({"spec": {"backupTargetURL": "s3://bucket@us-east-005/longhorn"}})
+    )
+    assert longhorn.backup_target_url(_run=run) == "s3://bucket@us-east-005/longhorn"
+
+
+def test_backup_target_url_is_empty_when_disarmed_or_unreadable():
+    """A blank URL is what `k3s_longhorn_backup_armed: false` enforces, and a kubectl failure
+    must read the same way. The caller declines to classify on empty; returning anything else
+    would let R2's deletions be charged to B2's cap."""
+    assert (
+        longhorn.backup_target_url(_run=_target_run(0, json.dumps({"spec": {}}))) == ""
+    )
+    assert longhorn.backup_target_url(_run=_target_run(1, "")) == ""
+    assert longhorn.backup_target_url(_run=_target_run(0, "not json")) == ""

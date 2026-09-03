@@ -46,8 +46,16 @@ def b2_ledger_path(day=None):
     return os.path.join(B2_LEDGER_DIR, f"{day}.tsv")
 
 
-def record_b2_spend(tool, class_a=0, class_b=0, class_c=0, note="", _now=None):
-    """Append one line of spend. Never raises: a ledger failure must not fail the real work."""
+def record_b2_spend(
+    tool, class_a=0, class_b=0, class_c=0, note="", _now=None, day=None
+):
+    """Append one line of spend. Never raises: a ledger failure must not fail the real work.
+
+    `day` charges the spend to a UTC day other than today's. A tool that reports its own spend
+    as it happens never needs it; one that accounts for spend AFTER the fact does, because B2's
+    caps reset per UTC day — a deletion at 23:50 UTC discovered by the next morning's run
+    belongs to the cap it actually consumed, not to the cap the run happens to fall under.
+    """
     try:
         os.makedirs(B2_LEDGER_DIR, exist_ok=True)
         stamp = (_now or datetime.now(timezone.utc)).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -61,7 +69,7 @@ def record_b2_spend(tool, class_a=0, class_b=0, class_c=0, note="", _now=None):
                 note.replace("\t", " "),
             ]
         )
-        with open(b2_ledger_path(), "a") as fh:
+        with open(b2_ledger_path(day), "a") as fh:
             fh.write(line + "\n")
     except OSError:
         pass
@@ -238,3 +246,281 @@ def run_b2_record(ns):
         % (ns.tool, ns.class_a, ns.class_b, ns.class_c, b2_ledger_path())
     )
     return 0
+
+
+# --- b2-deletions: charge a deletion that already happened -------------------------------------
+
+# Longhorn logs a pair per deleted backup — `Start deleting backup` (backups.go:302) and
+# `Complete deleting backup` (:310) — both naming the target URL, the backup ID and the volume:
+#
+#   msg="Complete deleting backup s3://bucket@region/longhorn?backup=backup-0ab05217dd5a4501
+#        &volume=pvc-c2ca0afb-74f0-4507-a29a-3cf40aac175d"
+#
+# Anchor on Complete, never Start. Counting both doubles every deletion, the pair straddles a
+# window edge routinely (measured 2026-09-03: one pair spanned 03:30:52 to 03:33:39), and
+# Complete is the line that means the block-tree walk actually spent the transactions.
+DELETE_COMPLETE_RE = re.compile(
+    r"Complete deleting backup (?P<target>s3://[^\s?\"]+)\?"
+    r"backup=(?P<backup>[A-Za-z0-9_-]+)&volume=(?P<volume>pvc-[0-9a-f-]{36})"
+)
+DELETIONS_LOGQL = '{namespace="longhorn-system"} |= "Complete deleting backup"'
+# Written by `b2-budget`, read here. Lives beside the ledger so a test that patches
+# B2_LEDGER_DIR relocates both.
+PRUNE_SNAPSHOT_NAME = "prune-costs.json"
+
+
+def prune_snapshot_path():
+    return os.path.join(B2_LEDGER_DIR, PRUNE_SNAPSHOT_NAME)
+
+
+def write_prune_snapshot(vols, _now=None):
+    """Persist `{volume: prune}` plus when it was measured. Never raises, like record_b2_spend."""
+    try:
+        os.makedirs(B2_LEDGER_DIR, exist_ok=True)
+        stamp = (_now or datetime.now(timezone.utc)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        payload = {
+            "measured_at": stamp,
+            "volumes": {vol: v["prune"] for vol, v in vols.items() if "prune" in v},
+        }
+        with open(prune_snapshot_path(), "w") as fh:
+            json.dump(payload, fh, indent=2, sort_keys=True)
+    except OSError:
+        pass
+
+
+def read_prune_snapshot():
+    """-> (measured_at, {volume: prune}). ({}, "") when nothing has written one yet."""
+    try:
+        with open(prune_snapshot_path()) as fh:
+            payload = json.load(fh)
+    except OSError, json.JSONDecodeError, ValueError:
+        return "", {}
+    volumes = payload.get("volumes")
+    if not isinstance(volumes, dict):
+        return "", {}
+    return payload.get("measured_at", ""), volumes
+
+
+def parse_backup_deletions(rows, target_url):
+    """[(ns_timestamp, line)] -> [{stamp, backup, volume}] for deletions against `target_url`.
+
+    Filtering on the target is the whole reason this takes an argument. The cluster deletes
+    against two backup stores and only one is B2; an R2 deletion charged here would inflate the
+    ledger against a daily cap that does not govern R2 at all. An empty `target_url` means the
+    caller could not establish which store is B2, so nothing is claimed.
+    """
+    if not target_url:
+        return []
+    seen, out = set(), []
+    for ts, line in rows:
+        m = DELETE_COMPLETE_RE.search(line)
+        if not m or m.group("target") != target_url:
+            continue
+        backup = m.group("backup")
+        # Loki can return the same line twice across overlapping chunks; a backup ID is deleted
+        # exactly once, so the ID is a safe key within one window as well as across runs.
+        if backup in seen:
+            continue
+        seen.add(backup)
+        out.append({"stamp": ts, "backup": backup, "volume": m.group("volume")})
+    return out
+
+
+LEDGER_DELETIONS_TOOL = "b2-deletions"
+_LEDGER_BACKUP_ID_RE = re.compile(r"\b(backup-[A-Za-z0-9_-]+)\b")
+
+
+def recorded_deletion_ids(days):
+    """Backup IDs this tool has already charged, read from the raw ledger lines of `days`.
+
+    `read_b2_ledger` cannot answer this: it collapses to per-tool totals and drops the note the
+    ID lives in. Reading several days matters because a deletion just before 00:00 UTC is
+    recorded in one day's file and re-seen by the next run, whose file is a different one.
+    """
+    ids = set()
+    for day in days:
+        try:
+            with open(b2_ledger_path(day)) as fh:
+                lines = fh.readlines()
+        except OSError:
+            continue
+        for line in lines:
+            parts = line.rstrip("\n").split("\t")
+            if len(parts) < 6 or parts[1] != LEDGER_DELETIONS_TOOL:
+                continue
+            m = _LEDGER_BACKUP_ID_RE.search(parts[5])
+            if m:
+                ids.add(m.group(1))
+    return ids
+
+
+def deletion_utc_day(ns_timestamp):
+    """The UTC day a Loki row's nanosecond timestamp falls on, as `YYYY-MM-DD`."""
+    return datetime.fromtimestamp(ns_timestamp / 1e9, timezone.utc).strftime("%Y-%m-%d")
+
+
+def ledger_days_spanning(seconds, _now=None):
+    """Every UTC ledger day a `--since <seconds>` window can have written into, newest first."""
+    end = (_now or datetime.now(timezone.utc)).timestamp()
+    days, t = [], end
+    while t > end - seconds - 86400:
+        day = datetime.fromtimestamp(t, timezone.utc).strftime("%Y-%m-%d")
+        if day not in days:
+            days.append(day)
+        t -= 86400
+    return days
+
+
+def price_deletions(deletions, prices):
+    """-> (priced, unpriced). A deletion's Class C cost is its volume's whole-block-tree walk.
+
+    `DeleteDeltaBlockBackup` runs `getBlockNamesForVolume`, one delimited ListObjects per
+    `blocks/` directory, so the price is `1 + lv1 + lv2` — the figure `parse_backup_budget`
+    already computes. A volume absent from the snapshot is returned UNPRICED rather than charged
+    zero: a silent zero is indistinguishable from a free deletion, and understating is the
+    failure mode this ledger exists to prevent.
+    """
+    priced, unpriced = [], []
+    for d in deletions:
+        cost = prices.get(d["volume"])
+        if cost is None:
+            unpriced.append(d)
+        else:
+            priced.append(dict(d, class_c=cost))
+    return priced, unpriced
+
+
+def format_backup_deletions(priced, unpriced, skipped, window, measured_at, names=None):
+    """Render what was charged, what could not be, and how old the price is.
+
+    Exit 1 when a deletion went unpriced. That is the one state an operator has to act on — the
+    transactions were spent, the tree that would have priced them is gone, and no later run can
+    recover the figure. Everything else here is a meter.
+    """
+    names = names or {}
+    rows = []
+    if priced:
+        rows.append("%-24s %-26s %8s" % ("PVC", "BACKUP", "CLASS C"))
+        for d in sorted(priced, key=lambda x: -x["class_c"]):
+            rows.append(
+                "%-24s %-26s %8d"
+                % (names.get(d["volume"], d["volume"])[:24], d["backup"], d["class_c"])
+            )
+        rows.append("")
+        rows.append(
+            "charged %d deletion(s) over %s: %d Class C, priced from the %s block-tree listing"
+            % (
+                len(priced),
+                window,
+                sum(d["class_c"] for d in priced),
+                measured_at or "(unknown date)",
+            )
+        )
+        rows.append(
+            "  That price is a MODEL, not a measurement: the tree each deletion walked is gone, "
+            "and a listing taken after the deletion is smaller than the one it walked. The "
+            "figure is therefore a floor. Run b2-budget before the prune window to keep it tight."
+        )
+    else:
+        rows.append(f"no new B2 backup deletions in the last {window}")
+    if skipped:
+        rows.append(
+            "%d deletion(s) already in the ledger from an earlier run — not re-charged"
+            % skipped
+        )
+    if unpriced:
+        rows.append("")
+        rows.append(
+            "UNPRICED — these deletions spent Class C that cannot now be recovered:"
+        )
+        for d in unpriced:
+            rows.append(
+                "  %-24s %s" % (names.get(d["volume"], d["volume"])[:24], d["backup"])
+            )
+        rows.append(
+            "  Their volume is absent from the block-tree snapshot, so nothing prices them. "
+            "Each is recorded at zero with UNPRICED in the note — the ledger says the deletion "
+            "happened and that its cost is unrecoverable. Run `probe.py b2-budget` to write a "
+            "snapshot; every later deletion of these volumes is then chargeable."
+        )
+    return "\n".join(rows), (1 if unpriced else 0)
+
+
+def run_b2_deletions(ns):
+    """Charge Longhorn's completed backup deletions to today's ledger, after the fact.
+
+    The ledger's gap until 2026-09-03: `record_b2_spend` was called only from the two read-only
+    listing commands, so the one class of operation it exists to capture — a deletion, which
+    walks a whole block tree at ~1.28 Class C per stored block — wrote no line at all. Deriving
+    it from `longhorn-manager`'s own logs needs no cooperation from whoever ran the deletion,
+    which is the property a `b2-record` call inside each drop playbook would still lack.
+
+    Reads Loki and the Kubernetes API only. It spends nothing on B2, so it is safe on a timer.
+    """
+    seconds = parse_duration_seconds(ns.since)
+    end_s = datetime.now(_CHICAGO).timestamp()
+    base, pin = loki_endpoint()
+    url = loki_query_url(
+        base,
+        DELETIONS_LOGQL,
+        ns.limit,
+        start=int((end_s - seconds) * 1e9),
+        end=int(end_s * 1e9),
+        direction="forward",
+    )
+    if ns.dry_run:
+        return core.print_dry_run(url, resolve=pin)
+
+    target = ns.target_url or longhorn.backup_target_url()
+    if not target:
+        # Disarmed or absent. Declining beats matching everything: the R2 deletions in the same
+        # log stream would be charged to B2's cap.
+        print(
+            "the B2 BackupTarget has no URL — disarmed, or the CR is gone. Nothing classified; "
+            "pass --target-url to charge deletions against a store this cannot read."
+        )
+        return 0
+
+    rows = _rows_from_loki(json.loads(core.fetch(url, resolve=pin)))
+    deletions = parse_backup_deletions(rows, target)
+    # Every ledger day the window can have written into. A deletion is charged to the UTC day it
+    # happened on, so a `--since` reaching back past midnight has already recorded into an
+    # earlier file — reading only today's would re-charge everything from before 00:00 UTC.
+    already = recorded_deletion_ids(ledger_days_spanning(seconds))
+    fresh = [d for d in deletions if d["backup"] not in already]
+    measured_at, prices = read_prune_snapshot()
+    priced, unpriced = price_deletions(fresh, prices)
+
+    if not ns.no_record:
+        for d in priced:
+            record_b2_spend(
+                LEDGER_DELETIONS_TOOL,
+                class_c=d["class_c"],
+                note="%s vol=%s priced from %s listing"
+                % (d["backup"], d["volume"], measured_at or "unknown"),
+                day=deletion_utc_day(d["stamp"]),
+            )
+        # An unpriced deletion gets a line too, at zero, with UNPRICED in the note. The zero
+        # understates the day's spend, which this module otherwise treats as the failure mode
+        # that matters — but the alternative understates it by exactly as much AND leaves no
+        # trace that a deletion happened at all, which is the gap this whole command closes.
+        # Recording it also stops a later run charging it against a snapshot taken after the
+        # fact, which would be a fabricated number rather than a missing one.
+        for d in unpriced:
+            record_b2_spend(
+                LEDGER_DELETIONS_TOOL,
+                class_c=0,
+                note="%s vol=%s UNPRICED — no block-tree snapshot covered this volume"
+                % (d["backup"], d["volume"]),
+                day=deletion_utc_day(d["stamp"]),
+            )
+    text, code = format_backup_deletions(
+        priced,
+        unpriced,
+        len(deletions) - len(fresh),
+        ns.since,
+        measured_at,
+        longhorn.pvc_names(),
+    )
+    print(text)
+    return code

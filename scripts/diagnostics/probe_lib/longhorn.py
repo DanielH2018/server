@@ -433,8 +433,15 @@ def run_b2_budget(ns):
         class_c=stats.get("class_c", 0),
         note=f"{stats.get('pages', 0)} pages",
     )
+    vols = parse_backup_budget(lines)
+    # Persist the per-volume prune price for `b2-deletions`, which prices a deletion that has
+    # ALREADY happened and so can no longer measure the tree it walked. This listing is the only
+    # thing in the repo that computes those directory counts, and it costs 2-3 Class C to make —
+    # so writing them down here is what turns an unrepeatable measurement into one an after-the-
+    # fact accounting pass can use.
+    ledger.write_prune_snapshot(vols)
     text, code = format_backup_budget(
-        parse_backup_budget(lines),
+        vols,
         volume_shard_labels(),
         pvc_names(),
         ns.retain,
@@ -581,3 +588,43 @@ def run_longhorn_blocks(ns):
     text, code = format_block_census(volume_tier_census(json.loads(proc.stdout)))
     print(text)
     return code
+
+
+# --- which BackupTarget is B2 -----------------------------------------------------------------
+
+# The cluster holds two BackupTargets and only one of them is B2: `default` carries the B2 URL
+# (`longhorn-backup.yml` patches it with `kopia_b2_bucket`), `r2` carries Cloudflare's
+# (`longhorn-backuptarget-r2.yaml.j2`). R2's caps are monthly and vast, so charging an R2
+# deletion against B2's 2,500/day Class C cap would inflate the ledger against a cap that does
+# not apply to it. The deletion log line names the target URL, not the target NAME, so the
+# mapping has to come from the CRs — inferring B2 from the `us-east-005` region component would
+# be exactly the guess `docs/adr/0014` and the tiering memory warn against.
+B2_BACKUP_TARGET_NAME = "default"
+
+
+def backup_target_url(name=B2_BACKUP_TARGET_NAME, _run=None):
+    """The `spec.backupTargetURL` of one BackupTarget, or "" when it is absent or disarmed.
+
+    Empty is a real state, not an error: `k3s_longhorn_backup_armed: false` enforces a BLANK
+    URL as the containment lever for a cap spiral. A caller that gets "" must decline to
+    classify rather than fall back to matching everything.
+    """
+    run = _run or (lambda argv: subprocess.run(argv, capture_output=True, text=True))
+    out = run(
+        [
+            "kubectl",
+            "-n",
+            "longhorn-system",
+            "get",
+            "backuptargets.longhorn.io",
+            name,
+            "-o",
+            "json",
+        ]
+    )
+    if out.returncode != 0:
+        return ""
+    try:
+        return json.loads(out.stdout).get("spec", {}).get("backupTargetURL", "") or ""
+    except json.JSONDecodeError:
+        return ""
