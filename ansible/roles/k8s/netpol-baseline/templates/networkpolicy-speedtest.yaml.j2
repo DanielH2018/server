@@ -1,6 +1,8 @@
 ---
 # speedtest-tracker. One caller beyond the baseline; browsers arrive through traefik and
-# prometheus scrapes nothing here, both of which the baseline already carries.
+# (since #996) prometheus scrapes `/prometheus` on this same port, both of which the
+# baseline-ingress policy already carries (namespaceSelector=observability + app=prometheus,
+# no `ports:` on that rule -> every port, this one included; see networkpolicy.yaml.j2).
 #
 #   monitor-bridge — SPEEDTEST_URL (monitor-bridge/templates/env-secret.yaml.j2), the check
 #                    that reads the newest result row. A failed run leaves no other trace:
