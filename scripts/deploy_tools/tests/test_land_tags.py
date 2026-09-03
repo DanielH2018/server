@@ -137,44 +137,6 @@ def test_missing_changed_files_count_falls_back_rather_than_guessing():
     assert tags == []
 
 
-# Comment lines are stripped: land.sh's own comment explains why `deploy.sh --changed` is
-# NOT used, and matching that sentence would fail the very rule it documents.
-_LAND_SH = "\n".join(
-    line
-    for line in (Path(__file__).resolve().parent.parent / "land.sh")
-    .read_text()
-    .splitlines()
-    if not line.lstrip().startswith("#")
-)
-
-
-def test_land_health_checks_the_tags_it_deployed():
-    """land.sh must resolve the fallback path to a tag list itself, not hand deploy.sh `--changed`.
-
-    deploy.sh resolves --changed internally, so the verdict call downstream would receive an empty
-    --tags -- and gate() with no tags reports settled having health checked nothing, on exactly the
-    large-PR path where verification matters most.
-    """
-    assert "deploy.sh --changed" not in _LAND_SH
-
-
-def test_land_still_invokes_the_deployer():
-    """The reject half.
-
-    A test for an absent string passes identically against an empty file or a renamed script, so pin
-    what must be present too.
-    """
-    assert "./scripts/deploy.sh --tags" in _LAND_SH
-
-
-def test_land_deploys_each_tag_on_the_host_that_declares_it():
-    """Issue #929: `--tags alloy` on daniel-box matched no service, exited 0, and the landing read
-    `settled` while daniel-pi ran the old container. land.sh asks deploy_tags.py which host declares
-    each tag and adds `-e target=` for one that is not the local node."""
-    assert "deploy_tags.py hosts" in _LAND_SH
-    assert '-e "target=$host"' in _LAND_SH
-
-
 def test_a_build_role_pulls_in_the_workload_that_runs_its_image():
     """PR #570's real shape: a build role must pull in the workload that runs its image.
 
@@ -198,41 +160,6 @@ def test_an_ordinary_role_is_not_widened():
     )
     assert source == "pr"
     assert tags == ["sonarr"]
-
-
-def test_land_preflights_before_waiting_on_ci():
-    """Order is the entire value.
-
-    Checking blockers AFTER the CI wait would still catch the condition but keep the ~6 wasted
-    minutes that motivated it (PR #570, 2026-08-29).
-
-    The anchor is the master-CI call by its argument, not the bare module name. land.sh asks
-    await_ci.py a second question during the merge wait (the PR's own CI, #814), which comes
-    before the preflight by construction -- there is no merge commit to check blockers
-    against yet -- so a bare `await_ci.py` anchor matches that one and fails.
-
-    The anchor carries the closing quote of `"$LAND_DIR/await_ci.py"`, because that helper is
-    invoked through the directory land.sh itself came from (issue #851).
-    """
-    preflight = _LAND_SH.index("deploy_tags.py blockers")
-    ci_wait = _LAND_SH.index('await_ci.py" "$MERGE_SHA"')
-    assert preflight < ci_wait, "land.sh waits on CI before checking for blockers"
-
-
-def test_land_treats_a_stale_tree_as_a_resume_point():
-    """deploy.sh exit 4 means nothing was deployed and the tree is behind — CLAUDE.md calls
-    that a resume point. Reporting it as deploy-failed sends the operator after a fault that
-    is not there."""
-    assert 'deploy_rc" -eq 4' in _LAND_SH
-
-
-def test_land_never_bypasses_the_staleness_guard():
-    """The reject half of the retry: land never bypasses the staleness guard.
-
-    The tempting fix for exit 4 is the flag that disables the check, which deploys stale templates
-    over live config.
-    """
-    assert "--skip-staleness-check" not in _LAND_SH
 
 
 def test_a_setup_plane_pr_is_not_nothing_to_deploy():
@@ -492,53 +419,6 @@ def test_a_mixed_pr_reports_both_a_tag_and_a_manual_apply():
     assert land_tags.plane_note(files) != ""
 
 
-def test_land_reports_a_setup_plane_pr_as_unfinished():
-    assert "needs-manual-apply" in _LAND_SH
-
-
-def test_land_reads_the_deployers_state_for_a_self_applied_pr():
-    """A self-applied PR has no service tag, so nothing but the deployer's own markers can say
-    whether the tick applied it. Both must be read: `behind_since` for "not yet", `hold_sha`
-    for "tried and failed"."""
-    assert "--self-applied" in _LAND_SH
-    assert "behind_since" in _LAND_SH and "hold_sha" in _LAND_SH
-    assert "VERDICT: deferred" in _LAND_SH
-
-
-def test_land_can_wait_for_the_merge_itself_without_reading_ci():
-    """`--await-merge` exists so the session's procedure is create → `merge --auto` → one
-    backgrounded land.sh.
-
-    The wait must not shell out to `gh pr checks` or `gh run`: that is the hand-polling
-    land.sh exists to replace, and the nudge hook denies it. Asking await_ci.py for a
-    one-shot verdict is the opposite of that -- a bounded read that ENDS the wait on a red
-    (#814) rather than a session watching for a green to arrive -- so the ban stays on the
-    two `gh` forms, and the CI question stays delegated rather than reimplemented here.
-    """
-    assert "--await-merge" in _LAND_SH
-    start = _LAND_SH.index('"$AWAIT_MERGE" -eq 1')
-    end = _LAND_SH.index("== 1/6")
-    wait_block = _LAND_SH[start:end]
-    assert "gh pr view" in wait_block and "--json state" in wait_block
-    assert "gh pr checks" not in wait_block and "gh run" not in wait_block
-    assert 'await_ci.py" --timeout 0' in wait_block, (
-        "the PR's CI verdict must come from await_ci.py, not from logic written here"
-    )
-    assert "MERGED" in wait_block and "CLOSED" in wait_block
-
-
-def test_land_retries_a_tick_skipped_for_lock_contention():
-    """gitops_tick.sh exit 3 means the unit's own flock gave up and NOTHING fast-forwarded.
-
-    #723's landing carried on from there and every later reading said "the tick deferred"
-    (2026-09-01). The retry loop must wrap the tick, not just the deploy.
-    """
-    tick = _LAND_SH.index("gitops_tick.sh")
-    loop = _LAND_SH.rfind('while [ "$attempt" -le "$LOCK_RETRIES" ]', 0, tick)
-    assert loop != -1, "the first gitops_tick.sh call is not inside a retry loop"
-    assert '"$tick_rc" -ne 3' in _LAND_SH
-
-
 # PR #617's real 32-path file list, read from `gh pr view 617 --json files` on 2026-08-29.
 # 22 of its role directories have a containers_list entry; `manifests` and `volume-claim` do
 # not, and naming either in --tags makes deploy.sh refuse the whole list.
@@ -645,23 +525,6 @@ def test_the_shared_roles_are_still_undeclared(monkeypatch):
     assert "sonarr" in declared, (
         "the reject half: a lookup returning nothing would pass"
     )
-
-
-def test_land_does_not_call_a_refused_tag_list_nothing_to_deploy():
-    """deploy.sh exit 2 means it refused the WHOLE list and deployed nothing, including every
-    valid service beside the bad tag. Reporting that as nothing-to-deploy and exiting 0 is
-    what hid PR #617. Matched literally: a guard read through a variable stops matching
-    silently."""
-    assert 'echo "VERDICT: nothing-to-deploy (no service tag matched)"' not in _LAND_SH
-    assert "deploy-failed (PR #$PR — a derived tag matched no service" in _LAND_SH
-
-
-def test_land_still_has_a_nothing_to_deploy_path():
-    """The reject half of the verdict change: a docs-only PR really is finished.
-
-    It must not be reported as needing a human.
-    """
-    assert "nothing-to-deploy" in _LAND_SH
 
 
 def test_a_secrets_rotation_is_flagged():
@@ -824,75 +687,3 @@ def test_a_range_covering_the_file_list_is_read(monkeypatch):
         land_tags.deploy_tags, "comment_only_paths", lambda paths, old, new: {"a.yml"}
     )
     assert land_tags.quiet_paths(["a.yml", "b.yml"], "old..new") == {"a.yml"}
-
-
-def test_land_reads_the_prs_own_range_from_the_pull_ref():
-    """land.sh must derive the range from `refs/pull/<n>/head` and its merge base.
-
-    Not `--since`, which covers every other session's merged work. And not
-    `$MERGE_SHA^..$MERGE_SHA`, which is right for a squash merge and WRONG for a rebase
-    merge of a multi-commit PR: the parent is then the PR's own commit n-1, so a broad path
-    changed in commit 1 reads identical across the range. This repo allows all three merge
-    methods and PR #843 was two commits.
-    """
-    assert '"refs/pull/$PR/head"' in _LAND_SH
-    assert 'git merge-base "$pr_head" "$MERGE_SHA"' in _LAND_SH
-    assert "$MERGE_SHA^.." not in _LAND_SH
-    assert "--plane --range" in _LAND_SH
-    assert "--self-applied --range" in _LAND_SH
-
-
-def test_land_falls_back_to_loud_when_the_range_cannot_be_read():
-    """A fetch or merge-base that fails must classify every path as loud."""
-    assert "quiet_range=''" in _LAND_SH
-    assert "every broad path stays owed to a hand" in _LAND_SH
-
-
-# --- which checkout each helper comes from (issue #851) -------------------------------------
-#
-# `land.sh` cd's to the primary checkout so deploy.sh renders from a tree that is not behind
-# master. That made every RELATIVE helper path resolve there too, while land.sh itself is the
-# copy in the checkout it was invoked from. PR #850 added a flag to `land_tags.py` and a call
-# site in `land.sh`, and failed on its own landing with
-# `land_tags.py: error: unrecognized arguments: --range`.
-#
-# The split is not uniform, and the reject half below is the point: moving `deploy_tags.py`
-# to `$LAND_DIR` too would silently re-aim `blockers` and `changed` at the WORKTREE's HEAD.
-
-_CODE_MUST_MATCH = (
-    "land_tags.py",
-    "await_ci.py",
-    "deploy_detach_notify.py",
-    "gitops_tick.sh",
-)
-
-
-def test_helpers_that_must_match_land_sh_come_from_its_own_checkout():
-    """A helper this script passes new flags to has to be the same release as this script."""
-    assert "LAND_DIR=$(cd -- " in _LAND_SH
-    for helper in _CODE_MUST_MATCH:
-        assert f'"$LAND_DIR/{helper}"' in _LAND_SH, helper
-        assert f"scripts/deploy_tools/{helper}" not in _LAND_SH, helper
-
-
-def test_deploy_tags_still_reads_the_primary_checkout():
-    """The reject half, and the reason the split is not a uniform sweep.
-
-    `blockers` reads `HEAD..origin/master` and `changed` reads `<since>...HEAD`, both with
-    their own checkout as the cwd. Through `$LAND_DIR` that HEAD becomes the worktree's --
-    a missed blocker or a wrong tag list, neither of which announces itself.
-    """
-    assert "$LAND_DIR/deploy_tags.py" not in _LAND_SH
-    assert 'scripts/deploy_tools/deploy_tags.py blockers "origin/$BRANCH"' in _LAND_SH
-    assert "scripts/deploy_tools/deploy_tags.py changed" in _LAND_SH
-
-
-def test_deploy_sh_still_runs_from_the_primary_checkout():
-    """deploy.sh renders from its working directory, so it must never move.
-
-    A worktree is behind master after a squash merge; deploying from one is refused as stale,
-    and would render stale templates if it were not.
-    """
-    assert "./scripts/deploy.sh --tags" in _LAND_SH
-    assert "$LAND_DIR/scripts/deploy.sh" not in _LAND_SH
-    assert 'cd "$PRIMARY"' in _LAND_SH

@@ -125,7 +125,7 @@ def main() -> int:
         return 0
 
     # land.sh runs gh itself. Its own invocation is the fix, never the problem.
-    if "land.sh" in command:
+    if "land.sh" in command or "land.py" in command:
         return 0
 
     kind = classify(command)
