@@ -82,6 +82,14 @@ GENERATORS: list[tuple[list[str], str]] = [
         "docs/reference/networking.md",
     ),
     (
+        [
+            "scripts/docs/reference/decisions.py",
+            "--out",
+            "docs/reference/decisions.md",
+        ],
+        "docs/reference/decisions.md",
+    ),
+    (
         ["scripts/docs/reference/scripts.py", "--out", "docs/reference/scripts.md"],
         "docs/reference/scripts.md",
     ),
