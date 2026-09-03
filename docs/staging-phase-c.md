@@ -186,7 +186,7 @@ question than the one that was being refused. The next tick asks about the new t
 ## Decision 5 — the window
 
 A full prod deploy of 54 services measures 20m12s. Six services is a small fraction of that, so
-a staging pass should fit inside the 30-minute tick comfortably — but **that is an inference and
+a staging pass should fit inside the 10-minute tick comfortably — but **that is an inference and
 the spec it comes from says to measure before sizing.** An earlier draft of the Phase A/B spec
 reasoned from a stale 59-minute figure and concluded the window roughly doubles, which was
 wrong.
@@ -329,7 +329,7 @@ days, which is still a different order from the one-a-month tick rate the rescop
 to. Do not read the timer's hourly cadence as the sample rate; it is only how often the harness
 checks whether master has produced anything to ask about.
 
-**Contention with the 30-minute tick is a skip, not a sample.** Both reach the same staging lock.
+**Contention with the 10-minute tick is a skip, not a sample.** Both reach the same staging lock.
 The loser used to answer PREP_FAILED, which the harness scored as a false failure — so the tick
 would have reset the measured streak to zero on every collision, the metric destroying itself.
 `staging_gate_remote.sh` now exits `GATE_BUSY` for lock contention specifically,
