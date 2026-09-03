@@ -70,6 +70,7 @@ STUBS = {
     "manifest_prune_push_token": "t" * 32,
     "etcd_snapshot_push_token": "t" * 32,
     "remember_logs_push_token": "t" * 32,
+    "release_staleness_push_token": "t" * 32,
 }
 
 # The resend intervals come from the role's real defaults, not from a stub. Stubbing them would

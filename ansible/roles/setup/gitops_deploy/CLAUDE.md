@@ -282,6 +282,25 @@ stay).
     tick leaves `local == origin` and every subsequent `next_action()` is a noop. The pilot list
     used to bound this at one service; since it was cleared (2026-08-16) the cap is the only
     bound, which is what it was written for.
+  - **The Discord page above is a one-shot detection, not a durable signal (issue #947).**
+    `alert_once` fires it exactly once per origin SHA, and the ff-merge that follows clears
+    `behind_since` — the deployer's own "still behind origin" marker — so a k8s change deferred
+    this way leaves every OTHER monitored marker clean while the cluster keeps running the old
+    manifests. Renovate automerges digest bumps on the 20+ `k8s_autodeploy: false` roles
+    (`renovate.json`), so this path runs unattended with the one Discord line as its entire
+    signal until someone happens to reread it. The `# DECIDED:` at the `cs.k8s` branch in
+    `gitops_deploy.py` points here. The durable signal is a daniel-box root cron
+    (`roles/setup/k3s/templates/release-staleness-check.sh.j2`, tag `release-staleness`, every
+    `k3s_release_staleness_cron_minute`) reading `uv run python scripts/diagnostics/probe.py
+    releases --stale-only`: it compares each service's release record (the applied commit
+    `roles/k8s/manifests/tasks/release_stamp.yml` stamps on every real apply) against
+    `origin/master` under that service's own role AND the shared roles every service's manifests
+    depend on (`manifests`, `rollout-drain`, and the rest with no `containers_list` entry —
+    `scripts/diagnostics/probe_lib/releases.py`'s `shared_k8s_roles()`), and pushes the "Release
+    Staleness Drift" Kuma monitor down when any service is stale or missing a record entirely.
+    No clearing rule is needed: the next real apply of that service rewrites its record, so the
+    flag is derived from state rather than a marker this deployer would have to remember to
+    clear.
   - **Accepted, not fixed here: the batch-abort blast radius is this branch's most likely bad
     day.** `K8S_AUTODEPLOY_MAX_PER_TICK` (3) and `ansible/tasks/k8s_batch.yml` share one
     `ansible-playbook` run with no `rescue` — so one service's revert failing during a rollback
