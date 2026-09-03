@@ -27,8 +27,6 @@ desktop, so your real ISP IP is never exposed to anything.
 |---|---|
 | WireGuard endpoint | `wireguard.daniel-hunter.com` on the daniel-box UDP port above → wg-easy on `daniel-box` (k8s) |
 | wg-easy admin UI | `https://wg-easy.daniel-hunter.com` (behind Authelia) |
-| WireGuard client subnet | `10.8.0.0/24` |
-| Home LAN subnet | `10.0.0.0/24` |
 | Service URLs | `https://<name>.local.daniel-hunter.com` → the k3s ingress VIP above |
 | `.local` auth portal | `https://auth.local.daniel-hunter.com` (one_factor) |
 | New-client DNS default | `10.0.0.243` (`default_dns: {{ dns_k8s_vip }}` on wg-easy's `containers_list` entry) |

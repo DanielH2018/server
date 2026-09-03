@@ -328,7 +328,12 @@ def render_fail2ban_jails(jails: list[dict[str, str]]) -> str:
 
 
 def render_lan_addresses(
-    ingress_vip: str, dns_vip: str, wg_port: str, pi_wg_port: str
+    ingress_vip: str,
+    dns_vip: str,
+    wg_port: str,
+    pi_wg_port: str,
+    lan_subnet: str,
+    wg_client_subnet: str,
 ) -> str:
     """Renders the LAN address table fragment.
 
@@ -337,6 +342,9 @@ def render_lan_addresses(
         dns_vip: the Pi-hole DNS MetalLB VIP.
         wg_port: the WireGuard UDP port for wg-easy on daniel-box.
         pi_wg_port: the WireGuard UDP port for the Pi's LAN-only wg-easy.
+        lan_subnet: the physical LAN subnet.
+        wg_client_subnet: wg-easy's own client pool (not an Ansible input; see the
+            `wg_client_subnet` comment in group_vars/all.yml).
     """
     rows = [
         ("k3s ingress VIP (MetalLB; every `.local` service answers here)", ingress_vip,
@@ -346,6 +354,8 @@ def render_lan_addresses(
          "`udp_port` on the k8s `wg-easy` entry in `host_vars/daniel-box.yml`"),
         ("WireGuard UDP port, the Pi's LAN-only wg-easy", f"{pi_wg_port}/udp",
          "`udp_port` on `wg-easy` in `host_vars/daniel-pi.yml`"),
+        ("Home LAN subnet", lan_subnet, "`lan_subnet`"),
+        ("WireGuard client subnet", wg_client_subnet, "`wg_client_subnet`"),
     ]  # fmt: skip
     lines = ["| Address | Value | Set by |", "|---|---|---|"]
     lines += [f"| {what} | `{value}` | {source} |" for what, value, source in rows]
@@ -377,6 +387,8 @@ def _lan() -> tuple[str, list[str]]:
         str(group["dns_k8s_vip"]),
         container_udp_port(role_defaults(HOST_VARS / "daniel-box.yml"), "wg-easy"),
         container_udp_port(role_defaults(HOST_VARS / "daniel-pi.yml"), "wg-easy"),
+        str(group["lan_subnet"]),
+        str(group["wg_client_subnet"]),
     ), [
         "ansible/inventory/group_vars/all.yml",
         "ansible/inventory/host_vars/daniel-box.yml",

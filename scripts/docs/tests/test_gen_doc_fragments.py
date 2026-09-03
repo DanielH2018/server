@@ -264,6 +264,10 @@ def test_deadman_cadences_fails_on_a_missing_variable_rather_than_guessing():
 
 
 def test_lan_addresses_names_each_value_and_its_variable():
-    out = g.render_lan_addresses("10.0.0.240", "10.0.0.243", "51820", "51822")
+    out = g.render_lan_addresses(
+        "10.0.0.240", "10.0.0.243", "51820", "51822", "10.0.0.0/24", "10.8.0.0/24"
+    )
     assert "| `10.0.0.240` | `k3s_metallb_ingress_vip` |" in out
     assert "| `51822/udp` |" in out
+    assert "| `10.0.0.0/24` | `lan_subnet` |" in out
+    assert "| `10.8.0.0/24` | `wg_client_subnet` |" in out
