@@ -124,3 +124,31 @@ def test_the_migrate_playbook_points_at_the_seed_step():
         "migrate_volume_block_size.yml must tell the operator to seed a first backup after "
         "restoring the tier label - relabelling alone leaves a multi-day uncovered window"
     )
+
+
+def test_both_seed_crs_carry_the_owning_jobs_label():
+    """Retain counts only backups labelled with its own job, and the snapshot auto-cleanup only
+    deletes snapshots that are. An unlabelled seed is unowned: its backup sat in B2 until
+    drop_seed_backups.yml and its snapshot pinned 3.5 GB of deleted files into every weekly backup
+    of valheim-config (issue #942)."""
+    snapshot = _named("Create the snapshot")[0]["ansible.builtin.command"]["stdin"]
+    backup = _named("Request the backup")[0]["ansible.builtin.command"]["stdin"]
+    for manifest in (snapshot, backup):
+        assert "RecurringJob: {{ seed_job }}" in manifest
+        assert "seeded-by: seed_volume_backup.yml" in manifest
+
+
+def test_the_owning_job_is_read_from_the_recurringjob_crs():
+    """The daily tier's group is `default` and its job `daily-backup`; guessing job == group
+    would label a daily seed with a job that does not exist and nothing would prune it."""
+    lookup = _named("Read which recurring job owns")[0]["ansible.builtin.command"][
+        "argv"
+    ]
+    assert "recurringjobs.longhorn.io" in lookup
+    assert any("spec.groups" in a and "{{ seed_group }}" in a for a in lookup)
+    refusal = _named("Refuse a group no recurring job selects")
+    assert refusal, "an empty lookup must refuse, not label the seed with an empty job"
+    order = [t.get("name") for t in TASKS]
+    assert order.index(refusal[0]["name"]) < order.index(
+        _named("Create the snapshot")[0]["name"]
+    )
