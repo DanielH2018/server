@@ -645,11 +645,21 @@ DEPLOYED_HOSTS=''
 # Arguments:
 #   None
 # Returns:
-#   0 when every host's deploy succeeded, else the first non-zero deploy.sh exit
+#   0 when every host's deploy succeeded; $HOST_LOOKUP_FAILED when `deploy_tags.py hosts`
+#   itself failed, before any deploy.sh ran; else the first non-zero deploy.sh exit
 #######################################
+# `deploy_tags.py hosts` crashing (a YAML parse error in host_vars, an environment `uv run`
+# hits before Python even starts) exits 1 -- Python's own default for an uncaught exception,
+# since `_cmd_hosts` never returns non-zero on its own. That collides with deploy.sh's own
+# rare `cd "$repo_root" || exit 1`, and both used to feed the same $deploy_rc into the
+# catch-all `deploy-failed (exit $deploy_rc)` arm below -- indistinguishable from a real
+# deploy.sh failure even though deploy.sh never ran at all here (issue #1016). Same collision
+# class PLAYBOOK_FAILED handles in deploy.sh; same remedy: reserve a code outside deploy.sh's
+# own set ({0,1,2,3,4,20,64,75}) instead of reusing 1.
+HOST_LOOKUP_FAILED=21
 deploy_by_host() {
   local by_host line host host_tags rc
-  by_host=$(uv run python scripts/deploy_tools/deploy_tags.py hosts "$TAGS") || return 1
+  by_host=$(uv run python scripts/deploy_tools/deploy_tags.py hosts "$TAGS") || return "$HOST_LOOKUP_FAILED"
   if [ -z "$by_host" ]; then
     ./scripts/deploy.sh --tags "$TAGS"
     return $?
@@ -762,6 +772,14 @@ case "$deploy_rc" in
     exit 1
     ;;
   75) die "deploy lock stayed busy after $LOCK_RETRIES attempts — nothing deployed" 75 lock-busy ;;
+  "$HOST_LOOKUP_FAILED")
+    # `deploy_tags.py hosts` itself failed (a crash or bad environment), before deploy.sh was
+    # ever invoked for any host — nothing here overlaps with deploy.sh's own catch-all below,
+    # which really did run deploy.sh and fail. See HOST_LOOKUP_FAILED above (issue #1016).
+    LAND_VERDICT=deploy-failed
+    echo "VERDICT: deploy-failed (PR #$PR — deploy_tags.py hosts failed before any deploy.sh ran; nothing was touched; tags: $TAGS)"
+    exit 1
+    ;;
   20)
     # The playbook RAN and a task failed, so this is the one deploy-failed verdict that must
     # NOT say nothing deployed: everything applied before the failing task is live. It reads
