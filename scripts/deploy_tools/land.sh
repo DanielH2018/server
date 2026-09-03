@@ -42,9 +42,18 @@
 # text never contains `gh pr merge`, and it is the single script call the worktree-containment
 # check already accepts with its internal loops (verified 2026-08-29). Idempotent -- a PR
 # already MERGED is left alone rather than re-armed, so a retried invocation is safe; a CLOSED
-# one dies rather than waiting on a merge that will never come. `--subject` overrides the
-# squash commit's subject; the PR's own title is used otherwise. Requires --pr, same as every
-# other mode.
+# one dies rather than waiting on a merge that will never come.
+#
+# GitHub's `enablePullRequestAutoMerge` mutation (what `--auto` calls) rejects a PR that is
+# already CLEAN -- there is nothing to defer, so it fails on exactly the PRs that are ready to
+# merge right now (issue #1008, reproduced on PRs #998/#1001/#1002/#1004). A CLEAN rejection
+# falls through to a direct `gh pr merge --squash` instead of dying; a PR that merged in the
+# gap between the idempotency check above and the `--auto` attempt is treated the same as an
+# already-MERGED PR (a no-op, not a failure); anything else GitHub calls not-yet-mergeable
+# (BLOCKED, DIRTY, ...) still dies -- that PR failing to arm is a real problem.
+#
+# `--subject` overrides the squash commit's subject; the PR's own title is used otherwise.
+# Requires --pr, same as every other mode.
 #
 # Exit codes:
 #   0   deployed and settled, or there was nothing to deploy
@@ -254,6 +263,35 @@ done
 # announces itself. Its checkout is the question, not an implementation detail.
 cd "$PRIMARY" || die "cannot cd to $PRIMARY" 1
 
+#######################################
+# Decide what to do after `gh pr merge --auto` rejects a PR, from a freshly re-read state and
+# mergeStateStatus. A pure function of two strings -- no `gh` call inside -- so
+# test_land_arm_merge.py can drive the branch by running land.sh against a stubbed `gh`
+# without a network (issue #1008).
+#
+# GitHub's `enablePullRequestAutoMerge` mutation (what `--auto` calls) only accepts a PR that
+# is genuinely blocked -- checks pending, or otherwise not yet mergeable. A PR that is already
+# CLEAN has nothing to defer, so `--auto` fails on exactly the PRs that are ready to merge
+# right now -- reproduced on PRs #998, #1001, #1002 and #1004 on 2026-09-03.
+# Arguments:
+#   $1 state              (gh pr view --json state: OPEN/MERGED/CLOSED)
+#   $2 mergeStateStatus    (gh pr view --json mergeStateStatus: CLEAN/BLOCKED/DIRTY/...)
+# Outputs:
+#   one of already-merged | merge-direct | die, on stdout
+#######################################
+arm_merge_fallback_decision() {
+  local state="$1" merge_state_status="$2"
+  if [ "$state" = MERGED ]; then
+    echo already-merged
+    return 0
+  fi
+  if [ "$merge_state_status" = CLEAN ]; then
+    echo merge-direct
+    return 0
+  fi
+  echo die
+}
+
 if [ "$ARM_MERGE" -eq 1 ]; then
   echo "== arm  arming PR #$PR's merge"
   arm_state=$(gh pr view "$PR" --json state,title --jq '.state + "\t" + .title') ||
@@ -265,9 +303,32 @@ if [ "$ARM_MERGE" -eq 1 ]; then
     CLOSED) die "PR #$PR was closed without merging — nothing to arm" 1 ;;
     *)
       arm_subject=${SUBJECT:-$arm_pr_title}
-      gh pr merge "$PR" --squash --auto --subject "$arm_subject" ||
-        die "gh pr merge --auto failed for PR #$PR" 1
-      say "auto-merge armed: $arm_subject"
+      if gh pr merge "$PR" --squash --auto --subject "$arm_subject"; then
+        say "auto-merge armed: $arm_subject"
+      else
+        arm_retry=$(gh pr view "$PR" --json state,mergeStateStatus \
+          --jq '.state + "\t" + .mergeStateStatus') ||
+          die "gh pr merge --auto failed for PR #$PR, and its state could not be re-read" 1
+        arm_retry_state=${arm_retry%%$'\t'*}
+        arm_retry_mss=${arm_retry#*$'\t'}
+        case "$(arm_merge_fallback_decision "$arm_retry_state" "$arm_retry_mss")" in
+          already-merged)
+            # A race with the idempotency check above: the PR merged between that read and
+            # this `--auto` attempt. Keep the existing MERGED short-circuit's semantics --
+            # `say`, not `die`.
+            say "gh pr merge --auto failed because PR #$PR merged in the meantime"
+            ;;
+          merge-direct)
+            say "PR #$PR is CLEAN -- nothing to defer; merging directly"
+            gh pr merge "$PR" --squash --subject "$arm_subject" ||
+              die "direct gh pr merge --squash failed for PR #$PR" 1
+            say "merged directly: $arm_subject"
+            ;;
+          *)
+            die "gh pr merge --auto failed for PR #$PR (mergeStateStatus=$arm_retry_mss)" 1
+            ;;
+        esac
+      fi
       ;;
   esac
 fi
