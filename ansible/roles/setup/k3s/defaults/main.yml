@@ -962,7 +962,7 @@ k3s_coredns_probe_retries: 8
 # availability rather than doubling it). Run via:
 #   uv run ansible-playbook ansible/k3s-bringup.yml --tags join-firewall   # on daniel-box first
 #   uv run ansible-playbook ansible/k3s-bringup.yml -e join_agent=daniel-server
-k3s_server_join_url: https://10.0.0.215:6443
+k3s_server_join_url: "https://{{ hostvars['daniel-box'].server_ip }}:6443"
 
 # Agent install flags. node.longhorn.io/create-default-disk=false turned out to be
 # INERT (2026-08-13 join): Longhorn honors it only when the cluster-level

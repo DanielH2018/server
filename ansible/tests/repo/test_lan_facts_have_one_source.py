@@ -102,9 +102,11 @@ ALLOWLIST: list[tuple[str, str]] = [
     ),
     (
         r"^ansible/roles/setup/k3s/defaults/main\.yml$",
-        "k3s_server_join_url duplicates daniel-box's server_ip; a bring-up-only value with no "
-        "offline render check to prove a hostvars rewrite is safe — filed, not fixed here "
-        "(findings.py)",
+        "k3s_metallb_pool is the definition site for the ingress pool's own address range "
+        "(10.0.0.241-10.0.0.250), a distinct fact from the six named LAN facts this guard "
+        "tracks — not a duplicate of any single VIP or host address (#975 removed this "
+        "file's other exemption, for k3s_server_join_url, by rewriting that literal to "
+        "hostvars['daniel-box'].server_ip)",
     ),
     (
         r"^ansible/roles/setup/hypervisor/defaults/main\.yml$",
