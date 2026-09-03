@@ -105,43 +105,6 @@ spec:
             - name: traefik-logs
               mountPath: /var/log/traefik
 {{ container_resources(cpu_limit='250m', mem_limit='128Mi', cpu_request='10m', mem_request='16Mi') }}
-        # crowdsec-agent's own entrypoint (build/docker/docker_start.sh in crowdsecurity/crowdsec)
-        # populates /etc/crowdsec from a baked-in /staging/etc/crowdsec on its first boot, gated
-        # on `[ ! -e /etc/crowdsec/config.yaml ]`. Several of those staged files (hub content,
-        # notifications/*, credentials templates) are root-owned and not world-readable, so that
-        # populate step — run as the sidecar's own hardened non-root uid with ALL capabilities
-        # dropped — fails partway through ("Permission denied") and rsync exits 23. The
-        # entrypoint runs under `set -e`, so that nonzero exit kills the container on every cold
-        # start (kubelet then restarts it; #976). This init container does the SAME copy — root
-        # can read the restricted source files, hence DAC_READ_SEARCH rather than the broader
-        # DAC_OVERRIDE (read-only need, same shape as loki-homelab's alloy-daemonset reading
-        # syslog's 640 files) — so /etc/crowdsec/config.yaml already exists by the time the
-        # sidecar's own entrypoint runs and its populate step is skipped entirely. Runs AFTER
-        # crowdsec-config-install and keeps --ignore-existing so our seeded acquis.yaml/whitelist
-        # files still win, exactly like upstream's own precedence. The final chmod is required
-        # because rsync -a preserves the source's root-only modes, and the long-running
-        # crowdsec-agent container below is unchanged: still non-root, still ALL caps dropped.
-        - name: crowdsec-hub-seed
-          image: {{ crowdsec_k8s_image }}
-          command:
-            - /bin/sh
-            - -c
-            - >-
-              rsync -a --ignore-existing /staging/etc/crowdsec/ /etc/crowdsec/ &&
-              chmod -R a+rX /etc/crowdsec
-          securityContext:
-            allowPrivilegeEscalation: false
-            runAsUser: 0
-            runAsGroup: 0
-            capabilities:
-              add:
-                - DAC_READ_SEARCH
-              drop:
-                - ALL
-          volumeMounts:
-            - name: crowdsec-etc
-              mountPath: /etc/crowdsec
-{{ container_resources(cpu_limit='250m', mem_limit='128Mi', cpu_request='10m', mem_request='16Mi') }}
 {% endif %}
       containers:
         - name: traefik

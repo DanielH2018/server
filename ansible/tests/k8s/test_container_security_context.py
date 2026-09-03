@@ -236,9 +236,6 @@ _HOST_OR_NETWORK_ROOT = {
 _ROOT_BY_DESIGN = {
     ("code-server", "seed-workspace-claim"),
     ("wg-easy", "config-chown"),
-    # Root + DAC_READ_SEARCH to read the crowdsec image's root-owned staged config before the
-    # non-root crowdsec-agent sidecar starts — #976.
-    ("traefik", "crowdsec-hub-seed"),
 }
 
 # Runs as root over root-owned data. These are the ones with real work behind them: each needs an
