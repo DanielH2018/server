@@ -63,6 +63,7 @@ selecting the `r2` target, not `default`; see
 | valheim-config | weekly (Tue) | B2 | post-doc addition (2026-08-13, pwd→SOPS recovery); world saves. The image's hourly world zips were diverted to the nobackup `valheim-server` claim on 2026-09-02 (`BACKUPS_DIRECTORY`) — see *The storage cap is a second axis* |
 | valheim-stats-data, terraria-stats-data | weekly (Mon/Sun) | B2 | post-doc additions; small stats DBs |
 | pi-peer-backup-data | weekly (Sat) | B2 | post-doc addition (2026-08-14); the Pi's nightly rsync lands at 04:30 UTC, so a Saturday 04:30 backup captures the previous day's sync — crash-consistent either way |
+| navidrome-data | weekly (Sun) | B2 | post-doc addition (2026-09-03, issue #946); `ND_DATAFOLDER` — Navidrome's SQLite DB and artwork cache, not the music library (that's an emptyDir mount, `navidrome/templates/deployment.yaml.j2`) |
 | `scrutiny`-influxdb-data | **no-backup** | — | kopia: `scrutiny/influxdb2/` — the volume IS the TSDB (single mount, verified) |
 | uptime-kuma-data | **no-backup** | — | kopia: `uptime-kuma/data*/` — monitors regenerate from the static-monitors Secret; admin recreated by hand; history not kept (kopia's own caveat, now in this doc) |
 | `crowdsec`-db | **no-backup** | — | Docker's `crowdsec`-db named volume was deliberately outside kopia scope |
