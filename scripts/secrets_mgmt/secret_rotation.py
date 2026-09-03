@@ -176,6 +176,9 @@ CROSS_HOST_PUSH_TOKENS = frozenset(
         # deploy tag, so `--deploy --tags uptime-kuma` would move the tile and leave the root cron
         # pushing the old value — silencing the monitor that watches the shutdown chain.
         "ups_secondary_push_token",
+        # daniel-server's (ups_host) own leg of the same watchdog, added in issue #952 so the
+        # two hosts stop sharing ups_secondary_push_token above — same shape and same reason.
+        "ups_secondary_daniel_server_push_token",
     }
 )
 

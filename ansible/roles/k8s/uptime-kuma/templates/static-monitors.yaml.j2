@@ -233,10 +233,21 @@ stringData:
    this deadline both derive from nut_host_watchdog_interval_minutes, so a schedule change cannot
    leave the tile graced against the old one. Gated on the token like its siblings: an ungated
    tile sits red from creation until the secret exists. Carries `email` because a dead secondary
-   is only discovered at a power cut, which is exactly when Discord is unreachable. #}
+   is only discovered at a power cut, which is exactly when Discord is unreachable.
+
+   ONE TILE PER HOST, never shared: nut_host's watchdog now runs on both daniel-box and
+   daniel-server (ups_host), each pushing its OWN token (kuma-push.env.j2 selects by
+   inventory_hostname). Two hosts on one push token would let either host's `up` satisfy the
+   deadline, masking the other's `down` (issue #952). The filename (AutoKuma's entity id) and
+   token for the daniel-box tile are UNCHANGED from before this split — only its display name
+   moved from the generic "(host)" to "(daniel-box)" — so its Kuma history survives. #}
 {% if ups_secondary_push_token | default('') %}
   ups-secondary.json: |
-    {"type": "push", "name": "UPS Secondary (host)", "interval": {{ nut_host_watchdog_interval_minutes | default(10) * 60 * 2 }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ ups_secondary_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
+    {"type": "push", "name": "UPS Secondary (daniel-box)", "interval": {{ nut_host_watchdog_interval_minutes | default(10) * 60 * 2 }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ ups_secondary_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
+{% endif %}
+{% if ups_secondary_daniel_server_push_token | default('') %}
+  ups-secondary-daniel-server.json: |
+    {"type": "push", "name": "UPS Secondary (daniel-server)", "interval": {{ nut_host_watchdog_interval_minutes | default(10) * 60 * 2 }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ ups_secondary_daniel_server_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
 {% endif %}
   # DECIDED: 5400s, not the 1200 its host-cron siblings use — the deadline must exceed the
   # PRODUCER'S PERIOD, and this producer is an hourly cron (k3s_remember_logs_cron_minute), not a
