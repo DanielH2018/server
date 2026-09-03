@@ -48,6 +48,7 @@ testpaths = [                        # single source of truth for WHAT runs; exc
   "ansible/roles/k8s/ical-proxy/tests",
   "ansible/roles/k8s/homelab-mcp/tests",
   "ansible/roles/k8s/artifacts/tests",             # artifact index/search server + path confinement
+  "ansible/roles/k8s/uptime-kuma/tests",           # status-page group rules + the sync's write-only-on-change
   ".claude/hooks",
   ".claude/tests",                 # audit-permissions report/suggester logic tests
   "scripts",                         # closes the smoke_extract CI gap
@@ -241,6 +242,7 @@ extra-paths = [
   "ansible/roles/setup/common/files",
   "ansible/roles/setup/gitops_deploy/files",
   "ansible/roles/k8s/monitor-bridge/files",
+  "ansible/roles/k8s/uptime-kuma/files",
   "scripts",
   "scripts/availability_bots",
   "scripts/backup",

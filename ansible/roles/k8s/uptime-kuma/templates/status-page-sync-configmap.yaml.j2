@@ -1,0 +1,37 @@
+{#
+  Inputs for the status-page-sync CronJob: the group rules, the AutoKuma id to display-name
+  index, and the script that joins them.
+
+  render_status_page.py lives in files/, not templates/: validate/k8s_manifests.py renders every
+  *.j2 under templates/ and parses it as YAML, and a Python script is not a manifest.
+
+  kuma_declarations is a fact this role's tasks/main.yml builds under no_log, by rendering
+  static-monitors.yaml.j2 back into data. It exists because the AutoKuma id is invisible over
+  Kuma's API — see the script's own docstring. index.json takes the id and the display name and
+  nothing else, so the push tokens, the Discord webhook and the SMTP password stay in the
+  Secret; that is also why the sync pod does not mount the monitor Secret itself.
+
+  Keep comments at column 0 and above the document, never indented between two keys: an
+  indented comment leaves its leading spaces behind and pushes the following key inside the
+  preceding block scalar, which still parses as valid YAML (the trap artifacts/configmap.yaml.j2
+  records at length).
+#}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kuma-status-page-sync
+  namespace: {{ k8s_namespace }}
+data:
+  rules.json: |
+    {{ kuma_status_page_groups | tojson }}
+  index.json: |
+    {
+{% for autokuma_id, declaration in (kuma_declarations | default({})).items() if declaration.type != 'notification' %}
+      {{ autokuma_id | tojson }}: {{ declaration.name | tojson }}{{ "," if not loop.last }}
+{% endfor %}
+    }
+  render_status_page.py: |
+{{ lookup('file', playbook_dir + '/roles/k8s/uptime-kuma/files/render_status_page.py') | indent(4, true) }}
+  push_heartbeat.py: |
+{{ lookup('file', playbook_dir + '/roles/k8s/uptime-kuma/files/push_heartbeat.py') | indent(4, true) }}

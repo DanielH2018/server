@@ -7,6 +7,8 @@
 #   cloudflare-ddns-direct  — KUMA push URL (cloudflare-ddns/templates/deployment-direct.yaml.j2)
 #   cloudflare-ddns-proxied — the same, deployment-proxied.yaml.j2
 #   pi-peer-backup          — push_url (pi-peer-backup/templates/secret.yaml.j2), a CronJob
+#   kuma-status-page-sync   — KUMA__URL and the deadman push, the second CronJob
+#                             (uptime-kuma/templates/status-page-sync-cronjob.yaml.j2)
 #
 # pi-peer-backup was missed when this policy first landed: the census read Deployments, and it is
 # the namespace's only CronJob. Its 2026-08-21 03:30 UTC run pulled its two peer files and exited
@@ -53,6 +55,9 @@ spec:
         - podSelector:
             matchLabels:
               app: pi-peer-backup
+        - podSelector:
+            matchLabels:
+              app: kuma-status-page-sync
       ports:
         - port: 3001
           protocol: TCP

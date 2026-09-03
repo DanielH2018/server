@@ -126,8 +126,9 @@ SLICE_45A_WORKLOADS = {
 
 SLICE_45A_ROLES = {role for role, _name in SLICE_45A_WORKLOADS}
 
-# Slice 4.5 stage B: the standalone apps. Each renders exactly one workload, so role-granular and
-# workload-granular agree here — they are still named per workload for the same reason stage A is.
+# Slice 4.5 stage B: the standalone apps. Each renders exactly one workload — except uptime-kuma,
+# which added the kuma-status-page-sync CronJob, and is why these are named per workload rather
+# than per role in the first place.
 SLICE_45B_WORKLOADS = {
     ("homepage", "homepage"),
     ("homelab-mcp", "homelab-mcp"),
@@ -138,6 +139,7 @@ SLICE_45B_WORKLOADS = {
     ("valheim-stats", "valheim-stats"),
     ("home-assistant", "home-assistant"),
     ("uptime-kuma", "uptime-kuma"),
+    ("uptime-kuma", "kuma-status-page-sync"),
 }
 
 SLICE_45B_ROLES = {role for role, _name in SLICE_45B_WORKLOADS}

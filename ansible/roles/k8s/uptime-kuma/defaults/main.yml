@@ -115,3 +115,103 @@ kuma_bridge_push_interval: 1200
 # event nobody controls, and notifies email as well as Discord is the case a hold is for. Add
 # the override back plus an entry in test_kuma_static_monitors.py's RESEND_HELD, and write the
 # condition that lifts it.
+
+# ── status page group sync ─────────────────────────────────────────────────────────────────
+# Kuma's status page at /status/<slug> — the one Homepage's `uptimekuma` widget reads
+# (roles/k8s/homepage/templates/services.yaml.j2). The CronJob below owns its group list; the
+# page object itself is hand-created and stays that way. Do NOT declare it as an AutoKuma
+# `status_page` entity: AutoKuma at the pinned tag CREATES a status page and never edits one
+# (sync.rs's `match (merge, current)` has no StatusPage arm, on the pin and on master), and
+# with on_delete=delete a declaration that ever disappeared would delete the live page.
+kuma_status_page_slug: containers
+# Same build matrix and tag as autokuma_k8s_image above (.github/workflows/docker-build-push.yml
+# builds ghcr.io/bigboot/kuma from Dockerfile.cli) — the CLI and the sidecar speak to the same
+# Kuma through the same kuma-client, so they move together.
+kuma_cli_k8s_image: ghcr.io/bigboot/kuma:2.1.0-rc.2
+# Quarter-hourly. Membership only changes on a deploy, and a run that finds nothing to do costs
+# one pod and writes nothing at all.
+# The render and heartbeat stages are stdlib Python; per-role pin like every other
+# python:3.14-alpine consumer here, so Renovate tracks them one by one.
+kuma_status_page_sync_image: python:3.14-alpine@sha256:05b2b8b732ecd268fee8727a369f936f022d1321b59befd13c30ede22769dcdc
+kuma_status_page_sync_schedule: "*/15 * * * *"
+kuma_status_page_sync_deadline_seconds: 300
+
+# Ordered. Each declared monitor lands in the FIRST group one of whose patterns matches its
+# AutoKuma id (the filename in static-monitors.yaml.j2, not the display name), and group order
+# here is the display order on the page. Patterns are Python `re.search`.
+#
+# `Other` is a runtime safety net, not a destination: a new declaration that matches nothing
+# still reaches the page instead of vanishing. test_status_page_groups.py asserts it stays
+# EMPTY for the committed declarations, so adding a monitor without placing it fails CI rather
+# than quietly appending it to a junk drawer.
+kuma_status_page_groups:
+  - name: Services
+    match:
+      - "-k8s$"
+      - "^pihole-k8s-dns$"
+      - "^jellyfin-lan-vip$"
+      - "^k3s-speedtest$"
+      - "^loki$"
+      - "^livesync-bridge$"
+      - "^email-to-rss$"
+      - "^slzb-coordinator$"
+      - "^monitor-bridge-(ha|n8n)$"
+  - name: Cluster Health
+    match:
+      - "^k3s-container-"
+      - "^k3s-cpu-"
+      - "^monitor-bridge-k8s-workloads$"
+      - "^crowdsec-"
+  - name: Observability
+    match:
+      - "^monitor-bridge-(prometheus|targets|cluster-prometheus|cluster-targets)$"
+      - "^monitor-bridge-(loki|loki-reachable|promtail-dropped|discord)$"
+      - "^monitor-bridge-traefik"
+      - "^claude-otel-health$"
+      - "^remember-logs-health$"
+  - name: Backups & Storage
+    match:
+      - "^longhorn-backup$"
+      - "^monitor-bridge-(longhorn-volumes|pvc-fullness)$"
+      - "^monitor-bridge-(b2-reachable|b2-storage|r2-usage)$"
+      - "^etcd-"
+  - name: Hosts & Power
+    match:
+      - "^daniel-box-disk$"
+      - "^monitor-bridge-(disk|mem|cert|scrutiny|ups)$"
+      - "^ups-secondary"
+      - "^host-temperature$"
+      - "^cloudflare-(ddns|ip-drift)"
+  - name: Raspberry Pi
+    match:
+      - "^daniel-pi-"
+      - "^monitor-bridge-pi$"
+      - "^wg-easy-pi-peers$"
+  - name: Media Automation
+    match:
+      - "^configarr$"
+      - "^monitor-bridge-(janitorr|arr-queue|bazarr|prowlarr-indexers)$"
+      - "^autofix-fake-remux"
+      - "^mkv-attachment-repair$"
+      - "^arr-autoblock$"
+  - name: Automation & Drift
+    match:
+      - "^gitops-deploy-"
+      - "^renovate-"
+      - "-drift-check$"
+      - "^github-ruleset-drift$"
+      - "^secret-rotation$"
+      - "^docs-refresh$"
+      - "^manifest-prune-check$"
+      - "^release-staleness-check$"
+      - "^homelab-eval-sweep$"
+      - "^staging-backfill-ratchet$"
+      - "^status-page-sync$"
+  - name: Other
+    match:
+      - ".*"
+
+kuma_status_page_sync_cpu_limit: "200m"
+kuma_status_page_sync_mem_limit: 128Mi
+kuma_status_page_sync_cpu_request: "10m"
+kuma_status_page_sync_mem_request: 32Mi

@@ -242,6 +242,11 @@ def consumer_tags(name: str) -> tuple[str, ...]:
     # `monitor_bridge_` prefix, so the prefix rule would otherwise claim them first.
     if name in CROSS_HOST_PUSH_TOKENS:
         return ()
+    elif name == "kuma_status_page_sync_push_token":
+        # The one token whose pusher and tile are the SAME role: the status-page-sync CronJob
+        # reads it from autokuma-credentials, and its tile is a static-file entity beside it.
+        # Returning the tag twice would be the honest reading of the rule below, and useless.
+        return (UPTIME_KUMA_TAG,)
     elif name in PREFIX_EXCEPTION_CONSUMERS:
         pusher: str | None = PREFIX_EXCEPTION_CONSUMERS[name]
     elif name.startswith("monitor_bridge_"):
