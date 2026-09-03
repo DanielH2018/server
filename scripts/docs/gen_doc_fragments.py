@@ -25,7 +25,10 @@ run a commit. When a fragment's content last changed is its git history.
 
 STATIC PARSING ONLY, like every generator here. Role defaults are read with yaml.safe_load
 and Python constants with `ast`, never by importing the deployer or the rotation tool --
-both bootstrap sys.path and read the environment on import.
+both bootstrap sys.path and read the environment on import. The k8s auto-deploy stance is
+the one exception: `scripts/dev/k8s_autodeploy_counts.py` and the `k8s_autodeploy` filter
+plugin it wraps do neither -- they only walk role directories and `yaml.safe_load` their
+defaults -- so this script imports them rather than re-deriving the same partition.
 
 Every fragment must be included by at least one page and every include must name a
 fragment this script emits; scripts/docs/tests/test_gen_doc_fragments.py checks both
@@ -51,6 +54,7 @@ import yaml
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
+from dev.k8s_autodeploy_counts import all_role_names, autodeploy_stances
 from lib.docs_provenance import write_if_body_changed
 from lib.repo_paths import REPO
 
@@ -70,6 +74,8 @@ FAIL2BAN_CONF = (
 )
 GROUP_VARS = REPO / "ansible/inventory/group_vars/all.yml"
 HOST_VARS = REPO / "ansible/inventory/host_vars"
+TRAEFIK_DEFAULTS = REPO / "ansible/roles/k8s/traefik/defaults/main.yml"
+HYPERVISOR_DEFAULTS = REPO / "ansible/roles/setup/hypervisor/defaults/main.yml"
 
 
 def header(sources: list[str]) -> str:
@@ -195,6 +201,117 @@ def render_staging_subset(csv: str) -> str:
     )
 
 
+def render_staging_coverage(
+    all_roles: list[str], subset: set[str], eligible: list[str]
+) -> str:
+    """Renders how much of the fleet the staging gate covers, and who it leaves unprotected.
+
+    Args:
+        all_roles: every role name under `ansible/roles/k8s/`.
+        subset: `STAGING_SUBSET`, the roles the staging gate actually runs.
+        eligible: role names declaring `k8s_autodeploy: true` — an image-pin bump can
+            reach these unattended, so they are the ones a staging run would protect.
+    """
+    ungated_eligible = sorted(set(eligible) - subset)
+    lines = [
+        f"{len(subset)} of {len(all_roles)} k8s roles are staging-gated (`STAGING_SUBSET` "
+        f"against every directory under `ansible/roles/k8s/`).",
+        "",
+        f"{len(ungated_eligible)} auto-deploy-eligible role(s) sit outside the gate — an "
+        f"image-pin bump to any of these reaches production unattended with no staging run "
+        f"first: {_code_list(ungated_eligible)}.",
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def render_autodeploy_coverage(
+    eligible: list[str], denied: list[str], not_declaring: list[str]
+) -> str:
+    """Renders the k8s auto-deploy eligibility fragment.
+
+    Args:
+        eligible: role names declaring `k8s_autodeploy: true`.
+        denied: role names declaring `k8s_autodeploy: false` — the denylist.
+        not_declaring: role names declaring no stance (`SHARED_ROLES`, which deploys no
+            service of its own).
+    """
+    lines = [
+        "| Stance | Roles |",
+        "|---|---|",
+        f"| Eligible | {len(eligible)} |",
+        f"| Denied | {len(denied)} |",
+        f"| Not declaring | {len(not_declaring)} |",
+        "",
+        f"Denylisted (`k8s_autodeploy: false`): {_code_list(denied)}.",
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def render_staging_timeouts(gate_s: int, expect_s: int) -> str:
+    """Renders the advisory wall-clock the staging gate can add to a tick.
+
+    Args:
+        gate_s: `STAGING_GATE_TIMEOUT_S`, staging's own deploy budget.
+        expect_s: `STAGING_EXPECT_TIMEOUT_S`, the wait for the manifest queue.
+    """
+    return (
+        f"Worst case the staging gate adds {gate_s + expect_s}s to a tick: "
+        f"`STAGING_GATE_TIMEOUT_S` = {gate_s}s for staging's own deploy, plus "
+        f"`STAGING_EXPECT_TIMEOUT_S` = {expect_s}s waiting for the manifest queue.\n"
+    )
+
+
+def render_crowdsec_agent_liveness(period_s: int) -> str:
+    """Renders the CrowdSec node-agent's liveness probe interval.
+
+    Args:
+        period_s: `periodSeconds` on the node-agent DaemonSet's `cscli lapi status` probe.
+    """
+    return (
+        f"The CrowdSec node-agent's `livenessProbe` runs `cscli lapi status` every "
+        f"{period_s}s and restarts the container until registration lands.\n"
+    )
+
+
+def render_etcd_offbox_retention(retention: int) -> str:
+    """Renders the off-box etcd snapshot retain count.
+
+    Args:
+        retention: `k3s_etcd_s3_retention`, how many R2 snapshots are kept.
+    """
+    return f"{retention} off-box etcd snapshots are retained on R2 (`k3s_etcd_s3_retention`).\n"
+
+
+def render_traefik_ports(http_port: int, https_port: int) -> str:
+    """Renders Traefik's pod-level ports, as opposed to the Service's 80/443.
+
+    Args:
+        http_port: `traefik_k8s_http_port`, the container's HTTP containerPort.
+        https_port: `traefik_k8s_https_port`, the container's HTTPS containerPort.
+    """
+    return (
+        f"Traefik's containerPorts are `{http_port}` (`traefik_k8s_http_port`) and "
+        f"`{https_port}` (`traefik_k8s_https_port`) — a NetworkPolicy naming the Service's "
+        f"80/443 admits nothing.\n"
+    )
+
+
+def render_staging_vm_sizing(memory_mib: int, vcpus: int, disk: str) -> str:
+    """Renders the staging VM's resource budget.
+
+    Args:
+        memory_mib: `hypervisor_staging_vm_memory_mib`.
+        vcpus: `hypervisor_staging_vm_vcpus`.
+        disk: `hypervisor_staging_vm_disk_size`.
+    """
+    gib = memory_mib // 1024
+    return (
+        f"The staging VM is sized {gib} GB RAM (`hypervisor_staging_vm_memory_mib` = "
+        f"{memory_mib}), {vcpus} vCPU (`hypervisor_staging_vm_vcpus`), {disk} disk "
+        f"(`hypervisor_staging_vm_disk_size`).\n"
+    )
+
+
 def render_secret_tiers(tier_days: dict, lead_days: int, counts: dict[str, int]) -> str:
     """Renders the secret-rotation tier table fragment.
 
@@ -237,6 +354,69 @@ def _staging() -> tuple[str, list[str]]:
     return render_staging_subset(config_default(GITOPS_DEPLOY, "STAGING_SUBSET")), [
         "ansible/roles/setup/gitops_deploy/files/gitops_deploy.py"
     ]
+
+
+def _staging_coverage() -> tuple[str, list[str]]:
+    eligible, _denied, _not_declaring = autodeploy_stances()
+    subset = {
+        n.strip()
+        for n in config_default(GITOPS_DEPLOY, "STAGING_SUBSET").split(",")
+        if n.strip()
+    }
+    return render_staging_coverage(all_role_names(), subset, eligible), [
+        "ansible/roles/k8s/ (role directories)",
+        "ansible/roles/setup/gitops_deploy/files/gitops_deploy.py",
+        "ansible/filter_plugins/k8s_autodeploy.py",
+    ]
+
+
+def _autodeploy_coverage() -> tuple[str, list[str]]:
+    eligible, denied, not_declaring = autodeploy_stances()
+    return render_autodeploy_coverage(eligible, denied, not_declaring), [
+        "scripts/dev/k8s_autodeploy_counts.py",
+        "ansible/filter_plugins/k8s_autodeploy.py",
+    ]
+
+
+def _staging_timeouts() -> tuple[str, list[str]]:
+    return render_staging_timeouts(
+        int(config_default(GITOPS_DEPLOY, "STAGING_GATE_TIMEOUT_S")),
+        int(config_default(GITOPS_DEPLOY, "STAGING_EXPECT_TIMEOUT_S")),
+    ), ["ansible/roles/setup/gitops_deploy/files/gitops_deploy.py"]
+
+
+def _crowdsec_agent_liveness() -> tuple[str, list[str]]:
+    source = "ansible/roles/k8s/crowdsec/templates/node-agent-daemonset.yaml.j2"
+    text = (REPO / source).read_text()
+    after_probe = text[text.index("livenessProbe:") :]
+    period_line = next(
+        line for line in after_probe.splitlines() if "periodSeconds:" in line
+    )
+    period_s = int(period_line.split(":")[1].strip())
+    return render_crowdsec_agent_liveness(period_s), [source]
+
+
+def _etcd_offbox_retention() -> tuple[str, list[str]]:
+    retention = role_defaults(K3S_DEFAULTS)["k3s_etcd_s3_retention"]
+    return render_etcd_offbox_retention(retention), [
+        "ansible/roles/setup/k3s/defaults/main.yml"
+    ]
+
+
+def _traefik_ports() -> tuple[str, list[str]]:
+    d = role_defaults(TRAEFIK_DEFAULTS)
+    return render_traefik_ports(
+        d["traefik_k8s_http_port"], d["traefik_k8s_https_port"]
+    ), ["ansible/roles/k8s/traefik/defaults/main.yml"]
+
+
+def _staging_vm_sizing() -> tuple[str, list[str]]:
+    d = role_defaults(HYPERVISOR_DEFAULTS)
+    return render_staging_vm_sizing(
+        d["hypervisor_staging_vm_memory_mib"],
+        d["hypervisor_staging_vm_vcpus"],
+        d["hypervisor_staging_vm_disk_size"],
+    ), ["ansible/roles/setup/hypervisor/defaults/main.yml"]
 
 
 def parse_jails(conf: str) -> list[dict[str, str]]:
@@ -397,6 +577,13 @@ FRAGMENTS: dict[str, Callable[[], tuple[str, list[str]]]] = {
     "longhorn-tiers": _longhorn,
     "broad-prefixes": _gitops,
     "staging-subset": _staging,
+    "staging-coverage": _staging_coverage,
+    "autodeploy-coverage": _autodeploy_coverage,
+    "staging-timeouts": _staging_timeouts,
+    "node-agent-liveness": _crowdsec_agent_liveness,
+    "etcd-offbox-retention": _etcd_offbox_retention,
+    "traefik-ports": _traefik_ports,
+    "staging-vm-sizing": _staging_vm_sizing,
     "secret-tiers": _secrets,
     "deadman-cadences": _deadman,
     "fail2ban-jails": _fail2ban,

@@ -45,11 +45,33 @@ def eligible_roles() -> list[str]:
     return names
 
 
-def main() -> None:
+def all_role_names() -> list[str]:
+    """Every directory under `ansible/roles/k8s/`, sorted."""
+    return sorted(entry.name for entry in _ROLES_DIR.iterdir() if entry.is_dir())
+
+
+def autodeploy_stances() -> tuple[list[str], list[str], list[str]]:
+    """Every k8s role, partitioned into eligible / denied / not-declaring.
+
+    Eligible and denied come from `eligible_roles()` and `k8s_autodeploy_denylist()`, which
+    `test_every_role_is_either_denied_or_declares_itself_deployable` asserts partition every
+    role that declares a stance. Not-declaring is the remainder — `SHARED_ROLES`, which is
+    exempt because it deploys no service of its own.
+
+    Returns:
+        `(eligible, denied, not_declaring)`, each sorted.
+    """
     eligible = eligible_roles()
     denied = k8s_autodeploy_denylist(str(_REPO / "ansible"))
+    not_declaring = sorted(set(all_role_names()) - set(eligible) - set(denied))
+    return eligible, denied, not_declaring
+
+
+def main() -> None:
+    eligible, denied, not_declaring = autodeploy_stances()
     print(f"eligible: {len(eligible)}")
     print(f"denylist: {len(denied)}")
+    print(f"not declaring: {len(not_declaring)}")
 
 
 if __name__ == "__main__":

@@ -257,13 +257,13 @@ port."* Both halves of that question are wrong.
 
 - **A NetworkPolicy matches the POD's port, not the Service's.** kube-proxy has already DNAT'd
   Service port → targetPort by the time the policy is evaluated. traefik's Service maps 80→`http`
-  and 443→`https`, whose containerPorts are **8000 and 8443**, so a policy naming 80/443 admitted
-  two ports nothing listens on and denied every in-cluster caller of the real ones. The symptom was
-  diagnostic and misleading: the probes failed on `cannot reach traefik:80` while the same route
-  answered **200 from the LAN**, because external traffic arrives over the VIP path rather than the
-  ClusterIP. Every review verified the ports against the Service — the wrong reference — because
-  that is what they were asked to check. **Check `targetPort` for every service a policy fences.**
-  In this slice only traefik diverged; the other six map 1:1.
+  and 443→`https`, so a policy naming 80/443 admitted two ports nothing listens on and denied
+  every in-cluster caller of the real ones. The symptom was diagnostic and misleading: the probes
+  failed on `cannot reach traefik:80` while the same route answered **200 from the LAN**, because
+  external traffic arrives over the VIP path rather than the ClusterIP. Every review verified the
+  ports against the Service — the wrong reference — because that is what they were asked to
+  check. **Check `targetPort` for every service a policy fences.** In this slice only traefik
+  diverged; the other six map 1:1.
 - **A sidecar has no network identity of its own — it carries its POD's labels.** authelia runs a
   `crowdsec-agent` sidecar shipping auth logs to the LAPI, so that traffic arrives as
   `app: authelia`, which the `crowdsec` policy did not admit. kube-router REJECTs rather than drops,
@@ -286,6 +286,10 @@ port."* Both halves of that question are wrong.
 **The rollback lever is wider than one slice.** `netpol_baseline_enforced` gates the baseline too,
 so disarming it to unstick a slice-4 workload also unfences the 16 slice-1/2 workloads. Reverting a
 single workload's label is the narrower undo.
+
+<!-- Generated from traefik_k8s_http_port and traefik_k8s_https_port in the traefik role's
+     defaults; edit those. -->
+--8<-- "assets/generated/fragments/traefik-ports.md"
 
 ## Slice 4.5 — the workloads no slice owns
 

@@ -132,12 +132,15 @@ cron exists to find), and anything created outside the repo.
 ## Where the snapshots are
 
 - Local, k3s's own schedule: `/var/lib/rancher/k3s/server/db/snapshots/`, 00:00 and 12:00, 5 retained.
-- Off-box, the cron this doc is about: R2, `s3://<r2_bucket>/etcd-snapshots/`, daily at 02:45,
-  14 retained. Named `offbox-<node>-<unix-timestamp>.zip` — compressed, and the extension is
-  literally `.zip`, not zstd as this line claimed until 2026-08-22. The name matters: it is what
+- Off-box, the cron this doc is about: R2, `s3://<r2_bucket>/etcd-snapshots/`, daily at 02:45.
+  Named `offbox-<node>-<unix-timestamp>.zip` — compressed, and the extension is literally
+  `.zip`, not zstd as this line claimed until 2026-08-22. The name matters: it is what
   `--cluster-reset-restore-path` takes, and it takes it as a NAME, never a path (see below).
 - Credentials: `/etc/rancher/k3s/etcd-s3.env` on daniel-box (0600 root), rendered by the k3s role
   from the `r2_*` SOPS secrets.
+
+<!-- Generated from k3s_etcd_s3_retention in the k3s role's defaults; edit that. -->
+--8<-- "assets/generated/fragments/etcd-offbox-retention.md"
 
 Kuma monitor **Off-box etcd Snapshot** (push, daily) plus the `etcd-snapshot-offbox`
 Healthchecks.io check cover the cron. The two become live differently: the Kuma tile appears once
