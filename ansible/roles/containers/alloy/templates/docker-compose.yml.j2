@@ -44,6 +44,23 @@ services:
     tmpfs:
       - /tmp
     {{ service_networks() }}
+    # Docker copies the HOST's resolver options into every container's resolv.conf, and this
+    # host's are `timeout:2 attempts:1` (optimize_pi_dns_options) — sized so a dead Pi-hole
+    # costs one 2s wait before 1.1.1.1 answers. Inside a container that same single 2s try
+    # also governs the hop to Docker's embedded DNS at 127.0.0.11, which is dockerd itself,
+    # and dockerd stalls for seconds on this Zero 2 W whenever it is busy with a container or
+    # network operation. Every 60s pass here opens a fresh connection per container, so one
+    # such stall fails six lookups at once — `lookup docker-proxy on 127.0.0.11:53: i/o
+    # timeout`, at level=error, six in one 350ms burst on 2026-09-03 eight seconds before a
+    # `kill promtail` event, against 0ms for the same lookup at idle (issue #927). Neither
+    # side is broken: the resolver is idle-fast, and CFS throttling at the 0.30 cap can hold
+    # this process at most 70ms per period, so it cannot manufacture a 2s timeout. Three 3s
+    # tries ride out the stall. `attempts` is rounds over the nameserver list, and the list
+    # here is one entry, so this is three tries against dockerd — the upstream failover the
+    # host's values were tuned for happens inside dockerd's own forwarder, not on this hop.
+    dns_opt:
+      - timeout:3
+      - attempts:3
     volumes:
       - ./config/config.alloy:/etc/alloy/config.alloy:ro
       # Positions must survive a restart. Without this the container re-reads every
