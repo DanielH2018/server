@@ -127,6 +127,7 @@ nav:
       - Hosts: reference/hosts.md
       - Secrets: reference/secrets.md
       - Scheduled jobs: reference/crons.md
+      - State of the lab: reference/state.md
       - Networking: reference/networking.md
       - Scripts: reference/scripts.md
       - Backlog: reference/backlog.md

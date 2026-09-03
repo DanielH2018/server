@@ -70,6 +70,10 @@ GENERATORS: list[tuple[list[str], str]] = [
         "docs/reference/crons.md",
     ),
     (
+        ["scripts/docs/reference/state.py", "--out", "docs/reference/state.md"],
+        "docs/reference/state.md",
+    ),
+    (
         [
             "scripts/docs/reference/networking.py",
             "--out",

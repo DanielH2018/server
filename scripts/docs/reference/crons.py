@@ -100,6 +100,64 @@ def _changes_state(job: str) -> str:
     return "no (read-only by its command)"
 
 
+_SPECIAL_CADENCE_MINUTES = {
+    "yearly": 525600.0,
+    "annually": 525600.0,
+    "monthly": 43200.0,
+    "weekly": 10080.0,
+    "daily": 1440.0,
+    "midnight": 1440.0,
+    "hourly": 60.0,
+}
+
+
+def cadence_minutes(schedule: str) -> float | None:
+    """The approximate interval between runs a rendered five-field `schedule` implies.
+
+    Reads the shape of the schedule only -- whether each field is `*`, a `*/N` step, or
+    anything else -- never a field's literal value. That is what lets it work on a schedule
+    this page has already printed as unresolved Jinja (`{{ some_var }}`): a templated field
+    is simply "not a wildcard", which is enough to place it in the right cadence bucket
+    without knowing what it resolves to.
+
+    Returns None when the shape gives no honest answer (`@reboot`, or a schedule this
+    heuristic does not recognize).
+    """
+    schedule = schedule.strip()
+    if schedule.startswith("@"):
+        return _SPECIAL_CADENCE_MINUTES.get(schedule[1:])
+    fields = schedule.split()
+    if len(fields) != 5:
+        return None
+    minute, hour, day, month, weekday = fields
+
+    def _step(field: str) -> int | None:
+        if not field.startswith("*/"):
+            return None
+        try:
+            return int(field[2:])
+        except ValueError:
+            return None
+
+    minute_step = _step(minute)
+    if minute_step and hour == "*":
+        return float(minute_step)
+    hour_step = _step(hour)
+    if hour_step and minute != "*":
+        return float(hour_step * 60)
+    if minute != "*" and hour == "*":
+        return 60.0
+    if weekday != "*":
+        return 10080.0
+    if day != "*":
+        return 43200.0 if month == "*" else 525600.0
+    if hour != "*" and "," in hour:
+        return 1440.0 / len(hour.split(","))
+    if hour != "*" and minute != "*":
+        return 1440.0
+    return None
+
+
 def _rel(path: Path, roles: Path) -> str:
     """Repo-relative path where possible, else relative to the roles root.
 
