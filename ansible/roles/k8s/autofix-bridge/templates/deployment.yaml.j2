@@ -1,5 +1,6 @@
 {% from 'container-resources.yml.j2' import container_resources with context %}
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
+{% from 'checksum-annotation.yml.j2' import checksum_annotation with context %}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -25,7 +26,7 @@ spec:
         # Recreate the pod when any bridge module's source changes — same idiom as
         # monitor-bridge's checksum/check-script. The fact is a hash over every module in
         # autofix_bridge_modules, so an edit confined to bridge/common.py rolls the pod too.
-        checksum/autofix-script: "{{ autofix_bridge_script_checksum | default('unstaged') }}"
+        {{ checksum_annotation('autofix-script', value=autofix_bridge_script_checksum) }}
     spec:
       enableServiceLinks: false
       # Off daniel-server for the same reason as the monitor-bridge twin: the drain and

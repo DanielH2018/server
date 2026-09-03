@@ -1,6 +1,7 @@
 {% from 'container-resources.yml.j2' import container_resources with context %}
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
 {% from 'pod-affinity.yml.j2' import node_affinity_preference with context %}
+{% from 'checksum-annotation.yml.j2' import checksum_annotation with context %}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -21,7 +22,7 @@ spec:
       annotations:
         # Rolls this pod when the registry digest for n8n-runners moves, including when it moved
         # in an earlier failed run rather than in this play. Full reasoning in deployment.yaml.j2.
-        checksum/image: "{{ k8s_built_images | default([]) | selectattr('name', 'equalto', 'n8n-runners') | map(attribute='digest') | first | default('unstaged') }}"
+        {{ checksum_annotation('image', value=(k8s_built_images | default([]) | selectattr('name', 'equalto', 'n8n-runners') | map(attribute='digest') | first)) }}
     spec:
       enableServiceLinks: false
       initContainers:

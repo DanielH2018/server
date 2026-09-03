@@ -22,6 +22,16 @@ K8S_ROLES = REPO / "ansible" / "roles" / "k8s"
 # closing backtick or punctuation rather than swallowing the rest of the sentence.
 CHECKSUM_RE = re.compile(r"checksum/([a-zA-Z0-9._-]+)")
 
+# `checksum_annotation('foo', ...)` — the shared macro (ansible/templates/checksum-
+# annotation.yml.j2) that monitor-bridge, autofix-bridge, n8n, valheim-stats and
+# terraria-stats call instead of writing `checksum/foo:` literally. Without this second
+# pattern every one of those roles reads as having NO checksum annotation at all: the macro
+# renders `checksum/{{ name }}`, so the literal string `checksum/check-script` no longer
+# appears anywhere in monitor-bridge's own templates for CHECKSUM_RE to find, and the
+# repo-root CLAUDE.md's citation of it would fail this test though the annotation is very
+# much still there.
+MACRO_CALL_RE = re.compile(r"checksum_annotation\(\s*['\"]([a-zA-Z0-9._-]+)['\"]")
+
 
 def _role_dirs():
     return sorted(
@@ -38,7 +48,9 @@ def _annotations_in_templates(role: Path) -> set[str]:
     ):
         if path.name == "CLAUDE.md":
             continue
-        found |= set(CHECKSUM_RE.findall(path.read_text(errors="replace")))
+        text = path.read_text(errors="replace")
+        found |= set(CHECKSUM_RE.findall(text))
+        found |= set(MACRO_CALL_RE.findall(text))
     return found
 
 

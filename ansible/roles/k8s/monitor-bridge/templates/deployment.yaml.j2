@@ -1,5 +1,6 @@
 {% from 'container-resources.yml.j2' import container_resources with context %}
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
+{% from 'checksum-annotation.yml.j2' import checksum_annotation with context %}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -27,7 +28,7 @@ spec:
         # manifests, so the manifests role's own change detection never sees them. The fact
         # is a hash over every module in monitor_bridge_modules, so a change confined to a
         # split-out module rolls the pod too.
-        checksum/check-script: "{{ monitor_bridge_script_checksum | default('unstaged') }}"
+        {{ checksum_annotation('check-script', value=monitor_bridge_script_checksum) }}
     spec:
       enableServiceLinks: false
       # Stays off daniel-server so the drain (and its eventual cold boot) never takes the
