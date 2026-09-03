@@ -35,7 +35,7 @@
 # every script current.
 
 - name: Deploy the Kuma push credentials for the heartbeat scripts
-  tags: [backup-health, disk-health, manifest-prune, etcd-snapshot, remember-logs]
+  tags: [backup-health, disk-health, manifest-prune, etcd-snapshot, remember-logs, release-staleness]
   # 0640 root:{{ sys_user }}, for the same reason as live-drift-check.env below: the scripts that
   # consume these land 0755, so a token rendered inline is readable by every local account — and
   # a Kuma push token is enough to forge or suppress a heartbeat, which hides a real outage. The
