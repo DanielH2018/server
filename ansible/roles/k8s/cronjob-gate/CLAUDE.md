@@ -3,6 +3,9 @@
 This role deploys nothing. A caller includes it, and it makes one run of the caller's CronJob
 happen *now*, then blocks the play until that run reaches a terminal state.
 
+**No standalone deploy tag.** Callers reach it via `include_role: name: k8s/cronjob-gate`,
+never `--tags cronjob-gate` — see the invocation example below.
+
 **What it proves is narrow, and worth reading before you rely on it: this role proves the new
 image RUNS. It does not prove the workload succeeded.** That is weaker than the Deployment path,
 where `roles/k8s/manifests` runs `rollout status` and then a stability soak against a

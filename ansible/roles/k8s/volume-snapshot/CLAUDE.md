@@ -14,6 +14,9 @@ steps for a partial multi-claim revert, and what is and is not covered by tests 
 `k8s/volume-revert`'s own CLAUDE.md — see "Reverting: automated via k8s/volume-revert" below for
 the trigger and the pointer.
 
+**No standalone deploy tag.** `roles/k8s/manifests` includes `k8s/volume-snapshot`
+automatically for an opted-in caller — there is no `--tags volume-snapshot` to run by itself.
+
 ## How a role opts in
 
 A `Recreate` + RWO role does **not** include this role itself. It declares

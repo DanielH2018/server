@@ -3,6 +3,8 @@
 qBittorrent with a `wireguard` sidecar init container that tunnels all egress through
 Mullvad. See repo-root `CLAUDE.md` for shared conventions.
 
+**Deploy tag:** `--tags "qbittorrent"`.
+
 ## Traps
 
 ### A VPN kill-switch outlives the container it fenced
