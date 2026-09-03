@@ -117,6 +117,48 @@ spec:
             - name: traefik-logs
               mountPath: /var/log/traefik
 {{ container_resources(cpu_limit='250m', mem_limit='128Mi', cpu_request='10m', mem_request='16Mi') }}
+        # The image ships its datafiles at /staging/var/lib/crowdsec/data mode 0600 root:root
+        # (measured on the v1.7.8 image), and the entrypoint SYMLINKS them into the data volume
+        # rather than copying. The non-root agent then cannot read through the link, so GeoIP
+        # never initialises — `unable to open GeoLite2-City.mmdb: permission denied`, and the
+        # geoip-enrich parser is dead in a pod that otherwise reads healthy (#990). Copying them
+        # in world-readable defeats the symlink: the entrypoint's `[ ! -e ]` guard skips a name
+        # that already exists, so the agent reads these copies instead.
+        - name: crowdsec-data-install
+          image: {{ crowdsec_k8s_image }}
+          command:
+            - /bin/sh
+            - -c
+            # Per file, not `cp -r`: `trace/` is a 0700 directory and the db is the entrypoint's
+            # own documented skip. A file that cannot be read is left to the symlink path — the
+            # status quo for that name — rather than failing the pod, because traefik rolls
+            # under Recreate and an init container that exits non-zero takes the edge down (the
+            # #986 outage). `ls` succeeds because the directory itself is 0755.
+            - >-
+              for f in /staging/var/lib/crowdsec/data/*; do
+              [ -f "$f" ] || continue;
+              case "${f##*/}" in crowdsec.db*) continue ;; esac;
+              install -m 644 "$f" /var/lib/crowdsec/data/ ||
+              echo "skipped ${f##*/}" >&2;
+              done; exit 0
+          # Root, written out rather than built through hardened_security_context() — the macro
+          # refuses uid 0 so that ansible/tests/k8s/test_root_needs_dac_capability.py can still
+          # see this block in raw template text. DAC_READ_SEARCH is the read-only half of root's
+          # permission-bit override: it covers the 0600 sources however the image later owns
+          # them. Writing needs no DAC_OVERRIDE, since the emptyDir is root-owned and empty
+          # until this container runs.
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsUser: 0
+            capabilities:
+              add:
+                - DAC_READ_SEARCH
+              drop:
+                - ALL
+          volumeMounts:
+            - name: crowdsec-data
+              mountPath: /var/lib/crowdsec/data
+{{ container_resources(cpu_limit='250m', mem_limit='128Mi', cpu_request='10m', mem_request='16Mi') }}
 {% endif %}
       containers:
         - name: traefik

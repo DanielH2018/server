@@ -217,6 +217,34 @@ def test_traefik_prestages_the_agent_config_so_the_entrypoint_never_rsyncs() -> 
     )
 
 
+def test_traefik_copies_the_staged_datafiles_in_so_geoip_can_initialise() -> None:
+    """The image ships its datafiles 0600 root:root and the entrypoint symlinks them into the
+    data volume, so the non-root agent could not read through the link and GeoIP never
+    initialised (#990). A root init container copies them in world-readable, which also defeats
+    the symlink: the entrypoint skips a name that already exists."""
+    spec = _pod_spec("traefik", True)
+    init = {c["name"]: c for c in spec["initContainers"]}["crowdsec-data-install"]
+    script = init["command"][-1]
+    assert "/staging/var/lib/crowdsec/data/*" in script
+    assert "install -m 644" in script, (
+        "the copies must be readable by the non-root agent"
+    )
+    assert "crowdsec.db*" in script, "the entrypoint's own db skip must be honoured"
+    assert script.rstrip().endswith("exit 0"), (
+        "an init container that exits non-zero takes the edge down under Recreate"
+    )
+
+    sc = init["securityContext"]
+    assert sc["runAsUser"] == 0
+    assert "DAC_READ_SEARCH" in sc["capabilities"]["add"]
+    assert sc["capabilities"]["drop"] == ["ALL"]
+
+    mounts = {m["name"]: m["mountPath"] for m in init["volumeMounts"]}
+    assert mounts == {"crowdsec-data": "/var/lib/crowdsec/data"}, (
+        "this container must reach nothing but the data volume it seeds"
+    )
+
+
 def test_traefik_keeps_its_init_container_key_while_acme_still_needs_it() -> None:
     """Traefik has two conditional init containers, so the key follows their disjunction."""
     spec = _pod_spec("traefik", False, traefik_k8s_manage_acme=True)
