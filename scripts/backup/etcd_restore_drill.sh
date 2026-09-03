@@ -169,6 +169,44 @@ stamp_success() {
   return 0
 }
 
+# The verification stage, pulled out so it can be exercised without a real restore: a fixture
+# `kubectl` returning zero namespaces/deployments/PVCs must drive each `die` below, which is the
+# proof issue #1017 asked for (CLAUDE.md: "a new check ships with a proof it can go RED"). Reads
+# the KUBECTL array and SNAPSHOT the caller has already set; has no side effect beyond echo/die,
+# so sourcing this file and calling it is enough — see
+# ansible/tests/setup/test_etcd_restore_drill_verify.py.
+verify_restored_objects() {
+  # Counts, not names: the point is that the object graph came back, and a count that reads
+  # zero is the failure this drill exists to catch.
+  ns=$("${KUBECTL[@]}" get namespaces --no-headers 2>/dev/null | wc -l)
+  deploys=$("${KUBECTL[@]}" get deployments -A --no-headers 2>/dev/null | wc -l)
+  pvcs=$("${KUBECTL[@]}" get pvc -A --no-headers 2>/dev/null | wc -l)
+  secrets=$("${KUBECTL[@]}" get secrets -A --no-headers 2>/dev/null | wc -l)
+  crds=$("${KUBECTL[@]}" get crd --no-headers 2>/dev/null | wc -l)
+
+  echo
+  echo "restored from : ${SNAPSHOT:-unknown}"
+  echo "namespaces    : $ns"
+  echo "deployments   : $deploys"
+  echo "PVCs          : $pvcs"
+  echo "CRDs          : $crds"
+  echo "secrets       : $secrets (presence only — encrypted at rest, never decoded by this drill)"
+  echo
+
+  # A restore that yields an empty or near-empty object set is the silent failure worth
+  # catching: the stages all "succeed" and the cluster comes up carrying nothing.
+  [[ "$ns" -ge 3 ]]      || die "only $ns namespaces — the snapshot restored but carries no cluster"
+  [[ "$deploys" -ge 1 ]] || die "no deployments in the restored set"
+  [[ "$pvcs" -ge 1 ]]    || die "no PVCs in the restored set — a rebuild would have nothing to reattach"
+}
+
+# Sourced by the test above to drive verify_restored_objects() in isolation. Everything from here
+# down does real things — argument parsing, the root check, reading live S3 credentials — so a
+# sourced invocation must stop before any of it runs.
+if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
+  return 0
+fi
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --snapshot) SNAPSHOT="${2:?--snapshot needs a name}"; shift 2 ;;
@@ -396,28 +434,7 @@ until "${KUBECTL[@]}" get --raw /readyz >/dev/null 2>&1; do
 done
 log "scratch API server is serving the restored objects"
 
-# The assertions. Counts, not names: the point is that the object graph came back, and a count
-# that reads zero is the failure this drill exists to catch.
-ns=$("${KUBECTL[@]}" get namespaces --no-headers 2>/dev/null | wc -l)
-deploys=$("${KUBECTL[@]}" get deployments -A --no-headers 2>/dev/null | wc -l)
-pvcs=$("${KUBECTL[@]}" get pvc -A --no-headers 2>/dev/null | wc -l)
-secrets=$("${KUBECTL[@]}" get secrets -A --no-headers 2>/dev/null | wc -l)
-crds=$("${KUBECTL[@]}" get crd --no-headers 2>/dev/null | wc -l)
-
-echo
-echo "restored from : $SNAPSHOT"
-echo "namespaces    : $ns"
-echo "deployments   : $deploys"
-echo "PVCs          : $pvcs"
-echo "CRDs          : $crds"
-echo "secrets       : $secrets (presence only — encrypted at rest, never decoded by this drill)"
-echo
-
-# A restore that yields an empty or near-empty object set is the silent failure worth catching:
-# the stages all "succeed" and the cluster comes up carrying nothing.
-[[ "$ns" -ge 3 ]]      || die "only $ns namespaces — the snapshot restored but carries no cluster"
-[[ "$deploys" -ge 1 ]] || die "no deployments in the restored set"
-[[ "$pvcs" -ge 1 ]]    || die "no PVCs in the restored set — a rebuild would have nothing to reattach"
+verify_restored_objects
 
 stamp_success full
 log "DRILL PASSED — this snapshot restores and serves its objects"
