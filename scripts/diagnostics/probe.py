@@ -86,9 +86,12 @@ from diagnostics.probe_lib.core import (
     since_window_ns,
 )
 
-# The per-subcommand modules. Each `run_*` is re-exported here rather than dispatched
-# through a registry, because `plan()` below is the one dispatch table and keeping the
-# names in this module's namespace is what lets it stay a flat mapping.
+# The per-subcommand modules. Each `run_*` is re-exported here because `plan()` below and
+# the `handlers` table in `main()` are what actually dispatch to it — REGISTRY (below,
+# built from SUBCOMMANDS) only carries names, descriptions and each subcommand's backing
+# `probe_lib` module, for `--list` and for the completeness guard in
+# `scripts/diagnostics/tests/test_probe_registry.py`. It does not replace `plan()`/
+# `handlers`, so argparse and dispatch stay exactly as they were.
 from diagnostics.probe_lib.alerts import run_alerts
 from diagnostics.probe_lib.arr import ARR_PORTS, run_arr
 from diagnostics.probe_lib.ha import run_ha, run_ha_state
@@ -111,6 +114,106 @@ from diagnostics.probe_lib.longhorn import (
     run_longhorn_blocks,
 )
 from diagnostics.probe_lib.vip_placement import run_vip_placement
+from lib.registry import Registry
+
+# name, one-line description (matches the subparser's `help=`), backing `probe_lib` module
+# (None for a subcommand that only ever streams a curl pipeline through `plan()`), backing
+# `run_*` callable (None likewise). `REGISTRY` below is built from this and exists for
+# `--list` and the completeness guard — see the import-block comment above for what it is
+# NOT: dispatch stays in `plan()`/`handlers` in `main()`, untouched.
+SUBCOMMANDS = [
+    ("metric", "Prometheus instant query", "metrics", run_query),
+    ("targets", "Prometheus scrape-target health", None, None),
+    (
+        "monitors",
+        "Kuma down-monitors rollup (exit 0 = all up)",
+        "monitors",
+        run_monitors,
+    ),
+    (
+        "kuma-drift",
+        "declared monitors vs live ones — catches a tile that is gone rather than down, "
+        "which `monitors` counts as green (exit 0 = no drift)",
+        "monitors",
+        run_kuma_drift,
+    ),
+    ("loki-labels", "Loki label names", None, None),
+    ("loki-query", "Loki range query", "metrics", run_query),
+    (
+        "alerts",
+        "monitor-bridge DOWN alert history, collapsed to episodes (Loki)",
+        "alerts",
+        run_alerts,
+    ),
+    ("scrutiny", "disk SMART summary", None, None),
+    (
+        "b2-longhorn",
+        "Longhorn backup objects in B2, per volume — proves DATA blocks landed, not just "
+        "metadata (exit 1 if any volume has none)",
+        "longhorn",
+        run_b2_longhorn,
+    ),
+    (
+        "b2-budget",
+        "per-shard Class C projection against B2's free-tier daily cap (exit 1 if a weekly "
+        "shard is over budget)",
+        "longhorn",
+        run_b2_budget,
+    ),
+    (
+        "b2-spend",
+        "MEASURED Class B spend from Longhorn's own logs (Loki-only, spends nothing on B2)",
+        "b2_ledger",
+        run_b2_spend,
+    ),
+    (
+        "b2-record",
+        "record a tool's B2 transaction spend in today's ledger",
+        "b2_ledger",
+        run_b2_record,
+    ),
+    (
+        "longhorn-blocks",
+        "census live Longhorn volumes by tier and backup block size (exit 1 when a weekly-"
+        "shard volume is not on 16 MiB blocks)",
+        "longhorn",
+        run_longhorn_blocks,
+    ),
+    (
+        "readonly-rbac",
+        "assert plain kubectl is still read-only (exit 1 on privilege creep)",
+        "readonly_rbac",
+        run_readonly_rbac,
+    ),
+    (
+        "vip-placement",
+        "assert every ETP=Local MetalLB VIP has a Ready endpoint on its announcing node "
+        "(exit 1 when one is stranded)",
+        "vip_placement",
+        run_vip_placement,
+    ),
+    ("pi", "Pi glances API", None, None),
+    ("cert", "served TLS cert subject/dates", None, None),
+    (
+        "health",
+        "k8s rollout + recent-restart rollup (exit 0 = healthy)",
+        "health",
+        run_health,
+    ),
+    ("arr", "read-only *arr API GET (key from SOPS, fed via stdin)", "arr", run_arr),
+    ("ha", "Home Assistant live state (read-only, GET)", "ha", run_ha),
+    ("ha-state", "live view of the derived HA state model", "ha", run_ha_state),
+    (
+        "releases",
+        "which commit produced each k8s service's applied manifests",
+        "releases",
+        run_releases,
+    ),
+]
+
+REGISTRY = Registry("probe")
+for _name, _description, _module, _func in SUBCOMMANDS:
+    REGISTRY.add(_name, _func, _description, module=_module)
 
 
 def cert_stages(host, port, sni):
@@ -155,6 +258,12 @@ def _build_parser():
     )
     p.add_argument(
         "--dry-run", action="store_true", help="print the command(s) instead of running"
+    )
+    p.add_argument(
+        "--list",
+        action="store_true",
+        help="list every subcommand with its description and exit "
+        "(handled before subcommand parsing, so it needs no subcommand)",
     )
     sub = p.add_subparsers(dest="cmd", required=True)
 
@@ -445,6 +554,12 @@ def main(argv=None):
     built by `plan()`.
     """
     argv = list(sys.argv[1:] if argv is None else argv)
+    # Handled on raw argv, ahead of `_build_parser().parse_args`: the subparsers below are
+    # `required=True`, so `probe.py --list` alone would otherwise fail argparse's "cmd is
+    # required" check before `ns.list` was ever read.
+    if "--list" in argv:
+        print("\n".join(REGISTRY.render_list()))
+        return 0
     ns = _build_parser().parse_args(argv)
     # `health` parses/formats docker inspect rather than streaming a pipeline.
     if ns.cmd == "health":
