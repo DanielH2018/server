@@ -137,3 +137,64 @@ def test_the_prompt_invokes_the_skill() -> None:
 def test_the_timer_is_persistent() -> None:
     """A host down at the scheduled minute must still run the tick — the backlog only grows."""
     assert "Persistent=true" in TIMER.read_text()
+
+
+# ── the alive beat: the tile, the unit's push, and the deadline that ties them ───────────
+
+MONITORS = (
+    ANSIBLE / "roles" / "k8s" / "uptime-kuma" / "templates" / "static-monitors.yaml.j2"
+)
+ROTATION = ANSIBLE / "secret_rotation.yml"
+TOKEN = "renovate_agent_kuma_push_token"
+DAY = 86400
+
+
+def _alive_tile() -> dict:
+    """The rendered Renovate Agent tile, read out of the template by filename key."""
+    m = re.search(
+        r"^  renovate-agent-alive\.json: \|\n\s+(\{.*\})$", MONITORS.read_text(), re.M
+    )
+    assert m, "renovate-agent-alive.json is missing from static-monitors.yaml.j2"
+    return __import__("json").loads(re.sub(r"\{\{[^}]*\}\}", "0", m.group(1)))
+
+
+def test_the_unit_beats_kuma_only_after_a_clean_run(unit: str) -> None:
+    posts = directive(unit, "ExecStartPost")
+    assert posts and any(f"/api/push/{{{{ {TOKEN} }}}}" in p for p in posts), (
+        "ExecStartPost must push the Kuma beat with renovate_agent_kuma_push_token: without "
+        "it a timer that stops firing is invisible until someone notices the backlog"
+    )
+    assert f"{{% if {TOKEN} | default('') %}}" in unit, (
+        "the beat must be gated on the token, or a checkout without the secret renders a "
+        "URL with an empty token and curl -f fails every otherwise-clean run"
+    )
+
+
+def test_the_tile_and_the_unit_share_one_token(unit: str) -> None:
+    tile = re.search(
+        r"^  renovate-agent-alive\.json: \|\n\s+(\{.*\})$", MONITORS.read_text(), re.M
+    )
+    assert tile, "renovate-agent-alive.json is missing from static-monitors.yaml.j2"
+    assert f'"push_token": "{{{{ {TOKEN} }}}}"' in tile.group(1), (
+        "the tile must embed the same SOPS var the unit pushes with, or the beat lands on a "
+        "monitor that does not exist and the tile sits red"
+    )
+    assert f"\n  {TOKEN}:\n" in ROTATION.read_text(), (
+        f"{TOKEN} is not registered in secret_rotation.yml — run secret_rotation.py sync"
+    )
+
+
+def test_the_deadline_straddles_the_daily_period() -> None:
+    """Below one period the tile fires DOWN on a run that merely started late; at two periods
+    a whole missed run goes unreported. The timer is daily with a 10-min jitter and up to a
+    100-min run, so the beat-to-beat gap can exceed a day by under two hours."""
+    interval = _alive_tile()["interval"]
+    assert DAY + 2 * 3600 < interval < 2 * DAY, (
+        f"interval {interval}s must sit between one jittered daily period and two days"
+    )
+    defaults = yaml.safe_load(DEFAULTS.read_text())
+    assert re.fullmatch(
+        r"\*-\*-\* \d\d:\d\d:\d\d", defaults["renovate_agent_oncalendar"]
+    ), (
+        "the deadline above assumes a once-daily OnCalendar — re-derive it if the cadence moves"
+    )
