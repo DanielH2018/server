@@ -19,7 +19,7 @@ def test_nothing_to_deploy_is_decided_before_the_ci_wait(land_run):
     rc, out, _, calls, logline = land_run([], Fakes(derived=([], "pr")))
     assert rc == 0 and "VERDICT: nothing-to-deploy" in out
     assert "await_ci" not in _names(calls)
-    assert "verdict=nothing-to-deploy exit=0" in logline
+    assert "verdict=nothing-to-deploy cause= exit=0" in logline
 
 
 def test_preflight_runs_before_the_ci_wait(land_run):
@@ -34,7 +34,10 @@ def test_preflight_runs_before_the_ci_wait(land_run):
 
 def test_the_annotation_is_written_on_a_verdict(land_run):
     _, _, _, _, logline = land_run([], Fakes(await_ci=[(75, "no verdict")]))
-    assert "event=landing pr=999" in logline and "verdict=ci-timeout exit=75" in logline
+    assert (
+        "event=landing pr=999" in logline
+        and "verdict=ci-timeout cause= exit=75" in logline
+    )
 
 
 def test_an_unexpected_exception_annotates_as_aborted_and_propagates():
@@ -44,7 +47,9 @@ def test_an_unexpected_exception_annotates_as_aborted_and_propagates():
     tools.gh_json = lambda *a, **k: 1 / 0
     with pytest.raises(ZeroDivisionError):
         land.main(["--pr", "7"], tools=tools)
-    assert "verdict=aborted exit=1" in next(c[1][0] for c in calls if c[0] == "logger")
+    assert "verdict=aborted cause= exit=1" in next(
+        c[1][0] for c in calls if c[0] == "logger"
+    )
 
 
 def test_settled_end_to_end(land_run):
@@ -58,7 +63,7 @@ def test_settled_end_to_end(land_run):
         "deploy",
         "gate",
     ]
-    assert "verdict=settled exit=0" in logline and "tags=sonarr" in logline
+    assert "verdict=settled cause= exit=0" in logline and "tags=sonarr" in logline
     for k in ("wait_merge", "wait_ci", "tick", "deploy"):
         assert f"{k}=" in logline and f"{k}= " not in logline
 

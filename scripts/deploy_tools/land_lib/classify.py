@@ -65,6 +65,12 @@ def classify(ln: Landing) -> None:
     quiet = t.quiet_paths(paths, pr_range(ln))
     ln.plane = t.plane_note(paths, quiet=quiet)
     ln.self_applied = t.self_applied(paths, quiet=quiet)
+    # What a self-applied setup role still needs beyond the host the tick runs on.
+    # initial_setup.yml applies to ONE target per run, so a role with no `when:` gate reaches
+    # every host the playbook is ever run on, and the tick converging here says nothing about
+    # the others (issue #1009, PR #1002: two hosts kept the old kuma-push-lib.sh for three
+    # days behind a `settled` verdict).
+    ln.remaining_setup = t.remaining_setup_hosts(paths, t.hostname(), quiet=quiet)
     # -1 rather than 0: `gh` omitting the field must not read as agreement with an empty
     # file list, which would silently license a zero-tag deploy.
     tags, source = t.derive(paths, view.get("changedFiles", -1))

@@ -95,7 +95,9 @@ def lock_holder() -> str:
     """The tree lock's holder as `<etimes> <command>`, or '' when nobody holds it.
 
     fuser prints the PIDs on stdout and the path on stderr; the lowest PID is the flock
-    parent, its children inherit the descriptor.
+    parent, its children inherit the descriptor. 200 characters rather than 120: an
+    `ansible-playbook` command line is long enough that the tags -- the part that says which
+    landing holds the lock -- fell off the end (issue #1031).
     """
     with contextlib.suppress(
         OSError, subprocess.SubprocessError, ValueError, StopIteration
@@ -111,7 +113,7 @@ def lock_holder() -> str:
             timeout=5,
             check=False,
         ).stdout
-        return " ".join(ps.split()).replace('"', "")[:120]
+        return " ".join(ps.split()).replace('"', "")[:200]
     return ""
 
 
@@ -140,6 +142,7 @@ class Tools:
     )
     plane_note: Callable[..., str] = land_tags.plane_note
     self_applied: Callable[..., bool] = land_tags.self_applied
+    remaining_setup_hosts: Callable[..., str] = land_tags.remaining_setup_hosts_note
     derive: Callable[..., tuple[list[str], str]] = land_tags.derive
     quiet_paths: Callable[[list[str], str], set[str]] = land_tags.quiet_paths
     read_state: Callable[[Path, str], str] = read_state

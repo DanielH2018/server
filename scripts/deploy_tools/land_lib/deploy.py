@@ -51,6 +51,7 @@ def no_tag_outcome(ln: Landing) -> NoReturn:
         print(
             f"  the deployer is holding {ln.state('hold_sha')}: its apply failed — see hold_plane and the gitops-deploy journal"
         )
+        ln.ledger.cause = "tick-held"
         ln.finish(
             "deploy-failed", 1, f"PR #{pr} — the tick's own apply failed and is held"
         )
@@ -62,6 +63,14 @@ def no_tag_outcome(ln: Landing) -> NoReturn:
             "  Usually a newer merge whose CI is still running; the next tick crosses it. Nothing is wrong with this PR."
         )
         ln.finish("deferred", 75, f"PR #{pr} — landed, not yet applied by the tick")
+    if ln.remaining_setup:
+        local = ln.tools.hostname()
+        print(f"  applied on {local} only; it also reaches: {ln.remaining_setup}")
+        ln.finish(
+            "needs-manual-apply",
+            1,
+            f"PR #{pr}, {sha} — self-applied on {local} only; other hosts still need it",
+        )
     ln.finish(
         "settled",
         0,
@@ -74,8 +83,12 @@ def deploy_by_host(ln: Landing) -> int:
     o, t = ln.opts, ln.tools
     r = t.deploy_tags(o.primary, ["hosts", ln.tags])
     if r.returncode != 0:
+        # deploy.sh was never invoked for any host, so nothing here overlaps with the
+        # catch-all in deploy_outcome, which really did run it (issue #1016).
+        ln.ledger.cause = "host-lookup"
         ln.die(
-            f"could not map tags to hosts ({ln.tags}) — nothing deployed",
+            "deploy_tags.py hosts failed before any deploy.sh ran; nothing was touched; "
+            f"tags: {ln.tags}",
             1,
             "deploy-failed",
         )
@@ -104,11 +117,13 @@ def deploy_with_lock_retry(ln: Landing) -> int:
     o, t = ln.opts, ln.tools
     rc = 0
     for attempt in range(1, o.lock_retries + 1):
+        # Sampled BEFORE the attempt, for the reason note_lock_contention documents.
+        holder = t.lock_holder()
         started = t.clock()
         rc = deploy_by_host(ln)
         if rc != 75:
             break
-        ln.note_lock_contention(int(t.clock() - started) + o.lock_backoff)
+        ln.note_lock_contention(int(t.clock() - started) + o.lock_backoff, holder)
         say(
             f"deploy lock busy (attempt {attempt}/{o.lock_retries}); retrying in {o.lock_backoff}s"
         )
@@ -125,6 +140,7 @@ def deploy_outcome(ln: Landing, rc: int) -> None:
         # deploy.sh refused the WHOLE list and deployed nothing, including every valid
         # service beside the bad tag. This read as nothing-to-deploy until 2026-08-29,
         # which is how PR #617 left 22 digest pins undeployed behind a green verdict.
+        ln.ledger.cause = "tag-miss"
         ln.finish(
             "deploy-failed",
             1,
@@ -139,11 +155,13 @@ def deploy_outcome(ln: Landing, rc: int) -> None:
     if rc == 20:
         # The playbook RAN and a task failed: everything before it is live (issue #840).
         # Not a resume point; re-running it is not automatically safe.
+        ln.ledger.cause = "playbook-failed"
         ln.finish(
             "deploy-failed",
             1,
             f"PR #{pr} — a playbook task failed AFTER applying; some changes are live; tags: {tags}",
         )
+    ln.ledger.cause = f"deploy-exit-{rc}"
     ln.finish("deploy-failed", 1, f"PR #{pr}, exit {rc}")
 
 

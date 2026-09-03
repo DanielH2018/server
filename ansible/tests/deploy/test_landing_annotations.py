@@ -76,3 +76,14 @@ def test_an_unreached_stamp_leaves_its_field_empty():
 def test_the_datasource_uid_matches_the_provisioned_one():
     uids = set(re.findall(r'"uid":\s*"([^"]+)"', _BOARD.read_text())) - {"landings"}
     assert uids == {"bf4q19tuivta8e"}, uids
+
+
+def test_a_deploy_failed_line_names_its_cause():
+    """Issue #1031: `deploy-failed` alone cannot tell "nothing deployed" from "changes are
+    live", so the cause rides on the same line. Every other verdict leaves it empty, like an
+    unreached stamp."""
+    line = annotation_line(
+        Ledger(pr="1", t_start=0.0, verdict="deploy-failed", cause="tag-miss"), 1, 3.0
+    )
+    assert "verdict=deploy-failed cause=tag-miss " in line
+    assert " cause= " in annotation_line(Ledger(pr="1", t_start=0.0), 75, 5.0)

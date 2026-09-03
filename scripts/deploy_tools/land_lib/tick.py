@@ -23,11 +23,14 @@ def run_tick(ln: Landing) -> None:
     o, t = ln.opts, ln.tools
     rc = 0
     for attempt in range(1, o.lock_retries + 1):
+        # Sampled BEFORE the attempt: read afterwards, the holder has usually released and
+        # the landing books an empty one (issue #1031).
+        holder = t.lock_holder()
         started = t.clock()
         rc = t.tick()
         if rc != 3:
             break
-        ln.note_lock_contention(int(t.clock() - started) + o.lock_backoff)
+        ln.note_lock_contention(int(t.clock() - started) + o.lock_backoff, holder)
         say(
             f"tick skipped for lock contention (attempt {attempt}/{o.lock_retries}); retrying in {o.lock_backoff}s"
         )
@@ -43,4 +46,8 @@ def run_tick(ln: Landing) -> None:
             75,
             "lock-busy",
         )
-    ln.die(f"gitops tick failed (exit {rc})", 1)
+    # gitops_tick.sh exit 1 is "the unit exited non-zero" -- the one verdict-less path that
+    # maps to a recurring operational event, so it names deploy-failed rather than landing in
+    # the board's `aborted` bucket (issue #1031).
+    ln.ledger.cause = "tick-failed"
+    ln.die(f"gitops tick failed (exit {rc})", 1, "deploy-failed")

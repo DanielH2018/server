@@ -303,7 +303,7 @@ def _eval_when(
     non-list value (a YAML `when: true`), an unresolved name, or a Jinja construct `eval`
     cannot parse. Wider than the truth is recoverable (an extra command an operator can
     no-op past); narrower silently hides a real gap, which is the failure this function
-    exists to close. Same asymmetry `_quiet_paths` already applies to a broad path it cannot
+    exists to close. Same asymmetry `quiet_paths` already applies to a broad path it cannot
     read.
     """
     if isinstance(expr, list):

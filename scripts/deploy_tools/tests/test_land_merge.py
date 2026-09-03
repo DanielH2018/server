@@ -134,3 +134,114 @@ def test_a_merged_pr_leaves_the_wait(landing, capsys):
     )
     merge.await_merge(ln)
     assert "merged after 0s" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    "state, mss, expected",
+    [
+        ("MERGED", "CLEAN", "already-merged"),
+        ("OPEN", "CLEAN", "merge-direct"),
+        ("OPEN", "BLOCKED", "die"),
+        ("OPEN", "DIRTY", "die"),
+        ("OPEN", "", "die"),
+    ],
+)
+def test_arm_merge_fallback_decision(state, mss, expected):
+    assert merge.arm_merge_fallback_decision(state, mss) == expected
+
+
+def test_a_clean_pr_falls_through_to_a_direct_merge(landing, capsys):
+    """Issue #1008: --auto rejects a CLEAN PR; the fallback merges it directly."""
+    ln, calls = landing(
+        Fakes(
+            gh_views={
+                "state,title": _OPEN,
+                "state,mergeStateStatus": {
+                    "state": "OPEN",
+                    "mergeStateStatus": "CLEAN",
+                },
+            },
+            gh_merge_rc=[1, 0],
+        )
+    )
+    merge.arm_merge(ln)
+    merges = [c[1] for c in calls if c[0] == "gh"]
+    assert merges[0][:5] == ("pr", "merge", "999", "--squash", "--auto")
+    assert merges[1] == (
+        "pr",
+        "merge",
+        "999",
+        "--squash",
+        "--subject",
+        "Bump vale to 3.19.0",
+    )
+    assert "merging directly" in capsys.readouterr().out
+
+
+def test_a_dirty_pr_still_dies(landing):
+    ln, _ = landing(
+        Fakes(
+            gh_views={
+                "state,title": _OPEN,
+                "state,mergeStateStatus": {
+                    "state": "OPEN",
+                    "mergeStateStatus": "DIRTY",
+                },
+            },
+            gh_merge_rc=[1],
+        )
+    )
+    with pytest.raises(Outcome) as exc:
+        merge.arm_merge(ln)
+    assert exc.value.rc == 1 and "mergeStateStatus=DIRTY" in exc.value.error
+
+
+def test_a_merge_that_lands_while_arming_reads_as_success(landing, capsys):
+    ln, calls = landing(
+        Fakes(
+            gh_views={
+                "state,title": _OPEN,
+                "state,mergeStateStatus": {
+                    "state": "MERGED",
+                    "mergeStateStatus": "CLEAN",
+                },
+            },
+            gh_merge_rc=[1],
+        )
+    )
+    merge.arm_merge(ln)
+    assert len([c for c in calls if c[0] == "gh"]) == 1
+    assert "merged in the meantime" in capsys.readouterr().out
+
+
+def test_an_auto_exit_0_with_no_auto_merge_request_merges_directly(landing, capsys):
+    """Issue #1029: --auto exited 0 on PR #1026 and autoMergeRequest stayed null."""
+    ln, calls = landing(
+        Fakes(
+            gh_views={
+                "state,title": _OPEN,
+                "state,autoMergeRequest": {"state": "OPEN", "autoMergeRequest": None},
+            }
+        )
+    )
+    merge.arm_merge(ln)
+    merges = [c[1] for c in calls if c[0] == "gh"]
+    assert len(merges) == 2 and "--auto" not in merges[1]
+    assert "not armed" in capsys.readouterr().out
+
+
+def test_a_verified_arm_says_armed_and_merges_nothing_directly(landing, capsys):
+    ln, calls = landing(
+        Fakes(
+            gh_views={
+                "state,title": _OPEN,
+                "state,autoMergeRequest": {
+                    "state": "OPEN",
+                    "autoMergeRequest": {"enabledAt": "x"},
+                },
+            }
+        )
+    )
+    merge.arm_merge(ln)
+    assert len([c for c in calls if c[0] == "gh"]) == 1
+    assert "auto-merge armed" in capsys.readouterr().out

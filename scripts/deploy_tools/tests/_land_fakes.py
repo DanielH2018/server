@@ -36,7 +36,7 @@ class Fakes:
     """
 
     gh_views: dict[str, Any] = field(default_factory=dict)
-    gh_merge_rc: int = 0
+    gh_merge_rc: list[int] = field(default_factory=lambda: [0])
     fetch_rc: int = 0
     pull_ref_rc: int = 0
     tip: str = MERGE_SHA
@@ -53,9 +53,10 @@ class Fakes:
     )
     plane: str = ""
     self_applied: bool = False
+    remaining_setup: str = ""
     derived: tuple[list[str], str] = field(default_factory=lambda: (["sonarr"], "pr"))
     state: dict[str, str] = field(default_factory=dict)
-    lock_holder: str = "42 flock deploy"
+    lock_holder: list[str] = field(default_factory=lambda: ["42 flock deploy"])
     hostname: str = "daniel-box"
 
 
@@ -81,6 +82,12 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         k: (list(v) if isinstance(v, list) else [v]) for k, v in f.gh_views.items()
     }
     views.setdefault("mergeCommit", [{"mergeCommit": {"oid": MERGE_SHA}}])
+    # An arm that reads back as armed, so every existing --arm-merge test still says
+    # "auto-merge armed" rather than taking #1029's direct-merge path.
+    views.setdefault(
+        "state,autoMergeRequest",
+        [{"state": "OPEN", "autoMergeRequest": {"enabledAt": "x"}}],
+    )
     views.setdefault(
         "files,changedFiles",
         [
@@ -95,10 +102,12 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
     def gh_json(*args, **kwargs):
         return view_seq[args[args.index("--json") + 1]]()
 
+    gh_rc = _seq(f.gh_merge_rc, calls, "gh")
+
     def gh_run(*args, **kwargs):
-        calls.append(("gh", args, kwargs))
-        if f.gh_merge_rc:
-            raise subprocess.CalledProcessError(f.gh_merge_rc, args, stderr="boom")
+        rc = gh_rc(*args, **kwargs)
+        if rc:
+            raise subprocess.CalledProcessError(rc, args, stderr="boom")
         return _cp()
 
     def git_run(*args, cwd=None, check=True, **kwargs):
@@ -131,6 +140,11 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         calls.append(("gate", (tags,), {}))
         return f.gate
 
+    def remaining_setup_hosts(paths, local_host, quiet=()):
+        # local_host is recorded: the phase must pass `tools.hostname()`, not a constant.
+        calls.append(("remaining_setup_hosts", (local_host,), {}))
+        return f.remaining_setup
+
     t = [0.0]
 
     def clock() -> float:
@@ -148,10 +162,11 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         gate=gate,
         plane_note=lambda paths, quiet=(): f.plane,
         self_applied=lambda paths, quiet=(): f.self_applied,
+        remaining_setup_hosts=remaining_setup_hosts,
         derive=lambda paths, changed: f.derived,
         quiet_paths=lambda paths, range_: set(),
         read_state=lambda root, name: f.state.get(name, ""),
-        lock_holder=lambda: f.lock_holder,
+        lock_holder=_seq(f.lock_holder, [], ""),
         hostname=lambda: f.hostname,
         logger=lambda line: calls.append(("logger", (line,), {})),
         sleep=lambda s: calls.append(("sleep", (s,), {})),

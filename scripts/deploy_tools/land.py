@@ -46,8 +46,10 @@ ci-red | ci-timeout | lock-busy.
 
 `blocked` is not a failure of this PR -- something else in the incoming range needs an
 operator, and nothing was deployed. `needs-manual-apply` means this PR reaches something
-neither a deploy tag nor the tick covers, so it is landed but not live. `deferred` means
-the tick applies this PR itself and has not crossed origin yet; the next tick does it.
+neither a deploy tag nor the tick covers, or a self-applied setup role that reaches a host
+beyond the one the tick just ran on (issue #1009), so it is landed but not live everywhere.
+`deferred` means the tick applies this PR itself and has not crossed origin yet; the next
+tick does it.
 `merge-conflict` and `pr-ci-red` are the merge wait ending early on the two states an armed
 auto-merge never recovers from. `pr-ci-red` is the PR's CI before the merge; `ci-red` is
 master's after it.

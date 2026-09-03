@@ -32,6 +32,7 @@ class Landing:
         self.tags = opts.tags
         self.plane = ""
         self.self_applied = False
+        self.remaining_setup = ""
         self.needs_diff = False
         self.deployed_hosts: set[str] = set()
 
@@ -64,12 +65,17 @@ class Landing:
         if self.git("fetch", "-q", "origin", BRANCH).returncode != 0:
             self.die(f"could not fetch origin/{BRANCH}", 1)
 
-    def note_lock_contention(self, seconds: int) -> None:
-        """Book one attempt that lost the tree lock; name the holder on the first."""
+    def note_lock_contention(self, seconds: int, holder: str = "") -> None:
+        """Book one attempt that lost the tree lock; name the holder on the first.
+
+        `holder` is the sample the caller took BEFORE the losing attempt. By the time the
+        attempt returns, the holder has usually released and a fresh read is empty, so the
+        given one wins whenever it is non-empty (issue #1031).
+        """
         self.ledger.lock_waited += seconds
         if self.ledger.lock_holder:
             return
-        self.ledger.lock_holder = self.tools.lock_holder()
+        self.ledger.lock_holder = holder or self.tools.lock_holder()
         if self.ledger.lock_holder:
             say(f"lock held by (etimes, command): {self.ledger.lock_holder}")
 

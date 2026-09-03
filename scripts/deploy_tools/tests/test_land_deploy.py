@@ -62,33 +62,39 @@ def test_a_mapping_failure_dies_with_its_own_verdict(landing):
     ln.tags = "sonarr"
     with pytest.raises(Outcome) as exc:
         deploy.deploy_by_host(ln)
+    assert exc.value.verdict == "deploy-failed"
     assert (
-        exc.value.verdict == "deploy-failed" and "nothing deployed" in exc.value.error
+        "deploy_tags.py hosts failed before any deploy.sh ran; nothing was touched"
+        in exc.value.error
     )
+    assert ln.ledger.cause == "host-lookup"
     assert "deploy" not in [c[0] for c in calls]
 
 
 @pytest.mark.parametrize(
-    "rc, verdict, code, phrase",
+    "rc, verdict, code, phrase, cause",
     [
         (
             2,
             "deploy-failed",
             1,
             "a derived tag matched no service, so nothing deployed",
+            "tag-miss",
         ),
-        (20, "deploy-failed", 1, "some changes are live"),
-        (75, "lock-busy", 75, "lock stayed busy"),
-        (9, "deploy-failed", 1, "exit 9"),
+        (20, "deploy-failed", 1, "some changes are live", "playbook-failed"),
+        (75, "lock-busy", 75, "lock stayed busy", ""),
+        (9, "deploy-failed", 1, "exit 9", "deploy-exit-9"),
     ],
 )
-def test_deploy_outcomes(landing, rc, verdict, code, phrase):
+def test_deploy_outcomes(landing, rc, verdict, code, phrase, cause):
+    """#1031: every deploy-failed names its cause, so Loki can tell the shapes apart."""
     ln, _ = _ready(landing)
     ln.tags = "sonarr"
     with pytest.raises(Outcome) as exc:
         deploy.deploy_outcome(ln, rc)
     assert (exc.value.rc, exc.value.verdict) == (code, verdict)
     assert phrase in (exc.value.detail + (exc.value.error or ""))
+    assert ln.ledger.cause == cause
 
 
 def test_a_clean_deploy_returns(landing):
@@ -104,14 +110,23 @@ def test_a_clean_deploy_returns(landing):
         (Fakes(self_applied=True, state={"hold_sha": "abc"}), "deploy-failed", 1),
         (Fakes(self_applied=True, state={"behind_since": "x"}), "deferred", 75),
         (Fakes(self_applied=True), "settled", 0),
+        (
+            Fakes(self_applied=True, remaining_setup="daniel-server, daniel-pi"),
+            "needs-manual-apply",
+            1,
+        ),
     ],
 )
 def test_no_tag_outcomes(landing, fakes, verdict, code):
     ln, _ = _ready(landing, fakes)
     ln.plane, ln.self_applied = fakes.plane, fakes.self_applied
+    ln.remaining_setup = fakes.remaining_setup
     with pytest.raises(Outcome) as exc:
         deploy.no_tag_outcome(ln)
     assert (exc.value.rc, exc.value.verdict) == (code, verdict)
+    if verdict == "needs-manual-apply" and fakes.remaining_setup:
+        assert "other hosts still need it" in exc.value.detail
+    assert ln.ledger.cause == ("tick-held" if fakes.state.get("hold_sha") else "")
 
 
 def test_the_diff_fallback_derives_after_the_tick(landing):

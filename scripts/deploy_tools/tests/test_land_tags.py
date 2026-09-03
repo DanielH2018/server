@@ -388,11 +388,6 @@ def test_an_unroutable_setup_role_has_no_remaining_hosts():
     assert land_tags.remaining_setup_hosts_note(files, "daniel-box") == ""
 
 
-def test_land_wires_the_remaining_setup_hosts_check():
-    assert "--remaining-setup-hosts" in _LAND_SH
-    assert "REMAINING_SETUP" in _LAND_SH
-
-
 def test_an_ordinary_service_pr_needs_no_manual_apply():
     """The reject half.
 

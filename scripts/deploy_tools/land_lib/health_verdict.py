@@ -44,6 +44,7 @@ def health(ln: Landing) -> NoReturn:
                 f"  services deployed, but the deployer is holding {ln.state('hold_sha')}: "
                 "its own apply failed — see hold_plane"
             )
+            ln.ledger.cause = "tick-held"
             ln.finish(
                 "deploy-failed",
                 1,
@@ -59,4 +60,16 @@ def health(ln: Landing) -> NoReturn:
                 75,
                 f"PR #{pr}, {sha}, tags: {tags} — services deployed, the tick's half not yet",
             )
+    if ln.remaining_setup:
+        local = ln.tools.hostname()
+        print(
+            f"  services deployed and the tick applied on {local}, but it also reaches: "
+            f"{ln.remaining_setup}"
+        )
+        ln.finish(
+            "needs-manual-apply",
+            1,
+            f"PR #{pr}, {sha}, tags: {tags} — self-applied on {local} only; "
+            "other hosts still need it",
+        )
     ln.finish("settled", 0, f"PR #{pr}, {sha}, tags: {tags}")

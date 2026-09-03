@@ -5,6 +5,18 @@ the ask list, and auto mode suspends the allow list, so a session with nobody to
 prompt times out as a denial (three attempts, three denials, 2026-09-03, issue #979).
 Idempotent: a MERGED PR is left alone, a CLOSED one dies.
 
+GitHub's `enablePullRequestAutoMerge` mutation (what `--auto` calls) rejects a PR that is
+already CLEAN -- there is nothing to defer -- so --arm-merge used to fail on exactly the PRs
+that were ready to merge (issue #1008, reproduced on PRs #998/#1001/#1002/#1004 on
+2026-09-03). A CLEAN rejection falls through to a direct `gh pr merge --squash`; a PR that
+merged in the gap between the idempotency check and the `--auto` attempt is a no-op, not a
+failure; anything else GitHub calls not-yet-mergeable (BLOCKED, DIRTY, ...) still dies.
+
+`--auto` exiting 0 is not proof the merge was armed either (issue #1029): on PR #1026 it
+exited 0, `autoMergeRequest` stayed null, and the landing polled 35 minutes toward
+merge-timeout on a PR that was CLEAN with every check green. The state is read back, and an
+OPEN PR with no `autoMergeRequest` takes the same direct-merge path a CLEAN rejection does.
+
 --await-merge polls the PR's state until merged, so `gh pr create` -> `gh pr merge --auto`
 -> one backgrounded land.sh is the whole procedure. Every landing on 2026-09-01 hand-wrote
 that wait.
@@ -22,6 +34,34 @@ from deploy_tools.land_lib.landing import BRANCH, Landing
 from deploy_tools.land_lib.outcome import say
 
 
+def arm_merge_fallback_decision(state: str, merge_state_status: str) -> str:
+    """What to do after `gh pr merge --auto` rejects a PR: already-merged | merge-direct | die.
+
+    GitHub's `enablePullRequestAutoMerge` mutation only accepts a PR that is genuinely
+    blocked. A PR that is already CLEAN has nothing to defer, so `--auto` fails on exactly
+    the PRs that are ready to merge right now (issue #1008; PRs #998, #1001, #1002, #1004 on
+    2026-09-03). A pure function of two strings so the branch is testable without gh.
+    """
+    if state == "MERGED":
+        return "already-merged"
+    if merge_state_status == "CLEAN":
+        return "merge-direct"
+    return "die"
+
+
+def _merge_direct(ln: Landing, subject: str) -> None:
+    """Squash-merge the PR now, for a PR `--auto` will not or did not arm."""
+    say(f"PR #{ln.opts.pr} is CLEAN -- nothing to defer; merging directly")
+    try:
+        ln.tools.gh("pr", "merge", ln.opts.pr, "--squash", "--subject", subject)
+    except subprocess.CalledProcessError as exc:
+        ln.die(
+            f"direct gh pr merge --squash failed for PR #{ln.opts.pr}: {exc.stderr.strip()}",
+            1,
+        )
+    say(f"merged directly: {subject}")
+
+
 def arm_merge(ln: Landing) -> None:
     """Run `gh pr merge --squash --auto` for this PR, unless it is already merged."""
     pr = ln.opts.pr
@@ -35,8 +75,34 @@ def arm_merge(ln: Landing) -> None:
     subject = ln.opts.subject or view.get("title", "")
     try:
         ln.tools.gh("pr", "merge", pr, "--squash", "--auto", "--subject", subject)
-    except subprocess.CalledProcessError as exc:
-        ln.die(f"gh pr merge --auto failed for PR #{pr}: {exc.stderr.strip()}", 1)
+    except subprocess.CalledProcessError:
+        retry = ln.view("state,mergeStateStatus")
+        decision = arm_merge_fallback_decision(
+            retry.get("state", ""), retry.get("mergeStateStatus", "")
+        )
+        if decision == "already-merged":
+            # A race with the idempotency check above: the PR merged between that read and
+            # this --auto attempt. Keep the MERGED short-circuit's semantics: say, not die.
+            say(f"gh pr merge --auto failed because PR #{pr} merged in the meantime")
+            return
+        if decision == "merge-direct":
+            _merge_direct(ln, subject)
+            return
+        ln.die(
+            f"gh pr merge --auto failed for PR #{pr} "
+            f"(mergeStateStatus={retry.get('mergeStateStatus', '')})",
+            1,
+        )
+    # --auto exiting 0 is not proof the merge was armed (issue #1029). Read the state back;
+    # an OPEN PR with no autoMergeRequest takes the same direct-merge path a CLEAN
+    # rejection does.
+    armed = ln.view("state,autoMergeRequest")
+    if armed.get("state") == "OPEN" and armed.get("autoMergeRequest") is None:
+        say(
+            f"gh pr merge --auto exited 0 but PR #{pr} is not armed (autoMergeRequest is null)"
+        )
+        _merge_direct(ln, subject)
+        return
     say(f"auto-merge armed: {subject}")
 
 

@@ -28,21 +28,21 @@ printf '%s\\n' "$*" >> "$LAND_TEST_LOGGER_CALLS"
 def _no_syslog(tmp_path_factory, monkeypatch):
     """Put a fake `logger` on PATH so a test run writes nothing to syslog.
 
-    `land.sh` emits one logfmt line per landing through `logger`, from an EXIT trap that fires
-    on every verdict including the `die` paths. Three test modules here run the real script
-    against a stubbed `gh`, so every one of those runs reached the host's syslog, shipped to
-    Loki, and landed on the Landings dashboard beside real landings.
+    A landing emits one logfmt line through `logger` on every verdict, the `die` paths
+    included. Every test module here that runs the real script against a stubbed `gh` reached
+    the host's syslog that way, shipped to Loki, and landed on the Landings dashboard beside
+    real landings.
 
     Measured over the two days to 2026-09-03: 2,169 of the 2,577 landing annotations in Loki
     were fixtures — 84% of the board. They are not merely extra rows. They carry `pr=999`,
     `pr=939` and `pr=unknown` with `verdict=aborted`, so any group-by over the dashboard
     reports a landing failure rate dominated by tests that passed.
 
-    Autouse and directory-wide rather than opt-in per test: the three modules that run
-    `land.sh` today are not a closed set, and a fourth added later would silently start
-    polluting again. A stubbed `logger` no test calls costs nothing.
+    Autouse and directory-wide rather than opt-in per test: the modules that run `land.sh`
+    today are not a closed set, and one added later would silently start polluting again. A
+    stubbed `logger` no test calls costs nothing.
 
-    The three modules build their subprocess env from `os.environ` with their own stub dir
+    Those modules build their subprocess env from `os.environ` with their own stub dir
     prepended, so mutating PATH here is inherited by all of them: their `gh` stub still wins
     for `gh`, and this wins for `logger` over `/usr/bin/logger`.
     """

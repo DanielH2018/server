@@ -37,7 +37,21 @@ def test_exit_75_is_not_a_failure(landing, capsys):
 
 
 def test_an_outright_failure_dies(landing):
+    """#1031: the tick failing is deploy-failed, not the verdict-less `aborted` bucket."""
     ln, _ = landing(Fakes(tick=[1]))
     with pytest.raises(Outcome) as exc:
         tick.run_tick(ln)
     assert exc.value.rc == 1 and "gitops tick failed (exit 1)" in exc.value.error
+    assert exc.value.verdict == "deploy-failed"
+    assert ln.ledger.cause == "tick-failed"
+
+
+def test_the_lock_holder_is_sampled_before_the_attempt(landing):
+    """#1031: read after the losing attempt, the holder has usually already released.
+
+    The fake answers once and then goes empty, the shape a holder that released has: the
+    holder is only recorded at all if it was sampled BEFORE the contended tick.
+    """
+    ln, _ = landing(Fakes(tick=[3, 0], lock_holder=["42 flock deploy", ""]))
+    tick.run_tick(ln)
+    assert ln.ledger.lock_holder == "42 flock deploy"

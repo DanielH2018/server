@@ -17,6 +17,7 @@ def _deployed(landing, fakes=None):
     ln.merge_sha, ln.tags = MERGE_SHA, "sonarr"
     ln.plane = (fakes or Fakes()).plane
     ln.self_applied = (fakes or Fakes()).self_applied
+    ln.remaining_setup = (fakes or Fakes()).remaining_setup
     return ln, calls
 
 
@@ -46,18 +47,21 @@ def test_needs_manual_apply_when_a_plane_remains(landing, capsys):
 
 
 @pytest.mark.parametrize(
-    "state, verdict, code",
+    "state, verdict, code, cause",
     [
-        ({"hold_sha": "abc"}, "deploy-failed", 1),
-        ({"behind_since": "x"}, "deferred", 75),
-        ({}, "settled", 0),
+        ({"hold_sha": "abc"}, "deploy-failed", 1, "tick-held"),
+        ({"behind_since": "x"}, "deferred", 75, ""),
+        ({}, "settled", 0, ""),
     ],
 )
-def test_a_self_applied_half_reads_the_deployers_state(landing, state, verdict, code):
+def test_a_self_applied_half_reads_the_deployers_state(
+    landing, state, verdict, code, cause
+):
     ln, _ = _deployed(landing, Fakes(self_applied=True, state=state))
     with pytest.raises(Outcome) as exc:
         health_verdict.health(ln)
     assert (exc.value.rc, exc.value.verdict) == (code, verdict)
+    assert ln.ledger.cause == cause
 
 
 def test_an_ordinary_service_pr_ignores_the_deployers_state(landing):
@@ -66,3 +70,23 @@ def test_an_ordinary_service_pr_ignores_the_deployers_state(landing):
     with pytest.raises(Outcome) as exc:
         health_verdict.health(ln)
     assert exc.value.verdict == "settled"
+
+
+def test_a_self_applied_role_that_reaches_other_hosts_is_not_settled(landing, capsys):
+    """Issue #1009: the services are live, the tick converged, and two hosts are still owed."""
+    ln, _ = _deployed(
+        landing, Fakes(self_applied=True, remaining_setup="daniel-server, daniel-pi")
+    )
+    with pytest.raises(Outcome) as exc:
+        health_verdict.health(ln)
+    assert (exc.value.rc, exc.value.verdict) == (1, "needs-manual-apply")
+    assert "other hosts still need it" in exc.value.detail
+    assert "it also reaches: daniel-server, daniel-pi" in capsys.readouterr().out
+
+
+def test_no_remaining_hosts_still_settles(landing):
+    """The reject half: the #723 shape, where the tick's host is the only one reached."""
+    ln, _ = _deployed(landing, Fakes(self_applied=True, remaining_setup=""))
+    with pytest.raises(Outcome) as exc:
+        health_verdict.health(ln)
+    assert (exc.value.rc, exc.value.verdict) == (0, "settled")

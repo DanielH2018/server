@@ -62,6 +62,22 @@ def test_classify_fills_tags_plane_and_self_applied(landing):
     )
 
 
+def test_classify_asks_what_a_self_applied_role_still_owes_other_hosts(landing):
+    """Issue #1009: the tick runs on ONE host, so `self_applied` alone leaves the rest silent."""
+    ln, calls = landing(
+        Fakes(
+            self_applied=True, remaining_setup="`initial_setup` also reaches daniel-pi"
+        )
+    )
+    ln.merge_sha = MERGE_SHA
+    classify.classify(ln)
+    assert ln.remaining_setup == "`initial_setup` also reaches daniel-pi"
+    # the host the tick ran on, read from the boundary rather than hardcoded
+    assert next(c for c in calls if c[0] == "remaining_setup_hosts")[1] == (
+        "daniel-box",
+    )
+
+
 def test_explicit_tags_skip_derivation(landing):
     ln, calls = landing(tags="sonarr")
     classify.classify(ln)
