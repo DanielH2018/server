@@ -333,6 +333,42 @@ a build failure would dominate the staging window (`n8n` + `n8n-runners`, `code-
 Growing the subset later is a config change, not a redesign — but each addition needs the same
 question asked: does this role mutate anything outside the VM?
 
+**Mechanism coverage is already saturated, so widening buys less than it looks.** Measured
+2026-09-02 against the tree: the 61 roles under `roles/k8s/` render 21 distinct top-level kinds
+between them, and the six members above exercise 16. The five they do not — `CronJob`,
+`LimitRange`, `Namespace`, `StorageClass`, `PersistentVolume` — are rendered only by `configarr`,
+`pi-peer-backup`, `claude-otel` and `media-volume`, every one of which is permanently excluded
+above. No admissible role adds a kind the subset lacks.
+
+Two checks say the census is not vacuous. The shared `manifests` role has no `templates/`
+directory at all, so all 16 covered kinds come from the six members themselves rather than from
+plumbing every role would inherit. And no `StatefulSet` exists anywhere in the tree, so the
+line-anchored `kind:` match is not silently dropping one: the only indented `kind:` lines are
+nested references — a `dataSource`, an IngressRoute's `services[]`, an `ownerReferences` entry.
+
+What widening still buys is **per-role** coverage: a change to one service's own manifests would
+be gated where today it is not. That band is narrow, because `validate/k8s_manifests.py` already
+renders and parses every template repo-side and `--dry-run` shows them to a real API server. It
+is also expensive now that a rejection parks prod.
+
+The budget bounds it further. `hypervisor_staging_vm_memory_mib` is 8192 across 4 vCPU, and the
+six members declare 1664 MiB before k3s, Longhorn and Traefik take theirs. `code-server`
+(4096Mi) and `valheim` (6144Mi) do not fit; `home-assistant`, `qbittorrent` and `terraria`
+(2048Mi each) fit one at a time.
+
+Three of the cheapest candidates gate nothing here by construction. `volume-claim`,
+`volume-snapshot` and `volume-revert` are the pre-apply machinery, and this cluster disables it
+host-wide with `k8s_autodeploy_snapshot_pvcs: []` — the snapshot runs before the apply that
+creates the claim, and staging carries no migrating state to protect. Both reasons are properties
+of the cluster, not of a role, so no addition changes them.
+
+**`STAGING_SUBSET` is a filter, not the deploy list.** The deployer intersects it with the
+services a commit changes; what staging actually deploys is `containers_list` in
+`host_vars/daniel-stage.yml`, and every entry there with a route carries a `staging_expect`
+measured against the live cluster. An addition is therefore two files plus one measurement — and
+`staging_expectations.py` fails when an entry with a route arrives without one, so the gate
+cannot quietly grow a blind spot.
+
 ### 7. Node pinning — the 25 sites that named daniel-box
 
 **DONE.** This step landed, and every number below is a census taken while executing it, not a
