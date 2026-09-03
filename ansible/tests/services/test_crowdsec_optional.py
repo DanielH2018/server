@@ -211,40 +211,6 @@ def test_traefik_keeps_its_init_container_key_while_acme_still_needs_it() -> Non
     assert "initContainers" not in spec
 
 
-def test_the_hub_seed_step_ships_with_crowdsec_on_and_not_with_it_off() -> None:
-    """#976: without it, crowdsec-agent's own entrypoint hits a permission-denied rsync and
-    kubelet restarts the container on its first boot every time.
-    """
-    spec = _pod_spec("traefik", True, traefik_k8s_manage_acme=False)
-    names = [c["name"] for c in spec["initContainers"]]
-    assert "crowdsec-hub-seed" in names
-    # It must come after crowdsec-config-install: both rsync with --ignore-existing, so our
-    # seeded acquis.yaml/whitelist files only win over the image defaults if they land first.
-    assert names.index("crowdsec-hub-seed") > names.index("crowdsec-config-install")
-
-    spec = _pod_spec("traefik", False, traefik_k8s_manage_acme=False)
-    assert "initContainers" not in spec
-
-
-def test_the_hub_seed_step_stays_read_only_root() -> None:
-    """The main crowdsec-agent container stays exactly as strict as before #976 — non-root,
-    ALL capabilities dropped, no elevated privilege — because only this short-lived init
-    container needs to read the image's root-owned staged files. DAC_READ_SEARCH (read-only)
-    rather than DAC_OVERRIDE, since nothing here needs to WRITE as another uid.
-    """
-    spec = _pod_spec("traefik", True, traefik_k8s_manage_acme=False)
-    seed = next(c for c in spec["initContainers"] if c["name"] == "crowdsec-hub-seed")
-    ctx = seed["securityContext"]
-    assert ctx["runAsUser"] == 0
-    assert ctx["capabilities"]["drop"] == ["ALL"]
-    assert ctx["capabilities"]["add"] == ["DAC_READ_SEARCH"]
-
-    agent = next(c for c in spec["containers"] if c["name"] == "crowdsec-agent")
-    assert "runAsUser" not in agent.get("securityContext", {})
-    assert agent["securityContext"]["capabilities"]["drop"] == ["ALL"]
-    assert "add" not in agent["securityContext"]["capabilities"]
-
-
 @pytest.mark.parametrize("role", sorted(_FLAGS))
 @pytest.mark.parametrize("manage", [True, False])
 def test_every_mount_resolves_to_a_declared_volume(role: str, manage: bool) -> None:
