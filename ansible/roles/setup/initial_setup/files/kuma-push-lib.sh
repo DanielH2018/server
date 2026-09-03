@@ -99,13 +99,20 @@ kuma_push() {
       esac
     fi
     if [ "$attempt" -eq 1 ]; then
-      logger -t "$tag" "push failed transiently (status=${status}: ${msg}), retrying in ${retry_delay_s}s"
+      logger -t "$tag" "push failed transiently (http=${http_code} rc=${curl_rc}) (status=${status}: ${msg}), retrying in ${retry_delay_s}s"
       sleep "$retry_delay_s"
     fi
   done
   # shellcheck disable=SC2034  # read by the sourcing script, not by this file
   KUMA_PUSH_OK=0
-  logger -t "$tag" "push failed (status=${status}: ${msg})"
+  # http_code and curl_rc carry the LAST attempt's outcome. They are logged because the retry's
+  # classifier rests on an assumption nobody has observed: that a uptime-kuma rollout surfaces as
+  # a 503 from Traefik rather than a 4xx. A 4xx is the one class this does NOT retry, so if that
+  # assumption is wrong the retry is inert for real rollouts while passing every test. Logging
+  # the code settles it from the next rollout's journal instead of from another deploy —
+  # `journalctl --since ... | grep "push failed"` then reads the actual class. Neither value can
+  # carry the push token; both are numbers.
+  logger -t "$tag" "push failed (http=${http_code} rc=${curl_rc}) (status=${status}: ${msg})"
   return 0
 }
 
