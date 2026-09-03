@@ -72,9 +72,7 @@ def landing():
 @pytest.fixture
 def land_run(capsys):
     """Run `land.main(argv)` against Fakes; (rc, stdout, stderr, calls, logline)."""
-    # land.py doesn't exist until Task 5; this fixture is unused (and this import unreached)
-    # until then.
-    import land  # ty: ignore[unresolved-import]
+    import land
 
     def run(argv: list[str], fakes: Fakes | None = None):
         tools, calls = build_tools(fakes or Fakes())
