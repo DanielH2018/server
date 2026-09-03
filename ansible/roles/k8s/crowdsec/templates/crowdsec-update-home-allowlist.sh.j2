@@ -25,49 +25,69 @@ STATE_FILE="$STATE_DIR/ipv4"
 STATE_FILE6="$STATE_DIR/ipv6"
 PUSH_URL="https://uptime-kuma.local.{{ domain }}/api/push/{{ monitor_bridge_home_allowlist_push_token }}"
 
-# DECIDED: `--retry 3 --retry-all-errors`, not the bare `--retry 3` the sibling push crons use.
-# Every curl here is one transient failure away from a red monitor: the monitor is push-type
-# with max_retries 0, so a single bad run IS an immediate DOWN. Measured over the 3 days to
-# 2026-08-24 the monitor made 18 transitions (9 down/up cycles) with the allowlist itself never
-# once out of sync.
+# DECIDED: `--retry 6 --retry-all-errors --retry-max-time 60`, not the bare `--retry 3` the
+# sibling push crons use and not the shared library's single 30s backoff. Every curl here is one
+# transient failure away from a red monitor: the monitor is push-type with max_retries 0, so a
+# single bad run IS an immediate DOWN. Measured over the 3 days to 2026-08-24 the monitor made 18
+# transitions (9 down/up cycles) with the allowlist itself never once out of sync.
 #
-# `--retry-all-errors` buys CONNECTION REFUSED, and only that — measured on curl 8.5.0,
-# 2026-08-24, against a dead port and an unresolvable name:
+# `--retry-all-errors` is the flag that makes the retry cover this cron's actual failure, and
+# only that flag does — measured on curl 8.5.0, 2026-09-03, against uptime-kuma's own push route
+# with a bogus token, and 2026-08-24 against a dead port and an unresolvable name:
+#   HTTP 404:          bare --retry 0.02s (no retry)   |  --retry-all-errors 7.04s (retried)
 #   exit 7 (refused):  bare --retry 0.004s (no retry)  |  --retry-all-errors 7.04s (retried)
 #   exit 6 (DNS):      bare --retry 7.05s (retried)    |  --retry-all-errors 7.05s (retried)
 # So the widely-repeated "bare --retry skips DNS failures" is FALSE on this curl; do not restate
-# it. The refused case is the one that matters for the LAN push to Kuma, which is why the flag
-# stays. Accepted cost: a 4xx push (a bad token) now burns the backoff before failing.
+# it. Accepted cost: a genuinely bad token now burns the whole window before failing.
 #
-# Worst case is 4 attempts x 10s plus curl's 1/2/4s backoff per call, ~47s, and three calls
-# still fit the 5-minute cron interval. `--max-time` is PER ATTEMPT, not per operation —
-# measured 2026-08-24, `--max-time 3 --retry 3` against a black-holed address took 19.05s
-# (4 x 3s + 7s backoff). Were it whole-operation, the retries would be inert on a timeout.
+# WHY A 404 IS THE CASE TO SIZE FOR. The dropped pushes are not the 503 an uptime-kuma
+# `Recreate` rollout was assumed to produce. Measured from Traefik's access log on 2026-09-03,
+# they are Traefik's own 404 with an EMPTY RouterName and OriginStatus 0 — no router matched and
+# no backend was contacted. Traefik's KubernetesCRD provider drops a router whose service has no
+# endpoints, so a rollout removes uptime-kuma's route rather than serving 503 through it. The
+# discriminator: during 17:30:00-17:30:59 that day Traefik answered 302 for a dozen other
+# `*.local` hosts and 401 for livesync while every uptime-kuma push 404'd, so Traefik had routes
+# and only this one was gone. curl cannot tell that 404 from a bad token, which is why retrying
+# the 4xx is right here where the shared library's 4xx-stop is not.
 #
-# LIMIT: this does NOT cover a Kuma outage. Two clusters of consecutive failed pushes on
-# 2026-08-20 (01:40/01:45/01:55 and 12:35/12:40/12:45) each have a crowdsec-appsec-verify push
-# failing in the same window, so the endpoint was down, not the call — and no 7s backoff spans
-# a 15-minute gap. The retry closes the ISOLATED misses; a Kuma restart still flaps this
-# monitor, and the fix for that belongs to uptime-kuma's own availability.
+# WHY 63s. Sized from the longest endpoint-less window actually observed: 31s, 12:29:43 to
+# 12:30:14 on 2026-09-03, with monitor-bridge's in-cluster pushes taking ECONNREFUSED throughout
+# and the LAN-path 404s at 12:30:01-12 inside it. The previous `--retry 3` spans 7.04s and
+# covered none of it. `--retry 6 --retry-max-time 60` measured 63.09s end to end against a 404 on
+# 2026-09-03 — curl's 1/2/4/8/16/32s backoff — which is 2x the observed window. Keeping the
+# exponential backoff rather than a fixed delay leaves an isolated sub-second blip recovering in
+# ~1s.
 #
-# DECIDED: this stays off /usr/local/lib/kuma-push-lib.sh, alone among the health crons. The
-# retry semantics above are measured against THIS monitor (push-type, max_retries 0, 18
-# transitions in 3 days) — kuma_push gained its own bounded retry at issue #994, but that retry's
-# 30s backoff was measured against the shared library's ten OTHER callers, not against this
-# monitor's numbers, so hoisting this cron onto it would still hand it a retry nobody measured
-# here. The library's actual security property — the token-bearing URL reaching curl on stdin as
-# a config file rather than as an argv element, because /proc is mounted without hidepid and this
-# runs every 5 minutes — is reproduced inline below, and
+# The ceiling is the cron period, and the push is not the only curl here. Worst case per run is
+# 133s of push (7 attempts x 10s plus 63s of backoff) plus the two ipify calls at 47s each
+# (4 attempts x 10s plus 7s of backoff), 227s against the */5 period — so a genuinely-down Kuma
+# still cannot make a run overlap its successor. A wider `--retry 7 --retry-max-time 120` was
+# measured at 127.16s and rejected: it puts the run at 301s, one second over.
+# ansible/tests/services/test_crowdsec_allowlist_push_retry.py computes that budget from these
+# flags and the cron's own schedule, so widening either curl again fails there rather than in
+# production. `--max-time` is PER ATTEMPT, not per operation — measured 2026-08-24,
+# `--max-time 3 --retry 3` against a black-holed address took 19.05s (4 x 3s + 7s backoff). Were
+# it whole-operation, the retries would be inert on a timeout.
+#
+# LIMIT: this covers a rollout, not a Kuma outage. Three clusters of consecutive failed pushes —
+# 2026-08-20 01:40/01:45/01:55 and 12:35/12:40/12:45, 2026-09-03 16:05/16:10/16:15/16:20 — each
+# span 15+ minutes, and no in-run backoff reaches that; the fix for those belongs to
+# uptime-kuma's own availability. Over the 30 days to 2026-09-03 the monitor logged 65 dropped
+# pushes in 45 episodes, and 37 of those episodes were a single run. Those are the ones this
+# window is for.
+#
+# DECIDED: this stays off /usr/local/lib/kuma-push-lib.sh, alone among the health crons. Two
+# reasons. The retry semantics above are measured against THIS monitor (push-type, max_retries 0,
+# 18 transitions in 3 days), where the library's 30s backoff was measured against its ten OTHER
+# callers. And the library STOPS on a 4xx by design, which is exactly the status this path
+# produces during a rollout — adopting it would swap a retry that fires for one that cannot. The
+# library's actual security property — the token-bearing URL reaching curl on stdin as a config
+# file rather than as an argv element, because /proc is mounted without hidepid and this runs
+# every 5 minutes — is reproduced inline below, and
 # ansible/tests/setup/test_cron_scripts_publish_via_pr.py enforces it here with no exemption.
-#
-# KNOWN GAP (issue #994): this cron's own `--retry-all-errors` backoff (~7s total across curl's
-# internal attempts) is shorter than a Kuma rollout ("tens of seconds") — the LIMIT note above
-# already says a Kuma restart still flaps this monitor. #994 fixed the shared library; widening
-# THIS file's retry needs its own measurement against this monitor's transition data, which #994
-# did not take. Tracked, not fixed here.
 push() { # up|down msg
   printf 'url = "%s"\n' "$PUSH_URL" |
-    curl -fsS --max-time 10 --retry 3 --retry-all-errors -G -K - \
+    curl -fsS --max-time 10 --retry 6 --retry-all-errors --retry-max-time 60 -G -K - \
       --data-urlencode "status=$1" --data-urlencode "msg=$2" -o /dev/null \
     || logger -t crowdsec-home-allowlist "kuma push failed ($1: $2)"
 }
