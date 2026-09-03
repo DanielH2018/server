@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+# Release-staleness drift check — managed by Ansible (k3s role); edits overwritten.
+#
+# THE GAP THIS CLOSES (issue #947). When gitops_deploy.py defers a non-auto-deployable k8s role
+# change (`alert_deferred`'s `cs.k8s` branch), it fast-forwards the tree and pages Discord ONCE
+# per SHA. The ff-merge clears `behind_since` -- the deployer's own durable "still behind" signal
+# -- so every OTHER monitored marker reads clean while the cluster keeps running the old
+# manifests. Renovate automerges digest bumps on the 20+ `k8s_autodeploy: false` roles, so this
+# path runs unattended with one Discord line as its entire signal. See the `# DECIDED:` at the
+# `cs.k8s` branch in gitops_deploy.py and this role's CLAUDE.md for the full account.
+#
+# THE SIGNAL. `roles/k8s/manifests/tasks/release_stamp.yml` records, per service, the commit that
+# produced its applied manifests. `probe.py releases --stale-only` reads those records and
+# compares each one's role paths (the service's own role, plus the shared roles every service's
+# manifests depend on -- manifests, rollout-drain, and the rest with no `containers_list` entry
+# of their own) against origin/master. A service whose role paths moved past its applied commit,
+# or with no record at all, is stale. Unlike this role's other drift checks, this one needs no
+# `kubectl` at all -- it is pure git history plus the JSON records already on disk.
+#
+# `git fetch` runs FIRST. Without it, `origin/master` is whatever this checkout last fetched, so
+# a parked deployer (a broad hold, a dead timer) would read GREEN forever instead of catching up
+# to what actually landed -- the exact failure mode this check exists to close.
+set -uo pipefail
+
+# shellcheck source=/dev/null
+source /usr/local/lib/kuma-push-lib.sh || {
+  logger -t release-staleness-check "kuma-push-lib.sh missing — run initial_setup on this host"
+  exit 1
+}
+
+KUMA_HOST="uptime-kuma.local.{{ domain }}"
+# Pinned to the cluster ingress VIP, same reasoning as manifest-prune-check.sh beside this one:
+# Kuma serves from the k8s edge and the Docker edge's bridge route for this name is gone.
+KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
+# Sourced, never inlined: this script lands 0755, so an inlined token would be readable by every
+# local account. 0640 root:{{ sys_user }} env file, shared with the other k3s health crons.
+RELEASE_STALENESS_PUSH_TOKEN=""
+# shellcheck source=/dev/null
+[[ -r /etc/rancher/k3s/kuma-push.env ]] && . /etc/rancher/k3s/kuma-push.env
+PUSH_TOKEN="$RELEASE_STALENESS_PUSH_TOKEN"
+
+# The role must deploy cleanly before the operator has registered this secret (/add-secret) —
+# skip the push rather than fail the cron until the token exists. Names the env var, not the
+# registry secret, for the same reason as manifest-prune-check.sh beside this one: the secrets
+# guard matches whole-word registry names against raw template text and would flag a log line
+# that only names the variable.
+if [[ -z "$PUSH_TOKEN" ]]; then
+  logger -t release-staleness-check "RELEASE_STALENESS_PUSH_TOKEN not set — skipping push (see /add-secret)"
+  exit 0
+fi
+PUSH_URL="https://${KUMA_HOST}/api/push/${PUSH_TOKEN}"
+
+REPO_DIR=/home/{{ sys_user }}/server
+if ! FETCH_ERR="$(git -C "$REPO_DIR" fetch --quiet origin master 2>&1)"; then
+  STATUS=down
+  MSG="git fetch origin master failed in ${REPO_DIR}: ${FETCH_ERR}"
+  logger -t release-staleness-check "status=${STATUS} ${MSG}"
+  kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" release-staleness-check
+  exit 0
+fi
+
+# UV absolute-pathed: cron's PATH lacks ~/.local/bin. --frozen: never rewrite uv.lock on this
+# host — a rewrite would dirty the tree and wedge the GitOps deployer's dirty-skip, the same
+# reason secret-rotation-audit.sh uses it.
+UV=/home/{{ sys_user }}/.local/bin/uv
+OUTPUT="$(cd "$REPO_DIR" && "$UV" run --quiet --frozen python scripts/diagnostics/probe.py releases --stale-only 2>&1)"
+RC=$?
+
+if [[ $RC -eq 0 ]]; then
+  STATUS=up
+elif [[ $RC -eq 1 ]]; then
+  STATUS=down
+else
+  # Anything else (a Python traceback, uv failing to sync) is the check itself breaking, not a
+  # verdict about staleness — reported as down so it pages rather than reading as a clean fleet.
+  STATUS=down
+  OUTPUT="probe.py releases --stale-only exited ${RC}: ${OUTPUT}"
+fi
+MSG="$OUTPUT"
+
+logger -t release-staleness-check "status=${STATUS} ${MSG}"
+kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" release-staleness-check

@@ -65,6 +65,7 @@ _GROUP_TAGS = {
     "k3s-backup-health": "backup-health",
     "k3s-disk-health": "disk-health",
     "k3s-manifest-prune": "manifest-prune",
+    "k3s-release-staleness": "release-staleness",
     "k3s-etcd-snapshot": "etcd-snapshot",
     "k3s-remember-logs": "remember-logs",
 }

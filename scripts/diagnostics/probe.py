@@ -481,6 +481,14 @@ def _build_parser():
         help="read the record kept from before the last deploy",
     )
     rel.add_argument("--json", action="store_true", help="raw records, unformatted")
+    rel.add_argument(
+        "--stale-only",
+        action="store_true",
+        help=(
+            "one line per service whose role paths moved past its applied commit, or with no "
+            "record at all; exit 1 if any (for a cron -- see issue #947)"
+        ),
+    )
     return p
 
 

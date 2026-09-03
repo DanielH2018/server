@@ -934,6 +934,14 @@ def alert_deferred(
     if cs.k8s:
         # No `- deployed` subtraction (unlike tasks/meta): this deployer never auto-deploys a
         # k8s-platform role at all, so there's no scoped redeploy for a k8s change to have ridden.
+        #
+        # DECIDED: this alert is a one-shot detection, not the durable signal. It fires once per
+        # origin SHA (alert_once) and the ff-merge below clears `behind_since` -- the deployer's
+        # own "still behind" marker -- so every other monitored marker reads clean while the
+        # cluster keeps running the old manifests (issue #947). The durable signal is a daniel-box
+        # cron reading `probe.py releases --stale-only` against the release records
+        # `roles/k8s/manifests/tasks/release_stamp.yml` writes on every real apply -- see this
+        # role's CLAUDE.md, "k8s-platform roles are auto-deployed ONLY for an image-pin bump...".
         alert_once(
             K8S_ALERT_FILE,
             "k8s",

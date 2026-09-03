@@ -178,6 +178,7 @@ def test_discover_templates_finds_the_known_set():
         "disk-health.sh.j2",
         "remember-logs-health.sh.j2",
         "manifest-prune-check.sh.j2",
+        "release-staleness-check.sh.j2",
         "etcd-snapshot-offbox.sh.j2",
         "github-ruleset-drift.sh.j2",
         "telemetry-health.sh.j2",
