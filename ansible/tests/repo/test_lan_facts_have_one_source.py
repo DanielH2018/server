@@ -107,12 +107,6 @@ ALLOWLIST: list[tuple[str, str]] = [
         "(findings.py)",
     ),
     (
-        r"^ansible/roles/k8s/registry/defaults/main\.yml$",
-        "registry_k8s_netpol_cni_gateway is a role default the registry's own comment "
-        "documents as independently verified (`ip -4 addr show cni0` on daniel-box) and "
-        "scoped to one node only — not a re-derivation of netpol_baseline_node_cidrs",
-    ),
-    (
         r"^ansible/roles/setup/hypervisor/defaults/main\.yml$",
         "the source definition site for the hypervisor's own staging-net gateway/DHCP range "
         "(DECIDED comment above: chosen against a census of daniel-server's routes, not a "
