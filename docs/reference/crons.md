@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/crons.py
-generated_at: 2026-09-03 12:22 UTC
-generated_sha: 1806968e
+generated_at: 2026-09-03 15:05 UTC
+generated_sha: 6f36bccd
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 1806968e
 
 # Scheduled jobs
 
-40 cron entrie(s) installed across the roles.
+42 cron entrie(s) installed across the roles.
 
 !!! warning "The state column is a heuristic"
     It is judged from the command text, and nothing in a cron task declares its own blast radius. A job that runs a wrapper script reads as "read the script" rather than being guessed at. Treat it as a pointer, not an authority.
@@ -39,8 +39,10 @@ generated_sha: 1806968e
 | Redeploy {{ container_item.name }} | `{{ common_redeploy_cron_minute }} 6 * * 0` | every host in the play | `{{ sys_user }}` | yes (deploy) | `ansible/roles/containers/common/tasks/redeploy_cron.yml` |
 | Refresh generated docs | `17 6,18 * * *` | daniel-box | `{{ sys_user }}` | read the script | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
 | Refresh homelab infrastructure map | `*/15 * * * *` | daniel-box | `{{ sys_user }}` | no (read-only by its command) | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
+| Release staleness drift check | `{{ k3s_release_staleness_cron_minute }} * * * *` | every host in the play | `{{ sys_user }}` | read the script | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
 | Setup-plane drift check | `50 7 * * *` | conditional (inventory_hostname in setup_drift_check_hosts) | `root` | read the script | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
 | Sync peer Claude artifacts | `{{ artifacts_sync_minute }} * * * *` | conditional (not k8s_dry_run | bool) | `{{ sys_user }}` | read the script | `ansible/roles/k8s/artifacts/tasks/main.yml` |
+| TLS cert-expiry watch | `10 5 * * *` | daniel-box | `{{ sys_user }}` | no (read-only by its command) | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
 | UPS secondary watchdog | `*/{{ nut_host_watchdog_interval_minutes }} * * * *` | conditional (nut_host_watchdog_armed | bool) | `root` | read the script | `ansible/roles/nut_host/tasks/main.yml` |
 | Weekly AIDE file integrity check | `0 3 * * 1` | every host in the play | `root` | no (read-only by its command) | `ansible/roles/setup/initial_setup/tasks/integrity.yml` |
 | Weekly apt autoremove | `0 2 * * 0` | every host in the play | `root` | no (read-only by its command) | `ansible/roles/setup/initial_setup/tasks/accounting.yml` |

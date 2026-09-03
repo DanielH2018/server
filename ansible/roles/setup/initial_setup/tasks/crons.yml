@@ -283,6 +283,61 @@
     user: "{{ sys_user }}"
   become: true
 
+- name: Create the cert-expiry credentials directory (box only)
+  tags: [crons]
+  when: inventory_hostname == 'daniel-box'
+  ansible.builtin.file:
+    path: /etc/homelab
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: Deploy the cert-expiry webhook credentials (box only)
+  tags: [crons]
+  # Its own file, sourced rather than inlined into the crontab job -- a cron job's command
+  # sits in /proc/<pid>/cmdline, world-readable, for the whole run. Same reason
+  # setup-drift-kuma-push.env exists as its own file below. 0640 root:{{ sys_user }}, matching
+  # that file's mode, so only the cron's own user can read it.
+  when: inventory_hostname == 'daniel-box'
+  ansible.builtin.template:
+    src: cert-expiry-webhook.env.j2
+    dest: /etc/homelab/cert-expiry-webhook.env
+    owner: root
+    group: "{{ sys_user }}"
+    mode: "0640"
+  become: true
+  no_log: true # renders monitor_discord_webhook_url
+
+- name: Schedule the TLS cert-expiry watch (box only)
+  tags: [crons]
+  # Warns on Discord when a public route's TLS leaf falls within 14 days of expiry
+  # (scripts/watchers/cert_expiry.py). Runs on daniel-box because it needs the cluster's own
+  # MetalLB VIP (LAN-reachable from a cluster node) and a local age key to decrypt `domain` --
+  # the same has_gitops-style freshness reasoning as the secret-rotation crons above, since a
+  # stale checkout's secrets.yml can answer with the wrong domain silently.
+  #
+  # No new SOPS secret: reuses monitor_discord_webhook_url, the existing general-purpose
+  # ops-alert channel (already read by monitor-bridge and Uptime Kuma's own notification
+  # config), sourced from the credentials file above -- rather than minting a
+  # cert-expiry-specific one. No healthcheck ping is wired -- doing so needs a check created
+  # by hand in a console this play cannot reach, so $CERT_EXPIRY_HEALTHCHECK_URL is left
+  # unset and the watcher simply skips that ping.
+  when: inventory_hostname == 'daniel-box'
+  ansible.builtin.cron:
+    name: "TLS cert-expiry watch"
+    minute: "10"
+    hour: "5"
+    # The `{ ... || true; }` group fails soft: an unreadable/missing credentials file leaves
+    # the webhook var unset rather than aborting the whole `&&` chain before the watcher ever
+    # runs (it already treats a missing webhook as log-only, see lib/watcher.py's
+    # run_watcher). The outer `cd ... &&`, by contrast, is meant to abort -- the watcher's
+    # module path is relative to the repo root.
+    job: "cd /home/{{ sys_user }}/server && { [ -r /etc/homelab/cert-expiry-webhook.env ] && set -a && . /etc/homelab/cert-expiry-webhook.env && set +a || true; } && PATH=/usr/local/bin:/usr/bin:/bin /home/{{ sys_user }}/.local/bin/uv run --quiet python scripts/watchers/cert_expiry.py"
+    user: "{{ sys_user }}"
+  become: true
+
 # Render provenance for manifest-prune-check.sh's stale-script arm (2026-08-23b review H1).
 # secret-rotate.sh is the reason this one matters most of the nine that were uncovered: it is a
 # weekly STATE-CHANGING cron that commits and pushes, so a stale render runs old rotation logic
