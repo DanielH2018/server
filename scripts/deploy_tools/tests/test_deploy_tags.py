@@ -321,7 +321,7 @@ def test_tag_platforms_reads_the_declaring_platforms(host_vars):
 def test_hosts_prints_one_tab_separated_line_per_host(capsys, monkeypatch, host_vars):
     real = deploy_tags.tags_by_host
     monkeypatch.setattr(
-        deploy_tags, "tags_by_host", lambda tags, hv=host_vars: real(tags, hv)
+        deploy_tags, "tags_by_host", lambda tags, hv=None: real(tags, host_vars)
     )
     assert deploy_tags.main(["hosts", "dozzle,jellyfin,sonarr,config"]) == 0
     assert capsys.readouterr().out == "host_a\tjellyfin,sonarr\nhost_b\tdozzle\n"
@@ -331,3 +331,47 @@ def test_real_inventory_routes_the_pi_log_shipper_to_the_pi():
     """Non-vacuity against the live inventory: the tag from issue #929 resolves to daniel-pi."""
     assert deploy_tags.tags_by_host(["alloy"]) == {"daniel-pi": ["alloy"]}
     assert deploy_tags.tag_platforms("alloy") == {"docker"}
+
+
+def test_landing_hosts_drops_the_staging_guest_but_keeps_the_pi(tmp_path):
+    """Issue #935's follow-through: `hosts` must not route a tag to daniel-stage.
+
+    daniel-stage declares the STAGING_SUBSET tags, and land.sh runs `deploy.sh -e target=<host>`
+    for every host `hosts` prints. daniel-box cannot route to the staging guest, so that deploy
+    fails unreachable after the box's own succeeded. `tags_by_host` keeps listing staging (it
+    answers who declares the tag); only the landing shape drops it.
+    """
+    (tmp_path / "daniel-box.yml").write_text(
+        "containers_list:\n  - name: node-exporter\n    platform: k8s\n"
+    )
+    (tmp_path / "daniel-pi.yml").write_text(
+        "containers_list:\n  - name: node-exporter\n"
+    )
+    (tmp_path / "daniel-stage.yml").write_text(
+        "containers_list:\n  - name: node-exporter\n    platform: k8s\n"
+    )
+    assert deploy_tags.tags_by_host(["node-exporter"], tmp_path) == {
+        "daniel-box": ["node-exporter"],
+        "daniel-pi": ["node-exporter"],
+        "daniel-stage": ["node-exporter"],
+    }
+    assert deploy_tags.landing_hosts(["node-exporter"], tmp_path) == {
+        "daniel-box": ["node-exporter"],
+        "daniel-pi": ["node-exporter"],
+    }
+
+
+def test_hosts_never_prints_the_staging_guest(capsys):
+    """Non-vacuity against the live inventory: the staging guest declares tags, and none of
+    them may reach land.sh's per-host deploy loop under that host."""
+    staged = {
+        host
+        for host, _platform, _tag in deploy_tags.service_records()
+        if host in deploy_tags.HOSTS_LAND_SH_NEVER_DEPLOYS
+    }
+    assert staged == {"daniel-stage"}, "the staging guest no longer declares any tag"
+    assert deploy_tags.main(["hosts", "node-exporter,traefik,authelia"]) == 0
+    out = capsys.readouterr().out
+    assert "daniel-stage" not in out
+    assert out.startswith("daniel-box\t")
+    assert "daniel-pi\tnode-exporter\n" in out
