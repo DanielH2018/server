@@ -11,7 +11,7 @@ import sys as _sys
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
-from deploy_tools.land_lib import ci, classify, merge, tick
+from deploy_tools.land_lib import ci, classify, deploy, merge, tick
 from deploy_tools.land_lib.landing import Landing
 from deploy_tools.land_lib.outcome import Outcome
 
@@ -41,4 +41,5 @@ def _phases(ln: Landing) -> None:
     print("== 4/6  GitOps tick (fetch, ff-merge, deploy what is eligible)")
     tick.run_tick(ln)
     ln.ledger.t_tick = ln.tools.clock()
-    ln.die("deploy phase not yet ported", 1)
+    deploy.deploy_phase(ln)
+    ln.die("health phase not yet ported", 1)
