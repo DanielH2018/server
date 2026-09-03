@@ -72,13 +72,25 @@ services:
       # crons write as uid 1000 and this container already runs as 1000:1000.
       - /var/log/pi-health:/var/log/pi-health:ro
     environment:
-      # A HARD ceiling on the Go heap, not a hint. The Go runtime will happily grow to whatever
-      # the cgroup allows and only collect under pressure; GOMEMLIMIT makes it collect early
-      # instead, which is the right trade on a host with ~165 MiB free — CPU is cheaper here
-      # than RAM. Measured 2026-09-02 under this limit: 34-43 MiB RSS across twelve 5-minute
-      # samples of the spike hour (49 MiB in its first minute), no OOM kill, against
-      # Promtail's 15-22 MiB for the same two sources.
-      - GOMEMLIMIT=48MiB
+      # A soft ceiling on the Go runtime's TOTAL memory (heap, stacks, GC metadata, everything
+      # `go_memstats_sys_bytes` counts), not on the live heap. When the total reaches it the
+      # runtime collects continuously, and the only thing bounding that is the GC CPU limiter
+      # at 50% of GOMAXPROCS. This shipped as 48MiB on 2026-09-02, sized from RSS (34-43 MiB)
+      # rather than from the runtime total, and that is exactly the state it ran in: sys_bytes
+      # 58.7 MB against a 48 MiB limit, 2 GC cycles per second to ship 1.6 log lines per
+      # second, and 0.27-0.29 of a core steady for 7 days — the limiter's 50% of one processor,
+      # and the largest single load on the host (#932, the host contention behind #930).
+      #
+      # 72MiB leaves ~20 MiB over the measured total, so the limit is the spike ceiling it was
+      # meant to be and GOGC drives steady-state collection. Sized 2026-09-03 from
+      # `go_memstats_sys_bytes` = 58.7 MB, `go_memstats_heap_alloc_bytes` ≈ 19-37 MB across a
+      # cycle, allocation rate 152 KB/s.
+      - GOMEMLIMIT=72MiB
+      # Collect when the heap grows 50% past its live size, not the default 100%. Live heap is
+      # ~19 MiB, so this holds RSS near the 41 MiB it had under the old limit, and at 152 KB/s
+      # of allocation a cycle comes every ~60s instead of twice a second. CPU is not cheaper
+      # than RAM on this host after all: the 1c9592c1 shape spent 0.28 cores to save ~10 MiB.
+      - GOGC=50
       # One GC-visible processor. Alloy defaults GOMAXPROCS to the 4 cores on this Pi and
       # spawns a worker set to match, which is pure contention for a job this small on a box
       # that already showed RCU stalls from fork rate.
@@ -105,8 +117,8 @@ services:
 
       # Watchtower
       - "com.centurylinklabs.watchtower.depends-on=docker-proxy"
-    # 96M is the containment cap, ~2x the 48 MiB GOMEMLIMIT above so a spike is collected
-    # rather than OOM-killed. Startup under the 0.30 CPU cap takes minutes on this host (the
+    # 96M is the containment cap, 24 MiB over the 72 MiB GOMEMLIMIT above so a spike is
+    # collected rather than OOM-killed. Startup under the 0.30 CPU cap takes minutes on this host (the
     # binary is large and arm64 decompression is slow); it is not a hang.
     {{ resources('0.30', '96M', '0.02', '24M') }}
 
