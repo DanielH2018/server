@@ -166,6 +166,14 @@ def test_land_still_invokes_the_deployer():
     assert "./scripts/deploy.sh --tags" in _LAND_SH
 
 
+def test_land_deploys_each_tag_on_the_host_that_declares_it():
+    """Issue #929: `--tags alloy` on daniel-box matched no service, exited 0, and the landing read
+    `settled` while daniel-pi ran the old container. land.sh asks deploy_tags.py which host declares
+    each tag and adds `-e target=` for one that is not the local node."""
+    assert "deploy_tags.py hosts" in _LAND_SH
+    assert '-e "target=$host"' in _LAND_SH
+
+
 def test_a_build_role_pulls_in_the_workload_that_runs_its_image():
     """PR #570's real shape: a build role must pull in the workload that runs its image.
 

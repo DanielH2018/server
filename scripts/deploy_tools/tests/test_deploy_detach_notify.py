@@ -143,6 +143,80 @@ def test_check_one_unhealthy_is_not_confused_with_not_applicable():
     assert "sonarr" in detail
 
 
+def test_check_one_probes_a_docker_only_tag_on_the_pi_and_never_the_cluster():
+    """Issue #929: `alloy` is the Pi's log shipper and the name of loki-homelab's cluster
+    DaemonSet. Probing k8s first found the DaemonSet's 2/2 ready and reported the Pi's
+    undeployed container healthy. A tag only a Docker host declares asks the Pi alone."""
+    calls = []
+
+    def run(argv, **kwargs):
+        calls.append(argv)
+        if "--docker" in argv:
+            return _result(0, "alloy: running, health=healthy, restarts=0")
+        return _result(0, "alloy: 2/2 ready, 2 updated, restarts=0")
+
+    state, detail = notify_mod.check_one("alloy", run=run, platforms={"docker"})
+    assert state == "ok"
+    assert "health=healthy" in detail
+    assert len(calls) == 1
+    assert "--docker" in calls[0]
+
+
+def test_check_one_docker_only_tag_missing_on_the_pi_is_unhealthy_not_skipped():
+    """The reject half: the cluster's same-named workload cannot rescue the verdict."""
+
+    def run(argv, **kwargs):
+        if "--docker" in argv:
+            return _result(
+                1,
+                "alloy: MISSING — daniel-pi's inventory declares this service and the host "
+                "has no such container, so the deploy did not create it",
+            )
+        return _result(0, "alloy: 2/2 ready, 2 updated, restarts=0")
+
+    state, detail = notify_mod.check_one("alloy", run=run, platforms={"docker"})
+    assert state == "unhealthy"
+    assert "MISSING" in detail
+
+
+def test_check_one_k8s_only_tag_never_falls_back_to_the_pi():
+    calls = []
+
+    def run(argv, **kwargs):
+        calls.append(argv)
+        return _result(1, "sonarr: 0/1 ready, 0 updated, restarts=4 — RECENT RESTART")
+
+    state, _ = notify_mod.check_one("sonarr", run=run, platforms={"k8s"})
+    assert state == "unhealthy"
+    assert not any("--docker" in argv for argv in calls)
+
+
+def test_check_one_tag_on_both_platforms_needs_the_pi_healthy():
+    def run(argv, **kwargs):
+        if "--docker" in argv:
+            return _result(1, "wg-easy: exited, health=unhealthy, restarts=3")
+        return _result(0, "wg-easy: 1/1 ready, 1 updated, restarts=0")
+
+    state, detail = notify_mod.check_one(
+        "wg-easy", run=run, platforms={"docker", "k8s"}
+    )
+    assert state == "unhealthy"
+    assert "exited" in detail
+
+
+def test_check_one_reads_platforms_from_the_inventory_when_not_given():
+    """alloy is declared on daniel-pi alone, so the real inventory routes it to --docker."""
+    calls = []
+
+    def run(argv, **kwargs):
+        calls.append(argv)
+        return _result(0, "alloy: running (no healthcheck), restarts=0")
+
+    state, _ = notify_mod.check_one("alloy", run=run)
+    assert state == "ok"
+    assert calls and all("--docker" in argv for argv in calls)
+
+
 def test_check_one_survives_a_timeout():
     def run(argv, **kwargs):
         raise __import__("subprocess").TimeoutExpired(argv, kwargs.get("timeout", 30))

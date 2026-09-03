@@ -286,3 +286,48 @@ def test_changed_default_ref_is_origin_master():
     finally:
         deploy_tags._git_diff_paths = orig
     assert parser_ref == ["origin/master"]
+
+
+def test_tags_by_host_routes_each_tag_to_the_host_declaring_it(host_vars):
+    """Issue #929: a Pi-only tag deployed on the cluster node matched nothing and read settled."""
+    assert deploy_tags.tags_by_host(["dozzle", "jellyfin"], host_vars) == {
+        "host_a": ["jellyfin"],
+        "host_b": ["dozzle"],
+    }
+
+
+def test_tags_by_host_lists_a_tag_declared_on_two_hosts_under_both(tmp_path):
+    (tmp_path / "box.yml").write_text(
+        "containers_list:\n  - name: wg-easy\n    platform: k8s\n"
+    )
+    (tmp_path / "pi.yml").write_text("containers_list:\n  - name: wg-easy\n")
+    assert deploy_tags.tags_by_host(["wg-easy"], tmp_path) == {
+        "box": ["wg-easy"],
+        "pi": ["wg-easy"],
+    }
+
+
+def test_tags_by_host_drops_a_tag_no_host_declares(host_vars):
+    """The reject half: a block tag or a typo lands under no host, so nothing is targeted."""
+    assert deploy_tags.tags_by_host(["config", "jellifin"], host_vars) == {}
+
+
+def test_tag_platforms_reads_the_declaring_platforms(host_vars):
+    assert deploy_tags.tag_platforms("dozzle", host_vars) == {"docker"}
+    assert deploy_tags.tag_platforms("jellyfin", host_vars) == {"k8s"}
+    assert deploy_tags.tag_platforms("config", host_vars) == set()
+
+
+def test_hosts_prints_one_tab_separated_line_per_host(capsys, monkeypatch, host_vars):
+    real = deploy_tags.tags_by_host
+    monkeypatch.setattr(
+        deploy_tags, "tags_by_host", lambda tags, hv=host_vars: real(tags, hv)
+    )
+    assert deploy_tags.main(["hosts", "dozzle,jellyfin,sonarr,config"]) == 0
+    assert capsys.readouterr().out == "host_a\tjellyfin,sonarr\nhost_b\tdozzle\n"
+
+
+def test_real_inventory_routes_the_pi_log_shipper_to_the_pi():
+    """Non-vacuity against the live inventory: the tag from issue #929 resolves to daniel-pi."""
+    assert deploy_tags.tags_by_host(["alloy"]) == {"daniel-pi": ["alloy"]}
+    assert deploy_tags.tag_platforms("alloy") == {"docker"}
