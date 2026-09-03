@@ -3,6 +3,9 @@
 Authelia guards most public routes as a Traefik forward-auth middleware. See repo-root
 `CLAUDE.md` for shared conventions.
 
+**Deploy tag:** `--tags "authelia"`. Denylisted from GitOps auto-deploy (platform — SSO/OIDC
+gate; a failed deploy locks out access to everything behind it, including the tools to fix it).
+
 ## Traps
 
 ### The one-time code lives in the pod's notification.txt

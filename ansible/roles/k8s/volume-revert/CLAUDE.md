@@ -9,6 +9,9 @@ Deployment to zero, reverts, and leaves it there. The apply that follows in the 
 restores `replicas: 1` from the manifest — one rollout instead of two, and no race between
 them. A caller that reverts without applying afterwards leaves the service down.
 
+**No standalone deploy tag.** Callers reach `k8s/volume-revert` via `include_role`, keyed off
+`volume_revert_sha`, not `--tags volume-revert`; see `defaults/main.yml` and the callers below.
+
 **This code path runs only during an incident.** Nothing exercises it on a good day. That is
 why every step that can fail on its own account is checked before the scale-down, and why
 `ansible/tests/longhorn/test_volume_revert.py` pins claim.yml's whole sequence rather than a few pairs.

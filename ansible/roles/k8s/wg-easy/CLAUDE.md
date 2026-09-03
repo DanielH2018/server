@@ -6,6 +6,8 @@ is broken. Written 2026-08-24; the role had no `CLAUDE.md`, and the only wg-easy
 was `roles/containers/wg-easy/CLAUDE.md`, which describes the retired daniel-server **Docker**
 instance and a different auth model.
 
+**Deploy tag:** `--tags "wg-easy"`.
+
 **Do not read the two as one service.** They differ in platform, version, auth and UDP port:
 
 | | this role (k3s) | `roles/containers/wg-easy` (Docker) |

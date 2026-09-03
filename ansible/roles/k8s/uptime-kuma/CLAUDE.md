@@ -3,6 +3,8 @@
 Uptime Kuma plus an AutoKuma sidecar that creates monitors and notifications from this
 role's rendered declarations. See repo-root `CLAUDE.md` for shared conventions.
 
+**Deploy tag:** `--tags "uptime-kuma"`.
+
 ## Traps
 
 ### AutoKuma 2.0.0 drops resendInterval on push monitors

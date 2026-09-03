@@ -9,6 +9,7 @@ runbooks, design documents and generated reference pages are readable in a brows
 - **Host:** pinned to `daniel-box` (`docs_k8s_node`), because it bind-mounts that host's built
   site.
 - **Serves:** `docs_host_site_dir` (`/home/<user>/docs-site`), read-only.
+- **Deploy tag:** `--tags "docs"`.
 - **Config in:** `ansible/inventory/host_vars/daniel-box.yml` → `containers_list`,
   `platform: k8s`. **Public as well as LAN**, `use_authelia: true` — the ingressroute call
   passes no `public`, and the macro's default is `public=true`. This said LAN-only

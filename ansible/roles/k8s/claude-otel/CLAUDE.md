@@ -154,3 +154,5 @@ Healthy output after one probe session: metric names `session_count`, `token_usa
 **verbatim**. That is the intended configuration, and it is the reason the OTLP port is
 bound to loopback rather than published. Treat Loki's retention window as holding the same
 sensitivity as the transcripts themselves.
+
+**Deploy tag:** `--tags "claude-otel"`.

@@ -13,6 +13,7 @@ else in the tree documents.
 - **Serves:** `artifacts_host_dir` (`~/.claude/artifacts`, daniel-box's own) and
   `artifacts_peer_dir` (`~/.claude/artifacts-peer`, everything pulled from peers).
 - **Config in:** `ansible/inventory/host_vars/daniel-box.yml` → `containers_list`, `platform: k8s`.
+- **Deploy tag:** `--tags "artifacts"`.
 
 ## The peer sync is a pull, and the direction is not arbitrary
 `tasks/main.yml` installs `/usr/local/bin/sync-artifacts.sh` and a cron
