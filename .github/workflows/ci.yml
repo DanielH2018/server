@@ -296,8 +296,13 @@ jobs:
           key: galaxy-${{ runner.os }}-${{ hashFiles('ansible/requirements.yml') }}
       - name: Install Ansible collections
         run: uv run ansible-galaxy collection install -r ansible/requirements.yml -p ansible/collections
+      # --durations=15 because this job is the pole of the whole landing: its test step measured
+      # 267s against the `hooks` job beside it at 29-46s, and a landing waits on CI twice. The
+      # runner is ~4x slower per test than the workstation, so a local `--durations` run does not
+      # tell you which tests dominate HERE. Printing it on every run means the next person to
+      # attack this reads the answer off a green build instead of guessing at the shape.
       - name: Run the test suite
-        run: uv run python -m pytest --color yes
+        run: uv run python -m pytest --color yes --durations=15
 
   # The required status context. Branch protection, the deployer's CI_CONTEXTS, await_ci.py
   # and the ruleset-drift cron all name "prek (lint + validate + tests + secrets)", so that name
