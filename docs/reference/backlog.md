@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/backlog.py
-generated_at: 2026-09-02 18:17 UTC
-generated_sha: b49b867a
+generated_at: 2026-09-03 06:17 UTC
+generated_sha: 21556bbe
 ---
 
 !!! warning "Generated file — do not edit"
@@ -14,7 +14,4 @@ generated_sha: b49b867a
 
 Findings Claude confirmed and did not fix in the session that found them, filed through `scripts/dev/findings.py` and labelled `claude` on GitHub. A row that has been seen three times carries **escalated** (the filing plus two re-observations) and needs a durable owner: a test, a hook or a CLAUDE.md rule. Close one from a PR body with `Closes #<n>`.
 
-| # | Severity | Kind | Domain | Finding | First seen | Re-observed |
-|---|---|---|---|---|---|---|
-| [#862](https://github.com/DanielH2018/server/issues/862) | low | improvement | cicd | Code scanning runs under default setup, so every false positive costs a hand-dismissal that a refactor undoes | 2026-09-02 | 0 |
-| [#866](https://github.com/DanielH2018/server/issues/866) | low | addition | - | Give navidrome a real music library and unpark it | 2026-09-02 | 0 |
+No open findings.

@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/networking.py
-generated_at: 2026-08-29 06:17 UTC
-generated_sha: 41bb5baa
+generated_at: 2026-09-03 06:17 UTC
+generated_sha: 21556bbe
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 41bb5baa
 
 # Networking
 
-38 routed k8s service(s).
+39 routed k8s service(s).
 
 !!! note "The domain is filled in by your browser"
     `domain` is SOPS-sourced with no static default, and these pages are rendered by static parsing, so the generator writes `<domain>` rather than guessing. On the docs site the routes below become links, built from the domain of the URL you are reading this on — so you get LAN links on the LAN name and public links on the public one.
@@ -48,6 +48,7 @@ generated_sha: 41bb5baa
 | loki-homelab | daniel-box | <span class="fqdn" data-host="loki-homelab">loki-homelab.&lt;domain&gt;</span> · <span class="fqdn" data-host="loki-homelab.local">loki-homelab.local.&lt;domain&gt;</span> | LAN + public | `rate-limit` |
 | longhorn-ui | daniel-box | <span class="fqdn" data-host="longhorn.local">longhorn.local.&lt;domain&gt;</span> (LAN only) | LAN only | `rate-limit`, `authelia` |
 | n8n | daniel-box | <span class="fqdn" data-host="n8n">n8n.&lt;domain&gt;</span> · <span class="fqdn" data-host="n8n.local">n8n.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
+| navidrome | daniel-box | <span class="fqdn" data-host="navidrome">navidrome.&lt;domain&gt;</span> · <span class="fqdn" data-host="navidrome.local">navidrome.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
 | peanut | daniel-box | <span class="fqdn" data-host="peanut">peanut.&lt;domain&gt;</span> · <span class="fqdn" data-host="peanut.local">peanut.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
 | pihole | daniel-box | <span class="fqdn" data-host="pihole">pihole.&lt;domain&gt;</span> · <span class="fqdn" data-host="pihole.local">pihole.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
 | prowlarr | daniel-box | <span class="fqdn" data-host="prowlarr">prowlarr.&lt;domain&gt;</span> · <span class="fqdn" data-host="prowlarr.local">prowlarr.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
