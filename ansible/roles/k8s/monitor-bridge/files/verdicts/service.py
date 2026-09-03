@@ -244,22 +244,51 @@ def loki_ingestion_fresh(count, window):
     return True, "%d log lines in %s" % (int(count), window)
 
 
-def shipper_dropped(count, window, threshold):
-    """Pure: did a log shipper drop more than `threshold` entries over `window`? (ok, msg).
+def shipper_dropped(client_count, server_reasons, window, threshold):
+    """Pure: did the shipper give up on entries, or did Loki discard them, past `threshold`?
 
-    `count` = sum(increase(<dropped-entries counters>[window])) over ALL drop reasons
+    (ok, msg). Reports whichever side lost MORE over `window`.
+
+    `client_count` = sum(increase(<dropped-entries counters>[window])) over ALL drop reasons
     (ingester_error / rate_limited / stream_limited / line_too_long) and both shippers (Alloy on
-    the cluster, Promtail on the Pi), None when no counter has a series (reads as 0). Above the
-    threshold means Loki was rejecting entries and the shipper gave up on them — partial log loss
-    the total-silence Loki Log Ingestion check can't see.
+    the cluster, Promtail on the Pi), None when no counter has a series (reads as 0). That is
+    the CLIENT side of the pipe: a shipper only counts what IT gave up on.
+
+    `server_reasons` = [(reason, count), ...] from Loki's own distributor-side
+    `loki_discarded_samples_total`, one entry per `reason` label, [] when no series. This is
+    the SERVER side: entries Loki itself rejected, including a burst the shipper never
+    attributes to itself. Measured 2026-09-03: Loki discarded 161,573 samples server-side
+    (reason=too_far_behind) in a 24h window where the client-side counter recorded only 1,027
+    (reason=ingester_error) — the client side alone understated real loss by ~150x, and would
+    not have fired at all had the client not separately logged an unrelated ingester_error.
+
+    Whichever total is larger decides the verdict, so a burst attributed to only one side still
+    pages. The server side names the reason that fired: `too_far_behind` means entries arrived
+    outside Loki's accept window — a clock/backfill problem — where every other reason
+    (rate_limited / stream_limited / line_too_long) is a throughput or limit problem, and the
+    operator needs to know which they are chasing.
     """
-    n = count or 0.0
-    if n > threshold:
-        return False, (
-            "log shipper dropped %.0f entries in %s (> %.0f) — partial log loss"
-            % (n, window, threshold)
+    client_n = client_count or 0.0
+    server_reasons = server_reasons or []
+    server_n = sum(c for _, c in server_reasons)
+    n = max(client_n, server_n)
+    if n <= threshold:
+        return True, "shipper drops ok (client %.0f, server %.0f in %s)" % (
+            client_n,
+            server_n,
+            window,
         )
-    return True, "shipper drops ok (%.0f in %s)" % (n, window)
+    if server_n >= client_n:
+        top_reason, top_count = max(server_reasons, key=lambda kv: kv[1])
+        return False, (
+            "Loki discarded %.0f entries in %s (> %.0f), reason=%s (%.0f) — server-side "
+            "loss the shipper's own counter did not attribute to itself"
+            % (server_n, window, threshold, top_reason, top_count)
+        )
+    return False, (
+        "log shipper dropped %.0f entries in %s (> %.0f) — partial log loss"
+        % (client_n, window, threshold)
+    )
 
 
 def discord_webhook_ok(status_code, name=None):

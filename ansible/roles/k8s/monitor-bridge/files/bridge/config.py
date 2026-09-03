@@ -703,6 +703,22 @@ SHIPPER_DROPPED_METRICS = _env(
     "SHIPPER_DROPPED_METRICS",
     "loki_write_dropped_entries_total",
 )
+# The SERVER side of the same pipe (2026-09-03, #993): the shipper counter above only sees
+# what a shipper itself gave up on. Loki's distributor discards entries the shipper never
+# attributes to itself — 161,573 samples (39.4 MB) discarded server-side in a 24h window where
+# the shipper counted 1,027, all under a DIFFERENT reason (ingester_error vs
+# too_far_behind) — so the client-side counter alone understated real loss by ~150x and would
+# have missed a burst the client never logged at all. Scraped from Loki itself
+# (job=loki-homelab) by the same Prometheus every other PROM_DEPENDENT check reads, broken
+# down `by (reason)` in the query so a fired check can name which reason: `too_far_behind`
+# (entries arriving outside Loki's accept window — a clock/backfill problem) versus
+# rate_limited/stream_limited/line_too_long (throughput/limit problems). Shares
+# SHIPPER_DROPPED_WINDOW/_MAX with the client-side arm — both sides count dropped log lines
+# at comparable magnitude, and shipper_dropped() reports whichever side is larger.
+SHIPPER_DROPPED_SERVER_METRIC = _env(
+    "SHIPPER_DROPPED_SERVER_METRIC",
+    "loki_discarded_samples_total",
+)
 SHIPPER_DROPPED_WINDOW = _env("SHIPPER_DROPPED_WINDOW", "1h")
 SHIPPER_DROPPED_MAX = float(_env("SHIPPER_DROPPED_MAX", "1000"))
 

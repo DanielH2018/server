@@ -623,21 +623,48 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     `LOKI_STREAM`/`LOKI_FILETAIL_WINDOW`/`LOKI_DOCKER_STREAM`/`LOKI_WINDOW`/`LOKI_PI_STREAM`. Pure
     `loki_ingestion_fresh()` + `loki_count()` are unit-tested. A freshness watchdog in the same
     idiom as the SMART/restore-drill checks.)
-  - **Log Shipper Dropped Entries** (`sum(increase({__name__=~"loki_write_dropped_entries_total"}[1h]))`
-    from Prometheus, which scrapes both shippers — the cluster Alloy DaemonSet (`job=alloy`, port 12345) and
-    daniel-pi's Alloy container (`job=alloy-pi`) — `down` above `SHIPPER_DROPPED_MAX` (1000)
-    entries dropped in the window. Where **Loki Log Ingestion** catches TOTAL silence, this surfaces
-    PARTIAL loss: entries a shipper gave up on across ALL drop reasons (`ingester_error`,
-    `rate_limited`, `stream_limited`, `line_too_long` — the selector dropped its `ingester_error`-only
-    filter on 2026-07-15, review M2, so Loki's own configured limits no longer reject logs unseen).
-    The threshold keeps a transient Loki restart's handful
-    of drops from paging; `increase()` handles counter resets; no series → 0 → up (a dead shipper
-    scrape is Scrape Targets' page). **Prom-dependent** — suppressed under the Prometheus gate. Pure
-    `shipper_dropped()` is unit-tested; `SHIPPER_DROPPED_WINDOW`/`SHIPPER_DROPPED_MAX` tune it. A shipper's
-    FIRST start re-tails every current file from offset 0 and Loki rejects the already-ingested history
-    as "too far behind", counted under `reason="ingester_error"` — 193,348 at the 2026-09-02 Alloy
-    cutover, nothing lost — so expect one page per shipper cutover, and land a shipper change more
-    than an hour before pointing this check at its counter.)
+  - **Log Shipper Dropped Entries** (two arms, `down` on whichever counted MORE — added
+    2026-09-03, #993, after the CLIENT-only arm was measured understating the server-side total
+    by ~150x with nothing reading the server side at all. **Arm 1, client-side:**
+    `sum(increase({__name__=~"loki_write_dropped_entries_total"}[1h]))` from Prometheus, which
+    scrapes both shippers — the cluster Alloy DaemonSet (`job=alloy`, port 12345) and
+    daniel-pi's Alloy container (`job=alloy-pi`) — across ALL drop reasons (`ingester_error`,
+    `rate_limited`, `stream_limited`, `line_too_long` — the selector dropped its
+    `ingester_error`-only filter on 2026-07-15, review M2). This only sees what a shipper
+    itself gave up on. **Arm 2, server-side:**
+    `sum by (reason) (increase({__name__=~"loki_discarded_samples_total"}[1h]))` read directly
+    from Loki's own distributor (`job=loki-homelab`) — entries Loki rejected that no shipper
+    ever attributed to itself. Measured 2026-09-03: Loki discarded 161,660 samples server-side
+    under `reason="too_far_behind"` in the trailing 24h, where the client-side counter saw only
+    1,027 in the same window, entirely on `job=alloy-pi` under the unrelated
+    `reason="ingester_error"` — the client-side arm alone gave no visibility into the
+    server-side total or its real reason. `down` when either arm's total exceeds
+    `SHIPPER_DROPPED_MAX` (1000) over the window; the message names which reason fired when the
+    server-side arm is the one that dominates — `too_far_behind` is a clock/backfill problem,
+    every other reason is throughput/limits, and the operator needs to know which. Where **Loki
+    Log Ingestion** catches TOTAL silence, this surfaces PARTIAL loss either shipper- or
+    Loki-side. The threshold keeps a transient Loki restart's handful of drops from paging;
+    `increase()` handles counter resets; no series on either arm → 0 → up (a dead shipper
+    scrape is Scrape Targets' page). **Prom-dependent** — suppressed under the Prometheus gate.
+    Pure `shipper_dropped()` is unit-tested; `SHIPPER_DROPPED_WINDOW`/`SHIPPER_DROPPED_MAX` tune
+    both arms, `SHIPPER_DROPPED_METRICS`/`SHIPPER_DROPPED_SERVER_METRIC` tune which counters
+    they read — both queried by `__name__` regex, not a bare metric name, so a counter rename
+    on either side can't silently read as "0 dropped forever".
+    **Reading a `too_far_behind` page:** a shipper's FIRST start re-tails every current file
+    from offset 0, and Loki rejects the already-ingested history as "too far behind" — 193,348
+    at the 2026-09-02 cluster Alloy cutover, nothing lost, counted client-side under
+    `reason="ingester_error"` (the client-side counter folds `too_far_behind` into
+    `ingester_error` regardless of what Loki itself calls the rejection — the label only ever
+    surfaces as `too_far_behind` on the SERVER-side arm). The 2026-09-03 #993 burst above lines
+    up with the same shape: `alloy-pi`'s own uptime measured 58,756s (~16.3h) at discovery time,
+    inside the 24h window the burst was measured over, and the client-side drops that same
+    window were 100% `job=alloy-pi`. A shipper restart in the window is consistent with a
+    benign re-tail, not confirmation of one — correlate `time() - process_start_time_seconds{job=~"alloy.*"}`
+    against the alert window before treating a `too_far_behind` page as data loss. Either way
+    it must page: a benign re-tail still means the SLA on "logs land in Loki promptly" briefly
+    broke, and nothing but this arm would have shown an operator the shape of what happened.
+    Land a shipper change more than an hour before pointing this check at its counters, to
+    keep the cutover's own re-tail from paging the deploy.)
   - **Discord Delivery** (GET-verifies **all five** Discord notification webhooks: Kuma's own
     `monitor_discord_webhook_url` — the one Kuma POSTs every alert to — CrowdSec's
     `crowdsec_discord_webhook_url`, which CrowdSec POSTs ban alerts to *directly* (not via Kuma),
