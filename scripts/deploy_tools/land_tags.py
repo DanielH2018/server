@@ -437,7 +437,7 @@ def derive(
     return sorted(tags), "pr"
 
 
-def _quiet_paths(paths: list[str], range_: str) -> set[str]:
+def quiet_paths(paths: list[str], range_: str) -> set[str]:
     """The broad paths in `paths` whose change over `<old>..<new>` is comments only.
 
     Empty when no range was given, or when the range is malformed, or when git cannot read
@@ -502,7 +502,7 @@ def main(argv: list[str] | None = None) -> int:
     ns = parser.parse_args(argv)
     payload = json.loads(ns.json)
     paths = [f["path"] for f in payload.get("files", [])]
-    quiet = _quiet_paths(paths, ns.range_)
+    quiet = quiet_paths(paths, ns.range_)
     if ns.plane:
         print(plane_note(paths, quiet=quiet))
         return 0

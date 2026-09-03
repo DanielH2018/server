@@ -795,7 +795,7 @@ def test_an_unusable_range_reads_nothing_as_quiet():
     this cannot use must never widen what gets dropped.
     """
     for range_ in ("", "..", "abc", "..def", "ghi.."):
-        assert land_tags._quiet_paths(_PR_843, range_) == set(), range_
+        assert land_tags.quiet_paths(_PR_843, range_) == set(), range_
 
 
 def test_a_range_narrower_than_the_file_list_reads_nothing_as_quiet(monkeypatch):
@@ -812,7 +812,7 @@ def test_a_range_narrower_than_the_file_list_reads_nothing_as_quiet(monkeypatch)
         "comment_only_paths",
         lambda paths, old, new: set(paths),
     )
-    assert land_tags._quiet_paths(["a.yml", "b.yml"], "old..new") == set()
+    assert land_tags.quiet_paths(["a.yml", "b.yml"], "old..new") == set()
 
 
 def test_a_range_covering_the_file_list_is_read(monkeypatch):
@@ -823,7 +823,7 @@ def test_a_range_covering_the_file_list_is_read(monkeypatch):
     monkeypatch.setattr(
         land_tags.deploy_tags, "comment_only_paths", lambda paths, old, new: {"a.yml"}
     )
-    assert land_tags._quiet_paths(["a.yml", "b.yml"], "old..new") == {"a.yml"}
+    assert land_tags.quiet_paths(["a.yml", "b.yml"], "old..new") == {"a.yml"}
 
 
 def test_land_reads_the_prs_own_range_from_the_pull_ref():
