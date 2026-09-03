@@ -83,6 +83,19 @@ killing it, so a rollout check alone reports green on a crashlooping pod.
 which is why it died with `FileNotFoundError: 'docker'` on both cluster nodes for the two days
 after the Docker retirement.
 
+A role with no Deployment/DaemonSet/StatefulSet but a CronJob — configarr and pi-peer-backup
+today — is gated the same way on its most recent Job instead
+(`scripts/diagnostics/probe_lib/health.py`'s `format_cronjob_health`): the Job must have
+succeeded, be newer than the deploy that just ran (read from the `release_stamp.yml` record),
+and carry no restarted container. `homelab-readonly`, the identity `probe.py` runs as, cannot
+create a Job — verified live with `k3s kubectl auth can-i create jobs`, which the `view`
+ClusterRole it is bound to refuses — so this only ever reads the Job `k8s/cronjob-gate` already
+created at deploy time, never triggers one. When no Job has landed since the deploy, it falls
+back to the CronJob's own daily/weekly schedule: the previous run must have succeeded and not be
+more than twice its interval old. Any other schedule shape fails closed rather than guess an
+interval. A role with neither a workload nor a CronJob (media-volume, netpol-baseline) still
+reports "declares no rollout-checkable workload," which the deploy notifier skips.
+
 ### `ha …`
 
 Reads live Home Assistant state, authed with the SOPS `claude_ha_token`. `ha automation
