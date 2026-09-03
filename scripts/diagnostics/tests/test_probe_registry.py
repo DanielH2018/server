@@ -56,7 +56,7 @@ def test_list_flag_prints_every_subcommand_with_a_description(capsys):
     assert probe.main(["--list"]) == 0
     out = capsys.readouterr().out
     lines = out.strip().splitlines()
-    assert len(lines) == len(probe.SUBCOMMANDS) == 22
+    assert len(lines) == len(probe.SUBCOMMANDS) == 23
     for name, description, _module, _func in probe.SUBCOMMANDS:
         assert any(line.startswith(name) and description in line for line in lines), (
             name,

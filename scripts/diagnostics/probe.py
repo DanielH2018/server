@@ -107,7 +107,11 @@ from diagnostics.probe_lib.monitors import run_kuma_drift, run_monitors
 from diagnostics.probe_lib.pi_plane import run_pi_containers, run_pi_targets
 from diagnostics.probe_lib.readonly_rbac import run_readonly_rbac
 from diagnostics.probe_lib.releases import run_releases
-from diagnostics.probe_lib.b2_ledger import run_b2_record, run_b2_spend
+from diagnostics.probe_lib.b2_ledger import (
+    run_b2_deletions,
+    run_b2_record,
+    run_b2_spend,
+)
 from diagnostics.probe_lib.longhorn import (
     LONGHORN_PREFIX,
     run_b2_budget,
@@ -177,6 +181,13 @@ SUBCOMMANDS = [
         "record a tool's B2 transaction spend in today's ledger",
         "b2_ledger",
         run_b2_record,
+    ),
+    (
+        "b2-deletions",
+        "charge completed Longhorn backup deletions to the ledger, priced from the last "
+        "b2-budget listing (exit 1 when one cannot be priced)",
+        "b2_ledger",
+        run_b2_deletions,
     ),
     (
         "longhorn-blocks",
@@ -398,6 +409,27 @@ def _build_parser():
     b2r.add_argument("--class-b", type=int, default=0, dest="class_b")
     b2r.add_argument("--class-c", type=int, default=0, dest="class_c")
     b2r.add_argument("--note", default="")
+    b2d = sub.add_parser(
+        "b2-deletions",
+        help="charge completed Longhorn backup deletions to today's ledger, priced from the "
+        "block-tree counts the last b2-budget listing wrote. Reads Loki and the Kubernetes "
+        "API; spends nothing on B2.",
+    )
+    b2d.add_argument("--since", default="26h", help="window, e.g. 30m/6h/2d/1w")
+    b2d.add_argument("--limit", type=int, default=1000)
+    b2d.add_argument(
+        "--target-url",
+        dest="target_url",
+        default="",
+        help="B2 backupTargetURL to charge against, when the BackupTarget CR cannot be read "
+        "(it is disarmed, or kubectl is unavailable)",
+    )
+    b2d.add_argument(
+        "--no-record",
+        action="store_true",
+        dest="no_record",
+        help="report what would be charged without writing the ledger",
+    )
     lb = sub.add_parser(
         "longhorn-blocks",
         help="census live Longhorn volumes by tier and backup block size; exit 1 when a "
@@ -640,6 +672,7 @@ def main(argv=None):
         "readonly-rbac": run_readonly_rbac,
         "vip-placement": run_vip_placement,
         "b2-record": run_b2_record,
+        "b2-deletions": run_b2_deletions,
         "ha-state": run_ha_state,
         "monitors": run_monitors,
         "kuma-drift": run_kuma_drift,
