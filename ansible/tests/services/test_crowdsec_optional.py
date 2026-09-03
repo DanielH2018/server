@@ -202,6 +202,21 @@ def test_authelia_drops_the_init_container_key_rather_than_emptying_it() -> None
     assert "initContainers" not in _pod_spec("authelia", False)
 
 
+def test_traefik_prestages_the_agent_config_so_the_entrypoint_never_rsyncs() -> None:
+    """The sidecar's first start died on every cold boot (#976): the image entrypoint
+    populates /etc/crowdsec with ``rsync`` under ``set -e``, and about twenty staged
+    files are root-only, so the non-root sidecar's rsync exited 23. The init container
+    runs that rsync itself, tolerating exit 23 alone, so config.yaml exists before the
+    sidecar starts and the entrypoint skips the block."""
+    inits = {c["name"]: c for c in _pod_spec("traefik", True)["initContainers"]}
+    script = inits["crowdsec-config-install"]["command"][-1]
+    assert "rsync -a --ignore-existing /staging/etc/crowdsec/* /etc/crowdsec" in script
+    assert '|| [ "$?" -eq 23 ]' in script, "only a partial transfer may be tolerated"
+    assert script.index("rsync") < script.index("install -m 644 /seed/acquis.yaml"), (
+        "the seeds must be installed after the rsync so they win over the staged copies"
+    )
+
+
 def test_traefik_keeps_its_init_container_key_while_acme_still_needs_it() -> None:
     """Traefik has two conditional init containers, so the key follows their disjunction."""
     spec = _pod_spec("traefik", False, traefik_k8s_manage_acme=True)

@@ -81,11 +81,23 @@ spec:
             - /bin/sh
             - -c
             - >-
+              (rsync -a --ignore-existing /staging/etc/crowdsec/* /etc/crowdsec
+              || [ "$?" -eq 23 ]) &&
               install -m 644 /seed/acquis.yaml /etc/crowdsec/ &&
               install -d /etc/crowdsec/parsers/s02-enrich &&
               install -m 644 /seed/whitelist.yaml /seed/trusted-remote-whitelist.yaml
               /etc/crowdsec/parsers/s02-enrich/ &&
               install -m 640 /dev/null /var/log/traefik/access.log
+          # The rsync is the image entrypoint's own "Populating configuration directory"
+          # step (build/docker/docker_start.sh at v1.7.8), which runs under `set -e` and
+          # only while /etc/crowdsec/config.yaml is absent. Run here so the sidecar never
+          # runs it: about twenty staged files are root-only (the LAPI/online credentials
+          # and the bundled hub tree), so a non-root rsync exits 23 (partial transfer) and
+          # set -e killed the sidecar's first start on every cold boot (#976). The kubelet's
+          # restart then found config.yaml, skipped the block, and worked — this seeds the
+          # same state up front. Exit 23 is the only status tolerated: the files it skips
+          # are ones the agent regenerates (`cscli lapi register`) or re-downloads (`cscli
+          # hub update`) on start regardless. Runs before the installs so the seeds win.
           # Pod default uid, not root: it creates the access log traefik must then write,
           # and root-with-ALL-caps-dropped cannot chown it back (measured on the authelia
           # pod). Creating the file as that user sidesteps the capability; the agent reads
