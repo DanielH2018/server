@@ -29,20 +29,28 @@
 # gates its off-site dead-man's-switch ping on it). Reading it is opt-in; ignoring it leaves
 # the pre-existing behaviour of every other caller unchanged.
 #
-# Retries once, after a fixed backoff, on anything that ISN'T Kuma answering with a permanent
-# 4xx (a bad token or similar — retrying cannot fix it, and delaying the log line that surfaces
-# it costs more than it buys). "Anything else" is two distinct cases, both real: curl itself
-# failing before a response exists (connection refused/reset, timeout, TLS — a `curl_rc != 0`),
-# and Traefik answering directly with a 5xx. The second is not hypothetical — uptime-kuma's
-# Deployment is `strategy: Recreate` on two RWO Longhorn PVCs (a rolling update deadlocks on a
-# single-replica volume), so a restart has a real window with zero ready endpoints, and Traefik
-# itself stays up throughout and answers "no server available" as an HTTP 503, not a dropped
-# connection. A classifier keyed on curl's blanket `-f` exit code (22 for ANY HTTP >=400) cannot
-# tell that 503 apart from a 401, and retrying on curl_rc alone while a rollout actually fails as
-# 503 would pass every test here and fire on none of the real pushes — the "green and inert"
-# failure this repo has paid for twice (repo-root CLAUDE.md). So this classifies on the HTTP
-# status curl reports via `-w`, not on `-f`'s collapse of it: retry a `curl_rc != 0` or a 5xx,
-# stop on a 4xx.
+# Retries up to twice more (three attempts total), after a fixed backoff, on anything that isn't
+# Kuma answering with a genuine permanent rejection — a bad or revoked token, HTTP 401/403
+# (retrying cannot fix those, and delaying the log line that surfaces them costs more than it
+# buys). Everything else retries: curl itself failing before a response exists (connection
+# refused/reset, timeout, TLS — a `curl_rc != 0`), a 5xx, AND a 4xx other than 401/403 —
+# in particular 404. That last one is not hypothetical and is, empirically, the DOMINANT case:
+# uptime-kuma's Deployment is `strategy: Recreate` on two RWO Longhorn PVCs (a rolling update
+# deadlocks on a single-replica volume), so a restart has a real window with zero ready
+# endpoints — but Traefik's KubernetesCRD provider drops a router entirely once its service has
+# no endpoints, rather than keeping the route and answering through it with a 503. Measured from
+# Traefik's access log over the 3 days to 2026-09-03: non-200 responses to `/api/push/` were
+# 88 x 404 (empty RouterName, OriginStatus 0 — no router matched and nothing was contacted)
+# against 5 x 503, 5 x 500 and 2 x 403. This library shipped classifying a rollout as a 503 and
+# stopping on every 4xx including that 404, which made the retry inert against the failure mode
+# it was written for (issue #1010) — it passed every test here while firing on none of the real
+# rollout pushes, the "green and inert" failure this repo has paid for more than once (repo-root
+# CLAUDE.md). So this classifies on the HTTP status curl reports via `-w`, not on `-f`'s collapse
+# of it: retry a `curl_rc != 0` or any HTTP code except 2xx/401/403, stop only on 401 or 403. A
+# no-router 404 and a bad-token 404 are indistinguishable to curl — the trade is that a
+# genuinely bad token now burns the retry budget before its log line appears, which the sibling
+# cron `ansible/roles/k8s/crowdsec/templates/crowdsec-update-home-allowlist.sh.j2` already
+# accepts and records for the same reason.
 #
 # Issue #994 measured 49 dropped pushes across 11 crons clustered at three uptime-kuma rollouts,
 # with every one of them computed as `status=up` and thrown away — the static monitors run
@@ -51,10 +59,14 @@
 #
 # The backoff is a fixed in-library constant, not a caller argument or an env read: the header
 # above already commits every caller-identity field to an explicit argument, and a retry-tuning
-# knob is a library-internal concern, not identity. At two attempts, a 10s --max-time each and a
-# single 30s backoff between them, the worst case is ~50s — well under the tightest affected
-# cron period (the CrowdSec home-allowlist updater, */5 = 300s) — so a genuinely-down Kuma still
-# cannot make a cron overlap its next run.
+# knob is a library-internal concern, not identity. Three attempts rather than two: issue #1010
+# measured the longest observed endpoint-less window at 31s (12:29:43-12:30:14 on 2026-09-03),
+# longer than a single 30s backoff, so a lone retry can still land inside the outage. Three
+# attempts at a fixed 30s backoff put the second retry at t=60s, ~2x that window — the same
+# margin the crowdsec sibling sized its own retry to. At a 10s --max-time each and two 30s
+# backoffs between them, the worst case is 90s — well under the tightest affected cron period
+# (the CrowdSec home-allowlist updater, */5 = 300s) — so a genuinely-down Kuma still cannot make
+# a cron overlap its next run.
 #
 # Considered and rejected: raising `max_retries` on the monitors instead. That turns a Kuma
 # rollout into a red tile — noise for a cause that is not a real outage — where a delivered
@@ -80,7 +92,7 @@ kuma_push() {
   # guard on the assignment (rather than reading $? on the next line) keeps this safe under a
   # future `set -e` caller — every current caller runs `set -uo pipefail`, not `-e`, but the
   # function has no way to know what a caller five years from now will set.
-  for attempt in 1 2; do
+  for attempt in 1 2 3; do
     http_code=$(
       printf 'url = "%s"\n' "$push_url" |
         curl -sS --max-time 10 -G -K - \
@@ -92,26 +104,26 @@ kuma_push() {
     if [ "$curl_rc" -eq 0 ]; then
       case "$http_code" in
       2??) return 0 ;;
-      # A 4xx is Kuma answering with a permanent rejection — retrying cannot fix it. Everything
-      # else (curl itself failing with curl_rc != 0, or a 5xx/unexpected code here) is the
-      # transient case this retry exists for.
-      4??) break ;;
+      # 401/403 are Kuma answering with a genuine permanent rejection (bad/revoked token) —
+      # retrying cannot fix it. Everything else — curl itself failing with curl_rc != 0, a 5xx,
+      # or any OTHER 4xx (in particular a 404: Traefik drops a route entirely once its service
+      # has no endpoints, rather than serving a 503 through it — issue #1010) — is the transient
+      # case this retry exists for.
+      401 | 403) break ;;
       esac
     fi
-    if [ "$attempt" -eq 1 ]; then
+    if [ "$attempt" -lt 3 ]; then
       logger -t "$tag" "push failed transiently (http=${http_code} rc=${curl_rc}) (status=${status}: ${msg}), retrying in ${retry_delay_s}s"
       sleep "$retry_delay_s"
     fi
   done
   # shellcheck disable=SC2034  # read by the sourcing script, not by this file
   KUMA_PUSH_OK=0
-  # http_code and curl_rc carry the LAST attempt's outcome. They are logged because the retry's
-  # classifier rests on an assumption nobody has observed: that a uptime-kuma rollout surfaces as
-  # a 503 from Traefik rather than a 4xx. A 4xx is the one class this does NOT retry, so if that
-  # assumption is wrong the retry is inert for real rollouts while passing every test. Logging
-  # the code settles it from the next rollout's journal instead of from another deploy —
-  # `journalctl --since ... | grep "push failed"` then reads the actual class. Neither value can
-  # carry the push token; both are numbers.
+  # http_code and curl_rc carry the LAST attempt's outcome. They are logged because a rollout's
+  # failure mode was measured wrong once already (issue #1010: assumed 503, observed 404 in 88 of
+  # 100 non-200 responses) — logging the code lets the next rollout's journal settle the class
+  # directly instead of by inference. `journalctl --since ... | grep "push failed"` then reads
+  # the actual class. Neither value can carry the push token; both are numbers.
   logger -t "$tag" "push failed (http=${http_code} rc=${curl_rc}) (status=${status}: ${msg})"
   return 0
 }
