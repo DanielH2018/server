@@ -157,6 +157,23 @@
     label: "{{ item.name }}"
   become: true
 
+- name: Ship the release pruner inside the release for {{ release_bin_group }}
+  # The pruner rides in the release it prunes, not in the repo checkout. Every other artifact
+  # in a group reaches the target as content copied from the controller; until 2026-09-03 the
+  # pruner alone ran from `{{ playbook_dir }}/../scripts/`, which does not exist on a host with
+  # no checkout, so it needed a `has_repo_checkout` gate and a gated host kept every superseded
+  # release forever (issue #923). Shipping it here removes the dependency rather than gating
+  # it. It is not in `common_release_names`, so it gets no /usr/local/bin link: nothing but the
+  # task below calls it. It cannot delete itself, because the release it runs from is the one
+  # `current` points at, and the pruner's first rule keeps that one whatever its age.
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../scripts/deploy_tools/prune_releases.py"
+    dest: "{{ common_release_group_root }}/{{ common_release_sha }}/prune_releases.py"
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
 - name: Create the current-release pointer directory
   ansible.builtin.file:
     path: "{{ common_release_current_root }}"
@@ -212,7 +229,10 @@
       - --no-python-downloads
       - --python
       - "{{ host_python_version }}"
-      - "{{ playbook_dir }}/../scripts/deploy_tools/prune_releases.py"
+      # Through `current`, the copy shipped two tasks up: the pruner that runs is the one this
+      # release carries, and no path here exists only on the controller. That is what lets
+      # this task run ungated on a host with no repo checkout (daniel-stage).
+      - "{{ common_release_current_root }}/{{ release_bin_group }}/prune_releases.py"
       - "{{ common_release_group_root }}"
       - --current
       - "{{ common_release_current_root }}/{{ release_bin_group }}"
@@ -220,10 +240,5 @@
       - "{{ release_bin_keep | default(5) }}"
       - --apply
   register: common_release_prune
-  # Needs the checkout: the pruner is run in place from `{{ playbook_dir }}/../scripts/`, the
-  # same shape the gen_infra_map and docs-refresh crons use. A host without one therefore keeps
-  # every superseded release — disk only, and staging is disposable. Shipping the pruner as a
-  # released artifact would remove the dependency; filed rather than done here.
-  when: has_repo_checkout
   changed_when: "'removing ' in common_release_prune.stdout"
   become: true
