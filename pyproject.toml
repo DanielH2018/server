@@ -27,7 +27,7 @@ dev = [                              # `dev` is uv's default group for `uv run`/
   # would break the moment that pin moves.
   "mkdocs-material>=9.5",           # the docs site; `uv run mkdocs build` renders docs/ into site/
   "zizmor>=1.0",
-  "ty==0.0.77",                     # first-party Python type gate (prek hook). Pinned exactly, not
+  "ty==0.0.78",                     # first-party Python type gate (prek hook). Pinned exactly, not
   # `>=`, because ty is pre-1.0: a 0.0.x bump can add a rule or
   # change an inference and turn master red on an unrelated PR.
   # Renovate raises the bump as its own PR, which is where the
