@@ -18,8 +18,13 @@ services:
       - /etc/alloy/config.alloy
       # Alloy binds 127.0.0.1 by default; Prometheus scrapes this from the LAN.
       - --server.http.listen-addr=0.0.0.0:12345
-      # The tailing cursor lives here — see the data volume below.
-      - --storage.path=/var/lib/alloy/data
+      # The tailing cursor lives here — see the data volume below. NOT the image's own
+      # /var/lib/alloy/data: that parent is 0770 uid 473 in the image, so uid 1000 cannot
+      # traverse it to reach a bind mount inside, and Alloy dies at startup with
+      # `mkdir /var/lib/alloy/data: permission denied` — every two minutes, on the first
+      # deploy of this role (2026-09-02). Root never hits it, which is why the cluster
+      # DaemonSet and the spike that sized this container both ran.
+      - --storage.path=/data
       # Same reason Loki's own config sets analytics.reporting_enabled false: Pi-hole blocks
       # stats.grafana.org and each report would spend its retry budget on a name that never
       # resolves.
@@ -28,6 +33,8 @@ services:
     # the deploy user (1000). Left at the default, Alloy cannot write its positions under
     # --storage.path. With no positions to resume from, every restart re-reads every
     # container's log from the beginning and re-ships it. Matches the estate's PUID/PGID.
+    # The flip side is the storage path above: as 1000 this process cannot enter the
+    # image's /var/lib/alloy at all.
     user: "1000:1000"
     cap_drop:
       - ALL
@@ -42,7 +49,7 @@ services:
       # Positions must survive a restart. Without this the container re-reads every
       # container's log from the beginning on each recreate, which both duplicates lines in
       # Loki and spends the Pi's uplink re-sending them.
-      - ./data:/var/lib/alloy/data
+      - ./data:/data
       # The two host health crons' verdict lines (pi_health source). Read-only, and the same
       # path inside and out so the config's path needs no translation. No group_add: the
       # crons write as uid 1000 and this container already runs as 1000:1000.

@@ -59,6 +59,22 @@ def test_the_journal_is_not_shipped(alloy_config: str) -> None:
     assert "loki.source.journal" not in re.sub(r"//[^\n]*", "", alloy_config)
 
 
+_COMPOSE = REPO / "ansible/roles/containers/alloy/templates/docker-compose.yml.j2"
+
+
+def test_storage_path_is_not_under_the_images_own_var_lib_alloy() -> None:
+    """The image's /var/lib/alloy is 0770 uid 473; uid 1000 cannot traverse it.
+
+    A bind mount inside it is unreachable and Alloy dies at startup with
+    `mkdir /var/lib/alloy/data: permission denied` — the first deploy of this role did
+    exactly that, every two minutes, while the spike (root) had run for an hour.
+    """
+    compose = _COMPOSE.read_text()
+    assert "--storage.path=/data" in compose
+    assert "./data:/data" in compose
+    assert "/var/lib/alloy/data" not in re.sub(r"#[^\n]*", "", compose)
+
+
 def test_the_guard_can_go_red() -> None:
     assert len(REQUIRED_FRAGMENTS) >= 8
     assert '"machine" = "daniel-pi"' in REQUIRED_FRAGMENTS
