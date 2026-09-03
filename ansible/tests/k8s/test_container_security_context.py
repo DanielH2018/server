@@ -236,6 +236,10 @@ _HOST_OR_NETWORK_ROOT = {
 _ROOT_BY_DESIGN = {
     ("code-server", "seed-workspace-claim"),
     ("wg-easy", "config-chown"),
+    # Copies the crowdsec image's 0600 root:root datafiles into the agent's data volume as
+    # world-readable, so the non-root sidecar can read them (#990). Root over root-owned data
+    # it reads as the owner; DAC_READ_SEARCH covers the sources if the image reowns them.
+    ("traefik", "crowdsec-data-install"),
 }
 
 # Runs as root over root-owned data. These are the ones with real work behind them: each needs an

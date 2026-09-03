@@ -22,6 +22,11 @@ Look" table's note that this role must render before anything referencing its CR
   (`traefik_k8s_manage_crowdsec`) — `crowdsec` deploys **before** traefik in
   `containers_list` specifically so its LAPI machine credential exists before this
   sidecar starts.
+- A third initContainer copies the CrowdSec image's bundled datafiles into the agent's
+  data volume, world-readable. The image ships them `0600 root:root` and its entrypoint
+  symlinks rather than copies them, so the non-root sidecar could not read through the
+  link and GeoIP never initialised. This container is the role's only `runAsUser: 0`,
+  and it reaches nothing but that volume.
 - Ports are unprivileged inside the pod (`8000`/`8443`/`8082`); the Service maps the
   public `80`/`443` to them, avoiding `NET_BIND_SERVICE`. `runAsUser` is pinned to
   `traefik_k8s_uid` (65532).
