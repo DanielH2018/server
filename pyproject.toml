@@ -67,9 +67,32 @@ testpaths = [                        # single source of truth for WHAT runs; exc
 # hook so a bare `uv run pytest` gets it too. The suite is filesystem-read-only and order-
 # independent, so it parallelises cleanly — if you add a test that writes shared state, fix the
 # test rather than dropping this. Pass `-n0` to disable it for a debugging run (--pdb needs that).
+#
+# `--dist loadscope` keeps a module's tests on ONE worker. xdist's default `load` hands tests
+# out one at a time regardless of the module they came from, so a module-scoped fixture is
+# rebuilt on every worker that draws any of its tests — and this suite has expensive ones,
+# chiefly `real_tree` in scripts/validate/tests/test_validate_k8s_manifests.py, which renders
+# every k8s role. A single `--durations` run showed that one fixture three times over, at 22s,
+# 24s and 28s of setup.
+#
+# Measured 2026-09-03, `-n 4` (the GitHub runner's width), the two modes run interleaved on the
+# same box so a busy neighbour could not favour either — an earlier non-interleaved pair read
+# 148s vs 47s and was contention, not signal:
+#   --dist load:      56.5s / 56.9s wall, ~160s CPU
+#   --dist loadscope: 45.3s / 44.8s wall, ~155s CPU
+# So it is ~20% of wall and almost no CPU: the saving is worker idle time, not work removed.
+# At `-n auto` on a 16-core workstation the two are within noise (35s vs 38s) — the narrower
+# the run, the more loadscope is worth, which is why it pays on CI and looks pointless locally.
+#
+# It is worth the flag because BOTH CI legs of a landing are pytest-bound: the `pytest` job's
+# own test step measured 267s against the `hooks` job's 29-46s, and a landing waits on CI twice
+# — once on the PR before auto-merge fires, once on the master merge commit.
+#
+# loadscope groups by class where a module has them; drop to `loadfile` only if a module's
+# classes ever need splitting across workers.
 # --strict-markers turns a misspelled marker into a collection error instead of a silently
 # unregistered one; --strict-config does the same for an unknown key in this table.
-addopts = "-q -n auto -m 'not ui' --strict-markers --strict-config"
+addopts = "-q -n auto --dist loadscope -m 'not ui' --strict-markers --strict-config"
 # Every warning is a failure. Measured before enabling (2026-09-02): the only classes that
 # fired were ResourceWarnings, each a real leak — HTTPError test doubles built on a tempfile
 # nothing closed, an sqlite connection the Valheim store never closed, and the deployer's
