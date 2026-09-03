@@ -490,14 +490,33 @@ def _cmd_changed(args: argparse.Namespace) -> int:
     return 0
 
 
+# DECIDED: land.sh never deploys to daniel-stage. The staging guest sits on daniel-server's
+# libvirt NAT network, which daniel-box cannot route to, and the deployer's staging gate
+# owns every deploy there (`staging_gate.py`). `tags_by_host` still lists it, because it
+# answers "who declares this tag" and staging does; only the landing shape drops it. Without
+# this, landing any of the six STAGING_SUBSET tags (traefik, authelia, node-exporter, ...)
+# ran `deploy.sh -e target=daniel-stage` from daniel-box after the box's own deploy had
+# succeeded, and the unreachable host turned a good landing into `deploy-failed`.
+HOSTS_LAND_SH_NEVER_DEPLOYS = frozenset({"daniel-stage"})
+
+
+def landing_hosts(tags, host_vars: Path = HOST_VARS) -> dict[str, list[str]]:
+    """`tags_by_host` minus the hosts land.sh never deploys to."""
+    return {
+        host: host_tags
+        for host, host_tags in tags_by_host(tags, host_vars).items()
+        if host not in HOSTS_LAND_SH_NEVER_DEPLOYS
+    }
+
+
 def _cmd_hosts(args: argparse.Namespace) -> int:
-    """Print `<host>\\t<comma-joined tags>` per declaring host, for a comma-joined tag list.
+    """Print `<host>\\t<comma-joined tags>` per host land.sh deploys, for a comma-joined tag list.
 
     The shape land.sh consumes: one line per host, so a `while read host tags` loop can run
     one deploy.sh per host and add `-e target=` when the host is not the local node.
     """
     tags = [t for t in args.tags.split(",") if t]
-    for host, host_tags in tags_by_host(tags).items():
+    for host, host_tags in landing_hosts(tags).items():
         print(f"{host}\t{','.join(host_tags)}")
     return 0
 

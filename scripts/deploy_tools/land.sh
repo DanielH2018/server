@@ -508,7 +508,9 @@ DEPLOYED_HOSTS=''
 # A host whose deploy already succeeded is skipped on a retry, so the lock and stale-tree
 # retries below resume at the host that failed rather than re-running the ones that landed.
 # Tags no host declares (a block tag) fall through to one plain deploy.sh, which validates
-# them itself.
+# them itself. daniel-stage is never on the list even for a tag it declares: the staging
+# gate owns that host, and daniel-box cannot route to it (issue #935, and the DECIDED
+# marker on HOSTS_LAND_SH_NEVER_DEPLOYS in deploy_tags.py).
 # Globals:
 #   TAGS, LOCAL_HOST (read); DEPLOYED_HOSTS (modified)
 # Arguments:
