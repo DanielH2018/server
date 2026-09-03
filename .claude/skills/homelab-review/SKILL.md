@@ -269,6 +269,16 @@ control is the "fires on nothing" case the repo warns about, and it reads exactl
   and the **deliberate trade-offs** not to re-flag. Do not restate an issue's body in the ledger;
   the issue is the record and the ledger links it. If a ledger already exists for today, write the
   next letter suffix rather than overwriting.
+- **Append one row to `evals/review_outcomes.jsonl`** — the same run's counts as structured data,
+  so `scripts/dev/review_metrics.py` can trend the false-positive and fix-refusal rates across
+  runs instead of a reader re-deriving them from prose each time. One line, matching the schema
+  `scripts/dev/review_metrics.py`'s `validate_row` checks (`high`/`medium`/`low` are the confirmed
+  counts by severity, `refuted`/`downgraded` are finding counts, `fixes_proposed`/
+  `fixes_confirmed_safe`/`fixes_refuted` are the fix-skeptic pass's counts):
+  ```bash
+  printf '%s\n' '{"date": "2026-09-02", "high": 0, "medium": 3, "low": 1, "refuted": 1, "downgraded": null, "fixes_proposed": 4, "fixes_confirmed_safe": 3, "fixes_refuted": 1, "prs": [812, 813], "ledger": "review-2026-09-02-state"}' >> evals/review_outcomes.jsonl
+  ```
+  Use `null` for any count the ledger prose does not state as a number — never a guess.
 - **Then fold the durable half into `homelab-review-standing-donot-reflag`** — a new deliberate
   trade-off, a refutation of a finding that was never filed, or an entry this run proved stale.
   Open and recurring items belong in `findings.py`'s register, not there. Per the

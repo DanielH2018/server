@@ -86,6 +86,47 @@ uv run python evals/trend.py report.json --no-write                 # report onl
 - `history.json` is committed (a hermetic run is reproducible, so it's a real baseline). The pure
   trend logic is offline-tested in `test_trend.py`, part of `uv run pytest evals/tests`.
 
+## Review outcomes (structured data, not prose)
+
+`review_outcomes.jsonl` holds one JSON object per `/homelab-review` run — `date`, the confirmed
+finding counts by severity (`high`/`medium`/`low`), `refuted`, `downgraded`, and the fix-skeptic
+pass's `fixes_proposed`/`fixes_confirmed_safe`/`fixes_refuted`, plus the `prs` that shipped and the
+`ledger` memory file name. The skill's step 7 appends a row here right after writing the dated
+ledger memory — see `.claude/skills/homelab-review/SKILL.md`'s ledger-writing step for the exact
+command. A count the ledger prose doesn't state as a number is `null`, never a guess.
+
+```bash
+uv run python scripts/dev/review_metrics.py         # trend table: false-positive + fix-refusal rate
+uv run python scripts/dev/review_metrics.py --json   # same, as JSON
+uv run pytest evals/tests/test_review_outcomes.py    # schema guard over the committed file
+```
+
+- **False-positive rate** = refuted findings / (confirmed + refuted). This is the number the
+  skill's step 2 priming (the standing don't-re-flag list) exists to drive down.
+- **Fix-refusal rate** = fixes the fix-skeptic pass refused (UNSAFE or LAUNDERS) / fixes proposed.
+  This is the number the skill's step 7 fix-skeptic pass exists to drive down.
+
+## Harness metrics (evals/harness_metrics.py)
+
+Three measured numbers for the Claude Code harness itself, each carrying its evidence rather than
+a bare figure:
+
+```bash
+uv run python evals/harness_metrics.py         # text report
+uv run python evals/harness_metrics.py --json  # same, as JSON — feeds trend.py or a future cron
+```
+
+- **Bash-classifier precision/recall** over the labelled corpus
+  `.claude/hooks/tests/test_command_vectors.py` reads, run through the same `classify()` in
+  `.claude/hooks/auto-approve-readonly.py`. Needs the chezmoi checkout the corpus lives in; prints
+  `no corpus` when it isn't present.
+- **Hook firing counts over the last 7 days**, read from `~/.claude/logs/*.jsonl` if a hook-tagged
+  line falls in that window. The OTEL/Loki pipeline is out of scope (see the `otel-review` skill
+  for that). Prints `no local source` rather than a `0` when nothing local matches — a `0` would
+  read as "hooks fired zero times", indistinguishable here from "nothing was read".
+- **The review false-positive rate** from `review_outcomes.jsonl` above, reused via
+  `scripts/dev/review_metrics.py` rather than re-derived.
+
 ## What's tested (v1: the /homelab-review fleet)
 
 - **catch-defect** — a planted regression (drawn from this repo's documented gotchas) the agent must flag.
