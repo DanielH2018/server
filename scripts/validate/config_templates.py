@@ -28,6 +28,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
+from lib import yaml_fast
 from lib.render_guard import (
     ALL_VARS,
     ANSIBLE,
@@ -82,7 +83,7 @@ def build_env(role: str) -> Environment:
 def yaml_error(rendered: str) -> str | None:
     """Return an error string if ``rendered`` is not parseable YAML, else None."""
     try:
-        list(yaml.safe_load_all(rendered))
+        list(yaml_fast.safe_load_all(rendered))
     except yaml.YAMLError as exc:
         return f"invalid YAML: {exc}"
     return None
