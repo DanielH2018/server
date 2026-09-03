@@ -46,15 +46,17 @@ def render_markdown(rows: list[dict]) -> str:
         "through `scripts/dev/findings.py` and labelled `claude` on GitHub. A row that has "
         "been seen three times carries **escalated** (the filing plus two re-observations) "
         "and needs a durable owner: a "
-        "test, a hook or a CLAUDE.md rule. Close one from a PR body with `Closes #<n>`.\n"
+        "test, a hook or a CLAUDE.md rule. Close one from a PR body with `Closes #<n>`. A "
+        "row marked in the Verify-by column carries a read-only command in its issue body — "
+        "run `findings.py verify --all` to re-check every one and close what now passes.\n"
     )
     if not rows:
         parts.append("No open findings.\n")
         return "\n".join(parts)
     parts.append(
-        "| # | Severity | Kind | Domain | Finding | First seen | Re-observed |"
+        "| # | Severity | Kind | Domain | Finding | First seen | Re-observed | Verify-by |"
     )
-    parts.append("|---|---|---|---|---|---|---|")
+    parts.append("|---|---|---|---|---|---|---|---|")
     for r in sorted(rows, key=sort_key):
         flags = []
         if r["escalated"]:
@@ -62,9 +64,11 @@ def render_markdown(rows: list[dict]) -> str:
         if r["no_vetted_remediation"]:
             flags.append("*no vetted remediation*")
         title = md_cell(r["title"]) + (" — " + ", ".join(flags) if flags else "")
+        verify_by = "✓" if r.get("verify_by") else "-"
         parts.append(
             f"| [#{r['number']}]({r['url']}) | {r['severity'] or '-'} | {r['kind'] or '-'} | "
-            f"{r['domain'] or '-'} | {title} | {r['first_seen']} | {r['reobservations']} |"
+            f"{r['domain'] or '-'} | {title} | {r['first_seen']} | {r['reobservations']} | "
+            f"{verify_by} |"
         )
     return "\n".join(parts).rstrip("\n") + "\n"
 

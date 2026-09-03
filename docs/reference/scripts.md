@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/scripts.py
-generated_at: 2026-09-02 18:17 UTC
-generated_sha: b49b867a
+generated_at: 2026-09-03 12:23 UTC
+generated_sha: 1806968e
 ---
 
 !!! warning "Generated file — do not edit"
@@ -104,7 +104,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/diagnostics/probe_lib/releases.py` | `probe.py releases` -- which commit produced the manifests each k8s service is running. | imported by probe.py | `test_probe_releases.py` *(indirect)* |
 | `scripts/infra_map/render.py` | Rendering: turn the reconciled model into one self-contained HTML page. | imported by gen_infra_map.py | `test_infra_map_render.py` *(indirect)* |
 | `scripts/lib/render_guard.py` | Shared helpers for the render-guard scripts and other Ansible-inventory readers. | imported by compose_templates.py, config_templates.py, deploy_tags.py, hosts.py, k8s_manifests.py, networking.py, service_catalog.py, shell_templates.py | `test_render_guard.py` |
-| `scripts/lib/repo_paths.py` | The repo path anchors a script under ``scripts/`` reads the Ansible tree through. | imported by await_ci.py, build_docs.py, constants.py, core.py, crons.py, deploy_detach_notify.py, deploy_tags.py, docs_provenance.py, fact_cache_guard.py, freshness.py, gen_doc_fragments.py, gen_hosts_block.py, grafana_dashboards.py, ha.py, health.py, hosts.py, invocation_sites.py, k8s_autodeploy_counts.py, land_tags.py, memory_survey.py, monitors.py, networking.py, releases.py, render_guard.py, route_facts.py, scripts.py, secret_bearing_host_paths.py, secrets.py, staging_egress_probe.py, staging_gate.py, validate_ha_config.py | `test_render_guard.py` *(indirect)* |
+| `scripts/lib/repo_paths.py` | The repo path anchors a script under ``scripts/`` reads the Ansible tree through. | imported by await_ci.py, build_docs.py, constants.py, core.py, crons.py, deploy_detach_notify.py, deploy_tags.py, docs_provenance.py, fact_cache_guard.py, findings.py, freshness.py, gen_doc_fragments.py, gen_hosts_block.py, grafana_dashboards.py, ha.py, health.py, hosts.py, invocation_sites.py, k8s_autodeploy_counts.py, land_tags.py, memory_survey.py, monitors.py, networking.py, releases.py, render_guard.py, route_facts.py, scripts.py, secret_bearing_host_paths.py, secrets.py, staging_egress_probe.py, staging_gate.py, validate_ha_config.py | `test_render_guard.py` *(indirect)* |
 | `scripts/docs/route_facts.py` | Shared route facts for the reference generators. | imported by networking.py, service_catalog.py | `test_route_facts.py` |
 | `scripts/deploy_tools/staging_gate.py` | Ask the staging cluster whether it accepts a commit, from daniel-box. | imported by backfill_staging_gate.py | `test_staging_gate.py` |
 | `scripts/diagnostics/probe_lib/vip_placement.py` | `probe.py vip-placement` — does every ETP=Local VIP have a Ready endpoint on an announcing node? | imported by probe.py | `test_probe_vip_placement.py` *(indirect)* |
@@ -172,11 +172,14 @@ uv run python scripts/docs/reference/crons.py --out docs/reference/crons.md
 uv run python scripts/dev/findings.py sync-labels
 uv run python scripts/dev/findings.py open --title "..." --body-file f.md \
 --severity high --kind gap [--domain network] [--file path/to/file.py:12] \
-[--source review-2026-09-02] [--no-vetted-remediation] [--dry-run]
+[--source review-2026-09-02] [--no-vetted-remediation] \
+[--verify-by 'uv run python scripts/diagnostics/probe.py health <svc>'] [--dry-run]
 uv run python scripts/dev/findings.py touch 688 [--source review-2026-09-02]
 uv run python scripts/dev/findings.py close 688 --fixed [--pr 700]
 uv run python scripts/dev/findings.py close 688 --refuted --reason "..."
 uv run python scripts/dev/findings.py list [--state open|closed|all] [--json]
+uv run python scripts/dev/findings.py verify --all [--close] [--timeout 120]
+uv run python scripts/dev/findings.py verify 688 701 [--close]
 ```
 
 ### `scripts/docs/reference/freshness.py`

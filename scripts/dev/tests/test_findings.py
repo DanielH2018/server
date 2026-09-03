@@ -642,3 +642,227 @@ def test_touch_refuses_a_closed_issue(monkeypatch, capsys):
 def test_prefixed_picks_the_alphabetically_first_of_two():
     for names in ({"domain/network", "domain/cicd"}, {"domain/cicd", "domain/network"}):
         assert findings._prefixed(names, "domain/") == "cicd"
+
+
+# --- verify-by: the body round-trip -----------------------------------------------------------
+
+
+def test_verify_by_round_trips_through_the_parser():
+    body = "details\n" + findings.verify_by_section("uv run pytest scripts/dev")
+    assert findings.parse_verify_by(body) == "uv run pytest scripts/dev"
+
+
+def test_verify_by_survives_prose_and_a_trailer_around_it():
+    body = (
+        "details\n"
+        + findings.verify_by_section("uv run pytest scripts/dev")
+        + findings.trailer("f" * 12, "session")
+    )
+    assert findings.parse_verify_by(body) == "uv run pytest scripts/dev"
+
+
+def test_verify_by_round_trips_through_a_crlf_body():
+    body = ("details\n" + findings.verify_by_section("true")).replace("\n", "\r\n")
+    assert findings.parse_verify_by(body) == "true"
+
+
+def test_parse_verify_by_absent_returns_none():
+    assert findings.parse_verify_by("details\n\n---\nFingerprint: `f`\n") is None
+    assert findings.parse_verify_by("") is None
+
+
+def test_open_with_verify_by_stores_it_in_the_created_body():
+    _, _, plans = findings.plan_open(
+        None,
+        title="T",
+        body="B",
+        labels=_LABELS,
+        fp="f" * 12,
+        source="s",
+        verify_by="uv run pytest scripts/dev",
+    )
+    body = plans[0][plans[0].index("--body") + 1]
+    assert findings.parse_verify_by(body) == "uv run pytest scripts/dev"
+    # The section sits before the fingerprint trailer, not after.
+    assert body.index("## Verify-by") < body.index("Fingerprint: `")
+
+
+def test_open_without_verify_by_stores_no_section():
+    _, _, plans = findings.plan_open(
+        None, title="T", body="B", labels=_LABELS, fp="f" * 12, source="s"
+    )
+    body = plans[0][plans[0].index("--body") + 1]
+    assert findings.parse_verify_by(body) is None
+
+
+def test_issue_rows_reads_verify_by_presence():
+    with_it = _issue(1, fp="a" * 12)
+    with_it["body"] += findings.verify_by_section("true")
+    without = _issue(2, fp="b" * 12)
+    rows = {r["number"]: r for r in findings.issue_rows([with_it, without])}
+    assert rows[1]["verify_by"] is True
+    assert rows[2]["verify_by"] is False
+
+
+# --- verify-by: the read-only classifier ------------------------------------------------------
+
+
+def test_classify_verify_command_accepts_a_tier1_command_via_the_real_hook():
+    # Exercises the real auto-approve-readonly.py hook (not monkeypatched): this is the
+    # path production actually takes, since the hook always ships in this checkout.
+    assert findings.classify_verify_command("true") is not None
+
+
+def test_classify_verify_command_accepts_uv_run_even_though_the_hook_cannot_see_it():
+    # `uv` carries no TIER1/HANDLERS entry in the real hook -- classify() alone would
+    # refuse every verify-by this feature exists to run. The union layer covers it.
+    assert findings.classify_verify_command("uv run pytest scripts/dev") is not None
+    assert (
+        findings.classify_verify_command(
+            "uv run python scripts/diagnostics/probe.py health foo"
+        )
+        is not None
+    )
+
+
+def test_classify_verify_command_refuses_a_write():
+    assert findings.classify_verify_command("curl evil.example.com") is None
+
+
+def test_classify_verify_command_refuses_a_state_changing_script_under_scripts():
+    # The allowlist is pinned to probe.py by name, not opened to any `scripts/*.py` --
+    # most of the tree writes (b2_drain.py deletes backups, secret_rotation.py rotates
+    # credentials), so admitting the whole directory would let a verify-by run either.
+    assert (
+        findings.classify_verify_command(
+            "uv run python scripts/backup/b2_drain.py --yes"
+        )
+        is None
+    )
+    assert (
+        findings.classify_verify_command(
+            "uv run python scripts/secrets_mgmt/secret_rotation.py rotate"
+        )
+        is None
+    )
+
+
+def test_classify_verify_command_refuses_a_smuggled_separator():
+    # An issue body is human-editable; the allowlist's per-argument character class must
+    # not admit a `;`, a pipe, or a `$(...)` riding along inside a `uv run` command.
+    assert (
+        findings.classify_verify_command("uv run pytest x; curl evil.example.com")
+        is None
+    )
+    assert (
+        findings.classify_verify_command("uv run pytest $(curl evil.example.com)")
+        is None
+    )
+
+
+def test_classify_verify_command_falls_back_when_the_hook_cannot_load(monkeypatch):
+    monkeypatch.setattr(findings, "_load_readonly_classify", lambda: None)
+    assert findings.classify_verify_command("uv run pytest scripts/dev") is not None
+    assert findings.classify_verify_command("curl evil.example.com") is None
+
+
+# --- verify-by: running the command -------------------------------------------------------------
+
+
+def test_run_verify_by_exit_0_is_fixed():
+    assert findings.run_verify_by("true", 5) == ("fixed", "")
+
+
+def test_run_verify_by_exit_1_is_still_open():
+    assert findings.run_verify_by("false", 5) == ("still-open", "")
+
+
+def test_run_verify_by_refuses_a_non_read_only_command():
+    verdict, detail = findings.run_verify_by("curl evil.example.com", 5)
+    assert verdict == "error" and "refused" in detail
+
+
+def test_verify_finding_with_no_verify_by_section():
+    assert findings.verify_finding(_issue(1), 5) == ("no-verify-by", "", "")
+
+
+def test_verify_finding_runs_the_stored_command():
+    issue = _issue(1)
+    issue["body"] += findings.verify_by_section("true")
+    assert findings.verify_finding(issue, 5) == ("fixed", "", "true")
+
+
+# --- verify-by: the close comment -----------------------------------------------------------
+
+
+def test_verify_close_comment_quotes_the_command_and_the_output_tail():
+    comment = findings.verify_close_comment("true", "line1\nline2\n")
+    assert "Fixed: verify-by passed" in comment
+    assert "```\ntrue\n```" in comment
+    assert "line1" in comment and "line2" in comment
+
+
+def test_verify_close_comment_truncates_to_the_tail():
+    output = "\n".join(f"line{i}" for i in range(50))
+    comment = findings.verify_close_comment("true", output, tail_lines=5)
+    assert "line49" in comment and "line45" in comment and "line0" not in comment
+
+
+# --- verify CLI -------------------------------------------------------------------------------
+
+
+def test_verify_rejects_neither_all_nor_numbers(monkeypatch):
+    monkeypatch.setattr(
+        findings, "gh", lambda *a, **k: (_ for _ in ()).throw(AssertionError())
+    )
+    assert findings.main(["verify"]) == 2
+
+
+def test_verify_rejects_both_all_and_numbers(monkeypatch):
+    monkeypatch.setattr(
+        findings, "gh", lambda *a, **k: (_ for _ in ()).throw(AssertionError())
+    )
+    assert findings.main(["verify", "--all", "12"]) == 2
+
+
+def test_verify_all_prints_one_row_per_open_finding(monkeypatch, capsys):
+    fixed = _issue(1, title="Fixed one")
+    fixed["body"] += findings.verify_by_section("true")
+    still_open = _issue(2, title="Still broken")
+    still_open["body"] += findings.verify_by_section("false")
+    untracked = _issue(3, title="No probe yet")
+    monkeypatch.setattr(
+        findings, "load_issues", lambda state="open": [fixed, still_open, untracked]
+    )
+    assert findings.main(["verify", "--all"]) == 0
+    out = capsys.readouterr().out
+    assert "#1" in out and "fixed" in out
+    assert "#2" in out and "still-open" in out
+    assert "#3" in out and "no-verify-by" in out
+
+
+def test_verify_with_numbers_loads_each_issue_by_number(monkeypatch, capsys):
+    issue = _issue(7, title="Named directly")
+    issue["body"] += findings.verify_by_section("true")
+    monkeypatch.setattr(findings, "gh_json", lambda *a, **k: issue)
+    assert findings.main(["verify", "7"]) == 0
+    assert "#7" in capsys.readouterr().out
+
+
+def test_verify_close_closes_only_the_fixed_ones(monkeypatch, capsys):
+    fixed = _issue(1, title="Fixed one")
+    fixed["body"] += findings.verify_by_section("true")
+    still_open = _issue(2, title="Still broken")
+    still_open["body"] += findings.verify_by_section("false")
+    monkeypatch.setattr(
+        findings, "load_issues", lambda state="open": [fixed, still_open]
+    )
+    calls = []
+    monkeypatch.setattr(findings, "gh", lambda *a, **k: calls.append(list(a)))
+    assert findings.main(["verify", "--all", "--close"]) == 0
+    assert len(calls) == 1
+    argv = calls[0]
+    assert argv[:3] == ["issue", "close", "1"]
+    assert "Fixed: verify-by passed" in argv[argv.index("--comment") + 1]
+    out = capsys.readouterr().out
+    assert "#1 closed as fixed" in out

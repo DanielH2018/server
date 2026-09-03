@@ -11,16 +11,27 @@ the third one escalates, and a refuted finding stays closed.
 Every command PLANS a list of gh argv first (pure, unit-tested), then runs it. `--dry-run`
 prints the plan and writes nothing.
 
+VERIFY-BY. `open --verify-by '<command>'` stores a read-only shell command in the issue body
+under a `## Verify-by` heading, in a fenced code block so it survives a human editing the
+prose around it. `verify` re-runs that command later: exit 0 means the finding is FIXED,
+non-zero means it still reproduces. It refuses to run anything the repo's own read-only
+classifier (`.claude/hooks/auto-approve-readonly.py`, the same judgment that decides what a
+session can run without a prompt) does not clear — a command stored by `open` but never
+validated there is still only ever run through that gate.
+
 Usage::
 
     uv run python scripts/dev/findings.py sync-labels
     uv run python scripts/dev/findings.py open --title "..." --body-file f.md \\
         --severity high --kind gap [--domain network] [--file path/to/file.py:12] \\
-        [--source review-2026-09-02] [--no-vetted-remediation] [--dry-run]
+        [--source review-2026-09-02] [--no-vetted-remediation] \\
+        [--verify-by 'uv run python scripts/diagnostics/probe.py health <svc>'] [--dry-run]
     uv run python scripts/dev/findings.py touch 688 [--source review-2026-09-02]
     uv run python scripts/dev/findings.py close 688 --fixed [--pr 700]
     uv run python scripts/dev/findings.py close 688 --refuted --reason "..."
     uv run python scripts/dev/findings.py list [--state open|closed|all] [--json]
+    uv run python scripts/dev/findings.py verify --all [--close] [--timeout 120]
+    uv run python scripts/dev/findings.py verify 688 701 [--close]
 
 Exit codes: 0 done; 1 gh failed (its stderr is printed); 2 bad arguments;
 3 nothing was written because the issue refuses it — the fingerprint belongs to an issue
@@ -31,6 +42,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import re
 import subprocess
@@ -45,6 +57,71 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from lib.gh import gh, gh_json
+from lib.repo_paths import REPO
+
+_READONLY_HOOK = REPO / ".claude" / "hooks" / "auto-approve-readonly.py"
+# A narrow allowlist layered ON TOP of the hook's classify(), not just a fallback for when
+# it fails to load. `uv` is opaque to classify() by design — `uv run <anything>` can exec
+# anything, so TIER1/HANDLERS has no `uv` entry at all — which means the hook alone refuses
+# every command this feature exists to run: the review skill's own examples are
+# `uv run python scripts/diagnostics/probe.py ...` and `uv run pytest ...`. This regex covers
+# EXACTLY those two shapes and no other script: `scripts/[\w./-]+\.py` would also admit
+# `scripts/backup/b2_drain.py --yes` and `scripts/secrets_mgmt/secret_rotation.py rotate`,
+# both of which mutate state, so the script path is pinned to `probe.py` by name rather than
+# left open to anything under `scripts/`. Each argument is further restricted to a safe
+# character class so an issue body a human edited to smuggle `; curl attacker.example`
+# cannot slip through — `;`, `|`, `$`, backticks and quotes are all outside `_SAFE_ARG`.
+_SAFE_ARG = r"[\w./=:,-]+"
+_FALLBACK_VERIFY_RE = re.compile(
+    rf"^uv run (python scripts/diagnostics/probe\.py(?:\s+{_SAFE_ARG})*"
+    rf"|pytest(?:\s+{_SAFE_ARG})*)$"
+)
+
+
+def _load_readonly_classify():
+    """The auto-approve-readonly hook's `classify()`, loaded by path, or None.
+
+    The filename is hyphenated, so it is not importable by name. `block-protected-bash.py`
+    loads its sibling hook the same way, for the same reason: one classifier judges both
+    what a session can run without a prompt and what `findings.py verify` may execute.
+    """
+    if not _READONLY_HOOK.is_file():
+        return None
+    try:
+        # The hook's own top-level `from _hook_common import ...` only resolves once its
+        # directory is on sys.path — true automatically when it runs as the hook entry
+        # point, not when loaded by path from here.
+        hooks_dir = str(_READONLY_HOOK.parent)
+        if hooks_dir not in _sys.path:
+            _sys.path.insert(0, hooks_dir)
+        spec = importlib.util.spec_from_file_location(
+            "auto_approve_readonly", _READONLY_HOOK
+        )
+        if not spec or not spec.loader:
+            return None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module.classify
+    except Exception:
+        return None
+
+
+def classify_verify_command(command: str) -> str | None:
+    """A reason string if `command` is read-only by the repo's own standard, else None.
+
+    A union, not an either-or: the hook's `classify()` clears it, OR the narrow `uv run`
+    allowlist does (see `_FALLBACK_VERIFY_RE` for why that allowlist runs even when the hook
+    loaded fine). Falls back to the allowlist alone when the hook cannot be loaded at all —
+    this script is run outside the checkout that carries `.claude/`.
+    """
+    classify = _load_readonly_classify()
+    reason = classify(command) if classify is not None else None
+    if reason:
+        return reason
+    return (
+        "fallback: uv run" if _FALLBACK_VERIFY_RE.fullmatch(command.strip()) else None
+    )
+
 
 SEVERITIES = ("high", "medium", "low")
 KINDS = ("gap", "improvement", "addition")
@@ -91,6 +168,9 @@ _LIST_FIELDS = "number,title,state,labels,body,createdAt,closedAt,url,comments"
 _FP_RE = re.compile(r"^Fingerprint: `([0-9a-f]{12})`\s*$", re.M)
 _LINE_SUFFIX = re.compile(r":\d+(?:-\d+)?$")
 _REOBSERVED = "Re-observed"
+# DOTALL so `.` crosses the command's own newlines; the heading anchors it against prose
+# a human added elsewhere in the body, and the fence is stripped by the capture group.
+_VERIFY_BY_RE = re.compile(r"^## Verify-by\s*\n```[^\n]*\n(.*?)\n```", re.M | re.S)
 
 
 # --- pure helpers ---------------------------------------------------------------------------
@@ -111,6 +191,25 @@ def trailer(fp: str, source: str) -> str:
         "Filed by `scripts/dev/findings.py`. Re-observations are comments beginning "
         f"`{_REOBSERVED}`.\n"
     )
+
+
+def verify_by_section(command: str) -> str:
+    """The `## Verify-by` body section `open --verify-by` appends before the trailer."""
+    return f"\n\n## Verify-by\n```\n{command}\n```\n"
+
+
+def parse_verify_by(body: str) -> str | None:
+    """The verify-by command stored in an issue body, or None.
+
+    Reads the `## Verify-by` heading and its fenced code block back out, the one format
+    `verify_by_section` writes, so a body a human has edited around still parses. A body
+    fetched from the API can carry CRLF line endings, so they are normalized first.
+    """
+    m = _VERIFY_BY_RE.search((body or "").replace("\r\n", "\n"))
+    if not m:
+        return None
+    cmd = m.group(1).strip()
+    return cmd or None
 
 
 def label_names(issue: dict) -> set[str]:
@@ -194,6 +293,7 @@ def issue_rows(issues: list[dict]) -> list[dict]:
                 "domain": _prefixed(names, "domain/"),
                 "escalated": "escalated" in names,
                 "no_vetted_remediation": "no-vetted-remediation" in names,
+                "verify_by": parse_verify_by(issue.get("body") or "") is not None,
                 "first_seen": (issue.get("createdAt") or "")[:10],
                 "reobservations": reobservations(issue),
                 "url": issue.get("url", ""),
@@ -291,16 +391,20 @@ def plan_open(
     labels: list[str],
     fp: str,
     source: str,
+    verify_by: str | None = None,
 ) -> tuple[str, int, list[list[str]]]:
     """Plans the gh argv to file, touch or reopen a finding, given its matching issue.
 
     Args:
         existing: the issue matching this finding's fingerprint, or None if it is new.
         title: issue title.
-        body: issue body, before the fingerprint/source trailer is appended.
+        body: issue body, before the verify-by section and the fingerprint/source trailer
+            are appended.
         labels: labels to apply on create.
         fp: the finding's fingerprint.
         source: the review or session that produced this finding.
+        verify_by: a read-only command whose exit code later tells `verify` whether the
+            finding is fixed; stored only when creating a new issue.
 
     Returns:
         A ``(outcome, exit_code, plans)`` tuple: outcome is one of ``created``, ``touched``,
@@ -308,13 +412,17 @@ def plan_open(
         argv list to run.
     """
     if existing is None:
+        full_body = body
+        if verify_by:
+            full_body += verify_by_section(verify_by)
+        full_body += trailer(fp, source)
         argv = [
             "issue",
             "create",
             "--title",
             title,
             "--body",
-            body + trailer(fp, source),
+            full_body,
         ]
         for lab in labels:
             argv += ["--label", lab]
@@ -390,7 +498,13 @@ def cmd_open(args: argparse.Namespace) -> int:
     run(plan_sync_labels(_existing_labels()), args.dry_run)
     existing = find_by_fingerprint(load_issues("all"), fp)
     outcome, code, plans = plan_open(
-        existing, title=args.title, body=body, labels=labels, fp=fp, source=args.source
+        existing,
+        title=args.title,
+        body=body,
+        labels=labels,
+        fp=fp,
+        source=args.source,
+        verify_by=args.verify_by,
     )
     if outcome == "created":
         if args.dry_run:
@@ -415,7 +529,12 @@ def cmd_open(args: argparse.Namespace) -> int:
 
 
 def plan_close(
-    number: int, *, fixed: bool, pr: int | None, reason: str | None
+    number: int,
+    *,
+    fixed: bool,
+    pr: int | None,
+    reason: str | None,
+    comment: str | None = None,
 ) -> list[list[str]]:
     """Plans the gh argv to close an issue as fixed or refuted.
 
@@ -424,13 +543,14 @@ def plan_close(
         fixed: True to close as completed, False to close as refuted.
         pr: the PR that fixed it, included in the close comment when given.
         reason: required when ``fixed`` is False; what disproved the finding.
+        comment: overrides the default close comment (`verify` uses this to quote the
+            verify-by command and its output instead of naming a PR).
     """
     n = str(number)
     if fixed:
         by = f" by PR #{pr}" if pr else ""
-        return [
-            ["issue", "close", n, "--reason", "completed", "--comment", f"Fixed{by}."]
-        ]
+        text = comment or f"Fixed{by}."
+        return [["issue", "close", n, "--reason", "completed", "--comment", text]]
     return [
         ["issue", "edit", n, "--add-label", "refuted"],
         [
@@ -496,6 +616,105 @@ def cmd_close(args: argparse.Namespace) -> int:
     return 0
 
 
+DEFAULT_VERIFY_TIMEOUT = 120.0
+
+
+def verify_close_comment(command: str, output: str, *, tail_lines: int = 20) -> str:
+    """The close comment `verify --close` posts on a passing finding.
+
+    Quotes the command and the tail of its combined stdout/stderr, so the record of why an
+    issue closed lives on the issue rather than only in whoever ran `verify`.
+    """
+    lines = output.strip("\n").splitlines()
+    tail = "\n".join(lines[-tail_lines:]) if lines else "(no output)"
+    return (
+        "Fixed: verify-by passed.\n\n"
+        f"Command:\n```\n{command}\n```\n\n"
+        f"Output (tail):\n```\n{tail}\n```\n"
+    )
+
+
+def run_verify_by(command: str, timeout: float) -> tuple[str, str]:
+    """Runs a verify-by command and returns ``(verdict, detail)``.
+
+    verdict is ``fixed`` (exit 0), ``still-open`` (nonzero exit) or ``error`` (refused by
+    `classify_verify_command`, timed out, or could not be launched at all). detail is the
+    command's combined stdout/stderr for ``fixed``/``still-open``, or the reason for
+    ``error``.
+    """
+    reason = classify_verify_command(command)
+    if not reason:
+        return "error", "refused: not read-only by the repo's classifier"
+    try:
+        proc = subprocess.run(
+            command,
+            shell=True,
+            cwd=str(REPO),
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        return "error", f"timed out after {timeout:g}s"
+    except OSError as exc:
+        return "error", str(exc)
+    output = (proc.stdout or "") + (proc.stderr or "")
+    return ("fixed" if proc.returncode == 0 else "still-open"), output
+
+
+def verify_finding(issue: dict, timeout: float) -> tuple[str, str, str]:
+    """Verifies one issue. Returns ``(verdict, detail, command)``.
+
+    verdict adds ``no-verify-by`` to `run_verify_by`'s three, for an issue whose body
+    carries no `## Verify-by` section at all — never run, so ``command`` is empty.
+    """
+    command = parse_verify_by(issue.get("body") or "")
+    if not command:
+        return "no-verify-by", "", ""
+    verdict, detail = run_verify_by(command, timeout)
+    return verdict, detail, command
+
+
+def cmd_verify(args: argparse.Namespace) -> int:
+    """Handles the ``verify`` subcommand: re-runs each finding's stored verify-by command.
+
+    ``--dry-run`` only gates the gh writes a passing ``--close`` would make; the verify-by
+    commands themselves always run — producing a verdict requires it, and they were already
+    proven read-only by `classify_verify_command` before they run at all.
+
+    Args:
+        args: parsed CLI namespace carrying ``all``, ``numbers``, ``close``, ``timeout`` and
+            ``dry_run``.
+
+    Returns:
+        2 if neither or both of ``--all``/issue numbers were given, 0 otherwise.
+    """
+    if args.all and args.numbers:
+        sys.stderr.write("verify: pass --all or issue numbers, not both\n")
+        return 2
+    if not args.all and not args.numbers:
+        sys.stderr.write("verify: need --all or at least one issue number\n")
+        return 2
+    issues = load_issues("open") if args.all else [_load_issue(n) for n in args.numbers]
+    results = [
+        (issue["number"], issue["title"], *verify_finding(issue, args.timeout))
+        for issue in issues
+    ]
+    for number, title, verdict, _detail, _command in results:
+        print(f"#{number:<5} {verdict:<11} {title}")
+    if args.close:
+        for number, _title, verdict, detail, command in results:
+            if verdict != "fixed":
+                continue
+            comment = verify_close_comment(command, detail)
+            run(
+                plan_close(number, fixed=True, pr=None, reason=None, comment=comment),
+                args.dry_run,
+            )
+            print(f"#{number} closed as fixed (verify-by)")
+    return 0
+
+
 def cmd_sync_labels(args: argparse.Namespace) -> int:
     plans = plan_sync_labels(_existing_labels())
     run(plans, args.dry_run)
@@ -519,6 +738,7 @@ def cmd_list(args: argparse.Namespace) -> int:
             for f, on in (
                 ("escalated", r["escalated"]),
                 ("no-vetted-remediation", r["no_vetted_remediation"]),
+                ("verify-by", r["verify_by"]),
             )
             if on
         )
@@ -567,6 +787,10 @@ def _parser() -> argparse.ArgumentParser:
     )
     o.add_argument("--source", default="session", help="review-<date> or session")
     o.add_argument("--no-vetted-remediation", action="store_true")
+    o.add_argument(
+        "--verify-by",
+        help="read-only command; exit 0 means fixed, non-zero means it still reproduces",
+    )
 
     t = sub.add_parser(
         "touch", help="record a re-observation; the third adds escalated"
@@ -591,6 +815,23 @@ def _parser() -> argparse.ArgumentParser:
 
     sl = sub.add_parser("sync-labels", help="create any missing label")
     _add_dry_run(sl, suppress=True)
+
+    v = sub.add_parser(
+        "verify",
+        help="re-run each finding's verify-by command and report fixed/still-open",
+    )
+    _add_dry_run(v, suppress=True)
+    v.add_argument("numbers", nargs="*", type=int, help="issue numbers to verify")
+    v.add_argument("--all", action="store_true", help="verify every open finding")
+    v.add_argument(
+        "--close", action="store_true", help="close passing findings as fixed"
+    )
+    v.add_argument(
+        "--timeout",
+        type=float,
+        default=DEFAULT_VERIFY_TIMEOUT,
+        help="seconds before a verify-by command counts as an error",
+    )
     return p
 
 
@@ -613,6 +854,7 @@ def main(argv: list[str] | None = None) -> int:
         "open": cmd_open,
         "touch": cmd_touch,
         "close": cmd_close,
+        "verify": cmd_verify,
     }[args.cmd]
     try:
         return handler(args)
