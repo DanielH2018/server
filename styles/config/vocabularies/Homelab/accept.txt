@@ -333,6 +333,8 @@ SNATs
 [Vv]endored
 two_factor
 rc
+argparse
+[Ss]ubcommand
 
 # Claude shell permissions (docs/claude-shell-permissions.md)
 dotfiles
