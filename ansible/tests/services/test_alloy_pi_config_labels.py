@@ -78,3 +78,37 @@ def test_storage_path_is_not_under_the_images_own_var_lib_alloy() -> None:
 def test_the_guard_can_go_red() -> None:
     assert len(REQUIRED_FRAGMENTS) >= 8
     assert '"machine" = "daniel-pi"' in REQUIRED_FRAGMENTS
+
+
+_DNS_OPT_BLOCK = re.compile(r"^\s+dns_opt:\n((?:\s+- \S+\n)+)", re.MULTILINE)
+
+
+def _resolver_attempts(compose: str) -> int:
+    """Return the `attempts:` value the compose's `dns_opt` sets, or 1 (resolv.conf's default).
+
+    Docker copies the host's `timeout:2 attempts:1` into the container otherwise, and one 2s
+    try against the embedded resolver is what issue #927 measured failing.
+    """
+    block = _DNS_OPT_BLOCK.search(re.sub(r"#[^\n]*", "", compose))
+    if block is None:
+        return 1
+    found = re.search(r"- attempts:(\d+)", block.group(1))
+    return int(found.group(1)) if found else 1
+
+
+def test_resolver_retries_the_embedded_dns_hop() -> None:
+    """dockerd answers 127.0.0.11 and stalls for seconds under a container operation.
+
+    A single 2s try fails every lookup in that window at level=error; see the comment above
+    `dns_opt` in the compose template.
+    """
+    assert _resolver_attempts(_COMPOSE.read_text()) >= 3
+
+
+def test_resolver_attempts_reads_the_real_value_and_defaults_without_it() -> None:
+    assert (
+        _resolver_attempts("    dns_opt:\n      - timeout:3\n      - attempts:3\n") == 3
+    )
+    assert _resolver_attempts("    volumes:\n      - ./data:/data\n") == 1
+    # A commented-out block is not a setting.
+    assert _resolver_attempts("    # dns_opt:\n    #   - attempts:3\n") == 1
