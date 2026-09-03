@@ -358,7 +358,23 @@ def _runtime_modules() -> list[Path]:
     ]
 
 
-NODE_CORPUS = sorted(set(DOCS) | set(_runtime_modules()))
+# DECIDED: docs/reference/decisions.md is excluded here, not from DOCS itself -- its own
+# `path:line` citations (the "Decided" column) stay checked by the walk above, and only the
+# node-citation check below is skipped. That page mirrors verbatim `# DECIDED:` comment prose
+# from across the tree rather than being authored here, so a node citation appearing in it is
+# always a second copy of one the source file carries -- and the source is never itself in
+# this corpus, since a role's `.yml`/`.j2` task file is neither a doc nor a runtime module.
+# Checking the copy caught a citation the source has carried, unchecked, since before this
+# page existed (`ansible/roles/k8s/netpol-baseline/tasks/main.yml` cites a test that moved to
+# `test_k8s_autodeploy_batch_gates.py`), and separately turned an identifier that wraps across
+# two comment lines in the source into two words once the generator joins them with a space,
+# which the citation pattern below then reads as a shorter, nonexistent name. Neither is a bug
+# in the mirror; both are properties of the source the generator is not in a position to fix.
+_NODE_CORPUS_EXCLUDED = frozenset({"docs/reference/decisions.md"})
+NODE_CORPUS = sorted(
+    {p for p in DOCS if p.relative_to(REPO).as_posix() not in _NODE_CORPUS_EXCLUDED}
+    | set(_runtime_modules())
+)
 
 
 def cited_tests(line: str) -> list[tuple[str, str]]:
@@ -454,6 +470,22 @@ def test_node_resolution_rejects_a_renamed_test_and_a_renamed_file():
     assert not node_resolves(
         "test_deploy_k8s_declarations.py", "test_no_such_test_anywhere", source
     )
+
+
+def test_node_corpus_excludes_the_generated_decisions_page():
+    """decisions.md mirrors comment prose it did not author -- see the DECIDED marker above
+    NODE_CORPUS. A node citation appearing only because this page quoted it is not a claim
+    this page makes; the source file carries the same words and is checked in its own right
+    wherever it happens to also be a doc or a runtime module.
+    """
+    assert not any(
+        p.as_posix().endswith("docs/reference/decisions.md") for p in NODE_CORPUS
+    )
+
+
+def test_node_corpus_still_includes_an_ordinary_doc():
+    """The red-proof pair to the exclusion above: only the one page is skipped."""
+    assert any(p.as_posix().endswith("docs/adr/index.md") for p in NODE_CORPUS)
 
 
 def test_the_node_walk_finds_citations_to_check():

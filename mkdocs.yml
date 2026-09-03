@@ -132,6 +132,7 @@ nav:
       - Backlog: reference/backlog.md
       - Topology: reference/topology.md
       - Doc freshness: reference/freshness.md
+      - Decision markers: reference/decisions.md
   # template.md is deliberately absent — it is a form, not a document. The nav test only
   # checks docs/*.md, not subdirectories, so leaving it out costs nothing.
   - Decisions:
