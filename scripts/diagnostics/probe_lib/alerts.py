@@ -110,6 +110,16 @@ _SYSLOG_LINE_RE = re.compile(
 # "push failed (status=down: " scaffolding as if it were the message.
 _SYSLOG_PUSH_FAILED_RE = re.compile(r"^push failed \(status=down:\s*(?P<msg>.*?)\)?$")
 _SYSLOG_STATUS_RE = re.compile(r"^status=down\s*(?P<msg>.*)$")
+# The rsyslog-shaped prefix's second token, e.g. "2026-09-03T13:05:06+00:00 daniel-pi
+# pi-recovery-health: ...". Verified against the Pi's real health.log (`hostname` there prints
+# "daniel-pi", matching PI_HOST) rather than assumed.
+_SYSLOG_HOST_RE = re.compile(r"^\S+\s+(?P<host>\S+)\s+")
+
+# The one monitor-bridge check that watches daniel-pi remotely (check_pi_pressure in
+# ansible/roles/k8s/monitor-bridge/files/check.py's CHECKS list) — every other check in that
+# file runs against the cluster, and the monitor-bridge stream carries no host field at all to
+# filter on instead.
+PI_PRESSURE_CHECK_NAME = "pi_pressure"
 
 
 def parse_syslog_down_line(line):
@@ -142,6 +152,20 @@ ALERT_SOURCES = (
     (ALERT_LOGQL, parse_down_line),
     (SYSLOG_ALERT_LOGQL, parse_syslog_down_line),
 )
+
+
+def is_pi_alert(logql, line, name):
+    """Whether an alert row is attributable to daniel-pi. Pure.
+
+    The syslog stream carries rsyslog's own host field; the monitor-bridge stream carries none
+    at all, since it runs in-cluster — so the one check that watches the Pi remotely is matched
+    by name instead. See PI_PRESSURE_CHECK_NAME and _SYSLOG_HOST_RE above for where each signal
+    comes from.
+    """
+    if logql == SYSLOG_ALERT_LOGQL:
+        m = _SYSLOG_HOST_RE.match(line)
+        return bool(m) and m["host"] == "daniel-pi"
+    return name == PI_PRESSURE_CHECK_NAME
 
 
 def alert_episodes(rows, gap_s=1800):
@@ -244,7 +268,7 @@ def run_alerts(ns):
     Both streams are queried and their rows merged before episodes are built, so one episode
     list covers monitor-bridge's checks and the host crons that push Kuma directly. `--check`
     filters both, because both name episodes with a machine name rather than a Kuma display
-    name.
+    name. `--pi` filters both too, on is_pi_alert() rather than a name substring.
     """
     base, pin = loki_endpoint()
     urls = alert_source_urls(base, ns.days, ns.limit)
@@ -269,6 +293,8 @@ def run_alerts(ns):
                 continue
             name, msg = parsed
             if ns.check and ns.check.lower() not in name.lower():
+                continue
+            if ns.pi and not is_pi_alert(logql, line, name):
                 continue
             rows.append((ns_ts, name, msg))
     raw.sort()

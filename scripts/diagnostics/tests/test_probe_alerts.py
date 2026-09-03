@@ -288,6 +288,73 @@ def test_alerts_check_filter_matches_a_host_cron_tag(monkeypatch, capsys):
     assert "n8n" not in out
 
 
+#
+# `alerts --pi`: attributing an alert row to daniel-pi. The syslog stream carries the host's
+# own hostname (verified live against the Pi's health.log, not assumed — `hostname` there
+# prints "daniel-pi"); the monitor-bridge stream carries no host field at all, so its one
+# check that watches the Pi remotely (pi_pressure) is matched by name instead.
+
+PI_SYSLOG_LINE = (
+    "2026-09-02T19:24:00+00:00 daniel-pi pi-recovery-health: "
+    "status=down not running: autoheal; restarted: autoheal"
+)
+NON_PI_SYSLOG_LINE = SYSLOG_DOWN  # host is daniel-box
+
+
+def test_is_pi_alert_accepts_the_pi_syslog_host_token():
+    assert alerts.is_pi_alert(
+        alerts.SYSLOG_ALERT_LOGQL, PI_SYSLOG_LINE, "pi-recovery-health"
+    )
+
+
+def test_is_pi_alert_rejects_a_non_pi_syslog_host_token():
+    assert not alerts.is_pi_alert(
+        alerts.SYSLOG_ALERT_LOGQL, NON_PI_SYSLOG_LINE, "longhorn-backup-health"
+    )
+
+
+def test_is_pi_alert_accepts_the_pi_pressure_check_on_the_bridge_stream():
+    line = "[2026-09-02T19:05:00] DOWN pi_pressure - load5 2.40/core (5 cycles)"
+    assert alerts.is_pi_alert(alerts.ALERT_LOGQL, line, "pi_pressure")
+
+
+def test_is_pi_alert_rejects_a_different_bridge_check():
+    line = "[2026-08-19T13:50:03] DOWN n8n - 1 workflow failed (2 cycles)"
+    assert not alerts.is_pi_alert(alerts.ALERT_LOGQL, line, "n8n")
+
+
+def test_alerts_pi_scopes_to_pi_attributed_rows_across_both_streams(
+    monkeypatch, capsys
+):
+    minute = int(60 * 1e9)
+    _route_alert_fetch(
+        monkeypatch,
+        {
+            alerts.ALERT_LOGQL: [
+                (
+                    minute,
+                    "[2026-08-19T13:50:03] DOWN n8n - 1 workflow failed (2 cycles)",
+                ),
+                (
+                    2 * minute,
+                    "[2026-09-02T19:05:00] DOWN pi_pressure - load5 2.40/core (5 cycles)",
+                ),
+            ],
+            alerts.SYSLOG_ALERT_LOGQL: [
+                (minute, NON_PI_SYSLOG_LINE),
+                (2 * minute, PI_SYSLOG_LINE),
+            ],
+        },
+    )
+    ns = probe._build_parser().parse_args(["alerts", "--days", "3", "--pi"])
+    assert alerts.run_alerts(ns) == 0
+    out = capsys.readouterr().out
+    assert "pi_pressure" in out
+    assert "pi-recovery-health" in out
+    assert "n8n" not in out
+    assert "longhorn-backup-health" not in out
+
+
 def test_alerts_dry_run_prints_a_command_per_stream(monkeypatch, capsys):
     monkeypatch.setattr(core, "sops_extract", lambda key: "example.test")
     monkeypatch.setattr(core, "metallb_vip", lambda: "10.0.0.240")
