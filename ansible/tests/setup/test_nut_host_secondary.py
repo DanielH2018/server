@@ -301,9 +301,35 @@ def test_the_watchdog_renders_its_own_env_file():
     assert "ups_secondary_push_token" in WATCHDOG_ENV
 
 
+def test_the_env_file_selects_the_token_by_host():
+    """daniel-box and ups_host (daniel-server) must render DIFFERENT tokens.
+
+    Two hosts pushing the same token would let either host's `up` satisfy Kuma's push
+    deadline, masking the other's `down` (issue #952) — the literal-token guard above would
+    pass vacuously for the new leg without this check.
+    """
+    assert "{% if inventory_hostname == ups_host %}" in WATCHDOG_ENV
+    assert "ups_secondary_daniel_server_push_token" in WATCHDOG_ENV
+
+
+def test_the_env_file_token_selection_is_mandatory():
+    """A missed host selection must fail the deploy, not render an empty token.
+
+    The script's own empty-token branch is a silent `logger …; exit 0`, so a token that
+    resolves empty pushes nothing and logs nothing anyone watches — the failure has to happen
+    here, at render time, instead.
+    """
+    assert "ups_secondary_push_token | mandatory" in WATCHDOG_ENV
+    assert "ups_secondary_daniel_server_push_token | mandatory" in WATCHDOG_ENV
+
+
 def test_the_tile_is_gated_on_its_token():
     """An ungated tile sits red from creation until the secret exists."""
     assert "{% if ups_secondary_push_token | default('') %}" in STATIC_MONITORS
+    assert (
+        "{% if ups_secondary_daniel_server_push_token | default('') %}"
+        in STATIC_MONITORS
+    )
 
 
 def test_the_tile_deadline_is_derived_from_the_cron_cadence():

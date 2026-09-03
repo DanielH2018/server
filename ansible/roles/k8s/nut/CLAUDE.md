@@ -51,10 +51,23 @@ delay stays inside that band while a host beyond `ups_host` is armed.
 console access to each): `kubectl -n homelab exec deploy/nut -- upsmon -c fsd` → host poweroff
 within ~15 s (HOSTSYNC).
 
-**Known gap.** `nut_host_upsd_clusterip` is a deploy-time snapshot. The role asserts upsd is
-reachable when it runs, but nothing re-checks it: if the `nut` Service is recreated with a new
-ClusterIP, daniel-box silently reverts to a hard cut while every check stays green. A Kuma push
-or a `monitor-bridge` check is the follow-up.
+**The stale-ClusterIP gap is closed.** `nut_host_upsd_clusterip` is still a deploy-time
+snapshot — the role asserts upsd is reachable when it runs, and nothing re-checks that address
+afterwards — but `roles/nut_host/templates/ups-secondary-health.sh.j2` now re-proves the link
+itself every `nut_host_watchdog_interval_minutes` (10 min), from the deployed
+`/etc/nut/upsmon.conf`, on **every** armed host (daniel-box and `ups_host`/daniel-server both,
+since 2026-09). Each host pushes its own Kuma tile —
+`roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2`'s `ups-secondary.json` (daniel-box,
+`ups_secondary_push_token`) and `ups-secondary-daniel-server.json` (daniel-server,
+`ups_secondary_daniel_server_push_token`) — deliberately never the same token: two hosts
+sharing one push token would let either host's `up` satisfy Kuma's deadline and mask the
+other's `down` (issue #952). `kuma-push.env.j2` picks the right token by `inventory_hostname`.
+
+**Ordering matters when arming the watchdog on a new host.** The Kuma tile has to exist
+*before* `nut_host`'s cron starts pushing to it — deploy `uptime-kuma` first, then run
+`initial_setup.yml --tags nut_host` on the host. Running the cron install first just means its
+first several pushes land on a tile that doesn't exist yet; it does not risk a shared token,
+because each host's token and tile are provisioned together, one leg at a time.
 
 ## Editing
 - Manifests/config: `templates/*.j2` (config-secret.yaml.j2 holds all six NUT files)
