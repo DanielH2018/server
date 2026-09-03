@@ -184,3 +184,31 @@ def test_wrapper_stops_watching_a_joined_run_when_it_ends():
         f"{_WRAPPER}'s join branch leaves started_before at the in-flight run's own stamp, "
         "so the wait loop cannot see that run finish and always runs to its deadline."
     )
+
+
+# ── issue #948: two directives no test pinned. Four other units' OnFailure= were already
+# regex-pinned (see the module docstrings citing this file), and SuccessExitStatus/TimeoutStartSec
+# are asserted elsewhere in this file — but this unit's own OnFailure= and TimeoutStartSec= were
+# asserted by nothing. systemd ignores a typo'd key with a journal warning and loads the unit
+# anyway, so a silent drift here would reach a host with `daemon_reload: true` reporting success.
+
+
+def test_unit_pages_on_failure():
+    unit = _UNIT_TEMPLATE.read_text()
+    assert re.search(r"^OnFailure=gitops-deploy-alert\.service$", unit, re.MULTILINE), (
+        f"{_UNIT_TEMPLATE} no longer sets OnFailure=gitops-deploy-alert.service — a run that "
+        "fails outright (not the SuccessExitStatus=75 contention case above) would page nobody."
+    )
+
+
+def test_unit_timeout_covers_the_measured_k8s_worst_case():
+    # 180s max flock wait + STAGING_GATE_TIMEOUT_S (600) + STAGING_EXPECT_TIMEOUT_S (120) +
+    # K8S_DEPLOY_TIMEOUT_S (900) + K8S_ROLLBACK_TIMEOUT_S (1320) = 3120s, which is why the unit's
+    # own arithmetic comment sizes TimeoutStartSec to 60min rather than the 45min the docstring
+    # at the top of this file still (stale) describes.
+    unit = _UNIT_TEMPLATE.read_text()
+    assert re.search(r"^TimeoutStartSec=60min$", unit, re.MULTILINE), (
+        f"{_UNIT_TEMPLATE}'s TimeoutStartSec no longer reads 60min. If this is a deliberate "
+        "re-size, re-derive it against the budget arithmetic in the unit's own comment and "
+        "gitops_deploy/defaults/main.yml before changing this pin."
+    )

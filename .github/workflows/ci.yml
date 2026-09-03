@@ -132,6 +132,13 @@ jobs:
       - name: Install prek
         run: pip install prek==0.4.14  # pinned for a reproducible hook toolchain; Renovate (pypi) bumps it
 
+      # validate-unit-templates is `language = "system"`, so it runs whatever `systemd-analyze`
+      # is on PATH — unverified on ubuntu-latest before this ran once. This step exists so a
+      # runner image change that drops the binary fails loud here rather than as an opaque
+      # "command not found" inside the hook.
+      - name: Check systemd-analyze is available
+        run: systemd-analyze --version
+
       # The `vale` prek hook is `language = "system"`, so it runs whatever binary is on PATH
       # and there is none on a fresh runner. Version-pinned to match the workstation, because
       # a style package's rules change between releases and a gate that passes locally and
