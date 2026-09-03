@@ -202,3 +202,7 @@ nav:
       - Longhorn disaster recovery: longhorn-disaster-recovery.md
       - k3s etcd restore: k3s-etcd-restore.md
       - "Kopia disaster recovery (RETIRED — history only)": kopia-disaster-recovery.md
+      # The last stop on the recovery ladder — total loss of daniel-box or the author's own
+      # access. It is the entry point that links to every runbook above rather than one more
+      # subsystem-specific procedure, so it sits after all of them.
+      - Break glass: break-glass.md
