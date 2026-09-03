@@ -2,7 +2,7 @@
 
 The guard asserts every `probe_lib` module that defines a `run_*`/`main` entry point is
 covered by some REGISTRY entry's `module=`. It is deliberately checked against the literal
-eleven names below, not just "REGISTRY matches whatever `package_entry_points` returns
+twelve names below, not just "REGISTRY matches whatever `package_entry_points` returns
 today" — see CLAUDE.md's "Python & Tests" on non-vacuity.
 
 Run: uv run pytest scripts/diagnostics/tests/test_probe_registry.py
@@ -14,10 +14,11 @@ import probe
 from diagnostics import probe_lib
 from lib.registry import Registry, package_entry_points
 
-# The eleven probe_lib modules that define a run_*/main entry point (core.py doesn't — it's
+# The twelve probe_lib modules that define a run_*/main entry point (core.py doesn't — it's
 # helpers, not a subcommand backend). Every one of probe.py's 22 subcommands maps to one of
 # these (several subcommands share a module, e.g. "monitors"/"kuma-drift" both back onto
-# monitors.py) or to none (the streaming, plan()-driven subcommands like `pi`/`cert`).
+# monitors.py, and "targets"/"pi" both back onto pi_plane.py) or to none (the streaming,
+# plan()-driven subcommands like `loki-labels`/`cert`).
 EXPECTED_MODULES = frozenset(
     {
         "alerts",
@@ -28,6 +29,7 @@ EXPECTED_MODULES = frozenset(
         "longhorn",
         "metrics",
         "monitors",
+        "pi_plane",
         "readonly_rbac",
         "releases",
         "vip_placement",
@@ -35,7 +37,7 @@ EXPECTED_MODULES = frozenset(
 )
 
 
-def test_package_entry_points_matches_the_known_eleven():
+def test_package_entry_points_matches_the_known_twelve():
     assert package_entry_points(probe_lib) == sorted(EXPECTED_MODULES)
 
 

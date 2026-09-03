@@ -43,6 +43,42 @@ down leaves the ratio at N/N up (a fenced-off push tile read green for a day on 
 its own interval after a Kuma restart as pending, since Kuma exports a monitor only once it has
 beaten.
 
+### The Pi's own first-command triage
+
+daniel-pi runs no kubelet, so `targets`, `kuma-drift`, `alerts` and `health --docker` each need
+a `--pi`-shaped answer of their own rather than the cluster's — this is the Docker-plane
+equivalent of the four cluster checks above, backed by `probe_lib/pi_plane.py`.
+
+- **`targets --pi`** — Prometheus scrape-target health, scoped to daniel-pi. The declared job
+  set (`node-pi`, `alloy-pi`) is parsed from `k8s_pi_client_ip` static targets in claude-otel's
+  `prometheus.yaml.j2` rather than hand-listed, so a renamed or added job needs no change here.
+  A declared job absent from the live set is reported MISSING and fails the gate — dividing the
+  Pi's own live set by itself would repeat `monitors`' N/N-up mistake. glances carries no
+  Prometheus job anywhere in this repo (it is polled directly at `pi <path>`), and the output
+  says so rather than inventing one.
+- **`kuma-drift --pi`** — the same declared-vs-live reconciliation, scoped to daniel-pi's own
+  monitors. The scope comes from each monitor's YAML `stringData` key in
+  `static-monitors.yaml.j2` (`daniel-pi-host.json`, `monitor-bridge-pi.json`, …) carrying `pi`
+  as its own hyphen-delimited token — `pihole-k8s-dns.json` is excluded because `pi` there is a
+  substring of `pihole`, not a token, and Pi-hole runs on k3s.
+- **`alerts --pi`** — scopes the DOWN-episode reconstruction to daniel-pi. The syslog stream
+  (the Pi's own health crons) carries rsyslog's host token, verified live against
+  `/var/log/pi-health/health.log` (`hostname` there prints `daniel-pi`); the monitor-bridge
+  stream carries no host field at all, since it runs in-cluster, so its one check that watches
+  the Pi remotely — `pi_pressure` (`check_pi_pressure` in monitor-bridge's `CHECKS`) — is
+  matched by name instead.
+- **`pi containers`** — one ssh call to daniel-pi (`docker ps -aq` piped into `docker inspect`
+  in the same remote shell, so this is a single ssh invocation regardless of container count)
+  rendering name/image/status/health/networks for every container on the host. Flags a running
+  container with an empty `Networks` map — the reboot-detach failure recorded in
+  `containers-lose-network-across-pi-reboot.md` (`Up (healthy)` with no network at all) — and an
+  unhealthy healthcheck. A merely-stopped container (this host runs the short-lived
+  `docker-proxy-lifecycle` sub-proxy) is not flagged; gating on any non-running container would
+  read red on a normal day. Measured against the live Pi (2026-09-03, 7 containers, six runs):
+  3.65s–19.3s, almost all ssh/exec overhead on a Zero 2 W — `PI_CONTAINERS_TIMEOUT` in
+  `pi_plane.py` sits at 45s, above the observed tail rather than at `core.py`'s 10s HTTP
+  default, which this call is not.
+
 ### `releases [<service>] [--previous] [--json]`
 
 Which commit produced the manifests each k8s service is running. `kubectl` reports what is

@@ -117,6 +117,7 @@ def test_package_entry_points_finds_run_and_main_modules():
         "longhorn",
         "metrics",
         "monitors",
+        "pi_plane",
         "readonly_rbac",
         "releases",
         "vip_placement",
