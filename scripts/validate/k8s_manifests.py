@@ -177,6 +177,10 @@ def ansible_bool(value) -> bool:
     return bool(value)
 
 
+# A value that is nothing but one `{{ expr }}` — no surrounding text, no second expression.
+_PURE_TEMPLATE = re.compile(r"^\{\{\s*(?P<expr>[^{}]+?)\s*\}\}$")
+
+
 def resolve_vars(values: dict, context: dict, passes: int = 5) -> dict:
     """Expand ``{{ ... }}`` inside variable VALUES, the way Ansible does before templating.
 
@@ -205,9 +209,23 @@ def resolve_vars(values: dict, context: dict, passes: int = 5) -> dict:
         the whole value IS a string. A list- or dict-valued variable holding `{{ ... }}`
         therefore reaches a template already expanded; scanning only top-level strings would
         leave the literal braces in place one level further down.
+
+        A value that is NOTHING BUT a single `{{ expr }}` is evaluated as a Jinja expression
+        rather than rendered to text, so it keeps `expr`'s own type — this is what lets a role
+        default alias a list- or bool-valued group_var (`netpol_baseline_node_cidrs: "{{
+        k3s_cni0_gateways }}"`) rather than repeating its literal. Ansible does the same:
+        confirmed against a live `ansible-playbook` run, a whole-value alias to a list
+        variable comes back a list, not its `str()`. `.render()` always returns a string, so
+        without this a list alias reaches a `{% for %}` loop as the literal characters of its
+        Python repr — `[`, `'`, `1`, ... — silently breaking the template it aliases into.
         """
         if isinstance(node, str):
-            return env.from_string(node).render(ctx) if "{{" in node else node
+            if "{{" not in node:
+                return node
+            pure = _PURE_TEMPLATE.match(node.strip())
+            if pure:
+                return env.compile_expression(pure.group("expr"))(**ctx)
+            return env.from_string(node).render(ctx)
         if isinstance(node, list):
             return [expand(n, ctx) for n in node]
         if isinstance(node, dict):

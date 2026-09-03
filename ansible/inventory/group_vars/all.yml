@@ -98,6 +98,20 @@ lan_subnet: "10.0.0.0/24"
 # alone does not cover it — a ClusterIP is not on the LAN.
 k3s_pod_cidr: "10.42.0.0/16"
 k3s_service_cidr: "10.43.0.0/16"
+# The two k3s nodes' cni0 bridge gateway addresses, verified per node with
+# `ip -4 -o addr show cni0`. Global rather than netpol-baseline's role default because a
+# second role (loki-homelab's monitoring route) also has to admit exactly these two
+# addresses, and role defaults are not visible to a different role. netpol_baseline_node_cidrs
+# (netpol-baseline/defaults/main.yml) reads this rather than repeating the literals.
+k3s_cni0_gateways:
+  - 10.42.0.1/32
+  - 10.42.1.1/32
+# wg-easy v15 picks its own client pool internally (no WG_DEFAULT_ADDRESS env in this
+# deploy) rather than Ansible assigning it, so this isn't a Service/Deployment input —
+# it exists purely so the comments that describe wg-easy's client range (traefik's
+# trustedIPs note, authelia's bypass policy, docker_install's bridge-carve-out) cite one
+# name instead of repeating the literal.
+wg_client_subnet: "10.8.0.0/24"
 # code-server's read-only docker-proxy is gated on this host_var, not containers_list (a
 # tagged `deploy.yml --tags docker-proxy` set_facts containers_list to the filtered
 # dependency closure, which would drop code-server and render False). Override per-host.

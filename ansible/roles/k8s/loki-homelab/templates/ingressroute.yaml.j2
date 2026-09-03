@@ -12,7 +12,7 @@
     container_item.hostname | default(container_item.name),
     container_item.port,
     '/loki/api/v1/',
-    extra_client_cidrs=['10.42.0.1/32', '10.42.1.1/32']
+    extra_client_cidrs=k3s_cni0_gateways
   )
 }}
 {# DECIDED 2026-08-24: was PathPrefix(`/`) with extra_client_cidrs=['10.42.0.0/16'].

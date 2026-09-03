@@ -28,8 +28,9 @@ data:
 {% endfor %}
             # Carried over verbatim from the Docker traefik.yml.j2, and the reasoning is
             # unchanged by the platform: this governs X-Forwarded-For TRUST, not admission.
-            # Deliberately NOT 10.0.0.0/8 (that would trust wg-easy's 10.8.0.0/24 clients as
-            # upstream proxies, letting a WG client spoof XFF) and deliberately not the pod
+            # Deliberately NOT 10.0.0.0/8 (that would trust wg-easy's `wg_client_subnet`
+            # ({{ wg_client_subnet }}) clients as upstream proxies, letting a WG client
+            # spoof XFF) and deliberately not the pod
             # CIDR — the Service runs externalTrafficPolicy: Local specifically so requests
             # arrive with the real client address rather than cni0's, and trusting the pod
             # network would let any pod forge XFF.

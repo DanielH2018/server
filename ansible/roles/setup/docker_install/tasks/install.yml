@@ -166,8 +166,9 @@
     # as /20s) is nearly exhausted — all fourteen 172.x /16 slots are used and new isolation
     # nets have started landing in the 192.168.0.0/16 fallback, which also squats on a common
     # home-LAN range AND on the RFC1918 blocks Authelia/Unbound/Mullvad treat as trusted. Pin
-    # new-network allocation to 10.200.0.0/16 in /24s (256 nets): clear of the LAN (10.0.0.0/24),
-    # wg-easy (10.8.0.0/24), the Mullvad tunnel (10.64.0.0/10), and Docker's own 172.16/12 +
+    # new-network allocation to 10.200.0.0/16 in /24s (256 nets): clear of the LAN (`lan_subnet`,
+    # 10.0.0.0/24), wg-easy (`wg_client_subnet`, 10.8.0.0/24), the Mullvad tunnel
+    # (10.64.0.0/10), and Docker's own 172.16/12 +
     # 192.168/16 defaults. Only NEW `docker network create` calls draw from this; the ~20
     # existing networks keep their current subnets across the restart (live-restore).
     content: |

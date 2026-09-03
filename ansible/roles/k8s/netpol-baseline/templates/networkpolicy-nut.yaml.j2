@@ -57,10 +57,10 @@ spec:
         - podSelector:
             matchLabels:
               app: uptime-kuma
+{% for cidr in netpol_baseline_node_cidrs %}
         - ipBlock:
-            cidr: 10.42.0.1/32
-        - ipBlock:
-            cidr: 10.42.1.1/32
+            cidr: {{ cidr }}
+{% endfor %}
         - ipBlock:
             cidr: 10.42.0.0/32
         - ipBlock:

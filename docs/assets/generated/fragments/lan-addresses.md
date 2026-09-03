@@ -5,3 +5,5 @@
 | Pi-hole DNS VIP (MetalLB) | `10.0.0.243` | `dns_k8s_vip` |
 | WireGuard UDP port, wg-easy on daniel-box | `51820/udp` | `udp_port` on the k8s `wg-easy` entry in `host_vars/daniel-box.yml` |
 | WireGuard UDP port, the Pi's LAN-only wg-easy | `51822/udp` | `udp_port` on `wg-easy` in `host_vars/daniel-pi.yml` |
+| Home LAN subnet | `10.0.0.0/24` | `lan_subnet` |
+| WireGuard client subnet | `10.8.0.0/24` | `wg_client_subnet` |

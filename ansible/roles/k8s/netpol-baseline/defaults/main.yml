@@ -35,12 +35,12 @@ netpol_baseline_exempt_workloads:
   - karakeep-chrome
 
 # The node-side bridge addresses, for traffic that arrives with a node IP: containerd image
-# pulls, hostPort paths, and the three host crons that dial traefik. Verified per node with
-# `ip -4 -o addr show cni0`. These are /32 HOST addresses on purpose — see the plan's Global
-# Constraints for why a /16 here would silently cancel the whole policy.
-netpol_baseline_node_cidrs:
-  - 10.42.0.1/32
-  - 10.42.1.1/32
+# pulls, hostPort paths, and the three host crons that dial traefik. These are /32 HOST
+# addresses on purpose — see the plan's Global Constraints for why a /16 here would silently
+# cancel the whole policy. Sourced from group_vars' `k3s_cni0_gateways` (verified per node
+# with `ip -4 -o addr show cni0`) rather than repeated here — loki-homelab's monitoring route
+# and this role's own mosquitto/nut policies all admit the same two addresses.
+netpol_baseline_node_cidrs: "{{ k3s_cni0_gateways }}"
 
 # Matches headlamp_k8s_netpol_probe_image and registry_k8s_netpol_probe_image.
 netpol_baseline_probe_image: alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b

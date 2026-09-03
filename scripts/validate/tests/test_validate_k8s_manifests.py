@@ -388,6 +388,33 @@ def test_resolve_vars_leaves_a_brace_free_value_alone():
     assert vkm.resolve_vars(dict(values), {}) == values
 
 
+# ── resolve_vars: a whole-value alias keeps the aliased variable's own type ────────────────────
+#
+# Ansible does this for real: a role default that is nothing but `"{{ other_var }}"` comes back
+# as `other_var`'s own type, list included — confirmed against a live `ansible-playbook` run
+# (see the commit that added this). `.render()` alone cannot reproduce that: Jinja templates
+# always render to text, so a list-valued alias would come back as the literal characters of its
+# Python repr, and a `{% for %}` loop over it would iterate one character at a time.
+
+
+def test_resolve_vars_a_whole_value_alias_keeps_the_list_type():
+    resolved = vkm.resolve_vars(
+        {"node_cidrs": "{{ shared_cidrs }}"},
+        {"shared_cidrs": ["10.42.0.1/32", "10.42.1.1/32"]},
+    )
+    assert resolved["node_cidrs"] == ["10.42.0.1/32", "10.42.1.1/32"]
+
+
+def test_resolve_vars_a_partial_value_still_renders_to_a_string():
+    """The rejecting half: text alongside the expression still goes through `.render()`.
+
+    Only a value that IS the template, with nothing else in the string, gets the native-type
+    treatment — the same boundary Ansible itself draws.
+    """
+    resolved = vkm.resolve_vars({"url": "https://{{ host }}/x"}, {"host": ["a", "b"]})
+    assert resolved["url"] == "https://['a', 'b']/x"
+
+
 # ── role defaults must not shadow the inventory ───────────────────────────────────────────────
 
 
