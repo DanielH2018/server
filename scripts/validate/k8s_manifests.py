@@ -32,6 +32,7 @@ it has run clean — no false positive — for a while.
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import re
 import sys
@@ -67,6 +68,16 @@ from toposort import filter_by_platform
 from ansible.plugins.filter.core import to_bool
 
 
+def _ansible_hash(value, algo="sha1"):
+    """Mirror Ansible's `hash` filter so templates using it render identically here.
+
+    Same shim as `validate/compose_templates.py`'s `_ansible_hash`, kept as its own copy per
+    that module's convention: each render guard owns the Ansible pieces its own templates
+    reach for, rather than share a cross-guard import for a five-line function.
+    """
+    return hashlib.new(algo, str(value).encode("utf-8")).hexdigest()
+
+
 def register_ansible_filters(env):
     """Register the Ansible filters the manifest templates use on a bare Jinja env.
 
@@ -76,9 +87,13 @@ def register_ansible_filters(env):
 
     pihole's ConfigMap includes the shared dnsmasq template, which derives its override records
     from the inventory via the repo's filter plugin — register the real thing for that too.
+
+    `hash` backs `ansible/templates/checksum-annotation.yml.j2`'s path-mode call
+    (`lookup('file', path, rstrip=False) | hash('sha1')`).
     """
     env.filters["bool"] = to_bool
     env.filters["filter_by_platform"] = filter_by_platform
+    env.filters["hash"] = _ansible_hash
     return env
 
 
@@ -416,12 +431,16 @@ def make_lookup(ctx: dict):
     added to it later embedded as literal ``{{ ... }}`` in the ConfigMap.
     """
 
-    def lookup(kind: str, *args: str) -> str:
+    def lookup(kind: str, *args: str, **kwargs) -> str:
         """Resolve one `lookup()` call, supporting `file`, `pipe` (base64 only) and `template`.
 
         Args:
             kind: The lookup plugin name.
             args: The plugin's positional arguments; `args[0]` is always a path or command.
+            kwargs: Plugin options. Only `file`'s `rstrip` is recognised (default `True`,
+                matching Ansible's own `file` lookup) — `checksum-annotation.yml.j2`'s
+                path-mode call passes `rstrip=False` so the bytes it hashes match a `copy`
+                task's checksum of the same file, which is not stripped either.
 
         Raises:
             ValueError: `kind` is not one of the three supported plugins, or `kind == "pipe"`
@@ -429,7 +448,8 @@ def make_lookup(ctx: dict):
         """
         path = Path(args[0])
         if kind == "file":
-            return path.read_text().rstrip("\n")
+            text = path.read_text()
+            return text.rstrip("\n") if kwargs.get("rstrip", True) else text
         if kind == "pipe":
             # Only the binary-embed idiom, done hermetically in Python rather than by
             # running a shell: lookup('file') utf-8-decodes and would mangle binary, so

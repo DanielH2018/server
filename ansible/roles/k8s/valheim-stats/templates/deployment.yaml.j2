@@ -1,6 +1,7 @@
 {% from 'container-resources.yml.j2' import container_resources with context %}
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
 {% from 'pod-affinity.yml.j2' import node_affinity_preference with context %}
+{% from 'checksum-annotation.yml.j2' import checksum_annotation with context %}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -24,9 +25,11 @@ spec:
       annotations:
         # Recreate the pod when the script ConfigMap's source changes — the manifests
         # role only restarts on manifest changes, and the script is not a manifest.
-        # The value is the stage-task's register (its sha1 of the staged file), not a
-        # lookup|hash here: the offline render guard's Jinja env has no `hash` filter.
-        checksum/stats-script: "{{ (valheim_stats_script | default({})).checksum | default('unstaged') }}"
+        # DECIDED (was: no lookup|hash here, the offline render guard's Jinja env had no
+        # `hash` filter): scripts/validate/k8s_manifests.py now shims one
+        # (register_ansible_filters) and its lookup('file') shim takes rstrip, so the path
+        # form hashes the same raw bytes the `copy` task's own checksum register did.
+        {{ checksum_annotation('stats-script', path=playbook_dir + '/roles/k8s/valheim-stats/files/valheim_stats.py') }}
     spec:
       enableServiceLinks: false
       securityContext:

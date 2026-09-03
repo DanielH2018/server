@@ -10,7 +10,7 @@ from pathlib import Path
 import yaml
 from jinja2 import Environment, FileSystemLoader
 
-from validate.k8s_manifests import ansible_bool
+from validate.k8s_manifests import ansible_bool, make_lookup, register_ansible_filters
 from _helpers import ANSIBLE
 
 
@@ -28,7 +28,16 @@ BOX_VARS = yaml.safe_load(
 
 
 def _render(path: Path, **ctx) -> str:
-    """Render a template with the given context; undefined values are left to raise."""
+    """Render a template with the given context; undefined values are left to raise.
+
+    `playbook_dir` and `lookup`/`hash` are wired the same way `validate/k8s_manifests.py`
+    wires them, not just the caller's own `ctx` — a `deployment.yaml.j2` this renders may
+    call `ansible/templates/checksum-annotation.yml.j2`'s path-mode
+    `lookup('file', playbook_dir + ..., rstrip=False) | hash('sha1')`
+    (valheim-stats', terraria-stats'), and this helper renders every role's
+    `deployment.yaml.j2` generically, not just the ones a caller anticipated.
+    """
+    ctx.setdefault("playbook_dir", str(ANSIBLE))
     env = Environment(
         loader=FileSystemLoader([str(path.parent), str(ANSIBLE / "templates")]),
         trim_blocks=True,
@@ -36,6 +45,8 @@ def _render(path: Path, **ctx) -> str:
         keep_trailing_newline=True,
     )
     env.globals.update(ctx)
+    env.globals["lookup"] = make_lookup(ctx)
+    register_ansible_filters(env)
     return env.get_template(path.name).render(**ctx)
 
 

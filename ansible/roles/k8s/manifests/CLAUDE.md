@@ -61,6 +61,26 @@ same resources.
   deploying more than one Deployment names the rest in `manifests_extra_rollouts` as
   `{name, image}` pairs (`freshrss`, `prowlarr`, `karakeep`, `n8n` today), where `image` is the
   `k8s/image-builder` name whose rebuild should roll it.
+- **A pod that mounts content outside this cycle needs its own restart trigger.** A
+  ConfigMap/Secret a role's template builds with `lookup('file'|'template', ...)` needs
+  nothing extra: the lookup's content is IN the rendered manifest, so a content change
+  changes `manifests_render`'s bytes and the rollout-restart above fires on its own. A role
+  that instead stages its ConfigMap with `kubectl create configmap --from-file` — monitor-
+  bridge, autofix-bridge, valheim-stats and terraria-stats, all for a script too
+  Jinja-hostile to template (curly-brace exposition strings, PromQL selectors) — applies it
+  with its own `kubectl apply --server-side` task, entirely outside `manifests_files`, so
+  `manifests_render is changed` never sees it and the pod keeps running the code it started
+  with. Those roles add a `checksum/<name>` pod-template annotation instead, rendered by the
+  shared `checksum_annotation(name, value=...)` / `checksum_annotation(name, path=...)` macro
+  in `ansible/templates/checksum-annotation.yml.j2` (value mode renders an already-computed
+  checksum verbatim; path mode hashes one file's raw bytes inline via
+  `lookup('file', path, rstrip=False) | hash('sha1')`). n8n's own image-digest pod-roll
+  annotation reuses the same macro's value mode too, for a consistent annotation line — the
+  macro only standardises how the line renders, not what feeds it.
+  `ansible/tests/k8s/test_checksum_annotation_census.py` is the guard: every role that stages
+  a ConfigMap this way either carries the annotation or is named in that test's `DEBT` dict
+  with the reason it does not need one (claude-otel's dashboards poll on their own, per
+  Grafana's `updateIntervalSeconds`).
 - **Stale Secret keys are patched out explicitly, because `apply` cannot.** `kubectl apply` only
   prunes map keys on objects it has a last-applied baseline for, so one historical
   `kubectl create`/`replace` breaks pruning silently and forever — removing a key from a template

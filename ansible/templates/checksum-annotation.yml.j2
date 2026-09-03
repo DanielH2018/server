@@ -1,0 +1,46 @@
+{#
+  checksum/<name> pod-template annotation — the trigger a Deployment/DaemonSet needs to
+  restart on content it mounts but `ansible.builtin.template` never rendered. A ConfigMap
+  staged by `kubectl create configmap --from-file` (monitor-bridge, autofix-bridge,
+  valheim-stats, terraria-stats all do this for a Jinja-hostile script) sits outside the
+  manifests role's own render/apply cycle, so `manifests_render is changed`
+  (roles/k8s/manifests/tasks/main.yml) never fires for it and the pod keeps running the code
+  it started with. See "A config edit won't restart the pod (k3s)" in the repo CLAUDE.md.
+
+  A role that instead embeds its file via `lookup('file'|'template', ...)` directly INTO a
+  manifest listed in `manifests_files`/`manifests_secret_files` needs no annotation at all —
+  the embed changes the rendered manifest's bytes, `manifests_render is changed` fires on its
+  own, and the central rollout-restart covers it. Reach for this macro only for content that
+  reaches the cluster some other way.
+
+  Two call shapes, matching how each existing caller already computed its value before this
+  macro existed:
+
+    checksum_annotation('name', value=<already-computed checksum>)
+      Renders the value verbatim, `| default('unstaged')`. Use this when the value comes from
+      a task — a `copy` register, a fact hashing several files together (monitor-bridge,
+      autofix-bridge), an image digest (n8n's `checksum/image`) — anything other than one
+      file's raw bytes, so a role's own computation is preserved exactly rather than
+      approximated by this macro's own hashing.
+
+    checksum_annotation('name', path=<absolute path to one file>)
+      Hashes the file's raw bytes inline: `lookup('file', path, rstrip=False) | hash('sha1')`.
+      `rstrip=False` is load-bearing — the file lookup's default strips trailing whitespace,
+      which would hash different bytes than the file on disk and diverge from a `copy` task's
+      own (unstripped) checksum of the same file, e.g. valheim-stats' and terraria-stats'.
+
+  `unstaged` is the value every existing checksum/ annotation falls back to on a config-only
+  run (`--skip-tags deploy`), a `--dry-run` validator render, or a register/fact that never
+  ran — stable across all three so none of them rolls the pod. `path` mode falls back the
+  same way through the same `| default('unstaged')`: `scripts/validate/k8s_manifests.py`'s
+  offline `lookup('file', ...)` shim reads the checked-in role file directly (there is no
+  `--dry-run` case where that file is absent), so its render always yields a real digest
+  rather than the placeholder.
+
+  Invoke at the annotations block's indent, e.g.:
+      annotations:
+        {{ checksum_annotation('check-script', value=monitor_bridge_script_checksum) }}
+#}
+{% macro checksum_annotation(name, value=None, path=None) -%}
+checksum/{{ name }}: "{{ (value if path is none else (lookup('file', path, rstrip=False) | hash('sha1'))) | default('unstaged') }}"
+{%- endmacro %}
