@@ -68,6 +68,13 @@ def test_a_later_pipeline_stage_is_still_matched():
     assert _mod.classify("git fetch && gh run watch 1") == "watch"
 
 
+def test_a_semicolon_joined_later_stage_is_still_matched():
+    """Issue #1020: `;` joined the same way as `&&` above must still be caught — `shlex.split`
+    glues an unquoted `;` onto the word before it, so the `gh run watch` after it was never
+    its own stage until `_hook_common.split_stages` learned to cut on `;` first."""
+    assert _mod.classify("git fetch; gh run watch 1") == "watch"
+
+
 def test_a_flag_between_gh_and_the_subcommand_is_ignored():
     assert _mod.classify("gh --repo o/r run watch 1") == "watch"
 

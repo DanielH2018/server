@@ -151,6 +151,16 @@ def test_a_later_pipeline_stage_is_still_judged():
     assert _mod.problem("git fetch && git stash pop") is not None
 
 
+def test_a_semicolon_joined_later_stage_is_still_judged():
+    """Issue #1020: `;` joined the same way as `&&` above must still be caught.
+
+    This is the live incident's shape — `git stash && prek run ... | tail -5; git stash pop`
+    was ALLOWED before the fix, because `shlex.split` glued the `;` onto `-5` and the
+    `git stash pop` after it was never its own stage.
+    """
+    assert _mod.problem("git fetch; git stash pop") is not None
+
+
 # --- 5. a load generator aimed at the public hostname ------------------------------------------
 
 

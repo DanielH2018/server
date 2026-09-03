@@ -13,6 +13,56 @@ import json
 import shlex
 
 
+def _split_top_level_semicolons(command: str) -> list[str]:
+    """`command` cut at every `;` that sits outside quoting, each piece still raw shell text.
+
+    `shlex.split` leaves an unquoted `;` glued to the word before it (`"hi;"`), so no token
+    it returns is ever exactly `";"` — every rule keyed on that separator is unreachable. This
+    walks the raw string instead, tracking quote/escape state one character at a time, so a
+    `;` inside `'...'`/`"..."` or after a backslash stays part of its piece while a bare one
+    becomes a cut point. `;;` and `;&` (case-statement terminators) collapse into the same cut
+    as a lone `;` — swallowing the second character rather than leaving a stray `&`/`;` glued
+    to the next piece, which would just relocate the same bypass one character over.
+    """
+    pieces: list[str] = []
+    current: list[str] = []
+    in_single = in_double = escaped = False
+    i, n = 0, len(command)
+    while i < n:
+        ch = command[i]
+        if escaped:
+            current.append(ch)
+            escaped = False
+            i += 1
+            continue
+        if ch == "\\" and not in_single:
+            current.append(ch)
+            escaped = True
+            i += 1
+            continue
+        if ch == "'" and not in_double:
+            in_single = not in_single
+            current.append(ch)
+            i += 1
+            continue
+        if ch == '"' and not in_single:
+            in_double = not in_double
+            current.append(ch)
+            i += 1
+            continue
+        if ch == ";" and not in_single and not in_double:
+            pieces.append("".join(current))
+            current = []
+            i += 1
+            if i < n and command[i] in (";", "&"):
+                i += 1
+            continue
+        current.append(ch)
+        i += 1
+    pieces.append("".join(current))
+    return pieces
+
+
 def split_stages(command: str) -> list[list[str]]:
     """Every pipeline/sequence stage of `command`, split into argv-ish tokens.
 
@@ -20,21 +70,28 @@ def split_stages(command: str) -> list[list[str]]:
     how these calls are usually written. Unbalanced quotes return no stages: there is nothing
     reliable to match on, and a hook that guesses at a command it cannot parse is worse than
     one that declines to judge it.
+
+    `;` is cut out before `shlex.split` ever sees it (see `_split_top_level_semicolons`), so
+    each semicolon-delimited piece is tokenised and flushed as its own stage boundary here,
+    the same as hitting a literal `&&`/`||`/`|`/`&` token below.
     """
-    try:
-        words = shlex.split(command)
-    except ValueError:
-        return []
-    stages, current = [], []
-    for word in words:
-        if word in ("&&", "||", "|", ";", "&"):
-            if current:
-                stages.append(current)
-            current = []
-        else:
-            current.append(word)
-    if current:
-        stages.append(current)
+    stages: list[list[str]] = []
+    current: list[str] = []
+    for piece in _split_top_level_semicolons(command):
+        try:
+            words = shlex.split(piece)
+        except ValueError:
+            return []
+        for word in words:
+            if word in ("&&", "||", "|", "&"):
+                if current:
+                    stages.append(current)
+                current = []
+            else:
+                current.append(word)
+        if current:
+            stages.append(current)
+        current = []
     return stages
 
 
