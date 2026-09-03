@@ -132,8 +132,11 @@ run would rewrite it anyway.
 
 ## 6. Land them one at a time
 
-Follow the `land-after-merge` skill per PR — `gh pr merge --squash --auto`, then one backgrounded
-`land.sh --pr <n> --since <sha> --await-merge` with its output redirected to a file.
+Follow the `land-after-merge` skill per PR — one backgrounded
+`land.sh --pr <n> --since <sha> --arm-merge --await-merge` with its output redirected to a
+file. `--arm-merge` runs `gh pr merge --squash --auto` inside the script itself, which
+matters here: the unattended daily run has nobody to answer the permission prompt a bare
+`gh pr merge` raises (issue #979).
 
 **Serialize.** `land.sh` retries a stale tree three times and then gives up with
 `deploy-failed (exit 4)`; running two landings while other sessions are also merging burns those
