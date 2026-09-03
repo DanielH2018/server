@@ -57,6 +57,17 @@ services:
       {{ kuma(container_item.name) }}
     # ~20 MiB resident measured on the cluster's node-exporter DaemonSet, which runs a wider
     # collector set than this. The cap is containment, not a target.
-    {{ resources('0.30', '64M', '0.02', '16M') }}
+    #
+    # 0.50 CPU, up from 0.30. The exporter idles at 0% and spends its CPU in one burst per
+    # scrape: 418s of usage over 33h of 1-per-minute scrapes is ~210ms each, measured from
+    # the container's cgroup `cpu.stat` on 2026-09-03. Under a 0.30 cap that burst is spread
+    # over seven 100ms CFS periods (`nr_throttled` 9847 of 23203, 42%, on a process that only
+    # runs when scraped), which is where the 0.56s median scrape came from; 0.50 halves the
+    # stretch. The 10s tail that flapped the Scrape Targets monitor (#930) is host contention,
+    # not this cap — alloy-pi hit the same timeouts from a 0.22s median — and is covered by
+    # the per-job `scrape_timeout` in claude-otel's prometheus.yaml.j2. Budget: the seven
+    # containers' caps sum to 3.05 of 4 cores after this, with alloy the only one that runs
+    # near its cap.
+    {{ resources('0.50', '64M', '0.02', '16M') }}
 
 {{ external_networks() }}

@@ -293,8 +293,20 @@ data:
       # WireGuard allow was removed on exactly this evidence), so no firewall rule is needed
       # and the exporters are LAN-reachable — the same posture glances already has on that
       # host.
+      #
+      # `scrape_timeout: 30s` on both Pi jobs, against the 10s global default no other job
+      # overrides. The Pi is a 4-core Zero 2 W whose load5 reaches 2.4-6.6 and whose CPU PSI
+      # sits at ~30% `some`, so a scrape that lands in a contended stretch takes seconds
+      # rather than the 0.2-0.6s median. Measured over the 7 days to 2026-09-03: 88 minutes of
+      # `up == 0` on node-pi and 36 on alloy-pi, every one a scrape that crossed 10s, with a
+      # healthy exporter behind each (0 restarts, 200 in 0.6s from daniel-box). Each single-
+      # cycle DOWN flapped the Cluster Scrape Targets monitor (#930). 30s costs nothing on a
+      # 1m interval, and a Pi that genuinely stops answering still reads down within the
+      # minute. Set per job rather than globally so an in-cluster target that takes 30s
+      # still reads as the failure it is.
       - job_name: node-pi
         scrape_interval: 1m
+        scrape_timeout: 30s
         static_configs:
           - targets: ['{{ k8s_pi_client_ip }}:9100']
             labels:
@@ -308,6 +320,7 @@ data:
       # rather than needing a new one.
       - job_name: alloy-pi
         scrape_interval: 1m
+        scrape_timeout: 30s
         static_configs:
           - targets: ['{{ k8s_pi_client_ip }}:12345']
             labels:
