@@ -356,23 +356,43 @@ def hwmon_temp_limits(
     max_plausible,
     exclude_chip,
     names=None,
+    crits=(),
 ):
     """Pure: assign every scraped sensor a temperature limit.
 
     Returns a list of (label, temp, limit, basis) with basis "declared" or "fallback".
 
-    Exhaustive by construction — a sensor either has a plausible declared max or takes the fallback,
-    so no scraped sensor is ever left without a limit. That is the property worth holding: a check
-    that silently covers a subset reads green for the rest forever.
+    Exhaustive by construction — a sensor either has a plausible declared limit or takes the
+    fallback, so no scraped sensor is ever left without one. That is the property worth holding:
+    a check that silently covers a subset reads green for the rest forever.
 
-    A declared max outside (min_plausible, max_plausible] is treated as ABSENT, not as a limit. Some
-    NVMe controllers report 65261.85 for "no max declared" and a ratio of that never fires.
+    Two declared sources are read — `node_hwmon_temp_max_celsius` (`maxes`) and
+    `node_hwmon_temp_crit_celsius` (`crits`) — because a driver need not publish either, and need
+    not publish both: k10temp on daniel-box's Ryzen 7 8845HS publishes NEITHER for Tctl (verified
+    against `/sys/class/hwmon/hwmon2/` 2026-09-03 — only `temp1_input` and `temp1_label` exist),
+    while daniel-server's NVMe controller publishes both at DIFFERENT values (max 85.85, crit
+    86.85, measured 2026-09-03). **max wins when a sensor declares a plausible value for both**:
+    the hwmon convention (and that measured pair) has `max`/"high" as the earlier, more
+    conservative advisory threshold and `crit` as the later shutdown point, so ratioing against
+    `crit` would page closer to hardware failure than the existing 90% used against `max`. `crit`
+    is used only when `max` is absent or implausible for that sensor — a declared limit a driver
+    that skips `max` still gives is a better bound than the flat fallback. Where neither is
+    plausible, the sensor takes the fallback.
+
+    A declared value outside (min_plausible, max_plausible] is treated as ABSENT, not as a limit.
+    Some NVMe controllers report 65261.85 for "no max declared" and a ratio of that never fires —
+    the same sentinel check applies to `crits`.
 
     `names` is the hwmon_name_maps pair; omitting it labels sensors by their raw sysfs path.
     """
     declared = {}
+    for labels, value in crits or []:
+        if min_plausible < value <= max_plausible:
+            declared[_hwmon_sensor_key(labels)] = value
     for labels, value in maxes or []:
         if min_plausible < value <= max_plausible:
+            # Processed after crits and unconditionally overwrites: max is the more
+            # conservative declared source, so it wins whenever it is itself plausible.
             declared[_hwmon_sensor_key(labels)] = value
     out = []
     for labels, temp in hwmon_included_series(temps, exclude_chip):
@@ -397,15 +417,21 @@ def hwmon_temp_verdict(limits):
     limit: ..." — so the reader crossed two counts that say nothing about the hot sensor before
     reaching the one that does. Each hot sensor also names the arm that set its limit, because
     the two want different responses: a declared breach is the hardware calling itself too hot,
-    while a fallback breach can mean only that this chip declares no max and 85C does not suit
-    it — which is what daniel-box's k10temp Tctl does on every boost spike.
+    while a fallback breach means only that this chip declares no usable max or crit and 85C may
+    not suit it — confirmed 2026-09-03 for daniel-box's k10temp: reading
+    `/sys/class/hwmon/hwmon2/` directly shows only `temp1_input` and `temp1_label` (Tctl) exist,
+    no `temp1_max` or `temp1_crit` file at all, so nothing here — or anywhere in this estate —
+    can tell a genuine Tctl excursion from the fixed offset AMD applies over real die temperature
+    on this chip. A "fallback" breach on that sensor is legible as "this chip rates nothing", not
+    as "this chip is over its own rating"; whether 93.5C is a real thermal problem stays an open
+    question this check cannot answer (issue #995).
     """
     if not limits:
         return False, "no hwmon temperature sensors scraped (collector blind?)"
     hot = [(la, t, li, b) for la, t, li, b in limits if t >= li]
     n_declared = sum(1 for _la, _t, _li, b in limits if b == "declared")
     n_fallback = len(limits) - n_declared
-    coverage = "%d sensors checked, %d by declared max, %d by fallback" % (
+    coverage = "%d sensors checked, %d by declared limit, %d by fallback" % (
         len(limits),
         n_declared,
         n_fallback,

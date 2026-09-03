@@ -233,10 +233,10 @@ def check_host_temp():
     "Hardware Temperature Monitor" panel plots these series but nobody watches a panel.
 
     Drives are NOT read here; see HWMON_TEMP_EXCLUDE_CHIP. Two arms assign every remaining
-    sensor a limit — its own declared max where that max is plausible, a flat ceiling where it
-    is not — so coverage is exhaustive rather than whatever the metric join happens to yield.
-    The limit selection is pure and lives in verdicts.host, which is what lets the red-proof
-    tests drive it without a Prometheus.
+    sensor a limit — its own declared max or crit where either is plausible (max preferred when
+    both are), a flat ceiling where neither is — so coverage is exhaustive rather than whatever
+    the metric join happens to yield. The limit selection is pure and lives in verdicts.host,
+    which is what lets the red-proof tests drive it without a Prometheus.
 
     Empty vector pages rather than passing: no sensors means EVERY collector went blind, and a
     "nothing is too hot" verdict from zero readings is the inert-check failure this repo has
@@ -267,6 +267,11 @@ def check_host_temp():
         cfg.HWMON_TEMP_MAX_PLAUSIBLE_C,
         cfg.HWMON_TEMP_EXCLUDE_CHIP,
         names,
+        # A third instant query, the same shape as the two name lookups above: a driver that
+        # skips temp*_max but still publishes temp*_crit (issue #995 — see hwmon_temp_limits'
+        # docstring for why max wins when both exist) would otherwise fall to the flat fallback
+        # even though it declared a real limit.
+        crits=bridge.net.prom_vector("node_hwmon_temp_crit_celsius"),
     )
     # Counted over the series that survive exclusion, via the same predicate hwmon_temp_limits
     # uses — a host whose only sensors are excluded is not a host this check covers.

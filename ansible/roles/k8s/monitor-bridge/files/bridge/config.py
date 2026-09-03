@@ -525,16 +525,24 @@ SCRUTINY_WEAR_MAX = float(_env("SCRUTINY_WEAR_MAX", "80"))
 #
 #   1. The sensor's own declared max, when it declares a PLAUSIBLE one: page at
 #      HWMON_TEMP_RATIO of it. Preferred — coretemp declares 100, the daniel-server NVMe 85.85.
-#   2. HWMON_TEMP_FALLBACK_C, a flat ceiling, for every sensor that does not.
+#      Where max is absent/implausible but the sensor declares a plausible crit
+#      (node_hwmon_temp_crit_celsius), crit is used instead — a driver need not publish max at
+#      all (k10temp on daniel-box publishes NEITHER for Tctl, verified against
+#      /sys/class/hwmon/hwmon2/ 2026-09-03; issue #995). max wins over crit when both are
+#      plausible: hwmon's convention has crit as the LATER shutdown point (daniel-server's NVMe
+#      measures max 85.85 / crit 86.85), so ratioing crit would page closer to failure than the
+#      max-based 90% this estate already runs on.
+#   2. HWMON_TEMP_FALLBACK_C, a flat ceiling, for every sensor that declares neither.
 #
-# DECIDED: the declared max is sanity-bounded rather than trusted, because three of the ten
+# DECIDED: a declared max or crit is sanity-bounded rather than trusted, because three of the ten
 # max-declaring sensors declare 65261.85 (0xFFFF sentinel, an undeclared max encoded as a
 # number): daniel-server nvme temp2/temp3 and daniel-box nvme temp3. Ratio-of-max against that
 # is unreachable, so those sensors would read green through a fire — the inert-check class in
-# [[an-optimisation-can-land-green-and-be-inert]]. A max outside
+# [[an-optimisation-can-land-green-and-be-inert]]. A declared value outside
 # (HWMON_TEMP_MIN_PLAUSIBLE_C, HWMON_TEMP_MAX_PLAUSIBLE_C] is therefore treated as UNDECLARED and
-# falls to arm 2. This is also why the fallback arm is not optional: without it, 14 of 21 sensors
-# — including BOTH daniel-pi sensors, on the host with no fan — carry no limit at all.
+# falls through (crit, then arm 2). This is also why the fallback arm is not optional: without
+# it, 14 of 21 sensors — including BOTH daniel-pi sensors, on the host with no fan — carry no
+# limit at all.
 HWMON_TEMP_RATIO = float(_env("HWMON_TEMP_RATIO", "0.90"))
 HWMON_TEMP_FALLBACK_C = float(_env("HWMON_TEMP_FALLBACK_C", "85"))
 HWMON_TEMP_MIN_PLAUSIBLE_C = float(_env("HWMON_TEMP_MIN_PLAUSIBLE_C", "20"))
