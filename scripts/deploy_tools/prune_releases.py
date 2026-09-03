@@ -17,6 +17,12 @@ for artifacts that are deployed at different times from different trees, so it w
 for every group but the last one deployed. renovate.json reaches the same conclusion for image
 bumps and states it as "makes the rollback unit equal the deploy unit".
 
+WHERE IT RUNS FROM. release_bin.yml copies this file into every release it writes and invokes
+it through the group's `current` pointer, so the host needs no checkout of this repo and the
+pruner that runs is the one its own release carries. It is stdlib-only for that reason: a
+released copy has no venv beside it. It cannot remove itself -- the release it runs from is
+the one `current` resolves to, and rule 1 below keeps that one whatever its age.
+
 Usage:
     prune_releases.py <group-dir> --current <path> [--keep N] [--apply]
 
