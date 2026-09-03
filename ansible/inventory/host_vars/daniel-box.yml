@@ -551,3 +551,10 @@ render_gid: 993
 # a stale ClusterIP snapshot then; `nut_host_watchdog_armed` (roles/nut_host/defaults/main.yml)
 # is what re-checks it afterwards, every 10 minutes via ups-secondary-health.sh.
 nut_host_secondary_armed: true
+
+# The unattended Renovate agent (roles/setup/renovate_agent). Armed 2026-09-03. The timer
+# fires at 15:00 UTC daily and spends one headless session over the open Renovate PRs, merging
+# and landing up to renovate_agent_max_prs of them. Setting this back to false stops and
+# disables the timer; that is the rollback. There is no alive monitor yet, so a timer that
+# stops firing shows up only as a growing backlog in the renovate-notify digest.
+renovate_agent_enabled: true
