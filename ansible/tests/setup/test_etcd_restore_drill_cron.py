@@ -33,7 +33,7 @@ Run: uv run pytest ansible/tests/setup/test_etcd_restore_drill_cron.py
 
 from pathlib import Path
 
-import yaml
+from lib import yaml_fast
 from _helpers import ANSIBLE
 from _helpers import load_yaml
 
@@ -59,7 +59,7 @@ def _cron_task() -> dict:
 
 
 def _defaults() -> dict:
-    return yaml.safe_load((K3S / "defaults" / "main.yml").read_text())
+    return yaml_fast.safe_load((K3S / "defaults" / "main.yml").read_text())
 
 
 def test_the_drill_is_scheduled() -> None:

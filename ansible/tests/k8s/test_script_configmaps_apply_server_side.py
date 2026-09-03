@@ -21,7 +21,7 @@ Run: uv run pytest ansible/tests/k8s/test_script_configmaps_apply_server_side.py
 """
 
 import pytest
-import yaml
+from lib import yaml_fast
 from _helpers import REPO
 
 K8S = REPO / "ansible" / "roles" / "k8s"
@@ -46,7 +46,7 @@ def _roles_with_script_configmaps():
         tasks_file = role / "tasks" / "main.yml"
         if not tasks_file.is_file():
             continue
-        tasks = yaml.safe_load(tasks_file.read_text()) or []
+        tasks = yaml_fast.safe_load(tasks_file.read_text()) or []
         if _apply_tasks(tasks):
             found.append(role.name)
     return found
@@ -67,7 +67,7 @@ def test_the_derivation_finds_the_known_roles():
 
 @pytest.mark.parametrize("role", ROLES)
 def test_the_script_configmap_is_applied_server_side(role):
-    tasks = yaml.safe_load((K8S / role / "tasks" / "main.yml").read_text())
+    tasks = yaml_fast.safe_load((K8S / role / "tasks" / "main.yml").read_text())
     matches = _apply_tasks(tasks)
     assert len(matches) == 1, (
         f"{role}: expected one {TASK_NAME!r} task, found {len(matches)}"

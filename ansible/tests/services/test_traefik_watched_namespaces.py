@@ -28,11 +28,12 @@ from __future__ import annotations
 import sys
 
 import pytest
-import yaml
 from _helpers import REPO
 
 _REPO = REPO
 sys.path.insert(0, str(_REPO / "scripts"))
+
+from lib import yaml_fast  # noqa: E402
 
 from validate.k8s_manifests import (  # noqa: E402 — needs the path insert above
     ALL_VARS,
@@ -78,7 +79,7 @@ def _render(host: str, template: str) -> str:
 
 def _role_namespaces(host: str) -> list[str]:
     """Every namespace rbac.yaml.j2 renders a Role for, in order."""
-    docs = yaml.safe_load_all(_render(host, "rbac.yaml.j2"))
+    docs = yaml_fast.safe_load_all(_render(host, "rbac.yaml.j2"))
     return [
         d["metadata"]["namespace"]
         for d in docs
@@ -93,8 +94,8 @@ def _provider_namespaces(host: str) -> list[str]:
     a STRING at the manifest level and has to be parsed a second time. Parsing the manifest
     alone compares comments, not configuration.
     """
-    doc = yaml.safe_load(_render(host, "static-config.yaml.j2"))
-    config = yaml.safe_load(doc["data"]["traefik.yml"])
+    doc = yaml_fast.safe_load(_render(host, "static-config.yaml.j2"))
+    config = yaml_fast.safe_load(doc["data"]["traefik.yml"])
     return config["providers"]["kubernetesCRD"]["namespaces"]
 
 

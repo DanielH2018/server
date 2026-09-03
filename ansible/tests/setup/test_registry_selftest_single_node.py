@@ -17,7 +17,7 @@ correct deploy into a NotFound failure.
 
 from __future__ import annotations
 
-import yaml
+from lib import yaml_fast
 
 from _helpers import ROLES, jinja_env, task_named
 
@@ -40,7 +40,7 @@ _BASE_CONTEXT = {
 def _job_names(agent_node_ips: list[str]) -> set[str]:
     context = {**_BASE_CONTEXT, AGENT_VAR: agent_node_ips}
     rendered = jinja_env().from_string(PULL_TEMPLATE.read_text()).render(context)
-    docs = [d for d in yaml.safe_load_all(rendered) if d]
+    docs = [d for d in yaml_fast.safe_load_all(rendered) if d]
     assert docs, (
         f"{PULL_TEMPLATE} rendered no YAML documents with {AGENT_VAR}={agent_node_ips!r}. "
         f"The local pull Job is unconditional, so an empty render means the template broke, "
@@ -76,7 +76,7 @@ def test_an_undefined_agent_list_is_treated_as_no_agents():
     """
     context = dict(_BASE_CONTEXT)
     rendered = jinja_env().from_string(PULL_TEMPLATE.read_text()).render(context)
-    names = {d["metadata"]["name"] for d in yaml.safe_load_all(rendered) if d}
+    names = {d["metadata"]["name"] for d in yaml_fast.safe_load_all(rendered) if d}
     assert names == {LOCAL_JOB}, (
         f"{PULL_TEMPLATE} rendered {sorted(names)} with {AGENT_VAR} undefined. The gate needs "
         f"`| default([])`; without it this is an undefined-variable error on every host whose "
@@ -87,7 +87,7 @@ def test_an_undefined_agent_list_is_treated_as_no_agents():
 def test_the_wait_task_and_the_template_gate_on_the_same_thing():
     """A manifest that stops rendering the Job while the wait names it fails NotFound."""
     wait = task_named(
-        yaml.safe_load(REGISTRY_TASKS.read_text()), "Wait for the pull self-tests"
+        yaml_fast.safe_load(REGISTRY_TASKS.read_text()), "Wait for the pull self-tests"
     )
     gate = str(wait.get("vars", {}).get("registry_selftest_pull_jobs", ""))
     assert AGENT_VAR in gate, (

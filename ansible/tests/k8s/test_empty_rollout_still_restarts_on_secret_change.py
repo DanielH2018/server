@@ -53,7 +53,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-import yaml
+from lib import yaml_fast
 from _helpers import K8S_ROLES
 
 _MANIFESTS = K8S_ROLES / "manifests/tasks/main.yml"
@@ -78,7 +78,7 @@ _KNOWN_UNCOVERED: set[tuple[str, str]] = set()
 def _include_vars(role_tasks: Path) -> list[dict]:
     """The `vars:` of every `include_role: k8s/manifests` in a role's task file."""
     out = []
-    for task in yaml.safe_load(role_tasks.read_text()) or []:
+    for task in yaml_fast.safe_load(role_tasks.read_text()) or []:
         if not isinstance(task, dict):
             continue
         include = (
@@ -318,7 +318,7 @@ def test_a_role_restarting_its_workloads_privately_is_clean(tmp_path):
 
 def test_the_extra_rollouts_restart_is_not_gated_on_manifests_rollout():
     """The accept half for the mechanism: the escape hatch must stay ungated."""
-    tasks = yaml.safe_load(_MANIFESTS.read_text()) or []
+    tasks = yaml_fast.safe_load(_MANIFESTS.read_text()) or []
     extras = [
         task
         for task in tasks

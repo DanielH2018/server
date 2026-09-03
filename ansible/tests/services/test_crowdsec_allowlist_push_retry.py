@@ -23,7 +23,7 @@ from __future__ import annotations
 import re
 
 import pytest
-import yaml
+from lib import yaml_fast
 from _helpers import ROLES
 
 SCRIPT = ROLES / "k8s/crowdsec/templates/crowdsec-update-home-allowlist.sh.j2"
@@ -97,7 +97,7 @@ def _push_curl() -> str:
 
 
 def _cron_period_s() -> int:
-    tasks = yaml.safe_load(TASKS.read_text())
+    tasks = yaml_fast.safe_load(TASKS.read_text())
     schedules = [
         task["ansible.builtin.cron"]["minute"]
         for task in tasks

@@ -14,9 +14,9 @@ import pathlib
 import sys
 
 import pytest
-import yaml
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+from lib import yaml_fast
 
 import backfill_staging_gate as bf
 
@@ -67,7 +67,7 @@ def test_every_outcome_a_tick_can_emit_is_one_the_backfill_defines():
 def test_the_tick_ledger_constant_matches_the_ansible_default():
     """The deployer needs a module-level literal (the state_dir guard requires it), so the path
     exists in two places. Read the YAML rather than restating it in a third."""
-    defaults = yaml.safe_load((ROLE / "defaults/main.yml").read_text())
+    defaults = yaml_fast.safe_load((ROLE / "defaults/main.yml").read_text())
     literal = next(
         line.split('"')[1]
         for line in (ROLE / "files/gitops_deploy.py").read_text().splitlines()
@@ -79,7 +79,7 @@ def test_the_tick_ledger_constant_matches_the_ansible_default():
 def test_the_two_ledgers_are_different_files():
     """The whole reason this is a separate ledger. If these ever became one path, --since-ledger
     would plan its window from a tick row."""
-    defaults = yaml.safe_load((ROLE / "defaults/main.yml").read_text())
+    defaults = yaml_fast.safe_load((ROLE / "defaults/main.yml").read_text())
     assert (
         defaults["gitops_deploy_staging_tick_ledger"]
         != defaults["gitops_deploy_staging_backfill_ledger"]

@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import subprocess
 
-import yaml
+from lib import yaml_fast
 from _k8s_render import rendered_docs
 from ansible.plugins.filter.core import combine
 from jinja2.nativetypes import NativeEnvironment
@@ -81,7 +81,7 @@ def _eval(node, ctx, env):
 
 
 def _k8s_play() -> dict:
-    for play in yaml.safe_load(_DEPLOY.read_text()) or []:
+    for play in yaml_fast.safe_load(_DEPLOY.read_text()) or []:
         if "k8s" in str(play.get("name", "")).lower():
             return play
     raise AssertionError("deploy.yml no longer has a k8s play")

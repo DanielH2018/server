@@ -43,6 +43,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
+from lib import yaml_fast
 from lib.repo_paths import REPO
 
 
@@ -79,7 +80,7 @@ def workflow_run_steps(repo: Path = REPO) -> list[tuple[str, str]]:
     """(location, run text) for every `run:` step in a workflow job."""
     out = []
     for wf in workflow_files(repo):
-        data = yaml.safe_load(wf.read_text()) or {}
+        data = yaml_fast.safe_load(wf.read_text()) or {}
         for job_name, job in (data.get("jobs") or {}).items():
             for i, step in enumerate(job.get("steps") or []):
                 run = step.get("run")
@@ -117,7 +118,7 @@ def cron_jobs(repo: Path = REPO) -> list[CronJob]:
         if _is_archived(path):
             continue
         try:
-            loaded = yaml.safe_load(path.read_text())
+            loaded = yaml_fast.safe_load(path.read_text())
         except OSError, yaml.YAMLError:
             continue
         if not isinstance(loaded, list):

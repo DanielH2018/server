@@ -23,7 +23,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-import yaml
+from lib import yaml_fast
 from k8s_autodeploy import k8s_autodeploy_denylist
 from _helpers import REPO
 
@@ -328,7 +328,7 @@ def _live_tasks(role: Path) -> list[dict]:
     tasks_file = role / "tasks/main.yml"
     if not tasks_file.is_file():
         return []
-    parsed = yaml.safe_load(tasks_file.read_text())
+    parsed = yaml_fast.safe_load(tasks_file.read_text())
     return [
         task
         for task, tags, when_falsy in _iter_task_dicts(parsed)
@@ -392,7 +392,7 @@ def _auto_deployable(role: Path) -> bool:
     defaults = role / "defaults/main.yml"
     if not defaults.is_file():
         return False
-    data = yaml.safe_load(defaults.read_text()) or {}
+    data = yaml_fast.safe_load(defaults.read_text()) or {}
     return bool(data.get("k8s_autodeploy"))
 
 
@@ -407,7 +407,7 @@ def _declares_autodeploy(role: Path) -> bool:
     defaults = role / "defaults/main.yml"
     if not defaults.is_file():
         return False
-    data = yaml.safe_load(defaults.read_text()) or {}
+    data = yaml_fast.safe_load(defaults.read_text()) or {}
     return "k8s_autodeploy" in data and bool(
         str(data.get("k8s_autodeploy_reason", "")).strip()
     )
@@ -446,4 +446,4 @@ def _role_defaults(role: Path) -> dict:
     defaults = role / "defaults/main.yml"
     if not defaults.is_file():
         return {}
-    return yaml.safe_load(defaults.read_text()) or {}
+    return yaml_fast.safe_load(defaults.read_text()) or {}

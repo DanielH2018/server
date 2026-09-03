@@ -15,7 +15,7 @@ import json
 from pathlib import Path
 
 import pytest
-import yaml
+from lib import yaml_fast
 
 import gen_infra_map as g
 from infra_map import live
@@ -188,7 +188,7 @@ def _refresh_cron_job():
         pytest.skip("ansible role tree not present")
     loaded = []
     for path in sorted(task_dir.glob("*.yml")):
-        loaded += yaml.safe_load(path.read_text()) or []
+        loaded += yaml_fast.safe_load(path.read_text()) or []
     jobs = [
         t["ansible.builtin.cron"]["job"]
         for t in loaded

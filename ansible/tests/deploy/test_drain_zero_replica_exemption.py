@@ -12,7 +12,7 @@ everything and one that fires on nothing look identical from the passing side.
 
 from __future__ import annotations
 
-import yaml
+from lib import yaml_fast
 from _helpers import REPO, render_expr
 
 DRAIN = REPO / "ansible/roles/k8s/rollout-drain/tasks/main.yml"
@@ -20,7 +20,7 @@ DRAIN = REPO / "ansible/roles/k8s/rollout-drain/tasks/main.yml"
 
 def _no_pods_assert() -> dict:
     """The `Fail if a pod selector matched no pods` task, as parsed YAML."""
-    tasks = yaml.safe_load(DRAIN.read_text())
+    tasks = yaml_fast.safe_load(DRAIN.read_text())
     named = [
         t for t in tasks if t.get("name") == "Fail if a pod selector matched no pods"
     ]
@@ -79,7 +79,7 @@ def test_the_assert_reads_the_desired_count_task() -> None:
     role's own declaration excuse it from the gate. Pin the read to a `kubectl get` on the
     workload itself.
     """
-    tasks = yaml.safe_load(DRAIN.read_text())
+    tasks = yaml_fast.safe_load(DRAIN.read_text())
     named = [
         t
         for t in tasks

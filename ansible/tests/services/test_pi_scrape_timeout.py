@@ -19,12 +19,13 @@ import re
 import sys as _sys
 
 import pytest
-import yaml
 from _helpers import ANSIBLE as _ANSIBLE
 from _helpers import REPO as _REPO
 
 _sys.path.insert(0, str(_ANSIBLE / "tests"))
 _sys.path.insert(0, str(_REPO / "scripts" / "validate"))
+
+from lib import yaml_fast
 
 from _k8s_render import rendered_docs
 
@@ -76,7 +77,7 @@ def _scrape_jobs() -> list[dict]:
             continue
         if not isinstance(doc, dict) or doc.get("kind") != "ConfigMap":
             continue
-        return yaml.safe_load(doc["data"]["prometheus.yml"])["scrape_configs"]
+        return yaml_fast.safe_load(doc["data"]["prometheus.yml"])["scrape_configs"]
     pytest.fail("no prometheus ConfigMap rendered — this guard is watching nothing")
 
 
@@ -89,7 +90,7 @@ def _targets_pi(job: dict, pi_ip: str) -> bool:
 
 
 def test_every_rendered_job_has_the_right_timeout() -> None:
-    pi_ip = yaml.safe_load(_GROUP_VARS.read_text())["k8s_pi_client_ip"]
+    pi_ip = yaml_fast.safe_load(_GROUP_VARS.read_text())["k8s_pi_client_ip"]
     jobs = _scrape_jobs()
     pi_jobs = {job["job_name"] for job in jobs if _targets_pi(job, pi_ip)}
     missing = KNOWN_PI_JOBS - pi_jobs

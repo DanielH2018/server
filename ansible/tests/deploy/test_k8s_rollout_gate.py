@@ -24,7 +24,7 @@ simply never ran:
 from __future__ import annotations
 
 
-import yaml
+from lib import yaml_fast
 from _helpers import REPO as _REPO
 from _helpers import load_tasks as _tasks
 from _helpers import command_of as _cmd
@@ -40,7 +40,7 @@ _ALL_VARS = _REPO / "ansible/inventory/group_vars/all.yml"
 
 
 def _plays() -> list[dict]:
-    return yaml.safe_load(_DEPLOY.read_text()) or []
+    return yaml_fast.safe_load(_DEPLOY.read_text()) or []
 
 
 def _k8s_play() -> dict:
@@ -158,7 +158,7 @@ def test_batch_drains_after_applying() -> None:
 
 
 def test_batch_width_is_declared_and_conservative() -> None:
-    width = yaml.safe_load(_ALL_VARS.read_text())["k8s_rollout_batch_width"]
+    width = yaml_fast.safe_load(_ALL_VARS.read_text())["k8s_rollout_batch_width"]
     assert isinstance(width, int) and width >= 1
     assert width <= 10, (
         f"k8s_rollout_batch_width={width} rolls that many workloads at once. 37 of the 50 "

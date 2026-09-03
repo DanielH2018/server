@@ -23,7 +23,7 @@ Run: uv run pytest ansible/tests/services/test_anisync_pin_matches_server.py
 
 import re
 
-import yaml
+from lib import yaml_fast
 from _helpers import ANSIBLE
 
 DEFAULTS = ANSIBLE / "roles" / "k8s" / "jellyfin" / "defaults" / "main.yml"
@@ -35,7 +35,7 @@ LEADING_VERSION = re.compile(r"^(\d+(?:\.\d+)*)")
 
 
 def _defaults() -> dict:
-    return yaml.safe_load(DEFAULTS.read_text())
+    return yaml_fast.safe_load(DEFAULTS.read_text())
 
 
 def _version_tuple(text: str, what: str) -> tuple[int, ...]:

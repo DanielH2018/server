@@ -26,12 +26,12 @@ exist - the same shape as the readonly-SA rollout restart that prints "successfu
 Run: uv run pytest ansible/tests/longhorn/test_seed_volume_backup.py
 """
 
-import yaml
+from lib import yaml_fast
 from _helpers import ANSIBLE
 
 PLAYBOOK = ANSIBLE / "seed_volume_backup.yml"
 TEXT = PLAYBOOK.read_text()
-PLAY = yaml.safe_load(TEXT)[0]
+PLAY = yaml_fast.safe_load(TEXT)[0]
 TASKS = PLAY["tasks"]
 
 

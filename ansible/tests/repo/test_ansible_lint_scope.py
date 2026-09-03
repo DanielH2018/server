@@ -25,7 +25,7 @@ import re
 import subprocess
 import tomllib
 
-import yaml
+from lib import yaml_fast
 from _helpers import REPO as REPO_ROOT
 
 
@@ -39,7 +39,7 @@ def _ansible_lint_hook() -> dict:
 
 
 def _exclude_paths() -> list[str]:
-    data = yaml.safe_load((REPO_ROOT / ".ansible-lint").read_text())
+    data = yaml_fast.safe_load((REPO_ROOT / ".ansible-lint").read_text())
     return data.get("exclude_paths", [])
 
 

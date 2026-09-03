@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import subprocess
 
-import yaml
+from lib import yaml_fast
 from _helpers import REPO
 
 _REPO = REPO
@@ -176,7 +176,7 @@ def test_the_key_is_written_with_a_deterministic_trailing_newline():
     Pins both halves: `trim` collapses whatever the stored scalar carries, and the explicit
     newline puts back exactly one. Either alone is wrong.
     """
-    tasks = yaml.safe_load(_GITOPS_TASKS.read_text())
+    tasks = yaml_fast.safe_load(_GITOPS_TASKS.read_text())
     contents = [
         task["ansible.builtin.copy"]["content"]
         for task in tasks

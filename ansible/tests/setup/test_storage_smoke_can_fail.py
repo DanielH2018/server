@@ -19,7 +19,7 @@ later edit that removes it fails the suite rather than going quiet.
 """
 
 import pytest
-import yaml
+from lib import yaml_fast
 
 from _helpers import ANSIBLE, ROLES
 
@@ -30,7 +30,7 @@ DELETE_TASK = "Remove the storage smoke PVC"
 
 
 def _tasks():
-    return yaml.safe_load(SMOKE.read_text())
+    return yaml_fast.safe_load(SMOKE.read_text())
 
 
 def _block_task():

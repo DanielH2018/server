@@ -9,7 +9,7 @@ from __future__ import annotations
 import datetime as dt
 from pathlib import Path
 
-import yaml
+from lib import yaml_fast
 
 from docs_provenance import (
     finish_generator,
@@ -63,7 +63,7 @@ def test_banner_frontmatter_parses_as_yaml():
         "scripts/docs/service_catalog.py", when=FIXED, sha="abc1234"
     )
     body = banner.split("---")[1]
-    meta = yaml.safe_load(body)
+    meta = yaml_fast.safe_load(body)
     assert meta["generated_from"] == "scripts/docs/service_catalog.py"
     assert meta["generated_sha"] == "abc1234"
 

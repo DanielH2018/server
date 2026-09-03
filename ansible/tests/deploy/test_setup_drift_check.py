@@ -17,7 +17,7 @@ import re
 import subprocess
 from pathlib import Path
 
-import yaml
+from lib import yaml_fast
 from _helpers import REPO
 
 _REPO = REPO
@@ -350,7 +350,7 @@ def test_the_reader_is_armed_where_no_manifest_prune_check_runs():
     daniel-server must be in the allowlist, and daniel-box must not be — it already has
     manifest-prune-check, and a second reader there would page twice for one drift.
     """
-    gv = yaml.safe_load(_GROUP_VARS.read_text())
+    gv = yaml_fast.safe_load(_GROUP_VARS.read_text())
     hosts = gv["setup_drift_check_hosts"]
     assert "daniel-server" in hosts, (
         "daniel-server renders roles/nut_host — the UPS shutdown chain — and is the host the "
@@ -365,7 +365,7 @@ def test_the_reader_is_armed_where_no_manifest_prune_check_runs():
 def test_every_reader_task_is_gated_on_that_allowlist():
     """A task that forgets the gate installs a root cron on every host, including the Pi, which
     stamps nothing and would report only that it is unarmed — a permanently unhelpful monitor."""
-    tasks = yaml.safe_load(_CRONS.read_text())
+    tasks = yaml_fast.safe_load(_CRONS.read_text())
     named = [t for t in tasks if "setup_drift" in str(t.get("tags", ""))]
     assert named, "the setup-drift tasks lost their tag family"
     for task in named:

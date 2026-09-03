@@ -21,10 +21,10 @@ from __future__ import annotations
 import json
 import re
 
-import yaml
+from lib import yaml_fast
 from _helpers import ANSIBLE
 
-K3S_DEFAULTS = yaml.safe_load(
+K3S_DEFAULTS = yaml_fast.safe_load(
     (ANSIBLE / "roles/setup/k3s/defaults/main.yml").read_text()
 )
 MONITORS = (

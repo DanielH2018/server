@@ -30,7 +30,7 @@ import re
 import xml.etree.ElementTree as ET
 from urllib.parse import urlparse
 
-import yaml
+from lib import yaml_fast
 from diagnostics import staging_egress_probe
 
 from _helpers import ALL_VARS, HOST_VARS, ROLES, jinja_env
@@ -52,15 +52,15 @@ FILTER_NAME_VAR = "hypervisor_staging_nwfilter_name"
 
 
 def _load_host_vars(host: str):
-    return yaml.safe_load((HOST_VARS / f"{host}.yml").read_text()) or {}
+    return yaml_fast.safe_load((HOST_VARS / f"{host}.yml").read_text()) or {}
 
 
 def _all_vars():
-    return yaml.safe_load(ALL_VARS.read_text())
+    return yaml_fast.safe_load(ALL_VARS.read_text())
 
 
 def _hypervisor_defaults():
-    return yaml.safe_load(HYPERVISOR_DEFAULTS.read_text())
+    return yaml_fast.safe_load(HYPERVISOR_DEFAULTS.read_text())
 
 
 def _filter_name():
@@ -214,7 +214,7 @@ def test_the_cluster_dns_ip_falls_inside_the_fenced_service_cidr():
     in — which fences nothing and reads green in every check above.
     """
     service_cidr = ipaddress.ip_network(_all_vars()[SERVICE_CIDR_VAR])
-    k3s_defaults = yaml.safe_load(K3S_DEFAULTS.read_text())
+    k3s_defaults = yaml_fast.safe_load(K3S_DEFAULTS.read_text())
     dns_ip = ipaddress.ip_address(k3s_defaults["k3s_cluster_dns_ip"])
     assert dns_ip in service_cidr, (
         f"{SERVICE_CIDR_VAR} is {service_cidr}, which does not contain k3s_cluster_dns_ip "
@@ -236,7 +236,7 @@ def test_fencing_the_clusters_own_ranges_still_assumes_a_single_staging_node():
     """
     staging_agents = _load_host_vars("daniel-stage").get(
         "k3s_agent_node_ips",
-        yaml.safe_load(K3S_DEFAULTS.read_text())["k3s_agent_node_ips"],
+        yaml_fast.safe_load(K3S_DEFAULTS.read_text())["k3s_agent_node_ips"],
     )
     assert not staging_agents, (
         f"daniel-stage now declares agent nodes {staging_agents}, so staging is no longer a "
@@ -278,7 +278,7 @@ def test_the_filter_is_defined_before_the_guest_that_references_it():
     """libvirt refuses to start a domain whose <filterref> names a filter it does not know."""
     defines = [
         t
-        for t in yaml.safe_load(NETWORK_TASKS.read_text())
+        for t in yaml_fast.safe_load(NETWORK_TASKS.read_text())
         if "nwfilter-define" in str(t.get("ansible.builtin.command", ""))
     ]
     assert defines, (
@@ -292,7 +292,7 @@ def test_a_running_guest_with_an_unfenced_interface_is_restarted():
     """`virsh define` writes config only, so a running guest keeps its unfenced interface."""
     corrections = [
         t
-        for t in yaml.safe_load(GUEST_TASKS.read_text())
+        for t in yaml_fast.safe_load(GUEST_TASKS.read_text())
         if "destroy" in str(t.get("ansible.builtin.command", ""))
     ]
     assert len(corrections) == 1, (
@@ -310,7 +310,7 @@ def test_a_running_guest_with_an_unfenced_interface_is_restarted():
 
 def test_no_ufw_rule_claims_to_fence_staging():
     """The inert first attempt must be deleted, not left listed as protection."""
-    for task in yaml.safe_load(FIREWALL_TASKS.read_text()):
+    for task in yaml_fast.safe_load(FIREWALL_TASKS.read_text()):
         rule = task.get("community.general.ufw")
         if not isinstance(rule, dict) or not rule.get("route"):
             continue

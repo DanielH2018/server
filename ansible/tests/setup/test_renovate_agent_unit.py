@@ -19,7 +19,7 @@ Run: uv run pytest ansible/tests/setup/test_renovate_agent_unit.py
 import re
 
 import pytest
-import yaml
+from lib import yaml_fast
 from _helpers import ANSIBLE
 
 ROLE = ANSIBLE / "roles" / "setup" / "renovate_agent"
@@ -48,7 +48,7 @@ def unit() -> str:
 
 @pytest.fixture(scope="module")
 def defaults() -> dict:
-    return yaml.safe_load(DEFAULTS.read_text())
+    return yaml_fast.safe_load(DEFAULTS.read_text())
 
 
 def test_execstart_serializes_with_a_nonblocking_lock(unit: str) -> None:
@@ -100,7 +100,7 @@ def test_unit_timeout_sits_above_the_wrapper_timeout(defaults: dict) -> None:
 
 def test_arming_is_wired_in_both_directions() -> None:
     """A switch that only turns on is a one-way door."""
-    tasks = yaml.safe_load(TASKS.read_text())
+    tasks = yaml_fast.safe_load(TASKS.read_text())
     enable = [
         t for t in tasks if t.get("name", "").startswith("Enable and start the timer")
     ]
@@ -192,7 +192,7 @@ def test_the_deadline_straddles_the_daily_period() -> None:
     assert DAY + 2 * 3600 < interval < 2 * DAY, (
         f"interval {interval}s must sit between one jittered daily period and two days"
     )
-    defaults = yaml.safe_load(DEFAULTS.read_text())
+    defaults = yaml_fast.safe_load(DEFAULTS.read_text())
     assert re.fullmatch(
         r"\*-\*-\* \d\d:\d\d:\d\d", defaults["renovate_agent_oncalendar"]
     ), (

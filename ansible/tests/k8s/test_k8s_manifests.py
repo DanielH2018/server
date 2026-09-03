@@ -17,7 +17,7 @@ on the k8s play itself. The renderer and inventory vars they share are `_manifes
 Run: uv run pytest ansible/tests/k8s/test_k8s_manifests.py
 """
 
-import yaml
+from lib import yaml_fast
 
 from _helpers import ANSIBLE
 from _manifest_guards import K8S, _k8s_entries, _render, _role_defaults
@@ -32,7 +32,7 @@ def test_the_k8s_play_does_not_filter_an_already_filtered_list():
     so the Docker filter leaves [], the k8s filter of [] is [], and the play reports
     `ok=10 changed=0 failed=0` having deployed nothing at all (daniel-box, 2026-08-02).
     """
-    plays = yaml.safe_load((ANSIBLE / "deploy.yml").read_text())
+    plays = yaml_fast.safe_load((ANSIBLE / "deploy.yml").read_text())
     k8s_play = next(p for p in plays if "k8s" in p["name"].lower())
     task = next(t for t in k8s_play["pre_tasks"] if "k8s-platform" in t.get("name", ""))
     expr = task["ansible.builtin.set_fact"]["containers_list"]
@@ -92,7 +92,7 @@ def test_nothing_mounts_over_the_serviceaccount_token_path():
             **_DEPLOYMENT_STUBS,
             **_role_defaults(entry["name"]),
         )
-        for doc in yaml.safe_load_all(rendered):
+        for doc in yaml_fast.safe_load_all(rendered):
             for container in doc["spec"]["template"]["spec"]["containers"]:
                 for mount in container.get("volumeMounts", []):
                     path = mount["mountPath"].rstrip("/")
@@ -148,7 +148,7 @@ def test_every_deployment_disables_service_link_env_vars():
             **_DEPLOYMENT_STUBS,
             **_role_defaults(entry["name"]),
         )
-        for doc in yaml.safe_load_all(rendered):
+        for doc in yaml_fast.safe_load_all(rendered):
             assert doc["spec"]["template"]["spec"].get("enableServiceLinks") is False, (
                 f"{entry['name']} inherits Docker-link env vars for every Service in the namespace"
             )

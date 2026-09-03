@@ -30,11 +30,12 @@ import subprocess
 import sys
 from pathlib import Path
 
-import yaml
 
 # The build/roll couplings live in deploy_logic so this and `deploy_tags.py changed` widen
 # identically -- two derivations that disagree is the defect this import exists to prevent.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from lib import yaml_fast
 from lib.repo_paths import ALL_VARS, ANSIBLE, GITOPS_DEPLOY_FILES, HOST_VARS
 
 sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
@@ -262,7 +263,7 @@ def _initial_setup_roles(playbook: Path = _INITIAL_SETUP_YML) -> dict[str, objec
     cannot drift when this repo's own gates change (mirrors `deploy_tags.py`'s
     `host_vars: Path = HOST_VARS` pattern).
     """
-    play = yaml.safe_load(playbook.read_text())[0]
+    play = yaml_fast.safe_load(playbook.read_text())[0]
     roles: dict[str, object] = {}
     for entry in play["roles"]:
         name = entry if isinstance(entry, str) else entry["role"]
@@ -279,10 +280,10 @@ def _host_vars(
     The same precedence Ansible resolves a `when:` variable through (a host_vars key always
     wins over the group default). Defaults to this repo's group_vars/all.yml and host_vars/.
     """
-    merged = dict(yaml.safe_load(all_vars.read_text()) or {})
+    merged = dict(yaml_fast.safe_load(all_vars.read_text()) or {})
     hv = host_vars_dir / f"{host}.yml"
     if hv.exists():
-        merged.update(yaml.safe_load(hv.read_text()) or {})
+        merged.update(yaml_fast.safe_load(hv.read_text()) or {})
     return merged
 
 

@@ -20,7 +20,7 @@ import pathlib
 import re
 
 import pytest
-import yaml
+from lib import yaml_fast
 from _helpers import ALL_VARS, K8S_ROLES
 
 ROLE = K8S_ROLES / "claude-otel"
@@ -60,7 +60,7 @@ SERVICE_CIDR = ipaddress.ip_network("10.43.0.0/16")
 
 @pytest.fixture(scope="module")
 def defaults():
-    return yaml.safe_load(DEFAULTS.read_text())
+    return yaml_fast.safe_load(DEFAULTS.read_text())
 
 
 def service_spec(name):
@@ -93,7 +93,7 @@ def _pin_values() -> dict[str, ipaddress.IPv4Address | ipaddress.IPv6Address]:
     resolved = {}
     for variable, source in CROSS_ROLE_PINS.items():
         if source not in by_file:
-            by_file[source] = yaml.safe_load(source.read_text())
+            by_file[source] = yaml_fast.safe_load(source.read_text())
         content = by_file[source]
         assert variable in content, f"{variable} must be defined in {source}"
         resolved[variable] = ipaddress.ip_address(str(content[variable]))

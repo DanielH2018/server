@@ -37,6 +37,7 @@ import re
 from pathlib import Path
 
 import yaml
+from lib import yaml_fast
 from _helpers import ANSIBLE
 
 
@@ -85,7 +86,7 @@ def _command_cmds() -> list[tuple[Path, str, str]]:
     found = []
     for path in _yaml_files():
         try:
-            docs = list(yaml.safe_load_all(path.read_text()))
+            docs = list(yaml_fast.safe_load_all(path.read_text()))
         except yaml.YAMLError:
             continue
         for doc in docs:

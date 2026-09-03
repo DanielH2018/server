@@ -14,7 +14,7 @@ Run: uv run pytest ansible/tests/deploy/test_platform_filter_real_inventory.py
 """
 
 import pytest
-import yaml
+from lib import yaml_fast
 
 from toposort import filter_by_platform
 from _helpers import HOST_VARS
@@ -25,7 +25,7 @@ def _host_var_files():
 
 
 def _containers(path):
-    return (yaml.safe_load(path.read_text()) or {}).get("containers_list") or []
+    return (yaml_fast.safe_load(path.read_text()) or {}).get("containers_list") or []
 
 
 @pytest.mark.parametrize("path", _host_var_files(), ids=lambda p: p.stem)

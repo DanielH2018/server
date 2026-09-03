@@ -32,7 +32,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-import yaml
+from lib import yaml_fast
 from _helpers import REPO
 
 _REPO = REPO
@@ -47,7 +47,7 @@ _GUARD = "not k8s_dry_run | bool"
 
 
 def _tasks(path: Path) -> list[dict]:
-    return yaml.safe_load(path.read_text()) or []
+    return yaml_fast.safe_load(path.read_text()) or []
 
 
 def _named(tasks: list[dict], fragment: str) -> dict:
@@ -193,7 +193,7 @@ def test_the_render_directory_fact_survives_every_tag_selection() -> None:
 
 
 def _k8s_play() -> dict:
-    for play in yaml.safe_load(_DEPLOY.read_text()) or []:
+    for play in yaml_fast.safe_load(_DEPLOY.read_text()) or []:
         if "k8s" in str(play.get("name", "")).lower():
             return play
     raise AssertionError("deploy.yml no longer has a k8s play")
@@ -220,7 +220,7 @@ def test_namespace_apply_is_guarded() -> None:
 
 
 def _all_vars() -> dict:
-    return yaml.safe_load(_ALL_VARS.read_text()) or {}
+    return yaml_fast.safe_load(_ALL_VARS.read_text()) or {}
 
 
 def test_dry_run_defaults_off() -> None:

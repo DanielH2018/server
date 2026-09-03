@@ -67,6 +67,8 @@ import yaml
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from lib import yaml_fast
+
 from lib.git import git
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -432,7 +434,7 @@ def seed_last_rotated(name: str, tier: str, today: dt.date) -> str | None:
 def secret_names(path: str = SECRETS_FILE) -> list[str]:
     """Top-level secret keys from the (encrypted) secrets.yml — values stay encrypted."""
     with open(path) as fh:
-        data = yaml.safe_load(fh) or {}
+        data = yaml_fast.safe_load(fh) or {}
     return sorted(k for k in data if k != "sops")
 
 
@@ -440,7 +442,7 @@ def load_registry(path: str = REGISTRY_FILE) -> dict:
     if not os.path.exists(path):
         return {"secrets": {}}
     with open(path) as fh:
-        return yaml.safe_load(fh) or {"secrets": {}}
+        return yaml_fast.safe_load(fh) or {"secrets": {}}
 
 
 _HEADER = """\
@@ -497,7 +499,7 @@ def ciphertext_at(rev: str) -> dict[str, str]:
     Never decrypts: the `diff=sops` textconv driver rewrites diff output only, so `git show
     <rev>:<path>` streams the raw blob.
     """
-    data = yaml.safe_load(_git("show", f"{rev}:{SECRETS_GIT_PATH}")) or {}
+    data = yaml_fast.safe_load(_git("show", f"{rev}:{SECRETS_GIT_PATH}")) or {}
     return {k: str(v) for k, v in data.items() if k != "sops"}
 
 
@@ -692,7 +694,7 @@ def decrypted_values(path: str = SECRETS_FILE) -> dict | None:
             # `audit` on every commit touching secrets.yml / the registry / this file.
             timeout=30,
         )
-        data = yaml.safe_load(r.stdout) or {}
+        data = yaml_fast.safe_load(r.stdout) or {}
     except (
         OSError,
         subprocess.CalledProcessError,

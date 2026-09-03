@@ -19,14 +19,16 @@ regardless of which host runs an edge.
 Run: uv run pytest ansible/tests/setup/test_network_invariant.py
 """
 
-import yaml
+from lib import yaml_fast
 from _helpers import ANSIBLE as _ANSIBLE
 
 
 def _created_networks() -> set[str]:
-    all_vars = yaml.safe_load((_ANSIBLE / "inventory/group_vars/all.yml").read_text())
+    all_vars = yaml_fast.safe_load(
+        (_ANSIBLE / "inventory/group_vars/all.yml").read_text()
+    )
     docker_network = all_vars["docker_network"]
-    tasks = yaml.safe_load(
+    tasks = yaml_fast.safe_load(
         (_ANSIBLE / "roles/setup/docker_install/tasks/install.yml").read_text()
     )
     loop = next(t["loop"] for t in tasks if t.get("name") == "Create Docker networks")
@@ -40,7 +42,7 @@ def _created_networks() -> set[str]:
 def _referenced_networks() -> dict[str, str]:
     refs: dict[str, str] = {}  # network -> first "host/service" that references it
     for host_file in (_ANSIBLE / "inventory/host_vars").glob("*.yml"):
-        host_vars = yaml.safe_load(host_file.read_text()) or {}
+        host_vars = yaml_fast.safe_load(host_file.read_text()) or {}
         for svc in host_vars.get("containers_list") or []:
             for net in svc.get("networks") or []:
                 refs.setdefault(net, f"{host_file.stem}/{svc.get('name')}")

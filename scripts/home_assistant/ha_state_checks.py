@@ -26,7 +26,12 @@ from collections import defaultdict
 from collections.abc import Iterator
 from pathlib import Path
 
-import yaml
+# A directly-invoked script gets only its own directory on sys.path, and pyproject's
+# `pythonpath` is a pytest setting — so the cross-directory import below needs the
+# scripts/ root here, the same way its siblings reach it.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from lib import yaml_fast
 
 from ha_state_model import (
     DERIVED_YAML,
@@ -181,13 +186,15 @@ def mediator_reason_errors(config: dict) -> list[str]:
 def load_external_entities() -> set[str]:
     if not EXTERNAL_YAML.is_file():
         return set()
-    return set(yaml.safe_load(EXTERNAL_YAML.read_text()).get("entities", []))
+    return set(yaml_fast.safe_load(EXTERNAL_YAML.read_text()).get("entities", []))
 
 
 def load_external_services() -> set[str]:
     if not EXTERNAL_SERVICES_YAML.is_file():
         return set()
-    return set(yaml.safe_load(EXTERNAL_SERVICES_YAML.read_text()).get("services", []))
+    return set(
+        yaml_fast.safe_load(EXTERNAL_SERVICES_YAML.read_text()).get("services", [])
+    )
 
 
 EXPECTED_OVERRIDE_WRITERS = STATE_DIR / "expected_override_writers.yml"
@@ -202,7 +209,7 @@ SANCTIONED_YAML = STATE_DIR / "sanctioned_writers.yml"
 def load_expected_override_writers() -> dict:
     if not EXPECTED_OVERRIDE_WRITERS.is_file():
         return {}
-    return yaml.safe_load(EXPECTED_OVERRIDE_WRITERS.read_text()) or {}
+    return yaml_fast.safe_load(EXPECTED_OVERRIDE_WRITERS.read_text()) or {}
 
 
 def override_writer_errors(writes: dict, expected: dict) -> list[str]:
@@ -363,7 +370,7 @@ def alias_collision_errors(config: dict) -> list[str]:
 def load_sanctioned_writers() -> dict:
     if not SANCTIONED_YAML.is_file():
         return {}
-    return yaml.safe_load(SANCTIONED_YAML.read_text()) or {}
+    return yaml_fast.safe_load(SANCTIONED_YAML.read_text()) or {}
 
 
 def single_writer_errors(writes: dict, sanctioned: dict) -> list[str]:

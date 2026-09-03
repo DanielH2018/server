@@ -1,6 +1,5 @@
 """Hermetic tests for the HA state-model extractor + checks (no live HA / Docker / network)."""
 
-import yaml
 import ha_state_model as hsm
 from diagnostics.probe_lib import ha
 
@@ -311,7 +310,7 @@ def test_cmd_refresh_writes_both_snapshots(tmp_path, monkeypatch):
         get_services=lambda: {"notify.mobile_app_pixel_watch_3", "light.turn_on"},
     )
     assert rc == 0
-    saved = yaml.safe_load((tmp_path / "external_services.yml").read_text())
+    saved = yaml_fast.safe_load((tmp_path / "external_services.yml").read_text())
     assert "notify.mobile_app_pixel_watch_3" in saved["services"]
 
 
@@ -378,3 +377,6 @@ def test_cmd_refresh_live_imports_resolve_under_direct_invocation():
     )
     assert proc.returncode == 0, proc.stderr
     assert "diagnostics.probe_lib.ha" in proc.stdout
+
+
+from lib import yaml_fast  # noqa: E402

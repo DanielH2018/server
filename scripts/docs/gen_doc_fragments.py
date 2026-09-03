@@ -48,11 +48,12 @@ import sys as _sys
 from collections.abc import Callable
 from pathlib import Path as _Path
 
-import yaml
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+
+from lib import yaml_fast
 
 from dev.k8s_autodeploy_counts import all_role_names, autodeploy_stances
 from lib.docs_provenance import write_if_body_changed
@@ -122,13 +123,13 @@ def config_default(path: _Path, name: str) -> str:
 
 
 def role_defaults(path: _Path) -> dict:
-    return yaml.safe_load(path.read_text())
+    return yaml_fast.safe_load(path.read_text())
 
 
 def registry_counts(path: _Path) -> dict[str, int]:
     """How many registered secrets sit in each tier."""
     counts: dict[str, int] = {}
-    for entry in yaml.safe_load(path.read_text())["secrets"].values():
+    for entry in yaml_fast.safe_load(path.read_text())["secrets"].values():
         tier = str(entry.get("tier", "?"))
         counts[tier] = counts.get(tier, 0) + 1
     return counts

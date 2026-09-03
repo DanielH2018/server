@@ -18,8 +18,8 @@ from __future__ import annotations
 
 import re
 
-import yaml
 from _helpers import REPO
+from lib import yaml_fast
 
 _REPO = REPO
 _DEFAULTS = _REPO / "ansible/roles/k8s/claude-otel/defaults/main.yml"
@@ -30,7 +30,7 @@ _GITOPS = _REPO / "ansible/roles/setup/gitops_deploy/files/gitops_deploy.py"
 
 
 def _defaults() -> dict:
-    return yaml.safe_load(_DEFAULTS.read_text())
+    return yaml_fast.safe_load(_DEFAULTS.read_text())
 
 
 def test_the_query_matches_what_the_deployers_actually_log():

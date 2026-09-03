@@ -18,7 +18,7 @@ modes this suite guards are now:
 Run: uv run pytest ansible/tests/services/test_strangler_bridge.py
 """
 
-import yaml
+from lib import yaml_fast
 from jinja2 import ChainableUndefined, Environment, FileSystemLoader
 from _helpers import ANSIBLE
 
@@ -32,7 +32,7 @@ DOMAIN = "example.com"
 
 
 def _containers(host: str) -> list[dict]:
-    data = yaml.safe_load((HOST_VARS / f"{host}.yml").read_text()) or {}
+    data = yaml_fast.safe_load((HOST_VARS / f"{host}.yml").read_text()) or {}
     return data.get("containers_list") or []
 
 
@@ -48,15 +48,17 @@ def _gate_config() -> dict:
         k8s_namespace="homelab",
         livesync_sync_token="TESTTOKEN",
     )
-    manifest = yaml.safe_load(rendered)
-    return yaml.safe_load(manifest["stringData"]["livesync-gate.yml"])
+    manifest = yaml_fast.safe_load(rendered)
+    return yaml_fast.safe_load(manifest["stringData"]["livesync-gate.yml"])
 
 
 def test_no_bridge_hostname_key_survives_anywhere():
     """The key was renamed to `unsuffixed_hostname` at the teardown; a reintroduced
     `bridge_hostname` matches NOTHING and the service's pre-migration names silently 404."""
     for host_file in HOST_VARS.glob("*.yml"):
-        for entry in yaml.safe_load(host_file.read_text()).get("containers_list") or []:
+        for entry in (
+            yaml_fast.safe_load(host_file.read_text()).get("containers_list") or []
+        ):
             assert "bridge_hostname" not in entry, (
                 f"{host_file.name}: {entry.get('name')} declares bridge_hostname — "
                 "the teardown renamed this to unsuffixed_hostname"

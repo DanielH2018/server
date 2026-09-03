@@ -7,7 +7,7 @@ homepage Kubernetes widget carry their own cluster identities and are held to th
 
 import re
 
-import yaml
+from lib import yaml_fast
 from _helpers import ANSIBLE
 from _manifest_guards import (
     ALL_VARS,
@@ -31,7 +31,7 @@ def _readonly_rbac_docs() -> list[dict]:
         k3s_readonly_sa_namespace=K3S_DEFAULTS["k3s_readonly_sa_namespace"],
         k3s_readonly_crd_api_groups=K3S_DEFAULTS["k3s_readonly_crd_api_groups"],
     )
-    return [d for d in yaml.safe_load_all(rendered) if d]
+    return [d for d in yaml_fast.safe_load_all(rendered) if d]
 
 
 def _readonly_rules() -> list[dict]:
@@ -103,7 +103,7 @@ def _headlamp_rbac_docs() -> list[dict]:
         K8S / "headlamp" / "templates" / "rbac.yaml.j2",
         **_role_defaults("headlamp"),
     )
-    return [d for d in yaml.safe_load_all(rendered) if d]
+    return [d for d in yaml_fast.safe_load_all(rendered) if d]
 
 
 def test_headlamp_cluster_identity_stays_read_only():
@@ -143,7 +143,7 @@ def test_headlamp_keeps_its_serviceaccount_token_mounted():
     falls back to the namespace `default` SA with no permissions — leaves a dashboard that loads,
     authenticates nobody, and shows an empty cluster.
     """
-    doc = yaml.safe_load(
+    doc = yaml_fast.safe_load(
         _render(
             K8S / "headlamp" / "templates" / "deployment.yaml.j2",
             container_item=next(c for c in _k8s_entries() if c["name"] == "headlamp"),
@@ -167,7 +167,7 @@ def test_homepage_kubernetes_widget_wiring_holds_together():
     role = K8S / "homepage"
     assert "mode: cluster" in (role / "templates" / "kubernetes.yaml.j2").read_text()
 
-    deployment = yaml.safe_load(
+    deployment = yaml_fast.safe_load(
         _render(
             role / "templates" / "deployment.yaml.j2",
             container_item=next(c for c in _k8s_entries() if c["name"] == "homepage"),
@@ -178,7 +178,7 @@ def test_homepage_kubernetes_widget_wiring_holds_together():
 
     rbac = [
         d
-        for d in yaml.safe_load_all(
+        for d in yaml_fast.safe_load_all(
             _render(role / "templates" / "rbac.yaml.j2", **_role_defaults("homepage"))
         )
         if d

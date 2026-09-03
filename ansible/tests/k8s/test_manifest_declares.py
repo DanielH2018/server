@@ -20,11 +20,12 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-import yaml
 from _helpers import REPO
 
 _REPO = REPO
 sys.path.insert(0, str(_REPO / "ansible/roles/setup/k3s/files"))
+
+from lib import yaml_fast  # noqa: E402
 
 from _k8s_render import rendered_docs, rendered_texts  # noqa: E402
 from manifest_declares import declared, declared_in  # noqa: E402
@@ -33,7 +34,7 @@ from manifest_declares import declared, declared_in  # noqa: E402
 def _pyyaml_names(text: str) -> set[str]:
     """The same set PyYAML would produce, as the reference implementation."""
     names = set()
-    for doc in yaml.safe_load_all(text):
+    for doc in yaml_fast.safe_load_all(text):
         if not isinstance(doc, dict):
             continue
         kind, meta = doc.get("kind"), doc.get("metadata")

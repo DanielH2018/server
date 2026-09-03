@@ -28,7 +28,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-import yaml
+from lib import yaml_fast
 from _helpers import REPO
 
 _REPO = REPO
@@ -72,7 +72,7 @@ _GROUP_TAGS = {
 
 
 def _groups() -> list[dict]:
-    defaults = yaml.safe_load((_ROLE / "defaults/main.yml").read_text())
+    defaults = yaml_fast.safe_load((_ROLE / "defaults/main.yml").read_text())
     return defaults["k3s_render_stamp_groups"]
 
 
@@ -137,7 +137,7 @@ def test_each_stamp_task_carries_exactly_its_groups_tag_family():
     """
     # Parsed as YAML, not matched with a regex: the tasks ARE structured data, and a pattern
     # spanning task boundaries is both fragile and — as written the first time — quadratic.
-    tasks = yaml.safe_load(_HEALTH_CRONS.read_text())
+    tasks = yaml_fast.safe_load(_HEALTH_CRONS.read_text())
     by_group = {
         task["vars"]["stamp_render_name"]: task
         for task in tasks

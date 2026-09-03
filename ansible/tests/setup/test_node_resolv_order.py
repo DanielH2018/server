@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import re
 
-import yaml
+from lib import yaml_fast
 from _helpers import ROLES as _ROLES
 
 _TEMPLATE = _ROLES / "setup/common/templates/resolv.conf.j2"
@@ -99,7 +99,7 @@ def test_the_live_defaults_and_template_keep_pihole_first() -> None:
         "would silently stop checking the live values"
     )
     for host, (defaults, servers_var, options_var) in _CALLERS.items():
-        values = yaml.safe_load(defaults.read_text())
+        values = yaml_fast.safe_load(defaults.read_text())
         upstreams = values[servers_var]
         rendered = template.replace(
             loop, "".join(f"nameserver {s}\n" for s in upstreams)
@@ -173,7 +173,7 @@ def forward_problems(upstreams: list[str], corefile: str) -> list[str]:
 
 
 def test_the_live_corefile_keeps_pihole_first() -> None:
-    values = yaml.safe_load(_K3S_DEFAULTS.read_text())
+    values = yaml_fast.safe_load(_K3S_DEFAULTS.read_text())
     corefile = _COREFILE.read_text()
     loop = "{% for upstream in k3s_host_dns_upstreams %}{{ upstream }} {% endfor %}"
     assert loop in corefile, (
@@ -194,7 +194,7 @@ def test_the_live_corefile_keeps_pihole_first() -> None:
 
 def test_the_node_points_only_at_its_own_forwarder() -> None:
     """A second nameserver here makes a dead forwarder degrade silently to unfiltered DNS."""
-    values = yaml.safe_load(_K3S_DEFAULTS.read_text())
+    values = yaml_fast.safe_load(_K3S_DEFAULTS.read_text())
     assert values["k3s_node_dns_upstreams"] == ["127.0.0.1"], (
         "daniel-box resolves through its host forwarder and nothing else; a fallback entry "
         "here turns a dead forwarder from a loud outage into silent unfiltered DNS"

@@ -25,7 +25,7 @@ import re
 from pathlib import Path
 
 import pytest
-import yaml
+from lib import yaml_fast
 from _helpers import REPO
 
 ADR_DIR = REPO / "docs" / "adr"
@@ -61,7 +61,7 @@ def _frontmatter(path: Path) -> dict:
     if not text.startswith("---\n"):
         pytest.fail(f"{path.name}: no frontmatter")
     _, fm, _ = text.split("---", 2)
-    loaded = yaml.safe_load(fm)
+    loaded = yaml_fast.safe_load(fm)
     if not isinstance(loaded, dict):
         pytest.fail(f"{path.name}: frontmatter is not a mapping")
     return loaded

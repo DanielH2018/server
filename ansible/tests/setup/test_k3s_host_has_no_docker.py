@@ -27,7 +27,7 @@ Run: uv run pytest ansible/tests/setup/test_k3s_host_has_no_docker.py
 from pathlib import Path
 
 import pytest
-import yaml
+from lib import yaml_fast
 from _helpers import ANSIBLE
 
 
@@ -39,7 +39,7 @@ K3S_HOSTS = ("daniel-box", "daniel-server")
 
 
 def _load(path: Path):
-    return yaml.safe_load(path.read_text())
+    return yaml_fast.safe_load(path.read_text())
 
 
 def test_docker_install_is_gated_on_has_docker():

@@ -17,7 +17,7 @@ and the monitor cannot say WHY the target is down. This test can.
 
 from __future__ import annotations
 
-import yaml
+from lib import yaml_fast
 from _helpers import ROLES as _ROLES
 
 _GROUP_VARS = _ROLES.parent / "inventory/group_vars/all.yml"
@@ -38,8 +38,8 @@ def ports_disagree(publisher: int, scraper: int) -> str | None:
 
 
 def test_the_live_ports_agree() -> None:
-    publisher = yaml.safe_load(_K3S_DEFAULTS.read_text())[_PUBLISHER_VAR]
-    scraper = yaml.safe_load(_GROUP_VARS.read_text())[_SCRAPER_VAR]
+    publisher = yaml_fast.safe_load(_K3S_DEFAULTS.read_text())[_PUBLISHER_VAR]
+    scraper = yaml_fast.safe_load(_GROUP_VARS.read_text())[_SCRAPER_VAR]
     problem = ports_disagree(publisher, scraper)
     assert problem is None, problem
 

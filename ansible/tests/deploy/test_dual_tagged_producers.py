@@ -34,6 +34,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import yaml
+from lib import yaml_fast
 
 from _helpers import REPO as _REPO_ROOT
 from _helpers import ROLES as _ROLES
@@ -80,7 +81,7 @@ def test_no_value_producer_carries_both_tags() -> None:
     offenders = []
     for path in _task_files():
         try:
-            doc = yaml.safe_load(path.read_text())
+            doc = yaml_fast.safe_load(path.read_text())
         except (
             yaml.YAMLError
         ):  # a template-bearing tasks file is another guard's problem
@@ -100,7 +101,7 @@ def test_no_value_producer_carries_both_tags() -> None:
 
 def test_a_dual_tagged_set_fact_is_flagged() -> None:
     """The 2026-08-16 shape, verbatim."""
-    doc = yaml.safe_load(
+    doc = yaml_fast.safe_load(
         """
         - name: Resolve the manifest destination
           ansible.builtin.set_fact:
@@ -112,7 +113,7 @@ def test_a_dual_tagged_set_fact_is_flagged() -> None:
 
 
 def test_a_dual_tagged_register_is_flagged() -> None:
-    doc = yaml.safe_load(
+    doc = yaml_fast.safe_load(
         """
         - name: Read the deploy commit
           ansible.builtin.command: git rev-parse HEAD
@@ -125,7 +126,7 @@ def test_a_dual_tagged_register_is_flagged() -> None:
 
 def test_a_dual_tag_on_a_block_wrapper_is_flagged() -> None:
     """A block's tags govern its children, so the defect one level up must still be seen."""
-    doc = yaml.safe_load(
+    doc = yaml_fast.safe_load(
         """
         - name: The config and deploy pair
           tags: [config, deploy]
@@ -141,7 +142,7 @@ def test_a_dual_tag_on_a_block_wrapper_is_flagged() -> None:
 
 def test_a_producer_tagged_always_is_clean() -> None:
     """The prescribed fix must not itself trip the rule."""
-    doc = yaml.safe_load(
+    doc = yaml_fast.safe_load(
         """
         - name: Resolve the manifest destination
           ansible.builtin.set_fact:
@@ -153,7 +154,7 @@ def test_a_producer_tagged_always_is_clean() -> None:
 
 
 def test_a_producer_with_one_split_tag_is_clean() -> None:
-    doc = yaml.safe_load(
+    doc = yaml_fast.safe_load(
         """
         - name: Render the config
           ansible.builtin.set_fact:
@@ -170,7 +171,7 @@ def test_a_dual_tagged_plain_action_is_not_flagged() -> None:
     Widening the rule to every dual-tagged task means deleting this test, which is the point:
     the scope should not drift without someone deciding to drift it.
     """
-    doc = yaml.safe_load(
+    doc = yaml_fast.safe_load(
         """
         - name: Restart the unit
           ansible.builtin.systemd:
@@ -184,7 +185,7 @@ def test_a_dual_tagged_plain_action_is_not_flagged() -> None:
 
 def test_a_scalar_tag_string_is_handled() -> None:
     """`tags: config` is legal YAML for a single tag, and must not crash the walk."""
-    doc = yaml.safe_load(
+    doc = yaml_fast.safe_load(
         """
         - name: Render the config
           ansible.builtin.set_fact:

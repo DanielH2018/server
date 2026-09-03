@@ -30,7 +30,7 @@ Run: uv run pytest ansible/tests/deploy/test_image_builder_gate.py
 import re
 
 import pytest
-import yaml
+from lib import yaml_fast
 from ansible.template import Templar, trust_as_template
 from _helpers import ANSIBLE
 from _helpers import load_tasks
@@ -231,7 +231,7 @@ def test_dereferencing_consumers_are_guarded_before_the_deref(prefix):
 
 def test_force_is_documented_as_a_default():
     """An escape hatch nobody can find is not an escape hatch."""
-    defaults = yaml.safe_load(DEFAULTS.read_text())
+    defaults = yaml_fast.safe_load(DEFAULTS.read_text())
     assert defaults.get("image_builder_force") is False, (
         "image_builder_force must default to false in defaults/main.yml — that file is where "
         "the role's contract is readable in one place, and the CVE case is explained there."

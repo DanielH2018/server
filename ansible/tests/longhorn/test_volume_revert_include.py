@@ -8,7 +8,7 @@ replicas, or a revert leaves the workload at zero.
 
 from __future__ import annotations
 
-import yaml
+from lib import yaml_fast
 from _k8s_render import rendered_docs
 from _helpers import render_expr as _render
 from _volume_revert import _MANIFESTS, _REPO, _index, _named, _task_names
@@ -18,7 +18,7 @@ def _snapshot_roles() -> dict[str, list[str]]:
     """Every role that opts into a pre-deploy snapshot, and the claims it declares."""
     roles = {}
     for defaults in sorted((_REPO / "ansible/roles/k8s").glob("*/defaults/main.yml")):
-        declared = (yaml.safe_load(defaults.read_text()) or {}).get(
+        declared = (yaml_fast.safe_load(defaults.read_text()) or {}).get(
             "k8s_autodeploy_snapshot_pvcs"
         )
         if declared:

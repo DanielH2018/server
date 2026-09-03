@@ -24,6 +24,8 @@ from _helpers import REPO
 _REPO = REPO
 sys.path.insert(0, str(Path(__file__).parent))
 
+from lib import yaml_fast  # noqa: E402
+
 from _k8s_render import rendered_docs  # noqa: E402
 
 ARRS = ("sonarr", "radarr", "prowlarr")
@@ -204,4 +206,4 @@ def test_the_rendered_sidecar_is_a_sibling_container_not_a_nested_key():
             f"{role}/{name} should render exactly the app and its exportarr sidecar, "
             f"got {[c.get('name') for c in containers]}"
         )
-        assert yaml.safe_load(yaml.safe_dump(containers)) == containers
+        assert yaml_fast.safe_load(yaml.safe_dump(containers)) == containers

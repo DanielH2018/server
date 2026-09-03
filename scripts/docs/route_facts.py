@@ -34,6 +34,8 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
+from lib import yaml_fast
+
 from lib.repo_paths import ALL_VARS as GROUP_VARS
 
 # `public=false` in a role's own macro call opts the service out of the public Host rule
@@ -60,7 +62,7 @@ def public_route_enabled(group_vars: Path = GROUP_VARS) -> bool:
     name that does not resolve -- the safer error is under-reporting reachability.
     """
     try:
-        loaded: Any = yaml.safe_load(group_vars.read_text())
+        loaded: Any = yaml_fast.safe_load(group_vars.read_text())
     except OSError, yaml.YAMLError:
         return False
     return bool(isinstance(loaded, dict) and loaded.get("k8s_public_route"))

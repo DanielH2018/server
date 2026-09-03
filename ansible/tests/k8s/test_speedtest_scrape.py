@@ -17,7 +17,7 @@ a renderable manifest.
 from __future__ import annotations
 
 import pytest
-import yaml
+from lib import yaml_fast
 
 from _k8s_render import rendered_docs
 
@@ -35,7 +35,7 @@ def _scrape_jobs() -> list[dict]:
             continue
         if not isinstance(doc, dict) or doc.get("kind") != "ConfigMap":
             continue
-        return yaml.safe_load(doc["data"]["prometheus.yml"])["scrape_configs"]
+        return yaml_fast.safe_load(doc["data"]["prometheus.yml"])["scrape_configs"]
     pytest.fail("no prometheus ConfigMap rendered — this guard is watching nothing")
 
 

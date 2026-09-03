@@ -46,6 +46,8 @@ from jinja2.exceptions import TemplateSyntaxError
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from lib import yaml_fast
+
 from lib.repo_paths import K8S_ROLES
 
 ROLE_DIR = K8S_ROLES / "home-assistant"
@@ -233,7 +235,7 @@ def _root_files(role_dir: Path) -> list[str]:
     """The root file list the ConfigMap ships: `home_assistant_root_files`, else _ROOT_FILES."""
     defaults = role_dir / "defaults" / "main.yml"
     if defaults.is_file():
-        listed = (yaml.safe_load(defaults.read_text()) or {}).get(
+        listed = (yaml_fast.safe_load(defaults.read_text()) or {}).get(
             "home_assistant_root_files"
         )
         if listed:
@@ -420,7 +422,7 @@ def shipped_dir_list_errors(role_dir: Path) -> list[str]:
     defaults = role_dir / "defaults" / "main.yml"
     if not defaults.is_file():
         return []
-    values = yaml.safe_load(defaults.read_text()) or {}
+    values = yaml_fast.safe_load(defaults.read_text()) or {}
     errors = []
     for subdir, (var, pattern) in _SHIPPED_DIR_LISTS.items():
         listed = values.get(var)

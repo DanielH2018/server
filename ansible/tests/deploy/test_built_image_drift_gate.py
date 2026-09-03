@@ -27,7 +27,7 @@ failure. Hence a test rather than a comment.
 
 import re
 
-import yaml
+from lib import yaml_fast
 from _helpers import ANSIBLE
 
 _ANSIBLE = ANSIBLE
@@ -38,12 +38,12 @@ _BUILDER = _ANSIBLE / "roles" / "k8s" / "image-builder" / "tasks" / "main.yml"
 
 def _tasks(path):
     """Every task in a task file, as dicts."""
-    return [t for t in yaml.safe_load(path.read_text()) if isinstance(t, dict)]
+    return [t for t in yaml_fast.safe_load(path.read_text()) if isinstance(t, dict)]
 
 
 def _k8s_play():
     """The k8s play, selected by name — deploy.yml opens with the Docker play for the Pi."""
-    plays = yaml.safe_load(_DEPLOY.read_text())
+    plays = yaml_fast.safe_load(_DEPLOY.read_text())
     for play in plays:
         if play.get("name") == "Deploy k8s workloads":
             return play

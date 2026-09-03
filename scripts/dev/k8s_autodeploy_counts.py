@@ -24,7 +24,7 @@ from lib.repo_paths import FILTER_PLUGINS, REPO as _REPO
 
 sys.path.insert(0, str(FILTER_PLUGINS))
 
-import yaml
+from lib import yaml_fast
 from k8s_autodeploy import SHARED_ROLES, k8s_autodeploy_denylist
 
 _ROLES_DIR = _REPO / "ansible/roles/k8s"
@@ -39,7 +39,7 @@ def eligible_roles() -> list[str]:
         defaults = entry / "defaults" / "main.yml"
         if not defaults.is_file():
             continue
-        data = yaml.safe_load(defaults.read_text()) or {}
+        data = yaml_fast.safe_load(defaults.read_text()) or {}
         if bool(data.get("k8s_autodeploy")):
             names.append(entry.name)
     return names

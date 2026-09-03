@@ -6,7 +6,7 @@ VIP fails silently, because every manifest stays valid. Service annotations must
 `metallb.io` namespace, and the pinned MetalLB version must still be one that reads it.
 """
 
-import yaml
+from lib import yaml_fast
 from _helpers import ANSIBLE
 
 from _manifest_guards import ALL_VARS, K3S, K3S_DEFAULTS, K8S, _render
@@ -22,11 +22,11 @@ def _pool_docs() -> list[dict]:
     rendered = _render(
         K3S / "templates" / "metallb-pool.yaml.j2",
         k3s_metallb_ingress_vip=ALL_VARS["k3s_metallb_ingress_vip"],
-        k3s_metallb_pool=yaml.safe_load((K3S / "defaults" / "main.yml").read_text())[
-            "k3s_metallb_pool"
-        ],
+        k3s_metallb_pool=yaml_fast.safe_load(
+            (K3S / "defaults" / "main.yml").read_text()
+        )["k3s_metallb_pool"],
     )
-    docs = [d for d in yaml.safe_load_all(rendered) if d]
+    docs = [d for d in yaml_fast.safe_load_all(rendered) if d]
     return [d for d in docs if d["kind"] == "IPAddressPool"]
 
 

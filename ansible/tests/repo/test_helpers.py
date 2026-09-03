@@ -9,7 +9,7 @@ rather than relying on the callers to notice.
 from __future__ import annotations
 
 import pytest
-import yaml
+from lib import yaml_fast
 
 from _helpers import (
     ANSIBLE,
@@ -22,7 +22,7 @@ from _helpers import (
     walk_tasks,
 )
 
-BLOCKED = yaml.safe_load(
+BLOCKED = yaml_fast.safe_load(
     """
 - name: Plain first
   ansible.builtin.command: echo first

@@ -20,9 +20,9 @@ from __future__ import annotations
 import pathlib
 import subprocess
 
-import yaml
 from jinja2 import Environment
 from _helpers import REPO
+from lib import yaml_fast
 
 _REPO = REPO
 _ROLE = _REPO / "ansible" / "roles" / "setup" / "hypervisor"
@@ -37,7 +37,7 @@ _PREP_FAILED = 70
 
 
 def _render(**overrides) -> str:
-    defaults = yaml.safe_load(_DEFAULTS.read_text())
+    defaults = yaml_fast.safe_load(_DEFAULTS.read_text())
     context = {
         "hypervisor_staging_gate_repo": defaults["hypervisor_staging_gate_repo"],
         "hypervisor_staging_gate_lock": defaults["hypervisor_staging_gate_lock"],
@@ -229,7 +229,7 @@ def test_the_refusal_codes_map_to_no_verdict_in_the_caller():
 
 
 def _install_tasks() -> list[dict]:
-    return yaml.safe_load((_ROLE / "tasks" / "install.yml").read_text())
+    return yaml_fast.safe_load((_ROLE / "tasks" / "install.yml").read_text())
 
 
 def authorization_problems(tasks: list[dict]) -> list[str]:

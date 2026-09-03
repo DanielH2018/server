@@ -60,9 +60,12 @@ sys.path.insert(0, str(_HERE))
 sys.path.insert(
     0, str(_HERE.parents[1] / "ansible" / "roles" / "setup" / "gitops_deploy" / "files")
 )
+# The scripts/ root, for `from lib import ...`. The two inserts above reach a sibling
+# directory and a role's files/; neither puts lib's parent on the path.
+sys.path.insert(0, str(_HERE.parent))
 
 
-import yaml  # noqa: E402
+from lib import yaml_fast  # noqa: E402
 
 import deploy_logic  # noqa: E402
 import staging_gate  # noqa: E402
@@ -218,7 +221,7 @@ def staged_services_at(sha: str) -> set[str]:
         text = run_git("show", f"{sha}:{STAGE_INVENTORY}")
     except subprocess.CalledProcessError:
         return set()
-    doc = yaml.safe_load(text) or {}
+    doc = yaml_fast.safe_load(text) or {}
     return {
         entry["name"]
         for entry in doc.get("containers_list", []) or []

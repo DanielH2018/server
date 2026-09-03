@@ -14,6 +14,7 @@ from __future__ import annotations
 from _volume_ops import assert_every_api_call_pins_a_single_status_code
 
 import yaml
+from lib import yaml_fast
 from _helpers import load_tasks as _tasks
 from _helpers import render_expr as _render
 from _volume_snapshot import _CLAIM, _DEFAULTS, _GUARD, _named
@@ -359,7 +360,7 @@ def test_the_maintenance_sequence_runs_in_the_drill_proven_order() -> None:
 
 
 def test_the_role_declares_maintenance_attach_timeouts() -> None:
-    defaults = yaml.safe_load(_DEFAULTS.read_text())
+    defaults = yaml_fast.safe_load(_DEFAULTS.read_text())
     assert int(defaults["volume_snapshot_state_timeout"]) > 0
     assert int(defaults["volume_snapshot_poll_interval"]) > 0
     assert int(defaults["volume_snapshot_api_timeout"]) > 0

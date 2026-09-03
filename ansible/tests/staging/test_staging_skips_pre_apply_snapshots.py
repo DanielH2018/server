@@ -20,12 +20,13 @@ from __future__ import annotations
 import sys
 
 import pytest
-import yaml
 from jinja2 import Environment, StrictUndefined
 from _helpers import REPO
 
 _REPO = REPO
 sys.path.insert(0, str(_REPO / "scripts"))
+
+from lib import yaml_fast  # noqa: E402
 
 from validate.k8s_manifests import (  # noqa: E402 — needs the path insert above
     ALL_VARS,
@@ -53,7 +54,9 @@ def _context(host: str, role: str) -> dict:
 
 def _snapshot_gate() -> list[str]:
     """The `when:` conditions on the volume-snapshot include, read from the role itself."""
-    tasks = yaml.safe_load((K8S_ROLES / "manifests" / "tasks" / "main.yml").read_text())
+    tasks = yaml_fast.safe_load(
+        (K8S_ROLES / "manifests" / "tasks" / "main.yml").read_text()
+    )
     for task in tasks:
         include = (
             task.get("ansible.builtin.include_role") or task.get("include_role") or {}

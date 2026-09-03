@@ -26,12 +26,13 @@ import ast
 import sys
 
 import pytest
-import yaml
 from jinja2 import Environment, StrictUndefined
 from _helpers import REPO
 
 _REPO = REPO
 sys.path.insert(0, str(_REPO / "scripts"))
+
+from lib import yaml_fast  # noqa: E402
 
 from validate.k8s_manifests import (  # noqa: E402 — needs the path insert above
     ALL_VARS,
@@ -60,7 +61,7 @@ def _context(host: str) -> dict:
 
 
 def _tasks() -> list:
-    return yaml.safe_load((K8S_ROLES / _ROLE / "tasks" / "main.yml").read_text())
+    return yaml_fast.safe_load((K8S_ROLES / _ROLE / "tasks" / "main.yml").read_text())
 
 
 def _include(task: dict) -> dict:
@@ -144,7 +145,7 @@ def test_the_two_creators_agree_on_the_claim(host: str) -> None:
     differ in storage class or size. Nothing else compares them — they live in different
     roles, and only one renders per host."""
     ctx = _context(host)
-    seed_pvc = yaml.safe_load(
+    seed_pvc = yaml_fast.safe_load(
         (K8S_ROLES / "volume-claim" / "templates" / "pvc.yaml.j2")
         .read_text()
         .replace("{{ volume_claim_name }}", ctx["freshrss_k8s_claim"])
@@ -154,7 +155,7 @@ def test_the_two_creators_agree_on_the_claim(host: str) -> None:
     )
     env = Environment(undefined=StrictUndefined)
     register_ansible_filters(env)
-    role_pvc = yaml.safe_load(
+    role_pvc = yaml_fast.safe_load(
         env.from_string(
             (K8S_ROLES / _ROLE / "templates" / "pvc.yaml.j2").read_text()
         ).render(ctx)
@@ -170,7 +171,7 @@ def test_the_deployment_references_the_claim_the_flag_creates() -> None:
     ctx = _context("daniel-stage")
     env = Environment(undefined=StrictUndefined)
     register_ansible_filters(env)
-    pvc = yaml.safe_load(
+    pvc = yaml_fast.safe_load(
         env.from_string(
             (K8S_ROLES / _ROLE / "templates" / "pvc.yaml.j2").read_text()
         ).render(ctx)

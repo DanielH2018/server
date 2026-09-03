@@ -60,7 +60,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
-import yaml
+from lib import yaml_fast
 from jinja2.nativetypes import NativeEnvironment
 from _helpers import K8S_ROLES, load_tasks, load_yaml
 from _helpers import task_named
@@ -374,7 +374,7 @@ def _gate_include(role: Path) -> dict | None:
     tasks = role / "tasks/main.yml"
     if not tasks.is_file() or "k8s/cronjob-gate" not in tasks.read_text():
         return None
-    for task in yaml.safe_load(tasks.read_text()) or []:
+    for task in yaml_fast.safe_load(tasks.read_text()) or []:
         if (task.get("ansible.builtin.include_role") or {}).get("name") == (
             "k8s/cronjob-gate"
         ):
@@ -413,7 +413,7 @@ def _active_deadlines(role: Path) -> list[tuple[str, int]]:
     and that is how the rule got broken in the first place.
     """
     out: list[tuple[str, int]] = []
-    role_defaults = yaml.safe_load((role / "defaults/main.yml").read_text()) or {}
+    role_defaults = yaml_fast.safe_load((role / "defaults/main.yml").read_text()) or {}
     tdir = role / "templates"
     for template in sorted(tdir.glob("*.j2")) if tdir.is_dir() else []:
         for raw in _DEADLINE.findall(template.read_text()):

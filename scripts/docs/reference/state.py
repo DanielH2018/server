@@ -57,6 +57,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 import yaml
+from lib import yaml_fast
 
 from docs.reference import crons as crons_mod
 from lib.git import git
@@ -249,7 +250,7 @@ def etcd_restore_drill_run(
 def _k3s_default_var(name: str, defaults_path: Path = _K3S_DEFAULTS) -> str | None:
     """A single scalar default from roles/setup/k3s/defaults/main.yml."""
     try:
-        data = yaml.safe_load(defaults_path.read_text())
+        data = yaml_fast.safe_load(defaults_path.read_text())
     except OSError, yaml.YAMLError:
         return None
     value = (data or {}).get(name)

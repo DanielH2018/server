@@ -25,7 +25,7 @@ Run: uv run pytest ansible/tests/deploy/test_gitops_deploy_ship_list.py
 
 import ast
 
-import yaml
+from lib import yaml_fast
 from _helpers import REPO
 
 
@@ -39,7 +39,7 @@ STAMP_TASK = "Record the deployed gitops-deploy code"
 
 
 def _tasks():
-    return yaml.safe_load((ROLE / "tasks" / "main.yml").read_text())
+    return yaml_fast.safe_load((ROLE / "tasks" / "main.yml").read_text())
 
 
 def _task(name):

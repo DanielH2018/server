@@ -20,7 +20,7 @@ a textual guard is the whole check rather than an approximation of it.
 """
 
 import pytest
-import yaml
+from lib import yaml_fast
 
 from _helpers import ROLES
 
@@ -33,7 +33,7 @@ DEFAULTED_AWAY = ("globalDefault",)
 
 
 def _documents():
-    docs = [d for d in yaml.safe_load_all(TEMPLATE.read_text()) if d]
+    docs = [d for d in yaml_fast.safe_load_all(TEMPLATE.read_text()) if d]
     assert docs, (
         f"{TEMPLATE} parsed to no documents — check the loader, not the manifest."
     )

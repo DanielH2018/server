@@ -34,7 +34,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-import yaml
+from lib import yaml_fast
 
 from _k8s_render import rendered_docs
 from _helpers import HOST_VARS
@@ -56,7 +56,7 @@ CRD_ORDER_EXEMPT = {
 
 
 def _k8s_entries(path: Path) -> list[dict]:
-    loaded = yaml.safe_load(path.read_text()) or {}
+    loaded = yaml_fast.safe_load(path.read_text()) or {}
     return [
         c
         for c in (loaded.get("containers_list") or [])

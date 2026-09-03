@@ -24,7 +24,7 @@ Run: uv run pytest ansible/tests/setup/test_k3s_node_ip_pinned.py
 import re
 from pathlib import Path
 
-import yaml
+from lib import yaml_fast
 
 from _helpers import SETUP_ROLES, leaf_tasks
 from _helpers import load_yaml
@@ -45,7 +45,7 @@ def _imported_files() -> list[Path]:
     tasks_dir = K3S / "tasks"
     return [
         tasks_dir / entry["ansible.builtin.import_tasks"]
-        for entry in yaml.safe_load((tasks_dir / "main.yml").read_text()) or []
+        for entry in yaml_fast.safe_load((tasks_dir / "main.yml").read_text()) or []
         if entry.get("ansible.builtin.import_tasks")
     ]
 
@@ -57,7 +57,7 @@ def _task_text() -> str:
 def _tasks() -> list[dict]:
     tasks: list[dict] = []
     for path in _imported_files():
-        loaded = yaml.safe_load(path.read_text()) or []
+        loaded = yaml_fast.safe_load(path.read_text()) or []
         tasks += leaf_tasks(loaded)
     return tasks
 

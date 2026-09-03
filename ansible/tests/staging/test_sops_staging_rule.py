@@ -20,7 +20,7 @@ The last test reads the encrypted file itself, because a correct config still le
 import re
 
 import pytest
-import yaml
+from lib import yaml_fast
 
 from _helpers import ANSIBLE
 
@@ -40,7 +40,7 @@ DANIEL_SERVER_RECIPIENT = (
 
 
 def _rules():
-    rules = yaml.safe_load(SOPS_CONFIG.read_text())["creation_rules"]
+    rules = yaml_fast.safe_load(SOPS_CONFIG.read_text())["creation_rules"]
     assert rules, (
         f"{SOPS_CONFIG} has no creation_rules — check the loader, not the config."
     )
@@ -105,7 +105,7 @@ def test_the_staging_key_is_a_real_recipient_of_the_production_file():
 
 
 def test_the_staging_secrets_file_is_actually_encrypted():
-    doc = yaml.safe_load(STAGING_SECRETS.read_text())
+    doc = yaml_fast.safe_load(STAGING_SECRETS.read_text())
     sops = doc.get("sops")
     assert sops, (
         f"{STAGING_SECRETS} has no `sops` metadata — it is PLAINTEXT in the repo. Encrypt it "
@@ -121,7 +121,7 @@ def test_the_staging_secrets_file_is_actually_encrypted():
 @pytest.mark.parametrize("key", ["domain"])
 def test_every_value_in_the_staging_file_is_encrypted(key):
     """A partially-encrypted file reads as encrypted at a glance. Check the value, not the file."""
-    value = yaml.safe_load(STAGING_SECRETS.read_text())[key]
+    value = yaml_fast.safe_load(STAGING_SECRETS.read_text())[key]
     assert str(value).startswith("ENC["), (
         f"{key} in {STAGING_SECRETS} is not encrypted — its value is in the clear."
     )

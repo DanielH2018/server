@@ -34,12 +34,12 @@ import subprocess
 import sys
 from pathlib import Path
 
-import yaml
 from jinja2 import Environment, StrictUndefined
 
 # `scripts/` on sys.path is what resolves `validate.k8s_manifests` below: a directly-invoked
 # script gets only its own directory, and pyproject's `pythonpath` is a pytest setting.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from lib import yaml_fast
 
 from validate.k8s_manifests import (
     ALL_VARS,
@@ -105,7 +105,7 @@ def routable_services() -> set[str]:
             continue
         ctx = {**role_defaults(role, base), **base, "container_item": entry}
         names: list[str] = []
-        for task in yaml.safe_load(tasks_file.read_text()) or []:
+        for task in yaml_fast.safe_load(tasks_file.read_text()) or []:
             include = (
                 task.get("ansible.builtin.include_role")
                 or task.get("include_role")

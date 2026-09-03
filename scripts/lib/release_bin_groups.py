@@ -25,9 +25,17 @@ the group from the defaults instead; the literal-list form is still accepted bec
 pass one directly.
 """
 
+import sys
 from pathlib import Path
 
 import yaml
+
+# A directly-invoked script gets only its own directory on sys.path, and pyproject's
+# `pythonpath` is a pytest setting — so the cross-directory import below needs the
+# scripts/ root here, the same way its siblings reach it.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from lib import yaml_fast
 
 
 def group_sources(group: str, task_file: Path):
@@ -41,7 +49,7 @@ def group_sources(group: str, task_file: Path):
     if not defaults.is_file():
         return
     try:
-        doc = yaml.safe_load(defaults.read_text()) or {}
+        doc = yaml_fast.safe_load(defaults.read_text()) or {}
     except yaml.YAMLError:
         return
     for value in (doc or {}).values():
@@ -101,7 +109,7 @@ def iter_sources(roles: Path):
         if "/archive/" in str(path):
             continue
         try:
-            doc = yaml.safe_load(path.read_text())
+            doc = yaml_fast.safe_load(path.read_text())
         except yaml.YAMLError:
             continue
         for task in _walk(doc):
