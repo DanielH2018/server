@@ -52,7 +52,7 @@ Route to the source of truth by what you're doing, before reading linearly:
 |---|---|
 | Adding / changing a service (k3s — the default) | `/new-k8s-service` skill · a sibling role in `ansible/roles/k8s/` · `ansible/roles/k8s/manifests/CLAUDE.md` for the shared render → apply → queue contract every k8s role includes (`grep -rl k8s/manifests ansible/roles/k8s/*/tasks/` lists them) |
 | Adding / changing a Docker service (the Pi only) | `/new-container` skill (daniel-pi only — neither cluster node has Docker) |
-| Deploying or redeploying a service | `/deploy` skill · `## Common Commands` below for the exit codes |
+| Deploying or redeploying a service | `/deploy` skill (also owns the exit-code table) |
 | Retiring a finished worktree, or `ExitWorktree` refuses to remove one | `/worktree-cleanup` skill |
 | A PR just merged — what now | `## After a PR Merges — Pull, Deploy, Verify` below (the directive and *When to wait*) · `/land-after-merge` skill (the commands). Default is pull → deploy → verify in the same session, no ask. |
 | Going through the open Renovate PRs | `/renovate-prs` skill. Ten `automerge: false` rules name the manual half in their group name — merging one on green CI ships half a bump. A daily timer runs that same skill unattended where it is armed — `ansible/roles/setup/renovate_agent/CLAUDE.md`. |
@@ -63,7 +63,7 @@ Route to the source of truth by what you're doing, before reading linearly:
 | Editing HA automations / lighting / fans | `ansible/roles/k8s/home-assistant/CLAUDE.md` (config and workload both live there; it routes to `docs/` for per-topic behaviour) · `/ha-edit-automation` |
 | Reviewing the homelab for gaps | `/homelab-review` skill (per-domain reviewer agents) |
 | Answering "what runs here / where / behind what" | `docs/reference/` — generated from the tree by the `docs-refresh` cron, browsable at `docs.local.<domain>`. Services, hosts, secret rotation, scheduled jobs, networking. **Never hand-edit a generated page**; a hook rejects it. Change the generator (`scripts/docs/build_docs.py` lists them). The hook decides by the `generated_from:` provenance banner rather than the path, so `reference/topology.md` — hand-written prose, the one page there nobody generates — stays editable. |
-| CI fails on `test_every_committed_fragment_matches_what_the_generator_writes_now` | You changed a tunable a docs fragment reads. Run `uv run python scripts/docs/gen_doc_fragments.py` and commit what it writes — see *Generated docs fragments* below for which tunables those are and why this one gate is not left to the cron. |
+| CI fails on `test_every_committed_fragment_matches_what_the_generator_writes_now` | You changed a tunable a docs fragment reads. *Generated docs fragments* below has the regenerate command, which tunables those are, and why this one gate is not left to the cron. |
 | Chasing a reliability / monitoring "gap" | The role's `CLAUDE.md` + monitor-bridge `check.py` **first** — mature setup, most are handled |
 | Checking that a service's UI actually renders, not just that its pod is Ready | The `homelab-ui` MCP server — see `## Claude Tooling in This Repo` below, and `docs/claude-tooling.md` for the full reference. `probe.py health` cannot see a broken UI behind a healthy pod. |
 | A config edit won't restart the pod (k3s) | A ConfigMap/Secret change alone doesn't roll a Deployment. The general mechanism is the central rollout-restart in `ansible/roles/k8s/manifests/CLAUDE.md`, which fires when a role's rendered manifests change. A role whose pod depends on a file the manifests *don't* carry adds its own `checksum/<thing>` pod annotation instead — e.g. `checksum/check-script` in `roles/k8s/monitor-bridge/templates/deployment.yaml.j2`. |
@@ -71,7 +71,7 @@ Route to the source of truth by what you're doing, before reading linearly:
 | A host can't decrypt secrets | `add-secret` skill → *Onboarding a host that cannot decrypt yet* |
 | Starting Claude Code sessions from a phone | `ansible/roles/setup/claude_code/CLAUDE.md` — `claude-rc.service` hosts them. `/remote-control` inside a session and `claude rc` from a shell are different features; only the second creates sessions on demand. |
 | Adding / changing a cron that changes state | that role's `CLAUDE.md` *Autonomous-role contract* |
-| Recording a finding, fix or improvement you will not do this session | `uv run python scripts/dev/findings.py open …` — it files a GitHub Issue labelled `claude`, deduped by title and file. `findings.py list` is the open register; `docs/reference/backlog.md` renders it. Never `gh issue create` by hand. |
+| Recording a finding, fix or improvement you will not do this session | `findings.py open` (flags: `docs/reference/scripts.md`) — files a GitHub Issue labelled `claude`, deduped by title/file. `findings.py list` is the open register; `docs/reference/backlog.md` renders it. Never `gh issue create` by hand. |
 
 ## Adding a New Service
 
@@ -112,27 +112,13 @@ Before it takes the lock it clears an Ansible fact cache pinning another worktre
 pruned worktree used to fail EVERY deploy at Gathering Facts for the full 7200s TTL — with an
 error naming a module rather than the cache, after the ~9-minute wait on the lock.
 
-Four of its non-zero exits mean **nothing was deployed**, and each is a resume point rather
-than a playbook failure. The fifth, 20, is the inverse and the only one where changes are live.
-They arrive as a bare `Exit code N`, which is why they are here:
-
-| Exit | Meaning | What to do |
-|---|---|---|
-| 75 | the lock stayed busy | retry |
-| 4 | the tree is behind `origin/master` | `git pull`, never `--skip-staleness-check` |
-| 3 | the change is broad and maps to no single service | see *When to wait* |
-| 2 | a `--tags` value matched no service | `--list-services` prints every valid value |
-| 20 | the playbook ran and a task failed — **changes before it are live** | read the PLAY RECAP and the failing TASK; a re-run is not automatically safe |
-
-**20 exists because ansible-playbook's own exit codes collide with the four above.** Ansible
-returns 2 on a failed host, 3 on an unreachable one and 4 on a parse error, and `deploy.sh`
-returned that status verbatim until 2026-09-02. A play that applied both its manifests and then
-failed on a `k8s/rollout-drain` assert therefore exited 2, and `land.sh` reported `a derived tag
-matched no service, so nothing deployed` (issue #840). Every non-zero playbook status is now
-collapsed onto 20, so a wrapper refusal and a playbook failure can never share a number.
-
-The full command reference — the Pi's `-e target=`, config-only runs, the GitOps tick, initial
-setup — and why each exit code exists are in the **`deploy` skill**.
+Its non-zero exits arrive as a bare `Exit code N`. Four of them mean **nothing was
+deployed** — a resume point rather than a playbook failure (retry a busy lock, `git pull` a
+stale tree — never `--skip-staleness-check` — deploy by hand on a broad change, check
+`--list-services` on a tag miss). The fifth, 20, is the inverse: the playbook ran, a task
+failed, and changes before it are live — not a safe re-run. The full table, why 20 collides
+with ansible's own exit codes, the Pi's `-e target=`, config-only runs, the GitOps tick, and
+initial setup are all in the **`deploy` skill**.
 
 ### Checking a k8s change without deploying it
 `prek run --all-files`, `--check` and `--dry-run` check genuinely different things, and
@@ -155,16 +141,11 @@ refuses outright — and then say which command and why.
 
 ### The procedure
 
-Arm the merge with `gh pr merge --squash --auto`, then hand the follow-through to
-`./scripts/deploy_tools/land.sh --pr <n> --since <pre-merge-sha> --await-merge` as ONE
-backgrounded command **with stdout and stderr redirected to a file** — a backgrounded call
-hands Ansible a non-blocking pipe, which it refuses, and the failure reads as a playbook
-error. It waits for the merge (polling the PR's state, not its checks), then
-for master CI on the merge commit, ticks, deploys what the tick deferred, and prints a
-`VERDICT:` line. **Do not hand-poll CI and
-do not hand-merge** — hand-polling cost 835 polls across 213 wait episodes before `land.sh`
-existed. The exact commands, the `VERDICT:` values and the reason `--since` is needed are in
-the **`land-after-merge` skill**.
+Arm the merge, then hand the follow-through to `land.sh` as ONE backgrounded command with
+output redirected to a file — the exact commands, the `VERDICT:` values, why the redirect is
+load-bearing, and why `--since` is needed are in the **`land-after-merge` skill**. **Do not
+hand-poll CI and do not hand-merge** — hand-polling cost 835 polls across 213 wait episodes
+before `land.sh` existed.
 
 `cancelled`, `stale` and `skipped_by_concurrency` mean *no verdict for this SHA*, never *this
 SHA is bad* — `_CI_NO_VERDICT_CONCLUSIONS` in `deploy_logic.py` is the list, and a commit whose
@@ -179,9 +160,9 @@ pod. Exercise the thing you actually changed as well.
 
 ### Working alongside other sessions
 
-- **The lock serializes, and the exit codes are resume points rather than failures** — the table
-  in *Common Commands* above is the one copy. Two of them mean another session got there first:
-  75 (the lock stayed busy) and 4 (the tree is behind `origin/master`).
+- **The lock serializes, and the exit codes are resume points rather than failures** — the full
+  table is in the **`deploy` skill**. Two of them mean another session got there first: 75 (the
+  lock stayed busy) and 4 (the tree is behind `origin/master`).
 - **The tick pulls all of master, not just your commit.** Another session's merged work
   fast-forwards with yours. `land.sh` already scopes to your PR's own files; if you override with
   `--tags`, keep it to your own services.
@@ -351,9 +332,9 @@ feedback + MLD discipline):
   (`.claude/skills/homelab-review/SKILL.md`, step 3), so the marker is what carries the decision to
   the agent that would otherwise re-open it. It is a prior, not a verdict: contradict one with new
   evidence at a cited `file:line` and name the marker you are contradicting.
-- **A finding you will not fix this session is filed, not remembered.** Run
-  `uv run python scripts/dev/findings.py open --title … --body-file … --severity … --kind …`
-  before the session ends, for a review finding, a remediation the fix-skeptic refused, or an
+- **A finding you will not fix this session is filed, not remembered.** Run `findings.py open`
+  before the session ends (flags: `docs/reference/scripts.md`; the `homelab-review` skill covers
+  the review-specific ones) — for a review finding, a remediation the fix-skeptic refused, or an
   improvement you noticed while doing something else. List the issue numbers in the end-of-job
   report. A memory file, `PLANS.md`, or a "3 pending" line in the session notes has no status
   field and no owner; an issue closes from the fixing PR's `Closes #<n>`. Refuted findings close
