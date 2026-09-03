@@ -307,13 +307,14 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     `check_cpu_throttle` sees CFS throttling, which is a cgroup limit rather than heat, and the
     Grafana **Hardware Temperature Monitor** panel plots these series but a panel pages nobody.
     Every sensor gets a limit from one of **two exhaustive arms** — `HWMON_TEMP_RATIO` (0.90) of
-    its own declared max where that max is plausible, else the flat `HWMON_TEMP_FALLBACK_C`
-    (85 °C). **The fallback is not a nicety.** Measured live 2026-08-28, only 7 of 21 scraped
-    sensors declare a usable max, and both daniel-pi sensors declare none — so a
-    declared-max-only check would be silent on two thirds of the estate, daniel-pi included.
-    **The declared max is sanity-bounded, not trusted:** three NVMe sensors declare 65261.85
+    its own declared max or crit where either is plausible (max preferred when both are — see
+    below), else the flat `HWMON_TEMP_FALLBACK_C` (85 °C). **The fallback is not a nicety.**
+    Measured live 2026-08-28, only 7 of 21 scraped sensors declare a usable max, and both
+    daniel-pi sensors declare none — so a declared-max-only check would be silent on two thirds
+    of the estate, daniel-pi included.
+    **The declared value is sanity-bounded, not trusted:** three NVMe sensors declare 65261.85
     (a 0xFFFF sentinel for "no max"), and a ratio of that is unreachable, so those sensors
-    would read green through a fire. A max outside
+    would read green through a fire. A declared max or crit outside
     (`HWMON_TEMP_MIN_PLAUSIBLE_C`, `HWMON_TEMP_MAX_PLAUSIBLE_C`] is treated as UNDECLARED.
     An EMPTY sensor vector is `down`, not `up` — zero readings means EVERY collector went blind,
     and "nothing is too hot" from no data is a lie. `HWMON_TEMP_CONSECUTIVE` (3) rides out a
@@ -326,6 +327,26 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     verdict. Each hot sensor also names the arm that set its limit, because a `declared` breach
     is the hardware calling itself too hot while a `fallback` breach may only mean the flat 85 °C
     does not suit that chip.
+    **A second declared source, `node_hwmon_temp_crit_celsius`, joined 2026-09-03 (issue #995).**
+    A driver need not publish `temp*_max` at all, and daniel-box's own k10temp is the case: it
+    fired the fallback three times in five days (93.5 °C on 2026-09-03), which reads as either a
+    real thermal excursion or a Tctl-over-junction offset the flat 85 °C never accounted for —
+    nothing distinguishes the two from Prometheus alone. Read directly from
+    `/sys/class/hwmon/hwmon2/` on daniel-box the same day: only `temp1_input` and `temp1_label`
+    (`Tctl`) exist for this chip — no `temp1_max`, no `temp1_crit` — so k10temp declares NEITHER
+    source here, and no code change can turn this specific alert into a declared-limit one. The
+    fix that shipped is legibility, not a threshold: the message already said "fallback limit"
+    and named the chip before this issue (PR #692), so daniel-box's k10temp/Tctl breach already
+    read as "this chip rates nothing" rather than "this chip is over its own rating" — **the
+    real thermal question (excursion vs. Tctl offset) stays open**, and would need a Tdie/Tccd
+    series this driver does not export to settle. `crits` is still read for every OTHER sensor,
+    because a driver that skips `max` but declares `crit` (none currently in this estate; added
+    defensively) would otherwise take the flat fallback despite declaring a real limit. **`max`
+    wins when a sensor declares a plausible value for both**, not `crit`: hwmon's own convention
+    has `crit` as the LATER shutdown point, not an earlier warning — measured live 2026-09-03,
+    daniel-server's NVMe declares max 85.85 / crit 86.85 — so ratioing `crit` would page closer
+    to hardware failure than the max-based 90 % this estate already runs on. `crit` is used only
+    when `max` is absent or implausible for that sensor.
     **A PARTIAL blindness is a separate arm** (`HWMON_TEMP_ORIGINS_MIN`, added 2026-08-29 for
     review M-9): the empty-vector branch fires only when ALL hosts go quiet, so until this arm
     existed one host's hwmon collector could die while the other two answered "all below limit"
