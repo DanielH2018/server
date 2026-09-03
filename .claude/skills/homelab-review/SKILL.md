@@ -266,12 +266,15 @@ control is the "fires on nothing" case the repo warns about, and it reads exactl
 - **Verify-by.** Add `--verify-by '<read-only command>'` to the `open` call whenever a probe
   already exists that would exit non-zero on the broken state and 0 once fixed —
   `uv run python scripts/diagnostics/probe.py health <svc>` or `<check>` for a workload-health
-  finding, `uv run pytest <path>::<test>` for one a test already covers. The command is only
-  ever run through `findings.py verify`'s own read-only classifier, so a command that isn't
-  provably read-only is refused there regardless — don't invent one just to attach a flag.
-  Skip the flag when no such command exists; a finding without one still files normally. Once
-  filed, `uv run python scripts/dev/findings.py verify --all --close` re-checks every finding
-  carrying one and closes what now passes, without a human re-deriving the repro.
+  finding, `uv run pytest <path>::<test>` for one a test already covers. Only those two `uv
+  run` shapes are recognized as read-only under `findings.py verify`'s own classifier — no
+  other `scripts/*.py` invocation, since most of them write (`b2_drain.py`,
+  `secret_rotation.py rotate`, ...). A command outside that pair, or anything else not
+  provably read-only, is refused when `verify` tries to run it, so don't invent one just to
+  attach a flag. Skip the flag when no such command exists; a finding without one still files
+  normally. Once filed, `uv run python scripts/dev/findings.py verify --all --close`
+  re-checks every finding carrying one and closes what now passes, without a human
+  re-deriving the repro.
 - Offer to record a new `review-<date>-state` memory — the run narrative step 2 reads. Give it a
   one-line headline; then, **tagged by area**, each confirmed finding as `#<n>` plus what happened
   to it (shipped / filed / touched), each **refuted** finding *with the evidence that disproved it*,

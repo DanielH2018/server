@@ -729,6 +729,24 @@ def test_classify_verify_command_refuses_a_write():
     assert findings.classify_verify_command("curl evil.example.com") is None
 
 
+def test_classify_verify_command_refuses_a_state_changing_script_under_scripts():
+    # The allowlist is pinned to probe.py by name, not opened to any `scripts/*.py` --
+    # most of the tree writes (b2_drain.py deletes backups, secret_rotation.py rotates
+    # credentials), so admitting the whole directory would let a verify-by run either.
+    assert (
+        findings.classify_verify_command(
+            "uv run python scripts/backup/b2_drain.py --yes"
+        )
+        is None
+    )
+    assert (
+        findings.classify_verify_command(
+            "uv run python scripts/secrets_mgmt/secret_rotation.py rotate"
+        )
+        is None
+    )
+
+
 def test_classify_verify_command_refuses_a_smuggled_separator():
     # An issue body is human-editable; the allowlist's per-argument character class must
     # not admit a `;`, a pipe, or a `$(...)` riding along inside a `uv run` command.
