@@ -15,6 +15,8 @@ the inventory and is not one of these — it is the staging cluster, and the
   Its *Background* pages are the long-form working-out behind three of those records.
 - **Operations** are the hand-written procedures, ordered day-to-day first and recovery last:
   deploying, rotating a secret, then upgrading or restoring a subsystem after something broke.
+  [Break glass](break-glass.md) is the last one — the single entry point for rebuilding or
+  recovering the lab when the author is unavailable or daniel-box is gone.
 - **Artifacts** is not a page. It is a link off this site to the artifact browser.
 
 ## What generates what
