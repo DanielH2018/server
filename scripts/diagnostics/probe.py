@@ -104,6 +104,7 @@ from diagnostics.probe_lib.health import (
 )
 from diagnostics.probe_lib.metrics import run_query
 from diagnostics.probe_lib.monitors import run_kuma_drift, run_monitors
+from diagnostics.probe_lib.pi_plane import run_pi_containers, run_pi_targets
 from diagnostics.probe_lib.readonly_rbac import run_readonly_rbac
 from diagnostics.probe_lib.releases import run_releases
 from diagnostics.probe_lib.b2_ledger import run_b2_record, run_b2_spend
@@ -123,7 +124,12 @@ from lib.registry import Registry
 # NOT: dispatch stays in `plan()`/`handlers` in `main()`, untouched.
 SUBCOMMANDS = [
     ("metric", "Prometheus instant query", "metrics", run_query),
-    ("targets", "Prometheus scrape-target health", None, None),
+    (
+        "targets",
+        "Prometheus scrape-target health (--pi scopes to daniel-pi)",
+        "pi_plane",
+        run_pi_targets,
+    ),
     (
         "monitors",
         "Kuma down-monitors rollup (exit 0 = all up)",
@@ -192,7 +198,12 @@ SUBCOMMANDS = [
         "vip_placement",
         run_vip_placement,
     ),
-    ("pi", "Pi glances API", None, None),
+    (
+        "pi",
+        "Pi glances API (`pi containers` for a one-ssh docker inspect view)",
+        "pi_plane",
+        run_pi_containers,
+    ),
     ("cert", "served TLS cert subject/dates", None, None),
     (
         "health",
@@ -274,7 +285,14 @@ def _build_parser():
         action="store_true",
         help="print raw JSON instead of the formatted view",
     )
-    sub.add_parser("targets", help="Prometheus scrape-target health")
+    tg = sub.add_parser("targets", help="Prometheus scrape-target health")
+    tg.add_argument(
+        "--pi",
+        action="store_true",
+        help="scope to daniel-pi's own scrape jobs (derived from the k8s_pi_client_ip static "
+        "targets in claude-otel's prometheus.yaml.j2), formatted rather than raw JSON, and "
+        "exits 1 if a declared job has gone missing, not just down",
+    )
     sub.add_parser("monitors", help="Kuma down-monitors rollup (exit 0 = all up)")
     kd = sub.add_parser(
         "kuma-drift",
@@ -286,6 +304,12 @@ def _build_parser():
         action="store_true",
         help="skip the SOPS reads that resolve why a gated monitor is absent; those gates "
         "report as unverified instead of gated/ungated",
+    )
+    kd.add_argument(
+        "--pi",
+        action="store_true",
+        help="scope to daniel-pi's declared monitors (by their static-monitors.yaml.j2 key) "
+        "instead of the whole cluster's",
     )
     sub.add_parser("loki-labels", help="Loki label names")
     lq = sub.add_parser("loki-query", help="Loki range query")
@@ -307,6 +331,12 @@ def _build_parser():
         "--days", type=float, default=7, help="lookback window in days (default 7)"
     )
     al.add_argument("--check", help="filter to check names containing this substring")
+    al.add_argument(
+        "--pi",
+        action="store_true",
+        help="scope to alerts attributable to daniel-pi: the syslog stream's own host token, "
+        "or monitor-bridge's pi_pressure check (the only one that watches the Pi remotely)",
+    )
     al.add_argument(
         "--gap-min",
         type=float,
@@ -405,7 +435,11 @@ def _build_parser():
         help="print the kubectl calls without making them",
     )
     pi = sub.add_parser("pi", help="Pi glances API")
-    pi.add_argument("subpath", help="e.g. fs, quicklook, mem, cpu")
+    pi.add_argument(
+        "subpath",
+        help="glances API path (e.g. fs, quicklook, mem, cpu), or `containers` for a "
+        "one-ssh docker inspect view of every container on the host",
+    )
     ct = sub.add_parser(
         "cert",
         help="served TLS cert details (public hosts show the CF edge cert — "
@@ -559,7 +593,9 @@ def main(argv=None):
     `health` and the handler-table subcommands answer directly from an API or from
     `docker inspect`/kubectl. `metric`/`loki-query` without `--json`/`--dry-run` use the
     formatted view; every other subcommand falls through to the streaming `curl` pipeline
-    built by `plan()`.
+    built by `plan()`. `targets --pi` and `pi containers` are checked ahead of that fallback:
+    plain `targets` and every other `pi <subpath>` still stream, so only the Pi-scoped variants
+    need a real handler.
     """
     argv = list(sys.argv[1:] if argv is None else argv)
     # Handled on raw argv, ahead of `_build_parser().parse_args`: the subparsers below are
@@ -584,6 +620,10 @@ def main(argv=None):
                 print(" ".join(k8s_pods_argv(ns.container, ns_name)))
             return 0
         return run_health(ns.container, docker=ns.docker)
+    if ns.cmd == "targets" and ns.pi:
+        return run_pi_targets(ns)
+    if ns.cmd == "pi" and ns.subpath == "containers":
+        return run_pi_containers(ns)
     # Subcommands that answer from an API rather than streaming a shell pipeline. Each one is
     # `run_X(ns) -> int`, so the table is the whole dispatch — adding a subcommand is a parser
     # entry plus a row here. Built inside main() deliberately: run_b2_longhorn and its B2/Longhorn

@@ -224,14 +224,61 @@ def format_kuma_drift(declared, live, kuma_age_seconds, gate_states=None):
     return "\n".join(lines), 0
 
 
+_MONITOR_KEY_RE = re.compile(r"^\s*([a-z0-9_-]+)\.json:\s*\|\s*$")
+
+
+def monitor_keys(text):
+    """Map each declared monitor's display name to its YAML `stringData` key.
+
+    The key is the file-like name Ansible templates ("daniel-pi-host.json"), which encodes
+    which host/role owns the monitor even though the JSON body doesn't carry that. Used to
+    scope `kuma-drift --pi` to daniel-pi's own monitors without hand-listing their display
+    names.
+    """
+    keys, pending = {}, None
+    for line in text.splitlines():
+        km = _MONITOR_KEY_RE.match(line)
+        if km:
+            pending = km.group(1)
+            continue
+        name = _ENTITY_NAME_RE.search(line)
+        if name and pending:
+            keys[name.group(1)] = pending
+            pending = None
+    return keys
+
+
+def is_pi_monitor_key(key):
+    """Whether a monitor's YAML key names it as daniel-pi's, not a k8s workload's.
+
+    `pi` must be its own hyphen-delimited token — the k8s Pi-hole role's key has `pi` only
+    as a substring of `pihole`, so it is correctly excluded even though it also runs a Pi.
+    """
+    return "pi" in key.split("-")
+
+
+def pi_monitor_names(text):
+    """Declared monitor display names whose YAML key marks them as daniel-pi's."""
+    return {name for name, key in monitor_keys(text).items() if is_pi_monitor_key(key)}
+
+
 def run_kuma_drift(ns):
-    """Reconcile the declared monitor set against the live one (exit 0 = no drift)."""
+    """Reconcile the declared monitor set against the live one (exit 0 = no drift).
+
+    `--pi` scopes both the declared and live sets to daniel-pi's own monitors before handing
+    them to the same format_kuma_drift() the cluster path uses — the comparison logic doesn't
+    change, only which names it sees.
+    """
     base, pin = prom_endpoint()
     url = prom_query_url(base, 'monitor_status{job="uptime-kuma"}')
     if ns.dry_run:
         return core.print_dry_run(url, resolve=pin)
     with open(STATIC_MONITORS_PATH) as f:
-        declared = parse_declared_monitors(f.read())
+        text = f.read()
+    declared = parse_declared_monitors(text)
+    if ns.pi:
+        pi_names = pi_monitor_names(text)
+        declared = {name: spec for name, spec in declared.items() if name in pi_names}
     try:
         data = json.loads(core.fetch(url, resolve=pin))
     except json.JSONDecodeError:
@@ -242,6 +289,8 @@ def run_kuma_drift(ns):
         for s in data.get("data", {}).get("result", [])
     }
     live.discard(None)
+    if ns.pi:
+        live &= pi_names
     # Resolved only for gates whose monitor is actually absent — a sops call per gate is the
     # cost, and a monitor that is live needs no explanation for why it might not be.
     #
