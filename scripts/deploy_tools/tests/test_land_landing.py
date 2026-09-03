@@ -9,10 +9,7 @@ import subprocess
 
 import pytest
 
-# ty resolves the bare `conftest` name to whichever conftest.py its extra-paths list sees
-# first (ansible/tests/conftest.py), not this directory's; the repo has several. Runtime
-# is fine -- pytest's own rootdir insertion puts this file's directory first.
-from conftest import PRIMARY, Fakes  # ty: ignore[unresolved-import]
+from _land_fakes import PRIMARY, Fakes
 from deploy_tools.land_lib.outcome import Outcome
 
 

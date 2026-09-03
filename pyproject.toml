@@ -138,6 +138,8 @@ pythonpath = [
   "scripts/availability_bots",
   "scripts/backup",
   "scripts/deploy_tools",
+  # its tests share _land_fakes.py the way ansible/tests share _helpers.py
+  "scripts/deploy_tools/tests",
   "scripts/dev",
   "scripts/docs",
   "scripts/grafana",
@@ -293,6 +295,7 @@ extra-paths = [
   "ansible/roles/setup/renovate_notify/files",
   "ansible/roles/setup/renovate_agent/files",
   "ansible/roles/k8s/home-assistant/files",
+  "scripts/deploy_tools/tests",
 ]
 
 [tool.ty.src]
