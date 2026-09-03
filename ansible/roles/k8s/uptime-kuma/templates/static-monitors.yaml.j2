@@ -405,6 +405,18 @@ stringData:
   # slack, the same tolerance the retired renovate_alive check applied. Same token.
   renovate-notify-alive.json: |
     {"type": "push", "name": "Renovate Notifier — Alive", "interval": 129600, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_renovate_alive_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+  # Pushed once daily by renovate-agent's ExecStartPost on daniel-box (15:00 timer), and only
+  # when the session wrapper exited 0 — a failed run is the OnFailure alert's job, this tile
+  # reports silence. DECIDED: 100800s (28h), not the 90000 the other daily tiles use — the
+  # beat lands at the END of the run, and a fast run today followed by one that draws the
+  # full 10-min jitter and runs to the 100-min unit timeout tomorrow spaces two beats 25h50m
+  # apart; 25h fires DOWN on that. 28h leaves 2h of margin and stays under two periods, so a
+  # missed run still reports. test_renovate_agent_unit.py pins both bounds. Gated on the
+  # token so a checkout without the secret renders no tile rather than one that sits red.
+{% if renovate_agent_kuma_push_token | default('') %}
+  renovate-agent-alive.json: |
+    {"type": "push", "name": "Renovate Agent — Alive", "interval": 100800, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ renovate_agent_kuma_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+{% endif %}
   monitor-bridge-loki.json: |
     {"type": "push", "name": "Loki Log Ingestion", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_loki_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   monitor-bridge-promtail-dropped.json: |

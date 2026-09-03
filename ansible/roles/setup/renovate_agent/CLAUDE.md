@@ -98,10 +98,18 @@ against Claude Code 2.1.258 (a bash file create, a `sed -i`, and an `Edit` tool 
 landed with `permission_denials: []`), but a Claude Code upgrade can change it, and the
 failure mode is a session that reads green and does nothing.
 
-## Not yet built
+## The alive monitor
 
-**No alive monitor.** `renovate_agent_kuma_push_token` is unset, so the unit renders no
-`ExecStartPost` beat and a timer that stops firing is invisible until someone notices the
-backlog. Closing it needs a push monitor created in Uptime Kuma first and its token added to
-SOPS — inventing a token here would produce a monitor that has never existed, which is worse
-than none.
+`renovate_agent_kuma_push_token` (SOPS, tier auto) is the one token behind two halves: the
+unit's `ExecStartPost` beat, and the `Renovate Agent — Alive` push tile in
+`roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2`. The beat fires only when the
+wrapper exited 0, so the tile reports silence and the `OnFailure` alert reports failure.
+
+The tile's deadline is 28h, not the 25h the other daily tiles use, because the beat lands at
+the end of the run: a fast run followed by one that draws the full jitter and runs to the
+100-min unit timeout spaces two beats 25h50m apart. `test_renovate_agent_unit.py` pins the
+deadline between that gap and two periods.
+
+Rotating the token moves both halves, on two deploy paths: `deploy.sh --tags uptime-kuma`
+for the tile and `initial_setup.yml --tags renovate_agent` for the unit. That is why it is in
+`CROSS_HOST_PUSH_TOKENS` in `secret_rotation.py` and the unattended rotation skips it.

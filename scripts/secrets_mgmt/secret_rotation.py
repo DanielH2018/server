@@ -167,6 +167,7 @@ CROSS_HOST_PUSH_TOKENS = frozenset(
         "monitor_bridge_fake_remux_push_token",  # setup/fake_remux cron
         "monitor_bridge_fake_remux_replace_push_token",  # setup/fake_remux cron
         "monitor_bridge_renovate_alive_push_token",  # setup/renovate_notify
+        "renovate_agent_kuma_push_token",  # setup/renovate_agent, same shape
         # Same reason as its two fake_remux siblings above: pushed by a setup role with no deploy
         # tag, so there is nothing for --deploy to run. The tile is in k8s/uptime-kuma.
         "mkv_attachment_repair_push_token",
