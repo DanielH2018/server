@@ -12,6 +12,14 @@ incidents each one encodes — read
     primary checkout and left unapplied. Left alone it sits undeployed behind a green master
     until someone notices.
 
+Each k8s role declares its own `k8s_autodeploy` stance
+(`ansible/roles/k8s/<role>/defaults/main.yml`); `ansible/filter_plugins/k8s_autodeploy.py`
+collects the ones declaring `false` into the denylist above.
+
+<!-- Generated from k8s_autodeploy_counts.py, which reads every role's own declaration; edit
+     the role's defaults/main.yml, not this table. -->
+--8<-- "assets/generated/fragments/autodeploy-coverage.md"
+
 ## What a tick does
 
 A systemd timer runs `gitops-deploy.service` on `daniel-box`
@@ -24,11 +32,14 @@ every 10 minutes (`gitops_deploy_tick_interval`). One tick, in order:
    `deploy_logic.py`).
 4. Consult the staging cluster, on a k8s deploy where `gitops_deploy_staging_gate` is armed
    and the services intersect `STAGING_SUBSET`. Advisory: it returns no verdict and cannot
-   block the deploy, but it adds up to `STAGING_GATE_TIMEOUT_S` + `STAGING_EXPECT_TIMEOUT_S`
-   (600s + 120s) to the tick — worth knowing when a tick looks stuck.
+   block the deploy — worth knowing when a tick looks stuck.
 5. Fast-forward the checkout, if the action allows it.
 6. Deploy whatever is eligible.
 7. Health-gate the result, and roll back on failure.
+
+<!-- Generated from STAGING_GATE_TIMEOUT_S and STAGING_EXPECT_TIMEOUT_S in gitops_deploy.py;
+     edit those. -->
+--8<-- "assets/generated/fragments/staging-timeouts.md"
 
 All of it runs while holding `/var/lock/server-git-tree.lock`, which is what stops a tick
 racing an operator's deploy or the secret-rotation cron. See

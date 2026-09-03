@@ -156,6 +156,81 @@ def test_staging_subset_sorts_and_counts():
     assert "`authelia`, `freshrss`, `traefik` — 3 services" in out
 
 
+def test_staging_coverage_counts_gated_and_lists_ungated_eligible():
+    out = g.render_staging_coverage(["a", "b", "c", "d"], {"a", "b"}, ["a", "c", "d"])
+    assert "2 of 4 k8s roles are staging-gated" in out
+    assert "2 auto-deploy-eligible role(s) sit outside the gate" in out
+    assert "`c`, `d`" in out
+
+
+def test_staging_coverage_says_nothing_when_the_gate_covers_every_eligible_role():
+    out = g.render_staging_coverage(["a", "b"], {"a", "b"}, ["a", "b"])
+    assert "0 auto-deploy-eligible role(s) sit outside the gate" in out
+    assert "`a`, `b` — 2" not in out  # nothing left to name
+
+
+def test_autodeploy_coverage_renders_counts_and_denylist():
+    out = g.render_autodeploy_coverage(["a", "b"], ["c"], ["d"])
+    assert "| Eligible | 2 |" in out
+    assert "| Denied | 1 |" in out
+    assert "| Not declaring | 1 |" in out
+    assert "Denylisted (`k8s_autodeploy: false`): `c`." in out
+
+
+def test_autodeploy_coverage_with_an_empty_denylist():
+    out = g.render_autodeploy_coverage(["a"], [], [])
+    assert "| Denied | 0 |" in out
+    assert "Denylisted (`k8s_autodeploy: false`): ." in out
+
+
+def test_staging_timeouts_sums_both_budgets():
+    out = g.render_staging_timeouts(600, 120)
+    assert "Worst case the staging gate adds 720s" in out
+    assert "`STAGING_GATE_TIMEOUT_S` = 600s" in out
+    assert "`STAGING_EXPECT_TIMEOUT_S` = 120s" in out
+
+
+def test_staging_timeouts_reflects_a_different_budget():
+    out = g.render_staging_timeouts(60, 30)
+    assert "adds 90s" in out
+    assert "720s" not in out
+
+
+def test_crowdsec_agent_liveness_names_the_period():
+    out = g.render_crowdsec_agent_liveness(60)
+    assert "every 60s" in out
+    assert "cscli lapi status" in out
+
+
+def test_crowdsec_agent_liveness_with_a_different_period():
+    assert "every 30s" in g.render_crowdsec_agent_liveness(30)
+
+
+def test_etcd_offbox_retention_counts():
+    assert "14 off-box etcd snapshots" in g.render_etcd_offbox_retention(14)
+    assert "7 off-box etcd snapshots" in g.render_etcd_offbox_retention(7)
+
+
+def test_traefik_ports_names_both_container_ports():
+    out = g.render_traefik_ports(8000, 8443)
+    assert "`8000` (`traefik_k8s_http_port`)" in out
+    assert "`8443` (`traefik_k8s_https_port`)" in out
+
+
+def test_staging_vm_sizing_converts_mib_to_gb():
+    out = g.render_staging_vm_sizing(8192, 4, "100G")
+    assert "8 GB RAM" in out
+    assert "`hypervisor_staging_vm_memory_mib` = 8192" in out
+    assert "4 vCPU" in out
+    assert "100G disk" in out
+
+
+def test_staging_vm_sizing_with_a_different_memory_size():
+    out = g.render_staging_vm_sizing(4096, 2, "50G")
+    assert "4 GB RAM" in out
+    assert "8 GB RAM" not in out
+
+
 def test_secret_tiers_renders_cadence_and_count_per_tier():
     out = g.render_secret_tiers({"auto": 180, "ignore": None}, 8, {"auto": 3})
     assert "| `auto` | 180 d | 3 |" in out

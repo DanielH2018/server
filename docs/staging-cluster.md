@@ -60,8 +60,14 @@ A VM rather than the lighter container options, because of what else lives on th
 A VM gets its own kernel and its own network stack. That isolation is the entire reason staging
 is safe to break, and it is worth the RAM.
 
-**Sizing:** 8 GB RAM, 4 vCPU, 100 GB disk. Leaves daniel-server ~17 GB, which is above its
-current 4 GB working set with room for the k3s agent's own growth.
+**Sizing:**
+
+<!-- Generated from hypervisor_staging_vm_memory_mib, _vcpus and _disk_size in the
+     hypervisor role's defaults; edit those. -->
+--8<-- "assets/generated/fragments/staging-vm-sizing.md"
+
+Leaves daniel-server ~17 GB, which is above its current 4 GB working set with room for the
+k3s agent's own growth.
 
 **Node name:** `daniel-stage`. This name is load-bearing — see *Decision 7*.
 
@@ -304,6 +310,13 @@ the pipeline is green.
 
 <!-- Generated from the STAGING_SUBSET default in gitops_deploy.py; edit that. -->
 --8<-- "assets/generated/fragments/staging-subset.md"
+
+That is a small fraction of the fleet, and most of the fleet is auto-deployable — an
+image-pin bump reaches an eligible role unattended regardless of whether staging covers it:
+
+<!-- Generated from STAGING_SUBSET against every roles/k8s/ directory and each role's own
+     k8s_autodeploy declaration; edit those, not this table. -->
+--8<-- "assets/generated/fragments/staging-coverage.md"
 
 The subset is chosen for coverage of **mechanisms**, not importance:
 

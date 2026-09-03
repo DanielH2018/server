@@ -101,14 +101,18 @@ redeploy the app **and** every consumer (for example, Homepage, monitor-bridge, 
   pod start, so only a new pod reads the new value. Expect the node agents to fail their LAPI
   login for a few minutes in the middle of that deploy. The restart fires before the
   re-registration task, so the machines are deleted and not yet re-added. They converge without
-  help: each agent's `livenessProbe` runs `cscli lapi status` every 60s and restarts the
-  container until registration lands. **Do NOT just `sops set`**: the plugin hot-reloads the new key
+  help: each agent's liveness probe converges it, restarting the container until registration
+  lands. **Do NOT just `sops set`**: the plugin hot-reloads the new key
   while the LAPI still holds the old hash, and it fails OPEN — a silent WAF bypass. The
   traefik deploy now fails loudly on a rejected key (its probe task), which is the guard.
   Verify after: `kubectl -n homelab exec deploy/crowdsec -c crowdsec -- cscli bouncers list`
   (fresh `last_pull`) and a `kubectl -n homelab logs deploy/traefik` free of LAPI 403s.
   (`crowdsec_bouncer_api_key` — the retired local LAPI's legacy key — and
   `crowdsec_bouncer_docker_traefik_key` were both RETIRED 2026-08-13 with the Docker edge.)
+
+<!-- Generated from periodSeconds on the node-agent DaemonSet's livenessProbe; edit that. -->
+--8<-- "assets/generated/fragments/node-agent-liveness.md"
+
 - `grafana_admin_password`, `*_password`: change in the app (or its env on first run).
 - `authelia_secret` / `authelia_jwt`: rotating forces all users to re-login (not breaking).
 - `authelia_oidc_hmac_secret` / `*_password_hash`: re-issues OIDC — re-pair jellyfin (the
