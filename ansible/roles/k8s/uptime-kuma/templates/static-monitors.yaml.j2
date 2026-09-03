@@ -296,6 +296,16 @@ stringData:
   live-drift-check.json: |
     {"type": "push", "name": "Live Object Drift", "interval": 90000, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ live_drift_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
 {% endif %}
+{# Gated on the token like its siblings: no homelab_eval_push_token means no ANTHROPIC secret
+   exists yet either (initial_setup's eval-run.sh.j2 header), so the cron is disarmed and this
+   monitor lands before both halves exist rather than sitting red waiting for them.
+   INTERVAL IS DERIVED FROM THE CRONTAB: Sunday 02:00 weekly (crons.yml), a 604800s period,
+   plus generous slack for an 8-agent hermetic LLM sweep whose runtime is not fixed like a
+   script's — 626400s (+6h) so a sweep that merely runs long doesn't fire DOWN. #}
+{% if homelab_eval_push_token | default('') %}
+  homelab-eval-sweep.json: |
+    {"type": "push", "name": "Homelab Evals", "interval": 626400, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ homelab_eval_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+{% endif %}
 {% if etcd_snapshot_push_token | default('') %}
   etcd-snapshot-offbox.json: |
     {"type": "push", "name": "Off-box etcd Snapshot", "interval": 90000, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ etcd_snapshot_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}

@@ -32,12 +32,14 @@ TEMPLATES = REPO / "ansible/roles/setup/initial_setup/templates"
 DOCS_REFRESH = TEMPLATES / "docs-refresh.sh.j2"
 SECRET_ROTATE = TEMPLATES / "secret-rotate.sh.j2"
 ROTATION_AUDIT = TEMPLATES / "secret-rotation-audit.sh.j2"
+EVAL_RUN = TEMPLATES / "eval-run.sh.j2"
 
 # (path, the commit invocation as it appears in that script). secret-rotate splits its commit
 # across lines and passes --no-verify, so a single shared marker would silently match neither.
 SCRIPTS = [
     pytest.param(DOCS_REFRESH, 'git commit -m "docs:', id="docs-refresh"),
     pytest.param(SECRET_ROTATE, "commit --no-verify -m", id="secret-rotate"),
+    pytest.param(EVAL_RUN, 'git commit -m "evals:', id="eval-run"),
 ]
 
 

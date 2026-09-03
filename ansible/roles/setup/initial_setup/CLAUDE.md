@@ -158,6 +158,33 @@ Guarded by `ansible/tests/deploy/test_setup_drift_check.py`, which EXECUTES the 
 fixture rather than grepping it, and by `ansible/tests/deploy/test_setup_render_manifest.py`, whose
 guards now point at the library plus one that both consumers still source it.
 
+## Autonomous-role contract — Homelab eval sweep (`evals` tag)
+Weekly (Sunday 02:00, daniel-box only): grades every case under `evals/cases/` against the
+homelab agents/skills and rolls the result into `evals/history.json` (`evals/trend.py`), then
+publishes it. Written down for the same reason as autofix-bridge's contract — a
+change-producing cron with no human in the loop needs its authority stated so a later edit
+can't quietly widen it.
+- **Scope:** run the existing eval cases and commit the trended result. Never edits a case,
+  never touches an agent/skill definition, never runs the `run-live.mjs` live-smoke path.
+- **Mode:** binary, no dial. Either `anthropic_api_key` exists and the sweep runs hermetic, or
+  it is empty and the whole run is a no-op that reports UP with the reason logged
+  (`eval-run.sh.j2`'s header) — there is no non-hermetic fallback, because a subscription run's
+  numbers are noise `evals/trend.py` refuses to trend anyway.
+- **Authoritative source:** the chezmoi eval engine's own grading
+  (`~/.local/share/chezmoi/evals/run-evals.mjs`) — never a cached or hand-edited report.
+- **Abort valves:** the shared `/var/lock/server-git-tree.lock` (a dirty tree or another
+  in-flight commit means the sweep's result is thrown away, not recorded against a tree it
+  didn't grade); the one-open-PR guard (a still-open `evals-history/*` PR skips the run rather
+  than stacking a second one); the empty-key gate above.
+- **Required evidence:** every run logs `status=<up|down> <msg>` via `logger -t eval-run`
+  (readable in Loki) and, when armed, pushes the Kuma "Homelab Evals" monitor. A REGRESSED case
+  still gets committed (the data is real) but reports the push DOWN with the regression named,
+  matching autofix-bridge's "act, but don't launder the result" pattern rather than either
+  silently dropping the regression or silently blocking the commit.
+- **Next-run review:** before widening scope (grading `run-live.mjs`, changing cadence, adding
+  a case dir the loop should skip), read the last few PRs this cron opened
+  (`evals-history/*`, squash-merged) for what actually regressed or flaked.
+
 ## Notable
 - **Handlers live in the playbook, not this role** (there is no `handlers/main.yml`) — `Restart
   SSH`, `Restart fail2ban`, `Reload audit rules`, `Reload Postfix`, `Restart Postfix`, `Restart
