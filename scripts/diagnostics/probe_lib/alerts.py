@@ -10,8 +10,8 @@ alongside it. Reading only the first left the whole backup/drift plane with no e
 import json
 import re
 from collections import defaultdict
-from datetime import datetime
-from zoneinfo import ZoneInfo
+from datetime import UTC, datetime
+from statistics import median
 
 # `probe_lib` is a namespace package under `scripts/`, so reaching a sibling by package name
 # needs `scripts/` on sys.path — a module gets only its importer's path otherwise, and
@@ -47,7 +47,6 @@ from diagnostics.probe_lib.core import (
 # while `monitor_status{monitor_name="Manifest Prune Drift"}` read 0 and `alerts --check
 # manifest` printed "no DOWN alerts". See SYSLOG_ALERT_LOGQL below for the second stream.
 ALERT_LOGQL = '{container="monitor-bridge"} |= "DOWN"'
-_CHICAGO = ZoneInfo("America/Chicago")
 # "[2026-07-21T08:37:00] DOWN n8n - 1 active workflow(s) failed ... (2 cycles)"
 _DOWN_RE = re.compile(r"^\[[^\]]+\] DOWN (?P<name>\S+) - (?P<msg>.*)$")
 _CYCLES_SUFFIX_RE = re.compile(r"\s*\(\d+ cycles?\)\s*$")
@@ -168,12 +167,51 @@ def is_pi_alert(logql, line, name):
     return name == PI_PRESSURE_CHECK_NAME
 
 
-def alert_episodes(rows, gap_s=1800):
+# Splitting one incident into several is a CADENCE question, not a fixed-minutes one, and
+# getting it wrong is how `alerts` misdated an incident. The default gap used to be 30 minutes
+# against a `*/30` cron: consecutive DOWN ticks land EXACTLY on the splitting boundary, so a
+# second of cron jitter starts a new episode. Measured 2026-09-04, one continuous
+# release-staleness-check outage (33 down ticks, 00:30 to 14:00 UTC) rendered as 16 episodes.
+# The list is newest-first, so the top row read 07:30 — no row anywhere carried the onset, and
+# the root-cause pass on #1094 was dispatched against a start time 12 hours late.
+#
+# So each check gets its own threshold, derived from its own samples. The median delta is the
+# check's observed cadence: robust to a duplicate log line (which a min would take as the
+# cadence) and to a few long real gaps (which a mean would inflate).
+#
+# The clamp is what makes a SPARSE check behave. A check that fires once a day has a median
+# delta of a day, and an unclamped threshold would swallow a week of separate incidents into
+# one episode. The ceiling is 90 minutes because the slowest emitter here is an hourly cron
+# (remember-logs-health) — 3600s * 1.5 is exactly 5400s, so hourly runs still merge while
+# anything sparser splits.
+_GAP_CADENCE_FACTOR = 1.5
+_GAP_FLOOR_S = 120
+_GAP_CEILING_S = 5400
+
+
+def episode_gap_s(sample_ns, gap_s=None):
+    """Seconds of silence that split one episode from the next, for ONE check's samples.
+
+    An explicit `gap_s` (the operator's `--gap-min`) wins unchanged. Otherwise it is derived
+    from the check's own cadence, clamped to [_GAP_FLOOR_S, _GAP_CEILING_S]. `sample_ns` is
+    that check's sample times, ascending.
+    """
+    if gap_s is not None:
+        return gap_s
+    deltas = [b - a for a, b in zip(sample_ns, sample_ns[1:], strict=False)]
+    if not deltas:
+        return _GAP_FLOOR_S
+    cadence_s = median(deltas) / 1e9
+    return min(_GAP_CEILING_S, max(_GAP_FLOOR_S, cadence_s * _GAP_CADENCE_FACTOR))
+
+
+def alert_episodes(rows, gap_s=None):
     """Collapse per-cycle DOWN samples into firing episodes.
 
     `rows` is an iterable of (epoch_ns, check_name, msg). Consecutive samples for the
-    same check within `gap_s` seconds are one episode; a longer silence (the check
-    recovered, then fired again) starts a new one. Returns episode dicts
+    same check within the splitting gap are one episode; a longer silence (the check
+    recovered, then fired again) starts a new one. `gap_s` pins that gap for every check;
+    left None it is derived per check by episode_gap_s. Returns episode dicts
     {name, first_ns, last_ns, cycles, msg} newest-episode-first (by last_ns). msg is
     the latest sample's — check messages evolve as the underlying value drifts.
     """
@@ -181,9 +219,9 @@ def alert_episodes(rows, gap_s=1800):
     for ns, name, msg in rows:
         by_name[name].append((int(ns), msg))
     episodes = []
-    gap_ns = int(gap_s * 1e9)
     for name, samples in by_name.items():
         samples.sort()
+        gap_ns = int(episode_gap_s([ns for ns, _ in samples], gap_s) * 1e9)
         ep = None
         for ns, msg in samples:
             if ep is not None and ns - ep["last_ns"] <= gap_ns:
@@ -203,8 +241,19 @@ def alert_episodes(rows, gap_s=1800):
     return episodes
 
 
-def _fmt_local(ns):
-    return datetime.fromtimestamp(ns / 1e9, _CHICAGO).strftime("%Y-%m-%d %H:%M")
+# UTC, and SAID to be UTC on every row. daniel-box runs UTC (docs/healthchecks-io-deadman.md),
+# so the journal, the raw Loki lines and every incident timestamp an operator compares against
+# are UTC — these rows were America/Chicago with no marker, five hours off the surface next to
+# them. The monitor-bridge log line's own bracketed stamp stays Chicago (the container's TZ
+# env); `--raw` prints that line verbatim, and only the episode view is restamped.
+def _fmt_utc(ns):
+    return datetime.fromtimestamp(ns / 1e9, UTC).strftime("%Y-%m-%d %H:%M")
+
+
+def _fmt_utc_end(first_ns, last_ns):
+    """The episode's end, dropping the date when it matches the start's."""
+    start, end = _fmt_utc(first_ns), _fmt_utc(last_ns)
+    return end[11:] if end[:10] == start[:10] else end
 
 
 def _fmt_duration(ns):
@@ -221,21 +270,25 @@ def _fmt_duration(ns):
 def format_alert_episodes(episodes, days):
     """Human view: one aligned row per episode, newest first.
 
-    Times are America/Chicago, the container-log timezone. An empty result renders a clear
-    all-clear line.
+    Each row carries both ends of the episode, because the operator's question is "when did
+    this go down" and a start alone reads as the whole answer. Times are UTC. An empty result
+    renders a clear all-clear line.
     """
     if not episodes:
         return f"no DOWN alerts in the last {days:g}d"
     width = max(len(e["name"]) for e in episodes)
     header = (
-        f"{len(episodes)} DOWN episode(s), last {days:g}d "
+        f"{len(episodes)} DOWN episode(s), last {days:g}d, times UTC "
         "(monitor-bridge + host crons -> Kuma):"
     )
     lines = [header, ""]
     for e in episodes:
         dur = _fmt_duration(e["last_ns"] - e["first_ns"])
+        span = (
+            f"{_fmt_utc(e['first_ns'])} -> {_fmt_utc_end(e['first_ns'], e['last_ns'])}"
+        )
         lines.append(
-            f"{_fmt_local(e['first_ns'])}  {dur:>6}  "
+            f"{span:<36} {dur:>6}  "
             f"{e['name']:<{width}}  {e['cycles']:>3}c  {e['msg'][:88]}"
         )
     return "\n".join(lines)
@@ -247,7 +300,7 @@ def alert_source_urls(base, days, limit):
     `direction=forward` because episode reconstruction walks samples oldest-first; that is this
     command's need, not loki-query's — see run_query.
     """
-    end_s = datetime.now(_CHICAGO).timestamp()
+    end_s = datetime.now(UTC).timestamp()
     start_s = end_s - days * 86400
     return [
         loki_query_url(
@@ -301,7 +354,8 @@ def run_alerts(ns):
     if ns.raw:
         print("\n".join(line for _, line in raw) or "no logs")
     else:
-        episodes = alert_episodes(rows, ns.gap_min * 60)
+        gap_s = None if ns.gap_min is None else ns.gap_min * 60
+        episodes = alert_episodes(rows, gap_s)
         if ns.json:
             print(json.dumps(episodes, indent=2))
         else:

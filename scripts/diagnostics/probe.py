@@ -351,8 +351,9 @@ def _build_parser():
     al.add_argument(
         "--gap-min",
         type=float,
-        default=30,
-        help="minutes of silence that splits one episode from the next (default 30)",
+        help="minutes of silence that splits one episode from the next. Left unset, each "
+        "check gets its own threshold from its own sample cadence — a fixed 30 matched the "
+        "*/30 crons exactly and split every continuous outage into one episode per tick",
     )
     al.add_argument("--limit", type=int, default=5000)
     al.add_argument(

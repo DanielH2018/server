@@ -6,8 +6,11 @@ host crons emit, which push Kuma directly and so leave no other durable record. 
 first left the whole backup/drift plane with no episode history anywhere.
 """
 
+from datetime import UTC, datetime
+
 from diagnostics.probe_lib import alerts
 from diagnostics.probe_lib import metrics
+from diagnostics.probe_lib.alerts import alert_episodes
 import probe
 from diagnostics.probe_lib import core
 
@@ -362,3 +365,102 @@ def test_alerts_dry_run_prints_a_command_per_stream(monkeypatch, capsys):
     assert alerts.run_alerts(ns) == 0
     out = capsys.readouterr().out
     assert out.count("query_range") == len(alerts.ALERT_SOURCES)
+
+
+#
+# Episode splitting and timestamp rendering. Both halves of the 2026-09-04 misdating (#1104):
+# a `*/30` cron's ticks landed exactly on a fixed 30-minute splitting gap, so one 13.5-hour
+# outage rendered as 16 episodes and the newest-first list put a mid-incident fragment on top;
+# and every row was stamped America/Chicago with no marker, five hours off the `journalctl
+# --utc` output beside it. Each rule below is an accept/reject pair — a splitter that merges
+# everything and one that merges nothing are indistinguishable from the passing side alone.
+
+_MIN_NS = int(60 * 1e9)
+
+
+def _cron_run(period_min, count, name="release-staleness-check", start=0, jitter=1):
+    """One check's DOWN samples at a fixed period, with a second of cron jitter each tick."""
+    return [
+        (start + i * period_min * _MIN_NS + i * jitter * int(1e9), name, "stale")
+        for i in range(count)
+    ]
+
+
+def test_alert_episodes_merges_a_run_of_ticks_at_the_checks_own_period():
+    # The accept half: 28 consecutive `*/30` ticks are ONE outage. A fixed 30-minute gap made
+    # this 16 episodes, because 1800s of jitter-free period is not < 1800s.
+    eps = alert_episodes(_cron_run(30, 28))
+    assert len(eps) == 1
+    assert eps[0]["cycles"] == 28
+    assert eps[0]["first_ns"] == 0
+
+
+def test_alert_episodes_splits_when_the_check_recovered_between_runs():
+    # The reject half: the same cadence with one UP tick in the middle (a 60-minute silence)
+    # is two outages, and an adaptive gap must still say so.
+    rows = _cron_run(30, 4) + _cron_run(30, 4, start=5 * 30 * _MIN_NS)
+    eps = alert_episodes(rows)
+    assert len(eps) == 2
+
+
+def test_episode_gap_s_derives_the_threshold_from_the_sample_cadence():
+    half_hourly = [i * 30 * _MIN_NS for i in range(6)]
+    assert alerts.episode_gap_s(half_hourly) == 30 * 60 * 1.5
+
+
+def test_episode_gap_s_clamps_a_sparse_check_to_the_ceiling():
+    # A check that fires once a day has a median delta of a day. Unclamped, that would
+    # swallow a week of separate incidents into one episode.
+    daily = [i * 24 * 60 * _MIN_NS for i in range(4)]
+    assert alerts.episode_gap_s(daily) == alerts._GAP_CEILING_S
+    assert len(alert_episodes([(ns, "backup", "gone") for ns in daily])) == 4
+
+
+def test_episode_gap_s_floors_a_burst_of_near_simultaneous_samples():
+    assert alerts.episode_gap_s([0, int(1e9)]) == alerts._GAP_FLOOR_S
+
+
+def test_episode_gap_s_honours_an_explicit_gap_over_the_cadence():
+    assert (
+        alerts.episode_gap_s([i * 30 * _MIN_NS for i in range(6)], gap_s=1800) == 1800
+    )
+
+
+def test_format_alert_episodes_stamps_utc_and_carries_the_episode_end():
+    # 2026-09-04 00:30 -> 14:00 UTC is the real release-staleness-check outage from #1104,
+    # which the Chicago-stamped view rendered as 2026-09-03 19:30.
+    first = int(datetime(2026, 9, 4, 0, 30, tzinfo=UTC).timestamp() * 1e9)
+    last = int(datetime(2026, 9, 4, 14, 0, tzinfo=UTC).timestamp() * 1e9)
+    out = alerts.format_alert_episodes(
+        [
+            {
+                "name": "release-staleness-check",
+                "first_ns": first,
+                "last_ns": last,
+                "cycles": 28,
+                "msg": "registry: changed since applied",
+            }
+        ],
+        2,
+    )
+    assert "times UTC" in out
+    assert "2026-09-04 00:30 -> 14:00" in out
+    assert "2026-09-03" not in out
+
+
+def test_format_alert_episodes_keeps_the_date_on_an_end_in_another_day():
+    first = int(datetime(2026, 9, 3, 23, 30, tzinfo=UTC).timestamp() * 1e9)
+    last = int(datetime(2026, 9, 4, 0, 30, tzinfo=UTC).timestamp() * 1e9)
+    out = alerts.format_alert_episodes(
+        [
+            {
+                "name": "backup",
+                "first_ns": first,
+                "last_ns": last,
+                "cycles": 2,
+                "msg": "x",
+            }
+        ],
+        2,
+    )
+    assert "2026-09-03 23:30 -> 2026-09-04 00:30" in out
