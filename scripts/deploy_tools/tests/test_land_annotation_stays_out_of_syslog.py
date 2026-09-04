@@ -95,23 +95,16 @@ def test_land_annotation_is_intercepted(tmp_path, logger_calls):
     assert "event=landing" in captured
     assert "pr=939" in captured
 
-
-def test_the_landing_never_runs_in_the_live_checkout(tmp_path):
-    """`LAND_PRIMARY` is what keeps this module's landings off the deploy host's checkout.
-
-    Before `parse_args` read it, `Options.primary` was always `/home/ubuntu/server` and the
-    env var in `_run_land` was decoration (issue #1067).
-    """
-    _run_land(tmp_path)
-
+    # This module's landings must reach no checkout at all: the run ends at the merge-commit
+    # read, which is before `fetch_branch`. Whether LAND_PRIMARY aims a landing that DOES
+    # reach git is pinned by test_land_arm_merge_through_the_shim.py, which runs that far.
     gh_calls = (tmp_path / "gh-calls").read_text().splitlines()
     assert gh_calls, (
         "the gh stub recorded nothing, so this proves nothing about where it ran"
     )
     assert str(_LIVE_PRIMARY) not in {line.split("\t")[0] for line in gh_calls}
     assert (tmp_path / "git-calls").read_text() == "", (
-        "the landing reached git; it must die at the merge-commit read, and any git it does "
-        "run belongs in LAND_PRIMARY rather than the live checkout"
+        "the landing reached git, which this module's stubs do not answer for"
     )
 
 

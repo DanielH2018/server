@@ -22,7 +22,6 @@ import os
 import subprocess
 from pathlib import Path
 
-import pytest
 
 _LAND_SH = Path(__file__).resolve().parents[1] / "land.sh"
 _MERGE_ARGV = "pr merge 939 --squash --auto --subject t"
@@ -111,16 +110,17 @@ def test_an_already_merged_pr_reaches_gh_with_no_merge_argv(tmp_path):
     assert "VERDICT: nothing-to-deploy" in result.stdout
 
 
-@pytest.mark.parametrize("tool", ["gh", "git"])
-def test_every_subprocess_stays_out_of_the_live_checkout(tmp_path, tool):
-    """`LAND_PRIMARY` decides where git runs; without it every one of these ran in
-    `/home/ubuntu/server`, the deploy host's own checkout (issue #1067)."""
+def test_git_runs_in_land_primary_rather_than_the_live_checkout(tmp_path):
+    """`LAND_PRIMARY` decides which checkout the landing's git calls read.
+
+    Until `parse_args` read it, `Options.primary` was `/home/ubuntu/server` — a real
+    directory on the deploy host, so `_phases` passed its `is_dir` check and `fetch_branch`
+    ran there (issue #1067). This is the assertion that would have caught it.
+    """
     _run(tmp_path, "OPEN")
 
-    calls = _calls(tmp_path, tool)
-    assert calls, (
-        f"the {tool} stub recorded nothing, so this proves nothing about where it ran"
+    git_calls = _calls(tmp_path, "git")
+    assert git_calls, (
+        "the git stub recorded nothing, so this proves nothing about where it ran"
     )
-    if tool == "git":
-        assert {cwd for cwd, _ in calls} == {str(tmp_path)}
-    assert "/home/ubuntu/server" not in {cwd for cwd, _ in calls}
+    assert {cwd for cwd, _ in git_calls} == {str(tmp_path)}
