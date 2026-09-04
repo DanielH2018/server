@@ -1,12 +1,14 @@
 # Modules that were already over their line cap when the ratchet landed (2026-09-04).
 #
-# Format: `<repo-relative-path> <max_lines>`, one line per file, sorted by path. Caps are 600
-# lines for a module and 500 for a test module; a line here raises the bar for that one file.
-# An entry may only fall or be deleted -- see ansible/tests/repo/test_module_length_ratchet.py.
-# A file back at or under its cap must lose its line; the list records remaining work only.
+# Format: `<repo-relative-path> <max_lines>`, one line per file, in `LC_ALL=C sort` order
+# (codepoint order, which is what Python's own `sorted()` gives). Caps are 600 lines for a
+# module and 500 for a test module; a line here raises the bar for that one file. An entry may
+# only fall or be deleted -- ansible/tests/repo/test_module_length_ratchet.py enforces that
+# against origin/master. A file back at or under its cap must lose its line; the list records
+# remaining work only.
 #
 # Line count is `wc -l` semantics -- the number of newline characters:
-#   awk 'END {print NR}' <path>
+#   wc -l <path>
 .claude/hooks/auto-approve-readonly.py 931
 ansible/roles/k8s/artifacts/files/artifact_server.py 805
 ansible/roles/k8s/artifacts/tests/test_artifact_server.py 519

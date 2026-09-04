@@ -1,4 +1,4 @@
-"""Two ratchets over the Python tree: module length, and monkeypatch on a production module.
+"""Two ratchets over the Python tree: module length, and monkeypatch on a first-party module.
 
 Both work the same way. A cap says what a new file may do, an allowlist records what the
 files that already exceed it do today, and an entry may only fall or disappear. A file that
@@ -6,28 +6,43 @@ grows past its entry fails, and so does one that drops back under the cap while 
 line — the list is a record of remaining work, so finishing the work deletes the line.
 
 The caps are 600 lines for a module and 500 for a test module (`wc -l` semantics: the number
-of newline characters). Test modules are longer per idea and shorter-lived per line, which is
-why they get the tighter number rather than the looser one. The monkeypatch cap is 0: a patch
-on a production module pins that module's name into a test, so a module carrying any has not
-got a seam yet, and `scripts/deploy_tools/land_lib/tools.py` with
-`scripts/deploy_tools/tests/_land_fakes.py` is the shape that replaces one.
+of newline characters). The monkeypatch cap is 0: a patch on a first-party module pins that
+module's name into a test, so a module carrying any has not got a seam yet, and
+`scripts/deploy_tools/land_lib/tools.py` with `scripts/deploy_tools/tests/_land_fakes.py` is
+the shape that replaces one.
 
 The allowlists are `module_length_allowlist.txt` and `monkeypatch_allowlist.txt` beside this
 file: one `<repo-relative-path> <max>` line per file, sorted, `#` comments allowed. One line
 per file so the split PRs that each lower one entry merge cleanly.
 
+Two things enforce "only falls". Within a commit, a count over its own entry fails. Across
+commits, `test_no_allowlist_entry_rose_against_origin_master` diffs the lists against
+`git show origin/master:<path>`, or a PR could grow a file and raise its own line in the same
+diff. It skips, saying so, where that ref is absent (a shallow CI checkout); `prek` runs it
+locally, where the ref exists, and that is the gate it is written for. An added path fails
+even when the new file is over a cap: a split that produced another oversized module has not
+finished, and the number to change is the file's length.
+
 What the monkeypatch heuristic counts, and what it misses:
 
-- Counted: `monkeypatch.setattr(<name>, ...)` and `monkeypatch.setattr(<a>.<b>, ...)` where the
-  root name is bound by an `import` or `from ... import` in the same file.
+- Counted: `monkeypatch.setattr(<name>, ...)` or `...(<a>.<b>, ...)` where the root name is
+  bound to a FIRST-PARTY module — one whose name matches a tracked `.py` file or the
+  directory that directly holds one. `sys`, `subprocess` and `urllib` are not counted: no
+  seam can remove a patch on the standard library, so those entries could never reach zero.
+- Counted: a name assigned from `importlib.util.module_from_spec(...)` or
+  `importlib.import_module(...)`. That is how the hook and cluster-side tests reach a module
+  whose filename is not an identifier (`session-health.py`); 57 patches across five files
+  were invisible while only `import` statements were read.
 - Not counted: the string-target form `monkeypatch.setattr("mod.attr", ...)`, a receiver
   spelled anything but `monkeypatch`, and `delattr`/`setitem`/`setenv`/`chdir`.
-- `from x import y` may bind a class rather than a module, so a patch on an imported class
-  counts too. That is the intended reading — it pins a production name either way.
-- The count is per file, so moving patches from a listed test module into a new one lowers one
-  entry and adds another without removing any patching. That is inherent in the one-line-per-
-  file format, and a total ceiling is not the fix: a `# TOTAL n` line would conflict on every
-  parallel PR. Reviewers see the added entry in the diff.
+- Not counted: a patch on an imported class or function, unless its name happens to match a
+  first-party module name. Restricting roots to module names is what keeps the standard
+  library out, and an import statement does not say which kind of object it binds.
+- Over-counted: `import_module("json")` would count, because the argument is not resolved.
+  No test in this tree does that.
+- Per file, so moving patches from a listed test module into a new one lowers one entry and
+  adds another while removing no patching. That is inherent in the one-line-per-file format;
+  a `# TOTAL n` line would conflict on every parallel PR. The added entry shows in the diff.
 
 A listed file may sit anywhere between its cap and its listed max without failing. That is
 deliberate: otherwise every one-line deletion in a 900-line module would force an allowlist
@@ -38,37 +53,45 @@ Run: uv run pytest ansible/tests/repo/test_module_length_ratchet.py
 
 import ast
 import subprocess
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Collection, Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
 
-from _helpers import REPO
+from _helpers import REPO, is_test_file
 
 NON_TEST_CAP = 600
 TEST_CAP = 500
 
 HERE = REPO / "ansible" / "tests" / "repo"
 
+# One file per top-level tree that holds Python, asserted by name so the census cannot go
+# quiet. A bare size floor would still pass if a whole tree stopped being enumerated.
+CENSUS_MEMBERS = frozenset(
+    {
+        ".claude/hooks/_hook_common.py",
+        "ansible/filter_plugins/toposort.py",
+        "evals/harness_metrics.py",
+        "scripts/lib/repo_paths.py",
+    }
+)
 
-def is_test_path(rel: str) -> bool:
-    """Whether a repo-relative path is a test module, by basename or by directory."""
-    *parents, name = rel.split("/")
-    return name.startswith("test_") or name == "conftest.py" or "tests" in parents
+# `mod = importlib.util.module_from_spec(spec)` and `mod = importlib.import_module("x")` both
+# bind a module to a plain name, which no import statement records.
+DYNAMIC_IMPORTS = frozenset({"module_from_spec", "import_module"})
 
 
 def cap_for(rel: str) -> int:
     """The line cap a repo-relative path has to meet."""
-    return TEST_CAP if is_test_path(rel) else NON_TEST_CAP
+    return TEST_CAP if is_test_file(Path(rel)) else NON_TEST_CAP
 
 
 def parse_allowlist(text: str) -> dict[str, int]:
     """`<path> <max>` lines, in file order, rejecting a duplicate or a malformed line.
 
     A duplicate is the merge artifact this format invites: two PRs adding the same path with
-    different maxima. Last-wins would silently RAISE one of them, which is the one thing the
-    ratchet exists to prevent, so it raises instead.
+    different maxima, where last-wins would silently RAISE one of them.
     """
     parsed: dict[str, int] = {}
     for lineno, raw in enumerate(text.splitlines(), start=1):
@@ -85,6 +108,25 @@ def parse_allowlist(text: str) -> dict[str, int]:
     return parsed
 
 
+def raised_entries(
+    old: Mapping[str, int], new: Mapping[str, int], name: str
+) -> list[str]:
+    """Every way `new` is a looser allowlist than `old`, as sentences naming the fix."""
+    found = []
+    for path, limit in sorted(new.items()):
+        if path not in old:
+            found.append(
+                f"{path}: added to {name} at {limit}. A file this list has never carried "
+                f"has to meet the cap on its own — split it further rather than listing it."
+            )
+        elif limit > old[path]:
+            found.append(
+                f"{path}: {name} says {limit}, up from {old[path]} on origin/master. "
+                f"An entry only ever falls: lower the file, not the bar."
+            )
+    return found
+
+
 @dataclass(frozen=True)
 class Ratchet:
     """One allowlist, its cap policy and the message it fails with."""
@@ -96,6 +138,18 @@ class Ratchet:
 
     def allowlist(self) -> dict[str, int]:
         return parse_allowlist(self.path.read_text())
+
+    def allowlist_on_master(self) -> dict[str, int] | None:
+        """The same list as `origin/master` has it, or None when that ref is unavailable."""
+        rel = self.path.relative_to(REPO).as_posix()
+        shown = subprocess.run(
+            ["git", "show", f"origin/master:{rel}"],
+            cwd=REPO,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        return None if shown.returncode else parse_allowlist(shown.stdout)
 
     def violations(
         self, counts: Mapping[str, int], allow: Mapping[str, int]
@@ -139,7 +193,7 @@ LENGTHS = Ratchet(
 
 PATCHES = Ratchet(
     path=HERE / "monkeypatch_allowlist.txt",
-    unit="monkeypatch.setattr calls on an imported module",
+    unit="monkeypatch.setattr calls on a first-party module",
     remedy=(
         "Give the module under test a seam instead — a frozen dataclass of injectable "
         "boundaries, as in scripts/deploy_tools/land_lib/tools.py with its fakes in "
@@ -152,9 +206,8 @@ PATCHES = Ratchet(
 def tracked_python_files() -> list[str]:
     """Every tracked first-party `.py` path, repo-relative.
 
-    `git ls-files` rather than a filesystem walk: a walk from the repo root descends into
-    `.claude/worktrees/<name>/`, judging this commit against another session's older copies
-    (see test_no_root_anchored_rglob.py for the incident).
+    `git ls-files` rather than a walk, which from the repo root descends into
+    `.claude/worktrees/<name>/` — see test_no_root_anchored_rglob.py for that incident.
     """
     listed = subprocess.run(
         ["git", "ls-files", "-z", "--", "*.py"],
@@ -177,18 +230,56 @@ def line_counts() -> dict[str, int]:
     }
 
 
-def count_module_patches(source: str) -> int:
-    """How many `monkeypatch.setattr` calls in `source` target an imported name.
+def first_party_module_names(tracked: Iterable[str]) -> frozenset[str]:
+    """Every bare name an `import` in this repo could bind to a module of this repo.
+
+    A module's own stem, plus the directory that directly holds it — that directory is what a
+    dotted `bridge.config` import names. Directories further up (`ansible`, `roles`) are left
+    out: nothing imports them, and `ansible` is a third-party package.
+    """
+    names: set[str] = set()
+    for rel in tracked:
+        *parents, name = rel.split("/")
+        names.add(name.removesuffix(".py"))
+        if parents:
+            names.add(parents[-1])
+    return frozenset(names)
+
+
+def _bound_module_names(tree: ast.AST, first_party: Collection[str]) -> set[str]:
+    """The local names in `tree` that hold a first-party module."""
+    bound: set[str] = set()
+    for node in ast.walk(tree):
+        match node:
+            case ast.Import(names=aliases):
+                for alias in aliases:
+                    head, tail = alias.name.split(".")[0], alias.name.split(".")[-1]
+                    # `import a.b` binds `a`; `import a.b as m` binds the module `a.b`.
+                    local, target = (
+                        (alias.asname, tail) if alias.asname else (head, head)
+                    )
+                    if target in first_party:
+                        bound.add(local)
+            case ast.ImportFrom(names=aliases):
+                bound |= {
+                    alias.asname or alias.name
+                    for alias in aliases
+                    if alias.name in first_party
+                }
+            case ast.Assign(
+                targets=targets, value=ast.Call(func=ast.Attribute(attr=attr))
+            ) if attr in DYNAMIC_IMPORTS:
+                bound |= {t.id for t in targets if isinstance(t, ast.Name)}
+    return bound
+
+
+def count_module_patches(source: str, first_party: Collection[str]) -> int:
+    """How many `monkeypatch.setattr` calls in `source` target a first-party module.
 
     The module docstring lists what this deliberately does not see.
     """
     tree = ast.parse(source)
-    imported: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            imported.update(a.asname or a.name.split(".")[0] for a in node.names)
-        elif isinstance(node, ast.ImportFrom):
-            imported.update(a.asname or a.name for a in node.names)
+    bound = _bound_module_names(tree, first_party)
 
     counted = 0
     for node in ast.walk(tree):
@@ -199,7 +290,7 @@ def count_module_patches(source: str) -> int:
             ):
                 while isinstance(target, ast.Attribute):
                     target = target.value
-                if isinstance(target, ast.Name) and target.id in imported:
+                if isinstance(target, ast.Name) and target.id in bound:
                     counted += 1
     return counted
 
@@ -207,13 +298,15 @@ def count_module_patches(source: str) -> int:
 def monkeypatch_counts() -> dict[str, int]:
     """Repo-relative test-module path -> its module-patch count, zeros included.
 
-    Zeros are in the mapping on purpose: that is what lets a listed file whose patches are all
-    gone be reported as "remove it" rather than as a path that no longer exists.
+    Zeros are in the mapping so a listed file whose patches are all gone reads as "remove it"
+    rather than as a path that no longer exists.
     """
+    tracked = tracked_python_files()
+    first_party = first_party_module_names(tracked)
     return {
-        rel: count_module_patches((REPO / rel).read_text(errors="replace"))
-        for rel in tracked_python_files()
-        if is_test_path(rel)
+        rel: count_module_patches((REPO / rel).read_text(errors="replace"), first_party)
+        for rel in tracked
+        if is_test_file(Path(rel))
     }
 
 
@@ -285,9 +378,39 @@ def test_a_test_module_with_an_unlisted_module_patch_is_flagged():
     assert "seam" in flagged[0]
 
 
-def test_a_patch_on_an_imported_module_is_counted():
+def test_an_allowlist_that_only_falls_is_clean():
+    old = {"scripts/a.py": 900, "scripts/b.py": 700}
+    new = {"scripts/a.py": 800}
+    assert raised_entries(old, new, "list.txt") == []
+
+
+def test_a_raised_entry_is_flagged():
+    flagged = raised_entries({"scripts/a.py": 900}, {"scripts/a.py": 901}, "list.txt")
+    assert len(flagged) == 1
+    assert "up from 900" in flagged[0]
+
+
+def test_a_newly_added_path_is_flagged():
+    flagged = raised_entries({}, {"scripts/new.py": 900}, "list.txt")
+    assert len(flagged) == 1
+    assert "added to list.txt" in flagged[0]
+
+
+def test_a_first_party_name_is_a_module_stem_or_the_directory_holding_one():
+    names = first_party_module_names(["scripts/deploy_tools/land_lib/tools.py"])
+    assert "tools" in names and "land_lib" in names
+    assert "scripts" not in names and "deploy_tools" not in names
+
+
+def test_a_patch_on_an_imported_first_party_module_is_counted():
     src = "import mod\ndef test_x(monkeypatch):\n    monkeypatch.setattr(mod.sub, 'f', 1)\n"
-    assert count_module_patches(src) == 1
+    assert count_module_patches(src, {"mod"}) == 1
+
+
+def test_a_patch_on_the_standard_library_is_not_counted():
+    """A seam cannot remove one, so counting it would leave an entry stuck above zero."""
+    src = "import sys\ndef test_x(monkeypatch):\n    monkeypatch.setattr(sys, 'argv', [])\n"
+    assert count_module_patches(src, {"mod"}) == 0
 
 
 def test_a_patch_on_a_local_object_or_a_string_target_is_not_counted():
@@ -298,21 +421,30 @@ def test_a_patch_on_a_local_object_or_a_string_target_is_not_counted():
         "    monkeypatch.setattr('mod.f', 1)\n"
         "    monkeypatch.setenv('MOD', '1')\n"
     )
-    assert count_module_patches(src) == 0
+    assert count_module_patches(src, {"mod"}) == 0
 
 
 def test_an_aliased_import_is_still_the_module_it_aliases():
     src = "import a.b as mod\ndef test_x(monkeypatch):\n    monkeypatch.setattr(mod, 'f', 1)\n"
-    assert count_module_patches(src) == 1
+    assert count_module_patches(src, {"b"}) == 1
+
+
+def test_a_module_bound_by_importlib_is_counted_in_both_spellings():
+    """`session-health.py` is not an identifier, so its tests reach it through a spec."""
+    spec = "_mod = importlib.util.module_from_spec(_spec)\n"
+    named = "_mod = importlib.import_module('scripts.thing')\n"
+    patch = "def test_x(monkeypatch):\n    monkeypatch.setattr(_mod, 'f', 1)\n"
+    assert count_module_patches(spec + patch, set()) == 1
+    assert count_module_patches(named + patch, set()) == 1
 
 
 # ---------------------------------------------------------------- the live tree
 
 
-def test_the_census_reaches_the_whole_tree_and_exercises_both_caps():
-    """Without this, every assertion below passes on an empty census."""
+def test_the_census_reaches_every_tree_that_holds_python():
+    """Without this, every assertion below passes on a census that has gone quiet."""
     counts = line_counts()
-    assert len(counts) >= 400, len(counts)
+    assert CENSUS_MEMBERS <= set(counts), CENSUS_MEMBERS - set(counts)
     assert sum(1 for rel in counts if cap_for(rel) == TEST_CAP) >= 100
     assert sum(1 for rel in counts if cap_for(rel) == NON_TEST_CAP) >= 100
 
@@ -324,6 +456,20 @@ def test_no_module_is_longer_than_its_cap_or_its_allowlist_entry():
 
 def test_no_test_module_patches_more_modules_than_its_allowlist_entry():
     offenders = PATCHES.violations(monkeypatch_counts(), PATCHES.allowlist())
+    assert not offenders, "\n".join(offenders)
+
+
+@pytest.mark.parametrize("ratchet", [LENGTHS, PATCHES], ids=lambda r: r.path.name)
+def test_no_allowlist_entry_rose_against_origin_master(ratchet: Ratchet):
+    """A commit's own counts cannot see a diff that grows a file and its entry together."""
+    on_master = ratchet.allowlist_on_master()
+    if on_master is None:
+        pytest.skip(
+            f"origin/master:{ratchet.path.name} is unreadable — either the ref is not "
+            f"fetched (a shallow CI checkout) or the list is new. `prek run --all-files` "
+            f"runs this locally, where the ref exists."
+        )
+    offenders = raised_entries(on_master, ratchet.allowlist(), ratchet.path.name)
     assert not offenders, "\n".join(offenders)
 
 
