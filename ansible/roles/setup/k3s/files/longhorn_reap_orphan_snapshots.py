@@ -21,17 +21,20 @@ every trim of every volume forever. Operator decision 2026-08-16: leave it false
 specific, identified, stale snapshots instead. A snapshot delete is LOCAL ONLY; B2 backups are
 untouched.
 
-WHY DELETES BYPASS host_lib.kubectl_runner. Every READ here goes through it (30s cap, fine for
-a `get`). A delete does not: `--timeout=%s % DELETE_TIMEOUT` (120s by default) is the SERVER-side
-wait kubectl itself honours, and a 30s CLIENT-side subprocess cap kills the process long before
-that can ever return -- making the templated knob unreachable. `_delete_snapshot` below shells
-out directly with its own timeout, sized to outlive `DELETE_TIMEOUT` by a margin.
+HOW A DELETE IS BOUNDED. Reads and deletes both go through host_lib.kubectl_runner; the delete
+differs only in the timeout bound to its runner. `--timeout=%s % DELETE_TIMEOUT` (120s by
+default) is the SERVER-side wait kubectl itself honours, so the CLIENT-side subprocess cap has
+to outlive it by DELETE_TIMEOUT_MARGIN_S -- the runner's default 30s cap would kill the process
+long before the templated knob could ever return, making the knob unreachable. Neither bound
+cancels anything: kubectl has already issued the DELETE, and exceeding --timeout only gives up
+WAITING for the finalizer while the server carries on.
 
-A purge POST that gets back a non-2xx now reports failure (`urlopen` raises `HTTPError` on
-4xx/5xx); bash's `curl` without `-f` printed nothing and returned 0 either way, so a rejected
-purge request used to look identical to a successful one. Deliberate, not a gap: the whole
-point of the WARNING path a few lines down is telling the operator reclamation didn't happen,
-and a curl-style silent "success" on an actual rejection is the opposite of that.
+A purge POST that gets back a non-2xx counts as a failure, and main() exits 1 when ANY volume
+was left unpurged (`urlopen` raises `HTTPError` on 4xx/5xx). bash's `curl` without `-f` printed
+nothing and returned 0 either way, so a rejected purge used to look identical to a successful
+one. The exit code is what an operator reads first, and a run that reclaimed nothing must not
+read as a success: every snapshot it deleted stays marked-removed-but-not-coalesced, so no
+space comes back until someone purges from the Longhorn UI or re-runs.
 
 See longhorn_reap_logic.py for the floors (newest-per-volume, detached, the truncated-job-name
 prefix match, the age floor) and longhorn-reap-orphan-snapshots.sh.j2 for the wrapper.
@@ -43,7 +46,6 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
 import sys
 import time
 import urllib.request
@@ -109,38 +111,14 @@ def _print_bucket(header: str, rows: list, none_msg: str = "(none)") -> None:
 
 def _delete_snapshot(name: str, subprocess_timeout: float) -> tuple[int, str]:
     """Delete one Snapshot CR. `subprocess_timeout` must outlive kubectl's own --timeout."""
-    argv = KUBECTL_BIN.split()
-    env = dict(os.environ)
-    path = env.get("PATH", "")
-    if host_lib.LOCAL_BIN not in path.split(":"):
-        env["PATH"] = (
-            "%s:%s" % (host_lib.LOCAL_BIN, path) if path else host_lib.LOCAL_BIN
-        )
-    try:
-        proc = subprocess.run(
-            [
-                *argv,
-                "-n",
-                NAMESPACE,
-                "delete",
-                "snapshots.longhorn.io",
-                name,
-                "--ignore-not-found",
-                "--timeout=%s" % DELETE_TIMEOUT,
-            ],
-            capture_output=True,
-            text=True,
-            env=env,
-            timeout=subprocess_timeout,
-        )
-    except subprocess.TimeoutExpired:
-        return (
-            host_lib.KUBECTL_TIMEOUT_RC,
-            "kubectl timed out after %ss" % subprocess_timeout,
-        )
-    except OSError as e:
-        return host_lib.KUBECTL_UNRUNNABLE_RC, "could not run kubectl: %s" % e
-    return proc.returncode, proc.stdout if proc.returncode == 0 else proc.stderr
+    kubectl = host_lib.kubectl_runner(KUBECTL_BIN, NAMESPACE, int(subprocess_timeout))
+    return kubectl(
+        "delete",
+        "snapshots.longhorn.io",
+        name,
+        "--ignore-not-found",
+        "--timeout=%s" % DELETE_TIMEOUT,
+    )
 
 
 def _purge(kubectl, node: str, volumes: set[str]) -> int:
@@ -151,7 +129,13 @@ def _purge(kubectl, node: str, volumes: set[str]) -> int:
     node's manager pod, not the longhorn-backend ClusterIP: a process in the host netns can
     only reach its own node's pod CIDR, and kube-proxy's per-connection pick over the Service
     fails whenever it lands on the other node's manager (measured 2026-08-16: 27 of 37 calls).
+
+    Returns the number of volumes left unpurged, so 0 means every POST was accepted. A path
+    that never reaches the POST loop at all -- no readable pod list, no ready manager pod --
+    counts every volume as unpurged, and at least one, because a run that purged nothing is
+    never a success.
     """
+    nothing_purged = max(len(volumes), 1)
     rc, out = kubectl("get", "pods", "-l", "app=longhorn-manager", "-o", "json")
     if rc != 0:
         print(
@@ -159,12 +143,12 @@ def _purge(kubectl, node: str, volumes: set[str]) -> int:
             "NOT purged: %s" % out.strip()[:200],
             file=sys.stderr,
         )
-        return 1
+        return nothing_purged
     try:
         pods = json.loads(out).get("items", [])
     except ValueError as e:
         print("WARNING: unparseable pod list; nothing purged: %s" % e, file=sys.stderr)
-        return 1
+        return nothing_purged
 
     backend = ""
     for pod in pods:
@@ -173,11 +157,14 @@ def _purge(kubectl, node: str, volumes: set[str]) -> int:
         if spec.get("nodeName") != node or status.get("phase") != "Running":
             continue
         statuses = status.get("containerStatuses") or []
-        # `all()` over an empty list is True, matching jq's `[...] | all` on the same input --
-        # a pod reporting NO containerStatuses at all counts as ready, the same as bash did.
-        # The earlier `statuses and all(...)` form treated an empty list as NOT ready, which
-        # bash's jq pipeline never did.
-        if all(cs.get("ready") for cs in statuses):
+        # A pod reporting NO containerStatuses is NOT ready. Bash agreed, though not the way an
+        # earlier comment here claimed: its `select([.status.containerStatuses[].ready] | all)`
+        # never reached the vacuously-true `all` on such a pod, because `.[]` over a null field
+        # raises "Cannot iterate over null" and jq exits nonzero -- so bash took its "no ready
+        # manager pod" branch. Counting the empty list as ready aims the purge POST at a pod
+        # whose containers have not started, and the refused connection surfaces only as a
+        # purge failure well after the snapshots are already marked removed.
+        if statuses and all(cs.get("ready") for cs in statuses):
             backend = status.get("podIP", "")
             break
 
@@ -188,8 +175,9 @@ def _purge(kubectl, node: str, volumes: set[str]) -> int:
             % node,
             file=sys.stderr,
         )
-        return 1
+        return nothing_purged
 
+    unpurged = 0
     for vol in sorted(volumes):
         print("purging %s..." % vol)
         req = urllib.request.Request(
@@ -202,13 +190,14 @@ def _purge(kubectl, node: str, volumes: set[str]) -> int:
             with urllib.request.urlopen(req, timeout=30):
                 pass
         except Exception as e:
+            unpurged += 1
             print(
                 "  purge request failed for %s — retry from the Longhorn UI: %s"
                 % (vol, e),
                 file=sys.stderr,
             )
 
-    return 0
+    return unpurged
 
 
 def main(argv: list[str]) -> int:
@@ -290,9 +279,17 @@ def main(argv: list[str]) -> int:
         print("ABORT: unparseable snapshot list: %s" % e, file=sys.stderr)
         return 1
 
-    result = logic.classify_snapshots(
-        snapshots, owner, attached, MIN_AGE_DAYS, time.time()
-    )
+    try:
+        result = logic.classify_snapshots(
+            snapshots, owner, attached, MIN_AGE_DAYS, time.time()
+        )
+    except logic.ReapAbort as e:
+        # A volume whose group label named no RecurringJob resolves to owner "", which the
+        # current-tier test reads as "no snapshot belongs to the current tier" -- every snapshot
+        # past the age floor then becomes a candidate. classify_snapshots refuses; without this
+        # the refusal reaches the operator as a traceback.
+        print("ABORT: %s" % e, file=sys.stderr)
+        return 1
 
     _print_bucket("kept by a floor", result.kept)
     _print_bucket("reapable", result.candidates)
@@ -331,12 +328,19 @@ def main(argv: list[str]) -> int:
     print("deleted %d stranded snapshot(s)." % deleted)
 
     if deleted > 0:
-        # A hard exit here, ahead of the PARTIAL check below, mirrors the shell original: no
-        # ready manager pod means the deletions are marked-removed-but-not-purged, which is
-        # worse left unreported than a partial-run notice for a break that already happened.
-        purge_rc = _purge(kubectl, os.uname().nodename, touched)
-        if purge_rc != 0:
-            return purge_rc
+        # A hard exit here, ahead of the PARTIAL check below, mirrors the shell original: an
+        # unreachable manager pod or a rejected POST leaves the deletions marked-removed-but-
+        # not-purged, which is worse left unreported than a partial-run notice for a break that
+        # already happened.
+        unpurged = _purge(kubectl, os.uname().nodename, touched)
+        if unpurged:
+            print(
+                "%d of %d volume(s) were NOT purged — the deleted snapshots are marked removed "
+                "but never coalesced, so no space is reclaimed yet."
+                % (unpurged, len(touched)),
+                file=sys.stderr,
+            )
+            return 1
 
     if partial:
         print(

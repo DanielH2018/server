@@ -8,9 +8,10 @@
 # configarr-health.sh.j2.
 #
 # DRY RUN BY DEFAULT. Pass --apply to delete, --apply-deleted-volumes for backups whose volume
-# no longer exists. There is deliberately no cron for this — it is an operator-invoked tool. See
-# the Python module's docstring for the floor it enforces, why it shipped inoperative once, and
-# the B2 transaction cost --apply does not show in the dry run.
+# no longer exists, --max-deletions N to raise the per-run deletion cap. There is deliberately
+# no cron for this — it is an operator-invoked tool. See the Python module's docstring for the
+# floor it enforces, why it shipped inoperative once, the B2 transaction cost --apply does not
+# show in the dry run, and what the deletion cap is sized against.
 #
 # --apply is documented as `sudo /usr/local/bin/longhorn-reap-orphan-backups.sh --apply`, and
 # sudo resets HOME to /root by default, where uv finds no pinned interpreter — it was installed
