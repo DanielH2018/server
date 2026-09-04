@@ -17,21 +17,62 @@ import subprocess
 from pathlib import Path
 
 _LAND_SH = Path(__file__).resolve().parents[1] / "land.sh"
+# What `Options.primary` defaults to. Nothing here may run in it.
+_LIVE_PRIMARY = Path("/home/ubuntu/server")
 
 
-def _stub_gh(tmp_path: Path) -> None:
-    """A `gh` that reports PR 939 already merged, so land.sh exits early and annotates."""
+def _stub_bin(tmp_path: Path) -> Path:
+    """A `gh` that reports PR 939 already merged, and a `git` that only records being called.
+
+    `Tools.gh_json` parses stdout with `json.loads`, so the stub answers in JSON: the bash
+    `--jq` tab format made every run of this module die at the first `gh pr view` with
+    "unparseable gh output", short of the already-merged path it exists to exercise.
+
+    `{}` for every other read is what ends the run: `--arm-merge` no-ops on the MERGED PR,
+    then step 1 reads no merge commit and dies. That is before `fetch_branch`, so a git call
+    recorded here would mean the landing went somewhere this test never intended it to.
+    """
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir(exist_ok=True)
+    (tmp_path / "gh-calls").touch()
+    (tmp_path / "git-calls").touch()
+
     gh = bin_dir / "gh"
     gh.write_text(
         "#!/bin/sh\n"
+        f'printf "%s\\t%s\\n" "$PWD" "$*" >> "{tmp_path}/gh-calls"\n'
         'case "$*" in\n'
-        '  *"--json state,title"*) printf "MERGED\\tAlready merged\\n" ;;\n'
-        '  *) printf "\\n" ;;\n'
+        '  *"--json state,title"*)\n'
+        '    printf \'{"state":"MERGED","title":"Already merged"}\\n\' ;;\n'
+        "  *)\n"
+        "    printf '{}\\n' ;;\n"
         "esac\n"
     )
     gh.chmod(0o755)
+
+    git = bin_dir / "git"
+    git.write_text(
+        f'#!/bin/sh\nprintf "%s\\t%s\\n" "$PWD" "$*" >> "{tmp_path}/git-calls"\n'
+    )
+    git.chmod(0o755)
+    return bin_dir
+
+
+def _run_land(tmp_path: Path) -> subprocess.CompletedProcess[str]:
+    """One landing against the stubs, with `LAND_PRIMARY` aimed at tmp_path."""
+    bin_dir = _stub_bin(tmp_path)
+    env = {
+        **os.environ,
+        "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
+        "LAND_PRIMARY": str(tmp_path),
+    }
+    return subprocess.run(
+        ["bash", str(_LAND_SH), "--pr", "939", "--arm-merge"],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
 
 
 def test_land_annotation_is_intercepted(tmp_path, logger_calls):
@@ -41,19 +82,10 @@ def test_land_annotation_is_intercepted(tmp_path, logger_calls):
     never annotated (so the fixture proves nothing) or that the real `logger` took the call.
     Both are failures.
     """
-    _stub_gh(tmp_path)
-    env = {
-        **os.environ,
-        "PATH": f"{tmp_path / 'bin'}{os.pathsep}{os.environ['PATH']}",
-        "LAND_PRIMARY": str(tmp_path),
-    }
-    subprocess.run(
-        ["bash", str(_LAND_SH), "--pr", "939", "--arm-merge"],
-        env=env,
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
+    result = _run_land(tmp_path)
+
+    assert "unparseable gh output" not in result.stderr, result.stderr
+    assert "already merged; --arm-merge is a no-op" in result.stdout, result.stdout
 
     captured = logger_calls.read_text()
     assert captured.strip(), (
@@ -62,6 +94,25 @@ def test_land_annotation_is_intercepted(tmp_path, logger_calls):
     )
     assert "event=landing" in captured
     assert "pr=939" in captured
+
+
+def test_the_landing_never_runs_in_the_live_checkout(tmp_path):
+    """`LAND_PRIMARY` is what keeps this module's landings off the deploy host's checkout.
+
+    Before `parse_args` read it, `Options.primary` was always `/home/ubuntu/server` and the
+    env var in `_run_land` was decoration (issue #1067).
+    """
+    _run_land(tmp_path)
+
+    gh_calls = (tmp_path / "gh-calls").read_text().splitlines()
+    assert gh_calls, (
+        "the gh stub recorded nothing, so this proves nothing about where it ran"
+    )
+    assert str(_LIVE_PRIMARY) not in {line.split("\t")[0] for line in gh_calls}
+    assert (tmp_path / "git-calls").read_text() == "", (
+        "the landing reached git; it must die at the merge-commit read, and any git it does "
+        "run belongs in LAND_PRIMARY rather than the live checkout"
+    )
 
 
 def test_the_stub_is_what_resolves_for_logger(logger_calls):
