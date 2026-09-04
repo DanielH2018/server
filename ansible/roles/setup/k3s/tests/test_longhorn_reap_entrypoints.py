@@ -270,9 +270,9 @@ def test_backups_abort_on_unresolvable_ownership_makes_no_delete_call(tmp_path):
     assert proc.returncode == 1
     assert "ABORT" in proc.stderr
     assert not any("delete" in c for c in calls)
-    assert not any(
-        "backups.longhorn.io" in c for c in calls
-    )  # abort before reading backups
+    # abort before reading backups
+    # Exact match, not `in`: see ansible/tests/repo/test_no_host_shaped_membership_literal.py
+    assert not any(tok == "backups.longhorn.io" for c in calls for tok in c)
 
 
 def test_backups_apply_emits_exactly_the_delete_argv_the_classifier_chose(tmp_path):
@@ -564,7 +564,8 @@ def test_snapshots_aborts_when_recurringjobs_is_empty_but_a_volume_carries_the_l
     assert "reapable" not in proc.stdout  # never gets far enough to print a verdict
     # ABORT fires right after reading recurringjobs + volumes; snapshots.longhorn.io is never
     # read and no delete is ever attempted.
-    assert not any("snapshots.longhorn.io" in c for c in calls)
+    # Exact match, not `in`: see ansible/tests/repo/test_no_host_shaped_membership_literal.py
+    assert not any(tok == "snapshots.longhorn.io" for c in calls for tok in c)
     assert not any("delete" in c for c in calls)
 
 

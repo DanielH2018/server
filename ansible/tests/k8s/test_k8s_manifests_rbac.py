@@ -185,9 +185,10 @@ def test_homepage_kubernetes_widget_wiring_holds_together():
     ]
     rules = [rule for d in rbac if d["kind"] == "ClusterRole" for rule in d["rules"]]
     assert _grant_violations(rules) == []
-    assert any("metrics.k8s.io" in rule.get("apiGroups", []) for rule in rules), (
-        "no metrics.k8s.io read: every CPU/memory figure in the widget would be blank"
-    )
+    # Exact match, not `in`: see ansible/tests/repo/test_no_host_shaped_membership_literal.py
+    assert any(
+        g == "metrics.k8s.io" for rule in rules for g in rule.get("apiGroups", [])
+    ), "no metrics.k8s.io read: every CPU/memory figure in the widget would be blank"
 
 
 def test_readonly_role_covers_the_crd_groups_this_homelab_deploys():
@@ -202,4 +203,7 @@ def test_readonly_role_covers_the_crd_groups_this_homelab_deploys():
     assert re.search(r"^apiVersion: traefik\.io/", route, re.MULTILINE), (
         "ingressroute macro no longer uses the traefik.io group"
     )
-    assert "traefik.io" in groups, "IngressRoute/Middleware unreadable without sudo"
+    # Exact match, not `in`: see ansible/tests/repo/test_no_host_shaped_membership_literal.py
+    assert any(g == "traefik.io" for g in groups), (
+        "IngressRoute/Middleware unreadable without sudo"
+    )

@@ -302,7 +302,8 @@ def test_resolve_within_jail_allows_benign_symlink(tmp_path):
 
 def test_allowed_hosts_and_origins():
     hosts, origins = allowed_hosts_and_origins("mcp.local.example.com")
-    assert "mcp.local.example.com" in hosts
+    # Exact match, not `in`: see ansible/tests/repo/test_no_host_shaped_membership_literal.py
+    assert any(h == "mcp.local.example.com" for h in hosts)
     assert origins == ["https://mcp.local.example.com"]
     assert allowed_hosts_and_origins("") == ([], [])
 
