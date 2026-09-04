@@ -76,8 +76,41 @@ def test_prune_flags_render_when_armed_with_kinds() -> None:
     )
     assert "--prune " in rendered or rendered.rstrip().endswith("--prune")
     assert "-l homelab/role=widget" in rendered
-    assert "--prune-allowlist=apps/v1/Deployment,core/v1/Service" in rendered
+    assert "--prune-allowlist=apps/v1/Deployment" in rendered
+    assert "--prune-allowlist=core/v1/Service" in rendered
     assert "-n homelab" in rendered
+
+
+def test_prune_allowlist_uses_one_flag_per_kind_not_a_comma_joined_value() -> None:
+    """kubectl apply --prune-allowlist takes exactly one <group/version/kind> per flag.
+
+    #1092 shipped it with the kinds comma-joined into ONE flag value
+    (`--prune-allowlist=apps/v1/Deployment,core/v1/Service,...`), and kubectl parses the whole
+    string as a single GroupVersionKind and rejects it outright: `error: invalid
+    GroupVersionKind format: apps/v1/Deployment,core/v1/Service,...`. Every deploy of the one
+    armed role (registry) failed at this task. Pinned against the exact comma-joined shape that
+    used to read green here, so a regression back to `join(',')` fails this test instead of
+    only failing a real deploy.
+    """
+    rendered = _render(
+        {
+            **_BASE_CONTEXT,
+            "manifests_prune": True,
+            "manifests_prune_kinds": [
+                "apps/v1/Deployment",
+                "core/v1/Service",
+                "networking.k8s.io/v1/NetworkPolicy",
+            ],
+        }
+    )
+    assert "apps/v1/Deployment,core/v1/Service" not in rendered, (
+        "the kinds are comma-joined into a single --prune-allowlist value again — kubectl "
+        "rejects that as an invalid GroupVersionKind. See #1092's registry deploy failure."
+    )
+    assert rendered.count("--prune-allowlist=") == 3
+    assert "--prune-allowlist=apps/v1/Deployment" in rendered
+    assert "--prune-allowlist=core/v1/Service" in rendered
+    assert "--prune-allowlist=networking.k8s.io/v1/NetworkPolicy" in rendered
 
 
 def test_prune_selector_is_keyed_on_the_calling_role_not_a_constant() -> None:

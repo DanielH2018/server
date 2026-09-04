@@ -248,13 +248,21 @@
   # NetworkPolicy — a Middleware or IngressRoute dropped from a role armed with the bare flag
   # would silently NOT be pruned. `-n {{ k8s_namespace }}` is a second, independent scope
   # layer: even a mislabeled object outside this namespace cannot be listed as a candidate.
+  #
+  # `--prune-allowlist` takes exactly ONE <group/version/kind> per flag, repeated for more —
+  # unlike most kubectl list flags it does NOT accept a comma-joined value. #1092 shipped it
+  # comma-joined (`--prune-allowlist=apps/v1/Deployment,core/v1/Service,...`) and every deploy
+  # of the one armed role (registry) failed at this task with `error: invalid
+  # GroupVersionKind format: ...`, because kubectl parses the whole comma string as a single
+  # GVK. `map('regex_replace', ...)` renders one `--prune-allowlist=<kind>` token per entry
+  # instead of one token holding all of them.
   ansible.builtin.command:
     cmd: >-
       k3s kubectl apply -f {{ manifests_dest_dir }}/
       {{ '--dry-run=server' if k8s_dry_run | bool else '' }}
       {{ (
            '--prune -l homelab/role=' ~ manifests_service
-           ~ ' --prune-allowlist=' ~ (manifests_prune_kinds | join(','))
+           ~ ' ' ~ (manifests_prune_kinds | map('regex_replace', '^', '--prune-allowlist=') | join(' '))
            ~ ' -n ' ~ k8s_namespace
          ) if (manifests_prune | default(false)) and (manifests_prune_kinds | default([]) | length > 0) else '' }}
   register: manifests_apply
