@@ -173,6 +173,34 @@ def test_the_patch_maintained_exemption_names_its_mechanism():
     assert reason and "patch" in reason
 
 
+def test_routing_and_policy_kinds_are_covered():
+    # A live survey on 2026-09-04 (issue #1077) found every IngressRoute/Middleware/
+    # TLSOption/NetworkPolicy in the cluster client-side applied with the last-applied
+    # annotation, closing the gap manifest-prune-check.sh already covers for EXISTENCE but
+    # not for a live spec change. Asserted as a set, not a count: a rename or a KINDS edit
+    # that dropped one of these would leave a bare membership check green.
+    assert {"ingressroute", "middleware", "tlsoption", "networkpolicy"} <= set(
+        ldc.KINDS
+    )
+
+
+def test_the_longhorn_ingressroute_is_in_scope():
+    # ACCEPT half of the carve-out: longhorn-system is foreign for nearly everything Longhorn
+    # ships, but roles/k8s/longhorn-ui/templates/ingressroute.yaml.j2 stages longhorn-frontend
+    # there — the same object manifest-prune-check.sh's EXCLUDED_NS_KINDS leaves checked.
+    assert (
+        ldc.is_foreign("ingressroute", "longhorn-system", "longhorn-frontend") is None
+    )
+
+
+def test_other_longhorn_kinds_stay_foreign():
+    # REJECT half: the carve-out is keyed by kind, not by namespace alone. Without this half,
+    # a bug that carved out the whole namespace instead of just "ingressroute" would pass the
+    # accept test above and still be wrong.
+    assert ldc.is_foreign("networkpolicy", "longhorn-system", "longhorn-webhook")
+    assert ldc.is_foreign("service", "longhorn-system", "longhorn-frontend")
+
+
 # ── verdict ──────────────────────────────────────────────────────────────────────────────
 
 
