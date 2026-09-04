@@ -89,7 +89,7 @@ class Landing:
             return
         self.ledger.lock_holder = holder or self.tools.lock_holder()
         if self.ledger.lock_holder:
-            say(f"lock held by (etimes, command): {self.ledger.lock_holder}")
+            say(f"lock held by {self.ledger.lock_holder}")
 
     def state(self, name: str) -> str:
         return self.tools.read_state(self.opts.deployer_state, name)

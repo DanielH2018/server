@@ -52,11 +52,20 @@ def wait_master_ci(ln: Landing, sha: str, label: str | None = None) -> None:
         return
     where = f" on {label}" if label else ""
     if rc == 1:
-        ln.die(f"master CI is RED on {label or sha} — nothing deployed", 1, "ci-red")
+        # bash said "on $MERGE_SHA — nothing deployed" for step 3's own wait, and "on the
+        # tip $TIP_SHA — the tick cannot cross it; nothing deployed" for the stale retry --
+        # a caller passing `label` is always the latter, which the tick genuinely cannot
+        # cross once it names an origin tip that never went green.
+        cannot_cross = " — the tick cannot cross it;" if label else " —"
+        ln.die(
+            f"master CI is RED on {label or sha}{cannot_cross} nothing deployed",
+            1,
+            "ci-red",
+        )
     if rc == 75:
         ln.die(
             f"no CI verdict{where} inside {ln.opts.ci_timeout}s — nothing deployed",
             75,
             "ci-timeout",
         )
-    ln.die(f"await_ci failed (exit {rc}) — nothing deployed", 1)
+    ln.die(f"await_ci failed{where} (exit {rc}) — nothing deployed", 1)

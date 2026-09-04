@@ -57,6 +57,10 @@ def parse_args(argv: list[str] | None, description: str) -> Options:
         prog="land.sh",
         description=description,
         formatter_class=argparse.RawDescriptionHelpFormatter,
+        # Bash's `case` rejected any argument it didn't name outright, so `--su "text"`
+        # was `land: unknown argument '--su'`. argparse's default abbreviation matching
+        # would instead silently resolve it to `--subject` (or `--sin` to `--since`).
+        allow_abbrev=False,
     )
     parser.add_argument("--pr", required=True, help="the PR number")
     parser.add_argument(

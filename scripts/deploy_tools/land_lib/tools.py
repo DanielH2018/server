@@ -92,12 +92,16 @@ def syslog(line: str) -> None:
 
 
 def lock_holder() -> str:
-    """The tree lock's holder as `<etimes> <command>`, or '' when nobody holds it.
+    """The tree lock's holder as `pid <pid> (etimes, command): <etimes> <command>`, or ''.
 
     fuser prints the PIDs on stdout and the path on stderr; the lowest PID is the flock
-    parent, its children inherit the descriptor. 200 characters rather than 120: an
-    `ansible-playbook` command line is long enough that the tags -- the part that says which
-    landing holds the lock -- fell off the end (issue #1031).
+    parent, its children inherit the descriptor. bash's `note_lock_contention` kept the pid
+    in a separate local and only folded it into the printed `say` line, leaving this
+    string (which also feeds the `holder="..."` annotation field) pid-less; this single
+    return value is the only thing callers have, so the pid is folded in here instead.
+    200 characters rather than 120: an `ansible-playbook` command line is long enough that
+    the tags -- the part that says which landing holds the lock -- fell off the end
+    (issue #1031).
     """
     with contextlib.suppress(
         OSError, subprocess.SubprocessError, ValueError, StopIteration
@@ -113,7 +117,8 @@ def lock_holder() -> str:
             timeout=5,
             check=False,
         ).stdout
-        return " ".join(ps.split()).replace('"', "")[:200]
+        etimes_command = " ".join(ps.split()).replace('"', "")
+        return f"pid {pid} (etimes, command): {etimes_command}"[:200]
     return ""
 
 

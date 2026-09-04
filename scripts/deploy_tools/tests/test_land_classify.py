@@ -6,6 +6,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_land_classify.py
 from __future__ import annotations
 
 import pytest
+import yaml
 
 from _land_fakes import MERGE_SHA, PRIMARY, Fakes
 from deploy_tools.land_lib import classify
@@ -112,3 +113,61 @@ def test_any_reach_disables_the_shortcut(landing, attr):
     ln, _ = landing()
     setattr(ln, attr, "x" if attr in ("tags", "plane") else True)
     classify.shortcut_if_nothing(ln)
+
+
+@pytest.mark.parametrize(
+    "attr, label",
+    [
+        ("plane_note", "plane classification failed"),
+        ("self_applied", "self-applied classification failed"),
+        ("derive", "tag derivation failed"),
+    ],
+)
+def test_a_crashing_classification_helper_dies_named_rather_than_traces(
+    landing, attr, label
+):
+    """bash ran these as subprocesses guarded by `|| die "<name> failed" 1`; in-process, an
+    unhandled exception (a `yaml.YAMLError` reading `host_vars`, say) must still read as
+    `land: <name> failed` rather than a bare traceback (#1085 item 5)."""
+    ln, _ = landing()
+    ln.merge_sha = MERGE_SHA
+
+    def boom(*a, **k):
+        raise yaml.YAMLError("bad host_vars")
+
+    setattr(ln.tools, attr, boom)
+    with pytest.raises(Outcome) as exc:
+        classify.classify(ln)
+    assert exc.value.rc == 1 and label in exc.value.error
+
+
+def test_remaining_setup_hosts_crashing_dies_named(landing):
+    """Separate from the parametrized case: this helper takes `local_host` as a positional
+    argument, so it needs `self_applied=True` reached first before it is ever called."""
+    ln, _ = landing(Fakes(self_applied=True))
+    ln.merge_sha = MERGE_SHA
+
+    def boom(*a, **k):
+        raise yaml.YAMLError("bad host_vars")
+
+    ln.tools.remaining_setup_hosts = boom
+    with pytest.raises(Outcome) as exc:
+        classify.classify(ln)
+    assert (
+        exc.value.rc == 1
+        and "remaining-setup-hosts classification failed" in exc.value.error
+    )
+
+
+def test_a_classification_helper_calling_die_itself_is_not_relabelled(landing):
+    """`Outcome` (what `ln.die` raises) must pass through `_classified` unfiltered."""
+    ln, _ = landing()
+    ln.merge_sha = MERGE_SHA
+
+    def dies(*a, **k):
+        ln.die("something else entirely", 1)
+
+    ln.tools.plane_note = dies
+    with pytest.raises(Outcome) as exc:
+        classify.classify(ln)
+    assert exc.value.error == "something else entirely"

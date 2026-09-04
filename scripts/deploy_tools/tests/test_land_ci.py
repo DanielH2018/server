@@ -69,6 +69,35 @@ def test_a_labelled_wait_names_what_it_waited_on(landing):
     )
 
 
+def test_a_labelled_red_names_that_the_tick_cannot_cross_it(landing):
+    """bash's tip wait said "the tick cannot cross it" for a red CI on the tip; the
+    unlabelled step-3 wait never did (#1085 item 6)."""
+    ln, _ = landing(Fakes(await_ci=[(1, "x")]))
+    with pytest.raises(Outcome) as exc:
+        ci.wait_master_ci(ln, "def456", "the tip def456")
+    assert exc.value.error == (
+        "master CI is RED on the tip def456 — the tick cannot cross it; nothing deployed"
+    )
+
+
+def test_an_unrecognized_await_ci_exit_names_what_it_waited_on(landing):
+    """The catch-all `await_ci failed` branch dropped `where`, so a labelled (tip) wait and
+    an unlabelled (step 3) wait read identically on any exit other than 1 or 75 -- unlike
+    every other branch in this function (#1085 item 6)."""
+    ln, _ = landing(Fakes(await_ci=[(3, "x")]))
+    with pytest.raises(Outcome) as unlabelled:
+        ci.wait_master_ci(ln, "abc123")
+    assert unlabelled.value.error == "await_ci failed (exit 3) — nothing deployed"
+
+    ln, _ = landing(Fakes(await_ci=[(3, "x")]))
+    with pytest.raises(Outcome) as labelled:
+        ci.wait_master_ci(ln, "def456", "the tip def456")
+    assert (
+        labelled.value.error
+        == "await_ci failed on the tip def456 (exit 3) — nothing deployed"
+    )
+
+
 def test_green_returns_and_prints_the_line(landing, capsys):
     ln, _ = landing(Fakes(await_ci=[(0, "0123456: CI green")]))
     ci.wait_master_ci(ln, "abc", "abc")

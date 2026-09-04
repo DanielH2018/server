@@ -60,6 +60,38 @@ def test_an_unexpected_exception_annotates_as_aborted_and_propagates(monkeypatch
     )
 
 
+def test_a_bad_argument_annotates_before_reraising_exit_2():
+    """argparse raises before a Landing/Ledger exists, so a bad flag used to reach the
+    Landings board as nothing at all -- bash's EXIT trap was installed before its arg loop
+    and covered this (#1085 item 2). Real `parse_args`, not the `land_run` fixture's
+    wrapper: the wrapper always calls the real parser first and only replaces `primary`
+    afterwards, so an unrecognized flag still raises SystemExit(2) through it same as here.
+    """
+    import land
+    from _land_fakes import build_tools
+
+    tools, calls = build_tools(Fakes())
+    with pytest.raises(SystemExit) as exc:
+        land.main(["--bogus"], tools=tools)
+    assert exc.value.code == 2
+    logline = next(c[1][0] for c in calls if c[0] == "logger")
+    assert "event=landing pr=unknown" in logline
+    assert "verdict=aborted" in logline and "exit=2" in logline
+
+
+def test_help_does_not_annotate():
+    """`--help` (exit 0) is deliberately NOT reproduced: bash's trap logged a junk
+    `verdict=aborted exit=0` line for it, which this port correctly drops."""
+    import land
+    from _land_fakes import build_tools
+
+    tools, calls = build_tools(Fakes())
+    with pytest.raises(SystemExit) as exc:
+        land.main(["--help"], tools=tools)
+    assert exc.value.code == 0
+    assert not any(c[0] == "logger" for c in calls)
+
+
 def test_settled_end_to_end(land_run):
     rc, out, _, calls, logline = land_run([], Fakes())
     assert rc == 0 and out.rstrip().endswith(
