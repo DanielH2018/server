@@ -54,6 +54,18 @@ def test_render_html_includes_both_hosts_and_their_services():
         assert expected in page
 
 
+def test_render_html_embeds_the_captioned_figure_not_the_bare_svg():
+    """The page wants diagram_view; the standalone SVG wants diagram_svg_fragment.
+
+    Both return an <svg> element and differ only in the <figure> wrapper and the
+    caption, so swapping one for the other in render_html leaves every other assertion
+    here passing and silently drops the caption off the page.
+    """
+    page = rendered()
+    assert '<figure class="diagram">' in page
+    assert "<figcaption>" in page
+
+
 def test_render_html_escapes_values_from_the_inventory():
     host_vars = {
         "daniel-box": docker_host([]),
