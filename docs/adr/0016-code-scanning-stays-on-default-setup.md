@@ -117,6 +117,30 @@ status quo — nothing is lost.
 repository security-settings change. Do it deliberately, not as a side effect of landing a
 workflow file.
 
+## Amendment 2026-09-04: the remaining dismissals were removed at source too
+
+The decision above kept 13 `py/incomplete-url-substring-sanitization` dismissals as the
+accepted cost. PR #1081 rewrote those membership assertions as exact comparisons, and the
+query closed all of them as fixed. That left 12 dismissed results on master, one query in
+one file each, and both are removed at source in the same way as the TLS floor:
+
+- `py/path-injection` × 5 in `ansible/roles/k8s/artifacts/files/artifact_server.py`.
+  `safe_path()` now normalizes with `os.path.realpath` and checks with `str.startswith`,
+  which is the one sanitizer shape the query models; `Path.resolve` plus a `parents` test
+  rejected the same inputs and was invisible to it. `TestSafePath` in the role's tests pins
+  every rejection so the rewrite cannot drop one.
+- `py/clear-text-logging-sensitive-data` × 7 in `scripts/secrets_mgmt/secret_rotation.py`.
+  The query's source was the registry's top-level key: any `d["secrets"]` or
+  `d.get("secrets")` is a sensitive source by name, and the names the script prints are the
+  keys of that dict. The registry key is now `entries:` (the code already called them
+  entries), and the function that lists the SOPS top-level keys is `sops_names()`. Every
+  reader of the registry moved with it; the file format is otherwise unchanged.
+
+A rename to satisfy a name heuristic is the kind of change the decision above rejected for
+the test assertions. It is accepted here because both new names are at least as accurate as
+the old ones, and because the alternative was 12 permanent dismissals in the two files where
+those two queries matter most.
+
 ## Governs
 
 - `scripts/diagnostics/probe_lib/ha.py:283` — the `tls_context()` marker in the probe library.

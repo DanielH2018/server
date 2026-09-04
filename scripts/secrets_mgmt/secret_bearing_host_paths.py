@@ -70,7 +70,7 @@ def secret_names(registry: _Path = REGISTRY) -> list[str]:
     data = yaml_fast.safe_load(registry.read_text()) or {}
     tracked = {
         name
-        for name, meta in (data.get("secrets") or {}).items()
+        for name, meta in (data.get("entries") or {}).items()
         if (meta or {}).get("tier") not in NON_SECRET_TIERS
     }
     return sorted(tracked - GENERIC_NAMES)

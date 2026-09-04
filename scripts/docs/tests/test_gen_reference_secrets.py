@@ -21,7 +21,7 @@ def _registry(tmp_path):
     path = tmp_path / "secret_rotation.yml"
     path.write_text(
         textwrap.dedent("""\
-        secrets:
+        entries:
           arr_autoblock_push_token:
             last_rotated: '2026-08-10'
             tier: auto

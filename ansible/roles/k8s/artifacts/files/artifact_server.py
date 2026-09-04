@@ -526,16 +526,24 @@ def safe_path(root: Path, host: str, rel: str) -> Path | None:
 
     Traversal is rejected by resolving both sides and comparing prefixes, so `..`, an
     absolute path, and a symlink pointing out of the tree are all refused.
+
+    DECIDED: the check is `os.path.realpath` then `str.startswith`, not `Path.resolve` then
+    a `parents` test. Both reject the same inputs; only the first is the shape CodeQL's
+    `py/path-injection` query recognises as a sanitizer (its normalization step is
+    `os.path.normpath|abspath|realpath`, its safe-access check is `startswith`, and it models
+    neither `Path.resolve` nor `Path.parents`). The pathlib form carried five hand-dismissed
+    alerts that came back on every refactor. Full reasoning: ADR-0016.
     """
     if not host or "/" in host or host in (".", ".."):
         return None
-    base = (root / host).resolve()
+    base = os.path.realpath(os.path.join(root, host))
     try:
-        target = (base / rel).resolve()
+        resolved = os.path.realpath(os.path.join(base, rel))
     except OSError, ValueError:
         return None
-    if target != base and base not in target.parents:
+    if not resolved.startswith(base + os.sep):
         return None
+    target = Path(resolved)
     if not target.is_file():
         return None
     return target

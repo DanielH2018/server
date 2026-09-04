@@ -100,7 +100,7 @@ def test_the_repair_commands_route_each_plane_to_a_playbook_that_can_reach_it():
     assert "--tags fake_remux" in setup_cmd[0]
 
 
-@pytest.mark.parametrize("name", sr.secret_names())
+@pytest.mark.parametrize("name", sr.sops_names())
 def test_no_declared_consumer_tag_names_a_role_that_never_references_the_secret(name):
     """Every tag consumer_tags() routes to must actually render the secret."""
     phantom = _phantom_tags(name, sr.consumer_tags(name))
@@ -112,7 +112,7 @@ def test_no_declared_consumer_tag_names_a_role_that_never_references_the_secret(
     )
 
 
-@pytest.mark.parametrize("name", sr.secret_names())
+@pytest.mark.parametrize("name", sr.sops_names())
 def test_no_auto_deployable_secret_hides_a_setup_plane_consumer(name):
     blind = _setup_plane_blind_spots(name, sr.consumer_tags(name))
 
