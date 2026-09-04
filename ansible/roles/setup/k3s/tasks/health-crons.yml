@@ -105,6 +105,39 @@
       {{ (k3s_render_stamp_groups | selectattr('name', 'eq', 'k3s-backup-health')
           | first).templates }}
 
+# The classifiers behind longhorn-reap-orphan-backups.sh.j2 and its snapshot sibling. Plain
+# `copy`, not release_bin.yml: these are operator-invoked (deliberately unscheduled — see the
+# templates above), not cron targets, so there is no rollback-unit reason to version them
+# alongside the backup-health release, and a fixed /opt path matches configarr-health's shape
+# (roles/k8s/configarr/tasks/main.yml), which this install mirrors.
+- name: Install the Longhorn reap-orphan classifiers
+  tags: [backup-health]
+  ansible.builtin.file:
+    path: /opt/longhorn-reap
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: Install the Longhorn reap-orphan classifier scripts
+  tags: [backup-health]
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "/opt/longhorn-reap/{{ item | basename }}"
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - longhorn_reap_logic.py
+    - longhorn_reap_orphan_backups.py
+    - longhorn_reap_orphan_snapshots.py
+    # The kubectl runner these two entry points share with configarr's and janitorr's health
+    # readers. Copied rather than duplicated for the same reason those do it: the sibling copy
+    # is what `import host_lib` resolves at runtime.
+    - "{{ role_path }}/../common/files/host_lib.py"
+  become: true
+
 - name: Schedule the Longhorn backup-plane heartbeat
   tags: [backup-health]
   ansible.builtin.cron:
