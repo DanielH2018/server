@@ -271,6 +271,10 @@ def _run_longhorn_api_scratch_play(
         env["PATH"] = f"{bin_dir}:{env.get('PATH', '')}"
         env["ANSIBLE_LOG_PATH"] = str(tmp_path / "ansible.log")
         env["ANSIBLE_NOCOLOR"] = "1"
+        # The fact cache is shared across worktrees and with deploy.sh, so a test must never
+        # write to it. This play sets gather_facts: false, so nothing is written either way;
+        # this keeps that true if it ever gathers facts.
+        env["ANSIBLE_CACHE_PLUGIN"] = "memory"
         # Pin the interpreter instead of letting Ansible discover it. ansible.cfg caches facts
         # under ~/.cache/ansible/facts keyed on the host — `localhost` from every worktree —
         # so the last tree to run Ansible pins its own .venv for all the others for two hours.

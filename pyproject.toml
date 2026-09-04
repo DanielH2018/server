@@ -92,7 +92,10 @@ testpaths = [                        # single source of truth for WHAT runs; exc
 # classes ever need splitting across workers.
 # --strict-markers turns a misspelled marker into a collection error instead of a silently
 # unregistered one; --strict-config does the same for an unknown key in this table.
-addopts = "-q -n auto --dist loadscope -m 'not ui' --strict-markers --strict-config"
+# -p leakguard fails any test that reaches the network, the cluster or the host. It is
+# registered here rather than from a conftest so it covers every `testpaths` entry at once;
+# ansible/tests is on `pythonpath` below, which is what makes the bare module name resolve.
+addopts = "-q -n auto --dist loadscope -m 'not ui' --strict-markers --strict-config -p leakguard"
 # Every warning is a failure. Measured before enabling (2026-09-02): the only classes that
 # fired were ResourceWarnings, each a real leak — HTTPError test doubles built on a tempfile
 # nothing closed, an sqlite connection the Valheim store never closed, and the deployer's

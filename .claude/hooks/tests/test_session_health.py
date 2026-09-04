@@ -332,10 +332,14 @@ def test_main_runs_targets_even_when_docker_down(monkeypatch, capsys):
         called["targets"] = True
         return ["  ✗ target loki [loki:3100] down"]
 
-    monkeypatch.setattr(_mod.sys, "stdin", io.StringIO('{"source":"startup"}'))
-    monkeypatch.setattr(
-        _mod, "docker_problems", lambda: (["  ✗ docker unreachable"], False)
+    _run_main(
+        monkeypatch,
+        '{"source":"startup"}',
+        dock=["  ✗ docker unreachable"],
+        ok=False,
     )
+    # _run_main stubs target_problems to a fixed-return lambda; override it here so the
+    # assertion below proves main() actually CALLED it rather than just not crashing.
     monkeypatch.setattr(_mod, "target_problems", tp)
     assert _mod.main() == 0
     assert called["targets"] is True
@@ -396,7 +400,7 @@ def test_stale_worktree_lines_swallows_a_timeout(monkeypatch):
 # scripts/ while the module lived in scripts/dev/ from the #443 regrouping until 2026-09-01, and
 # nothing failed: the except returned [], which reads identically to "no other sessions are
 # running". These two pin the import and the fail-loud, because a silent [] is what hid the bug.
-def test_the_hook_can_import_prune_worktrees_when_run_as_a_subprocess():
+def test_the_hook_can_import_prune_worktrees_when_run_as_a_subprocess(fenced_calls):
     """Accept case, and it MUST be a subprocess with a clean PYTHONPATH.
 
     Calling `other_live_sessions()` in-process proves nothing here: pyproject's pytest
@@ -405,6 +409,11 @@ def test_the_hook_can_import_prune_worktrees_when_run_as_a_subprocess():
     reintroduced — verified, not assumed. SessionStart runs this file as a plain script with no
     such path, which is the only condition under which the insert is load-bearing. This is the
     repo rule about verifying a moved entry point by RUNNING it rather than by running the suite.
+
+    Deliberately a real subprocess reaching real external binaries: `docker`, `sops` and
+    `curl` (via `uv run probe.py targets`), and `gh` (via `uv run prune_worktrees.py`, once
+    per worktree on disk). The `_fence_external_binaries` conftest fixture stubs all four so
+    this runs neither slow nor side-effecting — see fenced_calls below for the proof it held.
     """
     env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
     proc = subprocess.run(
@@ -421,6 +430,16 @@ def test_the_hook_can_import_prune_worktrees_when_run_as_a_subprocess():
         "module moved and the insert did not follow it. Fix the path in other_live_sessions.\n"
         + proc.stdout
     )
+    # docker_problems() and target_problems() run unconditionally on every call to main(),
+    # so docker/sops/curl are always exercised — unlike gh, which only fires per worktree on
+    # disk and so isn't asserted here. A stub silently dropped from PATH is indistinguishable
+    # from a passing run without this: the real binaries would just run underneath it.
+    recorded = fenced_calls.read_text()
+    for binary in ("docker", "sops", "curl"):
+        assert binary in recorded, (
+            f"the real `{binary}` ran instead of the stub — the PATH fence did not hold.\n"
+            f"recorded calls:\n{recorded}"
+        )
 
 
 def test_a_broken_import_is_reported_rather_than_read_as_no_sessions(monkeypatch):
