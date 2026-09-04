@@ -208,8 +208,10 @@ entry = "uv run python scripts/validate/shell_templates.py"
 language = "system"
 pass_filenames = false
 # group_vars/all.yml is in scope because the validator renders with it (ALL_VARS) — an
-# edit there can change what the rendered scripts contain.
-files = "^(ansible/roles/.*\\.sh\\.j2|ansible/inventory/group_vars/all\\.yml|scripts/validate/shell_templates\\.py)$"
+# edit there can change what the rendered scripts contain. The four scripts/lib/ modules are
+# where the render, the lint and the two cron rules actually live; naming only the entry point
+# would leave the hook's selector matching a 197-line facade while its subject sat elsewhere.
+files = "^(ansible/roles/.*\\.sh\\.j2|ansible/inventory/group_vars/all\\.yml|scripts/validate/shell_templates\\.py|scripts/lib/(ansible_jinja_compat|cron_checks|cron_targets|shell_lint)\\.py)$"
 
 # Render every systemd unit template (*.service.j2 / *.timer.j2) with stubbed vars PLUS the
 # owning role's real defaults, and verify the output with `systemd-analyze verify`. Neither

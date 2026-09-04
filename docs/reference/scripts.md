@@ -1,6 +1,6 @@
 ---
 generated_from: scripts/docs/reference/scripts.py
-generated_at: 2026-09-04 20:35 UTC
+generated_at: 2026-09-04 20:40 UTC
 generated_sha: 9b71a483
 ---
 
@@ -12,7 +12,7 @@ generated_sha: 9b71a483
 
 # Scripts
 
-114 first-party script(s) in `scripts/`. Each summary is the script's own module docstring — change the docstring to change this page.
+116 first-party script(s) in `scripts/`. Each summary is the script's own module docstring — change the docstring to change this page.
 
 The sections below split them by **how each one is run**, which is derived from the tree rather than declared: a cron `job:`, a `prek.toml` entry, a workflow step, a Claude hook, an Ansible task, or an import edge. The *Reached by* column is the evidence, so a wrong answer is a wrong answer about a real file.
 
@@ -20,7 +20,7 @@ The sections below split them by **how each one is run**, which is derived from 
     Whether a script is safe to run. The summary is whatever its author wrote, and nothing here judges blast radius. For the ones that run unattended, and which of those change state, see [Scheduled jobs](crons.md).
 
 
-**1 of the 38 scripts that run unattended have no test; 10 of all 114 do not.** The first number is the one that matters. An untested script a person runs fails in front of that person; an untested one a cron or a commit gate runs fails unattended, or blocks everybody.
+**1 of the 38 scripts that run unattended have no test; 10 of all 116 do not.** The first number is the one that matters. An untested script a person runs fails in front of that person; an untested one a cron or a commit gate runs fails unattended, or blocks everybody.
 
 !!! note "Where the Tests column looks"
     First for a `scripts/test_<name>.py`. Failing that, for any test in `scripts/` or `ansible/tests/` that names the script — `gitops_tick.sh` has five, in `test_gitops_manual_trigger.py`, and the naming convention alone called it untested. Those show as *(indirect)*, which means a test exercises it, not that the test is about it.
@@ -83,11 +83,12 @@ The sections below split them by **how each one is run**, which is derived from 
 
 ## Imported, never run on their own
 
-52 script(s) — imported by another script — not an entry point.
+54 script(s) — imported by another script — not an entry point.
 
 | Script | What it does | Reached by | Tests |
 |---|---|---|---|
 | `scripts/diagnostics/probe_lib/alerts.py` | `probe.py alerts` -- DOWN history reconstructed from Loki, since Kuma keeps only current state. | imported by probe.py | `test_probe_alerts.py` *(indirect)* |
+| `scripts/lib/ansible_jinja_compat.py` | Ansible's `search` test and `bool` filter, reimplemented for a vanilla Jinja2 environment. | imported by shell_lint.py | `test_validate_shell_templates.py` *(indirect)* |
 | `scripts/diagnostics/probe_lib/arr.py` | `probe.py arr <app> <api-path>` — read-only *arr API GETs against sonarr/radarr/prowlarr. | imported by postflight.py, probe.py | `test_probe.py` *(indirect)* |
 | `scripts/deploy_tools/await_ci.py` | Wait for master CI to reach a verdict on one SHA. | imported by tools.py | `test_await_ci.py` |
 | `scripts/diagnostics/probe_lib/b2_ledger.py` | The B2 spend ledger: what maintenance tools spent, since B2 publishes no usage API. | imported by longhorn.py, probe.py | `test_probe_b2_ledger.py` *(indirect)* |
@@ -96,13 +97,13 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/availability_bots/common.py` | Thin re-export of the shared watcher helpers for the availability-watcher bots. | imported by glenstone-bot.py, osteria-francescana-bot.py | `test_availability_bots.py` *(indirect)* |
 | `scripts/infra_map/constants.py` | Constants shared by the infra-map inventory, live, model and render stages. | imported by gen_infra_map.py, inventory.py, live.py, model.py, render.py | — |
 | `scripts/diagnostics/probe_lib/core.py` | Shared plumbing for probe's subcommands: endpoints, secrets, HTTP, durations. | imported by alerts.py, arr.py, b2_ledger.py, cert_expiry.py, ha.py, ha_state_model.py, health.py, longhorn.py, metrics.py, monitors.py, pi_plane.py, postflight.py, probe.py, readonly_rbac.py, ui_login.py, vip_placement.py | `test_probe.py` *(indirect)* |
+| `scripts/lib/cron_checks.py` | The two cron-environment rules a rendered shell template must satisfy. | imported by shell_templates.py | `test_validate_shell_templates.py` *(indirect)* |
+| `scripts/lib/cron_targets.py` | Resolve which shell templates under `ansible/roles/` are scheduled as cron `job:` targets. | imported by cron_checks.py, shell_templates.py | `test_validate_shell_templates.py` *(indirect)* |
 | `scripts/deploy_tools/land_lib/deploy.py` | Step 5: deploy what the tick deferred, one deploy.sh per host, riding out a stale tree. | imported by pipeline.py | `test_land_deploy.py` *(indirect)* |
 | `scripts/lib/doc_freshness.py` | How old a hand-written doc is, and whether the files it names have moved under it. | imported by _mkdocs_freshness.py, freshness.py | `test_doc_freshness.py` |
 | `scripts/lib/docs_provenance.py` | The provenance banner every generated documentation page opens with. | imported by backlog.py, crons.py, decisions.py, freshness.py, gen_doc_fragments.py, gen_infra_map.py, hosts.py, networking.py, scripts.py, secrets.py, service_catalog.py, state.py | `test_docs_provenance.py` |
 | `scripts/deploy_tools/exit_codes.py` | Every exit-code contract the deploy tools share, named once. | imported by ci.py, deploy.py, deploy_tags.py, merge.py, publish_pr.py, staging_gate.py, tick.py, tools.py | `test_exit_codes.py` |
 | `scripts/dev/findings.py` | File, re-observe, escalate and close Claude's unfixed findings as GitHub Issues. | imported by backlog.py | `test_findings.py` |
-| `scripts/docs/fragment_readers.py` | The readers behind the doc fragments: the tree, parsed, never imported. | imported by gen_doc_fragments.py | `test_gen_doc_fragments.py` *(indirect)* |
-| `scripts/docs/fragment_renderers.py` | The renderers behind the doc fragments: pure functions from plain values to markdown. | imported by gen_doc_fragments.py | `test_gen_doc_fragments.py` *(indirect)* |
 | `scripts/lib/gh.py` | One way to run the GitHub CLI from a script, with no prompt and no notifier. | imported by findings.py, publish_pr.py, tools.py | `test_gh.py` |
 | `scripts/lib/git.py` | One way to run git from a script, with the repository chosen by ``cwd`` alone. | imported by await_ci.py, decisions.py, deploy_staleness.py, doc_freshness.py, docs_provenance.py, prune_worktrees.py, publish_pr.py, secret_rotation.py, state.py, tools.py | `test_git.py` |
 | `scripts/diagnostics/probe_lib/ha.py` | Home Assistant: live state, automations, and the read-only WebSocket trace client. | imported by ha_state_model.py, postflight.py, probe.py | `test_probe_ha.py` *(indirect)* |
@@ -127,18 +128,19 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/deploy_tools/land_lib/pipeline.py` | The phase order, the step headers, and nothing else. | imported by land.py | `test_land_pipeline.py` *(indirect)* |
 | `scripts/diagnostics/probe_lib/readonly_rbac.py` | `probe.py readonly-rbac` — is the read-only ServiceAccount still read-only? | imported by probe.py | `test_probe_readonly_rbac.py` *(indirect)* |
 | `scripts/lib/registry.py` | A small named-entry registry shared by this repo's CLI dispatchers. | imported by probe.py, run_all.py | `test_registry.py` |
-| `scripts/lib/release_bin_groups.py` | Resolve which source files a `release_bin.yml` group deploys. | imported by shell_templates.py | `test_kuma_env_renders_for_every_cron_tag.py` *(indirect)* |
+| `scripts/lib/release_bin_groups.py` | Resolve which source files a `release_bin.yml` group deploys. | imported by cron_targets.py | `test_kuma_env_renders_for_every_cron_tag.py` *(indirect)* |
 | `scripts/diagnostics/probe_lib/releases.py` | `probe.py releases` -- which commit produced the manifests each k8s service is running. | imported by health.py, probe.py | `test_probe_health.py` *(indirect)* |
 | `scripts/infra_map/render.py` | Rendering: turn the reconciled model into one self-contained HTML page. | imported by gen_infra_map.py | `test_infra_map_render.py` *(indirect)* |
-| `scripts/lib/render_guard.py` | Shared helpers for the render-guard scripts and other Ansible-inventory readers. | imported by cert_expiry.py, compose_templates.py, config_templates.py, deploy_tags.py, hosts.py, k8s_manifests.py, networking.py, service_catalog.py, shell_templates.py, unit_templates.py | `test_render_guard.py` |
-| `scripts/lib/repo_paths.py` | The repo path anchors a script under ``scripts/`` reads the Ansible tree through. | imported by await_ci.py, build_docs.py, cert_expiry.py, constants.py, core.py, crons.py, decisions.py, deploy_detach_notify.py, deploy_tags.py, docs_provenance.py, fact_cache_guard.py, findings.py, fragment_readers.py, freshness.py, gen_doc_fragments.py, gen_hosts_block.py, grafana_dashboards.py, ha.py, health.py, hosts.py, invocation_sites.py, k8s_autodeploy_counts.py, land_tags.py, memory_survey.py, monitors.py, networking.py, pi_plane.py, releases.py, render_guard.py, route_facts.py, scripts.py, secret_bearing_host_paths.py, secrets.py, staging_egress_probe.py, staging_gate.py, state.py, validate_ha_config.py | `test_render_guard.py` *(indirect)* |
+| `scripts/lib/render_guard.py` | Shared helpers for the render-guard scripts and other Ansible-inventory readers. | imported by cert_expiry.py, compose_templates.py, config_templates.py, deploy_tags.py, hosts.py, k8s_manifests.py, networking.py, service_catalog.py, shell_lint.py, shell_templates.py, unit_templates.py | `test_render_guard.py` |
+| `scripts/lib/repo_paths.py` | The repo path anchors a script under ``scripts/`` reads the Ansible tree through. | imported by await_ci.py, build_docs.py, cert_expiry.py, constants.py, core.py, cron_checks.py, cron_targets.py, crons.py, decisions.py, deploy_detach_notify.py, deploy_tags.py, docs_provenance.py, fact_cache_guard.py, findings.py, freshness.py, gen_doc_fragments.py, gen_hosts_block.py, grafana_dashboards.py, ha.py, health.py, hosts.py, invocation_sites.py, k8s_autodeploy_counts.py, land_tags.py, memory_survey.py, monitors.py, networking.py, pi_plane.py, releases.py, render_guard.py, route_facts.py, scripts.py, secret_bearing_host_paths.py, secrets.py, shell_templates.py, staging_egress_probe.py, staging_gate.py, state.py, validate_ha_config.py | `test_render_guard.py` *(indirect)* |
 | `scripts/docs/route_facts.py` | Shared route facts for the reference generators. | imported by cert_expiry.py, networking.py, service_catalog.py | `test_route_facts.py` |
+| `scripts/lib/shell_lint.py` | Render a Jinja-templated shell script, then lint the output with `bash -n` and shellcheck. | imported by shell_templates.py | `test_validate_shell_templates.py` *(indirect)* |
 | `scripts/deploy_tools/staging_gate.py` | Ask the staging cluster whether it accepts a commit, from daniel-box. | imported by backfill_staging_gate.py | `test_staging_gate.py` |
 | `scripts/deploy_tools/land_lib/tick.py` | Step 4, the GitOps tick, retried while the unit's own flock gives up. | imported by deploy.py, pipeline.py | `test_land_tick.py` *(indirect)* |
 | `scripts/deploy_tools/land_lib/tools.py` | Every process boundary a landing crosses, as one injectable object. | imported by _land_fakes.py, land.py, landing.py | `test_land_landing.py` *(indirect)* |
 | `scripts/diagnostics/probe_lib/vip_placement.py` | `probe.py vip-placement` — does every ETP=Local VIP have a Ready endpoint on an announcing node? | imported by probe.py | `test_probe_vip_placement.py` *(indirect)* |
 | `scripts/lib/watcher.py` | Generic scaffold for an external-watcher: fetch -> check -> notify -> healthcheck ping. | imported by cert_expiry.py, common.py | `test_watcher.py` |
-| `scripts/lib/yaml_fast.py` | `yaml.safe_load` backed by libyaml, which parses the same schema an order faster. | imported by backfill_staging_gate.py, compose_templates.py, config_templates.py, crons.py, deploy_tags.py, fragment_readers.py, gen_hosts_block.py, ha_state_checks.py, ha_state_model.py, inventory.py, invocation_sites.py, k8s_autodeploy_counts.py, k8s_manifests.py, land_tags.py, release_bin_groups.py, render_guard.py, route_facts.py, secret_bearing_host_paths.py, secret_rotation.py, shell_templates.py, staging_egress_probe.py, staging_expectations.py, state.py, validate_ha_config.py | `test_yaml_fast.py` |
+| `scripts/lib/yaml_fast.py` | `yaml.safe_load` backed by libyaml, which parses the same schema an order faster. | imported by backfill_staging_gate.py, compose_templates.py, config_templates.py, cron_targets.py, crons.py, deploy_tags.py, gen_doc_fragments.py, gen_hosts_block.py, ha_state_checks.py, ha_state_model.py, inventory.py, invocation_sites.py, k8s_autodeploy_counts.py, k8s_manifests.py, land_tags.py, release_bin_groups.py, render_guard.py, route_facts.py, secret_bearing_host_paths.py, secret_rotation.py, staging_egress_probe.py, staging_expectations.py, state.py, validate_ha_config.py | `test_yaml_fast.py` |
 
 ## Run by hand
 

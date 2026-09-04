@@ -1,7 +1,4 @@
-"""Tests for scripts/validate/shell_templates.py — the render-then-lint guard for Jinja-templated
-shell scripts (*.sh.j2) that the prek bash-syntax-check / shellcheck hooks can't see (identify
-tags a `.sh.j2` as {jinja, text}, never `shell`).
-"""
+"""Tests for scripts/validate/shell_templates.py and the scripts/lib/ modules it composes."""
 
 import os
 import re
@@ -11,6 +8,10 @@ from pathlib import Path
 
 import pytest
 from validate import shell_templates as v
+from lib import ansible_jinja_compat as ajc
+from lib import cron_checks as cc
+from lib import cron_targets as ct
+from lib import shell_lint as sl
 from lib.render_guard import ALL_VARS, BASE_CONTEXT, load_yaml
 
 BACKUP_HEALTH = v.ROLES / "setup" / "k3s" / "templates" / "longhorn-backup-health.sh.j2"
@@ -57,12 +58,12 @@ def test_backup_health_renders_clean_for_every_arm_state(
         "k3s_longhorn_backup_armed": b2_armed,
         "k3s_longhorn_r2_armed": r2_armed,
     }
-    rendered = v.render_template(BACKUP_HEALTH, ctx)
+    rendered = sl.render_template(BACKUP_HEALTH, ctx)
 
     out = tmp_path / "longhorn-backup-health.sh"
     out.write_text(rendered)
-    assert v.bash_syntax_check(out) is None
-    assert v.shellcheck_check(out, shellcheck_bin) is None
+    assert sl.bash_syntax_check(out) is None
+    assert sl.shellcheck_check(out, shellcheck_bin) is None
 
     assert f'export LONGHORN_BACKUP_ARMED="{expect_backup_armed}"' in rendered
     assert f'export LONGHORN_R2_ARMED="{expect_r2_armed}"' in rendered
@@ -79,7 +80,7 @@ def test_backup_health_arm_gates_treat_the_string_false_as_disarmed():
         "k3s_longhorn_backup_armed": "false",
         "k3s_longhorn_r2_armed": "false",
     }
-    rendered = v.render_template(BACKUP_HEALTH, ctx)
+    rendered = sl.render_template(BACKUP_HEALTH, ctx)
     assert 'export LONGHORN_BACKUP_ARMED="False"' in rendered
     assert 'export LONGHORN_R2_ARMED="False"' in rendered
 
@@ -92,7 +93,7 @@ def test_backup_health_logs_unconditionally_even_when_the_reader_itself_breaks()
     the one case that leaves no record at all.
     """
     ctx = {**BASE_CONTEXT, **load_yaml(ALL_VARS), **v.SHELL_STUB_OVERRIDES}
-    rendered = v.render_template(BACKUP_HEALTH, ctx)
+    rendered = sl.render_template(BACKUP_HEALTH, ctx)
     reader_failed_branch = rendered.split("if [[ $RC -ne 0", 1)[1].split("else", 1)[0]
     assert "logger -t longhorn-backup-health" in reader_failed_branch
 
@@ -119,7 +120,7 @@ def test_backup_health_logs_unconditionally_even_when_the_reader_itself_breaks()
     ],
 )
 def test_ansible_bool_filter_mirrors_ansible_semantics(value, expected: bool):
-    assert v._ansible_bool(value) is expected
+    assert ajc.ansible_bool(value) is expected
 
 
 def test_shellcheck_batch_attributes_findings_to_the_file_that_has_them(tmp_path):
@@ -137,7 +138,7 @@ def test_shellcheck_batch_attributes_findings_to_the_file_that_has_them(tmp_path
     dirty.write_text(
         "#!/bin/bash\nfoo=$(ls)\necho $foo\n"
     )  # SC2086: unquoted expansion
-    flagged = v.shellcheck_batch([clean, dirty], shellcheck_bin)
+    flagged = sl.shellcheck_batch([clean, dirty], shellcheck_bin)
     assert clean not in flagged, flagged
     assert dirty in flagged and "SC2086" in flagged[dirty], flagged
 
@@ -147,8 +148,8 @@ def test_shellcheck_batch_of_clean_files_is_empty(tmp_path):
     assert shellcheck_bin
     a = tmp_path / "a.sh"
     a.write_text('#!/bin/bash\necho "a"\n')
-    assert v.shellcheck_batch([a], shellcheck_bin) == {}
-    assert v.shellcheck_batch([], shellcheck_bin) == {}
+    assert sl.shellcheck_batch([a], shellcheck_bin) == {}
+    assert sl.shellcheck_batch([], shellcheck_bin) == {}
 
 
 def test_shellcheck_batch_blames_every_file_when_it_cannot_attribute(tmp_path):
@@ -156,7 +157,7 @@ def test_shellcheck_batch_blames_every_file_when_it_cannot_attribute(tmp_path):
     not read as a clean sweep."""
     a = tmp_path / "a.sh"
     a.write_text('#!/bin/bash\necho "a"\n')
-    flagged = v.shellcheck_batch([a], "false")  # `false`: exits 1, prints nothing
+    flagged = sl.shellcheck_batch([a], "false")  # `false`: exits 1, prints nothing
     assert a in flagged
 
 
@@ -224,10 +225,10 @@ def test_ansible_search_test_mirrors_the_real_jinja_test():
     # retired at E7 2026-08-13) — vanilla Jinja2 has no `search` test at all (TemplateRuntimeError
     # without this), so this pins the regex-search (not full-match) semantics for whichever
     # template needs it next.
-    assert v._ansible_search("172.64.0.0/13", ":") is False
-    assert v._ansible_search("2400:cb00::/32", ":") is True
-    assert v._ansible_search("ABC", "abc", ignorecase=True) is True
-    assert v._ansible_search("ABC", "abc", ignorecase=False) is False
+    assert ajc.ansible_search("172.64.0.0/13", ":") is False
+    assert ajc.ansible_search("2400:cb00::/32", ":") is True
+    assert ajc.ansible_search("ABC", "abc", ignorecase=True) is True
+    assert ajc.ansible_search("ABC", "abc", ignorecase=False) is False
 
 
 def test_bash_syntax_check_catches_unmatched_quote(tmp_path):
@@ -236,7 +237,7 @@ def test_bash_syntax_check_catches_unmatched_quote(tmp_path):
     # shape here — a stray unmatched single quote — and confirm bash -n rejects it.
     broken = tmp_path / "broken.sh"
     broken.write_text("#!/bin/bash\necho 'it's broken'\n")
-    err = v.bash_syntax_check(broken)
+    err = sl.bash_syntax_check(broken)
     assert err is not None
     assert "unexpected" in err or "syntax error" in err
 
@@ -244,7 +245,7 @@ def test_bash_syntax_check_catches_unmatched_quote(tmp_path):
 def test_bash_syntax_check_passes_valid_script(tmp_path):
     ok = tmp_path / "ok.sh"
     ok.write_text("#!/bin/bash\nset -euo pipefail\necho hello\n")
-    assert v.bash_syntax_check(ok) is None
+    assert sl.bash_syntax_check(ok) is None
 
 
 def test_render_template_stubs_undefined_vars(tmp_path):
@@ -252,7 +253,7 @@ def test_render_template_stubs_undefined_vars(tmp_path):
     # ("STUB") rather than aborting the render.
     tpl = tmp_path / "sample.sh.j2"
     tpl.write_text("#!/bin/bash\necho {{ some_never_defined_var }}\n")
-    rendered = v.render_template(tpl, {})
+    rendered = sl.render_template(tpl, {})
     assert "STUB" in rendered
 
 
@@ -293,7 +294,7 @@ def test_check_template_passes_a_clean_render(tmp_path):
     v.ANSIBLE = tmp_path
     try:
         err = v.check_template(
-            clean, {"sys_user": "ubuntu"}, out_dir, v.shutil.which("shellcheck"), {}
+            clean, {"sys_user": "ubuntu"}, out_dir, shutil.which("shellcheck"), {}
         )
     finally:
         v.ANSIBLE = orig_ansible
@@ -301,12 +302,11 @@ def test_check_template_passes_a_clean_render(tmp_path):
     assert err is None
 
 
-def test_main_fails_closed_when_shellcheck_missing(monkeypatch):
+def test_main_fails_closed_when_shellcheck_missing():
     # A missing shellcheck must FAIL the gate, not silently fall back to bash -n alone — the
     # whole point of failing loud instead of degrading (see module docstring / SHELL_STUB_OVERRIDES
     # design comment).
-    monkeypatch.setattr(v.shutil, "which", lambda name: None)
-    assert v.main() == 1
+    assert v.main(which=lambda _name: None) == 1
 
 
 @pytest.fixture(scope="module")
@@ -315,9 +315,9 @@ def cron_map():
 
     The resolver walks every role's tasks and crons to map template -> installing task file,
     which costs ~0.6s. Four guards below read the same mapping and none mutates it, so they
-    share one. A test that needs a different roles dir calls v.cron_job_scripts(roots) itself.
+    share one. A test that needs a different roles dir calls ct.cron_job_scripts(roots) itself.
     """
-    return v.cron_job_scripts()
+    return ct.cron_job_scripts()
 
 
 def test_cron_job_scripts_resolves_a_dest_rename(cron_map):
@@ -359,15 +359,15 @@ def test_cron_job_scripts_finds_a_live_role(tmp_path):
     # The accepting half of the pair below: without it, an exclusion that swallowed everything
     # would be indistinguishable from one that excludes only archive/.
     template = _fixture_role(tmp_path, "containers/live-role")
-    assert template in v.cron_job_scripts(tmp_path)
+    assert template in ct.cron_job_scripts(tmp_path)
 
 
 def test_cron_job_scripts_excludes_an_archived_role(tmp_path):
     # The rejecting half. The real archive/ tree schedules nothing, so the repo-wide guard
     # below can only ever be observed passing — this is the input it must refuse.
     template = _fixture_role(tmp_path, "containers/archive/retired-role")
-    assert template not in v.cron_job_scripts(tmp_path)
-    assert v.cron_job_scripts(tmp_path) == {}
+    assert template not in ct.cron_job_scripts(tmp_path)
+    assert ct.cron_job_scripts(tmp_path) == {}
 
 
 def test_cron_job_scripts_excludes_the_deliberately_unscheduled_reaper(cron_map):
@@ -389,7 +389,7 @@ def test_reap_orphan_shims_export_the_uv_python_install_dir(template_name):
     # --no-python-downloads forbids fetching one. Exporting UV_PYTHON_INSTALL_DIR before the
     # `uv run` call makes discovery independent of which HOME invoked the shim.
     ctx = {**BASE_CONTEXT, **load_yaml(ALL_VARS), **v.SHELL_STUB_OVERRIDES}
-    rendered = v.render_template(
+    rendered = sl.render_template(
         v.ROLES / "setup" / "k3s" / "templates" / template_name, ctx
     )
     sys_user = ctx["sys_user"]
@@ -411,7 +411,7 @@ def test_cron_path_error_flags_a_bare_invocation_with_no_path_fix(tmp_path):
     task_file = tmp_path / "main.yml"
     task_file.write_text("- name: noop\n")
     rendered = '#!/bin/bash\nKUBECTL="k3s kubectl -n foo"\n$KUBECTL get pods\n'
-    err = v.cron_path_error(template, rendered, {template: task_file})
+    err = cc.cron_path_error(template, rendered, {template: task_file})
     assert err is not None
     assert "cron job target" in err
 
@@ -424,7 +424,7 @@ def test_cron_path_error_passes_a_path_export(tmp_path):
         '#!/bin/bash\nexport PATH="/usr/local/bin:${PATH}"\n'
         'KUBECTL="k3s kubectl -n foo"\n$KUBECTL get pods\n'
     )
-    assert v.cron_path_error(template, rendered, {template: task_file}) is None
+    assert cc.cron_path_error(template, rendered, {template: task_file}) is None
 
 
 def test_cron_path_error_passes_an_absolute_invocation(tmp_path):
@@ -434,7 +434,7 @@ def test_cron_path_error_passes_an_absolute_invocation(tmp_path):
     rendered = (
         '#!/bin/bash\nKUBECTL="/usr/local/bin/k3s kubectl -n foo"\n$KUBECTL get pods\n'
     )
-    assert v.cron_path_error(template, rendered, {template: task_file}) is None
+    assert cc.cron_path_error(template, rendered, {template: task_file}) is None
 
 
 def test_cron_path_error_does_not_flag_kubectl_echoed_in_a_message(tmp_path):
@@ -446,7 +446,7 @@ def test_cron_path_error_does_not_flag_kubectl_echoed_in_a_message(tmp_path):
     rendered = (
         '#!/bin/bash\nMSG="job stuck — see: kubectl -n ns logs job/x"\necho "$MSG"\n'
     )
-    assert v.cron_path_error(template, rendered, {template: task_file}) is None
+    assert cc.cron_path_error(template, rendered, {template: task_file}) is None
 
 
 def test_cron_path_error_ignores_a_bare_invocation_inside_a_comment(tmp_path):
@@ -454,13 +454,13 @@ def test_cron_path_error_ignores_a_bare_invocation_inside_a_comment(tmp_path):
     task_file = tmp_path / "main.yml"
     task_file.write_text("- name: noop\n")
     rendered = "#!/bin/bash\n# see k3s kubectl for details\necho hi\n"
-    assert v.cron_path_error(template, rendered, {template: task_file}) is None
+    assert cc.cron_path_error(template, rendered, {template: task_file}) is None
 
 
 def test_cron_path_error_is_a_noop_for_a_non_cron_template(tmp_path):
     template = tmp_path / "whatever.sh.j2"
     rendered = 'KUBECTL="k3s kubectl -n foo"\n$KUBECTL get pods\n'
-    assert v.cron_path_error(template, rendered, {}) is None
+    assert cc.cron_path_error(template, rendered, {}) is None
 
 
 def test_cron_path_error_passes_when_the_crontab_sets_path(tmp_path):
@@ -474,7 +474,7 @@ def test_cron_path_error_passes_when_the_crontab_sets_path(tmp_path):
         "    value: /usr/local/bin:/usr/bin:/bin\n"
     )
     rendered = '#!/bin/bash\nKUBECTL="k3s kubectl -n foo"\n$KUBECTL get pods\n'
-    assert v.cron_path_error(template, rendered, {template: task_file}) is None
+    assert cc.cron_path_error(template, rendered, {template: task_file}) is None
 
 
 def test_no_cron_job_template_in_the_tree_violates_the_path_rule(cron_map):
@@ -488,8 +488,8 @@ def test_no_cron_job_template_in_the_tree_violates_the_path_rule(cron_map):
     offenders = {
         str(template.relative_to(v.ROLES))
         for template, task_file in cron_map.items()
-        if v.cron_path_error(
-            template, v.render_template(template, ctx), {template: task_file}
+        if cc.cron_path_error(
+            template, sl.render_template(template, ctx), {template: task_file}
         )
     }
     assert offenders == set()
@@ -587,7 +587,7 @@ K3S_ABS = "#!/bin/bash\n/usr/local/bin/k3s kubectl -n foo get pods\n"
 
 def test_kubeconfig_flags_a_nonroot_cron_touching_the_cluster(tmp_path):
     tpl = _cron_role(tmp_path, user="ubuntu")
-    err = v.cron_kubeconfig_error(tpl, K3S_BARE, roles=tmp_path)
+    err = cc.cron_kubeconfig_error(tpl, K3S_BARE, roles=tmp_path)
     assert err is not None
     assert "EMPTY cluster" in err
 
@@ -595,27 +595,27 @@ def test_kubeconfig_flags_a_nonroot_cron_touching_the_cluster(tmp_path):
 def test_kubeconfig_passes_a_root_cron(tmp_path):
     # k3s.yaml is 0640 root:root, so root needs no KUBECONFIG. Measured on daniel-box 2026-08-27.
     tpl = _cron_role(tmp_path, user="root")
-    assert v.cron_kubeconfig_error(tpl, K3S_BARE, roles=tmp_path) is None
+    assert cc.cron_kubeconfig_error(tpl, K3S_BARE, roles=tmp_path) is None
 
 
 def test_kubeconfig_treats_a_missing_user_as_nonroot(tmp_path):
     # ansible.builtin.cron defaults `user` to the connection user, which is not root here.
     # Failing closed on the omission is the whole point.
     tpl = _cron_role(tmp_path, user="")
-    assert v.cron_kubeconfig_error(tpl, K3S_BARE, roles=tmp_path) is not None
+    assert cc.cron_kubeconfig_error(tpl, K3S_BARE, roles=tmp_path) is not None
 
 
 def test_kubeconfig_passes_an_export_in_the_script(tmp_path):
     tpl = _cron_role(tmp_path, user="ubuntu")
     rendered = "#!/bin/bash\nexport KUBECONFIG=/home/ubuntu/.kube/config\n" + K3S_BARE
-    assert v.cron_kubeconfig_error(tpl, rendered, roles=tmp_path) is None
+    assert cc.cron_kubeconfig_error(tpl, rendered, roles=tmp_path) is None
 
 
 def test_kubeconfig_passes_when_the_job_line_sets_it(tmp_path):
     tpl = _cron_role(
         tmp_path, user="ubuntu", job_env="KUBECONFIG=/home/u/.kube/config "
     )
-    assert v.cron_kubeconfig_error(tpl, K3S_BARE, roles=tmp_path) is None
+    assert cc.cron_kubeconfig_error(tpl, K3S_BARE, roles=tmp_path) is None
 
 
 def test_kubeconfig_flags_an_absolute_invocation_too(tmp_path):
@@ -624,18 +624,18 @@ def test_kubeconfig_flags_an_absolute_invocation_too(tmp_path):
     # real tree call /usr/local/bin/k3s, so reusing the PATH rule's selector would have made
     # this rule blind to the shape it is most likely to meet.
     tpl = _cron_role(tmp_path, user="ubuntu")
-    assert v.cron_kubeconfig_error(tpl, K3S_ABS, roles=tmp_path) is not None
+    assert cc.cron_kubeconfig_error(tpl, K3S_ABS, roles=tmp_path) is not None
 
 
 def test_kubeconfig_ignores_a_template_that_is_not_a_cron_target(tmp_path):
     (tmp_path / "g" / "r" / "templates").mkdir(parents=True)
     orphan = tmp_path / "g" / "r" / "templates" / "orphan.sh.j2"
-    assert v.cron_kubeconfig_error(orphan, K3S_BARE, roles=tmp_path) is None
+    assert cc.cron_kubeconfig_error(orphan, K3S_BARE, roles=tmp_path) is None
 
 
 def test_kubeconfig_ignores_a_script_that_never_touches_the_cluster(tmp_path):
     tpl = _cron_role(tmp_path, user="ubuntu")
-    assert v.cron_kubeconfig_error(tpl, "#!/bin/bash\ndf -h\n", roles=tmp_path) is None
+    assert cc.cron_kubeconfig_error(tpl, "#!/bin/bash\ndf -h\n", roles=tmp_path) is None
 
 
 def test_kubeconfig_reads_the_user_of_the_matching_task_not_the_file(tmp_path):
@@ -668,11 +668,11 @@ def test_kubeconfig_reads_the_user_of_the_matching_task_not_the_file(tmp_path):
     )
     templates = tmp_path / "g" / "r" / "templates"
     assert (
-        v.cron_kubeconfig_error(templates / "rooted.sh.j2", K3S_BARE, roles=tmp_path)
+        cc.cron_kubeconfig_error(templates / "rooted.sh.j2", K3S_BARE, roles=tmp_path)
         is None
     )
     assert (
-        v.cron_kubeconfig_error(templates / "user.sh.j2", K3S_BARE, roles=tmp_path)
+        cc.cron_kubeconfig_error(templates / "user.sh.j2", K3S_BARE, roles=tmp_path)
         is not None
     )
 
@@ -680,7 +680,7 @@ def test_kubeconfig_reads_the_user_of_the_matching_task_not_the_file(tmp_path):
 def test_cron_targets_resolve_a_looped_template_task(tmp_path):
     # The looped src/dest form was invisible until 2026-08-27, which hid every longhorn wrapper.
     tpl = _cron_role(tmp_path, user="ubuntu", loop=True)
-    assert tpl in v.cron_job_scripts(tmp_path)
+    assert tpl in ct.cron_job_scripts(tmp_path)
 
 
 def test_cron_targets_resolve_a_job_line_carrying_jinja_with_spaces(tmp_path):
@@ -691,8 +691,8 @@ def test_cron_targets_resolve_a_job_line_carrying_jinja_with_spaces(tmp_path):
         user="ubuntu",
         job_env="PATH=/usr/local/bin:/usr/bin:/bin KUBECONFIG=/home/{{ sys_user }}/.kube/config ",
     )
-    assert tpl in v.cron_job_scripts(tmp_path)
-    assert v.cron_kubeconfig_error(tpl, K3S_BARE, roles=tmp_path) is None
+    assert tpl in ct.cron_job_scripts(tmp_path)
+    assert cc.cron_kubeconfig_error(tpl, K3S_BARE, roles=tmp_path) is None
 
 
 def test_the_widened_resolver_covers_the_scripts_it_was_written_for(cron_map):
@@ -712,10 +712,10 @@ def test_the_real_tree_has_no_kubeconfig_violation():
     # Zero today, and this is the assertion that says so out loud: the rule ships preventive,
     # not as a fix. A future non-root cron wrapper that reads the cluster fails here first.
     offenders = []
-    for tpl, _task_file, _cron, _env in v._cron_targets():
+    for tpl, _task_file, _cron, _env in ct.iter_cron_targets():
         if not tpl.exists():
             continue
-        err = v.cron_kubeconfig_error(tpl, tpl.read_text())
+        err = cc.cron_kubeconfig_error(tpl, tpl.read_text())
         if err:
             offenders.append(tpl.name)
     assert offenders == [], offenders
@@ -742,7 +742,7 @@ def test_backup_health_shim_exports_every_env_var_the_reader_requires():
     )
 
     ctx = {**BASE_CONTEXT, **load_yaml(ALL_VARS), **v.SHELL_STUB_OVERRIDES}
-    rendered = v.render_template(BACKUP_HEALTH, ctx)
+    rendered = sl.render_template(BACKUP_HEALTH, ctx)
     exported = set(
         re.findall(r"^export (LONGHORN_[A-Z0-9_]+)=", rendered, re.MULTILINE)
     )
@@ -784,7 +784,7 @@ def _run_rendered_shim(
     URL for that reason.
     """
     ctx = {**BASE_CONTEXT, **load_yaml(ALL_VARS), **v.SHELL_STUB_OVERRIDES}
-    rendered = v.render_template(BACKUP_HEALTH, ctx)
+    rendered = sl.render_template(BACKUP_HEALTH, ctx)
 
     fake_reader = tmp_path / "fake-reader.sh"
     fake_reader.write_text("#!/usr/bin/env bash\n" + fake_reader_body)

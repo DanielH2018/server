@@ -389,9 +389,8 @@ in `merge.py` already wrapped a single call; the multi-statement block was the h
 - **"`await_ci.py` duplicates `land_lib/ci.py`."** `ci.py` is a 62-line exit-code-to-verdict
   adapter over the injected `tools.await_ci`; the GitHub polling lives only in `await_ci.py`.
 - **"`scripts/lib/release_bin_groups.py` has no importers."** It is imported through the
-  `from lib import release_bin_groups` spelling at `scripts/validate/shell_templates.py:41`,
-  which a `from lib.` grep misses. That is the import-spelling inconsistency above, not dead
-  code.
+  `from lib import release_bin_groups` spelling in `scripts/lib/cron_targets.py`, which a
+  `from lib.` grep misses. That is the import-spelling inconsistency above, not dead code.
 
 ## Strengths to copy from
 
