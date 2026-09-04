@@ -111,10 +111,14 @@ namespace. Where policies do exist, **ingress** rules are enforced; **egress** r
   These filters are unit-tested (`ansible/tests/deploy/test_toposort.py`) — run via the `pytest`
   pre-commit hook.
 
-- **k8s play** (`platform: k8s`) — includes `roles/k8s/<name>` in **list order**. There is
-  no toposort here: the order in `host_vars/daniel-box.yml` is load-bearing, because the
-  `traefik` role installs the CRDs every later `IngressRoute` depends on, and `authelia`
-  creates the middleware other routes reference.
+- **k8s play** (`platform: k8s`) — toposorts `roles/k8s/<name>` with `build_k8s_dep_map` /
+  `toposort_containers` (the same `toposort_containers` the Docker play uses, from a
+  differently-built map). A role rendering a Traefik CRD gets an edge onto `traefik`, which
+  installs the CRDs every later `IngressRoute` depends on; `use_authelia: true` gets one onto
+  `authelia`, which creates the middleware other routes reference. Both are derived from the
+  role's own templates/entry, not hand-listed; an edge no template carries (crowdsec before
+  traefik, for the LAPI machine credential) is declared as `depends_on:` on the entry instead.
+  List order in `host_vars/daniel-box.yml` is only the sort's tiebreak.
 
 Both plays run against the host named by `-e target=` — but `daniel-server` and `daniel-box`
 are `ansible_connection=local` in `hosts.ini`, so `-e target=` only selects whose *variables*
@@ -182,8 +186,10 @@ prek run --all-files
 
 Almost every new service is a **k8s** workload: add a role under `ansible/roles/k8s/<name>/`
 rendering its manifests (Deployment/Service/IngressRoute/PVC), then an entry in
-`host_vars/daniel-box.yml` `containers_list` with `platform: k8s` — placed *after* anything
-it depends on, since that play has no toposort. Deploy tags derive from the name.
+`host_vars/daniel-box.yml` `containers_list` with `platform: k8s`. Position in the list
+doesn't matter — the k8s play toposorts on derived Traefik-CRD and authelia edges, plus any
+`depends_on:` the entry declares — so add it wherever reads best. Deploy tags derive from
+the name.
 
 For the Pi's Docker services, `ansible/roles/containers/` + the `new-container` workflow
 scaffold a role: a `tasks/main.yml`, a `templates/docker-compose.yml.j2` (Traefik + AutoKuma

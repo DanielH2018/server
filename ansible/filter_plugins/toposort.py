@@ -148,6 +148,85 @@ def expand_with_deps(containers_list, deps_map, requested_tags, running_names):
     return [c for c in containers_list if c["name"] in effective]
 
 
+# A role's own IngressRoute/Middleware templates either write `apiVersion: traefik.io/...`
+# directly or pull it in through the one shared `ingressroute.yml.j2` macro (`{% from
+# 'ingressroute.yml.j2' import ingressroute %}`) -- there is no third way in this repo to
+# emit one. A textual scan for either string matched a full Jinja render of every k8s role
+# exactly (35/35 roles, see ansible/tests/deploy/test_k8s_toposort.py), so it stands in for
+# the render at deploy time without paying for one.
+_TRAEFIK_CRD_MARKERS = ("traefik.io", "ingressroute.yml.j2")
+
+# Roles exempted from the derived "renders a Traefik CRD -> depends on traefik" edge.
+# A written reason, not a bare set, for the same cause the position-based test it replaces
+# gave for CRD_ORDER_EXEMPT: the whole failure mode here is an ordering decision that has to
+# survive as more than a comment someone can outrun.
+K8S_CRD_EDGE_EXEMPT = {
+    "crowdsec": (
+        "crowdsec must precede traefik for the LAPI machine credential (declared as "
+        "traefik's depends_on in host_vars) -- a traefik-before-crowdsec edge here would "
+        "cycle against that one. The accepted cost: crowdsec's own IngressRoute (the LAPI's "
+        "LAN face) applies before traefik installs the Traefik CRDs it needs, which is "
+        "harmless on a running cluster and a documented first-run-only failure on a rebuild."
+    ),
+}
+
+
+def _role_renders_traefik_crd(role_templates_dir):
+    """Whether a k8s role's templates render a traefik.io object (see _TRAEFIK_CRD_MARKERS)."""
+    try:
+        names = os.listdir(role_templates_dir)
+    except OSError:
+        return False
+    for name in names:
+        if not name.endswith(".j2"):
+            continue
+        try:
+            with open(os.path.join(role_templates_dir, name), encoding="utf-8") as fh:
+                text = fh.read()
+        except OSError:
+            continue
+        if any(marker in text for marker in _TRAEFIK_CRD_MARKERS):
+            return True
+    return False
+
+
+def build_k8s_dep_map(containers_list, playbook_dir):
+    """Derive the k8s play's dependency map -- the k8s counterpart of build_dep_map.
+
+    There is no per-role meta/deps.yml on this side. Two of the three real ordering
+    constraints are mechanically derivable, and re-deriving them here (instead of reading a
+    hand-authored file) is what lets a new role's edges arrive for free:
+
+      * every role rendering a Traefik CRD depends on traefik, except K8S_CRD_EDGE_EXEMPT
+      * every entry with `use_authelia: true` depends on authelia
+
+    The third -- crowdsec before traefik -- is not derivable from a template, so it is
+    declared data instead: an explicit `depends_on:` list on the containers_list entry,
+    unioned in below.
+
+    Takes the FULL containers_list, never a tag-narrowed one. Unlike the Docker play, the
+    k8s play applies `--tags` per-role inside a single loop rather than narrowing the list
+    before dependency resolution (no dep_closure/expand_with_deps here), so building this
+    map from a tagged subset would leave every role outside that subset with an empty dep
+    list -- silently falling back to list order for exactly the roles a tagged deploy is
+    most likely to append one after.
+    """
+    dep_map = {}
+    for c in containers_list:
+        name = c["name"]
+        deps = set(c.get("depends_on", []))
+        if c.get("use_authelia") and name != "authelia":
+            deps.add("authelia")
+        if name != "traefik" and name not in K8S_CRD_EDGE_EXEMPT:
+            role_templates = os.path.join(
+                playbook_dir, "roles", "k8s", name, "templates"
+            )
+            if _role_renders_traefik_crd(role_templates):
+                deps.add("traefik")
+        dep_map[name] = sorted(deps)
+    return dep_map
+
+
 def filter_by_platform(containers_list, platform="docker"):
     """Select containers_list entries targeting a given deploy platform.
 
@@ -164,6 +243,7 @@ class FilterModule:
     def filters(self):
         return {
             "build_dep_map": build_dep_map,
+            "build_k8s_dep_map": build_k8s_dep_map,
             "toposort_containers": toposort_containers,
             "dep_closure": dep_closure,
             "expand_with_deps": expand_with_deps,

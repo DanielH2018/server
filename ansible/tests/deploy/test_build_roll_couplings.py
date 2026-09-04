@@ -103,12 +103,14 @@ def test_every_coupling_target_is_a_real_role():
 
 
 def test_the_build_role_runs_before_its_consumer():
-    """Tags do not reorder anything.
+    """Tags do not reorder anything, and neither does the toposort.
 
-    `containers_list` runs in list order with no toposort, so a consumer listed BEFORE its build
-    role reads `k8s_rebuilt_images` while the fact is still empty -- the expanded tag set would be
-    correct and the rollout would still miss the rebuild. Assert the order, or the fix ships a green
-    run that changes nothing.
+    A consumer listed BEFORE its build role reads `k8s_rebuilt_images` while the fact is
+    still empty -- the expanded tag set would be correct and the rollout would still miss
+    the rebuild. build_k8s_dep_map (ansible/filter_plugins/toposort.py) derives edges only
+    for the Traefik-CRD and authelia constraints, so this pairing still relies on list
+    position and toposort_containers' stable sort preserving it. Assert the order, or the
+    fix ships a green run that changes nothing.
     """
     text = (REPO / "ansible" / "inventory" / "host_vars" / "daniel-box.yml").read_text()
     for build_role, needs in _BUILD_ROLL_COUPLINGS.items():

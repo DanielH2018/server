@@ -1,6 +1,6 @@
 ---
 name: new-k8s-service
-description: Add a new k3s workload to this homelab — the role skeleton, which sibling to copy, where the entry goes in containers_list and why its position matters, secrets, and the first deploy. Use when adding any service to the cluster, or when a new role deploys nothing and you need to know what was missed.
+description: Add a new k3s workload to this homelab — the role skeleton, the containers_list entry and how its deploy ordering is derived automatically, secrets, and the first deploy. Use when adding any service to the cluster, or when a new role deploys nothing and you need to know what was missed.
 allowed-tools: Read, Write, Edit, Grep, Glob, Bash
 ---
 
@@ -31,18 +31,20 @@ never `config` — so a mount reads unambiguously in a diff or a `kubectl descri
 and parses it as YAML. App config a manifest embeds via `lookup()` goes in `templates/config/`,
 static assets in `files/`. `Dockerfile*` is exempt and may sit in `templates/` directly.
 
-## 2. The inventory entry — position matters
+## 2. The inventory entry — ordering is automatic, position is not
 
 Add the service to `containers_list` in `ansible/inventory/host_vars/daniel-box.yml` with
-`platform: k8s`.
+`platform: k8s`. Where in the list doesn't matter: the k8s play toposorts on
+`build_k8s_dep_map` / `toposort_containers` (`ansible/filter_plugins/toposort.py`), and the
+two edges that used to require hand positioning are derived automatically —
 
-That play has **no toposort and runs in list order**, so place the entry:
+- an entry whose templates render a Traefik CRD (an `ingressroute.yaml.j2` using the shared
+  `ingressroute.yml.j2` macro counts) gets an edge onto `traefik`, and
+- an entry with `use_authelia: true` gets one onto `authelia`.
 
-- *after* `traefik`, which installs the CRDs its IngressRoute needs, and
-- *after* `authelia` if the route uses the `authelia` middleware.
-
-An entry in the wrong position fails on a CRD that does not exist yet, which reads as a
-manifest error rather than an ordering one.
+If the new entry needs an ordering constraint no template carries — something like
+crowdsec's LAPI-credential edge onto traefik — declare it with `depends_on: [<name>]` on the
+entry rather than moving it in the list.
 
 ## 3. Secrets
 
