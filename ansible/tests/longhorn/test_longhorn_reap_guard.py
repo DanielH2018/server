@@ -180,7 +180,10 @@ def test_deleted_volume_strays_need_their_own_flag():
     result = logic.classify_backups(
         [_backup("stray", "gone-vol", "2026-08-14T00:00:00Z", "daily-backup")],
         owner={},
-        existing_volumes=set(),
+        # A live volume alongside the deleted one. An EMPTY set is the separate case
+        # classify_backups now refuses outright: it means the volume read returned nothing,
+        # not that every volume was deleted, and orphaning the whole backup set on it is #1062.
+        existing_volumes={"live-vol"},
     )
     assert result.candidates == []
     assert [n for n, *_ in result.orphaned] == ["stray"]
