@@ -36,6 +36,13 @@ claude_code_rc_permission_mode: auto
 # to 10 on 2026-09-04 at user request.
 claude_code_rc_capacity: 10
 
+# Whether to set CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP on the host, turning off Claude
+# Code's kill of backgrounded Bash tasks under a Node memoryPressure event. On by default;
+# the unit template carries the reasoning. Set this false to hand the reaper back — the
+# reaper is upstream's protection against a runaway background shell, and turning it off
+# leaves MemoryHigh and claude_code_rc_capacity as the only bounds.
+claude_code_rc_disable_bg_shell_pressure_reap: true
+
 # How often to restart the host so it picks up a Claude Code auto-update. The binary
 # updates itself in the background, but a long-lived process keeps running the version it
 # started with. systemd OnCalendar syntax.

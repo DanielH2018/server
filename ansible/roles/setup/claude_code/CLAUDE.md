@@ -103,6 +103,16 @@ sessions" and nothing else.
 - **No `MemoryMax`.** systemd applies it to the whole cgroup, so one runaway session takes
   the OOM kill for the host and every other session, and `Restart=always` then returns an
   empty host. `claude_code_rc_capacity` is the real bound. ENFORCED by the same test.
+- **The background-shell pressure reaper is turned off.** Claude Code registers
+  `process.on("memoryPressure", ...)` and kills every running backgrounded Bash task with the
+  reason `memory_pressure`, surfacing as "stopped because the system is running low on
+  memory". The handler reads no threshold — it is a pass-through on Node's event, and Node
+  derives that event from the **cgroup**, so `free -m` on the host measures the wrong scope
+  and reads clean. The kill arrives as a task notification rather than an error in the
+  logfile, so a `land.sh --arm-merge` reaped between the arm and the CI wait leaves the PR
+  merged and undeployed with the session reading clean. `claude_code_rc_disable_bg_shell_pressure_reap`
+  drives it both ways. Three kills in a row on 2026-09-04, issue #1096. ENFORCED by the same
+  test.
 - **The weekly restart uses `try-restart`.** Plain `restart` would start a host that
   `claude_code_rc_enabled` deliberately keeps stopped. It exists because Claude Code updates
   its binary in the background while a long-lived process keeps the version it started with.

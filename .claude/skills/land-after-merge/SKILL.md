@@ -41,6 +41,17 @@ Ansible rather than the harness, so it reads as a playbook bug. Redirecting to a
 the deploy a blocking handle whether or not the call is backgrounded. Session transcripts on this
 host record the error at least ten times before the redirect became the rule.
 
+**If the task comes back "stopped because the system is running low on memory", the landing
+was reaped, not failed.** Claude Code kills every running backgrounded Bash task when Node
+emits a `memoryPressure` event, and the kill arrives as a task notification rather than an
+error in the logfile — so the session reads clean while the PR has merged and nothing
+followed it through. `--arm-merge` runs before the CI wait, so this is the worst point to be
+interrupted. Re-running the same `land.sh` command is the fix: it is idempotent, and a PR
+already `MERGED` is left alone. On `daniel-box` the host unit turns the reaper off
+(`CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1`, `roles/setup/claude_code/templates/claude-rc.service.j2`),
+so this only reaches a session started some other way. Three kills in a row on 2026-09-04,
+issue #1096.
+
 `--await-merge` polls the PR's state every 30s until it is merged and only then starts the
 landing. It reads the state, never the checks, so it is not the hand-polling this skill
 forbids. Without it the session has to notice the merge itself and start `land.sh` by hand,
