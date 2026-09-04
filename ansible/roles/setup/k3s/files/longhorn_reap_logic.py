@@ -401,11 +401,13 @@ def classify_snapshots(
 ) -> SnapshotClassification:
     """Sort snapshots into kept-by-a-floor and reapable.
 
-    Floor order matches the shell original: newest-per-volume (never a candidate, no reason
-    recorded — it isn't bucketed at all), already-removed (skipped silently, coalescing is the
-    engine's job), detached (FLOOR 0, reported), unlabelled/hand-taken (skipped silently),
-    current-tier (PREFIX match: the owning job name must start with the truncated label the
-    snapshot carries), then the age floor (FLOOR 2).
+    Floor order: already-removed (skipped silently, coalescing is the engine's job) is checked
+    BEFORE newest-per-volume claims FLOOR 1 — an already-removed snapshot must not consume the
+    floor slot, or the real newest live snapshot loses its protection and becomes reapable.
+    Then newest-per-volume (never a candidate, no reason recorded — it isn't bucketed at all),
+    detached (FLOOR 0, reported), unlabelled/hand-taken (skipped silently), current-tier
+    (PREFIX match: the owning job name must start with the truncated label the snapshot
+    carries), then the age floor (FLOOR 2).
 
     `min_age_days` is an int, matching `k3s_longhorn_snapshot_reap_min_age_days`'s type in
     defaults/main.yml -- bash's arithmetic context (`$(( NOW - MIN_AGE_DAYS * 86400 ))`) only
@@ -443,12 +445,12 @@ def classify_snapshots(
             r["removed"],
         )
 
+        if removed:
+            continue  # already marked removed; the engine coalesces it on the next purge
+
         if vol not in newest_seen:
             newest_seen.add(vol)
             continue  # FLOOR 1: the volume's current local restore point, whoever made it
-
-        if removed:
-            continue  # already marked removed; the engine coalesces it on the next purge
 
         if vol not in attached:
             result.kept.append((name, vol, "volume detached — no engine to purge it"))
