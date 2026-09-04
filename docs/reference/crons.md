@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/crons.py
-generated_at: 2026-09-03 15:05 UTC
-generated_sha: 6f36bccd
+generated_at: 2026-09-04 06:17 UTC
+generated_sha: 62c488dd
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,13 +12,15 @@ generated_sha: 6f36bccd
 
 # Scheduled jobs
 
-42 cron entrie(s) installed across the roles.
+44 cron entrie(s) installed across the roles.
 
 !!! warning "The state column is a heuristic"
     It is judged from the command text, and nothing in a cron task declares its own blast radius. A job that runs a wrapper script reads as "read the script" rather than being guessed at. Treat it as a pointer, not an authority.
 
 | Job | Schedule | Host | User | Changes state | Defined in |
 |---|---|---|---|---|---|
+| B2 backup budget listing | `{{ k3s_b2_budget_cron_minute }} {{ k3s_b2_budget_cron_hour }} * * *` | conditional (has_repo_checkout) | `{{ sys_user }}` | yes (backup) | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
+| B2 deletion accounting | `{{ k3s_b2_deletion_accounting_cron_minute }} {{ k3s_b2_deletion_accounting_cron_hour }} * * *` | conditional (has_repo_checkout) | `{{ sys_user }}` | no (read-only by its command) | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
 | Claude Code telemetry health | `{{ claude_otel_health_cron_minute }} * * * *` | every host in the play | `{{ sys_user }}` | read the script | `ansible/roles/k8s/claude-otel/tasks/main.yml` |
 | Clean unused Docker images | `30 6 * * *` | conditional (has_docker) | `{{ ansible_facts.user_id }}` | yes (prune) | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
 | Clear ansible log file | `0 6 * * 0` | conditional (has_repo_checkout) | `root` | yes (truncate) | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
