@@ -736,7 +736,7 @@ def test_backup_health_shim_exports_every_env_var_the_reader_requires():
     required = set(
         re.findall(r'_require_\w*env\("(LONGHORN_[A-Z0-9_]+)"\)', reader_source)
     )
-    assert len(required) >= 10, (
+    assert len(required) >= 13, (
         f"the derivation found suspiciously few required vars: {required} — "
         "did _require_env's call shape change?"
     )

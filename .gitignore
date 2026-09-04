@@ -28,7 +28,8 @@
 # git without an explicit allow — the same trap mkdocs.yml hit.
 !/.vale.ini
 !/styles
-# ...but not the Google package. `vale sync` downloads it, prek's hook re-syncs it, and it
+# ...but not the Google package. `vale sync` downloads it, prek's vale hook runs that sync
+# whenever the directory is missing (so a fresh worktree self-provisions), and it
 # is upstream content with its own release cadence. Pinning a vendored copy here would mean
 # reviewing someone else's style diffs in this repo's history.
 /styles/Google/
