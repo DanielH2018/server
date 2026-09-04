@@ -32,105 +32,23 @@ import shlex
 import sys
 
 from _hook_common import emit_permissionrequest_allow, emit_pretooluse_decision
-
-# Programs that cannot write or exec under ANY arguments
-# Deliberately excludes commands with a write/exec mode: env (`env CMD`),
-# less/more (`!cmd` escape), command/xargs/timeout/nice/... (exec wrappers),
-# sed/awk (-i, system()), tee/dd/xxd/mount/stty (write), sort/uniq/find/ip/...
-# (guarded below instead).
-TIER1 = {
-    # text / file readers and stdout-only filters (no output-file option)
-    "ls",
-    "cat",
-    "head",
-    "tail",
-    "wc",
-    "nl",
-    "tac",
-    "rev",
-    "fold",
-    "cut",
-    "tr",
-    "column",
-    "comm",
-    "grep",
-    "egrep",
-    "fgrep",
-    "zgrep",
-    "zcat",
-    "od",
-    "hexdump",
-    "strings",
-    "stat",
-    "file",
-    "readlink",
-    "realpath",
-    "basename",
-    "dirname",
-    "tree",
-    "cksum",
-    "md5sum",
-    "sha1sum",
-    "sha256sum",
-    "sha512sum",
-    "b2sum",
-    "jq",
-    # system / inspection
-    "pwd",
-    "whoami",
-    "id",
-    "groups",
-    "hostname",
-    "uname",
-    "arch",
-    "uptime",
-    "date",
-    "w",
-    "who",
-    "last",
-    "lastlog",
-    "df",
-    "du",
-    "free",
-    "ps",
-    "top",
-    "vmstat",
-    "iostat",
-    "mpstat",
-    "sar",
-    "nproc",
-    "lscpu",
-    "lsblk",
-    "lsusb",
-    "lspci",
-    "lsmod",
-    "lsattr",
-    "findmnt",
-    "blkid",
-    "getconf",
-    "getent",
-    "locale",
-    "printenv",
-    "lsof",
-    "ss",
-    "netstat",
-    "dig",
-    "host",
-    "nslookup",
-    "apt-cache",
-    "echo",
-    "printf",
-    "seq",
-    "true",
-    "false",
-    "which",
-    "type",
-    "cd",
-    # package / host queries with no write mode under any argument
-    "lsb_release",
-    "mailq",
-    "dpkg-query",
-}
+from _readonly_shell import (
+    _FORBIDDEN,
+    _OP_TOKEN,
+    _SEQ,
+    _SUBST,
+    _split,
+    _strip_redirects,
+)
+from _readonly_tables import (
+    SSH_HOSTS,
+    TIER1,
+    _SSH_FLAGS,
+    _SSH_GLOB,
+    _SSH_OPTIONS,
+    _SSH_SECRET,
+    _SSH_VALUE_FLAGS,
+)
 
 # git subcommands that are read-only regardless of arguments (branch/tag/remote
 # omitted: their bare form lists but `git branch <name>` / `-D` mutate).
@@ -666,49 +584,6 @@ def _sensors(argv):
     return None if any(a in ("-s", "--set") for a in argv[1:]) else "sensors"
 
 
-# Homelab hosts whose read-only commands may auto-approve. Anything else falls
-# through to a prompt: reaching an unknown host is itself worth confirming.
-SSH_HOSTS = {"daniel-server", "daniel-pi"}
-
-# ssh flags that change only how we connect, never what runs. Everything absent
-# is refused, which is what keeps -L/-R/-D (forwarding), -F (alternate config),
-# -A (agent forwarding) and -J/-W (proxying) out.
-_SSH_FLAGS = {"-q", "-T", "-n", "-4", "-6"}
-_SSH_VALUE_FLAGS = {"-i", "-p", "-l", "-o"}
-
-# -o takes arbitrary config, including ProxyCommand/LocalCommand — which execute
-# a command on THIS machine. Whitelisting the key is what makes -o safe.
-_SSH_OPTIONS = {
-    "batchmode",
-    "connectionattempts",
-    "connecttimeout",
-    "identitiesonly",
-    "loglevel",
-    "serveralivecountmax",
-    "serveraliveinterval",
-    "stricthostkeychecking",
-}
-
-# Reading a secret over ssh dumps it into the transcript, so the remote side is
-# held to a stricter standard than the local one (local `cat ~/.ssh/id_ed25519`
-# is already TIER1-approved). Mirrors the SECRET_RE in the user-level
-# allow-readonly-remote.sh, which governs the same traffic.
-_SSH_SECRET = re.compile(
-    r"\.env|\.ssh(/|\s|$)|id_rsa|id_ed25519|id_ecdsa|\.aws/credentials|\.aws/config"
-    r"|\.gnupg(/|\s|$)|\.netrc|\.pypirc|\.npmrc|/secrets(/|\s|$)|\.git-credentials"
-    r"|\.kube/config|\.docker/config\.json|\.config/gh/hosts\.yml|\.config/gcloud/"
-    r"|\.config/rclone/rclone\.conf|terraform\.tfstate|\.bash_history|\.claude\.json"
-    r"|/etc/shadow|/etc/gshadow|/proc/\S*environ|\.pem($|[^a-z])|\.key($|[^a-z])"
-    r"|\.p12($|[^a-z])|\.pfx($|[^a-z])",
-    re.IGNORECASE,
-)
-
-# A glob is expanded by the REMOTE shell, after our checks have run, so a literal
-# that _SSH_SECRET doesn't match (`/proc/self/enviro?`) can still become a secret
-# path over there. We can't see the remote filesystem, so we refuse the pattern.
-_SSH_GLOB = re.compile(r"[*?\[\]\\]")
-
-
 def _ssh(argv):
     # `ssh [opts] [user@]host CMD...` where CMD is itself read-only. ssh joins its
     # remaining arguments with spaces and hands the result to the remote shell, so
@@ -782,65 +657,6 @@ def _argv_readonly(argv):
         return name
     handler = HANDLERS.get(name)
     return handler(argv) if handler else None
-
-
-_SUBST = ("`", "$(", "${")
-_OP_TOKEN = re.compile(r"[();<>&|]+\Z")  # a token made ENTIRELY of shell operators
-_SEQ = {";", "&&", "||"}  # sequential separators (each side a pipeline)
-_FORBIDDEN = {"(", ")", "&"}  # subshell / backgrounding -- never read-only
-_SAFE_REDIR_TARGETS = {"/dev/null"}  # the only write target we trust
-
-
-def _split(tokens, seps):
-    """Split a token list on any separator token in `seps`."""
-    out, cur = [], []
-    for t in tokens:
-        if t in seps:
-            out.append(cur)
-            cur = []
-        else:
-            cur.append(t)
-    out.append(cur)
-    return out
-
-
-def _is_redirect(tok):
-    # a redirect operator carries a direction (< or >) and only redirect chars
-    return bool(tok) and ("<" in tok or ">" in tok) and all(c in "<>&" for c in tok)
-
-
-def _strip_redirects(stage):
-    """Drop write-free redirects from a stage; return its argv, or None if unsafe.
-
-    Allowed: input redirects (`< file` -- reading is read-only), writes/dups that
-    target /dev/null (`>/dev/null`, `2>/dev/null`, `&>/dev/null`), and fd
-    duplication (`2>&1`). Any redirect that writes a real file -> None.
-    """
-    argv = []
-    i, n = 0, len(stage)
-    while i < n:
-        t = stage[i]
-        if _is_redirect(t):
-            if argv and argv[-1].isdigit():  # an attached fd number (e.g. 2 in 2>)
-                argv.pop()
-            if i + 1 >= n:
-                return None
-            target = stage[i + 1]
-            if _OP_TOKEN.match(target):  # e.g. process substitution <( ... )
-                return None
-            if "<" in t and ">" not in t:  # pure input redirect: reading is OK
-                pass
-            elif ">&" in t or "<&" in t:  # fd duplication: target must be a fd
-                if not target.isdigit():
-                    return None
-            else:  # >, >>, &> : writing
-                if target not in _SAFE_REDIR_TARGETS:
-                    return None
-            i += 2
-            continue
-        argv.append(t)
-        i += 1
-    return argv
 
 
 def classify(command):
