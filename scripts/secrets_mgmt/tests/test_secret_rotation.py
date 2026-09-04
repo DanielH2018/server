@@ -5,10 +5,9 @@ import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 
-
-import rotation_tools
 import secret_rotation as sr
 from _rotation_fakes import Fakes, build_tools, named_calls, process_calls
+from secrets_mgmt.rotation_tools import SECRETS_FILE
 
 
 # ── classification ──────────────────────────────────────────────────────────
@@ -313,46 +312,8 @@ def test_sync_preserves_a_manual_tier_override():
     assert reg["entries"]["special_push_token"]["tier"] == "ignore"
 
 
-# The registry is the single plaintext source of names/tiers/dates. A save/load
-# corruption is SILENT (the next sync/audit reads garbage), so pin the contract:
-# round-trips losslessly, keeps the MANAGED header, and sorts keys deterministically
-# (sort_keys=True keeps the committed file diff-stable as secrets are added).
-
-
-def test_registry_round_trips_losslessly(tmp_path):
-    reg = {
-        "entries": {
-            "b_token": {"tier": "auto", "last_rotated": "2026-06-01"},
-            "a_token": {"tier": "assisted", "last_rotated": "2026-05-15"},
-        }
-    }
-    path = str(tmp_path / "reg.yml")
-    rotation_tools.save_registry(reg, path)
-    assert rotation_tools.load_registry(path) == reg
-
-
-def test_saved_registry_keeps_managed_header_and_sorts_keys(tmp_path):
-    path = str(tmp_path / "reg.yml")
-    rotation_tools.save_registry(
-        {"entries": {"z_tok": {"tier": "auto"}, "a_tok": {"tier": "auto"}}}, path
-    )
-    text = (tmp_path / "reg.yml").read_text()
-    assert text.startswith("# Secret rotation registry — MANAGED")
-    assert text.index("\n  a_tok:") < text.index("\n  z_tok:")  # sort_keys=True
-
-
-def test_load_registry_missing_file_returns_empty_skeleton(tmp_path):
-    missing = str(tmp_path / "does-not-exist.yml")
-    assert rotation_tools.load_registry(missing) == {"entries": {}}
-
-
-def test_the_default_tier_table_is_the_one_secret_rotation_assigns():
-    """`RotationTools()` resolves `tier_days` late; nothing else exercises that factory.
-
-    Every caller passes the table explicitly, so a factory that had drifted — or stopped
-    resolving at all — would be invisible until a bare `RotationTools()` was built.
-    """
-    assert rotation_tools.RotationTools().tier_days == sr.TIER_DAYS
+# The registry's own save/load contract, the decrypt arm and the tier table are
+# `rotation_tools`' now, and their tests moved with them: test_rotation_tools.py.
 
 
 # ── rotation dates derived from git ─────────────────────────────────────────
@@ -524,7 +485,7 @@ def test_rotate_commit_sends_new_token_on_stdin_not_argv():
         "sops",
         "set",
         "--value-stdin",
-        rotation_tools.SECRETS_FILE,
+        SECRETS_FILE,
         '["%s"]' % name,
     ], (
         "sops set must take only the file and index positionally — no value argument, "
@@ -629,21 +590,3 @@ def test_rotate_mints_a_token_the_shape_check_accepts():
     """The auto-rotation path and the guard must agree, or every rotation flips the monitor."""
     minted = {"x_push_token": sr.pysecrets.token_hex(16)}
     assert sr.malformed_push_tokens(minted) == []
-
-
-def test_decrypt_without_an_age_key_returns_none():
-    """CI has no age key.
-
-    The arm must go quiet there, not raise — `audit --check` is a prek/CI gate over this very file,
-    so a hard failure would fail every secrets PR.
-    """
-    tools, recorded = build_tools(
-        Fakes(run_error=subprocess.CalledProcessError(1, "sops", stderr="no key"))
-    )
-    assert tools.sops_decrypt("whatever.yml") is None
-    assert process_calls(recorded)[0][0][:2] == ["sops", "--decrypt"]
-
-
-def test_decrypt_drops_the_sops_metadata_key():
-    tools, _ = build_tools(Fakes(run_stdout="a_push_token: abc\nsops:\n  mac: xyz\n"))
-    assert tools.sops_decrypt("whatever.yml") == {"a_push_token": "abc"}

@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/scripts.py
-generated_at: 2026-09-05 01:43 UTC
-generated_sha: a6f25b0d
+generated_at: 2026-09-05 01:24 UTC
+generated_sha: 897eb640
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: a6f25b0d
 
 # Scripts
 
-134 first-party script(s) in `scripts/`. Each summary is the script's own module docstring — change the docstring to change this page.
+130 first-party script(s) in `scripts/`. Each summary is the script's own module docstring — change the docstring to change this page.
 
 The sections below split them by **how each one is run**, which is derived from the tree rather than declared: a cron `job:`, a `prek.toml` entry, a workflow step, a Claude hook, an Ansible task, or an import edge. The *Reached by* column is the evidence, so a wrong answer is a wrong answer about a real file.
 
@@ -20,7 +20,7 @@ The sections below split them by **how each one is run**, which is derived from 
     Whether a script is safe to run. The summary is whatever its author wrote, and nothing here judges blast radius. For the ones that run unattended, and which of those change state, see [Scheduled jobs](crons.md).
 
 
-**1 of the 38 scripts that run unattended have no test; 14 of all 134 do not.** The first number is the one that matters. An untested script a person runs fails in front of that person; an untested one a cron or a commit gate runs fails unattended, or blocks everybody.
+**1 of the 38 scripts that run unattended have no test; 11 of all 130 do not.** The first number is the one that matters. An untested script a person runs fails in front of that person; an untested one a cron or a commit gate runs fails unattended, or blocks everybody.
 
 !!! note "Where the Tests column looks"
     First for a `scripts/test_<name>.py`. Failing that, for any test in `scripts/` or `ansible/tests/` that names the script — `gitops_tick.sh` has five, in `test_gitops_manual_trigger.py`, and the naming convention alone called it untested. Those show as *(indirect)*, which means a test exercises it, not that the test is about it.
@@ -83,7 +83,7 @@ The sections below split them by **how each one is run**, which is derived from 
 
 ## Imported, never run on their own
 
-71 script(s) — imported by another script — not an entry point.
+68 script(s) — imported by another script — not an entry point.
 
 | Script | What it does | Reached by | Tests |
 |---|---|---|---|
@@ -104,11 +104,8 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/lib/doc_freshness.py` | How old a hand-written doc is, and whether the files it names have moved under it. | imported by _mkdocs_freshness.py, freshness.py | `test_doc_freshness.py` |
 | `scripts/lib/docs_provenance.py` | The provenance banner every generated documentation page opens with. | imported by backlog.py, crons.py, decisions.py, freshness.py, gen_doc_fragments.py, gen_infra_map.py, hosts.py, networking.py, scripts.py, secrets.py, service_catalog.py, state.py | `test_docs_provenance.py` |
 | `scripts/deploy_tools/exit_codes.py` | Every exit-code contract the deploy tools share, named once. | imported by ci.py, deploy.py, deploy_tags.py, merge.py, publish_pr.py, staging_gate.py, tick.py, tools.py | `test_exit_codes.py` |
-| `scripts/dev/findings_gh.py` | The gh reads and writes `findings.py` makes, and the one place a plan is executed. | imported by backlog.py, findings.py | — |
-| `scripts/dev/findings_model.py` | The finding vocabulary and the pure reads over a gh issue: no gh, no shell, no argv. | imported by _findings_fakes.py, backlog.py, findings.py, findings_gh.py, findings_plans.py, findings_verify.py | — |
-| `scripts/dev/findings_plans.py` | What `findings.py` decides to do, as gh argv nobody has run yet. | imported by findings.py, findings_gh.py | — |
-| `scripts/dev/findings_tools.py` | Every process boundary `findings.py` crosses, as one injectable object. | imported by _findings_fakes.py, findings.py, findings_gh.py, findings_verify.py | — |
-| `scripts/dev/findings_verify.py` | The verify-by gate: what a stored command must clear before it runs, and what it means. | imported by findings.py | `test_findings_verify.py` |
+| `scripts/dev/findings.py` | File, re-observe, escalate and close Claude's unfixed findings as GitHub Issues. | imported by _findings_fakes.py, backlog.py | `test_findings.py` |
+| `scripts/dev/findings_tools.py` | Every process boundary `findings.py` crosses, as one injectable object. | imported by _findings_fakes.py, findings.py | — |
 | `scripts/docs/fragment_readers.py` | The readers behind the doc fragments: the tree, parsed, never imported. | imported by gen_doc_fragments.py | `test_gen_doc_fragments.py` *(indirect)* |
 | `scripts/docs/fragment_renderers.py` | The renderers behind the doc fragments: pure functions from plain values to markdown. | imported by gen_doc_fragments.py | `test_gen_doc_fragments.py` *(indirect)* |
 | `scripts/lib/gh.py` | One way to run the GitHub CLI from a script, with no prompt and no notifier. | imported by findings_tools.py, publish_pr.py, tools.py | `test_gh.py` |
@@ -147,8 +144,8 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/diagnostics/probe_lib/releases.py` | `probe.py releases` -- which commit produced the manifests each k8s service is running. | imported by health.py, probe.py | `test_probe_health.py` *(indirect)* |
 | `scripts/infra_map/render.py` | Rendering: turn the reconciled model into one self-contained HTML page. | imported by gen_infra_map.py | `test_infra_map_render.py` *(indirect)* |
 | `scripts/lib/render_guard.py` | Shared helpers for the render-guard scripts and other Ansible-inventory readers. | imported by cert_expiry.py, compose_templates.py, config_templates.py, deploy_tags.py, hosts.py, k8s_context.py, k8s_manifests.py, k8s_roles.py, k8s_yaml.py, networking.py, service_catalog.py, shell_lint.py, shell_templates.py, unit_templates.py | `test_render_guard.py` |
-| `scripts/lib/repo_paths.py` | The repo path anchors a script under ``scripts/`` reads the Ansible tree through. | imported by await_ci.py, build_docs.py, cert_expiry.py, constants.py, core.py, cron_checks.py, cron_targets.py, crons.py, decisions.py, deploy_detach_notify.py, deploy_tags.py, docs_provenance.py, fact_cache_guard.py, findings_tools.py, findings_verify.py, fragment_readers.py, freshness.py, gen_doc_fragments.py, gen_hosts_block.py, grafana_dashboards.py, ha.py, health.py, hosts.py, invocation_sites.py, k8s_autodeploy_counts.py, k8s_context.py, k8s_pvc.py, k8s_roles.py, k8s_schema.py, land_tags.py, memory_survey.py, monitors.py, networking.py, pi_plane.py, releases.py, render_guard.py, route_facts.py, scripts.py, secret_bearing_host_paths.py, secrets.py, shell_templates.py, staging_egress_probe.py, staging_gate.py, state.py, validate_ha_config.py | `test_render_guard.py` *(indirect)* |
-| `scripts/secrets_mgmt/rotation_tools.py` | Every process boundary `secret_rotation.py` crosses, as one injectable object. | imported by _rotation_fakes.py, secret_rotation.py | `test_secret_rotation.py` *(indirect)* |
+| `scripts/lib/repo_paths.py` | The repo path anchors a script under ``scripts/`` reads the Ansible tree through. | imported by await_ci.py, build_docs.py, cert_expiry.py, constants.py, core.py, cron_checks.py, cron_targets.py, crons.py, decisions.py, deploy_detach_notify.py, deploy_tags.py, docs_provenance.py, fact_cache_guard.py, findings.py, findings_tools.py, fragment_readers.py, freshness.py, gen_doc_fragments.py, gen_hosts_block.py, grafana_dashboards.py, ha.py, health.py, hosts.py, invocation_sites.py, k8s_autodeploy_counts.py, k8s_context.py, k8s_pvc.py, k8s_roles.py, k8s_schema.py, land_tags.py, memory_survey.py, monitors.py, networking.py, pi_plane.py, releases.py, render_guard.py, route_facts.py, scripts.py, secret_bearing_host_paths.py, secrets.py, shell_templates.py, staging_egress_probe.py, staging_gate.py, state.py, validate_ha_config.py | `test_render_guard.py` *(indirect)* |
+| `scripts/secrets_mgmt/rotation_tools.py` | Every process boundary `secret_rotation.py` crosses, as one injectable object. | imported by _rotation_fakes.py, secret_rotation.py | `test_rotation_tools.py` |
 | `scripts/docs/route_facts.py` | Shared route facts for the reference generators. | imported by cert_expiry.py, networking.py, service_catalog.py | `test_route_facts.py` |
 | `scripts/lib/shell_lint.py` | Render a Jinja-templated shell script, then lint the output with `bash -n` and shellcheck. | imported by shell_templates.py | `test_backup_health_shim.py` *(indirect)* |
 | `scripts/deploy_tools/staging_gate.py` | Ask the staging cluster whether it accepts a commit, from daniel-box. | imported by backfill_staging_gate.py | `test_staging_gate.py` |
@@ -161,7 +158,7 @@ The sections below split them by **how each one is run**, which is derived from 
 
 ## Run by hand
 
-25 script(s) — a person runs it.
+24 script(s) — a person runs it.
 
 | Script | What it does | Reached by | Tests |
 |---|---|---|---|
@@ -170,7 +167,6 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/backup/etcd_restore_drill.sh` | prove an off-box etcd snapshot actually restores, without an outage. | no automated caller in the tree | `test_etcd_restore_drill_cron.py` *(indirect)* |
 | `scripts/grafana/export_grafana_dashboards.py` | Export the *customized* Grafana dashboards from the live DB into code. | no automated caller in the tree | `test_export_grafana_dashboards.py` |
 | `scripts/grafana/fetch_grafana_dashboards.py` | Fetch + adapt Grafana community dashboards for headless (provisioned) use. | no automated caller in the tree | — |
-| `scripts/dev/findings.py` | File, re-observe, escalate and close Claude's unfixed findings as GitHub Issues. | no automated caller in the tree | `test_findings.py` |
 | `scripts/dev/gen_hosts_block.py` | Emit an /etc/hosts block for every homelab `.local` name, with the right IP per service. | no automated caller in the tree | `test_gen_hosts_block.py` |
 | `scripts/deploy_tools/gitops_tick.sh` | trigger a GitOps deploy tick by hand and report what it did. | no automated caller in the tree | `test_gitops_manual_trigger.py` *(indirect)* |
 | `scripts/availability_bots/glenstone-bot.py` | Watch Glenstone's timed-entry calendar and alert when a target date opens up. | no automated caller in the tree | `test_availability_bots.py` *(indirect)* |

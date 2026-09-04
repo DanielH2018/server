@@ -873,9 +873,7 @@ def main(argv=None) -> int:
     args = p.parse_args(argv)
     # One `RotationTools` per run, built here and threaded down: every git call, sops call,
     # registry read or write, Kuma push and clock read a subcommand makes goes through it.
-    # `tier_days` is passed rather than defaulted so the late import in `_default_tier_days`
-    # never runs on this path — as `__main__`, this module would be imported a second time.
-    return args.func(args, RotationTools(tier_days=TIER_DAYS))
+    return args.func(args, RotationTools())
 
 
 if __name__ == "__main__":

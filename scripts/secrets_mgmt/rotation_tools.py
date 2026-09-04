@@ -2,10 +2,11 @@
 
 A test replaces one field of `RotationTools` and never a module attribute. The defaults are
 the real implementations, defined HERE rather than beside their callers: `secret_rotation.py`
-is the entry point, so a default imported from it would be a cycle (and, when that file runs
-as `__main__`, a second copy of the module). The import runs one way only — this module knows
-nothing about `secret_rotation` except the `TIER_DAYS` table, which `_default_tier_days`
-resolves at construction time rather than at import time.
+is the entry point, so a default imported from it would be a cycle — and, when that file runs
+as `__main__`, a second copy of the module under a second name. **This module names
+`secret_rotation` nowhere**, at import time or later, which is what makes it a leaf the split
+in Task 10 can move. The one fact both files hold is the tier table, and each spells the
+literal out; `_TIER_DAYS` below says why, and which test holds the two equal.
 
 WHY THE REAL IMPLEMENTATIONS TAKE A `run` KEYWORD. `sops_set` and `decrypted_values` build
 an argv whose exact shape is the security property: a freshly minted token travels on stdin,
@@ -24,7 +25,8 @@ import sys
 import urllib.parse
 import urllib.request
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from types import MappingProxyType
 from zoneinfo import ZoneInfo
 
 import yaml
@@ -180,18 +182,15 @@ def run_deploy(tags: list[str], *, run: Callable = subprocess.run) -> int:
     return run(cmd, cwd=REPO).returncode
 
 
-def _default_tier_days() -> Mapping[str, int | None]:
-    """`TIER_DAYS` as `secret_rotation.py` assigns it, read at construction not at import.
-
-    That literal has to stay in that file — `scripts/docs/gen_doc_fragments.py` AST-reads it
-    — and that file imports this one, so a module-level read here would be a cycle. `main()`
-    and the fakes both pass `tier_days` explicitly, so this fires only for a bare
-    `RotationTools()`; `test_the_default_tier_table_is_the_one_secret_rotation_assigns` is
-    what keeps it honest.
-    """
-    from secrets_mgmt.secret_rotation import TIER_DAYS
-
-    return TIER_DAYS
+# The rotation cadence per tier. `secret_rotation.py` assigns the same table as a literal,
+# because `scripts/docs/gen_doc_fragments.py` AST-reads it out of THAT file and a leaf may not
+# import its own facade. The two literals are held equal by
+# `test_the_default_tier_table_is_the_one_secret_rotation_assigns`; Task 10 of the
+# module-splits plan gives the table one home. A MappingProxyType rather than a dict, because
+# a dataclass rejects a mutable default and this object is frozen.
+_TIER_DAYS = MappingProxyType(
+    {"auto": 180, "assisted": 365, "external": 365, "pinned": 730, "ignore": None}
+)
 
 
 @dataclass(frozen=True)
@@ -207,4 +206,4 @@ class RotationTools:
     sops_set: Callable[[str, str], None] = sops_set
     kuma_push: Callable[[str, bool, str], None] = kuma_push
     deploy: Callable[[list[str]], int] = run_deploy
-    tier_days: Mapping[str, int | None] = field(default_factory=_default_tier_days)
+    tier_days: Mapping[str, int | None] = _TIER_DAYS

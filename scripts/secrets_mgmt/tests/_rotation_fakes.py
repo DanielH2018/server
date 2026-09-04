@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import datetime as dt
 import subprocess
-from collections.abc import Mapping
 from dataclasses import dataclass, field
 from functools import partial
 
@@ -25,10 +24,17 @@ import yaml
 import sys as _sys
 from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/secrets_mgmt
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 
-import rotation_tools
-import secret_rotation as sr
+# Package-qualified, as `_land_fakes.py` reaches `land_lib.tools`: a bare `import
+# rotation_tools` binds a SECOND module object in a pytest session, since the module under
+# test reaches the same file as `secrets_mgmt.rotation_tools`.
+from secrets_mgmt.rotation_tools import (
+    RotationTools,
+    decrypted_values,
+    run_deploy,
+    sops_set,
+)
 
 TODAY = dt.date(2026, 9, 1)
 
@@ -45,12 +51,14 @@ class Fakes:
     history: list[tuple[str, str, dict[str, str]]] = field(default_factory=list)
     git_error: BaseException | None = None
     run_error: BaseException | None = None
+    # A non-zero rc raises for a caller that passed `check=True`, the way subprocess does —
+    # `decrypted_values` distinguishes "cannot decrypt here" from "decrypted nothing" on
+    # exactly that exception, so a runner that swallowed it would fake away the difference.
     run_rc: int = 0
     run_stdout: str = ""
-    tier_days: Mapping[str, int | None] = field(default_factory=lambda: sr.TIER_DAYS)
 
 
-def build_tools(f: Fakes) -> tuple[rotation_tools.RotationTools, list]:
+def build_tools(f: Fakes) -> tuple[RotationTools, list]:
     """A `RotationTools` answering from `f`, and the call record every fake appends to."""
     calls: list[tuple] = []
     log = "\n".join("%s %s" % (sha, day) for sha, day, _ in f.history)
@@ -68,6 +76,12 @@ def build_tools(f: Fakes) -> tuple[rotation_tools.RotationTools, list]:
         calls.append(("run", (cmd,), kwargs))
         if f.run_error is not None:
             raise f.run_error
+        # `check=True` raises here for the same reason it does in subprocess: all three
+        # callers pass it, and two of them read a non-zero exit as "this host cannot
+        # decrypt" / "the rotation must not be recorded". A runner that returned the
+        # CompletedProcess anyway would make the failure path untestable.
+        if kwargs.get("check") and f.run_rc:
+            raise subprocess.CalledProcessError(f.run_rc, cmd)
         return subprocess.CompletedProcess(
             cmd, f.run_rc, stdout=f.run_stdout, stderr=""
         )
@@ -86,17 +100,18 @@ def build_tools(f: Fakes) -> tuple[rotation_tools.RotationTools, list]:
     def kuma_push(url: str, ok: bool, msg: str) -> None:
         calls.append(("kuma_push", (url, ok, msg), {}))
 
-    return rotation_tools.RotationTools(
+    # `tier_days` is left at its default: every test wants the real table, and the default
+    # now IS a literal in `rotation_tools` rather than something resolved from elsewhere.
+    return RotationTools(
         git=git,
         today=lambda: f.today,
         load_registry=load_registry,
         save_registry=save_registry,
         sops_names=sops_names,
-        sops_decrypt=partial(rotation_tools.decrypted_values, run=run),
-        sops_set=partial(rotation_tools.sops_set, run=run),
+        sops_decrypt=partial(decrypted_values, run=run),
+        sops_set=partial(sops_set, run=run),
         kuma_push=kuma_push,
-        deploy=partial(rotation_tools.run_deploy, run=run),
-        tier_days=f.tier_days,
+        deploy=partial(run_deploy, run=run),
     ), calls
 
 
