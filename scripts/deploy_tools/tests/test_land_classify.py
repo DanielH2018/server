@@ -55,7 +55,7 @@ def test_classify_fills_tags_plane_and_self_applied(landing):
     )
     ln.merge_sha = MERGE_SHA
     classify.classify(ln)
-    assert (ln.tags, ln.plane, ln.self_applied, ln.needs_diff) == (
+    assert (ln.tags_csv, ln.plane, ln.self_applied, ln.needs_diff) == (
         "sonarr,radarr",
         "initial_setup.yml --tags k3s",
         True,
@@ -82,7 +82,9 @@ def test_classify_asks_what_a_self_applied_role_still_owes_other_hosts(landing):
 def test_explicit_tags_skip_derivation(landing):
     ln, calls = landing(tags="sonarr")
     classify.classify(ln)
-    assert ln.tags == "sonarr" and not [c for c in calls if c[0].startswith("gh:files")]
+    assert ln.tags_csv == "sonarr" and not [
+        c for c in calls if c[0].startswith("gh:files")
+    ]
 
 
 def test_a_truncated_file_list_without_since_is_a_usage_error(landing):
@@ -97,7 +99,7 @@ def test_a_truncated_file_list_with_since_defers_derivation(landing, capsys):
     ln, _ = landing(Fakes(derived=([], "fallback")), since="abc")
     ln.merge_sha = MERGE_SHA
     classify.classify(ln)
-    assert ln.needs_diff and ln.tags == ""
+    assert ln.needs_diff and ln.resolved_tags == []
     assert "deriving from the diff since abc after the tick" in capsys.readouterr().out
 
 
@@ -108,10 +110,18 @@ def test_nothing_to_deploy_when_nothing_is_reached(landing):
     assert (exc.value.rc, exc.value.verdict) == (0, "nothing-to-deploy")
 
 
-@pytest.mark.parametrize("attr", ["tags", "plane", "self_applied", "needs_diff"])
-def test_any_reach_disables_the_shortcut(landing, attr):
+@pytest.mark.parametrize(
+    "attr, value",
+    [
+        ("resolved_tags", ["x"]),
+        ("plane", "x"),
+        ("self_applied", True),
+        ("needs_diff", True),
+    ],
+)
+def test_any_reach_disables_the_shortcut(landing, attr, value):
     ln, _ = landing()
-    setattr(ln, attr, "x" if attr in ("tags", "plane") else True)
+    setattr(ln, attr, value)
     classify.shortcut_if_nothing(ln)
 
 

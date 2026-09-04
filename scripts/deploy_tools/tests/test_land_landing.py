@@ -3,14 +3,14 @@
 Run: uv run pytest scripts/deploy_tools/tests/test_land_landing.py
 """
 
-from __future__ import annotations
-
 import json
 import subprocess
 
 import pytest
 
 from _land_fakes import PRIMARY, Fakes
+from deploy_tools.land_lib import tools as tools_mod
+from deploy_tools.land_lib.landing import TickState
 from deploy_tools.land_lib.outcome import Outcome
 
 
@@ -77,14 +77,56 @@ def test_lock_contention_is_booked_and_the_holder_named_once(landing, capsys):
 @pytest.mark.parametrize(
     "state, expected",
     [
-        ({}, "converged"),
-        ({"behind_since": "x"}, "behind"),
-        ({"hold_sha": "abc", "behind_since": "x"}, "held"),
+        ({}, TickState.CONVERGED),
+        ({"behind_since": "x"}, TickState.BEHIND),
+        ({"hold_sha": "abc", "behind_since": "x"}, TickState.HELD),
     ],
 )
 def test_tick_state_reads_hold_before_behind(landing, state, expected):
     ln, _ = landing(Fakes(state=state))
     assert ln.tick_state() == expected
+
+
+def test_an_unreadable_state_directory_is_unknown_not_converged(landing):
+    """The reject half of `tick_state`, and the reason `read_state` distinguishes the two.
+
+    `read_state` used to suppress every OSError and answer "", so a state directory this
+    process could not read reported `converged` -- "the tick applied it" -- and a landing
+    settled on the strength of a read that never happened.
+    """
+    ln, _ = landing()
+    ln.tools.read_state = lambda root, name: None
+    assert ln.tick_state() == TickState.UNKNOWN
+
+
+def test_read_state_answers_empty_for_an_absent_marker(tmp_path):
+    """The accept half: an absent marker is the ordinary state on every healthy tick."""
+    assert tools_mod.read_state(tmp_path, "hold_sha") == ""
+    assert tools_mod.read_state(tmp_path / "no-such-dir", "hold_sha") == ""
+
+
+def test_read_state_strips_the_marker_it_finds(tmp_path):
+    (tmp_path / "hold_sha").write_text("abc123\n")
+    assert tools_mod.read_state(tmp_path, "hold_sha") == "abc123"
+
+
+def test_read_state_answers_none_for_a_marker_it_cannot_read(tmp_path):
+    """The rejecting half. A directory where a file is expected raises IsADirectoryError,
+    which is an OSError that is NOT FileNotFoundError -- the exact split the fix turns on.
+    """
+    (tmp_path / "hold_sha").mkdir()
+    assert tools_mod.read_state(tmp_path, "hold_sha") is None
+
+
+def test_read_state_answers_none_for_an_unreadable_directory(tmp_path):
+    root = tmp_path / "state"
+    root.mkdir()
+    (root / "hold_sha").write_text("abc")
+    root.chmod(0o000)
+    try:
+        assert tools_mod.read_state(root, "hold_sha") is None
+    finally:
+        root.chmod(0o755)
 
 
 def test_fakes_defaults_are_fresh_per_instance():

@@ -26,19 +26,27 @@ so and trusts the exit code.
 that wait.
 """
 
-from __future__ import annotations
-
 import subprocess
+from enum import StrEnum
 
 import sys as _sys
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
+from deploy_tools.exit_codes import CI_RED
 from deploy_tools.land_lib.landing import BRANCH, Landing
-from deploy_tools.land_lib.outcome import Outcome, say
+from deploy_tools.land_lib.outcome import Outcome, Verdict, say
 
 
-def arm_merge_fallback_decision(state: str, merge_state_status: str) -> str:
+class ArmDecision(StrEnum):
+    """What to do after `gh pr merge --auto` refuses to arm a PR."""
+
+    ALREADY_MERGED = "already-merged"
+    MERGE_DIRECT = "merge-direct"
+    DIE = "die"
+
+
+def arm_merge_fallback_decision(state: str, merge_state_status: str) -> ArmDecision:
     """What to do after `gh pr merge --auto` rejects a PR: already-merged | merge-direct | die.
 
     GitHub's `enablePullRequestAutoMerge` mutation only accepts a PR that is genuinely
@@ -47,10 +55,10 @@ def arm_merge_fallback_decision(state: str, merge_state_status: str) -> str:
     2026-09-03). A pure function of two strings so the branch is testable without gh.
     """
     if state == "MERGED":
-        return "already-merged"
+        return ArmDecision.ALREADY_MERGED
     if merge_state_status == "CLEAN":
-        return "merge-direct"
-    return "die"
+        return ArmDecision.MERGE_DIRECT
+    return ArmDecision.DIE
 
 
 def _merge_direct(ln: Landing, subject: str) -> None:
@@ -69,7 +77,6 @@ def _merge_direct(ln: Landing, subject: str) -> None:
 def arm_merge(ln: Landing) -> None:
     """Run `gh pr merge --squash --auto` for this PR, unless it is already merged."""
     pr = ln.opts.pr
-    print(f"== arm  arming PR #{pr}'s merge")
     view = ln.view("state,title")
     if view.get("state") == "MERGED":
         say("already merged; --arm-merge is a no-op")
@@ -84,12 +91,12 @@ def arm_merge(ln: Landing) -> None:
         decision = arm_merge_fallback_decision(
             retry.get("state", ""), retry.get("mergeStateStatus", "")
         )
-        if decision == "already-merged":
+        if decision == ArmDecision.ALREADY_MERGED:
             # A race with the idempotency check above: the PR merged between that read and
             # this --auto attempt. Keep the MERGED short-circuit's semantics: say, not die.
             say(f"gh pr merge --auto failed because PR #{pr} merged in the meantime")
             return
-        if decision == "merge-direct":
+        if decision == ArmDecision.MERGE_DIRECT:
             _merge_direct(ln, subject)
             return
         ln.die(
@@ -99,7 +106,8 @@ def arm_merge(ln: Landing) -> None:
         )
     # --auto exiting 0 is not proof the merge was armed (issue #1029). One read-back
     # answers every way it can have gone wrong; a read-back that itself fails must not turn
-    # a possibly-successful arm into a failed landing.
+    # a possibly-successful arm into a failed landing. Only the read is guarded: an Outcome
+    # raised by anything after it is a real verdict and must not be swallowed here.
     try:
         armed = ln.view("state,mergeStateStatus,autoMergeRequest")
     except Outcome:
@@ -111,7 +119,7 @@ def arm_merge(ln: Landing) -> None:
         say(f"PR #{pr} merged in the meantime")
         return
     if state == "OPEN" and armed.get("autoMergeRequest") is None:
-        if arm_merge_fallback_decision(state, mss) == "merge-direct":
+        if arm_merge_fallback_decision(state, mss) == ArmDecision.MERGE_DIRECT:
             say(
                 f"gh pr merge --auto exited 0 but PR #{pr} is not armed "
                 "(autoMergeRequest is null)"
@@ -137,7 +145,6 @@ def await_merge(ln: Landing) -> None:
     exit 1 bails: `pending` IS the grace period, derived rather than guessed.
     """
     o, t = ln.opts, ln.tools
-    print(f"== 0/6  waiting for PR #{o.pr} to merge (auto-merge or the merge queue)")
     waited = 0
     conflicting = 0
     while True:
@@ -153,24 +160,24 @@ def await_merge(ln: Landing) -> None:
                 f"PR #{o.pr} conflicts with {BRANCH} — rebase it, re-arm "
                 "`gh pr merge --squash --auto`, then re-run this",
                 1,
-                "merge-conflict",
+                Verdict.MERGE_CONFLICT,
             )
         head = view.get("headRefOid") or ""
         if head:
             rc, line = t.await_ci(head, 0)
-            if rc == 1:
+            if rc == CI_RED:
                 ln.die(
                     f"PR #{o.pr} cannot merge — its own CI is red ({line}); fix it, push, "
                     "and re-run this",
                     1,
-                    "pr-ci-red",
+                    Verdict.PR_CI_RED,
                 )
         if waited >= o.merge_timeout:
             ln.die(
                 f"PR #{o.pr} still {state} after {o.merge_timeout}s — not being merged; "
                 "look at its checks or the queue",
                 75,
-                "merge-timeout",
+                Verdict.MERGE_TIMEOUT,
             )
         t.sleep(o.merge_poll)
         waited += o.merge_poll

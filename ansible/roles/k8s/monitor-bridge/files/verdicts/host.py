@@ -9,12 +9,15 @@ whole scrape is down, the NUT server dropped, or one entity was renamed, and onl
 should page here. The other two belong to monitors that own that fault.
 """
 
+from collections.abc import Sequence
 from datetime import datetime, timezone
 
 from bridge.parsing import parse_rfc3339
 
 
-def scrutiny_freshness(summary, max_age_h, now=None):
+def scrutiny_freshness(
+    summary: dict | None, max_age_h: float, now: datetime | None = None
+) -> tuple[bool, str]:
     """`summary` is the data.summary dict of scrutiny's /api/summary."""
     now = now or datetime.now(timezone.utc)
     stale, n = [], 0
@@ -38,7 +41,7 @@ def scrutiny_freshness(summary, max_age_h, now=None):
     return True, "%d device(s) reported within %gh" % (n, max_age_h)
 
 
-def _scrutiny_status_desc(status):
+def _scrutiny_status_desc(status: int) -> str:
     """Human-readable reason for a non-zero Scrutiny device_status (a bitwise enum)."""
     if not isinstance(status, int):
         return "device_status %s" % status
@@ -50,7 +53,7 @@ def _scrutiny_status_desc(status):
     return ", ".join(reasons) or ("device_status %s" % status)
 
 
-def scrutiny_health(summary, temp_max=0):
+def scrutiny_health(summary: dict | None, temp_max: float = 0) -> tuple[bool, str]:
     """Pure: any non-archived device reporting a drive failure or over-temp? (ok, msg).
 
     `summary` is scrutiny's /api/summary data.summary dict. device_status is 0 when the drive
@@ -78,7 +81,7 @@ def scrutiny_health(summary, temp_max=0):
     return True, "SMART health ok"
 
 
-def scrutiny_device_wear(details):
+def scrutiny_device_wear(details: dict | None) -> float | None:
     """Pure: one device's `percentage_used`, or None where the device does not report it.
 
     `details` is the parsed /api/device/<wwn>/details body. `smart_results` is a history array,
@@ -96,7 +99,9 @@ def scrutiny_device_wear(details):
     return value if isinstance(value, (int, float)) else None
 
 
-def scrutiny_wear_verdict(devices, wear_max):
+def scrutiny_wear_verdict(
+    devices: list[tuple[str, float | None]], wear_max: float
+) -> tuple[bool, str]:
     """Pure: (ok, msg) for NVMe endurance. `devices` is a list of (label, percentage_used|None).
 
     A list rather than a dict because both live drives report `device_name` "nvme0" — one per
@@ -131,7 +136,13 @@ def scrutiny_wear_verdict(devices, wear_max):
     return True, msg
 
 
-def ups_health(charge_pct, runtime_s, replace_battery, charge_min_pct, runtime_min_s):
+def ups_health(
+    charge_pct: float | None,
+    runtime_s: float | None,
+    replace_battery: float | None,
+    charge_min_pct: float,
+    runtime_min_s: float,
+) -> tuple[bool, str]:
     """Pure: is the UPS battery healthy? Returns (ok, msg).
 
     Judged on charge (%), estimated runtime (s) and the replace-battery verdict (0/1).
@@ -164,7 +175,14 @@ def ups_health(charge_pct, runtime_s, replace_battery, charge_min_pct, runtime_m
     return True, ", ".join(parts)
 
 
-def pi_pressure(load_json, mem_json, fs_json, load_max, mem_min_mb, disk_max_pct):
+def pi_pressure(
+    load_json: dict | None,
+    mem_json: dict | None,
+    fs_json: list | None,
+    load_max: float,
+    mem_min_mb: float,
+    disk_max_pct: float,
+) -> tuple[bool, str]:
     """Pure: load per core, available-memory floor, or a full filesystem on the Pi.
 
     Fed glances /api/4/load, /api/4/mem and /api/4/fs payloads. load5 (not load1)
@@ -212,7 +230,9 @@ def pi_pressure(load_json, mem_json, fs_json, load_max, mem_min_mb, disk_max_pct
 PI_UP_STATUSES = ("running", "healthy")
 
 
-def pi_ports_verdict(dead, checked, containers_json=None):
+def pi_ports_verdict(
+    dead: list[tuple[str, int]], checked: int, containers_json: list | None = None
+) -> tuple[bool, str]:
     """Pure: judge the Pi's published ports, attributing a dead one to its container.
 
     After a daniel-pi reboot a container can come back attached to NO Docker network while
@@ -271,7 +291,7 @@ def pi_ports_verdict(dead, checked, containers_json=None):
     return False, "; ".join(parts)
 
 
-def _hwmon_sensor_key(labels):
+def _hwmon_sensor_key(labels: dict) -> tuple[str, str, str]:
     """Identity of one hwmon sensor: the same triple in the temp and the max vector."""
     return (
         labels.get("instance", "?"),
@@ -280,7 +300,7 @@ def _hwmon_sensor_key(labels):
     )
 
 
-def _hwmon_chip_excluded(labels, exclude_chip):
+def _hwmon_chip_excluded(labels: dict, exclude_chip: str) -> bool:
     """Whether this series' chip is one check_scrutiny owns rather than check_host_temp.
 
     ONE predicate, called by both hwmon_temp_limits and hwmon_included_series. The host-coverage
@@ -291,7 +311,9 @@ def _hwmon_chip_excluded(labels, exclude_chip):
     return bool(exclude_chip) and exclude_chip in labels.get("chip", "?")
 
 
-def hwmon_included_series(temps, exclude_chip):
+def hwmon_included_series(
+    temps: list[tuple[dict, float]] | None, exclude_chip: str
+) -> list[tuple[dict, float]]:
     """Pure: the scraped temp series check_host_temp actually covers, exclusions applied.
 
     Same shape in as out — [(labels, value), ...] — so the result feeds _host_origin_shortfall,
@@ -308,7 +330,10 @@ def hwmon_included_series(temps, exclude_chip):
 _HWMON_MAX_LISTED = 5
 
 
-def hwmon_name_maps(chip_names, sensor_labels):
+def hwmon_name_maps(
+    chip_names: list[tuple[dict, float]] | None,
+    sensor_labels: list[tuple[dict, float]] | None,
+) -> tuple[dict[tuple[str, str], str], dict[tuple[str, str, str], str]]:
     """Pure: the two lookups that turn a sysfs path into the name an operator reads.
 
     node-exporter publishes them as separate metrics — `node_hwmon_chip_names` carries
@@ -332,7 +357,10 @@ def hwmon_name_maps(chip_names, sensor_labels):
     return chips, sensors
 
 
-def hwmon_display_name(key, names):
+def hwmon_display_name(
+    key: tuple[str, str, str],
+    names: tuple[dict[tuple[str, str], str], dict[tuple[str, str, str], str]] | None,
+) -> str:
     """Pure: "<host> <chip>/<sensor>" for one sensor triple, each half named where it can be.
 
     Degrades PER COMPONENT — a chip with a name whose sensor has none still reads
@@ -348,16 +376,17 @@ def hwmon_display_name(key, names):
 
 
 def hwmon_temp_limits(
-    temps,
-    maxes,
-    ratio,
-    fallback_c,
-    min_plausible,
-    max_plausible,
-    exclude_chip,
-    names=None,
-    crits=(),
-):
+    temps: list[tuple[dict, float]] | None,
+    maxes: list[tuple[dict, float]] | None,
+    ratio: float,
+    fallback_c: float,
+    min_plausible: float,
+    max_plausible: float,
+    exclude_chip: str,
+    names: tuple[dict[tuple[str, str], str], dict[tuple[str, str, str], str]]
+    | None = None,
+    crits: Sequence[tuple[dict, float]] = (),
+) -> list[tuple[str, float, float, str]]:
     """Pure: assign every scraped sensor a temperature limit.
 
     Returns a list of (label, temp, limit, basis) with basis "declared" or "fallback".
@@ -406,7 +435,7 @@ def hwmon_temp_limits(
     return out
 
 
-def hwmon_temp_verdict(limits):
+def hwmon_temp_verdict(limits: list[tuple[str, float, float, str]]) -> tuple[bool, str]:
     """Pure: (ok, msg) over the output of hwmon_temp_limits.
 
     An EMPTY list is not ok. Zero sensors means the hwmon collector stopped scraping, which is

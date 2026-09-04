@@ -403,7 +403,7 @@ def test_a_clean_cycle_clears_the_streak(monkeypatch):
 
 def test_registered_tokened_and_prom_suppressed():
     """Registration, token and suppression are one unit — any one alone is a broken monitor."""
-    names = {name for name, _token, _fn in check.CHECKS}
+    names = {c.name for c in check.CHECKS}
     env_secret = (
         Path(check.__file__).resolve().parents[1] / "templates" / "env-secret.yaml.j2"
     ).read_text()

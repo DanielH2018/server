@@ -44,11 +44,31 @@ def _task(name):
     return matches[0]
 
 
+HOST_LIB_INCLUDE = "{{ role_path }}/../common/tasks/install_host_lib.yml"
+
+
+def _host_lib_include():
+    """The shared-task include that installs host_lib.py into INSTALL_DIR, or None.
+
+    host_lib.py is not in this role's copy loop: roles/setup/common/tasks/install_host_lib.yml
+    installs it beside every consumer, and the caller names the directory. So the shipped
+    set is the copy loop plus that one file, when the include is present and aimed here.
+    """
+    for t in _tasks():
+        if t.get("ansible.builtin.import_tasks") == HOST_LIB_INCLUDE and (
+            t.get("vars", {}).get("host_lib_dir") == INSTALL_DIR
+        ):
+            return t
+    return None
+
+
 def _copy_loop_basenames():
-    """The host filename each copy-loop entry installs, whether given as a bare basename
-    (resolved against this role's own files/) or a role-relative path (host_lib.py, which
-    lives in roles/setup/common/files/)."""
-    return sorted(item.rsplit("/", 1)[-1] for item in _task(COPY_TASK)["loop"])
+    """The host filename each file that lands in INSTALL_DIR: every copy-loop entry's
+    basename, plus host_lib.py when the shared include installs it there."""
+    names = [item.rsplit("/", 1)[-1] for item in _task(COPY_TASK)["loop"]]
+    if _host_lib_include() is not None:
+        names.append("host_lib.py")
+    return sorted(names)
 
 
 def _stamp_pairs():
@@ -97,10 +117,12 @@ def test_host_lib_is_copied_from_the_common_role_not_duplicated_in_k3s():
     docstring. A second, edited copy under roles/setup/k3s/files/ is how two callers quietly
     stop agreeing about what a kubectl failure looks like."""
     loop = _task(COPY_TASK)["loop"]
-    host_lib_entries = [
-        item for item in loop if item.rsplit("/", 1)[-1] == "host_lib.py"
-    ]
-    assert host_lib_entries == ["{{ role_path }}/../common/files/host_lib.py"]
+    assert not [item for item in loop if item.rsplit("/", 1)[-1] == "host_lib.py"], (
+        "host_lib.py is installed by the shared include, not by this role's copy loop"
+    )
+    assert _host_lib_include() is not None, (
+        f"no import_tasks of {HOST_LIB_INCLUDE} with host_lib_dir={INSTALL_DIR}"
+    )
     assert not (FILES / "host_lib.py").exists()
 
 

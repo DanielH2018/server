@@ -32,7 +32,7 @@ import urllib.request
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from lib.git import git_stdout
+from lib.git import git, git_stdout
 from lib.repo_paths import GITOPS_DEPLOY_FILES
 
 sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
@@ -141,12 +141,14 @@ def _fetch_tip() -> str:
 
 
 def _is_ancestor(a: str, b: str) -> bool:
-    return (
-        subprocess.run(
-            ["git", "merge-base", "--is-ancestor", a, b], capture_output=True
-        ).returncode
-        == 0
-    )
+    """Whether `a` is an ancestor of `b`, through the same wrapper `_git` uses.
+
+    `lib.git.git` strips every `GIT_*` variable, so an inherited `GIT_DIR` cannot redirect
+    this at another repository -- the hazard `lib/git.py`'s docstring records. A raw
+    `subprocess.run(["git", ...])` here read the environment's repo while `_fetch_tip` two
+    functions above read `cwd`'s.
+    """
+    return git("merge-base", "--is-ancestor", a, b, check=False).returncode == 0
 
 
 def resolve_sha(sha: str, fetch_tip=_fetch_tip, is_ancestor=_is_ancestor) -> str:

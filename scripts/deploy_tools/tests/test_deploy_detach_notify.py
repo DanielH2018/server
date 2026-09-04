@@ -23,7 +23,9 @@ def test_check_one_ok_on_k8s_first_try():
         calls.append(argv)
         return _result(0, "jellyfin: 1/1 ready, 1 updated, restarts=0")
 
-    state, detail = notify_mod.check_one("jellyfin", run=run)
+    state, detail = notify_mod.check_one(
+        "jellyfin", tools=notify_mod.NotifyTools(run=run)
+    )
     assert state == "ok"
     assert "jellyfin" in detail
     assert len(calls) == 1  # no --docker fallback needed
@@ -39,7 +41,9 @@ def test_check_one_falls_back_to_docker(monkeypatch):
             return _result(0, "wg-easy: running, health=healthy, restarts=0")
         return _result(1, "wg-easy: no Deployment or DaemonSet in this namespace (...)")
 
-    state, detail = notify_mod.check_one("wg-easy", run=run)
+    state, detail = notify_mod.check_one(
+        "wg-easy", tools=notify_mod.NotifyTools(run=run)
+    )
     assert state == "ok"
     assert "wg-easy" in detail
     assert len(calls) == 2
@@ -54,7 +58,9 @@ def test_check_one_skipped_when_neither_platform_recognizes_it():
             )
         return _result(1, "config: no Deployment or DaemonSet in this namespace (...)")
 
-    state, _detail = notify_mod.check_one("config", run=run)
+    state, _detail = notify_mod.check_one(
+        "config", tools=notify_mod.NotifyTools(run=run)
+    )
     assert state == "skipped"
 
 
@@ -75,7 +81,9 @@ def test_check_one_skips_a_role_that_declares_no_workload():
             "(no Deployment, DaemonSet or StatefulSet in its manifests)",
         )
 
-    state, _ = notify_mod.check_one("netpol-baseline", run=run)
+    state, _ = notify_mod.check_one(
+        "netpol-baseline", tools=notify_mod.NotifyTools(run=run)
+    )
     assert state == "skipped"
 
 
@@ -96,7 +104,9 @@ def test_check_one_flags_a_declared_pi_container_that_is_absent():
             )
         return _result(1, "wg-easy: no Deployment or DaemonSet in this namespace (...)")
 
-    state, detail = notify_mod.check_one("wg-easy", run=run)
+    state, detail = notify_mod.check_one(
+        "wg-easy", tools=notify_mod.NotifyTools(run=run)
+    )
     assert state == "unhealthy"
     assert "MISSING" in detail
 
@@ -113,7 +123,9 @@ def test_check_one_flags_a_resolved_k8s_workload_that_is_absent():
             "observability/grafana",
         )
 
-    state, detail = notify_mod.check_one("claude-otel", run=run)
+    state, detail = notify_mod.check_one(
+        "claude-otel", tools=notify_mod.NotifyTools(run=run)
+    )
     assert state == "unhealthy"
     assert "FAILED the gate" in detail
 
@@ -127,7 +139,9 @@ def test_gate_fails_on_a_resolved_workload_that_is_absent():
             "claude-otel: 1 of 6 workloads FAILED the gate — Deployment homelab/grafana",
         )
 
-    ok, lines = notify_mod.gate(["claude-otel"], ansible_ok=True, run=run)
+    ok, lines = notify_mod.gate(
+        ["claude-otel"], ansible_ok=True, tools=notify_mod.NotifyTools(run=run)
+    )
     assert ok is False
     assert not any("skipped" in line for line in lines)
 
@@ -138,7 +152,9 @@ def test_check_one_unhealthy_is_not_confused_with_not_applicable():
             1, "sonarr: 0/1 ready, 0 updated, restarts=4 — RECENT RESTART: ..."
         )
 
-    state, detail = notify_mod.check_one("sonarr", run=run)
+    state, detail = notify_mod.check_one(
+        "sonarr", tools=notify_mod.NotifyTools(run=run)
+    )
     assert state == "unhealthy"
     assert "sonarr" in detail
 
@@ -155,7 +171,9 @@ def test_check_one_probes_a_docker_only_tag_on_the_pi_and_never_the_cluster():
             return _result(0, "alloy: running, health=healthy, restarts=0")
         return _result(0, "alloy: 2/2 ready, 2 updated, restarts=0")
 
-    state, detail = notify_mod.check_one("alloy", run=run, platforms={"docker"})
+    state, detail = notify_mod.check_one(
+        "alloy", tools=notify_mod.NotifyTools(run=run), platforms={"docker"}
+    )
     assert state == "ok"
     assert "health=healthy" in detail
     assert len(calls) == 1
@@ -174,7 +192,9 @@ def test_check_one_docker_only_tag_missing_on_the_pi_is_unhealthy_not_skipped():
             )
         return _result(0, "alloy: 2/2 ready, 2 updated, restarts=0")
 
-    state, detail = notify_mod.check_one("alloy", run=run, platforms={"docker"})
+    state, detail = notify_mod.check_one(
+        "alloy", tools=notify_mod.NotifyTools(run=run), platforms={"docker"}
+    )
     assert state == "unhealthy"
     assert "MISSING" in detail
 
@@ -186,7 +206,9 @@ def test_check_one_k8s_only_tag_never_falls_back_to_the_pi():
         calls.append(argv)
         return _result(1, "sonarr: 0/1 ready, 0 updated, restarts=4 — RECENT RESTART")
 
-    state, _ = notify_mod.check_one("sonarr", run=run, platforms={"k8s"})
+    state, _ = notify_mod.check_one(
+        "sonarr", tools=notify_mod.NotifyTools(run=run), platforms={"k8s"}
+    )
     assert state == "unhealthy"
     assert not any("--docker" in argv for argv in calls)
 
@@ -198,7 +220,7 @@ def test_check_one_tag_on_both_platforms_needs_the_pi_healthy():
         return _result(0, "wg-easy: 1/1 ready, 1 updated, restarts=0")
 
     state, detail = notify_mod.check_one(
-        "wg-easy", run=run, platforms={"docker", "k8s"}
+        "wg-easy", tools=notify_mod.NotifyTools(run=run), platforms={"docker", "k8s"}
     )
     assert state == "unhealthy"
     assert "exited" in detail
@@ -212,7 +234,7 @@ def test_check_one_reads_platforms_from_the_inventory_when_not_given():
         calls.append(argv)
         return _result(0, "alloy: running (no healthcheck), restarts=0")
 
-    state, _ = notify_mod.check_one("alloy", run=run)
+    state, _ = notify_mod.check_one("alloy", tools=notify_mod.NotifyTools(run=run))
     assert state == "ok"
     assert calls and all("--docker" in argv for argv in calls)
 
@@ -221,7 +243,9 @@ def test_check_one_survives_a_timeout():
     def run(argv, **kwargs):
         raise __import__("subprocess").TimeoutExpired(argv, kwargs.get("timeout", 30))
 
-    state, detail = notify_mod.check_one("jellyfin", run=run)
+    state, detail = notify_mod.check_one(
+        "jellyfin", tools=notify_mod.NotifyTools(run=run)
+    )
     assert state == "unhealthy"
     assert "timed out" in detail
 
@@ -233,7 +257,9 @@ def test_gate_fails_fast_on_ansible_failure_without_health_checking():
         called["n"] += 1
         return _result(0, "jellyfin: ok")
 
-    ok, lines = notify_mod.gate(["jellyfin"], ansible_ok=False, run=run)
+    ok, lines = notify_mod.gate(
+        ["jellyfin"], ansible_ok=False, tools=notify_mod.NotifyTools(run=run)
+    )
     assert ok is False
     assert called["n"] == 0
     assert any("ansible-playbook exited non-zero" in line for line in lines)
@@ -243,7 +269,9 @@ def test_gate_settled_when_all_tags_healthy():
     def run(argv, **kwargs):
         return _result(0, f"{argv[5]}: 1/1 ready, restarts=0")
 
-    ok, lines = notify_mod.gate(["jellyfin", "sonarr"], ansible_ok=True, run=run)
+    ok, lines = notify_mod.gate(
+        ["jellyfin", "sonarr"], ansible_ok=True, tools=notify_mod.NotifyTools(run=run)
+    )
     assert ok is True
     assert len(lines) == 2
 
@@ -255,7 +283,9 @@ def test_gate_unsettled_when_one_tag_is_unhealthy():
             return _result(1, "sonarr: 0/1 ready — rollout incomplete")
         return _result(0, f"{tag}: 1/1 ready, restarts=0")
 
-    ok, _lines = notify_mod.gate(["jellyfin", "sonarr"], ansible_ok=True, run=run)
+    ok, _lines = notify_mod.gate(
+        ["jellyfin", "sonarr"], ansible_ok=True, tools=notify_mod.NotifyTools(run=run)
+    )
     assert ok is False
 
 
@@ -267,7 +297,9 @@ def test_gate_skipped_tag_does_not_fail_the_verdict():
             )
         return _result(1, "config: no Deployment or DaemonSet in this namespace")
 
-    ok, lines = notify_mod.gate(["config"], ansible_ok=True, run=run)
+    ok, lines = notify_mod.gate(
+        ["config"], ansible_ok=True, tools=notify_mod.NotifyTools(run=run)
+    )
     assert ok is True
     assert any("skipped" in line for line in lines)
 

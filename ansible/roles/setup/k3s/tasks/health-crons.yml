@@ -117,6 +117,15 @@
     mode: "0755"
   become: true
 
+- name: Install the shared host_lib helper beside the reap-orphan classifiers
+  tags: [backup-health]
+  # Before the entry points below, not after: the sibling copy is what `import host_lib`
+  # resolves at runtime, so on a first install it must never be the file that lands last.
+  # root:root here, unlike every other caller — these classifiers run as root.
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/install_host_lib.yml"
+  vars:
+    host_lib_dir: /opt/longhorn-reap
+
 - name: Install the Longhorn reap-orphan classifier scripts
   tags: [backup-health]
   ansible.builtin.copy:
@@ -129,10 +138,6 @@
     - longhorn_reap_logic.py
     - longhorn_reap_orphan_backups.py
     - longhorn_reap_orphan_snapshots.py
-    # The kubectl runner these two entry points share with configarr's and janitorr's health
-    # readers. Copied rather than duplicated for the same reason those do it: the sibling copy
-    # is what `import host_lib` resolves at runtime.
-    - "{{ role_path }}/../common/files/host_lib.py"
   become: true
 
 # `copy:`-deployed like live-drift-check.py and manifest-declares.py above, so the stale-script
@@ -169,13 +174,24 @@
     mode: "0755"
   become: true
 
+- name: Install the shared host_lib helper beside the backup health reader
+  tags: [backup-health]
+  # Before the reader, not in the same loop after it. The `*/10` cron invokes the reader by
+  # absolute path, so a window in which the reader exists and its sibling import does not is a
+  # spurious page — the same hazard the directory task above documents, one file over.
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/install_host_lib.yml"
+  vars:
+    host_lib_dir: /opt/longhorn-backup-health
+    host_lib_owner: "{{ sys_user }}"
+
 - name: Install the Longhorn backup health reader scripts
   tags: [backup-health]
   # Plain `copy:`, not a versioned release like the shell script beside it: these are imported
   # by absolute sys.path, not invoked as their own /usr/local/bin/<name>, so the release
   # mechanism's per-name symlink (common_release_names unions template AND file names) would
-  # give host_lib.py a dangling /usr/local/bin/host_lib.py nothing calls. Same shape as
-  # configarr's health reader (roles/k8s/configarr/tasks/main.yml).
+  # give each of them a dangling /usr/local/bin entry nothing calls — the same reason the
+  # host_lib include above is a copy rather than a release. Same shape as configarr's health
+  # reader (roles/k8s/configarr/tasks/main.yml).
   ansible.builtin.copy:
     src: "{{ item }}"
     dest: "/opt/longhorn-backup-health/{{ item | basename }}"
@@ -185,11 +201,6 @@
   loop:
     - longhorn_backup_health.py
     - longhorn_backup_health_logic.py
-    # The kubectl runner this reader and configarr's/janitorr's share. Copied rather than
-    # duplicated for the same reason configarr's copy of it is: the sibling copy is what
-    # `import host_lib` resolves at runtime, and a second edited copy is how two callers
-    # quietly stop agreeing about what a kubectl failure looks like.
-    - "{{ role_path }}/../common/files/host_lib.py"
   become: true
 
 - name: Deploy the backup-health scripts as a versioned release

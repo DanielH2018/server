@@ -13,10 +13,10 @@ because it is a Loki arm folded into a cluster verdict — the caller reaches it
 import bridge.config as cfg
 import bridge.net
 from verdicts.cluster import log_error_verdict
-from verdicts.service import loki_ingestion_fresh, shipper_dropped
+from verdicts.logs import loki_ingestion_fresh, shipper_dropped
 
 
-def check_loki_ingestion():
+def check_loki_ingestion() -> tuple[bool, str]:
     """Checks that all three Loki ingestion arms (file-tail, container stream, Pi) are fresh.
 
     Down if any arm is silent: the file-tail union, the docker-stream arm (a
@@ -53,7 +53,7 @@ def check_loki_ingestion():
     return True, "%s (+ container stream, + pi)" % msg_all
 
 
-def check_shipper_dropped():
+def check_shipper_dropped() -> tuple[bool, str]:
     """Prometheus-based log-shipper + Loki-distributor partial-loss watchdog. Prom-dependent.
 
     Reads BOTH sides of the pipe (see shipper_dropped): the shippers' own client-side
@@ -83,12 +83,12 @@ def check_shipper_dropped():
     )
 
 
-def check_loki_reachable():
+def check_loki_reachable() -> tuple[bool, str]:
     bridge.net.loki_reachable()
     return True, "Loki reachable"
 
 
-def with_log_errors(ok, msg):
+def with_log_errors(ok: bool, msg: str) -> tuple[bool, str]:
     """Fold the log-pattern arm into the workload verdict, a burst winning the message.
 
     Folded here rather than given its own monitor, for the reason the extended-resource and

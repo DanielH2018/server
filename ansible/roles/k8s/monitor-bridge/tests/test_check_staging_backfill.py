@@ -113,7 +113,7 @@ def test_staging_backfill_is_registered_and_can_actually_push():
     Membership alone would pass for a check registered against a token nothing can set — it
     pushes to nowhere forever, present in the code and absent from the world.
     """
-    names = {name for name, _, _ in check.CHECKS}
+    names = {c.name for c in check.CHECKS}
     env_secret = (
         Path(check.__file__).resolve().parents[1] / "templates" / "env-secret.yaml.j2"
     ).read_text()

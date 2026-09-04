@@ -28,7 +28,9 @@ import json
 import re
 import subprocess
 import sys
+from enum import StrEnum
 from pathlib import Path
+from typing import NamedTuple
 
 
 # The build/roll couplings live in deploy_logic so this and `deploy_tags.py changed` widen
@@ -414,9 +416,21 @@ def remaining_setup_hosts_note(
     )
 
 
-def derive(
-    files, changed_files: int, declared: set[str] | None = None
-) -> tuple[list[str], str]:
+class DeriveSource(StrEnum):
+    """Where a tag list came from, and therefore whether it can be trusted whole."""
+
+    PR = "pr"
+    FALLBACK = "fallback"
+
+
+class Derivation(NamedTuple):
+    """What `derive` answers: the tags, and whether the file list could be trusted."""
+
+    tags: list[str]
+    source: DeriveSource
+
+
+def derive(files, changed_files: int, declared: set[str] | None = None) -> Derivation:
     """(sorted tags, 'pr'|'fallback').
 
     'fallback' means the file list could not be trusted and the caller must widen to a SHA
@@ -429,12 +443,12 @@ def derive(
     """
     files = list(files)
     if len(files) != changed_files:
-        return [], "fallback"
+        return Derivation([], DeriveSource.FALLBACK)
     declared = declared_tags() if declared is None else declared
     # A build role whose workload lives in a different role must not deploy alone: the build
     # would push a new image that nothing rolls onto, and report green doing it.
     tags = expand_build_couplings({t for p in files if (t := tag_for(p, declared))})
-    return sorted(tags), "pr"
+    return Derivation(sorted(tags), DeriveSource.PR)
 
 
 def quiet_paths(paths: list[str], range_: str) -> set[str]:

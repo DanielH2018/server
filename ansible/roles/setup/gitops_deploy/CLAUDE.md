@@ -409,10 +409,57 @@ stay).
 (a Unix-timestamp file) on every non-crashing completion; `monitor-bridge` reads this file
 to drive the GitOps-Alive Uptime-Kuma monitor — no Kuma pushing from the deployer.
 
-## Decision modules and their tests
+## How the deployer's Python is laid out
+
+Three layers, and which one a function belongs in is decided by what it touches.
+
+| layer | modules | holds |
+|---|---|---|
+| decisions (pure) | `deploy_changes`, `deploy_git`, `deploy_health`, `deploy_inventory`, `deploy_k8s`, `deploy_remediation`, `deploy_staging` | every branch the tick takes, as functions over plain values |
+| transport | `deploy_io`, `deploy_alerts` | subprocess, docker, the state directory, the config file, the webhook, and every message body |
+| the tick | `gitops_deploy` | `main()` sequencing named phases, and the delivery plumbing the phases share |
+
+**`main()` sequences, it does not decide.** `assess()` reads git and returns a frozen
+`TickTarget`; `plan_tick()` turns the incoming range into a frozen `TickPlan`; one `handle_*`
+function owns each terminal branch (`handle_dirty`, `handle_ci_failed`, `handle_broad`,
+`handle_k8s`, `handle_no_services`, `handle_docker`) and returns the exit code. The branch
+order in `main()` is load-bearing — broad before k8s before Docker — because one range can
+carry a broad change and a promoted image bump, and the broad plane has to win.
+`tests/test_gitops_deploy_phases.py` drives each phase alone;
+`tests/test_gitops_deploy_main_branches.py` still drives whole ticks for the orderings that
+only exist between phases.
+
+**`deploy_io` and `deploy_alerts` are reached QUALIFIED** — `deploy_io.run(...)`, never
+`from deploy_io import run`. A from-import takes its own reference at import time and never
+sees a `monkeypatch`, which is what the patch-boundary guard below enforces. It also means one
+`monkeypatch.setattr(deploy_io, "run", ...)` covers both the tick's own git calls and the ones
+`deploy_io` makes inside `deploy_k8s`.
+
+**Configuration is parsed once, and parsing cannot fail.** `deploy_io.load_config` returns a
+frozen `Config`; a malformed numeric value is collected into `Config.errors` rather than
+raised, and `CONFIG.validate()` at the top of `main()` turns it into one line naming the key
+plus a Discord post. Before that it was ~40 `int(C.get(...))` calls at module level, so a
+half-written config.env was an import traceback with no key name in it. The module-level
+constants in `gitops_deploy.py` are still derived from `CONFIG` and are what the suite patches
+— that is the remaining coupling, and threading `CONFIG` through every function instead is a
+separate change. Three keys keep their `C.get("<KEY>", "<literal>")` fallback in
+`gitops_deploy.py` rather than in `load_config`: `STAGING_SUBSET`,
+`STAGING_GATE_TIMEOUT_S` and `STAGING_EXPECT_TIMEOUT_S`, because
+`scripts/docs/gen_doc_fragments.py` parses those calls out of that file by name.
+
+**State is one object.** `deploy_io.DeployerState` wraps the fifteen marker files;
+`gitops_deploy.STATE` is the instance and the fifteen path literals stay declared there
+(`tests/conftest.py`'s `state_dir` repoints them, and one Ansible default is pinned against
+`STAGING_TICK_LEDGER`'s literal). `read()` returns None for a missing AND an empty marker —
+a torn write is a disarmed hold, not a hold on `""` — and PROPAGATES any other `OSError`:
+an unreadable state directory must not read as "no hold", or a held host reports converged.
+`tests/test_deployer_state.py` pins all three outcomes.
+
+### Decision modules and their tests
 The pure decision logic is split by the question each module answers. `deploy_logic.py` is the
-index: it defines nothing and re-exports every name, so `gitops_deploy.py` imports from one
-place and a `deploy_logic.<name>` citation in any doc stays true.
+index: it defines nothing and re-exports every name, so a `deploy_logic.<name>` citation in any
+doc stays true. `gitops_deploy.py` imports the decision modules DIRECTLY rather than through
+the facade, so its real coupling is legible at the import site.
 
 | module | decides |
 |---|---|
@@ -423,6 +470,12 @@ place and a `deploy_logic.<name>` citation in any doc stays true.
 | `deploy_inventory` | what this host declares, parsed from host_vars text |
 | `deploy_k8s` | k8s auto-deploy eligibility, the denylist, the rollback's revert note |
 | `deploy_staging` | the staging subset, its verdict, and whether that verdict blocks |
+
+`deploy_staging`'s two vocabularies are `StrEnum`s (`StagingVerdict`, `TickOutcome`) whose
+values are the words the journal prints and the tick ledger stores; the old module constants
+stay as aliases. `tests/test_staging_vocabulary_is_a_strenum.py` pins the values against the
+literals they replaced, because `backfill_staging_gate.py` reads them back out of the JSONL in
+the other tree.
 
 One test file per module, named for it: `tests/test_deploy_<module>.py`, with a second
 file where one module answers two separable questions — `test_deploy_changes_services.py`
@@ -435,7 +488,9 @@ every `container_name:` in the changed service's rendered compose, since a role 
 several containers and the bumped image's container is usually not the role-named one.
 
 `gitops_deploy.py` itself is covered by the `tests/test_gitops_deploy_*.py` family:
-`_subprocess` (`deploy_k8s()`'s argv, the rollback call site, `run()`'s process-group kill),
+`_phases` (each phase function driven alone against the `tick` fixture),
+`_subprocess` (`deploy_io.deploy_k8s()`'s argv, the rollback call site, `run()`'s
+process-group kill),
 `_fetch_skip` (`entrypoint()`'s handler chain and the two retryable git failures, by calling
 them), `_alert_delivery` (`discord()`, `deliver()` and `drain_pending()`, by calling them
 against a tmp state dir), `_alert_channels` (`alert_once()`, `alert_deferred()`,
@@ -649,7 +704,7 @@ unit-tested: they decide the rollback alert's one revert-status line — whether
 redeploy itself failed (in which case the note says the revert task may never have run, not that
 it was attempted), and, when it succeeded, which of the batch's services actually declare
 `k8s_autodeploy_snapshot_pvcs` (only those revert; the alert must not imply the rest did too).
-`gitops_deploy.read_local_k8s_default()` is the one line of I/O feeding it — a plain file read
+`deploy_io.read_local_k8s_default()` is the one line of I/O feeding it — a plain file read
 against the working tree AFTER `git reset --hard local`, matching exactly what
 `roles/k8s/manifests` itself reads for the claim list.
 

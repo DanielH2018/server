@@ -9,9 +9,14 @@ patches on those modules reach it. Rule and enforcement: bridge/config.py's head
 import bridge.config as cfg
 import bridge.net
 import bridge.streaks
+from verdicts.storage import (
+    longhorn_offenders,
+    longhorn_redundancy_verdict,
+    pvc_fullness_verdict,
+)
 
 
-def check_longhorn_volumes():
+def check_longhorn_volumes() -> tuple[bool, str]:
     """Longhorn volumes that have lost replica redundancy, named by PVC.
 
     `k3s_longhorn_replica_count` is 2, so a volume reading `degraded` is down to a single copy —
@@ -40,46 +45,32 @@ def check_longhorn_volumes():
     volumes = bridge.net.prom_scalar(
         'count(longhorn_volume_robustness{state="healthy"})'
     )
-    if not volumes:
-        bridge.streaks._down_streaks["longhorn"], ok, msg = bridge.streaks.down_streak(
-            bridge.streaks._down_streaks.get("longhorn", 0),
-            cfg.LONGHORN_CONSECUTIVE,
-            "no longhorn_volume_robustness series — replica redundancy is UNMONITORED "
-            "(job=longhorn scrape down?), which is not the same as healthy",
-            "scrape gap grace",
+    # Only fetch the offender vector when the census says the job is answering: with no series
+    # at all the verdict is already decided, and a second query would spend a request to learn
+    # the same thing.
+    offenders = (
+        longhorn_offenders(
+            bridge.net.prom_vector(
+                'longhorn_volume_robustness{state=~"degraded|faulted"} == 1'
+            )
         )
-        return ok, msg
-    worst = {}
-    for labels, _value in bridge.net.prom_vector(
-        'longhorn_volume_robustness{state=~"degraded|faulted"} == 1'
-    ):
-        name = labels.get("pvc") or labels.get("volume", "?")
-        state = labels.get("state", "?")
-        # faulted outranks degraded if both ever report for one volume
-        if worst.get(name) != "faulted":
-            worst[name] = state
-    if not worst:
+        if volumes
+        else {}
+    )
+    ok, msg, grace = longhorn_redundancy_verdict(volumes, offenders)
+    if ok:
         bridge.streaks._down_streaks["longhorn"] = 0
-        return True, "%d volume(s) redundant, none degraded or faulted" % int(volumes)
-    faulted = sorted(n for n, s in worst.items() if s == "faulted")
-    degraded = sorted(n for n, s in worst.items() if s != "faulted")
-    parts = []
-    if faulted:
-        parts.append("%d faulted (%s)" % (len(faulted), ", ".join(faulted[:5])))
-    if degraded:
-        parts.append(
-            "%d degraded, single-copy (%s)" % (len(degraded), ", ".join(degraded[:5]))
-        )
+        return ok, msg
     bridge.streaks._down_streaks["longhorn"], ok, msg = bridge.streaks.down_streak(
         bridge.streaks._down_streaks.get("longhorn", 0),
         cfg.LONGHORN_CONSECUTIVE,
-        "of %d volume(s): %s" % (int(volumes), "; ".join(parts)),
-        "drain/reboot grace",
+        msg,
+        grace,
     )
     return ok, msg
 
 
-def check_pvc_fullness():
+def check_pvc_fullness() -> tuple[bool, str]:
     """Filesystem fullness of every PersistentVolumeClaim the kubelet reports stats for.
 
     Nothing else covered this. check_disk iterates DISK_MOUNTPOINTS — `/`, `/boot`, `/boot/efi`
@@ -120,57 +111,27 @@ def check_pvc_fullness():
         for labels, pct in vec
         if labels.get("persistentvolumeclaim") not in cfg.PVC_EXCLUDE
     ]
-    if not watched:
-        # A DIFFERENT fault from a thin claim census below, and it must not reach the `worst`
-        # report: the ratio query returned nothing at all, which looks exactly like "no claim is
-        # full" and is not the same fact.
-        bridge.streaks._down_streaks["pvc_fullness"], ok, msg = (
+    breach_msg, census_msg, summary = pvc_fullness_verdict(
+        watched, claims, cfg.PVC_MAX_PCT, cfg.PVC_MIN_CLAIMS
+    )
+    # The census arm rides the streak; a fullness breach does not, because it is monotonic
+    # rather than flappy. Both are advanced BEFORE the breach is reported, so a cycle that is
+    # simultaneously blind and full still moves the census streak.
+    graced = None
+    if census_msg:
+        bridge.streaks._down_streaks["pvc_fullness"], census_ok, census_msg = (
             bridge.streaks.down_streak(
                 bridge.streaks._down_streaks.get("pvc_fullness", 0),
                 cfg.PVC_CLAIMS_CONSECUTIVE,
-                "no PVC reported a fullness ratio — PVC fullness is UNKNOWN, not OK",
+                census_msg,
                 "kubelet scrape gap grace",
             )
         )
-        return ok, msg
-    # Fullest first, so a truncated message names the claims closest to failing.
-    breaching = [
-        "%s/%s %.0f%%" % (ns, pvc, pct)
-        for pvc, ns, pct in sorted(watched, key=lambda w: w[2], reverse=True)
-        if pct > cfg.PVC_MAX_PCT
-    ]
-    # The floor is the input assertion, and it is evaluated over ALL claims including the
-    # excluded ones: it asserts the metric family is being scraped, which is a different
-    # question from which claims this arm judges.
-    shortfall = None
-    if claims is None or claims < cfg.PVC_MIN_CLAIMS:
-        seen = "no" if claims is None else "only %d" % int(claims)
-        bridge.streaks._down_streaks["pvc_fullness"], short_ok, short_msg = (
-            bridge.streaks.down_streak(
-                bridge.streaks._down_streaks.get("pvc_fullness", 0),
-                cfg.PVC_CLAIMS_CONSECUTIVE,
-                "%s kubelet_volume_stats claims visible, below the floor of %d — PVC fullness is "
-                "UNKNOWN, not OK" % (seen, cfg.PVC_MIN_CLAIMS),
-                "kubelet scrape gap grace",
-            )
-        )
-        shortfall = (short_ok, short_msg)
+        graced = (census_ok, census_msg)
     else:
         bridge.streaks._down_streaks["pvc_fullness"] = 0
-    # A claim that IS reporting and IS full outranks a complaint about the ones that are not —
-    # same ordering as check_disk, and for the same reason.
-    if breaching:
-        return False, "PVC over %.0f%%: %s" % (
-            cfg.PVC_MAX_PCT,
-            ", ".join(breaching[:5]),
-        )
-    if shortfall is not None:
-        return shortfall
-    worst = max(watched, key=lambda w: w[2])
-    return True, "%d claim(s) under %.0f%%, worst %s/%s %.0f%%" % (
-        len(watched),
-        cfg.PVC_MAX_PCT,
-        worst[1],
-        worst[0],
-        worst[2],
-    )
+    if breach_msg:
+        return False, breach_msg
+    if graced is not None:
+        return graced
+    return True, summary

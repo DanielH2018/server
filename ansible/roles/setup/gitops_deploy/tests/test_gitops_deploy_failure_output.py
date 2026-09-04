@@ -9,6 +9,9 @@ import pathlib
 
 import pytest
 
+import deploy_alerts
+import deploy_io
+
 FATAL = 'fatal: [daniel-box]: FAILED! => {"msg": "the task that broke"}'
 
 
@@ -22,7 +25,7 @@ def _fail(gitops_deploy, tmp_path: pathlib.Path, script: str) -> str:
     path = tmp_path / "fail.sh"
     path.write_text(script)
     with pytest.raises(RuntimeError) as excinfo:
-        gitops_deploy.run(["sh", str(path)], cwd=str(tmp_path))
+        deploy_io.run(["sh", str(path)], cwd=str(tmp_path))
     return str(excinfo.value)
 
 
@@ -61,14 +64,14 @@ def test_the_error_keeps_the_fatal_line_behind_an_overlong_stdout(
     """
     ok_tasks = "\n".join(
         f"TASK [ok task {n}] ****\nok: [daniel-box]"
-        for n in range(gitops_deploy.RUN_ERROR_STDOUT_CHARS // 30)
+        for n in range(deploy_io.RUN_ERROR_STDOUT_CHARS // 30)
     )
     (tmp_path / "out.txt").write_text(f"{ok_tasks}\n{TASK_HEADER}\n{FATAL}\n{RECAP}\n")
     message = _fail(gitops_deploy, tmp_path, "cat out.txt; exit 2")
     assert TASK_HEADER in message
     assert FATAL in message
     assert "TASK [ok task 0]" not in message, "the ok tasks before it are the padding"
-    assert len(message) < 2 * gitops_deploy.RUN_ERROR_STDOUT_CHARS
+    assert len(message) < 2 * deploy_io.RUN_ERROR_STDOUT_CHARS
 
 
 def test_the_error_keeps_the_fatal_line_ahead_of_a_profile_tasks_timing_table(
@@ -79,14 +82,14 @@ def test_the_error_keeps_the_fatal_line_ahead_of_a_profile_tasks_timing_table(
     A positional tail of that output is `ok=1950 failed=1` plus twenty timing rows, and the
     task that failed is the one thing not in it.
     """
-    table = _timing_table(gitops_deploy.RUN_ERROR_STDOUT_CHARS)
+    table = _timing_table(deploy_io.RUN_ERROR_STDOUT_CHARS)
     (tmp_path / "out.txt").write_text(f"{TASK_HEADER}\n{FATAL}\n{RECAP}\n{table}\n")
     message = _fail(gitops_deploy, tmp_path, "cat out.txt; exit 2")
     assert TASK_HEADER in message
     assert FATAL in message
     assert "failed=1" in message, "the recap is still worth carrying"
     assert "TASKS RECAP" not in message, "the timing table is not"
-    assert len(message) < 2 * gitops_deploy.RUN_ERROR_STDOUT_CHARS
+    assert len(message) < 2 * deploy_io.RUN_ERROR_STDOUT_CHARS
 
 
 def test_stdout_with_no_fatal_line_is_a_plain_tail(
@@ -108,11 +111,13 @@ def test_the_failing_task_is_the_last_one_not_ignored(gitops_deploy) -> None:
         "...ignoring\n"
         f"{TASK_HEADER}\n{FATAL}\n{RECAP}"
     )
-    task, rest = gitops_deploy._failing_task(text)
+    found = deploy_io.failing_task(text)
+    assert found is not None
+    task, rest = found
     assert task == f"{TASK_HEADER}\n{FATAL}"
     assert rest.startswith("PLAY RECAP")
     ignored_only = "\n".join(text.splitlines()[:3]) + f"\n{RECAP}"
-    assert gitops_deploy._failing_task(ignored_only) is None
+    assert deploy_io.failing_task(ignored_only) is None
 
 
 def test_the_failing_task_drops_the_ok_items_of_a_loop_and_keeps_its_failed_ones(
@@ -127,7 +132,9 @@ def test_the_failing_task_drops_the_ok_items_of_a_loop_and_keeps_its_failed_ones
         'fatal: [daniel-box]: FAILED! => {"msg": "One or more items failed"}\n'
         f"{RECAP}"
     )
-    task, _ = gitops_deploy._failing_task(text)
+    found = deploy_io.failing_task(text)
+    assert found is not None
+    task, _ = found
     assert task.startswith("TASK [k8s/manifests : Apply each manifest]")
     assert "(item=c)" in task
     assert "One or more items failed" in task
@@ -141,7 +148,9 @@ def test_an_unreachable_host_is_a_failing_task_too(gitops_deploy) -> None:
         "NO MORE HOSTS LEFT ****\n"
         f"{RECAP}"
     )
-    task, _ = gitops_deploy._failing_task(text)
+    found = deploy_io.failing_task(text)
+    assert found is not None
+    task, _ = found
     assert task == (
         "TASK [Gathering Facts] ****\n"
         'fatal: [daniel-pi]: UNREACHABLE! => {"msg": "ssh: connect refused"}'
@@ -157,10 +166,10 @@ def test_an_overlong_failing_task_is_head_cut_so_its_name_survives(
         + "m" * 9000
         + '"}'
     )
-    detail = gitops_deploy._failure_detail(text, 4000)
+    detail = deploy_io.failure_detail(text, 4000)
     assert detail.startswith(TASK_HEADER)
-    assert detail.endswith(gitops_deploy.TRUNCATED)
-    assert len(detail) <= 4000 + len(gitops_deploy.TRUNCATED) + 1
+    assert detail.endswith(deploy_io.TRUNCATED)
+    assert len(detail) <= 4000 + len(deploy_io.TRUNCATED) + 1
 
 
 def test_stderr_is_still_reported(gitops_deploy, tmp_path: pathlib.Path) -> None:
@@ -173,15 +182,15 @@ def test_stderr_is_still_reported(gitops_deploy, tmp_path: pathlib.Path) -> None
 def test_a_succeeding_command_still_returns_its_stdout(
     gitops_deploy, tmp_path: pathlib.Path
 ) -> None:
-    assert gitops_deploy.run(["sh", "-c", "echo hi"], cwd=str(tmp_path)) == "hi"
+    assert deploy_io.run(["sh", "-c", "echo hi"], cwd=str(tmp_path)) == "hi"
 
 
 def test_tail_passes_short_text_through(gitops_deploy) -> None:
-    assert gitops_deploy._tail("one\ntwo", 100) == "one\ntwo"
+    assert deploy_io.tail("one\ntwo", 100) == "one\ntwo"
 
 
 def test_tail_drops_the_head_of_long_text(gitops_deploy) -> None:
-    tailed = gitops_deploy._tail("head-line\n" + "y" * 50 + "\nlast-line", 60)
+    tailed = deploy_io.tail("head-line\n" + "y" * 50 + "\nlast-line", 60)
     assert "head-line" not in tailed
     assert "last-line" in tailed
 
@@ -190,7 +199,7 @@ def test_the_alert_excerpt_keeps_the_argv_line_and_the_tail(gitops_deploy) -> No
     exc = RuntimeError(
         "uv run ansible-playbook ansible/deploy.yml -> 2\n" + "z" * 5000 + f"\n{FATAL}"
     )
-    excerpt = gitops_deploy._alert_excerpt(exc)
+    excerpt = deploy_alerts.alert_excerpt(exc)
     assert excerpt.startswith("uv run ansible-playbook ansible/deploy.yml -> 2")
     assert FATAL in excerpt
 
@@ -203,8 +212,14 @@ def test_the_broad_alert_fits_discords_head_slice_with_the_action_line_intact(
     exc = RuntimeError(
         "uv run ansible-playbook ansible/deploy.yml -> 2\n" + "z" * 50000
     )
-    message = gitops_deploy.broad_failure_alert(
-        "daniel-box", "ansible/deploy.yml", [], "2d25ced3" * 5, exc
+    message = deploy_alerts.broad_failure_alert(
+        "daniel-box",
+        "ansible/deploy.yml",
+        [],
+        "2d25ced3" * 5,
+        exc,
+        gitops_deploy.HOLD_FILE,
+        gitops_deploy.HOLD_PLANE_FILE,
     )
     assert len(message) <= 1900
     assert "fix forward and re-run that playbook by hand" in message
@@ -213,8 +228,14 @@ def test_the_broad_alert_fits_discords_head_slice_with_the_action_line_intact(
 
 def test_the_broad_alert_carries_the_failure_detail(gitops_deploy) -> None:
     exc = RuntimeError(f"uv run ansible-playbook ansible/deploy.yml -> 2\n{FATAL}")
-    message = gitops_deploy.broad_failure_alert(
-        "daniel-box", "ansible/initial_setup.yml", ["k3s"], "2d25ced3" * 5, exc
+    message = deploy_alerts.broad_failure_alert(
+        "daniel-box",
+        "ansible/initial_setup.yml",
+        ["k3s"],
+        "2d25ced3" * 5,
+        exc,
+        gitops_deploy.HOLD_FILE,
+        gitops_deploy.HOLD_PLANE_FILE,
     )
     assert FATAL in message
     assert "--tags `k3s`" in message
@@ -223,11 +244,11 @@ def test_the_broad_alert_carries_the_failure_detail(gitops_deploy) -> None:
 def test_head_passes_short_text_through_and_cuts_long_text_at_a_line(
     gitops_deploy,
 ) -> None:
-    assert gitops_deploy._head("one\ntwo", 100) == "one\ntwo"
-    cut = gitops_deploy._head("first-line\n" + "y" * 50 + "\nlast-line", 60)
+    assert deploy_io.head("one\ntwo", 100) == "one\ntwo"
+    cut = deploy_io.head("first-line\n" + "y" * 50 + "\nlast-line", 60)
     assert cut.startswith("first-line\n")
     assert "last-line" not in cut
-    assert cut.endswith(gitops_deploy.TRUNCATED)
+    assert cut.endswith(deploy_io.TRUNCATED)
 
 
 def test_the_alert_excerpt_keeps_the_failing_task_ahead_of_a_long_stderr(
@@ -249,12 +270,11 @@ def test_the_alert_excerpt_keeps_the_failing_task_ahead_of_a_long_stderr(
     path = tmp_path / "fail.sh"
     path.write_text("cat out.txt; cat err.txt >&2; exit 2")
     with pytest.raises(RuntimeError) as excinfo:
-        gitops_deploy.run(["sh", str(path)], cwd=str(tmp_path))
-    excerpt = gitops_deploy._alert_excerpt(excinfo.value)
+        deploy_io.run(["sh", str(path)], cwd=str(tmp_path))
+    excerpt = deploy_alerts.alert_excerpt(excinfo.value)
     assert excerpt.startswith("sh ")
     assert TASK_HEADER in excerpt
     assert FATAL in excerpt
     assert (
-        len(excerpt)
-        <= gitops_deploy.ALERT_EXCERPT_CHARS + len(gitops_deploy.TRUNCATED) + 1
+        len(excerpt) <= deploy_alerts.ALERT_EXCERPT_CHARS + len(deploy_io.TRUNCATED) + 1
     )

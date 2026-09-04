@@ -33,7 +33,7 @@ def test_deploy_tags_is_the_relative_path_in_the_primary_checkout(monkeypatch):
 
 def test_deploy_adds_target_only_for_a_remote_host(monkeypatch):
     seen = _capture(monkeypatch)
-    tools.run_deploy(Path("/primary"), "alloy", "daniel-pi")
+    tools.run_deploy(Path("/primary"), ["alloy"], "daniel-pi")
     assert seen["argv"] == [
         "./scripts/deploy.sh",
         "--tags",
@@ -41,7 +41,7 @@ def test_deploy_adds_target_only_for_a_remote_host(monkeypatch):
         "-e",
         "target=daniel-pi",
     ]
-    tools.run_deploy(Path("/primary"), "sonarr", None)
+    tools.run_deploy(Path("/primary"), ["sonarr"], None)
     assert seen["argv"] == ["./scripts/deploy.sh", "--tags", "sonarr"]
     # deploy.sh renders from its working directory, so a wrong cwd would deploy the wrong
     # checkout's templates and report success.

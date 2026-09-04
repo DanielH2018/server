@@ -138,7 +138,7 @@ def test_etcd_drill_is_registered_and_can_actually_push():
     this asserts the pair, in both directions: a later edit that drops either half fails here
     rather than quietly producing a monitor that cannot page.
     """
-    names = {name for name, _, _ in check.CHECKS}
+    names = {c.name for c in check.CHECKS}
     env_secret = (
         Path(check.__file__).resolve().parents[1] / "templates" / "env-secret.yaml.j2"
     ).read_text()

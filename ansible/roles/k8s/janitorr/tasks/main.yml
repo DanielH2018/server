@@ -36,6 +36,17 @@
     mode: "0755"
   become: true
 
+- name: Install the shared host_lib helper beside the janitorr health reader
+  tags: [config]
+  # Before the reader, not in the same loop after it: the cron invokes the reader by absolute
+  # path, so a window in which it exists without its sibling import is a spurious page. The
+  # reader does a sys.path.insert of its own directory and nothing else, which is why the file
+  # is copied in rather than imported from a shared location.
+  ansible.builtin.import_tasks: "{{ role_path }}/../../setup/common/tasks/install_host_lib.yml"
+  vars:
+    host_lib_dir: /opt/janitorr-health
+    host_lib_owner: "{{ sys_user }}"
+
 - name: Install the janitorr health reader scripts
   tags: [config]
   ansible.builtin.copy:
@@ -47,11 +58,6 @@
   loop:
     - janitorr_health.py
     - janitorr_health_logic.py
-    # The kubectl runner this reader and configarr's used to carry a byte-identical copy of.
-    # Copied INTO this /opt dir rather than imported from a shared path: the reader does a
-    # sys.path.insert of its own directory and nothing else, which is the sibling-copy pattern
-    # gitops_deploy.py and renovate_notify.py already use for this same file.
-    - "{{ role_path }}/../../setup/common/files/host_lib.py"
   become: true
 
 - name: Deploy the janitorr error heartbeat

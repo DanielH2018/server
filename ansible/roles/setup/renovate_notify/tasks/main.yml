@@ -25,15 +25,12 @@
   become: true
   notify: Run renovate-notify once
 
-- name: Install the shared host_lib helper (source of truth in roles/setup/common/files)
-  ansible.builtin.copy:
-    src: "{{ role_path }}/../common/files/host_lib.py"
-    dest: /opt/renovate-notify/host_lib.py
-    owner: "{{ sys_user }}"
-    group: "{{ sys_user }}"
-    mode: "0755"
-  become: true
-  notify: Run renovate-notify once
+- name: Install the shared host_lib helper beside the notifier
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/install_host_lib.yml"
+  vars:
+    host_lib_dir: /opt/renovate-notify
+    host_lib_owner: "{{ sys_user }}"
+    host_lib_notify: [Run renovate-notify once]
 
 - name: Write notifier config (secret webhook, host-only)
   ansible.builtin.template:

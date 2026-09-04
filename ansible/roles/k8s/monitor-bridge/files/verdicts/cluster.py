@@ -9,8 +9,12 @@ and why breaking it fails silently rather than loudly.
 are no series at all, so the count floors are what stop a blind check reading green.
 """
 
+from collections.abc import Collection, Mapping, Sequence
 
-def targets_verdict(vec, min_targets):
+
+def targets_verdict(
+    vec: list[tuple[dict, float]], min_targets: float
+) -> tuple[bool, str]:
     """Pure: (ok, msg) from an `up` vector, failing closed when too few targets are visible.
 
     THE HOLE THIS CLOSES, opened by B5. Before the repoint an empty `up` could only mean the
@@ -40,7 +44,9 @@ def targets_verdict(vec, min_targets):
     return True, "all %d targets up" % len(vec)
 
 
-def cadvisor_coverage_shortfall(pod_count, min_pods, what):
+def cadvisor_coverage_shortfall(
+    pod_count: float | None, min_pods: float, what: str
+) -> str | None:
     """Pure: the failure message when a cAdvisor vector is too thin to mean anything, else None.
 
     check_restarts, check_oom and check_cpu_throttle all read a per-pod vector and then filter it
@@ -74,7 +80,7 @@ def cadvisor_coverage_shortfall(pod_count, min_pods, what):
     )
 
 
-def ksm_resource_label(resource):
+def ksm_resource_label(resource: str) -> str:
     """Turn a Kubernetes resource name into the `resource` label kube-state-metrics emits.
 
     KSM replaces every character outside [a-zA-Z0-9_] with `_`, so `devic_es_dri` is the only form
@@ -86,7 +92,11 @@ def ksm_resource_label(resource):
     return "".join(c if c.isalnum() or c == "_" else "_" for c in resource)
 
 
-def extended_resource_verdict(expected, advertised, allocatable_series):
+def extended_resource_verdict(
+    expected: list[str],
+    advertised: Mapping[str, float],
+    allocatable_series: float | None,
+) -> tuple[bool, str]:
     """Pure: (ok, msg) for extended resources that must stay advertised by some node.
 
     `advertised` maps resource name -> number of nodes advertising a NON-ZERO quantity.
@@ -127,14 +137,14 @@ def extended_resource_verdict(expected, advertised, allocatable_series):
 
 
 def k8s_workloads_verdict(
-    total,
-    offenders,
-    min_workloads,
-    restart_offenders=(),
-    ds_total=None,
-    ds_offenders=(),
-    min_daemonsets=None,
-):
+    total: float | None,
+    offenders: list[tuple[dict, float]],
+    min_workloads: float,
+    restart_offenders: Sequence[tuple[dict, float]] = (),
+    ds_total: float | None = None,
+    ds_offenders: Sequence[tuple[dict, float]] = (),
+    min_daemonsets: float | None = None,
+) -> tuple[bool, str]:
     """Pure: (ok, msg) from the deployment-series COUNT and the unavailable-replica offenders.
 
     The count argument is what makes this fail closed. `unavailable > 0` returning nothing is
@@ -205,7 +215,13 @@ def k8s_workloads_verdict(
     return True, "%d k8s workloads healthy" % int(total)
 
 
-def log_error_verdict(matches, total, threshold, window, ignore=frozenset()):
+def log_error_verdict(
+    matches: list[tuple[dict, float]],
+    total: float | None,
+    threshold: float,
+    window: str,
+    ignore: Collection[str] = frozenset(),
+) -> tuple[bool, str]:
     """Per-container counts of fatal log lines -> a verdict. Pure.
 
     A cluster verdict rather than a service one: it folds into k8s Workload Health, and it

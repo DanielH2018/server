@@ -45,7 +45,7 @@ import os
 import time
 
 
-def _env(name, default):
+def _env(name: str, default: str) -> str:
     return os.environ.get(name, default)
 
 
@@ -62,18 +62,22 @@ def _env(name, default):
 HTTP_TIMEOUT = int(_env("HTTP_TIMEOUT", "10"))
 
 
-def log(*args):
-    """Print a bracketed-timestamp log line.
+def log(*args: object) -> None:
+    """Print one log line to stdout.
 
-    The bracketed stamp is LOCAL time (America/Chicago via the container's TZ env), not UTC —
-    see the monitor-bridge CLAUDE.md's "bracketed log timestamps" trap for the incident that
-    came from reading it as UTC. Callers must reach this qualified as `bridge.common.log(...)`;
-    see this module's header.
+    It carries NO timestamp of its own. Both bridges run as containers, and the container runtime
+    already stamps every line — `kubectl logs --timestamps` prepends the true UTC ingestion time.
+    The stamp this function used to print was `time.strftime` with no offset, so it rendered the
+    container's local America/Chicago wall clock while looking like an ISO instant; reading it as
+    UTC shifted a B2 cap breach five hours early on 2026-08-16 and pointed the investigation at
+    the wrong window. One stamp from the runtime beats two that disagree.
+
+    Callers must reach this qualified as `bridge.common.log(...)`; see this module's header.
     """
-    print("[%s]" % time.strftime("%Y-%m-%dT%H:%M:%S"), *args, flush=True)
+    print(*args, flush=True)
 
 
-def touch_heartbeat(path):
+def touch_heartbeat(path: str) -> None:
     """Write the current time to `path`, the liveness-probe heartbeat file.
 
     Takes the path as an argument rather than reading a module-level constant, so each caller's
@@ -87,7 +91,7 @@ def touch_heartbeat(path):
         log("WARN: heartbeat write failed:", e)
 
 
-def sanitize(s, maxlen=120):
+def sanitize(s: object, maxlen: int = 120) -> str:
     """Neutralize adversary-controlled text before it enters a Discord-bound alert msg.
 
     Release titles, indexer names, n8n workflow names and *arr queue items are

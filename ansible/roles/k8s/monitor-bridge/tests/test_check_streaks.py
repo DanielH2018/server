@@ -126,7 +126,7 @@ def test_apply_startup_grace_streaks_are_per_name():
 
 def test_startup_grace_set_matches_real_checks():
     # Guard (mirrors PROM_DEPENDENT/LOKI_DEPENDENT): every graced name is a real check.
-    names = {name for name, _, _ in check.CHECKS}
+    names = {c.name for c in check.CHECKS}
     assert check.STARTUP_GRACE <= names
 
 
@@ -160,7 +160,7 @@ def test_startup_grace_covers_every_ungated_reach_out_check():
     self_hysteresis = {"ha_heartbeat", "discord"}
     reach_out = {
         name
-        for name, _, fn in check.CHECKS
+        for name, _, fn in ((c.name, c.token, c.fn) for c in check.CHECKS)
         if any(h in inspect.getsource(fn) for h in ("_get_json(", "_post_json("))
     }
     ungated = reach_out - gated - self_hysteresis
@@ -182,7 +182,9 @@ def _wire_run_once_grace(monkeypatch, results):
     monkeypatch.setattr(bridge.config, "GRACE_CYCLES", 2)
     monkeypatch.setattr(check, "_grace_streaks", {})
     seq = iter(results)
-    monkeypatch.setattr(check, "CHECKS", [("n8n", "tok_n8n", lambda: next(seq))])
+    monkeypatch.setattr(
+        check, "CHECKS", [check.Check("n8n", "tok_n8n", lambda: next(seq))]
+    )
     pushes = []
     monkeypatch.setattr(bridge.net, "push", lambda t, ok, m: pushes.append((t, ok, m)))
     out = []

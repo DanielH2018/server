@@ -19,7 +19,12 @@ _DEFAULTS = pathlib.Path(__file__).parents[1] / "defaults" / "main.yml"
 
 
 def _env_fallbacks(source: str) -> dict[str, int]:
-    """The literal defaults gitops_deploy.py falls back to when config.env lacks a key."""
+    """The literal defaults gitops_deploy.py falls back to when its config file lacks a key.
+
+    These three keys deliberately keep their `C.get` fallback in the entry module rather than
+    moving into `deploy_io.load_config` with the rest — scripts/docs/gen_doc_fragments.py parses
+    them out of that file by name to publish the staging fragment.
+    """
     return {
         name: int(value)
         for name, value in re.findall(

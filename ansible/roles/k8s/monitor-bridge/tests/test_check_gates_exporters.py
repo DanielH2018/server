@@ -67,7 +67,7 @@ def test_down_exporters(up, expected):
 def test_exporter_dependent_values_are_real_checks():
     # Guard (mirrors PROM_DEPENDENT): every suppressed dependent is a real check name, so the
     # exporter gate can't silently drift, and every dependent is also prom-dependent.
-    names = {name for name, _, _ in check.CHECKS}
+    names = {c.name for c in check.CHECKS}
     for deps in check.EXPORTER_DEPENDENT.values():
         assert deps <= names
         assert deps <= check.PROM_DEPENDENT
@@ -182,7 +182,9 @@ def _wire_run_once_prom_up(monkeypatch, up_vector, checks, prom_dependent):
 
         return fn
 
-    monkeypatch.setattr(check, "CHECKS", [(n, "tok_%s" % n, _mk(n)) for n in checks])
+    monkeypatch.setattr(
+        check, "CHECKS", [check.Check(n, "tok_%s" % n, _mk(n)) for n in checks]
+    )
     check.run_once()
     return ran, pushes
 
@@ -326,6 +328,6 @@ def test_run_once_up_probe_failure_does_not_suppress(monkeypatch):
 
         return fn
 
-    monkeypatch.setattr(check, "CHECKS", [("disk", "tok_disk", _mk("disk"))])
+    monkeypatch.setattr(check, "CHECKS", [check.Check("disk", "tok_disk", _mk("disk"))])
     check.run_once()
     assert "disk" in ran  # not suppressed

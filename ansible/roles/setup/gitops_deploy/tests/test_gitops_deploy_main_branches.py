@@ -17,6 +17,8 @@ from collections.abc import Sequence
 
 import pytest
 
+import deploy_alerts
+
 # The SHAs the `tick` fixture starts from; `from conftest import` is avoided because the
 # repo has several conftest.py files and the name resolves to whichever sys.path saw first.
 LOCAL = "1" * 40
@@ -53,7 +55,9 @@ def test_drain_pending_runs_ahead_of_the_noop_short_circuit(
 ):
     # The ff-merged channels never re-reach their alert code on a later tick, so a queued alert
     # is only recoverable at the top of EVERY tick, before local == origin returns.
-    gitops_deploy._write_pending({"secrets:" + ORIGIN: "queued last tick"})
+    deploy_alerts.write_pending(
+        gitops_deploy.PENDING_ALERTS_FILE, {"secrets:" + ORIGIN: "queued last tick"}
+    )
     tick.origin = tick.local
     gitops_deploy.main()
     assert tick.posts == ["queued last tick"]

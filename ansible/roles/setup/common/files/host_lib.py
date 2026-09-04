@@ -120,6 +120,9 @@ def discord_post(
     renders. Every automation's Discord message should carry a stable ``<automation>:`` identifier,
     either via this arg or baked into ``content`` (as gitops_deploy / renovate_notify already do).
     """
+    # The Cloudflare-1010 rationale above is duplicated in monitor-bridge's
+    # bridge/net.py `_get_json`, which sets the same header for its Discord webhook GETs. The two
+    # programs ship by different mechanisms and cannot share a module, so edit both together.
     if not webhook:
         if log:
             log("no Discord webhook set; skipping post")

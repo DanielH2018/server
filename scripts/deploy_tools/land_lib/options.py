@@ -27,9 +27,13 @@ def _merge_poll_from_env() -> int:
     return int(os.environ.get("LAND_MERGE_POLL") or MERGE_POLL_S)
 
 
-@dataclass
+@dataclass(frozen=True)
 class Options:
-    """The landing's parameters. Budgets are fields so a test sets them without an env knob."""
+    """The landing's parameters. Budgets are fields so a test sets them without an env knob.
+
+    Frozen: nothing writes an Option after `parse_args` built it, and `conftest.py` already
+    treats it as immutable by going through `dataclasses.replace`.
+    """
 
     pr: str
     since: str = ""

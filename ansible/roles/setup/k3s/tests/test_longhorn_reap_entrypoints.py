@@ -47,12 +47,18 @@ def _copy_loop_srcs() -> list[pathlib.Path]:
     assert len(matches) == 1, (
         f"expected exactly one task named {COPY_TASK_NAME!r}, found {len(matches)}"
     )
-    resolved = []
-    for item in matches[0]["loop"]:
-        if item.startswith("{{ role_path }}/../common/files/"):
-            resolved.append(COMMON_FILES / item.rsplit("/", 1)[-1])
-        else:
-            resolved.append(FILES / item)
+    resolved = [FILES / item for item in matches[0]["loop"]]
+    # host_lib.py arrives through roles/setup/common/tasks/install_host_lib.yml, not the copy
+    # loop; include it only when that include is present and aimed at the same directory, so
+    # dropping the include breaks these tests the way dropping a loop entry does.
+    for t in tasks:
+        if (
+            t.get("ansible.builtin.import_tasks", "").endswith(
+                "common/tasks/install_host_lib.yml"
+            )
+            and t.get("vars", {}).get("host_lib_dir") == "/opt/longhorn-reap"
+        ):
+            resolved.append(COMMON_FILES / "host_lib.py")
     return resolved
 
 

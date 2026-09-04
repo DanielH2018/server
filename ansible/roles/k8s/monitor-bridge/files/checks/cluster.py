@@ -30,14 +30,18 @@ from verdicts.cluster import (
 _cadvisor_streaks: dict[str, int] = {}
 
 
-def _top_offenders(vector, label, predicate):
+def _top_offenders(
+    vector: list[tuple[dict, float]], label: str, predicate
+) -> list[tuple[str, float]]:
     """Names (by `label`) of series matching predicate(value), sorted by value desc."""
     hits = [(m.get(label, "?"), v) for m, v in vector if predicate(v)]
     hits.sort(key=lambda nv: -nv[1])
     return hits
 
 
-def _cadvisor_blind(key, vec, what):
+def _cadvisor_blind(
+    key: str, vec: list[tuple[dict, float]], what: str
+) -> tuple[bool, str] | None:
     """(ok, msg) when `vec` covers too few pods for an offender filter to mean anything, else None.
 
     Called on the PRE-FILTER vector, which is why each check hands in the one it already fetched.
@@ -58,7 +62,7 @@ def _cadvisor_blind(key, vec, what):
     return ok, out
 
 
-def check_restarts():
+def check_restarts() -> tuple[bool, str]:
     """Containers restarting more than RESTART_MAX times within RESTART_WINDOW.
 
     Catches crash-loops that an intermittent up-check can miss.
@@ -85,7 +89,7 @@ def check_restarts():
     return True, "no restart loops in %s" % cfg.RESTART_WINDOW
 
 
-def check_oom():
+def check_oom() -> tuple[bool, str]:
     """Containers OOM-killed within OOM_WINDOW, naming each one.
 
     Closes the loop on the per-container memory limits (deploy.resources). An empty vector used to
@@ -116,7 +120,7 @@ def check_oom():
 _cpu_breach_streak = 0
 
 
-def check_cpu_throttle():
+def check_cpu_throttle() -> tuple[bool, str]:
     """Containers under *sustained* CPU CFS throttling within CPU_WINDOW, naming each one.
 
     A container pinned at its `deploy.resources` cpu limit is throttled (slowed) without
@@ -196,7 +200,7 @@ def check_cpu_throttle():
     )
 
 
-def check_prometheus():
+def check_prometheus() -> tuple[bool, str]:
     """Is Prometheus itself reachable and answering queries?
 
     A trivial `vector(1)` instant query returns 1.0 whenever Prometheus is up; if it's
@@ -213,14 +217,14 @@ def check_prometheus():
     return True, "Prometheus reachable"
 
 
-def check_targets_down():
+def check_targets_down() -> tuple[bool, str]:
     """Any Prometheus scrape target reporting up==0 (monitoring going blind)."""
     return targets_verdict(
         bridge.net.prom_vector("up%s" % bridge.net.origin_sel()), cfg.TARGETS_MIN
     )
 
 
-def check_traefik_5xx():
+def check_traefik_5xx() -> tuple[bool, str]:
     """Elevated 5xx ratio per Traefik service, naming each offender.
 
     Per-service (not aggregate) for two reasons: the alert points at *which* backend is
@@ -263,7 +267,7 @@ def check_traefik_5xx():
     )
 
 
-def check_traefik_latency():
+def check_traefik_latency() -> tuple[bool, str]:
     """Share of slow requests per Traefik service, naming each offender.
 
     The gap check_traefik_5xx cannot close: a slow route still answers 200, so an error-ratio
@@ -346,7 +350,7 @@ def check_traefik_latency():
     )
 
 
-def check_k8s_workloads():
+def check_k8s_workloads() -> tuple[bool, str]:
     """Deployment readiness for every workload in the k3s cluster.
 
     Gated by check_cluster_prometheus rather than the ordinary Prometheus gate: this is the one
@@ -425,7 +429,7 @@ def check_k8s_workloads():
     return checks.logs.with_log_errors(ok, "%s, %s" % (msg, res_msg))
 
 
-def check_cluster_targets():
+def check_cluster_targets() -> tuple[bool, str]:
     """Scrape targets of the CLUSTER's own Prometheus (the other half of Scrape Targets).
 
     B5 pinned check_targets_down to origin="daniel-server" so it kept meaning exactly what it
@@ -454,7 +458,7 @@ def check_cluster_targets():
     return targets_verdict(vec, cfg.CLUSTER_TARGETS_MIN)
 
 
-def check_cluster_prometheus():
+def check_cluster_prometheus() -> tuple[bool, str]:
     """Reachability gate for the cluster Prometheus — the peer of check_prometheus.
 
     Kept separate from the Docker Prometheus gate on purpose. They are different instances on

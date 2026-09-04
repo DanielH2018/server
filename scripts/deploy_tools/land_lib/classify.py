@@ -7,8 +7,6 @@ before 2026-09-02 ended nothing-to-deploy after a median seven minutes of PR CI 
 master CI.
 """
 
-from __future__ import annotations
-
 import sys as _sys
 from collections.abc import Callable
 from pathlib import Path as _Path
@@ -16,7 +14,8 @@ from typing import Any
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.land_lib.landing import Landing
-from deploy_tools.land_lib.outcome import Outcome, say
+from deploy_tools.land_lib.outcome import Outcome, Verdict, say
+from deploy_tools.land_tags import DeriveSource
 
 
 def _classified(
@@ -40,7 +39,6 @@ def _classified(
 def resolve(ln: Landing) -> None:
     """Step 1: the merge commit, and a fresh origin/master in the primary checkout."""
     ln.ledger.t_merged = ln.tools.clock()
-    print(f"== 1/6  resolving PR #{ln.opts.pr}")
     sha = (ln.view("mergeCommit").get("mergeCommit") or {}).get("oid") or ""
     if not sha:
         ln.die(f"PR #{ln.opts.pr} has no merge commit — is it merged?", 1)
@@ -77,15 +75,15 @@ def classify(ln: Landing) -> None:
     Computed whether or not tags were derived: a PR can touch a deployable role AND a
     plane, and then the deploy succeeds while half the change is unapplied.
     """
-    if ln.tags:
+    if ln.resolved_tags:
         return
-    t = ln.tools
+    t, c = ln.tools, ln.classifier
     view = ln.view("files,changedFiles")
     paths = [f["path"] for f in view.get("files", [])]
-    quiet = t.quiet_paths(paths, pr_range(ln))
-    ln.plane = _classified(ln, "plane classification", t.plane_note, paths, quiet=quiet)
+    quiet = c.quiet_paths(paths, pr_range(ln))
+    ln.plane = _classified(ln, "plane classification", c.plane_note, paths, quiet=quiet)
     ln.self_applied = _classified(
-        ln, "self-applied classification", t.self_applied, paths, quiet=quiet
+        ln, "self-applied classification", c.self_applied, paths, quiet=quiet
     )
     # What a self-applied setup role still needs beyond the host the tick runs on.
     # initial_setup.yml applies to ONE target per run, so a role with no `when:` gate reaches
@@ -95,7 +93,7 @@ def classify(ln: Landing) -> None:
     ln.remaining_setup = _classified(
         ln,
         "remaining-setup-hosts classification",
-        t.remaining_setup_hosts,
+        c.remaining_setup_hosts,
         paths,
         t.hostname(),
         quiet=quiet,
@@ -103,10 +101,10 @@ def classify(ln: Landing) -> None:
     # -1 rather than 0: `gh` omitting the field must not read as agreement with an empty
     # file list, which would silently license a zero-tag deploy.
     tags, source = _classified(
-        ln, "tag derivation", t.derive, paths, view.get("changedFiles", -1)
+        ln, "tag derivation", c.derive, paths, view.get("changedFiles", -1)
     )
-    ln.tags = ",".join(tags)
-    if source == "fallback":
+    ln.resolved_tags = list(tags)
+    if source == DeriveSource.FALLBACK:
         if not ln.opts.since:
             ln.die(
                 "PR file list was truncated and no --since was given — rerun with --since <pre-merge-sha>"
@@ -121,9 +119,9 @@ def classify(ln: Landing) -> None:
 
 def shortcut_if_nothing(ln: Landing) -> None:
     """A PR reaching no tag, no plane and nothing self-applied has nothing to wait for."""
-    if not (ln.tags or ln.plane or ln.self_applied or ln.needs_diff):
+    if not (ln.resolved_tags or ln.plane or ln.self_applied or ln.needs_diff):
         ln.finish(
-            "nothing-to-deploy",
+            Verdict.NOTHING_TO_DEPLOY,
             0,
             f"PR #{ln.opts.pr} touched no service; the deployer fast-forwards it on its next tick",
         )

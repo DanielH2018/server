@@ -25,7 +25,11 @@ from types import ModuleType
 
 import pytest
 
-GITOPS_SRC = pathlib.Path(__file__).resolve().parents[1] / "files" / "gitops_deploy.py"
+import deploy_io
+
+FILES = pathlib.Path(__file__).resolve().parents[1] / "files"
+GITOPS_SRC = FILES / "gitops_deploy.py"
+IO_SRC = FILES / "deploy_io.py"
 STATE_PREFIX = "/var/lib/gitops-deploy/"
 
 # At import, not in a fixture: a test module's own `import gitops_deploy` runs at collection,
@@ -61,6 +65,11 @@ def state_dir(
         monkeypatch.setattr(
             gitops_deploy, name, str(tmp_path / value.removeprefix(STATE_PREFIX))
         )
+    # The constants above are the literals the module declares; STATE is what its code reads and
+    # writes them through, so it has to be repointed too or a test would write to /var/lib.
+    # DeployerState derives the same basenames, which test_deployer_state.py pins against the
+    # constants.
+    monkeypatch.setattr(gitops_deploy, "STATE", deploy_io.DeployerState(tmp_path))
     return tmp_path
 
 
@@ -76,10 +85,21 @@ def gitops_tree() -> ast.Module:
 
 
 @pytest.fixture(scope="session")
-def gitops_fn(
-    gitops_tree: ast.Module,
+def deploy_io_tree() -> ast.Module:
+    """deploy_io.py's parsed source, for the guards that follow a function that moved there."""
+    return ast.parse(IO_SRC.read_text())
+
+
+@pytest.fixture(scope="session")
+def deploy_io_fn(
+    deploy_io_tree: ast.Module,
 ) -> Callable[[str, ast.AST | None], ast.FunctionDef]:
-    """`gitops_fn("main")` is main()'s FunctionDef; a missing name fails, never returns None.
+    """`deploy_io_fn("run_staging_scripts")` is that FunctionDef; a missing name fails."""
+    return _fn_finder(deploy_io_tree, "deploy_io.py")
+
+
+def _fn_finder(default_tree: ast.Module, filename: str):
+    """A `fn(name, tree=None)` returning that FunctionDef, asserting rather than returning None.
 
     `tree` overrides the parsed module for a rejecting half that parses the pre-fix shape
     of a function and asserts the check still flags it.
@@ -89,15 +109,23 @@ def gitops_fn(
         fn = next(
             (
                 n
-                for n in ast.walk(tree if tree is not None else gitops_tree)
+                for n in ast.walk(tree if tree is not None else default_tree)
                 if isinstance(n, ast.FunctionDef) and n.name == name
             ),
             None,
         )
-        assert fn is not None, f"{name}() not found in gitops_deploy.py"
+        assert fn is not None, f"{name}() not found in {filename}"
         return fn
 
     return _fn
+
+
+@pytest.fixture(scope="session")
+def gitops_fn(
+    gitops_tree: ast.Module,
+) -> Callable[[str, ast.AST | None], ast.FunctionDef]:
+    """`gitops_fn("main")` is main()'s FunctionDef; a missing name fails, never returns None."""
+    return _fn_finder(gitops_tree, "gitops_deploy.py")
 
 
 @pytest.fixture(scope="session")
@@ -189,7 +217,7 @@ class ScriptedTick:
         path.write_text("services: {}\n")
 
     # ── what main() sees ──────────────────────────────────────────────────────────────────────
-    def run(self, argv: list[str], **kwargs) -> str:
+    def run(self, argv: list[str], *, cwd: str | None = None, **kwargs) -> str:
         if argv[0] == "git":
             self.log.append(("git", argv))
             return self._git(argv)
@@ -289,12 +317,16 @@ def tick(gitops_deploy: ModuleType, monkeypatch, state_dir, tmp_path) -> Scripte
     repo.mkdir()
     scripted = ScriptedTick(repo)
     monkeypatch.setattr(gitops_deploy, "REPO", str(repo))
-    monkeypatch.setattr(gitops_deploy, "run", scripted.run)
+    # deploy_io.run, not gitops_deploy.run: main() reaches it qualified, so ONE patch covers both
+    # the tick's own git calls and the ones deploy_io makes inside deploy_k8s/deploy_broad.
+    monkeypatch.setattr(deploy_io, "run", scripted.run)
     monkeypatch.setattr(subprocess, "run", scripted.subprocess_run)
     monkeypatch.setattr(gitops_deploy, "discord", scripted.discord)
     monkeypatch.setattr(gitops_deploy, "fetch_ci_verdict", lambda _sha: scripted.ci)
     monkeypatch.setattr(
-        gitops_deploy, "service_healthy", lambda _svc, deadline=None: scripted.healthy
+        deploy_io,
+        "service_healthy",
+        lambda _repo, _svc, _timeout, deadline=None: scripted.healthy,
     )
 
     def _consult(services, _origin):
@@ -309,7 +341,7 @@ def tick(gitops_deploy: ModuleType, monkeypatch, state_dir, tmp_path) -> Scripte
     monkeypatch.setattr(gitops_deploy, "consult_staging", _consult)
     monkeypatch.setattr(gitops_deploy, "consume_staging_override", _consume_override)
     monkeypatch.setattr(
-        gitops_deploy,
+        deploy_io,
         "emit_deploy_annotation",
         lambda services, _sha: scripted.log.append(("annotation", set(services))),
     )

@@ -108,8 +108,8 @@ def test_check_enabled_only_and_skip_semantics():
 
 
 def test_name_set_parses_csv_with_spaces():
-    assert check._name_set(" a, b ,c,,") == frozenset({"a", "b", "c"})
-    assert check._name_set("") == frozenset()
+    assert bridge.config._name_set(" a, b ,c,,") == frozenset({"a", "b", "c"})
+    assert bridge.config._name_set("") == frozenset()
 
 
 def test_validate_rejects_unknown_names():
@@ -138,15 +138,15 @@ def test_validate_accepts_only_and_skip_shapes():
 
 def test_subset_names_are_real_checks():
     # Guard (mirrors the PROM_DEPENDENT guard): the subset must track CHECKS renames.
-    names = {name for name, _, _ in check.CHECKS}
+    names = {c.name for c in check.CHECKS}
     assert SUBSET_ONLY <= names
 
 
 def test_run_once_with_only_filter_touches_no_gate(monkeypatch):
     # With a CHECKS_ONLY filter active, run_once must evaluate exactly that set — no
     # gate probe, no metric check, no push for anything else.
-    monkeypatch.setattr(check, "CHECKS_ONLY", SUBSET_ONLY)
-    monkeypatch.setattr(check, "CHECKS_SKIP", frozenset())
+    monkeypatch.setattr(bridge.config, "CHECKS_ONLY", SUBSET_ONLY)
+    monkeypatch.setattr(bridge.config, "CHECKS_SKIP", frozenset())
     evaluated = []
     monkeypatch.setattr(
         check, "_evaluate", lambda name, fn: (evaluated.append(name), (True, "ok"))[1]

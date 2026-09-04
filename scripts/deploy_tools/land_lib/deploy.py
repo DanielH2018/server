@@ -7,17 +7,23 @@ deploy_tags.py hosts says which host declares each tag. daniel-stage is never on
 (issue #935; HOSTS_LAND_SH_NEVER_DEPLOYS in deploy_tags.py).
 """
 
-from __future__ import annotations
-
 from typing import NoReturn
 
 import sys as _sys
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
+from deploy_tools.exit_codes import (
+    DEPLOY_BROAD,
+    DEPLOY_LOCK_BUSY,
+    DEPLOY_OK,
+    DEPLOY_PLAYBOOK_FAILED,
+    DEPLOY_STALE,
+    DEPLOY_TAG_MISS,
+)
 from deploy_tools.land_lib import ci, tick
-from deploy_tools.land_lib.landing import BRANCH, Landing
-from deploy_tools.land_lib.outcome import say
+from deploy_tools.land_lib.landing import BRANCH, Landing, TickState, retry_while_locked
+from deploy_tools.land_lib.outcome import Cause, Verdict, cause_for_deploy_exit, say
 
 
 def derive_from_diff(ln: Landing) -> None:
@@ -29,11 +35,11 @@ def derive_from_diff(ln: Landing) -> None:
     """
     say(f"deriving tags from the diff since {ln.opts.since}")
     r = ln.tools.deploy_tags(ln.opts.primary, ["changed", ln.opts.since])
-    if r.returncode == 3:
+    if r.returncode == DEPLOY_BROAD:
         ln.die("the change is broad and maps to no service list — deploy it by hand", 1)
-    if r.returncode != 0:
+    if r.returncode != DEPLOY_OK:
         ln.die(f"deploy_tags.py changed failed (exit {r.returncode})", 1)
-    ln.tags = r.stdout.strip()
+    ln.resolved_tags = [t for t in r.stdout.strip().split(",") if t]
 
 
 def no_tag_outcome(ln: Landing) -> NoReturn:
@@ -42,37 +48,53 @@ def no_tag_outcome(ln: Landing) -> NoReturn:
     if ln.plane:
         print(f"  it needs applying by hand: {ln.plane}")
         ln.finish(
-            "needs-manual-apply", 1, f"PR #{pr} reaches no service tag, but is not done"
+            Verdict.NEEDS_MANUAL_APPLY,
+            1,
+            f"PR #{pr} reaches no service tag, but is not done",
         )
     if not ln.self_applied:
-        ln.finish("nothing-to-deploy", 0, f"PR #{pr} touched no service")
+        ln.finish(Verdict.NOTHING_TO_DEPLOY, 0, f"PR #{pr} touched no service")
     state = ln.tick_state()
-    if state == "held":
+    if state == TickState.UNKNOWN:
+        print(
+            f"  the deployer's state directory ({ln.opts.deployer_state}) could not be read, "
+            "so whether the tick applied this PR is unknown"
+        )
+        ln.finish(
+            Verdict.NEEDS_MANUAL_APPLY,
+            1,
+            f"PR #{pr} — the deployer's state could not be read; confirm the tick applied it",
+        )
+    if state == TickState.HELD:
         print(
             f"  the deployer is holding {ln.state('hold_sha')}: its apply failed — see hold_plane and the gitops-deploy journal"
         )
-        ln.ledger.cause = "tick-held"
+        ln.ledger.cause = Cause.TICK_HELD
         ln.finish(
-            "deploy-failed", 1, f"PR #{pr} — the tick's own apply failed and is held"
+            Verdict.DEPLOY_FAILED,
+            1,
+            f"PR #{pr} — the tick's own apply failed and is held",
         )
-    if state == "behind":
+    if state == TickState.BEHIND:
         print(
             f"  the tick did not fast-forward to origin (parked since: {ln.state('behind_since')})"
         )
         print(
             "  Usually a newer merge whose CI is still running; the next tick crosses it. Nothing is wrong with this PR."
         )
-        ln.finish("deferred", 75, f"PR #{pr} — landed, not yet applied by the tick")
+        ln.finish(
+            Verdict.DEFERRED, 75, f"PR #{pr} — landed, not yet applied by the tick"
+        )
     if ln.remaining_setup:
         local = ln.tools.hostname()
         print(f"  applied on {local} only; it also reaches: {ln.remaining_setup}")
         ln.finish(
-            "needs-manual-apply",
+            Verdict.NEEDS_MANUAL_APPLY,
             1,
             f"PR #{pr}, {sha} — self-applied on {local} only; other hosts still need it",
         )
     ln.finish(
-        "settled",
+        Verdict.SETTLED,
         0,
         f"PR #{pr}, {sha} — no service tag; the tick applied it and converged with origin",
     )
@@ -81,20 +103,20 @@ def no_tag_outcome(ln: Landing) -> NoReturn:
 def deploy_by_host(ln: Landing) -> int:
     """One deploy.sh per declaring host; the first non-zero exit. Retries resume at the failed host."""
     o, t = ln.opts, ln.tools
-    r = t.deploy_tags(o.primary, ["hosts", ln.tags])
-    if r.returncode != 0:
+    r = t.deploy_tags(o.primary, ["hosts", ln.tags_csv])
+    if r.returncode != DEPLOY_OK:
         # deploy.sh was never invoked for any host, so nothing here overlaps with the
         # catch-all in deploy_outcome, which really did run it (issue #1016).
-        ln.ledger.cause = "host-lookup"
+        ln.ledger.cause = Cause.HOST_LOOKUP
         ln.die(
             "deploy_tags.py hosts failed before any deploy.sh ran; nothing was touched; "
-            f"tags: {ln.tags}",
+            f"tags: {ln.tags_csv}",
             1,
-            "deploy-failed",
+            Verdict.DEPLOY_FAILED,
         )
     lines = [x for x in r.stdout.splitlines() if x.strip()]
     if not lines:
-        return t.deploy(o.primary, ln.tags, None)
+        return t.deploy(o.primary, ln.resolved_tags, None)
     local = t.hostname()
     for line in lines:
         host, _, host_tags = line.partition("\t")
@@ -105,8 +127,8 @@ def deploy_by_host(ln: Landing) -> int:
             say(
                 f"{host_tags}: declared on {host}, deploying there with -e target={host}"
             )
-        rc = t.deploy(o.primary, host_tags, target)
-        if rc != 0:
+        rc = t.deploy(o.primary, [x for x in host_tags.split(",") if x], target)
+        if rc != DEPLOY_OK:
             return rc
         ln.deployed_hosts.add(host)
     return 0
@@ -114,73 +136,59 @@ def deploy_by_host(ln: Landing) -> int:
 
 def deploy_with_lock_retry(ln: Landing) -> int:
     """deploy_by_host, retried while the git-tree lock stays busy (exit 75)."""
-    o, t = ln.opts, ln.tools
-    rc = 0
-    for attempt in range(1, o.lock_retries + 1):
-        # Sampled BEFORE the attempt, for the reason note_lock_contention documents. It
-        # precedes the WHOLE per-host loop, so contention arising at a later host can name
-        # the holder seen before the first one; `holder or tools.lock_holder()` covers the
-        # case where that sample was empty.
-        # DECIDED: see tick.py's run_tick for why this samples every attempt rather than
-        # only a losing one (#1085 item 4) -- same #1031 race, same tradeoff, same tests
-        # (test_the_lock_holder_is_sampled_before_the_deploy_attempt in
-        # tests/test_land_deploy.py).
-        holder = t.lock_holder()
-        started = t.clock()
-        rc = deploy_by_host(ln)
-        if rc != 75:
-            break
-        ln.note_lock_contention(int(t.clock() - started) + o.lock_backoff, holder)
-        say(
-            f"deploy lock busy (attempt {attempt}/{o.lock_retries}); retrying in {o.lock_backoff}s"
-        )
-        t.sleep(o.lock_backoff)
-    return rc
+    o = ln.opts
+    return retry_while_locked(
+        ln,
+        DEPLOY_LOCK_BUSY,
+        lambda: deploy_by_host(ln),
+        lambda n: (
+            f"deploy lock busy (attempt {n}/{o.lock_retries}); retrying in {o.lock_backoff}s"
+        ),
+    )
 
 
 def deploy_outcome(ln: Landing, rc: int) -> None:
     """Map deploy.sh's exit to a verdict; 0 returns."""
-    pr, tags, o = ln.opts.pr, ln.tags, ln.opts
-    if rc == 0:
+    pr, tags, o = ln.opts.pr, ln.tags_csv, ln.opts
+    if rc == DEPLOY_OK:
         return
-    if rc == 2:
+    if rc == DEPLOY_TAG_MISS:
         # deploy.sh refused the WHOLE list and deployed nothing, including every valid
         # service beside the bad tag. This read as nothing-to-deploy until 2026-08-29,
         # which is how PR #617 left 22 digest pins undeployed behind a green verdict.
-        ln.ledger.cause = "tag-miss"
+        ln.ledger.cause = Cause.TAG_MISS
         ln.finish(
-            "deploy-failed",
+            Verdict.DEPLOY_FAILED,
             1,
             f"PR #{pr} — a derived tag matched no service, so nothing deployed; tags: {tags}",
         )
-    if rc == 75:
+    if rc == DEPLOY_LOCK_BUSY:
         ln.die(
             f"deploy lock stayed busy after {o.lock_retries} attempts — nothing deployed",
             75,
-            "lock-busy",
+            Verdict.LOCK_BUSY,
         )
-    if rc == 20:
+    if rc == DEPLOY_PLAYBOOK_FAILED:
         # The playbook RAN and a task failed: everything before it is live (issue #840).
         # Not a resume point; re-running it is not automatically safe.
-        ln.ledger.cause = "playbook-failed"
+        ln.ledger.cause = Cause.PLAYBOOK_FAILED
         ln.finish(
-            "deploy-failed",
+            Verdict.DEPLOY_FAILED,
             1,
             f"PR #{pr} — a playbook task failed AFTER applying; some changes are live; tags: {tags}",
         )
-    ln.ledger.cause = f"deploy-exit-{rc}"
-    ln.finish("deploy-failed", 1, f"PR #{pr}, exit {rc}")
+    ln.ledger.cause = cause_for_deploy_exit(rc)
+    ln.finish(Verdict.DEPLOY_FAILED, 1, f"PR #{pr}, exit {rc}")
 
 
 def deploy_phase(ln: Landing) -> None:
     """Step 5, end to end: derive if needed, deploy, ride out a stale tree, stamp the ledger."""
     o, t = ln.opts, ln.tools
-    print("== 5/6  deploying what the tick deferred")
     if ln.needs_diff:
         derive_from_diff(ln)
-    if not ln.tags:
+    if not ln.resolved_tags:
         no_tag_outcome(ln)
-    ln.ledger.tags_label = ln.tags
+    ln.ledger.tags_label = ln.tags_csv
     rc = deploy_with_lock_retry(ln)
     # 4 = the tree is behind origin/master: someone merged during the CI wait. The tick
     # crosses a tip only once master CI is green ON IT, so wait on the CURRENT tip -- every
@@ -193,7 +201,7 @@ def deploy_phase(ln: Landing) -> None:
     # minutes before saying so. Bounded: a third merge during the tip wait moves the tip
     # again.
     for attempt in range(1, o.stale_retries + 1):
-        if rc != 4:
+        if rc != DEPLOY_STALE:
             break
         say(
             f"tree went stale mid-landing (exit 4); retrying in {o.lock_backoff}s "
@@ -201,9 +209,9 @@ def deploy_phase(ln: Landing) -> None:
         )
         t.sleep(o.lock_backoff)
         ln.fetch_branch()
-        if ci.blockers(ln) == 3:
+        if ci.blockers(ln) == DEPLOY_BROAD:
             ln.finish(
-                "blocked",
+                Verdict.BLOCKED,
                 1,
                 f"PR #{o.pr} — a change needing a hand landed during the wait; see above",
             )

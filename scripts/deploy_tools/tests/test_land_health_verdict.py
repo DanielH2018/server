@@ -14,7 +14,7 @@ from deploy_tools.land_lib.outcome import Outcome
 
 def _deployed(landing, fakes=None):
     ln, calls = landing(fakes)
-    ln.merge_sha, ln.tags = MERGE_SHA, "sonarr"
+    ln.merge_sha, ln.resolved_tags = MERGE_SHA, ["sonarr"]
     ln.plane = (fakes or Fakes()).plane
     ln.self_applied = (fakes or Fakes()).self_applied
     ln.remaining_setup = (fakes or Fakes()).remaining_setup
@@ -90,3 +90,13 @@ def test_no_remaining_hosts_still_settles(landing):
     with pytest.raises(Outcome) as exc:
         health_verdict.health(ln)
     assert (exc.value.rc, exc.value.verdict) == (0, "settled")
+
+
+def test_an_unreadable_deployer_state_is_not_settled(landing, capsys):
+    """Finding 13's rejecting half at step 6: services live, the tick's own half unknown."""
+    ln, _ = _deployed(landing, Fakes(self_applied=True))
+    ln.tools.read_state = lambda root, name: None
+    with pytest.raises(Outcome) as exc:
+        health_verdict.health(ln)
+    assert (exc.value.rc, exc.value.verdict) == (1, "needs-manual-apply")
+    assert "could not be read" in capsys.readouterr().out

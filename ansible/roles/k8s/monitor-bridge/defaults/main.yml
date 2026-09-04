@@ -35,6 +35,9 @@ monitor_bridge_modules:
   - verdicts/cluster.py
   - verdicts/host.py
   - verdicts/service.py
+  - verdicts/storage.py
+  - verdicts/logs.py
+  - verdicts/notify.py
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Observability: this IS the alert pipeline — every threshold check in the fleet pushes through

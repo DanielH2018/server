@@ -3,8 +3,6 @@
 Run: uv run pytest scripts/deploy_tools/tests/test_land_imports.py
 """
 
-from __future__ import annotations
-
 import ast
 from pathlib import Path
 
@@ -28,7 +26,8 @@ MODULES = frozenset(
 ALLOWED = {
     "outcome": set(),
     "options": set(),
-    "ledger": set(),
+    # `cause`'s vocabulary lives beside `verdict`'s, and the Ledger validates against it.
+    "ledger": {"outcome"},
     "tools": set(),
     "landing": {"outcome", "options", "tools", "ledger"},
     "merge": {"landing", "outcome"},
@@ -62,14 +61,25 @@ def _land_lib_imports(path: Path) -> set[str]:
     return found
 
 
-def test_every_module_exists():
-    present = {p.stem for p in LIB.glob("*.py")}
-    assert MODULES <= present, MODULES - present
+def _present() -> set[str]:
+    return {p.stem for p in LIB.glob("*.py")}
+
+
+def test_the_module_set_is_exactly_what_is_on_disk():
+    """`==`, not `<=`: a thirteenth module used to be added and never checked at all."""
+    assert MODULES == _present(), (
+        f"missing from MODULES: {sorted(_present() - MODULES)}; "
+        f"listed but absent: {sorted(MODULES - _present())}"
+    )
 
 
 def test_no_module_imports_outside_its_allowed_set():
-    for name in sorted(MODULES):
+    """Iterates what is ON DISK, so a new module with no ALLOWED entry is a KeyError."""
+    present = _present()
+    assert present, "the glob matched nothing -- LIB is wrong, not the tree"
+    for name in sorted(present):
         got = _land_lib_imports(LIB / f"{name}.py")
+        assert name in ALLOWED, f"{name} has no ALLOWED entry"
         assert got <= ALLOWED[name], f"{name} imports {sorted(got - ALLOWED[name])}"
 
 

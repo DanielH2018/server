@@ -106,6 +106,37 @@ def test_a_retryable_fetch_failure_is_a_clean_skip(
     assert seen["behind"] == []
 
 
+def test_an_unusable_config_is_one_line_and_exit_1_not_a_traceback(
+    gitops_deploy, monkeypatch, state_dir, capsys
+):
+    """The acceptance criterion for moving the config parse out of import time.
+
+    `HEALTH_TIMEOUT_S=5m` used to raise `ValueError: invalid literal for int()` while the module
+    was still importing — no key name, no webhook, no log line. The handler must sit ABOVE the
+    generic `except Exception` (ConfigError subclasses it, so a reordering silently restores the
+    traceback), and must leave last_run alone: a deployer that cannot parse its config is not
+    ticking, and writing the marker would hold GitOps-Alive green over it.
+    """
+    import deploy_io
+
+    seen = _tick(
+        gitops_deploy,
+        monkeypatch,
+        deploy_io.ConfigError(
+            "unusable deployer config: HEALTH_TIMEOUT_S='5m' is not a whole number"
+        ),
+    )
+    assert gitops_deploy.entrypoint() == 1
+    out = capsys.readouterr().out.strip()
+    assert out.count("\n") == 0, (
+        f"a diagnosable failure is one line, not a block: {out}"
+    )
+    assert "HEALTH_TIMEOUT_S" in out and "5m" in out
+    assert len(seen["posts"]) == 1 and "HEALTH_TIMEOUT_S" in seen["posts"][0]
+    assert not (state_dir / "last_run").exists()
+    assert seen["behind"] == []
+
+
 def test_a_genuine_crash_still_pages_and_reraises(
     gitops_deploy, monkeypatch, state_dir
 ):

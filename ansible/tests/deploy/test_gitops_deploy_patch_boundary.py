@@ -16,9 +16,9 @@ every name. That opens two silent holes, both the ones monitor-bridge's check.py
 
 The monitor-bridge guard counts an imported name as "bound", which a facade defeats: every
 name is bound there and none is defined. This one requires a def/class/assignment at the
-patched module's top level. The suite patches `gitops_deploy.run` (the argv tests) and the
-I/O around main() — `discord`, `main`, `drain_pending`, `_record_behind` — every one of
-which gitops_deploy defines; the census sanity test pins that the walk still finds them.
+patched module's top level. The suite patches `deploy_io.run` (the argv tests) and the I/O
+around main() — `discord`, `main`, `drain_pending`, `_record_behind` — each on the module that
+defines it; the census sanity test pins that the walk still finds them, per module.
 
 Run: uv run pytest ansible/tests/deploy/test_gitops_deploy_patch_boundary.py
 """
@@ -148,12 +148,23 @@ def _live_pairs():
 # --- The live tree ---------------------------------------------------------------------------
 
 
+# Named members per module, not a count: the assertions below pass vacuously if the AST walk
+# stops matching, and a total that merely moved would not say which module lost its seam.
+# `run` and `service_healthy` moved to deploy_io when main() split into phases; `discord`,
+# `deliver`, `drain_pending` and `main` are still defined on the entry module and patched there.
+_KNOWN_PATCHES = {
+    "gitops_deploy": {"discord", "drain_pending", "main", "REPO"},
+    "deploy_io": {"run", "service_healthy"},
+}
+
+
 def test_the_census_still_finds_the_known_patches():
     """Without this the assertions below pass vacuously if the AST walk stops matching."""
     pairs = _live_pairs()
-    assert {"run", "discord", "main", "drain_pending"} <= pairs.get(
-        "gitops_deploy", set()
-    ), pairs
+    for module, names in _KNOWN_PATCHES.items():
+        assert names <= pairs.get(module, set()), (
+            f"{sorted(names - pairs.get(module, set()))} no longer patched on {module}"
+        )
 
 
 def test_every_patched_name_is_defined_on_the_module_it_is_patched_on():

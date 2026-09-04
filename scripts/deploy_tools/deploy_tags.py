@@ -38,6 +38,7 @@ import difflib
 import subprocess
 import sys
 from pathlib import Path
+from typing import NamedTuple
 
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
@@ -91,14 +92,22 @@ def service_tags(host_vars: Path = HOST_VARS) -> set[str]:
     return tags
 
 
-def service_records(host_vars: Path = HOST_VARS) -> list[tuple[str, str, str]]:
+class ServiceRecord(NamedTuple):
+    """One containers_list entry, as the triple every caller unpacks positionally."""
+
+    host: str
+    platform: str
+    tag: str
+
+
+def service_records(host_vars: Path = HOST_VARS) -> list[ServiceRecord]:
     """(host, platform, tag) for every containers_list entry, across all hosts.
 
     Same source and the same `tags | default([name])` precedence as service_tags(), just kept
     per-entry instead of flattened to a set — `describe` groups by host/platform, which needs
     the host and platform back.
     """
-    records: list[tuple[str, str, str]] = []
+    records: list[ServiceRecord] = []
     for path in host_files(host_vars):
         for entry in containers_entries(path):
             # No host_vars file sets `platform` on a docker entry today (daniel-pi's don't
@@ -106,7 +115,7 @@ def service_records(host_vars: Path = HOST_VARS) -> list[tuple[str, str, str]]:
             # default rather than an unlabelled third state.
             platform = entry.get("platform", "docker")
             for tag in entry.get("tags") or [entry["name"]]:
-                records.append((path.stem, platform, tag))
+                records.append(ServiceRecord(path.stem, platform, tag))
     return records
 
 

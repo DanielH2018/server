@@ -22,6 +22,7 @@ from deploy_health import (
     containers_to_gate,
     gate_services,
     health_decision,
+    HealthSample,
     health_settles,
 )
 
@@ -304,3 +305,29 @@ def test_the_default_cap_is_the_one_the_deployer_uses():
     queue = {f"secrets:{i}": "msg" for i in range(PENDING_ALERTS_MAX + 2)}
     _capped, dropped = cap_pending(queue)
     assert len(dropped) == 2
+
+
+# ── HealthSample ──────────────────────────────────────────────────────────────────────────
+# The poll sequence crosses a module boundary: health_ok() (I/O) builds it, health_settles()
+# (pure) folds over it. Naming the two fields is what stops a silent (running, status)
+# inversion, which typechecks fine as tuple[str, bool].
+
+
+def test_a_health_sample_names_its_two_fields():
+    sample = HealthSample(status="", running=True)
+    assert (sample.status, sample.running) == ("", True)
+
+
+def test_health_settles_reads_named_samples_the_same_as_plain_pairs():
+    """The type is additive: every existing caller passes bare tuples and must be unaffected."""
+    named = [HealthSample("", True), HealthSample("", True), HealthSample("", True)]
+    assert health_settles(named, settle_checks=3) is True
+    assert health_settles(named, settle_checks=3) is health_settles(
+        [("", True), ("", True), ("", True)], settle_checks=3
+    )
+
+
+def test_an_inverted_sample_is_flagged():
+    """The rejecting half: fields swapped must not settle, where the bare pair silently would."""
+    inverted = [HealthSample(status="", running=False)] * 3
+    assert health_settles(inverted, settle_checks=3) is False

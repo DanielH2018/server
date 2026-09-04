@@ -16,7 +16,13 @@ clear it here. Rule and enforcement: bridge/config.py's header.
 _down_streaks: dict[str, int] = {}
 
 
-def down_streak(count, threshold, msg, grace_note, held_label="down streak"):
+def down_streak(
+    count: int,
+    threshold: float,
+    msg: str,
+    grace_note: str,
+    held_label: str = "down streak",
+) -> tuple[int, bool, str]:
     """Pure consecutive-down hysteresis step shared by every per-check grace mechanism.
 
     Used by check_ha_heartbeat's, check_ups's and check_discord's per-check grace, plus

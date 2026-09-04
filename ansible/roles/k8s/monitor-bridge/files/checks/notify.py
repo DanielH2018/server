@@ -16,10 +16,10 @@ import bridge.config as cfg
 import bridge.net
 import bridge.streaks
 from bridge.common import HTTP_TIMEOUT
-from verdicts.service import discord_webhook_ok
+from verdicts.notify import discord_webhook_ok
 
 
-def _discord_webhooks():
+def _discord_webhooks() -> list[tuple[str, str]]:
     """(label, url) pairs for each configured Discord webhook to verify (skips empties).
 
     Kuma's is the alert-chain delivery hop for every monitor; CrowdSec's is the independent
@@ -43,7 +43,7 @@ def _discord_webhooks():
     ]
 
 
-def _smtp_login_ok():
+def _smtp_login_ok() -> tuple[bool, str]:
     """Connect to the SMTP server over implicit TLS and AUTH with the notify creds. (ok, msg).
 
     A revoked/expired Gmail app-password fails at login; a broken SMTP endpoint fails at connect. NOOP
@@ -61,7 +61,7 @@ def _smtp_login_ok():
 _email_probe = {"ts": 0.0, "ok": True, "msg": "not yet probed"}
 
 
-def email_backstop(now=None):
+def email_backstop(now: float | None = None) -> tuple[bool, str]:
     """Throttled deliverability probe for the alert-email 2nd channel. (ok, msg).
 
     Empty SMTP_PASSWORD -> disabled (stays up). A SUCCESS is cached for EMAIL_PROBE_INTERVAL_S (so
@@ -90,7 +90,7 @@ def email_backstop(now=None):
     return ok, msg
 
 
-def check_discord():
+def check_discord() -> tuple[bool, str]:
     """GET-verify EVERY configured Discord notification webhook still delivers, plus the email backstop.
 
     Verifies the Kuma alert webhook, the CrowdSec ban-alert webhook, AND the GitOps/Renovate

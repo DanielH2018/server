@@ -24,6 +24,8 @@
   loop:
     - gitops_deploy.py
     - deploy_logic.py
+    - deploy_io.py
+    - deploy_alerts.py
     - deploy_changes.py
     - deploy_remediation.py
     - deploy_git.py
@@ -34,15 +36,12 @@
   become: true
   notify: Run gitops-deploy once
 
-- name: Install the shared host_lib helper (source of truth in roles/setup/common/files)
-  ansible.builtin.copy:
-    src: "{{ role_path }}/../common/files/host_lib.py"
-    dest: /opt/gitops-deploy/host_lib.py
-    owner: "{{ sys_user }}"
-    group: "{{ sys_user }}"
-    mode: "0755"
-  become: true
-  notify: Run gitops-deploy once
+- name: Install the shared host_lib helper beside the deployer
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/install_host_lib.yml"
+  vars:
+    host_lib_dir: /opt/gitops-deploy
+    host_lib_owner: "{{ sys_user }}"
+    host_lib_notify: [Run gitops-deploy once]
 
 - name: Write deployer config (secrets, host-only)
   ansible.builtin.template:
@@ -201,6 +200,10 @@
         src: ansible/roles/setup/gitops_deploy/files/gitops_deploy.py
       - live: /opt/gitops-deploy/deploy_logic.py
         src: ansible/roles/setup/gitops_deploy/files/deploy_logic.py
+      - live: /opt/gitops-deploy/deploy_io.py
+        src: ansible/roles/setup/gitops_deploy/files/deploy_io.py
+      - live: /opt/gitops-deploy/deploy_alerts.py
+        src: ansible/roles/setup/gitops_deploy/files/deploy_alerts.py
       - live: /opt/gitops-deploy/deploy_changes.py
         src: ansible/roles/setup/gitops_deploy/files/deploy_changes.py
       - live: /opt/gitops-deploy/deploy_remediation.py

@@ -7,9 +7,8 @@ verdict, and `apply_send_result` / `cap_pending` / `apply_drain_result` keep the
 file bounded across ticks.
 """
 
-from __future__ import annotations
-
 import re
+from typing import NamedTuple
 
 # A `container_name:` line in a rendered docker-compose.yml.
 _CONTAINER_NAME = re.compile(r'^\s*container_name:\s*["\']?([^\s"\']+)["\']?\s*$')
@@ -82,7 +81,27 @@ def health_decision(
     return "wait", 0
 
 
-def health_settles(samples: list[tuple[str, bool]], settle_checks: int = 3) -> bool:
+class HealthSample(NamedTuple):
+    """One poll of a container: what `docker inspect` reported for it.
+
+    A `NamedTuple` rather than a bare pair because the sequence crosses a module boundary —
+    `health_ok`'s poll loop produces these and `health_settles` folds over them — and
+    `(status, running)` in one file against `(running, status)` in the other is a silent
+    inversion that still typechecks as `tuple[str, bool]`. Still a tuple, so a caller passing
+    a plain pair is unchanged.
+
+    Attributes:
+        status: `.State.Health.Status`, or "" for an image with no HEALTHCHECK.
+        running: `.State.Running`, read only in the no-healthcheck case.
+    """
+
+    status: str
+    running: bool
+
+
+def health_settles(
+    samples: list[HealthSample] | list[tuple[str, bool]], settle_checks: int = 3
+) -> bool:
     """Fold `health_decision` over a sequence of (health_status, running) polls.
 
     True if the container would reach 'healthy' before the samples run out (the poll
