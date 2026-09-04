@@ -7,7 +7,7 @@ and editing the defaults would have moved nothing. These pin all three together.
 
 The `C.get(...)` calls in gitops_deploy.py are vestigial as of the move to deploy_io.load_config
 (the actual parsing, with error handling, lives there now) — they exist solely so
-scripts/docs/gen_doc_fragments.py's config_default() parser still has a call to read out of that
+scripts/docs/fragment_readers.py's config_default() parser still has a call to read out of that
 file by name. `test_staging_timeout_module_fallbacks_match_config_defaults` below is what keeps
 that vestige from drifting away from the value it is supposed to describe.
 """
