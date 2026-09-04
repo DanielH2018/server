@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/backlog.py
-generated_at: 2026-09-04 06:17 UTC
-generated_sha: 62c488dd
+generated_at: 2026-09-04 20:40 UTC
+generated_sha: 9b71a483
 ---
 
 !!! warning "Generated file — do not edit"
@@ -17,4 +17,4 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | # | Severity | Kind | Domain | Finding | First seen | Re-observed | Verify-by |
 |---|---|---|---|---|---|---|---|
 | [#1003](https://github.com/DanielH2018/server/issues/1003) | low | gap | backup-observability | k10temp Tctl vs real junction temp on daniel-box stays unresolved (no Tdie/Tccd exported) — *no vetted remediation* | 2026-09-03 | 0 | - |
-| [#1052](https://github.com/DanielH2018/server/issues/1052) | low | gap | cicd | Backup-health shim test writes fixture verdicts into the host syslog | 2026-09-04 | 0 | - |
+| [#1068](https://github.com/DanielH2018/server/issues/1068) | low | gap | cicd | k3s control-plane bumps need an operator-driven upgrade plan | 2026-09-04 | 0 | - |

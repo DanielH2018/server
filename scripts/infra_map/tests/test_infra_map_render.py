@@ -12,7 +12,11 @@ from __future__ import annotations
 
 
 import gen_infra_map as g
+from infra_map import diagram
+from infra_map import groups
+from infra_map import html_views
 from infra_map import render
+from infra_map import style
 
 from _infra_map import (
     GLOBALS,
@@ -74,9 +78,7 @@ def test_the_diagram_is_well_formed_svg():
     """Hand-authored markup — one stray tag would break the whole page."""
     from xml.etree import ElementTree
 
-    figure = render._diagram_view(model_for({}))
-    fragment = figure[figure.index("<svg") : figure.index("</svg>") + len("</svg>")]
-    ElementTree.fromstring(fragment)
+    ElementTree.fromstring(diagram.diagram_svg_fragment(model_for({})))
 
 
 def test_the_diagram_labels_edges_with_addresses_from_the_inventory():
@@ -89,9 +91,9 @@ def test_the_diagram_labels_edges_with_addresses_from_the_inventory():
     model = g.build_model(
         global_vars, {"daniel-box": docker_host([])}, {}, "now", ROLES
     )
-    diagram = render._diagram_view(model)
-    assert "10.9.9.9" in diagram
-    assert "example.test" in diagram
+    figure = diagram.diagram_view(model)
+    assert "10.9.9.9" in figure
+    assert "example.test" in figure
 
 
 def test_the_diagram_reports_a_disarmed_backup_target():
@@ -106,21 +108,21 @@ def test_the_diagram_reports_a_disarmed_backup_target():
             {"name": "r2", "url": "", "armed": False, "available": False}
         ],
     }
-    assert "disarmed" in render._diagram_view(model_for({}, cluster))
+    assert "disarmed" in diagram.diagram_view(model_for({}, cluster))
 
 
 def test_an_uncollected_cluster_does_not_claim_the_backups_are_disarmed():
     """Disarmed is a deliberate state here — a failed query must not announce it."""
-    diagram = render._diagram_view(model_for({}))
-    assert "disarmed" not in diagram
-    assert "not collected" in diagram
+    figure = diagram.diagram_view(model_for({}))
+    assert "disarmed" not in figure
+    assert "not collected" in figure
 
 
 def test_an_uncollected_cluster_does_not_paint_its_nodes_down():
     """Same false alarm on the nodes: unknown is not NotReady."""
-    diagram = render._diagram_view(model_for({}))
-    assert "s-down" not in diagram
-    assert "s-unknown" in diagram
+    figure = diagram.diagram_view(model_for({}))
+    assert "s-down" not in figure
+    assert "s-unknown" in figure
 
 
 def test_the_storage_plane_is_not_reddened_by_a_route_only_service():
@@ -135,8 +137,8 @@ def test_the_storage_plane_is_not_reddened_by_a_route_only_service():
         "volumes": 42,
         "backup_targets": [],
     }
-    diagram = render._diagram_view(model_for({}, cluster))
-    longhorn = diagram[diagram.index('y="706"') - 60 : diagram.index('y="706"')]
+    figure = diagram.diagram_view(model_for({}, cluster))
+    longhorn = figure[figure.index('y="706"') - 60 : figure.index('y="706"')]
     assert "s-missing" not in longhorn
 
 
@@ -154,7 +156,7 @@ def test_a_services_node_placement_reaches_the_page():
         "detail": "",
         "nodes": ["daniel-server"],
     }
-    assert "daniel-server" in render._service_row(service)
+    assert "daniel-server" in html_views._service_row(service)
 
 
 def _svg():
@@ -181,7 +183,7 @@ def test_svg_is_a_standalone_document():
 def test_svg_carries_its_own_styles():
     """The whole point of the task.
 
-    _diagram_view's colours come from the page-level STYLE block. Embedded in
+    diagram_svg_fragment's colours come from the page-level STYLE block. Embedded in
     Markdown there is no page, so an SVG without an inline <style> renders as
     unstyled black boxes -- which looks like a broken diagram, not a missing
     stylesheet.
@@ -225,3 +227,30 @@ def test_svg_ends_with_exactly_one_newline():
     out = _svg()
     assert out.endswith("\n")
     assert not out.endswith("\n\n")
+
+
+def test_the_facade_re_exports_the_grouping_gen_infra_map_imports():
+    """gen_infra_map imports group_services from render; it is defined in groups.
+
+    The facade is the only import site the entry point knows about, so a split that
+    dropped the re-export would break the CLI while every module still imported.
+    """
+    assert render.group_services is groups.group_services
+
+
+def test_every_status_label_has_a_dot_colour_in_the_stylesheet():
+    """A label with no .dot.<key> rule renders an invisible dot in the legend.
+
+    STATUS_LABELS and STYLE are edited independently — the labels are the vocabulary
+    model.py assigns, the rules are CSS — so nothing but this pairs them up.
+    """
+    assert len(style.STATUS_LABELS) >= 8, "the status vocabulary went empty"
+    missing = [k for k in style.STATUS_LABELS if f".dot.{k}" not in style.STYLE]
+    assert missing == []
+
+
+def test_a_status_with_no_dot_rule_is_caught():
+    """The RED half of the pair above: the check fails on a label CSS does not colour."""
+    labels = {**style.STATUS_LABELS, "invented": "Invented"}
+    missing = [k for k in labels if f".dot.{k}" not in style.STYLE]
+    assert missing == ["invented"]
