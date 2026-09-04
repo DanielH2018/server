@@ -24,8 +24,6 @@ ansible/roles/setup/fake_remux/tests/test_fake_remux_replace_logic.py 582
 ansible/roles/setup/gitops_deploy/files/deploy_io.py 653
 ansible/roles/setup/gitops_deploy/files/gitops_deploy.py 1380
 ansible/roles/setup/gitops_deploy/tests/test_deploy_changes_planes.py 538
-ansible/roles/setup/k3s/tests/test_longhorn_backup_health.py 1002
-ansible/roles/setup/k3s/tests/test_longhorn_reap_entrypoints.py 854
 ansible/roles/setup/k3s/tests/test_longhorn_reap_logic.py 701
 ansible/roles/setup/renovate_notify/files/notify_logic.py 605
 ansible/roles/setup/renovate_notify/tests/test_notify_logic.py 559
@@ -53,4 +51,3 @@ scripts/docs/tests/test_gen_reference_scripts.py 576
 scripts/docs/tests/test_service_catalog.py 506
 scripts/secrets_mgmt/secret_rotation.py 980
 scripts/secrets_mgmt/tests/test_secret_rotation.py 656
-scripts/validate/tests/test_validate_shell_templates.py 1045

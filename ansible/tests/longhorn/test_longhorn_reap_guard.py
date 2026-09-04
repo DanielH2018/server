@@ -174,7 +174,7 @@ def test_deleted_volume_strays_need_their_own_flag():
     it — but a deleted PVC is also exactly when someone reaches for a restore. classify_backups
     keeps it out of `.candidates` (the plain --apply bucket) and puts it in `.orphaned`, which
     longhorn_reap_orphan_backups.py's main() only deletes when --apply-deleted-volumes is set —
-    proven end-to-end in test_longhorn_reap_entrypoints.py
+    proven end-to-end in test_longhorn_reap_backups_cli.py
     ::test_backups_apply_deleted_volumes_only_deletes_the_orphaned_bucket.
     """
     result = logic.classify_backups(

@@ -4,8 +4,8 @@ The shell-template tests run the rendered backup-health shim for real, and the s
 `logger` on its failure paths. This puts a stubbed `logger` first on PATH, from
 `_helpers.stub_logger_on_path`, autouse and directory-wide rather than opt-in per test: a
 later test that runs another rendered cron would otherwise start polluting silently.
-`test_backup_health_reader_failure_is_logged_through_the_stub` is the proof the stub is on
-PATH.
+`test_backup_health_shim.py::test_backup_health_reader_failure_is_logged_through_the_stub` is
+the proof the stub is on PATH.
 """
 
 import pytest

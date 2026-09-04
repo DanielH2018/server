@@ -5,9 +5,12 @@ sees a hostname-shaped literal on the left of a containment test. It cannot tell
 check on a URL — the real defect the rule hunts, where `"example.com" in url` also matches
 `example.com.attacker.net` — from an *exact membership* check on a list, set or dict, which is
 what this repo writes every time. Fifteen alerts in this repo have been dismissed as false
-positives on that rule, and two more (#49, #50, on
-`ansible/roles/setup/k3s/tests/test_longhorn_reap_entrypoints.py`) opened on 2026-09-04. Every
-one was membership in a collection, several of them argv lists from a stubbed `kubectl`.
+positives on that rule, and two more (#49, #50) opened on 2026-09-04 against the reap-orphan
+entry-point tests. Those two shapes now sit in
+`ansible/roles/setup/k3s/tests/test_longhorn_reap_backups_cli.py` and
+`ansible/roles/setup/k3s/tests/test_longhorn_reap_snapshots_cli.py`, which the suite was split
+into. Every one was membership in a collection, several of them argv lists from a stubbed
+`kubectl`.
 
 Dismissing each alert by hand does not stop the next one, and a dismissal is re-raised when the
 surrounding lines move. Writing the comparison as `any(x == "<host>" for x in seq)` states the
