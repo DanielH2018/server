@@ -14,7 +14,7 @@ got a seam yet, and `scripts/deploy_tools/land_lib/tools.py` with
 
 The allowlists are `module_length_allowlist.txt` and `monkeypatch_allowlist.txt` beside this
 file: one `<repo-relative-path> <max>` line per file, sorted, `#` comments allowed. One line
-per file so the 23 module-split PRs that each lower one entry merge cleanly.
+per file so the split PRs that each lower one entry merge cleanly.
 
 What the monkeypatch heuristic counts, and what it misses:
 
@@ -31,7 +31,7 @@ What the monkeypatch heuristic counts, and what it misses:
 
 A listed file may sit anywhere between its cap and its listed max without failing. That is
 deliberate: otherwise every one-line deletion in a 900-line module would force an allowlist
-edit, and 23 PRs would collide on lines they had no reason to touch.
+edit, and parallel PRs would collide on lines they had no reason to touch.
 
 Run: uv run pytest ansible/tests/repo/test_module_length_ratchet.py
 """
@@ -345,7 +345,7 @@ def _assert_a_lowered_entry_is_flagged(ratchet: Ratchet, counts: Mapping[str, in
 
 
 def test_the_committed_allowlists_are_sorted():
-    """Sorted, one line per file, is what makes 23 parallel PRs merge cleanly."""
+    """Sorted, one line per file, is what makes parallel PRs merge cleanly."""
     for ratchet in (LENGTHS, PATCHES):
         listed = list(ratchet.allowlist())
         assert listed == sorted(listed), ratchet.path.name
