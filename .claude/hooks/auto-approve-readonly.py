@@ -32,6 +32,12 @@ import shlex
 import sys
 
 from _hook_common import emit_permissionrequest_allow, emit_pretooluse_decision
+
+# DECIDED: the underscore-prefixed names below cross a module boundary on purpose. The tables
+# and the tokenizer moved out of this file byte-for-byte, changing no verdict; making them
+# public would have turned that move into a rewrite of a security boundary. The underscore
+# still carries what it did before — internal to this classifier, not an API another hook may
+# import. Conventions for a new module: docs/python-code-organization.md.
 from _readonly_shell import (
     _FORBIDDEN,
     _OP_TOKEN,

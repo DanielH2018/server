@@ -3,8 +3,9 @@
 
 Data only: the program names that are read-only under any arguments, and the ssh flags,
 options and secret-path patterns that bound which remote commands the classifier will
-reconstruct and re-classify. Nothing here decides — `auto-approve-readonly.py` holds every
-guard, and reads these.
+reconstruct and re-classify. Nothing here executes a decision — `auto-approve-readonly.py`
+holds every guard and applies these, including the two patterns whose match is itself a
+refusal (`_SSH_SECRET`, `_SSH_GLOB`).
 
 That module imports them by bare name, which resolves both ways it is loaded: the hooks dir
 is ``sys.path[0]`` when Claude Code runs the hook, and the tests insert that dir before
