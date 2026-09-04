@@ -19,17 +19,19 @@ module's name into a test, so a module carrying any has not got a seam yet, and
 `scripts/deploy_tools/land_lib/tools.py` with `scripts/deploy_tools/tests/_land_fakes.py` is
 the shape that replaces one.
 
-Two things enforce "only falls". Within a commit, a count over its own entry fails
-(`Ratchet.violations`). Across commits, `raised_entries` diffs the lists as the working tree
-has them against `origin/master`, or a PR could grow a file and raise its own line in the same
-diff. An added
-path fails there — a split that produced another oversized module has not finished — with two
-exemptions, both passed in as plain values by the caller that reads git:
+Two things enforce "only falls". A count over its own entry fails (`Ratchet.violations`).
+Beyond that, `raised_entries` diffs the lists as the working tree has them against
+`origin/master`, or a branch could grow a file and raise its own line in the same diff. An
+added path fails there — a split that produced another oversized module has not finished —
+with two exemptions, both passed in as plain values by the caller that reads git:
 
 - A path `origin/master` does not track. That is a new or renamed file, and a rename would
   otherwise read as a deletion plus a forbidden addition.
 - A changed guard. Widening the heuristic (as the `importlib` fix did) finds patches that were
-  always there, and those files have to be able to enter the list in the same PR.
+  always there, and those files have to be able to enter the list in the same branch. The
+  trigger is narrow on purpose: the whole of `_ratchet.py` and the test module, but only the
+  text of `_helpers.is_test_file` — 198 modules import `_helpers`, so any edit to it would
+  otherwise wave through an addition that has nothing to do with the guard.
 
 What the monkeypatch heuristic counts, and what it misses:
 
@@ -118,10 +120,10 @@ def raised_entries(
 
     Args:
         old: the list as `origin/master` has it.
-        new: the list as this commit has it.
+        new: the list as the working tree has it.
         name: the allowlist's filename, for the message.
         untracked_on_master: paths `origin/master` does not track, which may be added.
-        guard_changed: whether this commit changes the guard, which may add any path.
+        guard_changed: whether the guard differs from `origin/master`, which may add any path.
     """
     found = []
     for path, limit in sorted(new.items()):
@@ -134,10 +136,30 @@ def raised_entries(
         elif not guard_changed and path not in untracked_on_master:
             found.append(
                 f"{path}: added to {name} at {limit}, though origin/master already tracks "
-                f"the file and this commit does not change the guard. A file that was "
+                f"the file and the guard is unchanged against origin/master. A file that was "
                 f"already there has to meet the cap — split it rather than listing it."
             )
     return found
+
+
+def function_source(text: str, name: str) -> str | None:
+    """The source of the top-level function `name` in `text`, or None when it has none."""
+    for node in ast.parse(text).body:
+        if (
+            isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
+            and node.name == name
+        ):
+            return ast.get_source_segment(text, node)
+    return None
+
+
+def function_differs(old_text: str, new_text: str, name: str) -> bool:
+    """Whether one function's source differs between two versions of a file.
+
+    Comparing the whole of `_helpers.py` would make any edit to it — 198 modules import it —
+    stand in for a change to the rule that decides a path's cap.
+    """
+    return function_source(old_text, name) != function_source(new_text, name)
 
 
 def first_party_module_names(tracked: Iterable[str]) -> frozenset[str]:

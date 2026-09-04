@@ -15,7 +15,7 @@ Run: uv run pytest ansible/tests/repo/test_module_length_ratchet.py
 """
 
 import subprocess
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from pathlib import Path
 
 import pytest
@@ -28,6 +28,8 @@ from _ratchet import (
     cap_for,
     count_module_patches,
     first_party_module_names,
+    function_differs,
+    function_source,
     parse_allowlist,
     raised_entries,
 )
@@ -46,13 +48,19 @@ CENSUS_MEMBERS = frozenset(
 )
 
 # Changing any of these changes what the lists are allowed to contain, which is what lets a
-# widened heuristic add the files it newly sees. `_helpers.py` is here because its
-# `is_test_file` decides both the cap a path gets and which files the patch census covers.
-GUARD_SOURCES = (
-    "ansible/tests/_helpers.py",
+# widened heuristic add the files it newly sees.
+WHOLE_FILE_GUARDS = (
     "ansible/tests/_ratchet.py",
     "ansible/tests/repo/test_module_length_ratchet.py",
 )
+
+# `is_test_file` decides both the cap a path gets and which files the patch census covers, so
+# it is a guard source. The rest of `_helpers.py` is not: 198 modules import that file, and
+# comparing all of it would let an unrelated edit wave through a forbidden addition.
+HELPERS = "ansible/tests/_helpers.py"
+CAP_DECIDER = "is_test_file"
+
+GUARD_SOURCES = (*WHOLE_FILE_GUARDS, HELPERS)
 
 LENGTHS = Ratchet(
     path=HERE / "module_length_allowlist.txt",
@@ -99,6 +107,17 @@ def text_on_master(rel: str) -> str:
 
 def differs_from_master(rel: str) -> bool:
     return _git("diff", "--quiet", "origin/master", "--", rel).returncode != 0
+
+
+def guard_differs_from_master() -> bool:
+    """Whether this branch changes the rules, which is what lets it add a path to a list."""
+    if any(differs_from_master(rel) for rel in WHOLE_FILE_GUARDS):
+        return True
+    if not tracked_on_master(HELPERS):
+        return True
+    return function_differs(
+        text_on_master(HELPERS), (REPO / HELPERS).read_text(), CAP_DECIDER
+    )
 
 
 def tracked_python_files() -> list[str]:
@@ -245,6 +264,26 @@ def test_a_raised_entry_is_flagged_even_when_the_guard_changed():
     assert len(flagged) == 1
 
 
+_HELPERS_BEFORE = (
+    "X = 1\n\n\ndef is_test_file(p):\n    return p.name.startswith('test_')\n"
+)
+
+
+def test_an_edit_elsewhere_in_the_file_leaves_the_watched_function_unchanged():
+    """198 modules import `_helpers`; only `is_test_file` decides a cap."""
+    other_edit = _HELPERS_BEFORE.replace("X = 1", "X = 2\nY = 3")
+    assert not function_differs(_HELPERS_BEFORE, other_edit, CAP_DECIDER)
+
+
+def test_a_changed_function_body_is_a_changed_guard():
+    widened = _HELPERS_BEFORE.replace(
+        "return p.name.startswith('test_')",
+        "return p.name.startswith('test_') or 'tests' in p.parts",
+    )
+    assert function_differs(_HELPERS_BEFORE, widened, CAP_DECIDER)
+    assert function_differs(_HELPERS_BEFORE, "X = 1\n", CAP_DECIDER)
+
+
 def test_a_first_party_name_is_a_module_stem_or_the_directory_holding_one():
     names = first_party_module_names(["scripts/deploy_tools/land_lib/tools.py"])
     assert "tools" in names and "land_lib" in names
@@ -308,14 +347,25 @@ def test_no_test_module_patches_more_modules_than_its_allowlist_entry():
     assert not offenders, "\n".join(offenders)
 
 
+def _missing_sources(paths: Iterable[str]) -> list[str]:
+    return [rel for rel in paths if not (REPO / rel).is_file()]
+
+
 def test_every_guard_source_exists_at_the_path_named():
     """`differs_from_master` answers False for a path absent on both sides.
 
     A renamed guard source would therefore read as unchanged, and the exemption that lets a
     widened rule add entries would be off with nothing saying so.
     """
-    missing = [rel for rel in GUARD_SOURCES if not (REPO / rel).is_file()]
-    assert not missing, f"GUARD_SOURCES names paths that do not exist: {missing}"
+    assert _missing_sources(GUARD_SOURCES) == []
+    assert function_source((REPO / HELPERS).read_text(), CAP_DECIDER), (
+        f"{HELPERS} no longer defines {CAP_DECIDER}, so comparing that function against "
+        f"origin/master compares None with None and the exemption never fires."
+    )
+
+
+def test_a_guard_source_that_does_not_exist_is_flagged():
+    assert _missing_sources(("no/such.py",)) == ["no/such.py"]
 
 
 def test_the_master_read_returns_content_for_a_path_master_tracks():
@@ -354,7 +404,7 @@ def test_no_allowlist_entry_rose_against_origin_master(ratchet: Ratchet):
         new,
         ratchet.path.name,
         untracked_on_master=[p for p in new if not tracked_on_master(p)],
-        guard_changed=any(differs_from_master(p) for p in GUARD_SOURCES),
+        guard_changed=guard_differs_from_master(),
     )
     assert not offenders, "\n".join(offenders)
 
