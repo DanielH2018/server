@@ -122,9 +122,41 @@ def worktree_is_reusable(repo_dir: str, path: str, branch: str) -> tuple[bool, s
     return True, ""
 
 
+def _process_start_time(pid: int) -> str:
+    """The starttime field scripts/dev/prune_worktrees.py's session_is_alive() compares.
+
+    Read from /proc/<pid>/stat: starttime is the field after the last ')', at index 19 once
+    split on whitespace — the comm field can itself contain spaces or parens, which is why
+    session_is_alive() anchors on the final ')' rather than counting from the start. Returns
+    "" if the pid can't be read, which makes the lock reason fail LOCK_OWNER's regex and so
+    read as "someone else's format" — session_is_alive() treats that as alive, never as dead.
+    """
+    stat = read_file(f"/proc/{pid}/stat")
+    fields = stat.rpartition(")")[2].split()
+    return fields[19] if len(fields) > 19 else ""
+
+
+def _lock_reason() -> str:
+    """The reason string `git worktree lock` records, in the format LOCK_OWNER parses.
+
+    scripts/dev/prune_worktrees.py keeps a worktree only while `tree.locked and
+    session_is_alive(tree.lock_reason)` — session_is_alive() matches `(pid <n> start <n>)`
+    against /proc/<pid>/stat, so this must be this process's own pid and start time. As long
+    as this script is still running (it blocks on run_session() for the run's duration), the
+    pid+start pair keeps matching and the pruner keeps the tree; once the process exits, the
+    pid no longer matches (or is reused with a different start time) and the lock is ignored.
+    """
+    pid = os.getpid()
+    return f"renovate-agent (pid {pid} start {_process_start_time(pid)})"
+
+
 def prepare_worktree(repo_dir: str, path: str, branch: str) -> None:
     """Recreate the run worktree at origin/master. Assumes worktree_is_reusable said yes."""
     if os.path.isdir(path):
+        # The previous tick's lock is still on this tree — `worktree remove` refuses a locked
+        # tree outright, and passing --force once does not override a lock (git needs it
+        # twice). Unlock first, mirroring prune_worktrees.py's own remove().
+        run(["git", "-C", repo_dir, "worktree", "unlock", path])
         run(["git", "-C", repo_dir, "worktree", "remove", "--force", path])
     run(["git", "-C", repo_dir, "worktree", "prune"])
     rc, out = run(
@@ -138,6 +170,13 @@ def prepare_worktree(repo_dir: str, path: str, branch: str) -> None:
     )
     if rc != 0:
         raise RuntimeError(f"git worktree add failed: {out.strip()[:300]}")
+    # Lock the tree for the run's duration so a concurrent session's SessionStart pruner
+    # (prune_worktrees.py --prune) doesn't delete it out from under this run — see #1069.
+    rc, out = run(
+        ["git", "-C", repo_dir, "worktree", "lock", path, "--reason", _lock_reason()]
+    )
+    if rc != 0:
+        raise RuntimeError(f"git worktree lock failed: {out.strip()[:300]}")
 
 
 def run_session(cfg: dict[str, str], cwd: str, log_path: str) -> tuple[str, int, bool]:
