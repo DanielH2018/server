@@ -338,7 +338,11 @@ def test_backups_apply_deleted_volumes_only_deletes_the_orphaned_bucket(tmp_path
     # A backup whose volume no longer exists must be reaped only under
     # --apply-deleted-volumes, never under a bare --apply.
     fixtures = {
-        "volumes": [],
+        # A live volume alongside the deleted one. An empty volume list is the separate case
+        # classify_backups refuses outright (#1062): it means the volume read returned nothing,
+        # not that every volume was deleted, and orphaning the whole backup set on it deletes
+        # the entire B2 set under this very flag.
+        "volumes": [_volume("live-vol", "daily-backup")],
         "backups": [
             _backup("stray", "gone-vol", "2026-08-14T00:00:00Z", "daily-backup")
         ],
