@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import pytest
 
-from _land_fakes import MERGE_SHA, Fakes, build_tools
+from _land_fakes import MERGE_SHA, PRIMARY, Fakes, build_tools
 
 
 def _names(calls):
@@ -40,9 +40,17 @@ def test_the_annotation_is_written_on_a_verdict(land_run):
     )
 
 
-def test_an_unexpected_exception_annotates_as_aborted_and_propagates():
+def test_an_unexpected_exception_annotates_as_aborted_and_propagates(monkeypatch):
+    """Built by hand rather than through `land_run`, because the raising gh_json must be
+    injected into `tools`; the primary override is repeated here for the same reason the
+    fixture carries it -- Options defaults to a checkout that exists only on the deploy host.
+    """
     import land
+    from deploy_tools.land_lib.options import Options
 
+    monkeypatch.setattr(
+        land, "parse_args", lambda argv, desc: Options(pr="7", primary=PRIMARY)
+    )
     tools, calls = build_tools(Fakes())
     tools.gh_json = lambda *a, **k: 1 / 0
     with pytest.raises(ZeroDivisionError):
