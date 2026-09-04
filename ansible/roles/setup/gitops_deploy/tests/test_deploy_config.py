@@ -38,6 +38,7 @@ def test_values_are_read_off_the_environment():
             "BRANCH": "main",
             "REQUIRE_CI": "true",
             "CI_CONTEXTS": "lint, test ",
+            "GITHUB_REPO": "DanielH2018/server",
             "K8S_DEPLOY_TIMEOUT_S": "1200",
         }
     )
@@ -55,6 +56,48 @@ def test_a_boolean_is_true_only_for_the_literal_word():
         assert deploy_io.load_config({"STAGING_GATE": raw}).staging_gate is False, raw
 
 
+# ── the CI gate's own disarm ──────────────────────────────────────────────────────────────
+def test_a_fully_rendered_config_keeps_the_ci_gate_armed():
+    cfg = deploy_io.load_config(
+        {
+            "REQUIRE_CI": "true",
+            "CI_CONTEXTS": "prek (lint + validate + tests + secrets)",
+            "GITHUB_REPO": "DanielH2018/server",
+        }
+    )
+    assert cfg.require_ci is True
+
+
+def test_require_ci_disarms_when_ci_contexts_is_empty(capsys):
+    """A half-rendered config.env (REQUIRE_CI set, CI_CONTEXTS/GITHUB_REPO not) must not read as
+    a silently ungated deployer — `Config.require_ci` disarms itself, and there is no separate
+    module global that could disagree with it."""
+    cfg = deploy_io.load_config(
+        {"REQUIRE_CI": "true", "GITHUB_REPO": "DanielH2018/server"}
+    )
+    assert cfg.require_ci is False
+    assert "disabling the CI gate" in capsys.readouterr().out
+
+
+def test_require_ci_disarms_when_github_repo_is_empty(capsys):
+    cfg = deploy_io.load_config(
+        {
+            "REQUIRE_CI": "true",
+            "CI_CONTEXTS": "prek (lint + validate + tests + secrets)",
+        }
+    )
+    assert cfg.require_ci is False
+    assert "disabling the CI gate" in capsys.readouterr().out
+
+
+def test_require_ci_false_does_not_log_the_disarm(capsys):
+    """The disarm message is specifically about a half-rendered config; a host that simply has
+    the gate off must not print it."""
+    cfg = deploy_io.load_config({})
+    assert cfg.require_ci is False
+    assert capsys.readouterr().out == ""
+
+
 # ── a malformed value ─────────────────────────────────────────────────────────────────────
 def test_a_malformed_number_does_not_raise_at_parse_time():
     """The property that keeps a half-written config out of the import path."""
@@ -63,6 +106,20 @@ def test_a_malformed_number_does_not_raise_at_parse_time():
         "the field keeps its default while the error is held"
     )
     assert cfg.errors
+
+
+def test_a_malformed_staging_timeout_does_not_raise_at_parse_time():
+    """`STAGING_GATE_TIMEOUT_S`/`STAGING_EXPECT_TIMEOUT_S` used to be parsed by a bare
+    `int(C.get(...))` at gitops_deploy.py module level — a malformed value there died at
+    import, before either of these tests could even run. They are Config fields now, parsed
+    with the same error handling as every other numeric."""
+    cfg = deploy_io.load_config(
+        {"STAGING_GATE_TIMEOUT_S": "10m", "STAGING_EXPECT_TIMEOUT_S": "2m"}
+    )
+    assert cfg.staging_gate_timeout_s == 600, "the field keeps its default"
+    assert cfg.staging_expect_timeout_s == 120, "the field keeps its default"
+    assert any("STAGING_GATE_TIMEOUT_S" in e for e in cfg.errors)
+    assert any("STAGING_EXPECT_TIMEOUT_S" in e for e in cfg.errors)
 
 
 def test_validate_raises_one_line_naming_the_key_and_what_it_held():

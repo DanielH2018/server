@@ -55,18 +55,24 @@ class Cause(StrEnum):
     HOST_LOOKUP = "host-lookup"
     TAG_MISS = "tag-miss"
     PLAYBOOK_FAILED = "playbook-failed"
+    DEPLOY_EXIT_CD_FAILED = "deploy-exit-1"
     DEPLOY_EXIT_BROAD = "deploy-exit-3"
     DEPLOY_EXIT_STALE = "deploy-exit-4"
     DEPLOY_EXIT_BAD_FLAGS = "deploy-exit-64"
     DEPLOY_EXIT_OTHER = "deploy-exit-other"
+    INVALID = "invalid-cause"
 
 
 CAUSES = frozenset(Cause)
 
-# The deploy.sh exits `deploy_outcome` does not give a verdict of its own. Every value here
-# was already emitted verbatim as `deploy-exit-<rc>`, so the board's existing labels are
-# unchanged; anything outside this table now buckets rather than inventing a label.
+# The deploy.sh exits `deploy_outcome` does not give a verdict of its own, keyed by the
+# wrapper's contract (`exit_codes.py`). `tools.run_deploy` passes only `--tags`, so of these
+# only 1 (the `cd` into the primary checkout failed) and 4 (stale tree) can arrive today; 3
+# needs `--changed` and 64 needs `--detach`, and both are kept so a call site that adds
+# either flag gets its label without editing this table. Anything outside the contract
+# buckets as `deploy-exit-other` rather than inventing a label the board would group on.
 _DEPLOY_EXIT_CAUSES = {
+    1: Cause.DEPLOY_EXIT_CD_FAILED,
     3: Cause.DEPLOY_EXIT_BROAD,
     4: Cause.DEPLOY_EXIT_STALE,
     64: Cause.DEPLOY_EXIT_BAD_FLAGS,

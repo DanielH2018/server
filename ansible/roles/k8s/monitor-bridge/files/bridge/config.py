@@ -18,52 +18,15 @@ Constants only. The mutable per-check state (`_n8n_streaks`, `_cadvisor_streaks`
 
 import os
 
-from bridge.common import _env
+from bridge.common import CONFIG_PROBLEMS, _env, _int, _num
 
-# Every env value this module could not parse, one operator-readable line each.
-#
-# IMPORTING THIS MODULE MUST NOT RAISE. `python /app/check.py` imports it transitively, so a
-# ValueError on one malformed number used to kill the pod during import — before the heartbeat
-# file exists, before a single monitor could be told, and with a traceback naming neither the
-# env var nor its value. The parse helpers below record the problem, fall back to the documented
-# default, and let `check.py`'s `main()` print the whole list and exit 2. One clear line per bad
-# value, at startup, where an operator is looking.
-CONFIG_PROBLEMS: list[str] = []
-
-
-def _int(name: str, default: str) -> int:
-    """The `name` env var as an int, recording a malformed value instead of raising.
-
-    Args:
-      name: The environment variable to read.
-      default: The value used when the variable is unset OR unparseable. A string, so the
-        fallback goes through the same parse the env value would.
-    """
-    raw = _env(name, default)
-    try:
-        return int(raw)
-    except ValueError:
-        CONFIG_PROBLEMS.append(
-            "%s=%r is not an integer; falling back to %s" % (name, raw, default)
-        )
-        return int(default)
-
-
-def _num(name: str, default: str) -> float:
-    """The `name` env var as a float, recording a malformed value instead of raising.
-
-    Args:
-      name: The environment variable to read.
-      default: The value used when the variable is unset OR unparseable.
-    """
-    raw = _env(name, default)
-    try:
-        return float(raw)
-    except ValueError:
-        CONFIG_PROBLEMS.append(
-            "%s=%r is not a number; falling back to %s" % (name, raw, default)
-        )
-        return float(default)
+# CONFIG_PROBLEMS and the _int/_num parsers that append to it live in bridge/common.py, not
+# here — this module's own constants below still parse every env value through them, and
+# check.py still reads the list as `cfg.CONFIG_PROBLEMS` (a from-import binds this module's own
+# attribute to the same list object, so a qualified `cfg.CONFIG_PROBLEMS` read still works; see
+# bridge/common.py's header for why they moved). IMPORTING THIS MODULE MUST NOT RAISE — a
+# ValueError on one malformed number used to kill the pod during import, before the heartbeat
+# file existed and before any monitor could be told.
 
 
 def _env_file(name: str, default: str = "") -> str:

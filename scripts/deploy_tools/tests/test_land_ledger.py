@@ -101,16 +101,18 @@ def test_every_cause_a_phase_writes_is_in_the_vocabulary():
         assert cause in CAUSES
 
 
-def test_an_unknown_cause_is_refused_on_assignment():
-    """The reject half. The board groups by this field, so an invented value becomes a bar."""
+def test_an_unknown_cause_is_coerced_on_assignment(capsys):
+    """The reject half. The board groups by this field, so an invented value would become
+    a bar; it is coerced to one named bucket and warned, not raised, because the write
+    happens after the deploy ran and a traceback there loses the `VERDICT:` line."""
     ledger = Ledger(pr="1", t_start=0.0)
-    with pytest.raises(ValueError, match="unknown ledger cause"):
-        ledger.cause = "deploy-exit-9"
+    ledger.cause = "deploy-exit-9"
+    assert ledger.cause == Cause.INVALID
+    assert "unknown ledger cause 'deploy-exit-9'" in capsys.readouterr().err
 
 
-def test_an_unknown_cause_is_refused_at_construction_too():
-    with pytest.raises(ValueError, match="unknown ledger cause"):
-        Ledger(pr="1", t_start=0.0, cause="whatever")
+def test_an_unknown_cause_is_coerced_at_construction_too():
+    assert Ledger(pr="1", t_start=0.0, cause="whatever").cause == Cause.INVALID
 
 
 def test_the_empty_cause_stays_legal():
@@ -121,6 +123,7 @@ def test_the_empty_cause_stays_legal():
 @pytest.mark.parametrize(
     "rc, expected",
     [
+        (1, "deploy-exit-1"),
         (3, "deploy-exit-3"),
         (4, "deploy-exit-4"),
         (64, "deploy-exit-64"),

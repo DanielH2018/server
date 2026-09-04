@@ -303,8 +303,17 @@ STAGING_SUBSET = deploy_io.csv_set(
 # whose config predates that render falls back to exactly these literals. Pinned by
 # test_gitops_deploy_staging_timeouts.py::test_staging_timeout_fallbacks_match_the_ansible_defaults.
 # A timeout here is NO VERDICT, never a rejection.
-STAGING_GATE_TIMEOUT_S = int(C.get("STAGING_GATE_TIMEOUT_S", "600"))
-STAGING_EXPECT_TIMEOUT_S = int(C.get("STAGING_EXPECT_TIMEOUT_S", "120"))
+#
+# The actual parsing lives in deploy_io.load_config now, with the same error-collection as
+# every other numeric — a malformed value is recorded in CONFIG.errors rather than raising at
+# import. The two `C.get(...)` calls below are unused: they exist only so
+# scripts/docs/gen_doc_fragments.py's config_default() parser, which reads a
+# `C.get("<KEY>", "<default>")` call out of THIS file by name, still has one to find. Pinned
+# against Config's own defaults by test_staging_timeout_module_fallbacks_match_config_defaults.
+_STAGING_GATE_TIMEOUT_FALLBACK = C.get("STAGING_GATE_TIMEOUT_S", "600")
+_STAGING_EXPECT_TIMEOUT_FALLBACK = C.get("STAGING_EXPECT_TIMEOUT_S", "120")
+STAGING_GATE_TIMEOUT_S = CONFIG.staging_gate_timeout_s
+STAGING_EXPECT_TIMEOUT_S = CONFIG.staging_expect_timeout_s
 # Slice 4. Whether a staging REJECTION stops the prod deploy, or is only logged and alerted.
 # A SEPARATE switch from STAGING_GATE, and off by default even where the gate is on: the entry
 # condition in docs/staging-phase-c.md is evidence rather than effort, so the code lands long
@@ -319,19 +328,15 @@ STAGING_GATE_BLOCKING = CONFIG.staging_gate_blocking
 #
 # OFF unless config.env says otherwise, so a host that has not been re-templated keeps its current
 # behaviour, and REQUIRE_CI=false is the documented way back out.
+#
+# The disarm for an empty CI_CONTEXTS/GITHUB_REPO (a half-rendered config.env) is decided inside
+# deploy_io.load_config, which is also where it logs — CONFIG.require_ci is the one value, so a
+# module global rebound separately here could disagree with the frozen CONFIG it was copied from.
 REQUIRE_CI = CONFIG.require_ci
 # GitHub check-run NAMES that must be green — the same strings branch protection calls contexts.
 # Comma-separated; the names contain spaces and parens, never commas.
 CI_CONTEXTS = CONFIG.ci_contexts
 CI_REPO = CONFIG.ci_repo
-if REQUIRE_CI and not (CI_CONTEXTS and CI_REPO):
-    # Fail closed the same way the k8s denylist does, but in the opposite direction: an empty
-    # context list would make ci_verdict() return `pass` for everything, turning a half-rendered
-    # config.env into a silently ungated deployer. Better to disarm loudly.
-    log(
-        "REQUIRE_CI is set but CI_CONTEXTS/GITHUB_REPO is empty — disabling the CI gate"
-    )
-    REQUIRE_CI = False
 
 
 # ── what one phase hands the next ─────────────────────────────────────────────────────────────
@@ -1356,8 +1361,11 @@ def entrypoint() -> int:
         # until load_config deferred the parse, so it reached an operator as a stack trace with no
         # key name in it, before any of the alerting below existed in the process.
         log(f"gitops-deploy: {e}")
-        discord(deploy_alerts.bad_config_alert(HOSTNAME, CONFIG_PATH, e))
-        return 1
+        posted = discord(deploy_alerts.bad_config_alert(HOSTNAME, CONFIG_PATH, e))
+        # Exit 0 on a delivered detailed post so OnFailure's generic curl doesn't double-page,
+        # same convention as the other `0 if posted else 1` branches; exit 1 only if the
+        # detailed post itself failed, leaving OnFailure the backstop.
+        return 0 if posted else 1
     except Exception as e:
         discord(deploy_alerts.crash_alert(e))
         raise

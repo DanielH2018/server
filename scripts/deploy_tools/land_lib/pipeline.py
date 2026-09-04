@@ -38,7 +38,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.land_lib import ci, classify, deploy, health_verdict, merge, tick
 from deploy_tools.land_lib.landing import Landing
-from deploy_tools.land_lib.outcome import Outcome
+from deploy_tools.land_lib.outcome import Outcome, Verdict
 
 
 def _step_resolve(ln: Landing) -> None:
@@ -62,6 +62,8 @@ def _step_tick(ln: Landing) -> None:
 
 # The numbered steps, in order. The label is formatted with `pr=`; the number and the
 # denominator both come from this list, so `== 3/6` cannot outlive a seventh step.
+# The callables are bound HERE at import: a test that monkeypatches `ci.preflight` on its
+# module does not reach the pipeline. Patch an entry of `_STEPS` instead.
 _STEPS: tuple[tuple[str, Callable[[Landing], None]], ...] = (
     ("resolving PR #{pr}", _step_resolve),
     ("pre-flight: can the tick cross what is incoming?", ci.preflight),
@@ -83,9 +85,14 @@ def run(ln: Landing) -> Outcome:
         return outcome
     # Unreachable: the last step is `health_verdict.health`, which is `NoReturn`. Returned
     # rather than raised, because `run`'s own `except Outcome` above would not catch an
-    # Outcome raised here and land.py would see a traceback instead of an exit code.
+    # Outcome raised here and land.py would see a traceback instead of an exit code. It
+    # carries a verdict so the `VERDICT:` line still prints and the ledger is not `aborted`.
+    ln.ledger.verdict = Verdict.BLOCKED
     return Outcome(
-        1, "the last phase must end the landing", error="pipeline fell through"
+        1,
+        "the last phase must end the landing",
+        verdict=Verdict.BLOCKED,
+        error="pipeline fell through",
     )
 
 

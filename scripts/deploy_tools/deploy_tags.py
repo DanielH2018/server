@@ -56,6 +56,7 @@ from lib.render_guard import (
     containers_entries,
     host_files,
 )
+from deploy_tools.exit_codes import DEPLOY_BROAD
 from lib.repo_paths import GITOPS_DEPLOY_FILES
 
 # deploy_logic.py lives under the gitops_deploy role's files/ because that role's own script
@@ -371,7 +372,7 @@ def _cmd_blockers(args: argparse.Namespace) -> int:
         f"and stop. Otherwise: {broad_remediation(cs.broad_deploy, cs.broad_setup, cs.setup_roles)}",
         file=sys.stderr,
     )
-    return 3
+    return DEPLOY_BROAD
 
 
 def _is_broad_manual(path: str) -> bool:
@@ -447,7 +448,7 @@ def _cmd_changed(args: argparse.Namespace) -> int:
             f"  Run manually instead: {broad_remediation(cs.broad_deploy, cs.broad_setup, cs.setup_roles)}",
             file=sys.stderr,
         )
-        return 3
+        return DEPLOY_BROAD
 
     if cs.tasks:
         print(
@@ -486,7 +487,7 @@ def _cmd_changed(args: argparse.Namespace) -> int:
             # Exit 3, the documented "broad, maps to no single service" refusal. Returning 0
             # with an empty tag list makes deploy.sh exit 0 having deployed nothing, which is
             # the false green this change removes.
-            return 3
+            return DEPLOY_BROAD
     if not tags:
         print(
             f"deploy --changed: no deployable service changed vs {args.ref}.",

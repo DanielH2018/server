@@ -243,6 +243,15 @@ def test_cluster_dependent_set_matches_real_checks():
     assert check.CLUSTER_DEPENDENT <= names
 
 
+def _dependents_are_real_checks(dependents_map: dict, names: set) -> bool:
+    """True when every check named across `dependents_map`'s values is a real CHECKS name.
+
+    Shared by the real guard and its rejecting half below, so a helper weakened to always
+    return True fails the rejecting half rather than passing both silently.
+    """
+    return set().union(*dependents_map.values()) <= names
+
+
 def test_gate_dependents_maps_real_gates_to_real_checks():
     """Guard (mirrors the four *_DEPENDENT sets above): both halves of GATE_DEPENDENTS are real.
 
@@ -253,7 +262,7 @@ def test_gate_dependents_maps_real_gates_to_real_checks():
     still pass.
     """
     names = {c.name for c in check.CHECKS}
-    assert set().union(*check.GATE_DEPENDENTS.values()) <= names
+    assert _dependents_are_real_checks(check.GATE_DEPENDENTS, names)
     # The KEYS are deliberately NOT check names. The four reachability gates are evaluated by
     # run_once directly and have no CHECKS entry, which is why validate_check_filter unions them
     # into `known` separately — so they are pinned against the gates run_once actually evaluates.
@@ -270,7 +279,7 @@ def test_a_gate_dependent_typo_would_be_caught():
     """The rejecting half: the assertion above must go red on a dependent that is not a check."""
     names = {c.name for c in check.CHECKS}
     typo = {"prometheus": frozenset({"disk", "disk_typoo"})}
-    assert not set().union(*typo.values()) <= names
+    assert not _dependents_are_real_checks(typo, names)
     assert not set(typo) == set(check.GATE_DEPENDENTS)
 
 

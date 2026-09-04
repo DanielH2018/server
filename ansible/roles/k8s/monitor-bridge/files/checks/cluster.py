@@ -11,6 +11,8 @@ it from-imports from verdicts.cluster are patched on THIS module, where they are
 Rule and enforcement: bridge/config.py's header.
 """
 
+from collections.abc import Callable
+
 import bridge.config as cfg
 import bridge.net
 import bridge.streaks
@@ -31,7 +33,7 @@ _cadvisor_streaks: dict[str, int] = {}
 
 
 def _top_offenders(
-    vector: list[tuple[dict, float]], label: str, predicate
+    vector: list[tuple[dict, float]], label: str, predicate: Callable[[float], bool]
 ) -> list[tuple[str, float]]:
     """Names (by `label`) of series matching predicate(value), sorted by value desc."""
     hits = [(m.get(label, "?"), v) for m, v in vector if predicate(v)]

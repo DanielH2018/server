@@ -60,6 +60,16 @@ def test_the_deploy_sh_values_match_the_wrapper_itself():
         assert f"exit {rc}\n" in text, f"deploy.sh no longer exits {rc}"
 
 
+def test_the_broad_refusal_is_returned_by_name_from_deploy_tags():
+    """3 reaches deploy.sh through `exit "$status"` from `deploy_tags.py changed`, so the
+    wrapper has no `exit 3` literal to grep. The producer returns the constant instead:
+    every broad refusal is `return DEPLOY_BROAD`, and no literal `return 3` remains."""
+    text = (Path(__file__).resolve().parents[1] / "deploy_tags.py").read_text()
+    assert "from deploy_tools.exit_codes import DEPLOY_BROAD" in text
+    assert "return DEPLOY_BROAD" in text
+    assert "return 3\n" not in text
+
+
 @pytest.mark.parametrize(
     "group",
     [

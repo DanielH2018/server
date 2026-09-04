@@ -39,6 +39,9 @@ def derive_from_diff(ln: Landing) -> None:
         ln.die("the change is broad and maps to no service list — deploy it by hand", 1)
     if r.returncode != DEPLOY_OK:
         ln.die(f"deploy_tags.py changed failed (exit {r.returncode})", 1)
+    # An empty element (a doubled or trailing comma) is dropped here rather than handed to
+    # deploy.sh, which would refuse the whole list as a tag miss. Deliberate: the empty
+    # element carries no service, so refusing on it is a false failure.
     ln.resolved_tags = [t for t in r.stdout.strip().split(",") if t]
 
 

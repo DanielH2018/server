@@ -133,13 +133,16 @@ class Landing:
 
         A marker that could not be READ is `UNKNOWN`, never `CONVERGED`: reporting the
         deployer as converged on the strength of a read that failed is the one wrong answer
-        that ends a landing with `settled`.
+        that ends a landing with `settled`. `hold_sha` is read first and decides on its
+        own: a readable hold is `HELD` whatever `behind_since` does, so an unreadable
+        second marker cannot downgrade a real hold to `UNKNOWN`.
         """
-        hold, behind = self.state("hold_sha"), self.state("behind_since")
-        if hold is None or behind is None:
-            return TickState.UNKNOWN
+        hold = self.state("hold_sha")
         if hold:
             return TickState.HELD
+        behind = self.state("behind_since")
+        if hold is None or behind is None:
+            return TickState.UNKNOWN
         if behind:
             return TickState.BEHIND
         return TickState.CONVERGED

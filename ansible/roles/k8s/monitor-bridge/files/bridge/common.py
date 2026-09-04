@@ -49,6 +49,58 @@ def _env(name: str, default: str) -> str:
     return os.environ.get(name, default)
 
 
+# Every env value this module or bridge/config.py could not parse, one operator-readable line
+# each.
+#
+# IMPORTING A MODULE THAT USES THESE MUST NOT RAISE. `python /app/check.py` imports both this
+# module and bridge/config.py transitively, so a ValueError on one malformed number used to kill
+# the pod during import — before the heartbeat file existed, before a single monitor could be
+# told, and with a traceback naming neither the env var nor its value. `_int`/`_num` below
+# record the problem, fall back to the documented default, and let check.py's `main()` print the
+# whole list and exit 2. One clear line per bad value, at startup, where an operator is looking.
+#
+# Defined here rather than in bridge/config.py because this module's own HTTP_TIMEOUT needs the
+# same treatment and is imported before bridge/config.py exists as a module; bridge/config.py
+# imports CONFIG_PROBLEMS and _int/_num from here so both modules share the one list and the one
+# pair of parsers.
+CONFIG_PROBLEMS: list[str] = []
+
+
+def _int(name: str, default: str) -> int:
+    """The `name` env var as an int, recording a malformed value instead of raising.
+
+    Args:
+      name: The environment variable to read.
+      default: The value used when the variable is unset OR unparseable. A string, so the
+        fallback goes through the same parse the env value would.
+    """
+    raw = _env(name, default)
+    try:
+        return int(raw)
+    except ValueError:
+        CONFIG_PROBLEMS.append(
+            "%s=%r is not an integer; falling back to %s" % (name, raw, default)
+        )
+        return int(default)
+
+
+def _num(name: str, default: str) -> float:
+    """The `name` env var as a float, recording a malformed value instead of raising.
+
+    Args:
+      name: The environment variable to read.
+      default: The value used when the variable is unset OR unparseable.
+    """
+    raw = _env(name, default)
+    try:
+        return float(raw)
+    except ValueError:
+        CONFIG_PROBLEMS.append(
+            "%s=%r is not a number; falling back to %s" % (name, raw, default)
+        )
+        return float(default)
+
+
 # The seconds every outbound HTTP call in both bridges is bounded by. Defined here rather than
 # once per bridge because it was the same line in both, and a timeout that drifts between two
 # scripts drifts in the one direction nobody notices: the slower copy fails open more often, and
@@ -59,7 +111,7 @@ def _env(name: str, default: str) -> str:
 # on the very next call, where its siblings answer in 0.03-0.06s. A source that slow needs the
 # cheap signal to decide and the expensive one only to explain — this constant cannot make that
 # choice for a caller, it can only stop a hang.
-HTTP_TIMEOUT = int(_env("HTTP_TIMEOUT", "10"))
+HTTP_TIMEOUT = _int("HTTP_TIMEOUT", "10")
 
 
 def log(*args: object) -> None:

@@ -89,10 +89,14 @@ class Config:
     broad_deploy_timeout_s: int = 1800
     staging_gate: bool = False
     staging_gate_blocking: bool = False
-    # STAGING_SUBSET and the two staging timeouts are deliberately NOT here. Their literal
-    # fallbacks are parsed out of gitops_deploy.py by scripts/docs/gen_doc_fragments.py, which
-    # looks for a `C.get("<KEY>", "<literal>")` call in that file by name — so moving them
-    # would leave the published fragment with no source. They stay module constants there.
+    staging_gate_timeout_s: int = 600
+    staging_expect_timeout_s: int = 120
+    # STAGING_SUBSET is deliberately NOT here. Its literal fallback is parsed out of
+    # gitops_deploy.py by scripts/docs/gen_doc_fragments.py, which looks for a
+    # `C.get("<KEY>", "<literal>")` call in that file by name — so moving it here would leave
+    # the published fragment with no source. It stays a module constant there. The two staging
+    # timeouts above used to live there too; gitops_deploy.py keeps a vestigial `C.get(...)`
+    # call for each purely so the generator still has one to read — see the comment there.
     errors: tuple[str, ...] = field(default=())
 
     def validate(self) -> None:
@@ -130,6 +134,10 @@ def load_config(env: Mapping[str, str]) -> Config:
     so importing the deployer cannot fail on a half-written config.env — the failure surfaces
     from `Config.validate()` inside `main()`, where it can be logged and posted rather than
     printed as an import traceback before the heartbeat exists.
+
+    `require_ci` also disarms itself here, loudly, when `REQUIRE_CI=true` but `CI_CONTEXTS` or
+    `GITHUB_REPO` is empty (a half-rendered config.env) — done in this one place so `Config` is
+    never split from the value a caller reads off it.
     """
     errors: list[str] = []
 
@@ -146,6 +154,18 @@ def load_config(env: Mapping[str, str]) -> Config:
     def _bool(key: str, default: bool = False) -> bool:
         return env.get(key, str(default).lower()).lower() == "true"
 
+    require_ci = _bool("REQUIRE_CI")
+    ci_contexts = csv_set(env.get("CI_CONTEXTS", ""))
+    ci_repo = env.get("GITHUB_REPO", "")
+    if require_ci and not (ci_contexts and ci_repo):
+        # Fail closed the same way the k8s denylist does, but in the opposite direction: an
+        # empty context list would make ci_verdict() return `pass` for everything, turning a
+        # half-rendered config.env into a silently ungated deployer. Better to disarm loudly.
+        log(
+            "REQUIRE_CI is set but CI_CONTEXTS/GITHUB_REPO is empty — disabling the CI gate"
+        )
+        require_ci = False
+
     return Config(
         repo=env.get("REPO_DIR", ""),
         branch=env.get("BRANCH", "master"),
@@ -153,9 +173,9 @@ def load_config(env: Mapping[str, str]) -> Config:
         discord_webhook=env.get("DISCORD_WEBHOOK", ""),
         health_timeout_s=_int("HEALTH_TIMEOUT_S", 300),
         run_budget_s=_int("RUN_BUDGET_S", 1020),
-        require_ci=_bool("REQUIRE_CI"),
-        ci_contexts=csv_set(env.get("CI_CONTEXTS", "")),
-        ci_repo=env.get("GITHUB_REPO", ""),
+        require_ci=require_ci,
+        ci_contexts=ci_contexts,
+        ci_repo=ci_repo,
         k8s_autodeploy_enabled=_bool("K8S_AUTODEPLOY_ENABLED"),
         k8s_autodeploy_pilot=csv_set(env.get("K8S_AUTODEPLOY_PILOT", "")),
         k8s_autodeploy_denylist=csv_set(env.get("K8S_AUTODEPLOY_DENYLIST", "")),
@@ -168,6 +188,8 @@ def load_config(env: Mapping[str, str]) -> Config:
         broad_deploy_timeout_s=_int("BROAD_DEPLOY_TIMEOUT_S", 1800),
         staging_gate=_bool("STAGING_GATE"),
         staging_gate_blocking=_bool("STAGING_GATE_BLOCKING"),
+        staging_gate_timeout_s=_int("STAGING_GATE_TIMEOUT_S", 600),
+        staging_expect_timeout_s=_int("STAGING_EXPECT_TIMEOUT_S", 120),
         errors=tuple(errors),
     )
 

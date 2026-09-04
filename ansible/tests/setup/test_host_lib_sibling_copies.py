@@ -15,10 +15,11 @@ list someone maintains, so a new consumer is in scope the moment it imports the 
 
 WHY THE SHARED FILE DOES NOT WRITE THE STAMP PAIR, and this test asserts it instead. A
 `stamp_deployed` fragment is named per group and holds that group's whole pair list, so a
-second fragment written from inside the shared file would overwrite the caller's. Four of the
-eight sites record a host_lib pair and four do not; emitting one for the other four would change
-host state. The copy and the pair are therefore joined here rather than in the task file:
-`test_a_declared_stamp_pair_names_a_directory_the_include_installs_into`.
+second fragment written from inside the shared file would overwrite the caller's. Five of the
+eight sites (gitops_deploy, renovate_notify, renovate_agent, and k3s twice) record a host_lib
+pair and the other three (configarr, janitorr, fake_remux) do not; emitting one for those three
+would change host state. The copy and the pair are therefore joined here rather than in the
+task file: `test_a_declared_stamp_pair_names_a_directory_the_include_installs_into`.
 
 Run: uv run pytest ansible/tests/setup/test_host_lib_sibling_copies.py
 """
@@ -102,10 +103,14 @@ def consumers(roles_root: Path) -> set[str]:
 
 
 def includes_of(role: Path) -> list[dict]:
-    """Every `import_tasks` of the shared install file in this role, with its vars."""
+    """Every `import_tasks` of the shared install file in this role, with its vars.
+
+    Walks nested task files (`tasks/sub/*.yml`), not just the top level — a role can
+    `import_tasks` a sub-file that itself includes the shared install task.
+    """
     out = []
     for task_file in (
-        sorted((role / "tasks").glob("*.yml")) if (role / "tasks").is_dir() else []
+        sorted((role / "tasks").rglob("*.yml")) if (role / "tasks").is_dir() else []
     ):
         for task in walk_tasks(load_tasks(task_file)):
             target = task.get("ansible.builtin.import_tasks") or task.get(
@@ -117,10 +122,10 @@ def includes_of(role: Path) -> list[dict]:
 
 
 def stamp_pairs_of(role: Path) -> list[dict]:
-    """Every declared stamp_deployed pair in this role, across all its task files."""
+    """Every declared stamp_deployed pair in this role, across all its task files, nested too."""
     out = []
     for task_file in (
-        sorted((role / "tasks").glob("*.yml")) if (role / "tasks").is_dir() else []
+        sorted((role / "tasks").rglob("*.yml")) if (role / "tasks").is_dir() else []
     ):
         for task in walk_tasks(load_tasks(task_file)):
             pairs = (task.get("vars") or {}).get("stamp_deployed_pairs")
@@ -135,12 +140,17 @@ def hand_copies(roles_root: Path) -> list[str]:
     Rooted like `consumers()` so the rejecting half can build its offender in tmp_path. Reads
     `src`, `dest` and `loop` together because the eight sites this replaced spelled it three
     ways: a dedicated task with the path in `src`, a loop item, and a `dest` naming the file.
+    Walks nested task files too (`tasks/sub/*.yml`), skipping only the shared install task
+    itself — the one file that legitimately copies host_lib.py — rather than every task file
+    OWNER_ROLE ships, so a hand copy planted elsewhere in that role is still caught.
     """
     offenders = []
     for role in _role_dirs(roles_root):
-        if role.name == OWNER_ROLE or not (role / "tasks").is_dir():
+        if not (role / "tasks").is_dir():
             continue
-        for task_file in sorted((role / "tasks").glob("*.yml")):
+        for task_file in sorted((role / "tasks").rglob("*.yml")):
+            if role.name == OWNER_ROLE and task_file.name == "install_host_lib.yml":
+                continue
             for task in walk_tasks(load_tasks(task_file)):
                 copy = task.get("ansible.builtin.copy") or task.get("copy")
                 if not isinstance(copy, dict):
@@ -298,10 +308,14 @@ def test_a_hand_written_host_lib_copy_is_flagged(tmp_path):
     `hand_copies` finds nothing in the tree by construction — that is the point of the change
     it guards — so from the passing side a detector that stopped matching is indistinguishable
     from one that works. This is the only thing that tells them apart.
+
+    Nested one level down (`tasks/sub/health.yml`), not `tasks/main.yml`: `hand_copies` used to
+    glob only the top level, so a hand copy tucked in an included sub-file read as clean.
     """
     role = tmp_path / "setup" / "backslider" / "tasks"
-    role.mkdir(parents=True)
-    (role / "main.yml").write_text(
+    nested = role / "sub"
+    nested.mkdir(parents=True)
+    (nested / "health.yml").write_text(
         "---\n"
         "- name: Install the scripts\n"
         "  ansible.builtin.copy:\n"
@@ -312,11 +326,11 @@ def test_a_hand_written_host_lib_copy_is_flagged(tmp_path):
         "    - reader.py\n"
         '    - "{{ role_path }}/../common/files/host_lib.py"\n'
     )
-    assert hand_copies(tmp_path) == ["setup/backslider/tasks/main.yml"]
+    assert hand_copies(tmp_path) == ["setup/backslider/tasks/sub/health.yml"]
 
     # And the accepting half on the same synthetic role, so a detector that flagged every copy
     # task would fail here rather than read as strictness.
-    (role / "main.yml").write_text(
+    (nested / "health.yml").write_text(
         "---\n"
         "- name: Install the scripts\n"
         "  ansible.builtin.copy:\n"

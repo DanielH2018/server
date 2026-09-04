@@ -32,7 +32,9 @@ MERGE_SHA = "0123456789abcdef0123456789abcdef01234567"
 # TemporaryDirectory rather than mkdtemp: mkdtemp leaves the directory behind for good, and
 # `-n auto` makes one per xdist worker on every run. The object is held at module scope so
 # its finalizer runs at interpreter exit and not before.
-_PRIMARY_TMP = tempfile.TemporaryDirectory(prefix="land-primary-")
+_PRIMARY_TMP = tempfile.TemporaryDirectory(
+    prefix="land-primary-", ignore_cleanup_errors=True
+)
 PRIMARY = Path(_PRIMARY_TMP.name)
 STATE = Path("/state")
 
@@ -106,7 +108,7 @@ def build_classifier(f: Fakes, calls: list | None = None) -> Classifier:
         plane_note=lambda paths, quiet=(): f.plane,
         self_applied=lambda paths, quiet=(): f.self_applied,
         remaining_setup_hosts=remaining_setup_hosts,
-        derive=lambda paths, changed: Derivation(
+        derive=lambda paths, changed, declared=None: Derivation(
             list(f.derived[0]), DeriveSource(f.derived[1])
         ),
         quiet_paths=lambda paths, range_: set(),

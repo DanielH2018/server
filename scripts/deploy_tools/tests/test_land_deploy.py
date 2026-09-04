@@ -158,6 +158,17 @@ def test_the_diff_fallback_derives_after_the_tick(landing):
     assert ("deploy_tags", ("changed", "abc"), {"cwd": PRIMARY}) in calls
 
 
+def test_the_diff_fallback_drops_an_empty_tag_element(landing):
+    """A doubled or trailing comma is not a service, so it is dropped here rather than
+    handed to deploy.sh as a tag miss that refuses the whole list."""
+    ln, calls = _ready(landing, Fakes(changed="sonarr,,radarr,"), since="abc")
+    ln.needs_diff = True
+    deploy.deploy_phase(ln)
+    assert ln.resolved_tags == ["sonarr", "radarr"]
+    deploy_argv = [c for c in calls if c[0] == "deploy"]
+    assert deploy_argv and deploy_argv[0][1][1] == ["sonarr", "radarr"]
+
+
 def test_a_broad_diff_fallback_is_handed_to_a_hand(landing):
     ln, _ = _ready(landing, Fakes(changed_rc=3), since="abc")
     ln.needs_diff = True

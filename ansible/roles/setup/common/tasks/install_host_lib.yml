@@ -8,12 +8,13 @@
 # finding this file closes: the source path, the `host_lib.py` basename and the 0755 mode were
 # written out eight times, so a change to any of them had eight places to miss.
 #
-# WHAT THIS FILE DELIBERATELY DOES NOT DO: write the stamp_deployed pair. Four of the eight
-# sites record `/opt/<x>/host_lib.py` in their role's `stamp_deployed_pairs`; the other four
-# do not, and emitting a fragment here would change host state at those. Worse, a fragment is
-# named per GROUP and holds the whole group's pairs, so a second fragment written from here
-# under the caller's own name would overwrite the pairs the caller declared. The copy↔pair
-# invariant is therefore held by a test rather than by this file:
+# WHAT THIS FILE DELIBERATELY DOES NOT DO: write the stamp_deployed pair. Five of the eight
+# sites record `/opt/<x>/host_lib.py` in their role's `stamp_deployed_pairs` (gitops_deploy,
+# renovate_notify, renovate_agent, and k3s twice); the other three (configarr, janitorr,
+# fake_remux) do not, and emitting a fragment here would change host state at those. Worse, a
+# fragment is named per GROUP and holds the whole group's pairs, so a second fragment written
+# from here under the caller's own name would overwrite the pairs the caller declared. The
+# copy↔pair invariant is therefore held by a test rather than by this file:
 # ENFORCED by ansible/tests/setup/test_host_lib_sibling_copies.py, which asserts that every
 # role whose files/ scripts `import host_lib` includes this task file, that the pair a role
 # does declare names the directory it passes here, and that a `host_lib_notify` handler name

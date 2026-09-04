@@ -374,6 +374,25 @@ def validate_check_filter(
     return problems
 
 
+def expand_gates_for_cli(names: frozenset[str]) -> frozenset[str]:
+    """Union in every gate a `--check`-selected check depends on.
+
+    `--check disk` alone must not trip validate_check_filter's "gate disabled but its dependents
+    are enabled" refusal — the operator named the check they want, not the gate underneath it,
+    and `--check` is a narrowing convenience rather than the strict CHECKS_ONLY env contract.
+    CHECKS_ONLY keeps its existing all-or-nothing behaviour: an operator writing that env var is
+    expected to spell out the gate themselves, same as today.
+
+    Args:
+      names: The check names passed on the command line via `--check`.
+    """
+    gates = set(names)
+    for gate, dependents in GATE_DEPENDENTS.items():
+        if names & dependents:
+            gates.add(gate)
+    return frozenset(gates)
+
+
 def apply_startup_grace(
     name: str, ok: bool, msg: str, threshold: float, streaks: dict[str, int]
 ) -> tuple[bool, str]:
@@ -597,8 +616,9 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="NAME",
         dest="checks",
         help=(
-            "run only this check; repeatable. Equivalent to CHECKS_ONLY, and validated the "
-            "same way — a gate whose dependents are enabled may not be disabled."
+            "run only this check; repeatable. Validated like CHECKS_ONLY — a gate whose "
+            "dependents are enabled may not be disabled — but unlike CHECKS_ONLY, the gate "
+            "each named check depends on is unioned in automatically."
         ),
     )
     parser.add_argument(
@@ -613,9 +633,12 @@ def main(argv: list[str] | None = None) -> int:
     """Validates the configuration and the check filter, then runs the check loop.
 
     Returns 2 without running any check if bridge/config.py could not parse an env value, or if
-    CHECKS_ONLY/CHECKS_SKIP (or --check) names an unknown check or disables a gate whose
-    dependents are still enabled. Otherwise loops run_once() at cfg.INTERVAL seconds, touching
-    the heartbeat file after every cycle, forever unless --once was given.
+    CHECKS_ONLY/CHECKS_SKIP names an unknown check or disables a gate whose dependents are still
+    enabled. `--check` is validated the same way, but first has its named checks' gates unioned
+    in (see expand_gates_for_cli) — CHECKS_ONLY keeps the strict env contract, `--check` does
+    not need the gate spelled out alongside the check. Otherwise loops run_once() at
+    cfg.INTERVAL seconds, touching the heartbeat file after every cycle, forever unless --once
+    was given.
 
     Args:
       argv: The argument list, without the program name. None reads sys.argv.
@@ -631,7 +654,9 @@ def main(argv: list[str] | None = None) -> int:
         for problem in cfg.CONFIG_PROBLEMS:
             bridge.common.log("FATAL: bad monitor-bridge config:", problem)
         return 2
-    only = frozenset(args.checks) if args.checks else cfg.CHECKS_ONLY
+    only = (
+        expand_gates_for_cli(frozenset(args.checks)) if args.checks else cfg.CHECKS_ONLY
+    )
     problems = validate_check_filter(only, cfg.CHECKS_SKIP, CHECKS)
     if problems:
         for p in problems:
@@ -644,7 +669,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     while True:
         run_once(dry_run=args.dry_run, only=only)
-        bridge.common.touch_heartbeat(cfg.HEARTBEAT_FILE)
+        # A --dry-run hand-run must touch nothing live, including the liveness-probe file — see
+        # build_parser()'s --dry-run help.
+        if not args.dry_run:
+            bridge.common.touch_heartbeat(cfg.HEARTBEAT_FILE)
         if args.once:
             return 0
         time.sleep(cfg.INTERVAL)

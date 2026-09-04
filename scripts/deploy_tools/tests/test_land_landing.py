@@ -87,6 +87,20 @@ def test_tick_state_reads_hold_before_behind(landing, state, expected):
     assert ln.tick_state() == expected
 
 
+def test_a_readable_hold_wins_over_an_unreadable_behind_marker(landing):
+    """`hold_sha` decides alone: a hold is a hold whatever `behind_since` does, so an
+    unreadable second marker cannot downgrade `held` (and its `tick-held` bar) to unknown."""
+    ln, _ = landing()
+    ln.tools.read_state = lambda root, name: "abc123" if name == "hold_sha" else None
+    assert ln.tick_state() == TickState.HELD
+
+
+def test_an_unreadable_hold_marker_is_unknown_even_when_behind_is_readable(landing):
+    ln, _ = landing()
+    ln.tools.read_state = lambda root, name: None if name == "hold_sha" else ""
+    assert ln.tick_state() == TickState.UNKNOWN
+
+
 def test_an_unreadable_state_directory_is_unknown_not_converged(landing):
     """The reject half of `tick_state`, and the reason `read_state` distinguishes the two.
 

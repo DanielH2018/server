@@ -65,10 +65,12 @@ NOT_APPLICABLE_MARKERS = (
 
 @dataclass(frozen=True)
 class NotifyTools:
-    """The two boundaries this notifier crosses, so a test replaces a field, not a module.
+    """The two boundaries the health gate crosses, so a test replaces a field, not a module.
 
     `run` is the probe subprocess; `tag_platforms` reads the inventory. Both default to the
-    real implementation, the way `land_lib.tools.Tools` does.
+    real implementation, the way `land_lib.tools.Tools` does. `notify()` below is a third
+    boundary (the host's gitops-deploy webhook) and stays outside this seam: it is
+    best-effort by contract and its tests stub the host files it reads.
     """
 
     run: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run

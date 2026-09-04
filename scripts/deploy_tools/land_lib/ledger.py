@@ -15,11 +15,12 @@ writing sites becomes a bar on the dashboard, and nothing downstream would rejec
 
 from dataclasses import dataclass
 
+import sys
 import sys as _sys
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
-from deploy_tools.land_lib.outcome import CAUSES
+from deploy_tools.land_lib.outcome import CAUSES, Cause
 
 
 @dataclass
@@ -40,9 +41,18 @@ class Ledger:
     lock_holder: str = ""
 
     def __setattr__(self, name: str, value: object) -> None:
-        """Reject a `cause` outside `outcome.CAUSES`; "" stays the no-cause value."""
+        """Coerce a `cause` outside `outcome.CAUSES` to `Cause.INVALID`; "" is no cause.
+
+        Coerced and warned, not raised: this is written after the deploy ran, and a
+        vocabulary typo must not turn a finished landing into a traceback with no
+        `VERDICT:` line. The board then shows one `invalid-cause` bar to chase.
+        """
         if name == "cause" and value and value not in CAUSES:
-            raise ValueError(f"unknown ledger cause {value!r}")
+            print(
+                f"land: unknown ledger cause {value!r}, recording as invalid-cause",
+                file=sys.stderr,
+            )
+            value = Cause.INVALID
         super().__setattr__(name, value)
 
 

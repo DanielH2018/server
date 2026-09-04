@@ -72,12 +72,16 @@ def test_a_missing_config_refuses_to_tick(gitops_deploy, monkeypatch):
 
 
 # ── entrypoint(): the exit-code contract around main() ────────────────────────────────────────
-def _tick(gitops_deploy, monkeypatch, outcome) -> dict[str, list]:
+def _tick(
+    gitops_deploy, monkeypatch, outcome, discord_ok: bool = True
+) -> dict[str, list]:
     """Run entrypoint() with main() replaced by `outcome` (a return value, or an exception to
     raise), recording every Discord post and whether the behind-origin marker was refreshed."""
     seen: dict[str, list] = {"posts": [], "behind": []}
     monkeypatch.setattr(
-        gitops_deploy, "discord", lambda content: seen["posts"].append(content) or True
+        gitops_deploy,
+        "discord",
+        lambda content: seen["posts"].append(content) or discord_ok,
     )
     monkeypatch.setattr(
         gitops_deploy, "_record_behind", lambda: seen["behind"].append(True)
@@ -106,7 +110,7 @@ def test_a_retryable_fetch_failure_is_a_clean_skip(
     assert seen["behind"] == []
 
 
-def test_an_unusable_config_is_one_line_and_exit_1_not_a_traceback(
+def test_an_unusable_config_is_one_line_and_exit_0_on_a_delivered_post(
     gitops_deploy, monkeypatch, state_dir, capsys
 ):
     """The acceptance criterion for moving the config parse out of import time.
@@ -115,7 +119,9 @@ def test_an_unusable_config_is_one_line_and_exit_1_not_a_traceback(
     was still importing — no key name, no webhook, no log line. The handler must sit ABOVE the
     generic `except Exception` (ConfigError subclasses it, so a reordering silently restores the
     traceback), and must leave last_run alone: a deployer that cannot parse its config is not
-    ticking, and writing the marker would hold GitOps-Alive green over it.
+    ticking, and writing the marker would hold GitOps-Alive green over it. Exit 0 on a delivered
+    detailed post — same convention as every other `0 if posted else 1` branch — so OnFailure's
+    generic curl doesn't double-page; see the failure-path test below for the exit-1 half.
     """
     import deploy_io
 
@@ -126,7 +132,7 @@ def test_an_unusable_config_is_one_line_and_exit_1_not_a_traceback(
             "unusable deployer config: HEALTH_TIMEOUT_S='5m' is not a whole number"
         ),
     )
-    assert gitops_deploy.entrypoint() == 1
+    assert gitops_deploy.entrypoint() == 0
     out = capsys.readouterr().out.strip()
     assert out.count("\n") == 0, (
         f"a diagnosable failure is one line, not a block: {out}"
@@ -135,6 +141,24 @@ def test_an_unusable_config_is_one_line_and_exit_1_not_a_traceback(
     assert len(seen["posts"]) == 1 and "HEALTH_TIMEOUT_S" in seen["posts"][0]
     assert not (state_dir / "last_run").exists()
     assert seen["behind"] == []
+
+
+def test_an_unusable_config_exits_1_when_the_alert_itself_cant_be_delivered(
+    gitops_deploy, monkeypatch, state_dir
+):
+    # Red proof for the branch above: when the detailed post fails, OnFailure is the backstop.
+    import deploy_io
+
+    _tick(
+        gitops_deploy,
+        monkeypatch,
+        deploy_io.ConfigError(
+            "unusable deployer config: HEALTH_TIMEOUT_S='5m' is not a whole number"
+        ),
+        discord_ok=False,
+    )
+    assert gitops_deploy.entrypoint() == 1
+    assert not (state_dir / "last_run").exists()
 
 
 def test_a_genuine_crash_still_pages_and_reraises(

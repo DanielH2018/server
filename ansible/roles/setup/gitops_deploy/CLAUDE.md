@@ -442,10 +442,12 @@ plus a Discord post. Before that it was ~40 `int(C.get(...))` calls at module le
 half-written config.env was an import traceback with no key name in it. The module-level
 constants in `gitops_deploy.py` are still derived from `CONFIG` and are what the suite patches
 — that is the remaining coupling, and threading `CONFIG` through every function instead is a
-separate change. Three keys keep their `C.get("<KEY>", "<literal>")` fallback in
-`gitops_deploy.py` rather than in `load_config`: `STAGING_SUBSET`,
-`STAGING_GATE_TIMEOUT_S` and `STAGING_EXPECT_TIMEOUT_S`, because
-`scripts/docs/gen_doc_fragments.py` parses those calls out of that file by name.
+separate change. Three keys keep a `C.get("<KEY>", "<literal>")` call in
+`gitops_deploy.py` because `scripts/docs/gen_doc_fragments.py` parses those calls out of
+that file by name: `STAGING_SUBSET` is read there for real, while the
+`STAGING_GATE_TIMEOUT_S` and `STAGING_EXPECT_TIMEOUT_S` calls are literals the generator
+reads and nothing else does; both timeouts are parsed and validated in `load_config`, and a
+test pins the literals to `Config`'s defaults.
 
 **State is one object.** `deploy_io.DeployerState` wraps the fifteen marker files;
 `gitops_deploy.STATE` is the instance and the fifteen path literals stay declared there
