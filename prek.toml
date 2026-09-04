@@ -429,10 +429,18 @@ types = ["shell"]
 # NEVER widen this to docs/reference/. That cron stages those paths and commits with hooks
 # running, so a style error there aborts the commit and alerts on every run until someone
 # fixes the generator. ENFORCED by the same test.
+#
+# The Google package is fetched, not tracked: .vale.ini pins its release URL and .gitignore
+# excludes styles/Google/, so a fresh checkout — every new worktree — has the tracked Homelab
+# style and nothing else on StylesPath. A bare `vale` there dies with "style 'Google' does
+# not exist on StylesPath" on every commit that touches a doc, until someone runs `vale sync`
+# by hand in that worktree. The entry syncs on the missing directory only, because `vale sync`
+# re-downloads unconditionally (0.3-0.5s and a network round-trip per commit otherwise).
+# ENFORCED by test_the_hook_syncs_the_google_package_when_missing in the same test file.
 [[repos.hooks]]
 id = "vale"
 name = "Prose style (Vale, scoped to ADRs + every top-level docs page)"
-entry = "vale"
+entry = "bash -c '[ -d styles/Google ] || vale sync || exit 1; exec vale \"$@\"' --"
 language = "system"
 # docs/[^/]+\.md is every top-level page and nothing below it, which is what keeps
 # docs/archive/ and docs/reference/ out. See .vale.ini for why each is excluded.
