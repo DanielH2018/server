@@ -15,24 +15,29 @@ BACKUP_HEALTH = v.ROLES / "setup" / "k3s" / "templates" / "longhorn-backup-healt
 
 
 @pytest.mark.parametrize(
-    ("b2_armed", "r2_armed", "expect_armed", "expect_disarmed"),
+    ("b2_armed", "r2_armed", "expect_backup_armed", "expect_r2_armed"),
     [
-        (True, True, ["default", "r2"], []),
-        (True, False, ["default"], ["r2"]),
-        (False, True, ["r2"], ["default"]),
-        (False, False, [], ["default", "r2"]),
+        (True, True, "True", "True"),
+        (True, False, "True", "False"),
+        (False, True, "False", "True"),
+        (False, False, "False", "False"),
     ],
 )
 def test_backup_health_renders_clean_for_every_arm_state(
-    tmp_path, b2_armed: bool, r2_armed: bool, expect_armed, expect_disarmed
+    tmp_path,
+    b2_armed: bool,
+    r2_armed: bool,
+    expect_backup_armed: str,
+    expect_r2_armed: str,
 ):
     """Both branches of the armed gates must render to valid shell.
 
     main() renders with group_vars only, so the ROLE default `k3s_longhorn_backup_armed: false`
     is never applied there and its branch would go unexercised — the dead-path shape that let two
-    commands stay broken behind passing tests after the k3s cutover. The disarmed branch is the
-    one that matters most: it is what runs whenever B2 is off, and an empty BACKUP_TARGETS array
-    under `set -u` is exactly the kind of thing that only fails at 03:30.
+    commands stay broken behind passing tests after the k3s cutover. Since the shim only exports
+    LONGHORN_BACKUP_ARMED/LONGHORN_R2_ARMED for the Python reader to interpret (BACKUP_TARGETS
+    itself is now derived cluster-side), the disarmed branch that matters is the exported string
+    the reader parses — a wrong render there disarms silently instead of at `set -u`.
     """
     shellcheck_bin = shutil.which("shellcheck")
     assert shellcheck_bin, "shellcheck must be on PATH (dev dependency shellcheck-py)"
@@ -51,17 +56,13 @@ def test_backup_health_renders_clean_for_every_arm_state(
     assert v.bash_syntax_check(out) is None
     assert v.shellcheck_check(out, shellcheck_bin) is None
 
-    def targets(prefix: str) -> list[str]:
-        line = next(ln for ln in rendered.splitlines() if ln.startswith(prefix))
-        return line[len(prefix) : -1].split()
-
-    assert targets("BACKUP_TARGETS=(") == expect_armed
-    assert targets("DISARMED_TARGETS=(") == expect_disarmed
+    assert f'export LONGHORN_BACKUP_ARMED="{expect_backup_armed}"' in rendered
+    assert f'export LONGHORN_R2_ARMED="{expect_r2_armed}"' in rendered
 
 
 def test_backup_health_arm_gates_treat_the_string_false_as_disarmed():
     # Ansible's `-e k3s_longhorn_backup_armed=false` passes the STRING "false", which is truthy in
-    # Jinja. Without `| bool` an extra-vars disarm would leave `default` in the armed set and
+    # Jinja. Without `| bool` an extra-vars disarm would render LONGHORN_BACKUP_ARMED="true" and
     # silently restore the permanently-red monitor this gate exists to prevent.
     ctx = {
         **BASE_CONTEXT,
@@ -71,8 +72,8 @@ def test_backup_health_arm_gates_treat_the_string_false_as_disarmed():
         "k3s_longhorn_r2_armed": "false",
     }
     rendered = v.render_template(BACKUP_HEALTH, ctx)
-    assert "BACKUP_TARGETS=()" in rendered
-    assert "DISARMED_TARGETS=(default r2)" in rendered
+    assert 'export LONGHORN_BACKUP_ARMED="False"' in rendered
+    assert 'export LONGHORN_R2_ARMED="False"' in rendered
 
 
 @pytest.mark.parametrize(

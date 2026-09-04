@@ -15,55 +15,55 @@ so the window is days wide, not hours.
 The fix mirrors what the DISARMED path already does: count it, and name it in the green message.
 Three properties are load-bearing, and a future edit could plausibly break any of them:
 
-COUNTED. The grace branch must increment GRACED before its `continue`, or the state is invisible
-again.
+COUNTED. The grace branch must increment `graced` before it excuses the volume, or the state is
+invisible again.
 
-SURFACED. GRACED must reach MSG. A counter nothing prints is the same silence with extra steps.
+SURFACED. `graced_new`/`graced_seeded` must reach the pushed green message via build_verdict().
+A counter nothing prints is the same silence with extra steps.
 
 NAMED. The volumes are listed, not just totalled. A graced volume has no offsite copy at all, so
 "3 volume(s) awaiting" tells an operator nothing they can act on — and an unactionable red is what
 check 3's own comment records as the thing that stops being read.
 
+check 4 now lives in longhorn_backup_health_logic.check_tier()/build_verdict(), ported from the
+shell verbatim; these guards run against the ported functions directly.
+
 Run: uv run pytest ansible/tests/longhorn/test_longhorn_backup_grace_visibility.py
 """
 
+import sys
+
 from _helpers import ANSIBLE
 
-HEALTH = (
-    ANSIBLE / "roles" / "setup" / "k3s" / "templates" / "longhorn-backup-health.sh.j2"
-)
+sys.path.insert(0, str(ANSIBLE / "roles" / "setup" / "k3s" / "files"))
+import longhorn_backup_health_logic as logic
+
+NOW = 1_800_000_000.0  # 2027-01-15T08:00:00Z
 
 
-def _code() -> str:
-    """The script minus its comments — the comments discuss this bug on purpose."""
-    return "\n".join(
-        line
-        for line in HEALTH.read_text().splitlines()
-        if not line.lstrip().startswith("#")
+def _graced_result():
+    """A single volume created 10 minutes ago, no backup anywhere, first run 3h from now."""
+    result = logic.TierResult()
+    created = "2027-01-15T07:50:00Z"
+    rows = [("pvc-1", created, "ns/claim1", "default")]
+    logic.check_tier(
+        result, rows, [], 30 * 3600, "daily", "daily-backup", "11:00", "*", set(), NOW
     )
-
-
-def _grace_branch() -> str:
-    """The `if [[ -z "$LATEST" ]]` arm, up to the uncovered-reporting that follows it."""
-    code = _code()
-    start = code.index('if [[ -z "$LATEST" ]]')
-    end = code.index("UNCOVERED=", start)
-    return code[start:end]
+    return result
 
 
 def test_the_grace_branch_counts_rather_than_dropping_silently():
-    """A graced volume increments GRACED; the bare `continue` was the whole defect."""
-    branch = _grace_branch()
-    assert "GRACED=$(( GRACED + 1 ))" in branch, (
-        "check 4's first-run grace must count the volume it excuses — a bare `continue` "
+    """A graced volume increments `graced`; a bare drop was the whole 2026-08-20 defect."""
+    result = _graced_result()
+    assert result.graced == 1, (
+        "check 4's first-run grace must count the volume it excuses — dropping it silently "
         "leaves a volume with no backup anywhere completely invisible"
     )
 
 
 def test_graced_volumes_are_named_not_just_counted():
-    """The excused volumes are listed, so the message is actionable."""
-    branch = _grace_branch()
-    assert "GRACED_VOLS=" in branch, (
+    result = _graced_result()
+    assert result.graced_vols == ["ns/claim1"], (
         "name the graced volumes — a bare count is not actionable, and a volume in this "
         "state has no offsite copy at all"
     )
@@ -71,25 +71,36 @@ def test_graced_volumes_are_named_not_just_counted():
 
 def test_graced_reaches_the_green_message():
     """A counter that never prints is the same silence with extra steps."""
-    code = _code()
-    msg = next(line for line in code.splitlines() if line.strip().startswith("MSG="))
-    assert "${GRACED_NOTE}" in msg, (
-        "GRACED must reach MSG, the way SUPPRESSED does via DISARMED_NOTE — otherwise the "
-        "green tile still reads identical while volumes sit unprotected"
+    status, msg, _push_msg = logic.build_verdict(
+        [],
+        backup_targets=["default"],
+        disarmed_targets=[],
+        age_s=0,
+        checked=0,
+        recent_n=0,
+        daily_backup_budget=16,
+        suppressed=0,
+        graced_new=1,
+        graced_new_vols=["ns/claim1"],
+        graced_seeded=0,
+        graced_seeded_vols=[],
     )
-    assert "GRACED_NOTE=" in code and "${GRACED_VOLS}" in code, (
-        "GRACED_NOTE must interpolate the named volume list"
+    assert status == "up"
+    assert "ns/claim1" in msg, (
+        "the graced volume list must reach the green message the way SUPPRESSED does via "
+        "the DISARMED note — otherwise the tile reads identical while volumes sit unprotected"
     )
 
 
 def test_checked_is_not_incremented_on_the_grace_path():
-    """The regression that made this invisible: CHECKED counts only volumes with a backup.
+    """The regression that made this invisible: `checked` counts only volumes with a backup.
 
     This is the property that makes the green count misleading on its own, and it is CORRECT —
     a graced volume genuinely is not covered. It is asserted here so that a future 'fix' that
     papers over the silence by counting graced volumes as covered fails loudly instead.
     """
-    assert "CHECKED=$(( CHECKED + 1 ))" not in _grace_branch(), (
+    result = _graced_result()
+    assert result.checked == 0, (
         "a volume with no backup must never count toward the covered total — that would "
         "turn an invisible gap into an actively false one"
     )
@@ -97,10 +108,21 @@ def test_checked_is_not_incremented_on_the_grace_path():
 
 def test_both_silent_skips_are_surfaced():
     """DISARMED and GRACED are the only two paths that excuse a volume; both must be named."""
-    code = _code()
-    msg = next(line for line in code.splitlines() if line.strip().startswith("MSG="))
-    for note in ("${DISARMED_NOTE}", "${GRACED_NOTE}"):
-        assert note in msg, (
-            f"{note} missing from the green message — every path that excuses a volume "
-            "has to say so, or the tile reports coverage it does not have"
-        )
+    _status, msg, _push_msg = logic.build_verdict(
+        [],
+        backup_targets=["default"],
+        disarmed_targets=["r2"],
+        age_s=0,
+        checked=0,
+        recent_n=0,
+        daily_backup_budget=16,
+        suppressed=2,
+        graced_new=1,
+        graced_new_vols=["ns/claim1"],
+        graced_seeded=0,
+        graced_seeded_vols=[],
+    )
+    assert "DISARMED" in msg and "ns/claim1" in msg, (
+        "every path that excuses a volume has to say so in the green message, or the tile "
+        "reports coverage it does not have"
+    )

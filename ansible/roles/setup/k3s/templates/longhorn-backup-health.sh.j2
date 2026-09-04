@@ -1,21 +1,26 @@
 #!/usr/bin/env bash
 # Longhorn backup-plane heartbeat — managed by Ansible (k3s role); edits overwritten.
 #
-# Until this existed, the cluster's backup path had no monitor at all: `grep -ic longhorn` over
-# monitor-bridge's check.py returned 0. On 2026-08-02 the Longhorn backup target went
-# unavailable at 10:02 and nothing anywhere noticed — the outage surfaced only because Kopia,
-# sharing the same B2 account, tripped its own freshness check nine minutes later. Had the cap
-# been hit by Longhorn alone, nothing would have alerted.
+# Thin on purpose. Everything that decides up-or-down is in longhorn_backup_health.py + its pure
+# core (longhorn_backup_health_logic.py), which are plain files with unit tests; this exists only
+# because the Kuma push token has to be templated in, and a secret-carrying file should hold as
+# little logic as possible. Same shape as configarr-health.sh and telemetry-health.sh.
 #
-# monitor-bridge runs on the SERVER and cannot see this cluster, so this pushes rather than
-# being polled — the same shape as the Pi's health crons (optimize_pi role), for the same
-# reason. The push itself comes from /usr/local/lib/kuma-push-lib.sh, which the initial_setup
-# role installs on every host. This file used to inline the curl and said promoting the Pi-only
-# lib was "a refactor worth doing when monitoring itself moves onto this host, not before" —
-# the k3s migration moved Kuma and monitor-bridge into the cluster on 2026-08-14, so it was.
+# Until this existed at all, the cluster's backup path had no monitor: `grep -ic longhorn` over
+# monitor-bridge's check.py returned 0. On 2026-08-02 the Longhorn backup target went unavailable
+# at 10:02 and nothing anywhere noticed — the outage surfaced only because Kopia, sharing the same
+# B2 account, tripped its own freshness check nine minutes later. Had the cap been hit by Longhorn
+# alone, nothing would have alerted. The eight checks that now exist to prevent a repeat of that,
+# and every incident that shaped one of their thresholds, are documented in
+# longhorn_backup_health_logic.py rather than here.
 #
-# Reads the cluster through the read-only ServiceAccount kubeconfig (k3s role), so the cron
-# needs no sudo and cannot mutate anything.
+# monitor-bridge runs on the SERVER and cannot see this cluster, so this pushes rather than being
+# polled — the same shape as the Pi's health crons (optimize_pi role), for the same reason. The
+# push itself comes from /usr/local/lib/kuma-push-lib.sh, which the initial_setup role installs on
+# every host.
+#
+# Reads the cluster through the read-only ServiceAccount kubeconfig (k3s role), so the cron needs
+# no sudo and cannot mutate anything.
 set -uo pipefail
 
 # shellcheck source=/dev/null
@@ -24,12 +29,7 @@ source /usr/local/lib/kuma-push-lib.sh || {
   exit 1
 }
 
-# Cron's PATH is /usr/bin:/bin, which omits /usr/local/bin where k3s lives. Without this the
-# cron run dies on "k3s: command not found" instead of reporting backup state.
-export PATH="/usr/local/bin:${PATH}"
 export KUBECONFIG=/home/{{ sys_user }}/.kube/config
-KUBECTL="k3s kubectl -n longhorn-system"
-AGE_S=0
 
 KUMA_HOST="uptime-kuma.local.{{ domain }}"
 # Pinned to the cluster ingress VIP: Kuma serves from the k8s edge, and the Docker
@@ -59,6 +59,11 @@ PUSH_URL="https://${KUMA_HOST}/api/push/${LONGHORN_BACKUP_PUSH_TOKEN}"
 # message keeps the heartbeat alive without claiming a reading, the same thing run_once does for
 # a gated bridge check.
 #
+# Kept in shell rather than routed through the Python reader: it reads /proc/uptime, which the
+# reader has no reason to touch, and the two checks below (`test_a_guarded_cron_still_beats_its_
+# kuma_tile`, `test_a_skipped_run_pings_no_healthchecks_slug`) assert on this exact block's text
+# and position — before PUSH_URL's dependents run, after PUSH_URL is set.
+#
 # Neither healthchecks.io slug is pinged here. Their graces are sized for exactly one skipped
 # slot (docs/healthchecks-io-deadman.md), and a success ping for a run that did not happen would
 # be a lie the dead-man exists to catch.
@@ -67,554 +72,37 @@ if boot_grace_active {{ k3s_health_cron_boot_grace_s }} longhorn-backup-health; 
   exit 0
 fi
 
-MAX_AGE_S=$(( {{ k3s_longhorn_backup_max_age_hours }} * 3600 ))
-WEEKLY_MAX_AGE_S=$(( {{ k3s_longhorn_weekly_backup_max_age_hours }} * 3600 ))
+# Every Jinja-templated role default the reader needs, exported as env vars — the reader is a
+# plain host script and takes no other input. `| bool` on the armed flags matches
+# longhorn-backup.yml's `when:` rather than an unfiltered render: `-e k3s_longhorn_backup_armed=false`
+# passes the STRING "false", which is truthy in Jinja, and an unfiltered render would put `default`
+# back into the armed set on an ad-hoc disarm — reverting the 2026-08-17 fix silently, in exactly
+# the incident-response case it is most likely to be used.
+export LONGHORN_BACKUP_ARMED="{{ k3s_longhorn_backup_armed | bool }}"
+export LONGHORN_R2_ARMED="{{ k3s_longhorn_r2_armed | bool }}"
+export LONGHORN_BACKUP_MAX_AGE_HOURS="{{ k3s_longhorn_backup_max_age_hours }}"
+export LONGHORN_WEEKLY_BACKUP_MAX_AGE_HOURS="{{ k3s_longhorn_weekly_backup_max_age_hours }}"
+export LONGHORN_BACKUP_ERROR_MAX_AGE_HOURS="{{ k3s_longhorn_backup_error_max_age_hours }}"
+export LONGHORN_DAILY_BACKUP_BUDGET="{{ k3s_longhorn_daily_backup_budget }}"
+export LONGHORN_BACKUP_CRON="{{ k3s_longhorn_backup_cron }}"
+export LONGHORN_WEEKLY_BACKUP_MINUTE_HOUR="{{ k3s_longhorn_weekly_backup_minute_hour }}"
+export LONGHORN_RESTORE_DRILL_STAMP_DIR="{{ k3s_longhorn_restore_drill_stamp_dir }}"
+export LONGHORN_RESTORE_DRILL_MAX_AGE_DAYS="{{ k3s_longhorn_restore_drill_max_age_days }}"
+export LONGHORN_RESTORE_DRILL_COVERAGE_SLACK_DAYS="{{ k3s_longhorn_restore_drill_coverage_slack_days }}"
 
-# When each tier's job is scheduled, as `H:MM` — used to work out whether a young PVC has yet
-# had a run it could have been backed up BY (see first_run_after). Derived from the same vars
-# that render the cron and the RecurringJob, so the grace cannot drift from the schedule.
-# Split in shell rather than Jinja: these are ROLE defaults, and validate/shell_templates.py
-# renders with group_vars only, so a `.split()` on the stub raises instead of rendering.
-DAILY_RUN_HHMM=$(awk '{ print $2 ":" $1 }' <<<"{{ k3s_longhorn_backup_cron }}")
-WEEKLY_RUN_HHMM=$(awk '{ print $2 ":" $1 }' <<<"{{ k3s_longhorn_weekly_backup_minute_hour }}")
-# Slack after a volume's first scheduled run before it is called uncovered — the same 6h the
-# tier bounds carry, absorbing a slow or late run without paging.
-GRACE_SLACK_S=$(( 6 * 3600 ))
-
-PROBLEM_RANK=()
-PROBLEM_TEXT=()
-PROBLEM_COUNT=0
-# Severity, lowest number = most urgent: 1 = nothing is landing (target unreachable, or no/stale
-# backup at all); 2 = a backup actively failed; 3 = a volume is stale/uncovered while the fleet
-# overall is fine; 4 = the transaction-budget proxy, informational until it 403s. Pushed messages
-# below surface only the top-ranked problem; the logger line still records every one, unranked.
-#
-# PROBLEM_COUNT is a plain counter, not the array-length sigil (dollar, brace, hash): that
-# sequence opens a Jinja comment in the rendered source (see the DISARMED_TARGETS note further
-# down for the same trap) and the template fails to render with "Missing end of comment tag".
-add() { PROBLEM_RANK+=("$1"); PROBLEM_TEXT+=("$2"); PROBLEM_COUNT=$(( PROBLEM_COUNT + 1 )); }
-
-# 1. Is the backup store reachable at all? This is the condition that was false for 13h on
-#    2026-08-02. Note what it does NOT prove — slice 0 flagged this — reachability is not
-#    evidence any object was ever written, which is what check 2 is for.
-#    Both targets are checked by name. Until 2026-08-15 only `default` (B2) was, so R2 going
-#    unavailable had no fast signal at all: its four volumes are caught by check 4, but only once
-#    they age past MAX_AGE_S, and that message names no target — triage would start in the wrong
-#    place. Naming the target in the message is the point of the loop.
-#
-#    A DISARMED target is not a fault, and this is the whole reason the split below exists. When
-#    k3s_longhorn_backup_armed is false the k3s role enforces a BLANK backupTargetURL, so Longhorn
-#    reports `available: false` with `backup target URL is empty` — forever, by declaration. Until
-#    2026-08-17 only `r2` was gated this way and `default` was checked unconditionally, so the
-#    2026-08-16 B2 disarm put this monitor into status=down on every 10-minute tick with no action
-#    available to clear it. That is precisely the failure check 3 already guards against in its own
-#    comment: a monitor red for a reason nobody can fix stops being read at all.
-#
-#    Disarming must stay VISIBLE rather than silent, though — the header records 2026-08-02, when
-#    the target went unavailable and nothing noticed. So the disarmed set is not merely skipped, it
-#    is named in the green message (see the MSG below). Silence would trade one blind spot for
-#    another.
-#    `| bool` on every one of these, matching longhorn-backup.yml's `when:` rather than the older
-#    unfiltered r2 line: `-e k3s_longhorn_backup_armed=false` passes the STRING "false", which is
-#    truthy in Jinja. Unfiltered, an extra-vars disarm would put `default` back into the armed set
-#    and empty the disarmed one — reverting this fix silently, in exactly the ad-hoc-incident case
-#    it is most likely to be used.
-BACKUP_TARGETS=({% if k3s_longhorn_backup_armed | bool %}default{% endif %}{% if k3s_longhorn_r2_armed | bool %} r2{% endif %})
-DISARMED_TARGETS=({% if not k3s_longhorn_backup_armed | bool %}default{% endif %}{% if not k3s_longhorn_r2_armed | bool %} r2{% endif %})
-
-is_disarmed_target() {
-  local want="$1" candidate
-  for candidate in ${DISARMED_TARGETS[@]+"${DISARMED_TARGETS[@]}"}; do
-    [[ "$want" == "$candidate" ]] && return 0
-  done
-  return 1
-}
-
-for TARGET in ${BACKUP_TARGETS[@]+"${BACKUP_TARGETS[@]}"}; do
-  AVAILABLE=$($KUBECTL get backuptarget "$TARGET" -o jsonpath='{.status.available}' 2>&1)
-  if [[ "$AVAILABLE" != "true" ]]; then
-    REASON=$($KUBECTL get backuptarget "$TARGET" -o jsonpath='{.status.conditions[0].message}' 2>/dev/null | head -c 160)
-    add 1 "backup target ${TARGET} unavailable: ${REASON:-$AVAILABLE}"
-  fi
-done
-
-# 2. Has anything actually landed recently? A recurring job that silently stops producing
-#    backups leaves the target perfectly "available" and the backup plane perfectly dead.
-NEWEST=$($KUBECTL get backups.longhorn.io \
-  -o jsonpath='{range .items[*]}{.status.snapshotCreatedAt}{"\n"}{end}' 2>/dev/null \
-  | grep -v '^$' | sort -r | head -1)
-
-if [[ -z "$NEWEST" ]]; then
-  add 1 "no backups exist"
-else
-  NEWEST_S=$(date -d "$NEWEST" +%s 2>/dev/null)
-  if [[ -z "$NEWEST_S" ]]; then
-    add 1 "unparseable backup timestamp: $NEWEST"
-  else
-    AGE_S=$(( $(date +%s) - NEWEST_S ))
-    if (( AGE_S > MAX_AGE_S )); then
-      add 1 "newest backup is $(( AGE_S / 3600 ))h old (limit {{ k3s_longhorn_backup_max_age_hours }}h)"
-    fi
-  fi
-fi
-
-# 3. A backup that reached Error state is a failure the two checks above both miss: the target
-#    stays available, and an older Completed backup keeps the freshness check green.
-#
-#    BOUNDED BY AGE, and that bound is the point. Longhorn's `retain: N` prunes only Completed
-#    backups belonging to a job that still runs, so an Error object whose owning job has been
-#    deleted is immortal: nothing in Longhorn, and nothing in the reaper (which skips any state
-#    that is not Completed), will ever remove it. Unbounded, this check re-reported the 11
-#    failures from 04:30 on 2026-08-16 on every 10-minute tick, forever — a monitor that is red
-#    for a reason no action can clear stops carrying information, and the operator learns to
-#    read past the whole message. A transient failure should page and then clear on its own.
-#
-#    Named by volume as well as object: the object IDs are opaque, and an operator seeing
-#    `backup-4a471c15` has to go look up which service just lost a backup. Error objects have an
-#    EMPTY .status.volumeName, so the attribution has to come from the metadata label.
-ERROR_CUTOFF_S=$(( $(date +%s) - {{ k3s_longhorn_backup_error_max_age_hours }} * 3600 ))
-ERRORED=$($KUBECTL get backups.longhorn.io -o json 2>/dev/null \
-  | jq -r --argjson cutoff "$ERROR_CUTOFF_S" '
-      .items[]
-      | select(.status.state == "Error")
-      | select(((.metadata.creationTimestamp // "") | try fromdateiso8601 catch 0) > $cutoff)
-      | "\(.metadata.name) (\(.metadata.labels["backup-volume"] // "volume unknown"))"' \
-  | paste -sd', ')
-if [[ -n "$ERRORED" ]]; then
-  add 2 "backups that failed in the last {{ k3s_longhorn_backup_error_max_age_hours }}h: ${ERRORED}"
-fi
-
-# 4. Is every backed-up volume covered, or just the loud ones? Checks 2 and 3 are fleet-wide:
-#    a volume whose recurring job silently stops producing backups emits NO Backup object, so
-#    there is nothing to reach Error state, and the other volumes keep newest-overall fresh.
-#    Nothing goes red. That is exactly how freshrss sat unverified after its 2026-08-05 cutover
-#    — its Kopia sentinel still resolved against a frozen directory on the server while the live
-#    PVC had no per-volume assertion at all. This is the Longhorn analogue of monitor-bridge's
-#    BACKUP_SENTINELS guard, and it is DERIVED from the cluster rather than hand-listed: a
-#    service that joins the backup group is covered the moment its volume binds, with no list to
-#    remember to edit.
-#
-#    Selected by the `default` recurring-job-group LABEL, not by storageClassName. Those agreed
-#    until 2026-08-08, when eight slice-4 config volumes were taken out of the backup set to get
-#    under B2's transaction cap — and a PVC's storageClassName is IMMUTABLE, so they still read
-#    `longhorn` while no longer being backed up. Class is a creation-time proxy; the label is what
-#    `daily-backup` actually selects on, so it is the only filter that cannot drift from reality.
-#    Filtering by class here would have paged all eight as uncovered, forever.
-#    Carries the OWNING RECURRING JOB, and is `|`-delimited to do it. Until 2026-08-16 this read
-#    volume+timestamp only, and check_tier matched on volume name alone — so a backup counted as
-#    freshness evidence for a volume no matter which job produced it. That is not a hypothetical:
-#    when a volume moves tier, its old backups keep their original timestamps, and the daily job
-#    that made them stops selecting it. Every one of the 21 volumes sharded to a weekday on
-#    2026-08-16 therefore read green off a frozen `daily-backup` object while `weekly-backup-d*`
-#    had produced NOTHING — 0 completed weekly backups against 11 in Error, with the tile green.
-#    Matching on (volume, owning job) is what makes a dead tier visible; a tier can no longer
-#    borrow another tier's evidence.
-#
-#    `|` rather than a space because a missing snapshotCreatedAt renders as an empty field, and
-#    under awk's default whitespace splitting the job name would silently shift into $2 and be
-#    read as a timestamp. Neither a pvc-<uuid> volume name, an RFC3339 stamp, nor a RecurringJob
-#    label can contain `|`.
-COVERAGE=$($KUBECTL get backups.longhorn.io \
-  -o jsonpath='{range .items[*]}{.status.volumeName}{"|"}{.status.snapshotCreatedAt}{"|"}{.status.labels.RecurringJob}{"\n"}{end}' 2>/dev/null)
-NOW_S=$(date +%s)
-
-# Epoch of the first scheduled run strictly after $1, for a job that fires at H:MM ($2) on
-# weekday $3 (0-6, 0=Sunday) or every day ($3 = "*"). Returns 0 if it cannot be computed.
-#
-# This replaces a flat "grace == the tier's own bound". That was right for the daily tier by
-# coincidence — 30h is about one 03:30 run plus slack — but on the weekly tier it meant a brand
-# new volume was excused for 198h whatever its shard day, and a volume whose shard weekday falls
-# the day after it binds was excused ~7x longer than it needed to be. Deriving the deadline from
-# the schedule makes the excuse exactly as long as the wait for a first run, and no longer.
-first_run_after() {
-  local from_s="$1" hhmm="$2" dow="$3" day probe_date probe_s
-  for day in 0 1 2 3 4 5 6 7; do
-    probe_date=$(date -d "@$(( from_s + day * 86400 ))" +%Y-%m-%d 2>/dev/null) || return 1
-    probe_s=$(date -d "${probe_date} ${hhmm}" +%s 2>/dev/null) || continue
-    (( probe_s <= from_s )) && continue
-    if [[ "$dow" == "*" || "$(date -d "@${probe_s}" +%w)" == "$dow" ]]; then
-      printf '%s\n' "$probe_s"
-      return 0
-    fi
-  done
-  printf '0\n'
-}
-UNCOVERED=""
-CHECKED=0
-SUPPRESSED=0
-GRACED=0
-GRACED_VOLS=""
-# Split by whether the volume has ANY backup, not just one from its tier's job. A seed carries no
-# RecurringJob label, so it never satisfies the freshness match above and both cases land here —
-# but "no recovery point exists" and "a recovery point exists, the rotation has not reached it"
-# are different exposures and the operator acts on them differently.
-GRACED_NEW=0
-GRACED_NEW_VOLS=""
-GRACED_SEEDED=0
-GRACED_SEEDED_VOLS=""
-
-# Run once per backup TIER. Until 2026-08-15 only the `default` group was walked, so the eleven
-# volumes moved to the weekly group (k3s_longhorn_weekly_volumes) had no per-volume staleness check
-# at all — they could stop backing up indefinitely with every tile green. They cannot share the
-# daily bound either: a weekly volume is legitimately ~7 days old, so MAX_AGE_S would page all
-# eleven every day. Each tier carries its own bound, and the message names which tier is late.
-check_tier() {
-  local selector="$1" max_age_s="$2" tier="$3" job="$4" run_hhmm="$5" dow="$6"
-  local VOL CREATED CLAIM TARGET LATEST CREATED_S LATEST_S FIRST_RUN_S
-
-  while read -r VOL CREATED CLAIM TARGET; do
-    # A Pending PVC has no volumeName yet — nothing to back up, and not a fault.
-    [[ -z "$VOL" ]] && continue
-
-    # An unset backupTargetName IS the `default` target in Longhorn, not "no target". Without
-    # this the field would read as armed and the volume would be reported stale while B2 is off.
-    [[ -z "$TARGET" ]] && TARGET=default
-
-    # A volume routed to a DISARMED target cannot be backed up, so reporting it as stale says
-    # nothing an operator can act on. Keyed on the volume's own spec.backupTargetName rather than
-    # on its tier: the tier→target mapping is inventory that can be re-pointed, and check 5
-    # already reads this same field for exactly that reason. On 2026-08-16 the split happened to
-    # be clean — the 4 daily volumes on r2, all 21 weekly-shard volumes on default — but gating
-    # whole tiers would silently do the wrong thing the first time one volume moves.
-    #
-    # Counted, not silently dropped: SUPPRESSED feeds the green message, so "21 volume(s) not
-    # checked" stays on screen the entire time B2 is off.
-    if is_disarmed_target "$TARGET"; then
-      SUPPRESSED=$(( SUPPRESSED + 1 ))
-      continue
-    fi
-
-    # Freshness must come from THIS tier's own job. `__no_job__` is the sentinel for a tier no
-    # RecurringJob selects (weekly-legacy): it matches nothing, deliberately, so a volume stuck
-    # with that label is reported rather than excused. An empty string would not do — it would
-    # match manually-triggered backups, which carry no RecurringJob label.
-    LATEST=$(printf '%s\n' "$COVERAGE" \
-      | awk -F'|' -v v="$VOL" -v j="$job" '$1 == v && $2 != "" && $3 == j { print $2 }' \
-      | sort -r | head -1)
-
-    # Grace applies ONLY to a volume with no backup at all, and only until it has had time for a
-    # scheduled run — a service deployed this afternoon must not redden the backup plane before
-    # its first 03:30. It deliberately does NOT extend to a volume that HAS a backup: freshrss and
-    # healthchecks bound their PVCs 21h before this check was written and were already backed up,
-    # so a blanket young-PVC skip would have excused the two volumes the check exists for.
-    if [[ -z "$LATEST" ]]; then
-      CREATED_S=$(date -d "$CREATED" +%s 2>/dev/null) || CREATED_S=0
-      FIRST_RUN_S=$(first_run_after "$CREATED_S" "$run_hhmm" "$dow")
-      if (( CREATED_S > 0 && FIRST_RUN_S > 0 && NOW_S < FIRST_RUN_S + GRACE_SLACK_S )); then
-        # Counted, not silently dropped — same reasoning as SUPPRESSED above, and it matters more
-        # here. A graced volume has NO backup anywhere, and CHECKED is incremented below this
-        # branch, so without GRACED the green message is bit-for-bit identical whether the volume
-        # exists or not: the covered count does not fall, it fails to rise, which nobody can see.
-        # On 2026-08-20 fourteen of twenty-five volumes sat in this branch at once, behind a green
-        # tile, because the weekly shard cadence puts a volume's first run up to six days out.
-        GRACED=$(( GRACED + 1 ))
-        GRACED_VOLS="${GRACED_VOLS:+${GRACED_VOLS}, }${CLAIM}"
-        # Same row set, without the `$3 == j` tier filter: any backup at all, however it was made.
-        ANY=$(printf '%s\n' "$COVERAGE" \
-          | awk -F'|' -v v="$VOL" '$1 == v && $2 != "" { print $2 }' \
-          | sort -r | head -1)
-        if [[ -n "$ANY" ]]; then
-          GRACED_SEEDED=$(( GRACED_SEEDED + 1 ))
-          GRACED_SEEDED_VOLS="${GRACED_SEEDED_VOLS:+${GRACED_SEEDED_VOLS}, }${CLAIM}"
-        else
-          GRACED_NEW=$(( GRACED_NEW + 1 ))
-          GRACED_NEW_VOLS="${GRACED_NEW_VOLS:+${GRACED_NEW_VOLS}, }${CLAIM}"
-        fi
-        continue
-      fi
-      if [[ "$job" == "__no_job__" ]]; then
-        UNCOVERED="${UNCOVERED:+$UNCOVERED, }${CLAIM} (${tier}, no recurring job selects it)"
-      else
-        UNCOVERED="${UNCOVERED:+$UNCOVERED, }${CLAIM} (${tier}, no backup from ${job})"
-      fi
-      continue
-    fi
-
-    CHECKED=$(( CHECKED + 1 ))
-    LATEST_S=$(date -d "$LATEST" +%s 2>/dev/null) || LATEST_S=0
-    if (( LATEST_S == 0 )); then
-      UNCOVERED="${UNCOVERED:+$UNCOVERED, }${CLAIM} (${tier}, unparseable timestamp)"
-    elif (( NOW_S - LATEST_S > max_age_s )); then
-      UNCOVERED="${UNCOVERED:+$UNCOVERED, }${CLAIM} (${tier}, $(( (NOW_S - LATEST_S) / 3600 ))h)"
-    fi
-  # backupTargetName is last on the line on purpose: it is the only field that can render EMPTY
-  # (a volume with no explicit target), and an empty field under `read`'s whitespace splitting
-  # would shift every field after it. The claim before it always renders at least `/`.
-  done < <($KUBECTL get volumes.longhorn.io -l "$selector" \
-    -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.metadata.creationTimestamp}{" "}{.status.kubernetesStatus.namespace}/{.status.kubernetesStatus.pvcName}{" "}{.spec.backupTargetName}{"\n"}{end}' 2>/dev/null)
-}
-
-check_tier "recurring-job-group.longhorn.io/default=enabled" "$MAX_AGE_S" daily \
-  daily-backup "$DAILY_RUN_HHMM" '*'
-# One tier per weekday shard (2026-08-16). Each shard is matched against ITS OWN job, so a
-# single shard failing is visible even while the other six succeed — under volume-name-only
-# matching a shard could never be distinguished from its siblings.
-#
-# The retired flat `weekly-backup` label is walked too: no RecurringJob selects it any more, so
-# a volume stuck with it is backed up by nothing — exactly the state this check exists to page
-# on. It gets the `__no_job__` sentinel so it reports as soon as its first-run grace lapses,
-# rather than waiting out a weekly bound against evidence no job will ever refresh.
-for SHARD in 0 1 2 3 4 5 6; do
-  check_tier "recurring-job-group.longhorn.io/weekly-backup-d${SHARD}=enabled" "$WEEKLY_MAX_AGE_S" \
-    "weekly-d${SHARD}" "weekly-backup-d${SHARD}" "$WEEKLY_RUN_HHMM" "$SHARD"
-done
-check_tier "recurring-job-group.longhorn.io/weekly-backup=enabled" "$WEEKLY_MAX_AGE_S" weekly-legacy \
-  __no_job__ "$WEEKLY_RUN_HHMM" '*'
-
-if [[ -n "$UNCOVERED" ]]; then
-  add 3 "backed-up volumes stale or missing: ${UNCOVERED}"
-fi
-
-# 5. Is the daily backup COUNT outgrowing B2's transaction allowance? Gap G2 in
-#    docs/b2-transaction-cap-monitoring-gaps.md, open until the cap fired a SECOND time on
-#    2026-08-08. Everything above this line is about whether backups happened; none of it can see
-#    the thing that stopped them, because B2 caps TRANSACTIONS separately from bytes and the byte
-#    monitors read 6.22 GB of 10 GB — 62%, comfortably green — throughout.
-#
-#    Deliberately a PROXY, and the message says so. B2 exposes no cap-headroom API, so nothing can
-#    measure the remaining allowance; what CAN be measured is the input that grew. Longhorn's daily
-#    run went 4 -> 7 -> 15 backups over three days as slice 4 moved config PVCs into the cluster,
-#    which is why the free tier's 2500-transaction ceiling stopped absorbing it.
-#
-#    What it cannot see: kopia's and the b2-usage rclone's share of the same ACCOUNT-wide cap. That
-#    is why the budget sits well under what Longhorn alone could spend — the slack is theirs. So a
-#    green reading here is "Longhorn is within its share", never "the account has headroom".
-DAY_AGO_S=$(( NOW_S - 86400 ))
-RECENT_N=0
-RECENT_BYTES=0
-
-#    Counts B2-destined backups ONLY. The four volumes routed to R2 (k3s_longhorn_r2_volumes)
-#    spend Cloudflare's allowance, not B2's, so counting them here inflates a number compared
-#    against a B2-shaped budget — the direction that slowly desensitises the check until it stops
-#    meaning anything. R2 has its own headroom monitor (check_r2_usage in monitor-bridge).
-#    The routed set is read from the volumes' own spec.backupTargetName rather than from the
-#    inventory list: that is what Longhorn actually acts on, it is already in the same name space
-#    as a Backup's .status.volumeName (pvc-<uuid>, not namespace/pvcName), and it cannot drift
-#    from the inventory the way a second copy of the list would.
-R2_VOLUMES=$($KUBECTL get volumes.longhorn.io \
-  -o jsonpath='{range .items[?(@.spec.backupTargetName=="r2")]}{.metadata.name}{" "}{end}' 2>/dev/null)
-is_r2_volume() {
-  local vol="$1" candidate
-  for candidate in $R2_VOLUMES; do
-    [[ "$vol" == "$candidate" ]] && return 0
-  done
-  return 1
-}
-
-while read -r VOL CREATED SIZE; do
-  [[ -z "$CREATED" ]] && continue
-  is_r2_volume "$VOL" && continue
-  CREATED_S=$(date -d "$CREATED" +%s 2>/dev/null) || continue
-  (( CREATED_S < DAY_AGO_S )) && continue
-  RECENT_N=$(( RECENT_N + 1 ))
-  RECENT_BYTES=$(( RECENT_BYTES + ${SIZE:-0} ))
-done < <($KUBECTL get backups.longhorn.io \
-  -o jsonpath='{range .items[*]}{.status.volumeName}{" "}{.status.snapshotCreatedAt}{" "}{.status.size}{"\n"}{end}' 2>/dev/null)
-
-if (( RECENT_N > {{ k3s_longhorn_daily_backup_budget }} )); then
-  add 4 "$RECENT_N backups in 24h exceeds the {{ k3s_longhorn_daily_backup_budget }} budget \
-($(( RECENT_BYTES / 1048576 )) MiB) — Longhorn's share of B2's transaction cap; \
-cut backup scope or raise the cap before it 403s"
-fi
-
-# 6. Did the JOB fail, rather than the backup? Every check above reads Longhorn's own objects,
-#    and a recurring job that dies before Longhorn records anything leaves none of them: no
-#    Error backup for check 3, and the other volumes keep the fleet-wide freshness of check 2
-#    green. `daily-backup-29775090` failed at 03:30 on 2026-08-12, exhausted its three retries
-#    by 11:28, and produced exactly one signal anywhere — a failed Job object nothing read. The
-#    B2 transaction cap it died against was found by hand, days later. Check 4 would have caught
-#    the consequence once those volumes aged past their tier bound, but hours after the fact and
-#    naming a stale volume rather than the run that failed.
-#
-#    BOUNDED BY THE SAME AGE as check 3, for the same reason and more sharply. Kubernetes keeps
-#    failed Jobs indefinitely — no TTL, and the history limits retain them by design — so this is
-#    a set that only grows. Unbounded, the 2026-08-12 failure alone would hold the tile red on
-#    every 10-minute tick forever, which is precisely the desensitising the check 3 comment
-#    describes. A failure pages for {{ k3s_longhorn_backup_error_max_age_hours }}h and then
-#    clears itself, whether or not anyone deletes the object.
-#
-#    Dated by the Failed CONDITION, not by creationTimestamp: a Job retries to its backoff limit
-#    before failing, and those are eight hours apart in the 2026-08-12 case. Created-yesterday /
-#    failed-this-morning is the shape that would silently fall outside the window.
-#
-#    Every failed Job in the namespace counts, with no name filter. The backup jobs are the only
-#    thing scheduled here, and a filter on `daily-backup-*`/`weekly-backup-d*` is a second copy of
-#    the naming scheme that would go quiet the day a tier is renamed.
-FAILED_JOBS=$($KUBECTL get jobs.batch -o json 2>/dev/null \
-  | jq -r --argjson cutoff "$ERROR_CUTOFF_S" '
-      .items[]
-      | select(any(.status.conditions[]?; .type == "Failed" and .status == "True"))
-      | {
-          name: .metadata.name,
-          at: ((([.status.conditions[]?
-                  | select(.type == "Failed" and .status == "True")
-                  | .lastTransitionTime] | first)
-                // .metadata.creationTimestamp // "")
-               | try fromdateiso8601 catch 0)
-        }
-      | select(.at > $cutoff)
-      | .name' \
-  | paste -sd', ')
-if [[ -n "$FAILED_JOBS" ]]; then
-  add 2 "backup job(s) that failed in the last {{ k3s_longhorn_backup_error_max_age_hours }}h: ${FAILED_JOBS}"
-fi
-
-# 7. Do the backups actually RESTORE? Checks 1-6 all answer "did a backup happen", which is a
-#    different claim. The first restore drill, 2026-08-15, failed on a B2 Class-B cap and
-#    surfaced as `cannot find volume.cfg in backupstore` — indistinguishable from data loss.
-#    The retry passed the next day, and then nothing recurred: the drill was a one-off playbook
-#    in a home directory, unscheduled and unwatched. A drill that silently stops looks exactly
-#    like one that was never set up, which is the whole reason this check exists rather than
-#    trusting the cron to keep running.
-#
-#    FAILS CLOSED, and that is the property worth protecting. The obvious shape here is
-#    `[[ -f $STAMP ]] && check_age`, which reports green when the drill has NEVER run — the one
-#    state most in need of reporting. A missing stamp is treated as a failure, matching how
-#    probe.py health treats an unreadable restart time. So is an unparseable one.
-#
-#    The drill writes the stamp only after its data assertions pass, so freshness here means "a
-#    restore was proven recently", not "the drill process ran recently". That distinction is
-#    what makes this cover the cron dying AND the drill failing, without needing to watch both.
-DRILL_STAMP="{{ k3s_longhorn_restore_drill_stamp_dir }}/last-success"
-DRILL_MAX_AGE_S=$(( {{ k3s_longhorn_restore_drill_max_age_days }} * 86400 ))
-if [[ ! -r "$DRILL_STAMP" ]]; then
-  add 3 "no restore drill has ever succeeded (no ${DRILL_STAMP}) — backups are unproven"
-else
-  DRILL_AT=$(cat "$DRILL_STAMP" 2>/dev/null)
-  if [[ ! "$DRILL_AT" =~ ^[0-9]+$ ]]; then
-    add 3 "restore-drill stamp is unreadable — treating the restore path as unproven"
-  else
-    DRILL_AGE_S=$(( $(date +%s) - DRILL_AT ))
-    if (( DRILL_AGE_S > DRILL_MAX_AGE_S )); then
-      add 3 "last successful restore drill was $(( DRILL_AGE_S / 86400 ))d ago (limit {{ k3s_longhorn_restore_drill_max_age_days }}d)"
-    fi
-  fi
-fi
-
-# 8. Is every volume covered by the rotation, or just the ones that happen to pass? Check 7 reads
-#    ONE stamp, which the drill writes on any successful night. That was the whole story while the
-#    drill was pinned to a single volume; since it rotates (2026-08-20) a green check 7 means one
-#    of 25 volumes restored, and a volume that fails every time its slot comes up is invisible
-#    behind the 24 that pass. This is the coverage half, and it is the same shape as check 4:
-#    per-volume assertions, derived rather than hand-listed.
-#
-#    Reads the candidate list the DRILL publishes rather than querying the cluster. The heartbeat
-#    runs as {{ sys_user }} with the read-only SA, and the drill already computes eligibility
-#    (label, has a Completed backup, under the size cap) — recomputing it here would be a second
-#    definition of "eligible" free to drift from the one that actually selects.
-#
-#    The window is DERIVED: one full cycle is one day per candidate, so a fleet that grows cannot
-#    silently outrun a hardcoded number.
-#
-#    The grace is PER CANDIDATE, measured from when that volume joined the rotation — the drill's
-#    `seen/<pvc>` marker, written once and never refreshed. A single rotation-wide start date is
-#    the obvious shape and is wrong: once the rotation is older than a cycle, a volume that joined
-#    yesterday is instantly judged against a window it has not had, so every volume added to the
-#    backup set would page for a full cycle. The attempt stamp cannot stand in either — it is
-#    refreshed each time the volume comes up, so for anything in steady rotation it is never older
-#    than one cycle and the grace would never expire.
-DRILL_CANDIDATES="{{ k3s_longhorn_restore_drill_stamp_dir }}/candidates"
-DRILL_SEEN="{{ k3s_longhorn_restore_drill_stamp_dir }}/seen"
-DRILL_SUCCESS="{{ k3s_longhorn_restore_drill_stamp_dir }}/success"
-if [[ -r "$DRILL_CANDIDATES" ]]; then
-  CAND_N=$(grep -c . "$DRILL_CANDIDATES" 2>/dev/null || echo 0)
-  COVERAGE_MAX_S=$(( (CAND_N + {{ k3s_longhorn_restore_drill_coverage_slack_days }}) * 86400 ))
-  NOW_S=$(date +%s)
-  if (( CAND_N > 0 )); then
-    UNPROVEN=""
-    while IFS= read -r cand; do
-      [[ -n "$cand" ]] || continue
-      # No marker means the drill has not published one yet: judge nothing on missing evidence.
-      SEEN_AT=$(stat -c %Y "${DRILL_SEEN}/${cand}" 2>/dev/null)
-      [[ "$SEEN_AT" =~ ^[0-9]+$ ]] || continue
-      (( NOW_S - SEEN_AT > COVERAGE_MAX_S )) || continue
-      CAND_AT=$(cat "${DRILL_SUCCESS}/${cand}" 2>/dev/null)
-      if [[ ! "$CAND_AT" =~ ^[0-9]+$ ]] || (( NOW_S - CAND_AT > COVERAGE_MAX_S )); then
-        UNPROVEN="${UNPROVEN:+${UNPROVEN}, }${cand}"
-      fi
-    done <"$DRILL_CANDIDATES"
-    # Named, not counted. A coverage failure clears only when someone fixes the specific volume,
-    # so an unactionable "3 volumes unproven" would sit red until it stopped being read.
-    if [[ -n "$UNPROVEN" ]]; then
-      add 3 "volume(s) not restore-proven in $(( COVERAGE_MAX_S / 86400 ))d: ${UNPROVEN}"
-    fi
-  fi
-fi
-
-if (( PROBLEM_COUNT == 0 )); then
-  STATUS=up
-  # The counts are in the green message on purpose: "newest backup 8h old" was true even while a
-  # volume had no backup at all, and it was true throughout the 2026-08-08 transaction-cap outage.
-  # The two numbers are what make this green mean something.
-  #
-  # DISARMED is appended for the same reason, and it is the half of the 2026-08-17 gate that
-  # matters: skipping a disarmed target keeps the monitor actionable, but skipping it QUIETLY
-  # would mean a green tile while 21 volumes go unbacked — the 2026-08-02 blind spot with extra
-  # steps. Green now reads "everything still armed is healthy, and here is what is not armed".
-  DISARMED_NOTE=""
-  # Tested as a string rather than by array length: bash's length sigil puts a brace followed by
-  # a hash into the Jinja source, which opens a Jinja comment, and the template then fails to
-  # render with "Missing end of comment tag". Naming that pair literally here would do it again.
-  if [[ -n "${DISARMED_TARGETS[*]:-}" ]]; then
-    DISARMED_NOTE=" — DISARMED: ${DISARMED_TARGETS[*]} (${SUPPRESSED} volume(s) not checked)"
-  fi
-  # Named, not just counted: "3 volume(s) awaiting" that nobody can act on would read as routine.
-  # The list is what makes it actionable, and it is short by construction — a volume leaves this
-  # state on its first scheduled backup.
-  #
-  # Two notes, because the two states carry different risk. A volume with no backup anywhere has no
-  # recovery point and seeding it is the remedy; a seeded one already has an offsite copy and only
-  # waits for its shard day, which needs no action at all. Reporting both as "no offsite copy yet"
-  # over-stated the exposure of eleven seeded volumes on 2026-08-21. Emptiness is tested on the
-  # string, never with an array-length sigil: brace-then-hash opens a Jinja comment and the template
-  # then fails to render — the same trap named in the DISARMED block above.
-  GRACED_NOTE=""
-  if (( GRACED_NEW > 0 )); then
-    GRACED_NOTE=" — ${GRACED_NEW} volume(s) awaiting their first scheduled backup, no offsite copy at all: ${GRACED_NEW_VOLS}"
-  fi
-  if (( GRACED_SEEDED > 0 )); then
-    GRACED_NOTE="${GRACED_NOTE} — ${GRACED_SEEDED} volume(s) seeded but not yet in rotation, first scheduled run pending: ${GRACED_SEEDED_VOLS}"
-  fi
-  MSG="backup target(s) ${BACKUP_TARGETS[*]:-none} available, newest backup $(( AGE_S / 3600 ))h old, ${CHECKED} backed-up volume(s) covered across daily+weekly, ${RECENT_N} B2 backup(s)/24h (budget {{ k3s_longhorn_daily_backup_budget }})${DISARMED_NOTE}${GRACED_NOTE}"
-  PUSH_MSG="$MSG"
-else
+# The reader prints `up<TAB>msg` or `down<TAB>msg` and always exits 0, having already logged the
+# full (unranked) verdict to syslog itself. A nonzero exit or empty output therefore means the
+# reader ITSELF broke — report that rather than pushing nothing, which would leave the monitor to
+# time out with no explanation.
+if ! OUT=$(/usr/local/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} /opt/longhorn-backup-health/longhorn_backup_health.py 2>&1) || [[ -z "$OUT" ]]; then
   STATUS=down
-  # MSG stays the full, unsorted list (every add() call, semicolon-joined) — this is what the
-  # logger line below records, so a `journalctl -t longhorn-backup-health` always has everything.
-  MSG=""
-  for PROBLEM in "${PROBLEM_TEXT[@]}"; do
-    MSG="${MSG:+$MSG; }$PROBLEM"
-  done
-
-  # PUSH_MSG is what actually goes out to Kuma/Healthchecks: the single highest-severity problem,
-  # so "target unavailable" (act now) doesn't arrive glued to a 21-volume stale list and a
-  # transaction-budget line — see the rank scale on the `add()` definition above. Sort is by rank
-  # first, encounter-index second (stable tiebreak) so two same-tier problems keep the order they
-  # were found in. Nothing here is lost: MSG/the logger line above still has the full text.
-  RANKED=$(
-    for RIDX in "${!PROBLEM_RANK[@]}"; do
-      printf '%s\t%s\t%s\n' "${PROBLEM_RANK[$RIDX]}" "$RIDX" "${PROBLEM_TEXT[$RIDX]}"
-    done | sort -t $'\t' -n -k1,1 -k2,2
-  )
-  TOP=$(head -n1 <<<"$RANKED" | cut -f3-)
-  REST=$(( PROBLEM_COUNT - 1 ))
-  if (( REST > 0 )); then
-    PUSH_MSG="${TOP} (+${REST} more: see journalctl -t longhorn-backup-health)"
-  else
-    PUSH_MSG="$TOP"
-  fi
+  MSG="longhorn backup health reader failed: ${OUT:-(no output)}"
+else
+  STATUS="${OUT%%$'\t'*}"
+  MSG="${OUT#*$'\t'}"
 fi
 
-# Log the verdict BEFORE pushing it, unconditionally. The `|| logger` below fires only when the
-# curl itself fails, so a DOWN status that pushes successfully — the ordinary case — left no
-# trace anywhere: Kuma keeps current state only, and `probe.py alerts` / the Alert History board
-# reconstruct outage history from monitor-bridge's Loki stream, which this cron is not part of.
-# The result was that this monitor could be down all day with no record of when it started or
-# how long it lasted. promtail's node-syslog job carries this line into Loki.
-logger -t longhorn-backup-health "status=${STATUS} ${MSG}"
-
-# kuma_push sets KUMA_PUSH_OK; the dead-man's-switch ping below reads it.
-kuma_push "$STATUS" "$PUSH_MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" longhorn-backup-health
+kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" longhorn-backup-health
 
 # Off-premises dead-man's switch. The push above targets Kuma, which runs ON the cluster this
 # script watches — a cluster or WAN outage kills the push AND the monitor waiting for it, so
@@ -631,7 +119,7 @@ if [[ -n "$HC_PING_KEY" ]]; then
   # new check that nobody is watching and that reads green forever.
   HC_URL="https://hc-ping.com/${HC_PING_KEY}/longhorn-backup-health"
   [[ "$STATUS" == "up" ]] || HC_URL="${HC_URL}/fail"
-  curl -fsS --max-time 10 --retry 3 --data-raw "$PUSH_MSG" "$HC_URL" >/dev/null \
+  curl -fsS --max-time 10 --retry 3 --data-raw "$MSG" "$HC_URL" >/dev/null \
     || logger -t longhorn-backup-health "healthchecks ping failed (status=${STATUS})"
 
   # A SECOND slug, reporting on Kuma itself rather than on backups. The ping above goes out
@@ -646,7 +134,7 @@ if [[ -n "$HC_PING_KEY" ]]; then
   # on hc-ping within one grace period. Chosen here because this script runs every 10 minutes
   # and already talks to Kuma — no new cron, no new credential, one of the 14 free slots.
   #
-  # No body: the status IS the signal, and PUSH_MSG belongs to the other check.
+  # No body: the status IS the signal, and MSG belongs to the other check.
   HC_ALIVE_URL="https://hc-ping.com/${HC_PING_KEY}/uptime-kuma-alive"
   (( KUMA_PUSH_OK )) || HC_ALIVE_URL="${HC_ALIVE_URL}/fail"
   curl -fsS --max-time 10 --retry 3 "$HC_ALIVE_URL" >/dev/null \
