@@ -5,6 +5,8 @@ Run: uv run pytest scripts/deploy_tools/tests/test_land_classify.py
 
 from __future__ import annotations
 
+import dataclasses
+
 import pytest
 import yaml
 
@@ -145,7 +147,7 @@ def test_a_crashing_classification_helper_dies_named_rather_than_traces(
     def boom(*a, **k):
         raise yaml.YAMLError("bad host_vars")
 
-    setattr(ln.tools, attr, boom)
+    ln.classifier = dataclasses.replace(ln.classifier, **{attr: boom})
     with pytest.raises(Outcome) as exc:
         classify.classify(ln)
     assert exc.value.rc == 1 and label in exc.value.error
@@ -160,7 +162,7 @@ def test_remaining_setup_hosts_crashing_dies_named(landing):
     def boom(*a, **k):
         raise yaml.YAMLError("bad host_vars")
 
-    ln.tools.remaining_setup_hosts = boom
+    ln.classifier = dataclasses.replace(ln.classifier, remaining_setup_hosts=boom)
     with pytest.raises(Outcome) as exc:
         classify.classify(ln)
     assert (
@@ -177,7 +179,7 @@ def test_a_classification_helper_calling_die_itself_is_not_relabelled(landing):
     def dies(*a, **k):
         ln.die("something else entirely", 1)
 
-    ln.tools.plane_note = dies
+    ln.classifier = dataclasses.replace(ln.classifier, plane_note=dies)
     with pytest.raises(Outcome) as exc:
         classify.classify(ln)
     assert exc.value.error == "something else entirely"

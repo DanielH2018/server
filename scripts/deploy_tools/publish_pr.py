@@ -205,8 +205,8 @@ def publish(
         # this reset exists to prevent. Report it as rc 2 (branch published, human must
         # clear it) rather than pressing on to open a PR while master disagrees with origin;
         # `failure_tail` names why the reset itself failed (index lock, dirtied tree).
-        return Outcome(
-            RC_PUSHED_NO_PR,
+        return PublishOutcome(
+            PUBLISH_PUSHED_NO_PR,
             f"{branch} pushed but resetting local master to drop its commit failed; "
             f"master is still one commit ahead of origin until this is cleared by hand: "
             f"{failure_tail(proc)}",

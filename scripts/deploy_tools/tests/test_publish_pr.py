@@ -149,7 +149,7 @@ def test_a_failed_reset_reports_master_still_ahead_and_stops_before_the_pr():
     squash lands under a new SHA (issue #1086)."""
     rec = Recorder({"git reset": _cp(1, err="Unable to create '.git/index.lock'")})
     out = _publish(rec)
-    assert out.rc == publish_pr.RC_PUSHED_NO_PR
+    assert out.rc == publish_pr.PUBLISH_PUSHED_NO_PR
     assert "master is still one commit ahead of origin" in out.message
     assert "index.lock" in out.message
     assert ("git", "branch", "-D", BRANCH) not in rec.calls

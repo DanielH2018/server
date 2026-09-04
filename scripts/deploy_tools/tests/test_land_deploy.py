@@ -217,7 +217,7 @@ def test_a_stale_retry_backs_off_between_attempts(landing):
     between them, while master CI on the merge commit was still 2m48s from green. Mirror
     the lock-contention retry's own backoff (`lock_backoff`, already used above)."""
     ln, calls = _ready(landing, Fakes(deploy=[4, 4, 4, 0]))
-    ln.tags = "sonarr"
+    ln.resolved_tags = ["sonarr"]
     deploy.deploy_phase(ln)
     sleeps = [c[1][0] for c in calls if c[0] == "sleep"]
     assert sleeps == [ln.opts.lock_backoff] * 3
@@ -228,7 +228,7 @@ def test_a_stale_retry_waits_on_ci_even_when_the_tip_is_unchanged(landing):
     still 2m48s from green. The old code gated the CI wait behind `tip_sha != merge_sha`, so
     an unchanged tip (default Fakes tip == MERGE_SHA) got no wait and no backoff at all."""
     ln, calls = _ready(landing, Fakes(deploy=[4, 0]))
-    ln.tags = "sonarr"
+    ln.resolved_tags = ["sonarr"]
     deploy.deploy_phase(ln)
     assert [c[0] for c in calls].count("await_ci") == 1
 
