@@ -15,7 +15,9 @@ minutes -- 835 polls across 213 wait episodes before this existed.
 ALWAYS REDIRECT STDOUT AND STDERR TO A FILE. A backgrounded Bash call hands this script a
 non-blocking pipe, and Ansible refuses to start on one ("Ansible requires blocking IO on
 stdin/stdout/stderr"). ``main`` clears O_NONBLOCK on its own fds, and deploy.sh does the
-same, but ``> "$CLAUDE_JOB_DIR/tmp/land<n>.log" 2>&1`` is still the whole fix.
+same, but ``> "$CLAUDE_JOB_DIR/tmp/land<n>.log" 2>&1`` is still the whole fix. ``main``
+also line-buffers stdout, so that log fills phase by phase instead of arriving at exit --
+see ``_prepare_stdio``.
 
 WHAT THIS SCRIPT DOES NOT DO. It holds no check of its own: no health logic, no tag
 validation, no staleness logic. deploy.sh owns the lock and the refusals, gitops_tick.sh
@@ -70,18 +72,31 @@ from deploy_tools.land_lib.options import parse_args
 from deploy_tools.land_lib.tools import Tools
 
 
-def _unblock_stdio() -> None:
-    """Clear O_NONBLOCK on 0/1/2: a backgrounded Bash call hands us non-blocking pipes."""
+def _prepare_stdio() -> None:
+    """Clear O_NONBLOCK on 0/1/2, and line-buffer stdout so a redirected log fills as we go.
+
+    Two separate hazards on the same fds. A backgrounded Bash call hands us non-blocking
+    pipes, which Ansible refuses to start on. And a landing is always run with stdout
+    redirected to a file, where Python block-buffers it -- so the log stayed EMPTY for the
+    whole ten-to-fifteen-minute run and appeared all at once at exit, leaving a session
+    tailing it unable to tell which phase was in flight. stderr is line-buffered either way,
+    which is why a `die` line used to surface above the `== arm` lines printed before it.
+
+    The suppress is load-bearing rather than defensive: under pytest's capsys, `sys.stdout`
+    is not a TextIOWrapper and has no `reconfigure`.
+    """
     for fd in (0, 1, 2):
         with contextlib.suppress(OSError):
             os.set_blocking(fd, True)
+    with contextlib.suppress(AttributeError, OSError, ValueError):
+        sys.stdout.reconfigure(line_buffering=True)
 
 
 def main(argv: list[str] | None = None, tools: Tools | None = None) -> int:
     """Parse, run, print the outcome, and annotate -- whatever happened."""
     opts = parse_args(argv, __doc__ or "")
     tools = tools or Tools()
-    _unblock_stdio()
+    _prepare_stdio()
     ln = Landing(opts, tools)
     rc = 1
     try:

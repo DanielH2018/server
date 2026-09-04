@@ -129,3 +129,33 @@ def test_every_verdict_is_produced_by_a_running_test():
     text = "\n".join(p.read_text() for p in files)
     named = set(re.findall(r'"([a-z-]+)"', text)) & VERDICTS
     assert named == VERDICTS, sorted(VERDICTS - named)
+
+
+def test_prepare_stdio_line_buffers_a_real_file_stream(tmp_path, monkeypatch):
+    """A landing always runs with stdout redirected to a file, where Python block-buffers it.
+
+    Asserted against a real `TextIOWrapper` over a file rather than through `land.main` under
+    capsys: pytest's capture object is not the stream the fix reconfigures, so asserting
+    `sys.stdout.line_buffering` after a captured run would pass whether or not the call is
+    there.
+    """
+    import land
+
+    with (tmp_path / "land.log").open("w") as fh:
+        assert fh.line_buffering is False
+        monkeypatch.setattr(land.sys, "stdout", fh)
+        land._prepare_stdio()
+        assert fh.line_buffering is True
+
+
+def test_prepare_stdio_tolerates_a_stdout_that_cannot_reconfigure(monkeypatch):
+    """capsys replaces sys.stdout with an object that has no `reconfigure`, and so does any
+    session that redirects it in-process. Failing there would break every captured test."""
+    import land
+
+    class _Plain:
+        def write(self, s):
+            return len(s)
+
+    monkeypatch.setattr(land.sys, "stdout", _Plain())
+    land._prepare_stdio()  # must not raise

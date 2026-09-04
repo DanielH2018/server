@@ -301,9 +301,16 @@ def test_notify_never_raises_on_a_broken_host_lib(monkeypatch, tmp_path, capsys)
     # this broken one never executes. Without the evict, the test passes alone and asserts
     # the wrong branch in suite order.
     monkeypatch.delitem(notify_mod.sys.modules, "host_lib", raising=False)
+    before = list(notify_mod.sys.path)
     notify_mod.notify("some content")  # must not raise
     out = capsys.readouterr().out
     assert "notify failed" in out
+    # notify() puts HOST_LIB_PATH's directory on sys.path to do that bare-name import. Left
+    # there, this tmp_path -- holding a host_lib.py that raises -- serves every later
+    # bare-name `import host_lib` in the process, which is how a passing test here failed
+    # test_tick_ledger_report.py instead. monkeypatch cannot undo an insert production code
+    # performed, so notify() has to restore it itself.
+    assert notify_mod.sys.path == before
 
 
 def test_main_returns_nonzero_on_unsettled_deploy(monkeypatch, capsys):

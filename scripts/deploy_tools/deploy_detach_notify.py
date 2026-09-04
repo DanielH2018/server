@@ -22,6 +22,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_deploy_detach_notify.py
 from __future__ import annotations
 
 import argparse
+import contextlib
 import subprocess
 import sys
 from pathlib import Path
@@ -174,7 +175,12 @@ def notify(content: str) -> None:
             f"({HOST_LIB_PATH} / {CONFIG_ENV_PATH} not found) -- skipping Discord notify."
         )
         return
-    sys.path.insert(0, str(HOST_LIB_PATH.parent))
+    # Removed again in the `finally`: the entry outlives the call otherwise, and a later
+    # bare-name `import host_lib` anywhere in the process then resolves against whatever
+    # sits in that directory. Under pytest that directory is a tmp_path holding a
+    # deliberately broken stub, which failed an unrelated test in another module.
+    lib_dir = str(HOST_LIB_PATH.parent)
+    sys.path.insert(0, lib_dir)
     try:
         from host_lib import discord_post, parse_env_file  # type: ignore[import-not-found]
 
@@ -191,6 +197,10 @@ def notify(content: str) -> None:
         print(
             f"deploy --detach: notify failed ({exc}) -- deploy result is only in this log."
         )
+    finally:
+        # `remove` takes the first occurrence, which is the one inserted above.
+        with contextlib.suppress(ValueError):
+            sys.path.remove(lib_dir)
 
 
 def main(argv: list[str] | None = None) -> int:
