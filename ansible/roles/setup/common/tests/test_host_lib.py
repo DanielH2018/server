@@ -207,3 +207,31 @@ def test_the_rest_of_the_environment_survives(monkeypatch):
     with mock.patch("host_lib.subprocess.run", capture):
         host_lib.kubectl_runner("k3s kubectl", "homelab", 30)("get", "pod")
     assert seen["env"]["KUBECONFIG"] == "/home/ubuntu/.kube/config"
+
+
+# ── rfc3339_to_epoch: shared with longhorn_backup_health_logic.py and longhorn_reap_logic.py ──
+#
+# Moved here 2026-09-04 (issue #1088, delta 7): the two modules each carried their own copy, and
+# they had already diverged — only the backup-health copy stripped fractional seconds, so the
+# same Longhorn `snapshotCreatedAt` parsed in one module and returned None in the other.
+
+
+def test_rfc3339_to_epoch_parses_a_plain_z_timestamp():
+    assert host_lib.rfc3339_to_epoch("2026-01-01T00:00:00Z") == 1767225600.0
+
+
+def test_rfc3339_to_epoch_accepts_fractional_seconds():
+    # The divergence: only one of the two original copies handled this.
+    assert host_lib.rfc3339_to_epoch("2026-01-01T00:00:00.123456Z") == 1767225600.0
+
+
+def test_rfc3339_to_epoch_accepts_a_numeric_utc_offset():
+    assert host_lib.rfc3339_to_epoch("2026-01-01T00:00:00+00:00") == 1767225600.0
+
+
+def test_rfc3339_to_epoch_rejects_garbage():
+    assert host_lib.rfc3339_to_epoch("not-a-timestamp") is None
+
+
+def test_rfc3339_to_epoch_rejects_empty_string():
+    assert host_lib.rfc3339_to_epoch("") is None

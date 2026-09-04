@@ -26,7 +26,13 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+
+# Resolves via longhorn_reap_orphan_backups.py / longhorn_reap_orphan_snapshots.py's own
+# sys.path.insert(0, <own dir>), which runs before either imports this module — host_lib.py is
+# copied alongside as a sibling both at release time (/opt/longhorn-reap/, health-crons.yml) and,
+# for the test suite, via the `ansible/roles/setup/common/files` pythonpath entry in
+# pyproject.toml.
+import host_lib
 
 RECURRING_JOB_GROUP_PREFIX = "recurring-job-group.longhorn.io/"
 
@@ -224,27 +230,20 @@ def resolve_kubeconfig(
 def parse_rfc3339_epoch(stamp: str) -> float | None:
     """Seconds since the epoch for a Kubernetes timestamp, or None if unparseable.
 
-    Bash used `date -u -d "$CREATED" +%s`, which accepts fractional seconds and numeric
-    offsets, not just a bare trailing `Z` at whole-second precision. `datetime.fromisoformat`
-    (3.11+) covers the same ground once a trailing `Z` is mapped to `+00:00` -- fromisoformat
-    itself only started accepting `Z` directly in 3.11, and mapping it explicitly here doesn't
-    depend on that.
+    Delegates the actual parsing to host_lib.rfc3339_to_epoch, shared with
+    longhorn_backup_health_logic.py (2026-09-04 review finding #7): the two copies had already
+    diverged, with only the backup-health one tolerant of fractional seconds, so the same
+    Longhorn `snapshotCreatedAt` parsed in one module and returned None in the other.
 
     Bash's fallback on a failed parse was `|| echo 0`, so CREATED_EPOCH==0 was its sentinel for
     "unparseable" -- indistinguishable, in bash, from a real 1970-01-01 timestamp, which no
-    Longhorn object legitimately carries. Matched here: an epoch that parses to exactly 0 is
-    treated as unparseable too, not as "very old".
+    Longhorn object legitimately carries. Matched here, on top of the shared parser: an epoch
+    that comes back exactly 0 is treated as unparseable too, not as "very old". host_lib's
+    parser deliberately does not bake this in, since not every caller wants it.
     """
     if not isinstance(stamp, str) or not stamp:
         return None
-    text = stamp[:-1] + "+00:00" if stamp.endswith("Z") else stamp
-    try:
-        dt = datetime.fromisoformat(text)
-    except ValueError:
-        return None
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
-    epoch = dt.timestamp()
+    epoch = host_lib.rfc3339_to_epoch(stamp)
     return None if epoch == 0 else epoch
 
 

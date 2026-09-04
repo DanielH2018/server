@@ -55,8 +55,21 @@ def _require_int_env(name: str) -> int:
 
 
 def _require_bool_env(name: str) -> bool:
-    """Parses a Jinja `{{ var | bool }}` render, which Python's str() spells "True"/"False"."""
-    return _require_env(name).strip().lower() in ("true", "1", "yes")
+    """Parses a Jinja `{{ var | bool }}` render, which Python's str() spells "True"/"False".
+
+    Refuses anything it doesn't recognize rather than defaulting to False. LONGHORN_BACKUP_ARMED
+    and LONGHORN_R2_ARMED both route through this, and False means DISARMED — a target's volumes
+    get suppressed from every check rather than watched. A typo'd or truncated export (a template
+    change that renders `Tru` instead of `True`, say) used to fold silently into "disarmed" here,
+    the same wrong-default direction `_require_env` above exists to close for a missing var
+    entirely.
+    """
+    raw = _require_env(name).strip().lower()
+    if raw in ("true", "1", "yes"):
+        return True
+    if raw in ("false", "0", "no"):
+        return False
+    raise SystemExit(f"env var {name}={raw!r} is not a recognized boolean")
 
 
 def _hhmm_from_two_field_cron(spec: str) -> str | None:
@@ -107,12 +120,14 @@ def _read_stamp(path: str) -> tuple[str | None, bool]:
 
     `unreadable` is True only when the file EXISTS but couldn't be opened (permissions, a
     directory in its place, ...) — distinct from FileNotFoundError, which is the ordinary
-    "never written" case and returns `(None, False)`. Bash's own `[[ -r ]]` made this same
-    distinction, and it matters: on 2026-08-19 the stamp directory's mode made a FRESH,
-    successful drill's stamp unreadable by this script's user, and a checker that can't tell
-    "never ran" from "ran, but I can't read the proof" reports the wrong one — "no restore drill
-    has ever succeeded", permanently, while a drill had just in fact succeeded. See
-    check_restore_drill()'s docstring in the logic module for how this is consumed.
+    "never written" case and returns `(None, False)`. Bash's own `[[ -r ]]` did NOT make this
+    distinction — it folded both into one boolean, and that fold is what caused the 2026-08-19
+    incident: the stamp directory's mode made a FRESH, successful drill's stamp unreadable by
+    this script's user, and `[[ -r ]]` reported the same "false" it would have for a stamp that
+    never existed at all — "no restore drill has ever succeeded", permanently, while a drill had
+    just in fact succeeded. This function is what fixes that: it distinguishes the two cases
+    bash could not. See check_restore_drill()'s docstring in the logic module for how this is
+    consumed.
     """
     try:
         with open(path) as fh:

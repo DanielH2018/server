@@ -7,10 +7,11 @@ without a cluster. `now_s` is always injected rather than read from `time.time()
 can pin it.
 
 Every function below corresponds to one numbered check in the original script's comments, and the
-message text is copied character-for-character — several are matched by downstream tests/greps
-and by an operator's muscle memory reading `journalctl -t longhorn-backup-health`.
+message text is copied character-for-character except where the fourth divergence below says
+otherwise — several are matched by downstream tests/greps and by an operator's muscle memory
+reading `journalctl -t longhorn-backup-health`.
 
-Three deliberate divergences from the shell, found by the 2026-09-04 review and left as-is
+Four deliberate divergences from the shell, found by the 2026-09-04 review and left as-is
 rather than made byte-identical:
 - Every `{int(duration / N)}` below (hours/days rendered into a message) uses true division then
   `int()`, which truncates toward zero exactly like bash's `$(( duration / N ))` — NOT floor
@@ -20,6 +21,18 @@ rather than made byte-identical:
   replaces: `.status.snapshotCreatedAt` is a plain Longhorn-authored string with no format
   guarantee, and rejecting a sub-second timestamp here would be a false RED, not a caught bug.
 - Ranks and thresholds are unchanged from the shell; only parsing tolerance was widened.
+- check_restore_drill()'s "not a valid timestamp" message is NOT the shell's string. Bash's
+  `[[ ! "$DRILL_AT" =~ ^[0-9]+$ ]]` branch reused the word "unreadable" — `"restore-drill stamp
+  is unreadable — treating the restore path as unproven"` — even though bash's own `[[ -r ]]`
+  gate above it meant that branch was reached only once the file HAD been read; "unreadable"
+  there meant "the content isn't a timestamp", not "the open() call failed". This module gives
+  the open()-failed case its own real permissions check (`_read_stamp()`'s `unreadable` flag,
+  the 2026-08-19 fix — see its docstring), which needed the word "unreadable" for what it
+  actually means. Reusing the old string for content-that-isn't-a-timestamp would make the two
+  distinct failure modes share one message again, so the content-parse message was reworded
+  instead: `"restore-drill stamp content is not a valid timestamp — ..."`. A Loki query or Kuma
+  keyword pinned to the old exact string needs updating to match either the new one or the
+  `_read_stamp`-unreadable one, depending on which failure it means to catch.
 """
 
 from __future__ import annotations
@@ -27,42 +40,21 @@ from __future__ import annotations
 import datetime as _dt
 import re
 
+# Resolves via longhorn_backup_health.py's own sys.path.insert(0, <own dir>), which runs before
+# it imports this module — host_lib.py is copied alongside as a sibling both at release time
+# (/opt/longhorn-backup-health/, health-crons.yml) and, for the test suite, via the
+# `ansible/roles/setup/common/files` pythonpath entry in pyproject.toml.
+import host_lib
+
 # 6h slack after a volume's first scheduled run before it is called uncovered. Hardcoded in the
 # original script too (`GRACE_SLACK_S=$(( 6 * 3600 ))`), not templated.
 GRACE_SLACK_S = 6 * 3600
 
 _STAMP_RE = re.compile(r"[0-9]+")
-_RFC3339 = "%Y-%m-%dT%H:%M:%SZ"
-_FRACTIONAL_SECONDS_RE = re.compile(r"\.\d+")
 
-
-def rfc3339_to_epoch(ts: str) -> float | None:
-    """Seconds since the epoch for an RFC3339 timestamp, or None if unparseable.
-
-    Mirrors `date -d "$ts" +%s 2>/dev/null` returning empty on failure. `.metadata
-    .creationTimestamp` is a Kubernetes metav1.Time and always seconds-precision UTC with a
-    trailing Z, but `.status.snapshotCreatedAt` is a plain string Longhorn writes itself and
-    carries no such guarantee — `date -d` accepts fractional seconds and a numeric UTC offset,
-    so this must too, or a sub-second stamp reads as unparseable and pages a false RED on every
-    tick. Fractional digits are dropped (bash's `date -d` truncates them too, and the checks here
-    only ever compare at whole-second resolution) before falling back to the strict seconds-only
-    path for plain `...Z` input.
-    """
-    if not ts:
-        return None
-    normalized = _FRACTIONAL_SECONDS_RE.sub("", ts)
-    try:
-        return _dt.datetime.fromisoformat(normalized.replace("Z", "+00:00")).timestamp()
-    except ValueError:
-        pass
-    try:
-        return (
-            _dt.datetime.strptime(normalized, _RFC3339)
-            .replace(tzinfo=_dt.timezone.utc)
-            .timestamp()
-        )
-    except ValueError:
-        return None
+# Shared with longhorn_reap_logic.py in host_lib.py (2026-09-04 review finding #7): the two had
+# already diverged, with only this module's copy tolerant of fractional seconds.
+rfc3339_to_epoch = host_lib.rfc3339_to_epoch
 
 
 def first_run_after(from_s: float, hhmm: str | None, dow: str) -> int:

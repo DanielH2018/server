@@ -1,19 +1,22 @@
 #!/usr/bin/env python3
 """Shared I/O-shell helpers for the host-run scripts.
 
-Used by gitops_deploy.py, renovate_notify.py, janitorr_health.py, and configarr_health.py.
-Each runs via ``uv run --no-project --python <pin>`` (host_python_version in
+Used by gitops_deploy.py, renovate_notify.py, janitorr_health.py, configarr_health.py,
+longhorn_backup_health_logic.py, and longhorn_reap_logic.py. Each runs via
+``uv run --no-project --python <pin>`` (host_python_version in
 ansible/inventory/group_vars/all.yml) or directly under cron, and is deployed into its own
 ``/opt`` dir, where it does a ``sys.path.insert(0, <own dir>)`` so ``from host_lib import ...``
 resolves the copy sitting alongside. Single source of truth for helpers that had drifted between
 scripts: the Cloudflare-1010 User-Agent on the Discord POST, the torn-write-safe atomic state
-write, the config.env parser, and the kubectl runner below. Stdlib only.
+write, the config.env parser, the kubectl runner, and the RFC3339 parser below. Stdlib only.
 """
 
 from __future__ import annotations
 
+import datetime as _dt
 import json
 import os
+import re
 import subprocess
 import urllib.request
 
@@ -26,6 +29,47 @@ LOCAL_BIN = "/usr/local/bin"
 # from "we never reached the cluster".
 KUBECTL_TIMEOUT_RC = 124
 KUBECTL_UNRUNNABLE_RC = 125
+
+_RFC3339_FMT = "%Y-%m-%dT%H:%M:%SZ"
+_FRACTIONAL_SECONDS_RE = re.compile(r"\.\d+")
+
+
+def rfc3339_to_epoch(ts: str) -> float | None:
+    """Seconds since the epoch for an RFC3339 timestamp, or None if unparseable.
+
+    Was duplicated between longhorn_backup_health_logic.py and longhorn_reap_logic.py, and
+    already diverged once: only the backup-health copy stripped fractional seconds, so the same
+    Longhorn `snapshotCreatedAt` parsed in one module and returned None in the other (2026-09-04
+    review). This is the single copy both now call.
+
+    Mirrors `date -d "$ts" +%s 2>/dev/null` returning empty on failure — permissively, not
+    strictly: `.status.snapshotCreatedAt` is a plain string Longhorn writes itself with no format
+    guarantee, while `.metadata.creationTimestamp` is a Kubernetes metav1.Time (always
+    seconds-precision UTC with a trailing Z). `date -d` accepts fractional seconds and a numeric
+    UTC offset for either, so this must too, or a sub-second stamp reads as unparseable and pages
+    a false RED on every tick. Fractional digits are dropped (bash's `date -d` truncates them
+    too, and every caller here compares at whole-second resolution) before falling back to the
+    strict seconds-only path for plain `...Z` input.
+
+    Callers that need bash's `|| echo 0` sentinel behaviour (an epoch of exactly 0 treated as
+    unparseable, since no real Longhorn object carries a 1970-01-01 timestamp) apply that on top
+    of this — it is not baked in here, because not every caller wants it.
+    """
+    if not ts:
+        return None
+    normalized = _FRACTIONAL_SECONDS_RE.sub("", ts)
+    try:
+        return _dt.datetime.fromisoformat(normalized.replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        pass
+    try:
+        return (
+            _dt.datetime.strptime(normalized, _RFC3339_FMT)
+            .replace(tzinfo=_dt.timezone.utc)
+            .timestamp()
+        )
+    except ValueError:
+        return None
 
 
 def parse_env_file(path: str) -> dict[str, str]:

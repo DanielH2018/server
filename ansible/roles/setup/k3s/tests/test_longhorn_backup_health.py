@@ -620,6 +620,49 @@ def test_reader_exits_nonzero_naming_a_missing_env_var(tmp_path):
     assert "LONGHORN_DAILY_BACKUP_BUDGET" in proc.stderr
 
 
+def test_reader_treats_a_clean_bool_env_normally(tmp_path):
+    """The clean half of the pair below: a recognized "False" must still disarm normally."""
+    env = _reader_env(
+        tmp_path,
+        LONGHORN_BACKUP_KUBECTL="/bin/false",
+        LONGHORN_R2_ARMED="False",
+    )
+    proc = subprocess.run(
+        [sys.executable, str(READER)],
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=30,
+    )
+    assert proc.returncode == 0, proc.stderr
+
+
+def test_reader_exits_nonzero_on_an_unrecognized_bool_env(tmp_path):
+    """An armed flag must REFUSE an unrecognized value, not fold it into False (2026-09-04
+    review finding #9).
+
+    `_require_bool_env` backs LONGHORN_BACKUP_ARMED and LONGHORN_R2_ARMED, and False there means
+    DISARMED — a target's volumes get suppressed from every check rather than watched. A typo'd
+    or truncated export used to fold silently into "disarmed" instead of failing loudly the way
+    a missing var already does.
+    """
+    env = _reader_env(
+        tmp_path,
+        LONGHORN_BACKUP_KUBECTL="/bin/false",
+        LONGHORN_R2_ARMED="maybe",
+    )
+    proc = subprocess.run(
+        [sys.executable, str(READER)],
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=30,
+    )
+    assert proc.returncode != 0
+    assert "LONGHORN_R2_ARMED" in proc.stderr
+    assert "maybe" in proc.stderr
+
+
 def _rfc3339(epoch: float) -> str:
     import datetime as _dt
 
