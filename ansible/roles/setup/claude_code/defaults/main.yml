@@ -29,11 +29,12 @@ claude_code_rc_spawn_mode: worktree
 # remotely is what Remote Control is for.
 claude_code_rc_permission_mode: auto
 
-# DECIDED: 3, not the CLI's default of 32. Measured on daniel-box, a `claude` process sits
-# at 200-400 MB RSS, so 32 sessions could ask for more than 12 GB against ~15 GB available
-# with k3s already running. Capacity is the real memory bound here (see the unit template
-# on why there is no MemoryMax), so it is set from measurement and raised on evidence.
-claude_code_rc_capacity: 3
+# DECIDED: 10, not the CLI's default of 32. Measured on daniel-box, a `claude` process sits
+# at 200-400 MB RSS, so 10 sessions ask for up to ~4 GB against ~15 GB available with k3s
+# already running. Capacity is the real memory bound here (see the unit template on why
+# there is no MemoryMax), so it is set from measurement and raised on evidence. Raised from 3
+# to 10 on 2026-09-04 at user request.
+claude_code_rc_capacity: 10
 
 # How often to restart the host so it picks up a Claude Code auto-update. The binary
 # updates itself in the background, but a long-lived process keeps running the version it
