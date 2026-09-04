@@ -10,6 +10,7 @@ Run: uv run pytest scripts/deploy_tools/tests -k land
 from __future__ import annotations
 
 import os
+import sys
 from dataclasses import replace
 from pathlib import Path
 
@@ -96,3 +97,31 @@ def land_run(capsys, monkeypatch):
         return rc, cap.out, cap.err, calls, logline
 
     return run
+
+
+@pytest.fixture(autouse=True)
+def _no_syspath_leak():
+    """Fail a test that leaves a new directory on `sys.path`.
+
+    `host_lib`, `deploy_logic` and `bridge.common` are cross-role modules imported by BARE
+    NAME, and they resolve through pytest's `pythonpath` rather than through a sibling file.
+    A directory inserted at index 0 and left there therefore shadows them for every later
+    test in the process. That is not hypothetical: `test_notify_never_raises_on_a_broken_host_lib`
+    left a tmp_path holding a `host_lib.py` whose only line is `raise RuntimeError('boom')`,
+    and `test_tick_ledger_report.py` -- a module the change never touched -- failed on it.
+
+    Membership rather than list equality: re-inserting a path that is already there adds no
+    new import candidate, and several modules here do that at import time.
+
+    Directory-scoped rather than repo-wide on purpose. This is where the leak class was
+    observed and where the bare-name imports concentrate; a repo-wide assertion would police
+    suites that have never had the problem.
+    """
+    before = set(sys.path)
+    yield
+    added = [p for p in sys.path if p not in before]
+    assert not added, (
+        f"this test left {added} on sys.path; a later test importing a cross-role module "
+        "by bare name would resolve against it. Remove the entry in a finally, or use "
+        "monkeypatch.syspath_prepend."
+    )
