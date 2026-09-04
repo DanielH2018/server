@@ -41,7 +41,9 @@ renovate_agent_budget_usd: 25
 renovate_agent_run_timeout_s: 5400
 renovate_agent_unit_timeout: 100min
 
-# 15:00 UTC — after Renovate's own "before 6am" cycle has opened the day's PRs, and after the
-# 13:00 renovate-notify digest has classified them. Late enough that the operator is awake to
-# read the result, which matters while this is new.
-renovate_agent_oncalendar: "*-*-* 15:00:00"
+# 06:00 America/Chicago — after Renovate's own "before 6am" cycle (UTC, so it closes at
+# midnight/1am CT depending on DST) has opened the day's PRs. This now runs BEFORE the 13:00
+# UTC renovate-notify digest classifies them, reversing the original "wait for both" ordering.
+# The explicit timezone keeps the wall-clock time fixed across the DST change instead of
+# drifting an hour twice a year.
+renovate_agent_oncalendar: "*-*-* 06:00:00 America/Chicago"

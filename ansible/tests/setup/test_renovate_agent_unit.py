@@ -194,7 +194,7 @@ def test_the_deadline_straddles_the_daily_period() -> None:
     )
     defaults = yaml_fast.safe_load(DEFAULTS.read_text())
     assert re.fullmatch(
-        r"\*-\*-\* \d\d:\d\d:\d\d", defaults["renovate_agent_oncalendar"]
+        r"\*-\*-\* \d\d:\d\d:\d\d( [\w/]+)?", defaults["renovate_agent_oncalendar"]
     ), (
         "the deadline above assumes a once-daily OnCalendar — re-derive it if the cadence moves"
     )
