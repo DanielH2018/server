@@ -36,8 +36,8 @@ __all__ = [
 # Schema version the rendered manifests are validated against. Must track the cluster: a
 # manifest is judged by the API server it will actually be applied to, and validating a 1.37
 # field against 1.36 schemas reports a perfectly good manifest as invalid (and vice versa —
-# a removed field passes). test_schema_version_matches_k3s in
-# scripts/validate/tests/test_validate_k8s_manifests.py ties this to k3s_version in
+# a removed field passes). test_schema_version_matches_the_cluster in
+# scripts/lib/tests/test_k8s_schema.py ties this to k3s_version in
 # roles/setup/k3s/defaults/main.yml so a cluster upgrade cannot leave it behind silently.
 K8S_SCHEMA_VERSION = "1.36"
 
