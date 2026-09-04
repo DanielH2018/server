@@ -7,6 +7,10 @@
 # against origin/master. A file back at or under its cap must lose its line; the list records
 # remaining work only.
 #
+# A path may be ADDED only when origin/master does not track the file (it is new, or renamed)
+# or when the same commit changes the guard itself (a widened rule finds files that were
+# always over). Otherwise split the file rather than listing it.
+#
 # Line count is `wc -l` semantics -- the number of newline characters:
 #   wc -l <path>
 .claude/hooks/auto-approve-readonly.py 931

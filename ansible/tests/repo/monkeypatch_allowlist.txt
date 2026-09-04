@@ -9,8 +9,12 @@
 # lower the entry; a file at 0 must lose its line. An entry may only fall or be deleted --
 # that is enforced against origin/master.
 #
-# The counting heuristic and its blind spots are in
-# ansible/tests/repo/test_module_length_ratchet.py's module docstring. To see a file's count
+# A path may be ADDED only when origin/master does not track the file (it is new, or renamed)
+# or when the same commit changes the guard itself (a widened heuristic finds patches that
+# were always there). Otherwise give the module a seam rather than listing the test.
+#
+# The counting heuristic and its blind spots are in ansible/tests/_ratchet.py's module
+# docstring. To see a file's count
 # now, lower its entry here by 1 and run the guard -- the failure names the real number:
 #   uv run pytest ansible/tests/repo/test_module_length_ratchet.py -k no_test_module_patches
 .claude/hooks/tests/test_auto_mode_bridge.py 1

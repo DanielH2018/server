@@ -180,9 +180,17 @@ already past either limit are listed one per line in
 `ansible/tests/repo/module_length_allowlist.txt` and
 `ansible/tests/repo/monkeypatch_allowlist.txt`, with the number each stands at today, and
 `ansible/tests/repo/test_module_length_ratchet.py` fails when one grows past its line, when a
-file over a cap has no line, or when a file that has come back under its cap keeps one. It
-also diffs both lists against `origin/master` and fails on a raised number or an added path,
-so an entry only ever falls or is deleted and the lists shrink to nothing as the splits land.
+file over a cap has no line, or when a file that has come back under its cap keeps one. The
+rules themselves are in `ansible/tests/_ratchet.py`, whose docstring is where the counting
+heuristic's blind spots are written down.
+
+It also diffs both lists against `origin/master`, so an entry only ever falls or is deleted
+and the lists shrink to nothing as the splits land. A path may be added to a list only when
+`origin/master` does not track the file — it is new, or renamed — or when the same commit
+changes the guard, since a widened rule finds files that were always over. That comparison
+skips, saying which reason, when `origin/master` is unreadable: a shallow CI checkout has no
+such ref. Locally the ref is only as fresh as your last `git fetch`, so a stale one compares
+against older numbers; `git fetch` before relying on it.
 
 ## What the measurements say
 
