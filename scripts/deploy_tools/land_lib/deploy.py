@@ -183,15 +183,23 @@ def deploy_phase(ln: Landing) -> None:
     ln.ledger.tags_label = ln.tags
     rc = deploy_with_lock_retry(ln)
     # 4 = the tree is behind origin/master: someone merged during the CI wait. The tick
-    # crosses the new tip only once master CI is green ON THE TIP, so wait on the tip first,
-    # after the blockers check -- a landing that can never cross must not wait 15 minutes
-    # before saying so. Bounded: a third merge during the tip wait moves the tip again.
+    # crosses a tip only once master CI is green ON IT, so wait on the CURRENT tip -- every
+    # attempt, not only when it moved -- after the blockers check, backed off by
+    # `lock_backoff` the way the lock-contention retry above already is. Issue #1084: PR
+    # #1051's landing retried this exit three times in ~25s with no backoff and, because the
+    # wait used to be gated behind `tip_sha != merge_sha`, no CI wait either, while master CI
+    # on the merge commit was still 2m48s from green (verdict=deploy-failed
+    # cause=deploy-exit-4 tags=configarr). A landing that can never cross must not wait 15
+    # minutes before saying so. Bounded: a third merge during the tip wait moves the tip
+    # again.
     for attempt in range(1, o.stale_retries + 1):
         if rc != 4:
             break
         say(
-            f"tree went stale mid-landing (someone merged during the wait); re-ticking ({attempt}/{o.stale_retries})"
+            f"tree went stale mid-landing (exit 4); retrying in {o.lock_backoff}s "
+            f"({attempt}/{o.stale_retries})"
         )
+        t.sleep(o.lock_backoff)
         ln.fetch_branch()
         if ci.blockers(ln) == 3:
             ln.finish(
@@ -203,17 +211,18 @@ def deploy_phase(ln: Landing) -> None:
         if tip.returncode != 0:
             ln.die(f"could not read origin/{BRANCH}", 1)
         tip_sha = tip.stdout.strip()
-        if tip_sha != ln.merge_sha:
-            say(
-                f"waiting for master CI on the new tip {tip_sha} (the tick defers until it is green)"
-            )
-            started = t.clock()
-            ci.wait_master_ci(ln, tip_sha, f"the tip {tip_sha}")
-            # CI time, not deploy time: shift both later stamps so the board books it under
-            # wait_ci with no new field to learn.
-            waited = t.clock() - started
-            ln.ledger.t_ci = (ln.ledger.t_ci or 0.0) + waited
-            ln.ledger.t_tick = (ln.ledger.t_tick or 0.0) + waited
+        say(
+            f"waiting for master CI on the tip {tip_sha} (the tick defers until it is green)"
+        )
+        started = t.clock()
+        ci.wait_master_ci(ln, tip_sha, f"the tip {tip_sha}")
+        # CI time, not deploy time: shift both later stamps so the board books it under
+        # wait_ci with no new field to learn. Includes the backoff sleep above (mirrors
+        # `deploy_with_lock_retry`'s own `+ o.lock_backoff`), or that time falls into
+        # t_deploy instead -- the exact mis-attribution this comment exists to prevent.
+        waited = t.clock() - started + o.lock_backoff
+        ln.ledger.t_ci = (ln.ledger.t_ci or 0.0) + waited
+        ln.ledger.t_tick = (ln.ledger.t_tick or 0.0) + waited
         # DECIDED: a failing retick here ENDS the landing (deploy-failed, cause=tick-failed)
         # rather than carrying on to deploy_by_host the way bash's stale-retry loop did --
         # bash discarded the tick's own exit code and kept going regardless. Deliberate per
