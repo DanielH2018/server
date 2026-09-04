@@ -45,9 +45,11 @@ CENSUS_MEMBERS = frozenset(
     }
 )
 
-# Changing either of these changes what the lists are allowed to contain, which is what lets a
-# widened heuristic add the files it newly sees.
+# Changing any of these changes what the lists are allowed to contain, which is what lets a
+# widened heuristic add the files it newly sees. `_helpers.py` is here because its
+# `is_test_file` decides both the cap a path gets and which files the patch census covers.
 GUARD_SOURCES = (
+    "ansible/tests/_helpers.py",
     "ansible/tests/_ratchet.py",
     "ansible/tests/repo/test_module_length_ratchet.py",
 )
@@ -224,7 +226,8 @@ def test_adding_a_path_master_does_not_track_is_clean():
     """A renamed or brand-new file has to be able to enter the list."""
     added = {"scripts/new.py": 900}
     assert (
-        raised_entries({}, added, "l.txt", untracked_on_master=["scripts/new.py"]) == []
+        raised_entries({}, added, "list.txt", untracked_on_master=["scripts/new.py"])
+        == []
     )
 
 
@@ -305,6 +308,16 @@ def test_no_test_module_patches_more_modules_than_its_allowlist_entry():
     assert not offenders, "\n".join(offenders)
 
 
+def test_every_guard_source_exists_at_the_path_named():
+    """`differs_from_master` answers False for a path absent on both sides.
+
+    A renamed guard source would therefore read as unchanged, and the exemption that lets a
+    widened rule add entries would be off with nothing saying so.
+    """
+    missing = [rel for rel in GUARD_SOURCES if not (REPO / rel).is_file()]
+    assert not missing, f"GUARD_SOURCES names paths that do not exist: {missing}"
+
+
 def test_the_master_read_returns_content_for_a_path_master_tracks():
     """The comparison below skips until the lists reach master; this keeps the read proved."""
     if not master_is_fetched():
@@ -312,6 +325,14 @@ def test_the_master_read_returns_content_for_a_path_master_tracks():
     assert tracked_on_master("ansible/tests/_helpers.py")
     assert text_on_master("ansible/tests/_helpers.py").startswith('"""')
     assert not tracked_on_master("ansible/tests/no_such_file.py")
+
+
+def test_the_master_read_raises_rather_than_returning_empty_for_an_unknown_path():
+    """A failed read must fail the comparison, not quietly look like an empty allowlist."""
+    if not master_is_fetched():
+        pytest.skip("origin/master is not fetched in this checkout")
+    with pytest.raises(RuntimeError):
+        text_on_master("ansible/tests/no_such_file.py")
 
 
 @pytest.mark.parametrize("ratchet", [LENGTHS, PATCHES], ids=lambda r: r.path.name)

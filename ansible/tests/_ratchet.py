@@ -1,4 +1,9 @@
-"""The two allowlist ratchets, as pure functions over mappings.
+"""The two allowlist ratchets: the caps, the comparisons and the monkeypatch counter.
+
+Everything here is a function over mappings and strings, with one exception:
+`Ratchet.allowlist()` reads the list file the dataclass points at. The census of the tree and
+the reads of `origin/master` are the caller's, in
+`ansible/tests/repo/test_module_length_ratchet.py`.
 
 Module length and `monkeypatch` on a first-party module are ratcheted the same way. A cap says
 what a new file may do, an allowlist records what the files that already exceed it do today,
@@ -15,8 +20,9 @@ module's name into a test, so a module carrying any has not got a seam yet, and
 the shape that replaces one.
 
 Two things enforce "only falls". Within a commit, a count over its own entry fails
-(`Ratchet.violations`). Across commits, `raised_entries` diffs the committed lists against
-`origin/master`, or a PR could grow a file and raise its own line in the same diff. An added
+(`Ratchet.violations`). Across commits, `raised_entries` diffs the lists as the working tree
+has them against `origin/master`, or a PR could grow a file and raise its own line in the same
+diff. An added
 path fails there — a split that produced another oversized module has not finished — with two
 exemptions, both passed in as plain values by the caller that reads git:
 

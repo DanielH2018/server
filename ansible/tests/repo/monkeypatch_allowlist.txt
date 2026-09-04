@@ -14,8 +14,8 @@
 # were always there). Otherwise give the module a seam rather than listing the test.
 #
 # The counting heuristic and its blind spots are in ansible/tests/_ratchet.py's module
-# docstring. To see a file's count
-# now, lower its entry here by 1 and run the guard -- the failure names the real number:
+# docstring. To see a file's count now, lower its entry here by 1 and run the guard -- the
+# failure names the real number:
 #   uv run pytest ansible/tests/repo/test_module_length_ratchet.py -k no_test_module_patches
 .claude/hooks/tests/test_auto_mode_bridge.py 1
 .claude/hooks/tests/test_block_footguns.py 2
