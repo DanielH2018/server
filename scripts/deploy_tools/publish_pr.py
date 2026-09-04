@@ -18,7 +18,10 @@ tree is in:
      clean up on origin; the next run refuses on the dirty/ahead tree
   2  the branch IS on origin but the PR could not be opened or auto-merge could not be
      enabled -- and the local commit is already gone. This is the state the secret-rotate
-     audit's ``git ls-remote`` arm exists to see (a branch with no PR)
+     audit's ``git ls-remote`` arm exists to see (a branch with no PR). Also covers the
+     rarer case where ``reset --hard HEAD~1`` itself failed after the push: the branch is
+     on origin, but the local commit is NOT gone -- master is still one commit ahead of
+     origin, named as such in the message, and the run stops before attempting a PR
 
 ``open-pr`` prints the number of the first open PR whose head starts with the prefix, or
 nothing. A ``gh`` failure prints nothing, exactly as the inline ``|| true`` did: the guard
@@ -174,6 +177,11 @@ def publish(
 
     proc = tools.git("push", "-u", "origin", branch)
     if proc.returncode != 0:
+        # The branch never reached origin, so it is a dead local ref pointing at the same
+        # commit as master. Left behind, a retry inside the same UTC minute fails at
+        # `git branch` with "already exists" and reports the wrong cause. Best-effort: the
+        # push already failed, so there is nothing more informative to do if this fails too.
+        tools.git("branch", "-D", branch)
         return Outcome(
             RC_STILL_LOCAL,
             f"publishing {branch} failed; commit is local on master: {failure_tail(proc)}",
@@ -185,10 +193,20 @@ def publish(
     # gitops-deploy's --ff-only refuse, and that parked the deployer twice during diagnosis.
     # HEAD~1, not origin/master: this undoes exactly the one commit the caller made.
     # origin/master is only as fresh as the last fetch, which the callers do not do, so
-    # resetting to it could discard something else or move master backwards. The local
-    # branch ref goes too, with -D because master no longer contains its commit; keeping it
-    # would leave one dead branch per run.
-    tools.git("reset", "--hard", "HEAD~1")
+    # resetting to it could discard something else or move master backwards.
+    proc = tools.git("reset", "--hard", "HEAD~1")
+    if proc.returncode != 0:
+        # The branch is on origin, but master is still one commit ahead -- exactly the state
+        # this reset exists to prevent. Report it as rc 2 (branch published, human must
+        # clear it) rather than pressing on to open a PR while master disagrees with origin;
+        # `failure_tail` names why the reset itself failed (index lock, dirtied tree).
+        return Outcome(
+            RC_PUSHED_NO_PR,
+            f"{branch} pushed but resetting local master to drop its commit failed; "
+            f"master is still one commit ahead of origin until this is cleared by hand: "
+            f"{failure_tail(proc)}",
+            branch,
+        )
     tools.git("branch", "-D", branch)
 
     proc = run_gh(

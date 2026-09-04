@@ -31,6 +31,11 @@ def git(
     want a failed ``rev-parse`` to surface. Pass ``check=False`` to read ``returncode``
     yourself, as a ``merge-base --is-ancestor`` test does.
     """
+    # Benign today: no caller of this module runs under an `Environment=GIT_...` (no
+    # GIT_SSH_COMMAND, no signing config arrives by env for the three publish_pr.py crons).
+    # But this strips ALL of it, including one a future cron unit adds on purpose -- e.g. a
+    # signing key path -- and `git push` would then fail on all three crons with nothing
+    # testing it, since this function is the one write path they share.
     env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
     return subprocess.run(
         ["git", *args],
