@@ -115,6 +115,59 @@ def test_alert_unit_is_the_onfailure_target(unit: str) -> None:
     )
 
 
+REAP_ENV = "CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP"
+REAP_VAR = "claude_code_rc_disable_bg_shell_pressure_reap"
+
+
+def render(unit_text: str, **overrides: object) -> str:
+    """Render the unit template with plausible scalars, so a Jinja guard is really exercised.
+
+    The other tests here read the raw text, which is enough for a line that is always
+    present. It is not enough for a line behind `{% if %}`: raw text cannot tell an armed
+    toggle from a dead one.
+    """
+    import jinja2
+
+    context: dict[str, object] = {
+        "sys_user": "ubuntu",
+        "claude_code_rc_spawn_mode": "worktree",
+        "claude_code_rc_workdir": "/home/ubuntu/server",
+        "claude_code_rc_permission_mode": "auto",
+        "claude_code_rc_capacity": 10,
+        REAP_VAR: True,
+    }
+    context.update(overrides)
+    return jinja2.Template(unit_text, undefined=jinja2.StrictUndefined).render(context)
+
+
+def test_bg_shell_pressure_reap_is_disabled_by_default(unit: str) -> None:
+    """A reaped background task is not a failed one, and it kills a landing mid-flight.
+
+    Claude Code kills every running backgrounded Bash task on a Node `memoryPressure` event.
+    The `land-after-merge` skill runs `land.sh --arm-merge` that way, so a reap between the
+    arm and the CI wait merges the PR and deploys nothing — issue #1096.
+    """
+    assert re.search(rf"^{REAP_VAR}: *true\b", DEFAULTS.read_text(), re.M), (
+        f"{REAP_VAR} must default to true in the role defaults, or an unattended landing "
+        "can be killed after its auto-merge is armed and never followed through"
+    )
+    assert f"Environment={REAP_ENV}=1" in render(unit), (
+        f"the unit must set Environment={REAP_ENV}=1 when {REAP_VAR} is true"
+    )
+
+
+def test_the_reap_toggle_gives_the_reaper_back(unit: str) -> None:
+    """The rejecting half: setting the var false must actually remove the line.
+
+    A guard keyed on a variable nothing sets renders the same both ways, which reads exactly
+    like a working toggle from the passing side alone.
+    """
+    assert REAP_ENV not in render(unit, **{REAP_VAR: False}), (
+        f"{REAP_VAR}: false must drop the Environment line; the reaper is upstream's "
+        "protection against a runaway background shell and has to be recoverable"
+    )
+
+
 def test_restart_timer_does_not_start_a_stopped_host(unit: str) -> None:
     """try-restart, not restart: the weekly update restart must never start a stopped host."""
     restart_unit = TEMPLATES / "claude-rc-restart.service.j2"

@@ -25,6 +25,28 @@ Environment=HOME=/home/{{ sys_user }}
 Environment=PATH=/home/{{ sys_user }}/.local/bin:/usr/local/bin:/usr/bin:/bin
 Environment=KUBECONFIG=/home/{{ sys_user }}/.kube/config
 
+{% if claude_code_rc_disable_bg_shell_pressure_reap %}
+# DECIDED: the background-shell pressure reaper is turned OFF here. Claude Code registers
+# `process.on("memoryPressure", ...)` and, when Node emits that event, kills every running
+# backgrounded Bash task with the reason `memory_pressure`, which reaches the session as
+# "stopped because the system is running low on memory". That handler reads no threshold of
+# its own — it is a pass-through on Node's event — and it is never registered when this
+# variable is set (bundle 2.1.260, `if (!Ce() && !env.CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP)`).
+#
+# It has to be off because a reaped background task is not a failed one. The
+# `land-after-merge` skill prescribes ONE backgrounded `land.sh --arm-merge`, and
+# renovate_agent's unattended daily tick runs that same skill. A reap lands AFTER the
+# auto-merge is armed and BEFORE the CI wait, so the PR merges and nothing follows it
+# through to a deploy — the undeployed-behind-green-master state the skill exists to
+# prevent. The kill arrives as a task notification rather than an error in the logfile, so
+# the session reads clean. Three kills in a row on 2026-09-04, issue #1096.
+#
+# Turning the reaper off removes no memory bound. MemoryHigh below still throttles the whole
+# cgroup and claude_code_rc_capacity is still the real bound. What the reaper adds over
+# those is a kill, and a kill is the one response this host cannot absorb.
+Environment=CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1
+{% endif %}
+
 # DECIDED: --spawn is passed EXPLICITLY and must stay that way. With it omitted the process
 # builds a readline interface on stdin to ask which spawn mode to use (it guards that on
 # process.stdin.isTTY). Under systemd there is no stdin to answer, so the host would sit
