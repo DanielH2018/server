@@ -44,11 +44,28 @@ same resources.
   ternary here, the queued kind `roles/k8s/rollout-drain` runs `rollout status` with, and the
   jsonpath branch in `ansible/post_tasks/k8s_stabilise_gate.yml`. An alias gets a green deploy
   with the gate reading a Deployment's jsonpath off a DaemonSet — `0 == 0`, passing vacuously.
-- **Dropping a name from `manifests_files` is only half a retirement.** `kubectl apply -f <dir>/`
-  sweeps the whole directory, so this role deletes the staged file for you — but the **live
-  object keeps serving**. It needs one hand `kubectl delete`, which the `manifest-prune-check.sh`
-  host cron flags. Bit for real on 2026-08-13: a retired IngressRoute deleted live at 18:51 was
-  re-created by the 18:53 deploy from its stale staged file.
+- **Dropping a name from `manifests_files` is only half a retirement, for the ~63 roles that
+  have not armed `manifests_prune`.** `kubectl apply -f <dir>/` sweeps the whole directory, so
+  this role deletes the staged file for you — but the **live object keeps serving**. It needs
+  one hand `kubectl delete`, which the `manifest-prune-check.sh` host cron flags. Bit for real
+  on 2026-08-13: a retired IngressRoute deleted live at 18:51 was re-created by the 18:53
+  deploy from its stale staged file.
+- **`manifests_prune` (#1076) removes the live object too, opt-in per role.** Set
+  `manifests_prune: true` and `manifests_prune_kinds: [<group/version/Kind>, ...]` on the
+  `include_role` call and the apply gains `--prune -l homelab/role=<service>
+  --prune-allowlist=<kinds> -n <namespace>`. Every kind named must have the matching
+  `homelab/role: <service>` label rendered in ITS OWN template's `metadata.labels` — an
+  unlabeled object is invisible to the selector and cannot be pruned, which is the mechanism's
+  entire safety argument (a bad kinds list can only ever touch this role's own labeled
+  objects). `roles/k8s/registry` is the only role armed so far; see the `manifests_prune`
+  DECIDED comment in `defaults/main.yml` for why arming another role is a deliberate two-step
+  (label the templates, then list the kinds) rather than a global flip, and why `Secret` and
+  `PersistentVolumeClaim` must never appear in any role's kinds list (guarded by
+  `ansible/tests/deploy/test_manifests_prune.py`). An orphan whose staged file was deleted
+  BEFORE its role armed this — including the claude-otel-ingest IngressRoute this issue names —
+  never receives the label and stays invisible to the selector; it still needs one manual
+  `kubectl delete`. `manifest-prune-check.sh` keeps watching every role, armed or not, until a
+  real deploy has been seen pruning a real orphan.
 - **This role does not wait for the rollout.** It appends to the play-scoped
   `k8s_pending_rollouts` accumulator, and `roles/k8s/rollout-drain` — invoked once per batch from
   `ansible/tasks/k8s_batch.yml` — watches every rollout the batch started at once — `max()` per batch instead of `sum()`. 1386s of serial
@@ -131,6 +148,8 @@ a fact, and anything that later prints either.
 ## Guards
 
 `ansible/tests/` holds the checks that keep callers honest: `test_manifests_apply_guarded.py`,
-`test_k8s_dry_run.py`, `test_k8s_rollout_gate.py`, `test_inline_rollout_gates.py`, and the
+`test_k8s_dry_run.py`, `test_k8s_rollout_gate.py`, `test_inline_rollout_gates.py`,
+`test_manifests_prune.py` (the `manifests_prune` opt-in — flag rendering, the
+Secret/PersistentVolumeClaim ban, the registry pilot's label/kind pairing), and the
 `test_k8s_autodeploy_*` set. A role rolling a workload outside this role (`claude-otel`,
 `pihole`, `prowlarr` do, deliberately) is covered by the inline-gate test rather than exempted.

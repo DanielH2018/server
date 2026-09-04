@@ -35,6 +35,10 @@ kind: NetworkPolicy
 metadata:
   name: registry
   namespace: {{ k8s_namespace }}
+  # See defaults/main.yml manifests_prune DECIDED comment: this is the label the --prune
+  # selector for this role keys on.
+  labels:
+    homelab/role: registry
 spec:
   podSelector:
     matchLabels:

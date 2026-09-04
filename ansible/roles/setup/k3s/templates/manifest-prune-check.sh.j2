@@ -43,6 +43,14 @@
 # now deletes those files before the apply, so a name dropped from the list disappears from the
 # staged set on the next deploy and this check sees the orphan. Deploy the owning role once after
 # retiring a manifest: until that role next runs, its stale staged file is still on disk.
+#
+# #1076 is the in-place fix for the orphan class itself: `k8s/manifests` can now be told, per
+# role, to `kubectl apply --prune -l homelab/role=<service> --prune-allowlist=<kinds>` instead
+# of leaving the live object for this cron to page about — see the `manifests_prune` DECIDED
+# comment in `ansible/roles/k8s/manifests/defaults/main.yml`. Only `roles/k8s/registry` is armed
+# so far, and this cron keeps watching every role, armed or not, until a real deploy has been
+# seen pruning a real orphan — that is a decision to make on evidence, not on the strength of
+# the flag existing.
 set -uo pipefail
 
 # shellcheck source=/dev/null

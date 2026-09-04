@@ -9,6 +9,15 @@
       - networkpolicy.yaml
       - deployment.yaml
       - service.yaml
+    # Pilot role for #1076's live prune (see k8s/manifests defaults/main.yml manifests_prune
+    # DECIDED comment). pvc.yaml is deliberately unlabeled and deliberately absent from
+    # this kinds list — deleting a live PVC is the one prune outcome worse than the orphan
+    # this feature exists to clean up.
+    manifests_prune: true
+    manifests_prune_kinds:
+      - apps/v1/Deployment
+      - core/v1/Service
+      - networking.k8s.io/v1/NetworkPolicy
 
 # THE SECOND ROLE THAT MUST WAIT INLINE (crowdsec is the other; see its header). k8s/manifests
 # deliberately does NOT wait — it queues the rollout for k8s/rollout-drain at the end of the
