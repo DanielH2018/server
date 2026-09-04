@@ -173,6 +173,25 @@ evaluation by default ([What's new in 3.14][py314]). Do not add it to a new modu
 **A check ships with a proof it can go red.** Repo-root `CLAUDE.md` owns this rule; it
 applies to every validator or guard in this tree.
 
+**Length and `monkeypatch` are ratcheted.** A module may be 600 lines and a test module 500,
+counted the way `wc -l` counts. A test module may patch no first-party module at all — a
+patch on the standard library is not counted, because no seam here can remove one. The files
+already past either limit are listed one per line in
+`ansible/tests/repo/module_length_allowlist.txt` and
+`ansible/tests/repo/monkeypatch_allowlist.txt`, with the number each stands at today, and
+`ansible/tests/repo/test_module_length_ratchet.py` fails when one grows past its line, when a
+file over a cap has no line, or when a file that has come back under its cap keeps one. The
+rules themselves are in `ansible/tests/_ratchet.py`, whose docstring is where the counting
+heuristic's blind spots are written down.
+
+It also diffs both lists against `origin/master`, so an entry only ever falls or is deleted
+and the lists shrink to nothing as the splits land. A path may be added to a list only when
+`origin/master` does not track the file — it is new, or renamed — or when the same commit
+changes the guard, since a widened rule finds files that were always over. That comparison
+skips, saying which reason, when `origin/master` is unreadable: a shallow CI checkout has no
+such ref. Locally the ref is only as fresh as your last `git fetch`, so a stale one compares
+against older numbers; `git fetch` before relying on it.
+
 ## What the measurements say
 
 The census below is what the conventions above are measured against. Each row is two

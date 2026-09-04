@@ -1,0 +1,93 @@
+# Test modules that patch a first-party module, as counted when the ratchet landed
+# (2026-09-04).
+#
+# Format: `<repo-relative-path> <max_calls>`, one line per file, in `LC_ALL=C sort` order
+# (codepoint order, which is what Python's own `sorted()` gives). The cap is 0: a
+# `monkeypatch.setattr` on a first-party module pins that module's name into the test, so a
+# module carrying any has no seam yet. Replace them with an injectable boundary object
+# (scripts/deploy_tools/land_lib/tools.py + scripts/deploy_tools/tests/_land_fakes.py) and
+# lower the entry; a file at 0 must lose its line. An entry may only fall or be deleted --
+# that is enforced against origin/master.
+#
+# A path may be ADDED only when origin/master does not track the file (it is new, or renamed)
+# or when the same commit changes the guard itself (a widened heuristic finds patches that
+# were always there). Otherwise give the module a seam rather than listing the test.
+#
+# The counting heuristic and its blind spots are in ansible/tests/_ratchet.py's module
+# docstring. To see a file's count now, lower its entry here by 1 and run the guard -- the
+# failure names the real number:
+#   uv run pytest ansible/tests/repo/test_module_length_ratchet.py -k no_test_module_patches
+.claude/hooks/tests/test_auto_mode_bridge.py 1
+.claude/hooks/tests/test_block_footguns.py 2
+.claude/hooks/tests/test_nudge_land_sh.py 8
+.claude/hooks/tests/test_session_health.py 33
+ansible/roles/k8s/artifacts/tests/test_artifact_server.py 3
+ansible/roles/k8s/autofix-bridge/tests/test_autofix.py 13
+ansible/roles/k8s/monitor-bridge/tests/test_b2_storage.py 5
+ansible/roles/k8s/monitor-bridge/tests/test_check.py 14
+ansible/roles/k8s/monitor-bridge/tests/test_check_cadvisor_floor.py 11
+ansible/roles/k8s/monitor-bridge/tests/test_check_cli.py 22
+ansible/roles/k8s/monitor-bridge/tests/test_check_etcd_drill.py 2
+ansible/roles/k8s/monitor-bridge/tests/test_check_gates.py 60
+ansible/roles/k8s/monitor-bridge/tests/test_check_gates_exporters.py 14
+ansible/roles/k8s/monitor-bridge/tests/test_check_gitops.py 2
+ansible/roles/k8s/monitor-bridge/tests/test_check_ha.py 11
+ansible/roles/k8s/monitor-bridge/tests/test_check_host.py 37
+ansible/roles/k8s/monitor-bridge/tests/test_check_loki.py 12
+ansible/roles/k8s/monitor-bridge/tests/test_check_longhorn.py 4
+ansible/roles/k8s/monitor-bridge/tests/test_check_notify.py 39
+ansible/roles/k8s/monitor-bridge/tests/test_check_parsing.py 3
+ansible/roles/k8s/monitor-bridge/tests/test_check_pi.py 12
+ansible/roles/k8s/monitor-bridge/tests/test_check_r2.py 11
+ansible/roles/k8s/monitor-bridge/tests/test_check_scrutiny.py 2
+ansible/roles/k8s/monitor-bridge/tests/test_check_service.py 30
+ansible/roles/k8s/monitor-bridge/tests/test_check_speedtest.py 10
+ansible/roles/k8s/monitor-bridge/tests/test_check_staging_backfill.py 1
+ansible/roles/k8s/monitor-bridge/tests/test_check_streaks.py 14
+ansible/roles/k8s/monitor-bridge/tests/test_check_ups.py 4
+ansible/roles/k8s/monitor-bridge/tests/test_host_temp.py 1
+ansible/roles/k8s/qbittorrent/tests/test_apply_prefs.py 1
+ansible/roles/setup/fake_remux/tests/test_fake_remux_replace_logic.py 2
+ansible/roles/setup/gitops_deploy/tests/conftest.py 10
+ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_alert_channels.py 2
+ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_phases.py 1
+ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_subprocess.py 1
+ansible/roles/setup/k3s/tests/test_live_drift_check.py 3
+ansible/roles/setup/k3s/tests/test_longhorn_reap_delete_transport.py 5
+ansible/roles/setup/renovate_agent/tests/test_agent_logic.py 3
+ansible/roles/setup/renovate_agent/tests/test_prepare_worktree.py 3
+ansible/roles/setup/renovate_notify/tests/test_pending_soak_wiring.py 6
+scripts/availability_bots/tests/test_availability_bots.py 4
+scripts/deploy_tools/tests/conftest.py 1
+scripts/deploy_tools/tests/test_await_ci.py 4
+scripts/deploy_tools/tests/test_backfill_staging_gate.py 15
+scripts/deploy_tools/tests/test_deploy_detach_notify.py 17
+scripts/deploy_tools/tests/test_deploy_tags.py 7
+scripts/deploy_tools/tests/test_deploy_tags_blockers.py 2
+scripts/deploy_tools/tests/test_land_pipeline.py 3
+scripts/deploy_tools/tests/test_land_tags.py 5
+scripts/deploy_tools/tests/test_land_tools.py 2
+scripts/deploy_tools/tests/test_staging_gate.py 3
+scripts/deploy_tools/tests/test_tick_ledger_report.py 3
+scripts/dev/tests/test_findings.py 41
+scripts/dev/tests/test_memory_survey.py 3
+scripts/diagnostics/tests/test_postflight.py 16
+scripts/diagnostics/tests/test_probe.py 7
+scripts/diagnostics/tests/test_probe_alerts.py 8
+scripts/diagnostics/tests/test_probe_b2_ledger.py 7
+scripts/diagnostics/tests/test_probe_ha.py 3
+scripts/diagnostics/tests/test_probe_health.py 3
+scripts/diagnostics/tests/test_probe_monitors.py 4
+scripts/diagnostics/tests/test_probe_pi_plane.py 5
+scripts/diagnostics/tests/test_ui_smoke_helpers.py 2
+scripts/docs/tests/test_build_docs.py 13
+scripts/docs/tests/test_gen_reference_backlog.py 1
+scripts/home_assistant/tests/test_ha_state_checks.py 2
+scripts/home_assistant/tests/test_ha_state_model.py 3
+scripts/infra_map/tests/test_gen_infra_map.py 1
+scripts/infra_map/tests/test_infra_map_live.py 10
+scripts/lib/tests/test_gh.py 4
+scripts/secrets_mgmt/tests/test_secret_rotation.py 8
+scripts/validate/tests/test_validate_k8s_manifests.py 1
+scripts/validate/tests/test_validate_shell_templates.py 1
+scripts/validate/tests/test_validate_unit_templates.py 4

@@ -201,7 +201,18 @@ def discover_docs() -> list[Path]:
 
 
 def is_test_file(path: Path) -> bool:
-    return path.name.startswith("test_") or path.name == "conftest.py"
+    """Whether `path` is test code, by basename or by living under a `tests/` directory.
+
+    Pass a path relative to the tree being judged (a repo-relative path, or one relative to
+    the `root` a caller is walking). The directory clause reads every component, so an
+    absolute path could match a `tests` component that is part of the checkout's own location
+    rather than of the repo layout.
+    """
+    return (
+        path.name.startswith("test_")
+        or path.name == "conftest.py"
+        or "tests" in path.parts[:-1]
+    )
 
 
 def module_id(path: Path, root: Path) -> str:
@@ -218,7 +229,7 @@ def python_modules(root: Path) -> dict[str, Path]:
     return {
         module_id(p, root): p
         for p in sorted(root.rglob("*.py"))
-        if "__pycache__" not in p.parts and not is_test_file(p)
+        if "__pycache__" not in p.parts and not is_test_file(p.relative_to(root))
     }
 
 

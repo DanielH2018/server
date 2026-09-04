@@ -1,0 +1,61 @@
+# Modules that were already over their line cap when the ratchet landed (2026-09-04).
+#
+# Format: `<repo-relative-path> <max_lines>`, one line per file, in `LC_ALL=C sort` order
+# (codepoint order, which is what Python's own `sorted()` gives). Caps are 600 lines for a
+# module and 500 for a test module; a line here raises the bar for that one file. An entry may
+# only fall or be deleted -- ansible/tests/repo/test_module_length_ratchet.py enforces that
+# against origin/master. A file back at or under its cap must lose its line; the list records
+# remaining work only.
+#
+# A path may be ADDED only when origin/master does not track the file (it is new, or renamed)
+# or when the same commit changes the guard itself (a widened rule finds files that were
+# always over). Otherwise split the file rather than listing it.
+#
+# Line count is `wc -l` semantics -- the number of newline characters:
+#   wc -l <path>
+.claude/hooks/auto-approve-readonly.py 931
+ansible/roles/k8s/artifacts/files/artifact_server.py 805
+ansible/roles/k8s/artifacts/tests/test_artifact_server.py 519
+ansible/roles/k8s/monitor-bridge/files/bridge/config.py 914
+ansible/roles/k8s/monitor-bridge/files/check.py 682
+ansible/roles/k8s/monitor-bridge/tests/test_check_gates.py 857
+ansible/roles/k8s/monitor-bridge/tests/test_check_service.py 600
+ansible/roles/k8s/monitor-bridge/tests/test_host_temp.py 634
+ansible/roles/setup/fake_remux/tests/test_fake_remux_replace_logic.py 582
+ansible/roles/setup/gitops_deploy/files/deploy_io.py 999
+ansible/roles/setup/gitops_deploy/files/gitops_deploy.py 1380
+ansible/roles/setup/gitops_deploy/tests/test_deploy_changes_planes.py 538
+ansible/roles/setup/k3s/tests/test_longhorn_backup_health.py 1002
+ansible/roles/setup/k3s/tests/test_longhorn_reap_entrypoints.py 854
+ansible/roles/setup/k3s/tests/test_longhorn_reap_logic.py 701
+ansible/roles/setup/renovate_notify/files/notify_logic.py 605
+ansible/roles/setup/renovate_notify/tests/test_notify_logic.py 559
+ansible/tests/deploy/test_cronjob_gate_decision.py 562
+ansible/tests/deploy/test_k8s_dry_run.py 575
+ansible/tests/deploy/test_setup_render_manifest.py 515
+ansible/tests/longhorn/test_longhorn_restore_drill.py 516
+ansible/tests/repo/test_documented_paths_exist.py 553
+ansible/tests/setup/test_cron_scripts_publish_via_pr.py 690
+ansible/tests/staging/test_staging_manifests_have_their_variables.py 615
+scripts/deploy_tools/tests/test_deploy_detach_notify.py 511
+scripts/deploy_tools/tests/test_land_tags.py 684
+scripts/deploy_tools/tests/test_publish_pr.py 514
+scripts/dev/findings.py 874
+scripts/dev/tests/test_findings.py 868
+scripts/diagnostics/probe.py 697
+scripts/diagnostics/probe_lib/health.py 938
+scripts/diagnostics/probe_lib/longhorn.py 630
+scripts/diagnostics/tests/test_probe.py 506
+scripts/diagnostics/tests/test_probe_health.py 998
+scripts/diagnostics/tests/test_ui_smoke.py 649
+scripts/docs/gen_doc_fragments.py 640
+scripts/docs/reference/scripts.py 697
+scripts/docs/service_catalog.py 655
+scripts/docs/tests/test_gen_reference_scripts.py 576
+scripts/docs/tests/test_service_catalog.py 506
+scripts/infra_map/render.py 759
+scripts/secrets_mgmt/secret_rotation.py 980
+scripts/secrets_mgmt/tests/test_secret_rotation.py 656
+scripts/validate/k8s_manifests.py 1006
+scripts/validate/tests/test_validate_k8s_manifests.py 691
+scripts/validate/tests/test_validate_shell_templates.py 1045
