@@ -29,10 +29,16 @@ def _cp(rc: int = 0, out: str = "", err: str = "") -> subprocess.CompletedProces
 
 
 class Recorder:
-    """A Tools pair that answers from a per-command table and records every call in order."""
+    """A Tools pair that answers from a per-command table and records every call in order.
+
+    An answer may be an exception instance instead of a completed process, which the runner
+    raises. That is the only way to reach the timeout path: ``lib.gh.gh`` bounds every call at
+    60s, and a stub that actually sleeps past it is not a test anyone can run.
+    """
 
     def __init__(
-        self, answers: dict[str, subprocess.CompletedProcess[str]] | None = None
+        self,
+        answers: dict[str, subprocess.CompletedProcess[str] | Exception] | None = None,
     ):
         self.answers = answers or {}
         self.calls: list[tuple[str, ...]] = []
@@ -41,12 +47,17 @@ class Recorder:
         self.calls.append((tool, *args))
         # Keyed on the verb: "git push", or "gh pr create" since every gh call starts with "pr".
         key = " ".join((tool, *args[: 2 if tool == "gh" else 1]))
-        return self.answers.get(key, _cp())
+        answer = self.answers.get(key, _cp())
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
 
     def tools(self) -> publish_pr.Tools:
+        # **kw absorbs the `timeout=` the ls-remote pre-flight passes; the stub never blocks,
+        # so the value is nothing to record.
         return publish_pr.Tools(
-            git=lambda *a: self._run("git", *a),
-            gh=lambda *a: self._run("gh", *a),
+            git=lambda *a, **kw: self._run("git", *a),
+            gh=lambda *a, **kw: self._run("gh", *a),
         )
 
 
@@ -187,6 +198,161 @@ def test_open_pr_returns_the_first_of_several():
     )
 
 
+# --- A `gh` timeout is a state, not a traceback ------------------------------------------------
+#
+# lib.gh.gh bounds every call at 60s where the inline shell the crons carried had no bound at
+# all, so TimeoutExpired is a state these callers did not have before. It is reachable in normal
+# operation: the anonymous GitHub quota is 60/hour and shared per host. Both `gh` calls in
+# publish() sit after the push and after `reset --hard HEAD~1`, so a raise there exits 1 with a
+# traceback -- the code that promises the commit is still local and origin is untouched.
+
+TIMEOUT = subprocess.TimeoutExpired(cmd=["gh"], timeout=60.0)
+
+
+def test_a_timeout_creating_the_pr_is_exit_2_not_a_raise():
+    rec = Recorder({"gh pr create": TIMEOUT})
+    out = _publish(rec)
+    assert out.rc == publish_pr.RC_PUSHED_NO_PR
+    assert out.message.startswith(f"{BRANCH} published but PR creation failed")
+    assert "timed out" in out.message
+    assert ("git", "push", "-u", "origin", BRANCH) in rec.calls, (
+        "the branch is on origin, which is what makes exit 2 the honest code"
+    )
+
+
+def test_a_timeout_enabling_auto_merge_is_exit_2_not_a_raise():
+    rec = Recorder({"gh pr merge": TIMEOUT})
+    out = _publish(rec)
+    assert out.rc == publish_pr.RC_PUSHED_NO_PR
+    assert "auto-merge could not be enabled" in out.message
+    assert "timed out" in out.message
+
+
+def test_a_timeout_listing_prs_fails_closed():
+    """`""` would let the caller's `[ -n "$OPEN_PR" ]` guard publish a second branch."""
+    rec = Recorder({"gh pr list": TIMEOUT})
+    assert (
+        publish_pr.open_pr("evals-history/", rec.tools()) == publish_pr.OPEN_PR_UNKNOWN
+    )
+    assert publish_pr.OPEN_PR_UNKNOWN != ""
+
+
+# --- unlanded: is a previous run's branch still on origin --------------------------------------
+
+_HEAD = "9f8e7d6\trefs/heads/docs-refresh/2026-09-03-0600"
+
+
+def _unlanded(rec: Recorder) -> publish_pr.Outcome:
+    return publish_pr.unlanded("docs-refresh/", rec.tools())
+
+
+def test_no_remote_head_means_nothing_is_unlanded():
+    out = _unlanded(Recorder({"git ls-remote": _cp(0, out="")}))
+    assert out.rc == publish_pr.RC_NOTHING_UNLANDED
+    assert out.message == ""
+
+
+def test_an_unreachable_origin_fails_closed():
+    """`|| true` here would read an unreachable origin as "no stale branch" and publish."""
+    rec = Recorder(
+        {"git ls-remote": _cp(128, err="Could not resolve host: github.com")}
+    )
+    out = _unlanded(rec)
+    assert out.rc == publish_pr.RC_ORIGIN_UNREADABLE
+    assert "Could not resolve host" in out.message
+    assert not any(c[0] == "gh" for c in rec.calls), (
+        "the PR lookup must not run when origin could not be read"
+    )
+
+
+def test_a_remote_head_with_an_open_pr_is_the_benign_code():
+    rec = Recorder(
+        {
+            "git ls-remote": _cp(0, out=_HEAD),
+            "gh pr list": _cp(
+                0, out='[{"number": 41, "headRefName": "docs-refresh/2026-09-03-0600"}]'
+            ),
+        }
+    )
+    out = _unlanded(rec)
+    assert out.rc == publish_pr.RC_UNLANDED_PR_OPEN
+    assert "PR #41" in out.message
+    assert out.branch == "docs-refresh/2026-09-03-0600"
+
+
+def test_a_remote_head_with_no_open_pr_is_the_stuck_code():
+    """The state a failed `gh pr create` leaves: a branch on origin, no PR, no local trace."""
+    rec = Recorder({"git ls-remote": _cp(0, out=_HEAD), "gh pr list": _cp(0, out="[]")})
+    out = _unlanded(rec)
+    assert out.rc == publish_pr.RC_UNLANDED_NO_PR
+    assert "NO open PR" in out.message
+
+
+def test_an_open_pr_on_a_sibling_branch_does_not_clear_an_orphan():
+    """Two heads under one prefix is the state issue #1066 says orphans accumulate into.
+
+    Matching the PR by prefix would return the sibling's number, downgrade the stuck state to
+    the benign one, and name the wrong branch while doing it.
+    """
+    rec = Recorder(
+        {
+            "git ls-remote": _cp(0, out=_HEAD),
+            "gh pr list": _cp(
+                0, out='[{"number": 41, "headRefName": "docs-refresh/2026-09-04-1800"}]'
+            ),
+        }
+    )
+    out = _unlanded(rec)
+    assert out.rc == publish_pr.RC_UNLANDED_NO_PR
+    assert out.branch == "docs-refresh/2026-09-03-0600"
+    assert "NO open PR" in out.message
+
+
+def test_an_origin_that_never_answers_is_bounded_and_fails_closed():
+    """`lib.git.git` has no default timeout and this runs under the git-tree lock.
+
+    An unbounded ls-remote against a blackholed origin parks the GitOps deployer, which waits
+    `flock -w 180`. A raise here would also reach Kuma as a flattened Python traceback.
+    """
+    rec = Recorder(
+        {"git ls-remote": subprocess.TimeoutExpired(cmd=["git"], timeout=30.0)}
+    )
+    out = _unlanded(rec)
+    assert out.rc == publish_pr.RC_ORIGIN_UNREADABLE
+    assert "did not answer within 30s" in out.message
+    assert not any(c[0] == "gh" for c in rec.calls)
+
+
+def test_the_pre_flight_bounds_its_own_ls_remote():
+    """The bound must reach the transport, not just exist as a constant."""
+    seen: dict[str, object] = {}
+
+    def git(*args: str, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        seen[args[0]] = kwargs.get("timeout")
+        return _cp()
+
+    publish_pr.unlanded("t/", publish_pr.Tools(git=git, gh=lambda *a, **kw: _cp()))
+    assert seen["ls-remote"] == publish_pr.LS_REMOTE_TIMEOUT_S
+
+
+def test_a_pr_lookup_that_times_out_cannot_clear_the_branch():
+    """ls-remote decides; the PR number only labels. A `gh` failure must not read as clean."""
+    rec = Recorder({"git ls-remote": _cp(0, out=_HEAD), "gh pr list": TIMEOUT})
+    out = _unlanded(rec)
+    assert out.rc == publish_pr.RC_UNLANDED_NO_PR
+    assert "did not answer" in out.message
+
+
+def test_the_clean_path_spends_no_gh_call():
+    """The quota that makes `gh` time out is 60/hour and shared per host.
+
+    ls-remote goes over git's own credential path, so the common case costs nothing from it.
+    """
+    rec = Recorder({"git ls-remote": _cp(0, out="")})
+    _unlanded(rec)
+    assert not any(c[0] == "gh" for c in rec.calls)
+
+
 # --- Transport pin ----------------------------------------------------------------------------
 #
 # The tests above never leave Python. This one runs the script the way the cron does, with a
@@ -217,7 +383,11 @@ def _run_cli(
     log = tmp_path / "calls.log"
     _stub(bin_dir, "git", log, fail_on)
     _stub(bin_dir, "gh", log, fail_on)
-    env = dict(os.environ, PATH=f"{bin_dir}:{os.environ['PATH']}")
+    # Every GIT_* stripped. The stubs above answer instead of git, but an inherited GIT_DIR
+    # from a hook or a parent worktree points at a REAL repository, and one of these arguments
+    # is `reset --hard`. A git-driving fixture under prek has already written the real repo once.
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    env["PATH"] = f"{bin_dir}:{os.environ['PATH']}"
     proc = subprocess.run(
         [sys.executable, str(SCRIPT), "--repo", str(tmp_path), *args],
         env=env,
@@ -263,6 +433,48 @@ def test_cli_publish_exit_code_reaches_the_shell(tmp_path):
     assert proc.returncode == publish_pr.RC_STILL_LOCAL
     assert "stub refused" in proc.stdout
     assert not any(c.startswith("gh") for c in calls)
+
+
+def test_cli_unlanded_is_quiet_and_gh_free_when_origin_has_no_head(tmp_path):
+    proc, calls = _run_cli(tmp_path, "unlanded", "--prefix", "t/")
+    assert proc.returncode == publish_pr.RC_NOTHING_UNLANDED, proc.stderr
+    assert proc.stdout == ""
+    assert calls == ["git ls-remote --heads origin t/*"], calls
+
+
+def test_cli_unlanded_exit_code_reaches_the_shell(tmp_path):
+    """rc 3 is what makes the templates report down rather than skipping quietly."""
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    for name, body in (
+        ("git", 'printf "9f8e7d6\\trefs/heads/t/2026-09-03-0600\\n"\n'),
+        ("gh", "printf '[]'\n"),
+    ):
+        stub = bin_dir / name
+        stub.write_text(f"#!/usr/bin/env bash\n{body}exit 0\n")
+        stub.chmod(stub.stat().st_mode | stat.S_IEXEC)
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    env["PATH"] = f"{bin_dir}:{os.environ['PATH']}"
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo",
+            str(tmp_path),
+            "unlanded",
+            "--prefix",
+            "t/",
+        ],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == publish_pr.RC_UNLANDED_NO_PR, proc.stderr
+    assert proc.stdout.startswith(
+        "branch t/2026-09-03-0600 is on origin with NO open PR"
+    )
+    assert "\n" not in proc.stdout.strip(), "the templates alert with this verbatim"
 
 
 def test_cli_body_file_is_read(tmp_path):

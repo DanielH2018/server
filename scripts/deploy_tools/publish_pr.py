@@ -23,7 +23,25 @@ tree is in:
 ``open-pr`` prints the number of the first open PR whose head starts with the prefix, or
 nothing. A ``gh`` failure prints nothing, exactly as the inline ``|| true`` did: the guard
 is "do not stack on an open PR", and an unreachable GitHub is reported by the publish step
-that follows, not here.
+that follows, not here. A ``gh`` TIMEOUT is the one exception and prints ``unknown``, which
+is non-empty so a caller gating on ``[ -n "$OPEN_PR" ]`` refuses rather than publishing a
+second branch -- see ``OPEN_PR_UNKNOWN``. That sentinel is load-bearing inside ``unlanded``,
+which is what the three crons call now; the subcommand stays because the lookup on its own
+is the useful thing to run by hand.
+
+``unlanded`` answers "is there work from a previous run that never landed", which is the
+guard the three crons need BEFORE they regenerate and commit. It reads origin rather than
+the open-PR list because ``gh pr create`` runs after the push: a create failure leaves
+``<prefix><stamp>`` on origin with no PR and no local trace at all, and an open-PR check
+passes cleanly in exactly that state. Merged branches are deleted on this repo
+(``deleteBranchOnMerge``), so a surviving head always means unlanded work. Its exit codes:
+
+  0  nothing unlanded; it prints nothing
+  1  origin could not be read -- fail closed, because ``|| true`` on an unreachable origin
+     reads as "no stale branch" and publishes straight into the state this refuses
+  2  a branch is on origin and its PR is open -- benign, it is waiting on CI
+  3  a branch is on origin with NO open PR -- the state a create failure leaves behind, and
+     the one a human has to clear
 
 Run: uv run pytest scripts/deploy_tools/tests/test_publish_pr.py
 """
@@ -54,6 +72,28 @@ RC_PUBLISHED = 0
 RC_STILL_LOCAL = 1
 RC_PUSHED_NO_PR = 2
 
+RC_NOTHING_UNLANDED = 0
+RC_ORIGIN_UNREADABLE = 1
+RC_UNLANDED_PR_OPEN = 2
+RC_UNLANDED_NO_PR = 3
+
+# What a PR lookup reports when it timed out. Non-empty on purpose: `unlanded` and the
+# `open-pr` shell idiom both read an empty answer as "no PR", which would let a run publish a
+# second branch on the strength of an answer GitHub never gave.
+OPEN_PR_UNKNOWN = "unknown"
+
+# `lib.git.git` has no default timeout, and the callers hold /var/lock/server-git-tree.lock
+# while this runs -- the GitOps deployer waits only `flock -w 180` for that lock. git sets no
+# connect timeout of its own, so a blackholed origin would park the deployer rather than skip a
+# run. 30s is well under both that wait and the 60s bound `lib.gh.gh` puts on the PR lookup
+# beside it.
+LS_REMOTE_TIMEOUT_S = 30.0
+
+# The shell's convention for "the command was killed on a timeout". `lib.gh.gh` bounds every
+# call at 60s where the inline shell these crons carried had no bound at all, so this is a
+# state the callers did not have before and must not meet as a traceback.
+GH_TIMEOUT_RC = 124
+
 Runner = Callable[..., subprocess.CompletedProcess[str]]
 
 
@@ -66,8 +106,10 @@ class Tools:
 
 
 def real_tools(repo: Path) -> Tools:
-    def git(*args: str) -> subprocess.CompletedProcess[str]:
-        return git_mod.git(*args, cwd=repo, check=False)
+    def git(
+        *args: str, timeout: float | None = None
+    ) -> subprocess.CompletedProcess[str]:
+        return git_mod.git(*args, cwd=repo, check=False, timeout=timeout)
 
     def gh(*args: str) -> subprocess.CompletedProcess[str]:
         return gh_mod.gh(*args, check=False)
@@ -86,6 +128,25 @@ def failure_tail(proc: subprocess.CompletedProcess[str]) -> str:
     """The last ``FAILURE_TAIL`` characters of a failed command's output, on one line."""
     text = " ".join((proc.stdout or "").split() + (proc.stderr or "").split())
     return text[-FAILURE_TAIL:]
+
+
+def run_gh(tools: Tools, *args: str) -> subprocess.CompletedProcess[str]:
+    """``tools.gh(*args)`` with a timeout reported as a failed process rather than a raise.
+
+    Both ``gh`` calls in ``publish`` sit AFTER the push and after ``reset --hard HEAD~1``, so
+    the true state at a timeout is branch-on-origin / commit-gone / no-PR -- exit 2. A raise
+    propagates out of ``main`` as exit 1 with a traceback, which is the code that promises the
+    commit is still local and there is nothing to clean up on origin.
+    """
+    try:
+        return tools.gh(*args)
+    except subprocess.TimeoutExpired as exc:
+        return subprocess.CompletedProcess(
+            args=["gh", *args],
+            returncode=GH_TIMEOUT_RC,
+            stdout="",
+            stderr=f"gh {' '.join(args[:2])} timed out after {exc.timeout}s",
+        )
 
 
 def branch_name(prefix: str, now: datetime | None = None) -> str:
@@ -130,7 +191,9 @@ def publish(
     tools.git("reset", "--hard", "HEAD~1")
     tools.git("branch", "-D", branch)
 
-    proc = tools.gh("pr", "create", "--head", branch, "--title", title, "--body", body)
+    proc = run_gh(
+        tools, "pr", "create", "--head", branch, "--title", title, "--body", body
+    )
     if proc.returncode != 0:
         return Outcome(
             RC_PUSHED_NO_PR,
@@ -138,7 +201,7 @@ def publish(
             branch,
         )
 
-    proc = tools.gh("pr", "merge", "--auto", "--squash", "--delete-branch", branch)
+    proc = run_gh(tools, "pr", "merge", "--auto", "--squash", "--delete-branch", branch)
     if proc.returncode != 0:
         return Outcome(
             RC_PUSHED_NO_PR,
@@ -149,9 +212,26 @@ def publish(
     return Outcome(RC_PUBLISHED, f"PR opened for {branch} with auto-merge", branch)
 
 
-def open_pr(prefix: str, tools: Tools) -> str:
-    """The number of the first open PR whose head branch starts with ``prefix``, else ``""``."""
-    proc = tools.gh("pr", "list", "--state", "open", "--json", "number,headRefName")
+def open_pr(prefix: str, tools: Tools, branch: str = "") -> str:
+    """The number of the first open PR whose head branch starts with ``prefix``, else ``""``.
+
+    Args:
+      prefix: the branch prefix to match a head against.
+      tools: the process boundaries.
+      branch: when given, require this EXACT head instead of the prefix. ``unlanded`` needs
+        that: several heads can sit under one prefix, and a PR open on a different one would
+        otherwise clear an orphan and name the wrong branch in the message.
+
+    Returns:
+      The PR number as a string, ``""`` when nothing matched, or ``OPEN_PR_UNKNOWN`` when the
+      lookup timed out. The anonymous GitHub quota is 60/hour and shared per host, so a slow
+      ``pr list`` is reachable in normal operation, and every caller reads an empty answer as
+      "no PR is open, publish another branch".
+    """
+    try:
+        proc = tools.gh("pr", "list", "--state", "open", "--json", "number,headRefName")
+    except subprocess.TimeoutExpired:
+        return OPEN_PR_UNKNOWN
     if proc.returncode != 0:
         return ""
     try:
@@ -159,9 +239,68 @@ def open_pr(prefix: str, tools: Tools) -> str:
     except json.JSONDecodeError:
         return ""
     for pr in prs:
-        if str(pr.get("headRefName", "")).startswith(prefix):
+        head = str(pr.get("headRefName", ""))
+        matched = head == branch if branch else head.startswith(prefix)
+        if matched:
             return str(pr["number"])
     return ""
+
+
+def unlanded(prefix: str, tools: Tools) -> Outcome:
+    """Whether a previous run's branch is still on origin, and whether it has an open PR.
+
+    ``git ls-remote`` decides; the PR number only labels the finding. That order is
+    deliberate twice over. ``ls-remote`` authenticates over git's own credential path rather
+    than through ``gh``, so the common (clean) case spends nothing from the shared 60/hour
+    GitHub quota that makes ``gh`` time out in the first place. And the ABSENCE of a PR is
+    the interesting case, so a PR lookup that fails must not be able to clear the branch.
+    """
+    try:
+        proc = tools.git(
+            "ls-remote",
+            "--heads",
+            "origin",
+            f"{prefix}*",
+            timeout=LS_REMOTE_TIMEOUT_S,
+        )
+    except subprocess.TimeoutExpired:
+        return Outcome(
+            RC_ORIGIN_UNREADABLE,
+            f"origin did not answer within {LS_REMOTE_TIMEOUT_S:.0f}s when checking for an "
+            f"unlanded {prefix}* branch",
+            "",
+        )
+    if proc.returncode != 0:
+        return Outcome(
+            RC_ORIGIN_UNREADABLE,
+            f"cannot reach origin to check for an unlanded {prefix}* branch: {failure_tail(proc)}",
+            "",
+        )
+    heads = [line for line in (proc.stdout or "").splitlines() if line.strip()]
+    if not heads:
+        return Outcome(RC_NOTHING_UNLANDED, "", "")
+
+    branch = heads[0].split("refs/heads/", 1)[-1].strip()
+    number = open_pr(prefix, tools, branch=branch)
+    if number == OPEN_PR_UNKNOWN:
+        return Outcome(
+            RC_UNLANDED_NO_PR,
+            f"branch {branch} is on origin and the open-PR lookup did not answer; treating "
+            f"it as unpublished. Check it and open the PR by hand if it has none",
+            branch,
+        )
+    if number:
+        return Outcome(
+            RC_UNLANDED_PR_OPEN,
+            f"PR #{number} from a previous run is still open ({branch})",
+            branch,
+        )
+    return Outcome(
+        RC_UNLANDED_NO_PR,
+        f"branch {branch} is on origin with NO open PR — a previous run published it but "
+        f"never opened one, and the local tree cannot show this. Open the PR by hand",
+        branch,
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -189,6 +328,11 @@ def build_parser() -> argparse.ArgumentParser:
         "open-pr", help="print the number of an open PR under the prefix"
     )
     opn.add_argument("--prefix", required=True)
+
+    unl = sub.add_parser(
+        "unlanded", help="report a previous run's branch still sitting on origin"
+    )
+    unl.add_argument("--prefix", required=True)
     return parser
 
 
@@ -198,6 +342,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "open-pr":
         print(open_pr(args.prefix, tools), end="")
         return 0
+    if args.command == "unlanded":
+        outcome = unlanded(args.prefix, tools)
+        if outcome.message:
+            print(outcome.message)
+        return outcome.rc
     body = args.body if args.body is not None else args.body_file.read_text()
     outcome = publish(args.prefix, args.title, body, tools)
     print(outcome.message)
