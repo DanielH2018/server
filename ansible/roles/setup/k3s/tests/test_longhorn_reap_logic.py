@@ -89,6 +89,42 @@ def test_abort_reason_is_none_with_no_volumes_at_all():
     assert logic.abort_reason(volume_count=0, owner_count=0) is None
 
 
+def test_abort_reason_fires_when_the_recurringjob_list_is_empty_but_volumes_carry_the_label():
+    # snapshot_owner_map records an entry for every volume with a group label EVEN WHEN
+    # group_job is empty (the value is just ""), so owner_count alone passes the check above --
+    # verified: with recurringjobs.longhorn.io returning [], every current-tier snapshot on a
+    # labelled volume misread as stranded and 3 were deleted on a dry run before this check.
+    reason = logic.abort_reason(
+        volume_count=3, owner_count=3, recurringjob_count=0, volumes_with_group_label=3
+    )
+    assert reason is not None
+    assert "ABORT" in reason
+    assert "3 volume" in reason
+
+
+def test_abort_reason_is_clean_when_recurringjobs_resolve_normally():
+    assert (
+        logic.abort_reason(
+            volume_count=3,
+            owner_count=3,
+            recurringjob_count=2,
+            volumes_with_group_label=3,
+        )
+        is None
+    )
+
+
+def test_abort_reason_skips_the_recurringjob_check_for_the_backups_reaper():
+    # The backups reaper never passes these kwargs -- it has no RecurringJob-CR indirection to
+    # break -- so the default None must never accidentally satisfy `recurringjob_count == 0`.
+    assert logic.abort_reason(volume_count=3, owner_count=3) is None
+
+
+def test_volumes_with_group_label_counts_only_labelled_volumes():
+    volumes = [_volume("a", group="weekly-backup-d3"), _volume("b", group=None)]
+    assert logic.volumes_with_group_label(volumes) == 1
+
+
 # ── resolve_kubeconfig ───────────────────────────────────────────────────────────────────
 
 
@@ -176,22 +212,48 @@ def test_floor1_is_clean_when_current_tier_has_produced_nothing():
 
 
 def test_a_hand_triggered_probe_backup_cannot_stand_in_as_tier_evidence():
-    # wg-easy-config's recorded 3-of-5 case: one hand-triggered probe backup (no RecurringJob
-    # label) must not count toward CURRENT_TIER_COUNT and must never itself be a candidate.
-    # Without the exclusion, that single probe backup satisfies `JOB == OWNER[$VOL]` under the
-    # empty-string comparison and disarms FLOOR 1 for every real stray behind it.
-    owner = {"wg-easy-config": "weekly-backup-d3"}
+    """wg-easy-config's recorded 3-of-5 incident, reproduced with the fixture that can actually
+    catch a regression of it.
+
+    The jsonpath bug's effect was an EMPTY ownership map (OWNER_COUNT==0 for every volume), so
+    `owner.get(vol, "")` returned "" for wg-easy-config specifically -- not a mismatched real
+    group name. A fixture with a POPULATED owner map (e.g. `{"wg-easy-config":
+    "weekly-backup-d3"}`) cannot exercise the danger: an empty probe JOB never equals a real
+    group name either way, so a regression that dropped the `if not job: continue` skip would
+    still pass a populated-owner fixture by coincidence. This one uses owner={}, matching what
+    the jsonpath bug actually produced, so the probe's job=="" DOES equal owner.get(vol,"")=="" --
+    which is exactly the condition the skip has to guard against.
+    """
+    owner: dict[
+        str, str
+    ] = {}  # wg-easy-config resolves to no owner, as the jsonpath bug did
     backups = [
         _backup("probe", "wg-easy-config", "2026-08-19T00:00:00Z", job=""),
-        _backup("stray-2", "wg-easy-config", "2026-08-15T00:00:00Z", "daily-backup"),
-        _backup("stray-1", "wg-easy-config", "2026-08-14T00:00:00Z", "daily-backup"),
+        _backup(
+            "stray-newest", "wg-easy-config", "2026-08-16T00:00:00Z", "daily-backup"
+        ),
+        _backup("stray-b", "wg-easy-config", "2026-08-15T00:00:00Z", "daily-backup"),
+        _backup("stray-c", "wg-easy-config", "2026-08-14T00:00:00Z", "daily-backup"),
+        _backup(
+            "stray-oldest", "wg-easy-config", "2026-08-13T00:00:00Z", "daily-backup"
+        ),
     ]
     result = logic.classify_backups(backups, owner, existing_volumes={"wg-easy-config"})
+
+    # Correct: the probe is excluded from the counting pass (its job is empty), so
+    # CURRENT_TIER_COUNT stays 0, FLOOR 1 fires, and every real stray is kept.
     assert result.candidates == []
     assert "probe" not in {name for name, *_ in result.kept}
     assert "probe" not in {name for name, *_ in result.candidates}
     kept = {name for name, *_ in result.kept}
-    assert kept == {"stray-2", "stray-1"}  # both kept: tier has produced no real backup
+    assert kept == {"stray-newest", "stray-b", "stray-c", "stray-oldest"}
+
+    # Named for the record, not asserted against a second implementation: drop the `if not job:
+    # continue` skip from the counting pass (`labelled = completed` instead of filtering on
+    # JOB) and the probe's job="" satisfies `job == owner.get(vol, "")` (both ""), setting
+    # CURRENT_TIER_COUNT["wg-easy-config"] = 1. FLOOR 1 then stands down, FLOOR 2 keeps only
+    # stray-newest, and stray-b/stray-c/stray-oldest — 3 of the volume's 5 backups — become
+    # reapable. That is the exact regression `result.candidates == []` above catches.
 
 
 def test_non_completed_backups_are_never_bucketed():
@@ -214,6 +276,27 @@ def test_backups_of_a_deleted_volume_land_in_orphaned_not_candidates():
     backups = [_backup("stray", "gone-vol", "2026-08-14T00:00:00Z", "daily-backup")]
     result = logic.classify_backups(backups, owner, existing_volumes=set())
     assert result.candidates == []
+    assert [n for n, *_ in result.orphaned] == ["stray"]
+
+
+def test_a_backup_with_an_empty_volumename_is_skipped_entirely():
+    # Without the guard, an empty volumeName is never in existing_volumes, so a completed
+    # backup with one lands in .orphaned and is deleted under --apply-deleted-volumes for an
+    # association that was never real.
+    result = logic.classify_backups(
+        [_backup("weird", "", "2026-08-14T00:00:00Z", "daily-backup")],
+        owner={},
+        existing_volumes=set(),
+    )
+    assert result.candidates == result.kept == result.orphaned == []
+
+
+def test_a_backup_with_a_real_volumename_still_classifies_normally():
+    result = logic.classify_backups(
+        [_backup("stray", "gone-vol", "2026-08-14T00:00:00Z", "daily-backup")],
+        owner={},
+        existing_volumes=set(),
+    )
     assert [n for n, *_ in result.orphaned] == ["stray"]
 
 
@@ -245,6 +328,31 @@ def test_creation_order_decides_the_floor_not_listing_order():
 _now = logic.parse_rfc3339_epoch("2026-08-20T00:00:00Z")
 assert _now is not None
 _NOW: float = _now
+
+
+def test_a_snapshot_with_an_empty_volume_is_skipped_entirely():
+    # Without the guard, an empty .spec.volume reaches .candidates and a later purge POSTs to
+    # /v1/volumes/ (empty path segment) for it.
+    result = logic.classify_snapshots(
+        [_snapshot("weird", "", "2026-08-01T00:00:00Z", job="daily-backup")],
+        owner={},
+        attached={""},
+        min_age_days=3,
+        now_epoch=_NOW,
+    )
+    assert result.candidates == result.kept == []
+
+
+def test_a_snapshot_with_a_real_volume_still_classifies_normally():
+    owner = {"vol-a": ""}
+    snaps = [
+        _snapshot("newest", "vol-a", "2026-08-19T00:00:00Z"),
+        _snapshot("stale", "vol-a", "2026-08-01T00:00:00Z", job="daily-backup"),
+    ]
+    result = logic.classify_snapshots(
+        snaps, owner, attached={"vol-a"}, min_age_days=3, now_epoch=_NOW
+    )
+    assert [n for n, *_ in result.candidates] == ["stale"]
 
 
 def test_the_newest_snapshot_is_never_a_candidate_whoever_made_it():

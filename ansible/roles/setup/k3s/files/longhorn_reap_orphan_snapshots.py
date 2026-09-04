@@ -21,6 +21,18 @@ every trim of every volume forever. Operator decision 2026-08-16: leave it false
 specific, identified, stale snapshots instead. A snapshot delete is LOCAL ONLY; B2 backups are
 untouched.
 
+WHY DELETES BYPASS host_lib.kubectl_runner. Every READ here goes through it (30s cap, fine for
+a `get`). A delete does not: `--timeout=%s % DELETE_TIMEOUT` (120s by default) is the SERVER-side
+wait kubectl itself honours, and a 30s CLIENT-side subprocess cap kills the process long before
+that can ever return -- making the templated knob unreachable. `_delete_snapshot` below shells
+out directly with its own timeout, sized to outlive `DELETE_TIMEOUT` by a margin.
+
+A purge POST that gets back a non-2xx now reports failure (`urlopen` raises `HTTPError` on
+4xx/5xx); bash's `curl` without `-f` printed nothing and returned 0 either way, so a rejected
+purge request used to look identical to a successful one. Deliberate, not a gap: the whole
+point of the WARNING path a few lines down is telling the operator reclamation didn't happen,
+and a curl-style silent "success" on an actual rejection is the opposite of that.
+
 See longhorn_reap_logic.py for the floors (newest-per-volume, detached, the truncated-job-name
 prefix match, the age floor) and longhorn-reap-orphan-snapshots.sh.j2 for the wrapper.
 
@@ -31,6 +43,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
 import time
 import urllib.request
@@ -43,15 +56,40 @@ NAMESPACE = "longhorn-system"
 KUBECTL_BIN = os.environ.get("LONGHORN_REAP_KUBECTL", "k3s kubectl")
 TIMEOUT = int(os.environ.get("LONGHORN_REAP_KUBECTL_TIMEOUT_S", "30"))
 DELETE_TIMEOUT = os.environ.get("LONGHORN_REAP_DELETE_TIMEOUT", "120s")
-MIN_AGE_DAYS = float(os.environ.get("LONGHORN_REAP_MIN_AGE_DAYS", "3"))
+# k3s_longhorn_snapshot_reap_min_age_days is an int in defaults/main.yml; bash's arithmetic
+# context only ever held one too, and printed "younger than 3d", not "3.0d".
+MIN_AGE_DAYS = int(os.environ.get("LONGHORN_REAP_MIN_AGE_DAYS", "3"))
+# Margin the CLIENT-side subprocess timeout carries over kubectl's own --timeout, so the
+# subprocess can never fire first and turn a delete that was still legitimately running on the
+# server into a false "FAILED". See the module docstring.
+DELETE_TIMEOUT_MARGIN_S = 30
 
 # Overridable via env purely so a test can point this at a fixture instead of the real
 # root-only file; production never sets this, so it stays the fixed admin path.
 ADMIN_KUBECONFIG = os.environ.get(
     "LONGHORN_REAP_ADMIN_KUBECONFIG", "/etc/rancher/k3s/k3s.yaml"
 )
+# No fallback default: the read-only kubeconfig path is templated per sys_user and is not
+# derivable here. Left unset, a dry run must refuse rather than let KUBECONFIG stay whatever
+# the caller's shell happens to have -- which, run as root, is the admin one. See main().
 READONLY_KUBECONFIG = os.environ.get("LONGHORN_REAP_READONLY_KUBECONFIG", "")
 SUDO_HINT = "sudo /usr/local/bin/longhorn-reap-orphan-snapshots.sh --apply"
+
+
+def _delete_timeout_seconds(text: str) -> float:
+    """Parse a Kubernetes duration string ("120s", "2m") into seconds.
+
+    Matches kubectl's own --timeout flag format; the repo's default (k3s_longhorn_snapshot_
+    reap_delete_timeout = "120s") only ever uses the `s` suffix, but `m`/`h` are cheap to cover.
+    """
+    text = text.strip()
+    if text.endswith("s"):
+        return float(text[:-1])
+    if text.endswith("m"):
+        return float(text[:-1]) * 60
+    if text.endswith("h"):
+        return float(text[:-1]) * 3600
+    return float(text)
 
 
 def _print_bucket(header: str, rows: list, none_msg: str = "(none)") -> None:
@@ -64,9 +102,45 @@ def _print_bucket(header: str, rows: list, none_msg: str = "(none)") -> None:
                 name, vol, reason = row
                 print("  %s  %s  (%s)" % (name, vol, reason))
             else:  # candidate: (name, vol, created, job)
-                name, vol, _created, _job = row
-                print("%s %s" % (name, vol))
+                name, vol, created, job = row
+                print("%s %s %s %s" % (name, vol, created, job))
     print()
+
+
+def _delete_snapshot(name: str, subprocess_timeout: float) -> tuple[int, str]:
+    """Delete one Snapshot CR. `subprocess_timeout` must outlive kubectl's own --timeout."""
+    argv = KUBECTL_BIN.split()
+    env = dict(os.environ)
+    path = env.get("PATH", "")
+    if host_lib.LOCAL_BIN not in path.split(":"):
+        env["PATH"] = (
+            "%s:%s" % (host_lib.LOCAL_BIN, path) if path else host_lib.LOCAL_BIN
+        )
+    try:
+        proc = subprocess.run(
+            [
+                *argv,
+                "-n",
+                NAMESPACE,
+                "delete",
+                "snapshots.longhorn.io",
+                name,
+                "--ignore-not-found",
+                "--timeout=%s" % DELETE_TIMEOUT,
+            ],
+            capture_output=True,
+            text=True,
+            env=env,
+            timeout=subprocess_timeout,
+        )
+    except subprocess.TimeoutExpired:
+        return (
+            host_lib.KUBECTL_TIMEOUT_RC,
+            "kubectl timed out after %ss" % subprocess_timeout,
+        )
+    except OSError as e:
+        return host_lib.KUBECTL_UNRUNNABLE_RC, "could not run kubectl: %s" % e
+    return proc.returncode, proc.stdout if proc.returncode == 0 else proc.stderr
 
 
 def _purge(kubectl, node: str, volumes: set[str]) -> int:
@@ -99,7 +173,11 @@ def _purge(kubectl, node: str, volumes: set[str]) -> int:
         if spec.get("nodeName") != node or status.get("phase") != "Running":
             continue
         statuses = status.get("containerStatuses") or []
-        if statuses and all(cs.get("ready") for cs in statuses):
+        # `all()` over an empty list is True, matching jq's `[...] | all` on the same input --
+        # a pod reporting NO containerStatuses at all counts as ready, the same as bash did.
+        # The earlier `statuses and all(...)` form treated an empty list as NOT ready, which
+        # bash's jq pipeline never did.
+        if all(cs.get("ready") for cs in statuses):
             backend = status.get("podIP", "")
             break
 
@@ -140,6 +218,16 @@ def main(argv: list[str]) -> int:
         print("unknown argument: %s (expected --apply)" % unknown[0], file=sys.stderr)
         return 2
 
+    if not apply and not READONLY_KUBECONFIG:
+        print(
+            "LONGHORN_REAP_READONLY_KUBECONFIG is not set, and a dry run must not silently "
+            "fall through to whatever KUBECONFIG the caller's shell already has -- run as "
+            "root, that would be the admin kubeconfig. Set the shim's env var, or pass "
+            "--apply to use the admin kubeconfig explicitly.",
+            file=sys.stderr,
+        )
+        return 1
+
     kubeconfig, err = logic.resolve_kubeconfig(
         needs_admin=apply,
         admin_readable=os.access(ADMIN_KUBECONFIG, os.R_OK),
@@ -179,7 +267,12 @@ def main(argv: list[str]) -> int:
     owner = logic.snapshot_owner_map(volumes, group_job)
     attached = logic.attached_volume_set(volumes)
 
-    abort = logic.abort_reason(len(volumes), len(owner))
+    abort = logic.abort_reason(
+        len(volumes),
+        len(owner),
+        recurringjob_count=len(recurringjobs),
+        volumes_with_group_label=logic.volumes_with_group_label(volumes),
+    )
     if abort:
         print(abort, file=sys.stderr)
         return 1
@@ -211,17 +304,15 @@ def main(argv: list[str]) -> int:
         print("  --apply  deletes them, then asks each affected volume to purge")
         return 0
 
+    delete_subprocess_timeout = (
+        _delete_timeout_seconds(DELETE_TIMEOUT) + DELETE_TIMEOUT_MARGIN_S
+    )
+
     deleted = 0
     partial = False
     touched: set[str] = set()
     for name, vol, _created, _job in result.candidates:
-        rc, out = kubectl(
-            "delete",
-            "snapshots.longhorn.io",
-            name,
-            "--ignore-not-found",
-            "--timeout=%s" % DELETE_TIMEOUT,
-        )
+        rc, out = _delete_snapshot(name, delete_subprocess_timeout)
         if rc != 0:
             print(
                 "delete FAILED or timed out for %s after %d deletion(s) — stopping: %s"

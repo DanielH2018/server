@@ -21,6 +21,21 @@ transaction against a free-tier 2,500/day. Measured 2026-08-17: seven reapable s
 three volumes came to ~3,640 Class C -- 1.5x the entire daily cap. Before --apply, check
 `probe.py b2-budget` against the day's remaining headroom.
 
+WHY DELETES BYPASS host_lib.kubectl_runner. Every READ here goes through it (30s cap, fine for
+a `get`). A delete does not: the cost note above means a backup delete routinely runs past 30s,
+and bash's original `kubectl delete` carried no timeout at all. Capping it here would kill an
+in-progress delete that bash let run to completion, so `_delete_backup` below shells out
+directly with no timeout.
+
+WHY A FAILED `kubectl get volumes` ABORTS HERE rather than falling through, unlike bash. Bash's
+volume read and its VOLUME_COUNT read were two separate `kubectl` calls, both swallowing stderr
+(`2>/dev/null`); if the first failed, the second usually failed the same way, so VOLUME_COUNT
+came back 0 too and the `VOLUME_COUNT>0 && OWNER_COUNT==0` abort check never fired (0>0 is
+false) -- bash fell through with an EMPTY `existing_volumes`, so every completed, labelled
+backup read as orphaned and became a candidate under --apply-deleted-volumes. Aborting
+explicitly on a failed read is a deliberate improvement, not a port: it refuses instead of
+silently reclassifying every backup as belonging to a deleted volume.
+
 Run directly: uv run --no-project --python <pin> longhorn_reap_orphan_backups.py [--apply]
 [--apply-deleted-volumes]
 """
@@ -29,6 +44,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -45,6 +61,9 @@ TIMEOUT = int(os.environ.get("LONGHORN_REAP_KUBECTL_TIMEOUT_S", "30"))
 ADMIN_KUBECONFIG = os.environ.get(
     "LONGHORN_REAP_ADMIN_KUBECONFIG", "/etc/rancher/k3s/k3s.yaml"
 )
+# No fallback default: the read-only kubeconfig path is templated per sys_user and is not
+# derivable here. Left unset, a dry run must refuse rather than let KUBECONFIG stay whatever
+# the caller's shell happens to have -- which, run as root, is the admin one. See main().
 READONLY_KUBECONFIG = os.environ.get("LONGHORN_REAP_READONLY_KUBECONFIG", "")
 SUDO_HINT = "sudo /usr/local/bin/longhorn-reap-orphan-backups.sh --apply"
 
@@ -61,16 +80,51 @@ def _print_bucket(header: str, rows: list, none_msg: str = "(none)") -> None:
                 name, vol, reason = row
                 print("  %s  %s  (%s)" % (name, vol, reason))
             else:  # candidate/orphaned: (name, vol, created, job)
-                name, vol, _created, _job = row
-                print("%s %s" % (name, vol))
+                name, vol, created, job = row
+                print("%s %s %s %s" % (name, vol, created, job))
     print()
 
 
-def _delete_bucket(kubectl, label: str, rows: list) -> int:
+def _delete_backup(name: str) -> tuple[int, str]:
+    """Delete one Backup CR with NO subprocess timeout -- see the module docstring."""
+    argv = KUBECTL_BIN.split()
+    env = dict(os.environ)
+    path = env.get("PATH", "")
+    if host_lib.LOCAL_BIN not in path.split(":"):
+        env["PATH"] = (
+            "%s:%s" % (host_lib.LOCAL_BIN, path) if path else host_lib.LOCAL_BIN
+        )
+    try:
+        proc = subprocess.run(
+            [
+                *argv,
+                "-n",
+                NAMESPACE,
+                "delete",
+                "backups.longhorn.io",
+                name,
+                "--ignore-not-found",
+            ],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+    except OSError as e:
+        return host_lib.KUBECTL_UNRUNNABLE_RC, "could not run kubectl: %s" % e
+    return proc.returncode, proc.stdout if proc.returncode == 0 else proc.stderr
+
+
+def _delete_bucket(label: str, rows: list) -> int:
+    """Delete every row in `rows`, stopping at the FIRST failure.
+
+    Bash's loop did the same (`if ! $KUBECTL delete ...; then ... exit 1; fi`, unconditionally
+    exiting the whole script). A caller that kept going into the next bucket after a failure
+    here would delete under a kubeconfig or cluster state that had just proven unreliable.
+    """
     print("deleting %s..." % label)
     deleted = 0
     for name, _vol, _created, _job in rows:
-        rc, out = kubectl("delete", "backups.longhorn.io", name, "--ignore-not-found")
+        rc, out = _delete_backup(name)
         if rc != 0:
             print(
                 "delete FAILED for %s after %d deletion(s) — stopping: %s"
@@ -96,6 +150,16 @@ def main(argv: list[str]) -> int:
         return 2
 
     needs_admin = apply or apply_deleted
+    if not needs_admin and not READONLY_KUBECONFIG:
+        print(
+            "LONGHORN_REAP_READONLY_KUBECONFIG is not set, and a dry run must not silently "
+            "fall through to whatever KUBECONFIG the caller's shell already has -- run as "
+            "root, that would be the admin kubeconfig. Set the shim's env var, or pass "
+            "--apply / --apply-deleted-volumes to use the admin kubeconfig explicitly.",
+            file=sys.stderr,
+        )
+        return 1
+
     kubeconfig, err = logic.resolve_kubeconfig(
         needs_admin=needs_admin,
         admin_readable=os.access(ADMIN_KUBECONFIG, os.R_OK),
@@ -177,12 +241,15 @@ def main(argv: list[str]) -> int:
         )
         return 0
 
-    rc = 0
     if apply:
-        rc = _delete_bucket(kubectl, "stray backup(s)", result.candidates) or rc
+        rc = _delete_bucket("stray backup(s)", result.candidates)
+        if rc != 0:
+            return rc
     if apply_deleted:
-        rc = _delete_bucket(kubectl, "orphaned backup(s)", result.orphaned) or rc
-    return rc
+        rc = _delete_bucket("orphaned backup(s)", result.orphaned)
+        if rc != 0:
+            return rc
+    return 0
 
 
 if __name__ == "__main__":

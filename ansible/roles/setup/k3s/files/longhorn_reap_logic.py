@@ -33,19 +33,39 @@ RECURRING_JOB_GROUP_PREFIX = "recurring-job-group.longhorn.io/"
 # ── shared ────────────────────────────────────────────────────────────────────────────────
 
 
-def abort_reason(volume_count: int, owner_count: int) -> str | None:
+def abort_reason(
+    volume_count: int,
+    owner_count: int,
+    *,
+    recurringjob_count: int | None = None,
+    volumes_with_group_label: int | None = None,
+) -> str | None:
     """None when the ownership lookup is usable; an ABORT message otherwise.
 
     Every volume in this cluster carries exactly one recurring-job group label, so an empty
     ownership map while volumes exist means the lookup broke -- and a broken lookup is
     indistinguishable from "nothing is stranded" in a classifier's output. Refuse rather than
     silently let every floor below run disarmed, which is what the jsonpath bug did.
+
+    The snapshots reaper passes the two keyword args too: `snapshot_owner_map` records an
+    entry for every volume that carries a group label REGARDLESS of whether that group
+    resolved to a real RecurringJob, so an empty RecurringJob list (owner_count == volume
+    count, every value "") passes the check above silently while every current-tier snapshot
+    reads as stranded. Refuse that case explicitly rather than let it look like a lookup that
+    resolved fine. The backups reaper never passes these, so this half is skipped there (no
+    RecurringJob-CR indirection exists to break).
     """
     if volume_count > 0 and owner_count == 0:
         return (
             "ABORT: %d volume(s) exist but none has a resolvable recurring-job group.\n"
             "The ownership lookup is broken; every floor below depends on it. Refusing to "
             "continue." % volume_count
+        )
+    if recurringjob_count == 0 and (volumes_with_group_label or 0) > 0:
+        return (
+            "ABORT: %d volume(s) carry a recurring-job group label but no RecurringJob CRs "
+            "were found. The group-to-job map is empty, so every current-tier snapshot would "
+            "misread as stranded. Refusing to continue." % volumes_with_group_label
         )
     return None
 
@@ -77,25 +97,46 @@ def resolve_kubeconfig(
 
 
 def parse_rfc3339_epoch(stamp: str) -> float | None:
-    """Seconds since the epoch for a Kubernetes RFC 3339 UTC timestamp, or None if unparseable."""
-    try:
-        return (
-            datetime.strptime(stamp, "%Y-%m-%dT%H:%M:%SZ")
-            .replace(tzinfo=timezone.utc)
-            .timestamp()
-        )
-    except ValueError, TypeError:
-        return None
+    """Seconds since the epoch for a Kubernetes timestamp, or None if unparseable.
 
+    Bash used `date -u -d "$CREATED" +%s`, which accepts fractional seconds and numeric
+    offsets, not just a bare trailing `Z` at whole-second precision. `datetime.fromisoformat`
+    (3.11+) covers the same ground once a trailing `Z` is mapped to `+00:00` -- fromisoformat
+    itself only started accepting `Z` directly in 3.11, and mapping it explicitly here doesn't
+    depend on that.
 
-def _newest_first(records: list[dict], vol_key: str, created_key: str) -> list[dict]:
-    """Sort by volume ascending, then creation time descending within each volume.
-
-    Two stable sorts rather than one composite key: `sort -t'|' -k2,2 -k3,3r` needs volume
-    ascending and time descending at once, and Python's `sorted` is stable, so sorting by time
-    descending first and then by volume preserves the time ordering inside each volume's group.
+    Bash's fallback on a failed parse was `|| echo 0`, so CREATED_EPOCH==0 was its sentinel for
+    "unparseable" -- indistinguishable, in bash, from a real 1970-01-01 timestamp, which no
+    Longhorn object legitimately carries. Matched here: an epoch that parses to exactly 0 is
+    treated as unparseable too, not as "very old".
     """
-    by_time = sorted(records, key=lambda r: r[created_key], reverse=True)
+    if not isinstance(stamp, str) or not stamp:
+        return None
+    text = stamp[:-1] + "+00:00" if stamp.endswith("Z") else stamp
+    try:
+        dt = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    epoch = dt.timestamp()
+    return None if epoch == 0 else epoch
+
+
+def _newest_first(
+    records: list[dict], vol_key: str, created_key: str, name_key: str = "name"
+) -> list[dict]:
+    """Sort by volume ascending, then creation time descending, then name ascending.
+
+    Three stable sorts, least-significant first: `sort -t'|' -k2,2 -k3,3r` only pins volume
+    ascending and time descending explicitly; GNU sort breaks a remaining tie (same volume,
+    same creation time) by falling back to whole-line comparison, and since both fields already
+    agree, that reduces to the NAME field ascending -- the first thing the line differs on.
+    Sorting by name first, then time descending, then volume last (each stable) reproduces
+    that priority order without a composite key.
+    """
+    by_name = sorted(records, key=lambda r: r[name_key])
+    by_time = sorted(by_name, key=lambda r: r[created_key], reverse=True)
     return sorted(by_time, key=lambda r: r[vol_key])
 
 
@@ -156,13 +197,18 @@ def classify_backups(
     outright. Skipping it in the counting pass is FLOOR 1's precondition -- counting it would
     let one probe backup stand in as proof the current tier is producing backups, which is
     exactly how FLOOR 1 was disarmed on wg-easy-config (see the module docstring).
+
+    A backup with no NAME or no `.status.volumeName` is skipped before anything else, matching
+    bash's `[[ -z "$NAME" || -z "$VOL" ]] && continue` -- without it a completed backup with an
+    empty volumeName lands in `.orphaned` (empty string is never in `existing_volumes`) and gets
+    deleted under --apply-deleted-volumes for an association that was never real.
     """
-    completed = [b for b in backups if _backup_fields(b)[4] == "Completed"]
-    labelled = [b for b in completed if _backup_fields(b)[3]]
+    valid = [f for f in (_backup_fields(b) for b in backups) if f[0] and f[1]]
+    completed = [f for f in valid if f[4] == "Completed"]
+    labelled = [f for f in completed if f[3]]
 
     current_tier_count: dict[str, int] = {}
-    for b in labelled:
-        _name, vol, _created, job, _state = _backup_fields(b)
+    for _name, vol, _created, job, _state in labelled:
         if job == owner.get(vol, ""):
             current_tier_count[vol] = current_tier_count.get(vol, 0) + 1
 
@@ -170,7 +216,7 @@ def classify_backups(
     seen_floor: set[str] = set()
     records = [
         {"name": n, "vol": v, "created": c, "job": j, "state": s}
-        for n, v, c, j, s in (_backup_fields(b) for b in labelled)
+        for n, v, c, j, s in labelled
     ]
     for b in _newest_first(records, "vol", "created"):
         name, vol, created, job = b["name"], b["vol"], b["created"], b["job"]
@@ -233,6 +279,21 @@ def snapshot_owner_map(
     return owner
 
 
+def volumes_with_group_label(volumes: list[dict]) -> int:
+    """How many volumes carry a recurring-job group label at all.
+
+    Feeds `abort_reason`'s second check: `snapshot_owner_map` records an entry for every one of
+    these volumes even when `group_job` is empty (the value is just `""`), so `owner_count`
+    alone can't tell "the RecurringJob list came back empty" from "every group resolved fine".
+    """
+    count = 0
+    for v in volumes:
+        labels = (v.get("metadata") or {}).get("labels") or {}
+        if any(key.startswith(RECURRING_JOB_GROUP_PREFIX) for key in labels):
+            count += 1
+    return count
+
+
 def attached_volume_set(volumes: list[dict]) -> set[str]:
     return {
         (v.get("metadata") or {}).get("name", "")
@@ -267,7 +328,7 @@ def classify_snapshots(
     snapshots: list[dict],
     owner: dict[str, str],
     attached: set[str],
-    min_age_days: float,
+    min_age_days: int,
     now_epoch: float,
 ) -> SnapshotClassification:
     """Sort snapshots into kept-by-a-floor and reapable.
@@ -277,11 +338,20 @@ def classify_snapshots(
     engine's job), detached (FLOOR 0, reported), unlabelled/hand-taken (skipped silently),
     current-tier (PREFIX match: the owning job name must start with the truncated label the
     snapshot carries), then the age floor (FLOOR 2).
+
+    `min_age_days` is an int, matching `k3s_longhorn_snapshot_reap_min_age_days`'s type in
+    defaults/main.yml -- bash's arithmetic context (`$(( NOW - MIN_AGE_DAYS * 86400 ))`) only
+    ever held an integer, and "younger than 3d" (not "3.0d") is the message it printed.
+
+    A snapshot with no NAME or no `.spec.volume` is skipped before anything else, matching
+    bash's `[[ -z "$NAME" || -z "$VOL" ]] && continue` -- without it an empty volume reaches
+    `.candidates` and a later purge POSTs to `/v1/volumes/` (empty path segment) for it.
     """
     cutoff = now_epoch - min_age_days * 86400
     raw_records = [
         {"name": n, "vol": v, "created": c, "job": j, "removed": r}
         for n, v, c, j, r in (_snapshot_fields(s) for s in snapshots)
+        if n and v
     ]
     records = _newest_first(raw_records, "vol", "created")
 
@@ -319,7 +389,7 @@ def classify_snapshots(
             result.kept.append((name, vol, "unparseable creationTime: %s" % created))
             continue
         if created_epoch > cutoff:
-            result.kept.append((name, vol, "younger than %sd" % min_age_days))
+            result.kept.append((name, vol, "younger than %dd" % min_age_days))
             continue
 
         result.candidates.append((name, vol, created, job))

@@ -24,27 +24,47 @@ import shutil
 import subprocess
 import sys
 
+from lib import yaml_fast
+
 FILES = pathlib.Path(__file__).resolve().parents[1] / "files"
 REPO = pathlib.Path(__file__).resolve().parents[5]
-# host_lib.py is a cross-role shared module (ansible/roles/setup/common/files), staged into
-# /opt/longhorn-reap/ as a sibling by the Ansible copy task — it does not live in this role's
-# own files/ in the repo. Deploying is what makes the two entry points' sibling directories the
-# same one; `_deployed_entry` below reproduces that shape in a tmp dir so the sys.path bootstrap
-# (`sys.path.insert(0, dirname(__file__)); import host_lib`) is exercised for real rather than
-# relying on pytest's own pythonpath, which a bare subprocess does not inherit.
-HOST_LIB = REPO / "ansible" / "roles" / "setup" / "common" / "files" / "host_lib.py"
+ROLE = pathlib.Path(__file__).resolve().parents[1]
+COMMON_FILES = REPO / "ansible" / "roles" / "setup" / "common" / "files"
+COPY_TASK_NAME = "Install the Longhorn reap-orphan classifier scripts"
 BACKUPS_ENTRY = FILES / "longhorn_reap_orphan_backups.py"
 SNAPSHOTS_ENTRY = FILES / "longhorn_reap_orphan_snapshots.py"
 
 
+def _copy_loop_srcs() -> list[pathlib.Path]:
+    """The exact file set health-crons.yml's own copy task installs into /opt/longhorn-reap/,
+    resolved to repo paths -- reading it from the task rather than hardcoding it here means
+    dropping a file from that loop (host_lib.py, say) breaks these transport tests with a
+    ModuleNotFoundError instead of silently shrinking what actually gets deployed. See
+    test_longhorn_reap_ship_list.py for the loop/stamp-pair/import-census guard this pairs with.
+    """
+    tasks = yaml_fast.safe_load((ROLE / "tasks" / "health-crons.yml").read_text())
+    matches = [t for t in tasks if t.get("name") == COPY_TASK_NAME]
+    assert len(matches) == 1, (
+        f"expected exactly one task named {COPY_TASK_NAME!r}, found {len(matches)}"
+    )
+    resolved = []
+    for item in matches[0]["loop"]:
+        if item.startswith("{{ role_path }}/../common/files/"):
+            resolved.append(COMMON_FILES / item.rsplit("/", 1)[-1])
+        else:
+            resolved.append(FILES / item)
+    return resolved
+
+
 def _deployed_entry(entry: pathlib.Path, deploy_dir: pathlib.Path) -> pathlib.Path:
+    # host_lib.py is a cross-role shared module (ansible/roles/setup/common/files), staged into
+    # /opt/longhorn-reap/ as a sibling by the Ansible copy task -- it does not live in this
+    # role's own files/ in the repo. Deploying is what makes the two entry points' sibling
+    # directories the same one; this reproduces that shape in a tmp dir so the sys.path
+    # bootstrap (`sys.path.insert(0, dirname(__file__)); import host_lib`) is exercised for real
+    # rather than relying on pytest's own pythonpath, which a bare subprocess does not inherit.
     deploy_dir.mkdir(exist_ok=True)
-    for src in (
-        FILES / "longhorn_reap_logic.py",
-        FILES / "longhorn_reap_orphan_backups.py",
-        FILES / "longhorn_reap_orphan_snapshots.py",
-        HOST_LIB,
-    ):
+    for src in _copy_loop_srcs():
         shutil.copy(src, deploy_dir / src.name)
     return deploy_dir / entry.name
 
@@ -54,6 +74,7 @@ import json, os, sys
 
 CALLS_LOG = os.environ["STUB_CALLS_LOG"]
 FIXTURES = json.loads(os.environ["STUB_FIXTURES"])
+FAIL_DELETE_NAMES = set(json.loads(os.environ.get("STUB_FAIL_DELETE_NAMES", "[]")))
 
 argv = sys.argv[1:]
 with open(CALLS_LOG, "a") as fh:
@@ -65,6 +86,10 @@ if argv[:1] == ["kubectl"] and "get" in argv:
     print(json.dumps({"items": FIXTURES.get(kind, [])}))
     sys.exit(0)
 if argv[:1] == ["kubectl"] and "delete" in argv:
+    name = argv[argv.index("delete") + 2]
+    if name in FAIL_DELETE_NAMES:
+        sys.stderr.write("stub: delete forced to fail for %s\\n" % name)
+        sys.exit(1)
     sys.exit(0)
 sys.exit(0)
 """
@@ -99,7 +124,16 @@ def _snapshot(name, vol, created, job=None):
     return {"metadata": {"name": name}, "spec": {"volume": vol}, "status": status}
 
 
-def _run(entry, args, fixtures, tmp_path, *, admin_readable=False):
+def _run(
+    entry,
+    args,
+    fixtures,
+    tmp_path,
+    *,
+    admin_readable=False,
+    fail_delete_names=(),
+    readonly_kubeconfig_set=True,
+):
     deployed = _deployed_entry(entry, tmp_path / "opt")
     stub_dir = tmp_path / "bin"
     stub_dir.mkdir(exist_ok=True)
@@ -114,8 +148,11 @@ def _run(entry, args, fixtures, tmp_path, *, admin_readable=False):
     env["PATH"] = "%s:%s" % (stub_dir, env.get("PATH", ""))
     env["STUB_CALLS_LOG"] = str(calls_log)
     env["STUB_FIXTURES"] = json.dumps(fixtures)
+    env["STUB_FAIL_DELETE_NAMES"] = json.dumps(list(fail_delete_names))
     env["LONGHORN_REAP_KUBECTL"] = "k3s kubectl"
-    env["LONGHORN_REAP_READONLY_KUBECONFIG"] = str(tmp_path / "readonly.yaml")
+    env["LONGHORN_REAP_READONLY_KUBECONFIG"] = (
+        str(tmp_path / "readonly.yaml") if readonly_kubeconfig_set else ""
+    )
     # The real admin kubeconfig is root-only at a fixed path; both entry points read this
     # override (falling back to the real path when unset) purely so a test can supply a
     # fixture instead of needing root.
@@ -167,6 +204,39 @@ def test_backups_dry_run_emits_no_delete_call(tmp_path):
     assert proc.returncode == 0, proc.stderr
     assert "dry run" in proc.stdout
     assert not any("delete" in c for c in calls)
+
+
+def test_backups_dry_run_prints_all_four_columns_for_a_reapable_row(tmp_path):
+    # bash printed "NAME VOL CREATED JOB" per candidate/orphaned row; an earlier draft here
+    # printed only "NAME VOL", silently dropping the two columns an operator reads to decide
+    # whether a stray is safe to delete.
+    fixtures = {
+        "volumes": [_volume("vol-a", "daily-backup")],
+        "backups": [
+            _backup("current-1", "vol-a", "2026-08-20T00:00:00Z", "daily-backup"),
+            _backup(
+                "stray-2", "vol-a", "2026-08-15T00:00:00Z", "weekly-backup"
+            ),  # kept, FLOOR 2
+            _backup(
+                "stray-1", "vol-a", "2026-08-14T00:00:00Z", "weekly-backup"
+            ),  # reapable
+        ],
+    }
+    proc, _calls = _run(BACKUPS_ENTRY, [], fixtures, tmp_path)
+    assert proc.returncode == 0, proc.stderr
+    assert "stray-1 vol-a 2026-08-14T00:00:00Z weekly-backup" in proc.stdout
+
+
+def test_backups_dry_run_refuses_when_readonly_kubeconfig_is_unset(tmp_path):
+    # An unset LONGHORN_REAP_READONLY_KUBECONFIG must not silently fall through to whatever
+    # KUBECONFIG the caller's shell already has -- run as root (the shim's --apply path), that
+    # would be the admin kubeconfig, letting a plain dry run read through write credentials.
+    proc, calls = _run(
+        BACKUPS_ENTRY, [], {"volumes": []}, tmp_path, readonly_kubeconfig_set=False
+    )
+    assert proc.returncode == 1
+    assert "LONGHORN_REAP_READONLY_KUBECONFIG is not set" in proc.stderr
+    assert calls == []
 
 
 def test_backups_apply_without_admin_kubeconfig_refuses_and_deletes_nothing(tmp_path):
@@ -228,6 +298,36 @@ def test_backups_apply_emits_exactly_the_delete_argv_the_classifier_chose(tmp_pa
     ]
 
 
+def test_backups_apply_stops_at_the_first_failed_delete(tmp_path):
+    # Bash's loop `exit 1`-ed the whole script on the first failed delete; a Python version
+    # that printed "stopping" but kept going into the rest of the bucket (or the next one)
+    # would delete under a kubeconfig or cluster state that had just proven unreliable.
+    fixtures = {
+        "volumes": [_volume("vol-a", "weekly-backup-d3")],
+        "backups": [
+            _backup("current-1", "vol-a", "2026-08-20T00:00:00Z", "weekly-backup-d3"),
+            _backup(
+                "stray-4", "vol-a", "2026-08-19T00:00:00Z", "daily-backup"
+            ),  # kept, FLOOR 2
+            _backup("stray-3", "vol-a", "2026-08-18T00:00:00Z", "daily-backup"),
+            _backup("stray-2", "vol-a", "2026-08-17T00:00:00Z", "daily-backup"),
+            _backup("stray-1", "vol-a", "2026-08-16T00:00:00Z", "daily-backup"),
+        ],
+    }
+    proc, calls = _run(
+        BACKUPS_ENTRY,
+        ["--apply"],
+        fixtures,
+        tmp_path,
+        admin_readable=True,
+        fail_delete_names=["stray-2"],
+    )
+    assert proc.returncode == 1
+    deletes = [c[-2] for c in calls if "delete" in c]  # the name argument
+    # stray-3 attempted and succeeded, stray-2 attempted and failed, stray-1 NEVER attempted.
+    assert deletes == ["stray-3", "stray-2"]
+
+
 def test_backups_apply_deleted_volumes_only_deletes_the_orphaned_bucket(tmp_path):
     # A backup whose volume no longer exists must be reaped only under
     # --apply-deleted-volumes, never under a bare --apply.
@@ -265,6 +365,39 @@ def test_backups_apply_deleted_volumes_only_deletes_the_orphaned_bucket(tmp_path
     ]
 
 
+def test_backups_apply_deleted_volumes_never_runs_after_a_failed_apply(tmp_path):
+    # Both flags given at once: if the stray bucket fails, the orphaned bucket must never be
+    # touched. Bash's single `exit 1` on the first failed delete made this true by construction;
+    # a Python `rc = _delete_bucket(...) or rc` for EACH bucket independently would not.
+    fixtures = {
+        "volumes": [_volume("vol-a", "daily-backup")],
+        "backups": [
+            # A current backup so CURRENT_TIER_COUNT > 0 -- otherwise FLOOR 1 keeps every stray.
+            _backup("current-1", "vol-a", "2026-08-20T00:00:00Z", "daily-backup"),
+            _backup(
+                "stray-newest", "vol-a", "2026-08-15T00:00:00Z", "weekly-backup"
+            ),  # kept, FLOOR 2
+            _backup(
+                "stray", "vol-a", "2026-08-14T00:00:00Z", "weekly-backup"
+            ),  # the sole candidate
+            _backup("orphan", "gone-vol", "2026-08-14T00:00:00Z", "daily-backup"),
+        ],
+    }
+    proc, calls = _run(
+        BACKUPS_ENTRY,
+        ["--apply", "--apply-deleted-volumes"],
+        fixtures,
+        tmp_path,
+        admin_readable=True,
+        fail_delete_names=["stray"],
+    )
+    assert proc.returncode == 1
+    deletes = [c[-2] for c in calls if "delete" in c]
+    assert deletes == [
+        "stray"
+    ]  # the "stray" delete failed; "orphan" was never attempted
+
+
 # ── snapshots: dry run emits no delete ──────────────────────────────────────────────────
 
 
@@ -283,6 +416,90 @@ def test_snapshots_dry_run_emits_no_delete_call(tmp_path):
     assert proc.returncode == 0, proc.stderr
     assert "dry run" in proc.stdout
     assert not any("delete" in c for c in calls)
+
+
+def test_snapshots_aborts_when_recurringjobs_is_empty_but_a_volume_carries_the_label(
+    tmp_path,
+):
+    # Verified without this check: 3 current-tier snapshots deleted on a dry run. An empty
+    # recurringjobs.longhorn.io list makes every group resolve to "", which the snapshot's own
+    # truncated job label ("daily-backup") never equals -- so the "current, not stranded" skip
+    # never fires and every current-tier snapshot past the newest reads as stranded.
+    fixtures = {
+        "recurringjobs": [],  # the RecurringJob CRs failed to list, or none exist
+        "volumes": [_volume("vol-a", "daily-backup")],
+        "snapshots": [
+            _snapshot("newest", "vol-a", "2026-08-19T00:00:00Z"),
+            _snapshot("current-2", "vol-a", "2026-08-18T00:00:00Z", job="daily-backup"),
+            _snapshot("current-3", "vol-a", "2026-08-17T00:00:00Z", job="daily-backup"),
+        ],
+    }
+    proc, calls = _run(SNAPSHOTS_ENTRY, [], fixtures, tmp_path)
+    assert proc.returncode == 1
+    assert "ABORT" in proc.stderr
+    assert "reapable" not in proc.stdout  # never gets far enough to print a verdict
+    # ABORT fires right after reading recurringjobs + volumes; snapshots.longhorn.io is never
+    # read and no delete is ever attempted.
+    assert not any("snapshots.longhorn.io" in c for c in calls)
+    assert not any("delete" in c for c in calls)
+
+
+def test_snapshots_dry_run_prints_all_four_columns_for_a_reapable_row(tmp_path):
+    fixtures = {
+        "recurringjobs": [
+            {"metadata": {"name": "daily-backup"}, "spec": {"groups": ["daily-backup"]}}
+        ],
+        "volumes": [_volume("vol-a", "daily-backup")],
+        "snapshots": [
+            _snapshot("newest", "vol-a", "2026-08-19T00:00:00Z"),
+            _snapshot("stale", "vol-a", "2026-08-01T00:00:00Z", job="weekly-backup"),
+        ],
+    }
+    proc, _calls = _run(SNAPSHOTS_ENTRY, [], fixtures, tmp_path)
+    assert proc.returncode == 0, proc.stderr
+    assert "stale vol-a 2026-08-01T00:00:00Z weekly-backup" in proc.stdout
+
+
+def test_snapshots_dry_run_prints_the_age_floor_as_a_bare_integer_day_count(tmp_path):
+    # k3s_longhorn_snapshot_reap_min_age_days is an int in defaults/main.yml; bash's arithmetic
+    # context only ever held one, and printed "younger than 3d" -- not "3.0d", which a
+    # float-typed MIN_AGE_DAYS would print instead.
+    import datetime
+
+    one_day_ago = (
+        datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=1)
+    ).strftime("%Y-%m-%dT%H:%M:%SZ")
+    fixtures = {
+        # A resolvable RecurringJob so `abort_reason`'s recurringjob check does not fire; the
+        # "recent" snapshot's own job ("daily-backup") deliberately does not match what the
+        # volume's group resolves to ("some-job"), so it reaches the age floor instead of being
+        # skipped as current.
+        "recurringjobs": [
+            {"metadata": {"name": "some-job"}, "spec": {"groups": ["some-group"]}}
+        ],
+        "volumes": [_volume("vol-a", "some-group")],
+        "snapshots": [
+            _snapshot("newest", "vol-a", one_day_ago),
+            _snapshot("recent", "vol-a", one_day_ago, job="daily-backup"),
+        ],
+    }
+    proc, _calls = _run(SNAPSHOTS_ENTRY, [], fixtures, tmp_path)
+    assert proc.returncode == 0, proc.stderr
+    assert "younger than 3d" in proc.stdout
+    assert "3.0d" not in proc.stdout
+
+
+def test_snapshots_dry_run_refuses_when_readonly_kubeconfig_is_unset(tmp_path):
+    proc, calls = _run(
+        SNAPSHOTS_ENTRY,
+        [],
+        {"recurringjobs": [], "volumes": []},
+        tmp_path,
+        readonly_kubeconfig_set=False,
+    )
+    assert proc.returncode == 1
+    assert "LONGHORN_REAP_READONLY_KUBECONFIG is not set" in proc.stderr
+    assert calls == []
 
 
 def test_snapshots_apply_without_admin_kubeconfig_refuses_and_deletes_nothing(tmp_path):

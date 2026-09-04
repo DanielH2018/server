@@ -12,11 +12,17 @@
 # week from now. See the Python module's docstring for why this problem differs from stranded
 # backups (local reclamation, not B2 storage) and why remove-snapshots-during-filesystem-trim
 # was rejected in favour of this.
+#
+# --apply is documented as `sudo /usr/local/bin/longhorn-reap-orphan-snapshots.sh --apply`, and
+# sudo resets HOME to /root by default, where uv finds no pinned interpreter — it was installed
+# `become: false` under /home/{{ sys_user }}/.local/share/uv/python. Pointing UV_PYTHON_INSTALL_DIR
+# there explicitly makes uv find it regardless of which HOME invoked this script.
 set -uo pipefail
 
 export LONGHORN_REAP_READONLY_KUBECONFIG="/home/{{ sys_user }}/.kube/config"
 export LONGHORN_REAP_MIN_AGE_DAYS="{{ k3s_longhorn_snapshot_reap_min_age_days }}"
 export LONGHORN_REAP_DELETE_TIMEOUT="{{ k3s_longhorn_snapshot_reap_delete_timeout }}"
+export UV_PYTHON_INSTALL_DIR="/home/{{ sys_user }}/.local/share/uv/python"
 
 exec /usr/local/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} \
   /opt/longhorn-reap/longhorn_reap_orphan_snapshots.py "$@"
