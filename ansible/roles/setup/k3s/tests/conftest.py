@@ -4,7 +4,9 @@ Every test here that runs a host script for real (the backup-health reader, the 
 a stubbed `logger` first on PATH, from `_helpers.stub_logger_on_path`. Autouse and
 directory-wide rather than opt-in per test: the set of tests that spawn a real script is not
 closed, and one added later would silently start polluting again. A stubbed `logger` no test
-calls costs nothing. `test_reader_syslog_line_is_intercepted` is the proof the stub is on PATH.
+calls costs nothing.
+`test_longhorn_backup_health_reader.py::test_reader_syslog_line_is_intercepted` is the proof the
+stub is on PATH.
 """
 
 import pytest
