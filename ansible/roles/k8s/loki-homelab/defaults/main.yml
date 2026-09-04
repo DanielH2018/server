@@ -1,7 +1,7 @@
 ---
 # Pinned like the claude-otel Loki (Renovate-tracked); the Docker copy ran :latest under
 # Watchtower, which retires with it.
-loki_homelab_image: grafana/loki:3.7.6
+loki_homelab_image: grafana/loki:3.7.7
 # The cluster log shipper. Alloy since 2026-09-02: Promtail (last pin 3.6.11) reached end of
 # life on 2026-03-02.
 loki_homelab_alloy_image: grafana/alloy:v1.19.2
