@@ -469,9 +469,14 @@ def test_a_gh_timeout_exits_1(tmp_path, capsys):
     body = tmp_path / "b.md"
     body.write_text("B")
     slow = subprocess.TimeoutExpired("gh", 60)
-    tools, _ = build_tools(Fakes(json_errors={"issue list": slow}))
+    tools, calls = build_tools(Fakes(json_errors={"issue list": slow}))
     assert findings.main(_open_argv(body), tools) == 1
     assert "gh failed:" in capsys.readouterr().err
+    # Which read timed out: `cmd_open` syncs labels first, and that one answered.
+    assert [argv[:2] for argv in calls.gh_json] == [
+        ("label", "list"),
+        ("issue", "list"),
+    ]
 
 
 # --- a closed issue's date and state -----------------------------------------------------------
