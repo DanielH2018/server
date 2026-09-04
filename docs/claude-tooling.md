@@ -33,6 +33,14 @@ It reads **two** streams: monitor-bridge's container log, and the `{job="syslog"
 lines the host crons emit, which push Kuma directly and so have no other durable record. Until
 2026-08-22 it read only the first, and the whole backup/drift plane left no episode anywhere.
 
+**Every episode row carries both ends, in UTC.** Two things made this view misdate an incident,
+and both are fixed: rows were stamped `America/Chicago` with no marker, five hours off the
+`journalctl --utc` output an operator compares them against, and only the episode's start was
+printed. **Each check's splitting gap is now derived from its own sample cadence**, because a
+fixed 30 minutes matched the `*/30` health crons exactly — a second of cron jitter started a new
+episode, so one 13.5-hour outage on 2026-09-04 rendered as 16 rows, none of them carrying the
+onset. `--gap-min` still pins the gap by hand for every check. See #1104.
+
 ### `monitors` vs `kuma-drift`
 
 `monitors` answers "what is down." **`kuma-drift` answers "what is missing,"** which `monitors`
