@@ -57,7 +57,7 @@ _MUST_USE_YAML_FAST = frozenset(
     {
         "ansible/tests/_k8s_render.py",
         "scripts/lib/invocation_sites.py",
-        "scripts/validate/k8s_manifests.py",
+        "scripts/lib/k8s_pvc.py",
         "scripts/validate/compose_templates.py",
     }
 )
