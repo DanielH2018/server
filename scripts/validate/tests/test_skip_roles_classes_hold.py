@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The two exemption classes in validate/k8s_manifests.py must keep meaning what they say.
+"""The two exemption classes in scripts/lib/k8s_roles.py must keep meaning what they say.
 
 A role in SKIP_ROLES is never rendered and never parsed as YAML by the manifest validator, so
 an entry whose stated reason has stopped being true is an unvalidated role that reads as a
@@ -24,7 +24,10 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from validate.k8s_manifests import (
+# Imported from the module that DEFINES them, not from validate.k8s_manifests, which only
+# re-exports them since the 2026-09-04 split. A guard that reads a re-export passes just as
+# happily when the definition it means to police has moved somewhere else.
+from lib.k8s_roles import (
     CALLER_RENDERED_ROLES,
     K8S_ROLES,
     NO_MANIFEST_ROLES,

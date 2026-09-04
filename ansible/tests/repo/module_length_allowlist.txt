@@ -54,6 +54,4 @@ scripts/docs/tests/test_gen_reference_scripts.py 576
 scripts/docs/tests/test_service_catalog.py 506
 scripts/secrets_mgmt/secret_rotation.py 980
 scripts/secrets_mgmt/tests/test_secret_rotation.py 656
-scripts/validate/k8s_manifests.py 1006
-scripts/validate/tests/test_validate_k8s_manifests.py 691
 scripts/validate/tests/test_validate_shell_templates.py 1045

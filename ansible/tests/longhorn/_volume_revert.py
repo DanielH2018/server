@@ -22,7 +22,10 @@ _MAIN = _ROLE / "tasks/main.yml"
 
 _DEFAULTS = _ROLE / "defaults/main.yml"
 
-_VALIDATOR = _REPO / "scripts/validate/k8s_manifests.py"
+# The two exemption sets the validator skips roles by. They moved out of
+# scripts/validate/k8s_manifests.py on 2026-09-04; that module re-exports them, but this test
+# parses the source rather than importing it, so it must name the file that defines them.
+_VALIDATOR = _REPO / "scripts/lib/k8s_roles.py"
 
 _MANIFESTS = _REPO / "ansible/roles/k8s/manifests/tasks/main.yml"
 
