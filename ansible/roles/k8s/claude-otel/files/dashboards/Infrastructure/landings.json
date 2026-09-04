@@ -2,7 +2,7 @@
   "annotations": {
     "list": []
   },
-  "description": "Where a landing's time goes, one point per land.sh run. land.sh writes a logfmt line to syslog from its EXIT trap (`logger -t landing-annotation`), promtail ships it to Loki, and this board reads it. wait_merge is `--await-merge` polling until the PR merged; wait_ci is master CI on the merge commit, plus any wait on a newer tip when another PR merged mid-landing; tick is the GitOps tick; deploy is the scoped deploy.sh run. Empty phases were never reached (a `blocked` landing has no wait_ci). CLI equivalent: `uv run python scripts/diagnostics/probe.py loki-query '{job=\"syslog\"} |= \"event=landing\" | logfmt'`.",
+  "description": "Where a landing's time goes, one point per land.sh run. land.sh writes a logfmt line to syslog from its EXIT trap (`logger -t landing-annotation`), promtail ships it to Loki, and this board reads it. wait_merge is `--await-merge` polling until the PR merged; wait_ci is master CI on the merge commit, plus any wait on a newer tip when another PR merged mid-landing; tick is the GitOps tick; deploy is the scoped deploy.sh run. Empty phases were never reached (a `blocked` landing has no wait_ci). `cause` names which deploy failure a `deploy-failed` verdict was, and is empty beside every other verdict. CLI equivalent: `uv run python scripts/diagnostics/probe.py loki-query '{job=\"syslog\"} |= \"event=landing\" | logfmt'`.",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
@@ -198,12 +198,126 @@
         "type": "loki",
         "uid": "bf4q19tuivta8e"
       },
-      "description": "The raw lines, newest first: pr, sha, verdict, exit code, every phase, and the tags deployed. A verdict other than settled or nothing-to-deploy is a landing that stopped early; its phases show where.",
+      "description": "How the landings in the range ended. settled and nothing-to-deploy are the two that delivered; everything else stopped early. `aborted` is the EXIT-trap default, so it means a path that named no verdict rather than one particular failure.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 15
+      },
+      "id": 4,
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "bf4q19tuivta8e"
+          },
+          "expr": "sum by (verdict) (count_over_time({job=\"syslog\"} |= \"event=landing\" | logfmt [$__range]))",
+          "legendFormat": "{{verdict}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Landings by verdict",
+      "type": "bargauge"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "bf4q19tuivta8e"
+      },
+      "description": "Which deploy failure this was. The verdict alone cannot tell \"nothing was deployed\" (tag-miss, tick-failed, host-lookup) from \"changes are live and a task failed after them\" (playbook-failed), and only the first group is safe to re-run unchanged. tick-held is the deployer holding its own apply. Empty for every other verdict.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 15
+      },
+      "id": 5,
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "bf4q19tuivta8e"
+          },
+          "expr": "sum by (cause) (count_over_time({job=\"syslog\"} |= \"event=landing\" | logfmt | verdict=\"deploy-failed\" [$__range]))",
+          "legendFormat": "{{cause}}",
+          "refId": "A"
+        }
+      ],
+      "title": "deploy-failed by cause",
+      "type": "bargauge"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "bf4q19tuivta8e"
+      },
+      "description": "The raw lines, newest first: pr, sha, verdict, the cause behind a deploy-failed, exit code, every phase, and the tags deployed. A verdict other than settled or nothing-to-deploy is a landing that stopped early; its phases show where.",
       "gridPos": {
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 15
+        "y": 23
       },
       "id": 3,
       "options": {
@@ -247,5 +361,5 @@
   "timezone": "browser",
   "title": "Landings",
   "uid": "landings",
-  "version": 1
+  "version": 2
 }
