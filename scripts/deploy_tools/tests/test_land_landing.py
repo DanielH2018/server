@@ -5,6 +5,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_land_landing.py
 
 from __future__ import annotations
 
+import json
 import subprocess
 
 import pytest
@@ -36,6 +37,27 @@ def test_view_dies_when_gh_fails(landing):
     with pytest.raises(Outcome) as exc:
         ln.view("state")
     assert exc.value.rc == 1 and "HTTP 404" in exc.value.error
+
+
+def test_view_dies_when_gh_times_out(landing):
+    ln, _ = landing()
+    ln.tools.gh_json = lambda *a, **k: (_ for _ in ()).throw(
+        subprocess.TimeoutExpired("gh", 30)
+    )
+    with pytest.raises(Outcome) as exc:
+        ln.view("state")
+    assert exc.value.rc == 1 and "gh timed out" in exc.value.error
+
+
+def test_view_dies_when_gh_answers_with_something_that_is_not_json(landing):
+    """An auth prompt or a proxy error page: gh exits 0 and the parse raises."""
+    ln, _ = landing()
+    ln.tools.gh_json = lambda *a, **k: (_ for _ in ()).throw(
+        json.JSONDecodeError("Expecting value", "<html>", 0)
+    )
+    with pytest.raises(Outcome) as exc:
+        ln.view("state")
+    assert exc.value.rc == 1 and "unparseable gh output" in exc.value.error
 
 
 def test_git_runs_in_the_primary_checkout_without_raising(landing):

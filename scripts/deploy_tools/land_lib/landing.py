@@ -49,13 +49,25 @@ class Landing:
     # -- shared reads -------------------------------------------------------------------
 
     def view(self, fields: str) -> dict[str, Any]:
-        """`gh pr view --json <fields>` for this PR, or die."""
+        """`gh pr view --json <fields>` for this PR, or die.
+
+        Three ways the read fails, each named rather than escaping as a traceback: gh
+        exiting non-zero, gh not answering inside its timeout, and gh answering with
+        something that is not JSON (an auth prompt or a proxy error page). The last two
+        would otherwise propagate out of the phase and annotate as `aborted` with no line
+        saying which PR read failed.
+        """
         try:
             return (
                 self.tools.gh_json("pr", "view", self.opts.pr, "--json", fields) or {}
             )
         except subprocess.CalledProcessError as exc:
             self.die(f"could not read PR #{self.opts.pr}: {exc.stderr.strip()}", 1)
+        except subprocess.TimeoutExpired:
+            self.die(f"could not read PR #{self.opts.pr}: gh timed out", 1)
+        except ValueError:
+            # json.JSONDecodeError is a ValueError subclass.
+            self.die(f"could not read PR #{self.opts.pr}: unparseable gh output", 1)
 
     def git(self, *args: str) -> subprocess.CompletedProcess[str]:
         """git in the PRIMARY checkout, never raising; callers read returncode."""

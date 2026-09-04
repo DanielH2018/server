@@ -45,6 +45,30 @@ def test_red_and_no_verdict_each_end_the_landing_with_a_name(
     assert (exc.value.rc, exc.value.verdict) == (code, verdict)
 
 
+def test_step_3_names_the_sha_and_omits_the_on_clause_for_a_timeout(landing):
+    """The unlabelled caller is step 3, waiting on the merge commit itself."""
+    ln, _ = landing(Fakes(await_ci=[(1, "x")]))
+    with pytest.raises(Outcome) as red:
+        ci.wait_master_ci(ln, "abc123")
+    assert red.value.error == "master CI is RED on abc123 — nothing deployed"
+
+    ln, _ = landing(Fakes(await_ci=[(75, "x")]), ci_timeout=900)
+    with pytest.raises(Outcome) as timeout:
+        ci.wait_master_ci(ln, "abc123")
+    assert timeout.value.error == "no CI verdict inside 900s — nothing deployed"
+
+
+def test_a_labelled_wait_names_what_it_waited_on(landing):
+    """The stale-retry caller waits on a tip that is not this PR's merge commit."""
+    ln, _ = landing(Fakes(await_ci=[(75, "x")]), ci_timeout=900)
+    with pytest.raises(Outcome) as exc:
+        ci.wait_master_ci(ln, "def456", "the tip def456")
+    assert (
+        exc.value.error
+        == "no CI verdict on the tip def456 inside 900s — nothing deployed"
+    )
+
+
 def test_green_returns_and_prints_the_line(landing, capsys):
     ln, _ = landing(Fakes(await_ci=[(0, "0123456: CI green")]))
     ci.wait_master_ci(ln, "abc", "abc")

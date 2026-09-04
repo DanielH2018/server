@@ -7,6 +7,7 @@ tests prove "blockers before the CI wait" without reading source.
 from __future__ import annotations
 
 import subprocess
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -20,7 +21,9 @@ from deploy_tools.land_lib.options import Options
 from deploy_tools.land_lib.tools import Tools
 
 MERGE_SHA = "0123456789abcdef0123456789abcdef01234567"
-PRIMARY = Path("/primary")
+# A real directory, because the pipeline refuses a primary checkout that is not one. Made
+# once per session rather than per test, so `cwd=PRIMARY` assertions stay comparable.
+PRIMARY = Path(tempfile.mkdtemp(prefix="land-primary-"))
 STATE = Path("/state")
 
 
@@ -85,8 +88,14 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
     # An arm that reads back as armed, so every existing --arm-merge test still says
     # "auto-merge armed" rather than taking #1029's direct-merge path.
     views.setdefault(
-        "state,autoMergeRequest",
-        [{"state": "OPEN", "autoMergeRequest": {"enabledAt": "x"}}],
+        "state,mergeStateStatus,autoMergeRequest",
+        [
+            {
+                "state": "OPEN",
+                "mergeStateStatus": "BLOCKED",
+                "autoMergeRequest": {"enabledAt": "x"},
+            }
+        ],
     )
     views.setdefault(
         "files,changedFiles",
@@ -166,7 +175,7 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         derive=lambda paths, changed: f.derived,
         quiet_paths=lambda paths, range_: set(),
         read_state=lambda root, name: f.state.get(name, ""),
-        lock_holder=_seq(f.lock_holder, [], ""),
+        lock_holder=_seq(f.lock_holder, calls, "lock_holder"),
         hostname=lambda: f.hostname,
         logger=lambda line: calls.append(("logger", (line,), {})),
         sleep=lambda s: calls.append(("sleep", (s,), {})),

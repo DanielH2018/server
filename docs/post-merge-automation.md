@@ -94,7 +94,7 @@ the suite — the suite is exactly the thing that cannot see a cross-directory i
 ### `scripts/deploy_tools/land.py` (invoked as `land.sh`)
 
 The orchestrator: `land.py` is the entry point and `land_lib/` holds one module per phase
-(`merge`, `classify`, `ci`, `tick`, `deploy`, `health`) plus the outcome vocabulary, the
+(`merge`, `classify`, `ci`, `tick`, `deploy`, `health_verdict`) plus the outcome vocabulary, the
 options, the tool boundary and the ledger the Landings board reads. `land.sh` is a two-line
 `exec` shim so every command in the skill, the hook's remedy text and the Renovate prompt
 stays the same. It is one invocation because the worktree containment check refuses

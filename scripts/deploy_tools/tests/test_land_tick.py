@@ -49,9 +49,14 @@ def test_an_outright_failure_dies(landing):
 def test_the_lock_holder_is_sampled_before_the_attempt(landing):
     """#1031: read after the losing attempt, the holder has usually already released.
 
-    The fake answers once and then goes empty, the shape a holder that released has: the
-    holder is only recorded at all if it was sampled BEFORE the contended tick.
+    Two halves, because the recorded value alone cannot tell the orders apart -- a
+    post-attempt read consumes the same first fake answer. The ORDER assertion is the one
+    that goes red without the pre-sample: `lock_holder` must be called before the tick it
+    is a sample for. The value assertion then proves the sample is the one that was booked,
+    with the fake going empty afterwards the way a released holder does.
     """
-    ln, _ = landing(Fakes(tick=[3, 0], lock_holder=["42 flock deploy", ""]))
+    ln, calls = landing(Fakes(tick=[3, 0], lock_holder=["42 flock deploy", ""]))
     tick.run_tick(ln)
+    names = [c[0] for c in calls]
+    assert names.index("lock_holder") < names.index("tick")
     assert ln.ledger.lock_holder == "42 flock deploy"

@@ -39,17 +39,23 @@ def preflight(ln: Landing) -> None:
     ln.die(f"pre-flight failed (exit {rc}) — nothing deployed", 1)
 
 
-def wait_master_ci(ln: Landing, sha: str, label: str) -> None:
-    """Wait for master CI on `sha`; red and no-verdict each end the landing with a name."""
+def wait_master_ci(ln: Landing, sha: str, label: str | None = None) -> None:
+    """Wait for master CI on `sha`; red and no-verdict each end the landing with a name.
+
+    `label` names what is being waited on when it is not simply the merge commit -- the
+    stale-retry caller passes `the tip <sha>`. Without one the messages read as step 3's
+    always did: the sha for a red CI, and no `on ...` clause at all for a timeout.
+    """
     rc, line = ln.tools.await_ci(sha, ln.opts.ci_timeout)
     print(line)
     if rc == 0:
         return
+    where = f" on {label}" if label else ""
     if rc == 1:
-        ln.die(f"master CI is RED on {label} — nothing deployed", 1, "ci-red")
+        ln.die(f"master CI is RED on {label or sha} — nothing deployed", 1, "ci-red")
     if rc == 75:
         ln.die(
-            f"no CI verdict on {label} inside {ln.opts.ci_timeout}s — nothing deployed",
+            f"no CI verdict{where} inside {ln.opts.ci_timeout}s — nothing deployed",
             75,
             "ci-timeout",
         )

@@ -46,13 +46,16 @@ def _board_exprs() -> list[str]:
     return exprs
 
 
-def test_every_field_the_board_unwraps_is_one_the_ledger_writes():
-    unwrapped = {
-        m.group(1) for e in _board_exprs() for m in re.finditer(r"unwrap (\w+)", e)
-    }
+def _fields_the_board_unwraps_but_the_ledger_omits(exprs: list[str]) -> set[str]:
+    """The unwrapped names in `exprs` that no `key=` in a sample annotation supplies."""
+    unwrapped = {m.group(1) for e in exprs for m in re.finditer(r"unwrap (\w+)", e)}
     assert unwrapped, "the board unwraps no field at all"
-    written = set(re.findall(r"(\w+)=", _sample_line()))
-    assert not (unwrapped - written), unwrapped - written
+    return unwrapped - set(re.findall(r"(\w+)=", _sample_line()))
+
+
+def test_every_field_the_board_unwraps_is_one_the_ledger_writes():
+    missing = _fields_the_board_unwraps_but_the_ledger_omits(_board_exprs())
+    assert not missing, missing
 
 
 def test_the_board_filters_on_a_literal_the_ledger_writes():
@@ -65,7 +68,16 @@ def test_the_board_filters_on_a_literal_the_ledger_writes():
 
 
 def test_a_field_the_ledger_does_not_write_would_be_caught():
-    assert "not_a_real_phase" not in set(re.findall(r"(\w+)=", _sample_line()))
+    """The rejecting half, driven through the same comparison the real test uses.
+
+    Asserting only that the sample line lacks `not_a_real_phase` proved nothing about the
+    comparison -- it would pass with the subtraction deleted. A planted expr must be
+    reported as missing.
+    """
+    planted = ['{job="syslog"} | logfmt | unwrap not_a_real_phase [$__interval]']
+    assert _fields_the_board_unwraps_but_the_ledger_omits(
+        [*_board_exprs(), *planted]
+    ) == {"not_a_real_phase"}
 
 
 def test_an_unreached_stamp_leaves_its_field_empty():

@@ -14,8 +14,12 @@ failure; anything else GitHub calls not-yet-mergeable (BLOCKED, DIRTY, ...) stil
 
 `--auto` exiting 0 is not proof the merge was armed either (issue #1029): on PR #1026 it
 exited 0, `autoMergeRequest` stayed null, and the landing polled 35 minutes toward
-merge-timeout on a PR that was CLEAN with every check green. The state is read back, and an
-OPEN PR with no `autoMergeRequest` takes the same direct-merge path a CLEAN rejection does.
+merge-timeout on a PR that was CLEAN with every check green. One read-back answers all three
+questions the arm can have gone wrong in -- merged in the gap, armed, or silently not armed --
+and an unarmed CLEAN PR takes the same direct-merge path a CLEAN rejection does. An unarmed
+PR that is NOT CLEAN dies: direct-merging it would only fail the same way. The read-back
+itself failing is not a reason to fail a landing whose arm may well have worked, so it says
+so and trusts the exit code.
 
 --await-merge polls the PR's state until merged, so `gh pr create` -> `gh pr merge --auto`
 -> one backgrounded land.sh is the whole procedure. Every landing on 2026-09-01 hand-wrote
@@ -31,7 +35,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.land_lib.landing import BRANCH, Landing
-from deploy_tools.land_lib.outcome import say
+from deploy_tools.land_lib.outcome import Outcome, say
 
 
 def arm_merge_fallback_decision(state: str, merge_state_status: str) -> str:
@@ -93,16 +97,32 @@ def arm_merge(ln: Landing) -> None:
             f"(mergeStateStatus={retry.get('mergeStateStatus', '')})",
             1,
         )
-    # --auto exiting 0 is not proof the merge was armed (issue #1029). Read the state back;
-    # an OPEN PR with no autoMergeRequest takes the same direct-merge path a CLEAN
-    # rejection does.
-    armed = ln.view("state,autoMergeRequest")
-    if armed.get("state") == "OPEN" and armed.get("autoMergeRequest") is None:
-        say(
-            f"gh pr merge --auto exited 0 but PR #{pr} is not armed (autoMergeRequest is null)"
-        )
-        _merge_direct(ln, subject)
+    # --auto exiting 0 is not proof the merge was armed (issue #1029). One read-back
+    # answers every way it can have gone wrong; a read-back that itself fails must not turn
+    # a possibly-successful arm into a failed landing.
+    try:
+        armed = ln.view("state,mergeStateStatus,autoMergeRequest")
+    except Outcome:
+        say(f"could not confirm PR #{pr}'s arm; trusting gh pr merge --auto's exit 0")
         return
+    state = armed.get("state", "")
+    mss = armed.get("mergeStateStatus", "")
+    if state == "MERGED":
+        say(f"PR #{pr} merged in the meantime")
+        return
+    if state == "OPEN" and armed.get("autoMergeRequest") is None:
+        if arm_merge_fallback_decision(state, mss) == "merge-direct":
+            say(
+                f"gh pr merge --auto exited 0 but PR #{pr} is not armed "
+                "(autoMergeRequest is null)"
+            )
+            _merge_direct(ln, subject)
+            return
+        ln.die(
+            f"gh pr merge --auto exited 0 but PR #{pr} is not armed "
+            f"(mergeStateStatus={mss})",
+            1,
+        )
     say(f"auto-merge armed: {subject}")
 
 

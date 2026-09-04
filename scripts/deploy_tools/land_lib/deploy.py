@@ -117,7 +117,10 @@ def deploy_with_lock_retry(ln: Landing) -> int:
     o, t = ln.opts, ln.tools
     rc = 0
     for attempt in range(1, o.lock_retries + 1):
-        # Sampled BEFORE the attempt, for the reason note_lock_contention documents.
+        # Sampled BEFORE the attempt, for the reason note_lock_contention documents. It
+        # precedes the WHOLE per-host loop, so contention arising at a later host can name
+        # the holder seen before the first one; `holder or tools.lock_holder()` covers the
+        # case where that sample was empty.
         holder = t.lock_holder()
         started = t.clock()
         rc = deploy_by_host(ln)

@@ -6,6 +6,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_land_tools.py
 from __future__ import annotations
 
 import subprocess
+import sys
 from pathlib import Path
 
 from deploy_tools.land_lib import tools
@@ -42,6 +43,9 @@ def test_deploy_adds_target_only_for_a_remote_host(monkeypatch):
     ]
     tools.run_deploy(Path("/primary"), "sonarr", None)
     assert seen["argv"] == ["./scripts/deploy.sh", "--tags", "sonarr"]
+    # deploy.sh renders from its working directory, so a wrong cwd would deploy the wrong
+    # checkout's templates and report success.
+    assert seen["cwd"] == Path("/primary")
 
 
 def test_the_tick_runs_from_beside_land_py(monkeypatch):
@@ -55,6 +59,8 @@ def test_helpers_whose_code_must_match_are_imported_from_beside_land_py():
     """Issue #851: a helper this script passes new flags to must be the same release."""
     assert Path(tools.await_ci.__file__).resolve().parent == tools.HERE
     assert Path(tools.land_tags.__file__).resolve().parent == tools.HERE
+    gate_file = sys.modules[tools.health_gate.__module__].__file__
+    assert gate_file and Path(gate_file).resolve().parent == tools.HERE
 
 
 def test_read_state_is_empty_for_a_missing_or_blank_marker(tmp_path):

@@ -27,6 +27,11 @@ def run(ln: Landing) -> Outcome:
 
 
 def _phases(ln: Landing) -> None:
+    # Every later phase runs git and deploy.sh with the primary checkout as cwd. A missing
+    # one is worth one named line here rather than an unreadable failure five phases in;
+    # land.sh checked it before anything else too.
+    if not ln.opts.primary.is_dir():
+        ln.die(f"cannot cd to {ln.opts.primary}", 1)
     if ln.opts.arm_merge:
         merge.arm_merge(ln)
     if ln.opts.await_merge:
@@ -36,7 +41,7 @@ def _phases(ln: Landing) -> None:
     classify.shortcut_if_nothing(ln)
     ci.preflight(ln)
     print("== 3/6  waiting for master CI")
-    ci.wait_master_ci(ln, ln.merge_sha, ln.merge_sha)
+    ci.wait_master_ci(ln, ln.merge_sha)
     ln.ledger.t_ci = ln.tools.clock()
     print("== 4/6  GitOps tick (fetch, ff-merge, deploy what is eligible)")
     tick.run_tick(ln)

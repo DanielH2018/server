@@ -11,6 +11,9 @@ Run: uv run pytest scripts/deploy_tools/tests/test_land_merge.py
 
 from __future__ import annotations
 
+import subprocess
+from pathlib import Path
+
 import pytest
 
 from _land_fakes import Fakes
@@ -175,7 +178,9 @@ def test_a_clean_pr_falls_through_to_a_direct_merge(landing, capsys):
         "--subject",
         "Bump vale to 3.19.0",
     )
-    assert "merging directly" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "merging directly" in out
+    assert "merged directly: Bump vale to 3.19.0" in out
 
 
 def test_a_dirty_pr_still_dies(landing):
@@ -220,14 +225,76 @@ def test_an_auto_exit_0_with_no_auto_merge_request_merges_directly(landing, caps
         Fakes(
             gh_views={
                 "state,title": _OPEN,
-                "state,autoMergeRequest": {"state": "OPEN", "autoMergeRequest": None},
+                "state,mergeStateStatus,autoMergeRequest": {
+                    "state": "OPEN",
+                    "mergeStateStatus": "CLEAN",
+                    "autoMergeRequest": None,
+                },
             }
         )
     )
     merge.arm_merge(ln)
     merges = [c[1] for c in calls if c[0] == "gh"]
     assert len(merges) == 2 and "--auto" not in merges[1]
-    assert "not armed" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "not armed" in out and "merged directly: Bump vale to 3.19.0" in out
+
+
+def test_an_unarmed_pr_that_is_not_clean_dies_rather_than_merging(landing):
+    """The reject half of #1029: direct-merging a BLOCKED PR would fail the same way."""
+    ln, calls = landing(
+        Fakes(
+            gh_views={
+                "state,title": _OPEN,
+                "state,mergeStateStatus,autoMergeRequest": {
+                    "state": "OPEN",
+                    "mergeStateStatus": "BLOCKED",
+                    "autoMergeRequest": None,
+                },
+            }
+        )
+    )
+    with pytest.raises(Outcome) as exc:
+        merge.arm_merge(ln)
+    assert exc.value.rc == 1
+    assert "not armed (mergeStateStatus=BLOCKED)" in exc.value.error
+    assert len([c for c in calls if c[0] == "gh"]) == 1
+
+
+def test_a_pr_that_merged_during_the_arm_is_not_merged_again(landing, capsys):
+    """The read-back finding MERGED is the same race the rejection path already handles."""
+    ln, calls = landing(
+        Fakes(
+            gh_views={
+                "state,title": _OPEN,
+                "state,mergeStateStatus,autoMergeRequest": {
+                    "state": "MERGED",
+                    "mergeStateStatus": "CLEAN",
+                    "autoMergeRequest": None,
+                },
+            }
+        )
+    )
+    merge.arm_merge(ln)
+    assert len([c for c in calls if c[0] == "gh"]) == 1
+    assert "PR #999 merged in the meantime" in capsys.readouterr().out
+
+
+def test_a_read_back_that_fails_trusts_the_exit_code(landing, capsys):
+    """A read-back is a confirmation, not a gate: gh failing here must not fail a landing
+    whose arm may well have worked, and must not double-merge on a guess."""
+    ln, calls = landing(Fakes(gh_views={"state,title": _OPEN}))
+    real = ln.tools.gh_json
+
+    def gh_json(*args, **kwargs):
+        if "state,mergeStateStatus,autoMergeRequest" in args:
+            raise subprocess.CalledProcessError(1, "gh", stderr="HTTP 502")
+        return real(*args, **kwargs)
+
+    ln.tools.gh_json = gh_json
+    merge.arm_merge(ln)
+    assert len([c for c in calls if c[0] == "gh"]) == 1
+    assert "trusting gh pr merge --auto's exit 0" in capsys.readouterr().out
 
 
 def test_a_verified_arm_says_armed_and_merges_nothing_directly(landing, capsys):
@@ -235,8 +302,9 @@ def test_a_verified_arm_says_armed_and_merges_nothing_directly(landing, capsys):
         Fakes(
             gh_views={
                 "state,title": _OPEN,
-                "state,autoMergeRequest": {
+                "state,mergeStateStatus,autoMergeRequest": {
                     "state": "OPEN",
+                    "mergeStateStatus": "BLOCKED",
                     "autoMergeRequest": {"enabledAt": "x"},
                 },
             }
@@ -245,3 +313,15 @@ def test_a_verified_arm_says_armed_and_merges_nothing_directly(landing, capsys):
     merge.arm_merge(ln)
     assert len([c for c in calls if c[0] == "gh"]) == 1
     assert "auto-merge armed" in capsys.readouterr().out
+
+
+def test_the_merge_wait_never_hand_polls_ci():
+    """The nudge-land-sh hook denies `gh pr checks --watch` and `gh run watch`, and merge.py
+    is where someone would "improve" the wait by adding one. await_ci owns the CI verdict:
+    it is one shot per poll, derived from the required checks, and its `pending` IS the
+    grace period. A textual guard because the failure is a command that never appears in
+    any test's call log until it is already in production."""
+    text = Path(merge.__file__).read_text()
+    assert "gh pr checks" not in text
+    assert '"run"' not in text
+    assert "await_ci" in text

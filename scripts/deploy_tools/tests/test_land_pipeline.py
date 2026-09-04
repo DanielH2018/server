@@ -76,13 +76,36 @@ def test_the_diff_fallback_reaches_the_tick_before_deriving(land_run):
     assert names.index("tick") < names.index("changed") < names.index("deploy")
 
 
+def test_a_missing_primary_checkout_is_named_before_any_phase_runs(land_run):
+    """Every phase runs git and deploy.sh there, so it is checked first and named plainly.
+
+    No verdict: bash annotated this as `aborted` too, and it is a broken invocation rather
+    than a landing outcome.
+    """
+    from pathlib import Path
+
+    rc, _, err, calls, logline = land_run([], primary=Path("/nonexistent"))
+    assert rc == 1
+    assert "cannot cd to /nonexistent" in err
+    assert "gh" not in _names(calls)
+    assert "verdict=aborted cause= exit=1" in logline
+
+
 def test_land_never_bypasses_the_staleness_guard():
-    """The tempting fix for exit 4 is the flag that disables the check."""
+    """The tempting fix for exit 4 is the flag that disables the check.
+
+    Every module in the package, not just deploy.py: the flag would work from any of them,
+    and a guard reading one file goes silently vacuous the day the deploy call moves. The
+    count assertion is what stops the glob returning nothing after a rename.
+    """
     from pathlib import Path
 
     from deploy_tools.land_lib import deploy
 
-    assert "--skip-staleness-check" not in Path(deploy.__file__).read_text()
+    modules = sorted(Path(deploy.__file__).parent.glob("*.py"))
+    assert len(modules) >= 12, [p.name for p in modules]
+    for module in modules:
+        assert "--skip-staleness-check" not in module.read_text(), module.name
 
 
 def test_every_verdict_is_produced_by_a_running_test():

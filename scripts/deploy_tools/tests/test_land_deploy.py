@@ -56,6 +56,23 @@ def test_a_retry_resumes_at_the_host_that_failed(landing):
     assert ln.ledger.lock_waited > 0
 
 
+def test_the_lock_holder_is_sampled_before_the_deploy_attempt(landing):
+    """#1031, the deploy half of the tick's own guard: the sample precedes the attempt.
+
+    The fake answers once and then goes empty, so a post-attempt read would book nothing --
+    but the ORDER assertion is what actually discriminates, since a post-attempt read
+    consumes the same first answer.
+    """
+    ln, calls = _ready(
+        landing, Fakes(deploy=[75, 0], lock_holder=["42 flock deploy", ""])
+    )
+    ln.tags = "sonarr"
+    deploy.deploy_with_lock_retry(ln)
+    names = [c[0] for c in calls]
+    assert names.index("lock_holder") < names.index("deploy")
+    assert ln.ledger.lock_holder == "42 flock deploy"
+
+
 def test_a_mapping_failure_dies_with_its_own_verdict(landing):
     """Closes #1016: this used to surface as a bare `deploy-failed (exit 1)`."""
     ln, calls = _ready(landing, Fakes(hosts_rc=1))
