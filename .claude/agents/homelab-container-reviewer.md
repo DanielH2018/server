@@ -20,9 +20,9 @@ highest-signal findings.
   backup tier that matches `docs/longhorn-backup-tiering.md`, and a `checksum/config` pod
   annotation wherever a ConfigMap/Secret change must roll the pod. `roles/k8s/sonarr` and
   `roles/k8s/freshrss` are good reference shapes.
-- **Two traps to respect:** the k8s deploy play has **no toposort** — `containers_list` order in
-  `host_vars/daniel-box.yml` is load-bearing (traefik's CRDs first, then authelia's middleware);
-  and `kubectl apply` leaves **stale Secret keys** behind, so a removed manifest key persists live.
+- **One trap to respect:** `kubectl apply` leaves **stale Secret keys** behind, so a removed
+  manifest key persists live. (The k8s deploy play toposorts `containers_list` on derived
+  Traefik-CRD and authelia edges, so a new entry's position no longer needs checking.)
 - **Egress NetworkPolicies are not enforced** by this cluster's CNI. Never report one as a control,
   and don't propose an egress policy as a fix.
 - **`ansible/roles/containers/archive/`** is retired code kept for reference — never flag it.

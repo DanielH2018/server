@@ -502,8 +502,13 @@ def test_staging_deploys_something() -> None:
 
 
 def test_traefik_comes_first() -> None:
-    """The play has no toposort — it runs containers_list in order, and Traefik installs the
-    CRDs every later IngressRoute needs."""
+    """Traefik installs the CRDs every later IngressRoute needs.
+
+    The k8s play toposorts containers_list (build_k8s_dep_map / toposort_containers in
+    ansible/filter_plugins/toposort.py), so a misordered entry no longer breaks the deploy —
+    but the list is still read in this raw order here, and keeping traefik first is what
+    makes that raw order match the deploy order without relying on the sort to fix it.
+    """
     roles = _staging_roles()
     assert roles[0] == "traefik", (
         f"traefik must lead {_HOST}'s containers_list, got {roles}"

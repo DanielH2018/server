@@ -23,8 +23,10 @@ ssh_config_path: /etc/ssh/sshd_config
 # No Compose services — the staging subset is k8s-only by design (docs/staging-cluster.md,
 # Decision 6). deploy.yml dies in its first pre_task if this is undefined at all.
 #
-# Order matters: the play has no toposort and runs this list in order, so traefik stays
-# first — it installs the CRDs every later IngressRoute needs.
+# The k8s play toposorts this list (build_k8s_dep_map / toposort_containers in
+# ansible/filter_plugins/toposort.py) rather than deploying it in list order — traefik gets
+# an incoming edge from every role rendering a Traefik CRD automatically, derived from the
+# role's own templates, so list position here is only the toposort's tiebreak.
 # `staging_expect` on an entry below is Phase C slice 2 (docs/staging-phase-c.md, Decision 2):
 # what this service must ANSWER, not merely that its pod came up. Every value was measured
 # against the live cluster on 2026-08-28, never inferred — an expectation nobody checked is a
@@ -51,9 +53,10 @@ containers_list:
         status: 302
 
   # The forward-auth gate, and the mechanism no other manifest exercises: a Middleware that
-  # other roles' IngressRoutes reference by name (docs/staging-cluster.md, Decision 6). Placed
-  # AFTER traefik, whose CRDs define that Middleware, and BEFORE freshrss, which references it.
-  # The play has no toposort and runs in list order.
+  # other roles' IngressRoutes reference by name (docs/staging-cluster.md, Decision 6). Its
+  # own IngressRoute renders a Traefik CRD, so build_k8s_dep_map gives it an edge onto
+  # traefik automatically; freshrss below gets its edge onto authelia the same way, from its
+  # own `use_authelia: true`.
   #
   # Its credentials are generated fakes, per Decision 5 — this portal guards nothing real, and
   # what staging gates is whether the manifests render and the pod reaches Ready.
@@ -69,9 +72,8 @@ containers_list:
         path: /
         status: 200
 
-  # The first real app: Deployment through PVC through IngressRoute. Placed AFTER traefik,
-  # which installs the CRDs its IngressRoute needs — the play has no toposort and runs in
-  # list order.
+  # The first real app: Deployment through PVC through IngressRoute. Its edge onto traefik
+  # is derived automatically (see the authelia entry above).
   #
   # `use_authelia: true`, matching prod, since the entry above now supplies the Middleware.
   # It was false while Authelia was absent: an IngressRoute referencing a Middleware that
@@ -101,8 +103,9 @@ containers_list:
 
   # The in-cluster registry, entered only because ical-proxy below is BUILT rather than
   # pulled: k8s/image-builder pushes to it and containerd pulls back from it. It is not part
-  # of the subset's mechanism coverage in its own right. Placed before ical-proxy — the play
-  # has no toposort and runs in list order.
+  # of the subset's mechanism coverage in its own right. Not a Traefik-CRD or authelia edge,
+  # so ical-proxy declares it explicitly (`depends_on: [registry]`) rather than relying on
+  # list position.
   #
   # Its agent-half pull self-test needs no per-cluster switch: selftest-pull-job.yaml.j2
   # renders that half only when `k3s_agent_node_ips` is non-empty, and this cluster has no
@@ -123,6 +126,7 @@ containers_list:
     hostname: "ical-proxy"
     port: 5000
     use_authelia: false
+    depends_on: [registry]
     # Both directions, because this is the service that proved the mechanism necessary. Its
     # route is a monitoring_route: Host + PathPrefix(/calendar) + a ClientIP guard. So
     # /calendar1.ics must answer 200 and / must answer 404 — the 404 is the PathPrefix working,

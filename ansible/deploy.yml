@@ -136,14 +136,33 @@
       tags: always
 
     - name: Restrict this play to k8s-platform containers
-      # No toposort here. Ordering is list order in host_vars, and it matters exactly once:
-      # the traefik role installs the Traefik CRDs that every other service's IngressRoute
-      # and Middleware depend on, so traefik is listed first. Three services do not justify
-      # a second dependency graph; revisit if slice 2 makes the ordering non-obvious.
       # Sourced from the snapshot, NOT from containers_list — the Docker play above has already
       # overwritten that fact with its own filtered subset.
       ansible.builtin.set_fact:
         containers_list: "{{ containers_list_unfiltered | filter_by_platform('k8s') }}"
+      tags: always
+
+    # Toposorted rather than list order, mirroring the Docker play above (build_dep_map /
+    # toposort_containers) but through build_k8s_dep_map, the k8s counterpart in the same
+    # filter_plugins/toposort.py: the traefik-CRD and authelia-middleware edges are derived
+    # from the role's own templates and its `use_authelia` flag, not hand-listed, and the one
+    # edge no template carries (crowdsec before traefik, for the LAPI machine credential) is
+    # declared as `depends_on:` on traefik's containers_list entry in host_vars. Stable sort,
+    # so on the live inventory — where every entry already sits in a valid topological order —
+    # this is a no-op (see ansible/tests/deploy/test_k8s_toposort.py).
+    #
+    # Built from the FULL list, unlike the Docker play's tag-narrowed map: this play applies
+    # `--tags` per-role inside the batch loop below rather than narrowing containers_list
+    # first, so a closure-only map would leave every role outside a tagged run's closure with
+    # no traefik/authelia edge at all.
+    - name: Build k8s role dependency map
+      ansible.builtin.set_fact:
+        _k8s_container_deps_map: "{{ containers_list | build_k8s_dep_map(playbook_dir) }}"
+      tags: always
+
+    - name: Sort k8s containers by dependency order
+      ansible.builtin.set_fact:
+        containers_list: "{{ containers_list | toposort_containers(_k8s_container_deps_map) }}"
       tags: always
 
     # k8s_dry_run suppresses mutation inside roles/k8s/manifests, which is where 35 of the 54
@@ -248,8 +267,8 @@
   tasks:
     # Batched rather than one flat loop: roles/k8s/manifests no longer waits on its own rollout
     # (see tasks/k8s_rollout_drain.yml), so the batch boundary is what bounds how many workloads
-    # roll at once. List order still holds within and across batches, which is what traefik's CRDs
-    # and authelia's middleware depend on.
+    # roll at once. The toposorted order from the pre_tasks above still holds within and across
+    # batches, which is what traefik's CRDs and authelia's middleware depend on.
     - name: Deploy k8s workloads in batches
       ansible.builtin.include_tasks: tasks/k8s_batch.yml
       loop: "{{ containers_list | batch(k8s_rollout_batch_width | int) | list }}"

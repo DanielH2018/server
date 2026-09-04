@@ -31,15 +31,19 @@ autofix_fake_remux_policy:
   max_attempts: 3
   history_retention_days: 14
 
-# ORDER IS LOAD-BEARING and this play has no toposort. The traefik role installs the
-# Traefik CRDs every IngressRoute and Middleware below depends on, and the authelia role
-# creates the `authelia` Middleware their routes reference. Per-entry ordering constraints
-# are noted where they apply.
+# The k8s play (ansible/deploy.yml) toposorts this list with build_k8s_dep_map /
+# toposort_containers (ansible/filter_plugins/toposort.py) rather than deploying it in list
+# order. The traefik-CRD and authelia-middleware edges below are derived automatically, from
+# each role's own templates and its `use_authelia` flag — a new entry gets them for free and
+# does not need to be positioned by hand. List order is kept only as the toposort's tiebreak,
+# so today's order stays the sorted order and a diff here still reads as "nothing moved".
 containers_list:
-  # BEFORE traefik deliberately: the traefik pod carries a crowdsec agent sidecar that logs
+  # crowdsec must precede traefik: the traefik pod carries a crowdsec agent sidecar that logs
   # into this engine's LAPI, and a post-deploy task in this role registers the machine
-  # credential — so the engine must exist before a traefik rollout starts the sidecar.
-  # Asserted by ansible/tests/deploy/test_containers_list_ordering.py.
+  # credential — so the engine must exist before a traefik rollout starts the sidecar. Not
+  # derivable from a template, so it is declared as traefik's `depends_on:` below rather than
+  # hand-positioned; see K8S_CRD_EDGE_EXEMPT in toposort.py for why the reverse (CRD) edge is
+  # exempted here instead of cycling against it.
   #
   # The cost accepted for that: this role renders an IngressRoute (the LAPI's LAN face)
   # ahead of traefik installing the CRDs. Harmless on the running cluster; on a rebuild it
@@ -55,6 +59,7 @@ containers_list:
   - name: traefik
     platform: k8s
     port: 8080
+    depends_on: [crowdsec]
   - name: authelia
     platform: k8s
     # This portal's name is the OIDC issuer Jellyfin's SSO plugin points at.

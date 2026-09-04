@@ -91,10 +91,16 @@ service rather than a fact you need in every session:
 
 Two facts stay here because they bite from outside those procedures:
 
-- **Position in `containers_list` matters.** That play has no toposort and runs in list
-  order, so a new entry goes *after* `traefik` (which installs the CRDs its IngressRoute
-  needs) and after `authelia` if the route uses the `authelia` middleware. Editing that list
-  for any reason means keeping the order.
+- **`containers_list` position no longer matters for a k8s entry** (Docker still runs its own
+  play in tag-narrowed dependency order, unaffected). `ansible/deploy.yml` toposorts the k8s
+  play with `build_k8s_dep_map` / `toposort_containers`
+  (`ansible/filter_plugins/toposort.py`): a role that renders a Traefik CRD gets an edge onto
+  `traefik`, and `use_authelia: true` gets one onto `authelia`, both derived from the role's
+  own templates and the entry itself — a new entry gets them for free, wherever you put it in
+  the list. The one ordering need no template carries — crowdsec before traefik, for the LAPI
+  machine credential — is declared, not positioned: `depends_on: [crowdsec]` on traefik's
+  entry in `host_vars`. If a new entry needs an ordering constraint a template can't express,
+  add its own `depends_on:` rather than moving it in the list.
 - **`kubectl apply` leaves stale Secret keys behind.** Removing a key from a `secret.yaml.j2`
   does not remove it live.
 

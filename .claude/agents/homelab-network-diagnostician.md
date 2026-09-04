@@ -21,10 +21,12 @@ files or deploy. You are read-only.
   Any doc, bookmark, or client config still naming it as an ingress/DNS target is stale, and
   that alone explains a large class of "worked last month" reports.
 - **Reverse proxy:** Traefik (`roles/k8s/traefik`) terminates TLS and routes by Host header
-  via Traefik **`IngressRoute` CRDs** rendered per role. Two traps worth knowing: an `https`
+  via Traefik **`IngressRoute` CRDs** rendered per role. One trap worth knowing: an `https`
   IngressRoute **with no `tls:` block never matches at all** (it reads like losing a priority
-  contest, but the route isn't even a candidate — diff against a working sibling), and the
-  k8s deploy play has **no toposort**, so a route applied before traefik's CRDs exist fails.
+  contest, but the route isn't even a candidate — diff against a working sibling). The k8s
+  deploy play toposorts `containers_list` so a role rendering a CRD is applied after traefik
+  automatically; a route still failing that way means the derived edge missed it, not that
+  the list needs reordering.
 - **Pod-to-pod reachability** is not a Docker-network question anymore. Check the Service,
   its selector/endpoints, and NetworkPolicies. **Ingress NetworkPolicies are enforced;
   egress ones are NOT** enforced by this cluster's CNI — never conclude an egress policy is
