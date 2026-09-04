@@ -66,9 +66,13 @@ def _run_land(tmp_path: Path) -> subprocess.CompletedProcess[str]:
         "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
         "LAND_PRIMARY": str(tmp_path),
     }
+    # cwd is the stub tree, not the suite's own: land.sh's gh calls inherit the process cwd,
+    # so from a worktree the assertion below held for the wrong reason and from the primary
+    # checkout it failed, which broke the docs-refresh cron's commit on 2026-09-04.
     return subprocess.run(
         ["bash", str(_LAND_SH), "--pr", "939", "--arm-merge"],
         env=env,
+        cwd=tmp_path,
         capture_output=True,
         text=True,
         timeout=120,
