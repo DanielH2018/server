@@ -39,8 +39,8 @@ ansible/tests/staging/test_staging_manifests_have_their_variables.py 615
 scripts/deploy_tools/tests/test_deploy_detach_notify.py 511
 scripts/deploy_tools/tests/test_land_tags.py 684
 scripts/deploy_tools/tests/test_publish_pr.py 514
-scripts/dev/findings.py 874
-scripts/dev/tests/test_findings.py 868
+scripts/dev/findings.py 868
+scripts/dev/tests/test_findings.py 733
 scripts/diagnostics/probe.py 697
 scripts/diagnostics/probe_lib/health.py 938
 scripts/diagnostics/probe_lib/longhorn.py 630
