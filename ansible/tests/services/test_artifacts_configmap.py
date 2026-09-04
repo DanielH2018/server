@@ -47,12 +47,35 @@ def _module_files() -> set[str]:
     return {path.name for path in FILES.glob("*.py")}
 
 
+def divergence(shipped: set[str], on_disk: set[str]) -> list[str]:
+    """What the ConfigMap ships against what `files/` holds, as readable problems.
+
+    Pure, so the red-proof pair below can hand it a set the tree does not produce. Both
+    directions matter and they fail differently, which is why each gets its own message.
+
+    Args:
+        shipped: The ConfigMap's `.py` keys, which are `artifacts_modules`.
+        on_disk: The `.py` filenames under the role's `files/`.
+
+    Returns:
+        One line per divergence, empty when the two sets agree.
+    """
+    return [
+        f"{name} is in files/ but not in artifacts_modules, so it never reaches the pod"
+        for name in sorted(on_disk - shipped)
+    ] + [
+        f"{name} is in artifacts_modules but not in files/"
+        for name in sorted(shipped - on_disk)
+    ]
+
+
 def test_every_key_survives_the_render() -> None:
     """The absorbed-key failure shows up here and nowhere else in the suite."""
     data = _configmap()["data"]
     assert set(data) == REQUIRED_MODULES | {"known_services.json"}, (
-        "a key was absorbed into another key's block scalar — the render still parses as "
-        f"YAML, so only this assertion catches it. Got keys: {sorted(data)}"
+        "the key set changed: for a new module, update REQUIRED_MODULES above. Otherwise a "
+        "key was absorbed into another key's block scalar — the render still parses as YAML, "
+        f"so only this assertion catches that. Got keys: {sorted(data)}"
     )
 
 
@@ -60,17 +83,31 @@ def test_the_shipped_modules_are_the_ones_on_disk() -> None:
     """A module added to files/ but not to artifacts_modules never reaches the pod.
 
     The pod imports its siblings by plain module name off /app, so the missing one surfaces
-    as ModuleNotFoundError at startup rather than as anything Ansible reports. The comparison
-    runs both ways: a stale list entry naming a deleted file fails the render outright.
+    as ModuleNotFoundError at startup rather than as anything Ansible reports.
+
+    The other direction rarely reaches this assertion: `artifacts_modules` naming a file that
+    no longer exists makes `lookup('file')` raise while `rendered_docs()` renders the whole
+    tree, so the failure arrives as that shared helper blowing up rather than as this test.
+    It is still compared here, because the render can be stubbed or skipped and this cannot.
     """
     on_disk = _module_files()
     assert REQUIRED_MODULES <= on_disk, REQUIRED_MODULES - on_disk
-    assert _module_keys() == on_disk
+    assert divergence(_module_keys(), on_disk) == []
 
 
-def test_an_absent_module_is_not_silently_dropped() -> None:
-    """The red half of the pair above: the comparison must notice a missing key."""
-    assert _module_keys() != _module_files() | {"artifact_gone.py"}
+def test_a_module_missing_from_the_ship_list_is_flagged() -> None:
+    """The red half: a key set short one real module must not compare equal."""
+    on_disk = _module_files()
+    assert divergence(_module_keys() - {"artifact_meta.py"}, on_disk) == [
+        "artifact_meta.py is in files/ but not in artifacts_modules, so it never reaches "
+        "the pod"
+    ]
+
+
+def test_a_ship_list_entry_with_no_file_is_flagged() -> None:
+    """The other direction, which the render usually catches first — see above."""
+    flagged = divergence(_module_keys() | {"artifact_gone.py"}, _module_files())
+    assert flagged == ["artifact_gone.py is in artifacts_modules but not in files/"]
 
 
 def test_every_embedded_module_is_parseable_python() -> None:

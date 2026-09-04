@@ -13,9 +13,14 @@ because the ConfigMap key had been appended to the Python program it sits next t
 The check here is deliberately one-directional: every key name written at the `data:` indent in
 the SOURCE must appear as a key in the PARSED render. Absorption removes a key from the parsed
 result while leaving the source line untouched, so it fails this and nothing else. Extra
-rendered keys are fine: `homepage/icons-configmap.yaml.j2` builds all six of its keys in a
-`{% for %}` loop, so it writes no literal key at all and is the one template this covers
-nothing of.
+rendered keys are fine.
+
+A key written by a `{% for %}` loop carries no literal name in the source, so this scan cannot
+see it. Two templates are covered only in part for that reason:
+`homepage/icons-configmap.yaml.j2` builds all six of its keys in a loop and is covered not at
+all, and `artifacts/configmap.yaml.j2` writes `known_services.json` literally but loops its
+three `.py` keys over `artifacts_modules`. Those `.py` keys are pinned by
+`test_artifacts_configmap.py` instead, which compares them against the files on disk.
 
 Two narrowings, both because the source is a template and not YAML:
 
