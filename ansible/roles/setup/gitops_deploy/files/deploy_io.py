@@ -36,7 +36,6 @@ from datetime import tzinfo
 from deploy_config import (  # noqa: F401 — re-exported for `deploy_io.<name>` callers
     Config,
     ConfigError,
-    csv_set,
     load_config,
     log,
     read_config_file,

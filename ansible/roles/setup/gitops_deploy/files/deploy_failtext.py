@@ -6,9 +6,11 @@ output are cut before they reach a Discord message. `failure_detail` is the stdo
 not a plain tail — profile_tasks prints its timing table after the PLAY RECAP, so it lifts the
 failing task's own lines out first and spends what is left of the budget on the tail.
 
-This is a leaf: it imports the standard library and nothing else. Callers reach these names
-qualified — `deploy_failtext.failure_detail(...)`. `deploy_io` re-exports them for the suite,
-which reads them through the module it has always read.
+This is a leaf: it imports the standard library and nothing else. No test patches a name
+defined here, so a caller may from-import one — unlike `deploy_io`, where a from-import would
+take its own reference and never see the `monkeypatch`. `test_gitops_deploy_patch_boundary.py`
+reports it if that ever stops being true. `deploy_io` also re-exports these names for the
+suite, which reads them through the module it always has.
 
 Stdlib only: the unit runs under `uv run --no-project` and the host is still on Python 3.12.
 """
@@ -26,7 +28,7 @@ import re
 # The stdout half is NOT a plain tail. The profile_tasks callback prints its timing table after
 # the PLAY RECAP, and on a 1950-task deploy.yml that table plus the recap is more than the whole
 # budget, so a positional tail held `ok=1950 failed=1` and nothing naming the task (issue #907,
-# the 21:26 failure on `55c33965`). _failure_detail lifts the failing task's own lines out first
+# the 21:26 failure on `55c33965`). failure_detail lifts the failing task's own lines out first
 # and spends what is left of the budget on the tail.
 RUN_ERROR_STDOUT_CHARS = 4000
 RUN_ERROR_STDERR_TAIL = 4000

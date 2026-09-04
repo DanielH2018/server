@@ -9,8 +9,10 @@ import traceback. `Config.validate()` is the half that raises, and it raises `Co
 `log` lives here because every module prints through it and it depends on nothing else.
 
 This is a leaf: it imports `host_lib` and the standard library, and nothing else from this
-role. Callers reach these names qualified — `deploy_config.load_config(...)`. `deploy_io`
-re-exports them for the suite, which reads them through the module it has always read.
+role. No test patches a name defined here, so a caller may from-import one — unlike
+`deploy_io`, where a from-import would take its own reference and never see the `monkeypatch`.
+`test_gitops_deploy_patch_boundary.py` reports it if that ever stops being true. `deploy_io`
+also re-exports these names for the suite, which reads them through the module it always has.
 
 Stdlib only: the unit runs under `uv run --no-project` and the host is still on Python 3.12.
 """
