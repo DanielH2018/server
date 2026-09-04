@@ -88,12 +88,16 @@ both halves ran against the local node: PR #928 (a `roles/containers/alloy` chan
 because the play matched no service on daniel-box and the gate guessed a same-named cluster
 workload (issue #929).
 
-If another PR merges during that CI wait, the first `deploy.sh` exits 4 (the tree is behind
-origin) and `land.sh` retries, up to three times: each pass re-runs the blockers check, waits
-for master CI on the new tip (the tick defers until the TIP is green, not just your commit),
-then ticks and deploys. The tip wait is booked under `wait_ci` on the Landings board.
-Before 2026-09-02 that retry skipped the wait and ended `deploy-failed (exit 4)` with nothing
-deployed, three landings in one day.
+If another PR merges during that CI wait, or the periodic tick simply hasn't fast-forwarded
+onto your own merge commit yet, the first `deploy.sh` exits 4 (the tree is behind origin) and
+`land.sh` retries, up to three times: each pass sleeps `lock_backoff` (60s), re-runs the
+blockers check, waits for master CI on the CURRENT tip (the tick defers until the TIP is
+green, not just your commit) whether or not the tip actually moved, then ticks and deploys.
+The tip wait is booked under `wait_ci` on the Landings board. Before 2026-09-02 that retry
+skipped the wait entirely and ended `deploy-failed (exit 4)` with nothing deployed, three
+landings in one day. Before 2026-09-04 (issue #1084) the wait and the backoff both still ran
+only when the tip had moved, so an unchanged tip burned all three retries in ~25s with no
+pacing at all.
 
 **One `deploy-failed` variant means the opposite of the rest.** `a playbook task failed AFTER
 applying; some changes are live` is `deploy.sh` exit 20: the play reached its tasks and one of
