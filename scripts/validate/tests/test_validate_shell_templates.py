@@ -349,9 +349,39 @@ def test_cron_job_scripts_excludes_an_archived_role(tmp_path):
 
 
 def test_cron_job_scripts_excludes_the_deliberately_unscheduled_reaper(cron_map):
-    # longhorn-reap-orphan-backups.sh.j2 uses the same bare `k3s kubectl` as the two real
-    # offenders but health-crons.yml deliberately never schedules it — it must not appear here.
+    # longhorn-reap-orphan-backups.sh.j2 is an operator-invoked tool — health-crons.yml installs
+    # it (release_bin) but deliberately never wires it to a `cron:` task, because the
+    # safe-to-delete set depends on live state the script can check but not guarantee will
+    # still hold on an unattended schedule. It must not appear in the cron job map.
     assert not any(t.name == "longhorn-reap-orphan-backups.sh.j2" for t in cron_map)
+
+
+@pytest.mark.parametrize(
+    "template_name",
+    ["longhorn-reap-orphan-backups.sh.j2", "longhorn-reap-orphan-snapshots.sh.j2"],
+)
+def test_reap_orphan_shims_export_the_uv_python_install_dir(template_name):
+    # `--apply` is documented as `sudo <shim> --apply`, and sudo resets HOME to /root by
+    # default. The pinned interpreter is installed `become: false` under sys_user's own HOME
+    # (~/.local/share/uv/python), so under sudo's /root HOME uv would find no interpreter and
+    # --no-python-downloads forbids fetching one. Exporting UV_PYTHON_INSTALL_DIR before the
+    # `uv run` call makes discovery independent of which HOME invoked the shim.
+    ctx = {**BASE_CONTEXT, **load_yaml(ALL_VARS), **v.SHELL_STUB_OVERRIDES}
+    rendered = v.render_template(
+        v.ROLES / "setup" / "k3s" / "templates" / template_name, ctx
+    )
+    sys_user = ctx["sys_user"]
+    assert (
+        'export UV_PYTHON_INSTALL_DIR="/home/%s/.local/share/uv/python"' % sys_user
+    ) in rendered
+    # And the export must land BEFORE the `uv run` invocation it exists to fix.
+    export_line = next(
+        i for i, ln in enumerate(rendered.splitlines()) if "UV_PYTHON_INSTALL_DIR" in ln
+    )
+    uv_run_line = next(
+        i for i, ln in enumerate(rendered.splitlines()) if "uv run" in ln
+    )
+    assert export_line < uv_run_line
 
 
 def test_cron_path_error_flags_a_bare_invocation_with_no_path_fix(tmp_path):
