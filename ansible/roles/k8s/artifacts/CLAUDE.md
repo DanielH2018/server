@@ -41,10 +41,16 @@ Consequences worth knowing before debugging a missing artifact:
 The pod runs `python3 /app/artifact_server.py` against the whole ConfigMap mounted at `/app`,
 and `templates/configmap.yaml.j2` builds one key per entry in `artifacts_modules`
 (`defaults/main.yml`). **Adding a file to `files/` without adding its name there ships nothing**
-— the pod dies at import with `ModuleNotFoundError`, which no Ansible output reports. Do not
-add a `lookup('file')` key to the template by hand: this ConfigMap crash-looped the pod twice
-that way, and `ansible/tests/services/test_artifacts_configmap.py` compares the list against
-`files/` in both directions.
+— the pod dies at import with `ModuleNotFoundError`, which no Ansible output reports.
+`ansible/tests/services/test_artifacts_configmap.py` compares the list against `files/` in
+both directions.
+
+**Edit the list, not the template.** That ConfigMap has crash-looped the pod twice, both times
+from a comment rather than from a key: once from a comment closing tag written inside a
+comment, which ended the comment early and rendered the remaining prose into the document as
+YAML, and once from an indented comment above `known_services.json`, which pushed that key
+inside the block scalar above it. The template's own header records both in full, and is the
+thing to read before editing it.
 
 ## Retiring a service does not remove it from the index
 `artifacts_retired_services` exists so an artifact *about* a retired service stays findable by

@@ -88,7 +88,10 @@ def test_the_shipped_modules_are_the_ones_on_disk() -> None:
     The other direction rarely reaches this assertion: `artifacts_modules` naming a file that
     no longer exists makes `lookup('file')` raise while `rendered_docs()` renders the whole
     tree, so the failure arrives as that shared helper blowing up rather than as this test.
-    It is still compared here, because the render can be stubbed or skipped and this cannot.
+
+    `divergence` sees only `.py` names, because `_module_keys` filters the data keys to those.
+    An `artifacts_modules` entry that is not a `.py` file is invisible here; the exact key set
+    in test_every_key_survives_the_render is what catches that one.
     """
     on_disk = _module_files()
     assert REQUIRED_MODULES <= on_disk, REQUIRED_MODULES - on_disk
