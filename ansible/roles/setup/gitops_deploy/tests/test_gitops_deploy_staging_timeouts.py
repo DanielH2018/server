@@ -4,6 +4,12 @@ defaults/main.yml is the source; config.env.j2 renders it onto the host; gitops_
 carries a `C.get(name, "<literal>")` fallback for a host whose config predates that render.
 Until 2026-08-29 the render was missing entirely, so the FALLBACK was what production ran on
 and editing the defaults would have moved nothing. These pin all three together.
+
+The `C.get(...)` calls in gitops_deploy.py are vestigial as of the move to deploy_io.load_config
+(the actual parsing, with error handling, lives there now) — they exist solely so
+scripts/docs/gen_doc_fragments.py's config_default() parser still has a call to read out of that
+file by name. `test_staging_timeout_module_fallbacks_match_config_defaults` below is what keeps
+that vestige from drifting away from the value it is supposed to describe.
 """
 
 # ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_staging_timeouts.py
@@ -13,13 +19,20 @@ import re
 
 import yaml
 
+import deploy_io
+
 _SRC = pathlib.Path(__file__).resolve().parents[1] / "files" / "gitops_deploy.py"
 _TEMPLATES = pathlib.Path(__file__).parents[1] / "templates"
 _DEFAULTS = pathlib.Path(__file__).parents[1] / "defaults" / "main.yml"
 
 
 def _env_fallbacks(source: str) -> dict[str, int]:
-    """The literal defaults gitops_deploy.py falls back to when config.env lacks a key."""
+    """The literal defaults gitops_deploy.py falls back to when its config file lacks a key.
+
+    These three keys deliberately keep their `C.get` fallback in the entry module rather than
+    moving into `deploy_io.load_config` with the rest — scripts/docs/gen_doc_fragments.py parses
+    them out of that file by name to publish the staging fragment.
+    """
     return {
         name: int(value)
         for name, value in re.findall(
@@ -83,3 +96,13 @@ def test_an_unrendered_key_is_caught():
     assert "STAGING_GATE_TIMEOUT_S" not in _rendered_env_keys(
         "STAGING_GATE={{ x }}\n# STAGING_GATE_TIMEOUT_S is only a comment\n"
     ), "a key named only in a comment must not count as rendered"
+
+
+def test_staging_timeout_module_fallbacks_match_config_defaults():
+    """The real parsing moved to deploy_io.load_config; these `C.get(...)` calls only exist so
+    gen_doc_fragments.py has one to read. Pin them against Config's own defaults so the two
+    cannot silently disagree."""
+    fallbacks = _env_fallbacks(_SRC.read_text())
+    defaults = deploy_io.Config()
+    assert fallbacks["STAGING_GATE_TIMEOUT_S"] == defaults.staging_gate_timeout_s
+    assert fallbacks["STAGING_EXPECT_TIMEOUT_S"] == defaults.staging_expect_timeout_s

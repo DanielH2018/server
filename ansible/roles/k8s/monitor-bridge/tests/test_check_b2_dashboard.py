@@ -57,6 +57,7 @@ def test_the_b2_storage_line_still_matches_the_dashboard_regex():
         truncated=False,
         cap=10_000_000_000,
         max_pct=90,
+        max_pages=50,
     )
     assert ok
     match = re.search(_dashboard_b2_regex(), msg)

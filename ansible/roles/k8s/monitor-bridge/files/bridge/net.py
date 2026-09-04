@@ -12,6 +12,7 @@ read `cfg.PROM_ORIGIN`, and the gates test renders them to prove where the origi
 """
 
 import json
+from typing import Any
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -22,7 +23,7 @@ from bridge.common import HTTP_TIMEOUT
 from bridge.parsing import FETCH_BODY_MAX, describe_fetch_failure, endpoint_label
 
 
-def origin_sel(*matchers):
+def origin_sel(*matchers: str) -> str:
     """A `{...}` label-matcher block: the given matchers plus the origin pin, when one applies.
 
     Returns "" when there is nothing to select on, so `"up%s" % origin_sel()` is a bare `up`
@@ -34,7 +35,7 @@ def origin_sel(*matchers):
     return "{%s}" % ", ".join(parts) if parts else ""
 
 
-def cadvisor_sel(*matchers):
+def cadvisor_sel(*matchers: str) -> str:
     """A `{...}` block for cAdvisor series, which carry NO origin label — so no origin pin.
 
     DECIDED: cAdvisor metrics must NOT go through origin_sel(). `origin` is applied by exactly
@@ -57,7 +58,7 @@ def cadvisor_sel(*matchers):
     return "{%s}" % ", ".join(parts) if parts else ""
 
 
-def host_metric_sel(*matchers):
+def host_metric_sel(*matchers: str) -> str:
     """A `{...}` block for the HOST-level node_* checks, minus origins owned by another check.
 
     node_* is estate-wide the moment a host runs node-exporter, so check_disk and check_mem
@@ -85,7 +86,7 @@ def host_metric_sel(*matchers):
     return "{%s}" % ", ".join(parts) if parts else ""
 
 
-def _origin_name(labels):
+def _origin_name(labels: dict) -> str:
     """The host a per-origin series belongs to, for naming an offender in an alert message.
 
     The Docker Prometheus has no `origin` label at all (external_labels are applied on
@@ -97,7 +98,13 @@ def _origin_name(labels):
 # HTTP / parsing helpers (pure-ish, unit-tested)
 
 
-def _get_json(url, headers=None):
+def _get_json(url: str, headers: dict[str, str] | None = None) -> Any:
+    # The explicit User-Agent is REQUIRED, not decoration. Discord sits behind Cloudflare, which
+    # 403s the default python-urllib UA with error 1010 — so `check_discord`'s webhook GETs would
+    # read as revoked webhooks on every cycle without it. host_lib.discord_post carries the same
+    # rationale for the host plane's POSTs; the two programs cannot share a module (monitor-bridge
+    # ships only its own files/ into a ConfigMap), so the reason is written in both places rather
+    # than in neither.
     hdrs = {"User-Agent": "monitor-bridge"}
     if headers is not None:
         hdrs.update(headers)
@@ -126,11 +133,12 @@ def _get_json(url, headers=None):
         raise RuntimeError(describe_fetch_failure(url, e)) from e
 
 
-def _post_json(url, payload, headers=None):
+def _post_json(url: str, payload: dict, headers: dict[str, str] | None = None) -> Any:
     """POST a JSON body and return the parsed JSON response. Same failure contract as _get_json.
 
     Only the Cloudflare GraphQL endpoint needs this — every other source here is a GET.
     """
+    # Same required User-Agent as _get_json above, for the same Cloudflare 1010 reason.
     hdrs = {"User-Agent": "monitor-bridge", "Content-Type": "application/json"}
     if headers is not None:
         hdrs.update(headers)
@@ -152,7 +160,7 @@ def _post_json(url, payload, headers=None):
         raise RuntimeError(describe_fetch_failure(url, e)) from e
 
 
-def _instant_query(base_url, path, query, source):
+def _instant_query(base_url: str, path: str, query: str, source: str) -> list[dict]:
     """Runs an instant query against `base_url + path` and returns the result list.
 
     Prometheus and Loki share the same /query?query= shape and {status, data.result}
@@ -166,7 +174,9 @@ def _instant_query(base_url, path, query, source):
     return data.get("data", {}).get("result", [])
 
 
-def prom_scalar(promql, base=None, source="prometheus"):
+def prom_scalar(
+    promql: str, base: str | None = None, source: str = "prometheus"
+) -> float | None:
     """Run an instant query; return the first result's value as float, or None if empty.
 
     `base` selects which Prometheus. PROM_URL is the default and is what every PROM_DEPENDENT
@@ -182,7 +192,9 @@ def prom_scalar(promql, base=None, source="prometheus"):
     return float(result[0]["value"][1])
 
 
-def prom_vector(promql, base=None, source="prometheus"):
+def prom_vector(
+    promql: str, base: str | None = None, source: str = "prometheus"
+) -> list[tuple[dict, float]]:
     """Run an instant query; return [(labels: dict, value: float), ...] (empty if none).
 
     Unlike prom_scalar this keeps each series' labels, so checks can name *which*
@@ -196,7 +208,7 @@ def prom_vector(promql, base=None, source="prometheus"):
     ]
 
 
-def loki_count(selector, window):
+def loki_count(selector: str, window: str) -> float | None:
     """Instant LogQL query: total log lines for `selector` over `window`. None if no series.
 
     Loki's instant-query endpoint evaluates a metric query — here
@@ -210,7 +222,7 @@ def loki_count(selector, window):
     return float(result[0]["value"][1])
 
 
-def loki_vector(query):
+def loki_vector(query: str) -> list[tuple[dict, float]]:
     """Instant LogQL query keeping each series' labels — the loki_count peer of prom_vector.
 
     Not prom_vector(base=LOKI_URL): Loki's instant endpoint is /loki/api/v1/query, and
@@ -222,7 +234,9 @@ def loki_vector(query):
     ]
 
 
-def log_error_counts(selector, pattern, window, by_label="container"):
+def log_error_counts(
+    selector: str, pattern: str, window: str, by_label: str = "container"
+) -> tuple[list[tuple[dict, float]], float | None]:
     """(matches, total) — per-container counts of `pattern`, and the selector's total volume.
 
     `total` is what keeps this arm honest. The whole arm fails OPEN (see with_log_errors), so a
@@ -239,7 +253,7 @@ def log_error_counts(selector, pattern, window, by_label="container"):
     return matches, total
 
 
-def loki_reachable():
+def loki_reachable() -> bool:
     """Is Loki itself reachable and answering queries? (the LOKI_DEPENDENT gate).
 
     Hits the labels endpoint — a fixed, ingestion-independent query that returns status=success
@@ -253,7 +267,7 @@ def loki_reachable():
     return True
 
 
-def push(token, ok, msg):
+def push(token: str, ok: bool, msg: str) -> None:
     """Pushes an up/down heartbeat plus message to the Kuma push monitor for `token`.
 
     A no-op, logged, when token is unset. Best-effort: an unreachable Kuma is logged and

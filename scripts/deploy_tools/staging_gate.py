@@ -41,18 +41,30 @@ import argparse
 import re
 import subprocess
 import sys
+from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from deploy_tools.exit_codes import (
+    DEPLOY_LOCK_BUSY,
+    DEPLOY_SH_NO_VERDICT,
+    GATE_NO_VERDICT,
+    GATE_NOT_RUN,
+    GATE_PASS,
+    GATE_REJECTED,
+)
 from lib.repo_paths import ROLES
 
 # Verdicts. These are this script's own exit codes and are what a later slice branches on.
-PASS = 0
-REJECTED = 1
-NO_VERDICT = 2
+# Named in `deploy_tools/exit_codes.py`, with every other contract these tools share; the
+# short aliases stay because this module's own prose and tests read `NO_VERDICT`.
+PASS = GATE_PASS
+REJECTED = GATE_REJECTED
+NO_VERDICT = GATE_NO_VERDICT
 
 # The remote's prep-failure code, defined in staging_gate_remote.sh. Kept in sync by
 # test_the_prep_code_matches_the_remote_script rather than by hoping.
@@ -72,7 +84,7 @@ GATE_BUSY = 76
 # What --report-busy returns instead of NO_VERDICT. Deliberately NOT returned by default:
 # deploy_logic.staging_verdict_summary reads any non-zero that is not 2 as REJECTED, so a third
 # code reaching the deployer would report a busy lock as staging rejecting the change.
-NOT_RUN = 3
+NOT_RUN = GATE_NOT_RUN
 
 # The restricted key's dispatcher refusing the request outright — a malformed operation name,
 # a SHA that is not a 40-hex object name, tags outside its charset. Defined in
@@ -87,8 +99,8 @@ DISPATCH_REFUSED = 71
 # deploy.sh exit codes that all mean *nothing was deployed*, so staging never formed an opinion:
 # 2 = a tag matched no service, 3 = the change is broad, 4 = the tree is behind origin,
 # 75 = the git-tree lock stayed busy. Reading any of these as a rejection would fail a merge for
-# a reason that has nothing to do with the merge.
-DEPLOY_SH_NO_VERDICT = frozenset({2, 3, 4, 75})
+# a reason that has nothing to do with the merge. The set itself is `exit_codes`', so this
+# module and `land_lib/deploy.py` cannot drift apart on what deploy.sh's numbers mean.
 
 # ssh's own failure code. A remote command exiting 255 is indistinguishable from ssh failing to
 # connect, and that ambiguity resolves toward NO_VERDICT on purpose: deploy.sh never exits 255,
@@ -135,7 +147,7 @@ NO_VERDICT_CODES = frozenset(
 
 # The subset of the above that means the run never STARTED, as opposed to started and could not
 # finish. deploy.sh's own 75 is the git-tree lock, which is the same situation one lock down.
-BUSY_CODES = frozenset({GATE_BUSY, 75})
+BUSY_CODES = frozenset({GATE_BUSY, DEPLOY_LOCK_BUSY})
 
 # The staging subset (docs/staging-cluster.md, Decision 6). A caller may narrow this; it may not
 # widen it to a service the cluster does not run, which would exit 2 on the far side as a tag
@@ -178,7 +190,19 @@ def verdict_name(verdict: int) -> str:
     }[verdict]
 
 
-def identity_problem() -> str | None:
+@dataclass(frozen=True)
+class GateTools:
+    """The one process boundary this gate crosses, so a test replaces a field.
+
+    `run` covers both `ssh-keygen` (the identity check) and the `ssh` call itself. The same
+    shape `land_lib.tools.Tools` and `publish_pr.PublishTools` use; the tests here reached
+    `sg.subprocess.run` through `monkeypatch` before it existed.
+    """
+
+    run: Callable[..., subprocess.CompletedProcess] = subprocess.run
+
+
+def identity_problem(tools: GateTools | None = None) -> str | None:
     """Why the restricted key cannot be used, or None if it is the key the far side authorizes.
 
     THIS IS THE ANTI-FALLBACK CHECK, and it is the whole reason the switch to the restricted key
@@ -191,13 +215,14 @@ def identity_problem() -> str | None:
     connect at all rather than letting ssh choose. Measured 2026-08-29: a key one byte short of
     its trailing newline fails to load and produces precisely that silent fallback.
     """
+    tools = tools or GateTools()
     if not IDENTITY.exists():
         return (
             f"{IDENTITY} does not exist — run initial_setup.yml --tags gitops_deploy on this "
             f"host. Refusing to connect, because ssh would fall back to the operator's key and "
             f"the gate would appear to work while running unrestricted."
         )
-    derived = subprocess.run(
+    derived = tools.run(
         ["ssh-keygen", "-y", "-f", str(IDENTITY)],
         capture_output=True,
         text=True,
@@ -219,8 +244,11 @@ def identity_problem() -> str | None:
     return None
 
 
-def run_gate(sha: str, tags: str, timeout: float) -> int:
+def run_gate(
+    sha: str, tags: str, timeout: float, tools: GateTools | None = None
+) -> int:
     """Ask the gate about `sha` over ssh and return the remote's raw exit code."""
+    tools = tools or GateTools()
     # The dispatcher refuses anything but a full 40-hex object name, and it is right to. Catching
     # it here turns a remote refusal into a local error naming the actual problem.
     if not re.fullmatch(r"[0-9a-f]{40}", sha):
@@ -231,13 +259,13 @@ def run_gate(sha: str, tags: str, timeout: float) -> int:
         )
         return DISPATCH_REFUSED
 
-    problem = identity_problem()
+    problem = identity_problem(tools)
     if problem is not None:
         print(f"staging-gate: {problem}", file=sys.stderr)
         return IDENTITY_UNUSABLE
 
     try:
-        completed = subprocess.run(
+        completed = tools.run(
             # ServerAlive* is the fix for M-5, and it is not cosmetic. When the transport wedges,
             # the local timeout below kills ssh here — but the remote command is a different
             # process group on a different host, so nothing local reaches it and it keeps holding

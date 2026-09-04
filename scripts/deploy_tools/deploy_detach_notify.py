@@ -25,7 +25,10 @@ import argparse
 import contextlib
 import subprocess
 import sys
+from collections.abc import Callable
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import NamedTuple
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
@@ -60,9 +63,41 @@ NOT_APPLICABLE_MARKERS = (
 )
 
 
+@dataclass(frozen=True)
+class NotifyTools:
+    """The two boundaries the health gate crosses, so a test replaces a field, not a module.
+
+    `run` is the probe subprocess; `tag_platforms` reads the inventory. Both default to the
+    real implementation, the way `land_lib.tools.Tools` does. `notify()` below is a third
+    boundary (the host's gitops-deploy webhook) and stays outside this seam: it is
+    best-effort by contract and its tests stub the host files it reads.
+    """
+
+    run: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run
+    tag_platforms: Callable[[str], set[str]] = field(
+        default=lambda tag: deploy_tags.tag_platforms(tag)
+    )
+
+
+class CheckResult(NamedTuple):
+    """One tag's health: the state the verdict counts, and the line an operator reads."""
+
+    state: str
+    detail: str
+
+
+class GateResult(NamedTuple):
+    """The notification's headline verdict, and the per-tag lines behind it."""
+
+    settled: bool
+    lines: list[str]
+
+
 def check_one(
-    tag: str, run=subprocess.run, platforms: set[str] | None = None
-) -> tuple[str, str]:
+    tag: str,
+    tools: NotifyTools | None = None,
+    platforms: set[str] | None = None,
+) -> CheckResult:
     """('ok'|'unhealthy'|'skipped', first line of probe.py's output) for one service tag.
 
     `platforms` is the set of platforms whose containers_list declares the tag, read from the
@@ -81,10 +116,12 @@ def check_one(
         workload.
     """
 
+    tools = tools or NotifyTools()
+
     def probe(extra: list[str]) -> tuple[int, str]:
         """Run probe.py health for `tag` with `extra` args; return (exit code, first line)."""
         try:
-            res = run(
+            res = tools.run(
                 [
                     "uv",
                     "run",
@@ -108,54 +145,54 @@ def check_one(
         return any(marker in line for marker in NOT_APPLICABLE_MARKERS)
 
     if platforms is None:
-        platforms = deploy_tags.tag_platforms(tag)
+        platforms = tools.tag_platforms(tag)
 
     if platforms == {"docker"}:
         code, line = probe(["--docker"])
-        return ("ok" if code == 0 else "unhealthy"), line
+        return CheckResult("ok" if code == 0 else "unhealthy", line)
 
     if platforms == {"k8s"}:
         code, line = probe([])
         if code == 0:
-            return "ok", line
-        return ("skipped" if not_applicable(line) else "unhealthy"), line
+            return CheckResult("ok", line)
+        return CheckResult("skipped" if not_applicable(line) else "unhealthy", line)
 
     if platforms == {"docker", "k8s"}:
         k8s_code, k8s_line = probe([])
         docker_code, docker_line = probe(["--docker"])
         line = f"{k8s_line}; {docker_line}"
         if docker_code != 0 or (k8s_code != 0 and not not_applicable(k8s_line)):
-            return "unhealthy", line
-        return "ok", line
+            return CheckResult("unhealthy", line)
+        return CheckResult("ok", line)
 
     code, line = probe([])
     if code == 0:
-        return "ok", line
+        return CheckResult("ok", line)
     if not_applicable(line):
         code, line = probe(["--docker"])
         if code == 0:
-            return "ok", line
+            return CheckResult("ok", line)
         if not_applicable(line):
-            return "skipped", line
-    return "unhealthy", line
+            return CheckResult("skipped", line)
+    return CheckResult("unhealthy", line)
 
 
 def gate(
-    tags: list[str], ansible_ok: bool, run=subprocess.run
-) -> tuple[bool, list[str]]:
+    tags: list[str], ansible_ok: bool, tools: NotifyTools | None = None
+) -> GateResult:
     """(settled, report_lines). `settled` is the notification's headline verdict.
 
     A failed ansible-playbook run is authoritative on its own -- no health check runs, since a
     failed apply didn't necessarily reach the point of rolling anything out.
     """
     if not ansible_ok:
-        return False, ["ansible-playbook exited non-zero -- see the log."]
+        return GateResult(False, ["ansible-playbook exited non-zero -- see the log."])
     lines = []
     ok = True
     if not tags:
         lines.append("no --tags given -- health not gated, ansible exit code only.")
     for tag in tags:
-        state, detail = check_one(tag, run=run)
+        state, detail = check_one(tag, tools=tools)
         if state == "skipped":
             lines.append(
                 f"{tag}: not a health-checkable workload (skipped) -- {detail}"
@@ -164,7 +201,7 @@ def gate(
         lines.append(detail or f"{tag}: {state}")
         if state == "unhealthy":
             ok = False
-    return ok, lines
+    return GateResult(ok, lines)
 
 
 def notify(content: str) -> None:

@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from _land_fakes import PRIMARY, Fakes, build_tools, make_landing
+from _land_fakes import PRIMARY, Fakes, build_classifier, build_tools, make_landing
 
 # The stub records one line per call so a test can assert it intercepted something. Without
 # that record the fixture would be indistinguishable from one that silently stopped being on
@@ -81,8 +81,15 @@ def land_run(capsys, monkeypatch):
     """
     import land
 
-    def run(argv: list[str], fakes: Fakes | None = None, primary: Path = PRIMARY):
-        tools, calls = build_tools(fakes or Fakes())
+    def run(
+        argv: list[str],
+        fakes: Fakes | None = None,
+        primary: Path = PRIMARY,
+        classifier=None,
+    ):
+        f = fakes or Fakes()
+        tools, calls = build_tools(f)
+        classifier = build_classifier(f, calls) if classifier is None else classifier
         if "--pr" not in argv:
             argv = [*argv, "--pr", "999"]
         real_parse = land.parse_args
@@ -91,7 +98,7 @@ def land_run(capsys, monkeypatch):
             "parse_args",
             lambda a, d: replace(real_parse(a, d), primary=primary),
         )
-        rc = land.main(argv, tools=tools)
+        rc = land.main(argv, tools=tools, classifier=classifier)
         cap = capsys.readouterr()
         logline = next((c[1][0] for c in calls if c[0] == "logger"), "")
         return rc, cap.out, cap.err, calls, logline

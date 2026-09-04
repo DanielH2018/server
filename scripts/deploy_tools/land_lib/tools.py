@@ -12,18 +12,22 @@ checkout as cwd, because their question IS the primary checkout: `blockers` read
 `HEAD..origin/master` and `changed` reads `<since>...HEAD`, and deploy.sh renders from its
 working directory. Moving either to this file's checkout would silently re-aim them at the
 worktree's HEAD.
+WHAT IS NOT HERE. Five path-list decisions used to sit on `Tools` beside the process
+boundaries -- `plane_note`, `self_applied`, `remaining_setup_hosts`, `derive`, `quiet_paths`.
+They are pure functions of a file list, so the fakes replaced them with constant lambdas and
+no pipeline test ever ran real tag derivation. They are `Classifier` now, a separate frozen
+dataclass the Landing holds beside `Tools`, so a test can take the real ones and the fake
+boundaries.
 """
-
-from __future__ import annotations
 
 import contextlib
 import socket
 import subprocess
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple, Protocol
 
 import sys as _sys
 from pathlib import Path as _Path
@@ -34,7 +38,10 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 # (pythonpath lists it); this insert makes an interpreter-only import work as well.
 _sys.path.insert(1, str(_Path(__file__).resolve().parents[1]))  # scripts/deploy_tools
 from deploy_tools import await_ci, land_tags
+from deploy_tools.deploy_detach_notify import GateResult
 from deploy_tools.deploy_detach_notify import gate as health_gate
+from deploy_tools.exit_codes import CI_DISARMED
+from deploy_tools.land_tags import Derivation
 from lib.gh import gh, gh_json
 from lib.git import git
 
@@ -50,13 +57,16 @@ def run_tick() -> int:
     return subprocess.run([str(HERE / "gitops_tick.sh")], check=False).returncode
 
 
-def run_deploy(primary: Path, tags: str, target: str | None) -> int:
+def run_deploy(primary: Path, tags: list[str], target: str | None) -> int:
     """Run deploy.sh in the primary checkout, stdio inherited; its exit code.
+
+    The tag list is joined HERE and nowhere earlier: `--tags` is an argv element, so this is
+    the one place a landing needs a comma string rather than a list.
 
     stdio is inherited on purpose: Ansible refuses a non-blocking handle, and deploy.sh
     clears O_NONBLOCK on the handles it is given.
     """
-    argv = ["./scripts/deploy.sh", "--tags", tags]
+    argv = ["./scripts/deploy.sh", "--tags", ",".join(tags)]
     if target:
         argv += ["-e", f"target={target}"]
     return subprocess.run(argv, cwd=primary, check=False).returncode
@@ -73,12 +83,19 @@ def run_deploy_tags(primary: Path, args: list[str]) -> subprocess.CompletedProce
     )
 
 
-def await_ci_verdict(sha: str, timeout_s: int) -> tuple[int, str]:
+class CiVerdict(NamedTuple):
+    """await_ci's exit code and the one line it printed to explain it."""
+
+    rc: int
+    line: str
+
+
+def await_ci_verdict(sha: str, timeout_s: int) -> CiVerdict:
     """await_ci.wait with its CLI's exit contract: 0 green, 1 red, 75 pending, 2 disarmed."""
     try:
-        return await_ci.wait(sha, timeout_s, 20)
+        return CiVerdict(*await_ci.wait(sha, timeout_s, 20))
     except await_ci.DisarmedGateError as exc:
-        return 2, f"await_ci: {exc}"
+        return CiVerdict(CI_DISARMED, f"await_ci: {exc}")
 
 
 def syslog(line: str) -> None:
@@ -122,11 +139,56 @@ def lock_holder() -> str:
     return ""
 
 
-def read_state(deployer_state: Path, name: str) -> str:
-    """The deployer's `<name>` marker, stripped; '' when the file is missing or empty."""
-    with contextlib.suppress(OSError):
+def read_state(deployer_state: Path, name: str) -> str | None:
+    """The deployer's `<name>` marker, stripped; '' when absent, None when unreadable.
+
+    ABSENT AND UNREADABLE ARE DIFFERENT ANSWERS. A missing marker means the deployer is not
+    holding and is not behind, which is the ordinary case on every healthy tick. A directory
+    this process cannot read answers nothing at all, and collapsing the two made
+    `Landing.tick_state` report `converged` -- "the tick applied it" -- for a state directory
+    it never saw. Callers must fail closed on None; `tick_state` does.
+    """
+    try:
         return (deployer_state / name).read_text().strip()
-    return ""
+    except FileNotFoundError:
+        return ""
+    except OSError:
+        return None
+
+
+# Every `files` parameter below is positional-only. The real functions and the fakes name it
+# differently (`files` against `paths`), and a Protocol matches a keyword-capable parameter by
+# NAME -- so without the `/` a fake with an equally valid signature is rejected.
+class PlaneNote(Protocol):
+    """`land_tags.plane_note`: what a PR still needs a HUMAN to apply, or ""."""
+
+    def __call__(self, files: list[str], /, *, quiet: Iterable[str] = ()) -> str: ...
+
+
+class SelfApplied(Protocol):
+    """`land_tags.self_applied`: whether the tick applies part of this PR itself."""
+
+    def __call__(self, files: list[str], /, *, quiet: Iterable[str] = ()) -> bool: ...
+
+
+class RemainingSetupHosts(Protocol):
+    """`land_tags.remaining_setup_hosts_note`: the hosts a self-applied role still owes."""
+
+    def __call__(
+        self, files: list[str], local_host: str, /, *, quiet: Iterable[str] = ()
+    ) -> str: ...
+
+
+class Derive(Protocol):
+    """`land_tags.derive`: the deploy tags a PR's own file list maps to.
+
+    `declared` pins the set of tags that exist, for a test; production passes none and
+    `land_tags` reads the inventory.
+    """
+
+    def __call__(
+        self, files: list[str], changed_files: int, /, declared: set[str] | None = None
+    ) -> Derivation: ...
 
 
 @dataclass
@@ -136,23 +198,34 @@ class Tools:
     gh_json: Callable[..., Any] = gh_json
     gh: Callable[..., subprocess.CompletedProcess[str]] = gh
     git: Callable[..., subprocess.CompletedProcess[str]] = git
-    await_ci: Callable[[str, int], tuple[int, str]] = await_ci_verdict
+    await_ci: Callable[[str, int], CiVerdict] = await_ci_verdict
     tick: Callable[[], int] = run_tick
-    deploy: Callable[[Path, str, str | None], int] = run_deploy
+    deploy: Callable[[Path, list[str], str | None], int] = run_deploy
     deploy_tags: Callable[[Path, list[str]], subprocess.CompletedProcess[str]] = (
         run_deploy_tags
     )
-    gate: Callable[[list[str]], tuple[bool, list[str]]] = field(
+    gate: Callable[[list[str]], GateResult] = field(
         default=lambda tags: health_gate(tags, True)
     )
-    plane_note: Callable[..., str] = land_tags.plane_note
-    self_applied: Callable[..., bool] = land_tags.self_applied
-    remaining_setup_hosts: Callable[..., str] = land_tags.remaining_setup_hosts_note
-    derive: Callable[..., tuple[list[str], str]] = land_tags.derive
-    quiet_paths: Callable[[list[str], str], set[str]] = land_tags.quiet_paths
-    read_state: Callable[[Path, str], str] = read_state
+    read_state: Callable[[Path, str], str | None] = read_state
     lock_holder: Callable[[], str] = lock_holder
     hostname: Callable[[], str] = socket.gethostname
     logger: Callable[[str], None] = syslog
     sleep: Callable[[float], None] = time.sleep
     clock: Callable[[], float] = time.monotonic
+
+
+@dataclass(frozen=True)
+class Classifier:
+    """The pure path-list decisions, held beside `Tools` rather than inside it.
+
+    Every one is a function of a changed-file list and nothing else: no subprocess, no
+    network, no clock. Keeping them here is what lets a pipeline test drive the REAL
+    derivation over a fixed path list while every boundary in `Tools` stays fake.
+    """
+
+    plane_note: PlaneNote = land_tags.plane_note
+    self_applied: SelfApplied = land_tags.self_applied
+    remaining_setup_hosts: RemainingSetupHosts = land_tags.remaining_setup_hosts_note
+    derive: Derive = land_tags.derive
+    quiet_paths: Callable[[list[str], str], set[str]] = land_tags.quiet_paths

@@ -1,0 +1,51 @@
+---
+# Install the shared `host_lib.py` beside a consumer script, so `import host_lib` resolves.
+#
+# WHY A SIBLING COPY AND NOT A SHARED PATH. Every consumer is a directly-invoked script, so it
+# gets its own directory on `sys.path` and nothing else (the repo-root CLAUDE.md states the
+# rule). Eight callers across seven roles therefore need a copy of the SAME file in their own
+# /opt directory, and each one wrote its own `copy:` task to get it. That duplication is the
+# finding this file closes: the source path, the `host_lib.py` basename and the 0755 mode were
+# written out eight times, so a change to any of them had eight places to miss.
+#
+# WHAT THIS FILE DELIBERATELY DOES NOT DO: write the stamp_deployed pair. Five of the eight
+# sites record `/opt/<x>/host_lib.py` in their role's `stamp_deployed_pairs` (gitops_deploy,
+# renovate_notify, renovate_agent, and k3s twice); the other three (configarr, janitorr,
+# fake_remux) do not, and emitting a fragment here would change host state at those. Worse, a
+# fragment is named per GROUP and holds the whole group's pairs, so a second fragment written
+# from here under the caller's own name would overwrite the pairs the caller declared. The
+# copy↔pair invariant is therefore held by a test rather than by this file:
+# ENFORCED by ansible/tests/setup/test_host_lib_sibling_copies.py, which asserts that every
+# role whose files/ scripts `import host_lib` includes this task file, that the pair a role
+# does declare names the directory it passes here, and that a `host_lib_notify` handler name
+# exists in the caller's own handlers/.
+#
+# `src` is absolute off `{{ playbook_dir }}` rather than a bare basename. A task file imported
+# from another role resolves `copy:` src against the role that OWNS the file, so a bare
+# `host_lib.py` would look in roles/setup/common/files — which happens to be right — but the
+# two k8s callers (configarr, janitorr) import this from a different plane entirely, and
+# release_bin.yml records the same resolution trap for `template:`. Naming the path outright
+# means the answer does not depend on which role imported it.
+#
+# NO TAGS IN THIS FILE, deliberately, matching release_bin.yml, stamp_render.yml and
+# stamp_deployed.yml. Tags UNION in Ansible, so a tag here would also inherit the caller's and
+# become selectable two ways. Carrying none means the copy is selected by exactly the caller's
+# tag — which is the only correct answer, because host_lib is only ever wanted alongside the
+# script that imports it.
+#
+# Callers pass:
+#   host_lib_dir      the directory the consumer script runs from, e.g. /opt/gitops-deploy
+#   host_lib_owner    optional, defaults to root (matching release_bin_owner's default)
+#   host_lib_mode     optional, defaults to 0755
+#   host_lib_notify   optional handler name(s); defaults to none. An empty list rather than
+#                     `omit` so the no-handler case is a real value Ansible can iterate.
+
+- name: Install the shared host_lib helper in {{ host_lib_dir }}
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/roles/setup/common/files/host_lib.py"
+    dest: "{{ host_lib_dir }}/host_lib.py"
+    owner: "{{ host_lib_owner | default('root') }}"
+    group: "{{ host_lib_owner | default('root') }}"
+    mode: "{{ host_lib_mode | default('0755') }}"
+  become: true
+  notify: "{{ host_lib_notify | default([]) }}"

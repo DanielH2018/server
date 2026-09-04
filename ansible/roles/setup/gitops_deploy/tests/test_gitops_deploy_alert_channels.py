@@ -18,6 +18,8 @@ import json
 import pathlib
 
 import pytest
+
+import deploy_io
 from deploy_changes import ChangeSet
 from deploy_remediation import k8s_remediation
 
@@ -47,7 +49,7 @@ def test_alert_once_delivers_and_advances_the_marker(
     gitops_deploy, monkeypatch, state_dir
 ):
     seen = _posts(gitops_deploy, monkeypatch)
-    gitops_deploy.alert_once(gitops_deploy.TASKS_ALERT_FILE, "tasks", ORIGIN, "changed")
+    gitops_deploy.alert_once("tasks_alerted", "tasks", ORIGIN, "changed")
     assert seen == [(f"tasks:{ORIGIN}", "changed")]
     assert _marker(state_dir, "tasks_alerted_sha") == ORIGIN
 
@@ -57,11 +59,9 @@ def test_alert_once_is_silent_for_a_sha_already_alerted(
 ):
     seen = _posts(gitops_deploy, monkeypatch)
     for _ in range(3):
-        gitops_deploy.alert_once(
-            gitops_deploy.TASKS_ALERT_FILE, "tasks", ORIGIN, "changed"
-        )
+        gitops_deploy.alert_once("tasks_alerted", "tasks", ORIGIN, "changed")
     assert len(seen) == 1
-    gitops_deploy.alert_once(gitops_deploy.TASKS_ALERT_FILE, "tasks", LATER, "again")
+    gitops_deploy.alert_once("tasks_alerted", "tasks", LATER, "again")
     assert seen[-1] == (f"tasks:{LATER}", "again")
     assert _marker(state_dir, "tasks_alerted_sha") == LATER
 
@@ -70,7 +70,7 @@ def test_alert_once_marks_detection_not_delivery(gitops_deploy, monkeypatch, sta
     # A failed post must not re-page on the next tick through this path: the marker advances
     # anyway, and redelivery is the pending queue's job. Real deliver(), fake discord().
     monkeypatch.setattr(gitops_deploy, "discord", lambda _content: False)
-    gitops_deploy.alert_once(gitops_deploy.META_ALERT_FILE, "meta", ORIGIN, "changed")
+    gitops_deploy.alert_once("meta_alerted", "meta", ORIGIN, "changed")
     assert _marker(state_dir, "meta_alerted_sha") == ORIGIN
     queued = json.loads((state_dir / "pending_alerts.json").read_text())
     assert queued == {f"meta:{ORIGIN}": "changed"}
@@ -257,7 +257,7 @@ def _git_heads(
         assert argv[:2] == ["git", "rev-parse"], argv
         return origin if argv[2].startswith("origin/") else local
 
-    monkeypatch.setattr(gitops_deploy, "run", fake_run)
+    monkeypatch.setattr(deploy_io, "run", fake_run)
     monkeypatch.setattr(gitops_deploy, "is_ancestor", lambda _a, _d: behind)
 
 
@@ -290,7 +290,7 @@ def test_a_git_failure_here_logs_and_leaves_the_marker(
     def broken_run(_argv, **_kwargs):
         raise RuntimeError("git rev-parse HEAD -> 128")
 
-    monkeypatch.setattr(gitops_deploy, "run", broken_run)
+    monkeypatch.setattr(deploy_io, "run", broken_run)
     gitops_deploy._record_behind()
     assert "could not record behind-origin state" in capsys.readouterr().out
     assert _marker(state_dir, "behind_since") == f"{ORIGIN} 1700000000"

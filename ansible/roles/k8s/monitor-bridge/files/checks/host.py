@@ -35,7 +35,13 @@ from verdicts.host import (
 _host_origin_streaks: dict[str, int] = {}
 
 
-def _host_origin_shortfall(key, vec, what, min_origins=None, consecutive=None):
+def _host_origin_shortfall(
+    key: str,
+    vec: list[tuple[dict, float]],
+    what: str,
+    min_origins: float | None = None,
+    consecutive: float | None = None,
+) -> tuple[bool, str] | None:
     """(ok, msg) when `vec` covers fewer than `min_origins` hosts, else None.
 
     Passes (green, but says so) while the shortfall is younger than `consecutive` cycles, so a
@@ -83,7 +89,7 @@ def _host_origin_shortfall(key, vec, what, min_origins=None, consecutive=None):
     )
 
 
-def check_disk():
+def check_disk() -> tuple[bool, str]:
     """Checks whether any monitored disk mountpoint is over cfg.DISK_MAX_PCT full.
 
     Computes each mountpoint's used percentage per-origin (host), pairing avail and size
@@ -125,7 +131,7 @@ def check_disk():
     return True, "all mounts under %.0f%%" % cfg.DISK_MAX_PCT
 
 
-def check_cert():
+def check_cert() -> tuple[bool, str]:
     days = bridge.net.prom_scalar("(min(traefik_tls_certs_not_after) - time()) / 86400")
     if days is None:
         return False, "cert metric unavailable"
@@ -134,7 +140,7 @@ def check_cert():
     return True, "cert valid %.0fd" % days
 
 
-def check_mem():
+def check_mem() -> tuple[bool, str]:
     """Checks whether any host's memory usage is over cfg.MEM_MAX_PCT.
 
     Host-level pressure only; per-container OOM kills are check_oom's job. Computed
@@ -173,7 +179,7 @@ def check_mem():
     return True, "mem %.0f%%" % worst
 
 
-def scrutiny_wear_devices(summary):
+def scrutiny_wear_devices(summary: dict | None) -> list[tuple[str, float | None]]:
     """One /api/device/<wwn>/details fetch per non-archived device.
 
     The wear attributes are not in /api/summary, which is what makes this N calls per cycle rather
@@ -196,7 +202,7 @@ def scrutiny_wear_devices(summary):
     return devices
 
 
-def check_scrutiny():
+def check_scrutiny() -> tuple[bool, str]:
     """Checks Scrutiny's summary for freshness, drive health, and (if configured) wear.
 
     Fetches /api/summary once; per-device wear details are fetched only when freshness and
@@ -224,7 +230,7 @@ def check_scrutiny():
     return True, "%s; %s; %s" % (fresh_msg, health_msg, wear_msg)
 
 
-def check_host_temp():
+def check_host_temp() -> tuple[bool, str]:
     """Board and CPU temperature across the three hosts, from node-exporter's hwmon collector.
 
     Answers the one thermal question nothing else here asks: is a host cooking? A hot box
@@ -297,7 +303,7 @@ def check_host_temp():
     return True, msg
 
 
-def check_ups():
+def check_ups() -> tuple[bool, str]:
     """UPS battery health from HA's Prometheus-scraped sensors (see the UPS_* env block above).
 
     Three arms: charge %, estimated runtime, and the replace-battery self-test verdict. All queries
@@ -396,7 +402,7 @@ def check_ups():
     return ok, msg
 
 
-def check_pi_pressure():
+def check_pi_pressure() -> tuple[bool, str]:
     """Swap-thrash / overload early warning for the memory-constrained Pi.
 
     Empty PI_GLANCES_URL -> disabled (stays up), like check_n8n without an API key.
@@ -413,7 +419,7 @@ def check_pi_pressure():
     return with_pi_ports(ok, msg)
 
 
-def _tcp_open(host, port, timeout):
+def _tcp_open(host: str, port: int, timeout: float) -> bool:
     """True when something accepts a TCP connection on host:port."""
     try:
         with socket.create_connection((host, port), timeout=timeout):
@@ -422,7 +428,7 @@ def _tcp_open(host, port, timeout):
         return False
 
 
-def with_pi_ports(ok, msg):
+def with_pi_ports(ok: bool, msg: str) -> tuple[bool, str]:
     """Fold the published-port arm into the Pi verdict, a dead port winning the message.
 
     Folded into this monitor rather than given its own for the reason recorded at with_ha_ban:
@@ -479,7 +485,9 @@ def with_pi_ports(ok, msg):
     return False, "%s | %s" % (arm_msg, msg)
 
 
-def speedtest_verdict(row, min_mbps, max_age_h, now=None):
+def speedtest_verdict(
+    row: dict | None, min_mbps: float, max_age_h: float, now: datetime | None = None
+) -> tuple[bool, str]:
     """Pure: judge the newest speedtest-tracker result row. (ok, msg).
 
     `row` is one element of /api/v1/results' `data`, or None when the app returned no rows at
@@ -547,7 +555,7 @@ def speedtest_verdict(row, min_mbps, max_age_h, now=None):
     return True, "download %.1f Mbps via %s, %.1fh ago" % (mbps, server, age_h)
 
 
-def check_speedtest():
+def check_speedtest() -> tuple[bool, str]:
     """Judge speedtest-tracker's newest result row (see the SPEEDTEST_* env block above).
 
     Empty URL/token -> disabled (stays up), like check_ha_heartbeat.

@@ -2,9 +2,12 @@
 
 Every fake appends `(name, args, kwargs)` to a shared `calls` list, which is how ordering
 tests prove "blockers before the CI wait" without reading source.
-"""
 
-from __future__ import annotations
+`build_classifier` is separate from `build_tools` because the two answer different kinds of
+question: `Tools` is the process boundaries, `Classifier` is pure path-list logic. A test
+that wants the REAL derivation passes `Classifier()` and keeps the fake boundaries --
+`test_land_pipeline.py` has one that does.
+"""
 
 import subprocess
 import tempfile
@@ -16,14 +19,23 @@ import sys as _sys
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
+from deploy_tools.deploy_detach_notify import GateResult
 from deploy_tools.land_lib import landing as landing_mod
 from deploy_tools.land_lib.options import Options
-from deploy_tools.land_lib.tools import Tools
+from deploy_tools.land_lib.tools import Classifier, CiVerdict, Tools
+from deploy_tools.land_tags import Derivation, DeriveSource
 
 MERGE_SHA = "0123456789abcdef0123456789abcdef01234567"
 # A real directory, because the pipeline refuses a primary checkout that is not one. Made
 # once per session rather than per test, so `cwd=PRIMARY` assertions stay comparable.
-PRIMARY = Path(tempfile.mkdtemp(prefix="land-primary-"))
+#
+# TemporaryDirectory rather than mkdtemp: mkdtemp leaves the directory behind for good, and
+# `-n auto` makes one per xdist worker on every run. The object is held at module scope so
+# its finalizer runs at interpreter exit and not before.
+_PRIMARY_TMP = tempfile.TemporaryDirectory(
+    prefix="land-primary-", ignore_cleanup_errors=True
+)
+PRIMARY = Path(_PRIMARY_TMP.name)
 STATE = Path("/state")
 
 
@@ -77,6 +89,30 @@ def _seq(values: list, calls: list, name: str):
         return last
 
     return answer
+
+
+def build_classifier(f: Fakes, calls: list | None = None) -> Classifier:
+    """The five pure classifiers, each answering from `Fakes` instead of the real tree.
+
+    `calls` is the list `build_tools` returned, so a classifier call lands in the same
+    ordering record as a boundary call.
+    """
+    record = calls if calls is not None else []
+
+    def remaining_setup_hosts(paths, local_host, quiet=()):
+        # local_host is recorded: the phase must pass `tools.hostname()`, not a constant.
+        record.append(("remaining_setup_hosts", (local_host,), {}))
+        return f.remaining_setup
+
+    return Classifier(
+        plane_note=lambda paths, quiet=(): f.plane,
+        self_applied=lambda paths, quiet=(): f.self_applied,
+        remaining_setup_hosts=remaining_setup_hosts,
+        derive=lambda paths, changed, declared=None: Derivation(
+            list(f.derived[0]), DeriveSource(f.derived[1])
+        ),
+        quiet_paths=lambda paths, range_: set(),
+    )
 
 
 def build_tools(f: Fakes) -> tuple[Tools, list]:
@@ -147,12 +183,12 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
 
     def gate(tags):
         calls.append(("gate", (tags,), {}))
-        return f.gate
+        return GateResult(*f.gate)
 
-    def remaining_setup_hosts(paths, local_host, quiet=()):
-        # local_host is recorded: the phase must pass `tools.hostname()`, not a constant.
-        calls.append(("remaining_setup_hosts", (local_host,), {}))
-        return f.remaining_setup
+    await_ci_seq = _seq(f.await_ci, calls, "await_ci")
+
+    def await_ci(sha, timeout):
+        return CiVerdict(*await_ci_seq(sha, timeout))
 
     t = [0.0]
 
@@ -164,16 +200,11 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         gh_json=gh_json,
         gh=gh_run,
         git=git_run,
-        await_ci=_seq(f.await_ci, calls, "await_ci"),
+        await_ci=await_ci,
         tick=_seq(f.tick, calls, "tick"),
         deploy=_seq(f.deploy, calls, "deploy"),
         deploy_tags=deploy_tags,
         gate=gate,
-        plane_note=lambda paths, quiet=(): f.plane,
-        self_applied=lambda paths, quiet=(): f.self_applied,
-        remaining_setup_hosts=remaining_setup_hosts,
-        derive=lambda paths, changed: f.derived,
-        quiet_paths=lambda paths, range_: set(),
         read_state=lambda root, name: f.state.get(name, ""),
         lock_holder=_seq(f.lock_holder, calls, "lock_holder"),
         hostname=lambda: f.hostname,
@@ -188,6 +219,7 @@ def make_landing(
     fakes: Fakes | None = None, **opts
 ) -> tuple[landing_mod.Landing, list]:
     """A Landing over fakes, for driving one phase directly."""
-    tools, calls = build_tools(fakes or Fakes())
+    f = fakes or Fakes()
+    tools, calls = build_tools(f)
     o = Options(pr="999", primary=PRIMARY, deployer_state=STATE, **opts)
-    return landing_mod.Landing(o, tools), calls
+    return landing_mod.Landing(o, tools, build_classifier(f, calls)), calls

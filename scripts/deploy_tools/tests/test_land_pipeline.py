@@ -3,11 +3,10 @@
 Run: uv run pytest scripts/deploy_tools/tests/test_land_pipeline.py
 """
 
-from __future__ import annotations
-
 import pytest
 
 from _land_fakes import MERGE_SHA, PRIMARY, Fakes, build_tools
+from deploy_tools.land_lib.tools import Classifier
 
 
 def _names(calls):
@@ -191,3 +190,61 @@ def test_prepare_stdio_tolerates_a_stdout_that_cannot_reconfigure(monkeypatch):
 
     monkeypatch.setattr(land.sys, "stdout", _Plain())
     land._prepare_stdio()  # must not raise
+
+
+def test_the_real_classifier_derives_a_tag_from_a_real_path(land_run):
+    """One pipeline run with the REAL `Classifier` and every process boundary still fake.
+
+    The fakes replace all five classifiers with constant lambdas, so no other pipeline test
+    runs real tag derivation -- the answer is whatever `Fakes.derived` says. This one hands
+    `land.main` a real `Classifier` and a real repo path, so `role_for`, the containers_list
+    lookup and `expand_build_couplings` all actually run.
+
+    `pull_ref_rc=1` makes `pr_range` fail to read the PR's own range, which is what keeps
+    `quiet_paths` from shelling out to git: with no range it returns immediately, and every
+    broad path stays loud -- the direction a wrong answer there must fall (issue #848).
+    """
+    fakes = Fakes(
+        pull_ref_rc=1,
+        gh_views={
+            "files,changedFiles": {
+                "files": [{"path": "ansible/roles/k8s/sonarr/defaults/main.yml"}],
+                "changedFiles": 1,
+            }
+        },
+    )
+    rc, out, _, calls, logline = land_run([], fakes, classifier=Classifier())
+    assert (rc, "VERDICT: settled" in out) == (0, True)
+    assert "tags=sonarr " in logline
+    assert [c[1] for c in calls if c[0] == "gate"] == [(["sonarr"],)]
+
+
+def test_the_real_classifier_derives_nothing_from_a_docs_only_path(land_run):
+    """The reject half: a path that maps to no role must not produce a tag."""
+    fakes = Fakes(
+        pull_ref_rc=1,
+        gh_views={
+            "files,changedFiles": {
+                "files": [{"path": "docs/python-code-organization.md"}],
+                "changedFiles": 1,
+            }
+        },
+    )
+    rc, out, _, calls, _ = land_run([], fakes, classifier=Classifier())
+    assert rc == 0 and "VERDICT: nothing-to-deploy" in out
+    assert "gate" not in _names(calls)
+
+
+def test_every_numbered_step_header_uses_the_same_denominator(land_run):
+    """Finding 27: `/6` was written out seven times against eight prints, checked by nobody."""
+    from deploy_tools.land_lib import pipeline
+
+    _, out, _, _, _ = land_run([])
+    headers = [ln for ln in out.splitlines() if ln.startswith("== ")]
+    numbered = [h for h in headers if "/" in h.split()[1]]
+    assert [h.split()[1] for h in numbered] == [
+        f"{n}/{pipeline.STEP_COUNT}" for n in range(1, pipeline.STEP_COUNT + 1)
+    ]
+    # A step that stops printing its header, or one added to the list and never reached,
+    # both show up here. `STEP_COUNT == len(_STEPS)` would be a tautology.
+    assert len(numbered) == pipeline.STEP_COUNT

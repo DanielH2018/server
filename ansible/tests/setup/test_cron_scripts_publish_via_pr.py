@@ -132,11 +132,11 @@ def test_the_regressed_suffix_strip_matches_what_the_publisher_prints():
     reads "PR opened for X with auto-merge; one or more eval cases REGRESSED", wrong and not
     obviously wrong (issue #1086).
     """
-    # Anchored on RC_PUBLISHED specifically: "PR opened for {branch}" is also the prefix of
+    # Anchored on PUBLISH_PUBLISHED specifically: "PR opened for {branch}" is also the prefix of
     # the auto-merge-failed message earlier in the same function, and an unanchored search
     # matches that one first.
     match = re.search(
-        r'RC_PUBLISHED,\s*f"PR opened for \{branch\}(.*?)"', PUBLISH_PR.read_text()
+        r'PUBLISH_PUBLISHED,\s*f"PR opened for \{branch\}(.*?)"', PUBLISH_PR.read_text()
     )
     assert match, (
         "publish_pr.py's happy-path message literal has moved; re-derive the suffix"

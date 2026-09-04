@@ -64,6 +64,15 @@ from typing import Callable
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from deploy_tools.exit_codes import (
+    PUBLISH_PUBLISHED,
+    PUBLISH_PUSHED_NO_PR,
+    PUBLISH_STILL_LOCAL,
+    UNLANDED_NO_PR,
+    UNLANDED_NOTHING,
+    UNLANDED_ORIGIN_UNREADABLE,
+    UNLANDED_PR_OPEN,
+)
 from lib import gh as gh_mod
 from lib import git as git_mod
 
@@ -71,14 +80,10 @@ from lib import git as git_mod
 # rejection line, short enough for a Kuma message.
 FAILURE_TAIL = 400
 
-RC_PUBLISHED = 0
-RC_STILL_LOCAL = 1
-RC_PUSHED_NO_PR = 2
-
-RC_NOTHING_UNLANDED = 0
-RC_ORIGIN_UNREADABLE = 1
-RC_UNLANDED_PR_OPEN = 2
-RC_UNLANDED_NO_PR = 3
+# Two contracts over the same integers -- `publish` says what state the tree is in, `unlanded`
+# says what it found on origin. Both are defined in `deploy_tools/exit_codes.py`, whose
+# prefixes are what tell a reader which of the two a value belongs to; the old names here were
+# `RC_*` for both, so 2 read as one number with two meanings.
 
 # What a PR lookup reports when it timed out. Non-empty on purpose: `unlanded` and the
 # `open-pr` shell idiom both read an empty answer as "no PR", which would let a run publish a
@@ -101,14 +106,14 @@ Runner = Callable[..., subprocess.CompletedProcess[str]]
 
 
 @dataclass(frozen=True)
-class Tools:
+class PublishTools:
     """The two process boundaries, injectable so a test drives the sequence without a remote."""
 
     git: Runner
     gh: Runner
 
 
-def real_tools(repo: Path) -> Tools:
+def real_tools(repo: Path) -> PublishTools:
     def git(
         *args: str, timeout: float | None = None
     ) -> subprocess.CompletedProcess[str]:
@@ -117,11 +122,11 @@ def real_tools(repo: Path) -> Tools:
     def gh(*args: str) -> subprocess.CompletedProcess[str]:
         return gh_mod.gh(*args, check=False)
 
-    return Tools(git=git, gh=gh)
+    return PublishTools(git=git, gh=gh)
 
 
 @dataclass(frozen=True)
-class Outcome:
+class PublishOutcome:
     rc: int
     message: str
     branch: str
@@ -133,7 +138,7 @@ def failure_tail(proc: subprocess.CompletedProcess[str]) -> str:
     return text[-FAILURE_TAIL:]
 
 
-def run_gh(tools: Tools, *args: str) -> subprocess.CompletedProcess[str]:
+def run_gh(tools: PublishTools, *args: str) -> subprocess.CompletedProcess[str]:
     """``tools.gh(*args)`` with a timeout reported as a failed process rather than a raise.
 
     Both ``gh`` calls in ``publish`` sit AFTER the push and after ``reset --hard HEAD~1``, so
@@ -161,16 +166,16 @@ def publish(
     prefix: str,
     title: str,
     body: str,
-    tools: Tools,
+    tools: PublishTools,
     now: datetime | None = None,
-) -> Outcome:
+) -> PublishOutcome:
     """Move HEAD's commit onto ``<prefix><stamp>``, push it, and open an auto-merging PR."""
     branch = branch_name(prefix, now)
 
     proc = tools.git("branch", branch, "HEAD")
     if proc.returncode != 0:
-        return Outcome(
-            RC_STILL_LOCAL,
+        return PublishOutcome(
+            PUBLISH_STILL_LOCAL,
             f"could not create {branch}; commit is local on master: {failure_tail(proc)}",
             branch,
         )
@@ -182,8 +187,8 @@ def publish(
         # `git branch` with "already exists" and reports the wrong cause. Best-effort: the
         # push already failed, so there is nothing more informative to do if this fails too.
         tools.git("branch", "-D", branch)
-        return Outcome(
-            RC_STILL_LOCAL,
+        return PublishOutcome(
+            PUBLISH_STILL_LOCAL,
             f"publishing {branch} failed; commit is local on master: {failure_tail(proc)}",
             branch,
         )
@@ -200,8 +205,8 @@ def publish(
         # this reset exists to prevent. Report it as rc 2 (branch published, human must
         # clear it) rather than pressing on to open a PR while master disagrees with origin;
         # `failure_tail` names why the reset itself failed (index lock, dirtied tree).
-        return Outcome(
-            RC_PUSHED_NO_PR,
+        return PublishOutcome(
+            PUBLISH_PUSHED_NO_PR,
             f"{branch} pushed but resetting local master to drop its commit failed; "
             f"master is still one commit ahead of origin until this is cleared by hand: "
             f"{failure_tail(proc)}",
@@ -213,24 +218,26 @@ def publish(
         tools, "pr", "create", "--head", branch, "--title", title, "--body", body
     )
     if proc.returncode != 0:
-        return Outcome(
-            RC_PUSHED_NO_PR,
+        return PublishOutcome(
+            PUBLISH_PUSHED_NO_PR,
             f"{branch} published but PR creation failed: {failure_tail(proc)}",
             branch,
         )
 
     proc = run_gh(tools, "pr", "merge", "--auto", "--squash", "--delete-branch", branch)
     if proc.returncode != 0:
-        return Outcome(
-            RC_PUSHED_NO_PR,
+        return PublishOutcome(
+            PUBLISH_PUSHED_NO_PR,
             f"PR opened for {branch} but auto-merge could not be enabled: {failure_tail(proc)}",
             branch,
         )
 
-    return Outcome(RC_PUBLISHED, f"PR opened for {branch} with auto-merge", branch)
+    return PublishOutcome(
+        PUBLISH_PUBLISHED, f"PR opened for {branch} with auto-merge", branch
+    )
 
 
-def open_pr(prefix: str, tools: Tools, branch: str = "") -> str:
+def open_pr(prefix: str, tools: PublishTools, branch: str = "") -> str:
     """The number of the first open PR whose head branch starts with ``prefix``, else ``""``.
 
     Args:
@@ -264,7 +271,7 @@ def open_pr(prefix: str, tools: Tools, branch: str = "") -> str:
     return ""
 
 
-def unlanded(prefix: str, tools: Tools) -> Outcome:
+def unlanded(prefix: str, tools: PublishTools) -> PublishOutcome:
     """Whether a previous run's branch is still on origin, and whether it has an open PR.
 
     ``git ls-remote`` decides; the PR number only labels the finding. That order is
@@ -282,39 +289,39 @@ def unlanded(prefix: str, tools: Tools) -> Outcome:
             timeout=LS_REMOTE_TIMEOUT_S,
         )
     except subprocess.TimeoutExpired:
-        return Outcome(
-            RC_ORIGIN_UNREADABLE,
+        return PublishOutcome(
+            UNLANDED_ORIGIN_UNREADABLE,
             f"origin did not answer within {LS_REMOTE_TIMEOUT_S:.0f}s when checking for an "
             f"unlanded {prefix}* branch",
             "",
         )
     if proc.returncode != 0:
-        return Outcome(
-            RC_ORIGIN_UNREADABLE,
+        return PublishOutcome(
+            UNLANDED_ORIGIN_UNREADABLE,
             f"cannot reach origin to check for an unlanded {prefix}* branch: {failure_tail(proc)}",
             "",
         )
     heads = [line for line in (proc.stdout or "").splitlines() if line.strip()]
     if not heads:
-        return Outcome(RC_NOTHING_UNLANDED, "", "")
+        return PublishOutcome(UNLANDED_NOTHING, "", "")
 
     branch = heads[0].split("refs/heads/", 1)[-1].strip()
     number = open_pr(prefix, tools, branch=branch)
     if number == OPEN_PR_UNKNOWN:
-        return Outcome(
-            RC_UNLANDED_NO_PR,
+        return PublishOutcome(
+            UNLANDED_NO_PR,
             f"branch {branch} is on origin and the open-PR lookup did not answer; treating "
             f"it as unpublished. Check it and open the PR by hand if it has none",
             branch,
         )
     if number:
-        return Outcome(
-            RC_UNLANDED_PR_OPEN,
+        return PublishOutcome(
+            UNLANDED_PR_OPEN,
             f"PR #{number} from a previous run is still open ({branch})",
             branch,
         )
-    return Outcome(
-        RC_UNLANDED_NO_PR,
+    return PublishOutcome(
+        UNLANDED_NO_PR,
         f"branch {branch} is on origin with NO open PR — a previous run published it but "
         f"never opened one, and the local tree cannot show this. Open the PR by hand",
         branch,

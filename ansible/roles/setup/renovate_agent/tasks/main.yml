@@ -24,14 +24,11 @@
     - agent_logic.py
   become: true
 
-- name: Install the shared host_lib helper (source of truth in roles/setup/common/files)
-  ansible.builtin.copy:
-    src: "{{ role_path }}/../common/files/host_lib.py"
-    dest: /opt/renovate-agent/host_lib.py
-    owner: "{{ sys_user }}"
-    group: "{{ sys_user }}"
-    mode: "0755"
-  become: true
+- name: Install the shared host_lib helper beside the agent
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/install_host_lib.yml"
+  vars:
+    host_lib_dir: /opt/renovate-agent
+    host_lib_owner: "{{ sys_user }}"
 
 # Rendered rather than shipped as a file so it can carry the caps the unit actually enforces.
 # A prompt naming a different PR cap or timeout from the ones in defaults/main.yml is how the

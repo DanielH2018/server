@@ -51,49 +51,66 @@ def test_r2_classify_counts_unknown_actions_as_class_a_and_names_them():
     assert unknown == ["SomeNewOp"]
 
 
+# The free-tier limits checks/r2.py passes in from bridge/config.py's R2_* defaults. Written out
+# here rather than read from cfg so the percentages asserted below are checkable by eye, and so a
+# test that means to vary one limit says so with an override.
+_FREE_TIER = {
+    "storage_max_gb": 10,
+    "class_a_max": 1_000_000,
+    "class_b_max": 10_000_000,
+    "uploads_max": 25,
+    "max_pct": 80,
+}
+
+
+def _verdict(*args, **overrides):
+    """r2_usage_verdict at the deployed free-tier limits, with any of them overridden."""
+    return checks.r2.r2_usage_verdict(*args, **{**_FREE_TIER, **overrides})
+
+
 def test_r2_verdict_up_well_inside_the_free_tier():
-    ok, msg = checks.r2.r2_usage_verdict(1_200_000_000, 0, 4_100, 88_000, [])
+    ok, msg = _verdict(1_200_000_000, 0, 4_100, 88_000, [])
     assert ok
     assert "storage 1.20/10 GB (12%)" in msg
     assert "Class B 88000/10000000 (1%)" in msg
 
 
 def test_r2_verdict_down_on_storage_breach():
-    ok, msg = checks.r2.r2_usage_verdict(8_500_000_000, 0, 0, 0, [])
+    ok, msg = _verdict(8_500_000_000, 0, 0, 0, [])
     assert not ok
     assert "storage at 85%" in msg
     assert "over 80% of free tier" in msg
 
 
 def test_r2_verdict_down_on_class_b_breach_names_only_that_arm():
-    ok, msg = checks.r2.r2_usage_verdict(0, 0, 0, 9_000_000, [])
+    ok, msg = _verdict(0, 0, 0, 9_000_000, [])
     assert not ok
     assert "Class B at 90%" in msg
     assert "storage at" not in msg
 
 
 def test_r2_verdict_breaches_at_exactly_the_threshold():
-    ok, _ = checks.r2.r2_usage_verdict(8_000_000_000, 0, 0, 0, [])
+    ok, _ = _verdict(8_000_000_000, 0, 0, 0, [])
     assert not ok
 
 
 def test_r2_verdict_down_on_orphaned_multipart_uploads():
     # The quiet storage fill: these bill as bytes and never appear in an object listing.
-    ok, msg = checks.r2.r2_usage_verdict(0, 500, 0, 0, [])
+    ok, msg = _verdict(0, 500, 0, 0, [])
     assert not ok
     assert "500 incomplete multipart uploads" in msg
     assert "AbortIncompleteMultipartUpload" in msg
 
 
 def test_r2_verdict_reports_unknown_actions_even_when_up():
-    ok, msg = checks.r2.r2_usage_verdict(0, 0, 5, 0, ["SomeNewOp"])
+    ok, msg = _verdict(0, 0, 5, 0, ["SomeNewOp"])
     assert ok
     assert "unclassified ops counted as Class A: SomeNewOp" in msg
 
 
 def test_r2_verdict_treats_a_zero_limit_as_no_limit():
     # A disabled arm must not divide by zero, and must not silently read as 0% used.
-    ok, msg = checks.r2.r2_usage_verdict(5_000_000_000, 0, 0, 0, [], storage_max_gb=0)
+    ok, msg = _verdict(5_000_000_000, 0, 0, 0, [], storage_max_gb=0)
     assert ok
     assert "no limit set" in msg
 

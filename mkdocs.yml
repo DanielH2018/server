@@ -190,6 +190,9 @@ nav:
       - Claude shell permissions: claude-shell-permissions.md
       - Claude tooling reference: claude-tooling.md
       - Failure classes: failure-classes.md
+      # Layout decisions, module conventions and the ranked structural findings from the
+      # 2026-09-04 review of land_lib, monitor-bridge and gitops_deploy.
+      - Python code organization: python-code-organization.md
       - Security tools: security-tools.md
       - WireGuard private access: wireguard-private-homelab-access.md
       - Healthchecks.io deadman: healthchecks-io-deadman.md

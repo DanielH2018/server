@@ -45,8 +45,60 @@ import os
 import time
 
 
-def _env(name, default):
+def _env(name: str, default: str) -> str:
     return os.environ.get(name, default)
+
+
+# Every env value this module or bridge/config.py could not parse, one operator-readable line
+# each.
+#
+# IMPORTING A MODULE THAT USES THESE MUST NOT RAISE. `python /app/check.py` imports both this
+# module and bridge/config.py transitively, so a ValueError on one malformed number used to kill
+# the pod during import — before the heartbeat file existed, before a single monitor could be
+# told, and with a traceback naming neither the env var nor its value. `_int`/`_num` below
+# record the problem, fall back to the documented default, and let check.py's `main()` print the
+# whole list and exit 2. One clear line per bad value, at startup, where an operator is looking.
+#
+# Defined here rather than in bridge/config.py because this module's own HTTP_TIMEOUT needs the
+# same treatment and is imported before bridge/config.py exists as a module; bridge/config.py
+# imports CONFIG_PROBLEMS and _int/_num from here so both modules share the one list and the one
+# pair of parsers.
+CONFIG_PROBLEMS: list[str] = []
+
+
+def _int(name: str, default: str) -> int:
+    """The `name` env var as an int, recording a malformed value instead of raising.
+
+    Args:
+      name: The environment variable to read.
+      default: The value used when the variable is unset OR unparseable. A string, so the
+        fallback goes through the same parse the env value would.
+    """
+    raw = _env(name, default)
+    try:
+        return int(raw)
+    except ValueError:
+        CONFIG_PROBLEMS.append(
+            "%s=%r is not an integer; falling back to %s" % (name, raw, default)
+        )
+        return int(default)
+
+
+def _num(name: str, default: str) -> float:
+    """The `name` env var as a float, recording a malformed value instead of raising.
+
+    Args:
+      name: The environment variable to read.
+      default: The value used when the variable is unset OR unparseable.
+    """
+    raw = _env(name, default)
+    try:
+        return float(raw)
+    except ValueError:
+        CONFIG_PROBLEMS.append(
+            "%s=%r is not a number; falling back to %s" % (name, raw, default)
+        )
+        return float(default)
 
 
 # The seconds every outbound HTTP call in both bridges is bounded by. Defined here rather than
@@ -59,21 +111,25 @@ def _env(name, default):
 # on the very next call, where its siblings answer in 0.03-0.06s. A source that slow needs the
 # cheap signal to decide and the expensive one only to explain — this constant cannot make that
 # choice for a caller, it can only stop a hang.
-HTTP_TIMEOUT = int(_env("HTTP_TIMEOUT", "10"))
+HTTP_TIMEOUT = _int("HTTP_TIMEOUT", "10")
 
 
-def log(*args):
-    """Print a bracketed-timestamp log line.
+def log(*args: object) -> None:
+    """Print one log line to stdout.
 
-    The bracketed stamp is LOCAL time (America/Chicago via the container's TZ env), not UTC —
-    see the monitor-bridge CLAUDE.md's "bracketed log timestamps" trap for the incident that
-    came from reading it as UTC. Callers must reach this qualified as `bridge.common.log(...)`;
-    see this module's header.
+    It carries NO timestamp of its own. Both bridges run as containers, and the container runtime
+    already stamps every line — `kubectl logs --timestamps` prepends the true UTC ingestion time.
+    The stamp this function used to print was `time.strftime` with no offset, so it rendered the
+    container's local America/Chicago wall clock while looking like an ISO instant; reading it as
+    UTC shifted a B2 cap breach five hours early on 2026-08-16 and pointed the investigation at
+    the wrong window. One stamp from the runtime beats two that disagree.
+
+    Callers must reach this qualified as `bridge.common.log(...)`; see this module's header.
     """
-    print("[%s]" % time.strftime("%Y-%m-%dT%H:%M:%S"), *args, flush=True)
+    print(*args, flush=True)
 
 
-def touch_heartbeat(path):
+def touch_heartbeat(path: str) -> None:
     """Write the current time to `path`, the liveness-probe heartbeat file.
 
     Takes the path as an argument rather than reading a module-level constant, so each caller's
@@ -87,7 +143,7 @@ def touch_heartbeat(path):
         log("WARN: heartbeat write failed:", e)
 
 
-def sanitize(s, maxlen=120):
+def sanitize(s: object, maxlen: int = 120) -> str:
     """Neutralize adversary-controlled text before it enters a Discord-bound alert msg.
 
     Release titles, indexer names, n8n workflow names and *arr queue items are

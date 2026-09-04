@@ -44,7 +44,7 @@ from datetime import datetime
 FETCH_BODY_MAX = 180
 
 
-def duration_seconds(spec):
+def duration_seconds(spec: str) -> int:
     """Seconds in a Prometheus duration like `15m` / `2h` / `90s` / `1d`. Unit-tested."""
     units = {"s": 1, "m": 60, "h": 3600, "d": 86400, "w": 604800}
     spec = spec.strip()
@@ -53,7 +53,7 @@ def duration_seconds(spec):
     return int(spec[:-1]) * units[spec[-1]]
 
 
-def parse_duration(s):
+def parse_duration(s: str) -> float:
     """Parse a Prometheus-style duration ('900s', '15m', '1h', '2d') to seconds (float).
 
     A bare number is treated as seconds. The n8n check evaluates its failure window in
@@ -67,7 +67,7 @@ def parse_duration(s):
     return float(s)
 
 
-def parse_rfc3339(ts):
+def parse_rfc3339(ts: str) -> datetime:
     """Parse an RFC3339 timestamp, tolerating nanosecond precision and a trailing 'Z'.
 
     datetime.fromisoformat only accepts 3- or 6-digit fractional seconds, but Kopia
@@ -90,7 +90,7 @@ def parse_rfc3339(ts):
     return datetime.fromisoformat(ts)
 
 
-def endpoint_label(url):
+def endpoint_label(url: str) -> str:
     """host:port for `url` — deliberately NOT the path or query.
 
     This ends up in Kuma messages and therefore in Discord. `_get_json` is used for the
@@ -103,7 +103,7 @@ def endpoint_label(url):
     return netloc.rsplit("@", 1)[-1] or "unknown host"
 
 
-def describe_fetch_failure(url, exc, body=""):
+def describe_fetch_failure(url: str, exc: object, body: str = "") -> str:
     """Compose the message an unreachable or erroring HTTP source should page with.
 
     `_evaluate` otherwise renders a bare `str(exc)`, which for the common failures is close

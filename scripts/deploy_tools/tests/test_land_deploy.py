@@ -23,21 +23,21 @@ def _ready(landing, fakes=None, **opts):
 def test_each_tag_deploys_on_the_host_that_declares_it(landing, capsys):
     """Issue #929: `--tags alloy` on daniel-box matched no service; the Pi ran the old container."""
     ln, calls = _ready(landing, Fakes(hosts="daniel-box\tsonarr\ndaniel-pi\talloy\n"))
-    ln.tags = "sonarr,alloy"
+    ln.resolved_tags = ["sonarr", "alloy"]
     assert deploy.deploy_by_host(ln) == 0
     assert [c[1] for c in calls if c[0] == "deploy"] == [
-        (PRIMARY, "sonarr", None),
-        (PRIMARY, "alloy", "daniel-pi"),
+        (PRIMARY, ["sonarr"], None),
+        (PRIMARY, ["alloy"], "daniel-pi"),
     ]
     assert "deploying there with -e target=daniel-pi" in capsys.readouterr().out
 
 
 def test_tags_no_host_declares_fall_through_to_one_deploy(landing):
     ln, calls = _ready(landing, Fakes(hosts=""))
-    ln.tags = "k8s-manifests"
+    ln.resolved_tags = ["k8s-manifests"]
     deploy.deploy_by_host(ln)
     assert [c[1] for c in calls if c[0] == "deploy"] == [
-        (PRIMARY, "k8s-manifests", None)
+        (PRIMARY, ["k8s-manifests"], None)
     ]
 
 
@@ -46,12 +46,12 @@ def test_a_retry_resumes_at_the_host_that_failed(landing):
         landing,
         Fakes(hosts="daniel-box\tsonarr\ndaniel-pi\talloy\n", deploy=[0, 75, 0]),
     )
-    ln.tags = "sonarr,alloy"
+    ln.resolved_tags = ["sonarr", "alloy"]
     assert deploy.deploy_with_lock_retry(ln) == 0
     assert [c[1][1:] for c in calls if c[0] == "deploy"] == [
-        ("sonarr", None),
-        ("alloy", "daniel-pi"),
-        ("alloy", "daniel-pi"),
+        (["sonarr"], None),
+        (["alloy"], "daniel-pi"),
+        (["alloy"], "daniel-pi"),
     ]
     assert ln.ledger.lock_waited > 0
 
@@ -66,7 +66,7 @@ def test_the_lock_holder_is_sampled_before_the_deploy_attempt(landing):
     ln, calls = _ready(
         landing, Fakes(deploy=[75, 0], lock_holder=["42 flock deploy", ""])
     )
-    ln.tags = "sonarr"
+    ln.resolved_tags = ["sonarr"]
     deploy.deploy_with_lock_retry(ln)
     names = [c[0] for c in calls]
     assert names.index("lock_holder") < names.index("deploy")
@@ -76,7 +76,7 @@ def test_the_lock_holder_is_sampled_before_the_deploy_attempt(landing):
 def test_a_mapping_failure_dies_with_its_own_verdict(landing):
     """Closes #1016: this used to surface as a bare `deploy-failed (exit 1)`."""
     ln, calls = _ready(landing, Fakes(hosts_rc=1))
-    ln.tags = "sonarr"
+    ln.resolved_tags = ["sonarr"]
     with pytest.raises(Outcome) as exc:
         deploy.deploy_by_host(ln)
     assert exc.value.verdict == "deploy-failed"
@@ -100,13 +100,17 @@ def test_a_mapping_failure_dies_with_its_own_verdict(landing):
         ),
         (20, "deploy-failed", 1, "some changes are live", "playbook-failed"),
         (75, "lock-busy", 75, "lock stayed busy", ""),
-        (9, "deploy-failed", 1, "exit 9", "deploy-exit-9"),
+        # 3, 4 and 64 keep the exact labels the board already groups by; anything outside
+        # deploy.sh's own contract buckets, so the `cause` vocabulary stays closed.
+        (3, "deploy-failed", 1, "exit 3", "deploy-exit-3"),
+        (4, "deploy-failed", 1, "exit 4", "deploy-exit-4"),
+        (9, "deploy-failed", 1, "exit 9", "deploy-exit-other"),
     ],
 )
 def test_deploy_outcomes(landing, rc, verdict, code, phrase, cause):
     """#1031: every deploy-failed names its cause, so Loki can tell the shapes apart."""
     ln, _ = _ready(landing)
-    ln.tags = "sonarr"
+    ln.resolved_tags = ["sonarr"]
     with pytest.raises(Outcome) as exc:
         deploy.deploy_outcome(ln, rc)
     assert (exc.value.rc, exc.value.verdict) == (code, verdict)
@@ -150,8 +154,19 @@ def test_the_diff_fallback_derives_after_the_tick(landing):
     ln, calls = _ready(landing, Fakes(changed="sonarr"), since="abc")
     ln.needs_diff = True
     deploy.deploy_phase(ln)
-    assert ln.tags == "sonarr"
+    assert ln.resolved_tags == ["sonarr"]
     assert ("deploy_tags", ("changed", "abc"), {"cwd": PRIMARY}) in calls
+
+
+def test_the_diff_fallback_drops_an_empty_tag_element(landing):
+    """A doubled or trailing comma is not a service, so it is dropped here rather than
+    handed to deploy.sh as a tag miss that refuses the whole list."""
+    ln, calls = _ready(landing, Fakes(changed="sonarr,,radarr,"), since="abc")
+    ln.needs_diff = True
+    deploy.deploy_phase(ln)
+    assert ln.resolved_tags == ["sonarr", "radarr"]
+    deploy_argv = [c for c in calls if c[0] == "deploy"]
+    assert deploy_argv and deploy_argv[0][1][1] == ["sonarr", "radarr"]
 
 
 def test_a_broad_diff_fallback_is_handed_to_a_hand(landing):
@@ -167,7 +182,7 @@ def test_a_stale_tree_waits_on_the_tip_before_reticking(landing):
     again and exited 4 again; the fix re-checks blockers, waits on the NEW tip, then ticks."""
     tip = "feedfacefeedfacefeedfacefeedfacefeedface"
     ln, calls = _ready(landing, Fakes(deploy=[4, 0], tip=tip))
-    ln.tags = "sonarr"
+    ln.resolved_tags = ["sonarr"]
     deploy.deploy_phase(ln)
     first = next(i for i, c in enumerate(calls) if c[0] == "deploy")
     tail = [c[1][0] if c[0] == "deploy_tags" else c[0] for c in calls[first + 1 :]]
@@ -182,7 +197,7 @@ def test_a_stale_tree_waits_on_the_tip_before_reticking(landing):
 
 def test_the_tip_wait_is_booked_under_wait_ci_not_deploy(landing):
     ln, _ = _ready(landing, Fakes(deploy=[4, 0], tip="f" * 40))
-    ln.tags = "sonarr"
+    ln.resolved_tags = ["sonarr"]
     t_ci, t_tick = ln.ledger.t_ci, ln.ledger.t_tick
     deploy.deploy_phase(ln)
     assert ln.ledger.t_ci > t_ci and ln.ledger.t_tick - ln.ledger.t_ci == t_tick - t_ci
@@ -190,7 +205,7 @@ def test_the_tip_wait_is_booked_under_wait_ci_not_deploy(landing):
 
 def test_a_stale_retry_is_bounded(landing):
     ln, calls = _ready(landing, Fakes(deploy=[4]))
-    ln.tags = "sonarr"
+    ln.resolved_tags = ["sonarr"]
     with pytest.raises(Outcome) as exc:
         deploy.deploy_phase(ln)
     assert exc.value.verdict == "deploy-failed"
@@ -202,7 +217,7 @@ def test_a_stale_retry_backs_off_between_attempts(landing):
     between them, while master CI on the merge commit was still 2m48s from green. Mirror
     the lock-contention retry's own backoff (`lock_backoff`, already used above)."""
     ln, calls = _ready(landing, Fakes(deploy=[4, 4, 4, 0]))
-    ln.tags = "sonarr"
+    ln.resolved_tags = ["sonarr"]
     deploy.deploy_phase(ln)
     sleeps = [c[1][0] for c in calls if c[0] == "sleep"]
     assert sleeps == [ln.opts.lock_backoff] * 3
@@ -213,14 +228,14 @@ def test_a_stale_retry_waits_on_ci_even_when_the_tip_is_unchanged(landing):
     still 2m48s from green. The old code gated the CI wait behind `tip_sha != merge_sha`, so
     an unchanged tip (default Fakes tip == MERGE_SHA) got no wait and no backoff at all."""
     ln, calls = _ready(landing, Fakes(deploy=[4, 0]))
-    ln.tags = "sonarr"
+    ln.resolved_tags = ["sonarr"]
     deploy.deploy_phase(ln)
     assert [c[0] for c in calls].count("await_ci") == 1
 
 
 def test_a_blocker_landing_during_the_wait_ends_the_retry_as_blocked(landing):
     ln, _ = _ready(landing, Fakes(deploy=[4], blockers=[3]))
-    ln.tags = "sonarr"
+    ln.resolved_tags = ["sonarr"]
     with pytest.raises(Outcome) as exc:
         deploy.deploy_phase(ln)
     assert exc.value.verdict == "blocked"
@@ -229,13 +244,24 @@ def test_a_blocker_landing_during_the_wait_ends_the_retry_as_blocked(landing):
 def test_a_contended_retick_inside_the_stale_retry_is_booked(landing):
     """The #1013 case: the retry's tick loses the lock and must retry and book it, not carry on."""
     ln, calls = _ready(landing, Fakes(deploy=[4, 0], tick=[3, 0]))
-    ln.tags = "sonarr"
+    ln.resolved_tags = ["sonarr"]
     deploy.deploy_phase(ln)
     assert [c[0] for c in calls].count("tick") == 2 and ln.ledger.lock_waited > 0
 
 
 def test_deploy_phase_stamps_the_ledger(landing):
     ln, _ = _ready(landing)
-    ln.tags = "sonarr"
+    ln.resolved_tags = ["sonarr"]
     deploy.deploy_phase(ln)
     assert ln.ledger.tags_label == "sonarr" and ln.ledger.t_deploy is not None
+
+
+def test_an_unreadable_deployer_state_is_not_settled(landing, capsys):
+    """Finding 13's rejecting half at the phase. `converged` here would print `settled`."""
+    ln, _ = _ready(landing, Fakes(self_applied=True))
+    ln.self_applied = True
+    ln.tools.read_state = lambda root, name: None
+    with pytest.raises(Outcome) as exc:
+        deploy.no_tag_outcome(ln)
+    assert (exc.value.rc, exc.value.verdict) == (1, "needs-manual-apply")
+    assert "could not be read" in capsys.readouterr().out

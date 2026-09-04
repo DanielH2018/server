@@ -6,14 +6,13 @@ turns out. Landing PR #570 on 2026-08-29 spent ~6 minutes waiting for CI and the
 at step 4, with the blocker visible in the range before the wait began.
 """
 
-from __future__ import annotations
-
 import sys as _sys
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
+from deploy_tools.exit_codes import CI_GREEN, CI_PENDING, CI_RED, DEPLOY_BROAD
 from deploy_tools.land_lib.landing import BRANCH, Landing
-from deploy_tools.land_lib.outcome import say
+from deploy_tools.land_lib.outcome import Verdict, say
 
 
 def blockers(ln: Landing) -> int:
@@ -25,14 +24,13 @@ def blockers(ln: Landing) -> int:
 
 def preflight(ln: Landing) -> None:
     """Step 2: can the tick cross what is incoming? Before waiting on anything."""
-    print("== 2/6  pre-flight: can the tick cross what is incoming?")
     rc = blockers(ln)
     if rc == 0:
         say("nothing in the way")
         return
-    if rc == 3:
+    if rc == DEPLOY_BROAD:
         ln.finish(
-            "blocked",
+            Verdict.BLOCKED,
             1,
             f"PR #{ln.opts.pr} — an incoming change needs a hand; see above",
         )
@@ -48,10 +46,10 @@ def wait_master_ci(ln: Landing, sha: str, label: str | None = None) -> None:
     """
     rc, line = ln.tools.await_ci(sha, ln.opts.ci_timeout)
     print(line)
-    if rc == 0:
+    if rc == CI_GREEN:
         return
     where = f" on {label}" if label else ""
-    if rc == 1:
+    if rc == CI_RED:
         # bash said "on $MERGE_SHA — nothing deployed" for step 3's own wait, and "on the
         # tip $TIP_SHA — the tick cannot cross it; nothing deployed" for the stale retry --
         # a caller passing `label` is always the latter, which the tick genuinely cannot
@@ -60,12 +58,12 @@ def wait_master_ci(ln: Landing, sha: str, label: str | None = None) -> None:
         ln.die(
             f"master CI is RED on {label or sha}{cannot_cross} nothing deployed",
             1,
-            "ci-red",
+            Verdict.CI_RED,
         )
-    if rc == 75:
+    if rc == CI_PENDING:
         ln.die(
             f"no CI verdict{where} inside {ln.opts.ci_timeout}s — nothing deployed",
             75,
-            "ci-timeout",
+            Verdict.CI_TIMEOUT,
         )
     ln.die(f"await_ci failed{where} (exit {rc}) — nothing deployed", 1)

@@ -22,6 +22,8 @@ import urllib.request
 import deploy_health
 import pytest
 
+import deploy_alerts
+
 
 def _pending(state_dir: pathlib.Path) -> dict[str, str]:
     path = state_dir / "pending_alerts.json"
@@ -136,7 +138,7 @@ def test_deliver_caps_the_queue_and_logs_each_drop(
     """
     limit = gitops_deploy.PENDING_ALERTS_MAX
     full = {f"tasks:{i:040x}": f"alert {i}" for i in range(limit)}
-    gitops_deploy._write_pending(full)
+    deploy_alerts.write_pending(gitops_deploy.PENDING_ALERTS_FILE, full)
     _sender(gitops_deploy, monkeypatch, state_dir, False)
 
     gitops_deploy.deliver("secrets:new", "one more, undelivered")
@@ -159,7 +161,9 @@ def test_cap_pending_is_the_tested_implementation(gitops_deploy):
 def test_drain_pending_clears_exactly_what_it_delivered(
     gitops_deploy, monkeypatch, state_dir
 ):
-    gitops_deploy._write_pending({"secrets:a": "first", "tasks:b": "second"})
+    deploy_alerts.write_pending(
+        gitops_deploy.PENDING_ALERTS_FILE, {"secrets:a": "first", "tasks:b": "second"}
+    )
     monkeypatch.setattr(gitops_deploy, "discord", lambda content: content == "first")
     gitops_deploy.drain_pending()
     assert _pending(state_dir) == {"tasks:b": "second"}

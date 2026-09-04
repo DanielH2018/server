@@ -12,109 +12,11 @@ from datetime import datetime, timedelta, timezone
 import bridge.config as cfg
 import bridge.net
 from bridge.parsing import FETCH_BODY_MAX
-
-
-def r2_month_start(now):
-    """UTC midnight on the 1st of the calendar month containing `now` (epoch seconds).
-
-    R2's free tier resets on the calendar month, so month-to-date is the only window whose
-    percentages mean anything — a rolling 30d window would report headroom that does not exist
-    on the 2nd and headroom that has already been given back on the 30th.
-    """
-    d = datetime.fromtimestamp(now, timezone.utc)
-    return d.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-
-
-def r2_classify_operations(rows):
-    """(class_a, class_b, unknown_actions) from r2OperationsAdaptiveGroups rows.
-
-    An actionType in neither published class list counts toward CLASS A — the expensive one — and
-    is named in the verdict. Cloudflare adds operations over time, and the alternative readings are
-    both worse: counting an unknown as Class B under-reports the arm with a 10x tighter limit, and
-    dropping it makes new operations invisible. Over-counting reports headroom we do not have,
-    which is the direction a guard should err in, and the named action says why the numbers moved.
-    """
-    class_a = class_b = 0
-    unknown = {}
-    for row in rows:
-        action = (row.get("dimensions") or {}).get("actionType") or "unknown"
-        requests = (row.get("sum") or {}).get("requests") or 0
-        if action in cfg.R2_CLASS_B_ACTIONS:
-            class_b += requests
-        elif action in cfg.R2_FREE_ACTIONS:
-            continue
-        elif action in cfg.R2_CLASS_A_ACTIONS:
-            class_a += requests
-        else:
-            class_a += requests
-            unknown[action] = unknown.get(action, 0) + requests
-    return class_a, class_b, sorted(unknown)
-
-
-def _pct(used, limit):
-    """Percent of `limit` used, or None when the limit is disabled (<= 0)."""
-    if limit <= 0:
-        return None
-    return 100.0 * used / limit
-
-
-def r2_usage_verdict(
-    storage_bytes,
-    uploads,
-    class_a,
-    class_b,
-    unknown_actions,
-    storage_max_gb=None,
-    class_a_max=None,
-    class_b_max=None,
-    uploads_max=None,
-    max_pct=None,
-):
-    """(ok, msg) from month-to-date R2 usage against the free-tier limits.
-
-    Reports all three arms every cycle whether or not any breaches, so the Kuma message carries
-    the trend and not just the alarm — the point of the monitor is to see a runaway client early.
-    """
-    storage_max_gb = cfg.R2_STORAGE_MAX_GB if storage_max_gb is None else storage_max_gb
-    class_a_max = cfg.R2_CLASS_A_MAX if class_a_max is None else class_a_max
-    class_b_max = cfg.R2_CLASS_B_MAX if class_b_max is None else class_b_max
-    uploads_max = cfg.R2_UPLOADS_MAX if uploads_max is None else uploads_max
-    max_pct = cfg.R2_USAGE_MAX_PCT if max_pct is None else max_pct
-
-    storage_gb = storage_bytes / 1e9  # R2 bills decimal GB, not GiB
-    arms = (
-        ("storage", storage_gb, storage_max_gb, "%.2f/%.0f GB"),
-        ("Class A", class_a, class_a_max, "%.0f/%.0f"),
-        ("Class B", class_b, class_b_max, "%.0f/%.0f"),
-    )
-    parts = []
-    breaching = []
-    for label, used, limit, fmt in arms:
-        pct = _pct(used, limit)
-        if pct is None:
-            parts.append("%s %s (no limit set)" % (label, fmt % (used, limit)))
-            continue
-        parts.append("%s %s (%.0f%%)" % (label, fmt % (used, limit), pct))
-        if pct >= max_pct:
-            breaching.append("%s at %.0f%%" % (label, pct))
-
-    if uploads_max > 0 and uploads > uploads_max:
-        breaching.append(
-            "%d incomplete multipart uploads (they bill as storage and do not show in a "
-            "listing — check the bucket's AbortIncompleteMultipartUpload lifecycle rule)"
-            % uploads
-        )
-
-    msg = "R2 month-to-date: " + ", ".join(parts)
-    if unknown_actions:
-        msg += " [unclassified ops counted as Class A: %s]" % ", ".join(unknown_actions)
-    if breaching:
-        return False, "over %.0f%% of free tier — %s. %s" % (
-            max_pct,
-            "; ".join(breaching),
-            msg,
-        )
-    return True, msg
+from verdicts.storage import (
+    r2_classify_operations,
+    r2_month_start,
+    r2_usage_verdict,
+)
 
 
 R2_QUERY = """query {
@@ -140,7 +42,7 @@ R2_QUERY = """query {
 }"""
 
 
-def r2_query_usage(now):
+def r2_query_usage(now: float) -> tuple[float, float, float, float, list[str]]:
     """(storage_bytes, uploads, class_a, class_b, unknown_actions) for the current month.
 
     One POST for both datasets — same account scope, so splitting it would double the calls and
@@ -202,7 +104,7 @@ def r2_query_usage(now):
 _r2_probe = {"ts": None, "ok": True, "msg": ""}
 
 
-def r2_usage(now=None):
+def r2_usage(now: float | None = None) -> tuple[bool, str]:
     """Throttled R2 free-tier headroom check. (ok, msg).
 
     SUCCESSES are cached for R2_PROBE_INTERVAL_S — month-to-date aggregates do not move on a 300s
@@ -224,12 +126,23 @@ def r2_usage(now=None):
             (now - _r2_probe["ts"]) / 60,
         )
     storage_bytes, uploads, class_a, class_b, unknown = r2_query_usage(now)
-    ok, msg = r2_usage_verdict(storage_bytes, uploads, class_a, class_b, unknown)
+    ok, msg = r2_usage_verdict(
+        storage_bytes,
+        uploads,
+        class_a,
+        class_b,
+        unknown,
+        cfg.R2_STORAGE_MAX_GB,
+        cfg.R2_CLASS_A_MAX,
+        cfg.R2_CLASS_B_MAX,
+        cfg.R2_UPLOADS_MAX,
+        cfg.R2_USAGE_MAX_PCT,
+    )
     _r2_probe["ts"] = now
     _r2_probe["ok"] = ok
     _r2_probe["msg"] = msg
     return ok, msg
 
 
-def check_r2_usage():
+def check_r2_usage() -> tuple[bool, str]:
     return r2_usage()

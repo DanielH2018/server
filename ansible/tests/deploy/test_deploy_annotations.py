@@ -26,7 +26,8 @@ _DEFAULTS = _REPO / "ansible/roles/k8s/claude-otel/defaults/main.yml"
 _GRAFANA = _REPO / "ansible/roles/k8s/claude-otel/templates/grafana.yaml.j2"
 _DASHBOARDS_TASKS = _REPO / "ansible/roles/k8s/claude-otel/tasks/dashboards.yml"
 _DEPLOY_SH = _REPO / "scripts/deploy.sh"
-_GITOPS = _REPO / "ansible/roles/setup/gitops_deploy/files/gitops_deploy.py"
+# emit_deploy_annotation lives in the deployer's I/O module, not in its entry point.
+_GITOPS = _REPO / "ansible/roles/setup/gitops_deploy/files/deploy_io.py"
 
 
 def _defaults() -> dict:

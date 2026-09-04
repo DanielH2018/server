@@ -1,32 +1,87 @@
-"""The words a landing ends with: the verdict set, the Outcome that carries one, and say().
+"""The words a landing ends with: the verdict set, the cause set, the Outcome, and say().
 
 An Outcome is raised by `Landing.die` and `Landing.finish` and returned by `pipeline.run`.
 It carries verdict and exit code together, so neither can be printed without the other --
 land.sh assigned LAND_VERDICT on the line before each `exit`, and a test grepped that they
 were adjacent.
+
+BOTH VOCABULARIES ARE CLOSED, AND BOTH ARE READ BY THE LANDINGS BOARD. `Verdict` is what the
+`VERDICT:` line prints; `Cause` is the one-token reason beside a `deploy-failed` verdict in
+the logfmt annotation, and the board groups by it. They are `StrEnum`s so `ty` catches a typo
+at the assignment rather than when the branch runs; the string values are unchanged, and the
+runtime check in `Outcome.__init__` stays for a value that arrives from outside.
 """
 
-from __future__ import annotations
-
 import sys
+from enum import StrEnum
 
-VERDICTS = frozenset(
-    {
-        "settled",
-        "unhealthy",
-        "deploy-failed",
-        "nothing-to-deploy",
-        "blocked",
-        "needs-manual-apply",
-        "deferred",
-        "merge-conflict",
-        "pr-ci-red",
-        "merge-timeout",
-        "ci-red",
-        "ci-timeout",
-        "lock-busy",
-    }
-)
+
+class Verdict(StrEnum):
+    """How a landing ended, as printed on the `VERDICT:` line."""
+
+    SETTLED = "settled"
+    UNHEALTHY = "unhealthy"
+    DEPLOY_FAILED = "deploy-failed"
+    NOTHING_TO_DEPLOY = "nothing-to-deploy"
+    BLOCKED = "blocked"
+    NEEDS_MANUAL_APPLY = "needs-manual-apply"
+    DEFERRED = "deferred"
+    MERGE_CONFLICT = "merge-conflict"
+    PR_CI_RED = "pr-ci-red"
+    MERGE_TIMEOUT = "merge-timeout"
+    CI_RED = "ci-red"
+    CI_TIMEOUT = "ci-timeout"
+    LOCK_BUSY = "lock-busy"
+
+
+VERDICTS = frozenset(Verdict)
+
+
+class Cause(StrEnum):
+    """Which deploy failure a `deploy-failed` verdict was, for the board's `by (cause)`.
+
+    The verdict alone cannot tell "nothing was deployed" (a tag miss, a failed tick, a
+    host-lookup crash) from "changes are live and a task failed after them".
+
+    DEPLOY_EXIT_* NAME THE deploy.sh CODES NO PHASE HANDLES ITSELF. They are enumerated
+    rather than formatted from the return code, because `f"deploy-exit-{rc}"` made the set
+    unbounded and the board groups by this field. `DEPLOY_EXIT_OTHER` is the bucket for a
+    code outside deploy.sh's own contract, which should not happen and previously would have
+    become its own label.
+    """
+
+    TICK_HELD = "tick-held"
+    TICK_FAILED = "tick-failed"
+    HOST_LOOKUP = "host-lookup"
+    TAG_MISS = "tag-miss"
+    PLAYBOOK_FAILED = "playbook-failed"
+    DEPLOY_EXIT_CD_FAILED = "deploy-exit-1"
+    DEPLOY_EXIT_BROAD = "deploy-exit-3"
+    DEPLOY_EXIT_STALE = "deploy-exit-4"
+    DEPLOY_EXIT_BAD_FLAGS = "deploy-exit-64"
+    DEPLOY_EXIT_OTHER = "deploy-exit-other"
+    INVALID = "invalid-cause"
+
+
+CAUSES = frozenset(Cause)
+
+# The deploy.sh exits `deploy_outcome` does not give a verdict of its own, keyed by the
+# wrapper's contract (`exit_codes.py`). `tools.run_deploy` passes only `--tags`, so of these
+# only 1 (the `cd` into the primary checkout failed) and 4 (stale tree) can arrive today; 3
+# needs `--changed` and 64 needs `--detach`, and both are kept so a call site that adds
+# either flag gets its label without editing this table. Anything outside the contract
+# buckets as `deploy-exit-other` rather than inventing a label the board would group on.
+_DEPLOY_EXIT_CAUSES = {
+    1: Cause.DEPLOY_EXIT_CD_FAILED,
+    3: Cause.DEPLOY_EXIT_BROAD,
+    4: Cause.DEPLOY_EXIT_STALE,
+    64: Cause.DEPLOY_EXIT_BAD_FLAGS,
+}
+
+
+def cause_for_deploy_exit(rc: int) -> Cause:
+    """The bounded `cause` for a deploy.sh exit no phase names itself."""
+    return _DEPLOY_EXIT_CAUSES.get(rc, Cause.DEPLOY_EXIT_OTHER)
 
 
 class Outcome(Exception):

@@ -1,4 +1,8 @@
-"""Service-health verdicts for check.py — n8n, the *arrs, Prowlarr, HA, Loki, GitOps, Discord.
+"""Service-health verdicts for check.py — n8n, the *arrs, Prowlarr, Home Assistant, GitOps.
+
+Loki's freshness and dropped-shipper verdicts live in verdicts/logs.py and the Discord webhook
+verdict in verdicts/notify.py; they moved out of here because this module had become the place
+a verdict landed when no sibling named its subject.
 
 These decide; check.py fetches. Each takes its inputs as arguments and reads no module-level
 config, which is what makes it safe to live here — see bridge/parsing.py's header for the rule
@@ -10,13 +14,20 @@ one poll. It takes the state dict as an argument, which is what keeps it testabl
 live here.
 """
 
+from collections.abc import Collection
 from datetime import datetime, timedelta, timezone
 
 from bridge.common import sanitize
 from bridge.parsing import parse_rfc3339
 
 
-def n8n_update_streaks(workflows_json, executions_json, state, now, window_s):
+def n8n_update_streaks(
+    workflows_json: dict | None,
+    executions_json: dict | None,
+    state: dict,
+    now: datetime,
+    window_s: float,
+) -> dict:
     """Advance per-workflow consecutive-failure streaks across check cycles.
 
     n8n doesn't record successful executions (EXECUTIONS_DATA_SAVE_ON_SUCCESS=none), so a
@@ -72,7 +83,12 @@ def n8n_update_streaks(workflows_json, executions_json, state, now, window_s):
     return result
 
 
-def n8n_verdict(streaks, consecutive_max, systemic_streak, systemic_max):
+def n8n_verdict(
+    streaks: dict,
+    consecutive_max: float,
+    systemic_streak: float,
+    systemic_max: float,
+) -> tuple[bool, str]:
     """Pure: turn per-workflow failure streaks into an up/down verdict + message.
 
     Down if any single workflow has failed >= consecutive_max times in a row, OR if
@@ -104,14 +120,16 @@ def n8n_verdict(streaks, consecutive_max, systemic_streak, systemic_max):
     )
 
 
-def gitops_alive(age_s, max_age_s):
+def gitops_alive(age_s: float, max_age_s: float) -> tuple[bool, str]:
     """Pure: is the deployer's last completed tick recent enough? Returns (ok, msg)."""
     if age_s <= max_age_s:
         return True, "deployer ran %.0fm ago" % (age_s / 60)
     return False, "deployer last ran %.0fm ago (> %.0fm)" % (age_s / 60, max_age_s / 60)
 
 
-def staging_backfill_alive(armed, age_s, max_age_s):
+def staging_backfill_alive(
+    armed: bool, age_s: float | None, max_age_s: float
+) -> tuple[bool, str]:
     """Pure: is the staging-gate backfill ratchet still running? Returns (ok, msg).
 
     `armed` is the arm state, not a liveness signal: the ratchet's timer is stopped whenever
@@ -131,7 +149,9 @@ def staging_backfill_alive(armed, age_s, max_age_s):
     return False, "ratchet last ran %.0fm ago (> %.0fm)" % (age_s / 60, max_age_s / 60)
 
 
-def queue_warnings(queue_json, app_name):
+def queue_warnings(
+    queue_json: dict | None, app_name: str
+) -> list[tuple[str, str, str]]:
     """Pure: (app_name, title, reason) for each queue item needing an operator's eyes.
 
     Fed a sonarr/radarr /api/v3/queue payload. trackedDownloadStatus == "warning" is the
@@ -164,7 +184,13 @@ def queue_warnings(queue_json, app_name):
     return offenders
 
 
-def indexers_down(status_json, name_by_id, now, min_down_min, ignore=None):
+def indexers_down(
+    status_json: list | None,
+    name_by_id: dict[int, str],
+    now: datetime,
+    min_down_min: float,
+    ignore: Collection[str] | None = None,
+) -> list[tuple[str, float]]:
     """Pure: (name, minutes_down) for each Prowlarr indexer failing >= min_down_min minutes.
 
     Fed /api/v1/indexerstatus (a list of {indexerId, initialFailure, disabledTill, ...}) and an
@@ -198,7 +224,9 @@ def indexers_down(status_json, name_by_id, now, min_down_min, ignore=None):
     return offenders
 
 
-def ha_heartbeat_fresh(state, max_age_s, now=None):
+def ha_heartbeat_fresh(
+    state: dict | None, max_age_s: float, now: datetime | None = None
+) -> tuple[bool, str]:
     """`state` is HA's /api/states/input_datetime.ha_heartbeat payload.
 
     Its last_changed advances every minute only while HA's automation scheduler runs the
@@ -218,12 +246,12 @@ def ha_heartbeat_fresh(state, max_age_s, now=None):
     return True, "fresh — automations ran %.0fs ago" % age
 
 
-def ha_ban_verdict(banned_count, window):
+def ha_ban_verdict(banned_count: float | None, window: str) -> tuple[bool, str]:
     """Decide the ip_ban arm from the "Banned IP" line count over `window` (None = no series).
 
-    None and 0 are the SAME healthy answer here, unlike loki_ingestion_fresh where a silent
-    stream is itself the fault: HA logs nothing when it bans nobody, so an empty vector is what
-    a healthy cluster looks like.
+    None and 0 are the SAME healthy answer here, unlike verdicts.logs.loki_ingestion_fresh,
+    where a silent stream is itself the fault: HA logs nothing when it bans nobody, so an empty
+    vector is what a healthy cluster looks like.
     """
     if not banned_count:
         return True, "no ip_ban events in %s" % window
@@ -231,76 +259,4 @@ def ha_ban_verdict(banned_count, window):
         "HA ip_ban fired %d time(s) in %s — an internal source IP is likely banned and is now "
         "getting 403s; check the pod log for the address and delete its line from "
         "/config/ip_bans.yaml to clear" % (int(banned_count), window)
-    )
-
-
-def loki_ingestion_fresh(count, window):
-    """Decide log-pipeline freshness from the line count over `window` (None = no series)."""
-    if not count:  # None or 0 — nothing shipped: promtail dead, positions corrupt, etc.
-        return (
-            False,
-            "no log lines ingested in %s — promtail/Loki pipeline silent" % window,
-        )
-    return True, "%d log lines in %s" % (int(count), window)
-
-
-def shipper_dropped(client_count, server_reasons, window, threshold):
-    """Pure: did the shipper give up on entries, or did Loki discard them, past `threshold`?
-
-    (ok, msg). Reports whichever side lost MORE over `window`.
-
-    `client_count` = sum(increase(<dropped-entries counters>[window])) over ALL drop reasons
-    (ingester_error / rate_limited / stream_limited / line_too_long) and both shippers (Alloy on
-    the cluster, Promtail on the Pi), None when no counter has a series (reads as 0). That is
-    the CLIENT side of the pipe: a shipper only counts what IT gave up on.
-
-    `server_reasons` = [(reason, count), ...] from Loki's own distributor-side
-    `loki_discarded_samples_total`, one entry per `reason` label, [] when no series. This is
-    the SERVER side: entries Loki itself rejected, including a burst the shipper never
-    attributes to itself. Measured 2026-09-03: Loki discarded 161,573 samples server-side
-    (reason=too_far_behind) in a 24h window where the client-side counter recorded only 1,027
-    (reason=ingester_error) — the client side alone understated real loss by ~150x, and would
-    not have fired at all had the client not separately logged an unrelated ingester_error.
-
-    Whichever total is larger decides the verdict, so a burst attributed to only one side still
-    pages. The server side names the reason that fired: `too_far_behind` means entries arrived
-    outside Loki's accept window — a clock/backfill problem — where every other reason
-    (rate_limited / stream_limited / line_too_long) is a throughput or limit problem, and the
-    operator needs to know which they are chasing.
-    """
-    client_n = client_count or 0.0
-    server_reasons = server_reasons or []
-    server_n = sum(c for _, c in server_reasons)
-    n = max(client_n, server_n)
-    if n <= threshold:
-        return True, "shipper drops ok (client %.0f, server %.0f in %s)" % (
-            client_n,
-            server_n,
-            window,
-        )
-    if server_n >= client_n:
-        top_reason, top_count = max(server_reasons, key=lambda kv: kv[1])
-        return False, (
-            "Loki discarded %.0f entries in %s (> %.0f), reason=%s (%.0f) — server-side "
-            "loss the shipper's own counter did not attribute to itself"
-            % (server_n, window, threshold, top_reason, top_count)
-        )
-    return False, (
-        "log shipper dropped %.0f entries in %s (> %.0f) — partial log loss"
-        % (client_n, window, threshold)
-    )
-
-
-def discord_webhook_ok(status_code, name=None):
-    """Pure: does a GET on a Discord webhook return 200 (still valid)? (ok, msg).
-
-    Discord answers a webhook GET with its JSON metadata (id/name) and HTTP 200 while the
-    webhook exists, and 404 once it's been rotated/revoked/deleted — so a non-200 means the
-    alert POSTs won't deliver. (A GET never posts a message, so this can't spam.)
-    """
-    if status_code == 200:
-        return True, "Discord webhook valid%s" % (" (%s)" % name if name else "")
-    return (
-        False,
-        "Discord webhook returned HTTP %s — alerts won't deliver" % status_code,
     )

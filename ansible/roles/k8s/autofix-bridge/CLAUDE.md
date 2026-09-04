@@ -139,7 +139,9 @@ elsewhere in this doc; this is the governed summary a change here must satisfy.
 ## Editing & testing
 - Sidecar: `files/autofix.py`, staged to the node and mounted from a ConfigMap along with
   monitor-bridge's `bridge/common.py` (`_env`/`sanitize`, imported by `autofix.py` —
-  `defaults/main.yml`'s `autofix_bridge_modules` names both, each with its own `src`). Never fork
+  `defaults/main.yml`'s `autofix_bridge_modules` names both, each with its own `src`). Shared
+  code means shared behavior: `bridge.common.log` carries no timestamp of its own here either —
+  see monitor-bridge's CLAUDE.md, "The runtime stamps the log lines". Never fork
   a second copy of `bridge/common.py` here; edit monitor-bridge's. The role's
   `checksum/autofix-script` annotation is a hash over every staged module, not just autofix.py —
   same idiom as monitor-bridge's own script-checksum annotation, and for the same reason: a

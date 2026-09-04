@@ -95,7 +95,10 @@ def _wire_run_once(monkeypatch, prom_result):
     monkeypatch.setattr(
         check,
         "CHECKS",
-        [("disk", "tok_disk", _mk("disk")), ("backup", "tok_backup", _mk("backup"))],
+        [
+            check.Check("disk", "tok_disk", _mk("disk")),
+            check.Check("backup", "tok_backup", _mk("backup")),
+        ],
     )
     check.run_once()
     return ran, pushes
@@ -130,7 +133,7 @@ def test_run_once_runs_all_when_prometheus_up(monkeypatch):
 
 def test_prom_dependent_set_matches_real_checks():
     # Guard: every name in PROM_DEPENDENT is a real check, so the gate can't silently drift.
-    names = {name for name, _, _ in check.CHECKS}
+    names = {c.name for c in check.CHECKS}
     assert check.PROM_DEPENDENT <= names
 
 
@@ -139,7 +142,7 @@ def test_prom_dependent_set_matches_real_checks():
 
 def test_loki_dependent_set_matches_real_checks():
     # Guard (mirrors PROM_DEPENDENT): every name in LOKI_DEPENDENT is a real check.
-    names = {name for name, _, _ in check.CHECKS}
+    names = {c.name for c in check.CHECKS}
     assert check.LOKI_DEPENDENT <= names
 
 
@@ -169,7 +172,9 @@ def _wire_run_once_loki(monkeypatch, loki_result, checks, loki_dependent):
 
         return fn
 
-    monkeypatch.setattr(check, "CHECKS", [(n, "tok_%s" % n, _mk(n)) for n in checks])
+    monkeypatch.setattr(
+        check, "CHECKS", [check.Check(n, "tok_%s" % n, _mk(n)) for n in checks]
+    )
     check.run_once()
     return ran, pushes
 
@@ -218,7 +223,7 @@ def test_run_once_runs_loki_dependent_when_loki_up(monkeypatch):
 
 def test_b2_dependent_set_matches_real_checks():
     # Guard (mirrors PROM_DEPENDENT/LOKI_DEPENDENT): every name in B2_DEPENDENT is a real check.
-    names = {name for name, _, _ in check.CHECKS}
+    names = {c.name for c in check.CHECKS}
     assert check.B2_DEPENDENT <= names
 
 
@@ -234,8 +239,61 @@ def test_b2_dependent_set_matches_real_checks():
 
 def test_cluster_dependent_set_matches_real_checks():
     # Guard (mirrors PROM_DEPENDENT/LOKI_DEPENDENT/B2_DEPENDENT): every name is a real check.
-    names = {name for name, _, _ in check.CHECKS}
+    names = {c.name for c in check.CHECKS}
     assert check.CLUSTER_DEPENDENT <= names
+
+
+def _dependents_are_real_checks(dependents_map: dict, names: set) -> bool:
+    """True when every check named across `dependents_map`'s values is a real CHECKS name.
+
+    Shared by the real guard and its rejecting half below, so a helper weakened to always
+    return True fails the rejecting half rather than passing both silently.
+    """
+    return set().union(*dependents_map.values()) <= names
+
+
+def test_gate_dependents_maps_real_gates_to_real_checks():
+    """Guard (mirrors the four *_DEPENDENT sets above): both halves of GATE_DEPENDENTS are real.
+
+    validate_check_filter reads this map to refuse a CHECKS_ONLY/CHECKS_SKIP filter that turns a
+    gate off while leaving its dependents on. A typo on either side stops guarding one gate and
+    changes nothing else, so the filter would accept exactly the configuration the gate exists to
+    prevent — silently, since the four sets it is built from each have their own guard and would
+    still pass.
+    """
+    names = {c.name for c in check.CHECKS}
+    assert _dependents_are_real_checks(check.GATE_DEPENDENTS, names)
+    # The KEYS are deliberately NOT check names. The four reachability gates are evaluated by
+    # run_once directly and have no CHECKS entry, which is why validate_check_filter unions them
+    # into `known` separately — so they are pinned against the gates run_once actually evaluates.
+    assert set(check.GATE_DEPENDENTS) == {
+        "prometheus",
+        "loki_reachable",
+        "b2_reachable",
+        "cluster_prometheus",
+    }
+    assert set(check.GATE_DEPENDENTS).isdisjoint(names)
+
+
+def test_a_gate_dependent_typo_would_be_caught():
+    """The rejecting half: the assertion above must go red on a dependent that is not a check."""
+    names = {c.name for c in check.CHECKS}
+    typo = {"prometheus": frozenset({"disk", "disk_typoo"})}
+    assert not _dependents_are_real_checks(typo, names)
+    assert not set(typo) == set(check.GATE_DEPENDENTS)
+
+
+def test_exporter_dependent_union_is_real_checks_and_not_empty():
+    """Guard for EXPORTER_DEPENDENT as a whole, beside its per-key sibling in the exporters suite.
+
+    The non-vacuity half is the load-bearing one: `set().union(*{}.values())` is empty and is a
+    subset of everything, so an EXPORTER_DEPENDENT emptied by a bad edit would satisfy the subset
+    assertion while suppressing nothing.
+    """
+    names = {c.name for c in check.CHECKS}
+    dependents = set().union(*check.EXPORTER_DEPENDENT.values())
+    assert dependents <= names
+    assert {"disk", "memory", "host_temp"} <= dependents
 
 
 def test_cluster_dependent_disjoint_from_prom_dependent():
@@ -570,7 +628,7 @@ def test_run_once_runs_cluster_dependent_when_cluster_prometheus_up(monkeypatch)
 def _run_once_with_gates(monkeypatch, cluster_ok, checks, cluster_dependent):
     """Drive run_once with every gate but the cluster one forced healthy."""
     pushed = {}
-    monkeypatch.setattr(check, "CHECKS", checks)
+    monkeypatch.setattr(check, "CHECKS", [check.Check(*c) for c in checks])
     monkeypatch.setattr(check, "STARTUP_GRACE", frozenset())
     monkeypatch.setattr(check, "PROM_DEPENDENT", frozenset())
     monkeypatch.setattr(check, "LOKI_DEPENDENT", frozenset())
@@ -763,7 +821,9 @@ def _wire_run_once_b2(monkeypatch, b2_result, checks, b2_dependent):
 
         return fn
 
-    monkeypatch.setattr(check, "CHECKS", [(n, "tok_%s" % n, _mk(n)) for n in checks])
+    monkeypatch.setattr(
+        check, "CHECKS", [check.Check(n, "tok_%s" % n, _mk(n)) for n in checks]
+    )
     check.run_once()
     return ran, pushes
 

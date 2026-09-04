@@ -39,6 +39,15 @@
     - { path: "{{ fake_remux_state_dir }}", mode: "0755" } # ledger + the two state files
   become: true
 
+- name: Install the shared host_lib helper beside the fake-remux scripts
+  tags: [fake_remux]
+  # Before the entry scripts below: the sibling copy is what both of them `from host_lib import`
+  # at runtime, and the cron invokes them by absolute path.
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/install_host_lib.yml"
+  vars:
+    host_lib_dir: "{{ fake_remux_opt_dir }}"
+    host_lib_owner: "{{ sys_user }}"
+
 - name: Install the fake-remux scripts
   tags: [fake_remux]
   ansible.builtin.copy:
@@ -55,8 +64,6 @@
     - "{{ role_path }}/files/fake_remux_replace_logic.py"
     - "{{ role_path }}/files/mkv_attachment_repair.py"
     - "{{ role_path }}/files/mkv_attachment_logic.py"
-    # Runtime sibling both entry scripts `from host_lib import`.
-    - "{{ role_path }}/../common/files/host_lib.py"
   become: true
 
 - name: Resolve Sonarr's ClusterIP

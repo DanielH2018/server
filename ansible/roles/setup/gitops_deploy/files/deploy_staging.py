@@ -1,9 +1,8 @@
 # ansible/roles/setup/gitops_deploy/files/deploy_staging.py
 """Scoping a k8s batch to the staging subset and summarising its verdict."""
 
-from __future__ import annotations
-
 from collections.abc import Set as AbstractSet
+from enum import StrEnum
 
 
 def staging_scope(
@@ -68,20 +67,35 @@ def staging_verdict_summary(
     return f"staging: PASS on {sorted(gated)}{unchecked}"
 
 
-# The verdict words `consult_staging` returns and `main()` branches on. Strings rather than an
-# enum because this module is imported under `uv run --no-project`, and because they are what a
-# journal line has to read as — a verdict an operator cannot name is one they cannot act on.
-STAGING_PASS = "pass"
-STAGING_REJECTED = "rejected"
-STAGING_NO_VERDICT = "no_verdict"
-# Nothing was asked: the gate is off, or the change touched nothing staging runs. Distinct from
-# NO_VERDICT, which means the gate WAS asked and could not answer — Decision 3's point is that a
-# silent skip and a silent pass look identical afterwards, and the same is true of a skip and a
-# failed consultation.
-STAGING_SKIPPED = "skipped"
+class StagingVerdict(StrEnum):
+    """The verdict words `consult_staging` returns and the tick branches on.
+
+    A `StrEnum` so `ty` catches a typo where a bare string only failed when the branch ran.
+    The VALUES are unchanged and load-bearing: they are what a journal line reads as, what
+    `json.dumps` writes into the tick ledger, and what `backfill_staging_gate.py` reads back
+    out of it — a verdict an operator cannot name is one they cannot act on. Pinned by
+    test_staging_vocabulary_is_a_strenum.py.
+    """
+
+    PASS = "pass"
+    REJECTED = "rejected"
+    NO_VERDICT = "no_verdict"
+    # Nothing was asked: the gate is off, or the change touched nothing staging runs. Distinct
+    # from NO_VERDICT, which means the gate WAS asked and could not answer — Decision 3's point
+    # is that a silent skip and a silent pass look identical afterwards, and the same is true of
+    # a skip and a failed consultation.
+    SKIPPED = "skipped"
 
 
-def staging_verdict(deploy_rc: int, expect_rc: int) -> str:
+# The module-level names every caller already imports, kept as aliases so the split between the
+# deployer and the scripts tree needs no coordinated rename.
+STAGING_PASS = StagingVerdict.PASS
+STAGING_REJECTED = StagingVerdict.REJECTED
+STAGING_NO_VERDICT = StagingVerdict.NO_VERDICT
+STAGING_SKIPPED = StagingVerdict.SKIPPED
+
+
+def staging_verdict(deploy_rc: int, expect_rc: int) -> StagingVerdict:
     """The one word for a (deploy, expect) exit-code pair.
 
     Kept in lockstep with `staging_verdict_summary` by
@@ -121,9 +135,22 @@ def staging_blocks(verdict: str | None, *, blocking: bool) -> bool:
 # files/, and the backfill runs from the repo. The three words are asserted equal to that
 # module's constants by test_tick_and_backfill_agree_on_the_outcome_vocabulary, so a rename on
 # either side fails rather than silently splitting the ledger's meaning in two.
-TICK_OK = "pass"
-TICK_FALSE_FAILURE = "false-failure"
-TICK_NEEDS_TRIAGE = "needs-triage"
+class TickOutcome(StrEnum):
+    """The outcome vocabulary a real gated tick records in the ledger.
+
+    Same reasoning as `StagingVerdict`: the values are the on-disk JSONL form and must not
+    move. `backfill_staging_gate.OK`/`FALSE_FAILURE`/`NEEDS_TRIAGE` are the same three words
+    in the other tree, tied by test_tick_and_backfill_agree_on_the_outcome_vocabulary.
+    """
+
+    OK = "pass"
+    FALSE_FAILURE = "false-failure"
+    NEEDS_TRIAGE = "needs-triage"
+
+
+TICK_OK = TickOutcome.OK
+TICK_FALSE_FAILURE = TickOutcome.FALSE_FAILURE
+TICK_NEEDS_TRIAGE = TickOutcome.NEEDS_TRIAGE
 
 _TICK_OUTCOMES = {
     STAGING_PASS: TICK_OK,
@@ -137,7 +164,7 @@ _TICK_OUTCOMES = {
 }
 
 
-def staging_tick_outcome(verdict: str) -> str | None:
+def staging_tick_outcome(verdict: str) -> TickOutcome | None:
     """The ledger outcome for a real gated tick's verdict, or None when there is nothing to record.
 
     Args:

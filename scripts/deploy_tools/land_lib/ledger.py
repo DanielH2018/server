@@ -8,12 +8,19 @@ deploy attempts that ended in lock contention, backoff included -- part of `tick
 `cause` is a one-token reason beside a `deploy-failed` verdict, and empty beside every other
 one. The verdict alone cannot tell "nothing was deployed" (a tag miss, a failed tick, a
 host-lookup crash) from "changes are live and a task failed after them", and the board had
-no way to split them (issue #1031).
+no way to split them (issue #1031). Its vocabulary is `outcome.Cause` and it is checked HERE,
+on assignment, because the board groups by the field: a value invented at one of the seven
+writing sites becomes a bar on the dashboard, and nothing downstream would reject it.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
+
+import sys
+import sys as _sys
+from pathlib import Path as _Path
+
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
+from deploy_tools.land_lib.outcome import CAUSES, Cause
 
 
 @dataclass
@@ -32,6 +39,21 @@ class Ledger:
     tags_label: str = ""
     lock_waited: int = 0
     lock_holder: str = ""
+
+    def __setattr__(self, name: str, value: object) -> None:
+        """Coerce a `cause` outside `outcome.CAUSES` to `Cause.INVALID`; "" is no cause.
+
+        Coerced and warned, not raised: this is written after the deploy ran, and a
+        vocabulary typo must not turn a finished landing into a traceback with no
+        `VERDICT:` line. The board then shows one `invalid-cause` bar to chase.
+        """
+        if name == "cause" and value and value not in CAUSES:
+            print(
+                f"land: unknown ledger cause {value!r}, recording as invalid-cause",
+                file=sys.stderr,
+            )
+            value = Cause.INVALID
+        super().__setattr__(name, value)
 
 
 def _phase(a: float | None, b: float | None) -> str:

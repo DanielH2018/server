@@ -38,6 +38,7 @@ import difflib
 import subprocess
 import sys
 from pathlib import Path
+from typing import NamedTuple
 
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
@@ -55,6 +56,7 @@ from lib.render_guard import (
     containers_entries,
     host_files,
 )
+from deploy_tools.exit_codes import DEPLOY_BROAD
 from lib.repo_paths import GITOPS_DEPLOY_FILES
 
 # deploy_logic.py lives under the gitops_deploy role's files/ because that role's own script
@@ -91,14 +93,22 @@ def service_tags(host_vars: Path = HOST_VARS) -> set[str]:
     return tags
 
 
-def service_records(host_vars: Path = HOST_VARS) -> list[tuple[str, str, str]]:
+class ServiceRecord(NamedTuple):
+    """One containers_list entry, as the triple every caller unpacks positionally."""
+
+    host: str
+    platform: str
+    tag: str
+
+
+def service_records(host_vars: Path = HOST_VARS) -> list[ServiceRecord]:
     """(host, platform, tag) for every containers_list entry, across all hosts.
 
     Same source and the same `tags | default([name])` precedence as service_tags(), just kept
     per-entry instead of flattened to a set — `describe` groups by host/platform, which needs
     the host and platform back.
     """
-    records: list[tuple[str, str, str]] = []
+    records: list[ServiceRecord] = []
     for path in host_files(host_vars):
         for entry in containers_entries(path):
             # No host_vars file sets `platform` on a docker entry today (daniel-pi's don't
@@ -106,7 +116,7 @@ def service_records(host_vars: Path = HOST_VARS) -> list[tuple[str, str, str]]:
             # default rather than an unlabelled third state.
             platform = entry.get("platform", "docker")
             for tag in entry.get("tags") or [entry["name"]]:
-                records.append((path.stem, platform, tag))
+                records.append(ServiceRecord(path.stem, platform, tag))
     return records
 
 
@@ -362,7 +372,7 @@ def _cmd_blockers(args: argparse.Namespace) -> int:
         f"and stop. Otherwise: {broad_remediation(cs.broad_deploy, cs.broad_setup, cs.setup_roles)}",
         file=sys.stderr,
     )
-    return 3
+    return DEPLOY_BROAD
 
 
 def _is_broad_manual(path: str) -> bool:
@@ -438,7 +448,7 @@ def _cmd_changed(args: argparse.Namespace) -> int:
             f"  Run manually instead: {broad_remediation(cs.broad_deploy, cs.broad_setup, cs.setup_roles)}",
             file=sys.stderr,
         )
-        return 3
+        return DEPLOY_BROAD
 
     if cs.tasks:
         print(
@@ -477,7 +487,7 @@ def _cmd_changed(args: argparse.Namespace) -> int:
             # Exit 3, the documented "broad, maps to no single service" refusal. Returning 0
             # with an empty tag list makes deploy.sh exit 0 having deployed nothing, which is
             # the false green this change removes.
-            return 3
+            return DEPLOY_BROAD
     if not tags:
         print(
             f"deploy --changed: no deployable service changed vs {args.ref}.",

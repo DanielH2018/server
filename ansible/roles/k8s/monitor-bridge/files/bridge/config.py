@@ -18,10 +18,18 @@ Constants only. The mutable per-check state (`_n8n_streaks`, `_cadvisor_streaks`
 
 import os
 
-from bridge.common import _env
+from bridge.common import CONFIG_PROBLEMS, _env, _int, _num
+
+# CONFIG_PROBLEMS and the _int/_num parsers that append to it live in bridge/common.py, not
+# here — this module's own constants below still parse every env value through them, and
+# check.py still reads the list as `cfg.CONFIG_PROBLEMS` (a from-import binds this module's own
+# attribute to the same list object, so a qualified `cfg.CONFIG_PROBLEMS` read still works; see
+# bridge/common.py's header for why they moved). IMPORTING THIS MODULE MUST NOT RAISE — a
+# ValueError on one malformed number used to kill the pod during import, before the heartbeat
+# file existed and before any monitor could be told.
 
 
-def _env_file(name, default=""):
+def _env_file(name: str, default: str = "") -> str:
     """Read a secret from the file named by <name>_FILE if set, else the plain <name> env var.
 
     Inlined in the compose environment, a secret lands in the container's Config.Env, which the
@@ -45,7 +53,7 @@ def _env_file(name, default=""):
     return os.environ.get(name, default)
 
 
-INTERVAL = int(_env("INTERVAL", "300"))
+INTERVAL = _int("INTERVAL", "300")
 # Startup/redeploy grace for the reach-out checks (STARTUP_GRACE, applied in run_once). The
 # bridge's first cycle after a host reboot runs before the heavy apps it polls (n8n,
 # sonarr/radarr, prowlarr, scrutiny, the Pi glances) finish starting, so an un-graced reach-out
@@ -53,7 +61,7 @@ INTERVAL = int(_env("INTERVAL", "300"))
 # max_retries=0 push monitor DOWN on that one transient cycle and pages, then recovers next cycle —
 # the weekly-reboot noise. Like HA_CONSECUTIVE, only the GRACE_CYCLES'th consecutive down pages; a
 # genuinely-down dependency still alerts after ~one extra INTERVAL, and one ok resets the streak.
-GRACE_CYCLES = int(_env("GRACE_CYCLES", "2"))
+GRACE_CYCLES = _int("GRACE_CYCLES", "2")
 # Touched after every completed cycle; the container healthcheck compares its mtime
 # against ~3×INTERVAL. PID death already restarts the container, but a HANG only shows
 # up as push silence in Kuma — the healthcheck lets autoheal restart on that too.
@@ -65,22 +73,22 @@ LOKI_URL = _env("LOKI_URL", "http://loki:3100").rstrip("/")
 DISK_MOUNTPOINTS = [
     m.strip() for m in _env("DISK_MOUNTPOINTS", "/").split(",") if m.strip()
 ]
-DISK_MAX_PCT = float(_env("DISK_MAX_PCT", "90"))
-CERT_MIN_DAYS = float(_env("CERT_MIN_DAYS", "14"))
-MEM_MAX_PCT = float(_env("MEM_MAX_PCT", "90"))
+DISK_MAX_PCT = _num("DISK_MAX_PCT", "90")
+CERT_MIN_DAYS = _num("CERT_MIN_DAYS", "14")
+MEM_MAX_PCT = _num("MEM_MAX_PCT", "90")
 # Origins that check_disk/check_mem must NOT scan, as a regex alternation. See host_metric_sel:
 # daniel-pi runs node-exporter like the other hosts, but check_pi_pressure owns its disk and
 # memory with thresholds sized for a 456 MB box.
 HOST_METRIC_ORIGIN_EXCLUDE = _env("HOST_METRIC_ORIGIN_EXCLUDE", "daniel-pi")
 OOM_WINDOW = _env("OOM_WINDOW", "1h")
 CPU_WINDOW = _env("CPU_WINDOW", "15m")
-CPU_THROTTLE_PCT = float(_env("CPU_THROTTLE_PCT", "25"))
-CPU_MIN_THROTTLED_CORES = float(_env("CPU_MIN_THROTTLED_CORES", "0.05"))
-CPU_CONSECUTIVE = int(_env("CPU_CONSECUTIVE", "3"))
+CPU_THROTTLE_PCT = _num("CPU_THROTTLE_PCT", "25")
+CPU_MIN_THROTTLED_CORES = _num("CPU_MIN_THROTTLED_CORES", "0.05")
+CPU_CONSECUTIVE = _int("CPU_CONSECUTIVE", "3")
 RESTART_WINDOW = _env("RESTART_WINDOW", "15m")
-RESTART_MAX = float(_env("RESTART_MAX", "3"))
-TRAEFIK_5XX_PCT = float(_env("TRAEFIK_5XX_PCT", "5"))
-TRAEFIK_MIN_RPS = float(_env("TRAEFIK_MIN_RPS", "0.05"))
+RESTART_MAX = _num("RESTART_MAX", "3")
+TRAEFIK_5XX_PCT = _num("TRAEFIK_5XX_PCT", "5")
+TRAEFIK_MIN_RPS = _num("TRAEFIK_MIN_RPS", "0.05")
 # Slowness is measured at a histogram BUCKET BOUNDARY, not with histogram_quantile. Traefik's
 # default buckets are 0.1 / 0.3 / 1.2 / 5.0 / +Inf, so between 1.2s and 5.0s there is nothing to
 # interpolate from and a quantile landing there is invented, not measured. The old check compared
@@ -94,7 +102,7 @@ TRAEFIK_MIN_RPS = float(_env("TRAEFIK_MIN_RPS", "0.05"))
 # 5.0s", stated without interpolation. Keep TRAEFIK_SLOW_BUCKET on a boundary Traefik actually
 # emits — an le= that matches no series selects nothing (see the unmeasurable branch below).
 TRAEFIK_SLOW_BUCKET = _env("TRAEFIK_SLOW_BUCKET", "5.0")
-TRAEFIK_SLOW_PCT = float(_env("TRAEFIK_SLOW_PCT", "5"))
+TRAEFIK_SLOW_PCT = _num("TRAEFIK_SLOW_PCT", "5")
 N8N_URL = _env("N8N_URL", "http://n8n:5678").rstrip("/")
 N8N_API_KEY = _env("N8N_API_KEY", "")
 # n8n hides successful executions (EXECUTIONS_DATA_SAVE_ON_SUCCESS=none, kept that way to bound
@@ -103,12 +111,12 @@ N8N_API_KEY = _env("N8N_API_KEY", "")
 # it advances once per NEW error (deduped by execution id) and resets when a workflow's latest
 # error ages past N8N_FAIL_WINDOW (recovered / went idle).
 N8N_FAIL_WINDOW = _env("N8N_FAIL_WINDOW", "2h")
-N8N_CONSECUTIVE_MAX = int(_env("N8N_CONSECUTIVE_MAX", "3"))
+N8N_CONSECUTIVE_MAX = _int("N8N_CONSECUTIVE_MAX", "3")
 # Systemic catch: if N8N_SYSTEMIC_MAX+ workflows are each failing >= N8N_SYSTEMIC_STREAK times,
 # something is wrong with n8n itself — page now as ONE alert instead of waiting for each to reach
 # N8N_CONSECUTIVE_MAX (and instead of a per-workflow flood).
-N8N_SYSTEMIC_STREAK = int(_env("N8N_SYSTEMIC_STREAK", "2"))
-N8N_SYSTEMIC_MAX = int(_env("N8N_SYSTEMIC_MAX", "2"))
+N8N_SYSTEMIC_STREAK = _int("N8N_SYSTEMIC_STREAK", "2")
+N8N_SYSTEMIC_MAX = _int("N8N_SYSTEMIC_MAX", "2")
 
 # Sonarr/Radarr queue warnings: the 2026-07-01 incident — an indexer served a poisoned
 # fake-episode .exe, sonarr itself blocked the import and flagged the queue item
@@ -143,7 +151,7 @@ BAZARR_API_KEY = _env("BAZARR_API_KEY", "")
 # (stays up), same idiom as N8N_API_KEY. Already on `media`, so prowlarr:9696 is reachable.
 PROWLARR_URL = _env("PROWLARR_URL", "http://prowlarr:9696").rstrip("/")
 PROWLARR_API_KEY = _env("PROWLARR_API_KEY", "")
-PROWLARR_INDEXER_MIN_DOWN_MIN = float(_env("PROWLARR_INDEXER_MIN_DOWN_MIN", "30"))
+PROWLARR_INDEXER_MIN_DOWN_MIN = _num("PROWLARR_INDEXER_MIN_DOWN_MIN", "30")
 # Comma-separated indexer names (case-insensitive) never counted as offenders. For chronically
 # flaky PUBLIC trackers whose backend routinely 503s/times-out past the sustained-down gate (e.g. The Pirate
 # Bay's apibay.org) — they'd page every outage though the other indexers cover the same searches.
@@ -154,7 +162,7 @@ PROWLARR_INDEXER_IGNORE = _env("PROWLARR_INDEXER_IGNORE", "")
 # the pod is pinned to that node and hostPath-mounts /var/lib/gitops-deploy. One
 # deployer remains in the fleet (the Pi runs has_gitops: false), so one watcher.
 GITOPS_STATE_DIR = _env("GITOPS_STATE_DIR", "/gitops-state")
-GITOPS_MAX_AGE_S = float(_env("GITOPS_MAX_AGE_MIN", "90")) * 60
+GITOPS_MAX_AGE_S = _num("GITOPS_MAX_AGE_MIN", "90") * 60
 ETCD_DRILL_STATE_DIR = _env("ETCD_DRILL_STATE_DIR", "/etcd-drill-state")
 # DECIDED: 8 days, DERIVED from the drill's cadence rather than picked round. The cron is
 # k3s_etcd_restore_drill_cron = "20 10 * * 1" — weekly, Monday 10:20 — so anything over 7 days
@@ -163,7 +171,7 @@ ETCD_DRILL_STATE_DIR = _env("ETCD_DRILL_STATE_DIR", "/etcd-drill-state")
 # the monitor clears the very miss it exists to catch, which is how a 24h grace against a 23h
 # gap read green on 2026-08-25. Move this ONLY together with the cron; the two are pinned to
 # each other by test_etcd_drill_grace_is_derived_from_the_cron.
-ETCD_DRILL_MAX_AGE_S = float(_env("ETCD_DRILL_MAX_AGE_DAYS", "8")) * 86400
+ETCD_DRILL_MAX_AGE_S = _num("ETCD_DRILL_MAX_AGE_DAYS", "8") * 86400
 # The staging-gate backfill ratchet's run-recency window. It shares GITOPS_STATE_DIR: the unit
 # writes its heartbeat and Ansible writes its armed marker into /var/lib/gitops-deploy, which
 # this pod already hostPath-mounts for the gitops pair.
@@ -174,12 +182,12 @@ ETCD_DRILL_MAX_AGE_S = float(_env("ETCD_DRILL_MAX_AGE_DAYS", "8")) * 86400
 # slack and still falls short of two cadences (190 min) — a window that spans two would tolerate
 # a fully missed run, which is the miss this check exists to catch. Move it only with the timer;
 # test_staging_backfill_window_is_derived_from_the_timer pins the pair.
-STAGING_BACKFILL_MAX_AGE_S = float(_env("STAGING_BACKFILL_MAX_AGE_MIN", "150")) * 60
+STAGING_BACKFILL_MAX_AGE_S = _num("STAGING_BACKFILL_MAX_AGE_MIN", "150") * 60
 # How long the host may sit behind origin before GitOps Status pages. Generous on purpose: the
 # deployer ticks every 30 min, and the dirty-tree path (operator mid-edit) is behind by design for
 # as long as the edit lasts. 6 h pages a genuinely-stuck host well inside a day while never firing
 # on a normal push or a long editing session.
-GITOPS_BEHIND_MAX_S = float(_env("GITOPS_BEHIND_MAX_MIN", "360")) * 60
+GITOPS_BEHIND_MAX_S = _num("GITOPS_BEHIND_MAX_MIN", "360") * 60
 # pi_peers + renovate_alive checks REMOVED at the 2026-08-14 host flips: the peer pull
 # is the k8s/pi-peer-backup CronJob and the notifier's ExecStartPost pushes its own
 # beat — both push their Kuma monitors directly, so no state file and no check remain.
@@ -237,12 +245,12 @@ B2_PROBE_APPLICATION_KEY = _env_file("B2_PROBE_APPLICATION_KEY")
 # on failure, so a cap breach would drive the full 288 rejected calls/day into an exhausted cap.
 # At 1800s this is 48 calls/day flat, and detection lands within 30 min of a breach that last time
 # went 9.5 hours unactioned.
-B2_PROBE_INTERVAL_S = float(_env("B2_PROBE_INTERVAL_S", "1800"))
+B2_PROBE_INTERVAL_S = _num("B2_PROBE_INTERVAL_S", "1800")
 # The TTL for a failure that never reached B2 (DNS, connect, timeout). Deliberately NOT
 # B2_PROBE_INTERVAL_S: the whole reason that interval is long is that a probe costs a transaction,
 # and a connection that never landed costs nothing, so the argument above does not apply to it.
 # One INTERVAL, so the next cycle re-probes and the recovery is not held back — see b2_reachable.
-B2_TRANSPORT_RETRY_S = float(_env("B2_TRANSPORT_RETRY_S", str(INTERVAL)))
+B2_TRANSPORT_RETRY_S = _num("B2_TRANSPORT_RETRY_S", str(INTERVAL))
 
 # B2 free-tier STORAGE headroom — the other half of the B2 budget, billed separately from the
 # transaction cap b2_reachable watches. kopia reported this as `kopia_b2_billable_bytes`; that
@@ -253,16 +261,16 @@ B2_TRANSPORT_RETRY_S = float(_env("B2_TRANSPORT_RETRY_S", str(INTERVAL)))
 # Listing versions is the only way to see the real number: hidden and unfinished versions bill as
 # stored bytes and do NOT appear in a plain object listing, which is how the cap filled unnoticed
 # before (hidden kopia bytes wedged retention deletes, 2026-08-13).
-B2_STORAGE_CAP_BYTES = float(_env("B2_STORAGE_CAP_BYTES", str(10 * 1000**3)))
-B2_STORAGE_MAX_PCT = float(_env("B2_STORAGE_MAX_PCT", "80"))
+B2_STORAGE_CAP_BYTES = _num("B2_STORAGE_CAP_BYTES", str(10 * 1000**3))
+B2_STORAGE_MAX_PCT = _num("B2_STORAGE_MAX_PCT", "80")
 # Daily rather than B2_PROBE_INTERVAL_S: a full listing costs one Class C call per 1000 versions,
 # and a check that guards a budget must not be a meaningful part of the spend. At ~5k versions
 # that is ~5 calls/day against a 2500/day Class C allowance.
-B2_STORAGE_INTERVAL_S = float(_env("B2_STORAGE_INTERVAL_S", "86400"))
+B2_STORAGE_INTERVAL_S = _num("B2_STORAGE_INTERVAL_S", "86400")
 # Stop paging rather than walk forever if the bucket is far larger than expected. Hitting this is
 # itself reported, because a truncated sum under-reports usage — the direction that reads as
 # headroom we do not have.
-B2_STORAGE_MAX_PAGES = int(_env("B2_STORAGE_MAX_PAGES", "50"))
+B2_STORAGE_MAX_PAGES = _int("B2_STORAGE_MAX_PAGES", "50")
 
 # Cloudflare R2 free-tier headroom, via the GraphQL Analytics API. Cloudflare offers NO spending
 # cap or usage limit on R2 — on any plan — so the only boundary is one we watch and act on. The
@@ -280,57 +288,25 @@ CF_GRAPHQL_URL = _env("CF_GRAPHQL_URL", "https://api.cloudflare.com/client/v4/gr
 CF_ACCOUNT_ID = _env("CF_ACCOUNT_ID", "")
 CF_ANALYTICS_TOKEN = _env_file("CF_ANALYTICS_TOKEN")
 R2_BUCKET = _env("R2_BUCKET", "")
-R2_STORAGE_MAX_GB = float(_env("R2_STORAGE_MAX_GB", "10"))
-R2_CLASS_A_MAX = float(_env("R2_CLASS_A_MAX", "1000000"))
-R2_CLASS_B_MAX = float(_env("R2_CLASS_B_MAX", "10000000"))
-R2_USAGE_MAX_PCT = float(_env("R2_USAGE_MAX_PCT", "80"))
+R2_STORAGE_MAX_GB = _num("R2_STORAGE_MAX_GB", "10")
+R2_CLASS_A_MAX = _num("R2_CLASS_A_MAX", "1000000")
+R2_CLASS_B_MAX = _num("R2_CLASS_B_MAX", "10000000")
+R2_USAGE_MAX_PCT = _num("R2_USAGE_MAX_PCT", "80")
 # Outstanding incomplete multipart uploads. These bill as stored bytes but do NOT appear in a
 # normal object listing, so they are the quiet way a 10 GB budget fills. The durable fix is a
 # bucket lifecycle rule (AbortIncompleteMultipartUpload) — a one-time operator step, see this
 # role's CLAUDE.md — and this arm is the backstop that notices when it is absent or not working.
-R2_UPLOADS_MAX = float(_env("R2_UPLOADS_MAX", "25"))
+R2_UPLOADS_MAX = _num("R2_UPLOADS_MAX", "25")
 # SUCCESSES are cached for this long; a failure re-probes next cycle. The opposite of
 # B2_PROBE_INTERVAL_S's cache-both, and deliberately so: the fault B2 detects is a spend cap that
 # retrying makes worse, whereas GraphQL analytics calls are free and count against no R2 budget.
 # So this follows EMAIL_PROBE_INTERVAL_S's cache-successes-only idiom, and rides out a transient
 # Cloudflare blip through STARTUP_GRACE rather than through a stale cached failure.
-R2_PROBE_INTERVAL_S = float(_env("R2_PROBE_INTERVAL_S", "1800"))
+R2_PROBE_INTERVAL_S = _num("R2_PROBE_INTERVAL_S", "1800")
 
-# R2 bills operations in two classes, and the GraphQL API reports raw actionType names without
-# saying which class each falls in — so the mapping has to live here. From the R2 pricing page.
-# DeleteObject, DeleteBucket and AbortMultipartUpload are free and counted in neither.
-R2_CLASS_A_ACTIONS = frozenset(
-    {
-        "ListBuckets",
-        "PutBucket",
-        "ListObjects",
-        "PutObject",
-        "CopyObject",
-        "CompleteMultipartUpload",
-        "CreateMultipartUpload",
-        "LifecycleStorageTierTransition",
-        "ListMultipartUploads",
-        "UploadPart",
-        "UploadPartCopy",
-        "ListParts",
-        "PutBucketEncryption",
-        "PutBucketCors",
-        "PutBucketLifecycleConfiguration",
-    }
-)
-R2_CLASS_B_ACTIONS = frozenset(
-    {
-        "HeadBucket",
-        "HeadObject",
-        "GetObject",
-        "UsageSummary",
-        "GetBucketEncryption",
-        "GetBucketLocation",
-        "GetBucketCors",
-        "GetBucketLifecycleConfiguration",
-    }
-)
-R2_FREE_ACTIONS = frozenset({"DeleteObject", "DeleteBucket", "AbortMultipartUpload"})
+# The Class A / Class B / free ACTION LISTS are not here. They read no env var — Cloudflare's
+# pricing page decides them, not this deployment — so they live in verdicts/storage.py beside
+# r2_classify_operations, their only reader. Moved 2026-09-04.
 
 # k3s workload health, via the CLUSTER's Prometheus — a SECOND Prometheus, not the one PROM_URL
 # points at. Slice 3 D8 (docs/archive/k3s-migration/slice-3-monitoring-plane.md). Seven k8s workloads ran
@@ -388,21 +364,21 @@ PROM_ORIGIN = _env(
 # reports UNKNOWN. A floor of 1 cannot detect a PARTIAL shortfall, but with one expected series
 # there is no partial case to detect. The code default of 2 is kept only as the fail-safe for a
 # host whose env omits the key entirely.
-TARGETS_MIN = int(_env("TARGETS_MIN", "2"))
+TARGETS_MIN = _int("TARGETS_MIN", "2")
 # Same floor idea for the cluster's own scrape targets (see check_cluster_targets). Since the
 # otel-collector became a DaemonSet (Phase F drain, 2026-08-13) its two jobs are per-POD —
 # one target per node each — so the set is seven: prometheus, 2x otel-collector,
 # 2x otel-collector-internal, kube-state-metrics, kubernetes-cadvisor. 3 still tolerates a
 # deliberate removal without ever mistaking an empty vector for a clean one.
-CLUSTER_TARGETS_MIN = int(_env("CLUSTER_TARGETS_MIN", "3"))
+CLUSTER_TARGETS_MIN = _int("CLUSTER_TARGETS_MIN", "3")
 # Coverage floor for the three cAdvisor checks (restarts/oom/cpu), which filter a per-pod vector
 # down to offenders and so cannot tell "quiet" from "gone". Reasoning and the measurements behind
 # the value: cadvisor_coverage_shortfall in verdicts/cluster.py.
-CADVISOR_PODS_MIN = int(_env("CADVISOR_PODS_MIN", "20"))
+CADVISOR_PODS_MIN = _int("CADVISOR_PODS_MIN", "20")
 # Hysteresis for the same reason HOST_ORIGINS_CONSECUTIVE exists: a kubelet restart takes a node's
 # cAdvisor away briefly, and three monitors going down together on one transient is the alert storm
 # the gates elsewhere in this file exist to prevent.
-CADVISOR_CONSECUTIVE = int(_env("CADVISOR_CONSECUTIVE", "2"))
+CADVISOR_CONSECUTIVE = _int("CADVISOR_CONSECUTIVE", "2")
 
 
 # The floor below which the deployment series is treated as missing rather than healthy. THE
@@ -413,7 +389,7 @@ CADVISOR_CONSECUTIVE = int(_env("CADVISOR_CONSECUTIVE", "2"))
 # from an empty result. The floor also covers a partially-loaded kube-state-metrics: its
 # ClusterRole is deliberately scoped, so dropping `apps` from it would take every deployment series
 # away while the pod stays up and Ready.
-K8S_MIN_WORKLOADS = int(_env("K8S_MIN_WORKLOADS", "5"))
+K8S_MIN_WORKLOADS = _int("K8S_MIN_WORKLOADS", "5")
 # Same fail-closed reasoning as K8S_MIN_WORKLOADS, for the DaemonSet series
 # (kube_daemonset_status_number_unavailable) instead of the Deployment one — a DaemonSet's
 # absent/unschedulable pod has no Deployment-arm equivalent, so it was invisible until this
@@ -421,7 +397,7 @@ K8S_MIN_WORKLOADS = int(_env("K8S_MIN_WORKLOADS", "5"))
 # scrutiny-collector, crowdsec-node-agent, dri-device-plugin, engine-image-*,
 # longhorn-csi-plugin, longhorn-manager, speaker. Bump this floor (and the comment) when a
 # DaemonSet is added or retired — same discipline as K8S_MIN_WORKLOADS.
-K8S_MIN_DAEMONSETS = int(_env("K8S_MIN_DAEMONSETS", "9"))
+K8S_MIN_DAEMONSETS = _int("K8S_MIN_DAEMONSETS", "9")
 # Extended resources that must stay ADVERTISED by at least one node. The DaemonSet arm above
 # watches whether the plugin's POD is running; this watches whether the thing the pod exists to
 # provide is still there. dri-device-plugin has no probe — and a container with no readinessProbe
@@ -440,7 +416,7 @@ K8S_EXTENDED_RESOURCES = [
 # every volume on the departing node BY DESIGN, so a single breaching cycle must not page — 3
 # cycles at the bridge cadence is longer than either takes to settle. Same shape as
 # CPU_CONSECUTIVE / UPS_CONSECUTIVE.
-LONGHORN_CONSECUTIVE = int(_env("LONGHORN_CONSECUTIVE", "3"))
+LONGHORN_CONSECUTIVE = _int("LONGHORN_CONSECUTIVE", "3")
 # Filesystem fullness of the cluster's PersistentVolumeClaims (check_pvc_fullness). A separate
 # arm from check_disk rather than another DISK_MOUNTPOINTS entry: a Longhorn PVC is its own
 # filesystem at a FIXED capacity, so it cannot borrow the host's free space and a full one is
@@ -449,7 +425,7 @@ LONGHORN_CONSECUTIVE = int(_env("LONGHORN_CONSECUTIVE", "3"))
 # has to arrive while that is still unhurried work. Measured 2026-09-01: the fullest claim was
 # uptime-kuma-data at 38.6%, and the smallest genuine claim is 973 MiB, where 85% leaves 146 MiB
 # of headroom against 97 MiB at 90%.
-PVC_MAX_PCT = float(_env("PVC_MAX_PCT", "85"))
+PVC_MAX_PCT = _num("PVC_MAX_PCT", "85")
 # Claims this arm must NOT scan, comma-separated bare claim names. media-data is a `local` PV at
 # /srv/media on daniel-box (k8s/media-volume/templates/pv.yaml.j2), i.e. the `/` filesystem
 # check_disk already watches — including it would page twice for one full disk. Every other claim
@@ -467,18 +443,18 @@ PVC_EXCLUDE = [
 # that as healthy — the same partial blindness HOST_ORIGINS_MIN exists for. 32 is strictly above
 # the 27-claim survivor and 11 below the live 43, so it fires on that outage and still tolerates
 # a dozen services being retired.
-PVC_MIN_CLAIMS = int(_env("PVC_MIN_CLAIMS", "32"))
+PVC_MIN_CLAIMS = _int("PVC_MIN_CLAIMS", "32")
 # Hysteresis on the coverage floor only. A kubelet restart or a node drain drops a node's volume
 # stats for a cycle or two, and that must not page; a fullness breach gets no grace because it is
 # monotonic rather than flappy.
-PVC_CLAIMS_CONSECUTIVE = int(_env("PVC_CLAIMS_CONSECUTIVE", "3"))
+PVC_CLAIMS_CONSECUTIVE = _int("PVC_CLAIMS_CONSECUTIVE", "3")
 # Crash-loop arm of the workload check: pods whose restart counter climbed more than
 # K8S_RESTART_MAX inside K8S_RESTART_WINDOW page even while readiness flaps green
 # (CrashLoopBackOff passes probes briefly each backoff cycle — the 2026-08-13 homepage
 # incident: 31 restarts overnight, tile and replica check mostly green throughout).
 # 3-in-1h ≈ steady-state backoff cadence; a legitimate deploy rollout restarts once.
 K8S_RESTART_WINDOW = _env("K8S_RESTART_WINDOW", "1h")
-K8S_RESTART_MAX = int(_env("K8S_RESTART_MAX", "3"))
+K8S_RESTART_MAX = _int("K8S_RESTART_MAX", "3")
 # Recency gate on the same arm: `increase(...[1h])` is a pure lookback, so a pod that
 # crash-looped and then RECOVERED keeps the monitor DOWN until the restarts age out of the
 # 1h window — up to an hour of red on a healthy pod (2026-08-23 zigbee2mqtt: recovered
@@ -506,14 +482,14 @@ K8S_RESTART_RECENT_WINDOW = _env("K8S_RESTART_RECENT_WINDOW", "30m")
 # optional temperature ceiling (°C); 0 = disabled (default), since Scrutiny already folds the SMART
 # temperature attribute into device_status — the ceiling is just an earlier-warning lever.
 SCRUTINY_URL = _env("SCRUTINY_URL", "http://scrutiny:8080").rstrip("/")
-SCRUTINY_MAX_AGE_H = float(_env("SCRUTINY_MAX_AGE_H", "26"))
-SCRUTINY_TEMP_MAX = float(_env("SCRUTINY_TEMP_MAX", "0"))
+SCRUTINY_MAX_AGE_H = _num("SCRUTINY_MAX_AGE_H", "26")
+SCRUTINY_TEMP_MAX = _num("SCRUTINY_TEMP_MAX", "0")
 # NVMe endurance ceiling (percentage_used, where 100 means the controller's rated write endurance
 # is spent). Scrutiny ships this attribute with thresh=100, so its own evaluation cannot fold a
 # breach into device_status until the drive is fully consumed — days of warning where the wear
 # curve offers months. Verified against the live API 2026-08-22: daniel-server's SHPP41-500GM
 # reads 7 at 30,959 power-on hours, daniel-box's CT1000E100SSD8 reads 0 at 576. 0 = disabled.
-SCRUTINY_WEAR_MAX = float(_env("SCRUTINY_WEAR_MAX", "80"))
+SCRUTINY_WEAR_MAX = _num("SCRUTINY_WEAR_MAX", "80")
 
 # Board and CPU temperature from node-exporter's hwmon collector. Drives are NOT read here —
 # check_scrutiny owns them (its device_status folds the SMART temperature attribute), so
@@ -543,14 +519,14 @@ SCRUTINY_WEAR_MAX = float(_env("SCRUTINY_WEAR_MAX", "80"))
 # falls through (crit, then arm 2). This is also why the fallback arm is not optional: without
 # it, 14 of 21 sensors — including BOTH daniel-pi sensors, on the host with no fan — carry no
 # limit at all.
-HWMON_TEMP_RATIO = float(_env("HWMON_TEMP_RATIO", "0.90"))
-HWMON_TEMP_FALLBACK_C = float(_env("HWMON_TEMP_FALLBACK_C", "85"))
-HWMON_TEMP_MIN_PLAUSIBLE_C = float(_env("HWMON_TEMP_MIN_PLAUSIBLE_C", "20"))
-HWMON_TEMP_MAX_PLAUSIBLE_C = float(_env("HWMON_TEMP_MAX_PLAUSIBLE_C", "150"))
+HWMON_TEMP_RATIO = _num("HWMON_TEMP_RATIO", "0.90")
+HWMON_TEMP_FALLBACK_C = _num("HWMON_TEMP_FALLBACK_C", "85")
+HWMON_TEMP_MIN_PLAUSIBLE_C = _num("HWMON_TEMP_MIN_PLAUSIBLE_C", "20")
+HWMON_TEMP_MAX_PLAUSIBLE_C = _num("HWMON_TEMP_MAX_PLAUSIBLE_C", "150")
 HWMON_TEMP_EXCLUDE_CHIP = _env("HWMON_TEMP_EXCLUDE_CHIP", "nvme_")
 # Hysteresis: a transcode or a compile spikes coretemp for one scrape. 3 cycles at the loop
 # cadence is sustained heat, not a burst.
-HWMON_TEMP_CONSECUTIVE = int(_env("HWMON_TEMP_CONSECUTIVE", "3"))
+HWMON_TEMP_CONSECUTIVE = _int("HWMON_TEMP_CONSECUTIVE", "3")
 
 # Host-coverage floor for the thermal check, the peer of HOST_ORIGINS_MIN and deliberately a
 # DIFFERENT number. Until 2026-08-29 hwmon_temp_verdict paged only on a fully empty vector, so
@@ -562,14 +538,14 @@ HWMON_TEMP_CONSECUTIVE = int(_env("HWMON_TEMP_CONSECUTIVE", "3"))
 # 3 rather than the shared 2 because all three hosts declare non-excluded sensors, measured live
 # 2026-08-29 after HWMON_TEMP_EXCLUDE_CHIP: daniel-server 9, daniel-box 5, daniel-pi 2. The
 # shared floor of 2 would be met by any two of them, which is exactly the state this must catch.
-HWMON_TEMP_ORIGINS_MIN = int(_env("HWMON_TEMP_ORIGINS_MIN", "3"))
+HWMON_TEMP_ORIGINS_MIN = _int("HWMON_TEMP_ORIGINS_MIN", "3")
 # Its own grace, longer than HOST_ORIGINS_CONSECUTIVE, because the third host is daniel-pi and
 # the Pi drops out for longer than either amd64 node. Measured over the 7d to 2026-08-29 at a 5m
 # step: 1054 samples, coverage below 3 in 6 of them, all daniel-pi (1048/1054 present), and the
 # worst 30m window held 4 consecutive short samples — about 20 minutes. The shared grace of 3
 # cycles is 15 minutes at INTERVAL=300, so it would have paged once in that week on a healthy
 # estate. 5 cycles is 25 minutes: one cycle of margin over the observed worst case.
-HWMON_TEMP_ORIGINS_CONSECUTIVE = int(_env("HWMON_TEMP_ORIGINS_CONSECUTIVE", "5"))
+HWMON_TEMP_ORIGINS_CONSECUTIVE = _int("HWMON_TEMP_ORIGINS_CONSECUTIVE", "5")
 
 # UPS battery health via Home Assistant's Prometheus scrape (the APC UPS is on NUT/peanut; HA's
 # prometheus integration exposes its sensors as hass_sensor_*). The only pre-existing UPS alert is
@@ -610,9 +586,9 @@ UPS_REPLACE_QUERY = _env(
 # scraping fine while every UPS entity was renamed/removed at once (Scrape Targets can't see it →
 # the UPS would go silently unmonitored). Empty disables the gate (always defer, the old behaviour).
 UPS_HA_UP_QUERY = _env("UPS_HA_UP_QUERY", 'up{job="home-assistant"}')
-UPS_CHARGE_MIN_PCT = float(_env("UPS_CHARGE_MIN_PCT", "50"))
-UPS_RUNTIME_MIN_S = float(_env("UPS_RUNTIME_MIN_S", "300"))
-UPS_CONSECUTIVE = int(_env("UPS_CONSECUTIVE", "2"))
+UPS_CHARGE_MIN_PCT = _num("UPS_CHARGE_MIN_PCT", "50")
+UPS_RUNTIME_MIN_S = _num("UPS_RUNTIME_MIN_S", "300")
+UPS_CONSECUTIVE = _int("UPS_CONSECUTIVE", "2")
 
 # Loki log-ingestion freshness: Loki's Kuma /ready probe stays green even when promtail
 # stops SHIPPING (DOCKER_HOST/docker-proxy break, positions-file corruption, relabel
@@ -677,7 +653,7 @@ LOG_ERROR_PATTERN = _env(
 LOG_ERROR_WINDOW = _env("LOG_ERROR_WINDOW", "1h")
 # Per container, not estate-wide: one workload melting down must not be diluted by 50 quiet
 # ones, and the offender's name is the whole value of the alert.
-LOG_ERROR_MAX = float(_env("LOG_ERROR_MAX", "20"))
+LOG_ERROR_MAX = _num("LOG_ERROR_MAX", "20")
 # Containers whose normal output trips the pattern. Comma-separated, case-insensitive. Keep
 # this list short and say WHY in the inventory — a growing ignore list is the arm decaying.
 LOG_ERROR_IGNORE = _env("LOG_ERROR_IGNORE", "")
@@ -728,7 +704,7 @@ SHIPPER_DROPPED_SERVER_METRIC = _env(
     "loki_discarded_samples_total",
 )
 SHIPPER_DROPPED_WINDOW = _env("SHIPPER_DROPPED_WINDOW", "1h")
-SHIPPER_DROPPED_MAX = float(_env("SHIPPER_DROPPED_MAX", "1000"))
+SHIPPER_DROPPED_MAX = _num("SHIPPER_DROPPED_MAX", "1000")
 
 
 # Pi pressure: the 512MB Zero 2 W dies by swap-thrash, not by clean failures —
@@ -737,22 +713,37 @@ SHIPPER_DROPPED_MAX = float(_env("SHIPPER_DROPPED_MAX", "1000"))
 # Polled from the glances API already running on the Pi (zero added Pi footprint);
 # the separate static Kuma HTTP monitor covers glances itself being down.
 PI_GLANCES_URL = _env("PI_GLANCES_URL", "").rstrip("/")
-PI_LOAD_MAX = float(_env("PI_LOAD_MAX", "1.5"))  # load5 per core
-PI_MEM_MIN_MB = float(_env("PI_MEM_MIN_MB", "50"))
-PI_DISK_MAX_PCT = float(_env("PI_DISK_MAX_PCT", "90"))
+PI_LOAD_MAX = _num("PI_LOAD_MAX", "1.5")  # load5 per core
+PI_MEM_MIN_MB = _num("PI_MEM_MIN_MB", "50")
+PI_DISK_MAX_PCT = _num("PI_DISK_MAX_PCT", "90")
+
+
 # `name:port` pairs for the Pi containers that publish a port, rendered from daniel-pi's
 # containers_list (every entry with a `port`) so the set cannot drift from the inventory.
 # Empty = the port arm is disabled, like PI_GLANCES_URL disables the whole check.
-PI_PUBLISHED_PORTS = tuple(
-    (pair.split(":", 1)[0].strip(), int(pair.split(":", 1)[1]))
-    for pair in _env("PI_PUBLISHED_PORTS", "").split(",")
-    if ":" in pair
-)
-PI_PORT_TIMEOUT = float(_env("PI_PORT_TIMEOUT", "3"))
+def _published_ports(raw: str) -> tuple[tuple[str, int], ...]:
+    """`name:port` pairs from a comma-separated list, skipping and recording a malformed port."""
+    pairs = []
+    for pair in raw.split(","):
+        if ":" not in pair:
+            continue
+        name, _, port = pair.partition(":")
+        try:
+            pairs.append((name.strip(), int(port)))
+        except ValueError:
+            CONFIG_PROBLEMS.append(
+                "PI_PUBLISHED_PORTS entry %r has a non-integer port; it is not watched"
+                % pair
+            )
+    return tuple(pairs)
+
+
+PI_PUBLISHED_PORTS = _published_ports(_env("PI_PUBLISHED_PORTS", ""))
+PI_PORT_TIMEOUT = _num("PI_PORT_TIMEOUT", "3")
 # A Pi deploy recreates containers, so their ports are genuinely closed for a few seconds.
 # Two cycles of grace, same idiom as HA_CONSECUTIVE; a detached container persists until
 # someone recreates it and still pages.
-PI_PORTS_CONSECUTIVE = int(_env("PI_PORTS_CONSECUTIVE", "2"))
+PI_PORTS_CONSECUTIVE = _int("PI_PORTS_CONSECUTIVE", "2")
 
 # HA automation-engine heartbeat: an HA time_pattern automation stamps
 # input_datetime.ha_heartbeat with now() every minute, so its last_changed is fresh ONLY
@@ -766,12 +757,12 @@ HA_URL = _env("HA_URL", "").rstrip("/")
 # File-mounted (HA_TOKEN_FILE) so this full-access HA long-lived token stays out of the container
 # Env the docker-proxy exposes to monitoring-net neighbors; falls back to the HA_TOKEN env.
 HA_TOKEN = _env_file("HA_TOKEN", "")
-HA_HEARTBEAT_MAX_AGE_S = float(_env("HA_HEARTBEAT_MAX_AGE", "300"))
+HA_HEARTBEAT_MAX_AGE_S = _num("HA_HEARTBEAT_MAX_AGE", "300")
 HA_HEARTBEAT_ENTITY = "input_datetime.ha_heartbeat"
 # Consecutive-cycle hysteresis (like CPU_CONSECUTIVE) so a planned HA redeploy — which takes
 # the API unreachable for ~120s and then leaves the scheduler a beat behind — doesn't page.
 # 2 straight down cycles (~one full INTERVAL of continuous badness) before `down`.
-HA_CONSECUTIVE = int(_env("HA_CONSECUTIVE", "2"))
+HA_CONSECUTIVE = _int("HA_CONSECUTIVE", "2")
 # ip_ban arm of the HA monitor. HA's ban middleware runs on every request and keys on the peer
 # address, so a burst of unauthenticated /api/ calls can ban an INFRASTRUCTURE ip rather than an
 # attacker — on 2026-08-23 five bad calls from the node's pod-network gateway (10.42.0.1) banned
@@ -817,13 +808,13 @@ SPEEDTEST_TOKEN = _env_file("SPEEDTEST_TOKEN", "")
 # of 910 Mbps and a worst of 119, while the 17 runs on six other servers had a median of 12.8
 # and a best of 42.8. Nothing landed between 42.8 and 119, so any floor in that gap separates
 # the two populations with room on both sides.
-SPEEDTEST_DOWNLOAD_MIN_MBPS = float(_env("SPEEDTEST_DOWNLOAD_MIN_MBPS", "100"))
+SPEEDTEST_DOWNLOAD_MIN_MBPS = _num("SPEEDTEST_DOWNLOAD_MIN_MBPS", "100")
 # Staleness ceiling, hours. SPEEDTEST_SCHEDULE runs every 6h, so 8 allows one missed slot plus
 # slack. This arm is what notices the scheduler dying — the failure mode with no other symptom,
 # since a pod that runs no tests still serves its UI and passes both probes.
-SPEEDTEST_MAX_AGE_H = float(_env("SPEEDTEST_MAX_AGE_H", "8"))
+SPEEDTEST_MAX_AGE_H = _num("SPEEDTEST_MAX_AGE_H", "8")
 # Consecutive-cycle hysteresis for the FETCH only, never for the verdict — see check_speedtest.
-SPEEDTEST_CONSECUTIVE = int(_env("SPEEDTEST_CONSECUTIVE", "2"))
+SPEEDTEST_CONSECUTIVE = _int("SPEEDTEST_CONSECUTIVE", "2")
 
 # Discord delivery: Kuma fires every alert by POSTing to its Discord webhook
 # (monitor_discord_webhook_url). A rotated/revoked/deleted webhook leaves every monitor
@@ -857,7 +848,7 @@ DISCORD_ARR_WEBHOOK_URL = _env("DISCORD_ARR_WEBHOOK_URL", "")
 # redundant secondary path (healthchecks' primary alert route is SMTP email, and it self-logs send
 # failures in hc.sqlite), but it's still an un-Kuma'd delivery hop worth verifying. Empty = skipped.
 DISCORD_HEALTHCHECKS_WEBHOOK_URL = _env("DISCORD_HEALTHCHECKS_WEBHOOK_URL", "")
-DISCORD_CONSECUTIVE = int(_env("DISCORD_CONSECUTIVE", "2"))
+DISCORD_CONSECUTIVE = _int("DISCORD_CONSECUTIVE", "2")
 
 # Alert-email backstop deliverability (folded into check_discord). The uptime-kuma `email` notification
 # (Gmail SMTP) is the independent 2nd channel attached ONLY to the Discord Delivery monitor — the
@@ -869,10 +860,10 @@ DISCORD_CONSECUTIVE = int(_env("DISCORD_CONSECUTIVE", "2"))
 # EMAIL_PROBE_INTERVAL_S — Gmail flags frequent AUTHs, so a success is cached and only a failure
 # re-probes every cycle. Empty SMTP_PASSWORD = disabled (stays up), like the empty-webhook skips.
 SMTP_HOST = _env("SMTP_HOST", "smtp.gmail.com")
-SMTP_PORT = int(_env("SMTP_PORT", "465"))
+SMTP_PORT = _int("SMTP_PORT", "465")
 SMTP_USER = _env("SMTP_USER", "")
 SMTP_PASSWORD = _env("SMTP_PASSWORD", "")
-EMAIL_PROBE_INTERVAL_S = float(_env("EMAIL_PROBE_INTERVAL_S", "21600"))  # 6h
+EMAIL_PROBE_INTERVAL_S = _num("EMAIL_PROBE_INTERVAL_S", "21600")  # 6h
 
 
 # Distinct `origin` values the host-metric checks must see. node-exporter is a DaemonSet on both
@@ -889,10 +880,35 @@ EMAIL_PROBE_INTERVAL_S = float(_env("EMAIL_PROBE_INTERVAL_S", "21600"))  # 6h
 # two checks with nothing firing anywhere. Same shape as check_ups's partial-absence arm: never
 # monitor the survivor silently. Verified before setting the floor: /, /boot and /boot/efi each
 # report from both origins over the preceding 7d, so no mountpoint is legitimately single-host.
-HOST_ORIGINS_MIN = int(_env("HOST_ORIGINS_MIN", "2"))
+HOST_ORIGINS_MIN = _int("HOST_ORIGINS_MIN", "2")
 # Hysteresis, for the same reason UPS_CONSECUTIVE exists: the weekly Sunday reboot takes a node's
 # node-exporter away for minutes against a 1m scrape and a 5m check loop, and a bare floor would
 # page every week. Measured over the 7d to 2026-08-23, `count(node_memory_MemTotal_bytes) < 2`
 # held for 66 samples and ALL 66 were inside the real outage — so the floor is quiet in steady
 # state and this grace only has to cover reboots.
-HOST_ORIGINS_CONSECUTIVE = int(_env("HOST_ORIGINS_CONSECUTIVE", "3"))
+HOST_ORIGINS_CONSECUTIVE = _int("HOST_ORIGINS_CONSECUTIVE", "3")
+
+
+def _name_set(value: str) -> frozenset[str]:
+    """A comma-separated check-name list as a set, tolerating spaces and empty entries."""
+    return frozenset(n for n in value.replace(" ", "").split(",") if n)
+
+
+# Which checks THIS instance runs. The Phase F twin/remnant split ended with the Docker
+# uninstall (2026-08-14): the cluster deployment is now the ONLY bridge and runs every
+# check (the gitops checks re-pointed at daniel-box's deployer via a hostPath — the pod
+# is pinned there; disk_prune retired with the Docker daemon; pi_peers/renovate_alive
+# became direct pushers at the host flips). The CHECKS_ONLY/CHECKS_SKIP mechanism stays
+# — it is how any future split would be expressed, and check.py's guards keep it honest.
+# CHECKS_ONLY (comma-separated names) enables exactly that set; CHECKS_SKIP drops
+# names from whatever is otherwise enabled. The four reachability gates participate under
+# the names their monitors push as (prometheus, loki_reachable, b2_reachable,
+# cluster_prometheus). A filter that enables a gated check while disabling its gate would
+# reintroduce the alert storm the gate exists to prevent, so check.py's main() refuses to start
+# on one (validate_check_filter) — a crash-looping bridge is loud, a mis-gated one lies quietly.
+#
+# They live here rather than in check.py because this module is monitor-bridge's one env-reading
+# surface, and these were two of the three that had escaped it. `check.py --check <name>`
+# overrides CHECKS_ONLY for a hand-run cycle.
+CHECKS_ONLY = _name_set(_env("CHECKS_ONLY", ""))
+CHECKS_SKIP = _name_set(_env("CHECKS_SKIP", ""))

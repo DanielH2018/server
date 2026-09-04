@@ -57,8 +57,6 @@ auto-merge never recovers from. `pr-ci-red` is the PR's CI before the merge; `ci
 master's after it.
 """
 
-from __future__ import annotations
-
 import contextlib
 import os
 import sys
@@ -69,7 +67,7 @@ from deploy_tools.land_lib import pipeline
 from deploy_tools.land_lib.landing import Landing
 from deploy_tools.land_lib.ledger import Ledger, annotation_line
 from deploy_tools.land_lib.options import parse_args
-from deploy_tools.land_lib.tools import Tools
+from deploy_tools.land_lib.tools import Classifier, Tools
 
 
 def _prepare_stdio() -> None:
@@ -92,7 +90,11 @@ def _prepare_stdio() -> None:
         sys.stdout.reconfigure(line_buffering=True)
 
 
-def main(argv: list[str] | None = None, tools: Tools | None = None) -> int:
+def main(
+    argv: list[str] | None = None,
+    tools: Tools | None = None,
+    classifier: Classifier | None = None,
+) -> int:
     """Parse, run, print the outcome, and annotate -- whatever happened."""
     tools = tools or Tools()
     t_start = tools.clock()
@@ -112,7 +114,7 @@ def main(argv: list[str] | None = None, tools: Tools | None = None) -> int:
                 tools.logger(annotation_line(ledger, 2, tools.clock() - t_start))
         raise
     _prepare_stdio()
-    ln = Landing(opts, tools)
+    ln = Landing(opts, tools, classifier)
     rc = 1
     try:
         outcome = pipeline.run(ln)

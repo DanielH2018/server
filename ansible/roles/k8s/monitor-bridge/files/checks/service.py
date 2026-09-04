@@ -39,7 +39,7 @@ _n8n_streaks = {}
 # checks: each returns (ok, msg)
 
 
-def _parse_behind(marker):
+def _parse_behind(marker: str | None) -> tuple[str, float | None]:
     """Split the deployer's "<origin_sha> <unix_ts_first_seen>" marker.
 
     Returns (sha, since) with since=None when absent or unparseable — an unreadable marker must read
@@ -57,13 +57,13 @@ def _parse_behind(marker):
 
 
 def gitops_status(
-    hold_sha,
-    diverged_sha=None,
-    behind_since=None,
-    now=None,
-    max_behind_s=cfg.GITOPS_BEHIND_MAX_S,
-    hold_plane=None,
-):
+    hold_sha: str | None,
+    diverged_sha: str | None = None,
+    behind_since: str | None = None,
+    now: float | None = None,
+    max_behind_s: float = cfg.GITOPS_BEHIND_MAX_S,
+    hold_plane: str | None = None,
+) -> tuple[bool, str]:
     """Pure: is the deploy pipeline in a state needing operator action? Returns (ok, msg).
 
     Three down states share this monitor, most-specific first: a rolled-back commit HELD pending a
@@ -112,7 +112,7 @@ def gitops_status(
     return True, "no held deploy"
 
 
-def check_n8n():
+def check_n8n() -> tuple[bool, str]:
     """Consecutive failures of active ("Prod") n8n workflows (streak accumulated across cycles).
 
     Polls the n8n public API on the internal network (X-N8N-API-KEY header, no Authelia). n8n
@@ -143,7 +143,7 @@ def check_n8n():
     )
 
 
-def check_arr_queue():
+def check_arr_queue() -> tuple[bool, str]:
     """Sonarr/Radarr queue warning/blocked-import watchdog (see queue_warnings).
 
     Empty SONARR_API_KEY/RADARR_API_KEY independently skip that app (like the multi-webhook
@@ -185,7 +185,7 @@ def check_arr_queue():
     return True, "queue clean (%s)" % ", ".join(a[0] for a in configured)
 
 
-def bazarr_problems(status, health):
+def bazarr_problems(status: dict | None, health: dict | None) -> list[str]:
     """Problems from Bazarr's /api/system/status and /api/system/health payloads.
 
     Pure, so the reject case is testable without a live Bazarr.
@@ -218,7 +218,7 @@ def bazarr_problems(status, health):
     return problems
 
 
-def check_bazarr():
+def check_bazarr() -> tuple[bool, str]:
     """Bazarr's own health, and whether it can still talk to Sonarr and Radarr.
 
     Bazarr is the one *arr with no exporter, and that is why the 2026-08-29 stale-key incident
@@ -257,7 +257,7 @@ def check_bazarr():
     )
 
 
-def check_prowlarr_indexers():
+def check_prowlarr_indexers() -> tuple[bool, str]:
     """Prowlarr sustained-indexer watchdog (see indexers_down).
 
     Pages only when an indexer has been failing >= PROWLARR_INDEXER_MIN_DOWN_MIN, not on the
@@ -299,7 +299,7 @@ def check_prowlarr_indexers():
     )
 
 
-def check_gitops_alive():
+def check_gitops_alive() -> tuple[bool, str]:
     """Checks that the GitOps deployer's last_run marker is fresh.
 
     Down when the marker is missing (the deployer never completed a tick) or unparseable.
@@ -315,7 +315,7 @@ def check_gitops_alive():
     return gitops_alive(time.time() - ts, cfg.GITOPS_MAX_AGE_S)
 
 
-def _read_gitops_marker(name):
+def _read_gitops_marker(name: str) -> str | None:
     try:
         with open(os.path.join(cfg.GITOPS_STATE_DIR, name)) as fh:
             return fh.read().strip() or None
@@ -323,7 +323,7 @@ def _read_gitops_marker(name):
         return None
 
 
-def check_gitops_status():
+def check_gitops_status() -> tuple[bool, str]:
     return gitops_status(
         _read_gitops_marker("hold_sha"),
         _read_gitops_marker("diverged_sha"),
@@ -332,7 +332,7 @@ def check_gitops_status():
     )
 
 
-def check_staging_backfill_alive():
+def check_staging_backfill_alive() -> tuple[bool, str]:
     """Is the staging-gate backfill ratchet still running at all?
 
     `OnFailure=staging-backfill-alert.service` covers "ran and failed" and nothing else. A timer
@@ -369,7 +369,7 @@ def check_staging_backfill_alive():
     return staging_backfill_alive(armed, age_s, cfg.STAGING_BACKFILL_MAX_AGE_S)
 
 
-def check_etcd_restore_drill():
+def check_etcd_restore_drill() -> tuple[bool, str]:
     """Is the off-box etcd snapshot still PROVABLY restorable?
 
     The snapshot half has been taken, uploaded and alarmed since 2026-08-16. Until 2026-08-28
@@ -430,7 +430,7 @@ def check_etcd_restore_drill():
     return True, "etcd restore drill passed %.1f days ago" % (age_s / 86400)
 
 
-def with_ha_ban(ok, msg):
+def with_ha_ban(ok: bool, msg: str) -> tuple[bool, str]:
     """Fold the ip_ban arm into a heartbeat verdict, ban winning the message.
 
     Folded into this monitor rather than given its own for the reason recorded at
@@ -456,7 +456,7 @@ def with_ha_ban(ok, msg):
     return False, "%s | %s" % (ban_msg, msg)
 
 
-def check_ha_heartbeat():
+def check_ha_heartbeat() -> tuple[bool, str]:
     """Poll HA's automation-driven heartbeat over the apps network (Bearer token).
 
     Empty HA_URL/HA_TOKEN -> disabled (stays up), like check_n8n.

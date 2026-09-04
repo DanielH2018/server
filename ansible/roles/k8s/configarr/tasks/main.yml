@@ -61,6 +61,16 @@
     mode: "0755"
   become: true
 
+- name: Install the shared host_lib helper beside the configarr health reader
+  tags: [config]
+  # Before the reader, not in the same loop after it: the cron invokes the reader by absolute
+  # path, so a window in which it exists without its sibling import is a spurious page. The
+  # shared file lives in the setup plane and is reached from here by path — see its header.
+  ansible.builtin.import_tasks: "{{ role_path }}/../../setup/common/tasks/install_host_lib.yml"
+  vars:
+    host_lib_dir: /opt/configarr-health
+    host_lib_owner: "{{ sys_user }}"
+
 - name: Install the configarr health reader scripts
   tags: [config]
   ansible.builtin.copy:
@@ -77,10 +87,6 @@
     # `import configarr_status` resolves at runtime, and a second edited copy is how two callers
     # quietly stop agreeing about what a failed sync looks like.
     - "{{ role_path }}/files/configarr_status.py"
-    # The kubectl runner this reader and janitorr's used to carry a byte-identical copy of.
-    # Same sibling-copy reasoning as the line above, and the same file gitops_deploy.py and
-    # renovate_notify.py already import.
-    - "{{ role_path }}/../../setup/common/files/host_lib.py"
   become: true
 
 - name: Deploy the configarr sync heartbeat

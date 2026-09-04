@@ -31,13 +31,17 @@ def test_sum_versions_tolerates_the_size_field_and_missing_lengths():
 
 
 def test_verdict_ok_under_threshold():
-    ok, msg = checks.b2.b2_storage_verdict(1e9, 10, False, cap=10e9, max_pct=80)
+    ok, msg = checks.b2.b2_storage_verdict(
+        1e9, 10, False, cap=10e9, max_pct=80, max_pages=50
+    )
     assert ok
     assert "10%" in msg
 
 
 def test_verdict_down_over_threshold():
-    ok, msg = checks.b2.b2_storage_verdict(9e9, 10, False, cap=10e9, max_pct=80)
+    ok, msg = checks.b2.b2_storage_verdict(
+        9e9, 10, False, cap=10e9, max_pct=80, max_pages=50
+    )
     assert not ok
     assert "90%" in msg
 
@@ -48,7 +52,9 @@ def test_verdict_treats_a_truncated_walk_as_failure():
     A partial sum looks like headroom we do not have, so a truncated listing must page rather than
     report a smaller number confidently.
     """
-    ok, msg = checks.b2.b2_storage_verdict(1e9, 50000, True, cap=10e9, max_pct=80)
+    ok, msg = checks.b2.b2_storage_verdict(
+        1e9, 50000, True, cap=10e9, max_pct=80, max_pages=50
+    )
     assert not ok
     assert "FLOOR" in msg
 
@@ -81,7 +87,7 @@ def test_storage_is_gated_by_b2_reachable():
     """A transaction cap fails both this and b2_reachable; one root cause must not light two
     monitors, which is precisely what the B2 gate is for."""
     assert "b2_storage" in check.B2_DEPENDENT
-    assert "b2_storage" in {name for name, _, _ in check.CHECKS}
+    assert "b2_storage" in {c.name for c in check.CHECKS}
 
 
 # ── the pagination cursor ─────────────────────────────────────────────────────────────────────

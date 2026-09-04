@@ -254,8 +254,12 @@ def test_a_staleness_refusing_invocation_is_caught() -> None:
 # identity files still count as configured. So these drive the check that does.
 
 
-def _fake_ssh(monkeypatch, rc=0):
-    """Capture the argv and kwargs staging_gate would hand subprocess.run, without connecting."""
+def _fake_ssh(rc=0):
+    """(GateTools, calls): capture the ssh argv and kwargs without connecting.
+
+    Field injection rather than `monkeypatch.setattr(sg.subprocess, "run", ...)`: the seam
+    is `GateTools.run`, so the test replaces a field and nothing module-global moves.
+    """
     calls = {}
 
     def fake_run(cmd, **kwargs):
@@ -266,8 +270,7 @@ def _fake_ssh(monkeypatch, rc=0):
             return subprocess.CompletedProcess(cmd, rc)
         return _real_run(cmd, **kwargs)
 
-    monkeypatch.setattr(sg.subprocess, "run", fake_run)
-    return calls
+    return sg.GateTools(run=fake_run), calls
 
 
 def _install_identity(
@@ -342,8 +345,8 @@ def test_an_identity_the_far_side_does_not_authorize_refuses_to_connect(
 def test_an_unusable_identity_never_reaches_ssh(monkeypatch, tmp_path):
     """The point of the check: no connection is attempted at all, so ssh cannot pick a key."""
     _install_identity(monkeypatch, tmp_path, authorized=True, loadable=False)
-    calls = _fake_ssh(monkeypatch)
-    rc = sg.run_gate("a" * 40, "freshrss", 30.0)
+    tools, calls = _fake_ssh()
+    rc = sg.run_gate("a" * 40, "freshrss", 30.0, tools)
     assert rc == sg.IDENTITY_UNUSABLE
     assert "cmd" not in calls, "ssh was invoked despite an unusable identity"
     assert sg.classify(rc) == sg.NO_VERDICT
@@ -352,9 +355,9 @@ def test_an_unusable_identity_never_reaches_ssh(monkeypatch, tmp_path):
 def test_the_request_is_one_argument_and_nothing_is_piped(monkeypatch, tmp_path):
     """A forced command does not stop ssh forwarding stdin, so nothing may be sent on it."""
     key = _install_identity(monkeypatch, tmp_path, authorized=True)
-    calls = _fake_ssh(monkeypatch)
+    tools, calls = _fake_ssh()
     sha = "b" * 40
-    sg.run_gate(sha, "freshrss,traefik", 30.0)
+    sg.run_gate(sha, "freshrss,traefik", 30.0, tools)
 
     cmd = calls["cmd"]
     assert cmd[-1] == f"gate {sha} freshrss,traefik", (
@@ -374,8 +377,8 @@ def test_the_request_is_one_argument_and_nothing_is_piped(monkeypatch, tmp_path)
 def test_a_short_sha_is_refused_locally(monkeypatch, tmp_path):
     """The forced command would refuse it anyway; failing here names the real problem."""
     _install_identity(monkeypatch, tmp_path, authorized=True)
-    calls = _fake_ssh(monkeypatch)
-    rc = sg.run_gate("deadbeef", "freshrss", 30.0)
+    tools, calls = _fake_ssh()
+    rc = sg.run_gate("deadbeef", "freshrss", 30.0, tools)
     assert rc == sg.DISPATCH_REFUSED
     assert "cmd" not in calls, "a malformed request must not be sent"
     assert sg.classify(rc) == sg.NO_VERDICT
@@ -387,7 +390,7 @@ def test_a_shell_fallback_is_no_verdict_not_a_rejection(monkeypatch, tmp_path):
     Classifying that as REJECTED would fail a merge on the strength of a security regression.
     """
     _install_identity(monkeypatch, tmp_path, authorized=True)
-    _fake_ssh(monkeypatch, rc=sg.SHELL_FALLBACK)
-    rc = sg.run_gate("c" * 40, "freshrss", 30.0)
+    tools, _calls = _fake_ssh(rc=sg.SHELL_FALLBACK)
+    rc = sg.run_gate("c" * 40, "freshrss", 30.0, tools)
     assert rc == sg.SHELL_FALLBACK
     assert sg.classify(rc) == sg.NO_VERDICT

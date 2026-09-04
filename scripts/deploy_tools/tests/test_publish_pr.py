@@ -52,16 +52,16 @@ class Recorder:
             raise answer
         return answer
 
-    def tools(self) -> publish_pr.Tools:
+    def tools(self) -> publish_pr.PublishTools:
         # **kw absorbs the `timeout=` the ls-remote pre-flight passes; the stub never blocks,
         # so the value is nothing to record.
-        return publish_pr.Tools(
+        return publish_pr.PublishTools(
             git=lambda *a, **kw: self._run("git", *a),
             gh=lambda *a, **kw: self._run("gh", *a),
         )
 
 
-def _publish(rec: Recorder) -> publish_pr.Outcome:
+def _publish(rec: Recorder) -> publish_pr.PublishOutcome:
     return publish_pr.publish(
         "docs-refresh/", "docs: refresh", "body", rec.tools(), now=NOW
     )
@@ -70,7 +70,7 @@ def _publish(rec: Recorder) -> publish_pr.Outcome:
 def test_the_happy_path_runs_the_six_steps_in_order():
     rec = Recorder()
     out = _publish(rec)
-    assert out.rc == publish_pr.RC_PUBLISHED
+    assert out.rc == publish_pr.PUBLISH_PUBLISHED
     assert out.message == f"PR opened for {BRANCH} with auto-merge"
     assert rec.calls == [
         ("git", "branch", BRANCH, "HEAD"),
@@ -105,7 +105,7 @@ def test_a_failed_push_leaves_the_commit_local_and_says_so():
         {"git push": _cp(1, err="remote: declined due to repository rule violations")}
     )
     out = _publish(rec)
-    assert out.rc == publish_pr.RC_STILL_LOCAL
+    assert out.rc == publish_pr.PUBLISH_STILL_LOCAL
     assert "commit is local on master" in out.message
     assert "repository rule violations" in out.message, "the failure text must survive"
     assert ("git", "reset", "--hard", "HEAD~1") not in rec.calls
@@ -149,7 +149,7 @@ def test_a_failed_reset_reports_master_still_ahead_and_stops_before_the_pr():
     squash lands under a new SHA (issue #1086)."""
     rec = Recorder({"git reset": _cp(1, err="Unable to create '.git/index.lock'")})
     out = _publish(rec)
-    assert out.rc == publish_pr.RC_PUSHED_NO_PR
+    assert out.rc == publish_pr.PUBLISH_PUSHED_NO_PR
     assert "master is still one commit ahead of origin" in out.message
     assert "index.lock" in out.message
     assert ("git", "branch", "-D", BRANCH) not in rec.calls
@@ -160,7 +160,7 @@ def test_a_failed_pr_create_reports_the_branch_as_published():
     """Exit 2 is the state the secret-rotate audit watches for: a branch on origin, no PR."""
     rec = Recorder({"gh pr create": _cp(1, err="HTTP 401: Bad credentials")})
     out = _publish(rec)
-    assert out.rc == publish_pr.RC_PUSHED_NO_PR
+    assert out.rc == publish_pr.PUBLISH_PUSHED_NO_PR
     assert out.message.startswith(f"{BRANCH} published but PR creation failed")
     assert "Bad credentials" in out.message
     assert ("git", "reset", "--hard", "HEAD~1") in rec.calls
@@ -170,7 +170,7 @@ def test_a_failed_pr_create_reports_the_branch_as_published():
 def test_a_failed_auto_merge_is_reported_distinctly():
     rec = Recorder({"gh pr merge": _cp(1, err="auto-merge is not allowed")})
     out = _publish(rec)
-    assert out.rc == publish_pr.RC_PUSHED_NO_PR
+    assert out.rc == publish_pr.PUBLISH_PUSHED_NO_PR
     assert out.message.startswith(
         f"PR opened for {BRANCH} but auto-merge could not be enabled"
     )
@@ -237,7 +237,7 @@ TIMEOUT = subprocess.TimeoutExpired(cmd=["gh"], timeout=60.0)
 def test_a_timeout_creating_the_pr_is_exit_2_not_a_raise():
     rec = Recorder({"gh pr create": TIMEOUT})
     out = _publish(rec)
-    assert out.rc == publish_pr.RC_PUSHED_NO_PR
+    assert out.rc == publish_pr.PUBLISH_PUSHED_NO_PR
     assert out.message.startswith(f"{BRANCH} published but PR creation failed")
     assert "timed out" in out.message
     assert ("git", "push", "-u", "origin", BRANCH) in rec.calls, (
@@ -248,7 +248,7 @@ def test_a_timeout_creating_the_pr_is_exit_2_not_a_raise():
 def test_a_timeout_enabling_auto_merge_is_exit_2_not_a_raise():
     rec = Recorder({"gh pr merge": TIMEOUT})
     out = _publish(rec)
-    assert out.rc == publish_pr.RC_PUSHED_NO_PR
+    assert out.rc == publish_pr.PUBLISH_PUSHED_NO_PR
     assert "auto-merge could not be enabled" in out.message
     assert "timed out" in out.message
 
@@ -267,13 +267,13 @@ def test_a_timeout_listing_prs_fails_closed():
 _HEAD = "9f8e7d6\trefs/heads/docs-refresh/2026-09-03-0600"
 
 
-def _unlanded(rec: Recorder) -> publish_pr.Outcome:
+def _unlanded(rec: Recorder) -> publish_pr.PublishOutcome:
     return publish_pr.unlanded("docs-refresh/", rec.tools())
 
 
 def test_no_remote_head_means_nothing_is_unlanded():
     out = _unlanded(Recorder({"git ls-remote": _cp(0, out="")}))
-    assert out.rc == publish_pr.RC_NOTHING_UNLANDED
+    assert out.rc == publish_pr.UNLANDED_NOTHING
     assert out.message == ""
 
 
@@ -283,7 +283,7 @@ def test_an_unreachable_origin_fails_closed():
         {"git ls-remote": _cp(128, err="Could not resolve host: github.com")}
     )
     out = _unlanded(rec)
-    assert out.rc == publish_pr.RC_ORIGIN_UNREADABLE
+    assert out.rc == publish_pr.UNLANDED_ORIGIN_UNREADABLE
     assert "Could not resolve host" in out.message
     assert not any(c[0] == "gh" for c in rec.calls), (
         "the PR lookup must not run when origin could not be read"
@@ -300,7 +300,7 @@ def test_a_remote_head_with_an_open_pr_is_the_benign_code():
         }
     )
     out = _unlanded(rec)
-    assert out.rc == publish_pr.RC_UNLANDED_PR_OPEN
+    assert out.rc == publish_pr.UNLANDED_PR_OPEN
     assert "PR #41" in out.message
     assert out.branch == "docs-refresh/2026-09-03-0600"
 
@@ -309,7 +309,7 @@ def test_a_remote_head_with_no_open_pr_is_the_stuck_code():
     """The state a failed `gh pr create` leaves: a branch on origin, no PR, no local trace."""
     rec = Recorder({"git ls-remote": _cp(0, out=_HEAD), "gh pr list": _cp(0, out="[]")})
     out = _unlanded(rec)
-    assert out.rc == publish_pr.RC_UNLANDED_NO_PR
+    assert out.rc == publish_pr.UNLANDED_NO_PR
     assert "NO open PR" in out.message
 
 
@@ -328,7 +328,7 @@ def test_an_open_pr_on_a_sibling_branch_does_not_clear_an_orphan():
         }
     )
     out = _unlanded(rec)
-    assert out.rc == publish_pr.RC_UNLANDED_NO_PR
+    assert out.rc == publish_pr.UNLANDED_NO_PR
     assert out.branch == "docs-refresh/2026-09-03-0600"
     assert "NO open PR" in out.message
 
@@ -343,7 +343,7 @@ def test_an_origin_that_never_answers_is_bounded_and_fails_closed():
         {"git ls-remote": subprocess.TimeoutExpired(cmd=["git"], timeout=30.0)}
     )
     out = _unlanded(rec)
-    assert out.rc == publish_pr.RC_ORIGIN_UNREADABLE
+    assert out.rc == publish_pr.UNLANDED_ORIGIN_UNREADABLE
     assert "did not answer within 30s" in out.message
     assert not any(c[0] == "gh" for c in rec.calls)
 
@@ -356,7 +356,9 @@ def test_the_pre_flight_bounds_its_own_ls_remote():
         seen[args[0]] = kwargs.get("timeout")
         return _cp()
 
-    publish_pr.unlanded("t/", publish_pr.Tools(git=git, gh=lambda *a, **kw: _cp()))
+    publish_pr.unlanded(
+        "t/", publish_pr.PublishTools(git=git, gh=lambda *a, **kw: _cp())
+    )
     assert seen["ls-remote"] == publish_pr.LS_REMOTE_TIMEOUT_S
 
 
@@ -364,7 +366,7 @@ def test_a_pr_lookup_that_times_out_cannot_clear_the_branch():
     """ls-remote decides; the PR number only labels. A `gh` failure must not read as clean."""
     rec = Recorder({"git ls-remote": _cp(0, out=_HEAD), "gh pr list": TIMEOUT})
     out = _unlanded(rec)
-    assert out.rc == publish_pr.RC_UNLANDED_NO_PR
+    assert out.rc == publish_pr.UNLANDED_NO_PR
     assert "did not answer" in out.message
 
 
@@ -455,14 +457,14 @@ def test_cli_publish_exit_code_reaches_the_shell(tmp_path):
         "B",
         fail_on="push",
     )
-    assert proc.returncode == publish_pr.RC_STILL_LOCAL
+    assert proc.returncode == publish_pr.PUBLISH_STILL_LOCAL
     assert "stub refused" in proc.stdout
     assert not any(c.startswith("gh") for c in calls)
 
 
 def test_cli_unlanded_is_quiet_and_gh_free_when_origin_has_no_head(tmp_path):
     proc, calls = _run_cli(tmp_path, "unlanded", "--prefix", "t/")
-    assert proc.returncode == publish_pr.RC_NOTHING_UNLANDED, proc.stderr
+    assert proc.returncode == publish_pr.UNLANDED_NOTHING, proc.stderr
     assert proc.stdout == ""
     assert calls == ["git ls-remote --heads origin t/*"], calls
 
@@ -495,7 +497,7 @@ def test_cli_unlanded_exit_code_reaches_the_shell(tmp_path):
         text=True,
         check=False,
     )
-    assert proc.returncode == publish_pr.RC_UNLANDED_NO_PR, proc.stderr
+    assert proc.returncode == publish_pr.UNLANDED_NO_PR, proc.stderr
     assert proc.stdout.startswith(
         "branch t/2026-09-03-0600 is on origin with NO open PR"
     )

@@ -10,8 +10,12 @@ the Kuma push monitor's heartbeat interval is the backstop for "the bridge itsel
 Design: docs/superpowers/specs/2026-06-06-monitor-bridge-alerting-design.md
 """
 
+import argparse
 import sys
 import time
+from collections.abc import Callable
+from dataclasses import dataclass
+from typing import NamedTuple
 
 # This file is the registry and the run loop; every check body lives in a checks_* module.
 # A name the test suite patches is read QUALIFIED from the module that binds it — `cfg.X`
@@ -80,39 +84,67 @@ from checks.logs import (
 )
 
 
+class CheckResult(NamedTuple):
+    """What a check or a gate decided: `ok` and the message pushed to Kuma.
+
+    A NamedTuple rather than a dataclass so every existing `ok, msg = fn()` unpacking — in this
+    file, in the checks modules and across the test suite — keeps working unchanged. The check
+    bodies themselves still return a plain `(bool, str)` tuple, which this type accepts; the name
+    exists so the registry's consumption boundary here says what the pair means.
+    """
+
+    ok: bool
+    msg: str
+
+
+@dataclass(frozen=True)
+class Check:
+    """One entry in the CHECKS registry.
+
+    Attributes:
+      name: The check's own name — what CHECKS_ONLY/CHECKS_SKIP and the gate sets refer to.
+      token: The Kuma push-monitor token this check's result is pushed to. Empty skips the push.
+      fn: The zero-argument check body, returning (ok, msg).
+    """
+
+    name: str
+    token: str
+    fn: Callable[[], tuple[bool, str]]
+
+
 CHECKS = [
-    ("disk", _env("KUMA_PUSH_DISK", ""), check_disk),
-    ("cert", _env("KUMA_PUSH_CERT", ""), check_cert),
-    ("memory", _env("KUMA_PUSH_MEM", ""), check_mem),
+    Check("disk", _env("KUMA_PUSH_DISK", ""), check_disk),
+    Check("cert", _env("KUMA_PUSH_CERT", ""), check_cert),
+    Check("memory", _env("KUMA_PUSH_MEM", ""), check_mem),
     # restarts/oom/cpu RETARGETED 2026-08-14 (Phase G): retired with the Docker cadvisor
     # the same morning, re-armed the same evening against the kubernetes-cadvisor job's
     # label shape — grouped by pod (`name` is the runtime hash there). Same pure logic,
     # same thresholds; complements k8s_workloads' crashloop paging with OOM + sustained-
     # throttle depth the retirement dropped.
-    ("restarts", _env("KUMA_PUSH_RESTARTS", ""), check_restarts),
-    ("oom", _env("KUMA_PUSH_OOM", ""), check_oom),
-    ("cpu", _env("KUMA_PUSH_CPU", ""), check_cpu_throttle),
-    ("targets", _env("KUMA_PUSH_TARGETS", ""), check_targets_down),
-    ("traefik5xx", _env("KUMA_PUSH_TRAEFIK", ""), check_traefik_5xx),
-    (
+    Check("restarts", _env("KUMA_PUSH_RESTARTS", ""), check_restarts),
+    Check("oom", _env("KUMA_PUSH_OOM", ""), check_oom),
+    Check("cpu", _env("KUMA_PUSH_CPU", ""), check_cpu_throttle),
+    Check("targets", _env("KUMA_PUSH_TARGETS", ""), check_targets_down),
+    Check("traefik5xx", _env("KUMA_PUSH_TRAEFIK", ""), check_traefik_5xx),
+    Check(
         "traefik_latency",
         _env("KUMA_PUSH_TRAEFIK_LATENCY", ""),
         check_traefik_latency,
     ),
-    ("n8n", _env("KUMA_PUSH_N8N", ""), check_n8n),
-    ("arr_queue", _env("KUMA_PUSH_ARR_QUEUE", ""), check_arr_queue),
-    ("bazarr", _env("KUMA_PUSH_BAZARR", ""), check_bazarr),
-    (
+    Check("n8n", _env("KUMA_PUSH_N8N", ""), check_n8n),
+    Check("arr_queue", _env("KUMA_PUSH_ARR_QUEUE", ""), check_arr_queue),
+    Check("bazarr", _env("KUMA_PUSH_BAZARR", ""), check_bazarr),
+    Check(
         "prowlarr_indexers",
         _env("KUMA_PUSH_PROWLARR_INDEXERS", ""),
         check_prowlarr_indexers,
     ),
-    ("gitops_alive", _env("KUMA_PUSH_GITOPS_ALIVE", ""), check_gitops_alive),
-    ("gitops_status", _env("KUMA_PUSH_GITOPS_STATUS", ""), check_gitops_status),
+    Check("gitops_alive", _env("KUMA_PUSH_GITOPS_ALIVE", ""), check_gitops_alive),
+    Check("gitops_status", _env("KUMA_PUSH_GITOPS_STATUS", ""), check_gitops_status),
     # The staging-gate backfill ratchet's run-recency arm. Same shape and same hostPath as the
     # gitops pair above — it reads the unit's heartbeat out of /var/lib/gitops-deploy. Its
     # sibling `OnFailure=` unit pages when a run FAILS; this pages when runs stop happening.
-    (
+    Check(
         "staging_backfill",
         _env("KUMA_PUSH_STAGING_BACKFILL", ""),
         check_staging_backfill_alive,
@@ -122,34 +154,36 @@ CHECKS = [
     # minted 2026-08-28, which is what let it be registered — test_checks_and_env_secret_push
     # _tokens_agree blocks a check whose KUMA_PUSH_* name has no env-secret entry, correctly:
     # such a check pushes to nowhere forever, present in the code and absent from the world.
-    (
+    Check(
         "etcd_restore_drill",
         _env("KUMA_PUSH_ETCD_DRILL", ""),
         check_etcd_restore_drill,
     ),
-    ("scrutiny", _env("KUMA_PUSH_SCRUTINY", ""), check_scrutiny),
-    ("host_temp", _env("KUMA_PUSH_HOST_TEMP", ""), check_host_temp),
-    ("ups", _env("KUMA_PUSH_UPS", ""), check_ups),
-    ("pi_pressure", _env("KUMA_PUSH_PI", ""), check_pi_pressure),
-    ("ha_heartbeat", _env("KUMA_PUSH_HA", ""), check_ha_heartbeat),
-    ("speedtest", _env("KUMA_PUSH_SPEEDTEST", ""), check_speedtest),
-    ("loki_ingestion", _env("KUMA_PUSH_LOKI", ""), check_loki_ingestion),
-    (
+    Check("scrutiny", _env("KUMA_PUSH_SCRUTINY", ""), check_scrutiny),
+    Check("host_temp", _env("KUMA_PUSH_HOST_TEMP", ""), check_host_temp),
+    Check("ups", _env("KUMA_PUSH_UPS", ""), check_ups),
+    Check("pi_pressure", _env("KUMA_PUSH_PI", ""), check_pi_pressure),
+    Check("ha_heartbeat", _env("KUMA_PUSH_HA", ""), check_ha_heartbeat),
+    Check("speedtest", _env("KUMA_PUSH_SPEEDTEST", ""), check_speedtest),
+    Check("loki_ingestion", _env("KUMA_PUSH_LOKI", ""), check_loki_ingestion),
+    Check(
         "shipper_dropped",
         _env("KUMA_PUSH_SHIPPER_DROPPED", ""),
         check_shipper_dropped,
     ),
-    ("discord", _env("KUMA_PUSH_DISCORD", ""), check_discord),
-    ("r2_usage", _env("KUMA_PUSH_R2_USAGE", ""), check_r2_usage),
-    ("b2_storage", _env("KUMA_PUSH_B2_STORAGE", ""), check_b2_storage),
-    ("k8s_workloads", _env("KUMA_PUSH_K8S_WORKLOADS", ""), check_k8s_workloads),
-    ("cluster_targets", _env("KUMA_PUSH_CLUSTER_TARGETS", ""), check_cluster_targets),
-    (
+    Check("discord", _env("KUMA_PUSH_DISCORD", ""), check_discord),
+    Check("r2_usage", _env("KUMA_PUSH_R2_USAGE", ""), check_r2_usage),
+    Check("b2_storage", _env("KUMA_PUSH_B2_STORAGE", ""), check_b2_storage),
+    Check("k8s_workloads", _env("KUMA_PUSH_K8S_WORKLOADS", ""), check_k8s_workloads),
+    Check(
+        "cluster_targets", _env("KUMA_PUSH_CLUSTER_TARGETS", ""), check_cluster_targets
+    ),
+    Check(
         "longhorn_volumes",
         _env("KUMA_PUSH_LONGHORN_VOLUMES", ""),
         check_longhorn_volumes,
     ),
-    ("pvc_fullness", _env("KUMA_PUSH_PVC", ""), check_pvc_fullness),
+    Check("pvc_fullness", _env("KUMA_PUSH_PVC", ""), check_pvc_fullness),
 ]
 
 # Checks that query Prometheus. A single Prometheus outage would fail every one of them at once
@@ -291,18 +325,10 @@ STARTUP_GRACE = frozenset(
 
 _grace_streaks = {}
 
-# Which checks THIS instance runs. The Phase F twin/remnant split ended with the Docker
-# uninstall (2026-08-14): the cluster deployment is now the ONLY bridge and runs every
-# check (the gitops checks re-pointed at daniel-box's deployer via a hostPath — the pod
-# is pinned there; disk_prune retired with the Docker daemon; pi_peers/renovate_alive
-# became direct pushers at the host flips). The CHECKS_ONLY/CHECKS_SKIP mechanism stays
-# — it is how any future split would be expressed, and the guards below keep it honest.
-# CHECKS_ONLY (comma-separated names) enables exactly that set; CHECKS_SKIP drops
-# names from whatever is otherwise enabled. The four reachability gates participate under
-# the names their monitors push as (prometheus, loki_reachable, b2_reachable,
-# cluster_prometheus). A filter that enables a gated check while disabling its gate would
-# reintroduce the alert storm the gate exists to prevent, so main() refuses to start on one
-# (validate_check_filter) — a crash-looping bridge is loud, a mis-gated one lies quietly.
+# GATE_DEPENDENTS maps each reachability gate to the checks it suppresses when it is down. The
+# CHECKS_ONLY/CHECKS_SKIP filter that names these lives in bridge/config.py, with the account of
+# what the mechanism is for; validate_check_filter below is what refuses a filter that would
+# disable a gate while leaving its dependents enabled.
 GATE_DEPENDENTS = {
     "prometheus": PROM_DEPENDENT,
     "loki_reachable": LOKI_DEPENDENT,
@@ -311,25 +337,30 @@ GATE_DEPENDENTS = {
 }
 
 
-def _name_set(value):
-    return frozenset(n for n in value.replace(" ", "").split(",") if n)
+def check_enabled(
+    name: str,
+    only: frozenset[str] | None = None,
+    skip: frozenset[str] | None = None,
+) -> bool:
+    """Is `name` enabled under the CHECKS_ONLY/CHECKS_SKIP filter?
 
-
-CHECKS_ONLY = _name_set(_env("CHECKS_ONLY", ""))
-CHECKS_SKIP = _name_set(_env("CHECKS_SKIP", ""))
-
-
-def check_enabled(name, only=None, skip=None):
-    only = CHECKS_ONLY if only is None else only
-    skip = CHECKS_SKIP if skip is None else skip
+    Args:
+      name: The check name to test.
+      only: The enable-exactly-this-set filter; None reads cfg.CHECKS_ONLY.
+      skip: The names to drop; None reads cfg.CHECKS_SKIP.
+    """
+    only = cfg.CHECKS_ONLY if only is None else only
+    skip = cfg.CHECKS_SKIP if skip is None else skip
     if only and name not in only:
         return False
     return name not in skip
 
 
-def validate_check_filter(only, skip, checks):
+def validate_check_filter(
+    only: frozenset[str], skip: frozenset[str], checks: list[Check]
+) -> list[str]:
     """Pure: return the list of problems with a CHECKS_ONLY/CHECKS_SKIP configuration."""
-    known = {name for name, _, _ in checks} | set(GATE_DEPENDENTS)
+    known = {c.name for c in checks} | set(GATE_DEPENDENTS)
     problems = ["unknown check name: %s" % n for n in sorted((only | skip) - known)]
     for gate, dependents in sorted(GATE_DEPENDENTS.items()):
         if check_enabled(gate, only, skip):
@@ -343,7 +374,28 @@ def validate_check_filter(only, skip, checks):
     return problems
 
 
-def apply_startup_grace(name, ok, msg, threshold, streaks):
+def expand_gates_for_cli(names: frozenset[str]) -> frozenset[str]:
+    """Union in every gate a `--check`-selected check depends on.
+
+    `--check disk` alone must not trip validate_check_filter's "gate disabled but its dependents
+    are enabled" refusal — the operator named the check they want, not the gate underneath it,
+    and `--check` is a narrowing convenience rather than the strict CHECKS_ONLY env contract.
+    CHECKS_ONLY keeps its existing all-or-nothing behaviour: an operator writing that env var is
+    expected to spell out the gate themselves, same as today.
+
+    Args:
+      names: The check names passed on the command line via `--check`.
+    """
+    gates = set(names)
+    for gate, dependents in GATE_DEPENDENTS.items():
+        if names & dependents:
+            gates.add(gate)
+    return frozenset(gates)
+
+
+def apply_startup_grace(
+    name: str, ok: bool, msg: str, threshold: float, streaks: dict[str, int]
+) -> tuple[bool, str]:
     """Pure: hold a reach-out check `up` through the first `threshold`-1 consecutive down cycles.
 
     `streaks` is a name->consecutive-down-count dict, mutated in place. An `ok` result resets the
@@ -359,7 +411,7 @@ def apply_startup_grace(name, ok, msg, threshold, streaks):
     return ok, msg
 
 
-def down_exporters(up_vector):
+def down_exporters(up_vector: list[tuple[dict, float]]) -> set[str]:
     """Pure: which EXPORTER_DEPENDENT jobs report up==0 in a Prometheus `up` vector.
 
     Fed prom_vector("up") — [(labels, value), ...]. Returns the subset of EXPORTER_DEPENDENT keys
@@ -369,34 +421,48 @@ def down_exporters(up_vector):
     return {job for job in EXPORTER_DEPENDENT if job in down_jobs}
 
 
-def _evaluate(name, fn):
+def _evaluate(name: str, fn: Callable[[], tuple[bool, str]]) -> CheckResult:
     """Runs one check, converting an unreachable source/metric into a descriptive `down`.
 
     Keeps the loop alive instead of letting an unreachable source or metric raise and
-    kill it. Returns (ok, msg).
+    kill it.
     """
     try:
-        return fn()
+        return CheckResult(*fn())
     except Exception as e:  # an unreachable source/metric must not kill the loop
-        return False, "%s check error: %s" % (name, e)
+        return CheckResult(False, "%s check error: %s" % (name, e))
 
 
-def _gate(name, fn, push_env):
-    """Evaluate one reachability gate: verdict, log line, heartbeat push. Returns (ok, msg).
+def _gate(
+    name: str,
+    fn: Callable[[], tuple[bool, str]],
+    push_env: str,
+    dry_run: bool = False,
+    only: frozenset[str] | None = None,
+) -> CheckResult:
+    """Evaluate one reachability gate: verdict, log line, heartbeat push.
 
     A gate differs from an ordinary check only in what its verdict is used for — the CHECKS
     loop in run_once() reads it to suppress that gate's dependents, so a single outage pages
     once instead of storming. A disabled gate returns `True` so the filter suppresses nothing.
+
+    Args:
+      name: The gate's own check name, as CHECKS_ONLY/CHECKS_SKIP and GATE_DEPENDENTS spell it.
+      fn: The gate's check body.
+      push_env: The env var holding this gate's Kuma push token.
+      dry_run: Evaluate and log, but push nothing to Kuma.
+      only: The enable-exactly-this-set filter; None reads cfg.CHECKS_ONLY.
     """
-    if not check_enabled(name):
-        return True, "disabled by check filter"
+    if not check_enabled(name, only):
+        return CheckResult(True, "disabled by check filter")
     ok, msg = _evaluate(name, fn)
     bridge.common.log("OK  " if ok else "DOWN", name, "-", msg)
-    bridge.net.push(_env(push_env, ""), ok, msg)
-    return ok, msg
+    if not dry_run:
+        bridge.net.push(_env(push_env, ""), ok, msg)
+    return CheckResult(ok, msg)
 
 
-def run_once():
+def run_once(dry_run: bool = False, only: frozenset[str] | None = None) -> None:
     """Runs one full check cycle: the reachability gates, then every enabled check.
 
     Evaluates the Prometheus, Loki, B2 and cluster-Prometheus gates first, so a single
@@ -404,20 +470,30 @@ def run_once():
     message) instead of paging each of them separately. Every enabled check in CHECKS is
     then evaluated (unless suppressed by a gate or an exporter outage) and its result is
     logged and pushed to its Kuma monitor.
+
+    Args:
+      dry_run: Evaluate and log every check, but push nothing to Kuma. Defaults to False, so
+        the pod's own `python /app/check.py` and every existing caller are unchanged.
+      only: The enable-exactly-this-set filter `--check` builds. None reads cfg.CHECKS_ONLY,
+        which is what the pod runs with, so it must be threaded to EVERY check_enabled call
+        below — a filter validated in main() and not passed here would print an enabled count
+        it does not honour.
     """
     # Prometheus reachability is evaluated FIRST and gates the prom-dependent checks: a single
     # Prometheus outage would otherwise page all of them at once (one root cause, an alert storm).
     # When it's down they're suppressed (pushed `up` with a skip msg, keeping each push monitor's
     # heartbeat alive) so only the Prometheus monitor pages; a real per-metric problem still alerts
     # whenever Prometheus is up.
-    prom_ok, prom_msg = _gate("prometheus", check_prometheus, "KUMA_PUSH_PROMETHEUS")
+    prom_ok, prom_msg = _gate(
+        "prometheus", check_prometheus, "KUMA_PUSH_PROMETHEUS", dry_run, only
+    )
 
     # Exporter-reachability gate (one level below the Prometheus gate): when Prometheus is up, probe
     # `up` once and suppress each dead exporter's dependents so a node-exporter/cadvisor death is one
     # page (Scrape Targets), not a 3-monitor false-page storm / silent-green split. A failure to
     # DETERMINE exporter health leaves `suppressed` empty (fail toward alerting, never masking).
     suppressed = set()
-    if prom_ok and check_enabled("prometheus"):
+    if prom_ok and check_enabled("prometheus", only):
         try:
             for job in down_exporters(
                 bridge.net.prom_vector("up%s" % bridge.net.origin_sel())
@@ -429,7 +505,11 @@ def run_once():
     # Loki-reachability gate (peer of the Prometheus gate): probe Loki once so a single Loki outage
     # is one page (Loki Reachable), not a storm across every Loki-querying check (LOKI_DEPENDENT).
     loki_ok, _loki_msg = _gate(
-        "loki_reachable", check_loki_reachable, "KUMA_PUSH_LOKI_REACHABLE"
+        "loki_reachable",
+        check_loki_reachable,
+        "KUMA_PUSH_LOKI_REACHABLE",
+        dry_run,
+        only,
     )
 
     # B2-reachability gate (peer of the two above): B2 caps TRANSACTIONS separately from storage
@@ -439,7 +519,9 @@ def run_once():
     # needs B2. The probe is throttled inside b2_reachable (it must not spend the transaction
     # budget it is watching), but the cached verdict is pushed every cycle so this monitor's own
     # heartbeat stays alive.
-    b2_ok, _b2_msg = _gate("b2_reachable", check_b2_reachable, "KUMA_PUSH_B2_REACHABLE")
+    b2_ok, _b2_msg = _gate(
+        "b2_reachable", check_b2_reachable, "KUMA_PUSH_B2_REACHABLE", dry_run, only
+    )
 
     # Cluster-Prometheus gate (peer of the Prometheus gate, for the OTHER instance): the cluster
     # checks read daniel-box's Prometheus over the cluster ingress, a path none of the other gates
@@ -456,12 +538,12 @@ def run_once():
     # check_enabled() test and the log/push, which is exactly the span _gate() owns. Threading a
     # precomputed verdict through would add a parameter for one caller and hide the reuse.
     cluster_ok, cluster_msg = True, "disabled by check filter"
-    if check_enabled("cluster_prometheus"):
+    if check_enabled("cluster_prometheus", only):
         # The same-instance reuse only holds when the prometheus gate actually probed.
         if (
             cfg.CLUSTER_PROM_URL
             and cfg.CLUSTER_PROM_URL == cfg.PROM_URL
-            and check_enabled("prometheus")
+            and check_enabled("prometheus", only)
         ):
             cluster_ok, cluster_msg = (
                 prom_ok,
@@ -474,12 +556,14 @@ def run_once():
         bridge.common.log(
             "OK  " if cluster_ok else "DOWN", "cluster_prometheus", "-", cluster_msg
         )
-        bridge.net.push(
-            _env("KUMA_PUSH_CLUSTER_PROMETHEUS", ""), cluster_ok, cluster_msg
-        )
+        if not dry_run:
+            bridge.net.push(
+                _env("KUMA_PUSH_CLUSTER_PROMETHEUS", ""), cluster_ok, cluster_msg
+            )
 
-    for name, token, fn in CHECKS:
-        if not check_enabled(name):
+    for entry in CHECKS:
+        name, token, fn = entry.name, entry.token, entry.fn
+        if not check_enabled(name, only):
             continue
         if not prom_ok and name in PROM_DEPENDENT:
             ok, msg = True, "skipped — Prometheus unreachable (see Prometheus monitor)"
@@ -506,34 +590,93 @@ def run_once():
                     name, ok, msg, cfg.GRACE_CYCLES, _grace_streaks
                 )
             bridge.common.log("OK  " if ok else "DOWN", name, "-", msg)
-        bridge.net.push(token, ok, msg)
+        if not dry_run:
+            bridge.net.push(token, ok, msg)
 
 
-def main():
-    """Validates the check filter, then runs the check loop.
+def build_parser() -> argparse.ArgumentParser:
+    """The command line. `python /app/check.py` with no arguments is the pod's invocation."""
+    parser = argparse.ArgumentParser(
+        prog="check.py",
+        description=(
+            "Evaluate the homelab health checks and push each result to its Uptime Kuma "
+            "push monitor. With no arguments this loops forever at INTERVAL seconds, which "
+            "is what the Deployment runs."
+        ),
+    )
+    parser.add_argument(
+        "--once",
+        action="store_true",
+        help="run one cycle and exit, instead of looping at INTERVAL seconds",
+    )
+    parser.add_argument(
+        "--check",
+        action="append",
+        default=[],
+        metavar="NAME",
+        dest="checks",
+        help=(
+            "run only this check; repeatable. Validated like CHECKS_ONLY — a gate whose "
+            "dependents are enabled may not be disabled — but unlike CHECKS_ONLY, the gate "
+            "each named check depends on is unioned in automatically."
+        ),
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="evaluate every check and print the results, but push nothing to Kuma",
+    )
+    return parser
 
-    Exits 2 without running any check if CHECKS_ONLY/CHECKS_SKIP names an unknown check.
-    Otherwise loops run_once() at cfg.INTERVAL seconds, touching the heartbeat file after
-    every cycle, forever unless invoked with --once.
+
+def main(argv: list[str] | None = None) -> int:
+    """Validates the configuration and the check filter, then runs the check loop.
+
+    Returns 2 without running any check if bridge/config.py could not parse an env value, or if
+    CHECKS_ONLY/CHECKS_SKIP names an unknown check or disables a gate whose dependents are still
+    enabled. `--check` is validated the same way, but first has its named checks' gates unioned
+    in (see expand_gates_for_cli) — CHECKS_ONLY keeps the strict env contract, `--check` does
+    not need the gate spelled out alongside the check. Otherwise loops run_once() at
+    cfg.INTERVAL seconds, touching the heartbeat file after every cycle, forever unless --once
+    was given.
+
+    Args:
+      argv: The argument list, without the program name. None reads sys.argv.
+
+    Returns:
+      The process exit code: 0 after a completed --once run, 2 on a configuration fault.
     """
-    once = "--once" in sys.argv
-    problems = validate_check_filter(CHECKS_ONLY, CHECKS_SKIP, CHECKS)
+    args = build_parser().parse_args(argv)
+    # Config parsing never raises at import — a malformed numeric is recorded and reported here,
+    # where the operator gets one clear line per problem instead of a traceback with no context
+    # about which env var was wrong. See bridge/config.py's `_int`/`_num`.
+    if cfg.CONFIG_PROBLEMS:
+        for problem in cfg.CONFIG_PROBLEMS:
+            bridge.common.log("FATAL: bad monitor-bridge config:", problem)
+        return 2
+    only = (
+        expand_gates_for_cli(frozenset(args.checks)) if args.checks else cfg.CHECKS_ONLY
+    )
+    problems = validate_check_filter(only, cfg.CHECKS_SKIP, CHECKS)
     if problems:
         for p in problems:
             bridge.common.log("FATAL: bad CHECKS_ONLY/CHECKS_SKIP:", p)
-        sys.exit(2)
-    enabled = [name for name, _, _ in CHECKS if check_enabled(name)]
+        return 2
+    enabled = [c.name for c in CHECKS if check_enabled(c.name, only, cfg.CHECKS_SKIP)]
     bridge.common.log(
-        "monitor-bridge starting (interval=%ss, once=%s, checks=%d/%d)"
-        % (cfg.INTERVAL, once, len(enabled), len(CHECKS))
+        "monitor-bridge starting (interval=%ss, once=%s, dry_run=%s, checks=%d/%d)"
+        % (cfg.INTERVAL, args.once, args.dry_run, len(enabled), len(CHECKS))
     )
     while True:
-        run_once()
-        bridge.common.touch_heartbeat(cfg.HEARTBEAT_FILE)
-        if once:
-            break
+        run_once(dry_run=args.dry_run, only=only)
+        # A --dry-run hand-run must touch nothing live, including the liveness-probe file — see
+        # build_parser()'s --dry-run help.
+        if not args.dry_run:
+            bridge.common.touch_heartbeat(cfg.HEARTBEAT_FILE)
+        if args.once:
+            return 0
         time.sleep(cfg.INTERVAL)
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

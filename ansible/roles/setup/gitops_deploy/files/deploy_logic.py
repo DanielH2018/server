@@ -64,6 +64,7 @@ from deploy_git import (  # noqa: F401
 from deploy_health import (  # noqa: F401
     _CONTAINER_NAME,
     PENDING_ALERTS_MAX,
+    HealthSample,
     apply_drain_result,
     apply_send_result,
     cap_pending,
@@ -110,6 +111,8 @@ from deploy_staging import (  # noqa: F401
     STAGING_PASS,
     STAGING_REJECTED,
     STAGING_SKIPPED,
+    StagingVerdict,
+    TickOutcome,
     staging_blocks,
     staging_scope,
     staging_tick_outcome,

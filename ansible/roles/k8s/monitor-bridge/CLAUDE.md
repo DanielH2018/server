@@ -921,7 +921,7 @@ landed 2026-09-01, `check.py` from 3,732 lines to ~510).
 
 | module | holds |
 |---|---|
-| `check.py` | `CHECKS`, the `*_DEPENDENT` gate sets, `STARTUP_GRACE`, `check_enabled`, `apply_startup_grace`, `_gate`, `run_once`, `main` |
+| `check.py` | the `Check`/`CheckResult` types and the `CHECKS` registry, the `*_DEPENDENT` gate sets, `STARTUP_GRACE`, `check_enabled`, `apply_startup_grace`, `_gate`, `run_once`, the `argparse` front end and `main(argv) -> int` |
 | `checks/service.py` | `check_n8n` with `_n8n_streaks`, `check_arr_queue`, `check_bazarr` with `bazarr_problems`, `check_prowlarr_indexers`, the gitops pair with `gitops_status` and `_parse_behind`, `check_etcd_restore_drill`, `check_ha_heartbeat` with `with_ha_ban` |
 | `checks/notify.py` | `check_discord` with `_discord_webhooks`, `email_backstop` with `_smtp_login_ok` and `_email_probe` |
 | `checks/logs.py` | `check_loki_ingestion`, `check_shipper_dropped`, `check_loki_reachable`, `with_log_errors` (the Loki arm `check_k8s_workloads` folds in) |
@@ -930,19 +930,31 @@ landed 2026-09-01, `check.py` from 3,732 lines to ~510).
 | `checks/b2.py` | the `b2_*` family with `check_b2_reachable` (the `B2_DEPENDENT` gate) and `check_b2_storage`, and the probe caches `_b2_probe` / `_b2_storage` |
 | `checks/r2.py` | the `r2_*` family with `check_r2_usage`, `R2_QUERY`, and `_r2_probe` |
 | `checks/storage.py` | `check_longhorn_volumes`, `check_pvc_fullness` — the cluster storage layer |
-| `bridge/config.py` | every `_env(...)` constant — thresholds, URLs, credentials, windows — with the commentary that justifies each value. Read as `cfg.X`, never from-imported |
+| `bridge/config.py` | every `_env(...)` constant — thresholds, URLs, credentials, windows, and the `CHECKS_ONLY`/`CHECKS_SKIP` filter — with the commentary that justifies each value. Read as `cfg.X`, never from-imported. Parses through `_int`/`_num`, which record a malformed value in `CONFIG_PROBLEMS` instead of raising |
 | `bridge/net.py` | `_get_json`, `_post_json`, `prom_scalar`, `prom_vector`, the `loki_*` queries, `push`, and the selector builders (`origin_sel`, `cadvisor_sel`, `host_metric_sel`). Read as `bridge.net.X`; the tests stub the fetch layer here |
 | `bridge/streaks.py` | `_down_streaks` and `down_streak` — the consecutive-down counter four domains share. `conftest.py` clears it here |
 | `bridge/common.py` | `_env`, `sanitize` — the two helpers shared verbatim with autofix-bridge's `autofix.py`, staged into that role's ConfigMap too (see its CLAUDE.md) |
 | `bridge/parsing.py` | duration/timestamp parsing, `endpoint_label`, `describe_fetch_failure` |
 | `verdicts/cluster.py` | `k8s_workloads_verdict`, `extended_resource_verdict`, `ksm_resource_label`, `targets_verdict` |
 | `verdicts/host.py` | `ups_health`, the `scrutiny_*` family, `pi_pressure` |
-| `verdicts/service.py` | n8n streaks, `queue_warnings`, `indexers_down`, `gitops_alive`, the HA/Loki/Discord verdicts |
+| `verdicts/service.py` | n8n streaks, `queue_warnings`, `indexers_down`, `gitops_alive`, the HA verdicts |
+| `verdicts/storage.py` | the B2 and R2 decisions (`b2_storage_verdict`, `r2_usage_verdict`, `r2_classify_operations` with the Class A/B/free ACTION LISTS beside it) and the cluster storage ones (`longhorn_redundancy_verdict`, `pvc_fullness_verdict`) |
+| `verdicts/logs.py` | `loki_ingestion_fresh`, `shipper_dropped` |
+| `verdicts/notify.py` | `discord_webhook_ok` |
 
 `gitops_status` is the one verdict that lives in a `checks_*` module rather than in
 `verdicts/service.py`, because it reads `cfg.GITOPS_BEHIND_MAX_S` itself; `gitops_alive` takes
 its threshold as an argument. Its private helper `_parse_behind` sits beside it, so the only
 caller and the helper stay together.
+
+**A `verdicts/` module reads no `cfg`, and takes every threshold as an argument.** The check
+body resolves `cfg.X` at the call site — `ups_health(charge, runtime, replace,
+cfg.UPS_CHARGE_MIN_PCT, cfg.UPS_RUNTIME_MIN_S)` is the shape. The R2 action-class frozensets in
+`verdicts/storage.py` are the one exception, and they are policy rather than configuration:
+Cloudflare's pricing page decides which operations bill as Class A, no env var names them, and
+`r2_classify_operations` is their only reader. `K8S_EXTENDED_RESOURCES` and `PVC_EXCLUDE` stay in
+`bridge/config.py` for the inverse reason — both read an env var, and `PVC_EXCLUDE` is rendered
+in `templates/env-secret.yaml.j2`.
 
 **A test patches the module that READS the name, and a module reads a patched name qualified.**
 A function reads its globals from the module it is DEFINED in. So a test that stubs a threshold
@@ -1002,7 +1014,11 @@ failure. pytest cannot catch that: it imports from `files/` on disk and never re
   bare `uv run pytest`.
 - Smoke test one pass:
   `sudo k3s kubectl -n homelab exec deploy/monitor-bridge -- python /app/check.py --once`
-  (the readonly SA plain `kubectl` uses holds no exec verb)
+  (the readonly SA plain `kubectl` uses holds no exec verb). Add `--dry-run` to evaluate and
+  print every check while pushing nothing, so a hand-run cycle cannot overwrite a live monitor's
+  state; `--check <name>` (repeatable) narrows it to one check, validated exactly like
+  `CHECKS_ONLY` — including the refusal to enable a gated check without its gate. The
+  Deployment's own command is `python /app/check.py` with no arguments, which is unchanged.
 - Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "monitor-bridge"`
 
 ## Traps
@@ -1051,14 +1067,19 @@ cycle is not evidence. `LOKI_STREAM_LABELS` +
 `test_loki_selectors_use_real_stream_labels` in `test_check_loki.py` now pin the vocabulary
 for all three Loki selectors.
 
-### The bracketed log timestamps are Central time, not UTC
-Log lines like `[2026-08-16T07:26:57] DOWN b2_reachable ...` carry the container's local
-America/Chicago wall clock from the `TZ` env, while `kubectl logs --timestamps` prepends the
-true UTC ingestion time. Verified 2026-08-16: bracketed `07:26:57` paired with kubectl's
-`12:26:57Z`. Reading the brackets as UTC shifted a B2 cap-breach 5h early and pointed the
-investigation at the wrong window — a "03:09 breach" that was really 08:09 UTC, minutes after
-the 07:30 weekly reboot.
+### The runtime stamps the log lines; `bridge.common.log` does not
+`bridge.common.log` prints the bare message — `DOWN b2_reachable ...` — and the container
+runtime supplies the time. Pass `--timestamps` to `kubectl logs` when building a timeline, and
+read that prefix as UTC.
 
-When building a timeline from monitor-bridge, or from any homelab container that sets
-`TZ=America/Chicago`, pass `--timestamps` to `kubectl logs` and trust the prefix over the
-app's own stamp. Cross-check one line against `date -u` before anchoring an incident timeline.
+It used to print its own bracketed stamp, and that stamp was the trap. `time.strftime` with no
+offset rendered the container's local America/Chicago wall clock while looking like an ISO
+instant. Verified 2026-08-16: bracketed `07:26:57` paired with kubectl's `12:26:57Z`. Reading
+the brackets as UTC shifted a B2 cap-breach 5h early and pointed the investigation at the wrong
+window — a "03:09 breach" that was really 08:09 UTC, minutes after the 07:30 weekly reboot. The
+stamp was dropped rather than made offset-aware, because the runtime's is already there and two
+stamps that disagree is the whole fault.
+
+**A log line archived before this change still carries the bracket, and it is still Central.**
+Any homelab container that sets `TZ=America/Chicago` and stamps its own lines has the same
+problem; cross-check one line against `date -u` before anchoring an incident timeline on it.

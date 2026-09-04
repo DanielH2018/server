@@ -185,7 +185,7 @@ def k8s_role_paths(listing: str) -> dict[str, str | None]:
     FOURTH segment — this indexing shipped an off-by-one once already.
 
     Pure string parsing, callable on its own so it's unit-testable without git; the I/O caller
-    is gitops_deploy.k8s_declarations_at.
+    is deploy_io.k8s_declarations_at.
     """
     roles: dict[str, str | None] = {}
     for path in listing.splitlines():
