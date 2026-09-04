@@ -75,3 +75,32 @@ def test_the_syslog_tag_is_the_one_the_board_expects(monkeypatch):
     seen = _capture(monkeypatch)
     tools.syslog("event=landing pr=1")
     assert seen["argv"][:3] == ["logger", "-t", "landing-annotation"]
+
+
+def _fake_fuser_then_ps(monkeypatch, fuser_stdout: str, ps_stdout: str = ""):
+    calls = []
+
+    def run(argv, **kw):
+        calls.append(argv)
+        if argv[0] == "fuser":
+            return subprocess.CompletedProcess(argv, 0, fuser_stdout, "")
+        return subprocess.CompletedProcess(argv, 0, ps_stdout, "")
+
+    monkeypatch.setattr(tools.subprocess, "run", run)
+    return calls
+
+
+def test_lock_holder_names_the_pid_alongside_etimes_and_command(monkeypatch):
+    """bash's printed `lock held by pid $pid (etimes, command): ...` line named the pid
+    separately from the etimes+command ps read; this single string is the only value
+    callers get, so the pid must be folded in here rather than dropped (#1085 item 3)."""
+    _fake_fuser_then_ps(monkeypatch, "12345", "42 ansible-playbook --tags sonarr")
+    assert (
+        tools.lock_holder()
+        == "pid 12345 (etimes, command): 42 ansible-playbook --tags sonarr"
+    )
+
+
+def test_lock_holder_is_empty_when_nobody_holds_the_lock(monkeypatch):
+    _fake_fuser_then_ps(monkeypatch, "")
+    assert tools.lock_holder() == ""

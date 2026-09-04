@@ -10,11 +10,31 @@ master CI.
 from __future__ import annotations
 
 import sys as _sys
+from collections.abc import Callable
 from pathlib import Path as _Path
+from typing import Any
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.land_lib.landing import Landing
-from deploy_tools.land_lib.outcome import say
+from deploy_tools.land_lib.outcome import Outcome, say
+
+
+def _classified(
+    ln: Landing, label: str, fn: Callable[..., Any], *args: Any, **kwargs: Any
+) -> Any:
+    """Run one classification helper bash ran as a subprocess, guarded the way it was.
+
+    bash: `X=$(... land_tags.py ...) || die "<label> failed" 1`. In-process, an unhandled
+    exception (a `yaml.YAMLError` reading `host_vars`, say) would otherwise surface as a
+    bare traceback instead of `land: <label> failed`. `Outcome` is let through unfiltered:
+    a helper that calls `ln.die` itself must not be relabelled as a classification failure.
+    """
+    try:
+        return fn(*args, **kwargs)
+    except Outcome:
+        raise
+    except Exception:
+        ln.die(f"{label} failed", 1)
 
 
 def resolve(ln: Landing) -> None:
@@ -63,17 +83,28 @@ def classify(ln: Landing) -> None:
     view = ln.view("files,changedFiles")
     paths = [f["path"] for f in view.get("files", [])]
     quiet = t.quiet_paths(paths, pr_range(ln))
-    ln.plane = t.plane_note(paths, quiet=quiet)
-    ln.self_applied = t.self_applied(paths, quiet=quiet)
+    ln.plane = _classified(ln, "plane classification", t.plane_note, paths, quiet=quiet)
+    ln.self_applied = _classified(
+        ln, "self-applied classification", t.self_applied, paths, quiet=quiet
+    )
     # What a self-applied setup role still needs beyond the host the tick runs on.
     # initial_setup.yml applies to ONE target per run, so a role with no `when:` gate reaches
     # every host the playbook is ever run on, and the tick converging here says nothing about
     # the others (issue #1009, PR #1002: two hosts kept the old kuma-push-lib.sh for three
     # days behind a `settled` verdict).
-    ln.remaining_setup = t.remaining_setup_hosts(paths, t.hostname(), quiet=quiet)
+    ln.remaining_setup = _classified(
+        ln,
+        "remaining-setup-hosts classification",
+        t.remaining_setup_hosts,
+        paths,
+        t.hostname(),
+        quiet=quiet,
+    )
     # -1 rather than 0: `gh` omitting the field must not read as agreement with an empty
     # file list, which would silently license a zero-tag deploy.
-    tags, source = t.derive(paths, view.get("changedFiles", -1))
+    tags, source = _classified(
+        ln, "tag derivation", t.derive, paths, view.get("changedFiles", -1)
+    )
     ln.tags = ",".join(tags)
     if source == "fallback":
         if not ln.opts.since:

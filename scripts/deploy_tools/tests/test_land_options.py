@@ -65,3 +65,17 @@ def test_help_prints_the_description(capsys):
         options.parse_args(["--help"], "Verdicts printed on stdout: settled")
     assert exc.value.code == 0
     assert "Verdicts printed on stdout" in capsys.readouterr().out
+
+
+def test_an_abbreviated_flag_is_rejected_rather_than_silently_resolved():
+    """bash's `case` rejected any flag it didn't name outright: `--su x` was `land: unknown
+    argument '--su'`. argparse's default abbreviation matching would instead silently
+    resolve `--su` to `--subject` and `--sin` to `--since` (#1085 item 1)."""
+    with pytest.raises(SystemExit) as exc:
+        options.parse_args(["--pr", "7", "--su", "text"], "d")
+    assert exc.value.code == 2
+
+
+def test_the_full_flag_still_works():
+    """The reject half above only proves something; this proves it isn't everything."""
+    assert options.parse_args(["--pr", "7", "--subject", "text"], "d").subject == "text"

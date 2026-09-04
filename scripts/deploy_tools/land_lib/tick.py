@@ -25,6 +25,13 @@ def run_tick(ln: Landing) -> None:
     for attempt in range(1, o.lock_retries + 1):
         # Sampled BEFORE the attempt: read afterwards, the holder has usually released and
         # the landing books an empty one (issue #1031).
+        # DECIDED: this samples on every attempt, including an uncontended first one, where
+        # bash's `note_lock_contention` only ran fuser+ps after an attempt had already lost
+        # the lock. That is a real parity delta (#1085 item 4) and it stays: reverting to
+        # bash's post-failure sample reintroduces the #1031 race this pre-sample exists to
+        # close, and `test_the_lock_holder_is_sampled_before_the_attempt`
+        # (tests/test_land_tick.py) plus its deploy.py sibling would go red on the revert.
+        # The cost is two short-lived processes per attempt against a 10-15 minute landing.
         holder = t.lock_holder()
         started = t.clock()
         rc = t.tick()

@@ -121,6 +121,10 @@ def deploy_with_lock_retry(ln: Landing) -> int:
         # precedes the WHOLE per-host loop, so contention arising at a later host can name
         # the holder seen before the first one; `holder or tools.lock_holder()` covers the
         # case where that sample was empty.
+        # DECIDED: see tick.py's run_tick for why this samples every attempt rather than
+        # only a losing one (#1085 item 4) -- same #1031 race, same tradeoff, same tests
+        # (test_the_lock_holder_is_sampled_before_the_deploy_attempt in
+        # tests/test_land_deploy.py).
         holder = t.lock_holder()
         started = t.clock()
         rc = deploy_by_host(ln)
@@ -210,6 +214,13 @@ def deploy_phase(ln: Landing) -> None:
             waited = t.clock() - started
             ln.ledger.t_ci = (ln.ledger.t_ci or 0.0) + waited
             ln.ledger.t_tick = (ln.ledger.t_tick or 0.0) + waited
+        # DECIDED: a failing retick here ENDS the landing (deploy-failed, cause=tick-failed)
+        # rather than carrying on to deploy_by_host the way bash's stale-retry loop did --
+        # bash discarded the tick's own exit code and kept going regardless. Deliberate per
+        # tick.py's module docstring and #1013: this shares tick.py's one retry
+        # implementation with step 4 rather than land.sh's un-retried, un-accounted copy, and
+        # that implementation's failure mode is to raise. Listed as #1085 item 8 so it is not
+        # re-derived as a parity bug.
         tick.run_tick(ln)
         rc = deploy_by_host(ln)
     deploy_outcome(ln, rc)
