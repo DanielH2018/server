@@ -5,6 +5,7 @@ tags a `.sh.j2` as {jinja, text}, never `shell`).
 
 import re
 import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -12,27 +13,38 @@ from validate import shell_templates as v
 from lib.render_guard import ALL_VARS, BASE_CONTEXT, load_yaml
 
 BACKUP_HEALTH = v.ROLES / "setup" / "k3s" / "templates" / "longhorn-backup-health.sh.j2"
+BACKUP_HEALTH_READER = (
+    v.ANSIBLE / "roles" / "setup" / "k3s" / "files" / "longhorn_backup_health.py"
+)
+KUMA_PUSH_LIB = (
+    v.ANSIBLE / "roles" / "setup" / "initial_setup" / "files" / "kuma-push-lib.sh"
+)
 
 
 @pytest.mark.parametrize(
-    ("b2_armed", "r2_armed", "expect_armed", "expect_disarmed"),
+    ("b2_armed", "r2_armed", "expect_backup_armed", "expect_r2_armed"),
     [
-        (True, True, ["default", "r2"], []),
-        (True, False, ["default"], ["r2"]),
-        (False, True, ["r2"], ["default"]),
-        (False, False, [], ["default", "r2"]),
+        (True, True, "True", "True"),
+        (True, False, "True", "False"),
+        (False, True, "False", "True"),
+        (False, False, "False", "False"),
     ],
 )
 def test_backup_health_renders_clean_for_every_arm_state(
-    tmp_path, b2_armed: bool, r2_armed: bool, expect_armed, expect_disarmed
+    tmp_path,
+    b2_armed: bool,
+    r2_armed: bool,
+    expect_backup_armed: str,
+    expect_r2_armed: str,
 ):
     """Both branches of the armed gates must render to valid shell.
 
     main() renders with group_vars only, so the ROLE default `k3s_longhorn_backup_armed: false`
     is never applied there and its branch would go unexercised — the dead-path shape that let two
-    commands stay broken behind passing tests after the k3s cutover. The disarmed branch is the
-    one that matters most: it is what runs whenever B2 is off, and an empty BACKUP_TARGETS array
-    under `set -u` is exactly the kind of thing that only fails at 03:30.
+    commands stay broken behind passing tests after the k3s cutover. Since the shim only exports
+    LONGHORN_BACKUP_ARMED/LONGHORN_R2_ARMED for the Python reader to interpret (BACKUP_TARGETS
+    itself is now derived cluster-side), the disarmed branch that matters is the exported string
+    the reader parses — a wrong render there disarms silently instead of at `set -u`.
     """
     shellcheck_bin = shutil.which("shellcheck")
     assert shellcheck_bin, "shellcheck must be on PATH (dev dependency shellcheck-py)"
@@ -51,17 +63,13 @@ def test_backup_health_renders_clean_for_every_arm_state(
     assert v.bash_syntax_check(out) is None
     assert v.shellcheck_check(out, shellcheck_bin) is None
 
-    def targets(prefix: str) -> list[str]:
-        line = next(ln for ln in rendered.splitlines() if ln.startswith(prefix))
-        return line[len(prefix) : -1].split()
-
-    assert targets("BACKUP_TARGETS=(") == expect_armed
-    assert targets("DISARMED_TARGETS=(") == expect_disarmed
+    assert f'export LONGHORN_BACKUP_ARMED="{expect_backup_armed}"' in rendered
+    assert f'export LONGHORN_R2_ARMED="{expect_r2_armed}"' in rendered
 
 
 def test_backup_health_arm_gates_treat_the_string_false_as_disarmed():
     # Ansible's `-e k3s_longhorn_backup_armed=false` passes the STRING "false", which is truthy in
-    # Jinja. Without `| bool` an extra-vars disarm would leave `default` in the armed set and
+    # Jinja. Without `| bool` an extra-vars disarm would render LONGHORN_BACKUP_ARMED="true" and
     # silently restore the permanently-red monitor this gate exists to prevent.
     ctx = {
         **BASE_CONTEXT,
@@ -71,8 +79,21 @@ def test_backup_health_arm_gates_treat_the_string_false_as_disarmed():
         "k3s_longhorn_r2_armed": "false",
     }
     rendered = v.render_template(BACKUP_HEALTH, ctx)
-    assert "BACKUP_TARGETS=()" in rendered
-    assert "DISARMED_TARGETS=(default r2)" in rendered
+    assert 'export LONGHORN_BACKUP_ARMED="False"' in rendered
+    assert 'export LONGHORN_R2_ARMED="False"' in rendered
+
+
+def test_backup_health_logs_unconditionally_even_when_the_reader_itself_breaks():
+    """The reader logs its own verdict on a normal run — but on THIS branch it never got that far.
+
+    Without a `logger` call inside the `if ! OUT=$(...)` branch, the one failure mode where the
+    local journalctl trail matters most (the Python reader crashing, or `uv` itself missing) is
+    the one case that leaves no record at all.
+    """
+    ctx = {**BASE_CONTEXT, **load_yaml(ALL_VARS), **v.SHELL_STUB_OVERRIDES}
+    rendered = v.render_template(BACKUP_HEALTH, ctx)
+    reader_failed_branch = rendered.split("if [[ $RC -ne 0", 1)[1].split("else", 1)[0]
+    assert "logger -t longhorn-backup-health" in reader_failed_branch
 
 
 @pytest.mark.parametrize(
@@ -697,3 +718,100 @@ def test_the_real_tree_has_no_kubeconfig_violation():
         if err:
             offenders.append(tpl.name)
     assert offenders == [], offenders
+
+
+def test_backup_health_shim_exports_every_env_var_the_reader_requires():
+    """LONGHORN_* names are derived from the reader's OWN source, not hardcoded here.
+
+    Every LONGHORN_* var the reader reads is REQUIRED — `_require_env`/`_require_int_env`/
+    `_require_bool_env`, no hardcoded fallback (the 2026-09-04 review's finding #3: a fallback
+    used to let a shim that stopped exporting one var substitute a stale constant silently). The
+    two sides must therefore agree exactly: this derives the required set straight from
+    longhorn_backup_health.py's source so a var added to one side without the other is caught
+    here, rather than by the reader exiting nonzero in production naming the var nobody remembered
+    to export.
+    """
+    reader_source = BACKUP_HEALTH_READER.read_text()
+    required = set(
+        re.findall(r'_require_\w*env\("(LONGHORN_[A-Z0-9_]+)"\)', reader_source)
+    )
+    assert len(required) >= 10, (
+        f"the derivation found suspiciously few required vars: {required} — "
+        "did _require_env's call shape change?"
+    )
+
+    ctx = {**BASE_CONTEXT, **load_yaml(ALL_VARS), **v.SHELL_STUB_OVERRIDES}
+    rendered = v.render_template(BACKUP_HEALTH, ctx)
+    exported = set(
+        re.findall(r"^export (LONGHORN_[A-Z0-9_]+)=", rendered, re.MULTILINE)
+    )
+
+    missing = required - exported
+    assert not missing, f"the shim does not export: {sorted(missing)}"
+
+
+def test_backup_health_kubectl_stderr_does_not_contaminate_the_status(tmp_path):
+    """Regression for the 2026-09-04 review's finding #1, run against the ACTUAL shipped shim.
+
+    Until this fix, `OUT=$(... 2>&1)` meant any stderr byte the reader's own `logger` subprocess
+    wrote — `logger: socket /dev/log: ...`, e.g. — landed ahead of the reader's real stdout line
+    once the two streams were merged, silently turning `up` into garbage that Kuma reads as DOWN
+    and pings healthchecks.io `/fail` on a backup plane that was fine. This renders the real
+    template, patches in a fake reader that writes junk to stderr before printing `up<TAB>ok`,
+    and a `kuma_push` stub that records the status it actually receives — proving the fix at the
+    point that matters (what reaches Kuma) rather than just that the fix's source text exists.
+    """
+    ctx = {**BASE_CONTEXT, **load_yaml(ALL_VARS), **v.SHELL_STUB_OVERRIDES}
+    rendered = v.render_template(BACKUP_HEALTH, ctx)
+
+    fake_reader = tmp_path / "fake-reader.sh"
+    fake_reader.write_text(
+        "#!/usr/bin/env bash\n"
+        "printf 'logger: socket /dev/log: No such file or directory\\n' >&2\n"
+        "printf 'up\\tbackup target(s) default available, 1 backed-up volume(s) covered\\n'\n"
+    )
+    fake_reader.chmod(0o755)
+
+    push_token_env = tmp_path / "kuma-push.env"
+    push_token_env.write_text("LONGHORN_BACKUP_PUSH_TOKEN='test-token'\n")
+    kuma_push_call = tmp_path / "kuma-push-call.txt"
+
+    script = rendered
+    script = script.replace(
+        "source /usr/local/lib/kuma-push-lib.sh ||", f"source {KUMA_PUSH_LIB} ||"
+    )
+    script = script.replace("/etc/rancher/k3s/kuma-push.env", str(push_token_env))
+    reader_invocation = re.search(
+        r"/usr/local/bin/uv run --no-project --no-python-downloads --python \S+ "
+        r"/opt/longhorn-backup-health/longhorn_backup_health\.py",
+        script,
+    )
+    assert reader_invocation, "the reader invocation line moved; update this test"
+    script = script.replace(reader_invocation.group(0), str(fake_reader))
+    # boot_grace_active/kuma_push are shell FUNCTIONS bash resolves at call time, so defining our
+    # own here — after the real `source` above, before either is actually called further down —
+    # shadows the sourced versions for the rest of this run without needing to fake the library.
+    script = script.replace(
+        "if boot_grace_active ",
+        f"boot_grace_active() {{ return 1; }}\n"
+        # KUMA_PUSH_OK is set by the real kuma_push and read further down by the healthchecks
+        # block (`(( KUMA_PUSH_OK ))` under `set -u`) — the stub must set it too or that read is
+        # an unbound-variable error, not a skipped block.
+        f'kuma_push() {{ printf "%s" "$1" > {kuma_push_call}; KUMA_PUSH_OK=1; }}\n'
+        "if boot_grace_active ",
+        1,
+    )
+
+    script_path = tmp_path / "longhorn-backup-health.sh"
+    script_path.write_text(script)
+    script_path.chmod(0o755)
+
+    proc = subprocess.run(
+        ["bash", str(script_path)], capture_output=True, text=True, timeout=30
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert kuma_push_call.exists(), "kuma_push was never called"
+    assert kuma_push_call.read_text() == "up", (
+        f"stderr contamination reached STATUS: got {kuma_push_call.read_text()!r}, "
+        f"stdout={proc.stdout!r} stderr={proc.stderr!r}"
+    )

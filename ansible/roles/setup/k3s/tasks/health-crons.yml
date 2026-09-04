@@ -96,16 +96,6 @@
 #
 # The per-script notes that used to sit in this loop now live beside that list in
 # roles/setup/k3s/defaults/main.yml, next to the paths they describe.
-- name: Deploy the backup-health scripts as a versioned release
-  tags: [backup-health]
-  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/release_bin.yml"
-  vars:
-    release_bin_group: k3s-backup-health
-    release_bin_templates: >-
-      {{ (k3s_render_stamp_groups | selectattr('name', 'eq', 'k3s-backup-health')
-          | first).templates }}
-
-# The classifiers behind longhorn-reap-orphan-backups.sh.j2 and its snapshot sibling. Plain
 # `copy`, not release_bin.yml: these are operator-invoked (deliberately unscheduled — see the
 # templates above), not cron targets, so there is no rollback-unit reason to version them
 # alongside the backup-health release, and a fixed /opt path matches configarr-health's shape
@@ -155,6 +145,70 @@
       - live: /opt/longhorn-reap/longhorn_reap_orphan_snapshots.py
         src: ansible/roles/setup/k3s/files/longhorn_reap_orphan_snapshots.py
       - live: /opt/longhorn-reap/host_lib.py
+        src: ansible/roles/setup/common/files/host_lib.py
+
+- name: Install the Longhorn backup health reader
+  tags: [backup-health]
+  # Installed BEFORE the shim below, deliberately: the shim's every-10-minutes cron invokes
+  # /opt/longhorn-backup-health/longhorn_backup_health.py by absolute path the moment it lands,
+  # so if the shim's release install ran first, a `*/10` cron firing in the window between the
+  # two tasks would call a reader that doesn't exist yet (first install) — a spurious page,
+  # not a real one (2026-09-04 review finding #5).
+  ansible.builtin.file:
+    path: /opt/longhorn-backup-health
+    state: directory
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0755"
+  become: true
+
+- name: Install the Longhorn backup health reader scripts
+  tags: [backup-health]
+  # Plain `copy:`, not a versioned release like the shell script beside it: these are imported
+  # by absolute sys.path, not invoked as their own /usr/local/bin/<name>, so the release
+  # mechanism's per-name symlink (common_release_names unions template AND file names) would
+  # give host_lib.py a dangling /usr/local/bin/host_lib.py nothing calls. Same shape as
+  # configarr's health reader (roles/k8s/configarr/tasks/main.yml).
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "/opt/longhorn-backup-health/{{ item | basename }}"
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0755"
+  loop:
+    - longhorn_backup_health.py
+    - longhorn_backup_health_logic.py
+    # The kubectl runner this reader and configarr's/janitorr's share. Copied rather than
+    # duplicated for the same reason configarr's copy of it is: the sibling copy is what
+    # `import host_lib` resolves at runtime, and a second edited copy is how two callers
+    # quietly stop agreeing about what a kubectl failure looks like.
+    - "{{ role_path }}/../common/files/host_lib.py"
+  become: true
+
+- name: Deploy the backup-health scripts as a versioned release
+  tags: [backup-health]
+  # Runs AFTER the reader above lands, not before — see that task's comment.
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/release_bin.yml"
+  vars:
+    release_bin_group: k3s-backup-health
+    release_bin_templates: >-
+      {{ (k3s_render_stamp_groups | selectattr('name', 'eq', 'k3s-backup-health')
+          | first).templates }}
+
+- name: Record the deployed Longhorn backup health reader
+  tags: [backup-health]
+  # `copy:`-deployed, like live-drift-check.py and manifest-declares.py, so a stale copy of the
+  # reader is visible to manifest-prune-check's deployed-code arm rather than invisible to it
+  # (2026-08-24 review M-5) — the render-stamp arm above only ever saw the shell shim.
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_deployed.yml"
+  vars:
+    stamp_deployed_name: k3s-longhorn-backup-health-reader
+    stamp_deployed_pairs:
+      - live: /opt/longhorn-backup-health/longhorn_backup_health.py
+        src: ansible/roles/setup/k3s/files/longhorn_backup_health.py
+      - live: /opt/longhorn-backup-health/longhorn_backup_health_logic.py
+        src: ansible/roles/setup/k3s/files/longhorn_backup_health_logic.py
+      - live: /opt/longhorn-backup-health/host_lib.py
         src: ansible/roles/setup/common/files/host_lib.py
 
 - name: Schedule the Longhorn backup-plane heartbeat

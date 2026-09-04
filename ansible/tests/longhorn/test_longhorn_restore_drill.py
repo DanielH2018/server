@@ -30,6 +30,7 @@ Run: uv run pytest ansible/tests/longhorn/test_longhorn_restore_drill.py
 """
 
 import re
+import sys
 from pathlib import Path
 
 from lib import yaml_fast
@@ -39,8 +40,12 @@ from _helpers import load_yaml
 
 K3S = ANSIBLE / "roles" / "setup" / "k3s"
 DRILL = K3S / "templates" / "longhorn-restore-drill.sh.j2"
-HEALTH = K3S / "templates" / "longhorn-backup-health.sh.j2"
 CRONS = K3S / "tasks" / "health-crons.yml"
+
+sys.path.insert(0, str(K3S / "files"))
+import longhorn_backup_health_logic as logic  # noqa: E402
+
+NOW = 1_800_000_000.0  # 2027-01-15T08:00:00Z
 
 
 def _code(path: Path) -> str:
@@ -50,11 +55,6 @@ def _code(path: Path) -> str:
         for line in path.read_text().splitlines()
         if not line.lstrip().startswith("#")
     )
-
-
-def _check_seven() -> str:
-    code = _code(HEALTH)
-    return code[code.index("DRILL_STAMP=") :]
 
 
 def test_drill_resolves_the_backup_instead_of_pinning_one() -> None:
@@ -282,35 +282,81 @@ def test_drill_and_heartbeat_deploy_under_a_shared_tag() -> None:
     )
 
 
+def test_reader_is_installed_before_the_shim_that_invokes_it() -> None:
+    """The shim's cron fires every 10 minutes and calls the reader by absolute path immediately.
+
+    If the shim's release install ran first, a cron tick landing in the window between that task
+    and the reader's `copy:` tasks below would call a reader that does not exist yet on a fresh
+    install — a spurious page, not a real one (2026-09-04 review finding #5).
+    """
+    tasks = _tasks()
+    names = [t.get("name") for t in tasks]
+    reader_scripts_idx = names.index(
+        "Install the Longhorn backup health reader scripts"
+    )
+    shim_release_idx = names.index(
+        "Deploy the backup-health scripts as a versioned release"
+    )
+    assert reader_scripts_idx < shim_release_idx, (
+        "the reader's files must land before the shim that invokes them by absolute path"
+    )
+
+
 def test_check_seven_fails_closed_when_the_drill_never_ran() -> None:
     """The never-run state is the one most in need of reporting. See the module docstring."""
-    block = _check_seven()
-    assert 'if [[ ! -r "$DRILL_STAMP" ]]; then' in block, (
-        "a missing stamp must take the failing branch, not be skipped"
+    problem = logic.check_restore_drill(
+        None, "/var/lib/longhorn-restore-drill/last-success", NOW, 3 * 86400, 3
     )
-    assert re.search(r'add 3 "no restore drill has ever succeeded', block), (
+    assert problem is not None, "a missing stamp must page, not be skipped"
+    assert problem[1].startswith("no restore drill has ever succeeded"), (
         "a never-run drill must page, not read green"
     )
 
 
 def test_check_seven_rejects_an_unparseable_stamp() -> None:
     """A truncated or corrupt stamp is not evidence of a recent restore."""
-    block = _check_seven()
-    assert "=~ ^[0-9]+$" in block, (
+    missing = logic.check_restore_drill(None, "/stamp", NOW, 3 * 86400, 3)
+    garbage = logic.check_restore_drill("not-a-number", "/stamp", NOW, 3 * 86400, 3)
+    stale = logic.check_restore_drill(
+        str(int(NOW - 5 * 86400)), "/stamp", NOW, 3 * 86400, 3
+    )
+    assert garbage is not None, (
         "the stamp contents must be validated before being compared"
     )
-    assert block.count("add 3") >= 3, (
-        "missing, unparseable and stale stamps are three distinct failures and each must page"
+    assert missing is not None and stale is not None
+    assert len({missing[1], garbage[1], stale[1]}) == 3, (
+        "missing, unparseable and stale stamps are three distinct failures and each must page "
+        "with its own message"
     )
+
+
+def test_check_seven_distinguishes_a_missing_stamp_from_an_unreadable_one() -> None:
+    """Regression for the 2026-08-19 incident this module's docstring documents.
+
+    root's umask made a FRESH, successful drill's stamp unreadable by the checker's own user,
+    and folding
+    that into "never ran" paged a lie — permanently, and precisely backwards — since a drill
+    had just succeeded. "Never ran" and "ran, but the checker can't prove it" must stay two
+    different messages.
+    """
+    missing = logic.check_restore_drill(None, "/stamp", NOW, 3 * 86400, 3)
+    unreadable = logic.check_restore_drill(
+        None, "/stamp", NOW, 3 * 86400, 3, stamp_unreadable=True
+    )
+    assert missing is not None and unreadable is not None
+    assert missing[1] != unreadable[1]
+    assert missing[1].startswith("no restore drill has ever succeeded")
+    assert "could not be read" in unreadable[1]
 
 
 def test_check_seven_pages_below_backup_failure_severity() -> None:
     """A stale drill is an assurance gap, not an active backup failure — rank 3, not 2."""
-    block = _check_seven()
-    assert "add 2" not in block, (
-        "rank 2 means 'a backup actively failed'; a stale drill would then outrank a real "
-        "failure in the pushed message, which surfaces only the top-ranked problem"
-    )
+    for content in (None, "garbage", str(int(NOW - 5 * 86400))):
+        problem = logic.check_restore_drill(content, "/stamp", NOW, 3 * 86400, 3)
+        assert problem is not None and problem[0] == 3, (
+            "rank 2 means 'a backup actively failed'; a stale drill would then outrank a real "
+            "failure in the pushed message, which surfaces only the top-ranked problem"
+        )
 
 
 def _tasks():
@@ -411,14 +457,20 @@ def test_cadence_and_staleness_window_move_together() -> None:
 
 def test_check_eight_derives_its_window_from_the_fleet() -> None:
     """A hardcoded coverage window goes stale the moment a volume joins the backup set."""
-    block = _check_seven()
-    assert "CAND_N +" in block and "* 86400" in block, (
-        "the coverage window must be derived from the candidate count, so it tracks a fleet "
-        "that grows"
+    small = logic.check_restore_coverage(
+        ["pvc-1"], {"pvc-1": NOW - 100 * 86400}, {}, NOW, 5
     )
-    assert "$DRILL_CANDIDATES" in block, (
-        "coverage must read the candidate list the drill publishes, not a second definition "
-        "of eligibility free to drift from the one that selects"
+    big = logic.check_restore_coverage(
+        ["pvc-%d" % i for i in range(20)],
+        {"pvc-1": NOW - 100 * 86400},
+        {},
+        NOW,
+        5,
+    )
+    assert small is not None and big is not None
+    assert "6d" in small[1] and "25d" in big[1], (
+        "the coverage window must be derived from the candidate count (cand_n + slack days), "
+        "so it tracks a fleet that grows rather than staying fixed"
     )
 
 
@@ -431,15 +483,17 @@ def test_check_eight_graces_each_candidate_from_when_it_joined() -> None:
     is never older than one cycle and the grace would never expire. Only a write-once join marker
     answers "has this volume had a fair chance".
     """
-    block = _check_seven()
-    assert "DRILL_SEEN" in block, (
-        "coverage must grace each candidate from its own join marker"
-    )
-    assert "NOW_S - SEEN_AT > COVERAGE_MAX_S" in block, (
-        "the grace period must be measured per candidate, from when it joined the rotation"
-    )
-    assert "ROTATION_START" not in block, (
-        "a rotation-wide start date pages for a full cycle on every newly added volume"
+    coverage_days = 2 + 5  # cand_n=2, slack=5
+    seen = {
+        "pvc-old": NOW
+        - (coverage_days + 1) * 86400,  # joined long ago, past its window
+        "pvc-new": NOW - 86400,  # joined yesterday, well within its own window
+    }
+    problem = logic.check_restore_coverage(["pvc-old", "pvc-new"], seen, {}, NOW, 5)
+    assert problem is not None
+    assert "pvc-old" in problem[1] and "pvc-new" not in problem[1], (
+        "the grace period must be measured per candidate, from when IT joined the rotation — "
+        "a rotation-wide start date would page every newly added volume for a full cycle"
     )
     code = _code(DRILL)
     assert '! -e "${SEEN_DIR}/${cand}"' in code, (
@@ -454,8 +508,9 @@ def test_check_eight_names_the_unproven_volumes() -> None:
     That is the failure recorded on 2026-08-15, when a blank backup target made the backup
     plane's only monitor red for 9h with nothing an operator could act on.
     """
-    block = _check_seven()
-    assert "${UNPROVEN}" in block, "the coverage failure must name the volumes"
-    assert "add 3" in block.split("UNPROVEN=")[-1], (
-        "coverage pages below backup-failure severity, like check 7"
-    )
+    coverage_days = 1 + 5
+    seen = {"pvc-1": NOW - (coverage_days + 1) * 86400}
+    problem = logic.check_restore_coverage(["pvc-1"], seen, {}, NOW, 5)
+    assert problem is not None
+    assert "pvc-1" in problem[1], "the coverage failure must name the volumes"
+    assert problem[0] == 3, "coverage pages below backup-failure severity, like check 7"
