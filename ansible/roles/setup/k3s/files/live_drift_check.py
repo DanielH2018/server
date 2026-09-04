@@ -19,7 +19,9 @@ credential for one cron was the alternative and is not worth it.
 Instead each object is compared against its OWN `kubectl.kubernetes.io/last-applied-
 configuration` annotation, which `kubectl apply` writes and which holds the manifest exactly
 as Ansible last applied it. That is a plain `get` — no dry-run, no write verb, nothing the
-read-only SA cannot do. 168 of the 188 objects in scope carry the annotation.
+read-only SA cannot do. Nearly every object in scope carries the annotation; the few that
+don't are named in the push message rather than counted here, since that count moves as
+kinds are added or objects come and go.
 
 WHAT IT COMPARES. Only the keys the applied manifest declares. Everything else on a live
 object is defaults, status and controller bookkeeping, none of which is drift. So a manifest
@@ -68,6 +70,17 @@ KINDS = (
     "configmap",
     "cronjob",
     "ingress",
+    # Routing and policy kinds, added 2026-09-04 (issue #1077) once a live survey (below)
+    # confirmed every instance is client-side applied with the last-applied annotation, same
+    # as the workload kinds above. manifest-prune-check.sh already watches these four for
+    # EXISTENCE (its neighbouring check, same templates dir); this is the first thing that
+    # watches them for a live SPEC change — a hand-widened NetworkPolicy or a patched
+    # Middleware survives silently otherwise, and neither is a "restart the pod" mistake that
+    # a rollout would surface on its own.
+    "ingressroute",
+    "middleware",
+    "tlsoption",
+    "networkpolicy",
 )
 
 LAST_APPLIED = "kubectl.kubernetes.io/last-applied-configuration"
@@ -80,6 +93,16 @@ LAST_APPLIED = "kubectl.kubernetes.io/last-applied-configuration"
 FOREIGN_NAMESPACES = frozenset(
     {"longhorn-system", "kube-system", "kube-public", "kube-node-lease", "default"}
 )
+
+# longhorn-system is foreign for nearly everything living in it, but one object there IS ours:
+# roles/k8s/longhorn-ui/templates/ingressroute.yaml.j2 stages the longhorn-frontend
+# IngressRoute. manifest-prune-check.sh makes the identical carve-out (its EXCLUDED_NS_KINDS
+# excludes longhorn-system:service/deployment/daemonset/networkpolicy but leaves ingressroute
+# checked) — without this, adding "ingressroute" to KINDS above would silently exempt the one
+# ingressroute in that namespace we actually apply.
+NAMESPACE_OWNED_KINDS = {
+    "longhorn-system": frozenset({"ingressroute"}),
+}
 
 # Objects a controller creates inside a namespace we DO manage. Same trigger as above —
 # nothing here applies them — but they need naming individually because the namespace is ours.
@@ -202,6 +225,8 @@ def is_foreign(kind: str, namespace: str, name: str) -> str | None:
         return specific
     if name in CONTROLLER_OBJECTS:
         return f"{name} is created by a controller, not by Ansible"
+    if kind in NAMESPACE_OWNED_KINDS.get(namespace, ()):
+        return None
     if namespace in FOREIGN_NAMESPACES:
         return f"namespace {namespace} is not applied from this repo"
     return None
