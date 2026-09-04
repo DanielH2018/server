@@ -83,7 +83,7 @@ def test_seeds_spread_due_dates_no_single_day_pileup():
 # ── audit ───────────────────────────────────────────────────────────────────
 def _reg(*entries):
     return {
-        "secrets": {
+        "entries": {
             name: {"tier": tier, "last_rotated": lr} for name, tier, lr in entries
         }
     }
@@ -150,9 +150,9 @@ def test_sync_adds_missing_and_preserves_existing():
     added, _stale = sr.sync(reg, ["kept_push_token", "new_push_token"], today)
     assert added == ["new_push_token"]
     assert (
-        reg["secrets"]["kept_push_token"]["last_rotated"] == "2026-05-05"
+        reg["entries"]["kept_push_token"]["last_rotated"] == "2026-05-05"
     )  # untouched
-    assert reg["secrets"]["new_push_token"]["tier"] == "auto"
+    assert reg["entries"]["new_push_token"]["tier"] == "auto"
 
 
 def test_sync_reports_stale_registry_entries():
@@ -233,7 +233,7 @@ def test_every_auto_tier_token_resolves_a_consumer_or_is_known_manual():
     # documents its pusher/label host pair beside the name.
     known_manual = sr.CROSS_HOST_PUSH_TOKENS
     reg = sr.load_registry()
-    auto = [n for n, m in reg["secrets"].items() if m.get("tier") == "auto"]
+    auto = [n for n, m in reg["entries"].items() if m.get("tier") == "auto"]
     assert auto  # sanity: the registry has auto-tier tokens
     unrotatable = [n for n in auto if not sr.consumer_tags(n) and n not in known_manual]
     assert not unrotatable, (
@@ -309,7 +309,7 @@ def test_sync_preserves_a_manual_tier_override():
     # Operator downgraded a push token to ignore — sync must not reclassify it.
     reg = _reg(("special_push_token", "ignore", None))
     sr.sync(reg, ["special_push_token"], today)
-    assert reg["secrets"]["special_push_token"]["tier"] == "ignore"
+    assert reg["entries"]["special_push_token"]["tier"] == "ignore"
 
 
 # The registry is the single plaintext source of names/tiers/dates. A save/load
@@ -320,7 +320,7 @@ def test_sync_preserves_a_manual_tier_override():
 
 def test_registry_round_trips_losslessly(tmp_path):
     reg = {
-        "secrets": {
+        "entries": {
             "b_token": {"tier": "auto", "last_rotated": "2026-06-01"},
             "a_token": {"tier": "assisted", "last_rotated": "2026-05-15"},
         }
@@ -333,7 +333,7 @@ def test_registry_round_trips_losslessly(tmp_path):
 def test_saved_registry_keeps_managed_header_and_sorts_keys(tmp_path):
     path = str(tmp_path / "reg.yml")
     sr.save_registry(
-        {"secrets": {"z_tok": {"tier": "auto"}, "a_tok": {"tier": "auto"}}}, path
+        {"entries": {"z_tok": {"tier": "auto"}, "a_tok": {"tier": "auto"}}}, path
     )
     text = (tmp_path / "reg.yml").read_text()
     assert text.startswith("# Secret rotation registry — MANAGED")
@@ -341,7 +341,7 @@ def test_saved_registry_keeps_managed_header_and_sorts_keys(tmp_path):
 
 
 def test_load_registry_missing_file_returns_empty_skeleton(tmp_path):
-    assert sr.load_registry(str(tmp_path / "does-not-exist.yml")) == {"secrets": {}}
+    assert sr.load_registry(str(tmp_path / "does-not-exist.yml")) == {"entries": {}}
 
 
 # ── rotation dates derived from git ─────────────────────────────────────────
@@ -399,10 +399,10 @@ def test_reordering_does_not_count_as_a_rotation(monkeypatch):
 
 
 def test_advance_moves_a_stale_date_forward():
-    reg = {"secrets": {"tok": {"tier": "assisted", "last_rotated": "2025-08-24"}}}
+    reg = {"entries": {"tok": {"tier": "assisted", "last_rotated": "2025-08-24"}}}
     advanced = sr.advance_last_rotated(reg, {"tok": dt.date(2026, 3, 13)})
     assert advanced == [("tok", "2025-08-24", "2026-03-13")]
-    assert reg["secrets"]["tok"]["last_rotated"] == "2026-03-13"
+    assert reg["entries"]["tok"]["last_rotated"] == "2026-03-13"
 
 
 def test_advance_never_moves_a_date_backward():
@@ -410,15 +410,15 @@ def test_advance_never_moves_a_date_backward():
 
     A registry date newer than git's — a rotation recorded before its commit landed — must survive.
     """
-    reg = {"secrets": {"tok": {"tier": "assisted", "last_rotated": "2026-08-25"}}}
+    reg = {"entries": {"tok": {"tier": "assisted", "last_rotated": "2026-08-25"}}}
     assert sr.advance_last_rotated(reg, {"tok": dt.date(2026, 3, 13)}) == []
-    assert reg["secrets"]["tok"]["last_rotated"] == "2026-08-25"
+    assert reg["entries"]["tok"]["last_rotated"] == "2026-08-25"
 
 
 def test_advance_ignores_secrets_git_has_no_date_for():
-    reg = {"secrets": {"tok": {"tier": "assisted", "last_rotated": "2025-08-24"}}}
+    reg = {"entries": {"tok": {"tier": "assisted", "last_rotated": "2025-08-24"}}}
     assert sr.advance_last_rotated(reg, {}) == []
-    assert reg["secrets"]["tok"]["last_rotated"] == "2025-08-24"
+    assert reg["entries"]["tok"]["last_rotated"] == "2025-08-24"
 
 
 def test_derivation_failure_degrades_to_recorded_dates(monkeypatch):
@@ -446,7 +446,7 @@ _SKIP_TAGS = ("ignore", "pinned", "external")
 
 def _consumer_tags():
     reg = sr.load_registry()
-    for name in reg["secrets"]:
+    for name in reg["entries"]:
         for tag in sr.consumer_tags(name):
             if tag not in _SKIP_TAGS:
                 yield name, tag
@@ -507,7 +507,7 @@ def test_rotate_commit_sends_new_token_on_stdin_not_argv(monkeypatch):
     requires the JSON-quoted form.
     """
     name = "monitor_bridge_test_token"
-    reg = {"secrets": {name: {}}}
+    reg = {"entries": {name: {}}}
     monkeypatch.setattr(sr, "load_registry", lambda: reg)
     monkeypatch.setattr(
         sr, "audit", lambda reg, today: {"all": [(name, "auto", "2026-01-01", -5)]}
@@ -559,7 +559,7 @@ def test_uptime_kuma_is_a_consumer_iff_a_tile_exists():
     ).read_text()
     reg = sr.load_registry()
     wrong = []
-    for name in reg["secrets"]:
+    for name in reg["entries"]:
         tags = sr.consumer_tags(name)
         if not tags:
             continue  # manual: this test says nothing about tokens with no consumer at all

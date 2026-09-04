@@ -129,7 +129,7 @@ def role_defaults(path: _Path) -> dict:
 def registry_counts(path: _Path) -> dict[str, int]:
     """How many registered secrets sit in each tier."""
     counts: dict[str, int] = {}
-    for entry in yaml_fast.safe_load(path.read_text())["secrets"].values():
+    for entry in yaml_fast.safe_load(path.read_text())["entries"].values():
         tier = str(entry.get("tier", "?"))
         counts[tier] = counts.get(tier, 0) + 1
     return counts

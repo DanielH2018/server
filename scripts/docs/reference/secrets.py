@@ -57,7 +57,7 @@ def build_rows(
     now = today or secret_rotation.today()
     reg = secret_rotation.load_registry(str(registry))
     rows = []
-    for name, entry in sorted((reg.get("secrets") or {}).items()):
+    for name, entry in sorted((reg.get("entries") or {}).items()):
         tier = str(entry.get("tier", "unknown"))
         due = secret_rotation.due_date(entry)
         rows.append(

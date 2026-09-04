@@ -431,7 +431,7 @@ def seed_last_rotated(name: str, tier: str, today: dt.date) -> str | None:
     return (today - dt.timedelta(days=offset)).isoformat()
 
 
-def secret_names(path: str = SECRETS_FILE) -> list[str]:
+def sops_names(path: str = SECRETS_FILE) -> list[str]:
     """Top-level secret keys from the (encrypted) secrets.yml — values stay encrypted."""
     with open(path) as fh:
         data = yaml_fast.safe_load(fh) or {}
@@ -440,9 +440,9 @@ def secret_names(path: str = SECRETS_FILE) -> list[str]:
 
 def load_registry(path: str = REGISTRY_FILE) -> dict:
     if not os.path.exists(path):
-        return {"secrets": {}}
+        return {"entries": {}}
     with open(path) as fh:
-        return yaml_fast.safe_load(fh) or {"secrets": {}}
+        return yaml_fast.safe_load(fh) or {"entries": {}}
 
 
 _HEADER = """\
@@ -465,7 +465,7 @@ def save_registry(reg: dict, path: str = REGISTRY_FILE) -> None:
 
 def sync(reg: dict, names: list[str], today: dt.date) -> tuple[list[str], list[str]]:
     """Add missing secrets (classified + staggered seed); report stale registry entries."""
-    entries = reg.setdefault("secrets", {})
+    entries = reg.setdefault("entries", {})
     added, stale = [], []
     for name in names:
         if name not in entries:
@@ -572,7 +572,7 @@ def advance_last_rotated(
     # fiction for every secret nobody has rotated since registration. That fiction is what
     # aged calendar_1 into a false OVERDUE and took the monitor down on 2026-08-25.
     advanced = []
-    for name, entry in reg.get("secrets", {}).items():
+    for name, entry in reg.get("entries", {}).items():
         derived = dates.get(name)
         recorded = entry.get("last_rotated")
         if derived is None or not recorded:
@@ -587,7 +587,7 @@ def advance_last_rotated(
 def audit(reg: dict, today: dt.date) -> dict:
     """Returns {overdue: [...], soon: [...], by_tier: {...}} sorted by urgency."""
     rows = []
-    for name, entry in reg.get("secrets", {}).items():
+    for name, entry in reg.get("entries", {}).items():
         d = due_date(entry)
         if d is None:
             continue
@@ -614,11 +614,11 @@ def _push(url: str, ok: bool, msg: str) -> None:
 def cmd_sync(args) -> int:
     """Reconcile the registry with secrets.yml, save it, and print what changed."""
     reg = load_registry()
-    added, stale = sync(reg, secret_names(), today())
+    added, stale = sync(reg, sops_names(), today())
     save_registry(reg)
     print("sync: %d added, %d stale" % (len(added), len(stale)))
     for n in added:
-        print("  + %-40s %s" % (n, reg["secrets"][n]["tier"]))
+        print("  + %-40s %s" % (n, reg["entries"][n]["tier"]))
     for n in stale:
         print("  ! stale (in registry, not in secrets.yml): %s" % n)
     return 0
@@ -743,7 +743,7 @@ def cmd_audit(args) -> int:
     """
     reg = load_registry()
     # Registry drift: warn by default (so a forgotten `sync` is visible); --check fails on it.
-    missing, stale = registry_drift(set(reg.get("secrets", {})), set(secret_names()))
+    missing, stale = registry_drift(set(reg.get("entries", {})), set(sops_names()))
     # A real rotation changes the ciphertext in git but leaves `last_rotated` behind,
     # because `sync` deliberately won't touch an existing value's date. Reading the date
     # back out of git closes that gap without writing the registry.
@@ -886,7 +886,7 @@ def cmd_rotate(args) -> int:
             check=True,
             cwd=REPO,
         )
-        reg["secrets"][name]["last_rotated"] = now.isoformat()
+        reg["entries"][name]["last_rotated"] = now.isoformat()
         tags.update(consumer_tags(name))
         print("  rotated %s" % name)
     if not args.commit:

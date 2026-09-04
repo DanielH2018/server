@@ -56,7 +56,7 @@ GENERIC_NAMES = frozenset({"domain"})
 
 def secret_names():
     data = yaml_fast.safe_load(REGISTRY.read_text()) or {}
-    return sorted(set(data.get("secrets", {})) - GENERIC_NAMES)
+    return sorted(set(data.get("entries", {})) - GENERIC_NAMES)
 
 
 def scan_for_secrets(text, names):

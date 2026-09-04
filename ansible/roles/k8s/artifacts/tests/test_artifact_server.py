@@ -425,6 +425,25 @@ class TestSafePath:
         (root / "daniel-box" / "sub").mkdir()
         assert srv.safe_path(root, "daniel-box", "sub") is None
 
+    # The four below pin what the realpath + startswith rewrite (ADR-0016) could get wrong
+    # that the pathlib `parents` check could not: a prefix match that is not a directory
+    # boundary, the host directory itself, a symlink that stays inside, and a NUL byte.
+    def test_a_sibling_sharing_the_host_prefix_is_refused(self, root):
+        (root / "daniel-box2").mkdir()
+        write(root, "daniel-box2", "a.html", "x")
+        assert srv.safe_path(root, "daniel-box", "../daniel-box2/a.html") is None
+
+    def test_the_host_directory_itself_is_refused(self, root):
+        assert srv.safe_path(root, "daniel-box", "") is None
+
+    def test_a_symlink_that_stays_inside_is_served(self, root):
+        real = write(root, "daniel-box", "real.html", "x")
+        (root / "daniel-box" / "alias.html").symlink_to(real)
+        assert srv.safe_path(root, "daniel-box", "alias.html") == real
+
+    def test_a_nul_byte_is_refused_rather_than_raising(self, root):
+        assert srv.safe_path(root, "daniel-box", "a\x00.html") is None
+
 
 class TestServing:
     """End-to-end over a real socket — the handler wiring is where a route typos itself."""

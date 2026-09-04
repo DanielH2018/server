@@ -140,7 +140,7 @@ def test_the_push_token_reaches_a_kuma_monitor():
     assert var in monitors, "no Kuma monitor carries this token"
     assert var in env_secret, "the bridge would push a token no monitor holds"
     registry = yaml.safe_load((_REPO / "ansible/secret_rotation.yml").read_text())
-    assert var in registry["secrets"], (
+    assert var in registry["entries"], (
         "an unregistered secret is excluded from rotation silently"
     )
 
