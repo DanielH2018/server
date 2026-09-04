@@ -103,6 +103,7 @@ def test_the_census_reads_real_directives():
     # and an empty set would fail them loudly — but only because REQUIRED is non-empty. This
     # pins the parser itself against a record that predates this change and that nothing
     # here touches, so a parser that quietly stopped matching cannot read as a clean tree.
-    assert "daniel-pi.lan" in _host_record_names(_dnsmasq_conf()), (
+    # Exact match, not `in`: see ansible/tests/repo/test_no_host_shaped_membership_literal.py
+    assert any(n == "daniel-pi.lan" for n in _host_record_names(_dnsmasq_conf())), (
         "the parser stopped reading host-record lines it used to read"
     )

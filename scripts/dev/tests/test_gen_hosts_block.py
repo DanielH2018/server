@@ -103,8 +103,9 @@ def test_hostname_overrides_the_service_name():
         }
     )
     fqdns = [fqdn for _, fqdn in g.entries(s)]
-    assert "www.local.example.com" in fqdns
-    assert "littlelink.local.example.com" not in fqdns
+    # Exact match, not `in`: see ansible/tests/repo/test_no_host_shaped_membership_literal.py
+    assert any(f == "www.local.example.com" for f in fqdns)
+    assert not any(f == "littlelink.local.example.com" for f in fqdns)
 
 
 def test_pi_gets_its_lan_host_record():
