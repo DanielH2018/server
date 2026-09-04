@@ -25,12 +25,6 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import host_lib
 import longhorn_backup_health_logic as logic
 
-NAMESPACE = os.environ.get("LONGHORN_BACKUP_NAMESPACE", "longhorn-system")
-KUBECTL_BIN = os.environ.get("LONGHORN_BACKUP_KUBECTL", "k3s kubectl")
-TIMEOUT = int(os.environ.get("LONGHORN_BACKUP_KUBECTL_TIMEOUT_S", "30"))
-
-kubectl = host_lib.kubectl_runner(KUBECTL_BIN, NAMESPACE, TIMEOUT)
-
 
 def _require_env(name: str) -> str:
     """Value of a required, shim-templated env var — raises SystemExit naming it if unset.
@@ -83,6 +77,12 @@ def _hhmm_from_two_field_cron(spec: str) -> str | None:
     minute, hour = fields[0], fields[1]
     return f"{hour}:{minute}"
 
+
+NAMESPACE = _require_env("LONGHORN_BACKUP_NAMESPACE")
+KUBECTL_BIN = _require_env("LONGHORN_BACKUP_KUBECTL")
+TIMEOUT = _require_int_env("LONGHORN_BACKUP_KUBECTL_TIMEOUT_S")
+
+kubectl = host_lib.kubectl_runner(KUBECTL_BIN, NAMESPACE, TIMEOUT)
 
 BACKUP_ARMED = _require_bool_env("LONGHORN_BACKUP_ARMED")
 R2_ARMED = _require_bool_env("LONGHORN_R2_ARMED")
@@ -183,35 +183,79 @@ def _fetch_target(name: str) -> dict:
     return {"raw": raw, "reason": reason}
 
 
-def _fetch_backups_json() -> list[dict]:
-    rc, out = kubectl("get", "backups.longhorn.io", "-o", "json")
+# DECIDED: a kubectl fetch that fails is a DOWN with a reason, not an empty result. The bash
+# this was ported from sent every one of these reads to `2>/dev/null`
+# (`git show 62c488dd^:ansible/roles/setup/k3s/templates/longhorn-backup-health.sh.j2`, lines
+# 144, 176, 218, 344, 395, 412 and 443) and let the empty capture flow into the checks; the first
+# Python port kept that shape as `... if rc == 0 else []`. Both read an API-server timeout, a 500
+# or RBAC drift as "nothing errored, nothing is stale, this tier has no volumes" — a green light
+# over data nobody looked at, on the deadman for the Longhorn backup plane. Parity with the bash
+# was the wrong target here, so this departs from it: a reader that cannot see the cluster says
+# so. Issue #1061 has the per-line analysis.
+#
+# The one thing that is NOT a failure is rc == 0 with empty output: that is the ordinary answer
+# for eight of the nine tier selectors and for the r2 volume set, and flagging it would
+# false-DOWN a healthy cluster on every tick.
+def _fetch_text(problems: list[tuple[int, str]], what: str, *args: str) -> str | None:
+    """Output of one kubectl fetch, or None having appended a problem naming `what` and the rc.
+
+    The appended problems join the same list logic.build_verdict() ranks. Rank 1 (the scale in
+    build_verdict's docstring) puts a fetch failure behind "backup target unavailable" for the
+    push slot — sorted() is stable and check 1 appends first — and ahead of everything else.
+    """
+    rc, out = kubectl(*args)
     if rc != 0:
-        return []
+        detail = out.strip()[:160] or "(no output)"
+        problems.append((1, f"{what} fetch failed (rc={rc}): {detail}"))
+        return None
+    return out
+
+
+def _fetch_items(
+    problems: list[tuple[int, str]], what: str, *args: str
+) -> list[dict] | None:
+    """`.items` from a kubectl `-o json` fetch, or None having appended a problem.
+
+    The body is checked structurally rather than by catching ValueError alone: `json.loads`
+    accepts the literal `null` and returns None, so a truncated or empty-but-successful read
+    used to reach `.get("items")` as an AttributeError instead of a verdict.
+    """
+    out = _fetch_text(problems, what, *args)
+    if out is None:
+        return None
     try:
-        return json.loads(out).get("items", [])
+        body = json.loads(out)
     except ValueError:
-        return []
+        body = None
+    items = body.get("items") if isinstance(body, dict) else None
+    if not isinstance(items, list):
+        detail = out.strip()[:160] or "(empty)"
+        problems.append((1, f"{what} fetch returned an unparseable body: {detail}"))
+        return None
+    return items
 
 
-def _fetch_jobs_json() -> list[dict]:
-    rc, out = kubectl("get", "jobs.batch", "-o", "json")
-    if rc != 0:
-        return []
-    try:
-        return json.loads(out).get("items", [])
-    except ValueError:
-        return []
+def _fetch_backups_json(problems: list[tuple[int, str]]) -> list[dict] | None:
+    return _fetch_items(
+        problems, "errored-backups", "get", "backups.longhorn.io", "-o", "json"
+    )
 
 
-def _fetch_r2_volumes() -> set[str]:
-    rc, out = kubectl(
+def _fetch_jobs_json(problems: list[tuple[int, str]]) -> list[dict] | None:
+    return _fetch_items(problems, "failed-jobs", "get", "jobs.batch", "-o", "json")
+
+
+def _fetch_r2_volumes(problems: list[tuple[int, str]]) -> set[str] | None:
+    out = _fetch_text(
+        problems,
+        "r2 volume set",
         "get",
         "volumes.longhorn.io",
         "-o",
         """jsonpath={range .items[?(@.spec.backupTargetName=="r2")]}{.metadata.name}{" "}{end}""",
     )
-    if rc != 0:
-        return set()
+    if out is None:
+        return None
     return set(out.split())
 
 
@@ -301,40 +345,47 @@ def main() -> int:
     )
 
     # ── check 2: freshness ────────────────────────────────────────────────────────────────
-    rc, backups_jsonpath = kubectl(
+    # On a failed fetch, check_freshness is skipped rather than fed a None newest_ts: that path
+    # reports "no backups exist", a claim about the data plane this reader has not seen. `age_s`
+    # stays 0 and is never read — the fetch problem already forces build_verdict's DOWN branch,
+    # and only the green summary prints an age.
+    age_s = 0.0
+    backups_jsonpath = _fetch_text(
+        problems,
+        "backup freshness",
         "get",
         "backups.longhorn.io",
         "-o",
         'jsonpath={range .items[*]}{.status.snapshotCreatedAt}{"\\n"}{end}',
     )
-    newest_ts = None
-    if rc == 0:
+    if backups_jsonpath is not None:
         stamps = [line for line in backups_jsonpath.splitlines() if line.strip()]
-        newest_ts = max(stamps) if stamps else None
-    fresh_problem, age_s = logic.check_freshness(
-        newest_ts, now_s, MAX_AGE_S, MAX_AGE_HOURS
-    )
-    if fresh_problem:
-        problems.append(fresh_problem)
+        fresh_problem, age_s = logic.check_freshness(
+            max(stamps) if stamps else None, now_s, MAX_AGE_S, MAX_AGE_HOURS
+        )
+        if fresh_problem:
+            problems.append(fresh_problem)
 
     # ── check 3: errored backups ──────────────────────────────────────────────────────────
     error_cutoff_s = now_s - ERROR_MAX_AGE_HOURS * 3600
-    backup_items = _fetch_backups_json()
-    errored_problem = logic.check_errored_backups(
-        backup_items, error_cutoff_s, ERROR_MAX_AGE_HOURS
-    )
-    if errored_problem:
-        problems.append(errored_problem)
+    backup_items = _fetch_backups_json(problems)
+    if backup_items is not None:
+        errored_problem = logic.check_errored_backups(
+            backup_items, error_cutoff_s, ERROR_MAX_AGE_HOURS
+        )
+        if errored_problem:
+            problems.append(errored_problem)
 
     # ── check 4: per-tier coverage ────────────────────────────────────────────────────────
-    rc, coverage_raw = kubectl(
+    coverage_raw = _fetch_text(
+        problems,
+        "backup coverage",
         "get",
         "backups.longhorn.io",
         "-o",
         'jsonpath={range .items[*]}{.status.volumeName}{"|"}{.status.snapshotCreatedAt}'
         '{"|"}{.status.labels.RecurringJob}{"\\n"}{end}',
     )
-    coverage_rows = _parse_pipe_rows(coverage_raw) if rc == 0 else []
 
     disarmed_set = set(disarmed_targets)
     result = logic.TierResult()
@@ -367,8 +418,16 @@ def main() -> int:
             "*",
         ),
     ]
-    for selector, max_age_s, tier, job, run_hhmm, dow in tiers:
-        rc, rows_raw = kubectl(
+    # The whole loop is skipped when the coverage fetch failed: every tier is matched against
+    # those rows, so feeding it an empty list would report all nine tiers' volumes as uncovered
+    # over one unread fetch. The coverage fetch's own problem is already in `problems`.
+    coverage_rows = _parse_pipe_rows(coverage_raw) if coverage_raw is not None else []
+    for selector, max_age_s, tier, job, run_hhmm, dow in (
+        tiers if coverage_raw is not None else []
+    ):
+        rows_raw = _fetch_text(
+            problems,
+            f"{tier} tier volumes",
             "get",
             "volumes.longhorn.io",
             "-l",
@@ -378,10 +437,11 @@ def main() -> int:
             '{" "}{.status.kubernetesStatus.namespace}/{.status.kubernetesStatus.pvcName}'
             '{" "}{.spec.backupTargetName}{"\\n"}{end}',
         )
-        rows = _parse_volume_rows(rows_raw) if rc == 0 else []
+        if rows_raw is None:
+            continue
         logic.check_tier(
             result,
-            rows,
+            _parse_volume_rows(rows_raw),
             coverage_rows,
             max_age_s,
             tier,
@@ -398,31 +458,37 @@ def main() -> int:
 
     # ── check 5: recent-backup budget ─────────────────────────────────────────────────────
     day_ago_s = now_s - 86400
-    rc, recent_raw = kubectl(
+    recent_raw = _fetch_text(
+        problems,
+        "recent backups",
         "get",
         "backups.longhorn.io",
         "-o",
         'jsonpath={range .items[*]}{.status.volumeName}{" "}{.status.snapshotCreatedAt}'
         '{" "}{.status.size}{"\\n"}{end}',
     )
-    recent_rows = _parse_space_rows(recent_raw) if rc == 0 else []
-    r2_volumes = _fetch_r2_volumes()
-    recent_n, recent_bytes = logic.compute_recent_backups(
-        recent_rows, r2_volumes, day_ago_s
-    )
-    budget_problem = logic.check_recent_budget(
-        recent_n, recent_bytes, DAILY_BACKUP_BUDGET
-    )
-    if budget_problem:
-        problems.append(budget_problem)
+    r2_volumes = _fetch_r2_volumes(problems)
+    # recent_n reaches build_verdict, which prints it only on the green summary — a failed fetch
+    # here has already put its own problem in the list, so the 0 is never reported as a count.
+    recent_n = 0
+    if recent_raw is not None and r2_volumes is not None:
+        recent_n, recent_bytes = logic.compute_recent_backups(
+            _parse_space_rows(recent_raw), r2_volumes, day_ago_s
+        )
+        budget_problem = logic.check_recent_budget(
+            recent_n, recent_bytes, DAILY_BACKUP_BUDGET
+        )
+        if budget_problem:
+            problems.append(budget_problem)
 
     # ── check 6: failed jobs ──────────────────────────────────────────────────────────────
-    job_items = _fetch_jobs_json()
-    failed_jobs_problem = logic.check_failed_jobs(
-        job_items, error_cutoff_s, ERROR_MAX_AGE_HOURS
-    )
-    if failed_jobs_problem:
-        problems.append(failed_jobs_problem)
+    job_items = _fetch_jobs_json(problems)
+    if job_items is not None:
+        failed_jobs_problem = logic.check_failed_jobs(
+            job_items, error_cutoff_s, ERROR_MAX_AGE_HOURS
+        )
+        if failed_jobs_problem:
+            problems.append(failed_jobs_problem)
 
     # ── check 7: restore drill freshness ──────────────────────────────────────────────────
     drill_stamp_path = os.path.join(DRILL_STAMP_DIR, "last-success")

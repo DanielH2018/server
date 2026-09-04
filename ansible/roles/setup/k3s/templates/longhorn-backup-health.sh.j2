@@ -100,6 +100,17 @@ fi
 # passes the STRING "false", which is truthy in Jinja, and an unfiltered render would put `default`
 # back into the armed set on an ad-hoc disarm — reverting the 2026-08-17 fix silently, in exactly
 # the incident-response case it is most likely to be used.
+# The three transport settings are exported here for the same reason as the thresholds below
+# them: the reader requires every LONGHORN_* var it reads, so a value only this shim knows
+# cannot sit in the reader as a hardcoded default that a wrong export would silently shadow.
+# The kubectl binary is absolute rather than the bare `k3s kubectl` longhorn-restore-drill.sh.j2
+# uses: cron's PATH omits /usr/local/bin, and validate_shell_templates.py fails a cron target that
+# names it bare (host_lib.kubectl_runner also prepends that directory, so this is the second of
+# two guards, not the only one). The 30s timeout is the per-call deadline this file's header
+# sizes the worst-case run against.
+export LONGHORN_BACKUP_NAMESPACE="{{ k8s_longhorn_namespace }}"
+export LONGHORN_BACKUP_KUBECTL="/usr/local/bin/k3s kubectl"
+export LONGHORN_BACKUP_KUBECTL_TIMEOUT_S="30"
 export LONGHORN_BACKUP_ARMED="{{ k3s_longhorn_backup_armed | bool }}"
 export LONGHORN_R2_ARMED="{{ k3s_longhorn_r2_armed | bool }}"
 export LONGHORN_BACKUP_MAX_AGE_HOURS="{{ k3s_longhorn_backup_max_age_hours }}"

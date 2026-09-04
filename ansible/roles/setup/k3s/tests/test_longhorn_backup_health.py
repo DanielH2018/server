@@ -23,6 +23,8 @@ import sys
 import time
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "files"))
 import longhorn_backup_health_logic as logic
 
@@ -515,15 +517,18 @@ def _reader_env(tmp_path, **overrides) -> dict:
 
     Every one of these is REQUIRED by the reader (`_require_env` et al — no hardcoded fallback,
     the 2026-09-04 review's finding #3), so a subprocess test that used to set only a couple of
-    vars and rely on module-level defaults for the rest now has to set all eleven or the reader
+    vars and rely on module-level defaults for the rest now has to set all thirteen or the reader
     exits nonzero before doing anything else. Centralised here so each test only names the ONE
-    var it cares about overriding.
+    var it cares about overriding. LONGHORN_BACKUP_KUBECTL is the exception: every subprocess
+    test points it at its own stub, so it has no default here.
     """
     env = dict(os.environ)
     env["PYTHONPATH"] = f"{HOST_LIB_DIR}:{env.get('PYTHONPATH', '')}"
     env["LONGHORN_RESTORE_DRILL_STAMP_DIR"] = str(tmp_path / "no-such-drill-dir")
     env.update(
         {
+            "LONGHORN_BACKUP_NAMESPACE": "longhorn-system",
+            "LONGHORN_BACKUP_KUBECTL_TIMEOUT_S": "30",
             "LONGHORN_BACKUP_ARMED": "True",
             "LONGHORN_R2_ARMED": "True",
             "LONGHORN_BACKUP_MAX_AGE_HOURS": "30",
@@ -632,10 +637,18 @@ def _green_path_stub_kubectl(tmp_path, snapshot_ts: str) -> Path:
     `pvc-web-data`, is backed up by the "daily" tier only — every other tier's label selector
     matches nothing, which is the ordinary (and simplest-to-fixture) shape for a fleet where only
     one recurring job is armed.
+
+    Each dispatch arm carries a branch NAME, and two env knobs turn one named branch red without
+    disturbing the other eight: `STUB_FAIL_BRANCH` makes it exit 124 (host_lib's timeout code)
+    and `STUB_NULL_BRANCH` makes it answer the JSON literal `null` with rc 0. That is what lets
+    the fetch-failure tests below reuse this one fixture instead of shipping a stub per fetch.
     """
     stub = tmp_path / "stub-kubectl-green"
-    script = f"""#!/usr/bin/env python3
+    script = r"""#!/usr/bin/env python3
+import os
 import sys
+
+SNAPSHOT_TS = "__SNAPSHOT_TS__"
 
 args = sys.argv[1:]
 if "-n" in args:
@@ -643,40 +656,41 @@ if "-n" in args:
     args = args[:i] + args[i + 2:]
 joined = " ".join(args)
 
-
-def emit(text, rc=0):
-    sys.stdout.write(text)
-    sys.exit(rc)
-
-
-if args[:3] == ["get", "backuptarget", "default"]:
-    emit("true")
-elif args[:3] == ["get", "backuptarget", "r2"]:
-    emit("true")
+if args[:2] == ["get", "backuptarget"]:
+    branch, body = "target-" + args[2], "true"
 elif args[:2] == ["get", "backups.longhorn.io"] and args[-1] == "json":
-    emit('{{"items": []}}')
+    branch, body = "errored-backups", '{"items": []}'
 elif args[:2] == ["get", "jobs.batch"] and args[-1] == "json":
-    emit('{{"items": []}}')
+    branch, body = "failed-jobs", '{"items": []}'
 elif args[:2] == ["get", "backups.longhorn.io"] and "|" in joined:
-    emit("pvc-web-data|{snapshot_ts}|daily-backup\\n")
+    branch = "coverage"
+    body = "pvc-web-data|%s|daily-backup\n" % SNAPSHOT_TS
 elif args[:2] == ["get", "backups.longhorn.io"] and "size" in joined:
-    emit("pvc-web-data {snapshot_ts} 1048576\\n")
+    branch = "recent"
+    body = "pvc-web-data %s 1048576\n" % SNAPSHOT_TS
 elif args[:2] == ["get", "backups.longhorn.io"] and "snapshotCreatedAt" in joined:
-    emit("{snapshot_ts}\\n")
+    branch, body = "freshness", "%s\n" % SNAPSHOT_TS
 elif args[:2] == ["get", "volumes.longhorn.io"] and "-l" in args:
     sel = args[args.index("-l") + 1]
+    branch = "tier-" + sel.split("/")[-1].split("=")[0]
     if sel == "recurring-job-group.longhorn.io/default=enabled":
-        emit(
-            "pvc-web-data {snapshot_ts} default/web-data default\\n"
-        )
+        body = "pvc-web-data %s default/web-data default\n" % SNAPSHOT_TS
     else:
-        emit("")
+        body = ""
 elif args[:2] == ["get", "volumes.longhorn.io"]:
-    emit("")
+    branch, body = "r2", ""
 else:
-    sys.stderr.write("UNEXPECTED ARGS: %r\\n" % (args,))
+    sys.stderr.write("UNEXPECTED ARGS: %r\n" % (args,))
     sys.exit(1)
-"""
+
+if branch == os.environ.get("STUB_FAIL_BRANCH"):
+    sys.stderr.write("STUB_FETCH_FAILED %s\n" % branch)
+    sys.exit(124)
+if branch == os.environ.get("STUB_NULL_BRANCH"):
+    body = "null"
+
+sys.stdout.write(body)
+""".replace("__SNAPSHOT_TS__", snapshot_ts)
     stub.write_text(script)
     stub.chmod(0o755)
     return stub
@@ -715,6 +729,112 @@ def test_reader_green_path_pins_the_transport(tmp_path):
     assert "backup target(s) default r2 available" in proc.stdout
     assert "1 backed-up volume(s) covered across daily+weekly" in proc.stdout
     assert "1 B2 backup(s)/24h (budget 16)" in proc.stdout
+
+
+# ── fetch failures: the deadman must go DOWN with a reason, never quietly UP (issue #1061) ────
+#
+# test_reader_green_path_pins_the_transport above is the CLEAN half of every pair below: the same
+# fixture, no knob set, verdict UP. Each test here turns exactly one fetch red and asserts the
+# verdict flips and names that fetch — so a helper that stopped appending its problem, or one
+# that started firing on a healthy answer, fails a test rather than reading green forever.
+#
+# The reader's OWN syslog line carries the full unranked problem list; stdout carries only the
+# top-ranked one plus a count, so the fetch name is asserted against `logger_calls`.
+
+
+def _run_reader_against(stub, tmp_path, **env_overrides):
+    """Run the reader against `stub` on an otherwise-green fixture, returning the finished proc."""
+    now = time.time()
+    drill_dir = tmp_path / "drill"
+    drill_dir.mkdir(exist_ok=True)
+    (drill_dir / "last-success").write_text(str(int(now - 3600)))
+    env = _reader_env(
+        tmp_path,
+        LONGHORN_BACKUP_KUBECTL=str(stub),
+        LONGHORN_RESTORE_DRILL_STAMP_DIR=str(drill_dir),
+        **env_overrides,
+    )
+    return subprocess.run(
+        [sys.executable, str(READER)],
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=30,
+    )
+
+
+@pytest.mark.parametrize(
+    ("branch", "named"),
+    [
+        ("freshness", "backup freshness fetch failed (rc=124)"),
+        ("errored-backups", "errored-backups fetch failed (rc=124)"),
+        ("coverage", "backup coverage fetch failed (rc=124)"),
+        ("tier-default", "daily tier volumes fetch failed (rc=124)"),
+        ("recent", "recent backups fetch failed (rc=124)"),
+        ("r2", "r2 volume set fetch failed (rc=124)"),
+        ("failed-jobs", "failed-jobs fetch failed (rc=124)"),
+    ],
+)
+def test_a_timed_out_fetch_is_flagged_by_name(tmp_path, logger_calls, branch, named):
+    """rc 124 is host_lib's timeout code — the exact case that used to read as an empty result.
+
+    Every one of these seven fetches turned a nonzero rc into `[]`/`set()` and fed it to a check
+    that reads empty as clean: "nothing errored", "no failed jobs", or a tier silently dropped
+    from the coverage count. A 30s API-server timeout on one call therefore left the whole
+    verdict UP with a quietly smaller number in it.
+    """
+    stub = _green_path_stub_kubectl(tmp_path, _rfc3339(time.time() - 60))
+    proc = _run_reader_against(stub, tmp_path, STUB_FAIL_BRANCH=branch)
+
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.startswith("down\t"), proc.stdout
+    logged = logger_calls.read_text()
+    assert named in logged, logged
+
+
+@pytest.mark.parametrize(
+    ("branch", "named"),
+    [
+        ("errored-backups", "errored-backups fetch returned an unparseable body"),
+        ("failed-jobs", "failed-jobs fetch returned an unparseable body"),
+    ],
+)
+def test_an_unparseable_json_body_is_flagged_by_name(
+    tmp_path, logger_calls, branch, named
+):
+    """A `null` body parses cleanly and carries no `items` — kubectl's answer on a truncated read.
+
+    `json.loads("null")` returns None rather than raising, so the reader's old `except ValueError`
+    never saw this one: it reached `.get("items")` as an AttributeError. Only the two `-o json`
+    fetches are covered — for the five jsonpath fetches a garbage body is indistinguishable from
+    data, and a malformed jsonpath makes kubectl exit nonzero, which the rc pair above covers.
+    """
+    stub = _green_path_stub_kubectl(tmp_path, _rfc3339(time.time() - 60))
+    proc = _run_reader_against(stub, tmp_path, STUB_NULL_BRANCH=branch)
+
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.startswith("down\t"), proc.stdout
+    logged = logger_calls.read_text()
+    assert named in logged, logged
+
+
+def test_a_failed_coverage_fetch_does_not_cascade_into_the_tier_loop(
+    tmp_path, logger_calls
+):
+    """One unread fetch reports one problem, not ten.
+
+    Every tier is matched against the coverage rows, so passing the loop an empty list on a
+    failed coverage fetch would report all nine tiers' volumes as stale or missing — burying the
+    one thing that actually happened under nine consequences of it.
+    """
+    stub = _green_path_stub_kubectl(tmp_path, _rfc3339(time.time() - 60))
+    proc = _run_reader_against(stub, tmp_path, STUB_FAIL_BRANCH="coverage")
+
+    assert proc.stdout.startswith("down\t"), proc.stdout
+    logged = logger_calls.read_text()
+    assert "backup coverage fetch failed" in logged, logged
+    assert "tier volumes fetch failed" not in logged, logged
+    assert "stale or missing" not in logged, logged
 
 
 def _grace_pair_stub_kubectl(tmp_path, created_ts: str, old_backup_ts: str) -> Path:
