@@ -20,8 +20,8 @@
 # crons for no reason docs-refresh's generator actually has.
 #
 # THE COMMIT SEQUENCE FOLLOWS docs-refresh.sh EXACTLY: dirty-tree guard, one-open-PR guard,
-# commit, throwaway branch, push, `gh pr create` + `gh pr merge --auto --squash`, then reset
-# master back to origin. A repository ruleset rejects every direct push to master (see
+# commit, then scripts/deploy_tools/publish_pr.py (throwaway branch, push, reset master,
+# `gh pr create` + `gh pr merge --auto --squash`). A repository ruleset rejects every direct push to master (see
 # docs-refresh.sh's header for the rejected-push evidence), so a PR is the only path that
 # publishes; committing straight to evals/history.json here would silently stop working the
 # same way docs-refresh's direct commit once did.
@@ -107,9 +107,8 @@ if ! git diff --quiet || ! git diff --cached --quiet; then
   PUSH_STATUS=up
   exit 0
 fi
-OPEN_PR="$(gh pr list --state open --json number,headRefName \
-  --jq "[.[] | select(.headRefName | startswith(\"$PR_BRANCH_PREFIX\"))][0].number" \
-  2>/dev/null || true)"
+OPEN_PR="$("$UV" run --frozen python scripts/deploy_tools/publish_pr.py open-pr \
+  --prefix "$PR_BRANCH_PREFIX" 2>/dev/null || true)"
 if [ -n "$OPEN_PR" ]; then
   alert "eval-run: PR #$OPEN_PR still open; skipped before running the sweep"
   PUSH_STATUS=up
@@ -156,9 +155,8 @@ fi
 # One open PR at a time, same guard as docs-refresh.sh: a still-open evals-history/* PR means
 # last week's result hasn't landed yet, so recording another would either duplicate it or
 # race it.
-OPEN_PR="$(gh pr list --state open --json number,headRefName \
-  --jq "[.[] | select(.headRefName | startswith(\"$PR_BRANCH_PREFIX\"))][0].number" \
-  2>/dev/null || true)"
+OPEN_PR="$("$UV" run --frozen python scripts/deploy_tools/publish_pr.py open-pr \
+  --prefix "$PR_BRANCH_PREFIX" 2>/dev/null || true)"
 if [ -n "$OPEN_PR" ]; then
   alert "eval-run: PR #$OPEN_PR still open; ran the sweep but recorded nothing"
   PUSH_STATUS=up
@@ -206,41 +204,24 @@ if ! git commit -m "evals: record weekly hermetic eval sweep" >"$LOG" 2>&1; then
   exit 1
 fi
 
-BRANCH="${PR_BRANCH_PREFIX}$(date -u +%Y-%m-%d-%H%M)"
-if ! git branch "$BRANCH" HEAD >"$LOG" 2>&1; then
-  say_failure "eval-run: could not create $BRANCH; commit is local on master" "$LOG"
-  exit 1
-fi
-
-if ! git push -u origin "$BRANCH" >"$LOG" 2>&1; then
-  say_failure "eval-run: publishing $BRANCH failed; commit is local on master" "$LOG"
-  exit 1
-fi
-
-# From here the commit is safe on the remote, so master gives it up -- same reasoning as
-# docs-refresh.sh: HEAD~1, not origin/master, since this script never fetches.
-git reset --hard HEAD~1 >/dev/null 2>&1
-git branch -D "$BRANCH" >/dev/null 2>&1
-
+# Branch, push, reset master, PR, auto-merge: scripts/deploy_tools/publish_pr.py, shared with
+# docs-refresh and secret-rotate. Exit 1 means the commit is still local on master, 2 that the
+# branch is on origin without a PR; either way the message says which.
 PR_BODY="Weekly hermetic homelab-agent eval sweep, rolled into evals/history.json by evals/trend.py. $(tr '\n' ' ' < "$TREND_OUT" | tail -c 800)"
-if ! gh pr create --head "$BRANCH" --title "evals: record weekly hermetic eval sweep" \
-  --body "$PR_BODY" >"$LOG" 2>&1; then
-  say_failure "eval-run: $BRANCH published but PR creation failed" "$LOG"
+if ! PUB_MSG="$("$UV" run --frozen python scripts/deploy_tools/publish_pr.py publish \
+    --prefix "$PR_BRANCH_PREFIX" --title "evals: record weekly hermetic eval sweep" \
+    --body "$PR_BODY" 2>&1)"; then
+  alert "eval-run: $PUB_MSG"
   exit 1
 fi
 
-if ! gh pr merge --auto --squash --delete-branch "$BRANCH" >"$LOG" 2>&1; then
-  say_failure "eval-run: PR opened for $BRANCH but auto-merge could not be enabled" "$LOG"
-  exit 1
-fi
-
-logger -t eval-run "regenerated, committed, PR opened for $BRANCH with auto-merge"
+logger -t eval-run "regenerated, committed, $PUB_MSG"
 if [ "$REGRESSED" -eq 1 ]; then
   PUSH_STATUS=down
-  PUSH_MSG="PR opened for $BRANCH; one or more eval cases REGRESSED — see the PR body"
+  PUSH_MSG="${PUB_MSG%% with auto-merge}; one or more eval cases REGRESSED — see the PR body"
 else
   PUSH_STATUS=up
-  PUSH_MSG="regenerated, committed, PR opened for $BRANCH with auto-merge"
+  PUSH_MSG="regenerated, committed, $PUB_MSG"
 fi
 if [ -n "$FAILED_AGENTS" ]; then
   PUSH_MSG="$PUSH_MSG (below-threshold case in:$FAILED_AGENTS)"

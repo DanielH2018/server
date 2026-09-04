@@ -148,9 +148,8 @@ fi
 # accumulate one per run, twice a day, with nobody looking.
 # `gh pr list --head` matches one exact branch, and each run's branch is timestamped, so
 # the filter has to be a prefix match over the open list rather than a --head lookup.
-OPEN_PR="$(gh pr list --state open --json number,headRefName \
-  --jq "[.[] | select(.headRefName | startswith(\"$PR_BRANCH_PREFIX\"))][0].number" \
-  2>/dev/null || true)"
+OPEN_PR="$("$UV" run --frozen python scripts/deploy_tools/publish_pr.py open-pr \
+  --prefix "$PR_BRANCH_PREFIX" 2>/dev/null || true)"
 if [ -n "$OPEN_PR" ]; then
   alert "docs-refresh: PR #$OPEN_PR still open; rebuilt site only, no regeneration"
   PUSH_STATUS=up
@@ -214,54 +213,25 @@ if ! git commit -m "docs: refresh generated reference pages" >"$LOG" 2>&1; then
   exit 1
 fi
 
-# Branch, PR, auto-merge -- see the header. The ORDER matters: the branch reaches the
-# remote before master is reset, so the commit is never only on a branch this script is
-# about to throw away.
-BRANCH="${PR_BRANCH_PREFIX}$(date -u +%Y-%m-%d-%H%M)"
-if ! git branch "$BRANCH" HEAD >"$LOG" 2>&1; then
-  say_failure "docs-refresh: could not create $BRANCH; commit is local on master" "$LOG"
+# Branch, push, reset master, PR, auto-merge: scripts/deploy_tools/publish_pr.py, shared with
+# eval-run and secret-rotate. Its header carries the ordering and the HEAD~1 reasoning. It
+# prints one line to alert with, and its exit code says where the commit is: 1 while it is
+# still local on master, 2 once the branch is on origin without a PR.
+if ! PUB_MSG="$("$UV" run --frozen python scripts/deploy_tools/publish_pr.py publish \
+    --prefix "$PR_BRANCH_PREFIX" --title "docs: refresh generated reference pages" \
+    --body "Generated output only, from the twice-daily docs-refresh cron: the pages under docs/reference/ and the infra map. Both are reproducible by scripts/docs/build_docs.py. Opened as a PR because a repository ruleset rejects direct writes to master." \
+    2>&1)"; then
+  alert "docs-refresh: $PUB_MSG"
   exit 1
 fi
 
-if ! git push -u origin "$BRANCH" >"$LOG" 2>&1; then
-  say_failure "docs-refresh: publishing $BRANCH failed; commit is local on master" "$LOG"
-  exit 1
-fi
-
-# From here the commit is safe on the remote, so master gives it up. Leaving master ahead
-# would break gitops-deploy's --ff-only once the squash lands under a new SHA, which parks
-# the deployer behind origin until someone resets it by hand.
-#
-# HEAD~1, not origin/master: this undoes exactly the commit made above. `origin/master` is
-# only as fresh as the last fetch, and this script deliberately never fetches, so resetting
-# to it could discard something else or move master backwards.
-git reset --hard HEAD~1 >/dev/null 2>&1
-
-# The commit lives on the remote branch now. Keeping the local ref would leave one dead
-# branch per run, and -d refuses it because master no longer contains the commit.
-git branch -D "$BRANCH" >/dev/null 2>&1
-
-if ! gh pr create --head "$BRANCH" --title "docs: refresh generated reference pages" \
-  --body "Generated output only, from the twice-daily docs-refresh cron: the pages under docs/reference/ and the infra map. Both are reproducible by scripts/docs/build_docs.py. Opened as a PR because a repository ruleset rejects direct writes to master." \
-  >"$LOG" 2>&1; then
-  say_failure "docs-refresh: $BRANCH published but PR creation failed" "$LOG"
-  exit 1
-fi
-
-# --auto lands it when the required check passes, so the cron stays unattended. Without
-# this the PR waits for a human and the next run skips on the open-PR guard above.
-if ! gh pr merge --auto --squash --delete-branch "$BRANCH" >"$LOG" 2>&1; then
-  say_failure "docs-refresh: PR opened for $BRANCH but auto-merge could not be enabled" "$LOG"
-  exit 1
-fi
-
-logger -t docs-refresh "regenerated, committed, PR opened for $BRANCH with auto-merge"
+logger -t docs-refresh "regenerated, committed, $PUB_MSG"
 # The publish succeeded either way; GENERATORS_OK decides whether it published a COMPLETE set.
 # Reporting up here regardless would let a failing generator ride out on a successful PR, which
 # is the same "the run worked, the content did not" split that made 2026-08-27 invisible.
 if [ "$GENERATORS_OK" -eq 1 ]; then
   PUSH_STATUS=up
-  PUSH_MSG="regenerated, committed, PR opened for $BRANCH with auto-merge"
+  PUSH_MSG="regenerated, committed, $PUB_MSG"
 else
   PUSH_STATUS=down
   PUSH_MSG="PR opened for $BRANCH, but one or more generators had failed — the published set is incomplete"

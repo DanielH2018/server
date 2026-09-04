@@ -10,10 +10,11 @@ secret-rotate is the more consequential of the two: it changes a live credential
 redeploys its consumer BEFORE publishing, so an unpublished rotation leaves the running value
 and origin disagreeing, and the next deploy from origin re-applies the superseded one.
 
-These are text assertions over the templates, which is the weaker kind of guard -- an
-indirection through a variable or a helper would slip past. They are still worth having,
-because the regression they cover is someone reinstating a direct write, and that is a
-literal line of shell.
+The publish sequence itself -- branch, push, reset master, `gh pr create`, `gh pr merge
+--auto` -- lives in scripts/deploy_tools/publish_pr.py, which the three crons call, and is
+EXECUTED by scripts/deploy_tools/tests/test_publish_pr.py. What stays here is text
+assertions over the templates, the weaker kind of guard, kept because the regression they
+cover is someone reinstating an inline direct write, and that is a literal line of shell.
 
 The second half of this file is a different invariant on the same crons: no Kuma push token
 reaches curl's argv. It carries its own header above `ROLES`, including why its corpus is
@@ -62,50 +63,61 @@ def code_lines(path: Path) -> list[str]:
     ]
 
 
+PUBLISHER = "scripts/deploy_tools/publish_pr.py publish"
+
+
+def _joined_code(path: Path) -> str:
+    """Code lines with backslash continuations joined, so a multi-line call reads as one."""
+    return re.sub(r"\\\n\s*", " ", "\n".join(code_lines(path)))
+
+
 @pytest.mark.parametrize(("path", "commit_marker"), SCRIPTS)
-def test_it_opens_a_pull_request(path, commit_marker):
-    text = read(path)
-    assert "gh pr create" in text, (
-        f"{path.name} opens no PR; a direct write is rejected"
+def test_it_publishes_through_the_shared_publisher(path, commit_marker):
+    """One implementation of branch-push-reset-PR-auto-merge, executed under test, not three."""
+    calls = [line for line in _joined_code(path).splitlines() if PUBLISHER in line]
+    assert len(calls) == 1, (
+        f"{path.name} calls the publisher {len(calls)} times; expected exactly one, after the commit"
     )
-    assert "gh pr merge --auto" in text, (
-        f"{path.name} opens a PR but never lands it — without --auto the cron needs a human, "
-        f"and the in-flight guard then blocks every subsequent run"
+    assert '--prefix "$PR_BRANCH_PREFIX"' in calls[0], (
+        f"{path.name} publishes under a branch prefix other than its own, so its open-PR "
+        f"guard cannot see the PR it opens: {calls[0].strip()!r}"
     )
 
 
 @pytest.mark.parametrize(("path", "commit_marker"), SCRIPTS)
 def test_nothing_is_written_to_the_default_branch(path, commit_marker):
-    """The bug. Every push must name the run's branch."""
-    pushes = [line for line in code_lines(path) if re.search(r"\bgit push\b", line)]
-    assert pushes, f"{path.name} has no git push — the branch never reaches the remote"
-    for line in pushes:
-        assert '"$BRANCH"' in line, (
-            f"{path.name} pushes somewhere other than the run's branch, which the repository "
-            f"ruleset rejects: {line.strip()!r}"
-        )
+    """The bug: a direct write, which the ruleset rejects. Only the publisher pushes."""
+    inline = [
+        line
+        for line in code_lines(path)
+        if re.search(r"\bgit push\b|\bgh pr create\b|\bgh pr merge\b", line)
+    ]
+    assert not inline, (
+        f"{path.name} pushes or opens a PR inline instead of through {PUBLISHER}: {inline!r}"
+    )
 
 
 @pytest.mark.parametrize(("path", "commit_marker"), SCRIPTS)
 def test_failure_paths_keep_their_error_text(path, commit_marker):
-    """A failure whose reason goes to /dev/null cost a day of diagnosis."""
-    for command in (commit_marker, "git push -u", "gh pr create", "gh pr merge --auto"):
-        lines = [line for line in code_lines(path) if command in line]
-        assert lines, f"{command!r} not found in {path.name}"
-        for line in lines:
-            assert "/dev/null" not in line, (
-                f"{path.name} discards the error from {command!r}; route it to the log file "
-                f"so the alert can say why: {line.strip()!r}"
-            )
+    """A failure whose reason goes to /dev/null cost a day of diagnosis.
 
-
-@pytest.mark.parametrize(("path", "commit_marker"), SCRIPTS)
-def test_the_checkout_is_not_left_ahead_of_origin(path, commit_marker):
-    """Leaving the commit on the local branch breaks gitops-deploy's --ff-only once the squash
-    lands under a new SHA. That parked the deployer behind origin twice during diagnosis."""
-    assert "git reset --hard HEAD~1" in read(path), (
-        f"{path.name} keeps the commit locally after publishing the branch, so the next "
-        f"fast-forward fails and the deployer parks"
+    The commit's output goes to the log file the alert reads; the publisher's one-line message
+    is captured, stderr included, and alerted verbatim.
+    """
+    commit = [line for line in code_lines(path) if commit_marker in line]
+    assert commit, f"{commit_marker!r} not found in {path.name}"
+    for line in commit:
+        assert "/dev/null" not in line, (
+            f"{path.name} discards the commit error; route it to the log file so the alert "
+            f"can say why: {line.strip()!r}"
+        )
+    call = next(line for line in _joined_code(path).splitlines() if PUBLISHER in line)
+    assert "PUB_MSG=" in call and "2>&1" in call and "/dev/null" not in call, (
+        f"{path.name} does not capture the publisher's message and stderr for the alert: "
+        f"{call.strip()!r}"
+    )
+    assert re.search(r'alert "[^"]*\$PUB_MSG', read(path)), (
+        f"{path.name} captures the publisher's message but never alerts with it"
     )
 
 
