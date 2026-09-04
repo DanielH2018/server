@@ -1,7 +1,9 @@
-"""Tests for gen_doc_fragments: its readers, its renderers, and the two-way fragment wiring.
+"""Tests for the doc fragments: their readers, their renderers, and the two-way wiring.
 
-The readers find their sources, the renderers are pure, and every fragment is wired both ways -- a
-page includes it, and it exists for the page to include.
+`fragment_readers` finds the sources, `fragment_renderers` is pure, and `gen_doc_fragments`
+wires every fragment both ways -- a page includes it, and it exists for the page to include.
+Each test reaches the module that owns the function, so a name that moves fails here rather
+than resolving through a re-export.
 """
 
 from __future__ import annotations
@@ -14,6 +16,8 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+import fragment_readers as readers
+import fragment_renderers as renderers
 import gen_doc_fragments as g
 
 DOCS = g.REPO / "docs"
@@ -84,26 +88,26 @@ def test_the_header_is_one_line_with_no_frontmatter():
 
 
 def test_module_constant_reads_a_tuple_without_importing():
-    prefixes = g.module_constant(g.DEPLOY_CHANGES, "_BROAD_MANUAL_PREFIXES")
+    prefixes = readers.module_constant(g.DEPLOY_CHANGES, "_BROAD_MANUAL_PREFIXES")
     assert "ansible/bootstrap.yml" in prefixes
 
 
 def test_module_constant_rejects_a_name_that_is_not_assigned():
     with pytest.raises(KeyError):
-        g.module_constant(g.DEPLOY_CHANGES, "_NO_SUCH_CONSTANT")
+        readers.module_constant(g.DEPLOY_CHANGES, "_NO_SUCH_CONSTANT")
 
 
 def test_config_default_reads_the_fallback_string():
-    assert "traefik" in g.config_default(g.GITOPS_DEPLOY, "STAGING_SUBSET")
+    assert "traefik" in readers.config_default(g.GITOPS_DEPLOY, "STAGING_SUBSET")
 
 
 def test_config_default_rejects_a_key_nothing_reads():
     with pytest.raises(KeyError):
-        g.config_default(g.GITOPS_DEPLOY, "NO_SUCH_KEY")
+        readers.config_default(g.GITOPS_DEPLOY, "NO_SUCH_KEY")
 
 
 def test_registry_counts_cover_every_registered_secret():
-    counts = g.registry_counts(g.SECRET_REGISTRY)
+    counts = readers.registry_counts(g.SECRET_REGISTRY)
     assert sum(counts.values()) > 100
     assert "auto" in counts
 
@@ -124,53 +128,55 @@ _DEFAULTS = {
 
 
 def test_longhorn_tiers_renders_the_defaults_it_is_given():
-    out = g.render_longhorn_tiers(_DEFAULTS)
+    out = renderers.render_longhorn_tiers(_DEFAULTS)
     assert "| Daily | R2 (`r2`) | 2 | `30 3 * * *` | 14 |" in out
     assert "| 1, one weekday each | `30 4 * * <index mod 7>` | 2 |" in out
     assert "`homelab/a`, `homelab/b`" in out
 
 
 def test_longhorn_tiers_says_when_backups_are_disarmed():
-    assert "**disarmed**" in g.render_longhorn_tiers(_DEFAULTS)
-    assert "are armed" in g.render_longhorn_tiers(
+    assert "**disarmed**" in renderers.render_longhorn_tiers(_DEFAULTS)
+    assert "are armed" in renderers.render_longhorn_tiers(
         {**_DEFAULTS, "k3s_longhorn_backup_armed": True}
     )
 
 
 def test_longhorn_tiers_fails_on_a_missing_default_rather_than_guessing():
     with pytest.raises(KeyError):
-        g.render_longhorn_tiers(
+        renderers.render_longhorn_tiers(
             {k: v for k, v in _DEFAULTS.items() if "retain" not in k}
         )
 
 
 def test_gitops_prefixes_lists_every_prefix_under_its_constant():
-    out = g.render_gitops_prefixes(("s/",), ("d/", "e/"), ("m.yml",))
+    out = renderers.render_gitops_prefixes(("s/",), ("d/", "e/"), ("m.yml",))
     assert "| Setup, scoped | `s/` (`_BROAD_SETUP_PREFIXES`)" in out
     assert "`d/`, `e/` (`_BROAD_DEPLOY_PREFIXES`)" in out
     assert "`m.yml` (`_BROAD_MANUAL_PREFIXES`)" in out
 
 
 def test_staging_subset_sorts_and_counts():
-    out = g.render_staging_subset("traefik, authelia,freshrss")
+    out = renderers.render_staging_subset("traefik, authelia,freshrss")
     assert "`authelia`, `freshrss`, `traefik` — 3 services" in out
 
 
 def test_staging_coverage_counts_gated_and_lists_ungated_eligible():
-    out = g.render_staging_coverage(["a", "b", "c", "d"], {"a", "b"}, ["a", "c", "d"])
+    out = renderers.render_staging_coverage(
+        ["a", "b", "c", "d"], {"a", "b"}, ["a", "c", "d"]
+    )
     assert "2 of 4 k8s roles are staging-gated" in out
     assert "2 auto-deploy-eligible role(s) sit outside the gate" in out
     assert "`c`, `d`" in out
 
 
 def test_staging_coverage_says_nothing_when_the_gate_covers_every_eligible_role():
-    out = g.render_staging_coverage(["a", "b"], {"a", "b"}, ["a", "b"])
+    out = renderers.render_staging_coverage(["a", "b"], {"a", "b"}, ["a", "b"])
     assert "0 auto-deploy-eligible role(s) sit outside the gate" in out
     assert "`a`, `b` — 2" not in out  # nothing left to name
 
 
 def test_autodeploy_coverage_renders_counts_and_denylist():
-    out = g.render_autodeploy_coverage(["a", "b"], ["c"], ["d"])
+    out = renderers.render_autodeploy_coverage(["a", "b"], ["c"], ["d"])
     assert "| Eligible | 2 |" in out
     assert "| Denied | 1 |" in out
     assert "| Not declaring | 1 |" in out
@@ -178,47 +184,47 @@ def test_autodeploy_coverage_renders_counts_and_denylist():
 
 
 def test_autodeploy_coverage_with_an_empty_denylist():
-    out = g.render_autodeploy_coverage(["a"], [], [])
+    out = renderers.render_autodeploy_coverage(["a"], [], [])
     assert "| Denied | 0 |" in out
     assert "Denylisted (`k8s_autodeploy: false`): ." in out
 
 
 def test_staging_timeouts_sums_both_budgets():
-    out = g.render_staging_timeouts(600, 120)
+    out = renderers.render_staging_timeouts(600, 120)
     assert "Worst case the staging gate adds 720s" in out
     assert "`STAGING_GATE_TIMEOUT_S` = 600s" in out
     assert "`STAGING_EXPECT_TIMEOUT_S` = 120s" in out
 
 
 def test_staging_timeouts_reflects_a_different_budget():
-    out = g.render_staging_timeouts(60, 30)
+    out = renderers.render_staging_timeouts(60, 30)
     assert "adds 90s" in out
     assert "720s" not in out
 
 
 def test_crowdsec_agent_liveness_names_the_period():
-    out = g.render_crowdsec_agent_liveness(60)
+    out = renderers.render_crowdsec_agent_liveness(60)
     assert "every 60s" in out
     assert "cscli lapi status" in out
 
 
 def test_crowdsec_agent_liveness_with_a_different_period():
-    assert "every 30s" in g.render_crowdsec_agent_liveness(30)
+    assert "every 30s" in renderers.render_crowdsec_agent_liveness(30)
 
 
 def test_etcd_offbox_retention_counts():
-    assert "14 off-box etcd snapshots" in g.render_etcd_offbox_retention(14)
-    assert "7 off-box etcd snapshots" in g.render_etcd_offbox_retention(7)
+    assert "14 off-box etcd snapshots" in renderers.render_etcd_offbox_retention(14)
+    assert "7 off-box etcd snapshots" in renderers.render_etcd_offbox_retention(7)
 
 
 def test_traefik_ports_names_both_container_ports():
-    out = g.render_traefik_ports(8000, 8443)
+    out = renderers.render_traefik_ports(8000, 8443)
     assert "`8000` (`traefik_k8s_http_port`)" in out
     assert "`8443` (`traefik_k8s_https_port`)" in out
 
 
 def test_staging_vm_sizing_converts_mib_to_gb():
-    out = g.render_staging_vm_sizing(8192, 4, "100G")
+    out = renderers.render_staging_vm_sizing(8192, 4, "100G")
     assert "8 GB RAM" in out
     assert "`hypervisor_staging_vm_memory_mib` = 8192" in out
     assert "4 vCPU" in out
@@ -226,13 +232,13 @@ def test_staging_vm_sizing_converts_mib_to_gb():
 
 
 def test_staging_vm_sizing_with_a_different_memory_size():
-    out = g.render_staging_vm_sizing(4096, 2, "50G")
+    out = renderers.render_staging_vm_sizing(4096, 2, "50G")
     assert "4 GB RAM" in out
     assert "8 GB RAM" not in out
 
 
 def test_secret_tiers_renders_cadence_and_count_per_tier():
-    out = g.render_secret_tiers({"auto": 180, "ignore": None}, 8, {"auto": 3})
+    out = renderers.render_secret_tiers({"auto": 180, "ignore": None}, 8, {"auto": 3})
     assert "| `auto` | 180 d | 3 |" in out
     assert "| `ignore` | — | 0 |" in out
     assert "3 secrets are registered" in out
@@ -270,7 +276,7 @@ maxretry = 3
 
 
 def test_parse_jails_resolves_defaults_and_skips_disabled():
-    jails = g.parse_jails(_CONF)
+    jails = readers.parse_jails(_CONF)
     assert [j["jail"] for j in jails] == ["sshd", "recidive"]
     assert jails[0] == {
         "jail": "sshd",
@@ -282,7 +288,7 @@ def test_parse_jails_resolves_defaults_and_skips_disabled():
 
 
 def test_fail2ban_table_renders_one_row_per_enabled_jail():
-    out = g.render_fail2ban_jails(g.parse_jails(_CONF))
+    out = renderers.render_fail2ban_jails(readers.parse_jails(_CONF))
     assert "| `sshd` | 5 failures in 10m (`maxretry 5`, `findtime 10m`) | 1h |" in out
     assert "dovecot" not in out
 
@@ -294,7 +300,7 @@ def test_container_udp_port_reads_the_named_entry():
             {"name": "wg-easy", "udp_port": 51820},
         ]
     }
-    assert g.container_udp_port(hv, "wg-easy") == "51820"
+    assert readers.container_udp_port(hv, "wg-easy") == "51820"
 
 
 def test_container_udp_port_refuses_an_ambiguous_or_missing_entry():
@@ -305,9 +311,9 @@ def test_container_udp_port_refuses_an_ambiguous_or_missing_entry():
         ]
     }
     with pytest.raises(AssertionError):
-        g.container_udp_port(hv, "wg-easy")
+        readers.container_udp_port(hv, "wg-easy")
     with pytest.raises(AssertionError):
-        g.container_udp_port({"containers_list": []}, "wg-easy")
+        readers.container_udp_port({"containers_list": []}, "wg-easy")
 
 
 def test_deadman_cadences_assembles_each_cron_from_its_variables():
@@ -324,7 +330,7 @@ def test_deadman_cadences_assembles_each_cron_from_its_variables():
         "registry_k8s_gc_cron_hour": "4",
         "registry_k8s_gc_cron_minute": "20",
     }
-    out = g.render_deadman_cadences(
+    out = renderers.render_deadman_cadences(
         k3s, {"pi_peer_backup_k8s_schedule": "30 23 * * *"}, registry
     )
     assert "| `daniel-box-disk-health` | `*/5 * * * *` |" in out
@@ -335,11 +341,11 @@ def test_deadman_cadences_assembles_each_cron_from_its_variables():
 
 def test_deadman_cadences_fails_on_a_missing_variable_rather_than_guessing():
     with pytest.raises(KeyError):
-        g.render_deadman_cadences({}, {"pi_peer_backup_k8s_schedule": "x"}, {})
+        renderers.render_deadman_cadences({}, {"pi_peer_backup_k8s_schedule": "x"}, {})
 
 
 def test_lan_addresses_names_each_value_and_its_variable():
-    out = g.render_lan_addresses(
+    out = renderers.render_lan_addresses(
         "10.0.0.240", "10.0.0.243", "51820", "51822", "10.0.0.0/24", "10.8.0.0/24"
     )
     assert "| `10.0.0.240` | `k3s_metallb_ingress_vip` |" in out
