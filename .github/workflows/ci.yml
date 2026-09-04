@@ -130,7 +130,7 @@ jobs:
           key: galaxy-${{ runner.os }}-${{ hashFiles('ansible/requirements.yml') }}
 
       - name: Install prek
-        run: pip install prek==0.4.14  # pinned for a reproducible hook toolchain; Renovate (pypi) bumps it
+        run: pip install prek==0.5.0  # pinned for a reproducible hook toolchain; Renovate (pypi) bumps it
 
       # validate-unit-templates is `language = "system"`, so it runs whatever `systemd-analyze`
       # is on PATH — unverified on ubuntu-latest before this ran once. This step exists so a
