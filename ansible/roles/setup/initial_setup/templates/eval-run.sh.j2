@@ -26,11 +26,11 @@
 # publishes; committing straight to evals/history.json here would silently stop working the
 # same way docs-refresh's direct commit once did.
 #
-# THE DIRTY-TREE AND OPEN-PR GUARDS APPEAR TWICE ON PURPOSE. A cheap, read-only, no-lock copy
+# THE DIRTY-TREE AND UNLANDED-BRANCH GUARDS APPEAR TWICE ON PURPOSE. A cheap, read-only, no-lock copy
 # runs before the sweep as a pre-filter -- unlike docs-refresh's generator this sweep costs
-# real API dollars (evals/README.md), so a tree already dirty or last week's PR still open
-# should skip BEFORE paying for a run that would just be thrown away. The copies under the
-# lock below are the authoritative check: state can still change during the sweep, and only
+# real API dollars (evals/README.md), so a tree already dirty or last week's branch still on
+# origin should skip BEFORE paying for a run that would just be thrown away. The copies under
+# the lock below are the authoritative check: state can still change during the sweep, and only
 # they gate the actual commit.
 #
 # NODE VIA fnm's `default` ALIAS, NOT $PATH. A Claude Code session's node lives on an
@@ -107,11 +107,21 @@ if ! git diff --quiet || ! git diff --cached --quiet; then
   PUSH_STATUS=up
   exit 0
 fi
-OPEN_PR="$("$UV" run --frozen python scripts/deploy_tools/publish_pr.py open-pr \
-  --prefix "$PR_BRANCH_PREFIX" 2>/dev/null || true)"
-if [ -n "$OPEN_PR" ]; then
-  alert "eval-run: PR #$OPEN_PR still open; skipped before running the sweep"
-  PUSH_STATUS=up
+# Gated on origin rather than the open-PR list: `gh pr create` runs AFTER the push inside the
+# publisher, so a create failure leaves evals-history/<stamp> on origin with no PR and no local
+# trace, and an open-PR check reads that as "nothing pending" and stacks a second branch on it.
+# Exit codes: 0 clean, 1 origin unreadable, 2 a PR is open, 3 a branch with no PR.
+UNLANDED="$("$UV" run --frozen python scripts/deploy_tools/publish_pr.py unlanded \
+  --prefix "$PR_BRANCH_PREFIX" 2>&1)"
+UNLANDED_RC=$?
+if [ "$UNLANDED_RC" -ne 0 ]; then
+  alert "eval-run: $UNLANDED; skipped before running the sweep"
+  # 2 is last week's PR waiting on CI, which clears itself. 1 and 3 need a human.
+  if [ "$UNLANDED_RC" -eq 2 ]; then
+    PUSH_STATUS=up
+  else
+    PUSH_STATUS=down
+  fi
   exit 0
 fi
 
@@ -152,14 +162,20 @@ if ! git diff --quiet || ! git diff --cached --quiet; then
   exit 0
 fi
 
-# One open PR at a time, same guard as docs-refresh.sh: a still-open evals-history/* PR means
-# last week's result hasn't landed yet, so recording another would either duplicate it or
-# race it.
-OPEN_PR="$("$UV" run --frozen python scripts/deploy_tools/publish_pr.py open-pr \
-  --prefix "$PR_BRANCH_PREFIX" 2>/dev/null || true)"
-if [ -n "$OPEN_PR" ]; then
-  alert "eval-run: PR #$OPEN_PR still open; ran the sweep but recorded nothing"
-  PUSH_STATUS=up
+# One unlanded branch at a time, same guard as docs-refresh.sh: an evals-history/* branch still
+# on origin means last week's result hasn't landed yet, so recording another would either
+# duplicate it or race it. This is the authoritative copy -- the pre-filter above ran before the
+# sweep, and origin can change during it.
+UNLANDED="$("$UV" run --frozen python scripts/deploy_tools/publish_pr.py unlanded \
+  --prefix "$PR_BRANCH_PREFIX" 2>&1)"
+UNLANDED_RC=$?
+if [ "$UNLANDED_RC" -ne 0 ]; then
+  alert "eval-run: $UNLANDED; ran the sweep but recorded nothing"
+  if [ "$UNLANDED_RC" -eq 2 ]; then
+    PUSH_STATUS=up
+  else
+    PUSH_STATUS=down
+  fi
   exit 0
 fi
 
@@ -208,9 +224,16 @@ fi
 # docs-refresh and secret-rotate. Exit 1 means the commit is still local on master, 2 that the
 # branch is on origin without a PR; either way the message says which.
 PR_BODY="Weekly hermetic homelab-agent eval sweep, rolled into evals/history.json by evals/trend.py. $(tr '\n' ' ' < "$TREND_OUT" | tail -c 800)"
-if ! PUB_MSG="$("$UV" run --frozen python scripts/deploy_tools/publish_pr.py publish \
-    --prefix "$PR_BRANCH_PREFIX" --title "evals: record weekly hermetic eval sweep" \
-    --body "$PR_BODY" 2>&1)"; then
+PUB_MSG="$("$UV" run --frozen python scripts/deploy_tools/publish_pr.py publish \
+  --prefix "$PR_BRANCH_PREFIX" --title "evals: record weekly hermetic eval sweep" \
+  --body "$PR_BODY" 2>&1)"
+PUB_RC=$?
+# The publisher prints one line, but 2>&1 also captures uv's own resolver chatter after a lock
+# bump, and logger and Kuma each take one. Same flatten-and-cap as say_failure, safe as a
+# pipeline because PUB_RC above already holds the status this branches on. Not bash's
+# `${PUB_MSG: -400}`: a negative offset larger than the string returns the EMPTY string.
+PUB_MSG="$(printf '%s' "$PUB_MSG" | tr '\n' ' ' | tail -c 400)"
+if [ "$PUB_RC" -ne 0 ]; then
   alert "eval-run: $PUB_MSG"
   exit 1
 fi

@@ -197,6 +197,165 @@ def test_the_audit_watches_for_an_unlanded_rotation_branch():
     )
 
 
+# --- Every variable a cron reads is one it can see ------------------------------------------
+#
+# All four scripts run under `set -uo pipefail`, so reading an unset variable aborts the script
+# at that line. That is normally the right behaviour, but it is invisible to every check the
+# repo has: the templates render, ansible-lint passes, and the abort only happens on the branch
+# that reads the variable -- which for docs-refresh was the branch that reports a DEGRADED run,
+# so a healthy run never touched it. The port to publish_pr.py deleted `BRANCH=` and left the
+# `$BRANCH` read at docs-refresh.sh.j2:237 behind, and it stayed there through review, CI and a
+# deploy (issue #1060).
+#
+# A read is satisfied when the same template assigns it, when kuma-push-lib.sh does (every one
+# of these sources it), or when it is in _CRON_ENV below. Forms that survive `set -u` --
+# ${VAR:-}, ${VAR-}, ${VAR:+}, ${VAR+}, ${VAR:=}, ${VAR=} -- are not reads. Nothing else is
+# exempt: ${VAR#...}, ${VAR//...} and ${#VAR} all abort on an unset VAR just as `$VAR` does.
+
+# Environment the cron wrapper supplies, with the line that supplies it. Each entry widens the
+# guard, so each carries its provenance and test_the_cron_env_allowlist_is_still_exported
+# checks that provenance still exists.
+_CRON_ENV = {
+    "PATH": "set on the cron job line (crons.yml:481 docs-refresh, :531 eval-run) and "
+    "exported by secret-rotate.sh.j2 itself",
+    "KUBECONFIG": "set on the docs-refresh cron job line (crons.yml:481)",
+    "HOME": "set on the eval-run cron job line (crons.yml:531)",
+}
+
+KUMA_PUSH_LIB = REPO / "ansible/roles/setup/initial_setup/files/kuma-push-lib.sh"
+
+# Templates whose reads are checked, and one name each that the read census MUST contain. A
+# census that silently stops matching returns an empty set, and "no unsatisfied reads" is what
+# an empty set looks like -- the failure mode CLAUDE.md names as surviving the red-proof pair.
+_READ_CENSUS_MUST_FIND = {
+    DOCS_REFRESH: frozenset({"PUSH_STATUS", "PUSH_MSG", "PUB_MSG", "UV", "REPO"}),
+    EVAL_RUN: frozenset({"PUSH_STATUS", "PUB_MSG", "UNLANDED_RC", "REPO", "TREND_RC"}),
+    SECRET_ROTATE: frozenset({"PUB_MSG", "STALE_HEADS", "TRACKED", "UV"}),
+    ROTATION_AUDIT: frozenset({"KUMA_HOST", "EXTRA_DOWN", "STALE_HEADS", "UV"}),
+}
+
+# `${NAME` plus the operator that follows, when there is one.
+_BRACED_READ = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(:?[-+=])?")
+# `$NAME`. `${` cannot match: `{` is not in the name class.
+_BARE_READ = re.compile(r"\$([A-Za-z_][A-Za-z0-9_]*)")
+# The shell keywords an assignment can hide behind: `if ! VAR="$(...)"`, `while VAR=...`.
+_LEADING_KEYWORDS = re.compile(r"^(?:(?:if|elif|while|until|then|else|do)\s+|!\s*)*")
+_ASSIGNED = re.compile(
+    r"^(?:export\s+|readonly\s+|local\s+(?:-\w+\s+)?|declare\s+(?:-\w+\s+)?)?"
+    r"([A-Za-z_][A-Za-z0-9_]*)="
+)
+_FOR_LOOP = re.compile(r"^for\s+([A-Za-z_][A-Za-z0-9_]*)\s+in\b")
+# `local a b c` / `declare x y` bind names with no `=` at all.
+_BARE_DECLARATION = ("local ", "declare ", "readonly ")
+
+
+def shell_reads(text: str) -> set[str]:
+    """Every variable name the script reads in a form that aborts under ``set -u``."""
+    names = set()
+    for line in _logical_lines(text):
+        names.update(
+            name for name, operator in _BRACED_READ.findall(line) if not operator
+        )
+        names.update(_BARE_READ.findall(line))
+    return names
+
+
+def shell_assignments(text: str) -> set[str]:
+    """Every variable name the script binds, by assignment, loop variable or declaration."""
+    names = set()
+    for line in _logical_lines(text):
+        for chunk in re.split(r"[;&|]+|\(\(|\)\)", line):
+            stripped = _LEADING_KEYWORDS.sub("", chunk.strip())
+            if match := _ASSIGNED.match(stripped):
+                names.add(match.group(1))
+            if loop := _FOR_LOOP.match(stripped):
+                names.add(loop.group(1))
+            if stripped.startswith(_BARE_DECLARATION):
+                names.update(
+                    word.split("=")[0]
+                    for word in stripped.split()[1:]
+                    if not word.startswith("-")
+                )
+    return names
+
+
+def unsatisfied_reads(text: str) -> set[str]:
+    """Names the script reads that neither it, the shared library, nor the cron env supplies."""
+    supplied = (
+        shell_assignments(text)
+        | shell_assignments(KUMA_PUSH_LIB.read_text())
+        | set(_CRON_ENV)
+    )
+    return shell_reads(text) - supplied
+
+
+@pytest.mark.parametrize(
+    "path",
+    [pytest.param(path, id=path.name) for path in _READ_CENSUS_MUST_FIND],
+)
+def test_every_variable_a_cron_reads_is_one_it_can_see(path):
+    """`set -u` turns a leftover read into an abort on the branch that reads it."""
+    missing = unsatisfied_reads(read(path))
+    assert not missing, (
+        f"{path.name} reads {sorted(missing)} under `set -u` without assigning them, sourcing "
+        f"them from kuma-push-lib.sh, or their being cron environment named in _CRON_ENV. "
+        f"Each one aborts the script at that line the first time its branch is taken."
+    )
+
+
+@pytest.mark.parametrize(
+    ("path", "expected"),
+    [
+        pytest.param(path, names, id=path.name)
+        for path, names in _READ_CENSUS_MUST_FIND.items()
+    ],
+)
+def test_the_read_census_still_finds_the_variables_it_is_built_on(path, expected):
+    """A census that stops matching returns nothing, and nothing has no unsatisfied reads."""
+    found = shell_reads(read(path))
+    assert expected <= found, (
+        f"the read census no longer sees {sorted(expected - found)} in {path.name}, so it is "
+        f"reporting green on a set it cannot see. Check _BRACED_READ / _BARE_READ."
+    )
+
+
+def test_a_read_with_no_assignment_is_flagged():
+    """The rejecting half. This is docs-refresh.sh.j2:237 before the fix, minimised."""
+    template = 'PUSH_MSG="PR opened for $BRANCH"\n'
+    assert unsatisfied_reads(template) == {"BRANCH"}
+
+
+def test_a_read_the_script_assigns_is_clean():
+    template = 'BRANCH="docs-refresh/x"\nPUSH_MSG="PR opened for $BRANCH"\n'
+    assert unsatisfied_reads(template) == set()
+
+
+def test_a_set_u_safe_default_is_not_a_read():
+    """`${LOG:-}` is the idiom the traps use for a variable set later or not at all."""
+    assert unsatisfied_reads('rm -f "${LOG:-}" "${TMP-}" "${DIR:+x}"\n') == set()
+
+
+def test_a_substring_expansion_of_an_unset_name_is_still_a_read():
+    """Only `:- - :+ + := =` survive `set -u`; `#`, `%%` and `//` all abort."""
+    assert unsatisfied_reads('echo "${PUB_MSG%% with auto-merge}"\n') == {"PUB_MSG"}
+
+
+def test_the_cron_env_allowlist_is_still_exported():
+    """An entry whose provenance is gone silently widens the guard for everything else."""
+    crons = (TEMPLATES.parent / "tasks/crons.yml").read_text()
+    templates = "".join(path.read_text() for path in _READ_CENSUS_MUST_FIND)
+    stale = [
+        name
+        for name in _CRON_ENV
+        if f"{name}=" not in crons and f"export {name}=" not in templates
+    ]
+    assert not stale, (
+        "these _CRON_ENV entries are no longer set by any cron job line in crons.yml or "
+        "exported by a template, so the guard is excusing reads nothing supplies: "
+        + ", ".join(stale)
+    )
+
+
 # --- No Kuma push token reaches curl's argv -------------------------------------------------
 #
 # /proc is mounted without hidepid on all three hosts, so any local user can read another user's

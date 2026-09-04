@@ -174,8 +174,10 @@ can't quietly widen it.
   (`~/.local/share/chezmoi/evals/run-evals.mjs`) — never a cached or hand-edited report.
 - **Abort valves:** the shared `/var/lock/server-git-tree.lock` (a dirty tree or another
   in-flight commit means the sweep's result is thrown away, not recorded against a tree it
-  didn't grade); the one-open-PR guard (a still-open `evals-history/*` PR skips the run rather
-  than stacking a second one); the empty-key gate above.
+  didn't grade); the unlanded-branch guard (`publish_pr.py unlanded` — an `evals-history/*`
+  branch still on origin skips the run rather than stacking a second one, and it reads origin
+  rather than the open-PR list because a failed `gh pr create` leaves a branch with no PR);
+  the empty-key gate above.
 - **Required evidence:** every run logs `status=<up|down> <msg>` via `logger -t eval-run`
   (readable in Loki) and, when armed, pushes the Kuma "Homelab Evals" monitor. A REGRESSED case
   still gets committed (the data is real) but reports the push DOWN with the regression named,

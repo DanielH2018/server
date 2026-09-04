@@ -37,12 +37,14 @@
 #
 # secret-rotate.sh had the same bug and got its own change (#427), for the reason noted here:
 # it rotates live credentials, so its failure mode and its remedy are different. It publishes
-# through a PR too now, and gates on the remote branch rather than an open PR — a `gh pr
-# create` failure lands after the push, which no local check can see.
+# through a PR too now.
 #
-# ONE OPEN PR AT A TIME. After opening one this script resets master back to origin, so
-# the next run regenerates the same diff and would open a duplicate. It checks for an
-# already-open PR first and exits instead.
+# ONE UNLANDED BRANCH AT A TIME. After publishing one this script resets master back to
+# origin, so the next run regenerates the same diff and would publish a duplicate. It asks
+# `publish_pr.py unlanded` first and exits instead. That gate reads origin rather than the
+# open-PR list, which is secret-rotate's reasoning: `gh pr create` runs after the push, so a
+# create failure leaves the branch on origin with no PR and no local trace at all, and an
+# open-PR check reads exactly that state as clean (#1066).
 #
 # NO DEADMAN. Deliberate, and the same call the infra-map cron makes. Every generated page
 # carries the timestamp its content was last built from, and the served site carries
@@ -142,19 +144,31 @@ if ! git diff --quiet || ! git diff --cached --quiet; then
   exit 0
 fi
 
-# An unmerged PR from a previous run means its diff is still pending. Regenerating now
-# would produce the same diff again and open a duplicate, so build the site (the useful
-# half, and it does not need the PR) and stop. If CI is stuck the PRs would otherwise
-# accumulate one per run, twice a day, with nobody looking.
-# `gh pr list --head` matches one exact branch, and each run's branch is timestamped, so
-# the filter has to be a prefix match over the open list rather than a --head lookup.
-OPEN_PR="$("$UV" run --frozen python scripts/deploy_tools/publish_pr.py open-pr \
-  --prefix "$PR_BRANCH_PREFIX" 2>/dev/null || true)"
-if [ -n "$OPEN_PR" ]; then
-  alert "docs-refresh: PR #$OPEN_PR still open; rebuilt site only, no regeneration"
-  PUSH_STATUS=up
+# Unlanded work from a previous run means its diff is still pending. Regenerating now would
+# produce the same diff again and publish a duplicate, so build the site (the useful half,
+# and it does not need the PR) and stop. If CI is stuck the PRs would otherwise accumulate
+# one per run, twice a day, with nobody looking.
+#
+# GATED ON ORIGIN, not on the open-PR list, which is secret-rotate's reasoning applied here:
+# `gh pr create` runs AFTER the push inside the publisher, so a create failure -- a `gh`
+# timeout against the 60/hour quota is enough -- leaves docs-refresh/<stamp> on origin with no
+# PR and no local trace at all. An open-PR check reads that state as "nothing open" and
+# publishes a second orphan branch, twice a day, which is the accumulation this guard exists
+# to prevent. Merged branches are deleted on this repo, so a surviving head means unlanded work.
+UNLANDED="$("$UV" run --frozen python scripts/deploy_tools/publish_pr.py unlanded \
+  --prefix "$PR_BRANCH_PREFIX" 2>&1)"
+UNLANDED_RC=$?
+if [ "$UNLANDED_RC" -ne 0 ]; then
+  alert "docs-refresh: $UNLANDED; rebuilt site only, no regeneration"
+  # 2 is a PR waiting on CI: benign, it clears itself, and the docs are only a run behind.
+  # 1 (origin unreadable) and 3 (a branch with no PR) both need a human, so they report down.
+  if [ "$UNLANDED_RC" -eq 2 ]; then
+    PUSH_STATUS=up
+  else
+    PUSH_STATUS=down
+  fi
   "$UV" run --frozen python scripts/docs/build_docs.py --skip-generators --site-dir "$SITE_DIR" \
-    || { alert "docs-refresh: site build failed while a PR was open"; PUSH_STATUS=down; }
+    || { alert "docs-refresh: site build failed while a previous run was unlanded"; PUSH_STATUS=down; }
   exit 0
 fi
 
@@ -217,10 +231,21 @@ fi
 # eval-run and secret-rotate. Its header carries the ordering and the HEAD~1 reasoning. It
 # prints one line to alert with, and its exit code says where the commit is: 1 while it is
 # still local on master, 2 once the branch is on origin without a PR.
-if ! PUB_MSG="$("$UV" run --frozen python scripts/deploy_tools/publish_pr.py publish \
-    --prefix "$PR_BRANCH_PREFIX" --title "docs: refresh generated reference pages" \
-    --body "Generated output only, from the twice-daily docs-refresh cron: the pages under docs/reference/ and the infra map. Both are reproducible by scripts/docs/build_docs.py. Opened as a PR because a repository ruleset rejects direct writes to master." \
-    2>&1)"; then
+PUB_MSG="$("$UV" run --frozen python scripts/deploy_tools/publish_pr.py publish \
+  --prefix "$PR_BRANCH_PREFIX" --title "docs: refresh generated reference pages" \
+  --body "Generated output only, from the twice-daily docs-refresh cron: the pages under docs/reference/ and the infra map. Both are reproducible by scripts/docs/build_docs.py. Opened as a PR because a repository ruleset rejects direct writes to master." \
+  2>&1)"
+PUB_RC=$?
+# The publisher prints one line, but 2>&1 also captures uv's own resolver chatter after a lock
+# bump, and logger and Kuma each take one. Same flatten-and-cap as say_failure, and safe to run
+# a pipeline here because PUB_RC above already holds the status this branches on. Bash's own
+# `${PUB_MSG: -400}` is NOT the shorter way to write it: a negative offset larger than the
+# string returns the EMPTY string, so it would silently drop every message under 400 characters.
+PUB_MSG="$(printf '%s' "$PUB_MSG" | tr '\n' ' ' | tail -c 400)"
+# Exit 1 and exit 2 are both reported the same way here, deliberately. At 2 the publisher has
+# already reset the local master, so the tree is clean either way and there is nothing for this
+# script to undo; the unlanded arm above is what catches the orphaned branch on the next run.
+if [ "$PUB_RC" -ne 0 ]; then
   alert "docs-refresh: $PUB_MSG"
   exit 1
 fi
@@ -234,5 +259,8 @@ if [ "$GENERATORS_OK" -eq 1 ]; then
   PUSH_MSG="regenerated, committed, $PUB_MSG"
 else
   PUSH_STATUS=down
-  PUSH_MSG="PR opened for $BRANCH, but one or more generators had failed — the published set is incomplete"
+  # $PUB_MSG, not a re-derived branch name: the publisher already names the branch it opened,
+  # and the BRANCH variable this line used to read was deleted when that logic moved into
+  # publish_pr.py -- leaving a `set -u` abort on exactly the path that reports a degraded run.
+  PUSH_MSG="$PUB_MSG, but one or more generators had failed — the published set is incomplete"
 fi
