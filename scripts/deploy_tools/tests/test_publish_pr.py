@@ -112,6 +112,17 @@ def test_a_failed_push_leaves_the_commit_local_and_says_so():
     assert not any(c[0] == "gh" for c in rec.calls)
 
 
+def test_a_failed_push_deletes_the_dead_local_branch():
+    """The branch never reached origin, so it is a dead local ref at the same commit as
+    master. Left behind, a retry inside the same UTC minute fails at `git branch` with
+    "already exists" and reports the wrong cause (issue #1086)."""
+    rec = Recorder(
+        {"git push": _cp(1, err="remote: declined due to repository rule violations")}
+    )
+    _publish(rec)
+    assert ("git", "branch", "-D", BRANCH) in rec.calls
+
+
 def test_the_local_master_is_reset_before_the_pr_is_opened():
     """A local master one commit ahead breaks gitops-deploy's --ff-only once the squash lands."""
     rec = Recorder()
@@ -129,6 +140,20 @@ def test_the_local_master_is_reset_before_the_pr_is_opened():
             "body",
         )
     )
+
+
+def test_a_failed_reset_reports_master_still_ahead_and_stops_before_the_pr():
+    """A reset failure (index lock, tree dirtied between the guard and here) must not be
+    swallowed: pressing on would report "PR opened ... with auto-merge" while master is
+    still one commit ahead of origin, and gitops-deploy's --ff-only parks silently once the
+    squash lands under a new SHA (issue #1086)."""
+    rec = Recorder({"git reset": _cp(1, err="Unable to create '.git/index.lock'")})
+    out = _publish(rec)
+    assert out.rc == publish_pr.RC_PUSHED_NO_PR
+    assert "master is still one commit ahead of origin" in out.message
+    assert "index.lock" in out.message
+    assert ("git", "branch", "-D", BRANCH) not in rec.calls
+    assert not any(c[0] == "gh" for c in rec.calls)
 
 
 def test_a_failed_pr_create_reports_the_branch_as_published():

@@ -34,6 +34,7 @@ DOCS_REFRESH = TEMPLATES / "docs-refresh.sh.j2"
 SECRET_ROTATE = TEMPLATES / "secret-rotate.sh.j2"
 ROTATION_AUDIT = TEMPLATES / "secret-rotation-audit.sh.j2"
 EVAL_RUN = TEMPLATES / "eval-run.sh.j2"
+PUBLISH_PR = REPO / "scripts/deploy_tools/publish_pr.py"
 
 # (path, the commit invocation as it appears in that script). secret-rotate splits its commit
 # across lines and passes --no-verify, so a single shared marker would silently match neither.
@@ -118,6 +119,35 @@ def test_failure_paths_keep_their_error_text(path, commit_marker):
     )
     assert re.search(r'alert "[^"]*\$PUB_MSG', read(path)), (
         f"{path.name} captures the publisher's message but never alerts with it"
+    )
+
+
+def test_the_regressed_suffix_strip_matches_what_the_publisher_prints():
+    """eval-run.sh.j2's REGRESSED alert strips a literal suffix off PUB_MSG on the assumption
+    that publish_pr.py's happy-path message ends exactly that way.
+
+    ``test_the_happy_path_runs_the_six_steps_in_order`` in test_publish_pr.py pins the
+    producer's wording, but nothing pinned the two sides to each other -- change the message
+    there and this template silently keeps stripping the stale suffix, so the REGRESSED alert
+    reads "PR opened for X with auto-merge; one or more eval cases REGRESSED", wrong and not
+    obviously wrong (issue #1086).
+    """
+    # Anchored on RC_PUBLISHED specifically: "PR opened for {branch}" is also the prefix of
+    # the auto-merge-failed message earlier in the same function, and an unanchored search
+    # matches that one first.
+    match = re.search(
+        r'RC_PUBLISHED,\s*f"PR opened for \{branch\}(.*?)"', PUBLISH_PR.read_text()
+    )
+    assert match, (
+        "publish_pr.py's happy-path message literal has moved; re-derive the suffix"
+    )
+    suffix = match.group(1)
+
+    template = re.search(r"PUB_MSG%%([^}]*)\}", read(EVAL_RUN))
+    assert template, "eval-run.sh.j2 no longer strips a %% suffix off PUB_MSG"
+    assert template.group(1) == suffix, (
+        f"eval-run.sh.j2 strips {template.group(1)!r} off PUB_MSG but publish_pr.py's "
+        f"happy path prints {suffix!r} -- the REGRESSED alert would keep the stale suffix"
     )
 
 
