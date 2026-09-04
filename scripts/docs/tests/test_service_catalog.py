@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
-"""Tests for scripts/docs/service_catalog.py.
+"""Tests for scripts/docs/service_catalog.py and the catalog_* leaves it assembles.
 
-Entirely fixture-driven — synthetic host_vars/roles under tmp_path, never the real
-inventory (which changes; see scripts/deploy_tools/tests/test_deploy_tags.py's REAL-inventory tests for
-the pattern this deliberately does NOT follow, since the catalog's job is deriving
-facts, not guarding a fixed tag set).
-
+Entirely fixture-driven — synthetic host_vars/roles under tmp_path, never the real inventory
+(which changes; see scripts/deploy_tools/tests/test_deploy_tags.py's REAL-inventory tests for the
+pattern this deliberately does NOT follow — the catalog derives facts rather than guarding a set).
 Run: uv run pytest scripts/docs/tests/test_service_catalog.py
 """
 
@@ -14,6 +12,10 @@ from __future__ import annotations
 import textwrap
 
 import service_catalog
+from catalog_backup import backup_tier
+from catalog_facts import route_for
+from catalog_model import ServiceRow
+from catalog_render import render_html, render_markdown
 
 
 def _write(path, content):
@@ -112,9 +114,9 @@ def test_k8s_route_uses_hostname_default_name_when_ingressroute_exists(tmp_path)
     paths = _make_repo(tmp_path)
     role = paths["k8s_roles"] / "jellyfin" / "templates"
     _write(role / "ingressroute.yaml.j2", "{{ ingressroute(...) }}\n")
-    rows = service_catalog.build_rows(**paths)
-    row = next(r for r in rows if r.name == "jellyfin")
-    assert row.route.startswith("jellyfin.local.<domain>")
+    entry = {"name": "jellyfin", "hostname": "jellyfin"}
+    route = route_for(entry, "k8s", {}, paths["k8s_roles"], paths["all_vars"])
+    assert route.startswith("jellyfin.local.<domain>")
 
 
 def test_k8s_route_is_lan_only_when_public_route_is_off(tmp_path):
@@ -155,9 +157,7 @@ def test_markdown_route_cells_are_linkable_but_the_row_value_is_not(tmp_path):
     _write(role / "ingressroute.yaml.j2", "{{ ingressroute(...) }}\n")
     rows = service_catalog.build_rows(**paths)
     assert all("<span" not in r.route for r in rows)
-    assert 'class="fqdn" data-host="jellyfin.local"' in service_catalog.render_markdown(
-        rows
-    )
+    assert 'class="fqdn" data-host="jellyfin.local"' in render_markdown(rows)
 
 
 def test_k8s_route_is_no_route_when_role_has_no_ingressroute_template(tmp_path):
@@ -246,9 +246,9 @@ def test_backup_tier_pvc_not_in_either_list_defaults_to_daily_b2(tmp_path):
 
 def test_backup_tier_no_pvc_is_stateless_not_unknown(tmp_path):
     paths = _make_repo(tmp_path)
-    rows = service_catalog.build_rows(**paths)
-    row = next(r for r in rows if r.name == "authelia")
-    assert row.backup_tier == "no PVC (stateless)"
+    entry = {"name": "authelia"}
+    tier = backup_tier(entry, "k8s", "homelab", set(), set(), paths["k8s_roles"])
+    assert tier == "no PVC (stateless)"
 
 
 def test_backup_tier_unresolvable_var_is_unknown(tmp_path):
@@ -391,7 +391,7 @@ def test_multiple_pvcs_report_each_tier_deduplicated(tmp_path):
 def test_render_html_is_self_contained_and_lists_every_service(tmp_path):
     paths = _make_repo(tmp_path)
     rows = service_catalog.build_rows(**paths)
-    out = service_catalog.render_html(rows)
+    out = render_html(rows)
     assert "<!doctype html>" in out
     assert "<style>" in out
     assert "http" not in out.split("<style>")[0]  # no external asset before the CSS
@@ -423,7 +423,7 @@ def test_main_writes_output_file(tmp_path):
 
 # ── Markdown renderer (docs/reference/services.md) ─────────────────────────────────────
 
-_ROW = service_catalog.ServiceRow
+_ROW = ServiceRow
 
 
 def test_markdown_has_one_row_per_service():
@@ -431,7 +431,7 @@ def test_markdown_has_one_row_per_service():
         _ROW("sonarr", "daniel-box", "k8s", "sonarr", "authelia", "weekly", "yes"),
         _ROW("wg-easy", "daniel-pi", "docker", "LAN-direct", "none", "none", "no"),
     ]
-    out = service_catalog.render_markdown(rows)
+    out = render_markdown(rows)
     # Count ROWS, not substrings: a service whose route equals its name puts the same
     # "| name |" text in two cells of one line.
     lines = out.splitlines()
@@ -445,14 +445,14 @@ def test_markdown_groups_by_host():
         _ROW("sonarr", "daniel-box", "k8s", "sonarr", "authelia", "weekly", "yes"),
         _ROW("wg-easy", "daniel-pi", "docker", "LAN-direct", "none", "none", "no"),
     ]
-    out = service_catalog.render_markdown(rows)
+    out = render_markdown(rows)
     assert "## daniel-box" in out
     assert "## daniel-pi" in out
     assert out.index("## daniel-box") < out.index("| sonarr |")
 
 
 def test_markdown_opens_with_the_provenance_banner():
-    out = service_catalog.render_markdown([])
+    out = render_markdown([])
     assert out.startswith("---\n")
     assert "generated_from: scripts/docs/service_catalog.py" in out
     assert "do not edit" in out.lower()
@@ -465,7 +465,7 @@ def test_markdown_escapes_pipes_in_values():
     template text and nothing stops one appearing.
     """
     rows = [_ROW("odd", "daniel-box", "k8s", "a|b", "authelia", "none", "no")]
-    out = service_catalog.render_markdown(rows)
+    out = render_markdown(rows)
     row_line = next(ln for ln in out.splitlines() if ln.startswith("| odd |"))
     assert row_line.count("|") == 8, f"pipe count wrong, row split: {row_line}"
 
@@ -477,7 +477,7 @@ def test_markdown_counts_unknown_fields():
     'unknown' convention exists to prevent.
     """
     rows = [_ROW("x", "daniel-box", "k8s", "unknown", "authelia", "none", "no")]
-    out = service_catalog.render_markdown(rows)
+    out = render_markdown(rows)
     assert "unknown" in out.lower()
 
 
@@ -487,8 +487,8 @@ def test_markdown_is_stable_across_calls():
         _ROW("b", "daniel-box", "k8s", "b", "authelia", "none", "no"),
         _ROW("a", "daniel-pi", "docker", "LAN-direct", "none", "none", "no"),
     ]
-    first = service_catalog.render_markdown(rows)
-    second = service_catalog.render_markdown(list(reversed(rows)))
+    first = render_markdown(rows)
+    second = render_markdown(list(reversed(rows)))
     assert first == second, "row or host ordering depends on input order"
 
 
@@ -499,7 +499,7 @@ def test_markdown_ends_with_exactly_one_newline():
     hook keeps rewriting fails that commit on every run until someone fixes the
     generator. Canonical output at the source is what stops that.
     """
-    out = service_catalog.render_markdown(
+    out = render_markdown(
         [_ROW("a", "daniel-box", "k8s", "a", "authelia", "none", "no")]
     )
     assert out.endswith("\n")

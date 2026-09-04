@@ -1,7 +1,6 @@
-"""Tests for scripts/docs/reference/scripts.py.
+"""Tests for scripts/docs/reference/scripts.py and the two leaves it assembles.
 
 Fixture-driven: a synthetic scripts/ directory under tmp_path.
-
 Run: uv run pytest scripts/docs/tests/test_gen_reference_scripts.py
 """
 
@@ -12,6 +11,7 @@ import textwrap
 from pathlib import Path
 
 from docs.reference import scripts as g
+from lib import script_classify as sc, script_coverage as cov
 
 
 def _write(path, body):
@@ -185,7 +185,7 @@ def _repo(tmp_path):
 
 def test_a_cron_job_makes_a_script_scheduled(tmp_path):
     repo, scripts = _repo(tmp_path)
-    verdicts = g.classify(repo, scripts)
+    verdicts = sc.classify(repo, scripts)
     assert verdicts["cronned.py"][0] == "scheduled"
     assert "Nightly thing" in verdicts["cronned.py"][1]
 
@@ -193,28 +193,28 @@ def test_a_cron_job_makes_a_script_scheduled(tmp_path):
 def test_a_cron_reaches_through_its_wrapper_template(tmp_path):
     """build_docs.py is named only by docs-refresh.sh, which is what its cron runs."""
     repo, scripts = _repo(tmp_path)
-    verdicts = g.classify(repo, scripts)
+    verdicts = sc.classify(repo, scripts)
     assert verdicts["wrapped.py"][0] == "scheduled"
     assert "wrap.sh" in verdicts["wrapped.py"][1]
 
 
 def test_a_prek_entry_and_a_workflow_step_are_gates(tmp_path):
     repo, scripts = _repo(tmp_path)
-    verdicts = g.classify(repo, scripts)
+    verdicts = sc.classify(repo, scripts)
     assert verdicts["gated.py"][0] == "gate"
     assert verdicts["shipped.py"][0] == "gate"
 
 
 def test_an_imported_module_is_a_library(tmp_path):
     repo, scripts = _repo(tmp_path)
-    verdicts = g.classify(repo, scripts)
+    verdicts = sc.classify(repo, scripts)
     assert verdicts["lib.py"][0] == "library"
     assert "user.py" in verdicts["lib.py"][1]
 
 
 def test_a_script_nothing_reaches_is_adhoc(tmp_path):
     repo, scripts = _repo(tmp_path)
-    assert g.classify(repo, scripts)["lonely.py"] == (
+    assert sc.classify(repo, scripts)["lonely.py"] == (
         "adhoc",
         "no automated caller in the tree",
     )
@@ -224,14 +224,14 @@ def test_a_test_importing_its_subject_does_not_make_it_a_library(tmp_path):
     """Otherwise every tested entry point would read as a module nobody runs."""
     repo, scripts = _repo(tmp_path)
     _write(scripts / "test_lonely.py", '"""x"""\nimport lonely\n')
-    assert g.classify(repo, scripts)["lonely.py"][0] == "adhoc"
+    assert sc.classify(repo, scripts)["lonely.py"][0] == "adhoc"
 
 
 def test_the_highest_kind_wins_when_a_script_is_reached_twice(tmp_path):
     """The costliest way it runs is the one that decides what a break costs."""
     repo, scripts = _repo(tmp_path)
     _write(tmp_path / "prek.toml", 'entry = "uv run python scripts/cronned.py"\n')
-    assert g.classify(repo, scripts)["cronned.py"][0] == "scheduled"
+    assert sc.classify(repo, scripts)["cronned.py"][0] == "scheduled"
 
 
 def test_a_prose_mention_is_not_an_invocation(tmp_path):
@@ -241,7 +241,7 @@ def test_a_prose_mention_is_not_an_invocation(tmp_path):
         tmp_path / "ansible" / "roles" / "r" / "tasks" / "notes.yml",
         "- name: See `uv run python scripts/lonely.py` for detail\n",
     )
-    assert g.classify(repo, scripts)["lonely.py"][0] == "adhoc"
+    assert sc.classify(repo, scripts)["lonely.py"][0] == "adhoc"
 
 
 def test_a_printed_message_naming_a_script_is_not_an_invocation(tmp_path):
@@ -251,7 +251,7 @@ def test_a_printed_message_naming_a_script_is_not_an_invocation(tmp_path):
         tmp_path / "ansible" / "hand.sh",
         'echo "try uv run python scripts/lonely.py" >&2\n',
     )
-    assert g.classify(repo, scripts)["lonely.py"][0] == "adhoc"
+    assert sc.classify(repo, scripts)["lonely.py"][0] == "adhoc"
 
 
 def test_a_sentence_in_a_python_string_is_not_an_invocation(tmp_path):
@@ -261,7 +261,7 @@ def test_a_sentence_in_a_python_string_is_not_an_invocation(tmp_path):
         tmp_path / ".claude" / "hooks" / "h.py",
         'print("the gate (scripts/lonely.py, exit 4) refuses")\n',
     )
-    assert g.classify(repo, scripts)["lonely.py"][0] == "adhoc"
+    assert sc.classify(repo, scripts)["lonely.py"][0] == "adhoc"
 
 
 def test_an_argv_element_in_python_source_is_an_invocation(tmp_path):
@@ -277,7 +277,7 @@ def test_an_argv_element_in_python_source_is_an_invocation(tmp_path):
         'entry = "uv run python scripts/gated.py"\n'
         'other = "uv run python scripts/runner.py"\n',
     )
-    verdicts = g.classify(repo, scripts)
+    verdicts = sc.classify(repo, scripts)
     assert verdicts["runner.py"][0] == "gate"
     assert verdicts["lonely.py"][0] == "gate"
     assert "runner.py" in verdicts["lonely.py"][1]
@@ -289,7 +289,7 @@ def test_the_live_tree_classifies_the_names_we_already_know():
     Every name here has an invocation site someone can open. If one moves to `adhoc`,
     either the tree changed or the census stopped seeing a whole class of caller.
     """
-    verdicts = g.classify()
+    verdicts = sc.classify()
     expected = {
         "build_docs.py": "scheduled",
         "gen_infra_map.py": "scheduled",
@@ -332,7 +332,7 @@ def test_every_reference_generator_is_reached_from_the_docs_cron():
     prefix match returned an empty list — the `>= 5` below is what said so, since a vacuous
     `all()` over nothing passes.
     """
-    verdicts = g.classify()
+    verdicts = sc.classify()
     generators = [p.name for p in (g.SCRIPTS / "docs" / "reference").glob("*.py")]
     assert len(generators) >= 5
     assert all(verdicts[name][0] == "scheduled" for name in generators)
@@ -356,8 +356,8 @@ def test_a_test_that_merely_says_the_word_is_not_coverage(tmp_path):
     repo, scripts = _repo(tmp_path)
     _write(scripts / "deploy.sh", "#!/bin/sh\n# Summary.\n")
     _write(scripts / "test_other.py", 'MSG = "deploy the thing"\n')
-    rows = {r["name"]: r for r in g.build_rows(scripts, repo)}
-    assert rows["deploy.sh"]["indirect_tests"] == ""
+    files = cov.candidate_test_files(repo, scripts)
+    assert cov.indirect_test("deploy.sh", files, scripts) == ("", "")
 
 
 def test_no_script_is_credited_to_another_scripts_own_test():
@@ -470,7 +470,7 @@ def test_a_nested_script_is_listed_and_credited_to_its_caller(tmp_path):
     rows = {r["name"]: r for r in g.build_rows(scripts, repo)}
     assert "buried.py" in rows
     assert rows["buried.py"]["path"] == "scripts/deep/nested/buried.py"
-    assert rows["buried.py"]["evidence"] == f"caller.py ({g.RUNS['adhoc']})"
+    assert rows["buried.py"]["evidence"] == f"caller.py ({sc.RUNS['adhoc']})"
 
 
 def test_a_path_outside_scripts_is_still_not_a_reference(tmp_path):
@@ -480,9 +480,9 @@ def test_a_path_outside_scripts_is_still_not_a_reference(tmp_path):
     reject a same-shaped path rooted anywhere else, or every `ansible/roles/x/files/y.py`
     would start reading as an invocation of a first-party script.
     """
-    assert g._ARGV_RE.fullmatch("scripts/deep/nested/buried.py")
-    assert not g._ARGV_RE.fullmatch("ansible/roles/r/files/buried.py")
-    assert not g._ARGV_RE.fullmatch("other/scripts/deep/buried.py")
+    assert sc.ARGV_RE.fullmatch("scripts/deep/nested/buried.py")
+    assert not sc.ARGV_RE.fullmatch("ansible/roles/r/files/buried.py")
+    assert not sc.ARGV_RE.fullmatch("other/scripts/deep/buried.py")
 
 
 def _basename_clashes(paths):
@@ -513,7 +513,7 @@ def test_no_two_scripts_share_a_basename():
     undecidable for exactly the colliding names this test forbids. So uniqueness is the
     invariant, and this is where it is enforced.
     """
-    clashes = _basename_clashes(g._candidates(g.SCRIPTS))
+    clashes = _basename_clashes(sc.candidates(g.SCRIPTS))
     assert not clashes, (
         "two scripts share a basename, so they merge into one row on the reference page: "
         + "; ".join(clashes)
