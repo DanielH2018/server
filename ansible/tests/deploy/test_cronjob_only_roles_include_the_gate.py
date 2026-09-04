@@ -1,7 +1,7 @@
 """Every CronJob-only k8s role must include `k8s/cronjob-gate`, named for its own CronJob.
 
 `probe.py health <tag>` gates a CronJob-only role by reading its most recent Job
-(`scripts/diagnostics/probe_lib/health.py`'s `format_cronjob_health`) -- and that Job only
+(`scripts/diagnostics/probe_lib/health_cronjob.py`'s `format_cronjob_health`) -- and that Job only
 exists to read because `k8s/cronjob-gate` created one at deploy time. A CronJob-only role that
 skipped that include would have nothing for the read-only gate to find: `role_cronjob_targets`
 still reports it gated (the manifests declare a CronJob), `format_cronjob_health` prints "no
@@ -29,10 +29,10 @@ from diagnostics.probe_lib import health
 
 _DEFAULT_NS = "homelab"
 
-# The exact CronJob-only population today (scripts/diagnostics/tests/test_probe_health.py pins
-# the matching set from the health-gate side). Equality rather than a lower bound: a THIRD role
-# gaining a CronJob without a gate include must fail this test with a clear reason, not pass it
-# silently because the assertion below only checked >= 2.
+# The exact CronJob-only population today (test_probe_health_resolver.py, under
+# scripts/diagnostics/tests/, pins the matching set from the health-gate side). Equality rather
+# than a lower bound: a THIRD role gaining a CronJob without a gate include must fail this test
+# with a clear reason, not pass it silently because the assertion below only checked >= 2.
 _KNOWN_CRONJOB_ONLY_ROLES = frozenset({"configarr", "pi-peer-backup"})
 
 

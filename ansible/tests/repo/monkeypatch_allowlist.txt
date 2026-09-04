@@ -75,7 +75,7 @@ scripts/diagnostics/tests/test_probe.py 7
 scripts/diagnostics/tests/test_probe_alerts.py 8
 scripts/diagnostics/tests/test_probe_b2_ledger.py 7
 scripts/diagnostics/tests/test_probe_ha.py 3
-scripts/diagnostics/tests/test_probe_health.py 3
+scripts/diagnostics/tests/test_probe_health_cronjobs.py 2
 scripts/diagnostics/tests/test_probe_monitors.py 4
 scripts/diagnostics/tests/test_probe_pi_plane.py 5
 scripts/diagnostics/tests/test_ui_smoke_helpers.py 2

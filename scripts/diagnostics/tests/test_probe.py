@@ -10,7 +10,7 @@ import re
 import pytest
 
 from diagnostics.probe_lib import arr
-from diagnostics.probe_lib import health
+from diagnostics.probe_lib import health_docker
 from diagnostics.probe_lib import metrics
 from diagnostics.probe_lib import monitors
 import probe
@@ -79,22 +79,22 @@ def test_curl_argv():
 
 
 def test_inspect_ip_argv_targets_the_container():
-    argv = health.inspect_ip_argv("loki")
+    argv = health_docker.inspect_ip_argv("loki")
     assert argv[:3] == ["docker", "inspect", "-f"]
     assert argv[-1] == "loki"
     assert ".IPAddress" in argv[3]
 
 
 def test_parse_ip_takes_first_nonempty_token():
-    assert health.parse_ip("172.19.0.12 172.18.0.5 \n") == "172.19.0.12"
+    assert health_docker.parse_ip("172.19.0.12 172.18.0.5 \n") == "172.19.0.12"
 
 
 def test_parse_ip_returns_none_when_no_ip():
-    assert health.parse_ip("   \n") is None
+    assert health_docker.parse_ip("   \n") is None
 
 
 def test_k8s_service_ip_argv_targets_the_service():
-    argv = health.k8s_service_ip_argv("sonarr", "homelab")
+    argv = health_docker.k8s_service_ip_argv("sonarr", "homelab")
     assert argv[:2] == ["k3s", "kubectl"]
     assert argv[-1] == "jsonpath={.spec.clusterIP}"
     assert "sonarr" in argv
@@ -430,7 +430,7 @@ def test_resolve_arr_ip_uses_kubectl_not_docker(monkeypatch):
 
     monkeypatch.setattr(probe.subprocess, "run", fake_run)
     assert arr.resolve_arr_ip("sonarr") == "10.43.114.186"
-    assert calls == [health.k8s_service_ip_argv("sonarr", "homelab")]
+    assert calls == [health_docker.k8s_service_ip_argv("sonarr", "homelab")]
     assert "docker" not in calls[0]
 
 
