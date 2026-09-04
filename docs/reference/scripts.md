@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/scripts.py
-generated_at: 2026-09-04 21:52 UTC
-generated_sha: c8f2ca2d
+generated_at: 2026-09-04 22:22 UTC
+generated_sha: c48b9b40
 ---
 
 !!! warning "Generated file — do not edit"
@@ -74,7 +74,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/deploy_tools/land.sh` | the entry point every doc, skill and hook names; it execs land.py beside it. | Claude hook: nudge-land-sh.py | — |
 | `scripts/deploy_tools/prune_releases.py` | Remove old host-script release directories, never the one in use. | deploy: ansible/roles/setup/common/tasks/release_bin.yml | `test_prune_releases.py` |
 | `scripts/dev/prune_worktrees.py` | Report and remove Claude session worktrees under .claude/worktrees/ that are done with. | Claude hook: session-health.py | `test_prune_worktrees.py` |
-| `scripts/validate/shell_templates.py` | Render every Jinja-templated shell script under ansible/roles/ and lint the output. | prek hook (every commit) | `test_validate_shell_templates.py` *(indirect)* |
+| `scripts/validate/shell_templates.py` | Render every Jinja-templated shell script under ansible/roles/ and lint the output. | prek hook (every commit) | `test_backup_health_shim.py` *(indirect)* |
 | `scripts/dev/smoke_extract.py` | Extract newly-added container image references from a unified git diff. | CI: image-smoke.yml | `test_smoke_extract.py` |
 | `scripts/diagnostics/staging_egress_probe.py` | Acceptance gate for the staging guest's egress fence. | deploy: ansible/roles/setup/hypervisor/templates/staging-nwfilter.xml.j2 | `test_staging_egress_fence.py` *(indirect)* |
 | `scripts/deploy_tools/staging_gate_remote.sh` | The daniel-server half of the staging gate. Two arguments: the SHA under test, and the | deploy: ansible/roles/setup/hypervisor/tasks/install.yml | `test_staging_gate_paths_agree.py` *(indirect)* |
@@ -97,8 +97,8 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/availability_bots/common.py` | Thin re-export of the shared watcher helpers for the availability-watcher bots. | imported by glenstone-bot.py, osteria-francescana-bot.py | `test_availability_bots.py` *(indirect)* |
 | `scripts/infra_map/constants.py` | Constants shared by the infra-map inventory, live, model and render stages. | imported by gen_infra_map.py, inventory.py, live.py, model.py, render.py | — |
 | `scripts/diagnostics/probe_lib/core.py` | Shared plumbing for probe's subcommands: endpoints, secrets, HTTP, durations. | imported by alerts.py, arr.py, b2_ledger.py, cert_expiry.py, ha.py, ha_state_model.py, health.py, longhorn.py, metrics.py, monitors.py, pi_plane.py, postflight.py, probe.py, readonly_rbac.py, ui_login.py, vip_placement.py | `test_probe.py` *(indirect)* |
-| `scripts/lib/cron_checks.py` | The two cron-environment rules a rendered shell template must satisfy. | imported by shell_templates.py | `test_validate_shell_templates.py` *(indirect)* |
-| `scripts/lib/cron_targets.py` | Resolve which shell templates under `ansible/roles/` are scheduled as cron `job:` targets. | imported by cron_checks.py, shell_templates.py | `test_validate_shell_templates.py` *(indirect)* |
+| `scripts/lib/cron_checks.py` | The two cron-environment rules a rendered shell template must satisfy. | imported by shell_templates.py | `test_shell_template_cron_rules.py` *(indirect)* |
+| `scripts/lib/cron_targets.py` | Resolve which shell templates under `ansible/roles/` are scheduled as cron `job:` targets. | imported by cron_checks.py, shell_templates.py | `test_shell_template_cron_rules.py` *(indirect)* |
 | `scripts/deploy_tools/land_lib/deploy.py` | Step 5: deploy what the tick deferred, one deploy.sh per host, riding out a stale tree. | imported by pipeline.py | `test_land_deploy.py` *(indirect)* |
 | `scripts/infra_map/diagram.py` | The architecture figure: how a request reaches a workload, and on what it runs. | imported by render.py | `test_infra_map_render.py` *(indirect)* |
 | `scripts/lib/doc_freshness.py` | How old a hand-written doc is, and whether the files it names have moved under it. | imported by _mkdocs_freshness.py, freshness.py | `test_doc_freshness.py` |
@@ -146,7 +146,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/lib/render_guard.py` | Shared helpers for the render-guard scripts and other Ansible-inventory readers. | imported by cert_expiry.py, compose_templates.py, config_templates.py, deploy_tags.py, hosts.py, k8s_context.py, k8s_manifests.py, k8s_roles.py, k8s_yaml.py, networking.py, service_catalog.py, shell_lint.py, shell_templates.py, unit_templates.py | `test_render_guard.py` |
 | `scripts/lib/repo_paths.py` | The repo path anchors a script under ``scripts/`` reads the Ansible tree through. | imported by await_ci.py, build_docs.py, cert_expiry.py, constants.py, core.py, cron_checks.py, cron_targets.py, crons.py, decisions.py, deploy_detach_notify.py, deploy_tags.py, docs_provenance.py, fact_cache_guard.py, findings.py, findings_tools.py, fragment_readers.py, freshness.py, gen_doc_fragments.py, gen_hosts_block.py, grafana_dashboards.py, ha.py, health.py, hosts.py, invocation_sites.py, k8s_autodeploy_counts.py, k8s_context.py, k8s_pvc.py, k8s_roles.py, k8s_schema.py, land_tags.py, memory_survey.py, monitors.py, networking.py, pi_plane.py, releases.py, render_guard.py, route_facts.py, scripts.py, secret_bearing_host_paths.py, secrets.py, shell_templates.py, staging_egress_probe.py, staging_gate.py, state.py, validate_ha_config.py | `test_render_guard.py` *(indirect)* |
 | `scripts/docs/route_facts.py` | Shared route facts for the reference generators. | imported by cert_expiry.py, networking.py, service_catalog.py | `test_route_facts.py` |
-| `scripts/lib/shell_lint.py` | Render a Jinja-templated shell script, then lint the output with `bash -n` and shellcheck. | imported by shell_templates.py | `test_validate_shell_templates.py` *(indirect)* |
+| `scripts/lib/shell_lint.py` | Render a Jinja-templated shell script, then lint the output with `bash -n` and shellcheck. | imported by shell_templates.py | `test_backup_health_shim.py` *(indirect)* |
 | `scripts/deploy_tools/staging_gate.py` | Ask the staging cluster whether it accepts a commit, from daniel-box. | imported by backfill_staging_gate.py | `test_staging_gate.py` |
 | `scripts/infra_map/style.py` | The page's stylesheet, its status vocabulary, and the escape every view calls. | imported by diagram.py, html_views.py, render.py | `test_infra_map_render.py` *(indirect)* |
 | `scripts/deploy_tools/land_lib/tick.py` | Step 4, the GitOps tick, retried while the unit's own flock gives up. | imported by deploy.py, pipeline.py | `test_land_tick.py` *(indirect)* |
