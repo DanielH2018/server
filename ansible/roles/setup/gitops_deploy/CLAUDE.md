@@ -416,8 +416,16 @@ Three layers, and which one a function belongs in is decided by what it touches.
 | layer | modules | holds |
 |---|---|---|
 | decisions (pure) | `deploy_changes`, `deploy_git`, `deploy_health`, `deploy_inventory`, `deploy_k8s`, `deploy_remediation`, `deploy_staging` | every branch the tick takes, as functions over plain values |
-| transport | `deploy_io`, `deploy_alerts` | subprocess, docker, the state directory, the config file, the webhook, and every message body |
+| transport | `deploy_io`, `deploy_alerts` | subprocess, docker, the webhook, and every message body |
+| transport leaves | `deploy_config`, `deploy_state`, `deploy_failtext` | the config file, the state directory, and the text a failed run's alert quotes |
 | the tick | `gitops_deploy` | `main()` sequencing named phases, and the delivery plumbing the phases share |
+
+**A transport leaf imports nothing from `deploy_io`.** `deploy_config` (the config file,
+`Config`, `log`), `deploy_state` (the marker files) and `deploy_failtext` (bounding a failed
+run's output) each cross a boundary that needs no subprocess, so they are the half of the
+transport that a test can call without faking one. `deploy_io` re-exports every name it moved
+to them, and the role's own tests still read them as `deploy_io.<name>`; nothing in `files/`
+does, so the re-exports go when the suite stops needing them.
 
 **`main()` sequences, it does not decide.** `assess()` reads git and returns a frozen
 `TickTarget`; `plan_tick()` turns the incoming range into a frozen `TickPlan`; one `handle_*`
@@ -435,7 +443,7 @@ sees a `monkeypatch`, which is what the patch-boundary guard below enforces. It 
 `monkeypatch.setattr(deploy_io, "run", ...)` covers both the tick's own git calls and the ones
 `deploy_io` makes inside `deploy_k8s`.
 
-**Configuration is parsed once, and parsing cannot fail.** `deploy_io.load_config` returns a
+**Configuration is parsed once, and parsing cannot fail.** `deploy_config.load_config` returns a
 frozen `Config`; a malformed numeric value is collected into `Config.errors` rather than
 raised, and `CONFIG.validate()` at the top of `main()` turns it into one line naming the key
 plus a Discord post. Before that it was ~40 `int(C.get(...))` calls at module level, so a
@@ -449,7 +457,7 @@ that file by name: `STAGING_SUBSET` is read there for real, while the
 reads and nothing else does; both timeouts are parsed and validated in `load_config`, and a
 test pins the literals to `Config`'s defaults.
 
-**State is one object.** `deploy_io.DeployerState` wraps the fifteen marker files;
+**State is one object.** `deploy_state.DeployerState` wraps the fifteen marker files;
 `gitops_deploy.STATE` is the instance and the fifteen path literals stay declared there
 (`tests/conftest.py`'s `state_dir` repoints them, and one Ansible default is pinned against
 `STAGING_TICK_LEDGER`'s literal). `read()` returns None for a missing AND an empty marker —

@@ -25,6 +25,9 @@
     - gitops_deploy.py
     - deploy_logic.py
     - deploy_io.py
+    - deploy_config.py
+    - deploy_state.py
+    - deploy_failtext.py
     - deploy_alerts.py
     - deploy_changes.py
     - deploy_remediation.py
@@ -202,6 +205,12 @@
         src: ansible/roles/setup/gitops_deploy/files/deploy_logic.py
       - live: /opt/gitops-deploy/deploy_io.py
         src: ansible/roles/setup/gitops_deploy/files/deploy_io.py
+      - live: /opt/gitops-deploy/deploy_config.py
+        src: ansible/roles/setup/gitops_deploy/files/deploy_config.py
+      - live: /opt/gitops-deploy/deploy_state.py
+        src: ansible/roles/setup/gitops_deploy/files/deploy_state.py
+      - live: /opt/gitops-deploy/deploy_failtext.py
+        src: ansible/roles/setup/gitops_deploy/files/deploy_failtext.py
       - live: /opt/gitops-deploy/deploy_alerts.py
         src: ansible/roles/setup/gitops_deploy/files/deploy_alerts.py
       - live: /opt/gitops-deploy/deploy_changes.py

@@ -14,8 +14,9 @@ next tick —
 
     ModuleNotFoundError: No module named 'deploy_classify'
 
-— on the component that deploys everything else. `deploy_logic.py` is 1.4k lines and planned to
-split, which is exactly when a new module appears here.
+— on the component that deploys everything else. A split is exactly when a new module appears
+here: `deploy_logic.py` split into the `deploy_*` decision modules and became an index, and
+`deploy_io.py` then shed `deploy_config`, `deploy_state` and `deploy_failtext`.
 
 `host_lib.py` is installed by its own task from `roles/setup/common/files/` and is not in this
 role's files/, so it is outside the set this test derives. Its stamp pair is asserted directly.

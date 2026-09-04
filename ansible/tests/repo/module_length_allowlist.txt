@@ -21,7 +21,7 @@ ansible/roles/k8s/monitor-bridge/tests/test_check_gates.py 857
 ansible/roles/k8s/monitor-bridge/tests/test_check_service.py 600
 ansible/roles/k8s/monitor-bridge/tests/test_host_temp.py 634
 ansible/roles/setup/fake_remux/tests/test_fake_remux_replace_logic.py 582
-ansible/roles/setup/gitops_deploy/files/deploy_io.py 999
+ansible/roles/setup/gitops_deploy/files/deploy_io.py 653
 ansible/roles/setup/gitops_deploy/files/gitops_deploy.py 1380
 ansible/roles/setup/gitops_deploy/tests/test_deploy_changes_planes.py 538
 ansible/roles/setup/k3s/tests/test_longhorn_backup_health.py 1002

@@ -8,16 +8,15 @@ record the bad SHA as a hold marker, and alert the dedicated Discord webhook.
 
 `main()` sequences named phases and decides nothing itself: `assess()` reads git and returns a
 `TickTarget`, `plan_tick()` turns the incoming range into a `TickPlan`, and one `handle_*`
-function owns each terminal branch. The transport those phases call lives in `deploy_io.py`,
-the message bodies in `deploy_alerts.py`, and the decisions in the `deploy_*` modules
-`deploy_logic.py` indexes. Reach `deploy_io` and `deploy_alerts` QUALIFIED, never by
-from-import — see `deploy_io.py`'s docstring.
+function owns each terminal branch. The transport lives in `deploy_io.py` and its three leaves,
+the message bodies in `deploy_alerts.py`, and the decisions in the `deploy_*` modules that
+`deploy_logic.py` indexes. Reach `deploy_io` and `deploy_alerts` QUALIFIED, not by from-import.
 
 Config comes from /etc/gitops-deploy/config.env (KEY=VALUE), written by Ansible:
   REPO_DIR, BRANCH, HOSTNAME, DISCORD_WEBHOOK, HEALTH_TIMEOUT_S,
   REQUIRE_CI, CI_CONTEXTS, GITHUB_REPO
 
-`deploy_io.load_config` parses it into one frozen `Config`, and CONFIG is that object. The
+`deploy_config.load_config` parses it into one frozen `Config`, and CONFIG is that object. The
 module-level constants below are still derived from it at import, and that is the remaining
 coupling: they are what the test suite patches and what `state_dir` repoints, so threading
 CONFIG through every function instead would be a second change on top of this one. Parsing
@@ -42,6 +41,7 @@ from zoneinfo import ZoneInfo
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import deploy_alerts
 import deploy_io
+import deploy_state
 from deploy_changes import (
     ChangeSet,
     comment_only_broad_changes,
@@ -49,6 +49,7 @@ from deploy_changes import (
     setup_tags_for,
     shared_module_consumers,
 )
+from deploy_config import ConfigError, csv_set, load_config, log, read_config_file
 from deploy_git import (
     behind_marker,
     broad_hold_cleared_by,
@@ -70,7 +71,6 @@ from deploy_health import (
     gate_services,
 )
 from deploy_inventory import declared_k8s_services, reroute_k8s_services
-from deploy_io import log
 from deploy_k8s import (
     declared_denylist,
     declares_snapshot_claims,
@@ -199,7 +199,7 @@ CHICAGO = ZoneInfo("America/Chicago")
 
 # Every marker read and write goes through this. The `state_dir` fixture rebuilds it against
 # tmp_path alongside the constants above.
-STATE = deploy_io.DeployerState(deploy_io.STATE_DIR)
+STATE = deploy_state.DeployerState(deploy_state.STATE_DIR)
 
 
 # Overridable so the test suite can import this module against a canned copy
@@ -209,11 +209,11 @@ CONFIG_PATH = os.environ.get("GITOPS_DEPLOY_CONFIG", "/etc/gitops-deploy/config.
 
 def cfg() -> dict[str, str]:
     """The deployer's config file as KEY=VALUE pairs, or {} when it is absent."""
-    return deploy_io.read_config_file(CONFIG_PATH)
+    return read_config_file(CONFIG_PATH)
 
 
 C = cfg()
-CONFIG = deploy_io.load_config(C)
+CONFIG = load_config(C)
 REPO = CONFIG.repo
 BRANCH = CONFIG.branch
 HOSTNAME = CONFIG.hostname
@@ -292,7 +292,7 @@ STAGING_GATE = CONFIG.staging_gate
 # and that is load-bearing rather than an oversight: scripts/docs/gen_doc_fragments.py parses
 # `C.get("<KEY>", "<literal>")` calls OUT OF THIS FILE by name to publish the staging fragment,
 # so a default that moved into load_config would leave the fragment with no source at all.
-STAGING_SUBSET = deploy_io.csv_set(
+STAGING_SUBSET = csv_set(
     C.get(
         "STAGING_SUBSET", "traefik,authelia,freshrss,node-exporter,registry,ical-proxy"
     )
@@ -304,7 +304,7 @@ STAGING_SUBSET = deploy_io.csv_set(
 # test_gitops_deploy_staging_timeouts.py::test_staging_timeout_fallbacks_match_the_ansible_defaults.
 # A timeout here is NO VERDICT, never a rejection.
 #
-# The actual parsing lives in deploy_io.load_config now, with the same error-collection as
+# The actual parsing lives in deploy_config.load_config now, with the same error-collection as
 # every other numeric — a malformed value is recorded in CONFIG.errors rather than raising at
 # import. The two `C.get(...)` calls below are unused: they exist only so
 # scripts/docs/fragment_readers.py's config_default() parser, which reads a
@@ -330,7 +330,7 @@ STAGING_GATE_BLOCKING = CONFIG.staging_gate_blocking
 # behaviour, and REQUIRE_CI=false is the documented way back out.
 #
 # The disarm for an empty CI_CONTEXTS/GITHUB_REPO (a half-rendered config.env) is decided inside
-# deploy_io.load_config, which is also where it logs — CONFIG.require_ci is the one value, so a
+# deploy_config.load_config, which is also where it logs — CONFIG.require_ci is the one value, so a
 # module global rebound separately here could disagree with the frozen CONFIG it was copied from.
 REQUIRE_CI = CONFIG.require_ci
 # GitHub check-run NAMES that must be green — the same strings branch protection calls contexts.
@@ -1293,7 +1293,7 @@ def main() -> int:
     even the failure alert itself could not be delivered.
 
     Raises:
-        deploy_io.ConfigError: config.env holds a value this deployer cannot use.
+        deploy_config.ConfigError: config.env holds a value this deployer cannot use.
         RuntimeError: there is no config at all, so there is no repo to tick.
         RetryableFetchError: from `assess()`; entrypoint() skips the tick on it.
     """
@@ -1356,7 +1356,7 @@ def entrypoint() -> int:
         # GitOps-Alive. Must precede the generic handler below (Python matches except-clauses in order).
         log(f"git fetch failed (retryable) — skipping tick, will retry next run: {e}")
         return 0
-    except deploy_io.ConfigError as e:
+    except ConfigError as e:
         # One clear line, not a traceback. This was an unhandled ValueError raised during IMPORT
         # until load_config deferred the parse, so it reached an operator as a stack trace with no
         # key name in it, before any of the alerting below existed in the process.

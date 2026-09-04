@@ -1,11 +1,17 @@
 # ansible/roles/setup/gitops_deploy/files/deploy_io.py
-"""Every boundary the deployer crosses: subprocess, docker, the state directory, its config.
+"""The boundaries the deployer crosses to act: git, docker, the repo's files, the deploys.
 
 `deploy_logic.py` and the `deploy_*` modules behind it hold the decisions, which are pure.
 This module holds their I/O counterparts, which until now sat in `gitops_deploy.py` beside
 `main()` — `health_ok` next to `deploy_health`, `consult_staging`'s subprocess half next to
 `deploy_staging`, `deploy_k8s()` next to `deploy_k8s.py`. Splitting them out is what lets
 `gitops_deploy.main()` be a sequence of named phases a test can drive one at a time.
+
+Three boundaries are leaves of their own: `deploy_config` (the config file, `Config`, `log`),
+`deploy_state` (the marker files under /var/lib/gitops-deploy) and `deploy_failtext` (bounding
+a failed run's output). Each is reachable without faking a subprocess, and each imports nothing
+from here. This module re-exports their names so a `deploy_io.<name>` caller outside `files/`
+still resolves; nothing inside `files/` reads them that way.
 
 Two rules hold this module's shape:
 
@@ -22,384 +28,32 @@ Stdlib only: the unit runs under `uv run --no-project` and the host is still on 
 import json
 import os
 import pathlib
-import re
 import signal
 import subprocess
 import time
-from collections.abc import Mapping
-from dataclasses import dataclass, field
 from datetime import tzinfo
-from typing import ClassVar
 
+from deploy_config import (  # noqa: F401 — re-exported for `deploy_io.<name>` callers
+    Config,
+    ConfigError,
+    load_config,
+    log,
+    read_config_file,
+)
+from deploy_failtext import (  # noqa: F401 — re-exported for `deploy_io.<name>` callers
+    RUN_ERROR_STDERR_TAIL,
+    RUN_ERROR_STDOUT_CHARS,
+    TRUNCATED,
+    failing_task,
+    failure_detail,
+    head,
+    tail,
+)
 from deploy_health import HealthSample, containers_to_gate, health_decision
 from deploy_inventory import declared_services, stale_rendered_services
 from deploy_k8s import k8s_role_paths
 from deploy_staging import staging_tick_outcome
-from host_lib import atomic_write, parse_env_file
-
-
-def log(msg: str) -> None:
-    print(msg, flush=True)
-
-
-# ── configuration ─────────────────────────────────────────────────────────────────────────────
-
-
-class ConfigError(Exception):
-    """The deployer's config file holds a value it cannot be run with.
-
-    Raised by `Config.validate()`, never by parsing — see `load_config` for why the two are
-    separate.
-    """
-
-
-def csv_set(raw: str) -> frozenset[str]:
-    return frozenset(s.strip() for s in raw.split(",") if s.strip())
-
-
-@dataclass(frozen=True)
-class Config:
-    """One tick's configuration, as read from /etc/gitops-deploy/config.env.
-
-    Frozen: nothing rebinds a value mid-tick, and the CI gate and the k8s denylist both
-    disarm by deriving a NEW value rather than by writing one back.
-
-    Attributes:
-        errors: one message per key whose value could not be parsed. Empty on a good config.
-            Parsing records them instead of raising so that IMPORTING the deployer cannot fail
-            — `validate()` is where a bad config becomes a reportable error.
-    """
-
-    repo: str = ""
-    branch: str = "master"
-    hostname: str = "unknown-host"
-    discord_webhook: str = ""
-    health_timeout_s: int = 300
-    run_budget_s: int = 1020
-    require_ci: bool = False
-    ci_contexts: frozenset[str] = frozenset()
-    ci_repo: str = ""
-    k8s_autodeploy_enabled: bool = False
-    k8s_autodeploy_pilot: frozenset[str] = frozenset()
-    k8s_autodeploy_denylist: frozenset[str] = frozenset()
-    k8s_autodeploy_max_per_tick: int = 3
-    k8s_autodeploy_max_claim_services_per_tick: int = 1
-    k8s_deploy_timeout_s: int = 900
-    k8s_rollback_timeout_s: int = 1320
-    broad_deploy_timeout_s: int = 1800
-    staging_gate: bool = False
-    staging_gate_blocking: bool = False
-    staging_gate_timeout_s: int = 600
-    staging_expect_timeout_s: int = 120
-    # STAGING_SUBSET is deliberately NOT here. Its literal fallback is parsed out of
-    # gitops_deploy.py by scripts/docs/gen_doc_fragments.py, which looks for a
-    # `C.get("<KEY>", "<literal>")` call in that file by name — so moving it here would leave
-    # the published fragment with no source. It stays a module constant there. The two staging
-    # timeouts above used to live there too; gitops_deploy.py keeps a vestigial `C.get(...)`
-    # call for each purely so the generator still has one to read — see the comment there.
-    errors: tuple[str, ...] = field(default=())
-
-    def validate(self) -> None:
-        """Raise `ConfigError` naming every unparseable key, or return.
-
-        Args are none; the errors were collected at parse time.
-
-        Raises:
-            ConfigError: at least one key held a value this deployer cannot use. One line
-                naming every offending key and what it held — a tick that dies on its config
-                has to say which key, and it used to die during import with a bare
-                `ValueError: invalid literal for int()` and no key name in it.
-        """
-        if self.errors:
-            raise ConfigError("unusable deployer config: " + "; ".join(self.errors))
-
-
-def read_config_file(path: str) -> dict[str, str]:
-    """The KEY=VALUE pairs in `path`, or {} when the file is absent.
-
-    A missing file used to crash the import, which paged through the unit's OnFailure. It now
-    leaves every value at its default and `repo` empty, and `main()` refuses to tick on an
-    empty repo: the same page, raised from a function a test can call.
-    """
-    try:
-        return parse_env_file(path)
-    except FileNotFoundError:
-        return {}
-
-
-def load_config(env: Mapping[str, str]) -> Config:
-    """Parse `env` into a `Config`. Never raises.
-
-    A malformed numeric value is recorded in `Config.errors` and the field keeps its default,
-    so importing the deployer cannot fail on a half-written config.env — the failure surfaces
-    from `Config.validate()` inside `main()`, where it can be logged and posted rather than
-    printed as an import traceback before the heartbeat exists.
-
-    `require_ci` also disarms itself here, loudly, when `REQUIRE_CI=true` but `CI_CONTEXTS` or
-    `GITHUB_REPO` is empty (a half-rendered config.env) — done in this one place so `Config` is
-    never split from the value a caller reads off it.
-    """
-    errors: list[str] = []
-
-    def _int(key: str, default: int) -> int:
-        raw = env.get(key)
-        if raw is None:
-            return default
-        try:
-            return int(raw)
-        except ValueError:
-            errors.append(f"{key}={raw!r} is not a whole number")
-            return default
-
-    def _bool(key: str, default: bool = False) -> bool:
-        return env.get(key, str(default).lower()).lower() == "true"
-
-    require_ci = _bool("REQUIRE_CI")
-    ci_contexts = csv_set(env.get("CI_CONTEXTS", ""))
-    ci_repo = env.get("GITHUB_REPO", "")
-    if require_ci and not (ci_contexts and ci_repo):
-        # Fail closed the same way the k8s denylist does, but in the opposite direction: an
-        # empty context list would make ci_verdict() return `pass` for everything, turning a
-        # half-rendered config.env into a silently ungated deployer. Better to disarm loudly.
-        log(
-            "REQUIRE_CI is set but CI_CONTEXTS/GITHUB_REPO is empty — disabling the CI gate"
-        )
-        require_ci = False
-
-    return Config(
-        repo=env.get("REPO_DIR", ""),
-        branch=env.get("BRANCH", "master"),
-        hostname=env.get("HOSTNAME", "unknown-host"),
-        discord_webhook=env.get("DISCORD_WEBHOOK", ""),
-        health_timeout_s=_int("HEALTH_TIMEOUT_S", 300),
-        run_budget_s=_int("RUN_BUDGET_S", 1020),
-        require_ci=require_ci,
-        ci_contexts=ci_contexts,
-        ci_repo=ci_repo,
-        k8s_autodeploy_enabled=_bool("K8S_AUTODEPLOY_ENABLED"),
-        k8s_autodeploy_pilot=csv_set(env.get("K8S_AUTODEPLOY_PILOT", "")),
-        k8s_autodeploy_denylist=csv_set(env.get("K8S_AUTODEPLOY_DENYLIST", "")),
-        k8s_autodeploy_max_per_tick=_int("K8S_AUTODEPLOY_MAX_PER_TICK", 3),
-        k8s_autodeploy_max_claim_services_per_tick=_int(
-            "K8S_AUTODEPLOY_MAX_CLAIM_SERVICES_PER_TICK", 1
-        ),
-        k8s_deploy_timeout_s=_int("K8S_DEPLOY_TIMEOUT_S", 900),
-        k8s_rollback_timeout_s=_int("K8S_ROLLBACK_TIMEOUT_S", 1320),
-        broad_deploy_timeout_s=_int("BROAD_DEPLOY_TIMEOUT_S", 1800),
-        staging_gate=_bool("STAGING_GATE"),
-        staging_gate_blocking=_bool("STAGING_GATE_BLOCKING"),
-        staging_gate_timeout_s=_int("STAGING_GATE_TIMEOUT_S", 600),
-        staging_expect_timeout_s=_int("STAGING_EXPECT_TIMEOUT_S", 120),
-        errors=tuple(errors),
-    )
-
-
-# ── the state directory ───────────────────────────────────────────────────────────────────────
-
-STATE_DIR = "/var/lib/gitops-deploy"
-
-
-class DeployerState:
-    """The marker files under /var/lib/gitops-deploy, as one object with typed accessors.
-
-    Fifteen files recorded what this host believes — the held SHA, the plane that failed, how
-    long it has been behind origin, and one dedupe marker per alert channel — through fifteen
-    module constants and a pair of bare `_read_marker`/`_write_marker` helpers, so nothing
-    described the state as a whole. This is that description. The paths, the file contents and
-    the empty-vs-missing semantics are unchanged; `gitops_deploy.py` still holds the literal
-    constants because the tick ledger's Ansible default is pinned against one of them and the
-    test suite repoints the rest, and `tests/test_deployer_state.py` asserts the two agree.
-
-    Attributes:
-        directory: where the markers live. `/var/lib/gitops-deploy` on a host; a tmp_path
-            under test.
-    """
-
-    # Attribute name -> basename on disk. Every entry is a file `_read_marker` used to read.
-    MARKERS: ClassVar[dict[str, str]] = {
-        "hold": "hold_sha",
-        "hold_plane": "hold_plane",
-        "last_run": "last_run",
-        "diverged": "diverged_sha",
-        "behind": "behind_since",
-        "stale_composes": "stale_composes_alerted",
-        "broad_alerted": "broad_alerted_sha",
-        "secrets_alerted": "secrets_alerted_sha",
-        "tasks_alerted": "tasks_alerted_sha",
-        "meta_alerted": "meta_alerted_sha",
-        "k8s_alerted": "k8s_alerted_sha",
-        "stale_denylist_alerted": "stale_denylist_alerted_sha",
-        "ci_alerted": "ci_alerted_sha",
-        "staging_alerted": "staging_alerted_sha",
-        "dirty_alerted": "dirty_alerted_date",
-    }
-
-    def __init__(self, directory: str | pathlib.Path = STATE_DIR) -> None:
-        self.directory = str(directory)
-
-    def path(self, marker: str) -> str:
-        """The absolute path of one marker.
-
-        Raises:
-            KeyError: `marker` is not one of `MARKERS` — a typo is a mistake, not a new file.
-        """
-        return os.path.join(self.directory, self.MARKERS[marker])
-
-    def read(self, marker: str) -> str | None:
-        """The marker's stripped contents, or None when it is absent or empty.
-
-        Absent and empty deliberately read the same: a marker is armed by holding a SHA and
-        disarmed by being removed, and a torn write that left a zero-length file must read as
-        disarmed rather than as a SHA of "".
-
-        Raises:
-            OSError: the file exists but could not be read — an unreadable state directory
-                (a wrong mode, a failed mount) is NOT "no hold". Swallowing it here is how a
-                held host reports converged, so it propagates and the tick pages.
-        """
-        try:
-            with open(self.path(marker)) as fh:
-                return fh.read().strip() or None
-        except FileNotFoundError:
-            return None
-
-    def write(self, marker: str, value: str | None) -> None:
-        """Set the marker to `value`, or remove it when `value` is None.
-
-        The write is atomic (temp + rename, see `host_lib.atomic_write`): a torn marker is a
-        hold that reads as cleared.
-        """
-        if value is None:
-            try:
-                os.remove(self.path(marker))
-            except FileNotFoundError:
-                pass
-        else:
-            atomic_write(self.path(marker), value)
-
-    # The four markers with a reader outside this deployer (monitor-bridge reads three of them
-    # off the same mount) get a named property; the per-channel dedupe markers are reached
-    # through read()/write() by the alert code that owns them.
-    @property
-    def hold_sha(self) -> str | None:
-        """The commit this host refuses to redeploy, or None."""
-        return self.read("hold")
-
-    @property
-    def hold_plane(self) -> str | None:
-        """The playbook (and tags) whose broad apply failed, or None."""
-        return self.read("hold_plane")
-
-    @property
-    def diverged_sha(self) -> str | None:
-        """The origin SHA recorded while local and origin have diverged, or None."""
-        return self.read("diverged")
-
-    @property
-    def behind_since(self) -> str | None:
-        """`"<origin_sha> <unix_ts_first_seen>"` while behind origin, or None."""
-        return self.read("behind")
-
-
-# ── bounding a failed run's output ────────────────────────────────────────────────────────────
-
-# ansible-playbook writes the failing TASK header, the `fatal:` line carrying its msg and the
-# PLAY RECAP to STDOUT. stderr carries only warnings and deprecation notices, so an error string
-# built from stderr alone says nothing about what broke — the 2026-09-02 broad apply that failed
-# on `2d25ced3` left a deprecation warning's origin as the only surviving detail, and the broad
-# arm is forward-only, so the operator had nothing to fix forward from. Both halves are bounded
-# because a failed run can print megabytes into the journal.
-#
-# The stdout half is NOT a plain tail. The profile_tasks callback prints its timing table after
-# the PLAY RECAP, and on a 1950-task deploy.yml that table plus the recap is more than the whole
-# budget, so a positional tail held `ok=1950 failed=1` and nothing naming the task (issue #907,
-# the 21:26 failure on `55c33965`). _failure_detail lifts the failing task's own lines out first
-# and spends what is left of the budget on the tail.
-RUN_ERROR_STDOUT_CHARS = 4000
-RUN_ERROR_STDERR_TAIL = 4000
-
-# The default stdout callback opens every section with one of these, and profile_tasks adds
-# TASKS RECAP. A failure inside a section is a `fatal: [host]: ...` line (FAILED! or
-# UNREACHABLE!) or a per-item `failed: [host] (item=...)` line; ignore_errors prints
-# `...ignoring` on the line after each one.
-_SECTION_HEADER = re.compile(
-    r"^(TASK|RUNNING HANDLER|PLAY|PLAY RECAP|NO MORE HOSTS LEFT|TASKS RECAP)\b"
-)
-_TASK_HEADER = re.compile(r"^(TASK|RUNNING HANDLER) \[")
-_FAILURE_LINE = re.compile(r"^(fatal|failed): \[")
-TRUNCATED = "[...truncated...]"
-
-
-def tail(text: str, limit: int) -> str:
-    """Return at most the last ``limit`` characters of ``text``, cut at a line boundary.
-
-    The right slice for stderr and for stdout with no `fatal:` line in it: what ansible prints
-    last is the diagnostic part. It is the wrong slice once profile_tasks pads the end, which
-    is why failure_detail exists.
-    """
-    text = text.strip()
-    if len(text) <= limit:
-        return text
-    cut = text[-limit:]
-    _, newline, rest = cut.partition("\n")
-    return f"{TRUNCATED}\n" + (rest if newline else cut)
-
-
-def head(text: str, limit: int) -> str:
-    """Return at most the first ``limit`` characters of ``text``, cut at a line boundary."""
-    text = text.strip()
-    if len(text) <= limit:
-        return text
-    cut = text[:limit]
-    kept, newline, _ = cut.rpartition("\n")
-    return (kept if newline else cut) + f"\n{TRUNCATED}"
-
-
-def failing_task(text: str) -> tuple[str, str] | None:
-    """Find the last task in ansible stdout whose failure was not ignored.
-
-    Returns:
-        The task's lines and everything printed after them, or None when no section of
-        ``text`` carries an un-ignored `fatal:`/`failed:` line. The task's lines are its
-        header plus its output from the first failure line to the end of the section: a loop
-        task prints one line per ok item before the one that failed, and those are padding.
-        A failure a `rescue:` block caught is still a candidate — nothing marks it as
-        rescued at the point it prints — but a later un-ignored failure wins over it.
-    """
-    lines = text.splitlines()
-    starts = [i for i, line in enumerate(lines) if _SECTION_HEADER.match(line)]
-    for n in range(len(starts) - 1, -1, -1):
-        start = starts[n]
-        end = starts[n + 1] if n + 1 < len(starts) else len(lines)
-        if not _TASK_HEADER.match(lines[start]):
-            continue
-        section = lines[start:end]
-        failed_at = next(
-            (i for i, line in enumerate(section) if _FAILURE_LINE.match(line)), None
-        )
-        if failed_at is None or any(line.startswith("...ignoring") for line in section):
-            continue
-        task = "\n".join([section[0], *section[failed_at:]]).strip()
-        return task, "\n".join(lines[end:])
-    return None
-
-
-def failure_detail(stdout: str, limit: int) -> str:
-    """Bound ansible's stdout to ``limit`` characters, keeping the failing task's lines.
-
-    The failing task comes first and gets the budget first; the tail of what follows it gets
-    the remainder, minus profile_tasks' timing table, which is the padding that evicted the
-    task in the first place and diagnoses nothing. Stdout with no failing task in it is a
-    plain tail, as before.
-    """
-    found = failing_task(stdout)
-    if found is None:
-        return tail(stdout, limit)
-    task, rest = found
-    rest, _, _ = rest.partition("\nTASKS RECAP")
-    task = head(task, limit)
-    rest = tail(rest, limit - len(task))
-    return f"{task}\n{rest}" if rest else task
+from deploy_state import STATE_DIR, DeployerState  # noqa: F401 — re-exported
 
 
 # ── subprocess ────────────────────────────────────────────────────────────────────────────────
