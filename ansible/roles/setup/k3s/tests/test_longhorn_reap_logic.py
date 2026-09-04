@@ -372,6 +372,25 @@ def test_classify_backups_is_clean_when_an_empty_volume_list_has_no_backups_to_l
     assert logic.classify_backups([], {}, existing_volumes=set()).orphaned == []
 
 
+def test_a_stray_with_an_empty_snapshotcreatedat_is_kept_not_reaped():
+    # `_newest_first` sorts `created` as a raw string; "" sorts as the OLDEST value in a
+    # descending sort, so a stray with an empty timestamp used to lose the FLOOR 2 newest-stray
+    # slot to a real-timestamped sibling and fall through to `.candidates` on the strength of an
+    # unknown age. Parity with bash's `sort -k3,3r`. classify_backups now keeps it outright.
+    owner = {"vol-a": "weekly-backup-d3"}
+    backups = [
+        _backup("current-1", "vol-a", "2026-08-20T00:00:00Z", "weekly-backup-d3"),
+        _backup("stray-real", "vol-a", "2026-08-17T00:00:00Z", "daily-backup"),
+        _backup("stray-unknown-age", "vol-a", "", "daily-backup"),
+    ]
+    result = logic.classify_backups(backups, owner, existing_volumes={"vol-a"})
+    assert "stray-unknown-age" not in {n for n, *_ in result.candidates}
+    kept = {n for n, _vol, _reason in result.kept}
+    assert "stray-unknown-age" in kept
+    # the real-timestamped stray still claims the FLOOR 2 floor as before
+    assert "stray-real" in kept
+
+
 def test_creation_order_decides_the_floor_not_listing_order():
     owner = {"vol-a": "weekly-backup-d3"}
     backups = [

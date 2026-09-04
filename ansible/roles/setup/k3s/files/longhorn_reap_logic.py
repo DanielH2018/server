@@ -24,10 +24,94 @@ which do the kubectl reads/writes and printing.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 RECURRING_JOB_GROUP_PREFIX = "recurring-job-group.longhorn.io/"
+
+
+def parse_kubectl_json_items(text: str, what: str) -> tuple[list, str]:
+    """Parse a `kubectl get ... -o json` body into its `.items` list, or an error.
+
+    A malformed body raises `ValueError` from `json.loads`, caught below. A WELL-FORMED but
+    non-object body (`kubectl` occasionally prints a bare `null` -- an empty CRD list on some
+    server versions) parses cleanly and then raises `AttributeError: 'NoneType' object has no
+    attribute 'get'` on the `.get("items", [])` a caller used to do inline: a traceback where
+    every other unreadable-input case here prints `ABORT: unparseable ...`. Folding both
+    failure shapes into the same (items, error) return is what closes that gap. Returns
+    (items, "") on success, ([], message) on failure; `what` names the object being read for
+    the message, e.g. "volume list".
+    """
+    try:
+        doc = json.loads(text)
+    except ValueError as e:
+        return [], "unparseable %s: %s" % (what, e)
+    if not isinstance(doc, dict):
+        return [], "unparseable %s: expected a JSON object, got %s" % (
+            what,
+            type(doc).__name__,
+        )
+    return doc.get("items", []), ""
+
+
+def parse_int_env(name: str, raw: str) -> tuple[int, str]:
+    """Parse an environment-sourced integer knob, or a friendly error naming it.
+
+    Both entry points read integer knobs from env vars a `.sh.j2` shim exports from an Ansible
+    default (`k3s_longhorn_snapshot_reap_min_age_days`, an int today but not guaranteed to stay
+    one). A bare `int(os.environ.get(...))` at module scope raises an uncaught `ValueError`
+    before `main()` is ever reached, so the operator sees a traceback rather than which knob was
+    bad. A caller parses the raw string lazily, inside `main()`, so this can print `ABORT: ...`
+    and exit like every other refusal instead. Returns (value, "") on success, (0, message) on
+    failure.
+    """
+    try:
+        return int(raw), ""
+    except ValueError:
+        return 0, "%s expects an integer, got: %s" % (name, raw)
+
+
+def print_bucket(header: str, rows: list, none_msg: str = "(none)") -> None:
+    """Print one report section shared verbatim by both entry points.
+
+    A `len(row) == 3` row is a kept-by-a-floor record `(name, vol, reason)`; anything else is a
+    candidate/orphaned record `(name, vol, created, job)`. Shared because the report format used
+    to be asserted separately in each entry point's own tests, so a format change to one could
+    silently diverge the other with both suites green.
+    """
+    print("== %s ==" % header)
+    if not rows:
+        print("  %s" % none_msg)
+    else:
+        for row in rows:
+            if len(row) == 3:
+                name, vol, reason = row
+                print("  %s  %s  (%s)" % (name, vol, reason))
+            else:
+                name, vol, created, job = row
+                print("%s %s %s %s" % (name, vol, created, job))
+    print()
+
+
+def readonly_kubeconfig_refusal(
+    needs_admin: bool, readonly_kubeconfig: str, apply_flags_hint: str
+) -> str | None:
+    """None when a dry run may proceed; the ABORT message otherwise.
+
+    Shared for the same reason as `print_bucket`: the refusal text used to be near-verbatim in
+    both entry points, asserted separately by each suite. `apply_flags_hint` names this entry
+    point's apply flag(s) in the message, since the two scripts differ (`--apply` alone vs
+    `--apply / --apply-deleted-volumes`).
+    """
+    if needs_admin or readonly_kubeconfig:
+        return None
+    return (
+        "LONGHORN_REAP_READONLY_KUBECONFIG is not set, and a dry run must not silently "
+        "fall through to whatever KUBECONFIG the caller's shell already has -- run as "
+        "root, that would be the admin kubeconfig. Set the shim's env var, or pass "
+        "%s to use the admin kubeconfig explicitly." % apply_flags_hint
+    )
 
 
 class ReapAbort(RuntimeError):
@@ -283,6 +367,17 @@ def classify_backups(
 
         if current_tier_count.get(vol, 0) == 0:
             result.kept.append((name, vol, "current tier has produced no backup"))
+            continue
+
+        if not created:
+            # `_newest_first` sorts `created` as a raw string, and "" sorts as the OLDEST value
+            # in a descending sort -- an empty `status.snapshotCreatedAt` therefore sorts LAST
+            # within its volume's group and can never win the FLOOR 2 newest-stray slot above,
+            # leaving it to fall through to `.candidates` and be deleted on the strength of an
+            # unknown age. Longhorn populates this field on completion, so this is unreached in
+            # practice; parity with bash's `sort -k3,3r` is what asks for it anyway. Keep it
+            # rather than guess.
+            result.kept.append((name, vol, "unparseable snapshotCreatedAt"))
             continue
 
         if vol not in seen_floor:

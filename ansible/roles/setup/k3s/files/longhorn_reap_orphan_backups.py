@@ -52,7 +52,6 @@ Run directly: uv run --no-project --python <pin> longhorn_reap_orphan_backups.py
 
 from __future__ import annotations
 
-import json
 import os
 import sys
 
@@ -89,21 +88,6 @@ SUDO_HINT = "sudo /usr/local/bin/longhorn-reap-orphan-backups.sh --apply"
 
 _MAX_DELETIONS_FLAG = "--max-deletions"
 _USAGE = "expected --apply, --apply-deleted-volumes, %s N" % _MAX_DELETIONS_FLAG
-
-
-def _print_bucket(header: str, rows: list, none_msg: str = "(none)") -> None:
-    print("== %s ==" % header)
-    if not rows:
-        print("  %s" % none_msg)
-    else:
-        for row in rows:
-            if len(row) == 3:  # kept: (name, vol, reason)
-                name, vol, reason = row
-                print("  %s  %s  (%s)" % (name, vol, reason))
-            else:  # candidate/orphaned: (name, vol, created, job)
-                name, vol, created, job = row
-                print("%s %s %s %s" % (name, vol, created, job))
-    print()
 
 
 def _delete_backup(name: str) -> tuple[int, str]:
@@ -209,14 +193,11 @@ def main(argv: list[str]) -> int:
         return 2
 
     needs_admin = apply or apply_deleted
-    if not needs_admin and not READONLY_KUBECONFIG:
-        print(
-            "LONGHORN_REAP_READONLY_KUBECONFIG is not set, and a dry run must not silently "
-            "fall through to whatever KUBECONFIG the caller's shell already has -- run as "
-            "root, that would be the admin kubeconfig. Set the shim's env var, or pass "
-            "--apply / --apply-deleted-volumes to use the admin kubeconfig explicitly.",
-            file=sys.stderr,
-        )
+    refusal = logic.readonly_kubeconfig_refusal(
+        needs_admin, READONLY_KUBECONFIG, "--apply / --apply-deleted-volumes"
+    )
+    if refusal:
+        print(refusal, file=sys.stderr)
         return 1
 
     kubeconfig, err = logic.resolve_kubeconfig(
@@ -240,10 +221,9 @@ def main(argv: list[str]) -> int:
             "ABORT: could not read volumes: %s" % vol_out.strip()[:200], file=sys.stderr
         )
         return 1
-    try:
-        volumes = json.loads(vol_out).get("items", [])
-    except ValueError as e:
-        print("ABORT: unparseable volume list: %s" % e, file=sys.stderr)
+    volumes, err = logic.parse_kubectl_json_items(vol_out, "volume list")
+    if err:
+        print("ABORT: %s" % err, file=sys.stderr)
         return 1
 
     owner = logic.backup_owner_map(volumes)
@@ -260,10 +240,9 @@ def main(argv: list[str]) -> int:
             "ABORT: could not read backups: %s" % bkp_out.strip()[:200], file=sys.stderr
         )
         return 1
-    try:
-        backups = json.loads(bkp_out).get("items", [])
-    except ValueError as e:
-        print("ABORT: unparseable backup list: %s" % e, file=sys.stderr)
+    backups, err = logic.parse_kubectl_json_items(bkp_out, "backup list")
+    if err:
+        print("ABORT: %s" % err, file=sys.stderr)
         return 1
 
     try:
@@ -275,9 +254,9 @@ def main(argv: list[str]) -> int:
         print("ABORT: %s" % e, file=sys.stderr)
         return 1
 
-    _print_bucket("kept by a floor", result.kept)
-    _print_bucket("reapable", result.candidates)
-    _print_bucket("orphaned (volume deleted)", result.orphaned)
+    logic.print_bucket("kept by a floor", result.kept)
+    logic.print_bucket("reapable", result.candidates)
+    logic.print_bucket("orphaned (volume deleted)", result.orphaned)
 
     count = len(result.candidates)
     orphan_count = len(result.orphaned)

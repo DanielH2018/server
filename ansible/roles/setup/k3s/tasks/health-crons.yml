@@ -96,10 +96,17 @@
 #
 # The per-script notes that used to sit in this loop now live beside that list in
 # roles/setup/k3s/defaults/main.yml, next to the paths they describe.
-# `copy`, not release_bin.yml: these are operator-invoked (deliberately unscheduled — see the
-# templates above), not cron targets, so there is no rollback-unit reason to version them
-# alongside the backup-health release, and a fixed /opt path matches configarr-health's shape
-# (roles/k8s/configarr/tasks/main.yml), which this install mirrors.
+# DECIDED: `copy`, not release_bin.yml: these are operator-invoked (deliberately unscheduled —
+# see the templates above), not cron targets, so there is no rollback-unit reason to version
+# them alongside the backup-health release, and a fixed /opt path matches configarr-health's
+# shape (roles/k8s/configarr/tasks/main.yml), which this install mirrors. Consequence an
+# operator should know: the two `.sh.j2` shims above deploy as a VERSIONED release
+# (release_bin_group: k3s-backup-health below) while this Python deploys as a plain copy, so a
+# release rollback of that group reverts the shims and leaves the Python at whatever SHA last
+# deployed here — the two can drift apart. Accepted because both scripts are dry-run-by-default
+# and DELIBERATELY NOT SCHEDULED (defaults/main.yml's k3s_render_stamp_groups comment): an
+# operator invoking either by hand is already reading its dry-run output before ever passing
+# --apply, which is where a version mismatch between shim and classifier would show up.
 - name: Install the Longhorn reap-orphan classifiers
   tags: [backup-health]
   ansible.builtin.file:
