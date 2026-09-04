@@ -21,6 +21,21 @@
 #
 # Reads the cluster through the read-only ServiceAccount kubeconfig (k3s role), so the cron needs
 # no sudo and cannot mutate anything.
+#
+# Rollback skew, unique to this cron among the three: the shim ships via the versioned-release
+# mechanism (release_bin.yml) while the reader + its logic module ship via a plain `copy:`
+# (health-crons.yml), so a release rollback can move the shim to an older commit while the
+# reader/env-var contract underneath it stays current. Every LONGHORN_* tunable the shim exports
+# is REQUIRED by the reader (no hardcoded fallback — see `_require_env()` in
+# longhorn_backup_health.py): a shim that drops one on the way to matching an older reader, or a
+# reader that starts expecting a var an older shim never exported, exits nonzero and reports
+# "reader failed" naming the variable, rather than silently substituting a stale constant.
+#
+# The reader issues up to 19 kubectl calls across its eight checks (2 armed targets x up to 2
+# calls, +1 freshness, +1 errored-backups, +1 coverage +9 per-tier, +1 recent-budget +1 r2-set,
+# +1 failed-jobs), each with a 30s timeout — an 570s worst case against this script's 600s cron
+# period. Left as-is: `k3s kubectl` calls against the local API server return in well under a
+# second in practice, and 30s is a timeout for a wedged cluster, not an expected duration.
 set -uo pipefail
 
 # shellcheck source=/dev/null
@@ -46,6 +61,13 @@ if [[ -z "$LONGHORN_BACKUP_PUSH_TOKEN" ]]; then
   exit 0
 fi
 PUSH_URL="https://${KUMA_HOST}/api/push/${LONGHORN_BACKUP_PUSH_TOKEN}"
+# The token has to be sourced this early: the boot-grace push below also needs PUSH_URL, so
+# sourcing can't wait until after the reader runs. Once folded into PUSH_URL the raw value has
+# no further use in this script, so drop it from the shell's own variable table right away —
+# kuma-push.env.j2 does not `export` any of its six tokens today, so none of them currently
+# reach a child process's environ, but this makes that true by construction rather than by the
+# env file staying in a particular shape, and closes the same class of risk for good.
+unset -v LONGHORN_BACKUP_PUSH_TOKEN
 
 # Skip the first run after a boot. This script carries BOTH healthchecks.io dead-men
 # (longhorn-backup-health and uptime-kuma-alive) and sends `/fail` on a failed run, which pages
@@ -90,20 +112,38 @@ export LONGHORN_RESTORE_DRILL_STAMP_DIR="{{ k3s_longhorn_restore_drill_stamp_dir
 export LONGHORN_RESTORE_DRILL_MAX_AGE_DAYS="{{ k3s_longhorn_restore_drill_max_age_days }}"
 export LONGHORN_RESTORE_DRILL_COVERAGE_SLACK_DAYS="{{ k3s_longhorn_restore_drill_coverage_slack_days }}"
 
-# The reader prints `up<TAB>msg` or `down<TAB>msg` and always exits 0, having already logged the
-# full (unranked) verdict to syslog itself. A nonzero exit or empty output therefore means the
-# reader ITSELF broke — report that rather than pushing nothing, which would leave the monitor to
-# time out with no explanation.
-if ! OUT=$(/usr/local/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} /opt/longhorn-backup-health/longhorn_backup_health.py 2>&1) || [[ -z "$OUT" ]]; then
+# The reader prints `up<TAB>msg` or `down<TAB>msg` on its LAST stdout line and always exits 0,
+# having already logged the full (unranked) verdict to syslog itself. A nonzero exit or empty
+# output therefore means the reader ITSELF broke — report that rather than pushing nothing, which
+# would leave the monitor to time out with no explanation.
+#
+# Stdout and stderr are captured SEPARATELY (not `2>&1` into one pipe): this reader is the only
+# one of the three host health crons (configarr-health, telemetry-health are the others) that
+# spawns a subprocess of its own — it shells out to `logger` to write the full verdict before
+# printing the ranked one. `logger: socket /dev/log: ...`, or any uv/Python warning, landing on
+# stderr ahead of Python's own stdout flush used to become STATUS once `2>&1` merged the two
+# streams, silently turning an `up` into whatever garbage text preceded it — which Kuma reads as
+# DOWN and pings healthchecks.io `/fail` on a backup plane that was fine. Taking the verdict from
+# the LAST LINE of stdout (rather than the whole capture) is a second, independent guard against
+# the same class of contamination: even a stray stdout line ahead of the reader's own print
+# doesn't reach STATUS/MSG. longhorn_backup_health.py additionally redirects its own `logger`
+# subprocess's stdout/stderr to /dev/null so this can't happen even from inside the reader.
+ERR_FILE=$(mktemp /tmp/longhorn-backup-health.XXXXXX)
+OUT=$(/usr/local/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} /opt/longhorn-backup-health/longhorn_backup_health.py 2>"$ERR_FILE")
+RC=$?
+ERR=$(cat "$ERR_FILE" 2>/dev/null || true)
+rm -f "$ERR_FILE"
+LAST_LINE="${OUT##*$'\n'}"
+if [[ $RC -ne 0 || -z "$LAST_LINE" ]]; then
   STATUS=down
-  MSG="longhorn backup health reader failed: ${OUT:-(no output)}"
+  MSG="longhorn backup health reader failed: ${ERR:-${OUT:-(no output)}}"
   # The reader logs its own verdict on a normal run; on THIS path it never got that far, so log
   # here instead — otherwise the one failure mode where the local trail matters most (the reader
   # itself broke) is the one case with no journalctl record at all.
   logger -t longhorn-backup-health "status=${STATUS} ${MSG}"
 else
-  STATUS="${OUT%%$'\t'*}"
-  MSG="${OUT#*$'\t'}"
+  STATUS="${LAST_LINE%%$'\t'*}"
+  MSG="${LAST_LINE#*$'\t'}"
 fi
 
 kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" longhorn-backup-health

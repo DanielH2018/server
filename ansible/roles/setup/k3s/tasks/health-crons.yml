@@ -96,16 +96,6 @@
 #
 # The per-script notes that used to sit in this loop now live beside that list in
 # roles/setup/k3s/defaults/main.yml, next to the paths they describe.
-- name: Deploy the backup-health scripts as a versioned release
-  tags: [backup-health]
-  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/release_bin.yml"
-  vars:
-    release_bin_group: k3s-backup-health
-    release_bin_templates: >-
-      {{ (k3s_render_stamp_groups | selectattr('name', 'eq', 'k3s-backup-health')
-          | first).templates }}
-
-# The classifiers behind longhorn-reap-orphan-backups.sh.j2 and its snapshot sibling. Plain
 # `copy`, not release_bin.yml: these are operator-invoked (deliberately unscheduled — see the
 # templates above), not cron targets, so there is no rollback-unit reason to version them
 # alongside the backup-health release, and a fixed /opt path matches configarr-health's shape
@@ -159,6 +149,11 @@
 
 - name: Install the Longhorn backup health reader
   tags: [backup-health]
+  # Installed BEFORE the shim below, deliberately: the shim's every-10-minutes cron invokes
+  # /opt/longhorn-backup-health/longhorn_backup_health.py by absolute path the moment it lands,
+  # so if the shim's release install ran first, a `*/10` cron firing in the window between the
+  # two tasks would call a reader that doesn't exist yet (first install) — a spurious page,
+  # not a real one (2026-09-04 review finding #5).
   ansible.builtin.file:
     path: /opt/longhorn-backup-health
     state: directory
@@ -189,6 +184,16 @@
     # quietly stop agreeing about what a kubectl failure looks like.
     - "{{ role_path }}/../common/files/host_lib.py"
   become: true
+
+- name: Deploy the backup-health scripts as a versioned release
+  tags: [backup-health]
+  # Runs AFTER the reader above lands, not before — see that task's comment.
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/release_bin.yml"
+  vars:
+    release_bin_group: k3s-backup-health
+    release_bin_templates: >-
+      {{ (k3s_render_stamp_groups | selectattr('name', 'eq', 'k3s-backup-health')
+          | first).templates }}
 
 - name: Record the deployed Longhorn backup health reader
   tags: [backup-health]

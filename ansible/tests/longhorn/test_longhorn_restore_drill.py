@@ -282,6 +282,26 @@ def test_drill_and_heartbeat_deploy_under_a_shared_tag() -> None:
     )
 
 
+def test_reader_is_installed_before_the_shim_that_invokes_it() -> None:
+    """The shim's cron fires every 10 minutes and calls the reader by absolute path immediately.
+
+    If the shim's release install ran first, a cron tick landing in the window between that task
+    and the reader's `copy:` tasks below would call a reader that does not exist yet on a fresh
+    install — a spurious page, not a real one (2026-09-04 review finding #5).
+    """
+    tasks = _tasks()
+    names = [t.get("name") for t in tasks]
+    reader_scripts_idx = names.index(
+        "Install the Longhorn backup health reader scripts"
+    )
+    shim_release_idx = names.index(
+        "Deploy the backup-health scripts as a versioned release"
+    )
+    assert reader_scripts_idx < shim_release_idx, (
+        "the reader's files must land before the shim that invokes them by absolute path"
+    )
+
+
 def test_check_seven_fails_closed_when_the_drill_never_ran() -> None:
     """The never-run state is the one most in need of reporting. See the module docstring."""
     problem = logic.check_restore_drill(
@@ -308,6 +328,25 @@ def test_check_seven_rejects_an_unparseable_stamp() -> None:
         "missing, unparseable and stale stamps are three distinct failures and each must page "
         "with its own message"
     )
+
+
+def test_check_seven_distinguishes_a_missing_stamp_from_an_unreadable_one() -> None:
+    """Regression for the 2026-08-19 incident this module's docstring documents.
+
+    root's umask made a FRESH, successful drill's stamp unreadable by the checker's own user,
+    and folding
+    that into "never ran" paged a lie — permanently, and precisely backwards — since a drill
+    had just succeeded. "Never ran" and "ran, but the checker can't prove it" must stay two
+    different messages.
+    """
+    missing = logic.check_restore_drill(None, "/stamp", NOW, 3 * 86400, 3)
+    unreadable = logic.check_restore_drill(
+        None, "/stamp", NOW, 3 * 86400, 3, stamp_unreadable=True
+    )
+    assert missing is not None and unreadable is not None
+    assert missing[1] != unreadable[1]
+    assert missing[1].startswith("no restore drill has ever succeeded")
+    assert "could not be read" in unreadable[1]
 
 
 def test_check_seven_pages_below_backup_failure_severity() -> None:

@@ -20,6 +20,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "files"))
@@ -350,7 +351,27 @@ def test_restore_drill_is_flagged_when_the_stamp_is_missing():
 def test_restore_drill_is_flagged_on_an_unparseable_stamp():
     assert logic.check_restore_drill("not-a-number", "/stamp", NOW, 3 * DAY, 3) == (
         3,
-        "restore-drill stamp is unreadable — treating the restore path as unproven",
+        "restore-drill stamp content is not a valid timestamp — "
+        "treating the restore path as unproven",
+    )
+
+
+def test_restore_drill_is_flagged_when_the_stamp_is_unreadable():
+    """Distinct from a MISSING stamp — see check_restore_drill's docstring for the 2026-08-19
+    incident this distinction exists to prevent from repeating: a stamp that exists but can't be
+    opened must not read as "the drill never ran"."""
+    problem = logic.check_restore_drill(
+        None,
+        "/var/lib/longhorn-restore-drill/last-success",
+        NOW,
+        3 * DAY,
+        3,
+        stamp_unreadable=True,
+    )
+    assert problem == (
+        3,
+        "restore-drill stamp at /var/lib/longhorn-restore-drill/last-success could not be "
+        "read (permissions?) — treating the restore path as unproven",
     )
 
 
@@ -485,6 +506,39 @@ def test_build_verdict_ties_break_by_encounter_order():
 
 # ── transport ─────────────────────────────────────────────────────────────────────────────────
 
+READER = Path(__file__).resolve().parents[1] / "files" / "longhorn_backup_health.py"
+HOST_LIB_DIR = Path(__file__).resolve().parents[2] / "common" / "files"
+
+
+def _reader_env(tmp_path, **overrides) -> dict:
+    """Every LONGHORN_* env var the reader requires, with permissive defaults a test can override.
+
+    Every one of these is REQUIRED by the reader (`_require_env` et al — no hardcoded fallback,
+    the 2026-09-04 review's finding #3), so a subprocess test that used to set only a couple of
+    vars and rely on module-level defaults for the rest now has to set all eleven or the reader
+    exits nonzero before doing anything else. Centralised here so each test only names the ONE
+    var it cares about overriding.
+    """
+    env = dict(os.environ)
+    env["PYTHONPATH"] = f"{HOST_LIB_DIR}:{env.get('PYTHONPATH', '')}"
+    env["LONGHORN_RESTORE_DRILL_STAMP_DIR"] = str(tmp_path / "no-such-drill-dir")
+    env.update(
+        {
+            "LONGHORN_BACKUP_ARMED": "True",
+            "LONGHORN_R2_ARMED": "True",
+            "LONGHORN_BACKUP_MAX_AGE_HOURS": "30",
+            "LONGHORN_WEEKLY_BACKUP_MAX_AGE_HOURS": "198",
+            "LONGHORN_BACKUP_ERROR_MAX_AGE_HOURS": "24",
+            "LONGHORN_DAILY_BACKUP_BUDGET": "16",
+            "LONGHORN_BACKUP_CRON": "30 3 * * *",
+            "LONGHORN_WEEKLY_BACKUP_MINUTE_HOUR": "30 4",
+            "LONGHORN_RESTORE_DRILL_MAX_AGE_DAYS": "3",
+            "LONGHORN_RESTORE_DRILL_COVERAGE_SLACK_DAYS": "5",
+        }
+    )
+    env.update(overrides)
+    return env
+
 
 def test_reader_pins_the_transport(tmp_path):
     """Runs longhorn_backup_health.py as a real subprocess against a stub kubectl.
@@ -501,16 +555,10 @@ def test_reader_pins_the_transport(tmp_path):
     stub.write_text("#!/usr/bin/env bash\necho 'STUB_KUBECTL_MARKER' >&2\nexit 1\n")
     stub.chmod(0o755)
 
-    reader = Path(__file__).resolve().parents[1] / "files" / "longhorn_backup_health.py"
-    host_lib_dir = Path(__file__).resolve().parents[2] / "common" / "files"
-
-    env = dict(os.environ)
-    env["LONGHORN_BACKUP_KUBECTL"] = str(stub)
-    env["LONGHORN_RESTORE_DRILL_STAMP_DIR"] = str(tmp_path / "no-such-drill-dir")
-    env["PYTHONPATH"] = f"{host_lib_dir}:{env.get('PYTHONPATH', '')}"
+    env = _reader_env(tmp_path, LONGHORN_BACKUP_KUBECTL=str(stub))
 
     proc = subprocess.run(
-        [sys.executable, str(reader)],
+        [sys.executable, str(READER)],
         capture_output=True,
         text=True,
         env=env,
@@ -519,3 +567,249 @@ def test_reader_pins_the_transport(tmp_path):
     assert proc.returncode == 0, proc.stderr
     assert proc.stdout.startswith("down\t")
     assert "STUB_KUBECTL_MARKER" in proc.stdout
+
+
+def test_reader_exits_nonzero_naming_a_missing_env_var(tmp_path):
+    """A shim that stops exporting a var must be LOUD, not silently fall back to a stale constant.
+
+    Every LONGHORN_* var is required (2026-09-04 review finding #3). This drops one from the
+    otherwise-complete env and asserts the reader exits nonzero and names it — which is exactly
+    what the shim's `if ! OUT=$(...)` / `[[ $RC -ne 0 ]]` branch turns into a `reader failed`
+    push, rather than a wrong-but-plausible verdict computed from a hardcoded fallback.
+    """
+    env = _reader_env(tmp_path, LONGHORN_BACKUP_KUBECTL="/bin/false")
+    del env["LONGHORN_DAILY_BACKUP_BUDGET"]
+
+    proc = subprocess.run(
+        [sys.executable, str(READER)],
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=30,
+    )
+    assert proc.returncode != 0
+    assert "LONGHORN_DAILY_BACKUP_BUDGET" in proc.stderr
+
+
+def _rfc3339(epoch: float) -> str:
+    import datetime as _dt
+
+    return _dt.datetime.fromtimestamp(epoch, tz=_dt.timezone.utc).strftime(
+        "%Y-%m-%dT%H:%M:%SZ"
+    )
+
+
+def _green_path_stub_kubectl(tmp_path, snapshot_ts: str) -> Path:
+    """A stub kubectl answering every query the reader's green path issues, from fixtures.
+
+    Dispatches on argv (after stripping the `-n <namespace>` host_lib.kubectl_runner inserts),
+    not on raw text matching, so it stays exact even though several distinct queries all target
+    `backups.longhorn.io`/`volumes.longhorn.io` with different -o jsonpath shapes. One volume,
+    `pvc-web-data`, is backed up by the "daily" tier only — every other tier's label selector
+    matches nothing, which is the ordinary (and simplest-to-fixture) shape for a fleet where only
+    one recurring job is armed.
+    """
+    stub = tmp_path / "stub-kubectl-green"
+    script = f"""#!/usr/bin/env python3
+import sys
+
+args = sys.argv[1:]
+if "-n" in args:
+    i = args.index("-n")
+    args = args[:i] + args[i + 2:]
+joined = " ".join(args)
+
+
+def emit(text, rc=0):
+    sys.stdout.write(text)
+    sys.exit(rc)
+
+
+if args[:3] == ["get", "backuptarget", "default"]:
+    emit("true")
+elif args[:3] == ["get", "backuptarget", "r2"]:
+    emit("true")
+elif args[:2] == ["get", "backups.longhorn.io"] and args[-1] == "json":
+    emit('{{"items": []}}')
+elif args[:2] == ["get", "jobs.batch"] and args[-1] == "json":
+    emit('{{"items": []}}')
+elif args[:2] == ["get", "backups.longhorn.io"] and "|" in joined:
+    emit("pvc-web-data|{snapshot_ts}|daily-backup\\n")
+elif args[:2] == ["get", "backups.longhorn.io"] and "size" in joined:
+    emit("pvc-web-data {snapshot_ts} 1048576\\n")
+elif args[:2] == ["get", "backups.longhorn.io"] and "snapshotCreatedAt" in joined:
+    emit("{snapshot_ts}\\n")
+elif args[:2] == ["get", "volumes.longhorn.io"] and "-l" in args:
+    sel = args[args.index("-l") + 1]
+    if sel == "recurring-job-group.longhorn.io/default=enabled":
+        emit(
+            "pvc-web-data {snapshot_ts} default/web-data default\\n"
+        )
+    else:
+        emit("")
+elif args[:2] == ["get", "volumes.longhorn.io"]:
+    emit("")
+else:
+    sys.stderr.write("UNEXPECTED ARGS: %r\\n" % (args,))
+    sys.exit(1)
+"""
+    stub.write_text(script)
+    stub.chmod(0o755)
+    return stub
+
+
+def test_reader_green_path_pins_the_transport(tmp_path):
+    """The clean half of test_reader_pins_the_transport: every query answered, verdict is UP.
+
+    The red-path test above stubs kubectl to fail every call, which exercises the shell-out and
+    the down<TAB>msg contract but never the eight checks' happy path — the jsonpath literals,
+    the three row parsers, or the up<TAB>msg contract the shim's success branch depends on. This
+    runs the reader against fixtures shaped to leave every one of the eight checks clean.
+    """
+    now = time.time()
+    snapshot_ts = _rfc3339(now - 60)
+    drill_dir = tmp_path / "drill"
+    drill_dir.mkdir()
+    (drill_dir / "last-success").write_text(str(int(now - 3600)))
+
+    stub = _green_path_stub_kubectl(tmp_path, snapshot_ts)
+    env = _reader_env(
+        tmp_path,
+        LONGHORN_BACKUP_KUBECTL=str(stub),
+        LONGHORN_RESTORE_DRILL_STAMP_DIR=str(drill_dir),
+    )
+
+    proc = subprocess.run(
+        [sys.executable, str(READER)],
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=30,
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.startswith("up\t"), proc.stdout
+    assert "backup target(s) default r2 available" in proc.stdout
+    assert "1 backed-up volume(s) covered across daily+weekly" in proc.stdout
+    assert "1 B2 backup(s)/24h (budget 16)" in proc.stdout
+
+
+def _grace_pair_stub_kubectl(tmp_path, created_ts: str, old_backup_ts: str) -> Path:
+    """Two daily-tier volumes: `pvc-old` already backed up, `pvc-new` created moments ago.
+
+    `pvc-old` has a matching coverage row so checks 2/3/5/6 stay clean regardless of the cron
+    parse — only `pvc-new`'s fate (graced silently vs. paged as uncovered) depends on whether
+    LONGHORN_BACKUP_CRON parses.
+    """
+    stub = tmp_path / "stub-kubectl-grace"
+    script = f"""#!/usr/bin/env python3
+import sys
+
+args = sys.argv[1:]
+if "-n" in args:
+    i = args.index("-n")
+    args = args[:i] + args[i + 2:]
+joined = " ".join(args)
+
+
+def emit(text, rc=0):
+    sys.stdout.write(text)
+    sys.exit(rc)
+
+
+if args[:3] == ["get", "backuptarget", "default"]:
+    emit("true")
+elif args[:2] == ["get", "backups.longhorn.io"] and args[-1] == "json":
+    emit('{{"items": []}}')
+elif args[:2] == ["get", "jobs.batch"] and args[-1] == "json":
+    emit('{{"items": []}}')
+elif args[:2] == ["get", "backups.longhorn.io"] and "|" in joined:
+    emit("pvc-old|{old_backup_ts}|daily-backup\\n")
+elif args[:2] == ["get", "backups.longhorn.io"] and "size" in joined:
+    emit("pvc-old {old_backup_ts} 1048576\\n")
+elif args[:2] == ["get", "backups.longhorn.io"] and "snapshotCreatedAt" in joined:
+    emit("{old_backup_ts}\\n")
+elif args[:2] == ["get", "volumes.longhorn.io"] and "-l" in args:
+    sel = args[args.index("-l") + 1]
+    if sel == "recurring-job-group.longhorn.io/default=enabled":
+        emit(
+            "pvc-old {old_backup_ts} default/old-data default\\n"
+            "pvc-new {created_ts} default/new-data default\\n"
+        )
+    else:
+        emit("")
+elif args[:2] == ["get", "volumes.longhorn.io"]:
+    emit("")
+else:
+    sys.stderr.write("UNEXPECTED ARGS: %r\\n" % (args,))
+    sys.exit(1)
+"""
+    stub.write_text(script)
+    stub.chmod(0o755)
+    return stub
+
+
+def test_malformed_cron_pages_the_new_volume_instead_of_gracing_it(tmp_path):
+    """FLAGGED half: a malformed LONGHORN_BACKUP_CRON used to raise IndexError before main() ran.
+
+    _hhmm_from_two_field_cron() executed at module scope, so a bad value took down all eight
+    checks at once, not just the daily tier's first-run grace (2026-09-04 review finding #4).
+    With the fix, a malformed value degrades to `first_run_after(..., None, ...)`, which
+    check_tier() already treats as "no grace" — `pvc-new`, created moments ago, is paged as
+    uncovered instead of silently excused, and the reader still completes and emits a verdict.
+    """
+    now = time.time()
+    old_ts = _rfc3339(now - 3600)
+    new_ts = _rfc3339(now - 30)
+    stub = _grace_pair_stub_kubectl(tmp_path, created_ts=new_ts, old_backup_ts=old_ts)
+    drill_dir = tmp_path / "drill"
+    drill_dir.mkdir()
+    (drill_dir / "last-success").write_text(str(int(now - 3600)))
+
+    env = _reader_env(
+        tmp_path,
+        LONGHORN_BACKUP_KUBECTL=str(stub),
+        LONGHORN_R2_ARMED="False",
+        LONGHORN_RESTORE_DRILL_STAMP_DIR=str(drill_dir),
+        LONGHORN_BACKUP_CRON="30",  # malformed: one field, no hour
+    )
+
+    proc = subprocess.run(
+        [sys.executable, str(READER)],
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=30,
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.startswith("down\t"), proc.stdout
+    assert "pvc-new" in proc.stdout or "new-data" in proc.stdout, proc.stdout
+
+
+def test_well_formed_cron_graces_the_new_volume(tmp_path):
+    """CLEAN half of the malformed-cron pair: a well-formed value grants the new-volume grace."""
+    now = time.time()
+    old_ts = _rfc3339(now - 3600)
+    new_ts = _rfc3339(now - 30)
+    stub = _grace_pair_stub_kubectl(tmp_path, created_ts=new_ts, old_backup_ts=old_ts)
+    drill_dir = tmp_path / "drill"
+    drill_dir.mkdir()
+    (drill_dir / "last-success").write_text(str(int(now - 3600)))
+
+    env = _reader_env(
+        tmp_path,
+        LONGHORN_BACKUP_KUBECTL=str(stub),
+        LONGHORN_R2_ARMED="False",
+        LONGHORN_RESTORE_DRILL_STAMP_DIR=str(drill_dir),
+        LONGHORN_BACKUP_CRON="30 3 * * *",
+    )
+
+    proc = subprocess.run(
+        [sys.executable, str(READER)],
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=30,
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.startswith("up\t"), proc.stdout
+    assert "awaiting their first scheduled backup" in proc.stdout, proc.stdout

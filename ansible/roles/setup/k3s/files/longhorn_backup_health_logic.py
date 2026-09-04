@@ -9,6 +9,17 @@ can pin it.
 Every function below corresponds to one numbered check in the original script's comments, and the
 message text is copied character-for-character — several are matched by downstream tests/greps
 and by an operator's muscle memory reading `journalctl -t longhorn-backup-health`.
+
+Three deliberate divergences from the shell, found by the 2026-09-04 review and left as-is
+rather than made byte-identical:
+- Every `{int(duration / N)}` below (hours/days rendered into a message) uses true division then
+  `int()`, which truncates toward zero exactly like bash's `$(( duration / N ))` — NOT floor
+  division (`//`), which rounds a small negative duration (clock skew between this host and the
+  kube-apiserver) down to `-1h` instead of `0h`.
+- `rfc3339_to_epoch()` is intentionally more permissive than the jq/`date -d` pipeline it
+  replaces: `.status.snapshotCreatedAt` is a plain Longhorn-authored string with no format
+  guarantee, and rejecting a sub-second timestamp here would be a false RED, not a caught bug.
+- Ranks and thresholds are unchanged from the shell; only parsing tolerance was widened.
 """
 
 from __future__ import annotations
@@ -54,13 +65,16 @@ def rfc3339_to_epoch(ts: str) -> float | None:
         return None
 
 
-def first_run_after(from_s: float, hhmm: str, dow: str) -> int:
+def first_run_after(from_s: float, hhmm: str | None, dow: str) -> int:
     """Epoch of the first scheduled run strictly after `from_s`.
 
     The job fires at `hhmm` (H:MM, LOCAL time — matching the shell's unqualified `date`) on
     weekday `dow` (0-6, 0=Sunday) or every day (`dow == "*"`). Returns 0 if it cannot be
     computed — mirrors first_run_after() in longhorn-backup-health.sh.j2 exactly, including its
-    8-day search bound.
+    8-day search bound. `hhmm=None` (the I/O layer's signal for "the cron spec couldn't be
+    parsed") takes the same 0-returning path as a malformed string: `None.split(":")` raises
+    AttributeError, caught below alongside `ValueError`. A caller passing None gets the grace
+    disabled for that volume rather than an exception, which is the point — see check_tier().
     """
     try:
         hh, mm = hhmm.split(":")
@@ -121,7 +135,7 @@ def check_freshness(
     if age_s > max_age_s:
         return (
             1,
-            f"newest backup is {int(age_s // 3600)}h old (limit {max_age_hours}h)",
+            f"newest backup is {int(age_s / 3600)}h old (limit {max_age_hours}h)",
         ), age_s
     return None, age_s
 
@@ -178,7 +192,7 @@ def check_tier(
     max_age_s: float,
     tier: str,
     job: str,
-    run_hhmm: str,
+    run_hhmm: str | None,
     dow: str,
     disarmed_targets: set[str],
     now_s: float,
@@ -239,7 +253,7 @@ def check_tier(
         if latest_s == 0:
             result.uncovered.append(f"{claim} ({tier}, unparseable timestamp)")
         elif now_s - latest_s > max_age_s:
-            hours = int((now_s - latest_s) // 3600)
+            hours = int((now_s - latest_s) / 3600)
             result.uncovered.append(f"{claim} ({tier}, {hours}h)")
 
 
@@ -339,12 +353,28 @@ def check_restore_drill(
     now_s: float,
     max_age_s: float,
     max_age_days: int,
+    *,
+    stamp_unreadable: bool = False,
 ) -> tuple[int, str] | None:
     """Whether the restore drill's last success is fresh enough.
 
     `stamp_content` is the stamp file's content with any trailing newline already stripped
-    (matching bash `$(cat ...)` command substitution), or None if the file is missing/unreadable.
+    (matching bash `$(cat ...)` command substitution), or None if the file is missing or could
+    not be opened. `stamp_unreadable` distinguishes those two None cases — the I/O layer sets it
+    when `open()` raised something other than FileNotFoundError (a permissions problem, most
+    likely). Bash's own `[[ -r ]]` distinguished them and this must too: on 2026-08-19 the stamp
+    directory's mode made a fresh, successful drill's stamp unreadable by the checker's user, and
+    folding that into "never ran" paged "no restore drill has ever succeeded" — permanently, and
+    backwards, since a drill HAD just succeeded (see test_stamp_is_readable_by_the_user_that_
+    checks_it). "Never ran" and "ran, but I can't read the proof" are different problems with
+    different fixes, and conflating them sends whoever's paged to fix the wrong one.
     """
+    if stamp_unreadable:
+        return (
+            3,
+            f"restore-drill stamp at {stamp_path} could not be read (permissions?) — "
+            "treating the restore path as unproven",
+        )
     if stamp_content is None:
         return (
             3,
@@ -353,14 +383,15 @@ def check_restore_drill(
     if not _STAMP_RE.fullmatch(stamp_content):
         return (
             3,
-            "restore-drill stamp is unreadable — treating the restore path as unproven",
+            "restore-drill stamp content is not a valid timestamp — "
+            "treating the restore path as unproven",
         )
     drill_at = int(stamp_content)
     age_s = now_s - drill_at
     if age_s > max_age_s:
         return (
             3,
-            f"last successful restore drill was {int(age_s // 86400)}d ago "
+            f"last successful restore drill was {int(age_s / 86400)}d ago "
             f"(limit {max_age_days}d)",
         )
     return None
@@ -405,7 +436,7 @@ def check_restore_coverage(
         return None
     return (
         3,
-        f"volume(s) not restore-proven in {int(coverage_max_s // 86400)}d: "
+        f"volume(s) not restore-proven in {int(coverage_max_s / 86400)}d: "
         + ", ".join(unproven),
     )
 
@@ -452,7 +483,7 @@ def build_verdict(
             )
         targets_str = " ".join(backup_targets) if backup_targets else "none"
         msg = (
-            f"backup target(s) {targets_str} available, newest backup {int(age_s // 3600)}h old, "
+            f"backup target(s) {targets_str} available, newest backup {int(age_s / 3600)}h old, "
             f"{checked} backed-up volume(s) covered across daily+weekly, {recent_n} B2 backup(s)"
             f"/24h (budget {daily_backup_budget}){disarmed_note}{graced_note}"
         )
