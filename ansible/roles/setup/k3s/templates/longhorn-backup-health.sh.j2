@@ -31,6 +31,13 @@
 # reader that starts expecting a var an older shim never exported, exits nonzero and reports
 # "reader failed" naming the variable, rather than silently substituting a stale constant.
 #
+# That is the loud direction. The reverse — an OLDER reader running under a NEWER shim, from
+# before `_require_env()` existed — is quiet: an old reader consumes only the LONGHORN_* vars it
+# already knows how to read and ignores the rest, so a rollback that goes the other way silently
+# substitutes whatever hardcoded fallback that old reader shipped with, rather than the shim's
+# actual (newer) setting. Nothing here catches that case; it is a property of which commit is on
+# the host, not something this script can detect from the outside.
+#
 # The reader issues up to 19 kubectl calls across its eight checks (2 armed targets x up to 2
 # calls, +1 freshness, +1 errored-backups, +1 coverage +9 per-tier, +1 recent-budget +1 r2-set,
 # +1 failed-jobs), each with a 30s timeout — an 570s worst case against this script's 600s cron
@@ -139,22 +146,45 @@ export LONGHORN_RESTORE_DRILL_COVERAGE_SLACK_DAYS="{{ k3s_longhorn_restore_drill
 # the same class of contamination: even a stray stdout line ahead of the reader's own print
 # doesn't reach STATUS/MSG. longhorn_backup_health.py additionally redirects its own `logger`
 # subprocess's stdout/stderr to /dev/null so this can't happen even from inside the reader.
-ERR_FILE=$(mktemp /tmp/longhorn-backup-health.XXXXXX)
-OUT=$(/usr/local/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} /opt/longhorn-backup-health/longhorn_backup_health.py 2>"$ERR_FILE")
-RC=$?
-ERR=$(cat "$ERR_FILE" 2>/dev/null || true)
-rm -f "$ERR_FILE"
-LAST_LINE="${OUT##*$'\n'}"
-if [[ $RC -ne 0 || -z "$LAST_LINE" ]]; then
+# mktemp failure is unchecked no longer: an empty ERR_FILE would make `2>"$ERR_FILE"` below fail
+# the whole command substitution (a full or read-only /tmp), which used to read as RC nonzero —
+# STATUS=down and a /fail push for a backup plane that never even got a chance to run.
+if ! ERR_FILE=$(mktemp /tmp/longhorn-backup-health.XXXXXX); then
   STATUS=down
-  MSG="longhorn backup health reader failed: ${ERR:-${OUT:-(no output)}}"
-  # The reader logs its own verdict on a normal run; on THIS path it never got that far, so log
-  # here instead — otherwise the one failure mode where the local trail matters most (the reader
-  # itself broke) is the one case with no journalctl record at all.
+  MSG="longhorn backup health reader failed: mktemp could not create a stderr capture file"
   logger -t longhorn-backup-health "status=${STATUS} ${MSG}"
 else
-  STATUS="${LAST_LINE%%$'\t'*}"
-  MSG="${LAST_LINE#*$'\t'}"
+  OUT=$(/usr/local/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} /opt/longhorn-backup-health/longhorn_backup_health.py 2>"$ERR_FILE")
+  RC=$?
+  ERR=$(cat "$ERR_FILE" 2>/dev/null || true)
+  rm -f "$ERR_FILE"
+  LAST_LINE="${OUT##*$'\n'}"
+  # STATUS must be Kuma's own vocabulary before anything downstream trusts it: a reader that
+  # exits 0 with a last stdout line carrying no tab (a stray print, a warning that slipped past
+  # the separate-stderr guard above) makes STATUS the whole line, which is neither "up" nor
+  # "down" — `[[ "$STATUS" == "up" ]]` reads false and pings a healthchecks.io /fail on a status
+  # string Kuma never defined either. Treat that the same as a reader crash.
+  if [[ $RC -ne 0 || -z "$LAST_LINE" ]]; then
+    STATUS=down
+    MSG="longhorn backup health reader failed: ${ERR:-${OUT:-(no output)}}"
+    # The reader logs its own verdict on a normal run; on THIS path it never got that far, so log
+    # here instead — otherwise the one failure mode where the local trail matters most (the reader
+    # itself broke) is the one case with no journalctl record at all.
+    logger -t longhorn-backup-health "status=${STATUS} ${MSG}"
+  else
+    STATUS="${LAST_LINE%%$'\t'*}"
+    MSG="${LAST_LINE#*$'\t'}"
+    if [[ "$STATUS" != "up" && "$STATUS" != "down" ]]; then
+      logger -t longhorn-backup-health "status=down reader printed an unrecognized status: ${LAST_LINE}"
+      MSG="longhorn backup health reader printed an unrecognized status: ${LAST_LINE}"
+      STATUS=down
+    elif [[ -n "$ERR" ]]; then
+      # A green run's stderr is not necessarily empty — a kubectl RBAC warning or a uv resolution
+      # warning can land here on an otherwise-successful tick. Only the failure branch used to
+      # call `logger`, so this was silently dropped on every clean run with something on stderr.
+      logger -t longhorn-backup-health "status=${STATUS} stderr: ${ERR}"
+    fi
+  fi
 fi
 
 kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" longhorn-backup-health
@@ -190,8 +220,14 @@ if [[ -n "$HC_PING_KEY" ]]; then
   # and already talks to Kuma — no new cron, no new credential, one of the 14 free slots.
   #
   # No body: the status IS the signal, and MSG belongs to the other check.
+  #
+  # `${KUMA_PUSH_OK:-1}` — matching pi-sd-health.sh.j2 and pi-recovery-health.sh.j2, the other two
+  # callers that read this var — not a bare `$KUMA_PUSH_OK`: under `set -u`, `(( KUMA_PUSH_OK ))`
+  # expands the variable before evaluating the arithmetic, so an older kuma-push-lib.sh that
+  # never sets it makes the reference fatal, killing this script before the hc-ping call above
+  # even ran and silencing the off-site deadman rather than reddening it.
   HC_ALIVE_URL="https://hc-ping.com/${HC_PING_KEY}/uptime-kuma-alive"
-  (( KUMA_PUSH_OK )) || HC_ALIVE_URL="${HC_ALIVE_URL}/fail"
+  (( ${KUMA_PUSH_OK:-1} )) || HC_ALIVE_URL="${HC_ALIVE_URL}/fail"
   curl -fsS --max-time 10 --retry 3 "$HC_ALIVE_URL" >/dev/null \
-    || logger -t longhorn-backup-health "healthchecks kuma-alive ping failed (push_ok=${KUMA_PUSH_OK})"
+    || logger -t longhorn-backup-health "healthchecks kuma-alive ping failed (push_ok=${KUMA_PUSH_OK:-1})"
 fi
