@@ -63,6 +63,12 @@ from lib.repo_paths import GITOPS_DEPLOY_FILES
 # either changes — so this reaches across the role boundary instead, the same way
 # gitops_deploy.py reaches into its own directory.
 DEPLOY_LOGIC_DIR = GITOPS_DEPLOY_FILES
+# Put it on sys.path ONCE, here. The three functions that import from deploy_logic used to
+# each insert it per call and never remove it, so sys.path grew by one entry per call in a
+# long-lived process (#1046). The IMPORTS stay lazy inside those functions — see
+# _load_deploy_logic — because only the path entry is constant and free; the import is the
+# part `validate`/`list`/`describe` must not pay for.
+_sys.path.insert(0, str(DEPLOY_LOGIC_DIR))
 
 # Every container role block-tags its tasks with these (see the role task files and the
 # `--skip-tags deploy` config-only workflow in CLAUDE.md). They are legitimate --tags
@@ -245,7 +251,6 @@ def _load_deploy_logic():
     function rather than at module import time, so `validate`/`list`/`describe` never pay
     for or depend on this cross-directory import succeeding — only `changed` needs it.
     """
-    sys.path.insert(0, str(DEPLOY_LOGIC_DIR))
     from deploy_logic import (
         broad_remediation,
         expand_build_couplings,
@@ -361,7 +366,6 @@ def _cmd_blockers(args: argparse.Namespace) -> int:
 
 
 def _is_broad_manual(path: str) -> bool:
-    sys.path.insert(0, str(DEPLOY_LOGIC_DIR))
     from deploy_logic import _BROAD_MANUAL_PREFIXES
 
     return any(path.startswith(prefix) for prefix in _BROAD_MANUAL_PREFIXES)
@@ -380,7 +384,6 @@ def comment_only_paths(paths: list[str], old_ref: str, new_ref: str) -> set[str]
     explicit refs. Worktrees share the object store with the checkout they were made from,
     so a ref fetched in the primary is readable from a worktree that never fetched it.
     """
-    sys.path.insert(0, str(DEPLOY_LOGIC_DIR))
     from deploy_logic import comment_only_broad_changes
 
     def show(ref: str, path: str) -> str:
