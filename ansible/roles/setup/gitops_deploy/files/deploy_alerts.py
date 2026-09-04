@@ -16,7 +16,8 @@ see `deploy_io.py`'s docstring for why.
 
 import json
 
-from deploy_io import failing_task, head, log, tail
+from deploy_config import log
+from deploy_failtext import failing_task, head, tail
 from deploy_remediation import k8s_remediation
 from host_lib import atomic_write, discord_post
 
