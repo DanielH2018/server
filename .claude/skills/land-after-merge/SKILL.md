@@ -175,7 +175,9 @@ push. Before PR #775 that case waited out the whole budget and exited 75. If you
 by hand, check that way.
 
 `land.sh` runs from the primary checkout wherever you invoke it, because `deploy.sh` renders
-from its working directory and a worktree is behind master after a squash merge.
+from its working directory and a worktree is behind master after a squash merge. `land.sh` is
+an `exec` shim over `land.py` and the `land_lib/` package beside it; `--help` prints the full
+contract.
 
 It scopes the deploy to the PR's own file list rather than a SHA range, so another session's
 merged work is not swept in. `gh` paginates that list at 100 files, so it falls back to

@@ -169,6 +169,20 @@ def test_land_sh_itself_is_never_denied(monkeypatch, capsys, tmp_path):
         )
 
 
+def test_land_py_itself_is_never_denied(monkeypatch, capsys, tmp_path):
+    for _ in range(5):
+        assert (
+            _run(
+                monkeypatch,
+                capsys,
+                "uv run python scripts/deploy_tools/land.py --pr 1 --since abc > /tmp/l.log 2>&1",
+                "s6",
+                tmp_path,
+            )
+            is None
+        )
+
+
 def test_an_unrelated_command_never_consumes_a_read(monkeypatch, capsys, tmp_path):
     for _ in range(5):
         _run(monkeypatch, capsys, "git status", "s4", tmp_path)

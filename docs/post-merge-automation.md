@@ -91,10 +91,16 @@ It imports `deploy_logic` from `ansible/roles/setup/gitops_deploy/files/` with t
 `sys.path` bootstrap idiom, on the module that needs it. Verify it by running it, not by running
 the suite — the suite is exactly the thing that cannot see a cross-directory import break.
 
-### `scripts/deploy_tools/land.sh`
+### `scripts/deploy_tools/land.py` (invoked as `land.sh`)
 
-Pure glue, roughly 80 lines. It exists for one reason: the worktree containment check refuses
-multi-step chains, so the sequence must be a single invocation.
+The orchestrator: `land.py` is the entry point and `land_lib/` holds one module per phase
+(`merge`, `classify`, `ci`, `tick`, `deploy`, `health_verdict`) plus the outcome vocabulary, the
+options, the tool boundary and the ledger the Landings board reads. `land.sh` is a two-line
+`exec` shim so every command in the skill, the hook's remedy text and the Renovate prompt
+stays the same. It is one invocation because the worktree containment check refuses
+multi-step chains; it is Python because its whole body is "spawn a helper, branch on the
+exit code," and every one of those boundaries is a field on `Tools`, so each verdict has an
+executing test.
 
 ```
 land.sh --pr <n> [--since <pre-merge-sha>] [--tags <a,b>]
