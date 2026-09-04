@@ -14,6 +14,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "files"))
 
+import artifact_meta as tax  # the taxonomy and the metadata parsers
 import artifact_server as srv
 from typing import Any
 
@@ -44,13 +45,13 @@ ARTIFACT = """<!doctype html><html><head><meta charset="utf-8">
 
 class TestParseHtml:
     def test_extracts_title_heading_and_updated(self):
-        meta = srv.parse_html(ARTIFACT)
+        meta = tax.parse_html(ARTIFACT)
         assert meta["title"] == "Ansible k3s Drift Audit"
         assert meta["heading"] == "Ansible k3s Drift Audit"
         assert meta["updated"] == "2026-08-16 18:20"
 
     def test_counts_slices_by_status(self):
-        assert srv.parse_html(ARTIFACT)["slices"] == {
+        assert tax.parse_html(ARTIFACT)["slices"] == {
             "total": 2,
             "done": 1,
             "active": 1,
@@ -58,27 +59,26 @@ class TestParseHtml:
         }
 
     def test_summary_is_prose_not_a_repeat_of_the_heading(self):
-        summary = srv.parse_html(ARTIFACT)["summary"]
+        summary = tax.parse_html(ARTIFACT)["summary"]
         assert summary.startswith("Nine roles disagree")
 
     def test_meta_description_wins_over_derived_prose(self):
         body = '<html><head><title>T</title><meta name="description" content="Chosen."></head><body><p>Derived.</p></body></html>'
-        assert srv.parse_html(body)["summary"] == "Chosen."
+        assert tax.parse_html(body)["summary"] == "Chosen."
 
     def test_script_and_style_content_is_not_indexed(self):
-        assert "should not be indexed" not in srv.parse_html(ARTIFACT)["text"]
+        assert "should not be indexed" not in tax.parse_html(ARTIFACT)["text"]
 
-    def test_excerpt_is_bounded(self, monkeypatch):
-        monkeypatch.setattr(srv, "EXCERPT_CHARS", 20)
-        assert len(srv.parse_html("<p>" + "x " * 500 + "</p>")["text"]) <= 20
+    def test_excerpt_is_bounded(self):
+        assert len(tax.parse_html("<p>x " * 500, excerpt_chars=20)["text"]) <= 20
 
     def test_entities_are_unescaped(self):
-        assert srv.parse_html("<title>a &amp; b</title>")["title"] == "a & b"
+        assert tax.parse_html("<title>a &amp; b</title>")["title"] == "a & b"
 
 
 class TestParseMarkdown:
     def test_title_from_first_heading_and_summary_from_first_prose(self):
-        meta = srv.parse_markdown("# Free Tier Cloud\n\nWhat is still free.\n")
+        meta = tax.parse_markdown("# Free Tier Cloud\n\nWhat is still free.\n")
         assert meta["title"] == "Free Tier Cloud"
         assert meta["summary"] == "What is still free."
 
@@ -86,12 +86,12 @@ class TestParseMarkdown:
 class TestSlugTitle:
     def test_strips_date_suffix_and_separators(self):
         assert (
-            srv.slug_title("ansible-k3s-drift-audit_2026-08-16.html")
+            tax.slug_title("ansible-k3s-drift-audit_2026-08-16.html")
             == "ansible k3s drift audit"
         )
 
     def test_falls_back_to_the_name_when_nothing_remains(self):
-        assert srv.slug_title("2026-08-16.html") == "2026-08-16.html"
+        assert tax.slug_title("2026-08-16.html") == "2026-08-16.html"
 
 
 class TestBuildIndex:
@@ -186,7 +186,7 @@ KNOWN = [
 
 class TestDeriveServices:
     def test_word_match_tags_the_service(self):
-        assert "longhorn" in srv.derive_services("The longhorn volume failed", KNOWN)
+        assert "longhorn" in tax.derive_services("The longhorn volume failed", KNOWN)
 
     def test_a_substring_is_not_a_match(self):
         """`nut` lives inside "minute", which appears in nearly every artifact here.
@@ -195,41 +195,41 @@ class TestDeriveServices:
         documents `nut`, word matching 16. This is the assertion that pins the difference.
         """
         assert (
-            srv.derive_services(
+            tax.derive_services(
                 "The job runs every 5 minutes, give or take a minute", KNOWN
             )
             == []
         )
 
     def test_ambiguous_name_needs_two_mentions(self):
-        assert srv.derive_services("pushed it to the container registry", KNOWN) == []
-        assert "registry" in srv.derive_services(
+        assert tax.derive_services("pushed it to the container registry", KNOWN) == []
+        assert "registry" in tax.derive_services(
             "the registry rejected the push; registry GC ran", KNOWN
         )
 
     def test_unambiguous_name_needs_only_one(self):
-        assert srv.derive_services("sonarr could not import", KNOWN) == ["sonarr"]
+        assert tax.derive_services("sonarr could not import", KNOWN) == ["sonarr"]
 
     def test_hyphenated_names_match(self):
-        assert "wg-easy" in srv.derive_services("wg-easy lost its peer", KNOWN)
+        assert "wg-easy" in tax.derive_services("wg-easy lost its peer", KNOWN)
 
     def test_retired_names_are_still_matched(self):
-        assert "kopia" in srv.derive_services("the kopia repository was retired", KNOWN)
+        assert "kopia" in tax.derive_services("the kopia repository was retired", KNOWN)
 
     def test_an_ordinary_word_service_name_does_not_tag_prose(self):
         """`happy` is a retired service AND an English word — one use must not tag it."""
-        assert srv.derive_services("the result was a happy outcome", KNOWN) == []
+        assert tax.derive_services("the result was a happy outcome", KNOWN) == []
 
     def test_matching_is_case_insensitive(self):
-        assert "traefik" in srv.derive_services("Traefik routed it", KNOWN)
+        assert "traefik" in tax.derive_services("Traefik routed it", KNOWN)
 
-    def test_most_mentioned_first_and_capped(self, monkeypatch):
-        monkeypatch.setattr(srv, "MAX_SERVICES", 2)
+    def test_most_mentioned_first_and_capped(self):
         text = "sonarr sonarr sonarr traefik traefik longhorn"
-        assert srv.derive_services(text, KNOWN + ["longhorn"]) == ["sonarr", "traefik"]
+        capped = tax.derive_services(text, KNOWN + ["longhorn"], max_services=2)
+        assert capped == ["sonarr", "traefik"]
 
     def test_no_known_services_yields_nothing(self):
-        assert srv.derive_services("longhorn traefik sonarr", []) == []
+        assert tax.derive_services("longhorn traefik sonarr", []) == []
 
 
 class TestDeriveCategory:
@@ -239,7 +239,7 @@ class TestDeriveCategory:
         The body here scores `backup` several times over; the title scores `cost` twice. The
         title's 5x weight is what decides it.
         """
-        cat = srv.derive_category(
+        cat = tax.derive_category(
             "Free tier spend review", "the backup and restore of the longhorn snapshot"
         )
         assert cat == "cost"
@@ -248,7 +248,7 @@ class TestDeriveCategory:
         """Every document here says pod/cluster/deploy, so infra must never outrank a
         specific category — measured, it beat `cost` 4-3 before this rule existed."""
         assert (
-            srv.derive_category(
+            tax.derive_category(
                 "Grafana alert rules", "the pod on the node in the cluster deploy"
             )
             == "monitoring"
@@ -256,32 +256,32 @@ class TestDeriveCategory:
 
     def test_infra_still_wins_when_nothing_specific_scores(self):
         assert (
-            srv.derive_category("Ansible role layout", "the cluster deploy") == "infra"
+            tax.derive_category("Ansible role layout", "the cluster deploy") == "infra"
         )
 
     def test_security_wins_on_its_own_words(self):
         assert (
-            srv.derive_category("Authelia session audit", "sso and permission review")
+            tax.derive_category("Authelia session audit", "sso and permission review")
             == "security"
         )
 
     def test_no_keywords_yields_no_category(self):
-        assert srv.derive_category("Grocery list", "apples and pears") == ""
+        assert tax.derive_category("Grocery list", "apples and pears") == ""
 
 
 class TestDeriveStatus:
     def test_any_active_slice_makes_the_document_active(self):
-        assert srv.derive_status({"done": 2, "active": 1, "planned": 3}) == "active"
+        assert tax.derive_status({"done": 2, "active": 1, "planned": 3}) == "active"
 
     def test_all_done_makes_it_done(self):
-        assert srv.derive_status({"done": 3, "active": 0, "planned": 0}) == "done"
+        assert tax.derive_status({"done": 3, "active": 0, "planned": 0}) == "done"
 
     def test_remaining_planned_work_is_planned(self):
-        assert srv.derive_status({"done": 1, "active": 0, "planned": 2}) == "planned"
+        assert tax.derive_status({"done": 1, "active": 0, "planned": 2}) == "planned"
 
     def test_no_slices_yields_no_status(self):
-        assert srv.derive_status(None) == ""
-        assert srv.derive_status({}) == ""
+        assert tax.derive_status(None) == ""
+        assert tax.derive_status({}) == ""
 
 
 class TestDeclaredMetadata:
@@ -292,7 +292,7 @@ class TestDeclaredMetadata:
             '<meta name="artifact:services" content="authelia, traefik">'
             '<meta name="artifact:tags" content="sso,audit">'
         )
-        meta = srv.declared_metadata(body)
+        meta = tax.declared_metadata(body)
         assert meta["category"] == "security"
         assert meta["status"] == "done"
         assert meta["services"] == ["authelia", "traefik"]
@@ -300,16 +300,16 @@ class TestDeclaredMetadata:
 
     def test_markdown_frontmatter(self):
         body = "---\ncategory: backup\nstatus: active\nservices: longhorn, b2\n---\n\n# Doc\n"
-        meta = srv.declared_metadata(body, is_markdown=True)
+        meta = tax.declared_metadata(body, is_markdown=True)
         assert meta["category"] == "backup"
         assert meta["status"] == "active"
         assert meta["services"] == ["longhorn", "b2"]
 
     def test_absent_metadata_is_empty(self):
-        assert srv.declared_metadata("<p>nothing here</p>") == {}
+        assert tax.declared_metadata("<p>nothing here</p>") == {}
 
     def test_markdown_without_frontmatter_is_empty(self):
-        assert srv.declared_metadata("# Just a heading\n", is_markdown=True) == {}
+        assert tax.declared_metadata("# Just a heading\n", is_markdown=True) == {}
 
 
 class TestApplyMetadata:
@@ -319,7 +319,7 @@ class TestApplyMetadata:
             "text": "b2 spend cap",
             "slices": {"done": 1},
         }
-        srv.apply_metadata(
+        tax.apply_metadata(
             entry, '<meta name="artifact:category" content="security">', False, KNOWN
         )
         assert entry["category"] == "security"
@@ -331,20 +331,20 @@ class TestApplyMetadata:
             "text": "spend cap billing",
             "slices": None,
         }
-        srv.apply_metadata(entry, "<p>x</p>", False, KNOWN)
+        tax.apply_metadata(entry, "<p>x</p>", False, KNOWN)
         assert entry["category"] == "cost"
         assert entry["source"]["category"] == "derived"
 
     def test_a_field_with_neither_is_absent_rather_than_guessed_empty(self):
         entry = {"title": "Grocery list", "text": "apples", "slices": None}
-        srv.apply_metadata(entry, "<p>x</p>", False, KNOWN)
+        tax.apply_metadata(entry, "<p>x</p>", False, KNOWN)
         assert "category" not in entry
         assert "status" not in entry
         assert entry["source"] == {}
 
     def test_tags_are_declared_only(self):
         entry = {"title": "t", "text": "longhorn", "slices": None}
-        srv.apply_metadata(entry, "<p>x</p>", False, KNOWN)
+        tax.apply_metadata(entry, "<p>x</p>", False, KNOWN)
         assert "tags" not in entry
 
 
@@ -352,15 +352,15 @@ class TestKnownServicesFile:
     def test_reads_and_normalises_the_rendered_list(self, tmp_path):
         path = tmp_path / "known_services.json"
         path.write_text('["Longhorn", "traefik", "traefik", ""]')
-        assert srv.load_known_services(path) == ["longhorn", "traefik"]
+        assert tax.load_known_services(path) == ["longhorn", "traefik"]
 
     def test_missing_file_is_not_fatal(self, tmp_path):
-        assert srv.load_known_services(tmp_path / "absent.json") == []
+        assert tax.load_known_services(tmp_path / "absent.json") == []
 
     def test_malformed_file_is_not_fatal(self, tmp_path):
         path = tmp_path / "bad.json"
         path.write_text("{not json")
-        assert srv.load_known_services(path) == []
+        assert tax.load_known_services(path) == []
 
 
 class TestIndexCache:
