@@ -30,30 +30,57 @@ from datetime import datetime, timezone
 RECURRING_JOB_GROUP_PREFIX = "recurring-job-group.longhorn.io/"
 
 
+class ReapAbort(RuntimeError):
+    """A classifier refused to run because its ownership inputs are unusable.
+
+    Carries the `abort_reason` message. Raised rather than returned because the two
+    classifiers return a bucketed result and every empty bucket reads as "nothing to do" --
+    the exact shape the module docstring's incident had. An entry point should catch this,
+    print it and exit non-zero.
+    """
+
+
 # ── shared ────────────────────────────────────────────────────────────────────────────────
 
 
 def abort_reason(
-    volume_count: int,
-    owner_count: int,
+    volume_count: int = 0,
+    owner_count: int | None = None,
     *,
     recurringjob_count: int | None = None,
     volumes_with_group_label: int | None = None,
+    backup_count: int = 0,
+    unresolved_owner_count: int = 0,
 ) -> str | None:
     """None when the ownership lookup is usable; an ABORT message otherwise.
 
-    Every volume in this cluster carries exactly one recurring-job group label, so an empty
-    ownership map while volumes exist means the lookup broke -- and a broken lookup is
-    indistinguishable from "nothing is stranded" in a classifier's output. Refuse rather than
-    silently let every floor below run disarmed, which is what the jsonpath bug did.
+    Four independent refusals, each keyed only on the counts its own caller supplies. Every
+    count a caller cannot honestly produce is left out, and its rule stays inert: `owner_count`
+    and `recurringjob_count` default to None rather than 0 so an omitted count never reads as
+    "counted zero", and the two int counts default to 0 so an omitted one never trips a `> 0`.
 
-    The snapshots reaper passes the two keyword args too: `snapshot_owner_map` records an
-    entry for every volume that carries a group label REGARDLESS of whether that group
-    resolved to a real RecurringJob, so an empty RecurringJob list (owner_count == volume
-    count, every value "") passes the check above silently while every current-tier snapshot
-    reads as stranded. Refuse that case explicitly rather than let it look like a lookup that
-    resolved fine. The backups reaper never passes these, so this half is skipped there (no
-    RecurringJob-CR indirection exists to break).
+    1. Volumes exist but none resolved an owner (`volume_count`, `owner_count`). Every volume
+       in this cluster carries exactly one recurring-job group label, so an empty ownership map
+       while volumes exist means the lookup broke -- and a broken lookup is indistinguishable
+       from "nothing is stranded" in a classifier's output. Refuse rather than silently let
+       every floor below run disarmed, which is what the jsonpath bug did.
+    2. No volumes at all, but backups exist (`volume_count`, `backup_count`). A `kubectl get
+       volumes` that succeeds with zero items -- a wrong namespace, a context with no Longhorn,
+       an RBAC that lists nothing rather than erroring -- makes every labelled backup fail the
+       `vol not in existing_volumes` test in `classify_backups`, so the whole B2 backup set
+       lands in `.orphaned` and `--apply-deleted-volumes` deletes it with no floor. Zero
+       volumes AND zero backups is the only honestly empty cluster, and stays clean.
+    3. Volumes carry a group label but no RecurringJob CRs exist (`recurringjob_count`,
+       `volumes_with_group_label`). `snapshot_owner_map` records an entry for every volume that
+       carries a group label REGARDLESS of whether that group resolved to a real RecurringJob,
+       so an empty RecurringJob list (owner_count == volume count, every value "") passes rule
+       1 silently while every current-tier snapshot reads as stranded.
+    4. Some volume resolved to an empty owner (`unresolved_owner_count`). Rule 3 sees only the
+       all-or-nothing case: ONE missing or renamed RecurringJob CR leaves a nonzero job count
+       and a `""` owner for every volume in that group, and `classify_snapshots`' current-tier
+       test (`owner_job and owner_job.startswith(job)`) is False against `""`, so those
+       volumes' current snapshots past the age floor all become candidates. Same disarmed
+       ownership as rule 3, at per-volume granularity.
     """
     if volume_count > 0 and owner_count == 0:
         return (
@@ -61,11 +88,25 @@ def abort_reason(
             "The ownership lookup is broken; every floor below depends on it. Refusing to "
             "continue." % volume_count
         )
+    if volume_count == 0 and backup_count > 0:
+        return (
+            "ABORT: %d backup(s) exist but the volume list is empty. Every one of them would "
+            "classify as orphaned and be deleted under --apply-deleted-volumes. An empty "
+            "volume list is a broken read, not an empty cluster. Refusing to continue."
+            % backup_count
+        )
     if recurringjob_count == 0 and (volumes_with_group_label or 0) > 0:
         return (
             "ABORT: %d volume(s) carry a recurring-job group label but no RecurringJob CRs "
             "were found. The group-to-job map is empty, so every current-tier snapshot would "
             "misread as stranded. Refusing to continue." % volumes_with_group_label
+        )
+    if unresolved_owner_count > 0:
+        return (
+            "ABORT: %d volume(s) carry a recurring-job group label that resolves to no "
+            "RecurringJob CR. A missing or renamed job leaves those volumes with no owner, so "
+            "every current-tier snapshot on them would misread as stranded. Refusing to "
+            "continue." % unresolved_owner_count
         )
     return None
 
@@ -202,10 +243,22 @@ def classify_backups(
     bash's `[[ -z "$NAME" || -z "$VOL" ]] && continue` -- without it a completed backup with an
     empty volumeName lands in `.orphaned` (empty string is never in `existing_volumes`) and gets
     deleted under --apply-deleted-volumes for an association that was never real.
+
+    Raises:
+      ReapAbort: `existing_volumes` is empty while labelled backups exist -- `abort_reason`'s
+        rule 2, checked here rather than in the entry point because the entry point reads the
+        backup list only after its own `abort_reason` call.
     """
     valid = [f for f in (_backup_fields(b) for b in backups) if f[0] and f[1]]
     completed = [f for f in valid if f[4] == "Completed"]
     labelled = [f for f in completed if f[3]]
+
+    # `labelled` is the set at risk: the orphan loop below iterates it and nothing else. Only
+    # rule 2 is asked -- the entry point already checked ownership against the real volume list,
+    # and `owner` here legitimately omits any volume carrying no group label.
+    abort = abort_reason(volume_count=len(existing_volumes), backup_count=len(labelled))
+    if abort:
+        raise ReapAbort(abort)
 
     current_tier_count: dict[str, int] = {}
     for _name, vol, _created, job, _state in labelled:
@@ -266,6 +319,11 @@ def snapshot_owner_map(
     a snapshot records the JOB that made it (`weekly-backup`, truncated by Longhorn). Those
     strings differ for every weekly shard, so comparing label-suffix to job name directly would
     report every weekly-tier volume's own current snapshots as stranded.
+
+    A group naming no RecurringJob CR gets the value `""`, which is NOT "this volume has no
+    owner" -- a volume with no group label is absent from this map entirely. `""` means the
+    lookup for a volume that does carry a label failed, and `unresolved_owner_count` below
+    counts exactly those so `classify_snapshots` can refuse.
     """
     owner: dict[str, str] = {}
     for v in volumes:
@@ -279,12 +337,22 @@ def snapshot_owner_map(
     return owner
 
 
+def unresolved_owner_count(owner: dict[str, str]) -> int:
+    """How many volumes in a `snapshot_owner_map` resolved to no job.
+
+    Feeds `abort_reason`'s rule 4. Derived from the map rather than counted while building it,
+    so it stays a property of the value the classifier actually reads.
+    """
+    return sum(1 for job in owner.values() if not job)
+
+
 def volumes_with_group_label(volumes: list[dict]) -> int:
     """How many volumes carry a recurring-job group label at all.
 
-    Feeds `abort_reason`'s second check: `snapshot_owner_map` records an entry for every one of
-    these volumes even when `group_job` is empty (the value is just `""`), so `owner_count`
-    alone can't tell "the RecurringJob list came back empty" from "every group resolved fine".
+    Feeds `abort_reason`'s RecurringJob-list check (rule 3): `snapshot_owner_map` records an
+    entry for every one of these volumes even when `group_job` is empty (the value is just
+    `""`), so `owner_count` alone can't tell "the RecurringJob list came back empty" from
+    "every group resolved fine".
     """
     count = 0
     for v in volumes:
@@ -346,7 +414,16 @@ def classify_snapshots(
     A snapshot with no NAME or no `.spec.volume` is skipped before anything else, matching
     bash's `[[ -z "$NAME" || -z "$VOL" ]] && continue` -- without it an empty volume reaches
     `.candidates` and a later purge POSTs to `/v1/volumes/` (empty path segment) for it.
+
+    Raises:
+      ReapAbort: some volume in `owner` resolved to `""` -- `abort_reason`'s rule 4. Only that
+        rule is asked: this function is handed no volume list, so any volume or RecurringJob
+        count it supplied would be invented.
     """
+    abort = abort_reason(unresolved_owner_count=unresolved_owner_count(owner))
+    if abort:
+        raise ReapAbort(abort)
+
     cutoff = now_epoch - min_age_days * 86400
     raw_records = [
         {"name": n, "vol": v, "created": c, "job": j, "removed": r}

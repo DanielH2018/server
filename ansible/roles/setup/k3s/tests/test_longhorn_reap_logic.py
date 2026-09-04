@@ -13,6 +13,8 @@ Run: uv run pytest ansible/roles/setup/k3s/tests/test_longhorn_reap_logic.py
 import pathlib
 import sys
 
+import pytest
+
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "files"))
 import longhorn_reap_logic as logic
 
@@ -85,8 +87,45 @@ def test_abort_reason_fires_when_volumes_exist_but_no_owner_resolved():
     assert "22 volume" in reason
 
 
-def test_abort_reason_is_none_with_no_volumes_at_all():
-    assert logic.abort_reason(volume_count=0, owner_count=0) is None
+def test_abort_reason_is_clean_with_no_volumes_and_no_backups():
+    # The only honestly empty cluster: nothing to read, nothing at risk.
+    assert logic.abort_reason(volume_count=0, owner_count=0, backup_count=0) is None
+
+
+def test_abort_reason_is_flagged_with_no_volumes_but_backups_that_exist():
+    # #1062. A `kubectl get volumes` that succeeds with zero items -- wrong namespace, a
+    # context with no Longhorn, an RBAC that lists nothing rather than erroring -- puts every
+    # labelled backup in .orphaned, and --apply-deleted-volumes then deletes the whole B2 set
+    # with no floor. This case read as None until the guard existed.
+    reason = logic.abort_reason(volume_count=0, owner_count=0, backup_count=47)
+    assert reason is not None
+    assert "ABORT" in reason
+    assert "47 backup" in reason
+
+
+def test_abort_reason_is_clean_when_every_group_resolves_to_a_job():
+    assert logic.abort_reason(unresolved_owner_count=0) is None
+
+
+def test_abort_reason_is_flagged_when_a_group_label_resolves_to_no_job():
+    # #1063. One missing or renamed RecurringJob CR leaves a nonzero job count, so the rule
+    # above stays clean, while every volume in that group gets owner "" and its current-tier
+    # snapshots read as stranded.
+    reason = logic.abort_reason(
+        volume_count=9,
+        owner_count=9,
+        recurringjob_count=4,
+        volumes_with_group_label=9,
+        unresolved_owner_count=3,
+    )
+    assert reason is not None
+    assert "ABORT" in reason
+    assert "3 volume" in reason
+
+
+def test_unresolved_owner_count_counts_only_the_volumes_that_resolved_to_nothing():
+    owner = {"a": "weekly-backup", "b": "", "c": "daily-backup", "d": ""}
+    assert logic.unresolved_owner_count(owner) == 2
 
 
 def test_abort_reason_fires_when_the_recurringjob_list_is_empty_but_volumes_carry_the_label():
@@ -272,9 +311,11 @@ def test_non_completed_backups_are_never_bucketed():
 
 
 def test_backups_of_a_deleted_volume_land_in_orphaned_not_candidates():
-    owner = {}  # the volume is gone, so it resolves to no owner
+    owner: dict[str, str] = {}  # the volume is gone, so it resolves to no owner
     backups = [_backup("stray", "gone-vol", "2026-08-14T00:00:00Z", "daily-backup")]
-    result = logic.classify_backups(backups, owner, existing_volumes=set())
+    # One live volume, so this is "gone-vol was deleted" and not "the volume read returned
+    # nothing" -- the two must stay distinguishable, which is what #1062 was.
+    result = logic.classify_backups(backups, owner, existing_volumes={"live-vol"})
     assert result.candidates == []
     assert [n for n, *_ in result.orphaned] == ["stray"]
 
@@ -295,9 +336,40 @@ def test_a_backup_with_a_real_volumename_still_classifies_normally():
     result = logic.classify_backups(
         [_backup("stray", "gone-vol", "2026-08-14T00:00:00Z", "daily-backup")],
         owner={},
-        existing_volumes=set(),
+        existing_volumes={"live-vol"},
     )
     assert [n for n, *_ in result.orphaned] == ["stray"]
+
+
+def test_classify_backups_is_clean_when_one_volume_of_several_was_deleted():
+    # The case the guard below must NOT swallow: a real deleted volume, correctly orphaned.
+    backups = [
+        _backup("stray", "gone-vol", "2026-08-14T00:00:00Z", "daily-backup"),
+        _backup("current", "live-vol", "2026-08-14T00:00:00Z", "daily-backup"),
+    ]
+    result = logic.classify_backups(
+        backups, {"live-vol": "daily-backup"}, existing_volumes={"live-vol"}
+    )
+    assert [n for n, *_ in result.orphaned] == ["stray"]
+
+
+def test_classify_backups_is_flagged_when_the_volume_list_is_empty():
+    # #1062. Without the refusal every one of these lands in .orphaned and
+    # --apply-deleted-volumes deletes the whole B2 backup set. The entry point cannot make this
+    # call itself: it runs abort_reason before it has read the backups.
+    backups = [
+        _backup("b1", "vol-a", "2026-08-14T00:00:00Z", "daily-backup"),
+        _backup("b2", "vol-b", "2026-08-14T00:00:00Z", "daily-backup"),
+    ]
+    with pytest.raises(logic.ReapAbort) as excinfo:
+        logic.classify_backups(backups, {}, existing_volumes=set())
+    assert "ABORT" in str(excinfo.value)
+    assert "2 backup" in str(excinfo.value)
+
+
+def test_classify_backups_is_clean_when_an_empty_volume_list_has_no_backups_to_lose():
+    # An empty cluster reads empty on both sides, so there is nothing the guard protects.
+    assert logic.classify_backups([], {}, existing_volumes=set()).orphaned == []
 
 
 def test_creation_order_decides_the_floor_not_listing_order():
@@ -344,7 +416,9 @@ def test_a_snapshot_with_an_empty_volume_is_skipped_entirely():
 
 
 def test_a_snapshot_with_a_real_volume_still_classifies_normally():
-    owner = {"vol-a": ""}
+    # An absent key, not a `""` value: vol-a carries no group label at all. `""` now means the
+    # group label named a RecurringJob that does not exist, which classify_snapshots refuses.
+    owner: dict[str, str] = {}
     snaps = [
         _snapshot("newest", "vol-a", "2026-08-19T00:00:00Z"),
         _snapshot("stale", "vol-a", "2026-08-01T00:00:00Z", job="daily-backup"),
@@ -366,7 +440,9 @@ def test_the_newest_snapshot_is_never_a_candidate_whoever_made_it():
 
 
 def test_a_stranded_snapshot_past_the_age_floor_is_flagged():
-    owner = {"vol-a": ""}
+    # An absent key, not a `""` value: vol-a carries no group label at all. `""` now means the
+    # group label named a RecurringJob that does not exist, which classify_snapshots refuses.
+    owner: dict[str, str] = {}
     snaps = [
         _snapshot("newest", "vol-a", "2026-08-19T00:00:00Z"),
         _snapshot("stale", "vol-a", "2026-08-10T00:00:00Z", job="daily-backup"),
@@ -378,7 +454,9 @@ def test_a_stranded_snapshot_past_the_age_floor_is_flagged():
 
 
 def test_a_stranded_snapshot_younger_than_the_age_floor_is_kept():
-    owner = {"vol-a": ""}
+    # An absent key, not a `""` value: vol-a carries no group label at all. `""` now means the
+    # group label named a RecurringJob that does not exist, which classify_snapshots refuses.
+    owner: dict[str, str] = {}
     snaps = [
         _snapshot("newest", "vol-a", "2026-08-19T18:00:00Z"),
         _snapshot("recent", "vol-a", "2026-08-19T00:00:00Z", job="daily-backup"),
@@ -394,7 +472,9 @@ def test_a_stranded_snapshot_younger_than_the_age_floor_is_kept():
 def test_a_detached_volumes_snapshot_is_kept_not_reaped():
     # Deleting a snapshot on a detached volume does not stick: there is no running engine to
     # coalesce it, so a delete-then-recreate loop is churn that reads as progress.
-    owner = {"vol-a": ""}
+    # An absent key, not a `""` value: vol-a carries no group label at all. `""` now means the
+    # group label named a RecurringJob that does not exist, which classify_snapshots refuses.
+    owner: dict[str, str] = {}
     snaps = [
         _snapshot("newest", "vol-a", "2026-08-19T00:00:00Z"),
         _snapshot("stale", "vol-a", "2026-08-10T00:00:00Z", job="daily-backup"),
@@ -408,7 +488,9 @@ def test_a_detached_volumes_snapshot_is_kept_not_reaped():
 
 
 def test_an_already_removed_snapshot_is_skipped_silently_not_reaped_again():
-    owner = {"vol-a": ""}
+    # An absent key, not a `""` value: vol-a carries no group label at all. `""` now means the
+    # group label named a RecurringJob that does not exist, which classify_snapshots refuses.
+    owner: dict[str, str] = {}
     snaps = [
         _snapshot("newest", "vol-a", "2026-08-19T00:00:00Z"),
         _snapshot(
@@ -425,7 +507,9 @@ def test_an_already_removed_snapshot_is_skipped_silently_not_reaped_again():
 def test_an_unpopulated_markremoved_is_treated_as_not_removed():
     # R14, ported: status.markRemoved absent (a snapshot read moments after creation) must be
     # treated the same as an explicit False, not silently excluded.
-    owner = {"vol-a": ""}
+    # An absent key, not a `""` value: vol-a carries no group label at all. `""` now means the
+    # group label named a RecurringJob that does not exist, which classify_snapshots refuses.
+    owner: dict[str, str] = {}
     snaps = [
         _snapshot("newest", "vol-a", "2026-08-19T00:00:00Z"),
         _snapshot(
@@ -439,7 +523,9 @@ def test_an_unpopulated_markremoved_is_treated_as_not_removed():
 
 
 def test_a_hand_taken_snapshot_with_no_job_label_is_never_a_candidate():
-    owner = {"vol-a": ""}
+    # An absent key, not a `""` value: vol-a carries no group label at all. `""` now means the
+    # group label named a RecurringJob that does not exist, which classify_snapshots refuses.
+    owner: dict[str, str] = {}
     snaps = [
         _snapshot("newest", "vol-a", "2026-08-19T00:00:00Z"),
         _snapshot("by-hand", "vol-a", "2026-08-10T00:00:00Z", job=None),
@@ -495,8 +581,64 @@ def test_a_stranded_snapshot_from_a_since_moved_shard_is_kept_not_reaped():
     assert result.candidates == []
 
 
+def test_classify_snapshots_is_clean_when_every_group_label_resolved_to_a_job():
+    # Both RecurringJob CRs present: weekly-backup-d3 and daily-backup each resolve, so the
+    # map holds no "" and the reaper runs.
+    group_job = logic.recurringjob_group_to_job(
+        [
+            _recurringjob("weekly-backup", ["weekly-backup-d3"]),
+            _recurringjob("daily-backup", ["daily-backup"]),
+        ]
+    )
+    owner = logic.snapshot_owner_map(
+        [
+            _volume("vol-a", group="weekly-backup-d3"),
+            _volume("vol-b", group="daily-backup"),
+        ],
+        group_job,
+    )
+    snaps = [
+        _snapshot("newest", "vol-a", "2026-08-19T00:00:00Z"),
+        _snapshot("stale", "vol-a", "2026-08-10T00:00:00Z", job="daily-backup"),
+    ]
+    result = logic.classify_snapshots(
+        snaps, owner, attached={"vol-a"}, min_age_days=3, now_epoch=_NOW
+    )
+    assert [n for n, *_ in result.candidates] == ["stale"]
+
+
+def test_classify_snapshots_is_flagged_when_one_recurringjob_cr_is_missing():
+    # #1063. weekly-backup was renamed or deleted, so vol-a's group resolves to "" while
+    # daily-backup still resolves -- the RecurringJob count is nonzero and the all-empty guard
+    # stays silent. `owner_job and owner_job.startswith(job)` is False against "", so every
+    # current-tier snapshot on vol-a past the age floor would have become a candidate.
+    group_job = logic.recurringjob_group_to_job(
+        [_recurringjob("daily-backup", ["daily-backup"])]
+    )
+    owner = logic.snapshot_owner_map(
+        [
+            _volume("vol-a", group="weekly-backup-d3"),
+            _volume("vol-b", group="daily-backup"),
+        ],
+        group_job,
+    )
+    assert owner == {"vol-a": "", "vol-b": "daily-backup"}
+    snaps = [
+        _snapshot("newest", "vol-a", "2026-08-19T00:00:00Z"),
+        _snapshot("current", "vol-a", "2026-08-10T00:00:00Z", job="weekly-backup"),
+    ]
+    with pytest.raises(logic.ReapAbort) as excinfo:
+        logic.classify_snapshots(
+            snaps, owner, attached={"vol-a"}, min_age_days=3, now_epoch=_NOW
+        )
+    assert "ABORT" in str(excinfo.value)
+    assert "1 volume" in str(excinfo.value)
+
+
 def test_an_unparseable_creation_time_is_kept_and_reported():
-    owner = {"vol-a": ""}
+    # An absent key, not a `""` value: vol-a carries no group label at all. `""` now means the
+    # group label named a RecurringJob that does not exist, which classify_snapshots refuses.
+    owner: dict[str, str] = {}
     snaps = [
         _snapshot("newest", "vol-a", "2026-08-19T00:00:00Z"),
         # Lexically less than "newest"'s stamp (same date prefix, malformed suffix) so the
