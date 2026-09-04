@@ -7,3 +7,24 @@
 # record holds file names, checksums and a commit id, and a reader that needs root is a reader
 # nobody runs. `probe.py releases` is that reader.
 manifests_release_dir: /var/lib/homelab/k8s-releases.d
+
+# Opt-in live prune (#1076). `kubectl apply -f <dir>/` only adds/updates, so a manifest
+# dropped from manifests_files leaves its live object running — the "Prune staged manifests
+# dropped from the file lists" task above only deletes the STAGED FILE, never the live object.
+# manifest-prune-check.sh pages about that gap after the fact; this is the in-place fix.
+#
+# DECIDED: default false, armed per-role rather than globally. Two things block a global flip:
+# (1) there is no shared metadata-labels macro yet, so every one of the other ~63 roles would
+# need its templates hand-edited to carry `homelab/role: <service>` before --prune could ever
+# see their objects — doing that without a proven mechanism first is the wrong order. (2) a
+# label added to a role's manifests only protects objects APPLIED AFTER the label lands: an
+# orphan whose staged file was already deleted before this feature shipped (the
+# claude-otel-ingest IngressRoute this issue names) never receives the label and stays
+# invisible to `-l homelab/role=...` — it still needs one manual kubectl delete, same as today.
+# roles/k8s/registry is the one role armed so far, proving the mechanism end-to-end on a role
+# with a normal Deployment+Service+NetworkPolicy shape. Arming another role means: label its
+# object metadata the same way, list every kind it renders in manifests_prune_kinds (the
+# default --prune-allowlist misses NetworkPolicy and every Traefik CRD), and never include
+# Secret or PersistentVolumeClaim — see the guard test on that.
+manifests_prune: false
+manifests_prune_kinds: []

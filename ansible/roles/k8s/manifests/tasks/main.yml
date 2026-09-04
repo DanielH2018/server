@@ -237,10 +237,26 @@
   # schema validation, defaulting and admission, and is discarded instead of persisted. That is
   # the whole point of the mode — the manifests are judged by the same code path that would
   # accept them for real.
+  # PRUNE (#1076), opt-in via manifests_prune — see the DECIDED comment in defaults/main.yml
+  # for why this is armed per-role rather than globally. `-l homelab/role={{ manifests_service
+  # }}` is what keeps a wrong prune from ever reaching another role's objects: a live object
+  # this apply did not itself label is invisible to the selector and structurally cannot be
+  # matched, so the blast radius of a bad kinds list is "this role's own objects", never
+  # another role's. `--prune-allowlist` is passed explicitly rather than left at kubectl's
+  # default (Deployment/DaemonSet/ReplicaSet/StatefulSet/Job/CronJob/Pod/
+  # ReplicationController/Service) because that default has no Traefik CRDs and no
+  # NetworkPolicy — a Middleware or IngressRoute dropped from a role armed with the bare flag
+  # would silently NOT be pruned. `-n {{ k8s_namespace }}` is a second, independent scope
+  # layer: even a mislabeled object outside this namespace cannot be listed as a candidate.
   ansible.builtin.command:
     cmd: >-
       k3s kubectl apply -f {{ manifests_dest_dir }}/
       {{ '--dry-run=server' if k8s_dry_run | bool else '' }}
+      {{ (
+           '--prune -l homelab/role=' ~ manifests_service
+           ~ ' --prune-allowlist=' ~ (manifests_prune_kinds | join(','))
+           ~ ' -n ' ~ k8s_namespace
+         ) if (manifests_prune | default(false)) and (manifests_prune_kinds | default([]) | length > 0) else '' }}
   register: manifests_apply
   become: true
   # Dry-run stdout carries the same "created"/"configured" words as a real apply, so the live
