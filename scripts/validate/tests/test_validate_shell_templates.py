@@ -3,6 +3,7 @@ shell scripts (*.sh.j2) that the prek bash-syntax-check / shellcheck hooks can't
 tags a `.sh.j2` as {jinja, text}, never `shell`).
 """
 
+import os
 import re
 import shutil
 import subprocess
@@ -750,37 +751,54 @@ def test_backup_health_shim_exports_every_env_var_the_reader_requires():
     assert not missing, f"the shim does not export: {sorted(missing)}"
 
 
-def test_backup_health_kubectl_stderr_does_not_contaminate_the_status(tmp_path):
-    """Regression for the 2026-09-04 review's finding #1, run against the ACTUAL shipped shim.
+FAKE_HC_PING_KEY = "fixture-hc-ping-key"
 
-    Until this fix, `OUT=$(... 2>&1)` meant any stderr byte the reader's own `logger` subprocess
-    wrote — `logger: socket /dev/log: ...`, e.g. — landed ahead of the reader's real stdout line
-    once the two streams were merged, silently turning `up` into garbage that Kuma reads as DOWN
-    and pings healthchecks.io `/fail` on a backup plane that was fine. This renders the real
-    template, patches in a fake reader that writes junk to stderr before printing `up<TAB>ok`,
-    and a `kuma_push` stub that records the status it actually receives — proving the fix at the
-    point that matters (what reaches Kuma) rather than just that the fix's source text exists.
+
+def _run_rendered_shim(tmp_path, fake_reader_body: str):
+    """Run the real rendered backup-health shim with every external seam pointed at a fixture.
+
+    The seams: the reader invocation becomes `fake_reader_body`; `kuma_push` and
+    `boot_grace_active` are shadowed by shell functions; the Kuma token file and the
+    healthchecks.io key file are swapped for tmp copies; and `curl` is a stub on PATH that
+    records its argv. Returns `(proc, kuma_status, curl_calls)` where `kuma_status` is the
+    string the `kuma_push` stub received (None when never called) and `curl_calls` is one
+    argv line per curl invocation.
+
+    The healthchecks.io seam is not optional on this host: `/etc/healthchecks/ping.env` is
+    0640 root:ubuntu, so the test user CAN read the real key, and until this seam existed a
+    test run sourced it and sent a fixture `up` ping to the real off-site dead-man for both
+    `longhorn-backup-health` and `uptime-kuma-alive`. Two independent guards: the path is
+    replaced, and `curl` is stubbed so a missed replacement leaks a real key into a file
+    under tmp_path rather than onto the wire. The assertions on `curl_calls` never print a
+    URL for that reason.
     """
     ctx = {**BASE_CONTEXT, **load_yaml(ALL_VARS), **v.SHELL_STUB_OVERRIDES}
     rendered = v.render_template(BACKUP_HEALTH, ctx)
 
     fake_reader = tmp_path / "fake-reader.sh"
-    fake_reader.write_text(
-        "#!/usr/bin/env bash\n"
-        "printf 'logger: socket /dev/log: No such file or directory\\n' >&2\n"
-        "printf 'up\\tbackup target(s) default available, 1 backed-up volume(s) covered\\n'\n"
-    )
+    fake_reader.write_text("#!/usr/bin/env bash\n" + fake_reader_body)
     fake_reader.chmod(0o755)
 
     push_token_env = tmp_path / "kuma-push.env"
     push_token_env.write_text("LONGHORN_BACKUP_PUSH_TOKEN='test-token'\n")
+    hc_ping_env = tmp_path / "ping.env"
+    hc_ping_env.write_text(f"HC_PING_KEY='{FAKE_HC_PING_KEY}'\n")
     kuma_push_call = tmp_path / "kuma-push-call.txt"
+
+    stub_bin = tmp_path / "bin"
+    stub_bin.mkdir()
+    curl_calls = stub_bin / "curl-calls"
+    curl_calls.touch()
+    curl = stub_bin / "curl"
+    curl.write_text(f"#!/bin/sh\nprintf '%s\\n' \"$*\" >> {curl_calls}\n")
+    curl.chmod(0o755)
 
     script = rendered
     script = script.replace(
         "source /usr/local/lib/kuma-push-lib.sh ||", f"source {KUMA_PUSH_LIB} ||"
     )
     script = script.replace("/etc/rancher/k3s/kuma-push.env", str(push_token_env))
+    script = script.replace("/etc/healthchecks/ping.env", str(hc_ping_env))
     reader_invocation = re.search(
         r"/usr/local/bin/uv run --no-project --no-python-downloads --python \S+ "
         r"/opt/longhorn-backup-health/longhorn_backup_health\.py",
@@ -806,12 +824,80 @@ def test_backup_health_kubectl_stderr_does_not_contaminate_the_status(tmp_path):
     script_path.write_text(script)
     script_path.chmod(0o755)
 
+    env = dict(os.environ)
+    env["PATH"] = f"{stub_bin}{os.pathsep}{env['PATH']}"
     proc = subprocess.run(
-        ["bash", str(script_path)], capture_output=True, text=True, timeout=30
+        ["bash", str(script_path)],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        env=env,
+    )
+    kuma_status = kuma_push_call.read_text() if kuma_push_call.exists() else None
+    return proc, kuma_status, curl_calls.read_text().splitlines()
+
+
+def _assert_pings_carry_only_the_fixture_key(curl_calls: list[str]) -> None:
+    # Deliberately no URL in the failure message: a missed ping.env replacement means these
+    # lines hold the REAL healthchecks key.
+    assert len(curl_calls) == 2, f"expected both hc-ping calls, got {len(curl_calls)}"
+    assert all(FAKE_HC_PING_KEY in call for call in curl_calls), (
+        "a healthchecks ping did not carry the fixture key: the ping.env path replacement "
+        "in _run_rendered_shim missed, and the real key was sourced"
+    )
+
+
+def test_backup_health_kubectl_stderr_does_not_contaminate_the_status(
+    tmp_path, logger_calls
+):
+    """Regression for the 2026-09-04 review's finding #1, run against the ACTUAL shipped shim.
+
+    Until this fix, `OUT=$(... 2>&1)` meant any stderr byte the reader's own `logger` subprocess
+    wrote — `logger: socket /dev/log: ...`, e.g. — landed ahead of the reader's real stdout line
+    once the two streams were merged, silently turning `up` into garbage that Kuma reads as DOWN
+    and pings healthchecks.io `/fail` on a backup plane that was fine. This patches in a fake
+    reader that writes junk to stderr before printing `up<TAB>ok` and asserts on the status the
+    `kuma_push` stub actually receives — proving the fix at the point that matters (what reaches
+    Kuma) rather than just that the fix's source text exists.
+
+    On this path the shim itself never calls `logger` (the reader owns the verdict line), so
+    the stub must have recorded nothing; a line here would be a new shim-side log call that
+    needs its own interception test.
+    """
+    proc, kuma_status, curl_calls = _run_rendered_shim(
+        tmp_path,
+        "printf 'logger: socket /dev/log: No such file or directory\\n' >&2\n"
+        "printf 'up\\tbackup target(s) default available, 1 backed-up volume(s) covered\\n'\n",
     )
     assert proc.returncode == 0, proc.stderr
-    assert kuma_push_call.exists(), "kuma_push was never called"
-    assert kuma_push_call.read_text() == "up", (
-        f"stderr contamination reached STATUS: got {kuma_push_call.read_text()!r}, "
+    assert kuma_status is not None, "kuma_push was never called"
+    assert kuma_status == "up", (
+        f"stderr contamination reached STATUS: got {kuma_status!r}, "
         f"stdout={proc.stdout!r} stderr={proc.stderr!r}"
     )
+    assert logger_calls.read_text() == ""
+    _assert_pings_carry_only_the_fixture_key(curl_calls)
+
+
+def test_backup_health_reader_failure_is_logged_through_the_stub(
+    tmp_path, logger_calls
+):
+    """A reader that exits nonzero is pushed DOWN and logged, and the log hits the stub.
+
+    The end-to-end half of `test_backup_health_logs_unconditionally_even_when_the_reader_itself_
+    breaks`, which only asserts the `logger` call's source text sits in the right branch. It is
+    also the non-vacuity proof for this directory's `_no_syslog` fixture: the shim's `logger`
+    is the one call on any tested path, so an empty `logger_calls` here would mean the stub is
+    no longer first on PATH and the real syslog took it (issue #1052).
+    """
+    proc, kuma_status, curl_calls = _run_rendered_shim(
+        tmp_path, "printf 'Traceback: the reader broke\\n' >&2\nexit 1\n"
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert kuma_status == "down"
+    lines = logger_calls.read_text().splitlines()
+    assert lines == [
+        "-t longhorn-backup-health status=down longhorn backup health reader failed: "
+        "Traceback: the reader broke"
+    ], lines
+    _assert_pings_carry_only_the_fixture_key(curl_calls)
