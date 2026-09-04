@@ -97,6 +97,10 @@ export LONGHORN_RESTORE_DRILL_COVERAGE_SLACK_DAYS="{{ k3s_longhorn_restore_drill
 if ! OUT=$(/usr/local/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} /opt/longhorn-backup-health/longhorn_backup_health.py 2>&1) || [[ -z "$OUT" ]]; then
   STATUS=down
   MSG="longhorn backup health reader failed: ${OUT:-(no output)}"
+  # The reader logs its own verdict on a normal run; on THIS path it never got that far, so log
+  # here instead — otherwise the one failure mode where the local trail matters most (the reader
+  # itself broke) is the one case with no journalctl record at all.
+  logger -t longhorn-backup-health "status=${STATUS} ${MSG}"
 else
   STATUS="${OUT%%$'\t'*}"
   MSG="${OUT#*$'\t'}"

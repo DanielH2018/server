@@ -76,6 +76,19 @@ def test_backup_health_arm_gates_treat_the_string_false_as_disarmed():
     assert 'export LONGHORN_R2_ARMED="False"' in rendered
 
 
+def test_backup_health_logs_unconditionally_even_when_the_reader_itself_breaks():
+    """The reader logs its own verdict on a normal run — but on THIS branch it never got that far.
+
+    Without a `logger` call inside the `if ! OUT=$(...)` branch, the one failure mode where the
+    local journalctl trail matters most (the Python reader crashing, or `uv` itself missing) is
+    the one case that leaves no record at all.
+    """
+    ctx = {**BASE_CONTEXT, **load_yaml(ALL_VARS), **v.SHELL_STUB_OVERRIDES}
+    rendered = v.render_template(BACKUP_HEALTH, ctx)
+    reader_failed_branch = rendered.split("if ! OUT=$(", 1)[1].split("else", 1)[0]
+    assert "logger -t longhorn-backup-health" in reader_failed_branch
+
+
 @pytest.mark.parametrize(
     ("value", "expected"),
     [

@@ -84,6 +84,27 @@ def test_freshness_is_flagged_on_an_unparseable_timestamp():
     assert problem == (1, "unparseable backup timestamp: not-a-timestamp")
 
 
+# ── rfc3339_to_epoch: `.status.snapshotCreatedAt` is a plain string, not a metav1.Time ─────────
+#
+# Unlike `.metadata.creationTimestamp`, Longhorn writes snapshotCreatedAt itself with no format
+# guarantee. `date -d` (what the original shell used) accepts fractional seconds and a numeric
+# UTC offset; a parser that doesn't page a false RED on check 2/4 the first time a sub-second
+# stamp shows up.
+
+
+def test_rfc3339_to_epoch_accepts_fractional_seconds():
+    assert logic.rfc3339_to_epoch("2027-01-15T08:00:00.123456789Z") == NOW
+
+
+def test_rfc3339_to_epoch_accepts_a_numeric_utc_offset():
+    assert logic.rfc3339_to_epoch("2027-01-15T08:00:00+00:00") == NOW
+
+
+def test_rfc3339_to_epoch_still_rejects_garbage():
+    assert logic.rfc3339_to_epoch("not-a-timestamp") is None
+    assert logic.rfc3339_to_epoch("") is None
+
+
 # ── check 3: errored backups ─────────────────────────────────────────────────────────────────
 
 
@@ -245,6 +266,19 @@ def test_recent_budget_excludes_r2_routed_volumes():
     rows = [("pvc-r2", "2027-01-15T07:00:00Z", "1048576")] * 20
     n, _ = logic.compute_recent_backups(rows, {"pvc-r2"}, NOW - DAY)
     assert n == 0
+
+
+def test_recent_budget_tolerates_a_non_numeric_size():
+    """Mirrors `$(( RECENT_BYTES + ${SIZE:-0} ))`: bash arithmetic treats junk as 0, not a crash.
+
+    `.status.size` is a plain string Longhorn writes with no format guarantee — a reader that
+    raises on it takes down every OTHER check in the same tick, which is strictly worse than the
+    one backup this size belongs to going uncounted.
+    """
+    rows = [("pvc-1", "2027-01-15T07:00:00Z", "not-a-number")]
+    n, total = logic.compute_recent_backups(rows, set(), NOW - DAY)
+    assert n == 1
+    assert total == 0
 
 
 # ── check 6: failed Jobs ─────────────────────────────────────────────────────────────────────

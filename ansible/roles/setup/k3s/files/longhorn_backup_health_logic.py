@@ -22,19 +22,31 @@ GRACE_SLACK_S = 6 * 3600
 
 _STAMP_RE = re.compile(r"[0-9]+")
 _RFC3339 = "%Y-%m-%dT%H:%M:%SZ"
+_FRACTIONAL_SECONDS_RE = re.compile(r"\.\d+")
 
 
 def rfc3339_to_epoch(ts: str) -> float | None:
-    """Seconds since the epoch for a Kubernetes RFC3339 timestamp, or None if unparseable.
+    """Seconds since the epoch for an RFC3339 timestamp, or None if unparseable.
 
-    Kubernetes always emits UTC with a trailing Z. Mirrors `date -d "$ts" +%s 2>/dev/null`
-    returning empty on failure.
+    Mirrors `date -d "$ts" +%s 2>/dev/null` returning empty on failure. `.metadata
+    .creationTimestamp` is a Kubernetes metav1.Time and always seconds-precision UTC with a
+    trailing Z, but `.status.snapshotCreatedAt` is a plain string Longhorn writes itself and
+    carries no such guarantee — `date -d` accepts fractional seconds and a numeric UTC offset,
+    so this must too, or a sub-second stamp reads as unparseable and pages a false RED on every
+    tick. Fractional digits are dropped (bash's `date -d` truncates them too, and the checks here
+    only ever compare at whole-second resolution) before falling back to the strict seconds-only
+    path for plain `...Z` input.
     """
     if not ts:
         return None
+    normalized = _FRACTIONAL_SECONDS_RE.sub("", ts)
+    try:
+        return _dt.datetime.fromisoformat(normalized.replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        pass
     try:
         return (
-            _dt.datetime.strptime(ts, _RFC3339)
+            _dt.datetime.strptime(normalized, _RFC3339)
             .replace(tzinfo=_dt.timezone.utc)
             .timestamp()
         )
@@ -260,7 +272,13 @@ def compute_recent_backups(
         if created_s is None or created_s < day_ago_s:
             continue
         n += 1
-        total += int(size) if size else 0
+        # Mirrors `$(( RECENT_BYTES + ${SIZE:-0} ))`: bash arithmetic treats a non-numeric SIZE
+        # as 0 rather than raising, and `.status.size` is a plain string Longhorn writes with no
+        # format guarantee — int() must fail the same way it fails open, not crash the reader.
+        try:
+            total += int(size) if size else 0
+        except ValueError:
+            pass
     return n, total
 
 

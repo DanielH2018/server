@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
 import time
 
@@ -377,12 +378,15 @@ def main() -> int:
     # Log the FULL verdict before printing the ranked one, unconditionally — matching the
     # original script's "log before push" ordering, so a DOWN status logged here still leaves a
     # journalctl trail even though only `push_msg` reaches the wrapper's stdout/Kuma.
-    import subprocess
-
-    subprocess.run(
-        ["logger", "-t", "longhorn-backup-health", f"status={status} {msg}"],
-        check=False,
-    )
+    # check=False only silences a nonzero exit; a missing `logger` binary raises OSError, and
+    # this whole split exists so the reader can't take itself down over its own logging call.
+    try:
+        subprocess.run(
+            ["logger", "-t", "longhorn-backup-health", f"status={status} {msg}"],
+            check=False,
+        )
+    except OSError:
+        pass
 
     print("%s\t%s" % (status, push_msg))
     return 0
