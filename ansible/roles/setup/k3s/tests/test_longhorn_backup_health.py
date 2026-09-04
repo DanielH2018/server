@@ -569,6 +569,30 @@ def test_reader_pins_the_transport(tmp_path):
     assert "STUB_KUBECTL_MARKER" in proc.stdout
 
 
+def test_reader_syslog_line_is_intercepted(tmp_path, logger_calls):
+    """The reader's own `logger` call reaches the conftest stub, not the host's syslog.
+
+    This is the non-vacuity half of the autouse `_no_syslog` fixture: an empty `logger_calls`
+    would mean either that the reader stopped logging its verdict, or that the real `logger`
+    took the call — which is issue #1052, fixture verdicts (`STUB_KUBECTL_MARKER`, pytest tmp
+    paths) shipped through Promtail into the Alert History board beside real ones.
+    """
+    env = _reader_env(tmp_path, LONGHORN_BACKUP_KUBECTL="/bin/false")
+
+    proc = subprocess.run(
+        [sys.executable, str(READER)],
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=30,
+    )
+    assert proc.returncode == 0, proc.stderr
+    lines = logger_calls.read_text().splitlines()
+    assert any(
+        line.startswith("-t longhorn-backup-health status=down") for line in lines
+    ), lines
+
+
 def test_reader_exits_nonzero_naming_a_missing_env_var(tmp_path):
     """A shim that stops exporting a var must be LOUD, not silently fall back to a stale constant.
 

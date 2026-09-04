@@ -14,6 +14,7 @@ way.
 from __future__ import annotations
 
 import ast
+import os
 import subprocess
 from pathlib import Path
 from typing import Iterator
@@ -284,3 +285,41 @@ def module_of(node: ast.AST, bound: dict[str, str], ids) -> str | None:
         return None
     dotted = ".".join([bound[node.id], *reversed(parts)])
     return dotted if dotted in ids else None
+
+
+# The stub records one line per call so a test can assert it intercepted something. Without
+# that record the fixture would be indistinguishable from one that silently stopped being on
+# PATH: a stub no longer on PATH fails OPEN, the run stays green, and the real `logger` takes
+# every call again.
+_LOGGER_STUB = """#!/bin/sh
+printf '%s\\n' "$*" >> "$TEST_LOGGER_CALLS"
+"""
+
+
+def stub_logger_on_path(tmp_path_factory, monkeypatch) -> Path:
+    """Put a fake `logger` first on PATH so a test writes nothing to the host's syslog.
+
+    Returns the file the stub appends to, one line per call, holding `logger`'s arguments
+    verbatim (`-t <tag> <message>`).
+
+    A test that runs a host script as a real subprocess inherits this when it builds its env
+    from `os.environ`: its own stub directory, prepended later, still wins for `k3s` or `gh`,
+    and this wins for `logger` over `/usr/bin/logger`. A script that starts calling `logger`
+    by absolute path escapes it, which is why each directory using this also keeps one test
+    asserting the stub RECORDED a call.
+
+    Why it matters: the tags under test are shipped to Loki, so a fixture verdict written to
+    the real syslog sits on a dashboard beside real ones. `scripts/deploy_tools/tests/conftest.py`
+    measured 84% of the Landings board as fixtures before its copy of this existed, and issue
+    #1052 found the backup-health reader's fixture verdicts in the Alert History board.
+    """
+    stub_dir = tmp_path_factory.mktemp("logger-stub")
+    logger = stub_dir / "logger"
+    logger.write_text(_LOGGER_STUB)
+    logger.chmod(0o755)
+
+    calls = stub_dir / "logger-calls"
+    calls.touch()
+    monkeypatch.setenv("TEST_LOGGER_CALLS", str(calls))
+    monkeypatch.setenv("PATH", f"{stub_dir}{os.pathsep}{os.environ['PATH']}")
+    return calls
