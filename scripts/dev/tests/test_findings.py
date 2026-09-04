@@ -1,5 +1,8 @@
 """Tests for scripts/dev/findings.py: the planners are pure, gh is never called.
 
+The boundaries come from `_findings_fakes.build_tools`, which answers `gh_json` by argv, so
+`load_issues`, `_existing_labels` and the label planning they feed all run for real here.
+
 Run: uv run pytest scripts/dev/tests/test_findings.py
 """
 
@@ -9,6 +12,7 @@ import json
 import subprocess
 
 import findings
+from _findings_fakes import Fakes, build_tools
 
 
 def _issue(
@@ -36,6 +40,20 @@ def _issue(
         "url": f"https://github.com/o/r/issues/{number}",
         "comments": [{"body": c} for c in comments],
     }
+
+
+def _open_argv(body):
+    return [
+        "open",
+        "--title",
+        "T",
+        "--body-file",
+        str(body),
+        "--severity",
+        "low",
+        "--kind",
+        "gap",
+    ]
 
 
 # --- fingerprint -----------------------------------------------------------------------
@@ -137,47 +155,33 @@ def test_sync_labels_plans_exactly_the_missing_label():
 # --- run and dry-run ----------------------------------------------------------------------
 
 
-def test_run_dry_prints_and_does_not_call_gh(monkeypatch, capsys):
-    monkeypatch.setattr(
-        findings,
-        "gh",
-        lambda *a, **k: (_ for _ in ()).throw(AssertionError("gh called")),
-    )
-    findings.run([["issue", "comment", "1", "--body", "x"]], dry_run=True)
+def test_run_dry_prints_and_does_not_call_gh(capsys):
+    tools, calls = build_tools()
+    findings.run([["issue", "comment", "1", "--body", "x"]], True, tools)
     assert "gh issue comment 1 --body x" in capsys.readouterr().out
+    assert calls.none()
 
 
-def test_run_wet_calls_gh_in_order(monkeypatch):
-    calls = []
-    monkeypatch.setattr(findings, "gh", lambda *a, **k: calls.append(list(a)))
-    findings.run([["a"], ["b"]], dry_run=False)
-    assert calls == [["a"], ["b"]]
+def test_run_wet_calls_gh_in_order():
+    tools, calls = build_tools()
+    findings.run([["a"], ["b"]], False, tools)
+    assert calls.gh == [["a"], ["b"]]
 
 
 # --- list CLI -------------------------------------------------------------------------------
 
 
-def test_list_json_emits_rows(monkeypatch, capsys):
-    monkeypatch.setattr(
-        findings,
-        "gh_json",
-        lambda *a, **k: [_issue(5, labels=("severity/low",), fp="f")],
-    )
-    assert findings.main(["list", "--json"]) == 0
+def test_list_json_emits_rows(capsys):
+    tools, _ = build_tools(Fakes(issues=[_issue(5, labels=("severity/low",), fp="f")]))
+    assert findings.main(["list", "--json"], tools) == 0
     rows = json.loads(capsys.readouterr().out)
     assert rows[0]["number"] == 5 and rows[0]["severity"] == "low"
 
 
-def test_list_passes_the_state_filter_to_gh(monkeypatch):
-    seen = {}
-
-    def fake(*a, **k):
-        seen["argv"] = a
-        return []
-
-    monkeypatch.setattr(findings, "gh_json", fake)
-    findings.main(["list", "--state", "closed"])
-    argv = list(seen["argv"])
+def test_list_passes_the_state_filter_to_gh():
+    tools, calls = build_tools()
+    findings.main(["list", "--state", "closed"], tools)
+    argv = list(calls.gh_json[0])
     assert argv[argv.index("--state") + 1] == "closed"
     assert argv[argv.index("--label") + 1] == "claude"
 
@@ -185,28 +189,16 @@ def test_list_passes_the_state_filter_to_gh(monkeypatch):
 # --- --dry-run parses on either side of the subcommand -----------------------------------
 
 
-def test_dry_run_is_accepted_after_the_subcommand(monkeypatch):
-    monkeypatch.setattr(
-        findings, "gh_json", lambda *a, **k: [{"name": n} for n in findings.LABELS]
-    )
-    monkeypatch.setattr(
-        findings,
-        "gh",
-        lambda *a, **k: (_ for _ in ()).throw(AssertionError("gh called")),
-    )
-    assert findings.main(["sync-labels", "--dry-run"]) == 0
+def test_dry_run_is_accepted_after_the_subcommand():
+    tools, calls = build_tools()
+    assert findings.main(["sync-labels", "--dry-run"], tools) == 0
+    assert not calls.gh
 
 
-def test_dry_run_is_accepted_before_the_subcommand(monkeypatch):
-    monkeypatch.setattr(
-        findings, "gh_json", lambda *a, **k: [{"name": n} for n in findings.LABELS]
-    )
-    monkeypatch.setattr(
-        findings,
-        "gh",
-        lambda *a, **k: (_ for _ in ()).throw(AssertionError("gh called")),
-    )
-    assert findings.main(["--dry-run", "sync-labels"]) == 0
+def test_dry_run_is_accepted_before_the_subcommand():
+    tools, calls = build_tools()
+    assert findings.main(["--dry-run", "sync-labels"], tools) == 0
+    assert not calls.gh
 
 
 # --- open ----------------------------------------------------------------------------------
@@ -269,72 +261,22 @@ def test_open_with_a_fixed_match_reopens_then_comments():
     assert "regression" in plans[1][plans[1].index("--body") + 1].lower()
 
 
-def _all_labels_exist(monkeypatch):
-    """Every `open` CLI test needs this: cmd_open syncs labels before it reads issues."""
-    monkeypatch.setattr(findings, "_existing_labels", lambda: set(findings.LABELS))
-
-
-def test_open_cli_exits_3_on_refuted(monkeypatch, tmp_path):
-    _all_labels_exist(monkeypatch)
+def test_open_cli_exits_3_on_refuted(tmp_path):
     body = tmp_path / "b.md"
     body.write_text("B")
     fp = findings.fingerprint("T", "a.py:1")
-    monkeypatch.setattr(
-        findings,
-        "load_issues",
-        lambda state="all": [_issue(3, state="CLOSED", labels=("refuted",), fp=fp)],
-    )
-    monkeypatch.setattr(
-        findings,
-        "gh",
-        lambda *a, **k: (_ for _ in ()).throw(AssertionError("gh called")),
-    )
-    assert (
-        findings.main(
-            [
-                "open",
-                "--title",
-                "T",
-                "--body-file",
-                str(body),
-                "--severity",
-                "low",
-                "--kind",
-                "gap",
-                "--file",
-                "a.py:1",
-            ]
-        )
-        == 3
-    )
+    refuted = _issue(3, state="CLOSED", labels=("refuted",), fp=fp)
+    tools, calls = build_tools(Fakes(issues=[refuted]))
+    argv = [*_open_argv(body), "--file", "a.py:1"]
+    assert findings.main(argv, tools) == 3
+    assert not calls.gh
 
 
-def test_open_cli_prints_the_created_number(monkeypatch, tmp_path, capsys):
-    _all_labels_exist(monkeypatch)
+def test_open_cli_prints_the_created_number(tmp_path, capsys):
     body = tmp_path / "b.md"
     body.write_text("B")
-    monkeypatch.setattr(findings, "load_issues", lambda state="all": [])
-
-    class _P:
-        stdout = "https://github.com/o/r/issues/42\n"
-
-    monkeypatch.setattr(findings, "gh", lambda *a, **k: _P())
-    assert (
-        findings.main(
-            [
-                "open",
-                "--title",
-                "T",
-                "--body-file",
-                str(body),
-                "--severity",
-                "low",
-                "--kind",
-                "gap",
-            ]
-        )
-        == 0
-    )
+    tools, _ = build_tools()
+    assert findings.main(_open_argv(body), tools) == 0
     assert "#42 created" in capsys.readouterr().out
 
 
@@ -375,12 +317,10 @@ def test_touch_already_escalated_does_not_add_the_label_again():
     assert [p[:2] for p in plans] == [["issue", "comment"]]
 
 
-def test_touch_cli_loads_the_issue_by_number(monkeypatch, capsys):
-    monkeypatch.setattr(findings, "gh_json", lambda *a, **k: _issue(12))
-    calls = []
-    monkeypatch.setattr(findings, "gh", lambda *a, **k: calls.append(list(a)))
-    assert findings.main(["touch", "12", "--source", "review-2026-09-02"]) == 0
-    assert calls[0][:3] == ["issue", "comment", "12"]
+def test_touch_cli_loads_the_issue_by_number(capsys):
+    tools, calls = build_tools(Fakes(view=_issue(12)))
+    assert findings.main(["touch", "12", "--source", "review-2026-09-02"], tools) == 0
+    assert calls.gh[0][:3] == ["issue", "comment", "12"]
     assert "#12 touched" in capsys.readouterr().out
 
 
@@ -408,31 +348,23 @@ def test_close_refuted_adds_the_label_then_closes_with_the_reason():
     )
 
 
-def test_close_refuted_without_a_reason_is_rejected_before_any_write(monkeypatch):
-    monkeypatch.setattr(
-        findings,
-        "gh",
-        lambda *a, **k: (_ for _ in ()).throw(AssertionError("gh called")),
-    )
-    assert findings.main(["close", "5", "--refuted"]) == 2
+def test_close_refuted_without_a_reason_is_rejected_before_any_write():
+    tools, calls = build_tools()
+    assert findings.main(["close", "5", "--refuted"], tools) == 2
+    assert calls.none()
 
 
-def test_close_refuted_with_a_pr_is_rejected(monkeypatch):
-    monkeypatch.setattr(
-        findings,
-        "gh",
-        lambda *a, **k: (_ for _ in ()).throw(AssertionError("gh called")),
-    )
-    assert (
-        findings.main(["close", "5", "--refuted", "--reason", "r", "--pr", "700"]) == 2
-    )
+def test_close_refuted_with_a_pr_is_rejected():
+    tools, calls = build_tools()
+    argv = ["close", "5", "--refuted", "--reason", "r", "--pr", "700"]
+    assert findings.main(argv, tools) == 2
+    assert calls.none()
 
 
-def test_close_fixed_with_a_pr_is_accepted(monkeypatch):
-    calls = []
-    monkeypatch.setattr(findings, "gh", lambda *a, **k: calls.append(list(a)))
-    assert findings.main(["close", "5", "--fixed", "--pr", "700"]) == 0
-    assert calls[0][:3] == ["issue", "close", "5"]
+def test_close_fixed_with_a_pr_is_accepted():
+    tools, calls = build_tools()
+    assert findings.main(["close", "5", "--fixed", "--pr", "700"], tools) == 0
+    assert calls.gh[0][:3] == ["issue", "close", "5"]
 
 
 # --- the Project board is best-effort ---------------------------------------------------------
@@ -462,96 +394,46 @@ def test_is_project_failure_matches_project_and_scope_only():
     assert not findings.is_project_failure(None)
 
 
-def _open_argv(body):
-    return [
-        "open",
-        "--title",
-        "T",
-        "--body-file",
-        str(body),
-        "--severity",
-        "low",
-        "--kind",
-        "gap",
-    ]
-
-
-class _CreatedProcess:
-    stdout = "https://github.com/o/r/issues/42\n"
-
-
-def test_open_retries_without_project_and_warns(monkeypatch, tmp_path, capsys):
-    _all_labels_exist(monkeypatch)
+def test_open_retries_without_project_and_warns(tmp_path, capsys):
     body = tmp_path / "b.md"
     body.write_text("B")
-    monkeypatch.setattr(findings, "load_issues", lambda state="all": [])
-    calls = []
-
-    def fake_gh(*argv, **kwargs):
-        calls.append(list(argv))
-        if len(calls) == 1:
-            raise subprocess.CalledProcessError(
-                1, "gh", stderr="could not resolve to a ProjectV2\nmore\n"
-            )
-        return _CreatedProcess()
-
-    monkeypatch.setattr(findings, "gh", fake_gh)
-    assert findings.main(_open_argv(body)) == 0
+    board = subprocess.CalledProcessError(
+        1, "gh", stderr="could not resolve to a ProjectV2\nmore\n"
+    )
+    tools, calls = build_tools(Fakes(gh_errors=[board]))
+    assert findings.main(_open_argv(body), tools) == 0
     out = capsys.readouterr()
     assert "#42 created" in out.out
     assert 'not added to Project "Claude findings": could not resolve' in out.err
-    assert "--project" in calls[0] and "--project" not in calls[1]
+    assert "--project" in calls.gh[0] and "--project" not in calls.gh[1]
 
 
-def test_open_propagates_a_non_project_failure(monkeypatch, tmp_path):
-    _all_labels_exist(monkeypatch)
+def test_open_propagates_a_non_project_failure(tmp_path):
     body = tmp_path / "b.md"
     body.write_text("B")
-    monkeypatch.setattr(findings, "load_issues", lambda state="all": [])
-
-    def fake_gh(*argv, **kwargs):
-        raise subprocess.CalledProcessError(1, "gh", stderr="HTTP 422: label not found")
-
-    monkeypatch.setattr(findings, "gh", fake_gh)
-    assert findings.main(_open_argv(body)) == 1
+    other = subprocess.CalledProcessError(1, "gh", stderr="HTTP 422: label not found")
+    tools, _ = build_tools(Fakes(gh_errors=[other]))
+    assert findings.main(_open_argv(body), tools) == 1
 
 
 # --- open creates the labels it is about to use -----------------------------------------------
 
 
-def test_open_creates_a_missing_label_before_the_issue(monkeypatch, tmp_path):
+def test_open_creates_a_missing_label_before_the_issue(tmp_path):
     body = tmp_path / "b.md"
     body.write_text("B")
-    monkeypatch.setattr(
-        findings, "_existing_labels", lambda: set(findings.LABELS) - {"kind/gap"}
-    )
-    monkeypatch.setattr(findings, "load_issues", lambda state="all": [])
-    calls = []
-
-    def fake_gh(*argv, **kwargs):
-        calls.append(list(argv))
-        return _CreatedProcess()
-
-    monkeypatch.setattr(findings, "gh", fake_gh)
-    assert findings.main(_open_argv(body)) == 0
-    assert calls[0][:3] == ["label", "create", "kind/gap"]
-    assert calls[1][:2] == ["issue", "create"]
+    tools, calls = build_tools(Fakes(labels=set(findings.LABELS) - {"kind/gap"}))
+    assert findings.main(_open_argv(body), tools) == 0
+    assert calls.gh[0][:3] == ["label", "create", "kind/gap"]
+    assert calls.gh[1][:2] == ["issue", "create"]
 
 
-def test_open_with_every_label_present_creates_none(monkeypatch, tmp_path):
-    _all_labels_exist(monkeypatch)
+def test_open_with_every_label_present_creates_none(tmp_path):
     body = tmp_path / "b.md"
     body.write_text("B")
-    monkeypatch.setattr(findings, "load_issues", lambda state="all": [])
-    calls = []
-
-    def fake_gh(*argv, **kwargs):
-        calls.append(list(argv))
-        return _CreatedProcess()
-
-    monkeypatch.setattr(findings, "gh", fake_gh)
-    assert findings.main(_open_argv(body)) == 0
-    assert all(argv[:2] != ["label", "create"] for argv in calls)
+    tools, calls = build_tools()
+    assert findings.main(_open_argv(body), tools) == 0
+    assert all(argv[:2] != ["label", "create"] for argv in calls.gh)
 
 
 # --- the fingerprint trailer across line endings -----------------------------------------------
@@ -576,64 +458,49 @@ def test_find_by_fingerprint_rejects_a_different_id_in_a_crlf_body():
 # --- documented exits instead of tracebacks ----------------------------------------------------
 
 
-def test_open_with_a_missing_body_file_exits_2_without_calling_gh(
-    monkeypatch, tmp_path
-):
-    def boom(*a, **k):
-        raise AssertionError("gh called")
-
-    monkeypatch.setattr(findings, "gh", boom)
-    monkeypatch.setattr(findings, "_existing_labels", boom)
-    assert findings.main(_open_argv(tmp_path / "absent.md")) == 2
+def test_open_with_a_missing_body_file_exits_2_without_calling_gh(tmp_path):
+    tools, calls = build_tools()
+    assert findings.main(_open_argv(tmp_path / "absent.md"), tools) == 2
+    # Both boundaries: the label sync `cmd_open` runs first is a gh_json call.
+    assert calls.none()
 
 
-def test_a_gh_timeout_exits_1(monkeypatch, tmp_path, capsys):
-    _all_labels_exist(monkeypatch)
+def test_a_gh_timeout_exits_1(tmp_path, capsys):
     body = tmp_path / "b.md"
     body.write_text("B")
-
-    def boom(state="all"):
-        raise subprocess.TimeoutExpired("gh", 60)
-
-    monkeypatch.setattr(findings, "load_issues", boom)
-    assert findings.main(_open_argv(body)) == 1
+    slow = subprocess.TimeoutExpired("gh", 60)
+    tools, calls = build_tools(Fakes(json_errors={"issue list": slow}))
+    assert findings.main(_open_argv(body), tools) == 1
     assert "gh failed:" in capsys.readouterr().err
+    # Which read timed out: `cmd_open` syncs labels first, and that one answered.
+    assert [argv[:2] for argv in calls.gh_json] == [
+        ("label", "list"),
+        ("issue", "list"),
+    ]
 
 
 # --- a closed issue's date and state -----------------------------------------------------------
 
 
-def test_open_on_a_refuted_issue_with_a_null_closed_at(monkeypatch, tmp_path, capsys):
-    _all_labels_exist(monkeypatch)
+def test_open_on_a_refuted_issue_with_a_null_closed_at(tmp_path, capsys):
     body = tmp_path / "b.md"
     body.write_text("B")
     existing = _issue(
         3, state="CLOSED", labels=("refuted",), fp=findings.fingerprint("T", None)
     )
     existing["closedAt"] = None
-    monkeypatch.setattr(findings, "load_issues", lambda state="all": [existing])
-    monkeypatch.setattr(
-        findings,
-        "gh",
-        lambda *a, **k: (_ for _ in ()).throw(AssertionError("gh called")),
-    )
-    assert findings.main(_open_argv(body)) == 3
+    tools, calls = build_tools(Fakes(issues=[existing]))
+    assert findings.main(_open_argv(body), tools) == 3
     assert "refuted" in capsys.readouterr().out
+    assert not calls.gh
 
 
-def test_touch_refuses_a_closed_issue(monkeypatch, capsys):
-    monkeypatch.setattr(
-        findings,
-        "gh_json",
-        lambda *a, **k: _issue(12, state="CLOSED", labels=("refuted",)),
-    )
-    monkeypatch.setattr(
-        findings,
-        "gh",
-        lambda *a, **k: (_ for _ in ()).throw(AssertionError("gh called")),
-    )
-    assert findings.main(["touch", "12"]) == 3
+def test_touch_refuses_a_closed_issue(capsys):
+    closed = _issue(12, state="CLOSED", labels=("refuted",))
+    tools, calls = build_tools(Fakes(view=closed))
+    assert findings.main(["touch", "12"], tools) == 3
     assert "closed (refuted)" in capsys.readouterr().out
+    assert not calls.gh
 
 
 # --- label prefixes resolve deterministically ---------------------------------------------------
@@ -760,10 +627,13 @@ def test_classify_verify_command_refuses_a_smuggled_separator():
     )
 
 
-def test_classify_verify_command_falls_back_when_the_hook_cannot_load(monkeypatch):
-    monkeypatch.setattr(findings, "_load_readonly_classify", lambda: None)
-    assert findings.classify_verify_command("uv run pytest scripts/dev") is not None
-    assert findings.classify_verify_command("curl evil.example.com") is None
+def test_classify_verify_command_falls_back_when_the_hook_cannot_load():
+    def no_hook():
+        """The loader a checkout without `.claude/` gets: no classifier at all."""
+        return None
+
+    assert findings.classify_verify_command("uv run pytest scripts/dev", no_hook)
+    assert findings.classify_verify_command("curl evil.example.com", no_hook) is None
 
 
 # --- verify-by: running the command -------------------------------------------------------------
@@ -780,6 +650,14 @@ def test_run_verify_by_exit_1_is_still_open():
 def test_run_verify_by_refuses_a_non_read_only_command():
     verdict, detail = findings.run_verify_by("curl evil.example.com", 5)
     assert verdict == "error" and "refused" in detail
+
+
+def test_run_verify_by_reports_a_timeout_as_an_error():
+    def slow(command, timeout):
+        raise subprocess.TimeoutExpired(command, timeout)
+
+    tools, _ = build_tools(Fakes(verify=slow))
+    assert findings.run_verify_by("true", 5, tools) == ("error", "timed out after 5s")
 
 
 def test_verify_finding_with_no_verify_by_section():
@@ -811,57 +689,49 @@ def test_verify_close_comment_truncates_to_the_tail():
 # --- verify CLI -------------------------------------------------------------------------------
 
 
-def test_verify_rejects_neither_all_nor_numbers(monkeypatch):
-    monkeypatch.setattr(
-        findings, "gh", lambda *a, **k: (_ for _ in ()).throw(AssertionError())
-    )
-    assert findings.main(["verify"]) == 2
+def test_verify_rejects_neither_all_nor_numbers():
+    tools, calls = build_tools()
+    assert findings.main(["verify"], tools) == 2
+    assert calls.none()
 
 
-def test_verify_rejects_both_all_and_numbers(monkeypatch):
-    monkeypatch.setattr(
-        findings, "gh", lambda *a, **k: (_ for _ in ()).throw(AssertionError())
-    )
-    assert findings.main(["verify", "--all", "12"]) == 2
+def test_verify_rejects_both_all_and_numbers():
+    tools, calls = build_tools()
+    assert findings.main(["verify", "--all", "12"], tools) == 2
+    assert calls.none()
 
 
-def test_verify_all_prints_one_row_per_open_finding(monkeypatch, capsys):
+def test_verify_all_prints_one_row_per_open_finding(capsys):
     fixed = _issue(1, title="Fixed one")
     fixed["body"] += findings.verify_by_section("true")
     still_open = _issue(2, title="Still broken")
     still_open["body"] += findings.verify_by_section("false")
     untracked = _issue(3, title="No probe yet")
-    monkeypatch.setattr(
-        findings, "load_issues", lambda state="open": [fixed, still_open, untracked]
-    )
-    assert findings.main(["verify", "--all"]) == 0
+    tools, _ = build_tools(Fakes(issues=[fixed, still_open, untracked]))
+    assert findings.main(["verify", "--all"], tools) == 0
     out = capsys.readouterr().out
     assert "#1" in out and "fixed" in out
     assert "#2" in out and "still-open" in out
     assert "#3" in out and "no-verify-by" in out
 
 
-def test_verify_with_numbers_loads_each_issue_by_number(monkeypatch, capsys):
+def test_verify_with_numbers_loads_each_issue_by_number(capsys):
     issue = _issue(7, title="Named directly")
     issue["body"] += findings.verify_by_section("true")
-    monkeypatch.setattr(findings, "gh_json", lambda *a, **k: issue)
-    assert findings.main(["verify", "7"]) == 0
+    tools, _ = build_tools(Fakes(view=issue))
+    assert findings.main(["verify", "7"], tools) == 0
     assert "#7" in capsys.readouterr().out
 
 
-def test_verify_close_closes_only_the_fixed_ones(monkeypatch, capsys):
+def test_verify_close_closes_only_the_fixed_ones(capsys):
     fixed = _issue(1, title="Fixed one")
     fixed["body"] += findings.verify_by_section("true")
     still_open = _issue(2, title="Still broken")
     still_open["body"] += findings.verify_by_section("false")
-    monkeypatch.setattr(
-        findings, "load_issues", lambda state="open": [fixed, still_open]
-    )
-    calls = []
-    monkeypatch.setattr(findings, "gh", lambda *a, **k: calls.append(list(a)))
-    assert findings.main(["verify", "--all", "--close"]) == 0
-    assert len(calls) == 1
-    argv = calls[0]
+    tools, calls = build_tools(Fakes(issues=[fixed, still_open]))
+    assert findings.main(["verify", "--all", "--close"], tools) == 0
+    assert len(calls.gh) == 1
+    argv = calls.gh[0]
     assert argv[:3] == ["issue", "close", "1"]
     assert "Fixed: verify-by passed" in argv[argv.index("--comment") + 1]
     out = capsys.readouterr().out

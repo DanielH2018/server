@@ -56,7 +56,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
-from lib.gh import gh, gh_json
+from dev.findings_tools import FindingsTools
 from lib.repo_paths import REPO
 
 _READONLY_HOOK = REPO / ".claude" / "hooks" / "auto-approve-readonly.py"
@@ -106,15 +106,18 @@ def _load_readonly_classify():
         return None
 
 
-def classify_verify_command(command: str) -> str | None:
+def classify_verify_command(command: str, load_classify=None) -> str | None:
     """A reason string if `command` is read-only by the repo's own standard, else None.
 
     A union, not an either-or: the hook's `classify()` clears it, OR the narrow `uv run`
     allowlist does (see `_FALLBACK_VERIFY_RE` for why that allowlist runs even when the hook
     loaded fine). Falls back to the allowlist alone when the hook cannot be loaded at all —
     this script is run outside the checkout that carries `.claude/`.
+
+    `load_classify` is the LOADER, not the classifier: a test proving the fallback has to
+    say "the hook did not load", which a classifier of None cannot express.
     """
-    classify = _load_readonly_classify()
+    classify = (load_classify or _load_readonly_classify)()
     reason = classify(command) if classify is not None else None
     if reason:
         return reason
@@ -324,42 +327,29 @@ def plan_sync_labels(existing: set[str]) -> list[list[str]]:
 # --- gh-facing ------------------------------------------------------------------------------
 
 
-def load_issues(state: str = "all") -> list[dict]:
+def load_issues(state: str = "all", tools: FindingsTools | None = None) -> list[dict]:
     """Fetches every ``claude``-labeled issue from gh, up to 1000.
 
     Args:
         state: issue state to filter by (``open``, ``closed`` or ``all``).
+        tools: the boundaries to reach gh through; the real ones when omitted, which is how
+            `scripts/docs/reference/backlog.py` calls it.
     """
-    return (
-        gh_json(
-            "issue",
-            "list",
-            "--label",
-            "claude",
-            "--state",
-            state,
-            "--limit",
-            "1000",
-            "--json",
-            _LIST_FIELDS,
-        )
-        or []
-    )
+    argv = ("issue", "list", "--label", "claude", "--state", state, "--limit", "1000")
+    return (tools or FindingsTools()).gh_json(*argv, "--json", _LIST_FIELDS) or []
 
 
-def _existing_labels() -> set[str]:
-    return {
-        lab["name"]
-        for lab in gh_json("label", "list", "--limit", "200", "--json", "name") or []
-    }
+def _existing_labels(tools: FindingsTools) -> set[str]:
+    labels = tools.gh_json("label", "list", "--limit", "200", "--json", "name")
+    return {lab["name"] for lab in labels or []}
 
 
-def run(plans: list[list[str]], dry_run: bool) -> None:
+def run(plans: list[list[str]], dry_run: bool, tools: FindingsTools) -> None:
     for argv in plans:
         if dry_run:
             print("gh " + " ".join(argv))
         else:
-            gh(*argv)
+            tools.gh(*argv)
 
 
 # --- commands ---------------------------------------------------------------------------------
@@ -450,26 +440,26 @@ def plan_open(
     return "touched", 0, plan_touch(existing, source)
 
 
-def _create_with_optional_project(argv: list[str]) -> str:
+def _create_with_optional_project(argv: list[str], tools: FindingsTools) -> str:
     """Run the create argv, retrying without ``--project`` if the board is the only problem.
 
     Returns the created issue's URL. The board is a view; losing it must not lose the
     finding, so a Project failure warns and the issue is created anyway.
     """
     try:
-        return gh(*argv).stdout.strip()
+        return tools.gh(*argv).stdout.strip()
     except subprocess.CalledProcessError as exc:
         if not is_project_failure(exc.stderr):
             raise
         first_line = (exc.stderr or "").strip().partition("\n")[0]
-        url = gh(*without_project(argv)).stdout.strip()
+        url = tools.gh(*without_project(argv)).stdout.strip()
         sys.stderr.write(
             f'warning: not added to Project "{PROJECT_TITLE}": {first_line}\n'
         )
         return url
 
 
-def cmd_open(args: argparse.Namespace) -> int:
+def cmd_open(args: argparse.Namespace, tools: FindingsTools) -> int:
     """Handles the ``open`` subcommand: files, touches or reopens a finding's issue.
 
     Syncs labels first since ``gh issue create --label`` fails on a label the repo lacks,
@@ -495,8 +485,8 @@ def cmd_open(args: argparse.Namespace) -> int:
         labels.append("no-vetted-remediation")
     # `gh issue create --label` fails on a label the repo does not have, so the first `open`
     # in a fresh repo has to create the label set before it can use it.
-    run(plan_sync_labels(_existing_labels()), args.dry_run)
-    existing = find_by_fingerprint(load_issues("all"), fp)
+    run(plan_sync_labels(_existing_labels(tools)), args.dry_run, tools)
+    existing = find_by_fingerprint(load_issues("all", tools), fp)
     outcome, code, plans = plan_open(
         existing,
         title=args.title,
@@ -508,10 +498,10 @@ def cmd_open(args: argparse.Namespace) -> int:
     )
     if outcome == "created":
         if args.dry_run:
-            run(plans, True)
+            run(plans, True, tools)
             print(f"(dry-run) would create; fingerprint {fp}")
             return 0
-        url = _create_with_optional_project(plans[0])
+        url = _create_with_optional_project(plans[0], tools)
         print(f"#{url.rsplit('/', 1)[-1]} created  {url}")
         return 0
     # "created" is the only outcome plan_open returns for a missing issue, so every branch
@@ -523,7 +513,7 @@ def cmd_open(args: argparse.Namespace) -> int:
             f"#{existing['number']} refuted: closed on {(existing.get('closedAt') or '?')[:10]}; not reopened"
         )
         return code
-    run(plans, args.dry_run)
+    run(plans, args.dry_run, tools)
     print(f"#{existing['number']} {outcome}  {existing.get('url', '')}")
     return 0
 
@@ -565,11 +555,11 @@ def plan_close(
     ]
 
 
-def _load_issue(number: int) -> dict:
-    return gh_json("issue", "view", str(number), "--json", _LIST_FIELDS)
+def _load_issue(number: int, tools: FindingsTools) -> dict:
+    return tools.gh_json("issue", "view", str(number), "--json", _LIST_FIELDS)
 
 
-def cmd_touch(args: argparse.Namespace) -> int:
+def cmd_touch(args: argparse.Namespace, tools: FindingsTools) -> int:
     """Handles the ``touch`` subcommand: records a re-observation on an open issue.
 
     Args:
@@ -578,19 +568,19 @@ def cmd_touch(args: argparse.Namespace) -> int:
     Returns:
         3 if the issue is already closed, 0 otherwise.
     """
-    issue = _load_issue(args.number)
+    issue = _load_issue(args.number, tools)
     if issue.get("state") == "CLOSED":
         why = "refuted" if "refuted" in label_names(issue) else "fixed"
         print(f"#{args.number} is closed ({why}); use open to re-file")
         return 3
     plans = plan_touch(issue, args.source)
-    run(plans, args.dry_run)
+    run(plans, args.dry_run, tools)
     escalated = any(p[:2] == ["issue", "edit"] for p in plans)
     print(f"#{args.number} touched{' and escalated' if escalated else ''}")
     return 0
 
 
-def cmd_close(args: argparse.Namespace) -> int:
+def cmd_close(args: argparse.Namespace, tools: FindingsTools) -> int:
     """Handles the ``close`` subcommand: closes an issue as fixed or refuted.
 
     Args:
@@ -611,6 +601,7 @@ def cmd_close(args: argparse.Namespace) -> int:
     run(
         plan_close(args.number, fixed=args.fixed, pr=args.pr, reason=args.reason),
         args.dry_run,
+        tools,
     )
     print(f"#{args.number} closed as {'fixed' if args.fixed else 'refuted'}")
     return 0
@@ -634,7 +625,9 @@ def verify_close_comment(command: str, output: str, *, tail_lines: int = 20) -> 
     )
 
 
-def run_verify_by(command: str, timeout: float) -> tuple[str, str]:
+def run_verify_by(
+    command: str, timeout: float, tools: FindingsTools | None = None
+) -> tuple[str, str]:
     """Runs a verify-by command and returns ``(verdict, detail)``.
 
     verdict is ``fixed`` (exit 0), ``still-open`` (nonzero exit) or ``error`` (refused by
@@ -646,14 +639,7 @@ def run_verify_by(command: str, timeout: float) -> tuple[str, str]:
     if not reason:
         return "error", "refused: not read-only by the repo's classifier"
     try:
-        proc = subprocess.run(
-            command,
-            shell=True,
-            cwd=str(REPO),
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-        )
+        proc = (tools or FindingsTools()).run_verify(command, timeout)
     except subprocess.TimeoutExpired:
         return "error", f"timed out after {timeout:g}s"
     except OSError as exc:
@@ -662,7 +648,9 @@ def run_verify_by(command: str, timeout: float) -> tuple[str, str]:
     return ("fixed" if proc.returncode == 0 else "still-open"), output
 
 
-def verify_finding(issue: dict, timeout: float) -> tuple[str, str, str]:
+def verify_finding(
+    issue: dict, timeout: float, tools: FindingsTools | None = None
+) -> tuple[str, str, str]:
     """Verifies one issue. Returns ``(verdict, detail, command)``.
 
     verdict adds ``no-verify-by`` to `run_verify_by`'s three, for an issue whose body
@@ -671,11 +659,11 @@ def verify_finding(issue: dict, timeout: float) -> tuple[str, str, str]:
     command = parse_verify_by(issue.get("body") or "")
     if not command:
         return "no-verify-by", "", ""
-    verdict, detail = run_verify_by(command, timeout)
+    verdict, detail = run_verify_by(command, timeout, tools)
     return verdict, detail, command
 
 
-def cmd_verify(args: argparse.Namespace) -> int:
+def cmd_verify(args: argparse.Namespace, tools: FindingsTools) -> int:
     """Handles the ``verify`` subcommand: re-runs each finding's stored verify-by command.
 
     ``--dry-run`` only gates the gh writes a passing ``--close`` would make; the verify-by
@@ -695,9 +683,13 @@ def cmd_verify(args: argparse.Namespace) -> int:
     if not args.all and not args.numbers:
         sys.stderr.write("verify: need --all or at least one issue number\n")
         return 2
-    issues = load_issues("open") if args.all else [_load_issue(n) for n in args.numbers]
+    issues = (
+        load_issues("open", tools)
+        if args.all
+        else [_load_issue(n, tools) for n in args.numbers]
+    )
     results = [
-        (issue["number"], issue["title"], *verify_finding(issue, args.timeout))
+        (issue["number"], issue["title"], *verify_finding(issue, args.timeout, tools))
         for issue in issues
     ]
     for number, title, verdict, _detail, _command in results:
@@ -710,25 +702,26 @@ def cmd_verify(args: argparse.Namespace) -> int:
             run(
                 plan_close(number, fixed=True, pr=None, reason=None, comment=comment),
                 args.dry_run,
+                tools,
             )
             print(f"#{number} closed as fixed (verify-by)")
     return 0
 
 
-def cmd_sync_labels(args: argparse.Namespace) -> int:
-    plans = plan_sync_labels(_existing_labels())
-    run(plans, args.dry_run)
+def cmd_sync_labels(args: argparse.Namespace, tools: FindingsTools) -> int:
+    plans = plan_sync_labels(_existing_labels(tools))
+    run(plans, args.dry_run, tools)
     print(f"sync-labels: {len(plans)} label(s) created")
     return 0
 
 
-def cmd_list(args: argparse.Namespace) -> int:
+def cmd_list(args: argparse.Namespace, tools: FindingsTools) -> int:
     """Handles the ``list`` subcommand: prints open findings as a table or JSON.
 
     Args:
         args: parsed CLI namespace carrying ``state`` and ``json``.
     """
-    rows = sorted(issue_rows(load_issues(args.state)), key=sort_key)
+    rows = sorted(issue_rows(load_issues(args.state, tools)), key=sort_key)
     if args.json:
         print(json.dumps(rows, indent=2))
         return 0
@@ -835,7 +828,7 @@ def _parser() -> argparse.ArgumentParser:
     return p
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None, tools: FindingsTools | None = None) -> int:
     """Entry point: parses argv and dispatches to the matching subcommand handler.
 
     Catches gh failures at this outer layer so every subcommand handler can call ``gh``
@@ -843,6 +836,7 @@ def main(argv: list[str] | None = None) -> int:
 
     Args:
         argv: command-line arguments, or None to use ``sys.argv``.
+        tools: the process boundaries; the real ones when omitted.
 
     Returns:
         The dispatched handler's exit code, or 1 if `gh` failed.
@@ -857,7 +851,7 @@ def main(argv: list[str] | None = None) -> int:
         "verify": cmd_verify,
     }[args.cmd]
     try:
-        return handler(args)
+        return handler(args, tools or FindingsTools())
     except (subprocess.SubprocessError, OSError) as exc:
         # OSError covers a missing `gh` binary; SubprocessError covers TimeoutExpired as
         # well as the CalledProcessError whose stderr is the message worth showing.
