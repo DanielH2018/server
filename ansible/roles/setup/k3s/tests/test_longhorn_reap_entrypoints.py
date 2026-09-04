@@ -75,6 +75,10 @@ import json, os, sys
 CALLS_LOG = os.environ["STUB_CALLS_LOG"]
 FIXTURES = json.loads(os.environ["STUB_FIXTURES"])
 FAIL_DELETE_NAMES = set(json.loads(os.environ.get("STUB_FAIL_DELETE_NAMES", "[]")))
+# Kinds that must answer `null` instead of a well-formed `{"items": [...]}` body -- what
+# `kubectl` emits for some server versions on an empty CRD list. Exercises the
+# parse_kubectl_json_items isinstance(dict) guard rather than the ValueError branch.
+NULL_KINDS = set(json.loads(os.environ.get("STUB_NULL_KINDS", "[]")))
 
 argv = sys.argv[1:]
 with open(CALLS_LOG, "a") as fh:
@@ -83,7 +87,10 @@ with open(CALLS_LOG, "a") as fh:
 if argv[:1] == ["kubectl"] and "get" in argv:
     # e.g. "volumes.longhorn.io" -> "volumes"; a bare resource like "pods" is unchanged.
     kind = argv[argv.index("get") + 1].split(".", 1)[0]
-    print(json.dumps({"items": FIXTURES.get(kind, [])}))
+    if kind in NULL_KINDS:
+        print("null")
+    else:
+        print(json.dumps({"items": FIXTURES.get(kind, [])}))
     sys.exit(0)
 if argv[:1] == ["kubectl"] and "delete" in argv:
     name = argv[argv.index("delete") + 2]
@@ -133,6 +140,8 @@ def _run(
     admin_readable=False,
     fail_delete_names=(),
     readonly_kubeconfig_set=True,
+    null_kinds=(),
+    extra_env=None,
 ):
     deployed = _deployed_entry(entry, tmp_path / "opt")
     stub_dir = tmp_path / "bin"
@@ -149,6 +158,7 @@ def _run(
     env["STUB_CALLS_LOG"] = str(calls_log)
     env["STUB_FIXTURES"] = json.dumps(fixtures)
     env["STUB_FAIL_DELETE_NAMES"] = json.dumps(list(fail_delete_names))
+    env["STUB_NULL_KINDS"] = json.dumps(list(null_kinds))
     env["LONGHORN_REAP_KUBECTL"] = "k3s kubectl"
     env["LONGHORN_REAP_READONLY_KUBECONFIG"] = (
         str(tmp_path / "readonly.yaml") if readonly_kubeconfig_set else ""
@@ -162,6 +172,8 @@ def _run(
         env["LONGHORN_REAP_ADMIN_KUBECONFIG"] = str(admin_path)
     else:
         env["LONGHORN_REAP_ADMIN_KUBECONFIG"] = str(tmp_path / "no-such-admin.yaml")
+    if extra_env:
+        env.update(extra_env)
 
     proc = subprocess.run(
         [sys.executable, str(deployed), *args],
@@ -711,4 +723,126 @@ def test_snapshots_unknown_flag_is_rejected(tmp_path):
         SNAPSHOTS_ENTRY, ["--bogus"], {"recurringjobs": [], "volumes": []}, tmp_path
     )
     assert proc.returncode == 2
+    assert calls == []
+
+
+# ── null JSON bodies: ABORT, not a traceback ────────────────────────────────────────────
+
+
+def test_backups_aborts_cleanly_when_the_volume_list_body_is_null(tmp_path):
+    # A well-formed but non-object body (`kubectl` emitting a bare `null`) used to reach
+    # `.get("items", [])` and raise AttributeError -- a traceback where every other unreadable
+    # read here prints ABORT. See longhorn_reap_logic.parse_kubectl_json_items.
+    proc, calls = _run(
+        BACKUPS_ENTRY, [], {"volumes": []}, tmp_path, null_kinds=["volumes"]
+    )
+    assert proc.returncode == 1
+    assert "ABORT: unparseable volume list" in proc.stderr
+    assert "Traceback" not in proc.stderr, proc.stderr
+    assert not any("delete" in c for c in calls)
+
+
+def test_backups_aborts_cleanly_when_the_backup_list_body_is_null(tmp_path):
+    fixtures = {"volumes": [_volume("vol-a", "daily-backup")], "backups": []}
+    proc, calls = _run(BACKUPS_ENTRY, [], fixtures, tmp_path, null_kinds=["backups"])
+    assert proc.returncode == 1
+    assert "ABORT: unparseable backup list" in proc.stderr
+    assert "Traceback" not in proc.stderr, proc.stderr
+    assert not any("delete" in c for c in calls)
+
+
+def test_snapshots_aborts_cleanly_when_the_recurringjob_list_body_is_null(tmp_path):
+    proc, calls = _run(
+        SNAPSHOTS_ENTRY,
+        [],
+        {"recurringjobs": [], "volumes": []},
+        tmp_path,
+        null_kinds=["recurringjobs"],
+    )
+    assert proc.returncode == 1
+    assert "ABORT: unparseable RecurringJob list" in proc.stderr
+    assert "Traceback" not in proc.stderr, proc.stderr
+    assert not any("delete" in c for c in calls)
+
+
+def test_snapshots_aborts_cleanly_when_the_snapshot_list_body_is_null(tmp_path):
+    fixtures = {
+        "recurringjobs": [
+            {"metadata": {"name": "daily-backup"}, "spec": {"groups": ["daily-backup"]}}
+        ],
+        "volumes": [_volume("vol-a", "daily-backup")],
+        "snapshots": [],
+    }
+    proc, calls = _run(
+        SNAPSHOTS_ENTRY, [], fixtures, tmp_path, null_kinds=["snapshots"]
+    )
+    assert proc.returncode == 1
+    assert "ABORT: unparseable snapshot list" in proc.stderr
+    assert "Traceback" not in proc.stderr, proc.stderr
+    assert not any("delete" in c for c in calls)
+
+
+def test_snapshots_purge_warns_cleanly_when_the_pod_list_body_is_null(tmp_path):
+    # The pods read is inside _purge, WARNING-prefixed rather than ABORT-prefixed -- a
+    # different call site than the other three, so it gets its own case.
+    fixtures = {
+        "recurringjobs": [
+            {"metadata": {"name": "daily-backup"}, "spec": {"groups": ["daily-backup"]}}
+        ],
+        "volumes": [_volume("vol-a", "daily-backup")],
+        "snapshots": [
+            _snapshot("newest", "vol-a", "2026-08-19T00:00:00Z"),
+            _snapshot("stale", "vol-a", "2026-08-01T00:00:00Z", job="weekly-backup"),
+        ],
+        "pods": [],
+    }
+    proc, calls = _run(
+        SNAPSHOTS_ENTRY,
+        ["--apply"],
+        fixtures,
+        tmp_path,
+        admin_readable=True,
+        null_kinds=["pods"],
+    )
+    assert proc.returncode == 1
+    assert "WARNING: unparseable pod list" in proc.stderr
+    assert "nothing purged" in proc.stderr
+    assert "Traceback" not in proc.stderr, proc.stderr
+    # the snapshot delete itself still ran; only the purge read hit the null body
+    assert any("delete" in c for c in calls)
+
+
+# ── non-integral env knobs: a named ABORT, not a traceback ─────────────────────────────
+
+
+def test_snapshots_aborts_cleanly_on_a_non_integral_min_age_days(tmp_path):
+    # k3s_longhorn_snapshot_reap_min_age_days is an int in defaults/main.yml, but a host_vars
+    # override or a typo could set a non-integral value; `int(os.environ.get(...))` at module
+    # scope used to raise before main() could print a named ABORT.
+    proc, calls = _run(
+        SNAPSHOTS_ENTRY,
+        [],
+        {"recurringjobs": [], "volumes": []},
+        tmp_path,
+        extra_env={"LONGHORN_REAP_MIN_AGE_DAYS": "3.5"},
+    )
+    assert proc.returncode == 2
+    assert "LONGHORN_REAP_MIN_AGE_DAYS expects an integer, got: 3.5" in proc.stderr
+    assert "Traceback" not in proc.stderr, proc.stderr
+    assert calls == []
+
+
+def test_snapshots_aborts_cleanly_on_a_non_integral_kubectl_timeout(tmp_path):
+    proc, calls = _run(
+        SNAPSHOTS_ENTRY,
+        [],
+        {"recurringjobs": [], "volumes": []},
+        tmp_path,
+        extra_env={"LONGHORN_REAP_KUBECTL_TIMEOUT_S": "30.5"},
+    )
+    assert proc.returncode == 2
+    assert (
+        "LONGHORN_REAP_KUBECTL_TIMEOUT_S expects an integer, got: 30.5" in proc.stderr
+    )
+    assert "Traceback" not in proc.stderr, proc.stderr
     assert calls == []

@@ -108,7 +108,11 @@ def test_snapshots_computed_cap_outlives_the_kubectl_runner_cap_that_made_the_kn
         snapshots_mod._delete_timeout_seconds(snapshots_mod.DELETE_TIMEOUT)
         + snapshots_mod.DELETE_TIMEOUT_MARGIN_S
     )
-    assert computed > snapshots_mod.TIMEOUT  # host_lib.kubectl_runner's fixed 30s cap
+    # TIMEOUT is parsed lazily inside main() (see longhorn_reap_orphan_snapshots.py's
+    # _TIMEOUT_RAW), so the module itself carries only the raw env string.
+    assert computed > int(
+        snapshots_mod._TIMEOUT_RAW
+    )  # host_lib.kubectl_runner's 30s default
     assert computed >= snapshots_mod._delete_timeout_seconds(
         snapshots_mod.DELETE_TIMEOUT
     )

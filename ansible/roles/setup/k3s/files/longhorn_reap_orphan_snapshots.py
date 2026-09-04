@@ -44,7 +44,6 @@ Run directly: uv run --no-project --python <pin> longhorn_reap_orphan_snapshots.
 
 from __future__ import annotations
 
-import json
 import os
 import sys
 import time
@@ -56,11 +55,16 @@ import longhorn_reap_logic as logic
 
 NAMESPACE = "longhorn-system"
 KUBECTL_BIN = os.environ.get("LONGHORN_REAP_KUBECTL", "k3s kubectl")
-TIMEOUT = int(os.environ.get("LONGHORN_REAP_KUBECTL_TIMEOUT_S", "30"))
+# Parsed lazily in main() via logic.parse_int_env, for the same reason as _MIN_AGE_DAYS_RAW
+# below: a bad value here must not raise before main() can print a named ABORT.
+_TIMEOUT_RAW = os.environ.get("LONGHORN_REAP_KUBECTL_TIMEOUT_S", "30")
 DELETE_TIMEOUT = os.environ.get("LONGHORN_REAP_DELETE_TIMEOUT", "120s")
 # k3s_longhorn_snapshot_reap_min_age_days is an int in defaults/main.yml; bash's arithmetic
-# context only ever held one too, and printed "younger than 3d", not "3.0d".
-MIN_AGE_DAYS = int(os.environ.get("LONGHORN_REAP_MIN_AGE_DAYS", "3"))
+# context only ever held one too, and printed "younger than 3d", not "3.0d". Left as a raw
+# string here rather than `int(...)`'d at import time: a non-integral value (a host_vars
+# override, a typo'd `3.5`) would raise ValueError before main() is reached, printing a
+# traceback instead of naming the bad knob. Parsed lazily in main() via logic.parse_int_env.
+_MIN_AGE_DAYS_RAW = os.environ.get("LONGHORN_REAP_MIN_AGE_DAYS", "3")
 # Margin the CLIENT-side subprocess timeout carries over kubectl's own --timeout, so the
 # subprocess can never fire first and turn a delete that was still legitimately running on the
 # server into a false "FAILED". See the module docstring.
@@ -92,21 +96,6 @@ def _delete_timeout_seconds(text: str) -> float:
     if text.endswith("h"):
         return float(text[:-1]) * 3600
     return float(text)
-
-
-def _print_bucket(header: str, rows: list, none_msg: str = "(none)") -> None:
-    print("== %s ==" % header)
-    if not rows:
-        print("  %s" % none_msg)
-    else:
-        for row in rows:
-            if len(row) == 3:  # kept: (name, vol, reason)
-                name, vol, reason = row
-                print("  %s  %s  (%s)" % (name, vol, reason))
-            else:  # candidate: (name, vol, created, job)
-                name, vol, created, job = row
-                print("%s %s %s %s" % (name, vol, created, job))
-    print()
 
 
 def _delete_snapshot(name: str, subprocess_timeout: float) -> tuple[int, str]:
@@ -144,10 +133,9 @@ def _purge(kubectl, node: str, volumes: set[str]) -> int:
             file=sys.stderr,
         )
         return nothing_purged
-    try:
-        pods = json.loads(out).get("items", [])
-    except ValueError as e:
-        print("WARNING: unparseable pod list; nothing purged: %s" % e, file=sys.stderr)
+    pods, err = logic.parse_kubectl_json_items(out, "pod list")
+    if err:
+        print("WARNING: %s; nothing purged" % err, file=sys.stderr)
         return nothing_purged
 
     backend = ""
@@ -207,15 +195,21 @@ def main(argv: list[str]) -> int:
         print("unknown argument: %s (expected --apply)" % unknown[0], file=sys.stderr)
         return 2
 
-    if not apply and not READONLY_KUBECONFIG:
-        print(
-            "LONGHORN_REAP_READONLY_KUBECONFIG is not set, and a dry run must not silently "
-            "fall through to whatever KUBECONFIG the caller's shell already has -- run as "
-            "root, that would be the admin kubeconfig. Set the shim's env var, or pass "
-            "--apply to use the admin kubeconfig explicitly.",
-            file=sys.stderr,
-        )
+    refusal = logic.readonly_kubeconfig_refusal(apply, READONLY_KUBECONFIG, "--apply")
+    if refusal:
+        print(refusal, file=sys.stderr)
         return 1
+
+    timeout, err = logic.parse_int_env("LONGHORN_REAP_KUBECTL_TIMEOUT_S", _TIMEOUT_RAW)
+    if err:
+        print("ABORT: %s" % err, file=sys.stderr)
+        return 2
+    min_age_days, err = logic.parse_int_env(
+        "LONGHORN_REAP_MIN_AGE_DAYS", _MIN_AGE_DAYS_RAW
+    )
+    if err:
+        print("ABORT: %s" % err, file=sys.stderr)
+        return 2
 
     kubeconfig, err = logic.resolve_kubeconfig(
         needs_admin=apply,
@@ -230,7 +224,7 @@ def main(argv: list[str]) -> int:
     if kubeconfig:
         os.environ["KUBECONFIG"] = kubeconfig
 
-    kubectl = host_lib.kubectl_runner(KUBECTL_BIN, NAMESPACE, TIMEOUT)
+    kubectl = host_lib.kubectl_runner(KUBECTL_BIN, NAMESPACE, timeout)
 
     rj_rc, rj_out = kubectl("get", "recurringjobs.longhorn.io", "-o", "json")
     if rj_rc != 0:
@@ -245,11 +239,13 @@ def main(argv: list[str]) -> int:
             "ABORT: could not read volumes: %s" % vol_out.strip()[:200], file=sys.stderr
         )
         return 1
-    try:
-        recurringjobs = json.loads(rj_out).get("items", [])
-        volumes = json.loads(vol_out).get("items", [])
-    except ValueError as e:
-        print("ABORT: unparseable Longhorn object list: %s" % e, file=sys.stderr)
+    recurringjobs, err = logic.parse_kubectl_json_items(rj_out, "RecurringJob list")
+    if err:
+        print("ABORT: %s" % err, file=sys.stderr)
+        return 1
+    volumes, err = logic.parse_kubectl_json_items(vol_out, "volume list")
+    if err:
+        print("ABORT: %s" % err, file=sys.stderr)
         return 1
 
     group_job = logic.recurringjob_group_to_job(recurringjobs)
@@ -273,15 +269,14 @@ def main(argv: list[str]) -> int:
             file=sys.stderr,
         )
         return 1
-    try:
-        snapshots = json.loads(snap_out).get("items", [])
-    except ValueError as e:
-        print("ABORT: unparseable snapshot list: %s" % e, file=sys.stderr)
+    snapshots, err = logic.parse_kubectl_json_items(snap_out, "snapshot list")
+    if err:
+        print("ABORT: %s" % err, file=sys.stderr)
         return 1
 
     try:
         result = logic.classify_snapshots(
-            snapshots, owner, attached, MIN_AGE_DAYS, time.time()
+            snapshots, owner, attached, min_age_days, time.time()
         )
     except logic.ReapAbort as e:
         # A volume whose group label named no RecurringJob resolves to owner "", which the
@@ -291,8 +286,8 @@ def main(argv: list[str]) -> int:
         print("ABORT: %s" % e, file=sys.stderr)
         return 1
 
-    _print_bucket("kept by a floor", result.kept)
-    _print_bucket("reapable", result.candidates)
+    logic.print_bucket("kept by a floor", result.kept)
+    logic.print_bucket("reapable", result.candidates)
 
     count = len(result.candidates)
 
