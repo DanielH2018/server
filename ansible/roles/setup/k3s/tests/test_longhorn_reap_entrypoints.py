@@ -176,6 +176,11 @@ def _run(
     return proc, calls
 
 
+def _delete_names(calls) -> list[str]:
+    """The CR name out of each `kubectl delete <resource> <name> ...` argv the stub recorded."""
+    return [c[c.index("delete") + 2] for c in calls if "delete" in c]
+
+
 # ── sys.path bootstrap ───────────────────────────────────────────────────────────────────
 
 
@@ -294,6 +299,7 @@ def test_backups_apply_emits_exactly_the_delete_argv_the_classifier_chose(tmp_pa
             "backups.longhorn.io",
             "stray-1",
             "--ignore-not-found",
+            "--timeout=120s",
         ]
     ]
 
@@ -323,7 +329,7 @@ def test_backups_apply_stops_at_the_first_failed_delete(tmp_path):
         fail_delete_names=["stray-2"],
     )
     assert proc.returncode == 1
-    deletes = [c[-2] for c in calls if "delete" in c]  # the name argument
+    deletes = _delete_names(calls)
     # stray-3 attempted and succeeded, stray-2 attempted and failed, stray-1 NEVER attempted.
     assert deletes == ["stray-3", "stray-2"]
 
@@ -361,6 +367,7 @@ def test_backups_apply_deleted_volumes_only_deletes_the_orphaned_bucket(tmp_path
             "backups.longhorn.io",
             "stray",
             "--ignore-not-found",
+            "--timeout=120s",
         ]
     ]
 
@@ -392,10 +399,97 @@ def test_backups_apply_deleted_volumes_never_runs_after_a_failed_apply(tmp_path)
         fail_delete_names=["stray"],
     )
     assert proc.returncode == 1
-    deletes = [c[-2] for c in calls if "delete" in c]
+    deletes = _delete_names(calls)
     assert deletes == [
         "stray"
     ]  # the "stray" delete failed; "orphan" was never attempted
+
+
+# ── backups: the deletion cap ───────────────────────────────────────────────────────────
+
+
+def _three_candidates_and_one_orphan():
+    """Fixtures whose classification is exactly 3 reapable strays and 1 orphan.
+
+    stray-4 is the newest stray and is kept by FLOOR 2, so the reapable bucket is stray-3,
+    stray-2, stray-1 -- a count the --max-deletions pair below sits either side of.
+    """
+    return {
+        "volumes": [_volume("vol-a", "weekly-backup-d3")],
+        "backups": [
+            _backup("current-1", "vol-a", "2026-08-20T00:00:00Z", "weekly-backup-d3"),
+            _backup("stray-4", "vol-a", "2026-08-19T00:00:00Z", "daily-backup"),
+            _backup("stray-3", "vol-a", "2026-08-18T00:00:00Z", "daily-backup"),
+            _backup("stray-2", "vol-a", "2026-08-17T00:00:00Z", "daily-backup"),
+            _backup("stray-1", "vol-a", "2026-08-16T00:00:00Z", "daily-backup"),
+            _backup("orphan", "gone-vol", "2026-08-14T00:00:00Z", "daily-backup"),
+        ],
+    }
+
+
+def test_backups_apply_deletes_when_the_candidate_count_equals_the_cap(tmp_path):
+    proc, calls = _run(
+        BACKUPS_ENTRY,
+        ["--apply", "--max-deletions", "3"],
+        _three_candidates_and_one_orphan(),
+        tmp_path,
+        admin_readable=True,
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert _delete_names(calls) == ["stray-3", "stray-2", "stray-1"]
+
+
+def test_backups_apply_refuses_when_the_candidate_count_exceeds_the_cap(tmp_path):
+    # The rejecting half. Each deletion measured ~520 Class C against a 2,500/day free tier, so
+    # an unbounded --apply exhausts the cap mid-run and the 403s that follow read as missing
+    # backups. Refusing BEFORE the first delete is what keeps the run from ending part-done.
+    proc, calls = _run(
+        BACKUPS_ENTRY,
+        ["--apply", "--max-deletions=2"],
+        _three_candidates_and_one_orphan(),
+        tmp_path,
+        admin_readable=True,
+    )
+    assert proc.returncode == 1
+    assert _delete_names(calls) == []
+    assert "--max-deletions cap of 2" in proc.stderr
+
+
+def test_backups_cap_counts_both_buckets_together(tmp_path):
+    # 3 strays + 1 orphan is 4 deletions, over a cap of 3 that --apply alone would satisfy.
+    # The Class C cost is per deletion, so which bucket a deletion came from does not matter.
+    proc, calls = _run(
+        BACKUPS_ENTRY,
+        ["--apply", "--apply-deleted-volumes", "--max-deletions", "3"],
+        _three_candidates_and_one_orphan(),
+        tmp_path,
+        admin_readable=True,
+    )
+    assert proc.returncode == 1
+    assert _delete_names(calls) == []
+    assert "4 deletion(s) requested" in proc.stderr
+
+
+def test_backups_max_deletions_without_a_count_is_rejected(tmp_path):
+    proc, calls = _run(
+        BACKUPS_ENTRY, ["--apply", "--max-deletions"], {"volumes": []}, tmp_path
+    )
+    assert proc.returncode == 2
+    assert calls == []
+
+
+def test_backups_max_deletions_with_a_non_integer_count_is_rejected(tmp_path):
+    proc, calls = _run(
+        BACKUPS_ENTRY, ["--apply", "--max-deletions", "lots"], {"volumes": []}, tmp_path
+    )
+    assert proc.returncode == 2
+    assert calls == []
+
+
+def test_backups_dry_run_documents_the_cap(tmp_path):
+    proc, _calls = _run(BACKUPS_ENTRY, [], {"volumes": []}, tmp_path)
+    assert proc.returncode == 0, proc.stderr
+    assert "--max-deletions" in proc.stdout
 
 
 # ── snapshots: dry run emits no delete ──────────────────────────────────────────────────
