@@ -7,8 +7,12 @@ ONE key whose value was the script with `known_services.json: |` appended to it.
 valid YAML — there is nothing malformed about it — and the pod died on
 `SyntaxError: invalid syntax` instead.
 
-So these assert on content: that both keys survive the render, and that the embedded script is
-still a parseable Python program. A YAML-only check cannot see either failure.
+So these assert on content: that every key survives the render, and that each embedded module
+is still a parseable Python program. A YAML-only check cannot see either failure.
+
+The keys come from `artifacts_modules` in the role's defaults rather than one `lookup('file')`
+per module written out by hand, which is what caused both crash-loops. That list is compared
+against the files on disk here, in both directions.
 
 Run: uv run pytest ansible/tests/services/test_artifacts_configmap.py
 """
@@ -18,7 +22,14 @@ from __future__ import annotations
 import ast
 import json
 
+from _helpers import REPO
 from _k8s_render import rendered_docs
+
+FILES = REPO / "ansible" / "roles" / "k8s" / "artifacts" / "files"
+
+# The entry point plus the two modules it imports. Named rather than counted, so a census that
+# stopped seeing the tree fails here instead of passing over an empty set.
+REQUIRED_MODULES = frozenset({"_gui_html.py", "artifact_meta.py", "artifact_server.py"})
 
 
 def _configmap() -> dict:
@@ -28,20 +39,46 @@ def _configmap() -> dict:
     raise AssertionError("the artifacts ConfigMap did not render")
 
 
-def test_both_keys_survive_the_render() -> None:
+def _module_keys() -> set[str]:
+    return {key for key in _configmap()["data"] if key.endswith(".py")}
+
+
+def _module_files() -> set[str]:
+    return {path.name for path in FILES.glob("*.py")}
+
+
+def test_every_key_survives_the_render() -> None:
     """The absorbed-key failure shows up here and nowhere else in the suite."""
     data = _configmap()["data"]
-    assert set(data) == {"artifact_server.py", "known_services.json"}, (
+    assert set(data) == REQUIRED_MODULES | {"known_services.json"}, (
         "a key was absorbed into another key's block scalar — the render still parses as "
         f"YAML, so only this assertion catches it. Got keys: {sorted(data)}"
     )
 
 
-def test_the_embedded_script_is_parseable_python() -> None:
-    """Anything appended to the script (a YAML key, stray prose from a broken comment) makes
+def test_the_shipped_modules_are_the_ones_on_disk() -> None:
+    """A module added to files/ but not to artifacts_modules never reaches the pod.
+
+    The pod imports its siblings by plain module name off /app, so the missing one surfaces
+    as ModuleNotFoundError at startup rather than as anything Ansible reports. The comparison
+    runs both ways: a stale list entry naming a deleted file fails the render outright.
+    """
+    on_disk = _module_files()
+    assert REQUIRED_MODULES <= on_disk, REQUIRED_MODULES - on_disk
+    assert _module_keys() == on_disk
+
+
+def test_an_absent_module_is_not_silently_dropped() -> None:
+    """The red half of the pair above: the comparison must notice a missing key."""
+    assert _module_keys() != _module_files() | {"artifact_gone.py"}
+
+
+def test_every_embedded_module_is_parseable_python() -> None:
+    """Anything appended to a module (a YAML key, stray prose from a broken comment) makes
     the pod exit on SyntaxError at startup. Parsing it here is the same check, before deploy."""
-    source = _configmap()["data"]["artifact_server.py"]
-    ast.parse(source)
+    data = _configmap()["data"]
+    for key in sorted(_module_keys()):
+        ast.parse(data[key], filename=key)
 
 
 def test_the_service_list_is_json_and_holds_the_platform_names() -> None:

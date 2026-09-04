@@ -21,7 +21,7 @@
 .claude/hooks/tests/test_block_footguns.py 2
 .claude/hooks/tests/test_nudge_land_sh.py 8
 .claude/hooks/tests/test_session_health.py 33
-ansible/roles/k8s/artifacts/tests/test_artifact_server.py 3
+ansible/roles/k8s/artifacts/tests/test_artifact_server.py 1
 ansible/roles/k8s/autofix-bridge/tests/test_autofix.py 13
 ansible/roles/k8s/monitor-bridge/tests/test_b2_storage.py 5
 ansible/roles/k8s/monitor-bridge/tests/test_check.py 14

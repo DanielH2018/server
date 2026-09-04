@@ -12,6 +12,20 @@ artifacts_k8s_image: python:3.14-alpine@sha256:05b2b8b732ecd268fee8727a369f936f0
 k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
 k8s_autodeploy_reason: "stateless RollingUpdate Deployment, no PVC, readinessProbe gates the rollout, pinned image tag"  # noqa var-naming[no-role-prefix]
 
+# The Python files that make up the running server, mirroring autofix-bridge's
+# `autofix_bridge_modules` and carrying the same risk: a module missing here never reaches the
+# ConfigMap, and the pod dies at import with ModuleNotFoundError.
+#
+# Each name is both the ConfigMap key and the file under `files/`, because the Deployment
+# mounts the whole ConfigMap at /app and `python3 /app/artifact_server.py` imports its
+# siblings by their plain module name. Order is the render order and nothing else.
+# ENFORCED by ansible/tests/services/test_artifacts_configmap.py, which compares this list
+# against the files on disk in both directions.
+artifacts_modules:
+  - _gui_html.py
+  - artifact_meta.py
+  - artifact_server.py
+
 # hostPath pins the pod to ONE node. daniel-box is the control-plane node, where Ansible
 # runs and where most sessions work, so its tree is the local mount and every other host's
 # is synced in below.
