@@ -34,6 +34,13 @@ HOST_SHAPED = re.compile(
 
 SELF = "ansible/tests/repo/test_no_host_shaped_membership_literal.py"
 
+# A substring test against RENDERED TEXT — a manifest, a config file, a command string — is a
+# third case, and `in` is the right operator for it: the equality form would iterate the string
+# character by character and never be True. CodeQL flags those too, and they are the one shape
+# where its complaint is arguable, so each one is named here with the reason rather than left to
+# the regex. Add an entry only for a genuine text search, never for a collection.
+ALREADY_MITIGATED: dict[str, str] = {}
+
 
 def _tracked_python_files() -> list[str]:
     listed = subprocess.run(
@@ -71,7 +78,7 @@ def test_the_scan_finds_tracked_python_files():
 def test_no_tracked_file_membership_tests_a_host_shaped_literal():
     found = []
     for rel in _tracked_python_files():
-        if rel == SELF:
+        if rel == SELF or rel in ALREADY_MITIGATED:
             continue
         try:
             tree_hits = offenders_in((REPO / rel).read_text(errors="replace"))
@@ -81,8 +88,12 @@ def test_no_tracked_file_membership_tests_a_host_shaped_literal():
     assert not found, (
         f"{found} test a hostname-shaped literal with `in`, which raises CodeQL "
         f"py/incomplete-url-substring-sanitization. On a list, set or dict write "
-        f'`any(x == "<host>" for x in seq)` instead. On a URL string, parse it and compare '
-        f"the host component."
+        f'`any(x == "<host>" for x in seq)`. On a URL string, parse it and compare the host '
+        f"component. On rendered text — a manifest, a config file, a command string — `in` is "
+        f"the right operator and the equality form would be wrong: either match a surrounding "
+        f"anchor with a regex (see the `apiVersion: traefik\\.io/` search in "
+        f"ansible/tests/k8s/test_k8s_manifests_rbac.py) or add the file to ALREADY_MITIGATED "
+        f"above with the reason."
     )
 
 
