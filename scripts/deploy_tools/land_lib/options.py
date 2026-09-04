@@ -1,10 +1,30 @@
-"""Everything the command line sets, plus the budgets a test shortens."""
+"""Everything the command line sets, plus the budgets a test shortens.
+
+Two of those budgets also read the environment, the way land.sh did before the port
+(`land.sh:108-109` at f319437c^): `LAND_PRIMARY` names the checkout every git and deploy.sh
+call runs in, and `LAND_MERGE_POLL` is the merge wait's poll interval. A test that runs the
+shim as a process has no other way to aim a landing away from the live checkout.
+"""
 
 from __future__ import annotations
 
 import argparse
+import os
 from dataclasses import dataclass
 from pathlib import Path
+
+PRIMARY_CHECKOUT = Path("/home/ubuntu/server")
+MERGE_POLL_S = 30
+
+
+def _primary_from_env() -> Path:
+    """`LAND_PRIMARY`, or the primary checkout when it is unset or empty."""
+    return Path(os.environ.get("LAND_PRIMARY") or PRIMARY_CHECKOUT)
+
+
+def _merge_poll_from_env() -> int:
+    """`LAND_MERGE_POLL` in seconds, or the default when it is unset or empty."""
+    return int(os.environ.get("LAND_MERGE_POLL") or MERGE_POLL_S)
 
 
 @dataclass
@@ -21,13 +41,13 @@ class Options:
     # Sized for a PR run plus queueing behind other PRs' runs; a PR still open after this is
     # not being merged, and the session should look at why.
     merge_timeout: int = 2700
-    merge_poll: int = 30
+    merge_poll: int = MERGE_POLL_S
     lock_retries: int = 5
     lock_backoff: int = 60
     # A single retry covered one merge landing during the wait; a third merge landing during
     # the tip wait moved the tip again and the retry's own deploy exited 4.
     stale_retries: int = 3
-    primary: Path = Path("/home/ubuntu/server")
+    primary: Path = PRIMARY_CHECKOUT
     deployer_state: Path = Path("/var/lib/gitops-deploy")
 
 
@@ -70,4 +90,6 @@ def parse_args(argv: list[str] | None, description: str) -> Options:
         await_merge=ns.await_merge,
         arm_merge=ns.arm_merge,
         subject=ns.subject,
+        merge_poll=_merge_poll_from_env(),
+        primary=_primary_from_env(),
     )
