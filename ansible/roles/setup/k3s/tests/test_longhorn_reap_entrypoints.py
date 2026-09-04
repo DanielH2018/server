@@ -376,6 +376,32 @@ def test_backups_apply_deleted_volumes_only_deletes_the_orphaned_bucket(tmp_path
     ]
 
 
+def test_backups_apply_deleted_volumes_refuses_on_an_empty_volume_list(tmp_path):
+    # The rejecting half of the test above (#1062). A volume read that succeeds with zero items
+    # -- wrong namespace, a context with no Longhorn, an RBAC that lists nothing rather than
+    # erroring -- makes EVERY labelled backup fail `vol in existing_volumes` and land in the
+    # orphaned bucket, so this flag would delete the whole B2 set. classify_backups raises
+    # ReapAbort; main() must turn that into the ABORT line and exit 1, not a traceback.
+    fixtures = {
+        "volumes": [],
+        "backups": [
+            _backup("b1", "vol-a", "2026-08-14T00:00:00Z", "daily-backup"),
+            _backup("b2", "vol-b", "2026-08-15T00:00:00Z", "daily-backup"),
+        ],
+    }
+    proc, calls = _run(
+        BACKUPS_ENTRY,
+        ["--apply-deleted-volumes"],
+        fixtures,
+        tmp_path,
+        admin_readable=True,
+    )
+    assert proc.returncode == 1
+    assert "ABORT" in proc.stderr
+    assert "Traceback" not in proc.stderr, proc.stderr
+    assert _delete_names(calls) == []
+
+
 def test_backups_apply_deleted_volumes_never_runs_after_a_failed_apply(tmp_path):
     # Both flags given at once: if the stray bucket fails, the orphaned bucket must never be
     # touched. Bash's single `exit 1` on the first failed delete made this true by construction;
@@ -539,6 +565,28 @@ def test_snapshots_aborts_when_recurringjobs_is_empty_but_a_volume_carries_the_l
     # ABORT fires right after reading recurringjobs + volumes; snapshots.longhorn.io is never
     # read and no delete is ever attempted.
     assert not any("snapshots.longhorn.io" in c for c in calls)
+    assert not any("delete" in c for c in calls)
+
+
+def test_snapshots_refuse_when_a_labelled_volume_resolves_to_no_job(tmp_path):
+    # The rejecting half for #1063: RecurringJobs list fine, but the group this volume is
+    # labelled with names no job, so its owner resolves to "" and the current-tier test is False
+    # against every snapshot it has. classify_snapshots raises ReapAbort; main() must print the
+    # ABORT line and exit 1 rather than let the traceback out.
+    fixtures = {
+        "recurringjobs": [
+            {"metadata": {"name": "daily-backup"}, "spec": {"groups": ["daily-backup"]}}
+        ],
+        "volumes": [_volume("vol-a", "weekly-backup-d3")],
+        "snapshots": [
+            _snapshot("newest", "vol-a", "2026-08-19T00:00:00Z"),
+            _snapshot("older", "vol-a", "2026-08-01T00:00:00Z", job="weekly-backup-d3"),
+        ],
+    }
+    proc, calls = _run(SNAPSHOTS_ENTRY, [], fixtures, tmp_path)
+    assert proc.returncode == 1
+    assert "ABORT" in proc.stderr
+    assert "Traceback" not in proc.stderr, proc.stderr
     assert not any("delete" in c for c in calls)
 
 

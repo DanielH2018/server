@@ -279,9 +279,17 @@ def main(argv: list[str]) -> int:
         print("ABORT: unparseable snapshot list: %s" % e, file=sys.stderr)
         return 1
 
-    result = logic.classify_snapshots(
-        snapshots, owner, attached, MIN_AGE_DAYS, time.time()
-    )
+    try:
+        result = logic.classify_snapshots(
+            snapshots, owner, attached, MIN_AGE_DAYS, time.time()
+        )
+    except logic.ReapAbort as e:
+        # A volume whose group label named no RecurringJob resolves to owner "", which the
+        # current-tier test reads as "no snapshot belongs to the current tier" -- every snapshot
+        # past the age floor then becomes a candidate. classify_snapshots refuses; without this
+        # the refusal reaches the operator as a traceback.
+        print("ABORT: %s" % e, file=sys.stderr)
+        return 1
 
     _print_bucket("kept by a floor", result.kept)
     _print_bucket("reapable", result.candidates)

@@ -266,7 +266,14 @@ def main(argv: list[str]) -> int:
         print("ABORT: unparseable backup list: %s" % e, file=sys.stderr)
         return 1
 
-    result = logic.classify_backups(backups, owner, existing)
+    try:
+        result = logic.classify_backups(backups, owner, existing)
+    except logic.ReapAbort as e:
+        # classify_backups owns the empty-volume-list refusal because it is the first place the
+        # backup count is known. Uncaught it would reach the operator as a traceback, which is
+        # not the shape every other refusal in this function prints.
+        print("ABORT: %s" % e, file=sys.stderr)
+        return 1
 
     _print_bucket("kept by a floor", result.kept)
     _print_bucket("reapable", result.candidates)
@@ -311,8 +318,8 @@ def main(argv: list[str]) -> int:
             )
         )
         print(
-            "                           costs ~%d against the 2,500/day free tier. Over the "
-            "cap the" % (MAX_DELETIONS_DEFAULT * CLASS_C_PER_DELETION)
+            "                           costs ~%s against the 2,500/day free tier. Over the "
+            "cap the" % f"{MAX_DELETIONS_DEFAULT * CLASS_C_PER_DELETION:,}"
         )
         print("                           run refuses before deleting anything.")
         return 0
@@ -321,14 +328,14 @@ def main(argv: list[str]) -> int:
     if planned > max_deletions:
         print(
             "REFUSING: %d deletion(s) requested, over the --max-deletions cap of %d. At the "
-            "~%d Class C measured per deletion that is ~%d against a 2,500/day free tier. "
+            "~%d Class C measured per deletion that is ~%s against a 2,500/day free tier. "
             "Reap the backlog across several days, or check 'probe.py b2-budget' and pass "
             "--max-deletions %d to override deliberately."
             % (
                 planned,
                 max_deletions,
                 CLASS_C_PER_DELETION,
-                planned * CLASS_C_PER_DELETION,
+                f"{planned * CLASS_C_PER_DELETION:,}",
                 planned,
             ),
             file=sys.stderr,
