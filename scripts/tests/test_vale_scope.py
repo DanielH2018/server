@@ -142,3 +142,33 @@ def test_vale_ini_turns_the_styles_off_for_archive_and_reference():
         assert first.replace(" ", "") == "BasedOnStyles=", (
             f"{section} must clear BasedOnStyles to disable every rule, found {first!r}"
         )
+
+
+def vale_hook_entry() -> str:
+    config = tomllib.loads(PREK_TOML.read_text())
+    hooks = [
+        hook
+        for repo in config["repos"]
+        for hook in repo.get("hooks", [])
+        if hook.get("id") == "vale"
+    ]
+    assert len(hooks) == 1, f"expected exactly one vale hook, found {len(hooks)}"
+    return hooks[0]["entry"]
+
+
+def test_the_hook_syncs_the_google_package_when_missing():
+    """A fresh worktree has no styles/Google — it is gitignored and fetched by `vale sync`.
+
+    The hook entry was a bare `vale` until 2026-09-04, so every new worktree failed with
+    "style 'Google' does not exist on StylesPath" until someone synced by hand there. The
+    sync must be guarded on the directory, not unconditional: `vale sync` re-downloads every
+    call, which would put a network round-trip in every doc-touching commit.
+    """
+    entry = vale_hook_entry()
+    assert "vale sync" in entry, f"hook entry never syncs the Google package: {entry!r}"
+    assert "styles/Google" in entry, (
+        f"hook entry syncs unconditionally rather than on a missing styles/Google: {entry!r}"
+    )
+    assert entry.index("vale sync") < entry.index("exec vale"), (
+        f"sync must run before the lint, not after: {entry!r}"
+    )
