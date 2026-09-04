@@ -40,6 +40,24 @@ def test_it_touches_nothing():
     assert 1 + 1 == 2
 """
 
+# A skipped test never reaches `pytest_runtest_setup`, but its teardown still runs. Ordered
+# so that the skip follows the leak: the guard must blame the test that shelled out and leave
+# the skip alone.
+_LEAKS_THEN_SKIPS = """
+import subprocess
+
+import pytest
+
+
+def test_it_shells_out():
+    subprocess.run(["curl", "-sS", "https://example.invalid"], check=False)
+
+
+@pytest.mark.skip(reason="stands in for the live-API tests, which skip where there is no cluster")
+def test_it_is_skipped():
+    raise AssertionError("this body must never run")
+"""
+
 
 def _run_child(tmp_path: Path, body: str) -> subprocess.CompletedProcess[str]:
     (tmp_path / "pytest.ini").write_text(_CHILD_INI)
@@ -85,6 +103,32 @@ def test_a_test_that_touches_nothing_passes(tmp_path: Path) -> None:
     proc = _run_child(tmp_path, _CLEAN)
     assert proc.returncode == 0, (
         "the guard failed a test that touches nothing:\n" + proc.stdout + proc.stderr
+    )
+
+
+def test_a_skipped_test_does_not_inherit_the_previous_test_s_calls(
+    tmp_path: Path,
+) -> None:
+    """The leak is blamed on the test that caused it, even when the next one skips.
+
+    Teardown runs for a test whose setup never did, so a guard holding one mark rather than
+    one per nodeid hands the earlier test's calls to the later one. Reject case for that:
+    exactly one failure, naming the test that shelled out.
+    """
+    proc = _run_child(tmp_path, _LEAKS_THEN_SKIPS)
+    assert proc.returncode != 0, proc.stdout
+    # The shim's own stderr also says LEAKGUARD, so match the blame line specifically.
+    blamed = [
+        line
+        for line in proc.stdout.splitlines()
+        if "reached outside the test process" in line
+    ]
+    assert len(blamed) == 1, (
+        "the leak was blamed on more than one test:\n" + proc.stdout
+    )
+    assert "test_it_shells_out" in blamed[0], proc.stdout
+    assert "test_it_is_skipped" not in blamed[0], (
+        "the skipped test was blamed for the leaking test's calls:\n" + proc.stdout
     )
 
 

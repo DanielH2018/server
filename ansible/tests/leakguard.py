@@ -174,6 +174,13 @@ def _record(line: str) -> None:
             handle.write(line + "\n")
 
 
+def _marks() -> dict[str, int]:
+    """Where the call record stood when each running test started, keyed by nodeid."""
+    marks = _state.setdefault("marks", {})
+    assert isinstance(marks, dict)
+    return marks
+
+
 def _calls_seen() -> list[str]:
     calls = _state.get("calls")
     if not isinstance(calls, Path) or not calls.exists():
@@ -187,7 +194,11 @@ def pytest_runtest_setup(item: pytest.Item) -> None:
     if not isinstance(stub_dir, str) or not isinstance(real_path, str):
         return
     # Remember where the record stood, so teardown can attribute only what THIS test added.
-    _state["mark"] = len(_calls_seen())
+    # Keyed by nodeid rather than kept as a single value: teardown runs even when setup did
+    # not — a `skipif` that fires, or a fixture that raises — and a single value would then
+    # hand this test's calls to whichever test ran next. The five allowlisted tests all skip
+    # on a runner with no cluster, so that path is exercised in CI and not here.
+    _marks()[item.nodeid] = len(_calls_seen())
     if item.nodeid in _LIVE_API_TESTS:
         os.environ["PATH"] = real_path
     else:
@@ -195,8 +206,8 @@ def pytest_runtest_setup(item: pytest.Item) -> None:
 
 
 def pytest_runtest_teardown(item: pytest.Item) -> None:
-    mark = _state.get("mark")
-    if not isinstance(mark, int):
+    mark = _marks().pop(item.nodeid, None)
+    if mark is None:
         return
     new = _calls_seen()[mark:]
     if not new:
