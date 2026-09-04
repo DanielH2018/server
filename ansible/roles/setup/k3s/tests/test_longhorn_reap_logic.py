@@ -504,6 +504,24 @@ def test_an_already_removed_snapshot_is_skipped_silently_not_reaped_again():
     assert result.kept == []
 
 
+def test_a_removed_newest_snapshot_does_not_consume_the_floor_slot():
+    # #1080: the newest record for a volume can be already-removed (Longhorn hasn't coalesced
+    # it yet). If already-removed is checked AFTER the FLOOR 1 claim, that removed snapshot
+    # eats the floor slot and the real newest LIVE snapshot behind it gets no protection at
+    # all -- it falls straight through to the age floor and becomes reapable, even though it
+    # is the volume's current local restore point.
+    owner: dict[str, str] = {}
+    snaps = [
+        _snapshot("removed-newest", "vol-a", "2026-08-19T00:00:00Z", removed=True),
+        _snapshot("live-newest", "vol-a", "2026-08-10T00:00:00Z", job="daily-backup"),
+    ]
+    result = logic.classify_snapshots(
+        snaps, owner, attached={"vol-a"}, min_age_days=3, now_epoch=_NOW
+    )
+    assert result.candidates == []
+    assert result.kept == []  # live-newest claims FLOOR 1, not even reported
+
+
 def test_an_unpopulated_markremoved_is_treated_as_not_removed():
     # R14, ported: status.markRemoved absent (a snapshot read moments after creation) must be
     # treated the same as an explicit False, not silently excluded.
