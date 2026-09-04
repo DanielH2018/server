@@ -5,8 +5,11 @@ why, the conventions a new module follows, and the structural gaps a 2026-09-04 
 in `land_lib`, `monitor-bridge` and `gitops_deploy`.
 
 This is a reference, not a plan. The findings at the end are ranked and carry `file:line`
-evidence. Each one was checked against the source by a second reader; the two that did not
-survive are listed as refuted so nobody re-derives them.
+evidence as the review found it. Each one was checked against the source by a second reader,
+and the four that did not survive are listed as refuted so nobody re-derives them. The rest
+were closed in the same PR that added this page; the *Outcome* table at the head of the
+findings names the ones that closed partially and why. Line numbers in the findings are the
+pre-fix ones.
 
 ## The shape of the code
 
@@ -139,8 +142,10 @@ branch is testable without `gh`, and `monitor-bridge/files/verdicts/` against `c
 **Structure gets a type.** A value that crosses a module boundary is a frozen dataclass or a
 `NamedTuple`, not a tuple or a dict of strings. A closed vocabulary (verdicts, causes, tick
 states) is a `StrEnum` or `Literal`, so `ty` catches a typo that a runtime frozenset only
-catches when the branch runs. The repo has 28 dataclasses and zero `NamedTuple`, `StrEnum`,
-`Protocol` or `Literal` uses, which is the gap the findings below return to.
+catches when the branch runs. Reference: `land_lib/outcome.py` (`Verdict`, `CAUSES`),
+`land_lib/tools.py` (`CiVerdict`, the `Classifier` Protocols) and
+`monitor-bridge/files/check.py` (`Check`, `CheckResult`). Before the 2026-09-04 review the
+tree had 28 dataclasses and no `NamedTuple`, `StrEnum`, `Protocol` or `Literal` at all.
 
 **Exit codes are named once.** A program that has an exit contract defines it in one place
 and imports the names at every site that reads a return code.
@@ -192,7 +197,25 @@ shape `test_script_bootstraps_present.py` already uses.
 
 ## Findings
 
-Ranked by severity. `Confirmed` means a second reader checked the cited lines this session.
+Ranked by severity. `Confirmed` means a second reader checked the cited lines the day of the
+review. Every finding not marked refuted was fixed in the PR that added this page; the table
+below records the six that closed partially, with the constraint that stopped them, so the
+remainder is not re-derived as a new finding.
+
+### Outcome
+
+| Finding | What closed | What stayed, and why |
+|---|---|---|
+| 1 `main()` split | `main()` is 58 lines over `assess()`, `plan_tick()` and one `handle_*` per branch; I/O in `deploy_io.py`, composers and the queue's file I/O in `deploy_alerts.py` | `alert_once`, `deliver`, `drain_pending`, `discord`, `check_stale_composes`, `record_staging_tick`, `consult_staging` stay on the entry module: `test_gitops_deploy_patch_boundary.py` requires a patched name to be defined where it is patched, and about 30 tests patch them there |
+| 3 two mappers | A test asserts the two mappers agree at the role level over a fixed corpus | `derive` was not rerouted: `role_for` on a `k8s/manifests/` path returns `manifests` where the shared mapper returns a service set, and putting `manifests` in `--tags` makes `deploy.sh` refuse the list |
+| 6 config at import | Both programs cannot raise on import; `gitops_deploy` builds a frozen `Config` validated in `main()`, `monitor-bridge` collects `CONFIG_PROBLEMS` and reports them from `main()` with exit 2 | `gitops_deploy` keeps its module constants, derived from `CONFIG`; `STAGING_SUBSET` and two timeouts stay as literal `C.get()` calls because `gen_doc_fragments.py` parses them by text. `HTTP_TIMEOUT` stays in `bridge/common.py` because autofix-bridge imports it from there and does not ship `bridge/config.py` |
+| 10 seams | `GateTools` and `NotifyTools`; every subprocess monkeypatch converted | `staging_gate` tests still patch `IDENTITY` and `AUTHORIZED_PUBKEY`, which are filesystem constants rather than process boundaries |
+| 16 text assertions | `test_land_merge.py` from 18 `capsys` uses to 8 | The remaining eight are where the printed line is the only discriminator between two paths making one identical `gh` call |
+| 25 policy tables | The three R2 billing-class sets moved beside the R2 verdict | `K8S_EXTENDED_RESOURCES` and `PVC_EXCLUDE` are `_env`-read after all; one is rendered into the env Secret and the other is grepped out of `config.py` by a repo test |
+
+Two findings were closed by a comment at the line rather than a change. The `except Outcome:`
+in `merge.py` already wrapped a single call; the multi-statement block was the handler. And
+`r2_month_start` was already UTC and already pinned by a test.
 
 ### High
 
