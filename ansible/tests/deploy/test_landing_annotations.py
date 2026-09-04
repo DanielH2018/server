@@ -58,6 +58,46 @@ def test_every_field_the_board_unwraps_is_one_the_ledger_writes():
     assert not missing, missing
 
 
+def _labels_the_board_groups_by_but_the_ledger_omits(exprs: list[str]) -> set[str]:
+    """The `sum by (x)` labels in `exprs` that no `key=` in a sample annotation supplies."""
+    grouped = {
+        name.strip()
+        for e in exprs
+        for m in re.finditer(r"by \(([^)]*)\)", e)
+        for name in m.group(1).split(",")
+        if name.strip()
+    }
+    assert grouped, "the board groups by no label at all"
+    return grouped - set(re.findall(r"(\w+)=", _sample_line()))
+
+
+def test_every_label_the_board_groups_by_is_one_the_ledger_writes():
+    missing = _labels_the_board_groups_by_but_the_ledger_omits(_board_exprs())
+    assert not missing, missing
+
+
+def test_a_label_the_ledger_does_not_write_would_be_caught():
+    planted = ['sum by (not_a_real_label) (count_over_time({job="syslog"} [$__range]))']
+    assert _labels_the_board_groups_by_but_the_ledger_omits(
+        [*_board_exprs(), *planted]
+    ) == {"not_a_real_label"}
+
+
+def test_the_board_breaks_deploy_failed_down_by_cause():
+    """The reader half of issue #1031.
+
+    Writing `cause` into the annotation splits nothing on its own: the board reported one
+    `deploy-failed` bucket for six situations, and the field it needed was there for two
+    days before a panel read it. This asserts the panel exists, not merely that the field
+    can be parsed.
+    """
+    exprs = _board_exprs()
+    assert any("by (cause)" in e and 'verdict="deploy-failed"' in e for e in exprs), (
+        exprs
+    )
+    assert any("by (verdict)" in e for e in exprs), exprs
+
+
 def test_the_board_filters_on_a_literal_the_ledger_writes():
     literals = {
         m.group(1) for e in _board_exprs() for m in re.finditer(r'\|=\s*"([^"]+)"', e)

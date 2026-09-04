@@ -174,6 +174,17 @@ def notify(content: str) -> None:
             f"({HOST_LIB_PATH} / {CONFIG_ENV_PATH} not found) -- skipping Discord notify."
         )
         return
+    # Restored in the `finally`: this runs per call, and the entry it adds outlived the
+    # function until 2026-09-04. In the test suite that meant a `host_lib.py` written into
+    # one test's tmp_path stayed ahead of the real module on sys.path for every later
+    # `import host_lib` in the same interpreter, which is why the deploy-tools suite only
+    # passed under xdist's per-module process isolation (issue #1033). Snapshot-and-restore
+    # rather than `sys.path.remove`, which would drop someone else's identical entry.
+    #
+    # A host_lib that imported successfully stays in sys.modules on purpose -- that is
+    # ordinary import caching, and production runs this once. A test planting its own
+    # host_lib evicts the cached one itself.
+    saved_path = list(sys.path)
     sys.path.insert(0, str(HOST_LIB_PATH.parent))
     try:
         from host_lib import discord_post, parse_env_file  # type: ignore[import-not-found]
@@ -191,6 +202,8 @@ def notify(content: str) -> None:
         print(
             f"deploy --detach: notify failed ({exc}) -- deploy result is only in this log."
         )
+    finally:
+        sys.path[:] = saved_path
 
 
 def main(argv: list[str] | None = None) -> int:

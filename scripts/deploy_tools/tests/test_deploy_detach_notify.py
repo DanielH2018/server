@@ -306,6 +306,52 @@ def test_notify_never_raises_on_a_broken_host_lib(monkeypatch, tmp_path, capsys)
     assert "notify failed" in out
 
 
+def test_notify_leaves_sys_path_as_it_found_it_when_the_import_raises(
+    monkeypatch, tmp_path, capsys
+):
+    # This pair is the point: notify() inserts host_lib's directory on EVERY call, and until
+    # 2026-09-04 it never took it back off. A tmp_path host_lib left ahead of the real one is
+    # what broke test_tick_ledger_report under -n0 — visible only without xdist's per-module
+    # process isolation (issue #1033). Both exits from the try must restore.
+    broken = tmp_path / "host_lib.py"
+    broken.write_text("raise RuntimeError('boom')\n")
+    config = tmp_path / "config.env"
+    config.write_text("DISCORD_WEBHOOK=https://example.invalid/hook\n")
+    monkeypatch.setattr(notify_mod, "HOST_LIB_PATH", broken)
+    monkeypatch.setattr(notify_mod, "CONFIG_ENV_PATH", config)
+    monkeypatch.delitem(notify_mod.sys.modules, "host_lib", raising=False)
+    before = list(notify_mod.sys.path)
+    notify_mod.notify("some content")
+    assert "notify failed" in capsys.readouterr().out  # the raising path, not a skip
+    assert notify_mod.sys.path == before
+
+
+def test_notify_leaves_sys_path_as_it_found_it_when_the_post_succeeds(
+    monkeypatch, tmp_path, capsys
+):
+    host_lib = tmp_path / "host_lib.py"
+    host_lib.write_text(
+        "def parse_env_file(path):\n"
+        "    return {'DISCORD_WEBHOOK': 'https://example.invalid/hook'}\n"
+        "def discord_post(webhook, content, tag, marker=''):\n"
+        "    return True\n"
+    )
+    config = tmp_path / "config.env"
+    config.write_text("DISCORD_WEBHOOK=https://example.invalid/hook\n")
+    monkeypatch.setattr(notify_mod, "HOST_LIB_PATH", host_lib)
+    monkeypatch.setattr(notify_mod, "CONFIG_ENV_PATH", config)
+    monkeypatch.delitem(notify_mod.sys.modules, "host_lib", raising=False)
+    before = list(notify_mod.sys.path)
+    notify_mod.notify("some content")
+    # This one imported cleanly, so it stays in sys.modules. Evict it rather than serve the
+    # stub to the next `import host_lib` in this interpreter. A plain pop, not
+    # monkeypatch.delitem: delitem puts the key BACK at teardown, so the eviction would be
+    # undone before the next module runs.
+    notify_mod.sys.modules.pop("host_lib", None)
+    assert capsys.readouterr().out == ""  # posted; nothing to report
+    assert notify_mod.sys.path == before
+
+
 def test_main_returns_nonzero_on_unsettled_deploy(monkeypatch, capsys):
     monkeypatch.setattr(
         notify_mod, "gate", lambda tags, ok: (False, ["sonarr: unhealthy"])
