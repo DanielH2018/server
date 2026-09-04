@@ -307,7 +307,7 @@ STAGING_SUBSET = deploy_io.csv_set(
 # The actual parsing lives in deploy_io.load_config now, with the same error-collection as
 # every other numeric — a malformed value is recorded in CONFIG.errors rather than raising at
 # import. The two `C.get(...)` calls below are unused: they exist only so
-# scripts/docs/gen_doc_fragments.py's config_default() parser, which reads a
+# scripts/docs/fragment_readers.py's config_default() parser, which reads a
 # `C.get("<KEY>", "<default>")` call out of THIS file by name, still has one to find. Pinned
 # against Config's own defaults by test_staging_timeout_module_fallbacks_match_config_defaults.
 _STAGING_GATE_TIMEOUT_FALLBACK = C.get("STAGING_GATE_TIMEOUT_S", "600")
