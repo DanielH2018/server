@@ -466,10 +466,13 @@ uv run pytest                 # all repo unit tests (auto-syncs the env from uv.
 uv run pytest scripts         # just one suite
 ```
 
-- **Bare `python3` cannot parse this repo.** `requires-python = ">=3.14"`, and eight files use
-  PEP 758 syntax — unparenthesized `except OSError, yaml.YAMLError:` — including
-  `scripts/diagnostics/probe.py`, `ansible/filter_plugins/toposort.py` and
-  `ansible/roles/k8s/monitor-bridge/files/check.py`. Ubuntu's `/usr/bin/python3` is 3.12, so a
+- **Bare `python3` cannot parse this repo.** `requires-python = ">=3.14"`, and files across the
+  tree use PEP 758 syntax — unparenthesized `except OSError, yaml.YAMLError:` — among them
+  `ansible/filter_plugins/toposort.py`, `scripts/diagnostics/probe_lib/health.py` and
+  `ansible/roles/k8s/monitor-bridge/files/checks/service.py`. Derive the current set with
+  `grep -rlE '^\s*except [A-Za-z_.]+, [A-Za-z_.]+:' --include='*.py' .` rather than trusting a
+  count written here; a count and two of the three files this line used to name went stale when
+  those modules were split. Ubuntu's `/usr/bin/python3` is 3.12, so a
   bare `pytest` reports a `SyntaxError` naming a repo file, which reads as a repo bug. ENFORCED
   by `.claude/hooks/uv-python.sh`, a PreToolUse hook that rewrites a bare
   `python`/`python3`/`pytest`/`ansible-playbook`/`*.py` invocation into `uv run …`. It rewrites
