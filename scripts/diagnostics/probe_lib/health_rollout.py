@@ -21,7 +21,7 @@ from datetime import datetime, timezone
 RECENT_RESTART_SECONDS = 180
 
 
-def _seconds_since(timestamp, now):
+def seconds_since(timestamp, now):
     """Seconds between an RFC3339 kubectl timestamp and `now`, or None if unparseable."""
     if not timestamp:
         return None
@@ -100,7 +100,7 @@ def format_k8s_health(deploy, pods, service, now):
             finished = ((cs.get("lastState") or {}).get("terminated") or {}).get(
                 "finishedAt"
             )
-            age = _seconds_since(finished, now)
+            age = seconds_since(finished, now)
             where = f"{pod_name}/{cs.get('name', '?')}"
             # A restart whose time cannot be read counts as RECENT. Treating "unknown" as "long
             # ago" would fail open — the one direction a gate must never fail — and this branch

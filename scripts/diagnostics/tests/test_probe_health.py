@@ -191,8 +191,8 @@ def test_k8s_health_unparseable_restart_timestamp_does_not_fail_open():
     Treating unknown as old is the one direction a gate must never fail. Reachable whenever
     kubectl's timestamp format shifts — fractional seconds, for instance, parse as None.
     """
-    assert health_rollout._seconds_since("not-a-timestamp", NOW) is None
-    assert health_rollout._seconds_since(None, NOW) is None
+    assert health_rollout.seconds_since("not-a-timestamp", NOW) is None
+    assert health_rollout.seconds_since(None, NOW) is None
 
     text, code = health_rollout.format_k8s_health(
         _deploy(), pods(("app", 1, "2026-08-16T11:59:30.123456Z")), "freshrss", NOW
@@ -270,6 +270,46 @@ def test_k8s_health_argv_targets_the_named_namespace():
         "homelab",
     ]
     assert "app=freshrss" in health_kubectl.k8s_pods_argv("freshrss", "homelab")
+
+
+def _module_imports(source):
+    """Every module a Python source imports, whatever the import form."""
+    import ast
+
+    names = set()
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Import):
+            names.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            names.add(node.module or "")
+    return names
+
+
+def test_health_kubectl_imports_nothing_so_its_argv_shapes_need_no_cluster():
+    """health_kubectl.py's docstring promises it imports no sibling and runs no command.
+
+    That promise is why the ClusterIP pair stays in health_docker.py — the `# DECIDED:` marker
+    above `k8s_service_ip_argv` cites this test. A docstring nobody enforces rots into a comment
+    the first time someone moves a subprocess call in here, so assert it.
+    """
+    from pathlib import Path
+
+    assert _module_imports(Path(health_kubectl.__file__).read_text()) == set()
+    # Non-vacuity: an empty or renamed module would also import nothing.
+    assert {
+        "WORKLOAD_KINDS",
+        "k8s_deploy_argv",
+        "k8s_pods_argv",
+        "pod_selector",
+    } <= set(vars(health_kubectl))
+
+
+def test_the_import_census_sees_a_module_that_reaches_for_a_sibling():
+    """The rejecting half: the guard above is only meaningful if it can go red."""
+    assert _module_imports("from diagnostics.probe_lib import core\n") == {
+        "diagnostics.probe_lib"
+    }
+    assert _module_imports("import subprocess\n") == {"subprocess"}
 
 
 #

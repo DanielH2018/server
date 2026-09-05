@@ -19,7 +19,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
-from diagnostics.probe_lib.health_rollout import _seconds_since
+from diagnostics.probe_lib.health_rollout import seconds_since
 
 # RBAC decides which of two paths this gate can take: trigger a fresh run itself, the way
 # `k8s/cronjob-gate` does at deploy time, or fall back to reading the most recent existing run.
@@ -149,7 +149,7 @@ def format_cronjob_health(name, cronjob, latest_job, pods, deploy_applied_at, no
 
     job_name = (latest_job.get("metadata") or {}).get("name", "?")
     job_created = (latest_job.get("metadata") or {}).get("creationTimestamp")
-    job_age = _seconds_since(job_created, now)
+    job_age = seconds_since(job_created, now)
     if job_age is None:
         return (
             f"{name}: could not read {job_name}'s creation time ({job_created!r}) — "
@@ -157,7 +157,7 @@ def format_cronjob_health(name, cronjob, latest_job, pods, deploy_applied_at, no
             1,
         )
 
-    deploy_age = _seconds_since(deploy_applied_at, now)
+    deploy_age = seconds_since(deploy_applied_at, now)
     fresh = deploy_age is None or job_age < deploy_age
 
     outcome = _job_outcome(latest_job)

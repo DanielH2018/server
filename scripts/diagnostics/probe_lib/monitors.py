@@ -27,7 +27,7 @@ from datetime import datetime, timezone
 
 from diagnostics.probe_lib.core import SECRETS_PATH, prom_endpoint, prom_query_url
 from diagnostics.probe_lib.health_kubectl import k8s_pods_argv
-from diagnostics.probe_lib.health_rollout import _seconds_since
+from diagnostics.probe_lib.health_rollout import seconds_since
 
 from lib.repo_paths import REPO
 
@@ -334,7 +334,7 @@ def kuma_pod_age_seconds():
     except json.JSONDecodeError:
         return None
     starts = [
-        _seconds_since(
+        seconds_since(
             (p.get("status") or {}).get("startTime"), datetime.now(timezone.utc)
         )
         for p in pods

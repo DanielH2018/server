@@ -56,6 +56,15 @@ def inspect_argv(container):
     return ["docker", "inspect", container]
 
 
+# DECIDED: the ClusterIP pair below stays here, not in health_kubectl.py. `k8s_service_ip_argv`
+# and `resolve_service_ip` are kubectl by transport but Docker by role — they are the successor
+# to `inspect_ip_argv`/`resolve_ip`, answering the same question ("reach this service directly,
+# bypassing Traefik and Authelia") for the workloads that left the Pi. Moving them would split
+# that pair across two modules and falsify health_kubectl.py's invariant: it imports no sibling
+# and runs no command, so every argv shape the gate depends on is assertable without a cluster,
+# while `resolve_service_ip` runs a subprocess and imports `core`. The module NAME is what
+# misleads a reader here, not the grouping. Enforced by test_probe_health.py::
+# test_health_kubectl_imports_nothing_so_its_argv_shapes_need_no_cluster.
 def k8s_service_ip_argv(service, namespace):
     """kubectl argv for a Service's ClusterIP.
 
