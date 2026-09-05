@@ -512,6 +512,21 @@
     stamp_render_templates:
       - ansible/roles/setup/initial_setup/templates/docs-refresh.sh.j2
 
+- name: Create the eval-run state directory (box only)
+  tags: [crons, evals]
+  # eval-run keeps a failed commit's log here, and the sweep it could not publish beside it.
+  # Outside the checkout for the same reason as the docs-refresh directory above: a file written
+  # under /home/{{ sys_user }}/server would be untracked dirt, parking gitops-deploy exactly as
+  # the dirt it records does. Owned by the cron user because that cron runs without become.
+  when: inventory_hostname == 'daniel-box'
+  ansible.builtin.file:
+    path: /var/lib/homelab/eval-run.d
+    state: directory
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0755"
+  become: true
+
 - name: Install the homelab eval sweep script (box only)
   tags: [crons, evals]
   when: inventory_hostname == 'daniel-box'
