@@ -47,12 +47,12 @@ spec:
       containers:
         - name: monitor-bridge
           image: {{ monitor_bridge_k8s_image }}
-          command: ["python", "/app/check.py"]
+          command: ["python", "/app/cli.py"]
 {{ hardened_security_context(read_only=true) }}
           envFrom:
             - secretRef:
                 name: monitor-bridge-env
-          # check.py touches /tmp/heartbeat after every completed cycle; a stale mtime
+          # cli.py touches /tmp/heartbeat after every completed cycle; a stale mtime
           # means the loop HUNG (death alone exits the pod). Same contract as the Docker
           # healthcheck+autoheal pair — here a failing liveness recreates the pod.
           livenessProbe:

@@ -61,22 +61,23 @@ def _consumer_roots():
     return [K8S / name / "files" for name in sorted(roots)]
 
 
-def _test_and_conftest_files():
-    """Every test module + conftest.py under a consumer role — the suites this rule binds.
+def _suite_files():
+    """Every Python module under a consumer role's tests/ — the suites this rule binds.
 
     Every consumer's non-test modules are checked against the union of what any of those
     suites patches, since the shared module is shared between them. Tests live in `tests/`,
     a sibling of the `files/` roots `_consumer_roots()` returns, not inside `files/` itself.
+
+    The glob is every `*.py`, not `test_*.py` + `conftest.py`. A shared helper module —
+    monitor-bridge's `_check_gate_helpers.py`, which wires `run_once` for four suites — patches
+    the transport exactly as a test does, and under the narrower glob those patches were
+    invisible to this rule. A from-import of one of those names would then have passed.
     """
     files = []
     for root in _consumer_roots():
         tests_dir = root.parent / "tests"
-        if not tests_dir.is_dir():
-            continue
-        files += sorted(tests_dir.glob("test_*.py"))
-        conftest = tests_dir / "conftest.py"
-        if conftest.exists():
-            files.append(conftest)
+        if tests_dir.is_dir():
+            files += sorted(tests_dir.glob("*.py"))
     return files
 
 
@@ -99,7 +100,7 @@ def _patched_names_by_module(test_files=None, module_names=None):
     exactly that hole when first measured; this mirrors its AST shape rather than repeating
     the mistake. The test's local name for a module is resolved through its own imports.
     """
-    test_files = _test_and_conftest_files() if test_files is None else test_files
+    test_files = _suite_files() if test_files is None else test_files
     if module_names is None:
         module_names = set(_runtime_modules())
     names = {}
@@ -170,6 +171,14 @@ def test_there_are_patched_names_to_check():
     # ansible/tests/repo/test_no_host_shaped_membership_literal.py enforces repo-wide.
     patched = _patched_names_by_module()
     assert {"bridge.common", "bridge.net"} <= patched.keys(), sorted(patched)
+
+
+def test_the_suite_census_sees_shared_helper_modules():
+    # Non-vacuity for the `*.py` glob above, naming members rather than counting.
+    # `_check_gate_helpers.py` holds seven of monitor-bridge's transport patches and is not
+    # named `test_*`; the narrower glob that missed it read exactly as green as one that sees it.
+    names = {p.name for p in _suite_files()}
+    assert {"_check_gate_helpers.py", "conftest.py"} <= names, sorted(names)
 
 
 def test_there_are_consumer_modules():

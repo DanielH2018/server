@@ -18,6 +18,7 @@ import yaml
 
 import checks.service
 import check
+import registry
 
 _REPO = Path(__file__).resolve().parents[5]
 
@@ -146,7 +147,7 @@ def test_etcd_drill_is_registered_and_can_actually_push():
     this asserts the pair, in both directions: a later edit that drops either half fails here
     rather than quietly producing a monitor that cannot page.
     """
-    names = {c.name for c in check.CHECKS}
+    names = {c.name for c in registry.build_checks()}
     env_secret = (
         Path(check.__file__).resolve().parents[1] / "templates" / "env-secret.yaml.j2"
     ).read_text()

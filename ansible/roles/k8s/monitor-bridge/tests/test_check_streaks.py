@@ -16,6 +16,10 @@ import bridge.streaks
 import bridge.net
 import checks.logs
 import check
+import gates
+import registry
+from bridge.types import Check
+from gates import Gates
 
 _REPO = Path(__file__).resolve().parents[5]
 
@@ -134,19 +138,19 @@ def test_apply_startup_grace_streaks_are_per_name():
 
 def test_startup_grace_set_matches_real_checks():
     # Guard (mirrors PROM_DEPENDENT/LOKI_DEPENDENT): every graced name is a real check.
-    names = {c.name for c in check.CHECKS}
-    assert check.STARTUP_GRACE <= names
+    names = {c.name for c in registry.build_checks()}
+    assert gates.STARTUP_GRACE <= names
 
 
 def test_startup_grace_disjoint_from_run_once_skip_sets():
     # A graced check must reach the eval path EVERY cycle for its streak to be correct, so it
     # can't also be force-skipped by a reachability gate — STARTUP_GRACE must be disjoint from
     # every run_once skip set (else the streak wouldn't advance while the dependency was down).
-    assert check.STARTUP_GRACE.isdisjoint(check.PROM_DEPENDENT)
-    assert check.STARTUP_GRACE.isdisjoint(check.LOKI_DEPENDENT)
-    assert check.STARTUP_GRACE.isdisjoint(check.B2_DEPENDENT)
-    for deps in check.EXPORTER_DEPENDENT.values():
-        assert check.STARTUP_GRACE.isdisjoint(deps)
+    assert gates.STARTUP_GRACE.isdisjoint(gates.PROM_DEPENDENT)
+    assert gates.STARTUP_GRACE.isdisjoint(gates.LOKI_DEPENDENT)
+    assert gates.STARTUP_GRACE.isdisjoint(gates.B2_DEPENDENT)
+    for deps in gates.EXPORTER_DEPENDENT.values():
+        assert gates.STARTUP_GRACE.isdisjoint(deps)
 
 
 def test_startup_grace_covers_every_ungated_reach_out_check():
@@ -159,20 +163,20 @@ def test_startup_grace_covers_every_ungated_reach_out_check():
     import inspect
 
     gated = (
-        set(check.PROM_DEPENDENT) | set(check.LOKI_DEPENDENT) | set(check.B2_DEPENDENT)
+        set(gates.PROM_DEPENDENT) | set(gates.LOKI_DEPENDENT) | set(gates.B2_DEPENDENT)
     )
-    for deps in check.EXPORTER_DEPENDENT.values():
+    for deps in gates.EXPORTER_DEPENDENT.values():
         gated |= set(deps)
     # These ride out the reboot blip with their own down-streak hysteresis instead of the
     # STARTUP_GRACE mechanism (HA_CONSECUTIVE / DISCORD_CONSECUTIVE).
     self_hysteresis = {"ha_heartbeat", "discord"}
     reach_out = {
         name
-        for name, _, fn in ((c.name, c.token, c.fn) for c in check.CHECKS)
+        for name, _, fn in ((c.name, c.token, c.fn) for c in registry.build_checks())
         if any(h in inspect.getsource(fn) for h in ("_get_json(", "_post_json("))
     }
     ungated = reach_out - gated - self_hysteresis
-    missing = ungated - check.STARTUP_GRACE
+    missing = ungated - gates.STARTUP_GRACE
     assert not missing, "ungated reach-out checks missing startup grace: %s" % sorted(
         missing
     )
@@ -181,17 +185,20 @@ def test_startup_grace_covers_every_ungated_reach_out_check():
 def _wire_run_once_grace(cfg, monkeypatch, results):
     """Drive run_once with Prometheus+Loki UP and one STARTUP_GRACE check whose eval returns
     `results` in order across calls; capture the (ok, msg) pushed for it each cycle."""
-    monkeypatch.setattr(check, "check_prometheus", lambda _cfg: (True, "prom ok"))
     monkeypatch.setattr(bridge.net, "prom_vector", lambda _cfg, q: [])
-    monkeypatch.setattr(check, "check_loki_reachable", lambda _cfg: (True, "loki ok"))
-    monkeypatch.setattr(check, "PROM_DEPENDENT", frozenset())
-    monkeypatch.setattr(check, "LOKI_DEPENDENT", frozenset())
-    monkeypatch.setattr(check, "STARTUP_GRACE", frozenset({"n8n"}))
     cfg = replace(cfg, GRACE_CYCLES=2)
-    monkeypatch.setattr(bridge.streaks, "_grace_streaks", {})
     seq = iter(results)
-    monkeypatch.setattr(
-        check, "CHECKS", [check.Check("n8n", "tok_n8n", lambda _cfg: next(seq))]
+    checks = [Check("n8n", "tok_n8n", lambda _cfg: next(seq))]
+    # The streak dict is STATED rather than patched onto bridge.streaks: it is one of the eleven
+    # `Gates` fields, so passing an empty one here is both the isolation this needs and a read of
+    # the seam.
+    gate_config = Gates(
+        prom_dependent=frozenset(),
+        loki_dependent=frozenset(),
+        startup_grace=frozenset({"n8n"}),
+        grace_streaks={},
+        probe_prometheus=lambda _cfg: (True, "prom ok"),
+        probe_loki=lambda _cfg: (True, "loki ok"),
     )
     pushes = []
     monkeypatch.setattr(
@@ -199,7 +206,7 @@ def _wire_run_once_grace(cfg, monkeypatch, results):
     )
     out = []
     for _ in range(len(results)):
-        check.run_once(cfg)
+        check.run_once(cfg, checks, gates=gate_config)
         out.append(next((ok, m) for t, ok, m in pushes if t == "tok_n8n"))
         pushes.clear()
     return out

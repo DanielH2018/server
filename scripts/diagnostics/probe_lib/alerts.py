@@ -115,8 +115,8 @@ _SYSLOG_STATUS_RE = re.compile(r"^status=down\s*(?P<msg>.*)$")
 _SYSLOG_HOST_RE = re.compile(r"^\S+\s+(?P<host>\S+)\s+")
 
 # The one monitor-bridge check that watches daniel-pi remotely (check_pi_pressure in
-# ansible/roles/k8s/monitor-bridge/files/check.py's CHECKS list) — every other check in that
-# file runs against the cluster, and the monitor-bridge stream carries no host field at all to
+# ansible/roles/k8s/monitor-bridge/files/registry.py's check list) — every other check in that
+# registry runs against the cluster, and the monitor-bridge stream carries no host field at all to
 # filter on instead.
 PI_PRESSURE_CHECK_NAME = "pi_pressure"
 
