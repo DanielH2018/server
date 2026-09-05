@@ -80,10 +80,18 @@ spec:
           # DECIDED: tolerate exit 23 only, never `|| true`. This moves the failure from a
           # sidecar restart to a failed init container, and authelia rolls under Recreate —
           # the old pod is already gone, so a non-23 rsync failure takes SSO down rather
-          # than costing one restart. Exit 23 alone is safe because the files it skips are
-          # ones the agent regenerates (`cscli lapi register`) or re-downloads (`cscli hub
-          # update`) on start regardless; any OTHER rsync status is a real seed failure and
-          # must fail the pod rather than start an agent with a half-populated config.
+          # than costing one restart. Exit 23 alone is safe because the files it skips are the
+          # LAPI and online credentials, which the agent regenerates (`cscli lapi register`) on
+          # start regardless; any OTHER rsync status is a real seed failure and must fail the
+          # pod rather than start an agent with a half-populated config.
+          #
+          # AMENDED 2026-09-05 (#1211): the marker also claimed the skipped HUB tree is
+          # re-downloaded (`cscli hub update`) on start. It is not, or not before the parser
+          # load — both pods logged `Ignoring file … geoip-enrich.yaml: lstat
+          # /etc/crowdsec/hub/…: no such file or directory` once per parser-load pass. The
+          # decision against `|| true` is unchanged and still stands; what changed is that the
+          # hub tree is now staged explicitly by crowdsec-hub-install below rather than assumed
+          # to arrive on its own.
 {{ hardened_security_context(non_root=true) }}
           volumeMounts:
             - name: crowdsec-secret
@@ -98,6 +106,49 @@ spec:
             # here on the first rollout). Created uid-1000-owned so Authelia can write it.
             - name: authelia-logs
               mountPath: /var/log/authelia
+{{ container_resources(cpu_limit='250m', mem_limit='128Mi', cpu_request='10m', mem_request='16Mi') }}
+        # The staged hub tree is root-only, so the non-root rsync above never copies it — that
+        # is part of the exit 23 it tolerates. The parser CONFIGS the rsync did copy are
+        # symlinks into that tree, so /etc/crowdsec/parsers/s02-enrich/geoip-enrich.yaml points
+        # at a hub file that does not exist and the agent drops the parser: `Ignoring file …
+        # lstat /etc/crowdsec/hub/parsers/s02-enrich/crowdsecurity/geoip-enrich.yaml: no such
+        # file or directory`, once per parser-load pass. GeoIP enrichment therefore stayed dead
+        # even after the datafiles were installed below — a sibling defect one level up, on
+        # BOTH pods carrying the sidecar (#1211). Traefik's identical init container carries
+        # the same comment.
+        - name: crowdsec-hub-install
+          image: {{ crowdsec_k8s_image }}
+          command:
+            - /bin/sh
+            - -c
+            # Runs after crowdsec-config-install, so this fills in only what that rsync could
+            # not read. `cp -a` keeps the tree's own symlinks as symlinks; the chmod is what
+            # makes it readable to the non-root agent, and the hub holds public hub content
+            # only — the LAPI and online credentials sit beside it in /etc/crowdsec, not in it.
+            # Ends in `exit 0` for the same reason crowdsec-data-install does: authelia rolls
+            # under Recreate, so the old pod is already gone and a non-zero init container
+            # takes SSO down for the whole homelab rather than costing one parser.
+            - >-
+              mkdir -p /etc/crowdsec/hub &&
+              cp -a /staging/etc/crowdsec/hub/. /etc/crowdsec/hub/ &&
+              chmod -R a+rX /etc/crowdsec/hub ||
+              echo "hub stage incomplete" >&2;
+              exit 0
+          # Root, written out rather than built through hardened_security_context() — the macro
+          # refuses uid 0 so that ansible/tests/k8s/test_root_needs_dac_capability.py can still
+          # see this block in raw template text. DAC_READ_SEARCH is the read-only half of root's
+          # permission-bit override, which is what reaches the root-only staged hub tree.
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsUser: 0
+            capabilities:
+              add:
+                - DAC_READ_SEARCH
+              drop:
+                - ALL
+          volumeMounts:
+            - name: crowdsec-etc
+              mountPath: /etc/crowdsec
 {{ container_resources(cpu_limit='250m', mem_limit='128Mi', cpu_request='10m', mem_request='16Mi') }}
         # The image ships its datafiles at /staging/var/lib/crowdsec/data mode 0600 root:root
         # (measured on the v1.7.8 image), and the entrypoint SYMLINKS them into the data volume

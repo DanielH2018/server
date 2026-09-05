@@ -95,9 +95,11 @@ spec:
           # and the bundled hub tree), so a non-root rsync exits 23 (partial transfer) and
           # set -e killed the sidecar's first start on every cold boot (#976). The kubelet's
           # restart then found config.yaml, skipped the block, and worked — this seeds the
-          # same state up front. Exit 23 is the only status tolerated: the files it skips
-          # are ones the agent regenerates (`cscli lapi register`) or re-downloads (`cscli
-          # hub update`) on start regardless. Runs before the installs so the seeds win.
+          # same state up front. Exit 23 is the only status tolerated: the files it skips are
+          # the LAPI and online credentials, which the agent regenerates (`cscli lapi
+          # register`) on start regardless. It also skips the bundled hub tree, which is NOT
+          # re-downloaded in time for the parser load — crowdsec-hub-install below stages that
+          # explicitly (#1211). Runs before the installs so the seeds win.
           # Pod default uid, not root: it creates the access log traefik must then write,
           # and root-with-ALL-caps-dropped cannot chown it back (measured on the authelia
           # pod). Creating the file as that user sidesteps the capability; the agent reads
@@ -116,6 +118,49 @@ spec:
             # on its first rollout; the authelia pod lost it outright.
             - name: traefik-logs
               mountPath: /var/log/traefik
+{{ container_resources(cpu_limit='250m', mem_limit='128Mi', cpu_request='10m', mem_request='16Mi') }}
+        # The staged hub tree is root-only, so the non-root rsync above never copies it — that
+        # is part of the exit 23 it tolerates. The parser CONFIGS the rsync did copy are
+        # symlinks into that tree, so /etc/crowdsec/parsers/s02-enrich/geoip-enrich.yaml points
+        # at a hub file that does not exist and the agent drops the parser: `Ignoring file …
+        # lstat /etc/crowdsec/hub/parsers/s02-enrich/crowdsecurity/geoip-enrich.yaml: no such
+        # file or directory`, once per parser-load pass. GeoIP enrichment therefore stayed dead
+        # even after the datafiles were installed below — a sibling defect one level up, on
+        # BOTH pods carrying the sidecar (#1211). Authelia's identical init container carries
+        # the same comment.
+        - name: crowdsec-hub-install
+          image: {{ crowdsec_k8s_image }}
+          command:
+            - /bin/sh
+            - -c
+            # Runs after crowdsec-config-install, so this fills in only what that rsync could
+            # not read. `cp -a` keeps the tree's own symlinks as symlinks; the chmod is what
+            # makes it readable to the non-root agent, and the hub holds public hub content
+            # only — the LAPI and online credentials sit beside it in /etc/crowdsec, not in it.
+            # Ends in `exit 0` for the same reason crowdsec-data-install does: traefik rolls
+            # under Recreate, so a non-zero init container takes the edge down (the #986
+            # outage) rather than costing one parser.
+            - >-
+              mkdir -p /etc/crowdsec/hub &&
+              cp -a /staging/etc/crowdsec/hub/. /etc/crowdsec/hub/ &&
+              chmod -R a+rX /etc/crowdsec/hub ||
+              echo "hub stage incomplete" >&2;
+              exit 0
+          # Root, written out rather than built through hardened_security_context() — the macro
+          # refuses uid 0 so that ansible/tests/k8s/test_root_needs_dac_capability.py can still
+          # see this block in raw template text. DAC_READ_SEARCH is the read-only half of root's
+          # permission-bit override, which is what reaches the root-only staged hub tree.
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsUser: 0
+            capabilities:
+              add:
+                - DAC_READ_SEARCH
+              drop:
+                - ALL
+          volumeMounts:
+            - name: crowdsec-etc
+              mountPath: /etc/crowdsec
 {{ container_resources(cpu_limit='250m', mem_limit='128Mi', cpu_request='10m', mem_request='16Mi') }}
         # The image ships its datafiles at /staging/var/lib/crowdsec/data mode 0600 root:root
         # (measured on the v1.7.8 image), and the entrypoint SYMLINKS them into the data volume

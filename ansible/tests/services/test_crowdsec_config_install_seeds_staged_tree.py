@@ -40,10 +40,13 @@ INIT_NAME = "crowdsec-config-install"
 def _seeds_the_staged_tree(command: str) -> bool:
     """True when the command pre-runs the entrypoint's rsync and tolerates ONLY exit 23.
 
-    Exit 23 is partial transfer — the files it skips are ones the agent regenerates
-    (`cscli lapi register`) or re-downloads (`cscli hub update`) on start. Any other status is
-    a real seed failure and must fail the init container, so a blanket `|| true` is rejected:
-    it would start an agent on a half-populated config with nothing saying so.
+    Exit 23 is partial transfer — the files it skips are the LAPI and online credentials, which
+    the agent regenerates (`cscli lapi register`) on start. It also skips the bundled hub tree,
+    which is NOT re-downloaded in time for the parser load; `crowdsec-hub-install` stages that
+    explicitly and test_crowdsec_hub_install_stages_the_hub_tree.py holds both pods to it
+    (#1211). Any other status is a real seed failure and must fail the init container, so a
+    blanket `|| true` is rejected: it would start an agent on a half-populated config with
+    nothing saying so.
     """
     if "rsync" not in command or "/staging/etc/crowdsec" not in command:
         return False
