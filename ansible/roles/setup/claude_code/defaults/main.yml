@@ -31,10 +31,38 @@ claude_code_rc_permission_mode: auto
 
 # DECIDED: 10, not the CLI's default of 32. Measured on daniel-box, a `claude` process sits
 # at 200-400 MB RSS, so 10 sessions ask for up to ~4 GB against ~15 GB available with k3s
-# already running. Capacity is the real memory bound here (see the unit template on why
-# there is no MemoryMax), so it is set from measurement and raised on evidence. Raised from 3
-# to 10 on 2026-09-04 at user request.
+# already running. Raised from 3 to 10 on 2026-09-04 at user request.
+#
+# This is NOT the memory bound, though it read as one here until 2026-09-05. The per-process
+# figure above is accurate — the two live sessions during that day's stall measured 404 MB
+# and 376 MB. What it does not count is the subprocess tree: those two sessions held 203
+# processes and 6.96 GB anon, because the memory belongs to what a session SPAWNS. Capacity
+# multiplies that tree, it does not bound it. claude_code_rc_pytest_workers below is the
+# bound on the fan-out; MemoryHigh in the unit is the throttle when it is exceeded anyway.
 claude_code_rc_capacity: 10
+
+# Workers a single `-n auto` pytest run may use on this host, via PYTEST_XDIST_AUTO_NUM_WORKERS
+# in the unit. daniel-box has 16 cores, so `auto` means 16 per run and nothing bounds how many
+# runs the sessions launch at once.
+#
+# Derivation, and the thing to re-derive if you change it: the worst case is workers ×
+# capacity, not workers. At 4 × 10 that is 40 workers, and xdist workers measured 20-150 MB
+# RSS during the 2026-09-05 stall, so call it ~4 GB of workers against the 8 GB MemoryHigh,
+# with the 10 `claude` processes taking most of the rest. That sits the extreme case at the
+# throttle point, which is where a throttle belongs.
+#
+# Checked against the incident rather than only the arithmetic: nine concurrent runs would
+# have been 36 workers instead of 144, roughly 3.6 GB instead of the ~15 GB that exhausted
+# the box's swap. Raise it on measurement, and re-check the product, not the factor.
+claude_code_rc_pytest_workers: 4
+
+# The cgroup throttle for the whole rc host — the host process plus every session it spawns.
+# Raised 6G -> 8G on 2026-09-05 at user request, alongside the fan-out cap above. 8G leaves
+# roughly 7 GB clear of the ~13 GB k3s + kubepods baseline on this 28 GB box; that headroom
+# is the reason not to raise it further, since the throttle stalls whatever cgroup loses the
+# race and the homelab plane is the one that must not. See the unit template on why this is
+# MemoryHigh and not MemoryMax.
+claude_code_rc_memory_high: 8G
 
 # Whether to set CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP on the host, turning off Claude
 # Code's kill of backgrounded Bash tasks under a Node memoryPressure event. On by default;
