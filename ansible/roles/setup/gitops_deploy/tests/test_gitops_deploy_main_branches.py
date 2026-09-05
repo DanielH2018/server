@@ -156,7 +156,7 @@ def test_a_failed_health_gate_holds_then_resets_then_redeploys_the_prior_tree(
     gitops_deploy, tick, state_dir
 ):
     _docker_push(tick)
-    tick.healthy = False
+    tick.healthy["wg-easy"] = False
     assert gitops_deploy.main(tick.tools) == 0
     assert _marker(state_dir, "hold_sha") == ORIGIN
     reset = tick.index("git", "reset", "--hard", LOCAL)
@@ -172,7 +172,7 @@ def test_the_hold_is_on_disk_before_the_rollback_reset(gitops_deploy, tick, stat
     # A death between the reset and the hold write would leave the next tick redeploying the
     # same bad commit, so the order is hold, then reset. Observed through the reset itself.
     _docker_push(tick)
-    tick.healthy = False
+    tick.healthy["wg-easy"] = False
     seen_at_reset: list[str | None] = []
     real_git = tick._git
 
@@ -190,7 +190,7 @@ def test_the_hold_is_on_disk_before_the_rollback_reset(gitops_deploy, tick, stat
 def test_a_rollbacks_exit_code_follows_its_post(gitops_deploy, tick, discord_ok, rc):
     # exit 1 only when the detailed post failed, leaving OnFailure as the backstop.
     _docker_push(tick)
-    tick.healthy = False
+    tick.healthy["wg-easy"] = False
     tick.discord_ok = discord_ok
     assert gitops_deploy.main(tick.tools) == rc
 
@@ -361,11 +361,15 @@ def test_a_staging_rejection_holds_and_never_touches_prod(
     assert gitops_deploy.main(tick.tools) == 0
     assert tick.merges == [] and tick.playbooks == []
     assert _marker(state_dir, "hold_sha") == ORIGIN
-    # posts[0] is consult_staging's own verdict alert — it fires on every non-PASS, before the
-    # branch below decides what to do about it. The block's page is the one that says prod was
-    # never touched.
-    assert any("nothing to roll back" in post for post in tick.posts)
-    assert any("staging REJECTED" in post for post in tick.posts)
+    # Two posts, in this order. posts[0] is consult_staging's own verdict alert — it fires on
+    # every non-PASS, before the branch below decides what to do about it. posts[1] is the
+    # block's page, the one that says prod was never touched. Positional and counted: an
+    # `any()` over both bodies passes on either alone, because `staging REJECTED` appears in
+    # both. The substrings below are each unique to one of deploy_alerts' two bodies.
+    assert len(tick.posts) == 2, tick.posts
+    assert "staging: REJECTED" in tick.posts[0]
+    assert "This gate BLOCKS" in tick.posts[0]
+    assert "nothing to roll back" in tick.posts[1]
 
 
 def test_a_staging_rejection_deploys_prod_while_the_gate_is_advisory(
@@ -408,7 +412,7 @@ def test_an_armed_override_lets_one_rejected_tick_through_and_is_spent(
 
 
 def test_the_override_is_only_read_when_the_gate_would_block(
-    gitops_deploy, monkeypatch, tick
+    gitops_deploy, monkeypatch, tick, state_dir
 ):
     """Arming it before a passing tick must not burn it.
 
@@ -419,7 +423,10 @@ def test_the_override_is_only_read_when_the_gate_would_block(
     tick.staging_override = True
     assert gitops_deploy.main(tick.tools) == 0
     assert tick.staging_override, "a passing tick spent the override"
-    assert tick.override_file.exists(), "the marker itself was removed"
+    # The rest of the block's machinery never ran either: `staging_override` is a property over
+    # this same file, so re-reading it would assert the line above twice.
+    assert _marker(state_dir, "hold_sha") is None, "a passing tick wrote a hold"
+    assert not any("staging override used" in post for post in tick.posts), tick.posts
 
 
 def test_a_failed_rollout_rolls_back_to_the_failed_shas_snapshot_under_its_own_budget(

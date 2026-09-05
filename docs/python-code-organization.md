@@ -71,13 +71,22 @@ forbids it. pytest names test modules by basename because `consider_namespace_pa
 off by default ([pytest pythonpath][pytest-path]), so two test files with the same basename
 collide at collection.
 
-**A new module may not take the name of a `scripts/` directory.** A regular module beats a
-namespace portion whatever the `sys.path` order, so a `deploy_tools.py` on the path shadows
-`scripts/deploy_tools/` and every `from deploy_tools.exit_codes import ...` raises
+**A new module may not take the name of a namespace-package directory.** A regular module
+beats a namespace portion whatever the `sys.path` order, so a `deploy_tools.py` on the path
+shadows `scripts/deploy_tools/` and every `from deploy_tools.exit_codes import ...` raises
 `ModuleNotFoundError: 'deploy_tools' is not a package` — for the whole suite, not just for the
 role that added the file. That is why the deployer's boundaries object lives in
-`deploy_toolbox.py` while the class it holds is `DeployTools`. Before naming a new module,
-check it against `ls scripts/`.
+`deploy_toolbox.py` while the class it holds is `DeployTools`.
+
+The names at risk are the subdirectories of **every** `pythonpath` root in `pyproject.toml`,
+not `scripts/` alone. `ansible/tests` is a root too, so `deploy`, `k8s`, `longhorn`, `repo`,
+`services`, `setup` and `staging` are namespace portions by the same rule, and so are
+`bridge`, `checks` and `verdicts` under `ansible/roles/k8s/monitor-bridge/files`. Read the
+`pythonpath` list, then list what each root holds:
+
+```bash
+ls scripts/ ansible/tests/ ansible/roles/k8s/monitor-bridge/files/
+```
 
 ### Per-module `sys.path` bootstraps, not `python -m`
 

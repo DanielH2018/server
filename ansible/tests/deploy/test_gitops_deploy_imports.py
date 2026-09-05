@@ -27,6 +27,9 @@ from _helpers import REPO
 
 FILES = REPO / "ansible" / "roles" / "setup" / "gitops_deploy" / "files"
 ENTRY = "gitops_deploy"
+# The two modules every caller reaches QUALIFIED — `deploy_io.deploy_k8s(...)`, never
+# `from deploy_io import deploy_k8s`. The role's CLAUDE.md states the rule; this is its guard.
+QUALIFIED = {"deploy_io", "deploy_alerts"}
 
 # Every module in files/, and which siblings each may import. `None` means no restriction, and
 # only the entry module gets it. Checked with `==` against what is on disk, not `<=`: a new
@@ -72,6 +75,26 @@ ALLOWED: dict[str, set[str] | None] = {
 
 def _modules_on_disk() -> set[str]:
     return {p.stem for p in FILES.glob("*.py")}
+
+
+def _from_imports(source: str, names: set[str]) -> set[str]:
+    """Every module in `names` that `source` reaches by `from <module> import ...`."""
+    return {
+        node.module
+        for node in ast.walk(ast.parse(source))
+        if isinstance(node, ast.ImportFrom) and node.module in names
+    }
+
+
+def _plain_imports(source: str, names: set[str]) -> set[str]:
+    """Every module in `names` that `source` reaches by a plain `import <module>`."""
+    return {
+        alias.name
+        for node in ast.walk(ast.parse(source))
+        if isinstance(node, ast.Import)
+        for alias in node.names
+        if alias.name in names
+    }
 
 
 def _sibling_imports(source: str, siblings: set[str]) -> set[str]:
@@ -142,6 +165,37 @@ def test_no_leaf_imports_the_entry_module():
         if ENTRY in _sibling_imports((FILES / f"{name}.py").read_text(), siblings)
     )
     assert not importers, f"{importers} import the entry module — that is a cycle"
+
+
+def test_deploy_io_and_deploy_alerts_are_reached_qualified():
+    """`deploy_io.deploy_k8s(...)`, never `from deploy_io import deploy_k8s`.
+
+    Those two modules are the deployer's I/O surface, and the suite reads the argv their
+    functions build. A from-import binds a second name for one of them, which a reader
+    chasing a call site cannot tell from a local def — and it is the shape that made the
+    retired `test_gitops_deploy_patch_boundary.py` necessary in the first place.
+    """
+    plain = set()
+    for name in sorted(_modules_on_disk()):
+        source = (FILES / f"{name}.py").read_text()
+        assert _from_imports(source, QUALIFIED) == set(), (
+            f"{name} from-imports {sorted(_from_imports(source, QUALIFIED))} — "
+            f"reach them qualified instead"
+        )
+        if _plain_imports(source, QUALIFIED):
+            plain.add(name)
+    # Non-vacuity, against named members rather than a count: with no module importing either
+    # one, the loop above asserts nothing and still passes.
+    assert {ENTRY, "deploy_toolbox"} <= plain, (
+        f"only {sorted(plain)} import them at all"
+    )
+
+
+def test_a_from_import_of_the_io_surface_is_flagged():
+    """The reject half. The plain form beside it must NOT count as a from-import."""
+    source = "import deploy_io\nfrom deploy_alerts import post\n"
+    assert _from_imports(source, QUALIFIED) == {"deploy_alerts"}
+    assert _plain_imports(source, QUALIFIED) == {"deploy_io"}
 
 
 def test_the_index_defines_nothing():

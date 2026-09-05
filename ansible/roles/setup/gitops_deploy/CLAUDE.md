@@ -449,7 +449,11 @@ more. `main()` and `entrypoint()` both default the argument, so a host's `python
 gitops_deploy.py` is unchanged.
 
 **`deploy_io` and `deploy_alerts` are still reached QUALIFIED** — `deploy_io.deploy_k8s(...)`,
-never `from deploy_io import deploy_k8s`. `deploy_io.deploy`, `deploy_k8s` and `deploy_broad`
+never `from deploy_io import deploy_k8s`. ENFORCED by
+`test_deploy_io_and_deploy_alerts_are_reached_qualified` in
+`ansible/tests/deploy/test_gitops_deploy_imports.py`, which took this rule over from the
+retired `test_gitops_deploy_patch_boundary.py`.
+`deploy_io.deploy`, `deploy_k8s` and `deploy_broad`
 build the `ansible-playbook` argv the suite asserts on and call `deploy_io.run` qualified, so
 they stay outside `DeployTools`: a field there would replace the argv builder rather than the
 process. That is why `tests/conftest.py` keeps ONE patch, `deploy_io.run`.

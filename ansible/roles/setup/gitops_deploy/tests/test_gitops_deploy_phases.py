@@ -254,7 +254,7 @@ def test_handle_docker_holds_before_it_resets_when_the_gate_fails(
     """A hung rollback redeploy is SIGTERMed at TimeoutStartSec, so a hold written afterwards is
     a hold that never lands and a bad commit that redeploys every tick."""
     tick.render("sonarr")
-    tick.healthy = False
+    tick.healthy["sonarr"] = False
     plan = _plan(gitops_deploy, ChangeSet(services={"sonarr"}))
     assert gitops_deploy.handle_docker(tick.tools, _target(gitops_deploy), plan) == 0
     assert gitops_deploy.STATE.hold_sha == ORIGIN

@@ -60,7 +60,9 @@ class ScriptedTick:
             clean, and the list running out means every later run is clean.
         run_error: raised by every `run()` call instead of answering, for the paths that must
             survive a git failure.
-        healthy: what the Docker health gate reports for every service.
+        healthy: what the Docker health gate reports, PER SERVICE. `render()` seeds a service
+            as healthy, so a test flips one name; a gate call for a name nobody rendered is an
+            AssertionError rather than a silent pass.
         staging_verdict: the word the staging scripts' exit codes stand for — "pass",
             "rejected" or "no_verdict". "skipped" is not settable here; it is what the real
             `consult_staging` returns when the gate is off or nothing is in scope.
@@ -87,7 +89,7 @@ class ScriptedTick:
         self.diffs: dict[str, str] = {}
         self.playbook_outcomes: list[Exception | None] = []
         self.run_error: Exception | None = None
-        self.healthy = True
+        self.healthy: dict[str, bool] = {}
         self.staging_verdict = "pass"
         self.discord_ok = True
         self.log: list[tuple] = []
@@ -105,10 +107,15 @@ class ScriptedTick:
         path.write_text(hostvars)
 
     def render(self, service: str) -> None:
-        """A rendered compose for `service`, which makes the health gate apply to it here."""
+        """A rendered compose for `service`, which makes the health gate apply to it here.
+
+        Rendering is also what scripts the health gate's answer for that service — healthy
+        unless the test flips `healthy[service]` afterwards.
+        """
         path = self.repo / "containers" / service / "docker-compose.yml"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("services: {}\n")
+        self.healthy.setdefault(service, True)
 
     @property
     def staging_override(self) -> bool:
@@ -186,13 +193,25 @@ class ScriptedTick:
             return self.local_ahead
         raise AssertionError(f"unscripted ancestry query: {ancestor} {descendant}")
 
-    def fetch_ci_verdict(self, _sha: str) -> str:
+    def fetch_ci_verdict(self, sha: str) -> str:
+        """The scripted verdict, and only for the SHA the gate is supposed to ask about.
+
+        The gate reads origin's verdict; asking about `local` would be the bug, and a fake
+        that ignored its argument would answer the same either way.
+        """
+        assert sha == self.origin, (
+            f"the CI gate asked about {sha[:8]}, not origin {self.origin[:8]}"
+        )
         return self.ci
 
     def service_healthy(
-        self, _repo: str, _service: str, _timeout: float, deadline: float | None = None
+        self, _repo: str, service: str, _timeout: float, deadline: float | None = None
     ) -> bool:
-        return self.healthy
+        assert service in self.healthy, (
+            f"the health gate asked about {service!r}, which no test scripted "
+            f"(scripted: {sorted(self.healthy)})"
+        )
+        return self.healthy[service]
 
     def run_staging_scripts(
         self, _repo: str, _sha: str, tags: str, _gate_s: float, _expect_s: float
