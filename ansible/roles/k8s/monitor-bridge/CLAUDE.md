@@ -343,8 +343,21 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     (issue #1003). k10temp reports `Tdie = Tctl - temp_offset` and sets `temp_offset` only for
     six family-0x17 SKUs, none of them this one, so a Tdie on this chip would carry the SAME
     number as its Tctl — reading one would be a no-op, not a correction. The `DECIDED:` marker in
-    `verdicts.host.hwmon_temp_limits` holds the driver evidence. What stays open is narrower:
-    whether the flat 85 °C suits a Ryzen 7 8845HS, which needs AMD's published Tjmax (#1158).
+    `verdicts.host.hwmon_temp_limits` holds the driver evidence.
+    **The number half is settled too, by a third arm rather than a fourth query** (#1152). AMD
+    publishes `Max. Operating Temperature (Tjmax)` = 100 °C for the Ryzen 7 8845HS, so
+    `HWMON_TEMP_RATED_MAX_C` carries that rating for this one sensor as
+    `instance/chip/sensor=celsius`, and it is ratioed exactly like a declared max — 90 °C, the
+    same effective limit daniel-server's coretemp already gets from its own declared max of 100.
+    A rating is seeded BEFORE `crits` and `maxes`, so a driver that starts declaring either still
+    wins, and it passes the same plausibility gate, so a typo cannot un-watch the sensor. Keyed by
+    the raw sysfs triple, not the readable `daniel-box k10temp/Tctl`: `hwmon_name_maps` is partial
+    by construction, and a name-keyed entry would stop matching in silence. Three earlier attempts
+    recorded amd.com as unreachable from this estate — **it is reachable; a plain fetch is not.**
+    With a browser `User-Agent` the product page returned 200 in 0.66 s on 2026-09-05.
+    What this does NOT clear: daniel-box exceeds the new 90 °C for 9.3 % of a 30-day window
+    (12.2 % above the old 85 °C), so the calibration narrowed a true condition rather than
+    removing it.
     `crits` is still read for every OTHER sensor,
     because a driver that skips `max` but declares `crit` (none currently in this estate; added
     defensively) would otherwise take the flat fallback despite declaring a real limit. **`max`

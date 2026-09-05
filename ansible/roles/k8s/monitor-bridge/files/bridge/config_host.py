@@ -30,6 +30,10 @@ class HostConfig:
     SCRUTINY_WEAR_MAX: float
     HWMON_TEMP_RATIO: float
     HWMON_TEMP_FALLBACK_C: float
+    # Per-sensor published ratings, ((instance, chip, sensor), rated_max_c) — the part's own
+    # Tjmax for a sensor whose driver declares no max and no crit. A tuple rather than a dict so
+    # the frozen Config stays hashable.
+    HWMON_TEMP_RATED_MAX_C: tuple[tuple[tuple[str, str, str], float], ...]
     HWMON_TEMP_MIN_PLAUSIBLE_C: float
     HWMON_TEMP_MAX_PLAUSIBLE_C: float
     HWMON_TEMP_EXCLUDE_CHIP: str
@@ -83,6 +87,41 @@ def host_config(
                     % pair
                 )
         return tuple(pairs)
+
+    def _rated_max(raw: str) -> tuple[tuple[tuple[str, str, str], float], ...]:
+        """`instance/chip/sensor=celsius` entries from a comma-separated list.
+
+        `/` separates the three key components because an hwmon chip label carries colons of its
+        own (`pci0000:00_0000:00:18_3`) and carries no slash. A malformed entry is REPORTED and
+        dropped rather than guessed at: the sensor then falls to the flat fallback, which is the
+        conservative direction — it pages earlier, never later.
+        """
+        rated = []
+        for entry in raw.split(","):
+            entry = entry.strip()
+            if not entry:
+                continue
+            key, sep, value = entry.partition("=")
+            parts = key.split("/")
+            if not sep or len(parts) != 3:
+                problems.append(
+                    "HWMON_TEMP_RATED_MAX_C entry %r is not instance/chip/sensor=celsius; "
+                    "that sensor keeps the flat fallback" % entry
+                )
+                continue
+            try:
+                rated.append(
+                    (
+                        (parts[0].strip(), parts[1].strip(), parts[2].strip()),
+                        float(value),
+                    )
+                )
+            except ValueError:
+                problems.append(
+                    "HWMON_TEMP_RATED_MAX_C entry %r has a non-numeric limit; that sensor "
+                    "keeps the flat fallback" % entry
+                )
+        return tuple(rated)
 
     return HostConfig(
         DISK_MOUNTPOINTS=tuple(
@@ -147,12 +186,20 @@ def host_config(
         # the fallback arm is not optional: without it, 14 of 21 sensors — including BOTH
         # daniel-pi sensors, on the host with no fan — carry no limit at all.
         HWMON_TEMP_RATIO=_num("HWMON_TEMP_RATIO", "0.90"),
-        # 85C is an estate-wide flat default, not any chip's own rating. daniel-box's
-        # k10temp/Tctl is the sensor that breaches it, and it has no lower series to prefer
-        # instead: see the `DECIDED: k10temp subtracts no Tctl offset on daniel-box` marker in
-        # verdicts.host.hwmon_temp_limits for the driver evidence, and #1158 for the open
-        # question of whether 85 suits a Ryzen 7 8845HS.
+        # 85C is an estate-wide flat default, not any chip's own rating, so it is the arm of last
+        # resort rather than a limit anybody chose per part.
         HWMON_TEMP_FALLBACK_C=_num("HWMON_TEMP_FALLBACK_C", "85"),
+        # Arm 3, and the one that keeps arm 2 rare: a sensor whose driver declares nothing can
+        # still have a PUBLISHED rating, and an operator can supply it. Ratioed exactly like a
+        # declared max, so a rated 100 and a declared 100 produce the same 90C limit.
+        # Empty by default — a rating belongs beside the host it describes, in
+        # templates/env-secret.yaml.j2, where the part number justifying the number is reviewable.
+        # daniel-box's k10temp/Tctl is the entry that exists: AMD publishes Tjmax 100C for the
+        # Ryzen 7 8845HS. See the `DECIDED: daniel-box's k10temp/Tctl takes its limit` marker in
+        # verdicts.host.hwmon_temp_limits for that evidence and for how to fetch amd.com, and the
+        # `DECIDED: k10temp subtracts no Tctl offset` marker above it for why Tctl is the
+        # junction temperature this compares (#1003, #1152).
+        HWMON_TEMP_RATED_MAX_C=_rated_max(_env("HWMON_TEMP_RATED_MAX_C", "")),
         HWMON_TEMP_MIN_PLAUSIBLE_C=_num("HWMON_TEMP_MIN_PLAUSIBLE_C", "20"),
         HWMON_TEMP_MAX_PLAUSIBLE_C=_num("HWMON_TEMP_MAX_PLAUSIBLE_C", "150"),
         HWMON_TEMP_EXCLUDE_CHIP=_env("HWMON_TEMP_EXCLUDE_CHIP", "nvme_"),
