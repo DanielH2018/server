@@ -21,7 +21,10 @@ from dev.findings_model import (
     NO_REOPEN,
     PROJECT_TITLE,
     _REOBSERVED,
+    claim_comment,
+    current_claim,
     label_names,
+    release_comment,
     reobservations,
     trailer,
     verify_by_section,
@@ -59,6 +62,68 @@ def plan_touch(issue: dict, source: str) -> list[list[str]]:
     if seen >= 2 and "escalated" not in label_names(issue):
         plans.append(["issue", "edit", n, "--add-label", "escalated"])
     return plans
+
+
+class ClaimRefused(Exception):
+    """The issue will not accept this claim or release.
+
+    Carries the operator-facing reason, which `cmd_claim` prints before exiting 3 — the
+    same exit code every other "nothing was written because the issue refuses it" path uses.
+    """
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
+
+
+def plan_claim(
+    issue: dict, *, worktree: str, session: str | None, when: str
+) -> list[list[str]]:
+    """Plans the gh argv to claim ``issue`` for ``worktree``.
+
+    Returns an EMPTY list when ``worktree`` already holds the claim, so re-running a claim
+    is idempotent rather than a second comment on the same thread.
+
+    Raises:
+        ClaimRefused: the issue is closed, is labelled `manual`, or another worktree
+            already holds it.
+    """
+    if issue.get("state", "OPEN") != "OPEN":
+        raise ClaimRefused("closed — nothing to work")
+    if "manual" in label_names(issue):
+        raise ClaimRefused("labelled `manual` — reserved for the operator")
+    held = current_claim(issue)
+    if held == worktree:
+        return []
+    if held:
+        raise ClaimRefused(f"already claimed by `{held}`")
+    n = str(issue["number"])
+    return [
+        ["issue", "comment", n, "--body", claim_comment(worktree, session, when)],
+        ["issue", "edit", n, "--add-label", "claimed"],
+    ]
+
+
+def plan_release(
+    issue: dict, *, worktree: str, when: str, reason: str | None
+) -> list[list[str]]:
+    """Plans the gh argv to release ``worktree``'s claim on ``issue``.
+
+    Raises:
+        ClaimRefused: nobody holds the issue, or somebody else does. One session releasing
+            another's claim is always a mistake, so it is refused rather than allowed with
+            a warning.
+    """
+    held = current_claim(issue)
+    if held is None:
+        raise ClaimRefused("not claimed")
+    if held != worktree:
+        raise ClaimRefused(f"claimed by `{held}`, not by `{worktree}`")
+    n = str(issue["number"])
+    return [
+        ["issue", "comment", n, "--body", release_comment(worktree, when, reason)],
+        ["issue", "edit", n, "--remove-label", "claimed"],
+    ]
 
 
 def plan_open(
