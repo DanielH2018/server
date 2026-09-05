@@ -52,3 +52,30 @@ the key the note meant was recorded nowhere. Both halves are settled:
 `audit` advances the date in memory to the day git shows the ciphertext last changed, then
 writes nothing back — git is the source of truth, which is why `sync` leaves an existing date
 alone. Read the audit line before concluding that a registry date means a key is stale.
+
+### The crowdsec-agent sidecar seeds /etc/crowdsec from an init container, not its entrypoint
+
+The CrowdSec image entrypoint opens with a "Populating configuration directory" step — an
+`rsync -a --ignore-existing /staging/etc/crowdsec/* /etc/crowdsec` — that runs under `set -e`
+and only while `/etc/crowdsec/config.yaml` is absent. About twenty staged files are root-only
+(the LAPI and online credentials, the bundled hub tree), so the non-root sidecar exits 23 on
+it and the kubelet restarts the container. The restart finds `config.yaml` present, skips the
+block, and the pod settles at 2/2 Running with one restart on the clock.
+
+That one restart failed every authelia deploy's health gate. `probe.py health` fails closed on
+any container restart inside its 180s window, so `land.sh` read `VERDICT: unhealthy` while
+nothing was actually wrong (#1173). Traefik hit the same thing first (#976).
+
+`crowdsec-config-install` therefore runs that rsync itself, before its own `install` steps, so
+the seeds win over the staged copies of the same names and the sidecar's entrypoint finds
+`config.yaml` already there. **Exit 23 is the only status tolerated.** Authelia rolls under
+`Recreate`, so a failed init container means the old pod is already gone and SSO is down — but
+a blanket `|| true` would trade that for an agent started on a half-populated config with
+nothing saying so. `ansible/tests/services/test_crowdsec_config_install_seeds_staged_tree.py`
+holds both pods to this.
+
+Verify a deploy of this role by the sidecar's restart count, not just by pod readiness:
+
+```
+kubectl get pod -n homelab -l app=authelia -o jsonpath='{.items[*].status.containerStatuses[*].restartCount}'
+```
