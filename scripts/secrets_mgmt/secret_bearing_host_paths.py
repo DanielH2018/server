@@ -116,14 +116,22 @@ def _src_text(task_file: _Path, src: str) -> str:
     return ""
 
 
-def secret_bearing_host_paths(ansible: _Path = ANSIBLE) -> dict[str, list[str]]:
+def secret_bearing_host_paths(
+    ansible: _Path = ANSIBLE, registry: _Path = REGISTRY
+) -> dict[str, list[str]]:
     """Deployed host path -> the secret names its source renders.
 
     Walks every role task file, not just k8s: `nut_host` and the `setup/` plane deploy host
     scripts too, and `setup/fake_remux` is the consumer `deploy.sh` structurally cannot reach.
     `archive/` is skipped — those roles deploy nothing.
+
+    Args:
+      ansible: the Ansible tree to walk.
+      registry: the rotation registry the tracked secret names come from. Both are parameters
+        so a test can hand this a tree it built, rather than patching module globals — the
+        repo's monkeypatch ratchet asks for a seam here instead.
     """
-    names = secret_names()
+    names = secret_names(registry)
     found: dict[str, list[str]] = {}
     for task_file in sorted(ansible.glob("roles/**/tasks/*.yml")):
         if "/archive/" in str(task_file):
