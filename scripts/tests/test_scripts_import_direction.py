@@ -94,10 +94,15 @@ ALLOWED_CYCLES = frozenset(
             {"diagnostics.probe_lib.b2_ledger", "diagnostics.probe_lib.longhorn"}
         ),
         # `probe ha state` renders the derived state model, and the model's `refresh` reads live
-        # HA through probe. Both imports are deferred into the function that needs them.
+        # HA through probe. Both imports are deferred into the function that needs them. Why it
+        # stays a cycle rather than a shared module: `# DECIDED:` at probe_lib/ha.py:581 and at
+        # ha_state_model.py's `cmd_refresh` (the deferred `from diagnostics.probe_lib import
+        # core`/`ha`).
         frozenset({"diagnostics.probe_lib.ha", "home_assistant.ha_state_model"}),
         # ha_state_checks builds on the model at module level; the model reaches back into
-        # `check_errors` from inside one function.
+        # `check_errors` from inside one function. Why: `# DECIDED:` at ha_state_checks.py's
+        # `from ha_state_model import (...)` and at ha_state_model.py's `main()` (the deferred
+        # `from ha_state_checks import check_errors`).
         frozenset({"home_assistant.ha_state_checks", "home_assistant.ha_state_model"}),
     }
 )
