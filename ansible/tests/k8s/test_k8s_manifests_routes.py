@@ -380,3 +380,69 @@ def test_dashboard_route_guard_rejects_an_api_prefix_fixture():
         raise AssertionError(
             f"guard accepted {offending_match!r}, which routes /api and should be rejected"
         )
+
+
+# Scrutiny's web app has no auth of its own, so its Authelia bypass IS its access control.
+# Below: the paths a route-crossing caller reads, and the paths that must stay unreachable
+# unauthenticated — the second set is scrutiny's own mutating route table (delete a device,
+# forge SMART history, archive a device, rewrite notify settings).
+SCRUTINY_BYPASS_READS = frozenset(
+    {"/api/summary", "/api/health", "/api/device/0x5000c500a1b2c3d4/details"}
+)
+SCRUTINY_MUTATING_PATHS = frozenset(
+    {
+        "/api/device/0x5000c500a1b2c3d4",
+        "/api/device/0x5000c500a1b2c3d4/smart",
+        "/api/device/0x5000c500a1b2c3d4/archive",
+        "/api/settings",
+        "/api/health/notify",
+    }
+)
+
+
+def _bypass_permits_mutation(rule: dict, path: str) -> bool:
+    """Does this bypass rule leave `path` writable without authentication?
+
+    A rule reaches a path when some `resources` pattern matches it AND the rule permits a
+    method past GET/HEAD. An absent or empty `methods` key means every method.
+    """
+    methods = set(rule.get("methods") or [])
+    if methods and methods <= {"GET", "HEAD"}:
+        return False
+    return any(re.search(p, path) for p in rule["resources"])
+
+
+def test_scrutiny_bypass_is_read_only_and_path_scoped():
+    """The bypass granted `^/api/.*$` with no `methods` key until 2026-09-05, handing the LAN
+    and every pod scrutiny's whole mutating route table (#1120). Two callers cross this route
+    and both only read: `probe.py scrutiny` (/api/summary) and the Kuma monitor `k3s Scrutiny`
+    (/api/health). Every writer addresses the ClusterIP, so nothing here needs a verb past
+    HEAD."""
+    rules = _k8s_authelia_config()["access_control"]["rules"]
+    scrutiny = [
+        r
+        for r in rules
+        if r.get("policy") == "bypass" and "scrutiny" in str(r.get("domain"))
+    ]
+    assert len(scrutiny) == 1, f"expected one scrutiny bypass rule, got {len(scrutiny)}"
+    rule = scrutiny[0]
+
+    assert set(rule.get("methods") or []) <= {"GET", "HEAD"}, rule.get("methods")
+    for path in sorted(SCRUTINY_BYPASS_READS):
+        assert any(re.search(p, path) for p in rule["resources"]), path
+    # Path scope, asserted independently of the method gate: `_bypass_permits_mutation` short-circuits
+    # to False on any GET/HEAD-only rule, so a re-widening to `^/api/.*$` — unauthenticated
+    # reads of every device and of the notify settings — would satisfy that check vacuously.
+    for path in sorted(SCRUTINY_MUTATING_PATHS):
+        assert not any(re.search(p, path) for p in rule["resources"]), path
+        assert not _bypass_permits_mutation(rule, path), path
+
+
+def test_scrutiny_bypass_guard_rejects_the_old_wildcard():
+    """Red-proof: the pre-#1120 rule — every method, `^/api/.*$` — must be flagged by the
+    helper above, so a guard that quietly stopped matching fails here rather than passing on
+    an empty set."""
+    old = {"resources": ["^/api/.*$"]}
+    assert SCRUTINY_MUTATING_PATHS
+    for path in sorted(SCRUTINY_MUTATING_PATHS):
+        assert _bypass_permits_mutation(old, path), path
