@@ -445,13 +445,15 @@ types = ["shell"]
 # excludes styles/Google/, so a fresh checkout — every new worktree — has the tracked Homelab
 # style and nothing else on StylesPath. A bare `vale` there dies with "style 'Google' does
 # not exist on StylesPath" on every commit that touches a doc, until someone runs `vale sync`
-# by hand in that worktree. The entry syncs on the missing directory only, because `vale sync`
-# re-downloads unconditionally (0.3-0.5s and a network round-trip per commit otherwise).
-# ENFORCED by test_the_hook_syncs_the_google_package_when_missing in the same test file.
+# by hand in that worktree. `scripts/validate/vale.sh` provisions the package and then execs
+# Vale. It is a script rather than a `bash -c` entry because prek splits the file list across
+# several CONCURRENT invocations, and an inline guard on the directory raced itself in a fresh
+# worktree — read that script's header for the failure and the lock that fixes it (#1189).
+# ENFORCED by scripts/validate/tests/test_vale_sync_guard.py.
 [[repos.hooks]]
 id = "vale"
 name = "Prose style (Vale, scoped to ADRs + every top-level docs page)"
-entry = "bash -c '[ -d styles/Google ] || vale sync || exit 1; exec vale \"$@\"' --"
+entry = "scripts/validate/vale.sh"
 language = "system"
 # docs/[^/]+\.md is every top-level page and nothing below it, which is what keeps
 # docs/archive/ and docs/reference/ out. See .vale.ini for why each is excluded.
