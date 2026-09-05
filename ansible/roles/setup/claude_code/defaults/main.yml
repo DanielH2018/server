@@ -54,6 +54,10 @@ claude_code_rc_capacity: 10
 # Checked against the incident rather than only the arithmetic: nine concurrent runs would
 # have been 36 workers instead of 144, roughly 3.6 GB instead of the ~15 GB that exhausted
 # the box's swap. Raise it on measurement, and re-check the product, not the factor.
+#
+# A sibling entry in ~/.claude/settings.json's `env` block carries the same value for Claude
+# sessions this unit does not spawn (chezmoi repo, home/.chezmoitemplates/settings.base.json).
+# Raise both together, or the cap depends on how the session started.
 claude_code_rc_pytest_workers: 4
 
 # The cgroup throttle for the whole rc host — the host process plus every session it spawns.
