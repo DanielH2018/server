@@ -25,6 +25,30 @@ logging {
   level = "warn"
 }
 
+// The HTTP server on 12345 is published to the LAN — docker-compose.yml.j2's `ports:` marker
+// says why it has to be. Everything it serves besides /metrics is a control surface:
+// /-/reload re-reads the config and restarts components on an unauthenticated GET, the UI
+// renders the whole config graph, and /api/v0/component/ exposes each component's live state.
+// None of the three has a consumer; the only caller from off-box is Prometheus, and it reads
+// /metrics.
+//
+// `authenticate_matching_paths = false` INVERTS the filter — the listed paths are the ones
+// left open and everything else needs the credential (internal/service/http/auth.go at
+// v1.19.2, where the compare is a prefix match). The password is a lock rather than a login:
+// no consumer holds it, and nothing here should start using it. Issue #1130.
+http {
+  auth {
+    basic {
+      username = "alloy"
+      password = "{{ alloy_pi_http_password }}"
+    }
+    filter {
+      paths                       = ["/metrics"]
+      authenticate_matching_paths = false
+    }
+  }
+}
+
 loki.write "homelab" {
   endpoint {
     // The ClientIP-guarded push route, not a ClusterIP — the Pi is outside the cluster and

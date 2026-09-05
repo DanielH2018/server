@@ -15,7 +15,10 @@
   ansible.builtin.template:
     src: config.alloy.j2
     dest: "/home/{{ sys_user }}/server/containers/{{ container_item.name }}/config/config.alloy"
-    mode: "0644"
+    # 0640, not the 0644 the rest of this host's configs use: since #1130 this file carries the
+    # HTTP server's basic-auth password. The container runs 1000:1000 and setup_dirs.yml creates
+    # the bind-mount source owned by the deploy user, so the owner read is the only one needed.
+    mode: "0640"
   register: alloy_config
 
 # Deploys are idempotent (recreate: auto), so an edit to the bind-mounted config above does
