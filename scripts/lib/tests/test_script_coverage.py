@@ -152,14 +152,20 @@ def test_a_test_only_importer_cannot_stand_in_for_the_leafs_own_suite(tmp_path):
 
 
 def test_the_split_findings_leaves_are_not_reported_untested():
-    """Non-vacuity for the importer credit, against the real tree.
+    """Non-vacuity against the real tree for the class this rule was written for.
 
     The fixtures above prove the rule fires on inputs handed to it; this proves it still
     finds the class it was written for. Named members, so a failure says which leaf moved.
+
+    The via was `importer` until the dotted-path branch landed: `test_findings.py` says
+    `from dev.findings_gh import run`, which is the leaf imported directly and so a
+    stronger credit than inheriting the facade's suite. The suite named is the same either
+    way. `test_the_infra_map_facade_members_inherit_the_facades_suite` below is what keeps
+    the `importer` via itself non-vacuous.
     """
     rows = {r["name"]: r for r in g.build_rows()}
     for name in ("findings_gh.py", "findings_model.py", "findings_plans.py"):
-        assert rows[name]["indirect_via"] == "importer", name
+        assert rows[name]["indirect_via"] == "import", name
         assert rows[name]["indirect_tests"] == "test_findings.py", name
 
 
@@ -230,3 +236,62 @@ def test_the_infra_map_facade_members_inherit_the_facades_suite():
     for stem in ("constants", "inventory", "model"):
         assert rows[f"{stem}.py"]["indirect_via"] == "importer", stem
         assert rows[f"{stem}.py"]["indirect_tests"] == "test_gen_infra_map.py", stem
+
+
+def test_a_dotted_path_import_credits_the_suite(tmp_path):
+    """The stem can sit INSIDE the module path, not only after `from` or `import`.
+
+    `from deploy_tools.land_lib.landing import Landing` binds only capitalised names, so
+    neither the top-level branch nor the `from X import <stem>` branch saw it, and
+    `land_lib/landing.py` read untested with its suite green (issue #1169).
+    """
+    repo, scripts = _repo(tmp_path)
+    _write(scripts / "pkg" / "sub" / "leaf.py", '"""Summary."""\n')
+    _write(
+        scripts / "pkg" / "tests" / "test_leaf_phases.py",
+        "from pkg.sub.leaf import Thing\n",
+    )
+    rows = {r["name"]: r for r in g.build_rows(scripts, repo)}
+    assert rows["leaf.py"]["indirect_tests"] == "test_leaf_phases.py"
+    assert rows["leaf.py"]["indirect_via"] == "import"
+
+
+def test_a_dotted_path_to_a_longer_name_credits_nothing(tmp_path):
+    """The RED half: the stem still has to be a whole path segment.
+
+    `from pkg.sub.leaf_helpers import x` names a different module, and crediting it would
+    hand a leaf its neighbour's suite -- the miscredit this page has paid for repeatedly.
+    """
+    repo, scripts = _repo(tmp_path)
+    _write(scripts / "pkg" / "sub" / "leaf.py", '"""Summary."""\n')
+    _write(scripts / "pkg" / "sub" / "leaf_helpers.py", '"""Summary."""\n')
+    _write(
+        scripts / "pkg" / "tests" / "test_helpers.py",
+        "from pkg.sub.leaf_helpers import Thing\n",
+    )
+    rows = {r["name"]: r for r in g.build_rows(scripts, repo)}
+    assert rows["leaf.py"]["indirect_tests"] == ""
+    assert rows["leaf.py"]["indirect_via"] == ""
+
+
+def test_the_land_lib_modules_imported_by_dotted_path_are_not_reported_untested():
+    """Non-vacuity for the dotted-path branch, against the real tree.
+
+    Named members rather than a count, so a failure says which module lost its credit.
+    `landing.py` is the dotted-path branch on its own: it held no credit at all before the
+    branch existed.
+
+    `ledger.py` pins the tie-break the branch feeds, not the branch itself. It held
+    `test_probe_b2_ledger.py`, which imports probe's `b2_ledger` under the alias `ledger`;
+    once its own suite matches too, both carry the stem and `deploy_tools` sorting before
+    `diagnostics` settles it. So a rename of either suite fails here without the
+    dotted-path match having regressed -- read the failure before concluding it has.
+    """
+    rows = {r["path"]: r for r in g.build_rows()}
+    expected = {
+        "scripts/deploy_tools/land_lib/landing.py": "test_land_landing.py",
+        "scripts/deploy_tools/land_lib/ledger.py": "test_land_ledger.py",
+    }
+    for path, suite in expected.items():
+        assert rows[path]["indirect_via"] == "import", path
+        assert rows[path]["indirect_tests"] == suite, path
