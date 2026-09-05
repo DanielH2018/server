@@ -278,8 +278,14 @@ def test_the_land_lib_modules_imported_by_dotted_path_are_not_reported_untested(
     """Non-vacuity for the dotted-path branch, against the real tree.
 
     Named members rather than a count, so a failure says which module lost its credit.
-    `landing.py` held no credit at all before the branch existed; `ledger.py` held
-    `test_probe_b2_ledger.py`, which imports probe's `b2_ledger` under the alias `ledger`.
+    `landing.py` is the dotted-path branch on its own: it held no credit at all before the
+    branch existed.
+
+    `ledger.py` pins the tie-break the branch feeds, not the branch itself. It held
+    `test_probe_b2_ledger.py`, which imports probe's `b2_ledger` under the alias `ledger`;
+    once its own suite matches too, both carry the stem and `deploy_tools` sorting before
+    `diagnostics` settles it. So a rename of either suite fails here without the
+    dotted-path match having regressed -- read the failure before concluding it has.
     """
     rows = {r["path"]: r for r in g.build_rows()}
     expected = {
