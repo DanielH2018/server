@@ -49,7 +49,9 @@ terminal, so `open` refuses to re-file the same fingerprint afterwards: `--refut
 that a skeptic disproved it, and `--accepted` records that it is TRUE and the operator chose
 to live with the trade-off. Both need `--reason`. Reach for `--accepted` rather than closing
 by hand — a hand-close is invisible to the dedup, so the next review re-files an accepted
-decision and the comment on it reads "treat as a regression".
+decision and the comment on it reads "treat as a regression". Closing releases any claim it
+finds first, whoever holds it — not just the caller's own worktree — so `claims`, `reap` and
+`next` all stop showing the issue at once rather than leaving a claim stranded on a closed row.
 
 CLAIMING AN ISSUE. `claim` posts a `Claim:` comment and adds the `claimed` label, so a
 worktree fanning out several issues at once knows which are its own; `release` reverses

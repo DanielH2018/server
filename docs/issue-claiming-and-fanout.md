@@ -1,8 +1,7 @@
 # Issue claiming and fan-out
 
-**Status: drafted, not started.** This page describes a system that does not exist yet. It
-changes how every session picks up work, so a reader arriving from the backlog should find it
-rather than discover the behaviour changed under them.
+**Status: live.** The claim protocol and the `/issue-fanout` skill described below are in
+`scripts/dev/findings.py` and `.claude/skills/issue-fanout/`.
 
 Several Claude sessions work this repo at once. `findings.py` gives the backlog a status field
 and an owner-of-record, but nothing says which *session* is working an issue right now, and
