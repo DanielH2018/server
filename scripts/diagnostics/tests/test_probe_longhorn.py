@@ -8,7 +8,7 @@ credential-handling that keeps it safe to run, and the Class C budget projection
 import json
 
 import probe
-from diagnostics.probe_lib import longhorn
+from diagnostics.probe_lib import b2_api, longhorn, longhorn_budget, longhorn_cluster
 
 LSF = [
     "backupstore/volumes/aa/bb/pvc-authelia/volume.cfg;120",
@@ -26,15 +26,13 @@ def test_b2_credentials_travel_in_the_stdin_config_not_argv():
     inherit it; curl's `--config -` is the same guard by the route the rest of this file
     already uses for HA and the *arr apps.
     """
-    body = longhorn.b2_authorize_config("keyid123", "appkey456")
+    body = b2_api.b2_authorize_config("keyid123", "appkey456")
     assert 'user = "keyid123:appkey456"' in body
-    assert longhorn.B2_AUTHORIZE_URL in body
+    assert b2_api.B2_AUTHORIZE_URL in body
 
 
 def test_b2_list_config_carries_the_token_as_a_header_and_scopes_the_prefix():
-    body = longhorn.b2_list_files_config(
-        "https://api.example", "tok", "bid", "longhorn"
-    )
+    body = b2_api.b2_list_files_config("https://api.example", "tok", "bid", "longhorn")
     assert 'header = "Authorization: tok"' in body
     assert "prefix=longhorn%2F" in body and "bucketId=bid" in body
 
@@ -73,7 +71,7 @@ def test_b2_longhorn_lines_strips_the_prefix_and_pages():
         },
     ]
     calls = iter(pages)
-    lines = longhorn.b2_longhorn_lines(
+    lines = b2_api.b2_longhorn_lines(
         "k", "s", "bucket", "longhorn", _call=lambda _body: next(calls)
     )
     assert lines == [
@@ -81,7 +79,7 @@ def test_b2_longhorn_lines_strips_the_prefix_and_pages():
         "backupstore/volumes/aa/bb/pvc-x/volume.cfg;120",
     ]
     # The whole point: these lines survive the parser that the real command feeds them to.
-    vols = longhorn.parse_longhorn_listing(lines)
+    vols = b2_api.parse_longhorn_listing(lines)
     assert vols["pvc-x"]["blocks"] == 1 and vols["pvc-x"]["cfgs"] == 1
 
 
@@ -107,7 +105,7 @@ def test_b2_longhorn_lines_reports_pages_plus_the_authorize_as_class_c():
         return pages.pop(0)
 
     stats = {}
-    longhorn.b2_longhorn_lines("k", "s", "bucket", _call=fake, _stats=stats)
+    b2_api.b2_longhorn_lines("k", "s", "bucket", _call=fake, _stats=stats)
     assert stats == {"class_c": 3, "pages": 2}
 
 
@@ -135,7 +133,7 @@ def test_b2_longhorn_command_does_not_shell_out_to_docker_or_rclone():
     real_run = probe.subprocess.run
     probe.subprocess.run = fake_run
     try:
-        longhorn.b2_curl('url = "https://api.example"\n')
+        b2_api.b2_curl('url = "https://api.example"\n')
     finally:
         probe.subprocess.run = real_run
 
@@ -144,19 +142,25 @@ def test_b2_longhorn_command_does_not_shell_out_to_docker_or_rclone():
     # The url/credentials reach curl through stdin, so argv stays free of both.
     assert seen["stdin"].startswith("url = ")
 
-    # And no `"docker"` argv literal survives anywhere in this module's executable code.
-    # Scans the whole file, not a section split on a comment banner: the B2/Longhorn code
-    # is its own module now, so the module boundary carries what the marker used to.
-    with open(longhorn.__file__) as fh:
-        source = fh.read()
+    # And no `"docker"` argv literal survives in the executable code of either module the
+    # command runs through: b2_api.py holds the B2 calls the rewrite replaced, longhorn.py the
+    # subcommand that drives them. Scanning longhorn.py alone would assert nothing about the
+    # code that regressed, since b2_curl no longer lives there.
+    source = ""
+    for module in (b2_api, longhorn):
+        with open(module.__file__) as fh:
+            source += fh.read()
     code = "\n".join(
         line for line in source.splitlines() if not line.strip().startswith("#")
     )
+    # Non-vacuity: a wrong module object would pass the `not in` below by holding no code at
+    # all, so pin one name each module must contribute before asserting on the absence.
+    assert "def b2_curl(" in code and "def run_b2_longhorn(" in code
     assert '"docker"' not in code
 
 
 def test_parse_longhorn_listing_separates_data_from_metadata():
-    vols = longhorn.parse_longhorn_listing(LSF)
+    vols = b2_api.parse_longhorn_listing(LSF)
     assert vols["pvc-authelia"]["blocks"] == 2
     assert vols["pvc-authelia"]["block_bytes"] == 2097152 + 1048576
     assert vols["pvc-authelia"]["cfgs"] == 2
@@ -164,7 +168,7 @@ def test_parse_longhorn_listing_separates_data_from_metadata():
 
 
 def test_parse_longhorn_listing_ignores_unrelated_and_malformed_lines():
-    vols = longhorn.parse_longhorn_listing(
+    vols = b2_api.parse_longhorn_listing(
         ["", "   ", "kopia/p1234.f;99", "backupstore/volumes/aa;10", "no-semicolon"]
     )
     assert vols == {}
@@ -173,26 +177,26 @@ def test_parse_longhorn_listing_ignores_unrelated_and_malformed_lines():
 def test_format_longhorn_summary_fails_when_a_volume_has_no_data_blocks():
     """Metadata without blocks is the silent-corruption case worth exiting non-zero on."""
     vols = {"pvc-empty": {"blocks": 0, "block_bytes": 0, "cfgs": 3}}
-    text, code = longhorn.format_longhorn_summary(vols)
+    text, code = b2_api.format_longhorn_summary(vols)
     assert code == 1
     assert "NO DATA BLOCKS" in text and "pvc-empty" in text
 
 
 def test_format_longhorn_summary_passes_when_every_volume_has_blocks():
-    text, code = longhorn.format_longhorn_summary(longhorn.parse_longhorn_listing(LSF))
+    text, code = b2_api.format_longhorn_summary(b2_api.parse_longhorn_listing(LSF))
     assert code == 0
     assert "pvc-authelia" in text and "NO DATA BLOCKS" not in text
 
 
 def test_format_longhorn_summary_treats_no_objects_as_failure():
-    text, code = longhorn.format_longhorn_summary({})
+    text, code = b2_api.format_longhorn_summary({})
     assert code == 1 and "no Longhorn backup objects" in text
 
 
 def test_parse_backup_budget_prices_a_prune_by_directories_not_blocks():
     """A prune's cost is one ListObjects per block directory, so two blocks sharing a
     second-level directory cost less than two that do not."""
-    vols = longhorn.parse_backup_budget(LSF)
+    vols = longhorn_budget.parse_backup_budget(LSF)
     # pvc-authelia: blocks/ + 1a/ + (1a,2b) + (1a,2c) = 4
     assert vols["pvc-authelia"]["prune"] == 4
     assert vols["pvc-authelia"]["blocks"] == 2
@@ -203,9 +207,11 @@ def test_parse_backup_budget_prices_a_prune_by_directories_not_blocks():
 
 
 def test_format_backup_budget_flags_a_shard_over_the_daily_cap():
-    over = longhorn.B2_CLASS_C_DAILY_CAP - longhorn.B2_BUDGET_RESERVE + 1
+    over = longhorn_budget.B2_CLASS_C_DAILY_CAP - longhorn_budget.B2_BUDGET_RESERVE + 1
     vols = {"pvc-big": {"prune": over, "blocks": 9000, "backups": 4}}
-    text, code = longhorn.format_backup_budget(vols, {"pvc-big": "weekly-backup-d2"})
+    text, code = longhorn_budget.format_backup_budget(
+        vols, {"pvc-big": "weekly-backup-d2"}
+    )
     assert code == 1
     assert "OVER BUDGET" in text and "weekly-backup-d2" in text
 
@@ -214,7 +220,7 @@ def test_format_backup_budget_flags_a_b2_volume_left_on_the_daily_tier():
     """A PVC provisioned from the longhorn StorageClass lands in `default` until a deploy
     reconciles its label, which on B2 means a prune every night against a weekly budget."""
     vols = {"pvc-new": {"prune": 300, "blocks": 200, "backups": 4}}
-    text, code = longhorn.format_backup_budget(vols, {"pvc-new": "default"})
+    text, code = longhorn_budget.format_backup_budget(vols, {"pvc-new": "default"})
     assert code == 1
     assert "ON THE DAILY TIER AND ON B2" in text and "pvc-new" in text
 
@@ -229,7 +235,7 @@ def test_stranded_counts_backups_the_current_tier_does_not_own():
     """
     vols = {"pvc-moved": {"prune": 10, "blocks": 100, "backups": 5}}
     owners = {"pvc-moved": {"daily-backup": 4, "weekly-backup-d2": 1}}
-    text, _ = longhorn.format_backup_budget(
+    text, _ = longhorn_budget.format_backup_budget(
         vols, {"pvc-moved": "weekly-backup-d2"}, retain=2, owners=owners
     )
     assert "4 stranded backup(s)" in text, text
@@ -239,7 +245,7 @@ def test_backups_the_current_tier_owns_are_not_stranded_even_past_retain():
     """The owning job prunes them on its next run, so they are queued, not abandoned."""
     vols = {"pvc-busy": {"prune": 10, "blocks": 100, "backups": 5}}
     owners = {"pvc-busy": {"weekly-backup-d2": 5}}
-    text, _ = longhorn.format_backup_budget(
+    text, _ = longhorn_budget.format_backup_budget(
         vols, {"pvc-busy": "weekly-backup-d2"}, retain=2, owners=owners
     )
     assert "stranded" not in text, text
@@ -248,7 +254,7 @@ def test_backups_the_current_tier_owns_are_not_stranded_even_past_retain():
 def test_stranded_falls_back_to_zero_without_ownership_data():
     """No owners map means nothing is PROVEN stranded — never guess high and prompt a delete."""
     vols = {"pvc-x": {"prune": 10, "blocks": 100, "backups": 5}}
-    text, _ = longhorn.format_backup_budget(
+    text, _ = longhorn_budget.format_backup_budget(
         vols, {"pvc-x": "weekly-backup-d2"}, retain=2
     )
     assert "stranded" not in text, text
@@ -267,7 +273,7 @@ def test_format_backup_budget_reports_stranded_backups_not_pending_deletes():
     """
     vols = {"pvc-a": {"prune": 100, "blocks": 50, "backups": 11}}
     owners = {"pvc-a": {"daily-backup": 9, "weekly-backup-d5": 2}}
-    text, code = longhorn.format_backup_budget(
+    text, code = longhorn_budget.format_backup_budget(
         vols, {"pvc-a": "weekly-backup-d5"}, retain=4, owners=owners
     )
     assert code == 0
@@ -278,7 +284,7 @@ def test_format_backup_budget_does_not_charge_a_day_for_an_unscheduled_volume():
     """A volume with no recurring job never runs a backup and so never prunes — charging its
     blocks to a shard would read as an over-budget day that cannot actually happen."""
     vols = {"pvc-idle": {"prune": 99999, "blocks": 9000, "backups": 3}}
-    text, code = longhorn.format_backup_budget(vols, {"pvc-idle": "no-backup"})
+    text, code = longhorn_budget.format_backup_budget(vols, {"pvc-idle": "no-backup"})
     assert code == 0
     assert "never pruned" in text and "pvc-idle" in text
 
@@ -296,7 +302,9 @@ def _shard_run(labels):
 
 def test_volume_shard_labels_reads_the_recurring_job_group():
     run = _shard_run({"recurring-job-group.longhorn.io/weekly-backup-d5": "enabled"})
-    assert longhorn.volume_shard_labels(_run=run) == {"pvc-a": "weekly-backup-d5"}
+    assert longhorn_cluster.volume_shard_labels(_run=run) == {
+        "pvc-a": "weekly-backup-d5"
+    }
 
 
 def test_volume_shard_labels_reads_only_the_exact_label_group():
@@ -311,7 +319,7 @@ def test_volume_shard_labels_reads_only_the_exact_label_group():
             "recurring-job-group.longhorn.io": "enabled",
         }
     )
-    assert longhorn.volume_shard_labels(_run=run) == {}
+    assert longhorn_cluster.volume_shard_labels(_run=run) == {}
 
 
 def _target_run(returncode, stdout):
@@ -328,7 +336,10 @@ def test_backup_target_url_reads_the_cr():
     run = _target_run(
         0, json.dumps({"spec": {"backupTargetURL": "s3://bucket@us-east-005/longhorn"}})
     )
-    assert longhorn.backup_target_url(_run=run) == "s3://bucket@us-east-005/longhorn"
+    assert (
+        longhorn_cluster.backup_target_url(_run=run)
+        == "s3://bucket@us-east-005/longhorn"
+    )
 
 
 def test_backup_target_url_is_empty_when_disarmed_or_unreadable():
@@ -336,7 +347,10 @@ def test_backup_target_url_is_empty_when_disarmed_or_unreadable():
     must read the same way. The caller declines to classify on empty; returning anything else
     would let R2's deletions be charged to B2's cap."""
     assert (
-        longhorn.backup_target_url(_run=_target_run(0, json.dumps({"spec": {}}))) == ""
+        longhorn_cluster.backup_target_url(
+            _run=_target_run(0, json.dumps({"spec": {}}))
+        )
+        == ""
     )
-    assert longhorn.backup_target_url(_run=_target_run(1, "")) == ""
-    assert longhorn.backup_target_url(_run=_target_run(0, "not json")) == ""
+    assert longhorn_cluster.backup_target_url(_run=_target_run(1, "")) == ""
+    assert longhorn_cluster.backup_target_url(_run=_target_run(0, "not json")) == ""
