@@ -9,6 +9,6 @@
 # hook returns — only a hook on this event resolves them.
 #
 # Same failure posture as the PreToolUse wrapper: no output -> the prompt stands.
-cd /home/ubuntu/server || exit 0
+cd /home/ubuntu/server || { echo "auto-approve-remote-ssh.sh: classifier did not run (cd to /home/ubuntu/server failed) — command falls through to the normal permission flow" >&2; exit 0; }
 exec /home/ubuntu/.local/bin/uv run --no-sync --quiet python \
   "$(dirname "$(readlink -f "$0")")/auto-approve-readonly.py" --permission-request

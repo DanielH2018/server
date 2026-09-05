@@ -6,6 +6,6 @@
 # Routed through uv so the project-pinned interpreter runs (not the system python3, which
 # cannot parse this repo); --no-sync skips the env reconcile. If uv can't run, the hook emits
 # nothing and both events behave as they do without it.
-cd /home/ubuntu/server || exit 0
+cd /home/ubuntu/server || { echo "auto-mode-bridge.sh: bridge did not run (cd to /home/ubuntu/server failed) — no retry offered, no exit-code hint shown" >&2; exit 0; }
 exec /home/ubuntu/.local/bin/uv run --no-sync --quiet python \
   "$(dirname "$(readlink -f "$0")")/auto-mode-bridge.py"

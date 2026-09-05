@@ -72,8 +72,11 @@ def test_wrapper_fails_open_when_the_repo_is_missing():
     """cd must not be able to strand the hook.
 
     A failed cd has to exit 0, not run the exec from whatever directory it happened to land in.
+    The guard now also writes a line to stderr first, so the disarm is visible — the behaviour
+    itself is pinned by test_hook_shim_fail_open.py, which runs the shim rather than reading it.
     """
-    assert "|| exit 0" in WRAPPER_TEXT, "cd has no fail-open guard"
+    assert "exit 0" in WRAPPER_TEXT, "cd has no fail-open guard"
+    assert "did not run" in WRAPPER_TEXT, "the fail-open guard is silent again"
 
 
 @_runnable
