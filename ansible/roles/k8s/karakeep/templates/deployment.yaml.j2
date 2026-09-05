@@ -47,7 +47,10 @@ spec:
                           break
                       except OSError:
                           time.sleep(5)
-{{ hardened_security_context() }}
+          # read_only: the whole program is the `python3 -c` above. It imports two stdlib
+          # modules whose bytecode is already in the image and writes nothing, so it needs no
+          # writable path at all — no emptyDir goes with this.
+{{ hardened_security_context(read_only=true) }}
 {{ container_resources(cpu_limit='250m', mem_limit='128Mi', cpu_request='10m', mem_request='16Mi') }}
       automountServiceAccountToken: false
       priorityClassName: homelab-standard
@@ -62,6 +65,25 @@ spec:
           # The compose template's cap_drop: ALL with no cap_add — a Node app on a high
           # port. The seeded tree is root-owned and this image runs as root, so nothing
           # here needs CHOWN or DAC_OVERRIDE.
+          #
+          # DECIDED: no readOnlyRootFilesystem here, unlike the chrome sidecar and the
+          # wait-for-deps init container above. Three facts, and the third is why this is
+          # recorded rather than tried:
+          #   1. PID 1 is s6-overlay's `/init` (upstream `docker/Dockerfile`'s ENTRYPOINT, and the
+          #      process was measured as s6-svscan at uid 0 — see the ("karakeep",
+          #      "karakeep") entry in _ENTRYPOINT_DROPS,
+          #      ansible/tests/k8s/test_container_security_context.py). s6 rebuilds its whole
+          #      service tree under /run on every start, so a read-only root needs an emptyDir
+          #      at /run plus S6_READ_ONLY_ROOT=1, which changes how the init itself boots.
+          #   2. The image hardcodes HOME=/root, so anything cache-writing lands on the root
+          #      filesystem rather than a mounted path. That is its own open issue; it is not
+          #      fixed here.
+          #   3. Guessing wrong is a manual recovery, not a rollback: k8s_autodeploy is false,
+          #      strategy is Recreate, and the PVC is ReadWriteOnce, so the old pod is gone
+          #      before the replacement's mounts are known-good.
+          # Measuring the writable-path set would settle 1 and 2, and it needs a deploy — the
+          # read-only ServiceAccount is Forbidden on pods/exec, so no live census is possible
+          # from a review session.
 {{ hardened_security_context() }}
           env:
             - name: TZ

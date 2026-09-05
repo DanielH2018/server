@@ -35,6 +35,15 @@ spec:
             - containerPort: 7700
           # The compose template's cap_drop: ALL — a Rust binary on a high port whose data
           # is its own volume.
+          #
+          # DECIDED: no readOnlyRootFilesystem here, though a steady-state meilisearch writes
+          # only under /meili_data. MEILI_UPGRADE_DB below runs the in-place index migration on
+          # exactly one start — the first after an image bump — and on no other. A read-only
+          # root would therefore pass the deploy that introduces it and could still break a
+          # future Renovate bump, whose recovery is a full "Reindex All Bookmarks". A change
+          # whose riskiest path is structurally unexercised by the deploy that validates it is
+          # the shape that lands green and is inert; the migration is the reason to decline it
+          # here, not an absence of evidence about the steady state.
 {{ hardened_security_context() }}
           env:
             - name: MEILI_NO_ANALYTICS
