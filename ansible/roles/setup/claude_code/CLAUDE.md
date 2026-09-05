@@ -120,7 +120,8 @@ sessions" and nothing else.
   reclaims the cgroup's anon pages and, with `MemoryMax` deliberately infinity, the terminal
   state becomes the global OOM killer choosing a victim by badness anywhere on the box. The
   cap converts theft of the whole box's swap into a bounded share plus harder reclaim
-  throttling; it does not make the cgroup safe. ENFORCED by the same test.
+  throttling; it does not make the cgroup safe. ENFORCED by
+  `ansible/tests/setup/test_claude_rc_unit.py`.
 - **`claude_code_rc_pytest_workers` bounds the pytest fan-out**, via
   `PYTEST_XDIST_AUTO_NUM_WORKERS` in the unit. `addopts` in `pyproject.toml` carries
   `-n auto`; xdist reads this variable before any CPU detection, so a session's run gets 4
