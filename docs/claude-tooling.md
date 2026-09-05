@@ -17,7 +17,7 @@ uv run python scripts/diagnostics/probe.py <targets | metric '<promql>' | loki-q
 ```
 
 `uv run python scripts/diagnostics/probe.py --list` prints every subcommand with a one-line
-description, sourced from `SUBCOMMANDS`/`REGISTRY` near the top of `probe.py` (built on the
+description, sourced from `SUBCOMMANDS`/`REGISTRY` in `probe_lib/subcommands.py` (built on the
 shared `scripts/lib/registry.py`, the same only/skip-selection shape monitor-bridge's `CHECKS`
 uses — see that role's `check.py`). The registry is metadata only: `--list` and a completeness
 guard (`scripts/diagnostics/tests/test_probe_registry.py`, asserting every `probe_lib` module

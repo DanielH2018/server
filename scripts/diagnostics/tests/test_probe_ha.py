@@ -290,7 +290,7 @@ def test_automation_load_errors_tolerates_missing_attributes():
 
 
 def test_verify_automations_subcommand_parses():
-    from probe import _build_parser
+    from diagnostics.probe_lib.cli_parser import _build_parser
 
     ns = _build_parser().parse_args(["ha", "verify-automations"])
     assert ns.cmd == "ha" and ns.ha_cmd == "verify-automations"

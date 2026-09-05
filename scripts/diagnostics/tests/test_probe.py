@@ -1,8 +1,10 @@
-"""probe.py's command surface: argv parsing, routing, URL building, output formatting.
+"""probe.py's command surface: argv parsing, URL building, output formatting.
 
-`plan()` decides which request each subcommand makes without making it, so these are the tests
-that catch a subcommand pointed at the wrong host or built with the wrong query — the class of
-bug that returns a confident answer about the wrong thing.
+These cover the pieces a subcommand is assembled from — the URL builders in `core`, the
+argparse surface in `cli_parser`, and the formatters each `run_*` prints through.
+
+`test_probe_pipeline.py` covers the routing itself: which host `plan()` asks and which URL it
+builds for each streaming subcommand.
 """
 
 import re
@@ -13,7 +15,7 @@ from diagnostics.probe_lib import arr
 from diagnostics.probe_lib import health_docker
 from diagnostics.probe_lib import metrics
 from diagnostics.probe_lib import monitors
-import probe
+from diagnostics.probe_lib import cli_parser
 from diagnostics.probe_lib import core
 
 
@@ -99,111 +101,6 @@ def test_k8s_service_ip_argv_targets_the_service():
     assert argv[-1] == "jsonpath={.spec.clusterIP}"
     assert "sonarr" in argv
     assert "homelab" in argv
-
-
-def test_plan_metric_uses_cluster_prometheus_route(fake_resolve, fake_k8s_endpoint):
-    # The Docker prometheus (resolve_ip target) retired 2026-08-14 with the drain.
-    stages = probe.plan(["metric", "up == 0"], fake_resolve, fake_k8s_endpoint)
-    assert stages == [
-        core.curl_argv(
-            "https://prometheus.example/api/v1/query?query=up+%3D%3D+0",
-            resolve="prometheus.example:443:10.0.0.240",
-        )
-    ]
-
-
-def test_plan_targets_uses_cluster_prometheus_route(fake_resolve, fake_k8s_endpoint):
-    stages = probe.plan(["targets"], fake_resolve, fake_k8s_endpoint)
-    assert stages == [
-        core.curl_argv(
-            "https://prometheus.example/api/v1/targets",
-            resolve="prometheus.example:443:10.0.0.240",
-        )
-    ]
-
-
-def test_plan_loki_labels_uses_cluster_endpoint_with_vip_pin(
-    fake_resolve, fake_k8s_endpoint
-):
-    stages = probe.plan(["loki-labels"], fake_resolve, fake_k8s_endpoint)
-    assert stages == [
-        core.curl_argv(
-            "https://loki-homelab.example/loki/api/v1/labels",
-            resolve="loki-homelab.example:443:10.0.0.240",
-        )
-    ]
-
-
-def test_plan_loki_query_with_limit(fake_resolve, fake_k8s_endpoint):
-    stages = probe.plan(
-        ["loki-query", '{job="x"}', "--limit", "50"], fake_resolve, fake_k8s_endpoint
-    )
-    assert stages == [
-        core.curl_argv(
-            core.loki_query_url("https://loki-homelab.example", '{job="x"}', 50),
-            resolve="loki-homelab.example:443:10.0.0.240",
-        )
-    ]
-
-
-def test_plan_scrutiny_uses_cluster_endpoint_with_vip_pin(
-    fake_resolve, fake_k8s_endpoint
-):
-    stages = probe.plan(["scrutiny"], fake_resolve, fake_k8s_endpoint)
-    assert stages == [
-        core.curl_argv(
-            "https://scrutiny.example/api/summary",
-            resolve="scrutiny.example:443:10.0.0.240",
-        )
-    ]
-
-
-def test_plan_pi_does_not_resolve_docker():
-    # Pi glances is reached by hostname, so the container resolver must NOT be consulted.
-    def boom(_):
-        raise AssertionError("pi must not resolve a container IP")
-
-    stages = probe.plan(
-        ["pi", "fs"], boom, pi_resolve=lambda: "daniel-pi.lan:61208:10.0.0.139"
-    )
-    assert stages == [
-        core.curl_argv(
-            "http://daniel-pi.lan:61208/api/4/fs",
-            resolve="daniel-pi.lan:61208:10.0.0.139",
-        )
-    ]
-
-
-def test_plan_pi_resolves_to_a_reachable_pin_not_dns():
-    # Regression guard: this host's resolver has no answer for daniel-pi.lan (a
-    # Pi-hole-only LAN name), so plan() must always carry a --resolve pin here — a bare
-    # curl_argv() with no pin is the pre-fix shape that died `Could not resolve host`.
-    stages = probe.plan(
-        ["pi", "fs"], None, pi_resolve=lambda: "daniel-pi.lan:61208:10.0.0.139"
-    )
-    assert "--resolve" in stages[0]
-    assert "daniel-pi.lan:61208:10.0.0.139" in stages[0]
-
-
-def test_plan_cert_defaults_port_and_sni_to_host(fake_resolve):
-    stages = probe.plan(["cert", "homepage.daniel-hunter.com"], fake_resolve)
-    assert stages == probe.cert_stages(
-        "homepage.daniel-hunter.com", 443, "homepage.daniel-hunter.com"
-    )
-
-
-def test_plan_cert_explicit_port_and_sni(fake_resolve):
-    stages = probe.plan(
-        ["cert", "10.0.0.161:443", "--sni", "homepage.daniel-hunter.com"], fake_resolve
-    )
-    assert stages == probe.cert_stages("10.0.0.161", 443, "homepage.daniel-hunter.com")
-
-
-def test_cert_stages_is_a_two_stage_pipeline():
-    s1, s2 = probe.cert_stages("h", 443, "h")
-    assert s1[:2] == ["openssl", "s_client"]
-    assert "h:443" in s1
-    assert s2[:2] == ["openssl", "x509"]
 
 
 # These replace the `probe.py metric … | python3 -c "…reshape JSON…"` one-liners
@@ -319,7 +216,7 @@ def test_format_monitor_status_empty_result_fails():
 
 
 def test_monitors_subcommand_parses():
-    p = probe._build_parser()
+    p = cli_parser._build_parser()
     ns = p.parse_args(["monitors"])
     assert ns.cmd == "monitors"
 
@@ -346,13 +243,13 @@ def test_format_loki_empty_is_no_logs():
 
 
 def test_metric_defaults_to_formatted_with_json_escape_hatch():
-    p = probe._build_parser()
+    p = cli_parser._build_parser()
     assert p.parse_args(["metric", "up"]).json is False
     assert p.parse_args(["metric", "up", "--json"]).json is True
 
 
 def test_loki_query_defaults_to_formatted_with_json_escape_hatch():
-    p = probe._build_parser()
+    p = cli_parser._build_parser()
     assert p.parse_args(["loki-query", '{job="x"}']).json is False
     assert p.parse_args(["loki-query", '{job="x"}', "--json"]).json is True
 
@@ -428,7 +325,7 @@ def test_resolve_arr_ip_uses_kubectl_not_docker(monkeypatch):
         calls.append(argv)
         return FakeResult()
 
-    monkeypatch.setattr(probe.subprocess, "run", fake_run)
+    monkeypatch.setattr(health_docker.subprocess, "run", fake_run)
     assert arr.resolve_arr_ip("sonarr") == "10.43.114.186"
     assert calls == [health_docker.k8s_service_ip_argv("sonarr", "homelab")]
     assert "docker" not in calls[0]
@@ -442,7 +339,9 @@ def test_resolve_arr_ip_raises_on_kubectl_failure(monkeypatch):
         stdout = ""
         stderr = 'services "sonarr" not found'
 
-    monkeypatch.setattr(probe.subprocess, "run", lambda argv, **kwargs: FakeResult())
+    monkeypatch.setattr(
+        health_docker.subprocess, "run", lambda argv, **kwargs: FakeResult()
+    )
     with pytest.raises(SystemExit) as excinfo:
         arr.resolve_arr_ip("sonarr")
     assert "sonarr" in str(excinfo.value)
@@ -456,14 +355,16 @@ def test_resolve_arr_ip_raises_on_empty_cluster_ip(monkeypatch):
         stdout = ""
         stderr = ""
 
-    monkeypatch.setattr(probe.subprocess, "run", lambda argv, **kwargs: FakeResult())
+    monkeypatch.setattr(
+        health_docker.subprocess, "run", lambda argv, **kwargs: FakeResult()
+    )
     with pytest.raises(SystemExit) as excinfo:
         arr.resolve_arr_ip("sonarr")
     assert "ClusterIP" in str(excinfo.value)
 
 
 def test_arr_subcommand_parses_app_path_and_json_flag():
-    p = probe._build_parser()
+    p = cli_parser._build_parser()
     ns = p.parse_args(["arr", "sonarr", "health"])
     assert (
         ns.cmd == "arr"
@@ -477,30 +378,4 @@ def test_arr_subcommand_parses_app_path_and_json_flag():
 def test_arr_subcommand_rejects_unknown_app():
 
     with pytest.raises(SystemExit):
-        probe._build_parser().parse_args(["arr", "lidarr", "health"])
-
-
-def test_no_cluster_route_carries_the_retired_k8s_suffix(
-    fake_resolve, fake_k8s_endpoint
-):
-    """The `-k8s` suffix retired 2026-08-15 (870723e8), but probe.py kept building it for
-    another five hours: every cluster subcommand 404'd against Traefik's no-Host-match while
-    the fixtures below asserted the stale name, so CI ratified the break. Assert on the
-    hostnames plan() actually asks for, so a reintroduced suffix fails here first."""
-    asked = []
-
-    def record(hostname):
-        asked.append(hostname)
-        return fake_k8s_endpoint(hostname)
-
-    for argv in (
-        ["metric", "up"],
-        ["targets"],
-        ["loki-labels"],
-        ["loki-query", '{job="x"}'],
-        ["scrutiny"],
-    ):
-        probe.plan(argv, fake_resolve, record)
-
-    assert asked, "expected plan() to route these subcommands through k8s_endpoint"
-    assert not [h for h in asked if h.endswith("-k8s")]
+        cli_parser._build_parser().parse_args(["arr", "lidarr", "health"])
