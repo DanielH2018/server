@@ -94,7 +94,11 @@ class Fakes:
 
     issues: list[dict] = field(default_factory=list)
     labels: set[str] | None = None
+    # A single issue dict, or a dict keyed by issue number for a test that drives `claim` or
+    # `release` against more than one issue in one `main()` call.
     view: dict | None = None
+    # Answers the `pr list` key, for Task 5's `next`.
+    prs: list[dict] = field(default_factory=list)
     url: str = CREATED_URL
     # Keyed by the `issue create` / `issue close` pair `gh` is called with, the way
     # `json_errors` is keyed, and CONSUMED on the first match rather than raised every time.
@@ -108,11 +112,32 @@ class Fakes:
     verify: Callable[[str, float], subprocess.CompletedProcess[str]] | None = None
 
 
+def _issues_named(f: Fakes, number: int) -> list[dict]:
+    """Every issue dict known to ``f`` carrying this number, `issues` and `view` alike.
+
+    A test builds `view` from the same object it put in `issues`, so mutating through one
+    reaches both — this also covers the rare case where they are separate objects. A
+    per-number read SEQUENCE (a list rather than an issue dict, see `build_tools`'s `issue
+    view` branch) is skipped here: it stands for several successive reads, not one mutable
+    object, so there is nothing here to append a posted comment onto.
+    """
+    found = [i for i in f.issues if i.get("number") == number]
+    if isinstance(f.view, dict):
+        candidates = f.view.values() if "number" not in f.view else [f.view]
+        found += [
+            c
+            for c in candidates
+            if isinstance(c, dict) and c.get("number") == number and c not in found
+        ]
+    return found
+
+
 def build_tools(f: Fakes | None = None) -> tuple[FindingsTools, Calls]:
     """A `FindingsTools` answering from `f`, and the record of what it was asked."""
     f = f or Fakes()
     calls = Calls()
     gh_errors = dict(f.gh_errors)
+    view_reads: dict[int, int] = {}
 
     def gh_json(*argv, **kwargs):
         calls.gh_json.append(list(argv))
@@ -125,9 +150,30 @@ def build_tools(f: Fakes | None = None) -> tuple[FindingsTools, Calls]:
         if key == "issue view":
             if f.view is None:
                 raise AssertionError(argv)
-            return f.view
+            # A single issue dict carries a "number" key; a dict keyed by issue number does
+            # not, so that key tells the two shapes apart without a second field.
+            if isinstance(f.view, dict) and "number" not in f.view:
+                try:
+                    value = f.view[int(argv[2])]
+                except KeyError, ValueError:
+                    raise AssertionError(argv) from None
+            else:
+                value = f.view
+            if isinstance(value, list):
+                # A per-number SEQUENCE: one entry per successive `issue view` call for
+                # this number, sticking on the last once exhausted. `cmd_claim`'s
+                # post-write read-back needs the SECOND read to disagree with the first —
+                # a rival's claim landing between the pre-write check and the read-back —
+                # which a single static view cannot express.
+                number = int(argv[2])
+                i = view_reads.get(number, 0)
+                view_reads[number] = i + 1
+                return value[min(i, len(value) - 1)]
+            return value
         if key == "issue list":
             return list(f.issues)
+        if key == "pr list":
+            return list(f.prs)
         raise AssertionError(argv)
 
     def gh(*argv, **kwargs):
@@ -135,6 +181,13 @@ def build_tools(f: Fakes | None = None) -> tuple[FindingsTools, Calls]:
         error = gh_errors.pop(" ".join(argv[:2]), None)
         if error is not None:
             raise error
+        if list(argv[:2]) == ["issue", "comment"]:
+            # `cmd_claim` reads the issue back after posting its claim comment, to catch a
+            # race a second worktree won. Reflecting the write here is what makes that
+            # read-back see the comment it just posted, the way real `gh` would.
+            body = argv[argv.index("--body") + 1]
+            for issue in _issues_named(f, int(argv[2])):
+                issue.setdefault("comments", []).append({"body": body})
         return subprocess.CompletedProcess(list(argv), 0, f"{f.url}\n", "")
 
     return FindingsTools(gh_json, gh, f.verify or run_verify), calls

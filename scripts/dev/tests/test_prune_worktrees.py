@@ -16,6 +16,7 @@ from prune_worktrees import (
     KEEP,
     REMOVABLE,
     Worktree,
+    _worktree_facts,
     cherry_says_merged,
     classify,
     find_orphan_dirs,
@@ -464,3 +465,31 @@ def test_prune_all_reports_a_removal_git_refused(capsys, monkeypatch):
     monkeypatch.setattr("prune_worktrees.subprocess.run", fake_run)
     prune_all("/repo", [_tree()])
     assert "could not remove /w: is dirty" in capsys.readouterr().out
+
+
+def test_worktree_facts_ok_is_false_when_the_git_call_fails(monkeypatch):
+    """`reap` refuses on `ok=False` rather than release the whole register.
+
+    A failing `git worktree list` must read as "the read failed", not as "there are no
+    worktrees" — the two produce the same empty stdout under `check=False`.
+    """
+    monkeypatch.setattr("prune_worktrees.primary_checkout", lambda: "/repo")
+    monkeypatch.setattr(
+        "prune_worktrees.git",
+        lambda *a, **k: subprocess.CompletedProcess(a, 1, stdout="", stderr="fatal\n"),
+    )
+    trees, _dirty, _merged, ok = _worktree_facts()
+    assert ok is False
+    assert trees == []
+
+
+def test_worktree_facts_ok_is_true_when_git_succeeds_with_no_worktrees(monkeypatch):
+    """The other half of the pair above: a real empty list still reads `ok=True`."""
+    monkeypatch.setattr("prune_worktrees.primary_checkout", lambda: "/repo")
+    monkeypatch.setattr(
+        "prune_worktrees.git",
+        lambda *a, **k: subprocess.CompletedProcess(a, 0, stdout="", stderr=""),
+    )
+    trees, _dirty, _merged, ok = _worktree_facts()
+    assert ok is True
+    assert trees == []

@@ -381,3 +381,13 @@ xdist
 autouse
 unrepresentable
 monkeypatch
+
+# Issue claiming and fan-out (docs/issue-claiming-and-fanout.md)
+[Ss]ubagent
+[Ss]ubagents
+[Ss]ubagent's
+[Oo]rchestrator
+[Oo]rchestrator's
+[Gg]itignored
+[Ss]ubcommand
+[Ss]ubcommands

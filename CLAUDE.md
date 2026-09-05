@@ -56,6 +56,7 @@ Route to the source of truth by what you're doing, before reading linearly:
 | Retiring a finished worktree, or `ExitWorktree` refuses to remove one | `/worktree-cleanup` skill |
 | A PR just merged — what now | `## After a PR Merges — Pull, Deploy, Verify` below (the directive and *When to wait*) · `/land-after-merge` skill (the commands). Default is pull → deploy → verify in the same session, no ask. |
 | Going through the open Renovate PRs | `/renovate-prs` skill. Ten `automerge: false` rules name the manual half in their group name — merging one on green CI ships half a bump. A daily timer runs that same skill unattended where it is armed — `ansible/roles/setup/renovate_agent/CLAUDE.md`. |
+| Picking up an open issue, or working through the backlog | `findings.py next` names what is free to take · `/issue-fanout` skill for several at once · `findings.py claims` shows who holds what. Claim before you start: `findings.py claim <n> --worktree <branch>`. |
 | Checking a k8s manifest change without deploying it | `/deploy` skill → *Checking a k8s change without deploying it* (`--dry-run` vs `--check` vs `prek` — they check different things) |
 | Running or testing a GitOps tick without waiting for the timer | `/gitops-tick` skill. A real tick, not a rehearsal — there is no dry-run mode, and an uneventful tick logs nothing. |
 | Adding / rotating a secret | `/add-secret` skill · `docs/secret-rotation.md` · `## Secrets Management` |

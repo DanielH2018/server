@@ -178,6 +178,9 @@ nav:
       # session does after every merge, so a reader arriving at the pipeline page should find
       # it rather than discover the behaviour changed under them.
       - Post-merge automation: post-merge-automation.md
+      # The "(drafted)" suffix was dropped when the claim protocol and the /issue-fanout
+      # skill landed: the page now describes a system that exists, not one still specced.
+      - Issue claiming and fan-out: issue-claiming-and-fanout.md
       # The "(planned)" suffix was dropped on 2026-08-28 when Phase B landed: the cluster
       # exists on daniel-server and serves freshrss, so a reader arriving from Operations now
       # finds what the label promises. The page is still a spec as well as a description —
