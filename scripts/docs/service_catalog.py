@@ -82,13 +82,8 @@ from lib.render_guard import (
     load_yaml as _load_yaml,
 )
 
-# containers_list — same source and shape scripts/deploy_tools/deploy_tags.py already parses.
-
-
-# Kept as a name of its own: `describe` and the row builder both call it, and the tests import
-# it directly. It is now a thin alias for the shared reader rather than a second copy of the
-# `_`-prefix exclusion.
-iter_host_files = host_files
+# containers_list and the host_vars walk both come from lib.render_guard — the same source and
+# shape scripts/deploy_tools/deploy_tags.py already parses, rather than a second copy here.
 
 
 # Assembly
@@ -115,7 +110,7 @@ def build_rows(
     k8s_namespace = _load_yaml(all_vars).get("k8s_namespace", "homelab")
 
     rows: list[ServiceRow] = []
-    for path in iter_host_files(host_vars):
+    for path in host_files(host_vars):
         host_data = _load_yaml(path)
         host = path.stem
         for entry in containers_entries(path):

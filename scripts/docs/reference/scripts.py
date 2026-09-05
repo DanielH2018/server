@@ -52,7 +52,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from lib.docs_provenance import md_cell as _md_cell
 from lib.repo_paths import REPO, SCRIPTS
-from lib.script_classify import RUNS, candidates, classify, is_candidate
+from lib.script_classify import RUNS, candidates, classify
 from lib.script_coverage import candidate_test_files, indirect_test
 
 # The reStructuredText usage marker the repo's scripts already use, and the indented block
@@ -107,9 +107,6 @@ def build_rows(scripts: Path = SCRIPTS, repo: Path = REPO) -> list[dict[str, str
     test_files = candidate_test_files(repo, scripts)
     rows = []
     for path in candidates(scripts):
-        if not is_candidate(path):
-            continue
-
         if path.suffix == ".py":
             doc = _python_docstring(path)
             if doc is None:

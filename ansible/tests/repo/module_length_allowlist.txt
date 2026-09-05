@@ -41,7 +41,6 @@ scripts/diagnostics/probe.py 697
 scripts/diagnostics/probe_lib/longhorn.py 630
 scripts/diagnostics/tests/test_probe.py 506
 scripts/diagnostics/tests/test_ui_smoke.py 649
-scripts/docs/tests/test_gen_reference_scripts.py 576
-scripts/docs/tests/test_service_catalog.py 506
+scripts/docs/tests/test_gen_reference_scripts.py 575
 scripts/secrets_mgmt/secret_rotation.py 880
 scripts/secrets_mgmt/tests/test_secret_rotation.py 592

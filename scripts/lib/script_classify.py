@@ -319,11 +319,7 @@ def classify(repo: Path = REPO, scripts: Path = SCRIPTS) -> dict[str, tuple[str,
     # generators are scheduled by way of `build_docs.py` and its cron rather than reading
     # as things nobody runs. Iterated to a fixpoint: the chain is cron → build_docs.py →
     # generator, and a longer one would otherwise resolve only as far as it was walked.
-    callers = {
-        path: _invoked_by(path, scripts)
-        for path in candidates(scripts)
-        if is_candidate(path)
-    }
+    callers = {path: _invoked_by(path, scripts) for path in candidates(scripts)}
     while True:
         settled = True
         for path, targets in callers.items():
@@ -339,8 +335,7 @@ def classify(repo: Path = REPO, scripts: Path = SCRIPTS) -> dict[str, tuple[str,
             break
 
     for path in candidates(scripts):
-        if is_candidate(path):
-            verdicts.setdefault(path.name, ("adhoc", "no automated caller in the tree"))
+        verdicts.setdefault(path.name, ("adhoc", "no automated caller in the tree"))
     return verdicts
 
 

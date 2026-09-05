@@ -342,10 +342,7 @@ def test_a_test_that_names_the_path_counts_as_indirect_coverage(tmp_path):
     """gitops_tick.sh's five tests live in ansible/tests/deploy/test_gitops_manual_trigger.py."""
     repo, scripts = _repo(tmp_path)
     _write(scripts / "run.sh", "#!/bin/sh\n# Summary.\n")
-    _write(
-        repo / "ansible" / "tests" / "test_elsewhere.py",
-        'WRAPPER = "scripts/run.sh"\n',
-    )
+    _write(repo / "ansible/tests/test_elsewhere.py", 'WRAPPER = "scripts/run.sh"\n')
     rows = {r["name"]: r for r in g.build_rows(scripts, repo)}
     assert rows["run.sh"]["tests"] == ""
     assert rows["run.sh"]["indirect_tests"] == "test_elsewhere.py"
@@ -356,6 +353,8 @@ def test_a_test_that_merely_says_the_word_is_not_coverage(tmp_path):
     repo, scripts = _repo(tmp_path)
     _write(scripts / "deploy.sh", "#!/bin/sh\n# Summary.\n")
     _write(scripts / "test_other.py", 'MSG = "deploy the thing"\n')
+    rows = {r["name"]: r for r in g.build_rows(scripts, repo)}
+    assert rows["deploy.sh"]["indirect_tests"] == ""
     files = cov.candidate_test_files(repo, scripts)
     assert cov.indirect_test("deploy.sh", files, scripts) == ("", "")
 
