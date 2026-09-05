@@ -8,8 +8,6 @@ The result is memoised per role. Split from `test_inline_rollout_gates.py` on 20
 module's docstring is the contract.
 """
 
-from __future__ import annotations
-
 import re
 from dataclasses import dataclass
 from pathlib import Path

@@ -14,8 +14,6 @@ The footer is appended as Markdown so the theme styles it like the rest of the p
 `assets/extra.css` mutes `.doc-freshness`.
 """
 
-from __future__ import annotations
-
 import posixpath
 import sys
 from pathlib import Path

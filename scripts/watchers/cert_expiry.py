@@ -29,8 +29,6 @@ Env (both optional -- a watcher with neither just logs):
 Tests: uv run pytest scripts/watchers/tests
 """
 
-from __future__ import annotations
-
 import argparse
 import os
 import socket

@@ -10,8 +10,6 @@ because both suites need them and pytest names test modules by basename repo-wid
 Consumers: `test_longhorn_backup_health_reader.py`, `test_longhorn_backup_grace_cron.py`.
 """
 
-from __future__ import annotations
-
 import os
 import subprocess
 import sys

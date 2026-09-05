@@ -48,8 +48,6 @@ The FILENAME predates the widened selector and no longer describes it; it is kep
 of this guard stays on one path. Read the code, not the name.
 """
 
-from __future__ import annotations
-
 import re
 from pathlib import Path
 

@@ -20,8 +20,6 @@ A test that needs to point a reader at a ``tmp_path`` passes the path as an argu
 constants are defaults, never the only way in.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]

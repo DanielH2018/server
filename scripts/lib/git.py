@@ -12,8 +12,6 @@ decides which tree is read. This is for reads and worktree bookkeeping: a script
 commits and needs ``GIT_AUTHOR_*`` passes its own ``env`` to ``subprocess`` directly.
 """
 
-from __future__ import annotations
-
 import os
 import subprocess
 from pathlib import Path

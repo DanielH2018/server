@@ -70,9 +70,6 @@ the contract above, the hand-written `_MUST_GATE`, the excused `_UNRESOLVED_TARG
 assertions.
 """
 
-from __future__ import annotations
-
-
 from _inline_rollout_tasks import _K8S_ROLES, _Task, _tasks
 from _inline_rollout_targets import (
     _UNRESOLVED,

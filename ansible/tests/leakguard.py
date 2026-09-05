@@ -48,8 +48,6 @@ side effect, the shared fact cache, is fenced at the source by `ANSIBLE_CACHE_PL
 in the env those harnesses build.
 """
 
-from __future__ import annotations
-
 import os
 import shutil
 import socket

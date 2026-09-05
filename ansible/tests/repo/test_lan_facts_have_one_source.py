@@ -30,8 +30,6 @@ an `_is_clean` / `_is_flagged` pair below, and `test_the_census_actually_scanned
 asserts the walk visits a NAMED set of paths rather than trusting an empty result.
 """
 
-from __future__ import annotations
-
 import re
 from pathlib import Path
 

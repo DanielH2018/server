@@ -18,8 +18,6 @@ Both budgets are computed from curl's documented backoff rather than asserted as
 the failure message says which number moved.
 """
 
-from __future__ import annotations
-
 import re
 
 import pytest

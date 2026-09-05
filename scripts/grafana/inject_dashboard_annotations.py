@@ -20,8 +20,6 @@ injection is idempotent by name as well, and a board that already declares an an
 this name is left exactly as it is.
 """
 
-from __future__ import annotations
-
 import argparse
 import json
 import sys

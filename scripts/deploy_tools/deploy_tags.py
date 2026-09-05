@@ -31,8 +31,6 @@ stays flat and one-per-line for that possible future consumer (see test_deploy_t
 Run: uv run pytest scripts/deploy_tools/tests/test_deploy_tags.py
 """
 
-from __future__ import annotations
-
 import argparse
 import difflib
 import subprocess

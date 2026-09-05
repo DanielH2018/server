@@ -15,8 +15,6 @@ declare, and what it must NOT — the container, volume and key names whose fals
 declared" is the whole reason it replaced a grep.
 """
 
-from __future__ import annotations
-
 import sys
 from pathlib import Path
 

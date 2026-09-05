@@ -7,8 +7,6 @@ workload it renders, batch included, is gated by something this module can see.
 Consumed by `test_k8s_autodeploy_rollout_gates.py`.
 """
 
-from __future__ import annotations
-
 import re
 from pathlib import Path
 

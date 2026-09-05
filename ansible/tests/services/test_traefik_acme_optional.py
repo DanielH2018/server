@@ -14,8 +14,6 @@ Every rule here is a pair — one input it must accept, one it must reject — b
 has only ever been observed passing carries no evidence it can fail.
 """
 
-from __future__ import annotations
-
 import sys
 
 import pytest

@@ -23,8 +23,6 @@ Secrets (a Discord webhook, a healthcheck ping URL) are read from the environmen
 caller, exactly as the availability bots already do -- never hardcoded here.
 """
 
-from __future__ import annotations
-
 import json
 import logging
 import os

@@ -25,8 +25,6 @@ manifest list and `missing_expectations()` fails when a routable service declare
 the subset therefore cannot quietly grow the blind spot.
 """
 
-from __future__ import annotations
-
 import argparse
 import ast
 import re

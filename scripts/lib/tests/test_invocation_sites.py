@@ -4,8 +4,6 @@ reader that silently stopped matching (or started over-matching) fails its own t
 reading green forever.
 """
 
-from __future__ import annotations
-
 import textwrap
 
 from invocation_sites import (

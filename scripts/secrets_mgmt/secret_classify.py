@@ -9,8 +9,6 @@ The tiers themselves, and the cadence each carries, are documented in
 `docs/reference/secrets.md`.
 """
 
-from __future__ import annotations
-
 # Classification by name. First matching rule wins; default is `assisted` (the safe,
 # reminds-but-doesn't-touch tier).
 _IGNORE = {"domain"}

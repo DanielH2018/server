@@ -19,8 +19,6 @@ This deliberately does not assert the variable's VALUE. Off is the shipped defau
 is a legitimate operator choice; what must not happen is the two halves diverging.
 """
 
-from __future__ import annotations
-
 import re
 from _helpers import REPO
 

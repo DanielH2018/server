@@ -6,8 +6,6 @@ matters is about what the generator READS, not what it prints.
 Run: uv run pytest scripts/docs/tests/test_gen_reference_secrets.py
 """
 
-from __future__ import annotations
-
 import builtins
 import datetime as dt
 import textwrap

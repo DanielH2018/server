@@ -27,8 +27,6 @@ Reads the hook JSON on stdin. Emits a PreToolUse "deny" decision naming the land
 use instead; otherwise no output -> normal permission flow.
 """
 
-from __future__ import annotations
-
 import json
 import re
 import sys

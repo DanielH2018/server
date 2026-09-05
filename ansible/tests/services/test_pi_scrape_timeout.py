@@ -13,8 +13,6 @@ the failure the monitor exists to surface, so those jobs keep the 10s default. T
 both halves — the Pi jobs above the default, every other job at it.
 """
 
-from __future__ import annotations
-
 import re
 import sys as _sys
 

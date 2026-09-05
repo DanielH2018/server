@@ -12,8 +12,6 @@ shared var one directory up is invisible to it — the escape `crowdsec_k8s_imag
 in renovate.json. Duplication that a test keeps in lockstep beats a single copy nothing tracks.
 """
 
-from __future__ import annotations
-
 import re
 import sys
 from pathlib import Path

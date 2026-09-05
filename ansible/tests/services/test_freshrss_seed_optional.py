@@ -20,8 +20,6 @@ cluster with a fresh PVC has no label, the copy decision resolves to true, and t
 trying to tar a directory that is gone.
 """
 
-from __future__ import annotations
-
 import ast
 import sys
 

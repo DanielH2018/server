@@ -36,8 +36,6 @@ wrong way.
 Run: uv run pytest ansible/tests/deploy/test_k8s_toposort.py
 """
 
-from __future__ import annotations
-
 import random
 from pathlib import Path
 

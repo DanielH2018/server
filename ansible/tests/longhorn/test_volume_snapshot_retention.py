@@ -16,8 +16,6 @@ the code Ansible runs; `jinja2.nativetypes` returns real Python objects where An
 "True"/"False" strings, which the role's `| int` and `| bool` coercions collapse identically.
 """
 
-from __future__ import annotations
-
 from _helpers import load_tasks as _tasks
 
 from _helpers import render_expr as _render

@@ -25,8 +25,6 @@ a guard that matches everything and a guard that matches nothing are indistingui
 passing side alone.
 """
 
-from __future__ import annotations
-
 import subprocess
 import tomllib
 from pathlib import PurePosixPath

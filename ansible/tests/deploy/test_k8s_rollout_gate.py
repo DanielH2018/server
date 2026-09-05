@@ -21,9 +21,6 @@ simply never ran:
     reconciles against a dead API.
 """
 
-from __future__ import annotations
-
-
 from lib import yaml_fast
 from _helpers import REPO as _REPO
 from _helpers import load_tasks as _tasks

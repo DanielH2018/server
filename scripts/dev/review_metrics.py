@@ -20,8 +20,6 @@ a rate that depends on a `null` input is itself `null` — never silently comput
 partial row.
 """
 
-from __future__ import annotations
-
 import argparse
 import json
 from pathlib import Path

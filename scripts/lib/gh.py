@@ -11,8 +11,6 @@ This is for the authenticated CLI on this machine. It does not take a token: `gh
 `~/.config/gh/hosts.yml` for the invoking user, which is how every cron here already works.
 """
 
-from __future__ import annotations
-
 import json
 import os
 import subprocess

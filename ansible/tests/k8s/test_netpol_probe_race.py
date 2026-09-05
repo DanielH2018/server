@@ -20,8 +20,6 @@ own diagnostic. Either regression reads as "the policy is broken" when the polic
 is the failure mode this file exists to prevent.
 """
 
-from __future__ import annotations
-
 import re
 
 from _k8s_render import rendered_docs

@@ -5,8 +5,6 @@ non-mapping file to ``{}``; the shared one must keep doing so, or a host_vars fi
 top level is a list reaches a ``.get`` several calls later.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 from render_guard import HOST_VARS, REPO, host_files, load_yaml

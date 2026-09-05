@@ -7,8 +7,6 @@ for the whole pipeline through land.main. The fakes they build on live in _land_
 Run: uv run pytest scripts/deploy_tools/tests -k land
 """
 
-from __future__ import annotations
-
 import os
 import sys
 from dataclasses import replace

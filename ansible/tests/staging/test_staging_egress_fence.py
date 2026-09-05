@@ -23,8 +23,6 @@ does not contain the guest is not a weaker fence, it is no fence at all, and it 
 in every listing the host offers.
 """
 
-from __future__ import annotations
-
 import ipaddress
 import re
 import xml.etree.ElementTree as ET

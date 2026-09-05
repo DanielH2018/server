@@ -13,8 +13,6 @@ The I/O layer is pinned by real subprocess runs in `test_longhorn_backup_health_
 Run: uv run pytest ansible/roles/setup/k3s/tests/test_longhorn_backup_health.py
 """
 
-from __future__ import annotations
-
 import sys
 from pathlib import Path
 

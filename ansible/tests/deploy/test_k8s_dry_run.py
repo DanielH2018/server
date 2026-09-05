@@ -27,8 +27,6 @@ against a copy, so adding a `kubectl delete job` to a role fails here instead of
 widening what dry-run claims to cover.
 """
 
-from __future__ import annotations
-
 import re
 from pathlib import Path
 

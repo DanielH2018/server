@@ -43,8 +43,6 @@ Reads the hook JSON on stdin. Emits a PreToolUse "deny" decision carrying the fi
 output -> normal permission flow. The hook can only ever DENY.
 """
 
-from __future__ import annotations
-
 import json
 import sys
 from urllib.parse import urlsplit

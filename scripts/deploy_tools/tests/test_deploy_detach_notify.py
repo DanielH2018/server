@@ -4,8 +4,6 @@
 Run: uv run pytest scripts/deploy_tools/tests/test_deploy_detach_notify.py
 """
 
-from __future__ import annotations
-
 import types
 
 

@@ -51,9 +51,6 @@ reality, since only one service's rollout wait is ever the binding one (k8s/roll
 batches them).
 """
 
-from __future__ import annotations
-
-
 from lib import yaml_fast
 from _helpers import REPO as _REPO
 

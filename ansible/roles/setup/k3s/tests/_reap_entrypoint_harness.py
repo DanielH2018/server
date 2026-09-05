@@ -20,8 +20,6 @@ Consumers: `test_longhorn_reap_entrypoints.py`, `test_longhorn_reap_backups_cli.
 `test_longhorn_reap_snapshots_cli.py`.
 """
 
-from __future__ import annotations
-
 import json
 import os
 import pathlib

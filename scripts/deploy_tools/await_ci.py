@@ -19,8 +19,6 @@ Exit codes:
 Run: uv run python scripts/deploy_tools/await_ci.py <sha>
 """
 
-from __future__ import annotations
-
 import argparse
 import json
 import os

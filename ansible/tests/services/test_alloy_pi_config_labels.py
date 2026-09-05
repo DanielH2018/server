@@ -7,8 +7,6 @@ crons from the cluster hosts' syslog. The config is River, which `validate/confi
 cannot parse, so this reads the template text.
 """
 
-from __future__ import annotations
-
 import re
 
 import pytest

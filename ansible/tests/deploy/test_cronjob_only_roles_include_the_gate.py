@@ -12,8 +12,6 @@ the same way `test_k8s_autodeploy_batch_gates.py` catches a missing wait for a p
 Run: uv run pytest ansible/tests/deploy/test_cronjob_only_roles_include_the_gate.py
 """
 
-from __future__ import annotations
-
 import sys
 
 from _autodeploy import _K8S_ROLES

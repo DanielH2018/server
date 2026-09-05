@@ -5,8 +5,6 @@ with defaults, so a test states only the field it is about. Nothing here needs a
 a cluster, or ssh.
 """
 
-from __future__ import annotations
-
 import sys as _sys
 from pathlib import Path as _Path
 

@@ -20,8 +20,6 @@ helper whose job is to raise capabilities. Blocking it does not yield a safer bu
 a root or privileged one. This file pins the boundaries around that decision, not the decision.
 """
 
-from __future__ import annotations
-
 import sys
 
 from _helpers import REPO

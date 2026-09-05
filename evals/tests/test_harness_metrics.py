@@ -4,8 +4,6 @@ non-vacuity check on the shared classifier corpus import.
 Run: uv run pytest evals/tests/test_harness_metrics.py
 """
 
-from __future__ import annotations
-
 import os
 import sys
 

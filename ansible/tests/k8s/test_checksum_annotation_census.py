@@ -28,8 +28,6 @@ two different ways, and only one of them needs an annotation:
 Run: uv run pytest ansible/tests/k8s/test_checksum_annotation_census.py
 """
 
-from __future__ import annotations
-
 import sys
 from pathlib import Path
 

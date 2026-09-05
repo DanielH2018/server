@@ -18,8 +18,6 @@ So the verdict function below must separate "something else authenticated" from 
 authenticated and was not confined", and the tests that matter are the ones proving it does.
 """
 
-from __future__ import annotations
-
 import subprocess
 
 from lib import yaml_fast

@@ -4,8 +4,6 @@ The polling loop itself is I/O and is not unit-tested; this covers the part that
 whether a rollout was zero-downtime, which is the part a wrong answer would mislead on.
 """
 
-from __future__ import annotations
-
 from measure_rollout_gap import GapReport, ready_count, summarize
 
 

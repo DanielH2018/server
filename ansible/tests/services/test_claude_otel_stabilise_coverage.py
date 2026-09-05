@@ -28,9 +28,6 @@ Three things can silently break that, and none of them fails a deploy:
     `after <= before` comparison passes no matter what happened.
 """
 
-from __future__ import annotations
-
-
 from _helpers import REPO as _REPO
 from _helpers import load_tasks, load_yaml
 from _helpers import command_of as _cmd

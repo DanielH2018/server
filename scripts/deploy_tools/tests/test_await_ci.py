@@ -8,8 +8,6 @@ proceeds -- so each case that must pass has a sibling that must fail.
 Run: uv run pytest scripts/deploy_tools/tests/test_await_ci.py
 """
 
-from __future__ import annotations
-
 import sys
 from pathlib import Path
 

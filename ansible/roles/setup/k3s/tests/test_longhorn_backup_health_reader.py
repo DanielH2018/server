@@ -13,8 +13,6 @@ fixture is the file it appends to.
 Run: uv run pytest ansible/roles/setup/k3s/tests/test_longhorn_backup_health_reader.py
 """
 
-from __future__ import annotations
-
 import subprocess
 import sys
 import time

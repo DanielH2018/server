@@ -8,8 +8,6 @@ Rendering goes through validate.k8s_manifests' own machinery rather than a secon
 what a test considers a manifest cannot drift from what that validator does.
 """
 
-from __future__ import annotations
-
 import sys
 
 from _helpers import REPO

@@ -27,8 +27,6 @@ Usage::
     uv run python scripts/docs/build_docs.py --skip-generators        # rebuild only
 """
 
-from __future__ import annotations
-
 import argparse
 import datetime as dt
 import json

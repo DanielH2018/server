@@ -32,8 +32,6 @@ Usage (credentials come from the environment, see ansible/drain_backup_prefix.ym
         --live-volumes-file /tmp/live.txt --volumes pvc-aaa,pvc-bbb [--apply]
 """
 
-from __future__ import annotations
-
 import argparse
 import base64
 import json

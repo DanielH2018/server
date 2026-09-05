@@ -18,8 +18,6 @@ Every existing test of this guard asserted its source text and passed throughout
 gap this module closes: it runs the role and lets Ansible judge the conditional.
 """
 
-from __future__ import annotations
-
 import os
 import shutil
 import subprocess

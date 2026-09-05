@@ -17,8 +17,6 @@ against the files on disk here, in both directions.
 Run: uv run pytest ansible/tests/services/test_artifacts_configmap.py
 """
 
-from __future__ import annotations
-
 import ast
 import json
 

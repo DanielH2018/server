@@ -7,8 +7,6 @@ eligibility — and both report a reason rather than a guess when the role does 
 FIELD NOTES in the generator's own docstring record which cases those are and why.
 """
 
-from __future__ import annotations
-
 import sys as _sys
 from pathlib import Path as _Path
 

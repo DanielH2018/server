@@ -11,8 +11,6 @@ flagged none would restore the six wasted minutes it exists to save.
 Run: uv run pytest scripts/deploy_tools/tests/test_deploy_tags_blockers.py
 """
 
-from __future__ import annotations
-
 import argparse
 import sys
 from pathlib import Path

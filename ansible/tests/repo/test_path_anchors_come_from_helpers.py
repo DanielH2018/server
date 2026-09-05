@@ -16,8 +16,6 @@ Clean/flagged pairs below, per the repo rule that a new check ships with a proof
 Run: uv run pytest ansible/tests/repo/test_path_anchors_come_from_helpers.py
 """
 
-from __future__ import annotations
-
 import re
 
 from _helpers import ANSIBLE

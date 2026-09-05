@@ -6,8 +6,6 @@ directly-invoked script gets only its own directory on sys.path.
 Run: uv run pytest scripts/deploy_tools/tests/test_land_shim.py
 """
 
-from __future__ import annotations
-
 import os
 import subprocess
 from pathlib import Path

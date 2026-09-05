@@ -9,8 +9,6 @@ no longer ``sold_out``, posts to Discord and pings the run healthcheck.
 Required env (see .env.example): GLENSTONE_DISCORD_WEBHOOK_URL, GLENSTONE_HEALTHCHECK_URL
 """
 
-from __future__ import annotations
-
 import requests
 
 from common import (

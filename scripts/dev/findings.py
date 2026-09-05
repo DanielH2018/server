@@ -43,8 +43,6 @@ Exit codes: 0 done; 1 gh failed (its stderr is printed); 2 bad arguments;
 closed as refuted, or `touch` was given a closed issue.
 """
 
-from __future__ import annotations
-
 import argparse
 import json
 import subprocess

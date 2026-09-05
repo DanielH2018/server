@@ -27,8 +27,6 @@ blocks — this guard reads raw template text and cannot see one built through a
 without that pin the accept coverage could reach zero without a test turning red.
 """
 
-from __future__ import annotations
-
 import re
 from pathlib import Path
 

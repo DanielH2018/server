@@ -38,8 +38,6 @@ Usage::
     uv run python scripts/docs/reference/decisions.py --out docs/reference/decisions.md
 """
 
-from __future__ import annotations
-
 import argparse
 import datetime as dt
 import difflib

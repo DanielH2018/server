@@ -5,8 +5,6 @@ which is what lets the whole check be tested with synthetic values on a host (or
 no age key. Nothing here opens a file or spawns a process.
 """
 
-from __future__ import annotations
-
 import re
 
 # Uptime Kuma rejects a push token that is not exactly 32 letters/digits, and it rejects it at

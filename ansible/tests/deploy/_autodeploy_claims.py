@@ -7,8 +7,6 @@ for: a `strategy: Recreate` Deployment against at least one rendered RWO claim.
 Consumed by `test_k8s_autodeploy_guard.py`.
 """
 
-from __future__ import annotations
-
 import re
 from pathlib import Path
 

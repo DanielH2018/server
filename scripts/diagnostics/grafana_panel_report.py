@@ -26,8 +26,6 @@ provisioned to a Grafana that had dropped Angular and rendered nothing for 55 mi
 the pod read 1/1 with zero errors in the log.
 """
 
-from __future__ import annotations
-
 import re
 from dataclasses import dataclass
 

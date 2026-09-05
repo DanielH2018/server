@@ -4,8 +4,6 @@ There is no monitor and no deadman on the docs cron. A stopped cron surfaces as 
 old date on the page, so these assertions are load-bearing rather than cosmetic.
 """
 
-from __future__ import annotations
-
 import datetime as dt
 from pathlib import Path
 

@@ -7,8 +7,6 @@ pattern this deliberately does NOT follow — the catalog derives facts rather t
 Run: uv run pytest scripts/docs/tests/test_service_catalog.py
 """
 
-from __future__ import annotations
-
 import textwrap
 
 import service_catalog

@@ -4,8 +4,6 @@ Fixture-driven: a synthetic scripts/ directory under tmp_path.
 Run: uv run pytest scripts/docs/tests/test_gen_reference_scripts.py
 """
 
-from __future__ import annotations
-
 import re
 import textwrap
 from pathlib import Path

@@ -4,8 +4,6 @@ The guards split three ways on 2026-09-01 -- retention and naming, the maintenan
 path, and the deploy-hygiene checks -- and each reads the same three task files.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 from _helpers import K8S_ROLES

@@ -15,8 +15,6 @@ deployer records the change as applied. That is not hypothetical: on 2026-09-01 
 Adding a setup role, moving one between playbooks, or renaming a role's tag all fail here.
 """
 
-from __future__ import annotations
-
 import re
 
 from deploy_logic import setup_role_playbook, setup_role_tag

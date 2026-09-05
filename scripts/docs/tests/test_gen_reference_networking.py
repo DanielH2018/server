@@ -5,8 +5,6 @@ Fixture-driven: synthetic host_vars, roles and group_vars under tmp_path.
 Run: uv run pytest scripts/docs/tests/test_gen_reference_networking.py
 """
 
-from __future__ import annotations
-
 import textwrap
 
 from docs.reference import networking as g

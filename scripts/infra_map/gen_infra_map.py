@@ -36,8 +36,6 @@ Usage::
     uv run python scripts/infra_map/gen_infra_map.py --no-live           # declared state only
 """
 
-from __future__ import annotations
-
 import argparse
 import json
 import os

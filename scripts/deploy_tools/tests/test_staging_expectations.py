@@ -8,8 +8,6 @@ the route was unsatisfiable by construction.
 Every case drives `compare` or `missing_expectations` — the same functions the runner drives.
 """
 
-from __future__ import annotations
-
 import inspect
 import sys
 from pathlib import Path

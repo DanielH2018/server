@@ -3,8 +3,6 @@
 Run: uv run pytest scripts/deploy_tools/tests/test_land_tools.py
 """
 
-from __future__ import annotations
-
 import subprocess
 import sys
 from pathlib import Path

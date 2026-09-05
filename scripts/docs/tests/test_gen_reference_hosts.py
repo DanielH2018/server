@@ -6,8 +6,6 @@ inventory, which changes.
 Run: uv run pytest scripts/docs/tests/test_gen_reference_hosts.py
 """
 
-from __future__ import annotations
-
 import textwrap
 
 from docs.reference import hosts as g

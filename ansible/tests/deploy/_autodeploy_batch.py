@@ -8,8 +8,6 @@ behind a `when: false` is invisible to the credit exactly as it is invisible to 
 Consumed by `test_k8s_autodeploy_batch_gates.py` and by `_autodeploy_rollout.py`.
 """
 
-from __future__ import annotations
-
 import re
 from pathlib import Path
 

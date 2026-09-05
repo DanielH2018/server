@@ -10,8 +10,6 @@ pair: one that the stub captured land.sh's real annotation, one that the annotat
 landing line rather than any stray `logger` call.
 """
 
-from __future__ import annotations
-
 import os
 import subprocess
 from pathlib import Path

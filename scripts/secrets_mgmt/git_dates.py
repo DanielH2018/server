@@ -10,8 +10,6 @@ Nothing here decrypts. Every read goes through `tools.git`, so a test drives the
 derivation off a synthetic history.
 """
 
-from __future__ import annotations
-
 import datetime as dt
 import subprocess
 

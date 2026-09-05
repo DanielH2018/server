@@ -46,8 +46,6 @@ Usage:
     uv run python scripts/deploy_tools/fact_cache_guard.py --cache-dir DIR --repo-root DIR
 """
 
-from __future__ import annotations
-
 import argparse
 import configparser
 import json

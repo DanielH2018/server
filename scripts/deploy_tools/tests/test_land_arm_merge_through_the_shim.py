@@ -16,8 +16,6 @@ no service tag and no plane. That is far enough to prove `LAND_PRIMARY` reaches 
 -- `git` runs with the primary checkout as its cwd, and the recorded cwd is asserted.
 """
 
-from __future__ import annotations
-
 import os
 import subprocess
 from pathlib import Path

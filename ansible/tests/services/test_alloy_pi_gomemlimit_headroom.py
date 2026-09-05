@@ -13,8 +13,6 @@ The ceiling is the compose memory cap: a limit at or above it is no ceiling at a
 container is OOM-killed before the runtime collects.
 """
 
-from __future__ import annotations
-
 import re
 
 from _helpers import REPO

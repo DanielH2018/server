@@ -11,8 +11,6 @@ probe is listed below with the reason, which is the decision worth forcing on wh
 next one.
 """
 
-from __future__ import annotations
-
 from _k8s_render import rendered_docs
 
 _POD_KINDS = {"Deployment", "DaemonSet", "StatefulSet"}

@@ -3,8 +3,6 @@
 Run: uv run pytest scripts/docs/tests/test_route_facts.py
 """
 
-from __future__ import annotations
-
 import route_facts as rf
 
 

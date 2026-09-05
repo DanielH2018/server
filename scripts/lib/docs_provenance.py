@@ -22,8 +22,6 @@ Every generator calls generated_banner() for the preamble and write_if_body_chan
 to write the result.
 """
 
-from __future__ import annotations
-
 import datetime as dt
 import subprocess
 import sys

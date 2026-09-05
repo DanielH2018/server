@@ -49,8 +49,6 @@ passes cleanly in exactly that state. Merged branches are deleted on this repo
 Run: uv run pytest scripts/deploy_tools/tests/test_publish_pr.py
 """
 
-from __future__ import annotations
-
 import argparse
 import json
 import subprocess

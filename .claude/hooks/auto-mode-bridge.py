@@ -24,8 +24,6 @@ Stdlib-only, like the other hooks here: it runs under `uv run` from the wrapper,
 suite loads it by path.
 """
 
-from __future__ import annotations
-
 import json
 import os
 import re

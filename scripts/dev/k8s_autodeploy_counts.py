@@ -14,8 +14,6 @@ gitops_deploy denylist from, and the same source `ansible/tests/deploy/_autodepl
 every role exactly, so eligible + denylist always equals the role count.
 """
 
-from __future__ import annotations
-
 import sys
 from pathlib import Path
 

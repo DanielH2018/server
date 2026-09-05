@@ -15,8 +15,6 @@ that simply stopped matching would look fixed.
 Run: uv run pytest scripts/deploy_tools/tests/test_deploy_exit_codes.py
 """
 
-from __future__ import annotations
-
 import os
 import subprocess
 from pathlib import Path

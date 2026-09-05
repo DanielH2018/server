@@ -16,8 +16,6 @@ Equality, not containment. All three are the same six services today, and a subs
 would accept exactly the drift above.
 """
 
-from __future__ import annotations
-
 import ast
 import pathlib
 

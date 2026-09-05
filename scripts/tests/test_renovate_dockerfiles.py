@@ -11,8 +11,6 @@ workflows), each of which Renovate bumps as separate PRs.
 Run: uv run pytest scripts/tests/test_renovate_dockerfiles.py
 """
 
-from __future__ import annotations
-
 import re
 
 

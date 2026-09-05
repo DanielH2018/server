@@ -20,8 +20,6 @@ Scope is also asserted: the rule covers this one unit and only the `start` verb.
 /kill stay privileged, because a wedged run is an incident rather than a routine action.
 """
 
-from __future__ import annotations
-
 import re
 from _helpers import REPO as _REPO
 

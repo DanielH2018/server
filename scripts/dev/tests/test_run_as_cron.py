@@ -14,8 +14,6 @@ indistinguishable from a guard that fires on nothing.
 Run: uv run pytest scripts/dev/tests/test_run_as_cron.py
 """
 
-from __future__ import annotations
-
 import subprocess
 from pathlib import Path
 

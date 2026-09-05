@@ -27,8 +27,6 @@ guard that fires on everything and one that fires on nothing look identical from
 passing side, and this repo has paid for that twice.
 """
 
-from __future__ import annotations
-
 import json
 import re
 from pathlib import Path

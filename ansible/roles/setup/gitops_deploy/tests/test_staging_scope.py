@@ -11,8 +11,6 @@ manifest are the same alert otherwise, and an operator who cannot tell them apar
 reflex.
 """
 
-from __future__ import annotations
-
 import sys
 from pathlib import Path
 

@@ -12,8 +12,6 @@ ever sees argv, never the Python-side `timeout=` the caller passed in. The patch
 Run: uv run pytest ansible/roles/setup/k3s/tests/test_longhorn_reap_delete_transport.py
 """
 
-from __future__ import annotations
-
 import json
 import pathlib
 import subprocess

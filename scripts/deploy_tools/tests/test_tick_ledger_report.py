@@ -7,8 +7,6 @@ the outcome vocabulary is duplicated across two trees that cannot import each ot
 asserted equal here rather than kept in step by hand.
 """
 
-from __future__ import annotations
-
 import json
 import pathlib
 import sys

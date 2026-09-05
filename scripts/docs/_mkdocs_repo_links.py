@@ -40,8 +40,6 @@ the other way round.
 rendering, and `on_page_content` runs after that. `test_mkdocs_repo_links.py` is the gate.
 """
 
-from __future__ import annotations
-
 import html
 import os
 import re

@@ -19,8 +19,6 @@ attached path completes. A rendered-expression test cannot catch this class: the
 Ansible assigns a register, not in any expression's text.
 """
 
-from __future__ import annotations
-
 import os
 import shutil
 import subprocess

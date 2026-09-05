@@ -29,8 +29,6 @@ Scope: `roles/**/tasks/*.yml`, the same surface as `test_conditional_register_co
 Playbook-level `pre_tasks`/`post_tasks` are not walked.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import yaml

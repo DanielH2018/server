@@ -34,8 +34,6 @@ The reverse costs nothing and is allowed: `extra-paths` carries `.claude/hooks` 
 Clean/flagged pairs below, per the repo rule that a new check ships with a proof it can go RED.
 """
 
-from __future__ import annotations
-
 import subprocess
 import tomllib
 from pathlib import PurePosixPath

@@ -5,7 +5,6 @@ topologically sort containers_list, find the transitive-dependency closure of a 
 deploy, and expand a tagged deploy to include dependencies that are not already running.
 """
 
-from __future__ import annotations
 import heapq
 import os
 import yaml

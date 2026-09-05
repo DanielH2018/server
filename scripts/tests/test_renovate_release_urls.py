@@ -8,8 +8,6 @@ so a manager that quietly stopped matching cannot empty the corpus and pass.
 Run: uv run pytest scripts/tests/test_renovate_release_urls.py
 """
 
-from __future__ import annotations
-
 import re
 
 

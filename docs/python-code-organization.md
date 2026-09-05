@@ -185,7 +185,16 @@ non-obvious. Shape is gated by ruff `D205/D415/D212/D209/D210`; content follows
 `~/.claude/rules/python.md`.
 
 **`from __future__ import annotations` is dead on 3.14.** PEP 649 defers annotation
-evaluation by default ([What's new in 3.14][py314]). Do not add it to a new module.
+evaluation by default ([What's new in 3.14][py314]). Do not add it to a new module, and
+`ansible/tests/repo/test_no_future_annotations_import.py` enforces that the tree agrees —
+the rule governed new modules only until 2026-09-05, so half of `scripts/infra_map/` carried
+the line and half did not.
+
+**The exception is `ansible/roles/*/*/files/`**, which the guard exempts. A program there runs
+under the HOST's interpreter rather than the repo's uv env — `python3` on daniel-server and
+daniel-pi is 3.12.3 — and below 3.14 there is no PEP 649, so annotations evaluate eagerly at
+`def`/`class` time and the import is real insurance against a forward reference. The repo suite
+cannot see that difference, because it runs on 3.14 where both spellings are lazy.
 
 **A check ships with a proof it can go red.** Repo-root `CLAUDE.md` owns this rule; it
 applies to every validator or guard in this tree.

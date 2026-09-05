@@ -6,8 +6,6 @@ generator reads in production.
 Run: uv run pytest scripts/docs/tests/test_gen_reference_state.py
 """
 
-from __future__ import annotations
-
 import datetime as dt
 import textwrap
 

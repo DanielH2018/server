@@ -16,8 +16,6 @@ idempotent: run it, and a non-empty `git diff` under schemas/ is the drift.
 Refresh: uv run python scripts/validate/refresh_crd_schemas.py
 """
 
-from __future__ import annotations
-
 import sys
 import urllib.error
 import urllib.request

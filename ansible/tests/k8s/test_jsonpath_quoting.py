@@ -31,8 +31,6 @@ up, add a third rather than widening one regex until nobody can read it.
 Run: uv run pytest ansible/tests/k8s/test_jsonpath_quoting.py
 """
 
-from __future__ import annotations
-
 import re
 from pathlib import Path
 

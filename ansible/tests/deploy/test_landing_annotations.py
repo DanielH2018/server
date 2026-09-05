@@ -7,8 +7,6 @@ fields out of it. The two are edited independently, and nothing else checks that
 a panel unwraps is a field the script writes. Same shape as test_deploy_annotations.py.
 """
 
-from __future__ import annotations
-
 import json
 import re
 

@@ -10,8 +10,6 @@ passing side -- so every rule here has a reject half.
 Run: uv run pytest scripts/deploy_tools/tests/test_land_tags.py
 """
 
-from __future__ import annotations
-
 import sys
 from pathlib import Path
 

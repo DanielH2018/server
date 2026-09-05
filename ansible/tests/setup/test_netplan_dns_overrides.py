@@ -21,8 +21,6 @@ The three keys are asserted per LINK, not per file, so adding a second interface
 `k3s_node_dns_dhcp_links` cannot half-configure one of them.
 """
 
-from __future__ import annotations
-
 import re
 
 from _helpers import ROLES as _ROLES

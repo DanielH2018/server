@@ -5,8 +5,6 @@ Fixture-driven: synthetic roles under tmp_path, never the real tree, which chang
 Run: uv run pytest scripts/docs/tests/test_gen_reference_crons.py
 """
 
-from __future__ import annotations
-
 import textwrap
 
 from docs.reference import crons as g

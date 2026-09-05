@@ -13,9 +13,6 @@ This file holds the `wait`-shaped credit and the two tree-wide assertions. The
 as a completion gate and a failure escalation is `test_k8s_autodeploy_completion_gates.py`.
 """
 
-from __future__ import annotations
-
-
 import pytest
 
 from _autodeploy import (

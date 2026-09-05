@@ -40,8 +40,6 @@ produced there and is not generalisable.
 Run: uv run pytest ansible/tests/k8s/test_configmap_keys_not_absorbed.py
 """
 
-from __future__ import annotations
-
 import re
 from collections import defaultdict
 from pathlib import Path

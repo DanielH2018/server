@@ -22,8 +22,6 @@ Both halves are guarded, because either one alone re-opens a failure:
     checkout's collections whatever this value says.
 """
 
-from __future__ import annotations
-
 import configparser
 from pathlib import Path
 

@@ -13,8 +13,6 @@ it is that a future role joins the class unnoticed.
 Run: uv run pytest ansible/tests/deploy/test_build_roll_couplings.py
 """
 
-from __future__ import annotations
-
 import sys
 from pathlib import Path
 from _helpers import REPO

@@ -10,8 +10,6 @@ timeouts diverge). Those stay local to their own file rather than being forced i
 shape that would weaken one side or hide a deliberate difference.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 from lib import yaml_fast

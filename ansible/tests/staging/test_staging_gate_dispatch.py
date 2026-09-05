@@ -15,8 +15,6 @@ sourcing the rendered script. Sourcing is safe because the file guards its `main
 `BASH_SOURCE`, which is why that guard is there.
 """
 
-from __future__ import annotations
-
 import pathlib
 import subprocess
 

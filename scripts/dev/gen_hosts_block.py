@@ -23,8 +23,6 @@ Usage:
     uv run python scripts/dev/gen_hosts_block.py --sudo    # print, plus install instructions
 """
 
-from __future__ import annotations
-
 import argparse
 import re
 import subprocess

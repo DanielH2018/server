@@ -9,8 +9,6 @@ Every case below drives `classify`, the same function the runner drives, so a cl
 stopped discriminating fails here rather than in an alert nobody trusts.
 """
 
-from __future__ import annotations
-
 import re
 import subprocess
 import sys

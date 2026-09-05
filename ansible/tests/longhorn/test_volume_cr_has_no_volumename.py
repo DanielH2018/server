@@ -27,8 +27,6 @@ rule works. The synthetic pairs are that evidence, and the guard was additionall
 failing against a violation injected into a real template.
 """
 
-from __future__ import annotations
-
 import re
 from pathlib import Path
 

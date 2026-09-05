@@ -21,8 +21,6 @@ with the PR's own `changedFiles`, this reports `fallback` and the caller widens 
 Run: uv run pytest scripts/deploy_tools/tests/test_land_tags.py
 """
 
-from __future__ import annotations
-
 import argparse
 import json
 import re

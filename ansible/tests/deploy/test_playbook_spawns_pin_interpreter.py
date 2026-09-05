@@ -24,8 +24,6 @@ tree's path, and — because discovery is skipped — stops writing its own path
 tree to trip on.
 """
 
-from __future__ import annotations
-
 import ast
 from pathlib import Path
 from _helpers import REPO as _REPO

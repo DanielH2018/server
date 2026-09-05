@@ -11,8 +11,6 @@ plain functions over the filesystem, and the modules here already reach `_k8s_re
 way.
 """
 
-from __future__ import annotations
-
 import ast
 import os
 import subprocess

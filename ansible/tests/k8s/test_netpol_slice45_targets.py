@@ -13,8 +13,6 @@ terraria (0 replicas) and 0 on freshrss; the `[*]` form exits 0 on both. That co
 down".
 """
 
-from __future__ import annotations
-
 from lib import yaml_fast
 from _helpers import K8S_ROLES
 

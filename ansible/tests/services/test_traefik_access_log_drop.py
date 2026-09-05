@@ -22,8 +22,6 @@ which both engines read identically. Anything reaching for a backreference or a 
 would need a live Alloy to verify, and should not be written here in the first place.
 """
 
-from __future__ import annotations
-
 import re
 
 from _helpers import REPO

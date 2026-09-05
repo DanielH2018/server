@@ -48,8 +48,6 @@ because a guard that silently stops matching is the shape this repo has paid for
 core, and the paired `_is_clean` / `_is_flagged` tests below prove it can go red.
 """
 
-from __future__ import annotations
-
 import re
 from collections.abc import Callable
 from dataclasses import dataclass

@@ -17,8 +17,6 @@ What's specific to this cron, and what this file guards:
   disarmed rather than red or silently non-hermetic.
 """
 
-from __future__ import annotations
-
 import json
 import re
 

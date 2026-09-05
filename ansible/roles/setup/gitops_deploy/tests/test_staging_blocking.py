@@ -5,8 +5,6 @@ a gate that fires on everything and a gate that fires on nothing are indistingui
 passing side alone.
 """
 
-from __future__ import annotations
-
 import itertools
 
 import pytest

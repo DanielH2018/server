@@ -15,8 +15,6 @@ occurrence becomes a check, not another paragraph.
 Run: uv run pytest ansible/tests/k8s/test_observability_sole_tenancy.py
 """
 
-from __future__ import annotations
-
 from _k8s_render import rendered_docs
 
 # Same pod-producing kinds test_netpol_baseline_labels.py guards against.

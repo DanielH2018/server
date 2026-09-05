@@ -21,8 +21,6 @@ Still pinned here:
   3. `main()` consults the gate before `deploy_k8s`, and before the ff-merge.
 """
 
-from __future__ import annotations
-
 import ast
 
 

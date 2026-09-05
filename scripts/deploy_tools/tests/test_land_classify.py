@@ -3,8 +3,6 @@
 Run: uv run pytest scripts/deploy_tools/tests/test_land_classify.py
 """
 
-from __future__ import annotations
-
 import dataclasses
 
 import pytest

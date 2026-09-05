@@ -15,8 +15,6 @@ A claim in a description is not a constraint; this file is.
 Run: uv run pytest scripts/tests/test_renovate_manager_overlap.py
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 

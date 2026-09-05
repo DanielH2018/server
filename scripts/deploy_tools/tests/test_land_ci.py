@@ -3,8 +3,6 @@
 Run: uv run pytest scripts/deploy_tools/tests/test_land_ci.py
 """
 
-from __future__ import annotations
-
 import pytest
 
 from _land_fakes import PRIMARY, Fakes

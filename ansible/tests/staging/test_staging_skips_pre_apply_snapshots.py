@@ -15,8 +15,6 @@ variables, rather than restated here. A test that asserted `k8s_autodeploy_snaps
 directly would keep passing if the include's `when:` stopped consulting the list.
 """
 
-from __future__ import annotations
-
 import sys
 
 import pytest

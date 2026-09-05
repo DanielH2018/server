@@ -17,8 +17,6 @@ but it renders with prod's variables only. Nothing else exercises the empty-reso
 which is the one where the mistake is reachable.
 """
 
-from __future__ import annotations
-
 from lib import yaml_fast
 from jinja2 import Environment
 

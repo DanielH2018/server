@@ -17,8 +17,6 @@ rather than in the generator because ``classify`` is their heaviest caller, and 
 the facade it was split out of.
 """
 
-from __future__ import annotations
-
 import sys as _sys
 from pathlib import Path as _Path
 
