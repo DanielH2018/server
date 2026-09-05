@@ -12,6 +12,11 @@ checkout before the tree is put back.
 The functions are executed, not pattern-matched. Each is lifted out of the template by name and
 sourced into a scratch git repository, so what runs is the production code rather than a copy of
 its logic. Every behaviour carries the half that proves the test can go red.
+
+`say_failure` is here for the same reason one script over (#1188): prek keeps going past a
+failure and mkdocs-strict is the last hook, so an unfiltered tail of a rejected commit always
+ends `...Passed` and names nothing. Its fallback carries more weight here than in docs-refresh —
+two of the three call sites pass a log that has never been near a hook.
 """
 
 import re
@@ -29,7 +34,7 @@ CRONS = (ANSIBLE / "roles/setup/initial_setup/tasks/crons.yml").read_text()
 
 # The functions this module sources. Named rather than globbed: a rename would otherwise leave
 # every test below sourcing an empty string and passing on nothing at all.
-SOURCED = ("keep_failure_log", "restore_history")
+SOURCED = ("say_failure", "keep_failure_log", "restore_history")
 
 # The pre-fix body, kept as a fixture so the tests that accept the real one can be shown to
 # reject something. Without it every assertion below would pass on a `git reset` that never
@@ -219,6 +224,75 @@ def test_the_restore_reports_a_leftover_a_hook_wrote_after_git_add(tmp_path):
     assert run.returncode != 0, (
         "a leftover outside evals/history.json read as a clean restore"
     )
+
+
+def _alert(log_text: str, tmp_path: Path) -> str:
+    """The message say_failure would pass to logger for a run that wrote `log_text`."""
+    log = tmp_path / "commit.log"
+    log.write_text(log_text)
+    # Single quotes are literal to bash and a pytest tmp_path holds none, so the path needs no
+    # other escaping.
+    run = _bash(
+        f"alert() {{ printf '%s' \"$1\"; }}; say_failure 'commit failed' '{log}'",
+        tmp_path,
+        tmp_path / "stamp",
+    )
+    return run.stdout
+
+
+def test_the_alert_names_the_failing_hook(tmp_path):
+    """ACCEPT: prek keeps going past a failure and mkdocs-strict is the last hook.
+
+    The 400-byte tail of the whole run therefore always ends `...Passed`. This log is the shape
+    of the 2026-09-04 and 2026-09-05 docs-refresh alerts: the failure is early and buried under
+    far more than 400 bytes of later output, so both readers saw only `Passed` lines.
+    """
+    log = (
+        "Check YAML.........Passed\n"
+        "gen-doc-fragments..Failed\n"
+        "- hook id: gen-doc-fragments\n"
+        "- files were modified by this hook\n"
+    ) + "Build the docs site (mkdocs --strict)...............Passed\n" * 20
+    alert = _alert(log, tmp_path)
+    assert "gen-doc-fragments" in alert, alert
+    assert len(alert) <= 500
+
+
+def test_the_alert_falls_back_to_the_plain_tail_when_no_hook_failed(tmp_path):
+    """REJECT: a filter with no fallback returns EMPTY here, which is worse than uninformative.
+
+    This matters more in eval-run than in docs-refresh. Only the commit call site can carry a
+    prek token at all: the other two pass the report-merge log and $TREND_OUT, and this is the
+    latter — a trend.py crash, the one thing the history-unchanged arm exists to report. The
+    script runs without `set -e`, so nothing would notice an empty message.
+    """
+    log = (
+        "Traceback (most recent call last):\n"
+        '  File "evals/trend.py", line 91, in record_run\n'
+        "KeyError: 'cases'\n"
+    )
+    # Non-vacuity: the fixture must take the FALLBACK path, not the filter. `Failed` is
+    # unanchored, so a reworded traceback carrying it anywhere would quietly test the other
+    # branch while still reading green.
+    for token in ("Failed", "- hook id:", "files were modified by this hook"):
+        assert token not in log, f"the fallback fixture matches the filter on {token!r}"
+    alert = _alert(log, tmp_path)
+    assert "KeyError: 'cases'" in alert, alert
+
+
+def test_neither_cron_tails_the_whole_log_unfiltered():
+    """The plain-tail body is the bug #1188 and #1162 fixed; keep it out of both scripts.
+
+    The two crons share the failure-alert shape, and eval-run kept the pre-#1162 body for a day
+    after docs-refresh lost it. A guard on one script only would let the next one drift back.
+    """
+    for name, text in (("eval-run", SCRIPT), ("docs-refresh", DOCS_REFRESH)):
+        assert 'say_failure() { alert "$1: $(tr' not in text, (
+            f"{name}.sh.j2 tails the whole log again; a prek rejection ends `...Passed`"
+        )
+        assert "files were modified by this hook" in text, (
+            f"{name}.sh.j2 no longer filters for prek's failure tokens"
+        )
 
 
 def test_neither_cron_reads_the_exit_code_through_a_negation():
