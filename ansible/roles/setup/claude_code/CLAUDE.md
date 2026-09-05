@@ -129,6 +129,14 @@ sessions" and nothing else.
   — nine concurrent runs is still nine times the cap, and a run-count limit would need a lock
   across worktrees. Setting it on the unit rather than in `pyproject.toml` keeps CI and an
   interactive shell at full width. ENFORCED by the same test.
+- **The unit is not the only place this variable is set.** `PYTEST_XDIST_AUTO_NUM_WORKERS`
+  also sits in the `env` block of `~/.claude/settings.json`, scoped to daniel-box and
+  daniel-server, so a Claude session started outside this unit — a terminal, a background
+  job, an IDE — gets the same cap. That entry is generated from
+  `home/.chezmoitemplates/settings.base.json` in the chezmoi repo, not from this role. Keep
+  the two values equal: if they diverge, a session's fan-out depends on how it happened to
+  start. A human's own `pytest` in their own shell, and CI, stay at full width either way —
+  neither reads Claude's settings.
 - **The background-shell pressure reaper is turned off.** Claude Code registers
   `process.on("memoryPressure", ...)` and kills every running backgrounded Bash task with the
   reason `memory_pressure`, surfacing as "stopped because the system is running low on
