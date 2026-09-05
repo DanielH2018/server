@@ -12,11 +12,7 @@ from __future__ import annotations
 
 
 import gen_infra_map as g
-from infra_map import diagram
-from infra_map import groups
-from infra_map import html_views
-from infra_map import render
-from infra_map import style
+from infra_map import diagram, groups, html_views, render, style
 
 from _infra_map import (
     GLOBALS,

@@ -410,38 +410,38 @@ def test_deploy_sh_is_credited_to_the_test_that_reads_it():
     assert rows["deploy.sh"]["indirect_tests"] == "test_deploy_exit_codes.py"
 
 
-def test_a_package_member_import_counts_as_coverage():
+_IMPORTED = {"diagram", "groups", "html_views", "live", "render", "style"}
+# DECIDED: 2026-09-05 nothing imports these three by name; `test_gen_infra_map.py`
+# reaches them through re-exports. The reject half below fails the day one gains one.
+_FACADE_ONLY = {"constants", "inventory", "model"}
+_MEMBERS = {p.stem for p in (g.SCRIPTS / "infra_map").glob("*.py")} - {"gen_infra_map"}
+
+
+def test_every_package_member_import_counts_as_coverage():
     """`from infra_map import live` is an import, not a mention.
 
-    A module in a `scripts/` subdirectory whose basename is not unique across the tree can
-    only be reached that way. Matching `^\\s*(?:from|import)\\s+live\\b` alone reported
-    infra_map's `live` and `render` as untested the moment they dropped their prefix, which
-    is the page understating coverage rather than a real gap.
+    The census is derived; listing it froze it at `("live.py", "render.py")`, so the four
+    members added 2026-09-04 went unchecked. `_IMPORTED` is the non-vacuity floor: #1113.
     """
+    assert _IMPORTED | _FACADE_ONLY <= _MEMBERS, sorted(_MEMBERS)
     rows = {r["name"]: r for r in g.build_rows()}
-    for name in ("live.py", "render.py"):
-        assert rows[name]["indirect_via"] == "import", name
-        credited = rows[name]["indirect_tests"]
-        hit = next((g.SCRIPTS / "infra_map").rglob(credited))
-        assert re.search(
-            rf"^\s*from infra_map import {Path(name).stem}\b",
-            hit.read_text(),
-            re.MULTILINE,
-        )
+    for stem in sorted(_MEMBERS - _FACADE_ONLY):
+        assert rows[f"{stem}.py"]["indirect_via"] == "import", stem
 
 
-def test_a_bare_mention_of_a_package_member_is_not_coverage():
-    """The RED half of the pair above: the broadened pattern must still need an import.
+def test_a_facade_only_member_is_not_credited():
+    """The RED half, on live inputs: crediting every member would pass the accept half."""
+    assert _FACADE_ONLY <= _MEMBERS, sorted(_MEMBERS)
+    rows = {r["name"]: r for r in g.build_rows()}
+    for stem in sorted(_FACADE_ONLY):
+        assert rows[f"{stem}.py"]["indirect_via"] == "", stem
 
-    Without this, a rule that matched any line containing the stem would read as working
-    while crediting prose.
-    """
-    text = "A note about live and render, naming neither import.\n"
-    assert not re.search(
-        r"^\s*(?:from|import)\s+live\b|^\s*from\s+[\w.]+\s+import\s+.*\blive\b",
-        text,
-        re.MULTILINE,
-    )
+
+def test_a_bare_mention_of_a_package_member_is_not_coverage(tmp_path):
+    """The second RED half, asserted through the generator rather than a copy of it."""
+    mention = tmp_path / "tests" / "test_prose.py"
+    _write(mention, "# A note about live, naming no import.\n")
+    assert cov.indirect_test("live.py", [mention], tmp_path)[1] != "import"
 
 
 def test_markdown_splits_the_scripts_by_how_they_run(tmp_path):
