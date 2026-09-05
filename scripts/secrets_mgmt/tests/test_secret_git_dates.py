@@ -111,8 +111,13 @@ def test_the_git_fake_names_an_unscripted_ref_with_its_argv():
 
 
 def test_the_git_fake_rejects_an_unscripted_verb():
-    """An unscripted VERB fell through to the blob lookup and raised the same bare KeyError."""
-    tools = build_tools(Fakes(history=[]))[0]
+    """An unscripted VERB fell through to the blob lookup and raised the same bare KeyError.
+
+    The ref is one the history DOES carry, so only the verb clause of the guard can fire —
+    otherwise this test and the one above would prove the same branch twice.
+    """
+    history = [("deadbeef", "2026-01-01", {"a_token": "x"})]
+    tools = build_tools(Fakes(history=history))[0]
     with pytest.raises(AssertionError) as caught:
-        tools.git("rev-parse", "HEAD")
+        tools.git("rev-parse", "deadbeef:ansible/vars/secrets.yml")
     assert "rev-parse" in str(caught.value)
