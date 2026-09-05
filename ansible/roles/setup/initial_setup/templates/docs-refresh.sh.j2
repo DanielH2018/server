@@ -325,7 +325,14 @@ LOG="$(mktemp)"
 # --no-renames so a rename never arrives as the three-field line the restore would misread.
 STAGED_STATUS="$(git diff --cached --name-status --no-renames)"
 
-if ! git commit -m "docs: refresh generated reference pages" >"$LOG" 2>&1; then
+# NOT `if ! git commit`: inside that branch `$?` is the status of the negation, which is always 0,
+# so the exit code has to be captured from the plain command first. It is reported because
+# "hook rejection?" was only ever this script's guess -- the 2026-09-05 06:18 failure was filed
+# undiagnosed (#1155) precisely because the alert named no cause, and git's own code separates a
+# rejected hook (1) from a signing or ref failure.
+git commit -m "docs: refresh generated reference pages" >"$LOG" 2>&1
+COMMIT_RC=$?
+if [ "$COMMIT_RC" -ne 0 ]; then
   keep_failure_log "$LOG"
   if restore_generated_tree "$STAGED_STATUS"; then
     RESTORE_NOTE="tree restored"
@@ -334,8 +341,8 @@ if ! git commit -m "docs: refresh generated reference pages" >"$LOG" 2>&1; then
   fi
   # Stamped whichever way the restore went, and cleared only by a run that publishes or finds
   # nothing to publish: it is what lets the NEXT run recognise leftover dirt as its own.
-  mark_commit_failed "commit failed $(date -u '+%Y-%m-%dT%H:%M:%SZ'); ${RESTORE_NOTE}; full log: ${COMMIT_FAILED_LOG}"
-  say_failure "docs-refresh: commit failed (hook rejection?); ${RESTORE_NOTE}, nothing published" "$LOG"
+  mark_commit_failed "commit failed $(date -u '+%Y-%m-%dT%H:%M:%SZ') (git exit ${COMMIT_RC}); ${RESTORE_NOTE}; full log: ${COMMIT_FAILED_LOG}"
+  say_failure "docs-refresh: commit failed (git exit ${COMMIT_RC}); ${RESTORE_NOTE}, nothing published" "$LOG"
   exit 1
 fi
 
