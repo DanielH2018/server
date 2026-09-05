@@ -62,6 +62,14 @@ spec:
         # The copy would fail, `exit 0` would swallow it, and the pod would come up 2/2 with
         # the warning intact. Going first, this creates the directory root-owned and
         # world-readable, and the rsync's own `--ignore-existing` then leaves the files alone.
+        #
+        # ROOT-OWNED is the half that keeps it readable, not just a consequence of needing
+        # DAC_READ_SEARCH. rsync sets an existing destination directory's mode from the
+        # source, and the staged hub is root-only — reproduced locally, rsync chmodded a
+        # same-uid destination `hub/` to 000 and still exited 23. Here it runs as uid 1000
+        # against a root-owned directory, so that chmod is refused, the 0755 survives, and the
+        # refusal is one more error under the exit 23 the marker below already tolerates.
+        # Creating this directory as the pod uid instead would undo the fix silently.
         - name: crowdsec-hub-install
           image: {{ crowdsec_k8s_image }}
           command:
