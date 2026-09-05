@@ -60,14 +60,34 @@ spec:
           # image's own — asserting it is what makes it an API-server guarantee rather than an
           # image default a future tag bump could drop silently, and runAsNonRoot alone would
           # not do it, because the kubelet only rejects a numeric root uid.
-          # Safe for THIS container specifically because it mounts no volumes and binds 9222,
-          # an unprivileged port; chromium's profile goes to a temp dir under world-writable
-          # /tmp, and no root-owned path in the image is written. Do not copy it to the sibling
+          # Safe for THIS container specifically because it mounts only the kubelet-created
+          # 0777 emptyDir at /tmp below and binds 9222, an unprivileged port; chromium's
+          # profile goes to a temp dir under /tmp, and no root-owned path in the image is
+          # written, so there is no volume here for uid 65534 to need chowned.
+          #
+          # Do not copy it to the sibling
           # karakeep deployments without checking each one: karakeep's own /data seed tree and
           # time-tagger's /root/.cache/uv are root-owned, so the same three lines would break
           # them (2026-08-31 review). The entrypoint runs chromium with --no-sandbox, so it
           # needs no SYS_ADMIN or sandbox caps.
-{{ hardened_security_context(non_root=true, run_as_user=65534) }}
+          #
+          # read_only follows from the same fact. The image is chromedp/headless-shell plus
+          # `USER 65534:65534` (upstream docker/chrome/Dockerfile — it adds nothing else), and
+          # its /headless-shell/run.sh passes no --user-data-dir, so headless chromium picks a
+          # temp profile dir under /tmp. Running unprivileged over a root-owned image tree is
+          # already the evidence that nothing outside a world-writable path is written; the
+          # only thing readOnlyRootFilesystem takes away is /tmp itself, which the emptyDir
+          # below gives back. The sibling karakeep container does NOT get this — see the
+          # DECIDED comment in deployment.yaml.j2.
+{{ hardened_security_context(read_only=true, non_root=true, run_as_user=65534) }}
+          volumeMounts:
+            # Chromium's profile, its crash dumps, and — because of --disable-dev-shm-usage
+            # above — the shared-memory files it would otherwise put in /dev/shm. Default
+            # medium, not Memory: those files can be large per tab, and a memory-backed
+            # emptyDir charges them against the 2048Mi limit, where the container's writable
+            # layer they replace was node disk.
+            - name: chrome-tmp
+              mountPath: /tmp
           readinessProbe:
             httpGet:
               path: /json/version
@@ -81,3 +101,6 @@ spec:
             initialDelaySeconds: 60
             periodSeconds: 30
 {{ container_resources(cpu_limit=karakeep_k8s_chrome_cpu_limit, mem_limit=karakeep_k8s_chrome_mem_limit, cpu_request=karakeep_k8s_chrome_cpu_request, mem_request=karakeep_k8s_chrome_mem_request) }}
+      volumes:
+        - name: chrome-tmp
+          emptyDir: {}

@@ -144,8 +144,8 @@ def test_k10temp_tctl_declares_neither_max_nor_crit_and_falls_back_and_says_so()
     `node_hwmon_temp_crit_celsius` both have no series for it. Nothing can invent a limit this
     driver never declared; the check's whole obligation here is to fall back and say so, so an
     operator reading "93.5C over its 85.0C fallback limit" for this chip knows the 85C is a
-    guess, not the hardware's own rating. Whether that reading is a real thermal problem or a
-    Tctl offset over real die temperature stays unanswered by this check, by design.
+    guess, not the hardware's own rating. It is not a Tctl offset: k10temp subtracts none on this
+    chip, so Tdie would read the same number (#1003, and the `DECIDED:` marker in verdicts.host).
     """
     limits = checks.host_thermal.hwmon_temp_limits(
         [_temp("daniel-box", "pci0000:00_0000:00:18_3", "temp1", 93.5)],

@@ -69,6 +69,15 @@ UV="/home/{{ sys_user }}/.local/bin/uv"
 SITE_DIR="{{ docs_host_site_dir | default('/home/' + sys_user + '/docs-site') }}"
 PR_BRANCH_PREFIX="docs-refresh/"
 
+# State this script keeps ACROSS runs, and it lives OUTSIDE $REPO deliberately: an untracked file
+# inside the checkout parks gitops-deploy exactly as a modified one does, so a stamp whose job is
+# to record dirt must never be dirt itself. /var/lib/homelab is the setup plane's state directory
+# (root-owned, 0755); crons.yml creates this subdirectory owned by the cron user, because the cron
+# runs without become.
+STAMP_DIR="/var/lib/homelab/docs-refresh.d"
+COMMIT_FAILED_STAMP="$STAMP_DIR/commit-failed"
+COMMIT_FAILED_LOG="$STAMP_DIR/last-commit-failure.log"
+
 # The token is interpolated here rather than sourced from /etc/rancher/k3s/kuma-push.env,
 # matching secret-rotate.sh -- the sibling pusher in this same role. `| default('')` gates it:
 # the push is skipped until the secret exists, and the monitor in static-monitors.yaml.j2 is
@@ -122,7 +131,86 @@ alert() { logger -t docs-refresh "$1"; PUSH_MSG="$1"; }
 # day: the alert said the push failed and nothing said why. logger takes one line, so
 # flatten and cap -- the first few hundred characters of a git or gh failure carry the
 # reason, and the full text stays in the file until the run ends.
-say_failure() { alert "$1: $(tr '\n' ' ' < "$2" | tail -c 400)"; }
+#
+# FILTER BEFORE THE TAIL. prek runs every hook and keeps going past a failure, printing Passed and
+# Skipped lines after it, and mkdocs-strict is the last hook -- so a plain tail of the whole run
+# always ends `...Passed` and names no hook at all. The 2026-09-04 alert did exactly that, and two
+# readers failed to identify the failing hook from it afterwards.
+#
+# THE FALLBACK IS LOAD-BEARING. `git commit` also fails for reasons whose output carries none of
+# these tokens (a signing failure, "nothing to commit"), and this script runs without `set -e`, so
+# a non-matching grep would otherwise produce an EMPTY alert -- worse than the uninformative one.
+say_failure() {
+  local detail
+  detail="$(grep -E -A2 'Failed|^- hook id:|files were modified by this hook' "$2" 2>/dev/null \
+    | tr '\n' ' ' | tail -c 400)"
+  [ -n "$detail" ] || detail="$(tr '\n' ' ' < "$2" | tail -c 400)"
+  alert "$1: $detail"
+}
+
+# on_exit removes the temp log, the cron entry redirects nothing and Loki has no stream for this
+# script, so without this copy the cause of a commit failure is unrecoverable the moment the run
+# ends. Bounded, and outside $REPO for the same reason as the stamp.
+keep_failure_log() {
+  mkdir -p "$STAMP_DIR" 2>/dev/null || return 0
+  tail -c 65536 "$1" >"$COMMIT_FAILED_LOG" 2>/dev/null || return 0
+}
+
+# Puts the checkout back the way it was before `git add`. $1 is the output of
+# `git diff --cached --name-status --no-renames`, captured BEFORE the commit.
+#
+# `git reset` alone -- all this path used to do -- unstages and nothing else, leaving every
+# regenerated page MODIFIED in the primary checkout. deploy_git.py reads any porcelain output as
+# dirty and gitops_deploy.py takes its healthy-skip path, still writing last_run, so ONE failed
+# commit here parks every deploy on the box behind a green deployer. Four commit failures are on
+# record (2026-08-25 twice, 08-27, 09-04) and a human cleaned up each time before the next run.
+#
+# A newly generated page needs `rm`, not `git checkout HEAD --`: it has no HEAD version, the
+# checkout fails on it, and the file is left UNTRACKED -- which parks the deployer just as surely.
+#
+# Scoped to the staged paths, never a blanket `git checkout -- docs/reference`: topology.md is
+# hand-written prose in that tree, and a blanket checkout would destroy an uncommitted human edit.
+restore_generated_tree() {
+  local status path rc=0
+  while IFS=$'\t' read -r status path; do
+    [ -n "${path:-}" ] || continue
+    case "$status" in
+      A) rm -f -- "$path" ;;
+      *) git checkout HEAD -- "$path" >/dev/null 2>&1 || rc=1 ;;
+    esac
+  done <<EOF
+$1
+EOF
+  git reset >/dev/null 2>&1
+  # THE ACTION IS PER-PATH; THE CHECK IS PER-TREE, AND THE ASYMMETRY IS DELIBERATE.
+  #
+  # A prek hook can modify a file AFTER `git add` ran -- gen-doc-fragments regenerates the whole
+  # fragment set, so it rewrites fragments this run's generators never touched. Those files are
+  # dirty, they park the deployer, and they are absent from $1 by construction. A check scoped to
+  # $1 would report "tree restored" over exactly the leftover that made 2026-09-04's alert wrong.
+  #
+  # The cost is a false TREE-STILL-DIRTY if a human edits topology.md (the one hand-written page
+  # in docs/reference) inside the run window. That window is small -- the top-of-script gate exits
+  # on any dirty tree, so everything tracked and modified here arrived during this run -- and
+  # fail-closed is the direction this script's own header demands.
+  [ -z "$(git status --porcelain -- docs/reference docs/assets/generated)" ] || rc=1
+  return "$rc"
+}
+
+mark_commit_failed() {
+  mkdir -p "$STAMP_DIR" 2>/dev/null || return 0
+  printf '%s\n' "$1" >"$COMMIT_FAILED_STAMP" 2>/dev/null || return 0
+}
+
+clear_commit_failed() { rm -f "$COMMIT_FAILED_STAMP"; }
+
+# The status to report for a dirty tree. Foreign dirt is `up`: somebody else is mid-edit and this
+# run legitimately did nothing. This script's OWN leftover dirt is `down` -- run N fails its commit
+# and pushes down, run N+1 meets that dirt, takes the dirty branch and used to push `up`, clearing
+# the alarm run N raised while nothing had been published and the deployer was still parked. The
+# stamp tells the two apart; paths cannot, because a human running build_docs.py by hand in this
+# checkout dirties exactly the same files.
+dirty_tree_status() { if [ -e "$COMMIT_FAILED_STAMP" ]; then printf down; else printf up; fi; }
 
 cd "$REPO" || { alert "docs-refresh: $REPO missing"; exit 1; }
 
@@ -131,14 +219,23 @@ cd "$REPO" || { alert "docs-refresh: $REPO missing"; exit 1; }
 exec 9>/var/lock/server-git-tree.lock
 flock -w 2700 9 || { alert "docs-refresh: git-tree lock held >45m; skipped"; exit 1; }
 
-# A dirty tree means a human or another job is mid-edit. Committing on top of that would
-# mix their work into a docs commit. Build the site anyway -- serving current docs costs
-# nothing and is the useful half -- but change no files.
+# A dirty tree is usually a human or another job mid-edit. Committing on top of that would mix
+# their work into a docs commit. Build the site anyway -- serving current docs costs nothing and
+# is the useful half -- but change no files.
+#
+# THE DIRT IS NOT ALWAYS SOMEBODY ELSE'S. It may be this script's own, left by a commit failure a
+# run ago, and reporting up on that is how a failed run clears the alarm it just raised.
+# dirty_tree_status reads the stamp to tell the two apart.
 if ! git diff --quiet || ! git diff --cached --quiet; then
-  alert "docs-refresh: working tree dirty; rebuilt site only, no regeneration"
   # up BEFORE the build, down inside the `||`. The other order reports up on a failed build,
   # because the failure branch runs first and the blanket assignment then overwrites it.
-  PUSH_STATUS=up
+  PUSH_STATUS="$(dirty_tree_status)"
+  if [ "$PUSH_STATUS" = down ]; then
+    alert "docs-refresh: tree still dirty from this cron's own failed commit ($(tr '\n' ' ' \
+      < "$COMMIT_FAILED_STAMP" 2>/dev/null | tail -c 200)); rebuilt site only, nothing published"
+  else
+    alert "docs-refresh: working tree dirty; rebuilt site only, no regeneration"
+  fi
   "$UV" run --frozen python scripts/docs/build_docs.py --skip-generators --site-dir "$SITE_DIR" \
     || { alert "docs-refresh: site build failed on dirty tree"; PUSH_STATUS=down; }
   exit 0
@@ -201,6 +298,8 @@ if git diff --cached --quiet; then
   if [ "$GENERATORS_OK" -eq 1 ]; then
     PUSH_STATUS=up
     PUSH_MSG="no change"
+    # A clean tree with nothing left to publish means a previous run's failed commit is behind us.
+    clear_commit_failed
   else
     PUSH_STATUS=down
   fi
@@ -221,9 +320,22 @@ fi
 # on the same signal would REPLACE that one and take the push with it.
 LOG="$(mktemp)"
 
+# Captured BEFORE the commit. The index survives a failed commit, but the restore has to know
+# which paths were newly ADDED and which merely modified, and `git reset` erases that distinction.
+# --no-renames so a rename never arrives as the three-field line the restore would misread.
+STAGED_STATUS="$(git diff --cached --name-status --no-renames)"
+
 if ! git commit -m "docs: refresh generated reference pages" >"$LOG" 2>&1; then
-  git reset >/dev/null 2>&1
-  say_failure "docs-refresh: commit failed (hook rejection?); unstaged, nothing published" "$LOG"
+  keep_failure_log "$LOG"
+  if restore_generated_tree "$STAGED_STATUS"; then
+    RESTORE_NOTE="tree restored"
+  else
+    RESTORE_NOTE="TREE STILL DIRTY - gitops-deploy is parked until it is cleaned"
+  fi
+  # Stamped whichever way the restore went, and cleared only by a run that publishes or finds
+  # nothing to publish: it is what lets the NEXT run recognise leftover dirt as its own.
+  mark_commit_failed "commit failed $(date -u '+%Y-%m-%dT%H:%M:%SZ'); ${RESTORE_NOTE}; full log: ${COMMIT_FAILED_LOG}"
+  say_failure "docs-refresh: commit failed (hook rejection?); ${RESTORE_NOTE}, nothing published" "$LOG"
   exit 1
 fi
 
@@ -251,6 +363,9 @@ if [ "$PUB_RC" -ne 0 ]; then
 fi
 
 logger -t docs-refresh "regenerated, committed, $PUB_MSG"
+# Published: whatever an earlier run failed to commit is on origin now, so the stamp has done its
+# job and the next dirty tree this script meets belongs to somebody else.
+clear_commit_failed
 # The publish succeeded either way; GENERATORS_OK decides whether it published a COMPLETE set.
 # Reporting up here regardless would let a failing generator ride out on a successful PR, which
 # is the same "the run worked, the content did not" split that made 2026-08-27 invisible.

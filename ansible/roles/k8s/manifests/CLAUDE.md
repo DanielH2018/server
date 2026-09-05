@@ -1,9 +1,10 @@
 # manifests — the shared render → apply → queue cycle for every k3s workload
 
-Utility role, not a workload. 57 roles under `ansible/roles/k8s/` include it from their own
-`tasks/main.yml`, so a change here lands on every service at once. It renders a role's
-templates, applies them, reconciles Secret keys, records the release, and **queues** the
-rollout for someone else to wait on.
+Utility role, not a workload. Nearly every role under `ansible/roles/k8s/` includes it from its
+own `tasks/`, so a change here lands on every service at once. For the task files that include
+it, run `grep -rl k8s/manifests ansible/roles/k8s/*/tasks/` rather than trusting a count written
+here — the count drifted twice. It renders a role's templates, applies them, reconciles Secret
+keys, records the release, and **queues** the rollout for someone else to wait on.
 
 Named `manifests` rather than `common` so its ansible-lint variable prefix does not collide
 with the Docker-side `roles/containers/common` namespace.

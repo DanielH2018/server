@@ -314,3 +314,94 @@ def test_the_fixup_is_needed_because_a_non_blocking_child_reads_non_blocking(tmp
         os.close(out_fd)
         os.close(err_fd)
     assert out.read_text(encoding="utf-8").strip() == "False False"
+
+
+# --- heredocs: a document body is data, not a command sequence -----------------------------
+#
+# The walk reads a newline as a command separator, and a heredoc body is part of the Bash
+# tool's command text. So a line of prose starting with a `.py` filename used to be spliced
+# as if it were a program — a commit message went to master reading `uv run health.py had
+# grown to 938 lines`. Auto mode writes files through heredocs too, so `cat > foo.py <<'EOF'`
+# is the same bug on a more common surface.
+#
+# Body apostrophes are why these vectors need reading carefully: on the unfixed hook a body
+# containing "doesn't" flipped the quote state and the unterminated-quote bail returned None
+# for the wrong reason. The vectors below are apostrophe-free so they were RED before the fix.
+
+
+@_runnable
+def test_a_commit_message_naming_a_py_file_is_left_alone():
+    """The reported symptom: `git commit -F -` with a message body naming a script."""
+    assert (
+        rewrite("git commit -F - <<'EOF'\nSubject line\n\nprobe.py runs the gate.\nEOF")
+        is None
+    )
+
+
+@_runnable
+@pytest.mark.parametrize(
+    "command",
+    [
+        # An unquoted delimiter is still a delimiter.
+        "cat <<EOF > /tmp/note\nprobe.py runs the gate.\nEOF",
+        # A double-quoted one likewise.
+        'cat <<"EOF" > /tmp/note\npytest -q covers it.\nEOF',
+        # `<<-` strips leading tabs from the terminator, so the body ends at the tabbed EOF.
+        "cat <<-EOF > /tmp/note\npython3 is named here.\n\tEOF",
+        # A heredoc writing a Python file: the body is source, never a command.
+        "cat > scripts/foo.py <<'EOF'\nimport os\n\npython3 is discussed, not invoked\nEOF",
+        # The body ends the command text with no trailing newline.
+        "cat <<'EOF'\nansible-playbook deploy.yml is the command\nEOF",
+    ],
+)
+def test_heredoc_bodies_are_never_rewritten(command):
+    assert rewrite(command) is None
+
+
+@_runnable
+def test_a_command_after_a_heredoc_is_still_rewritten():
+    """The proof the fix skips the body rather than abandoning the whole command.
+
+    Without this, a fix that simply bailed on any heredoc would pass every test above while
+    leaving the `pytest` after it bare — the silent failure this hook exists to prevent.
+    """
+    command = "cat <<'EOF' > /tmp/note\nprobe.py runs the gate.\nEOF\npytest -q"
+    assert (
+        rewrite(command)
+        == "cat <<'EOF' > /tmp/note\nprobe.py runs the gate.\nEOF\nuv run pytest -q"
+    )
+
+
+@_runnable
+def test_the_program_before_a_heredoc_is_still_rewritten():
+    """The body is skipped; the command introducing it is not."""
+    assert (
+        rewrite("python3 - <<'EOF'\nprint(1)\nEOF")
+        == "uv run python3 - <<'EOF'\nprint(1)\nEOF"
+    )
+
+
+@_runnable
+def test_an_unterminated_heredoc_leaves_the_command_alone():
+    """Same posture as an unterminated quote: the body's extent is a guess, so do not splice."""
+    assert rewrite("cat <<'EOF'\nprobe.py runs the gate.\n") is None
+
+
+@_runnable
+def test_a_here_string_is_not_a_heredoc():
+    """`<<<` is a single-line redirection with no body to skip."""
+    assert rewrite("pytest <<< 'python3 data'") == "uv run pytest <<< 'python3 data'"
+
+
+@_runnable
+def test_a_body_apostrophe_no_longer_decides_the_outcome():
+    """The body is skipped opaquely, so prose quoting cannot corrupt the walk's quote state.
+
+    This vector passed before the fix too — via the unterminated-quote bail, not via any
+    understanding of the heredoc. It is kept as the pair to the vectors above, which is why
+    those are apostrophe-free.
+    """
+    command = (
+        "git commit -F - <<'EOF'\nSubject\n\nIt doesn't touch probe.py at all.\nEOF"
+    )
+    assert rewrite(command) is None
