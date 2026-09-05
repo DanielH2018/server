@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/decisions.py
-generated_at: 2026-09-05 02:05 UTC
-generated_sha: 87cc237f
+generated_at: 2026-09-05 02:16 UTC
+generated_sha: c2f1a5a4
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 87cc237f
 
 # Decisions
 
-176 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per CLAUDE.md's "Review & Memory Hygiene" section — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep.
+177 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per CLAUDE.md's "Review & Memory Hygiene" section — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep.
 
 !!! warning "Possible duplicates"
     Two markers below have a near-identical first sentence once case and whitespace are normalised — usually the same trade-off decided twice, or a marker copied and never specialised. Worth a look, not a verdict.
@@ -163,7 +163,8 @@ generated_sha: 87cc237f
 | the command runs through `sh -c`, not `exec "$@"`. line — cron hands the whole thing to /bin/sh — so exec'ing argv directly would refuse every builtin, pipeline and redirect a real cron job is allowed to use, and would fail them with a 127 that reads exactly like the PATH trap this script exists to expose. One argument is taken as that shell line verbatim; several are quoted into one. | `scripts/dev/run_as_cron.sh:74` | 2026-08-27 |
 | a plain redirect into a file, then cat — NOT `tee` via process substitution. The subshell tee runs in is reaped asynchronously, so the -s emptiness test below can read the file before tee has flushed and call a talkative command silent. stderr stays on stderr so a warning is not mistaken for output. | `scripts/dev/run_as_cron.sh:85` | 2026-08-27 |
 | state the floor instead of leaving it to the platform default. py/insecure-protocol reads a bare default context as permitting TLSv1 and TLSv1_1, and a hand-dismissal of that alert does not survive the next file move. (ADR-0016) | `scripts/diagnostics/probe_lib/ha.py:283` | 2026-09-02 |
-| the decrypt stays ON by default, and `--no-secrets` is the opt-out — not the reverse. This subcommand is allow-listed and so runs unprompted, which is a fair reason to want no SOPS read on the path; but assuming a gate was unset is exactly the miss 16cf5721 fixed on 2026-08-22, and defaulting to --no-secrets would reinstate it. The read is narrow: `var` comes from _JINJA_IF_COND_RE, constrained to [a-zA-Z_][a-zA-Z0-9_]*, and is passed as an argv element rather than through a shell, so no value and no injection point escapes gate_var_state — only bool(stdout) does. Reach for --no-secrets when the age key should not be touched at all; accept "unverified" as the cost. | `scripts/diagnostics/probe_lib/monitors.py:297` | 2026-08-25 |
+| the decrypt stays ON by default, and `--no-secrets` is the opt-out — not the reverse. This subcommand is allow-listed and so runs unprompted, which is a fair reason to want no SOPS read on the path; but assuming a gate was unset is exactly the miss 16cf5721 fixed on 2026-08-22, and defaulting to --no-secrets would reinstate it. The read is narrow: `var` comes from _JINJA_IF_COND_RE, constrained to [a-zA-Z_][a-zA-Z0-9_]*, and is passed as an argv element rather than through a shell, so no value and no injection point escapes gate_var_state — only bool(stdout) does. Reach for --no-secrets when the age key should not be touched at all; accept "unverified" as the cost. | `scripts/diagnostics/probe_lib/monitors.py:298` | 2026-08-25 |
+| git evidence beats the seed even though it can overstate freshness for a credential minted before this file's first commit (2026-01-17) — such a secret dates to when it was committed, not when it was created. The seed it replaces is not a better reading: `seed_last_rotated` backdates by a hash of the NAME, so it is fiction for every secret nobody has rotated since registration. That fiction is what aged calendar_1 into a false OVERDUE and took the monitor down on 2026-08-25. | `scripts/secrets_mgmt/git_dates.py:109` | 2026-09-05 |
 | role defaults are merged LAST here, so they outrank the inventory — the reverse of Ansible's own precedence, where role defaults are the weakest layer. The inversion is held harmless by `colliding_default_keys` above rather than corrected, because swapping the merge order changes the render context of every role at once to fix a collision that does not exist. Full reasoning in that function's docstring. Contradict it with a case where the guard passes and the render is still wrong. | `scripts/validate/k8s_manifests.py:296` | 2026-08-28 |
 | redirect_stderr/redirect_stdout, not capsys. pytest refuses to inject it into a module-scoped fixture; main() writes with print(file=sys.stderr), which redirect_stderr captures because it rebinds sys.stderr at call time. | `scripts/validate/tests/test_validate_k8s_manifests.py:36` | 2026-09-01 |
 
