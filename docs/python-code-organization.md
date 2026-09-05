@@ -15,13 +15,13 @@ pre-fix ones.
 
 | Measure | Value |
 |---|---|
-| First-party `.py` files (excluding `ansible/collections/`) | 625 |
-| Lines | 146,778 |
-| Non-test modules | 179 |
-| Test, conftest and `_helper` files | 446 |
+| First-party `.py` files (excluding `ansible/collections/`) | 758 |
+| Lines | 160,395 |
+| Non-test modules | 250 |
+| Test, conftest and `_helper` files | 508 |
 | `__init__.py` files | 0 |
-| Modules with a `sys.path` bootstrap | 190 |
-| Non-test modules over 600 lines | 15 |
+| Modules with a `sys.path` bootstrap | 232 |
+| Non-test modules over 600 lines | 3 |
 
 Three kinds of Python live here, and they ship by three different mechanisms. The mechanism
 decides what a module may import, so it is the first thing to establish about any file.
@@ -225,7 +225,7 @@ conventions coexisting for one thing; the right-hand column is the one to conver
 
 | Thing | Split | Converge on |
 |---|---|---|
-| Bootstrap spelling | 6 shapes across 190 files; 23 use `os.path` | The aliased `pathlib` form above |
+| Bootstrap spelling | 6 shapes across 232 files; 23 use `os.path` | The aliased `pathlib` form above |
 | `main` signature | 40 `main(argv)` / 48 `main()` / 17 unannotated | `main(argv=None) -> int` |
 | Exit protocol at the guard | 41 `sys.exit(main())` / 28 `raise SystemExit(main())` / 14 bare `main()` | `sys.exit(main())` |
 | CLI parsing | 45 `argparse` / 15 hand-rolled `sys.argv` | `argparse` |
