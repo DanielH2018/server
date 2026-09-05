@@ -338,9 +338,14 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     source here, and no code change can turn this specific alert into a declared-limit one. The
     fix that shipped is legibility, not a threshold: the message already said "fallback limit"
     and named the chip before this issue (PR #692), so daniel-box's k10temp/Tctl breach already
-    read as "this chip rates nothing" rather than "this chip is over its own rating" — **the
-    real thermal question (excursion vs. Tctl offset) stays open**, and would need a Tdie/Tccd
-    series this driver does not export to settle. `crits` is still read for every OTHER sensor,
+    read as "this chip rates nothing" rather than "this chip is over its own rating".
+    **The offset half is settled, and a Tdie/Tccd series was never what would have settled it**
+    (issue #1003). k10temp reports `Tdie = Tctl - temp_offset` and sets `temp_offset` only for
+    six family-0x17 SKUs, none of them this one, so a Tdie on this chip would carry the SAME
+    number as its Tctl — reading one would be a no-op, not a correction. The `DECIDED:` marker in
+    `verdicts.host.hwmon_temp_limits` holds the driver evidence. What stays open is narrower:
+    whether the flat 85 °C suits a Ryzen 7 8845HS, which needs AMD's published Tjmax (#1158).
+    `crits` is still read for every OTHER sensor,
     because a driver that skips `max` but declares `crit` (none currently in this estate; added
     defensively) would otherwise take the flat fallback despite declaring a real limit. **`max`
     wins when a sensor declares a plausible value for both**, not `crit`: hwmon's own convention
