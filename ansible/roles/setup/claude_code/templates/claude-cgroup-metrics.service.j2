@@ -1,0 +1,6 @@
+[Unit]
+Description=Write claude-rc.service / user-1000.slice cgroup counters for node-exporter's textfile collector
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/claude-cgroup-metrics.sh
