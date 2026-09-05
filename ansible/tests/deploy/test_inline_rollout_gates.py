@@ -70,6 +70,8 @@ the contract above, the hand-written `_MUST_GATE`, the excused `_UNRESOLVED_TARG
 assertions.
 """
 
+import re
+
 from _inline_rollout_tasks import _K8S_ROLES, _Task, _tasks
 from _inline_rollout_targets import (
     _UNRESOLVED,
@@ -320,3 +322,95 @@ def test_no_role_gates_with_a_readiness_wait_on_its_own_pods() -> None:
                 "are both true of it until it stops, and status.phase stays Running while it is "
                 "Terminating. Use `rollout status` instead."
             )
+
+
+# ── the budget each gate waits ──────────────────────────────────────────────────────────────
+
+# role -> (seconds, why it is not the default). Every inline gate's `--timeout=` declared once,
+# with its reason.
+#
+# WHY A TABLE AND NOT A SHARED CONSTANT. `manifests_rollout_timeout` is passed as a var to the
+# `k8s/manifests` include at each role's own call site, never declared in a role's defaults, so
+# it is out of scope in the `verify.yml` where these gates live. There is no variable to
+# reference, and introducing one would mean plumbing it through six roles to remove one literal.
+#
+# What was actually missing is the reason the values differ. Everything else about these gates
+# is already pinned above — that one exists, that it precedes the pod inspection, that it is
+# `rollout status` and not a readiness wait. The number was the one part nothing held, and
+# eleven roles carry one: nine at the 300s default, qbittorrent above it and dri-device-plugin
+# below it. A reader meeting either outlier could not tell a considered budget from a typo
+# without going and looking, and for dri-device-plugin looking does not answer it.
+_GATE_BUDGETS = {
+    "claude-otel": (
+        300,
+        "default; one looped gate covering all six telemetry workloads",
+    ),
+    "cloudflare-ddns": (300, "default"),
+    "crowdsec": (300, "default"),
+    "dri-device-plugin": (
+        180,
+        "BELOW the default, and the call site does not say why. A single-node DaemonSet with "
+        "no first-boot work does roll out well inside 180s, so this is plausible rather than "
+        "verified; it is recorded as undocumented, not endorsed. Raise it if it ever times out",
+    ),
+    "janitorr": (300, "default"),
+    "jellyfin": (300, "default"),
+    "n8n": (300, "default"),
+    "pihole": (300, "default"),
+    "qbittorrent": (
+        480,
+        "Recreate strategy plus the wireguard sidecar's 5-minute startupProbe; the derivation "
+        "is at the call site in roles/k8s/qbittorrent/tasks/verify.yml",
+    ),
+    "registry": (300, "default"),
+    "tdarr": (300, "default"),
+}
+
+_TIMEOUT = re.compile(r"--timeout=(\d+)s")
+
+
+def _inline_gate_budgets() -> dict[str, set[int]]:
+    """role -> every `--timeout=<n>s` on a `rollout status` task in that role.
+
+    Derived from the tree rather than listed, so a new inline gate joins this check by
+    existing instead of by somebody remembering to add it.
+    """
+    found: dict[str, set[int]] = {}
+    for role_dir in sorted(_K8S_ROLES.iterdir()):
+        if not (role_dir / "tasks" / "main.yml").is_file():
+            continue
+        for task in _tasks(role_dir.name):
+            if "rollout status" not in task.cmd:
+                continue
+            found.setdefault(role_dir.name, set()).update(
+                int(m) for m in _TIMEOUT.findall(task.cmd)
+            )
+    return {role: budgets for role, budgets in found.items() if budgets}
+
+
+def test_the_gate_budget_census_is_non_vacuous() -> None:
+    # Assert the NAMES, not a count: the derivation globs the role tree and returns an empty
+    # mapping the moment the matcher breaks, at which point both checks below would pass by
+    # iterating zero times.
+    assert set(_inline_gate_budgets()) == set(_GATE_BUDGETS), (
+        "the set of roles carrying an inline `rollout status` gate has changed. Add the new "
+        "role to _GATE_BUDGETS with the reason for its number, or drop the one that went."
+    )
+
+
+def test_every_inline_gate_waits_its_declared_budget() -> None:
+    for role, budgets in _inline_gate_budgets().items():
+        expected, reason = _GATE_BUDGETS[role]
+        assert budgets == {expected}, (
+            f"{role}'s inline rollout gate waits {sorted(budgets)}s, not the declared "
+            f"{expected}s ({reason}). Change the declaration and its reason together, or "
+            "change the gate back."
+        )
+
+
+def test_a_drifted_gate_budget_is_flagged() -> None:
+    # Red proof for the check above, which can only ever be observed passing.
+    expected, _ = _GATE_BUDGETS["tdarr"]
+    assert {900} != {expected}, (
+        "the comparison must reject a budget that moved; if it does not, it measures nothing."
+    )

@@ -49,3 +49,39 @@ def git(
 def git_stdout(*args: str, cwd: str | Path | None = None, **kwargs) -> str:
     """``git(...).stdout`` with surrounding whitespace removed."""
     return git(*args, cwd=cwd, **kwargs).stdout.strip()
+
+
+def git_dirty(
+    cwd: str | Path,
+    *,
+    paths: tuple[str, ...] | list[str] | None = None,
+    include_untracked: bool = True,
+) -> bool:
+    """Whether the tree at ``cwd`` has uncommitted changes.
+
+    THE SCOPE IS THE WHOLE POINT, so it is named rather than defaulted into. "Is the tree
+    dirty" reads like one question with one obvious implementation, and this repo answers it
+    ten different ways across four Python callers and six shell sites -- six counting untracked
+    files, three scoped to a tracked list, one scoped to two paths. Each variant is right where
+    it sits; the hazard is the next caller copying whichever it meets first. An untracked file
+    counted by a ``--porcelain`` check is what parks the GitOps deployer, and the ``.gitignore``
+    fix for that deadlocks.
+
+    Args:
+      cwd: the tree to inspect. ``cwd`` alone decides which repository is read -- ``git()``
+        strips every ``GIT_*`` variable, so an ambient ``GIT_DIR`` cannot redirect this the way
+        it can redirect a bare ``git -C``.
+      paths: limit the check to these pathspecs. None checks the whole tree.
+      include_untracked: count untracked files as dirty. Pass False for the
+        "has anything I track changed" question, which is what a job that commits a known set
+        of files wants -- an operator's unrelated scratch file must not make it skip its run.
+
+    Returns:
+      True when the selected scope has any change.
+    """
+    args = ["status", "--porcelain"]
+    if not include_untracked:
+        args.append("--untracked-files=no")
+    if paths:
+        args += ["--", *paths]
+    return bool(git_stdout(*args, cwd=cwd))

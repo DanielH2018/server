@@ -4,7 +4,7 @@ import subprocess
 
 import pytest
 
-from git import git, git_stdout
+from git import git, git_dirty, git_stdout
 
 
 def _init_repo(path):
@@ -62,3 +62,50 @@ def test_check_false_returns_the_exit_code(tmp_path):
     _init_repo(tmp_path)
     done = git("rev-parse", "--verify", "no-such-ref", cwd=tmp_path, check=False)
     assert done.returncode != 0
+
+
+def test_a_clean_tree_is_clean(tmp_path):
+    _init_repo(tmp_path)
+    assert git_dirty(tmp_path) is False
+
+
+def test_a_modified_tracked_file_is_flagged(tmp_path):
+    _init_repo(tmp_path)
+    (tmp_path / "a.txt").write_text("changed\n")
+    assert git_dirty(tmp_path) is True
+    # Still dirty with untracked excluded: the change is to a TRACKED file.
+    assert git_dirty(tmp_path, include_untracked=False) is True
+
+
+def test_an_untracked_file_is_flagged_only_when_untracked_files_count(tmp_path):
+    """The distinction the whole helper exists for.
+
+    One untracked file counted by a bare `--porcelain` check is what parks the GitOps
+    deployer; a job that commits a known set of files wants the other answer, so that an
+    operator's unrelated scratch file does not make it skip its run.
+    """
+    _init_repo(tmp_path)
+    (tmp_path / "scratch.txt").write_text("scratch\n")
+    assert git_dirty(tmp_path) is True
+    assert git_dirty(tmp_path, include_untracked=False) is False
+
+
+def test_paths_scope_the_question(tmp_path):
+    _init_repo(tmp_path)
+    (tmp_path / "sub").mkdir()
+    (tmp_path / "sub" / "b.txt").write_text("b\n")
+    assert git_dirty(tmp_path, paths=["sub"]) is True
+    assert git_dirty(tmp_path, paths=["a.txt"]) is False
+
+
+def test_an_ambient_git_dir_cannot_redirect_the_answer(tmp_path, monkeypatch):
+    """`cwd` decides, not the environment — the hazard `git -C` does not protect against."""
+    clean, dirty = tmp_path / "clean", tmp_path / "dirty"
+    clean.mkdir()
+    dirty.mkdir()
+    _init_repo(clean)
+    _init_repo(dirty)
+    (dirty / "scratch.txt").write_text("scratch\n")
+    monkeypatch.setenv("GIT_DIR", str(dirty / ".git"))
+    monkeypatch.setenv("GIT_WORK_TREE", str(dirty))
+    assert git_dirty(clean) is False
