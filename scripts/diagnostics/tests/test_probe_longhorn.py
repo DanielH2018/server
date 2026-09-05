@@ -130,6 +130,8 @@ def test_b2_longhorn_command_does_not_shell_out_to_docker_or_rclone():
 
         return Result()
 
+    # `probe.subprocess` is the shared stdlib module object, so swapping its `run` reaches
+    # b2_api.b2_curl too; the spelling predates the split.
     real_run = probe.subprocess.run
     probe.subprocess.run = fake_run
     try:
@@ -149,7 +151,7 @@ def test_b2_longhorn_command_does_not_shell_out_to_docker_or_rclone():
     source = ""
     for module in (b2_api, longhorn):
         with open(module.__file__) as fh:
-            source += fh.read()
+            source += fh.read() + "\n"
     code = "\n".join(
         line for line in source.splitlines() if not line.strip().startswith("#")
     )
