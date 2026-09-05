@@ -10,13 +10,13 @@ because it is a Loki arm folded into a cluster verdict — the caller reaches it
 `checks.logs.with_log_errors` and test_check_loki.py patches it here.
 """
 
-import bridge.config as cfg
+from bridge.config import Config
 import bridge.net
 from verdicts.cluster import log_error_verdict
 from verdicts.logs import loki_ingestion_fresh, shipper_dropped
 
 
-def check_loki_ingestion() -> tuple[bool, str]:
+def check_loki_ingestion(cfg: Config) -> tuple[bool, str]:
     """Checks that all three Loki ingestion arms (file-tail, container stream, Pi) are fresh.
 
     Down if any arm is silent: the file-tail union, the docker-stream arm (a
@@ -32,20 +32,21 @@ def check_loki_ingestion() -> tuple[bool, str]:
     # include it (else a healthy docker stream masks a dead file-tail pipeline) — hence the
     # separate selector + wider window (LOKI_FILETAIL_WINDOW).
     ok_all, msg_all = loki_ingestion_fresh(
-        bridge.net.loki_count(cfg.LOKI_STREAM, cfg.LOKI_FILETAIL_WINDOW),
+        bridge.net.loki_count(cfg, cfg.LOKI_STREAM, cfg.LOKI_FILETAIL_WINDOW),
         cfg.LOKI_FILETAIL_WINDOW,
     )
     if not ok_all:
         return False, "file-tail streams silent — " + msg_all
     ok_docker, msg_docker = loki_ingestion_fresh(
-        bridge.net.loki_count(cfg.LOKI_DOCKER_STREAM, cfg.LOKI_WINDOW), cfg.LOKI_WINDOW
+        bridge.net.loki_count(cfg, cfg.LOKI_DOCKER_STREAM, cfg.LOKI_WINDOW),
+        cfg.LOKI_WINDOW,
     )
     if not ok_docker:
         return False, "container log stream silent — " + msg_docker
     # Arm 3: the Pi ships its own logs and neither arm above counts them, so its promtail
     # dying is invisible while the cluster keeps talking.
     ok_pi, msg_pi = loki_ingestion_fresh(
-        bridge.net.loki_count(cfg.LOKI_PI_STREAM, cfg.LOKI_FILETAIL_WINDOW),
+        bridge.net.loki_count(cfg, cfg.LOKI_PI_STREAM, cfg.LOKI_FILETAIL_WINDOW),
         cfg.LOKI_FILETAIL_WINDOW,
     )
     if not ok_pi:
@@ -53,7 +54,7 @@ def check_loki_ingestion() -> tuple[bool, str]:
     return True, "%s (+ container stream, + pi)" % msg_all
 
 
-def check_shipper_dropped() -> tuple[bool, str]:
+def check_shipper_dropped(cfg: Config) -> tuple[bool, str]:
     """Prometheus-based log-shipper + Loki-distributor partial-loss watchdog. Prom-dependent.
 
     Reads BOTH sides of the pipe (see shipper_dropped): the shippers' own client-side
@@ -65,14 +66,16 @@ def check_shipper_dropped() -> tuple[bool, str]:
     must not silently read as "0 dropped forever".
     """
     client_count = bridge.net.prom_scalar(
+        cfg,
         'sum(increase({__name__=~"%s"}[%s]))'
-        % (cfg.SHIPPER_DROPPED_METRICS, cfg.SHIPPER_DROPPED_WINDOW)
+        % (cfg.SHIPPER_DROPPED_METRICS, cfg.SHIPPER_DROPPED_WINDOW),
     )
     server_reasons = [
         (labels.get("reason", "unknown"), value)
         for labels, value in bridge.net.prom_vector(
+            cfg,
             'sum by (reason) (increase({__name__=~"%s"}[%s]))'
-            % (cfg.SHIPPER_DROPPED_SERVER_METRIC, cfg.SHIPPER_DROPPED_WINDOW)
+            % (cfg.SHIPPER_DROPPED_SERVER_METRIC, cfg.SHIPPER_DROPPED_WINDOW),
         )
     ]
     return shipper_dropped(
@@ -83,12 +86,12 @@ def check_shipper_dropped() -> tuple[bool, str]:
     )
 
 
-def check_loki_reachable() -> tuple[bool, str]:
-    bridge.net.loki_reachable()
+def check_loki_reachable(cfg: Config) -> tuple[bool, str]:
+    bridge.net.loki_reachable(cfg)
     return True, "Loki reachable"
 
 
-def with_log_errors(ok: bool, msg: str) -> tuple[bool, str]:
+def with_log_errors(cfg: Config, ok: bool, msg: str) -> tuple[bool, str]:
     """Fold the log-pattern arm into the workload verdict, a burst winning the message.
 
     Folded here rather than given its own monitor, for the reason the extended-resource and
@@ -106,7 +109,7 @@ def with_log_errors(ok: bool, msg: str) -> tuple[bool, str]:
     ignore = {n.strip().lower() for n in cfg.LOG_ERROR_IGNORE.split(",") if n.strip()}
     try:
         matches, total = bridge.net.log_error_counts(
-            cfg.LOG_ERROR_SELECTOR, cfg.LOG_ERROR_PATTERN, cfg.LOG_ERROR_WINDOW
+            cfg, cfg.LOG_ERROR_SELECTOR, cfg.LOG_ERROR_PATTERN, cfg.LOG_ERROR_WINDOW
         )
     except Exception as e:
         return ok, "%s, log-error arm unavailable (%s)" % (msg, e)

@@ -8,6 +8,8 @@ banned infra IP 403'd the probes into a crash loop, which the heartbeat alone co
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
+from dataclasses import replace
+
 import pytest
 
 import bridge.config
@@ -68,55 +70,56 @@ def _ha_payload(age_s):
     return _ha_state(lc)
 
 
-def _ha_cycle(monkeypatch, age_s=600, raises=False, banned=0):
-    monkeypatch.setattr(bridge.config, "HA_URL", "http://home-assistant:8123")
-    monkeypatch.setattr(bridge.config, "HA_TOKEN", "tok")
+def _ha_cycle(cfg, monkeypatch, age_s=600, raises=False, banned=0):
+    cfg = replace(cfg, HA_URL="http://home-assistant:8123", HA_TOKEN="tok")
     # The ip_ban arm queries Loki via loki_count. Patch it explicitly rather than letting it fall
     # through the _get_json stub below: that stub returns an HA state payload, so the arm would
     # take its fail-open path for an accidental reason and stop testing the hysteresis cleanly.
-    monkeypatch.setattr(bridge.net, "loki_count", lambda *a, **k: banned)
+    monkeypatch.setattr(bridge.net, "loki_count", lambda _cfg, *a, **k: banned)
     if raises:
 
-        def boom(*a, **k):
+        def boom(_cfg, *a, **k):
             raise OSError("connection refused")
 
         monkeypatch.setattr(bridge.net, "_get_json", boom)
     else:
         monkeypatch.setattr(bridge.net, "_get_json", lambda *a, **k: _ha_payload(age_s))
-    return checks.service.check_ha_heartbeat()
+    return checks.service.check_ha_heartbeat(cfg)
 
 
-def test_ha_heartbeat_single_stale_cycle_is_suppressed(monkeypatch):
+def test_ha_heartbeat_single_stale_cycle_is_suppressed(monkeypatch, cfg):
     # One stale cycle (a deploy mid-recreate) must NOT page — pushes up with a streak msg.
-    ok, msg = _ha_cycle(monkeypatch, age_s=600)
+    ok, msg = _ha_cycle(cfg, monkeypatch, age_s=600)
     assert ok
     assert "1/2" in msg  # streak progress vs default HA_CONSECUTIVE=2
 
 
-def test_ha_heartbeat_two_consecutive_stale_cycles_alert(monkeypatch):
+def test_ha_heartbeat_two_consecutive_stale_cycles_alert(monkeypatch, cfg):
     # Default HA_CONSECUTIVE=2: the 2nd straight stale cycle is a genuinely wedged HA -> down.
-    ok, _ = _ha_cycle(monkeypatch, age_s=600)
+    ok, _ = _ha_cycle(cfg, monkeypatch, age_s=600)
     assert ok
-    ok, msg = _ha_cycle(monkeypatch, age_s=600)
+    ok, msg = _ha_cycle(cfg, monkeypatch, age_s=600)
     assert not ok
     assert "stale" in msg
 
 
-def test_ha_heartbeat_fresh_read_resets_streak(monkeypatch):
+def test_ha_heartbeat_fresh_read_resets_streak(monkeypatch, cfg):
     # stale, then fresh -> never down (a recovered deploy clears the streak).
-    assert _ha_cycle(monkeypatch, age_s=600)[0]
-    ok, msg = _ha_cycle(monkeypatch, age_s=60)  # scheduler resumed, heartbeat fresh
+    assert _ha_cycle(cfg, monkeypatch, age_s=600)[0]
+    ok, msg = _ha_cycle(
+        cfg, monkeypatch, age_s=60
+    )  # scheduler resumed, heartbeat fresh
     assert ok
     assert "fresh" in msg
     # the next stale cycle starts a NEW streak, so it's suppressed again
-    ok, msg = _ha_cycle(monkeypatch, age_s=600)
+    ok, msg = _ha_cycle(cfg, monkeypatch, age_s=600)
     assert ok
     assert "1/2" in msg
 
 
-def test_ha_heartbeat_unreachable_api_rides_grace(monkeypatch):
+def test_ha_heartbeat_unreachable_api_rides_grace(monkeypatch, cfg):
     # The recreate-window connection error must ride the SAME grace, not page immediately.
-    ok, msg = _ha_cycle(monkeypatch, raises=True)
+    ok, msg = _ha_cycle(cfg, monkeypatch, raises=True)
     assert ok
     assert "1/2" in msg
 
@@ -142,43 +145,41 @@ def test_ha_ban_event_is_down():
     assert "ip_bans.yaml" in msg
 
 
-def test_ha_ban_wins_the_message_over_a_healthy_heartbeat(monkeypatch):
+def test_ha_ban_wins_the_message_over_a_healthy_heartbeat(monkeypatch, cfg):
     # A ban pages even while the heartbeat itself is fresh — the two arms are independent, and
     # the ban text leads because it names the actionable fault.
-    ok, msg = _ha_cycle(monkeypatch, age_s=60, banned=3)
+    ok, msg = _ha_cycle(cfg, monkeypatch, age_s=60, banned=3)
     assert not ok
     assert msg.startswith("HA ip_ban fired 3 time(s)")
     assert "fresh" in msg  # the heartbeat's own verdict is preserved, not dropped
 
 
-def test_ha_ban_skips_the_deploy_grace(monkeypatch):
+def test_ha_ban_skips_the_deploy_grace(monkeypatch, cfg):
     # down_streak exists for transients. A ban persists in /config/ip_bans.yaml until a human
     # clears it, so it must page on the FIRST cycle rather than ride the 2-cycle grace.
-    ok, _ = _ha_cycle(monkeypatch, age_s=60, banned=1)
+    ok, _ = _ha_cycle(cfg, monkeypatch, age_s=60, banned=1)
     assert not ok
 
 
-def test_ha_ban_arm_fails_open_when_loki_errors(monkeypatch):
+def test_ha_ban_arm_fails_open_when_loki_errors(monkeypatch, cfg):
     # A Loki outage must not page the HA monitor. ha_heartbeat is deliberately NOT in
     # LOKI_DEPENDENT (that would suppress the whole check and blind the real heartbeat), so the
     # arm swallows the error and keeps the heartbeat's verdict.
 
-    def boom(*a, **k):
+    def boom(_cfg, *a, **k):
         raise OSError("loki unreachable")
 
     monkeypatch.setattr(bridge.net, "loki_count", boom)
-    monkeypatch.setattr(bridge.config, "HA_URL", "http://home-assistant:8123")
-    monkeypatch.setattr(bridge.config, "HA_TOKEN", "tok")
+    cfg = replace(cfg, HA_URL="http://home-assistant:8123", HA_TOKEN="tok")
     monkeypatch.setattr(bridge.net, "_get_json", lambda *a, **k: _ha_payload(60))
-    ok, msg = checks.service.check_ha_heartbeat()
+    ok, msg = checks.service.check_ha_heartbeat(cfg)
     assert ok
     assert "ip_ban arm unavailable" in msg
 
 
-def test_ha_heartbeat_disabled_when_no_url_token(monkeypatch):
-    monkeypatch.setattr(bridge.config, "HA_URL", "")
-    monkeypatch.setattr(bridge.config, "HA_TOKEN", "")
-    ok, msg = checks.service.check_ha_heartbeat()
+def test_ha_heartbeat_disabled_when_no_url_token(monkeypatch, cfg):
+    cfg = replace(cfg, HA_URL="", HA_TOKEN="")
+    ok, msg = checks.service.check_ha_heartbeat(cfg)
     assert ok
     assert "disabled" in msg
 

@@ -9,16 +9,15 @@ These are the tests that drive `run_once()` end to end with the transport stubbe
 the ones that fail when the wiring changes rather than the logic.
 """
 
-import email.message
-import importlib
-import urllib.error
 from pathlib import Path
+
+from dataclasses import replace
 
 import pytest
 
 import bridge.common
 import bridge.parsing
-import bridge.config
+from bridge.config import load_config
 import bridge.net
 import checks.b2
 import checks.cluster
@@ -27,39 +26,39 @@ import check
 _REPO = Path(__file__).resolve().parents[5]
 
 
-def test_loki_reachable_ok(monkeypatch):
+def test_loki_reachable_ok(monkeypatch, cfg):
     monkeypatch.setattr(
         bridge.net, "_get_json", lambda *a, **k: {"status": "success", "data": ["job"]}
     )
-    assert bridge.net.loki_reachable() is True
-    ok, msg = check.check_loki_reachable()
+    assert bridge.net.loki_reachable(cfg) is True
+    ok, msg = check.check_loki_reachable(cfg)
     assert ok
     assert "reachable" in msg.lower()
 
 
-def test_loki_reachable_non_success_raises(monkeypatch):
+def test_loki_reachable_non_success_raises(monkeypatch, cfg):
     monkeypatch.setattr(bridge.net, "_get_json", lambda *a, **k: {"status": "error"})
     with pytest.raises(RuntimeError):
-        bridge.net.loki_reachable()
+        bridge.net.loki_reachable(cfg)
 
 
 # ── Prometheus reachability gate + alert-storm suppression (L1) ──────────────
 
 
-def test_check_prometheus_reachable(monkeypatch):
-    monkeypatch.setattr(bridge.net, "prom_scalar", lambda q: 1.0)
-    ok, msg = check.check_prometheus()
+def test_check_prometheus_reachable(monkeypatch, cfg):
+    monkeypatch.setattr(bridge.net, "prom_scalar", lambda _cfg, q: 1.0)
+    ok, msg = check.check_prometheus(cfg)
     assert ok
     assert "reachable" in msg.lower()
 
 
-def test_check_prometheus_no_data_is_down(monkeypatch):
-    monkeypatch.setattr(bridge.net, "prom_scalar", lambda q: None)
-    ok, _msg = check.check_prometheus()
+def test_check_prometheus_no_data_is_down(monkeypatch, cfg):
+    monkeypatch.setattr(bridge.net, "prom_scalar", lambda _cfg, q: None)
+    ok, _msg = check.check_prometheus(cfg)
     assert not ok
 
 
-def _wire_run_once(monkeypatch, prom_result):
+def _wire_run_once(cfg, monkeypatch, prom_result):
     """Drive run_once with a tiny CHECKS list (one prom-dependent, one not) and capture pushes.
 
     Returns (ran, pushes): `ran` is the names of checks actually executed, `pushes` is
@@ -67,26 +66,26 @@ def _wire_run_once(monkeypatch, prom_result):
     """
     ran, pushes = [], []
     monkeypatch.setattr(
-        bridge.net, "push", lambda token, ok, msg: pushes.append((token, ok, msg))
+        bridge.net, "push", lambda _cfg, token, ok, msg: pushes.append((token, ok, msg))
     )
     if isinstance(prom_result, Exception):
 
-        def _prom():
+        def _prom(_cfg):
             raise prom_result
     else:
 
-        def _prom():
+        def _prom(_cfg):
             return prom_result
 
     monkeypatch.setattr(check, "check_prometheus", _prom)
     # No exporters down by default, so the prom-up path doesn't hit the network probing `up`.
-    monkeypatch.setattr(bridge.net, "prom_vector", lambda q: [])
+    monkeypatch.setattr(bridge.net, "prom_vector", lambda _cfg, q: [])
     monkeypatch.setattr(check, "PROM_DEPENDENT", frozenset({"disk"}))
     # Loki reachable by default so run_once's Loki gate doesn't make a real network call here.
-    monkeypatch.setattr(check, "check_loki_reachable", lambda: (True, "loki ok"))
+    monkeypatch.setattr(check, "check_loki_reachable", lambda _cfg: (True, "loki ok"))
 
     def _mk(name):
-        def fn():
+        def fn(_cfg):
             ran.append(name)
             return True, "%s ok" % name
 
@@ -100,12 +99,12 @@ def _wire_run_once(monkeypatch, prom_result):
             check.Check("backup", "tok_backup", _mk("backup")),
         ],
     )
-    check.run_once()
+    check.run_once(cfg)
     return ran, pushes
 
 
-def test_run_once_suppresses_prom_dependent_when_prometheus_down(monkeypatch):
-    ran, pushes = _wire_run_once(monkeypatch, (False, "prom is down"))
+def test_run_once_suppresses_prom_dependent_when_prometheus_down(monkeypatch, cfg):
+    ran, pushes = _wire_run_once(cfg, monkeypatch, (False, "prom is down"))
     # the prom-dependent check is suppressed: never executed, pushed `up` with a skip msg
     assert "disk" not in ran
     assert "backup" in ran  # non-prom check still runs
@@ -116,16 +115,16 @@ def test_run_once_suppresses_prom_dependent_when_prometheus_down(monkeypatch):
     assert any(ok is False and "prom is down" in msg for _, ok, msg in pushes)
 
 
-def test_run_once_unreachable_prometheus_exception_suppresses(monkeypatch):
+def test_run_once_unreachable_prometheus_exception_suppresses(monkeypatch, cfg):
     # prom_scalar raising (the real outage path) -> _evaluate renders it down -> suppression
-    ran, pushes = _wire_run_once(monkeypatch, RuntimeError("connection refused"))
+    ran, pushes = _wire_run_once(cfg, monkeypatch, RuntimeError("connection refused"))
     assert "disk" not in ran
     assert "backup" in ran
     assert any(ok is False and "connection refused" in msg for _, ok, msg in pushes)
 
 
-def test_run_once_runs_all_when_prometheus_up(monkeypatch):
-    ran, pushes = _wire_run_once(monkeypatch, (True, "ok"))
+def test_run_once_runs_all_when_prometheus_up(monkeypatch, cfg):
+    ran, pushes = _wire_run_once(cfg, monkeypatch, (True, "ok"))
     assert ran == ["disk", "backup"]  # nothing suppressed
     by_tok = {tok: (ok, msg) for tok, ok, msg in pushes}
     assert "skipped" not in by_tok["tok_disk"][1].lower()
@@ -146,27 +145,29 @@ def test_loki_dependent_set_matches_real_checks():
     assert check.LOKI_DEPENDENT <= names
 
 
-def _wire_run_once_loki(monkeypatch, loki_result, checks, loki_dependent):
+def _wire_run_once_loki(cfg, monkeypatch, loki_result, checks, loki_dependent):
     """Drive run_once with Prometheus UP and a stubbed Loki-reachability result; capture run+push."""
     ran, pushes = [], []
-    monkeypatch.setattr(bridge.net, "push", lambda t, ok, m: pushes.append((t, ok, m)))
-    monkeypatch.setattr(check, "check_prometheus", lambda: (True, "prom ok"))
-    monkeypatch.setattr(bridge.net, "prom_vector", lambda q: [])
+    monkeypatch.setattr(
+        bridge.net, "push", lambda _cfg, t, ok, m: pushes.append((t, ok, m))
+    )
+    monkeypatch.setattr(check, "check_prometheus", lambda _cfg: (True, "prom ok"))
+    monkeypatch.setattr(bridge.net, "prom_vector", lambda _cfg, q: [])
     monkeypatch.setattr(check, "PROM_DEPENDENT", frozenset())
     monkeypatch.setattr(check, "LOKI_DEPENDENT", frozenset(loki_dependent))
     if isinstance(loki_result, Exception):
 
-        def _loki():
+        def _loki(_cfg):
             raise loki_result
     else:
 
-        def _loki():
+        def _loki(_cfg):
             return loki_result
 
     monkeypatch.setattr(check, "check_loki_reachable", _loki)
 
     def _mk(name):
-        def fn():
+        def fn(_cfg):
             ran.append(name)
             return True, "%s ok" % name
 
@@ -175,12 +176,13 @@ def _wire_run_once_loki(monkeypatch, loki_result, checks, loki_dependent):
     monkeypatch.setattr(
         check, "CHECKS", [check.Check(n, "tok_%s" % n, _mk(n)) for n in checks]
     )
-    check.run_once()
+    check.run_once(cfg)
     return ran, pushes
 
 
-def test_run_once_suppresses_loki_dependent_when_loki_down(monkeypatch):
+def test_run_once_suppresses_loki_dependent_when_loki_down(monkeypatch, cfg):
     ran, pushes = _wire_run_once_loki(
+        cfg,
         monkeypatch,
         (False, "loki unreachable"),
         ["recyclarr", "janitorr", "backup"],
@@ -196,9 +198,10 @@ def test_run_once_suppresses_loki_dependent_when_loki_down(monkeypatch):
     assert any(ok is False and "loki unreachable" in m for _, ok, m in pushes)
 
 
-def test_run_once_unreachable_loki_exception_suppresses(monkeypatch):
+def test_run_once_unreachable_loki_exception_suppresses(monkeypatch, cfg):
     # check_loki_reachable raising (the real outage path) -> _evaluate down -> suppression
     ran, _ = _wire_run_once_loki(
+        cfg,
         monkeypatch,
         RuntimeError("connection refused"),
         ["recyclarr", "backup"],
@@ -208,8 +211,9 @@ def test_run_once_unreachable_loki_exception_suppresses(monkeypatch):
     assert "backup" in ran
 
 
-def test_run_once_runs_loki_dependent_when_loki_up(monkeypatch):
+def test_run_once_runs_loki_dependent_when_loki_up(monkeypatch, cfg):
     ran, _ = _wire_run_once_loki(
+        cfg,
         monkeypatch,
         (True, "Loki reachable"),
         ["recyclarr", "janitorr"],
@@ -394,46 +398,48 @@ def test_k8s_daemonsets_healthy_alongside_healthy_deployments():
     assert "18 k8s workloads healthy" == msg
 
 
-def test_origin_sel_is_empty_without_a_pin(monkeypatch):
+def test_origin_sel_is_empty_without_a_pin(monkeypatch, cfg):
     # Against the Docker Prometheus there is no `origin` label at all — external_labels apply on
     # remote-write and never to local storage — so a pin there would select NOTHING and read as
     # healthy. Empty must stay empty.
-    monkeypatch.setattr(bridge.config, "PROM_ORIGIN", "")
-    assert bridge.net.origin_sel() == ""
-    assert bridge.net.origin_sel('name!=""') == '{name!=""}'
+    cfg = replace(cfg, PROM_ORIGIN="")
+    assert bridge.net.origin_sel(cfg) == ""
+    assert bridge.net.origin_sel(cfg, 'name!=""') == '{name!=""}'
 
 
-def test_origin_sel_appends_the_pin(monkeypatch):
-    monkeypatch.setattr(bridge.config, "PROM_ORIGIN", 'origin="daniel-server"')
-    assert bridge.net.origin_sel() == '{origin="daniel-server"}'
-    assert bridge.net.origin_sel('name!=""') == '{name!="", origin="daniel-server"}'
+def test_origin_sel_appends_the_pin(monkeypatch, cfg):
+    cfg = replace(cfg, PROM_ORIGIN='origin="daniel-server"')
+    assert bridge.net.origin_sel(cfg) == '{origin="daniel-server"}'
+    assert (
+        bridge.net.origin_sel(cfg, 'name!=""') == '{name!="", origin="daniel-server"}'
+    )
 
 
-def test_origin_pin_derives_from_the_prometheus_url(monkeypatch):
+def test_origin_pin_derives_from_the_prometheus_url():
     # THE regression this guards. PROM_ORIGIN is derived rather than configured precisely so it
     # cannot drift out of lockstep with PROMETHEUS_URL: pointing one at the cluster and forgetting
     # the other selects nothing, which every one of these checks decodes as healthy.
-    monkeypatch.setenv("PROMETHEUS_URL", "https://prom-k8s.example")
-    monkeypatch.setenv("CLUSTER_PROMETHEUS_URL", "https://prom-k8s.example")
-    monkeypatch.delenv("PROM_ORIGIN", raising=False)
-    reloaded = importlib.reload(bridge.config)
-    try:
-        assert reloaded.PROM_ORIGIN == 'origin="daniel-server"'
-    finally:
-        monkeypatch.undo()
-        importlib.reload(bridge.config)
+    #
+    # The derivation is stated to load_config as an environment, not reached by reloading the
+    # module: a reload re-runs one module against the real os.environ, so the test had to mutate
+    # the process to ask its question and undo the mutation afterwards.
+    derived = load_config(
+        {
+            "PROMETHEUS_URL": "https://prom-k8s.example",
+            "CLUSTER_PROMETHEUS_URL": "https://prom-k8s.example",
+        }
+    )
+    assert derived.PROM_ORIGIN == 'origin="daniel-server"'
 
 
-def test_origin_pin_absent_when_reading_the_docker_prometheus(monkeypatch):
-    monkeypatch.setenv("PROMETHEUS_URL", "http://prometheus:9090")
-    monkeypatch.setenv("CLUSTER_PROMETHEUS_URL", "https://prom-k8s.example")
-    monkeypatch.delenv("PROM_ORIGIN", raising=False)
-    reloaded = importlib.reload(bridge.config)
-    try:
-        assert reloaded.PROM_ORIGIN == ""
-    finally:
-        monkeypatch.undo()
-        importlib.reload(bridge.config)
+def test_origin_pin_absent_when_reading_the_docker_prometheus():
+    derived = load_config(
+        {
+            "PROMETHEUS_URL": "http://prometheus:9090",
+            "CLUSTER_PROMETHEUS_URL": "https://prom-k8s.example",
+        }
+    )
+    assert derived.PROM_ORIGIN == ""
 
 
 def test_cluster_targets_is_cluster_dependent_not_prom_dependent():
@@ -443,7 +449,7 @@ def test_cluster_targets_is_cluster_dependent_not_prom_dependent():
     assert "cluster_targets" not in check.PROM_DEPENDENT
 
 
-def test_cluster_targets_covers_everything_its_sibling_does_not(monkeypatch):
+def test_cluster_targets_covers_everything_its_sibling_does_not(monkeypatch, cfg):
     """`origin!="daniel-server"` is the complement of check_targets_down's pin, so every `up`
     series belongs to exactly one of the two checks.
 
@@ -453,27 +459,27 @@ def test_cluster_targets_covers_everything_its_sibling_does_not(monkeypatch):
     """
     seen = {}
 
-    def fake_vector(promql, base=None, source="prometheus"):
+    def fake_vector(_cfg, promql, base=None, source="prometheus"):
         seen["q"], seen["base"] = promql, base
         return [({"job": "j%d" % i}, 1.0) for i in range(5)]
 
-    monkeypatch.setattr(bridge.config, "CLUSTER_PROM_URL", "https://cluster")
+    cfg = replace(cfg, CLUSTER_PROM_URL="https://cluster")
     monkeypatch.setattr(bridge.net, "prom_vector", fake_vector)
-    ok, _ = checks.cluster.check_cluster_targets()
+    ok, _ = checks.cluster.check_cluster_targets(cfg)
     assert ok is True
     assert seen["q"] == 'up{origin!="daniel-server"}'
     assert seen["base"] == "https://cluster"
 
 
-def test_cluster_targets_empty_is_down():
-    ok, msg = checks.cluster.targets_verdict([], bridge.config.CLUSTER_TARGETS_MIN)
+def test_cluster_targets_empty_is_down(cfg):
+    ok, msg = checks.cluster.targets_verdict([], cfg.CLUSTER_TARGETS_MIN)
     assert ok is False
     assert "UNKNOWN" in msg
 
 
-def test_cluster_targets_disabled_without_cluster_url(monkeypatch):
-    monkeypatch.setattr(bridge.config, "CLUSTER_PROM_URL", "")
-    ok, msg = checks.cluster.check_cluster_targets()
+def test_cluster_targets_disabled_without_cluster_url(monkeypatch, cfg):
+    cfg = replace(cfg, CLUSTER_PROM_URL="")
+    ok, msg = checks.cluster.check_cluster_targets(cfg)
     assert ok is True
     assert "disabled" in msg
 
@@ -518,7 +524,7 @@ _CADVISOR_METRICS = (
 )
 
 
-def test_cadvisor_checks_never_pin_the_origin():
+def test_cadvisor_checks_never_pin_the_origin(cfg):
     # REPLACES test_dual_estate_checks_all_pin_the_origin, which asserted the exact opposite and
     # was wrong from the Phase G retarget until 2026-08-24. Its premise — that these metrics
     # "genuinely exist in BOTH estates" — died with the Docker cAdvisor on 2026-08-14. `origin` is
@@ -547,30 +553,24 @@ def test_cadvisor_checks_never_pin_the_origin():
     # Guarded on PROM_ORIGIN being non-empty: under the test env PROM_URL is unset so the pin is
     # "", and `"" not in s` is False for every s — an unguarded assert fails on the empty case
     # while proving nothing about the real one.
-    if bridge.config.PROM_ORIGIN:
-        assert bridge.config.PROM_ORIGIN not in bridge.net.cadvisor_sel(
-            'container!=""'
-        ), (
+    if cfg.PROM_ORIGIN:
+        assert cfg.PROM_ORIGIN not in bridge.net.cadvisor_sel('container!=""'), (
             "cadvisor_sel() must not apply the origin pin — cAdvisor series carry no origin label"
         )
     # Independent of the environment: the pin can only enter through PROM_ORIGIN, so a
     # cadvisor_sel() built with a sentinel pin must still come back without it.
-    saved = bridge.config.PROM_ORIGIN
-    try:
-        bridge.config.PROM_ORIGIN = 'origin="sentinel"'
-        assert "sentinel" not in bridge.net.cadvisor_sel('container!=""')
-        assert "sentinel" in bridge.net.origin_sel('container!=""')
-    finally:
-        bridge.config.PROM_ORIGIN = saved
+    pinned = replace(cfg, PROM_ORIGIN='origin="sentinel"')
+    assert "sentinel" not in bridge.net.cadvisor_sel('container!=""')
+    assert "sentinel" in bridge.net.origin_sel(pinned, 'container!=""')
 
 
-def test_up_still_pins_the_origin_where_the_label_exists():
+def test_up_still_pins_the_origin_where_the_label_exists(cfg):
     # The other half of the contract: `up` DOES carry origin (the node job is relabelled), and
     # targets_verdict depends on the pin to scope its floor to one estate. Dropping it there would
     # make check_targets a duplicate of check_cluster_targets and orphan daniel-server's
     # node-exporter, which is why the fix deliberately left this call site alone.
-    if bridge.config.PROM_ORIGIN:
-        assert bridge.config.PROM_ORIGIN in bridge.net.origin_sel(), (
+    if cfg.PROM_ORIGIN:
+        assert cfg.PROM_ORIGIN in bridge.net.origin_sel(cfg), (
             "origin_sel() must still apply the pin when PROM_ORIGIN is set"
         )
 
@@ -585,47 +585,50 @@ def test_duration_seconds_parses_prometheus_durations():
             bridge.parsing.duration_seconds(bad)
 
 
-def test_k8s_workloads_disabled_without_cluster_url(monkeypatch):
-    monkeypatch.setattr(bridge.config, "CLUSTER_PROM_URL", "")
-    ok, msg = checks.cluster.check_k8s_workloads()
+def test_k8s_workloads_disabled_without_cluster_url(monkeypatch, cfg):
+    cfg = replace(cfg, CLUSTER_PROM_URL="")
+    ok, msg = checks.cluster.check_k8s_workloads(cfg)
     assert ok is True
     assert "disabled" in msg
 
 
-def test_cluster_prometheus_gate_down_when_no_result(monkeypatch):
-    monkeypatch.setattr(bridge.config, "CLUSTER_PROM_URL", "https://prom-k8s.example")
-    monkeypatch.setattr(bridge.net, "prom_scalar", lambda *a, **k: None)
-    ok, msg = check.check_cluster_prometheus()
+def test_cluster_prometheus_gate_down_when_no_result(monkeypatch, cfg):
+    cfg = replace(cfg, CLUSTER_PROM_URL="https://prom-k8s.example")
+    monkeypatch.setattr(bridge.net, "prom_scalar", lambda _cfg, *a, **k: None)
+    ok, msg = check.check_cluster_prometheus(cfg)
     assert ok is False
     assert "no result" in msg
 
 
 def test_run_once_suppresses_cluster_dependent_when_cluster_prometheus_down(
     monkeypatch,
+    cfg,
 ):
     # A cluster-side outage must page ONCE, as Cluster Prometheus — not as a workload fault.
     pushed = _run_once_with_gates(
+        cfg,
         monkeypatch,
         cluster_ok=False,
-        checks=[("k8s_workloads", "tok", lambda: (False, "should not run"))],
+        checks=[("k8s_workloads", "tok", lambda _cfg: (False, "should not run"))],
         cluster_dependent={"k8s_workloads"},
     )
     assert pushed["tok"][0] is True
     assert "cluster Prometheus unreachable" in pushed["tok"][1]
 
 
-def test_run_once_runs_cluster_dependent_when_cluster_prometheus_up(monkeypatch):
+def test_run_once_runs_cluster_dependent_when_cluster_prometheus_up(monkeypatch, cfg):
     pushed = _run_once_with_gates(
+        cfg,
         monkeypatch,
         cluster_ok=True,
-        checks=[("k8s_workloads", "tok", lambda: (False, "real failure"))],
+        checks=[("k8s_workloads", "tok", lambda _cfg: (False, "real failure"))],
         cluster_dependent={"k8s_workloads"},
     )
     assert pushed["tok"][0] is False
     assert pushed["tok"][1] == "real failure"
 
 
-def _run_once_with_gates(monkeypatch, cluster_ok, checks, cluster_dependent):
+def _run_once_with_gates(cfg, monkeypatch, cluster_ok, checks, cluster_dependent):
     """Drive run_once with every gate but the cluster one forced healthy."""
     pushed = {}
     monkeypatch.setattr(check, "CHECKS", [check.Check(*c) for c in checks])
@@ -634,224 +637,18 @@ def _run_once_with_gates(monkeypatch, cluster_ok, checks, cluster_dependent):
     monkeypatch.setattr(check, "LOKI_DEPENDENT", frozenset())
     monkeypatch.setattr(check, "B2_DEPENDENT", frozenset())
     monkeypatch.setattr(check, "CLUSTER_DEPENDENT", frozenset(cluster_dependent))
-    monkeypatch.setattr(check, "check_prometheus", lambda: (True, "up"))
-    monkeypatch.setattr(check, "check_loki_reachable", lambda: (True, "up"))
-    monkeypatch.setattr(check, "check_b2_reachable", lambda: (True, "up"))
-    monkeypatch.setattr(check, "check_cluster_prometheus", lambda: (cluster_ok, "gate"))
-    monkeypatch.setattr(bridge.net, "prom_vector", lambda *a, **k: [])
+    monkeypatch.setattr(check, "check_prometheus", lambda _cfg: (True, "up"))
+    monkeypatch.setattr(check, "check_loki_reachable", lambda _cfg: (True, "up"))
+    monkeypatch.setattr(check, "check_b2_reachable", lambda _cfg: (True, "up"))
     monkeypatch.setattr(
-        bridge.net, "push", lambda token, ok, msg: pushed.__setitem__(token, (ok, msg))
+        check, "check_cluster_prometheus", lambda _cfg: (cluster_ok, "gate")
+    )
+    monkeypatch.setattr(bridge.net, "prom_vector", lambda _cfg, *a, **k: [])
+    monkeypatch.setattr(
+        bridge.net,
+        "push",
+        lambda _cfg, token, ok, msg: pushed.__setitem__(token, (ok, msg)),
     )
     monkeypatch.setattr(bridge.common, "log", lambda *a, **k: None)
-    check.run_once()
+    check.run_once(cfg)
     return pushed
-
-
-def _reset_b2_probe(
-    monkeypatch, key_id="kid", app_key="akey", interval=1800, transport_retry=300
-):
-    monkeypatch.setattr(bridge.config, "B2_PROBE_KEY_ID", key_id)
-    monkeypatch.setattr(bridge.config, "B2_PROBE_APPLICATION_KEY", app_key)
-    monkeypatch.setattr(bridge.config, "B2_PROBE_INTERVAL_S", interval)
-    monkeypatch.setattr(bridge.config, "B2_TRANSPORT_RETRY_S", transport_retry)
-    monkeypatch.setattr(
-        checks.b2,
-        "_b2_probe",
-        {"ts": 0.0, "ok": True, "msg": "not yet probed", "ttl": interval},
-    )
-
-
-def _cap_denial():
-    """The exception a real transaction-cap breach raises.
-
-    _get_json re-raises urllib HTTPError UNTOUCHED (check.py, "Re-raise the SAME type") and wraps
-    only non-HTTP failures as RuntimeError. b2_reachable now branches on exactly that distinction
-    to pick a cache TTL, so a test that fakes a 403 as a RuntimeError would exercise the transport
-    path and prove the opposite of what it claims. These tests used to do that.
-    """
-    err = urllib.error.HTTPError(
-        bridge.config.B2_PROBE_URL,
-        403,
-        "Forbidden: transaction_cap_exceeded",
-        email.message.Message(),
-        None,
-    )
-    # Closed, as _get_json leaves a real one: an open HTTPError is a ResourceWarning at GC,
-    # which filterwarnings=error fails whichever test happens to be running then.
-    err.close()
-    return err
-
-
-def test_b2_reachable_disabled_without_credentials(monkeypatch):
-    _reset_b2_probe(monkeypatch, key_id="", app_key="")
-    ok, msg = checks.b2.b2_reachable(now=10_000)
-    assert ok is True and "disabled" in msg
-
-
-@pytest.mark.parametrize(
-    ("response", "ok", "must_contain"),
-    [
-        pytest.param({"accountId": "a1"}, True, ("reachable",), id="ok_on_account_id"),
-        # Version-tolerant: Backblaze publishes a v4 body example (accountId top-level) but none
-        # for v3, so either field proves it's B2. Pinning one shape would page every cycle if it
-        # moved.
-        pytest.param(
-            {"authorizationToken": "t"},
-            True,
-            (),
-            id="accepts_authorization_token_only",
-        ),
-        # A 200 from something that isn't B2 must not read as healthy.
-        pytest.param(
-            {"unexpected": 1}, False, ("accountId",), id="rejects_unrecognised_response"
-        ),
-    ],
-)
-def test_b2_authorize(monkeypatch, response, ok, must_contain):
-    monkeypatch.setattr(bridge.config, "B2_PROBE_KEY_ID", "kid")
-    monkeypatch.setattr(bridge.config, "B2_PROBE_APPLICATION_KEY", "akey")
-    monkeypatch.setattr(bridge.net, "_get_json", lambda url, headers=None: response)
-    result_ok, msg = checks.b2.b2_authorize()
-    assert result_ok is ok
-    for s in must_contain:
-        assert s in msg
-
-
-def test_b2_reachable_surfaces_the_cap_error_text(monkeypatch):
-    # G3: the alert must name the CAUSE. B2 answers a cap breach with transaction_cap_exceeded,
-    # and _get_json appends the response body to the HTTPError, so it has to reach the message.
-    _reset_b2_probe(monkeypatch)
-
-    def _boom(url, headers=None):
-        raise _cap_denial()
-
-    monkeypatch.setattr(bridge.net, "_get_json", _boom)
-    ok, msg = checks.b2.b2_reachable(now=10_000)
-    assert ok is False and "transaction_cap_exceeded" in msg
-
-
-def test_b2_reachable_caches_failure_and_does_not_reprobe(monkeypatch):
-    # THE cost-critical property. The fault being detected is a transaction cap, so a failure must
-    # NOT re-probe every cycle the way email_backstop does — that would spend the exhausted budget.
-    _reset_b2_probe(monkeypatch)
-    calls = []
-
-    def _boom(url, headers=None):
-        calls.append(url)
-        raise _cap_denial()
-
-    monkeypatch.setattr(bridge.net, "_get_json", _boom)
-    first_ok, _ = checks.b2.b2_reachable(now=10_000)
-    # five more cycles inside the interval (INTERVAL=300 -> 25 min of cycles)
-    for offset in (300, 600, 900, 1200, 1500):
-        ok, msg = checks.b2.b2_reachable(now=10_000 + offset)
-        assert ok is False
-        assert (
-            "transaction_cap_exceeded" in msg
-        )  # cached verdict still reported every cycle
-    assert first_ok is False
-    assert len(calls) == 1, "a cached failure must not re-probe: %d calls" % len(calls)
-
-
-def test_b2_reachable_reprobes_a_transport_failure_next_cycle(monkeypatch):
-    # The REJECT half of the caching pair above, and the 2026-08-30 restart's fix. A failure that
-    # never reached B2 was billed nothing, so the cost argument that justifies the 30-minute cache
-    # does not apply to it — and holding it pinned the gate DOWN for 25 minutes against an 8m35s
-    # outage, because the cache was holding back the RECOVERY as well as the retry.
-    _reset_b2_probe(monkeypatch, interval=1800, transport_retry=300)
-    calls = []
-    # _get_json wraps DNS/connect/timeout failures as RuntimeError; only these take the short TTL.
-    outcomes = [RuntimeError("b2 api: Temporary failure in name resolution")]
-
-    def _flaky(url, headers=None):
-        calls.append(url)
-        if outcomes:
-            raise outcomes.pop(0)
-        return {"accountId": "a1"}
-
-    monkeypatch.setattr(bridge.net, "_get_json", _flaky)
-    ok, msg = checks.b2.b2_reachable(now=10_000)
-    assert ok is False and "name resolution" in msg
-    # One cycle later the transport TTL has expired, so the gate re-probes and recovers — where a
-    # cap denial would still be reporting its cached verdict for another 25 minutes.
-    ok, msg = checks.b2.b2_reachable(now=10_300)
-    assert ok is True, "a transport failure must re-probe next cycle, got: %s" % msg
-    assert len(calls) == 2, "expected a re-probe, got %d calls" % len(calls)
-
-
-def test_b2_transport_retry_is_shorter_than_the_probe_interval():
-    # The two TTLs must not converge: if the transport retry ever reached B2_PROBE_INTERVAL_S the
-    # split above would be a no-op that still reads as implemented.
-    assert bridge.config.B2_TRANSPORT_RETRY_S < bridge.config.B2_PROBE_INTERVAL_S
-
-
-def test_b2_reachable_reprobes_after_the_interval(monkeypatch):
-    _reset_b2_probe(monkeypatch, interval=1800)
-    calls = []
-
-    def _ok(url, headers=None):
-        calls.append(url)
-        return {"accountId": "a1"}
-
-    monkeypatch.setattr(bridge.net, "_get_json", _ok)
-    checks.b2.b2_reachable(now=10_000)
-    checks.b2.b2_reachable(now=10_000 + 1799)  # still cached
-    assert len(calls) == 1
-    checks.b2.b2_reachable(now=10_000 + 1801)  # interval elapsed
-    assert len(calls) == 2
-
-
-def _wire_run_once_b2(monkeypatch, b2_result, checks, b2_dependent):
-    """Drive run_once with Prometheus+Loki UP and a stubbed B2-reachability result."""
-    ran, pushes = [], []
-    monkeypatch.setattr(bridge.net, "push", lambda t, ok, m: pushes.append((t, ok, m)))
-    monkeypatch.setattr(check, "check_prometheus", lambda: (True, "prom ok"))
-    monkeypatch.setattr(bridge.net, "prom_vector", lambda q: [])
-    monkeypatch.setattr(check, "check_loki_reachable", lambda: (True, "loki ok"))
-    monkeypatch.setattr(check, "PROM_DEPENDENT", frozenset())
-    monkeypatch.setattr(check, "LOKI_DEPENDENT", frozenset())
-    monkeypatch.setattr(check, "STARTUP_GRACE", frozenset())
-    monkeypatch.setattr(check, "B2_DEPENDENT", frozenset(b2_dependent))
-    monkeypatch.setattr(check, "check_b2_reachable", lambda: b2_result)
-
-    def _mk(name):
-        def fn():
-            ran.append(name)
-            return True, "%s ok" % name
-
-        return fn
-
-    monkeypatch.setattr(
-        check, "CHECKS", [check.Check(n, "tok_%s" % n, _mk(n)) for n in checks]
-    )
-    check.run_once()
-    return ran, pushes
-
-
-def test_run_once_suppresses_b2_dependent_when_b2_down(monkeypatch):
-    ran, pushes = _wire_run_once_b2(
-        monkeypatch,
-        (False, "B2 unreachable: HTTP Error 403: transaction_cap_exceeded"),
-        ["b2_usage", "verify", "backup"],
-        {"b2_usage", "verify"},
-    )
-    # The four state-file checks stop reporting their last-successful-run as current health...
-    assert not ({"b2_usage", "verify"} & set(ran))
-    by_tok = {t: (ok, m) for t, ok, m in pushes}
-    assert by_tok["tok_b2_usage"][0] is True
-    assert "b2" in by_tok["tok_b2_usage"][1].lower()
-    # ...while Backup Freshness still runs and can page — it is the signal that was right.
-    assert "backup" in ran
-    assert any(
-        ok is False and "transaction_cap_exceeded" in m for _, ok, m in pushes
-    ), "the B2 Reachable monitor must page with B2's own error text"
-
-
-def test_run_once_runs_b2_dependent_when_b2_up(monkeypatch):
-    ran, _ = _wire_run_once_b2(
-        monkeypatch,
-        (True, "B2 reachable"),
-        ["b2_usage", "verify"],
-        {"b2_usage", "verify"},
-    )
-    assert "b2_usage" in ran and "verify" in ran

@@ -93,7 +93,7 @@ def ksm_resource_label(resource: str) -> str:
 
 
 def extended_resource_verdict(
-    expected: list[str],
+    expected: Sequence[str],
     advertised: Mapping[str, float],
     allocatable_series: float | None,
 ) -> tuple[bool, str]:

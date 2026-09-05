@@ -4,7 +4,8 @@
 cleared between tests by conftest.py's autouse fixture, so it lives in its own module rather
 than in whichever domain moved out of check.py first. Callers reach it as
 `bridge.streaks.down_streak(...)` / `bridge.streaks._down_streaks[...]`; the tests patch and
-clear it here. Rule and enforcement: bridge/config.py's header.
+clear it here. `_grace_streaks` and `apply_startup_grace` moved here from check.py on
+2026-09-04, which is where this header always said they were.
 """
 
 # Per-check consecutive-down count (check_ups/check_ha_heartbeat/check_discord/
@@ -41,3 +42,28 @@ def down_streak(
             "%s %d/%d (%s): %s" % (held_label, count, threshold, grace_note, msg),
         )
     return count, False, "%s (%d cycles)" % (msg, count)
+
+
+# apply_startup_grace's per-name state for the reach-out checks' post-reboot startup grace
+# (STARTUP_GRACE in check.py). Keyed by a set of names disjoint from _down_streaks', and a
+# different mechanism: this one holds `up` through the first GRACE_CYCLES-1 cycles after the
+# bridge itself starts, rather than through a transient at any time.
+_grace_streaks: dict[str, int] = {}
+
+
+def apply_startup_grace(
+    name: str, ok: bool, msg: str, threshold: float, streaks: dict[str, int]
+) -> tuple[bool, str]:
+    """Pure: hold a reach-out check `up` through the first `threshold`-1 consecutive down cycles.
+
+    `streaks` is a name->consecutive-down-count dict, mutated in place. An `ok` result resets the
+    count; a down result advances the shared `down_streak` hysteresis, so a held cycle reads with the
+    same "down streak n/N" / "(n cycles)" wording as the HA/UPS/Discord per-check grace.
+    """
+    if ok:
+        streaks[name] = 0
+        return ok, msg
+    streaks[name], ok, msg = down_streak(
+        streaks.get(name, 0), threshold, msg, "startup/redeploy grace"
+    )
+    return ok, msg

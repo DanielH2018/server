@@ -12,9 +12,8 @@ mutates it. Rule and enforcement: bridge/config.py's header.
 
 import socket
 import urllib.parse
-from datetime import datetime, timezone
 
-import bridge.config as cfg
+from bridge.config import Config
 import bridge.net
 import bridge.streaks
 from verdicts.host import (
@@ -28,6 +27,7 @@ from verdicts.host import (
     scrutiny_freshness,
     scrutiny_health,
     scrutiny_wear_verdict,
+    speedtest_verdict,
     ups_health,
 )
 
@@ -36,6 +36,7 @@ _host_origin_streaks: dict[str, int] = {}
 
 
 def _host_origin_shortfall(
+    cfg: Config,
     key: str,
     vec: list[tuple[dict, float]],
     what: str,
@@ -89,7 +90,7 @@ def _host_origin_shortfall(
     )
 
 
-def check_disk() -> tuple[bool, str]:
+def check_disk(cfg: Config) -> tuple[bool, str]:
     """Checks whether any monitored disk mountpoint is over cfg.DISK_MAX_PCT full.
 
     Computes each mountpoint's used percentage per-origin (host), pairing avail and size
@@ -104,16 +105,17 @@ def check_disk() -> tuple[bool, str]:
     breaching = []
     shortfalls = []
     for mp in cfg.DISK_MOUNTPOINTS:
-        sel = bridge.net.host_metric_sel('mountpoint="%s"' % mp)
+        sel = bridge.net.host_metric_sel(cfg, 'mountpoint="%s"' % mp)
         vec = bridge.net.prom_vector(
+            cfg,
             "max by (origin) (100 * (1 - node_filesystem_avail_bytes%s"
-            " / node_filesystem_size_bytes%s))" % (sel, sel)
+            " / node_filesystem_size_bytes%s))" % (sel, sel),
         )
         if not vec:
             return False, "metric unavailable for %s" % mp
         # Collected, not returned, so a host that IS reporting and IS full still pages ahead of
         # the coverage complaint — a real breach on the survivor outranks the absent host.
-        short = _host_origin_shortfall("disk:%s" % mp, vec, "disk %s" % mp)
+        short = _host_origin_shortfall(cfg, "disk:%s" % mp, vec, "disk %s" % mp)
         if short is not None:
             shortfalls.append(short)
         for labels, used_pct in vec:
@@ -131,8 +133,10 @@ def check_disk() -> tuple[bool, str]:
     return True, "all mounts under %.0f%%" % cfg.DISK_MAX_PCT
 
 
-def check_cert() -> tuple[bool, str]:
-    days = bridge.net.prom_scalar("(min(traefik_tls_certs_not_after) - time()) / 86400")
+def check_cert(cfg: Config) -> tuple[bool, str]:
+    days = bridge.net.prom_scalar(
+        cfg, "(min(traefik_tls_certs_not_after) - time()) / 86400"
+    )
     if days is None:
         return False, "cert metric unavailable"
     if days < cfg.CERT_MIN_DAYS:
@@ -140,7 +144,7 @@ def check_cert() -> tuple[bool, str]:
     return True, "cert valid %.0fd" % days
 
 
-def check_mem() -> tuple[bool, str]:
+def check_mem(cfg: Config) -> tuple[bool, str]:
     """Checks whether any host's memory usage is over cfg.MEM_MAX_PCT.
 
     Host-level pressure only; per-container OOM kills are check_oom's job. Computed
@@ -153,10 +157,11 @@ def check_mem() -> tuple[bool, str]:
     # Per-origin for the same reason as check_disk: the bare prom_scalar form took result[0],
     # so which host it reported was an ordering artifact of Prometheus's response once both
     # estates emitted node_memory_*. The division pairs each host's avail with its own total.
-    sel = bridge.net.host_metric_sel()
+    sel = bridge.net.host_metric_sel(cfg)
     vec = bridge.net.prom_vector(
+        cfg,
         "100 * (1 - node_memory_MemAvailable_bytes%s / node_memory_MemTotal_bytes%s)"
-        % (sel, sel)
+        % (sel, sel),
     )
     if not vec:
         return False, "memory metric unavailable"
@@ -165,7 +170,7 @@ def check_mem() -> tuple[bool, str]:
     # that is actually out of memory outranks a complaint about the absent one. The comment used
     # to say "evaluated after", describing a line position this call has never had (2026-08-23b
     # review L9); what is deferred is the return, not the evaluation.
-    short = _host_origin_shortfall("mem", vec, "memory")
+    short = _host_origin_shortfall(cfg, "mem", vec, "memory")
     breaching = [
         "%s %.0f%%" % (bridge.net._origin_name(labels), pct)
         for labels, pct in vec
@@ -179,7 +184,9 @@ def check_mem() -> tuple[bool, str]:
     return True, "mem %.0f%%" % worst
 
 
-def scrutiny_wear_devices(summary: dict | None) -> list[tuple[str, float | None]]:
+def scrutiny_wear_devices(
+    cfg: Config, summary: dict | None
+) -> list[tuple[str, float | None]]:
     """One /api/device/<wwn>/details fetch per non-archived device.
 
     The wear attributes are not in /api/summary, which is what makes this N calls per cycle rather
@@ -202,7 +209,7 @@ def scrutiny_wear_devices(summary: dict | None) -> list[tuple[str, float | None]
     return devices
 
 
-def check_scrutiny() -> tuple[bool, str]:
+def check_scrutiny(cfg: Config) -> tuple[bool, str]:
     """Checks Scrutiny's summary for freshness, drive health, and (if configured) wear.
 
     Fetches /api/summary once; per-device wear details are fetched only when freshness and
@@ -223,14 +230,14 @@ def check_scrutiny() -> tuple[bool, str]:
     if not cfg.SCRUTINY_WEAR_MAX:
         return True, "%s; %s" % (fresh_msg, health_msg)
     wear_ok, wear_msg = scrutiny_wear_verdict(
-        scrutiny_wear_devices(summary), cfg.SCRUTINY_WEAR_MAX
+        scrutiny_wear_devices(cfg, summary), cfg.SCRUTINY_WEAR_MAX
     )
     if not wear_ok:
         return False, wear_msg
     return True, "%s; %s; %s" % (fresh_msg, health_msg, wear_msg)
 
 
-def check_host_temp() -> tuple[bool, str]:
+def check_host_temp(cfg: Config) -> tuple[bool, str]:
     """Board and CPU temperature across the three hosts, from node-exporter's hwmon collector.
 
     Answers the one thermal question nothing else here asks: is a host cooking? A hot box
@@ -254,19 +261,19 @@ def check_host_temp() -> tuple[bool, str]:
     compounded — down_streak is the thermal-spike grace and applies only to the hot-sensor path,
     while the coverage shortfall carries its own hysteresis inside _host_origin_shortfall.
     """
-    temps = bridge.net.prom_vector("node_hwmon_temp_celsius")
+    temps = bridge.net.prom_vector(cfg, "node_hwmon_temp_celsius")
     # node-exporter keeps the readable names in two side metrics rather than on the reading, so
     # naming the hot sensor `daniel-box k10temp/Tctl` instead of
     # `daniel-box/pci0000:00_0000:00:18_3/temp1` costs two more instant queries. Both are tiny
     # (11 and 16 series live on 2026-09-01) and neither can fail the check: an empty answer just
     # falls back to the sysfs path.
     names = hwmon_name_maps(
-        bridge.net.prom_vector("node_hwmon_chip_names"),
-        bridge.net.prom_vector("node_hwmon_sensor_label"),
+        bridge.net.prom_vector(cfg, "node_hwmon_chip_names"),
+        bridge.net.prom_vector(cfg, "node_hwmon_sensor_label"),
     )
     limits = hwmon_temp_limits(
         temps,
-        bridge.net.prom_vector("node_hwmon_temp_max_celsius"),
+        bridge.net.prom_vector(cfg, "node_hwmon_temp_max_celsius"),
         cfg.HWMON_TEMP_RATIO,
         cfg.HWMON_TEMP_FALLBACK_C,
         cfg.HWMON_TEMP_MIN_PLAUSIBLE_C,
@@ -277,11 +284,12 @@ def check_host_temp() -> tuple[bool, str]:
         # skips temp*_max but still publishes temp*_crit (issue #995 — see hwmon_temp_limits'
         # docstring for why max wins when both exist) would otherwise fall to the flat fallback
         # even though it declared a real limit.
-        crits=bridge.net.prom_vector("node_hwmon_temp_crit_celsius"),
+        crits=bridge.net.prom_vector(cfg, "node_hwmon_temp_crit_celsius"),
     )
     # Counted over the series that survive exclusion, via the same predicate hwmon_temp_limits
     # uses — a host whose only sensors are excluded is not a host this check covers.
     short = _host_origin_shortfall(
+        cfg,
         "host_temp",
         hwmon_included_series(temps, cfg.HWMON_TEMP_EXCLUDE_CHIP),
         "host temperature",
@@ -303,7 +311,7 @@ def check_host_temp() -> tuple[bool, str]:
     return True, msg
 
 
-def check_ups() -> tuple[bool, str]:
+def check_ups(cfg: Config) -> tuple[bool, str]:
     """UPS battery health from HA's Prometheus-scraped sensors (see the UPS_* env block above).
 
     Three arms: charge %, estimated runtime, and the replace-battery self-test verdict. All queries
@@ -335,7 +343,7 @@ def check_ups() -> tuple[bool, str]:
     ]
     if not configured:
         return True, "UPS monitoring disabled (no query)"
-    values = {name: bridge.net.prom_scalar(q) for name, q in configured}
+    values = {name: bridge.net.prom_scalar(cfg, q) for name, q in configured}
     if all(v is None for v in values.values()):
         # All arms gone. Usually HA's whole Prometheus scrape is down (the numeric AND the template
         # sensors vanish together) — Scrape Targets owns that, so defer. But if HA is scraping fine and
@@ -346,7 +354,9 @@ def check_ups() -> tuple[bool, str]:
         # An unqueryable/absent gate keeps the safe defer (never page over a source outage another
         # monitor owns).
         ha_up = (
-            bridge.net.prom_scalar(cfg.UPS_HA_UP_QUERY) if cfg.UPS_HA_UP_QUERY else None
+            bridge.net.prom_scalar(cfg, cfg.UPS_HA_UP_QUERY)
+            if cfg.UPS_HA_UP_QUERY
+            else None
         )
         if not (ha_up is not None and ha_up > 0.5 and "replace-battery" in values):
             bridge.streaks._down_streaks["ups"] = 0
@@ -402,7 +412,7 @@ def check_ups() -> tuple[bool, str]:
     return ok, msg
 
 
-def check_pi_pressure() -> tuple[bool, str]:
+def check_pi_pressure(cfg: Config) -> tuple[bool, str]:
     """Swap-thrash / overload early warning for the memory-constrained Pi.
 
     Empty PI_GLANCES_URL -> disabled (stays up), like check_n8n without an API key.
@@ -416,7 +426,7 @@ def check_pi_pressure() -> tuple[bool, str]:
     ok, msg = pi_pressure(
         load, mem, fs, cfg.PI_LOAD_MAX, cfg.PI_MEM_MIN_MB, cfg.PI_DISK_MAX_PCT
     )
-    return with_pi_ports(ok, msg)
+    return with_pi_ports(cfg, ok, msg)
 
 
 def _tcp_open(host: str, port: int, timeout: float) -> bool:
@@ -428,7 +438,7 @@ def _tcp_open(host: str, port: int, timeout: float) -> bool:
         return False
 
 
-def with_pi_ports(ok: bool, msg: str) -> tuple[bool, str]:
+def with_pi_ports(cfg: Config, ok: bool, msg: str) -> tuple[bool, str]:
     """Fold the published-port arm into the Pi verdict, a dead port winning the message.
 
     Folded into this monitor rather than given its own for the reason recorded at with_ha_ban:
@@ -485,77 +495,7 @@ def with_pi_ports(ok: bool, msg: str) -> tuple[bool, str]:
     return False, "%s | %s" % (arm_msg, msg)
 
 
-def speedtest_verdict(
-    row: dict | None, min_mbps: float, max_age_h: float, now: datetime | None = None
-) -> tuple[bool, str]:
-    """Pure: judge the newest speedtest-tracker result row. (ok, msg).
-
-    `row` is one element of /api/v1/results' `data`, or None when the app returned no rows at
-    all.
-
-    THE TIMESTAMP IS UTC DESPITE CARRYING NO OFFSET. /api/v1/results serializes `created_at` as
-    a bare "2026-08-24 11:00:00", while /api/speedtest/latest serializes the SAME row as
-    "2026-08-24T06:00:00.000000-05:00" — verified against row id 780 on 2026-08-24. The bare
-    form is therefore UTC, not the DISPLAY_TIMEZONE local time it resembles, and
-    datetime.fromisoformat returns it naive. Attaching UTC explicitly is what keeps the age
-    arm from reading five hours off; a naive value compared against an aware `now` raises
-    instead, which is the safer of the two failures but still not a verdict.
-
-    Arms run status, then age, then floor, in that order and for that reason: `download_bits`
-    is null on a failed row, so a floor comparison ahead of the status arm compares None.
-    """
-    now = now or datetime.now(timezone.utc)
-    if not row:
-        return (
-            False,
-            "speedtest has no results at all — the scheduler has never completed a run",
-        )
-
-    status = row.get("status")
-    created = row.get("created_at")
-
-    if status != "completed":
-        detail = ((row.get("data") or {}).get("message") or "").strip()
-        return False, "last run (%s) %s%s" % (
-            created or "unknown time",
-            status or "has no status",
-            " — " + detail if detail else "",
-        )
-
-    if not created:
-        return False, "last run has no created_at — cannot judge freshness"
-    stamp = datetime.fromisoformat(created.strip().replace(" ", "T"))
-    if stamp.tzinfo is None:
-        stamp = stamp.replace(tzinfo=timezone.utc)
-    age_h = (now - stamp).total_seconds() / 3600
-    if age_h > max_age_h:
-        return (
-            False,
-            "last run was %.1fh ago (> %gh) — the 6-hourly schedule has stopped"
-            % (
-                age_h,
-                max_age_h,
-            ),
-        )
-
-    bits = row.get("download_bits")
-    if bits is None:
-        return False, "last run completed but recorded no download figure"
-    mbps = float(bits) / 1e6
-    server = ((row.get("data") or {}).get("server") or {}).get(
-        "name"
-    ) or "unknown server"
-    if mbps < min_mbps:
-        return False, "download %.1f Mbps (< %g) via %s — %.1fh ago" % (
-            mbps,
-            min_mbps,
-            server,
-            age_h,
-        )
-    return True, "download %.1f Mbps via %s, %.1fh ago" % (mbps, server, age_h)
-
-
-def check_speedtest() -> tuple[bool, str]:
+def check_speedtest(cfg: Config) -> tuple[bool, str]:
     """Judge speedtest-tracker's newest result row (see the SPEEDTEST_* env block above).
 
     Empty URL/token -> disabled (stays up), like check_ha_heartbeat.

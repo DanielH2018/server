@@ -12,14 +12,14 @@ import ssl
 import time
 import urllib.error
 
-import bridge.config as cfg
+from bridge.config import Config
 import bridge.net
 import bridge.streaks
 from bridge.common import HTTP_TIMEOUT
 from verdicts.notify import discord_webhook_ok
 
 
-def _discord_webhooks() -> list[tuple[str, str]]:
+def _discord_webhooks(cfg: Config) -> list[tuple[str, str]]:
     """(label, url) pairs for each configured Discord webhook to verify (skips empties).
 
     Kuma's is the alert-chain delivery hop for every monitor; CrowdSec's is the independent
@@ -43,7 +43,7 @@ def _discord_webhooks() -> list[tuple[str, str]]:
     ]
 
 
-def _smtp_login_ok() -> tuple[bool, str]:
+def _smtp_login_ok(cfg: Config) -> tuple[bool, str]:
     """Connect to the SMTP server over implicit TLS and AUTH with the notify creds. (ok, msg).
 
     A revoked/expired Gmail app-password fails at login; a broken SMTP endpoint fails at connect. NOOP
@@ -61,7 +61,7 @@ def _smtp_login_ok() -> tuple[bool, str]:
 _email_probe = {"ts": 0.0, "ok": True, "msg": "not yet probed"}
 
 
-def email_backstop(now: float | None = None) -> tuple[bool, str]:
+def email_backstop(cfg: Config, now: float | None = None) -> tuple[bool, str]:
     """Throttled deliverability probe for the alert-email 2nd channel. (ok, msg).
 
     Empty SMTP_PASSWORD -> disabled (stays up). A SUCCESS is cached for EMAIL_PROBE_INTERVAL_S (so
@@ -78,7 +78,7 @@ def email_backstop(now: float | None = None) -> tuple[bool, str]:
             (now - _email_probe["ts"]) / 3600
         )
     try:
-        ok, msg = _smtp_login_ok()
+        ok, msg = _smtp_login_ok(cfg)
     except (
         Exception
     ) as e:  # revoked password / SMTP unreachable -> ride the check_discord streak
@@ -90,7 +90,7 @@ def email_backstop(now: float | None = None) -> tuple[bool, str]:
     return ok, msg
 
 
-def check_discord() -> tuple[bool, str]:
+def check_discord(cfg: Config) -> tuple[bool, str]:
     """GET-verify EVERY configured Discord notification webhook still delivers, plus the email backstop.
 
     Verifies the Kuma alert webhook, the CrowdSec ban-alert webhook, AND the GitOps/Renovate
@@ -103,7 +103,7 @@ def check_discord() -> tuple[bool, str]:
     blip pushes `up` with a streak msg and only the Nth straight failure pages — a genuinely dead
     webhook or SMTP credential stays bad and pages.
     """
-    webhooks = _discord_webhooks()
+    webhooks = _discord_webhooks(cfg)
     if not webhooks:
         return True, "Discord webhook check disabled (no URL)"
     ok, msg, valid = True, "", []
@@ -122,7 +122,7 @@ def check_discord() -> tuple[bool, str]:
             break
         valid.append(label)
     if ok:
-        e_ok, e_msg = email_backstop()
+        e_ok, e_msg = email_backstop(cfg)
         if e_ok:
             valid.append("email")
         else:

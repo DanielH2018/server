@@ -5,6 +5,8 @@ reads device_status, which freshness alone cannot see; and wear reads percentage
 ships with thresh=100 so device_status will never warn on it.
 """
 
+from dataclasses import replace
+
 from datetime import datetime, timezone
 
 
@@ -201,7 +203,7 @@ def test_scrutiny_wear_no_devices_is_inert():
     assert "INERT" in msg
 
 
-def test_scrutiny_wear_devices_skips_archived_and_labels_by_model(monkeypatch):
+def test_scrutiny_wear_devices_skips_archived_and_labels_by_model(monkeypatch, cfg):
     # Both live drives report device_name "nvme0", one per host — the label has to carry the model
     # or the two are indistinguishable in the alert.
     fetched = []
@@ -211,12 +213,12 @@ def test_scrutiny_wear_devices_skips_archived_and_labels_by_model(monkeypatch):
         return _details(attrs=_attr(7))
 
     monkeypatch.setattr(bridge.net, "_get_json", fake_get_json)
-    monkeypatch.setattr(bridge.config, "SCRUTINY_URL", "http://scrutiny:8080")
+    cfg = replace(cfg, SCRUTINY_URL="http://scrutiny:8080")
     summary = {
         "w1": {"device": {"device_name": "nvme0", "model_name": "SHPP41-500GM"}},
         "w2": {"device": {"device_name": "sda", "archived": True}},
     }
-    devices = checks.host.scrutiny_wear_devices(summary)
+    devices = checks.host.scrutiny_wear_devices(cfg, summary)
     assert devices == [("nvme0 (SHPP41-500GM)", 7)]
     assert fetched == ["http://scrutiny:8080/api/device/w1/details"]
 

@@ -11,9 +11,10 @@ remediation than a held service deploy, so the message says which it is.
 import time
 from pathlib import Path
 
+from dataclasses import replace
+
 import pytest
 
-import bridge.config
 import checks.service
 
 _REPO = Path(__file__).resolve().parents[5]
@@ -61,8 +62,8 @@ def test_gitops_alive(age_s, max_age, ok, must_contain):
         ),
     ],
 )
-def test_gitops_status(hold, diverged, ok, must_contain, exact_msg):
-    result_ok, msg = checks.service.gitops_status(hold, diverged)
+def test_gitops_status(hold, diverged, ok, must_contain, exact_msg, cfg):
+    result_ok, msg = checks.service.gitops_status(cfg, hold, diverged)
     assert result_ok is ok
     if exact_msg is not None:
         assert msg == exact_msg
@@ -84,11 +85,11 @@ def _gw(tmp_path, name, content):
         pytest.param(lambda: "not-a-float", False, ("unparseable",), id="unparseable"),
     ],
 )
-def test_check_gitops_alive(tmp_path, monkeypatch, content_fn, ok, must_contain):
-    monkeypatch.setattr(bridge.config, "GITOPS_STATE_DIR", str(tmp_path))
+def test_check_gitops_alive(tmp_path, monkeypatch, content_fn, ok, must_contain, cfg):
+    cfg = replace(cfg, GITOPS_STATE_DIR=str(tmp_path))
     if content_fn is not None:
         _gw(tmp_path, "last_run", content_fn())
-    result_ok, msg = checks.service.check_gitops_alive()
+    result_ok, msg = checks.service.check_gitops_alive(cfg)
     assert result_ok is ok
     for s in must_contain:
         assert s in msg
@@ -105,90 +106,90 @@ def test_check_gitops_alive(tmp_path, monkeypatch, content_fn, ok, must_contain)
     ],
 )
 def test_check_gitops_status(
-    tmp_path, monkeypatch, filename, content, ok, must_contain
+    tmp_path, monkeypatch, filename, content, ok, must_contain, cfg
 ):
-    monkeypatch.setattr(bridge.config, "GITOPS_STATE_DIR", str(tmp_path))
+    cfg = replace(cfg, GITOPS_STATE_DIR=str(tmp_path))
     if filename is not None:
         _gw(tmp_path, filename, content)
-    result_ok, msg = checks.service.check_gitops_status()
+    result_ok, msg = checks.service.check_gitops_status(cfg)
     assert result_ok is ok
     for s in must_contain:
         assert s in msg
 
 
-def test_gitops_status_behind_briefly_is_ok():
+def test_gitops_status_behind_briefly_is_ok(cfg):
     # A routine push leaves the host behind for one tick. That must never page.
     ok, msg = checks.service.gitops_status(
-        None, None, "abc123def4567890 1000.0", now=1600.0
+        cfg, None, None, "abc123def4567890 1000.0", now=1600.0
     )
     assert ok
     assert msg == "no held deploy"
 
 
-def test_gitops_status_behind_too_long_pages():
+def test_gitops_status_behind_too_long_pages(cfg):
     ok, msg = checks.service.gitops_status(
-        None, None, "abc123def4567890 1000.0", now=1000.0 + 7 * 3600
+        cfg, None, None, "abc123def4567890 1000.0", now=1000.0 + 7 * 3600
     )
     assert not ok
     assert "behind origin" in msg
     assert "abc123de" in msg
 
 
-def test_gitops_status_behind_respects_threshold_argument():
+def test_gitops_status_behind_respects_threshold_argument(cfg):
     ok, _ = checks.service.gitops_status(
-        None, None, "abc123def4567890 1000.0", now=1000.0 + 120, max_behind_s=60
+        cfg, None, None, "abc123def4567890 1000.0", now=1000.0 + 120, max_behind_s=60
     )
     assert not ok
 
 
-def test_gitops_status_hold_wins_over_behind():
+def test_gitops_status_hold_wins_over_behind(cfg):
     # A hold leaves the host behind too, but names the actual cause — report that, not the symptom.
     ok, msg = checks.service.gitops_status(
-        "held123abc456789", None, "abc123def4567890 1.0", now=1e9
+        cfg, "held123abc456789", None, "abc123def4567890 1.0", now=1e9
     )
     assert not ok
     assert "held" in msg
 
 
-def test_gitops_status_diverged_wins_over_behind():
+def test_gitops_status_diverged_wins_over_behind(cfg):
     ok, msg = checks.service.gitops_status(
-        None, "div123abc4567890", "abc123def4567890 1.0", now=1e9
+        cfg, None, "div123abc4567890", "abc123def4567890 1.0", now=1e9
     )
     assert not ok
     assert "diverged" in msg
 
 
-def test_gitops_status_unparseable_behind_marker_is_ok():
+def test_gitops_status_unparseable_behind_marker_is_ok(cfg):
     # A garbled marker must read as "not behind" rather than page forever on garbage.
     for marker in ("garbage", "abc123 notanumber", "abc123", ""):
-        ok, _ = checks.service.gitops_status(None, None, marker, now=1e9)
+        ok, _ = checks.service.gitops_status(cfg, None, None, marker, now=1e9)
         assert ok, marker
 
 
-def test_a_service_hold_names_the_pr():
-    ok, msg = checks.service.gitops_status("deadbeefcafe")
+def test_a_service_hold_names_the_pr(cfg):
+    ok, msg = checks.service.gitops_status(cfg, "deadbeefcafe")
     assert not ok
     assert "revert the offending PR" in msg
 
 
-def test_a_plane_hold_names_the_playbook_instead():
+def test_a_plane_hold_names_the_playbook_instead(cfg):
     """The forward-only broad arm leaves the tree fast-forwarded with a playbook failed partway.
 
     Reverting the PR undoes none of that, so the message must name what to re-run instead --
     otherwise the monitor prescribes a remediation that cannot work.
     """
     ok, msg = checks.service.gitops_status(
-        "deadbeefcafe", hold_plane="ansible/initial_setup.yml renovate_notify"
+        cfg, "deadbeefcafe", hold_plane="ansible/initial_setup.yml renovate_notify"
     )
     assert not ok
     assert "ansible/initial_setup.yml" in msg
     assert "revert the offending PR" not in msg
 
 
-def test_a_plane_marker_without_a_hold_does_not_page():
+def test_a_plane_marker_without_a_hold_does_not_page(cfg):
     """hold_sha is still what decides.
 
     A stale hold_plane left behind by a cleared hold must not keep the monitor red on its own.
     """
-    ok, _ = checks.service.gitops_status(None, hold_plane="ansible/deploy.yml")
+    ok, _ = checks.service.gitops_status(cfg, None, hold_plane="ansible/deploy.yml")
     assert ok

@@ -159,8 +159,17 @@ def _unqualified_binds(patched, modules):
 
 def test_there_are_patched_names_to_check():
     # Without this the assertion below passes vacuously if the AST walk ever stops matching.
+    #
+    # It named `bridge.config` alongside `bridge.common` until 2026-09-04, when monitor-bridge's
+    # configuration became a frozen `Config` built in `main()` and passed down. Nothing patches
+    # that module any more — which is the point of the seam, not a lapsed census — so the pair
+    # that keeps this honest is now `bridge.common` and `bridge.net`, the two the suite still
+    # stubs. Repoint it again rather than deleting it when the next module gets its seam.
+    # A subset comparison rather than two `in` tests: `"bridge.net" in patched` reads as a
+    # hostname-shaped substring check to CodeQL, which
+    # ansible/tests/repo/test_no_host_shaped_membership_literal.py enforces repo-wide.
     patched = _patched_names_by_module()
-    assert "bridge.common" in patched and "bridge.config" in patched, sorted(patched)
+    assert {"bridge.common", "bridge.net"} <= patched.keys(), sorted(patched)
 
 
 def test_there_are_consumer_modules():

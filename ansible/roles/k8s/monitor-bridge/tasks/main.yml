@@ -72,10 +72,13 @@
   changed_when: monitor_bridge_script is changed
 
 # Server-side apply, because the client-side form stores the WHOLE object again in the
-# `last-applied-configuration` annotation, and annotations are capped at 262144 bytes. The
-# nine modules total ~255 KB of source; JSON-escaped into that annotation they crossed the cap
-# on 2026-09-01 and `kubectl apply` refused the ConfigMap ("metadata.annotations: Too long")
-# while the pod kept running the previous code. Server-side apply writes no such annotation.
+# `last-applied-configuration` annotation, and annotations are capped at 262144 bytes. Every
+# module in `monitor_bridge_modules` goes into one ConfigMap and the total is already well past
+# that (~322 KB across 24 modules on 2026-09-05, and the list only grows); JSON-escaped into
+# that annotation it crossed the cap on 2026-09-01 and `kubectl apply` refused the ConfigMap
+# ("metadata.annotations: Too long") while the pod kept running the previous code. Read the
+# count off the ship list rather than trusting the figure here. Server-side apply writes no
+# such annotation.
 # `--force-conflicts` takes ownership of the data keys from the client-side field manager that
 # applied them before the switch; without it the first server-side apply is rejected.
 # Server-side apply prints the same line whether or not anything changed, so the changed

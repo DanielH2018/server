@@ -2,12 +2,17 @@
 
 monitor-bridge's modules are packages under files/ (`bridge/`, `checks/`, `verdicts/`), but a
 ConfigMap key cannot contain `/`, so each ships under a flat key (`checks_b2.py`) and the
-Deployment's `items:` puts it back at its path (`checks/b2.py`). Three places derive that
-mapping from `monitor_bridge_modules` — the staging copy, the `--from-file` line and the
-`items:` list — and pytest sees none of them: it imports from files/ on disk, where the
-packages already exist, so a wrong `items:` path or a key that never made it into the list
-is green here and `ModuleNotFoundError` in the pod, on the one workload that cannot page about
-its own failure.
+Deployment's `items:` puts it back at its path (`checks/b2.py`). pytest sees none of that: it
+imports from files/ on disk, where the packages already exist, so a wrong `items:` path or a
+key that never made it into `monitor_bridge_modules` is green here and `ModuleNotFoundError`
+in the pod, on the one workload that cannot page about its own failure.
+
+WHAT THIS PINS, exactly: the RENDERED `items:` list against `monitor_bridge_modules`, and that
+the result imports. The key half of the mapping is RE-DERIVED here (`m.replace("/", "_")`)
+rather than read back from the `--from-file` line in tasks/main.yml, so a `--from-file` line
+that stopped agreeing with that rule would not fail this test. The staging copy task is
+likewise unread. `ansible/tests/services/test_monitor_bridge_modules.py` is what keeps the
+ship list itself honest against the tree.
 
 This lays out a directory exactly as the RENDERED Deployment's `items:` says the kubelet will,
 from the same source files the copy task stages, then imports the entrypoint from it in a

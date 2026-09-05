@@ -7,11 +7,12 @@ is a way it could report GREEN while the ratchet is dead — plus the one way it
 on a deliberate disarm, which is how a monitor gets ignored.
 """
 
+from dataclasses import replace
+
 import re
 import time
 from pathlib import Path
 
-import bridge.config
 import check
 import checks.service
 import yaml
@@ -25,15 +26,14 @@ _UNIT = (
 _ROLE_DEFAULTS = _REPO / "ansible/roles/setup/gitops_deploy/defaults/main.yml"
 
 
-def _state(tmp_path, monkeypatch, armed=True, age_s=None):
+def _state(cfg, tmp_path, monkeypatch, armed=True, age_s=None):
     if armed:
         (tmp_path / "staging-backfill-armed").write_text("")
     if age_s is not None:
         (tmp_path / "staging-backfill-last-run").write_text(
             "%d\n" % int(time.time() - age_s)
         )
-    monkeypatch.setattr(bridge.config, "GITOPS_STATE_DIR", str(tmp_path))
-    return tmp_path
+    return replace(cfg, GITOPS_STATE_DIR=str(tmp_path))
 
 
 # --- the pure verdict: one input it must accept, one it must reject -----------------------------
@@ -74,32 +74,32 @@ def test_a_disarmed_ratchet_is_up_and_says_why():
 # --- the reader over real files ----------------------------------------------------------------
 
 
-def test_reader_passes_on_a_recent_heartbeat(tmp_path, monkeypatch):
-    _state(tmp_path, monkeypatch, armed=True, age_s=45 * 60)
-    ok, msg = checks.service.check_staging_backfill_alive()
+def test_reader_passes_on_a_recent_heartbeat(tmp_path, monkeypatch, cfg):
+    cfg = _state(cfg, tmp_path, monkeypatch, armed=True, age_s=45 * 60)
+    ok, msg = checks.service.check_staging_backfill_alive(cfg)
     assert ok is True
     assert "45m ago" in msg
 
 
-def test_reader_fails_on_a_stale_heartbeat(tmp_path, monkeypatch):
-    _state(tmp_path, monkeypatch, armed=True, age_s=5 * 3600)
-    ok, _msg = checks.service.check_staging_backfill_alive()
+def test_reader_fails_on_a_stale_heartbeat(tmp_path, monkeypatch, cfg):
+    cfg = _state(cfg, tmp_path, monkeypatch, armed=True, age_s=5 * 3600)
+    ok, _msg = checks.service.check_staging_backfill_alive(cfg)
     assert ok is False
 
 
-def test_reader_fails_closed_on_an_unparseable_heartbeat(tmp_path, monkeypatch):
+def test_reader_fails_closed_on_an_unparseable_heartbeat(tmp_path, monkeypatch, cfg):
     """A heartbeat written by something that is not the unit is not evidence the unit ran."""
-    _state(tmp_path, monkeypatch, armed=True)
+    cfg = _state(cfg, tmp_path, monkeypatch, armed=True)
     (tmp_path / "staging-backfill-last-run").write_text("recently\n")
-    ok, msg = checks.service.check_staging_backfill_alive()
+    ok, msg = checks.service.check_staging_backfill_alive(cfg)
     assert ok is False
     assert "unparseable" in msg
 
 
-def test_reader_ignores_a_stale_heartbeat_once_disarmed(tmp_path, monkeypatch):
+def test_reader_ignores_a_stale_heartbeat_once_disarmed(tmp_path, monkeypatch, cfg):
     """The marker is read FIRST. A disarm leaves the last heartbeat on disk, ageing forever."""
-    _state(tmp_path, monkeypatch, armed=False, age_s=30 * 86400)
-    ok, msg = checks.service.check_staging_backfill_alive()
+    cfg = _state(cfg, tmp_path, monkeypatch, armed=False, age_s=30 * 86400)
+    ok, msg = checks.service.check_staging_backfill_alive(cfg)
     assert ok is True
     assert "disarmed" in msg
 
@@ -163,7 +163,7 @@ def test_the_reader_and_the_unit_agree_on_the_file_names():
     assert marker.startswith("/var/lib/gitops-deploy/")
 
 
-def test_staging_backfill_window_is_derived_from_the_timer():
+def test_staging_backfill_window_is_derived_from_the_timer(cfg):
     """A grace period must come from the schedule it interacts with, never be picked round.
 
     OnUnitActiveSec=1h + RandomizedDelaySec=10min, with TimeoutStartSec=25min bounding the run
@@ -179,15 +179,15 @@ def test_staging_backfill_window_is_derived_from_the_timer():
     )
     assert "TimeoutStartSec=25min" in _UNIT.read_text()
     worst_gap_s = (60 + 10 + 25) * 60
-    assert bridge.config.STAGING_BACKFILL_MAX_AGE_S > worst_gap_s, (
+    assert cfg.STAGING_BACKFILL_MAX_AGE_S > worst_gap_s, (
         "a window under the worst-case gap flaps on an ordinary late run"
     )
-    assert bridge.config.STAGING_BACKFILL_MAX_AGE_S < 2 * worst_gap_s, (
+    assert cfg.STAGING_BACKFILL_MAX_AGE_S < 2 * worst_gap_s, (
         "a window of two cadences tolerates a fully missed run, which is what this check is for"
     )
 
 
-def test_the_rendered_window_matches_the_code_default():
+def test_the_rendered_window_matches_the_code_default(cfg):
     """The env-secret renders the window so it is tunable without a code change. A rendered value
     that disagrees with the code default makes the test above measure a number nothing runs."""
     env_secret = (
@@ -197,4 +197,4 @@ def test_the_rendered_window_matches_the_code_default():
         r'^\s*STAGING_BACKFILL_MAX_AGE_MIN: "(\d+)"$', env_secret, re.M
     )
     assert rendered, "the window is no longer rendered, so it is no longer tunable"
-    assert float(rendered.group(1)) * 60 == bridge.config.STAGING_BACKFILL_MAX_AGE_S
+    assert float(rendered.group(1)) * 60 == cfg.STAGING_BACKFILL_MAX_AGE_S

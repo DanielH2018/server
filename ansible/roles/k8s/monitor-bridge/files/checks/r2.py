@@ -9,7 +9,7 @@ import json
 import time
 from datetime import datetime, timedelta, timezone
 
-import bridge.config as cfg
+from bridge.config import Config
 import bridge.net
 from bridge.parsing import FETCH_BODY_MAX
 from verdicts.storage import (
@@ -42,7 +42,9 @@ R2_QUERY = """query {
 }"""
 
 
-def r2_query_usage(now: float) -> tuple[float, float, float, float, list[str]]:
+def r2_query_usage(
+    cfg: Config, now: float
+) -> tuple[float, float, float, float, list[str]]:
     """(storage_bytes, uploads, class_a, class_b, unknown_actions) for the current month.
 
     One POST for both datasets — same account scope, so splitting it would double the calls and
@@ -104,7 +106,7 @@ def r2_query_usage(now: float) -> tuple[float, float, float, float, list[str]]:
 _r2_probe = {"ts": None, "ok": True, "msg": ""}
 
 
-def r2_usage(now: float | None = None) -> tuple[bool, str]:
+def r2_usage(cfg: Config, now: float | None = None) -> tuple[bool, str]:
     """Throttled R2 free-tier headroom check. (ok, msg).
 
     SUCCESSES are cached for R2_PROBE_INTERVAL_S — month-to-date aggregates do not move on a 300s
@@ -125,7 +127,7 @@ def r2_usage(now: float | None = None) -> tuple[bool, str]:
             _r2_probe["msg"],
             (now - _r2_probe["ts"]) / 60,
         )
-    storage_bytes, uploads, class_a, class_b, unknown = r2_query_usage(now)
+    storage_bytes, uploads, class_a, class_b, unknown = r2_query_usage(cfg, now)
     ok, msg = r2_usage_verdict(
         storage_bytes,
         uploads,
@@ -144,5 +146,5 @@ def r2_usage(now: float | None = None) -> tuple[bool, str]:
     return ok, msg
 
 
-def check_r2_usage() -> tuple[bool, str]:
-    return r2_usage()
+def check_r2_usage(cfg: Config) -> tuple[bool, str]:
+    return r2_usage(cfg)

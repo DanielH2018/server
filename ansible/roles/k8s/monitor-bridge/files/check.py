@@ -11,25 +11,27 @@ Design: docs/superpowers/specs/2026-06-06-monitor-bridge-alerting-design.md
 """
 
 import argparse
+import os
 import sys
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import NamedTuple
 
 # This file is the registry and the run loop; every check body lives in a checks_* module.
-# A name the test suite patches is read QUALIFIED from the module that binds it — `cfg.X`
-# for every threshold and URL, `bridge.net.push`, `bridge.common.log` — never from-imported.
-# A from-import copies the value into this module's globals at import time, so a later
-# `monkeypatch.setattr(bridge.config, "X", ...)` would change nothing this file reads and
-# the test would pass against the real value. The check_* entries below ARE from-imported,
-# because run_once reads them from this module's globals and the gates tests patch them
-# HERE, on `check`. Enforced by ansible/tests/services/test_bridge_patch_boundary.py; the census of
-# what is patched where is ansible/tests/services/test_monitor_bridge_modules.py.
+# `main()` builds the frozen `Config` once and threads it down — see this role's CLAUDE.md,
+# *Configuration is a parameter, not a module global*.
+#
+# A name the suite DOES patch is still read QUALIFIED from the module that binds it —
+# `bridge.net.push`, `bridge.common.log` — never from-imported, because a from-import copies the
+# value in at import time and never sees the patch. The check_* entries below ARE from-imported:
+# run_once reads them from this module's globals and the gates tests patch them HERE. Enforced by
+# ansible/tests/services/test_bridge_patch_boundary.py; the census of what is patched where is
+# ansible/tests/services/test_monitor_bridge_modules.py.
 import bridge.common
 from bridge.common import _env
 
-import bridge.config as cfg
+from bridge.config import Config, load_config
 import bridge.net
 import bridge.streaks
 from checks.notify import (
@@ -84,6 +86,9 @@ from checks.logs import (
 )
 
 
+CheckFn = Callable[[Config], tuple[bool, str]]  # every check body and every gate
+
+
 class CheckResult(NamedTuple):
     """What a check or a gate decided: `ok` and the message pushed to Kuma.
 
@@ -104,14 +109,16 @@ class Check:
     Attributes:
       name: The check's own name — what CHECKS_ONLY/CHECKS_SKIP and the gate sets refer to.
       token: The Kuma push-monitor token this check's result is pushed to. Empty skips the push.
-      fn: The zero-argument check body, returning (ok, msg).
+      fn: The check body. Takes the frozen `Config` and returns (ok, msg).
     """
 
     name: str
     token: str
-    fn: Callable[[], tuple[bool, str]]
+    fn: CheckFn
 
 
+# The push tokens are the ONE thing here still read from os.environ at import — the frozen
+# Config covers every threshold and URL but not these. See the DECIDED note in main().
 CHECKS = [
     Check("disk", _env("KUMA_PUSH_DISK", ""), check_disk),
     Check("cert", _env("KUMA_PUSH_CERT", ""), check_cert),
@@ -323,8 +330,6 @@ STARTUP_GRACE = frozenset(
     }
 )
 
-_grace_streaks = {}
-
 # GATE_DEPENDENTS maps each reachability gate to the checks it suppresses when it is down. The
 # CHECKS_ONLY/CHECKS_SKIP filter that names these lives in bridge/config.py, with the account of
 # what the mechanism is for; validate_check_filter below is what refuses a filter that would
@@ -337,20 +342,14 @@ GATE_DEPENDENTS = {
 }
 
 
-def check_enabled(
-    name: str,
-    only: frozenset[str] | None = None,
-    skip: frozenset[str] | None = None,
-) -> bool:
+def check_enabled(name: str, only: frozenset[str], skip: frozenset[str]) -> bool:
     """Is `name` enabled under the CHECKS_ONLY/CHECKS_SKIP filter?
 
     Args:
       name: The check name to test.
-      only: The enable-exactly-this-set filter; None reads cfg.CHECKS_ONLY.
-      skip: The names to drop; None reads cfg.CHECKS_SKIP.
+      only: The enable-exactly-this-set filter. Empty enables everything.
+      skip: The names to drop.
     """
-    only = cfg.CHECKS_ONLY if only is None else only
-    skip = cfg.CHECKS_SKIP if skip is None else skip
     if only and name not in only:
         return False
     return name not in skip
@@ -393,24 +392,6 @@ def expand_gates_for_cli(names: frozenset[str]) -> frozenset[str]:
     return frozenset(gates)
 
 
-def apply_startup_grace(
-    name: str, ok: bool, msg: str, threshold: float, streaks: dict[str, int]
-) -> tuple[bool, str]:
-    """Pure: hold a reach-out check `up` through the first `threshold`-1 consecutive down cycles.
-
-    `streaks` is a name->consecutive-down-count dict, mutated in place. An `ok` result resets the
-    count; a down result advances the shared `down_streak` hysteresis, so a held cycle reads with the
-    same "down streak n/N" / "(n cycles)" wording as the HA/UPS/Discord per-check grace.
-    """
-    if ok:
-        streaks[name] = 0
-        return ok, msg
-    streaks[name], ok, msg = bridge.streaks.down_streak(
-        streaks.get(name, 0), threshold, msg, "startup/redeploy grace"
-    )
-    return ok, msg
-
-
 def down_exporters(up_vector: list[tuple[dict, float]]) -> set[str]:
     """Pure: which EXPORTER_DEPENDENT jobs report up==0 in a Prometheus `up` vector.
 
@@ -421,24 +402,25 @@ def down_exporters(up_vector: list[tuple[dict, float]]) -> set[str]:
     return {job for job in EXPORTER_DEPENDENT if job in down_jobs}
 
 
-def _evaluate(name: str, fn: Callable[[], tuple[bool, str]]) -> CheckResult:
+def _evaluate(cfg: Config, name: str, fn: CheckFn) -> CheckResult:
     """Runs one check, converting an unreachable source/metric into a descriptive `down`.
 
     Keeps the loop alive instead of letting an unreachable source or metric raise and
     kill it.
     """
     try:
-        return CheckResult(*fn())
+        return CheckResult(*fn(cfg))
     except Exception as e:  # an unreachable source/metric must not kill the loop
         return CheckResult(False, "%s check error: %s" % (name, e))
 
 
 def _gate(
+    cfg: Config,
     name: str,
-    fn: Callable[[], tuple[bool, str]],
+    fn: CheckFn,
     push_env: str,
-    dry_run: bool = False,
-    only: frozenset[str] | None = None,
+    dry_run: bool,
+    only: frozenset[str],
 ) -> CheckResult:
     """Evaluate one reachability gate: verdict, log line, heartbeat push.
 
@@ -447,22 +429,27 @@ def _gate(
     once instead of storming. A disabled gate returns `True` so the filter suppresses nothing.
 
     Args:
+      cfg: The gate body's config, and the skip filter. ASYMMETRIC with `only` on purpose:
+        `--check` can narrow `only` per run, so run_once has a value the config does not carry;
+        nothing narrows the skip set, so it is read off `cfg.CHECKS_SKIP` rather than threaded.
       name: The gate's own check name, as CHECKS_ONLY/CHECKS_SKIP and GATE_DEPENDENTS spell it.
       fn: The gate's check body.
       push_env: The env var holding this gate's Kuma push token.
       dry_run: Evaluate and log, but push nothing to Kuma.
-      only: The enable-exactly-this-set filter; None reads cfg.CHECKS_ONLY.
+      only: The enable-exactly-this-set filter.
     """
-    if not check_enabled(name, only):
+    if not check_enabled(name, only, cfg.CHECKS_SKIP):
         return CheckResult(True, "disabled by check filter")
-    ok, msg = _evaluate(name, fn)
+    ok, msg = _evaluate(cfg, name, fn)
     bridge.common.log("OK  " if ok else "DOWN", name, "-", msg)
     if not dry_run:
-        bridge.net.push(_env(push_env, ""), ok, msg)
+        bridge.net.push(cfg, _env(push_env, ""), ok, msg)
     return CheckResult(ok, msg)
 
 
-def run_once(dry_run: bool = False, only: frozenset[str] | None = None) -> None:
+def run_once(
+    cfg: Config, dry_run: bool = False, only: frozenset[str] | None = None
+) -> None:
     """Runs one full check cycle: the reachability gates, then every enabled check.
 
     Evaluates the Prometheus, Loki, B2 and cluster-Prometheus gates first, so a single
@@ -472,6 +459,7 @@ def run_once(dry_run: bool = False, only: frozenset[str] | None = None) -> None:
     logged and pushed to its Kuma monitor.
 
     Args:
+      cfg: The frozen config `main()` built — the ONLY source of configuration in a cycle.
       dry_run: Evaluate and log every check, but push nothing to Kuma. Defaults to False, so
         the pod's own `python /app/check.py` and every existing caller are unchanged.
       only: The enable-exactly-this-set filter `--check` builds. None reads cfg.CHECKS_ONLY,
@@ -479,13 +467,15 @@ def run_once(dry_run: bool = False, only: frozenset[str] | None = None) -> None:
         below — a filter validated in main() and not passed here would print an enabled count
         it does not honour.
     """
+    only = cfg.CHECKS_ONLY if only is None else only
+    skip = cfg.CHECKS_SKIP
     # Prometheus reachability is evaluated FIRST and gates the prom-dependent checks: a single
     # Prometheus outage would otherwise page all of them at once (one root cause, an alert storm).
     # When it's down they're suppressed (pushed `up` with a skip msg, keeping each push monitor's
     # heartbeat alive) so only the Prometheus monitor pages; a real per-metric problem still alerts
     # whenever Prometheus is up.
     prom_ok, prom_msg = _gate(
-        "prometheus", check_prometheus, "KUMA_PUSH_PROMETHEUS", dry_run, only
+        cfg, "prometheus", check_prometheus, "KUMA_PUSH_PROMETHEUS", dry_run, only
     )
 
     # Exporter-reachability gate (one level below the Prometheus gate): when Prometheus is up, probe
@@ -493,10 +483,10 @@ def run_once(dry_run: bool = False, only: frozenset[str] | None = None) -> None:
     # page (Scrape Targets), not a 3-monitor false-page storm / silent-green split. A failure to
     # DETERMINE exporter health leaves `suppressed` empty (fail toward alerting, never masking).
     suppressed = set()
-    if prom_ok and check_enabled("prometheus", only):
+    if prom_ok and check_enabled("prometheus", only, skip):
         try:
             for job in down_exporters(
-                bridge.net.prom_vector("up%s" % bridge.net.origin_sel())
+                bridge.net.prom_vector(cfg, "up%s" % bridge.net.origin_sel(cfg))
             ):
                 suppressed |= EXPORTER_DEPENDENT[job]
         except Exception as e:
@@ -505,6 +495,7 @@ def run_once(dry_run: bool = False, only: frozenset[str] | None = None) -> None:
     # Loki-reachability gate (peer of the Prometheus gate): probe Loki once so a single Loki outage
     # is one page (Loki Reachable), not a storm across every Loki-querying check (LOKI_DEPENDENT).
     loki_ok, _loki_msg = _gate(
+        cfg,
         "loki_reachable",
         check_loki_reachable,
         "KUMA_PUSH_LOKI_REACHABLE",
@@ -520,7 +511,7 @@ def run_once(dry_run: bool = False, only: frozenset[str] | None = None) -> None:
     # budget it is watching), but the cached verdict is pushed every cycle so this monitor's own
     # heartbeat stays alive.
     b2_ok, _b2_msg = _gate(
-        "b2_reachable", check_b2_reachable, "KUMA_PUSH_B2_REACHABLE", dry_run, only
+        cfg, "b2_reachable", check_b2_reachable, "KUMA_PUSH_B2_REACHABLE", dry_run, only
     )
 
     # Cluster-Prometheus gate (peer of the Prometheus gate, for the OTHER instance): the cluster
@@ -538,12 +529,12 @@ def run_once(dry_run: bool = False, only: frozenset[str] | None = None) -> None:
     # check_enabled() test and the log/push, which is exactly the span _gate() owns. Threading a
     # precomputed verdict through would add a parameter for one caller and hide the reuse.
     cluster_ok, cluster_msg = True, "disabled by check filter"
-    if check_enabled("cluster_prometheus", only):
+    if check_enabled("cluster_prometheus", only, skip):
         # The same-instance reuse only holds when the prometheus gate actually probed.
         if (
             cfg.CLUSTER_PROM_URL
             and cfg.CLUSTER_PROM_URL == cfg.PROM_URL
-            and check_enabled("prometheus", only)
+            and check_enabled("prometheus", only, skip)
         ):
             cluster_ok, cluster_msg = (
                 prom_ok,
@@ -551,19 +542,19 @@ def run_once(dry_run: bool = False, only: frozenset[str] | None = None) -> None:
             )
         else:
             cluster_ok, cluster_msg = _evaluate(
-                "cluster_prometheus", check_cluster_prometheus
+                cfg, "cluster_prometheus", check_cluster_prometheus
             )
         bridge.common.log(
             "OK  " if cluster_ok else "DOWN", "cluster_prometheus", "-", cluster_msg
         )
         if not dry_run:
             bridge.net.push(
-                _env("KUMA_PUSH_CLUSTER_PROMETHEUS", ""), cluster_ok, cluster_msg
+                cfg, _env("KUMA_PUSH_CLUSTER_PROMETHEUS", ""), cluster_ok, cluster_msg
             )
 
     for entry in CHECKS:
         name, token, fn = entry.name, entry.token, entry.fn
-        if not check_enabled(name, only):
+        if not check_enabled(name, only, skip):
             continue
         if not prom_ok and name in PROM_DEPENDENT:
             ok, msg = True, "skipped — Prometheus unreachable (see Prometheus monitor)"
@@ -584,14 +575,14 @@ def run_once(dry_run: bool = False, only: frozenset[str] | None = None) -> None:
             ok, msg = True, "skipped — exporter down (see Scrape Targets)"
             bridge.common.log("SKIP", name, "-", msg)
         else:
-            ok, msg = _evaluate(name, fn)
+            ok, msg = _evaluate(cfg, name, fn)
             if name in STARTUP_GRACE:
-                ok, msg = apply_startup_grace(
-                    name, ok, msg, cfg.GRACE_CYCLES, _grace_streaks
+                ok, msg = bridge.streaks.apply_startup_grace(
+                    name, ok, msg, cfg.GRACE_CYCLES, bridge.streaks._grace_streaks
                 )
             bridge.common.log("OK  " if ok else "DOWN", name, "-", msg)
         if not dry_run:
-            bridge.net.push(token, ok, msg)
+            bridge.net.push(cfg, token, ok, msg)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -629,7 +620,7 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None, env: Mapping[str, str] | None = None) -> int:
     """Validates the configuration and the check filter, then runs the check loop.
 
     Returns 2 without running any check if bridge/config.py could not parse an env value, or if
@@ -642,14 +633,23 @@ def main(argv: list[str] | None = None) -> int:
 
     Args:
       argv: The argument list, without the program name. None reads sys.argv.
+      env: The environment `load_config` reads. None reads the real one. See the DECIDED note.
 
     Returns:
       The process exit code: 0 after a completed --once run, 2 on a configuration fault.
     """
     args = build_parser().parse_args(argv)
-    # Config parsing never raises at import — a malformed numeric is recorded and reported here,
-    # where the operator gets one clear line per problem instead of a traceback with no context
-    # about which env var was wrong. See bridge/config.py's `_int`/`_num`.
+    # Building the config never raises; bridge.common.CONFIG_PROBLEMS carries HTTP_TIMEOUT's own
+    # parse failure, parsed there because autofix-bridge shares that module.
+    #
+    # DECIDED: `env` reaches `load_config` and nothing else.
+    # The CHECKS registry above still reads its KUMA_PUSH_* tokens from os.environ at import,
+    # so `main(env={...})` cannot change which monitor a result is pushed to. Slice 17b moves
+    # CHECKS to registry.py, where it can take the environment as a parameter; threading it
+    # here would rebuild a module-level list inside main(), the global this seam removed.
+    cfg = load_config(
+        os.environ if env is None else env, problems=bridge.common.CONFIG_PROBLEMS
+    )
     if cfg.CONFIG_PROBLEMS:
         for problem in cfg.CONFIG_PROBLEMS:
             bridge.common.log("FATAL: bad monitor-bridge config:", problem)
@@ -668,7 +668,7 @@ def main(argv: list[str] | None = None) -> int:
         % (cfg.INTERVAL, args.once, args.dry_run, len(enabled), len(CHECKS))
     )
     while True:
-        run_once(dry_run=args.dry_run, only=only)
+        run_once(cfg, dry_run=args.dry_run, only=only)
         # A --dry-run hand-run must touch nothing live, including the liveness-probe file — see
         # build_parser()'s --dry-run help.
         if not args.dry_run:
