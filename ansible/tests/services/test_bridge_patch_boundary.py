@@ -106,7 +106,7 @@ def _patched_names_by_module(test_files=None, module_names=None):
     names = {}
 
     for path in test_files:
-        tree = ast.parse(path.read_text(), filename=str(path))
+        tree = ast.parse(path.read_text(errors="ignore"), filename=str(path))
         bound = import_bindings(tree, module_names)
 
         def _add(target, name, bound=bound):
@@ -144,7 +144,7 @@ def _unqualified_binds(patched, modules):
     """
     problems = []
     for path in modules:
-        tree = ast.parse(path.read_text(), filename=str(path))
+        tree = ast.parse(path.read_text(errors="ignore"), filename=str(path))
         for node in ast.walk(tree):
             if not isinstance(node, ast.ImportFrom) or node.module not in patched:
                 continue
@@ -177,6 +177,8 @@ def test_the_suite_census_sees_shared_helper_modules():
     # Non-vacuity for the `*.py` glob above, naming members rather than counting.
     # `_check_gate_helpers.py` holds seven of monitor-bridge's transport patches and is not
     # named `test_*`; the narrower glob that missed it read exactly as green as one that sees it.
+    # Seeing the file is the weak half; the extraction anchor below is what proves those
+    # patches are read out of it.
     names = {p.name for p in _suite_files()}
     assert {"_check_gate_helpers.py", "conftest.py"} <= names, sorted(names)
 
@@ -198,7 +200,7 @@ def test_no_module_binds_a_patched_name_by_name():
 def _top_level_bindings(path):
     """Every name a module binds at its top level: def, class, assignment, import."""
     bound = set()
-    for node in ast.parse(path.read_text(), filename=str(path)).body:
+    for node in ast.parse(path.read_text(errors="ignore"), filename=str(path)).body:
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
             bound.add(node.name)
         elif isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
@@ -310,3 +312,75 @@ def test_checker_sees_a_packaged_module_in_every_spelling(tmp_path):
     assert imported_module_ids(tree, set(per_role["alpha"])) == {"bridge.common"}
     tree = ast.parse((k8s / "gamma/files/z.py").read_text())
     assert not imported_module_ids(tree, set(per_role["alpha"]))
+
+
+# What monitor-bridge's shared test helper contributes to the census: module id -> attribute
+# names. Members rather than a count, so a failure says which patch stopped being extracted.
+# Every one of these is also patched by `test_check_cli.py`, which is why a census taken over
+# the whole suite cannot anchor this: the map stays populated on the sibling's strength while
+# the helper contributes nothing. Extraction from the helper alone is what proves it.
+HELPER_PATCHES = {
+    "bridge.common": frozenset({"log"}),
+    "bridge.net": frozenset({"prom_vector", "push"}),
+}
+
+
+def _helper_files():
+    """The shared, non-`test_*` modules the `*.py` glob in `_suite_files` exists to pick up."""
+    return [p for p in _suite_files() if p.name == "_check_gate_helpers.py"]
+
+
+def test_the_helpers_patches_are_extracted_not_just_its_file_seen():
+    # The anchor that keeps `_suite_files`'s `*.py` glob honest. The file census above stays
+    # satisfied while `import_bindings` stops resolving the helper's aliases: the helper's
+    # patches drop out of the map and both halves still read green.
+    helpers = _helper_files()
+    assert helpers, sorted(p.name for p in _suite_files())
+    extracted = _patched_names_by_module(helpers, set(_runtime_modules()))
+    missing = sorted(
+        f"{module}.{name}"
+        for module, names in HELPER_PATCHES.items()
+        for name in names
+        if name not in extracted.get(module, frozenset())
+    )
+    assert not missing, "helper patches no longer extracted: %s; extracted: %s" % (
+        missing,
+        {m: sorted(n) for m, n in sorted(extracted.items())},
+    )
+
+
+def test_helper_patch_extraction_can_go_red(tmp_path):
+    """Red-proof for the anchor above: one helper it must read, one it must come up empty on."""
+    seen = tmp_path / "_wire_helpers.py"
+    seen.write_text(
+        "import bridge.net\nfrom bridge import common as c\n\n"
+        "def wire(monkeypatch):\n"
+        '    monkeypatch.setattr(bridge.net, "push", None)\n'
+        '    monkeypatch.setattr(c, "log", None)\n'
+    )
+    assert _patched_names_by_module([seen], {"bridge.common", "bridge.net"}) == {
+        "bridge.net": {"push"},
+        "bridge.common": {"log"},
+    }
+
+    # The regression the anchor exists to catch: the helper reaches the module through a name
+    # the census cannot resolve to a module id, so every patch it makes drops out silently.
+    blind = tmp_path / "_wire_blind.py"
+    blind.write_text(
+        "def wire(monkeypatch, mod):\n"
+        '    monkeypatch.setattr(mod, "push", None)\n'
+        '    monkeypatch.setattr(mod, "log", None)\n'
+    )
+    assert _patched_names_by_module([blind], {"bridge.common", "bridge.net"}) == {}
+
+
+def test_the_census_survives_an_undecodable_module(tmp_path):
+    # A stray non-UTF-8 byte under a consumer's tests/ must still leave a verdict, not raise a
+    # UnicodeDecodeError that pytest reports as a collection error. `_consumer_roots` has read
+    # with errors="ignore" since it was written; this reader did not until 2026-09-05.
+    junk = tmp_path / "_wire_latin1.py"
+    junk.write_bytes(
+        b"import bridge.net\n# \xff\xfe caf\xe9\ndef wire(m):\n"
+        b'    m.setattr(bridge.net, "push", None)\n'
+    )
+    assert _patched_names_by_module([junk], {"bridge.net"}) == {"bridge.net": {"push"}}
