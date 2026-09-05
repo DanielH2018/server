@@ -106,7 +106,7 @@ def _num(name: str, default: str) -> float:
 # scripts drifts in the one direction nobody notices: the slower copy fails open more often, and
 # a check that fails open is inert behind a green monitor.
 #
-# It is a CEILING, not a budget. The glances incident (see with_pi_ports in check.py) is what
+# It is a CEILING, not a budget. The glances incident (see with_pi_ports in checks/host_edge.py) is what
 # that distinction costs: /api/4/containers answered in 4.43s and then timed out at this bound
 # on the very next call, where its siblings answer in 0.03-0.06s. A source that slow needs the
 # cheap signal to decide and the expensive one only to explain — this constant cannot make that
