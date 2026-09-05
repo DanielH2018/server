@@ -24,7 +24,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from dev.findings_model import current_claim
+from dev.findings_model import _CLAIM_RE, _RELEASE_RE, current_claim
 from dev.prune_worktrees import REMOVABLE, Worktree, classify
 
 
@@ -80,7 +80,10 @@ def claim_is_live(
     tree = next((t for t in trees if t.branch == worktree_name), None)
     if tree is None:
         return False, "no worktree — the claim names a branch nothing has checked out"
-    verdict, reason = classify(tree, merged=merged(tree), dirty=dirty(tree.path))
+    is_dirty = dirty(tree.path)
+    # Only compute merged if classify will need it: after live lock and dirty checks.
+    is_merged = merged(tree) if (not tree.locked and not is_dirty) else False
+    verdict, reason = classify(tree, merged=is_merged, dirty=is_dirty)
     return verdict != REMOVABLE, reason
 
 
@@ -106,21 +109,47 @@ def claim_states(
 
 
 def _claim_age_days(issue: dict, held: str) -> int | None:
-    """Whole days since the comment that opened ``held``'s claim, or None.
+    """Whole days since the comment that opened the currently open episode of ``held``'s claim, or None.
 
-    Finds the FIRST comment claiming ``held``, matching `current_claim`'s first-writer-wins
-    fold. Returns None when the comment carries no parseable `createdAt`, which is how every
-    hand-built fixture looks.
+    Folds the comment list forward like `current_claim` does, finding the LAST transition
+    from None -> held that is still open (not released). Returns None when that comment
+    carries no parseable `createdAt`, or when the datetime is naive (missing timezone info).
     """
+    claimed_at_comment: dict | None = None
+    currently_held: str | None = None
+
     for comment in issue.get("comments", []):
-        if f"Claim: `{held}`" not in (comment.get("body") or ""):
+        body = comment.get("body") or ""
+
+        # Check for a claim opening.
+        m = _CLAIM_RE.search(body)
+        if m:
+            worktree = m.group(1)
+            if currently_held is None:
+                currently_held = worktree
+                if worktree == held:
+                    claimed_at_comment = comment
             continue
-        raw = comment.get("createdAt")
-        if not raw:
-            return None
-        try:
-            when = datetime.fromisoformat(raw.replace("Z", "+00:00"))
-        except ValueError:
-            return None
-        return (datetime.now(UTC) - when).days
-    return None
+
+        # Check for a release closing.
+        m = _RELEASE_RE.search(body)
+        if m and m.group(1) == currently_held:
+            currently_held = None
+
+    if claimed_at_comment is None:
+        return None
+
+    raw = claimed_at_comment.get("createdAt")
+    if not raw:
+        return None
+
+    try:
+        when = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+    # Reject naive datetimes (missing timezone info).
+    if when.tzinfo is None:
+        return None
+
+    return (datetime.now(UTC) - when).days
