@@ -280,13 +280,26 @@ def test_deploy_logic_imports_without_the_common_files_path():
     """
     env = dict(os.environ)
     env["PYTHONPATH"] = str(FILES)
-    proc = subprocess.run(
-        [sys.executable, "-c", "import deploy_logic"],
-        env=env,
-        capture_output=True,
-        text=True,
+
+    def _import(module: str) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [sys.executable, "-c", f"import {module}"],
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+
+    assert _import("deploy_logic").returncode == 0, _import("deploy_logic").stderr
+    # The reject half, through the identical env: `deploy_config` is the module the chain ended
+    # at, and it MUST fail here. Without this, the test above passes just as happily when the
+    # subprocess can no longer see the difference at all — an inherited path entry, a stray
+    # PYTHONPATH, or `host_lib` landing in files/ one day.
+    impure = _import("deploy_config")
+    assert impure.returncode != 0, (
+        "deploy_config imported with only files/ on the path — this test can no longer tell "
+        "a pure import chain from an impure one"
     )
-    assert proc.returncode == 0, proc.stderr
+    assert "host_lib" in impure.stderr, impure.stderr
 
 
 def test_the_pure_modules_the_index_re_exports_are_import_pure():

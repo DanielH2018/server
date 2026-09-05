@@ -856,7 +856,7 @@ was raised from 25min to 35min (task 6b), then to 45min so 180s max flock wait +
 k8s-path budgets it now covers.
 
 **With the staging gate armed, two more budgets join that same sequence, which is why the
-ceiling is 60min.** `consult_staging` runs inside `main()`'s `if cs.k8s_deploy:` block, ahead of
+ceiling is 60min.** `consult_staging` runs at the top of `deploy_handlers.handle_k8s`, ahead of
 `deploy_k8s`, so `STAGING_GATE_TIMEOUT_S` (600s) and `STAGING_EXPECT_TIMEOUT_S` (120s) are
 additive to the pair above rather than alternative to them: 180 + 600 + 120 + 900 + 1320 = 3120s
 against 3600s. Both are sized from a measured staging deploy — a full six-service run of the

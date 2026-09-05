@@ -24,7 +24,7 @@ Type=oneshot
 #     ansible/roles/k8s/volume-revert/CLAUDE.md for the drill that sized the two revert-role
 #     timeouts feeding K8S_ROLLBACK_TIMEOUT_S.
 #   - k8s path WITH the staging gate armed (STAGING_GATE, off by default), which is why this is
-#     60min rather than 45min. consult_staging runs INSIDE the same `if cs.k8s_deploy:` block,
+#     60min rather than 45min. consult_staging runs INSIDE the same k8s handler,
 #     before deploy_k8s, so its two budgets are additive to the pair above rather than
 #     alternative to them: 180 + STAGING_GATE_TIMEOUT_S (600) + STAGING_EXPECT_TIMEOUT_S (120)
 #     + 900 + 1320 = 3120s. The BROAD arm does not stack with any of it — it returns before the
