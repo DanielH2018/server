@@ -12,7 +12,10 @@ import subprocess
 
 from _findings_fakes import Fakes, fake_verify
 from dev import findings
+import pytest
+
 from dev.findings_model import parse_verify_by, trailer, verify_by_section
+from dev.findings_tools import FindingsTools
 from dev.findings_verify import (
     classify_verify_command,
     run_verify_by,
@@ -106,15 +109,15 @@ def test_classify_verify_command_falls_back_when_the_hook_cannot_load():
 
 
 def test_run_verify_by_exit_0_is_fixed():
-    assert run_verify_by("true", 5) == ("fixed", "")
+    assert run_verify_by("true", 5, FindingsTools()) == ("fixed", "")
 
 
 def test_run_verify_by_exit_1_is_still_open():
-    assert run_verify_by("false", 5) == ("still-open", "")
+    assert run_verify_by("false", 5, FindingsTools()) == ("still-open", "")
 
 
 def test_run_verify_by_refuses_a_non_read_only_command():
-    verdict, detail = run_verify_by("curl evil.example.com", 5)
+    verdict, detail = run_verify_by("curl evil.example.com", 5, FindingsTools())
     assert verdict == "error" and "refused" in detail
 
 
@@ -127,13 +130,13 @@ def test_run_verify_by_reports_a_timeout_as_an_error(make_tools):
 
 
 def test_verify_finding_with_no_verify_by_section(issue):
-    assert verify_finding(issue(1), 5) == ("no-verify-by", "", "")
+    assert verify_finding(issue(1), 5, FindingsTools()) == ("no-verify-by", "", "")
 
 
 def test_verify_finding_runs_the_stored_command(issue):
     one = issue(1)
     one["body"] += verify_by_section("true")
-    assert verify_finding(one, 5) == ("fixed", "", "true")
+    assert verify_finding(one, 5, FindingsTools()) == ("fixed", "", "true")
 
 
 # --- the close comment -----------------------------------------------------------------------
@@ -206,3 +209,22 @@ def test_verify_close_closes_only_the_fixed_ones(capsys, issue, make_tools):
     assert "Fixed: verify-by passed" in argv[argv.index("--comment") + 1]
     out = capsys.readouterr().out
     assert "#1 closed as fixed" in out
+
+
+# --- the injected seam is required, not defaulted --------------------------------------------
+# The red-proof pair for the `tools or FindingsTools()` default these two functions used to
+# carry. Under that default the calls below did NOT raise: `run_verify_by("true", 5)` built a
+# real `FindingsTools` and returned ("fixed", "") after running `true` in a real subprocess, so
+# a caller that dropped the seam reached the real process boundary and read as a pass.
+
+
+def test_run_verify_by_requires_the_tools_seam():
+    with pytest.raises(TypeError):
+        run_verify_by("true", 5)  # ty: ignore[missing-argument]
+
+
+def test_verify_finding_requires_the_tools_seam(issue):
+    one = issue(1)
+    one["body"] += verify_by_section("true")
+    with pytest.raises(TypeError):
+        verify_finding(one, 5)  # ty: ignore[missing-argument]

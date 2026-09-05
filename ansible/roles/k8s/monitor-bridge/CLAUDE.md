@@ -944,7 +944,7 @@ run loop alone on 2026-09-05).
 | module | holds |
 |---|---|
 | `cli.py` | the `argparse` front end and `main(argv, env, checks, gate_config) -> int`, which builds the `Config`, the registry and the `Gates`, validates the check filter and loops `run_once` |
-| `check.py` | `run_once(cfg, checks, dry_run, only, gates)` — the run loop, and nothing else |
+| `check.py` | `run_once(cfg, checks, gates, dry_run, only)` — the run loop, and nothing else |
 | `registry.py` | `build_checks(env)`, the list of every `Check` with its `KUMA_PUSH_*` token read from the environment it is handed |
 | `gates.py` | the five `*_DEPENDENT` sets, `STARTUP_GRACE`, `GATE_DEPENDENTS`, `check_enabled`, `validate_check_filter`, `expand_gates_for_cli`, `down_exporters`, `_evaluate`, `_gate`, and the frozen `Gates` seam `run_once` reads every gate fact through |
 | `bridge/types.py` | `Check`, `CheckResult`, `CheckFn` — the types `registry.py` and `check.py` share without importing one another |

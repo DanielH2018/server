@@ -185,7 +185,7 @@ def test_run_once_with_only_filter_touches_no_gate(monkeypatch, cfg):
     monkeypatch.setattr(
         bridge.net, "push", lambda _cfg, token, ok, msg: pushed.append(msg)
     )
-    check.run_once(cfg, registry.build_checks())
+    check.run_once(cfg, registry.build_checks(), gates.Gates())
     assert set(evaluated) == SUBSET_ONLY
     assert len(pushed) == len(SUBSET_ONLY)
 

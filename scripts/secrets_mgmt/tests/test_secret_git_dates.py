@@ -11,6 +11,8 @@ Run: uv run pytest scripts/secrets_mgmt/tests/test_secret_git_dates.py
 import datetime as dt
 import subprocess
 
+import pytest
+
 from _rotation_fakes import Fakes, build_tools
 from secrets_mgmt.git_dates import (
     advance_last_rotated,
@@ -89,3 +91,33 @@ def test_derivation_failure_degrades_to_recorded_dates():
     the monitor down would be a worse outage than the drift it corrects."""
     tools = build_tools(Fakes(git_error=subprocess.CalledProcessError(128, "git")))[0]
     assert derived_rotation_dates(tools) == {}
+
+
+# --- the fake's failure shape ----------------------------------------------------------------
+
+
+def test_the_git_fake_names_an_unscripted_ref_with_its_argv():
+    """The red-proof half: the blob lookup used to raise a bare `KeyError` naming the sha.
+
+    A `KeyError('deadbeef')` reads as "that sha is not in this history" — a plausible answer —
+    where the sibling fakes (`_findings_fakes.py`, `_land_fakes.py`, `_deploy_fakes.py`) raise a
+    named `AssertionError` carrying the argv, which reads as "this call was never scripted".
+    """
+    tools = build_tools(Fakes(history=[]))[0]
+    with pytest.raises(AssertionError) as caught:
+        tools.git("show", "deadbeef:ansible/vars/secrets.yml")
+    assert "unscripted git call" in str(caught.value)
+    assert "deadbeef" in str(caught.value)
+
+
+def test_the_git_fake_rejects_an_unscripted_verb():
+    """An unscripted VERB fell through to the blob lookup and raised the same bare KeyError.
+
+    The ref is one the history DOES carry, so only the verb clause of the guard can fire —
+    otherwise this test and the one above would prove the same branch twice.
+    """
+    history = [("deadbeef", "2026-01-01", {"a_token": "x"})]
+    tools = build_tools(Fakes(history=history))[0]
+    with pytest.raises(AssertionError) as caught:
+        tools.git("rev-parse", "deadbeef:ansible/vars/secrets.yml")
+    assert "rev-parse" in str(caught.value)

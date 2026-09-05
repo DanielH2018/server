@@ -68,6 +68,13 @@ def build_tools(f: Fakes) -> tuple[RotationTools, list]:
             raise f.git_error
         if args[0] == "log":
             return log + "\n"
+        # A named AssertionError carrying the argv, the shape every sibling fake raises
+        # (`_findings_fakes.py`, `_land_fakes.py`, `_deploy_fakes.py`). The blob lookup used
+        # to raise a bare `KeyError` naming the sha alone, so an unscripted VERB — a
+        # `git rev-parse` a future caller adds — read as "that sha is not in this history"
+        # rather than "this call was never scripted", and the argv never reached the report.
+        if args[0] != "show" or args[1].split(":", 1)[0] not in blobs:
+            raise AssertionError(f"unscripted git call: {args}")
         return yaml.safe_dump(blobs[args[1].split(":", 1)[0]])
 
     def run(cmd, **kwargs):

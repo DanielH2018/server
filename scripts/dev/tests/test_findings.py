@@ -331,3 +331,17 @@ def test_find_by_fingerprint_rejects_a_different_id_in_a_crlf_body(issue):
 def test_prefixed_picks_the_alphabetically_first_of_two():
     for names in ({"domain/network", "domain/cicd"}, {"domain/cicd", "domain/network"}):
         assert _prefixed(names, "domain/") == "cicd"
+
+
+# --- the injected seam is required, not defaulted --------------------------------------------
+
+
+def test_main_requires_the_tools_seam():
+    """`main` used to read `tools or FindingsTools()`, so this call reached the real `gh`.
+
+    The red-proof half: under the old default `main(["list"])` shelled out to `gh issue list`
+    from a unit test instead of failing. The `__main__` block is now the only site that builds
+    the real boundaries.
+    """
+    with pytest.raises(TypeError):
+        findings.main(["list"])  # ty: ignore[missing-argument]
