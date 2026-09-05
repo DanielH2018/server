@@ -17,8 +17,9 @@ This module is the index: every decision the deployer makes is defined in one of
 
 Nothing defines a name here, and that is load-bearing for the tests: a `monkeypatch` on
 `deploy_logic.<name>` rebinds a re-export that no function reads, so the test passes against
-unpatched code. `ansible/tests/deploy/test_gitops_deploy_patch_boundary.py` refuses such a patch —
-patch the module whose function reads the name, exactly as monitor-bridge's split prescribes.
+unpatched code, and the injected `DeployTools` (`deploy_toolbox.py`) is what a test replaces
+instead. `ansible/tests/deploy/test_gitops_deploy_imports.py` holds this file at zero
+definitions, and holds every module's sibling imports to its declared set.
 """
 
 from deploy_changes import (  # noqa: F401

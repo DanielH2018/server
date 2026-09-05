@@ -48,9 +48,7 @@ ansible/roles/k8s/monitor-bridge/tests/test_check_ups.py 1
 ansible/roles/k8s/monitor-bridge/tests/test_host_temp.py 1
 ansible/roles/k8s/qbittorrent/tests/test_apply_prefs.py 1
 ansible/roles/setup/fake_remux/tests/test_fake_remux_replace_logic.py 2
-ansible/roles/setup/gitops_deploy/tests/conftest.py 10
-ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_alert_channels.py 2
-ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_phases.py 1
+ansible/roles/setup/gitops_deploy/tests/conftest.py 6
 ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_subprocess.py 1
 ansible/roles/setup/k3s/tests/test_live_drift_check.py 3
 ansible/roles/setup/k3s/tests/test_longhorn_reap_delete_transport.py 5

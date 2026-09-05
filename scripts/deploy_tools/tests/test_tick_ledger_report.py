@@ -91,11 +91,16 @@ def test_what_the_deployer_writes_is_what_the_backfill_reads(tmp_path, monkeypat
     recorder renamed would pass all of them and only fail on the host, an hour later, silently —
     `load_tick_ledger` skips a row it cannot construct rather than raising."""
     sys.path.insert(0, str(ROLE / "files"))
+    import deploy_toolbox
     import gitops_deploy as gd
 
     ledger = tmp_path / "ticks.jsonl"
     monkeypatch.setattr(gd, "STAGING_TICK_LEDGER", str(ledger))
-    gd.record_staging_tick("c0ffee1234", {"freshrss"}, ds.STAGING_REJECTED)
+    # The real clock, from the deployer's own boundaries object: the row's `at` stamp is one of
+    # the fields load_tick_ledger has to be able to construct from.
+    gd.record_staging_tick(
+        deploy_toolbox.DeployTools(), "c0ffee1234", {"freshrss"}, ds.STAGING_REJECTED
+    )
 
     loaded = bf.load_tick_ledger(ledger)
     assert len(loaded) == 1, f"the recorder's row did not load: {ledger.read_text()!r}"

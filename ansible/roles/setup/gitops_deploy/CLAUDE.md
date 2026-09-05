@@ -418,6 +418,7 @@ Three layers, and which one a function belongs in is decided by what it touches.
 | decisions (pure) | `deploy_changes`, `deploy_git`, `deploy_health`, `deploy_inventory`, `deploy_k8s`, `deploy_remediation`, `deploy_staging` | every branch the tick takes, as functions over plain values |
 | transport | `deploy_io`, `deploy_alerts` | subprocess, docker, the webhook, and every message body |
 | transport leaves | `deploy_config`, `deploy_state`, `deploy_failtext` | the config file, the state directory, and the text a failed run's alert quotes |
+| the seam | `deploy_toolbox` | `DeployTools`, one frozen object holding every boundary the tick crosses, and `default_tools(CONFIG)` which binds the CI gate to the parsed config |
 | the tick | `gitops_deploy` | `main()` sequencing named phases, and the delivery plumbing the phases share |
 
 **A transport leaf imports nothing from `deploy_io`.** `deploy_config` (the config file,
@@ -437,11 +438,21 @@ carry a broad change and a promoted image bump, and the broad plane has to win.
 `tests/test_gitops_deploy_main_branches.py` still drives whole ticks for the orderings that
 only exist between phases.
 
-**`deploy_io` and `deploy_alerts` are reached QUALIFIED** — `deploy_io.run(...)`, never
-`from deploy_io import run`. A from-import takes its own reference at import time and never
-sees a `monkeypatch`, which is what the patch-boundary guard below enforces. It also means one
-`monkeypatch.setattr(deploy_io, "run", ...)` covers both the tick's own git calls and the ones
-`deploy_io` makes inside `deploy_k8s`.
+**Every process boundary is injected, not patched.** `main(tools)` builds one frozen
+`DeployTools` (`deploy_toolbox.default_tools(CONFIG)`) and threads it through `assess`,
+`plan_tick`, every `handle_*`, `deliver`/`drain_pending`/`alert_once` and `consult_staging`.
+Its fields are the git runner, `git_status`, `git_fetch`, `is_ancestor`, the CI verdict, the
+Discord post, the Docker health gate, the staging scripts, the deploy annotation and the clock;
+the defaults are the real implementations. A test builds a `DeployTools` from
+`tests/_deploy_fakes.py` and passes it in, so almost nothing patches a module attribute any
+more. `main()` and `entrypoint()` both default the argument, so a host's `python
+gitops_deploy.py` is unchanged.
+
+**`deploy_io` and `deploy_alerts` are still reached QUALIFIED** — `deploy_io.deploy_k8s(...)`,
+never `from deploy_io import deploy_k8s`. `deploy_io.deploy`, `deploy_k8s` and `deploy_broad`
+build the `ansible-playbook` argv the suite asserts on and call `deploy_io.run` qualified, so
+they stay outside `DeployTools`: a field there would replace the argv builder rather than the
+process. That is why `tests/conftest.py` keeps ONE patch, `deploy_io.run`.
 
 **Configuration is parsed once, and parsing cannot fail.** `deploy_config.load_config` returns a
 frozen `Config`; a malformed numeric value is collected into `Config.errors` rather than
@@ -522,13 +533,13 @@ the copy loop ships; `pythonpath` in `pyproject.toml` keeps `files/` importable 
 `test_systemd_unit_secrets.py` is the tree-wide ExecStart guard. Run via the repo pytest hook
 (`uv run pytest ansible/roles/setup/gitops_deploy/tests`).
 
-**Tests import and patch the module that defines the name, never the facade.** A
-`monkeypatch` on `deploy_logic.<name>` rebinds a re-export no function reads, so the test passes
-against unpatched code; and a runtime module that from-imports a name a test patches elsewhere
-holds its own reference from import time. Both are the holes monitor-bridge's check.py split
-hit. ENFORCED by `ansible/tests/deploy/test_gitops_deploy_patch_boundary.py`, which requires every
-patched name to be *defined* (not merely imported) on the module it is patched on — the
-monitor-bridge guard counts an import as bound, which a facade defeats.
+**Tests inject a `DeployTools`; the import direction is what a guard now holds.** The old rule
+— patch the module that DEFINES the name, never the facade — governed about 30 tests that
+reached the deployer's I/O by module attribute, and `DeployTools` removed them.
+`ansible/tests/deploy/test_gitops_deploy_imports.py` replaced that guard with the direction:
+each module's sibling imports must sit inside an explicit `ALLOWED` map, no leaf may import
+`gitops_deploy` (a cycle, and a second copy of the module under a second name once it runs as
+`__main__`), and `deploy_logic.py` must still define nothing.
 
 ## Which apply clears a hold
 

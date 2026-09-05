@@ -18,9 +18,9 @@ Two rules hold this module's shape:
 - **Nothing here reads a module-level constant of `gitops_deploy`.** Every function takes what
   it needs — `repo`, `hostname`, a timeout — as an argument, so a test can call it directly and
   so `gitops_deploy` stays the one place the deployer's configuration is bound.
-- **Callers reach these functions qualified (`deploy_io.run(...)`), never by from-import.**
-  A from-import takes a reference at import time and never sees a `monkeypatch` on this module.
-  ENFORCED by `ansible/tests/deploy/test_gitops_deploy_patch_boundary.py`.
+- **Most of these reach a caller as a `DeployTools` field (`deploy_toolbox.py`), so a test
+  replaces the field, not this module. `deploy`, `deploy_k8s` and `deploy_broad` are the exception:
+  they call `run` qualified and the suite patches `deploy_io.run` to read the argv they build.**
 
 Stdlib only: the unit runs under `uv run --no-project` and the host is still on Python 3.12.
 """

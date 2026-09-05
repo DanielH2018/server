@@ -36,6 +36,7 @@
     - deploy_inventory.py
     - deploy_k8s.py
     - deploy_staging.py
+    - deploy_toolbox.py
   become: true
   notify: Run gitops-deploy once
 
@@ -227,6 +228,8 @@
         src: ansible/roles/setup/gitops_deploy/files/deploy_k8s.py
       - live: /opt/gitops-deploy/deploy_staging.py
         src: ansible/roles/setup/gitops_deploy/files/deploy_staging.py
+      - live: /opt/gitops-deploy/deploy_toolbox.py
+        src: ansible/roles/setup/gitops_deploy/files/deploy_toolbox.py
       - live: /opt/gitops-deploy/host_lib.py
         src: ansible/roles/setup/common/files/host_lib.py
 

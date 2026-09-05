@@ -46,7 +46,7 @@ def _marker(state_dir, name: str) -> str | None:
 # ── the short-circuits: nothing merges, nothing deploys ───────────────────────────────────────
 def test_a_converged_checkout_is_a_noop(gitops_deploy, tick):
     tick.origin = tick.local
-    assert gitops_deploy.main() == 0
+    assert gitops_deploy.main(tick.tools) == 0
     assert tick.merges == [] and tick.playbooks == [] and tick.posts == []
 
 
@@ -59,7 +59,7 @@ def test_drain_pending_runs_ahead_of_the_noop_short_circuit(
         gitops_deploy.PENDING_ALERTS_FILE, {"secrets:" + ORIGIN: "queued last tick"}
     )
     tick.origin = tick.local
-    gitops_deploy.main()
+    gitops_deploy.main(tick.tools)
     assert tick.posts == ["queued last tick"]
     assert json.loads((state_dir / "pending_alerts.json").read_text()) == {}
 
@@ -67,21 +67,21 @@ def test_drain_pending_runs_ahead_of_the_noop_short_circuit(
 def test_a_dirty_tree_skips_without_merging(gitops_deploy, tick):
     tick.dirty = True
     tick.paths = ["docs/x.md"]
-    assert gitops_deploy.main() == 0
+    assert gitops_deploy.main(tick.tools) == 0
     assert tick.merges == [] and tick.playbooks == []
 
 
 def test_a_held_sha_is_skipped(gitops_deploy, tick):
     gitops_deploy.write_hold(ORIGIN)
     tick.paths = [DOCKER_TEMPLATE]
-    assert gitops_deploy.main() == 0
+    assert gitops_deploy.main(tick.tools) == 0
     assert tick.merges == [] and tick.playbooks == []
 
 
 def test_pending_ci_defers_silently(gitops_deploy, tick, state_dir):
     tick.ci = "pending"
     tick.paths = [DOCKER_TEMPLATE]
-    assert gitops_deploy.main() == 0
+    assert gitops_deploy.main(tick.tools) == 0
     assert tick.merges == [] and tick.posts == []
     assert _marker(state_dir, "ci_alerted_sha") is None
 
@@ -89,8 +89,8 @@ def test_pending_ci_defers_silently(gitops_deploy, tick, state_dir):
 def test_red_ci_parks_and_pages_once_per_sha(gitops_deploy, tick, state_dir):
     tick.ci = "fail"
     tick.paths = [DOCKER_TEMPLATE]
-    assert gitops_deploy.main() == 0
-    assert gitops_deploy.main() == 0
+    assert gitops_deploy.main(tick.tools) == 0
+    assert gitops_deploy.main(tick.tools) == 0
     assert tick.merges == []
     assert len(tick.posts) == 1 and "CI is RED" in tick.posts[0]
     assert _marker(state_dir, "ci_alerted_sha") == ORIGIN
@@ -103,7 +103,7 @@ def test_a_diverged_checkout_is_recorded_even_on_a_dirty_tick(
     tick.origin_ahead = False
     tick.local_ahead = False
     tick.dirty = True
-    gitops_deploy.main()
+    gitops_deploy.main(tick.tools)
     assert _marker(state_dir, "diverged_sha") == ORIGIN
     assert tick.merges == []
 
@@ -114,7 +114,7 @@ def test_an_unpushed_local_commit_is_a_plain_noop_not_a_divergence(
     (state_dir / "diverged_sha").write_text(ORIGIN)
     tick.origin_ahead = False
     tick.local_ahead = True
-    assert gitops_deploy.main() == 0
+    assert gitops_deploy.main(tick.tools) == 0
     assert _marker(state_dir, "diverged_sha") is None
     assert tick.merges == []
 
@@ -124,7 +124,7 @@ def test_a_docs_only_push_ff_merges_the_pinned_sha_and_deploys_nothing(
     gitops_deploy, tick
 ):
     tick.paths = ["docs/runbook.md"]
-    assert gitops_deploy.main() == 0
+    assert gitops_deploy.main(tick.tools) == 0
     assert tick.merges == [ORIGIN]
     assert tick.playbooks == [] and tick.posts == []
     assert tick.head == ORIGIN
@@ -142,7 +142,7 @@ def test_a_template_push_merges_then_deploys_then_clears_the_hold(
 ):
     (state_dir / "hold_sha").write_text("f" * 40)
     _docker_push(tick)
-    assert gitops_deploy.main() == 0
+    assert gitops_deploy.main(tick.tools) == 0
     assert tick.merges == [ORIGIN]
     assert tick.playbooks == [DEPLOY_WG_EASY]
     assert tick.index("git", "merge") < tick.index("playbook", "ansible/deploy.yml"), (
@@ -157,7 +157,7 @@ def test_a_failed_health_gate_holds_then_resets_then_redeploys_the_prior_tree(
 ):
     _docker_push(tick)
     tick.healthy = False
-    assert gitops_deploy.main() == 0
+    assert gitops_deploy.main(tick.tools) == 0
     assert _marker(state_dir, "hold_sha") == ORIGIN
     reset = tick.index("git", "reset", "--hard", LOCAL)
     assert tick.playbooks == [DEPLOY_WG_EASY, DEPLOY_WG_EASY]
@@ -182,7 +182,7 @@ def test_the_hold_is_on_disk_before_the_rollback_reset(gitops_deploy, tick, stat
         return real_git(argv)
 
     tick._git = git_with_a_look
-    gitops_deploy.main()
+    gitops_deploy.main(tick.tools)
     assert seen_at_reset == [ORIGIN]
 
 
@@ -192,7 +192,7 @@ def test_a_rollbacks_exit_code_follows_its_post(gitops_deploy, tick, discord_ok,
     _docker_push(tick)
     tick.healthy = False
     tick.discord_ok = discord_ok
-    assert gitops_deploy.main() == rc
+    assert gitops_deploy.main(tick.tools) == rc
 
 
 def test_a_deploy_execution_failure_takes_the_same_rollback(
@@ -200,7 +200,7 @@ def test_a_deploy_execution_failure_takes_the_same_rollback(
 ):
     _docker_push(tick)
     tick.playbook_outcomes = [RuntimeError("ansible-playbook -> 2")]
-    assert gitops_deploy.main() == 0
+    assert gitops_deploy.main(tick.tools) == 0
     assert _marker(state_dir, "hold_sha") == ORIGIN
     assert tick.playbooks == [DEPLOY_WG_EASY, DEPLOY_WG_EASY]
     assert tick.head == LOCAL
@@ -213,7 +213,7 @@ def test_a_setup_plane_push_merges_then_applies_its_own_playbook(
     gitops_deploy, tick, state_dir
 ):
     tick.paths = ["ansible/roles/setup/gitops_deploy/tasks/main.yml"]
-    assert gitops_deploy.main() == 0
+    assert gitops_deploy.main(tick.tools) == 0
     assert tick.merges == [ORIGIN]
     assert tick.playbooks == [
         [
@@ -238,7 +238,7 @@ def test_a_failed_broad_apply_holds_the_plane_and_rolls_nothing_back(
 ):
     tick.paths = ["ansible/roles/setup/gitops_deploy/tasks/main.yml"]
     tick.playbook_outcomes = [RuntimeError("timed out")]
-    assert gitops_deploy.main() == 0
+    assert gitops_deploy.main(tick.tools) == 0
     assert _marker(state_dir, "hold_sha") == ORIGIN
     assert _marker(state_dir, "hold_plane") == "ansible/initial_setup.yml gitops_deploy"
     assert tick.head == ORIGIN, "the arm is forward-only: no reset"
@@ -251,7 +251,7 @@ def test_a_bring_up_playbook_push_parks_and_pages(gitops_deploy, tick, state_dir
     tick.paths = ["ansible/bootstrap.yml"]
     tick.files[f"{LOCAL}:ansible/bootstrap.yml"] = "- hosts: all\n"
     tick.files[f"{ORIGIN}:ansible/bootstrap.yml"] = "- hosts: all\n  become: true\n"
-    assert gitops_deploy.main() == 0
+    assert gitops_deploy.main(tick.tools) == 0
     assert tick.merges == [] and tick.playbooks == []
     assert _marker(state_dir, "broad_alerted_sha") == ORIGIN
     assert "needing a hand" in tick.posts[0]
@@ -274,7 +274,7 @@ def test_a_setup_plane_success_keeps_a_deploy_plane_hold(
     """
     _hold_the_deploy_plane(state_dir)
     tick.paths = ["ansible/roles/setup/gitops_deploy/tasks/main.yml"]
-    assert gitops_deploy.main() == 0
+    assert gitops_deploy.main(tick.tools) == 0
     assert tick.playbooks, "the setup plane still applies"
     assert _marker(state_dir, "hold_sha") == "f" * 40
     assert _marker(state_dir, "hold_plane") == "ansible/deploy.yml"
@@ -285,7 +285,7 @@ def test_applying_the_held_plane_clears_the_hold(gitops_deploy, tick, state_dir)
     (state_dir / "hold_sha").write_text("f" * 40)
     (state_dir / "hold_plane").write_text("ansible/initial_setup.yml gitops_deploy")
     tick.paths = ["ansible/roles/setup/gitops_deploy/tasks/main.yml"]
-    assert gitops_deploy.main() == 0
+    assert gitops_deploy.main(tick.tools) == 0
     assert _marker(state_dir, "hold_sha") is None
     assert _marker(state_dir, "hold_plane") is None
 
@@ -294,7 +294,7 @@ def test_a_service_deploy_does_not_clear_a_broad_hold(gitops_deploy, tick, state
     """A service deploy applies no plane, so it is no evidence the held one was applied."""
     _hold_the_deploy_plane(state_dir)
     _docker_push(tick)
-    assert gitops_deploy.main() == 0
+    assert gitops_deploy.main(tick.tools) == 0
     assert tick.playbooks == [DEPLOY_WG_EASY], "the service still deploys"
     assert _marker(state_dir, "hold_sha") == "f" * 40
     assert _marker(state_dir, "hold_plane") == "ansible/deploy.yml"
@@ -329,7 +329,7 @@ def test_an_image_bump_consults_staging_then_merges_then_deploys(
     gitops_deploy, monkeypatch, tick, state_dir
 ):
     _image_bump(gitops_deploy, monkeypatch, tick)
-    assert gitops_deploy.main() == 0
+    assert gitops_deploy.main(tick.tools) == 0
     assert tick.merges == [ORIGIN]
     assert tick.playbooks == [DEPLOY_SONARR]
     staging = tick.log.index(("staging", {"sonarr"}))
@@ -358,11 +358,14 @@ def test_a_staging_rejection_holds_and_never_touches_prod(
     the tree is still on `local` when the verdict arrives.
     """
     _blocking(gitops_deploy, monkeypatch, tick, "rejected")
-    assert gitops_deploy.main() == 0
+    assert gitops_deploy.main(tick.tools) == 0
     assert tick.merges == [] and tick.playbooks == []
     assert _marker(state_dir, "hold_sha") == ORIGIN
-    assert "staging REJECTED" in tick.posts[0]
-    assert "nothing to roll back" in tick.posts[0]
+    # posts[0] is consult_staging's own verdict alert — it fires on every non-PASS, before the
+    # branch below decides what to do about it. The block's page is the one that says prod was
+    # never touched.
+    assert any("nothing to roll back" in post for post in tick.posts)
+    assert any("staging REJECTED" in post for post in tick.posts)
 
 
 def test_a_staging_rejection_deploys_prod_while_the_gate_is_advisory(
@@ -371,7 +374,7 @@ def test_a_staging_rejection_deploys_prod_while_the_gate_is_advisory(
     """The rejecting half of the switch: the same verdict with blocking off changes nothing."""
     _image_bump(gitops_deploy, monkeypatch, tick)
     tick.staging_verdict = "rejected"
-    assert gitops_deploy.main() == 0
+    assert gitops_deploy.main(tick.tools) == 0
     assert tick.merges == [ORIGIN]
     assert tick.playbooks == [DEPLOY_SONARR]
     assert _marker(state_dir, "hold_sha") is None
@@ -382,7 +385,7 @@ def test_no_verdict_deploys_prod_even_with_blocking_armed(
 ):
     """A staging outage must not park prod. The pass-through is the part-3 decision."""
     _blocking(gitops_deploy, monkeypatch, tick, "no_verdict")
-    assert gitops_deploy.main() == 0
+    assert gitops_deploy.main(tick.tools) == 0
     assert tick.merges == [ORIGIN]
     assert tick.playbooks == [DEPLOY_SONARR]
     assert _marker(state_dir, "hold_sha") is None
@@ -394,11 +397,11 @@ def test_an_armed_override_lets_one_rejected_tick_through_and_is_spent(
     """The escape hatch: prod deploys, the use is posted, and the marker is consumed."""
     _blocking(gitops_deploy, monkeypatch, tick, "rejected")
     tick.staging_override = True
-    assert gitops_deploy.main() == 0
+    assert gitops_deploy.main(tick.tools) == 0
     assert tick.merges == [ORIGIN]
     assert tick.playbooks == [DEPLOY_SONARR]
     assert _marker(state_dir, "hold_sha") is None
-    assert "staging override used" in tick.posts[0]
+    assert any("staging override used" in post for post in tick.posts)
     assert not tick.staging_override, (
         "the override was not spent, so it is not one-shot"
     )
@@ -414,9 +417,9 @@ def test_the_override_is_only_read_when_the_gate_would_block(
     """
     _blocking(gitops_deploy, monkeypatch, tick, "pass")
     tick.staging_override = True
-    assert gitops_deploy.main() == 0
+    assert gitops_deploy.main(tick.tools) == 0
     assert tick.staging_override, "a passing tick spent the override"
-    assert not [entry for entry in tick.log if entry[0] == "override"]
+    assert tick.override_file.exists(), "the marker itself was removed"
 
 
 def test_a_failed_rollout_rolls_back_to_the_failed_shas_snapshot_under_its_own_budget(
@@ -427,7 +430,7 @@ def test_a_failed_rollout_rolls_back_to_the_failed_shas_snapshot_under_its_own_b
     # on a second. The redeploy also reverts volumes, so it gets the larger budget.
     _image_bump(gitops_deploy, monkeypatch, tick)
     tick.playbook_outcomes = [RuntimeError("rollout gate failed")]
-    assert gitops_deploy.main() == 0
+    assert gitops_deploy.main(tick.tools) == 0
     forward, rollback = (entry for entry in tick.log if entry[0] == "playbook")
     assert forward[1] == DEPLOY_SONARR
     assert rollback[1] == DEPLOY_SONARR + [
@@ -447,7 +450,7 @@ def test_a_secrets_change_bundled_with_an_image_bump_is_still_flagged(
     # The promoted service is image-bump-only by construction, so it is never the secret's
     # consumer; without the alert the rotation is ff-merged and forgotten.
     _image_bump(gitops_deploy, monkeypatch, tick, ["ansible/vars/secrets.yml"])
-    assert gitops_deploy.main() == 0
+    assert gitops_deploy.main(tick.tools) == 0
     assert tick.playbooks == [DEPLOY_SONARR]
     assert _marker(state_dir, "secrets_alerted_sha") == ORIGIN
     assert any("nothing was redeployed" in post for post in tick.posts)
@@ -458,6 +461,6 @@ def test_a_non_image_k8s_change_is_ff_merged_and_flagged_not_deployed(
 ):
     _image_bump(gitops_deploy, monkeypatch, tick)
     tick.diffs["sonarr"] = "--- a\n+++ b\n+sonarr_replicas: 2\n"
-    assert gitops_deploy.main() == 0
+    assert gitops_deploy.main(tick.tools) == 0
     assert tick.merges == [ORIGIN] and tick.playbooks == []
     assert _marker(state_dir, "k8s_alerted_sha") == ORIGIN
