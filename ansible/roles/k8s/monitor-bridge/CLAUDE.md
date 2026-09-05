@@ -926,7 +926,9 @@ landed 2026-09-01, `check.py` from 3,732 lines to ~510).
 | `checks/notify.py` | `check_discord` with `_discord_webhooks`, `email_backstop` with `_smtp_login_ok` and `_email_probe` |
 | `checks/logs.py` | `check_loki_ingestion`, `check_shipper_dropped`, `check_loki_reachable`, `with_log_errors` (the Loki arm `check_k8s_workloads` folds in) |
 | `checks/cluster.py` | the cAdvisor trio `check_restarts` / `check_oom` / `check_cpu_throttle` with `_cadvisor_blind`, `_cadvisor_streaks` and `_cpu_breach_streak`; `check_prometheus`, `check_targets_down`, `check_traefik_5xx`, `check_traefik_latency`, `check_k8s_workloads`, `check_cluster_targets`, `check_cluster_prometheus` |
-| `checks/host.py` | `check_disk`, `check_cert`, `check_mem` and the `_host_origin_shortfall` floor with `_host_origin_streaks`; `check_host_temp`, `check_scrutiny`, `check_ups`, `check_pi_pressure` with `with_pi_ports`, `check_speedtest` with `speedtest_verdict` |
+| `checks/host.py` | `check_disk`, `check_cert`, `check_mem` and the `_host_origin_shortfall` floor with `_host_origin_streaks`, which `checks/host_thermal.py` reads qualified off this module |
+| `checks/host_thermal.py` | `check_scrutiny` with `scrutiny_wear_devices`, `check_host_temp`, `check_ups` — the hardware-health arms |
+| `checks/host_edge.py` | `check_pi_pressure` with `with_pi_ports` and `_tcp_open`, `check_speedtest`. Both entry points take the prober as `tcp_open`, defaulting to `_tcp_open`, so a test injects a fake port map instead of patching a module global |
 | `checks/b2.py` | the `b2_*` family with `check_b2_reachable` (the `B2_DEPENDENT` gate) and `check_b2_storage`, and the probe caches `_b2_probe` / `_b2_storage` |
 | `checks/r2.py` | the `r2_*` family with `check_r2_usage`, `R2_QUERY`, and `_r2_probe` |
 | `checks/storage.py` | `check_longhorn_volumes`, `check_pvc_fullness` — the cluster storage layer |

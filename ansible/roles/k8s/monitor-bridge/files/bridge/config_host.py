@@ -1,7 +1,8 @@
 """The host-facing half of monitor-bridge's configuration.
 
 Disks, certificates, memory, SMART, board temperatures, the UPS, the Pi and the speedtest —
-every threshold read by a check in `checks/host.py`, plus the origin-coverage floors the
+every threshold read by a check in `checks/host.py`, `checks/host_thermal.py` and
+`checks/host_edge.py`, plus the origin-coverage floors the
 host-metric checks fail closed on.
 
 A field's justification sits beside its DECLARATION; its env var name and default sit beside
