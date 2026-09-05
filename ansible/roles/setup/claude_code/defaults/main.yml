@@ -64,6 +64,25 @@ claude_code_rc_pytest_workers: 4
 # MemoryHigh and not MemoryMax.
 claude_code_rc_memory_high: 8G
 
+# The cgroup's swap ceiling, written to memory.swap.max. Without it the cgroup swaps without
+# limit: on 2026-09-05 it held all 8 GiB of this box's swap plus 6.96 GB anon, stalled in
+# reclaim 98.5% of the time, and starved every other cgroup — k3s at 2.9 GB and
+# kubepods.slice at 10.8 GB. MemoryHigh cannot prevent that. It throttles rather than caps,
+# and swap is exactly where a throttled cgroup's anon pages go. Issue #1154.
+#
+# Derivation, and what to re-derive if you change it: 2G is a quarter of this host's 8 GiB
+# /swap.img, so the three-quarters the incident took from the homelab plane stays with it.
+# The other half of the sum is MemoryHigh: 8G + 2G puts the cgroup's committed ceiling at
+# 10 GB against 28 GiB of RAM with a ~13 GB k3s + kubepods baseline, which leaves ~5 GB
+# clear. Raise this only alongside that arithmetic, not on its own.
+#
+# NOT 0. Zero swap does not contain the cgroup, it relocates the same growth into RAM:
+# nothing reclaims anon without swap, MemoryMax is deliberately infinity, so the terminal
+# state becomes the GLOBAL OOM killer choosing a victim by badness anywhere on the box —
+# a k3s process included. See the unit template on why a kill is the response this host
+# cannot absorb.
+claude_code_rc_memory_swap_max: 2G
+
 # Whether to set CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP on the host, turning off Claude
 # Code's kill of backgrounded Bash tasks under a Node memoryPressure event. On by default;
 # the unit template carries the reasoning. Set this false to hand the reaper back — the
