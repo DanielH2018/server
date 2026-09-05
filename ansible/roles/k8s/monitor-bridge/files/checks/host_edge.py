@@ -117,7 +117,7 @@ def check_pi_pressure(
 
 
 def check_speedtest(cfg: Config) -> tuple[bool, str]:
-    """Judge speedtest-tracker's newest result row (see the SPEEDTEST_* env block above).
+    """Judge speedtest-tracker's newest result row (the SPEEDTEST_* env block in bridge/config_host.py).
 
     Empty URL/token -> disabled (stays up), like check_ha_heartbeat.
 

@@ -160,7 +160,7 @@ def check_host_temp(cfg: Config) -> tuple[bool, str]:
 
 
 def check_ups(cfg: Config) -> tuple[bool, str]:
-    """UPS battery health from HA's Prometheus-scraped sensors (see the UPS_* env block above).
+    """UPS battery health from HA's Prometheus-scraped sensors (the UPS_* env block in bridge/config_host.py).
 
     Three arms: charge %, estimated runtime, and the replace-battery self-test verdict. All queries
     empty -> disabled (stays up), like check_pi_pressure without a glances URL. Two defer paths keep
