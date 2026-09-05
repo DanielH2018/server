@@ -168,7 +168,7 @@ def git_status(repo: str) -> subprocess.CompletedProcess:
     128 / fatal: this operation must be run in a work tree` and double-paged (crash Discord +
     OnFailure), while the very next tick ran normally — a transient tree state, not a broken
     checkout. The caller turns a non-zero exit into a RetryableFetchError, which skips the tick
-    cleanly and does NOT write last_run.
+    cleanly and does NOT write last_run. SCOPE #1223: whole tree, untracked-inclusive by design.
     """
     return subprocess.run(
         ["git", "status", "--porcelain"], cwd=repo, text=True, capture_output=True

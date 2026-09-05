@@ -1,5 +1,6 @@
 {% from 'container-resources.yml.j2' import container_resources with context %}
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
+{% from 'pvc.yml.j2' import pvc with context %}
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -60,18 +61,7 @@ data:
         local:
           directory: /loki/rules
 ---
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: loki-data
-  namespace: {{ k8s_observability_namespace }}
-spec:
-  accessModes:
-    - ReadWriteOnce
-  storageClassName: {{ claude_otel_storage_class }}
-  resources:
-    requests:
-      storage: {{ claude_otel_loki_storage }}
+{{ pvc('loki-data', claude_otel_storage_class, claude_otel_loki_storage, namespace=k8s_observability_namespace) }}
 ---
 apiVersion: apps/v1
 kind: Deployment

@@ -162,6 +162,8 @@ restore_history() {
   # construction -- a check scoped to evals/history.json would report "tree restored" over
   # exactly the leftover that parks the deployer. Everything dirty here arrived during this run:
   # the pre-sweep gate and the post-lock gate both exit on a tree that was already dirty.
+  # SCOPE (see lib.git.git_dirty, #1223): whole tree, untracked counted — the same
+  # scope git_dirty(cwd) defaults to, expressed here in shell since these templates can't import it.
   [ -z "$(git status --porcelain)" ] || rc=1
   return "$rc"
 }

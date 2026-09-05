@@ -106,6 +106,10 @@ def worktree_is_reusable(repo_dir: str, path: str, branch: str) -> tuple[bool, s
     It cannot when the previous tick left work behind — uncommitted changes, or commits that
     never reached origin/master. Removing either would destroy a landing that was in flight,
     so the tick skips instead and names the path for the operator.
+
+    SCOPE (see lib.git.git_dirty, #1223): whole tree, untracked counted — an unlanded scratch
+    file is exactly the kind of leftover this must not discard. Stays inline rather than
+    importing lib.git because this file is deployed onto the host with no path to scripts/lib.
     """
     if not os.path.isdir(path):
         return True, ""

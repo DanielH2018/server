@@ -48,7 +48,15 @@ JINJA_RE = re.compile(r"^\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}$")
 # converted role drops out of this suite silently, which is how the check would end up passing
 # on almost nothing; `test_the_var_map_resolves_most_templated_sizes` is the floor that caught
 # exactly that when the first five roles adopted the macro.
-PVC_CALL_RE = re.compile(r"\bpvc\(\s*[^,()]+,\s*[^,()]+,\s*([^,()]+?)\s*\)")
+#
+# The trailing `(?:,\s*namespace=[^,()]+)?` is for claude-otel's four claims (#1230): the macro
+# grew an optional `namespace=` kwarg so they could pass `k8s_observability_namespace` instead
+# of the module default, and a plain 3-arg regex stops matching the moment a 4th argument
+# follows the size — which is exactly how a converted role drops out silently. See the accept
+# case below that pins this shape.
+PVC_CALL_RE = re.compile(
+    r"\bpvc\(\s*[^,()]+,\s*[^,()]+,\s*([^,()]+?)\s*(?:,\s*namespace=[^,()]+)?\s*\)"
+)
 IDENT_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
 
 
@@ -109,7 +117,7 @@ def test_the_var_map_resolves_most_templated_sizes() -> None:
     """Guard the guard: if resolution broke, every size would skip and the check would pass."""
     sizes = _declared_sizes()
     resolved = [s for _, _, s in sizes if SIZE_RE.match(s)]
-    assert len(resolved) >= 22, (
+    assert len(resolved) >= 23, (
         f"only {len(resolved)} of {len(sizes)} declared sizes resolved to a literal — "
         "variable resolution is broken, so this suite is checking almost nothing"
     )
@@ -148,6 +156,8 @@ def test_pvc_size_is_a_multiple_of_the_backup_block_size(
         "{{ pvc(registry_k8s_claim, registry_k8s_storage_class, registry_k8s_size) }}",
         "{% call pvc(mosquitto_k8s_claim, mosquitto_k8s_storage_class, mosquitto_k8s_size) %}",
         "{% call pvc('authelia-config', 'longhorn', authelia_k8s_storage) %}",
+        "{{ pvc('tempo-data', claude_otel_storage_class, claude_otel_tempo_storage,"
+        " namespace=k8s_observability_namespace) }}",
     ],
 )
 def test_the_macro_call_regex_finds_the_size_argument(text: str) -> None:

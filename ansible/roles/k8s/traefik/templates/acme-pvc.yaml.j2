@@ -1,15 +1,6 @@
+{% from 'pvc.yml.j2' import pvc with context %}
 ---
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: traefik-acme
-  namespace: {{ k8s_namespace }}
-spec:
+{% call pvc('traefik-acme', 'longhorn', traefik_k8s_acme_storage) %}
   # Backed up by the `default`-group RecurringJob the k3s role installs, but not load-bearing:
   # acme.json is regenerable, and losing it costs one ACME re-issue rather than data.
-  accessModes:
-    - ReadWriteOnce
-  storageClassName: longhorn
-  resources:
-    requests:
-      storage: {{ traefik_k8s_acme_storage }}
+{% endcall %}

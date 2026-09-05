@@ -46,6 +46,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 from lib import yaml_fast
+from lib.git import git, git_stdout
 
 from lib.render_guard import (
     ALL_VARS,
@@ -56,6 +57,28 @@ from lib.render_guard import (
 )
 from deploy_tools.exit_codes import DEPLOY_BROAD
 from lib.repo_paths import GITOPS_DEPLOY_FILES
+
+
+def _git_show(ref: str, path: str) -> str:
+    """`git show <ref>:<path>` via lib.git, unstripped (file content, not a summary line).
+
+    Routed through `git()` rather than a private `subprocess.run` (#1230), for the same
+    GIT_*-stripping reason as `_git_diff_names` below — but `git_stdout` would `.strip()` the
+    file's own trailing newline, so this calls `git()` directly and reads `.stdout` raw.
+    """
+    return git("show", f"{ref}:{path}", cwd=REPO).stdout
+
+
+def _git_diff_names(*args: str, cwd: Path) -> list[str]:
+    """`git diff --name-only <args>` via lib.git, split into a path list.
+
+    Routed through `git_stdout` rather than a private `subprocess.run` (#1230): it strips
+    every `GIT_*` env var first, so `cwd` alone decides which tree is read even under a hook
+    that sets `GIT_DIR`/`GIT_WORK_TREE`.
+    """
+    out = git_stdout("diff", "--name-only", *args, cwd=cwd)
+    return [line for line in out.splitlines() if line]
+
 
 # deploy_logic.py lives under the gitops_deploy role's files/ because that role's own script
 # (gitops_deploy.py) imports it as a same-directory sibling. scripts/ needs the same pure
@@ -275,14 +298,7 @@ def _load_deploy_logic():
 
 
 def _git_diff_paths(ref: str, cwd: Path = REPO) -> list[str]:
-    result = subprocess.run(
-        ["git", "diff", "--name-only", f"{ref}...HEAD"],
-        cwd=cwd,
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    return [line for line in result.stdout.splitlines() if line]
+    return _git_diff_names(f"{ref}...HEAD", cwd=cwd)
 
 
 def _incoming_paths(ref: str, cwd: Path = REPO) -> list[str]:
@@ -291,26 +307,12 @@ def _incoming_paths(ref: str, cwd: Path = REPO) -> list[str]:
     Two dots and this direction on purpose. `_git_diff_paths` answers "what have I changed",
     which is the wrong question here: the blocker is a commit somebody else already pushed.
     """
-    result = subprocess.run(
-        ["git", "diff", "--name-only", f"HEAD..{ref}"],
-        cwd=cwd,
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    return [line for line in result.stdout.splitlines() if line]
+    return _git_diff_names(f"HEAD..{ref}", cwd=cwd)
 
 
 def range_paths(old_ref: str, new_ref: str, cwd: Path = REPO) -> list[str]:
     """The paths a two-dot range touches, for a caller checking that a range is wide enough."""
-    result = subprocess.run(
-        ["git", "diff", "--name-only", f"{old_ref}..{new_ref}"],
-        cwd=cwd,
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    return [line for line in result.stdout.splitlines() if line]
+    return _git_diff_names(f"{old_ref}..{new_ref}", cwd=cwd)
 
 
 def _cmd_blockers(args: argparse.Namespace) -> int:
@@ -394,16 +396,7 @@ def comment_only_paths(paths: list[str], old_ref: str, new_ref: str) -> set[str]
     """
     from deploy_logic import comment_only_broad_changes
 
-    def show(ref: str, path: str) -> str:
-        return subprocess.run(
-            ["git", "show", f"{ref}:{path}"],
-            cwd=REPO,
-            capture_output=True,
-            text=True,
-            check=True,
-        ).stdout
-
-    return comment_only_broad_changes(paths, old_ref, new_ref, show)
+    return comment_only_broad_changes(paths, old_ref, new_ref, _git_show)
 
 
 def _cmd_changed(args: argparse.Namespace) -> int:

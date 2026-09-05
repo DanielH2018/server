@@ -30,16 +30,21 @@
     name           PVC name; matches whatever claimName a Deployment mounts.
     storage_class  e.g. `longhorn`, `longhorn-nobackup`, or a role's own `*_k8s_storage_class`.
     size           e.g. a role's own `*_k8s_storage` / `*_k8s_size` default.
+    namespace      defaults to the shared `k8s_namespace`, same idiom as ingressroute.yml.j2's
+                   `namespace | default(k8s_namespace, true)`. claude-otel's four claims (loki,
+                   prometheus, grafana, tempo) pass `k8s_observability_namespace` explicitly —
+                   the one thing that kept them off this macro until every existing caller was
+                   checked to confirm none needed the same override.
 
   Call with a body to insert a comment block between `spec:` and `accessModes:`; call plain
   (no `{% call %}`) when there's nothing to say there.
 #}
-{% macro pvc(name, storage_class, size) -%}
+{% macro pvc(name, storage_class, size, namespace=none) -%}
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: {{ name }}
-  namespace: {{ k8s_namespace }}
+  namespace: {{ namespace | default(k8s_namespace, true) }}
 spec:
 {% if caller is defined %}{{ caller() }}{% endif %}
   accessModes:
