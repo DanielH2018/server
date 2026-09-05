@@ -39,8 +39,12 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
 
 from lib import yaml_fast
 from lib.git import git
+from lib.repo_paths import REPO as _REPO_PATH
 
-REPO = str(_Path(__file__).resolve().parents[2])
+# `str`, because every consumer below builds paths with os.path.join. lib.repo_paths.REPO is a
+# Path; this module is the last of the twenty call sites that module's docstring describes,
+# which re-derived `parents[2]` by hand under three different names.
+REPO = str(_REPO_PATH)
 SECRETS_FILE = os.path.join(REPO, "ansible", "vars", "secrets.yml")
 REGISTRY_FILE = os.path.join(REPO, "ansible", "secret_rotation.yml")
 
