@@ -198,3 +198,37 @@ def test_every_inherited_credit_names_a_test_of_a_real_importer():
         not in imports.get(Path(r["name"]).stem, set())
     }
     assert unbacked == {}
+
+
+def test_inheritance_does_not_require_a_single_importer(tmp_path):
+    """The one-importer gate is on the TIE-BREAK, not on the inherited credit.
+
+    Worth pinning because the two rules sit next to each other and read alike. `_name_rank`
+    demands exactly one importer, because it REORDERS suites that already cover the module
+    and a wrong reorder replaces a right answer. Inheritance runs only after every other
+    match has failed, where the alternative is not a different suite but "untested" -- so
+    the gate would buy nothing and would cost the understatement the rule exists to fix.
+    `infra_map/constants.py` has five importers and is the live case.
+    """
+    repo, scripts = _repo(tmp_path)
+    _write(scripts / "pkg" / "leaf.py", '"""Summary."""\n')
+    for caller in ("beta", "alpha"):
+        _write(scripts / "pkg" / f"{caller}.py", '"""x"""\nfrom pkg import leaf\n')
+        _write(scripts / "pkg" / "tests" / f"test_{caller}.py", "x = 1\n")
+    rows = {r["name"]: r for r in g.build_rows(scripts, repo)}
+    assert rows["leaf.py"]["indirect_via"] == "importer"
+    assert rows["leaf.py"]["indirect_tests"] == "test_alpha.py"
+
+
+def test_the_infra_map_facade_members_inherit_the_facades_suite():
+    """Non-vacuity on the real tree, and the other half of the census in the generator's suite.
+
+    `test_a_facade_only_member_gets_no_by_name_import_credit` there asserts only that these
+    three do NOT hold an `import` credit, which is what keeps its accept half honest. That
+    leaves what they DO hold unpinned, so assert it here: nothing imports them by name, and
+    `test_gen_infra_map.py` reaches them through the facade's re-exports.
+    """
+    rows = {r["name"]: r for r in g.build_rows()}
+    for stem in ("constants", "inventory", "model"):
+        assert rows[f"{stem}.py"]["indirect_via"] == "importer", stem
+        assert rows[f"{stem}.py"]["indirect_tests"] == "test_gen_infra_map.py", stem

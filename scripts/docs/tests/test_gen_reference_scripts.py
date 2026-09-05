@@ -412,7 +412,7 @@ def test_deploy_sh_is_credited_to_the_test_that_reads_it():
 
 _IMPORTED = {"diagram", "groups", "html_views", "live", "render", "style"}
 # DECIDED: 2026-09-05 nothing imports these three by name; `test_gen_infra_map.py`
-# reaches them through re-exports. The reject half below fails the day one gains one.
+# reaches them through re-exports, so they carry `importer` rather than `import`.
 _FACADE_ONLY = {"constants", "inventory", "model"}
 _MEMBERS = {p.stem for p in (g.SCRIPTS / "infra_map").glob("*.py")} - {"gen_infra_map"}
 
@@ -429,12 +429,12 @@ def test_every_package_member_import_counts_as_coverage():
         assert rows[f"{stem}.py"]["indirect_via"] == "import", stem
 
 
-def test_a_facade_only_member_is_not_credited():
-    """The RED half, on live inputs: crediting every member would pass the accept half."""
+def test_a_facade_only_member_gets_no_by_name_import_credit():
+    """RED half: an `import` credit needs a by-name import, not package membership."""
     assert _FACADE_ONLY <= _MEMBERS, sorted(_MEMBERS)
     rows = {r["name"]: r for r in g.build_rows()}
     for stem in sorted(_FACADE_ONLY):
-        assert rows[f"{stem}.py"]["indirect_via"] == "", stem
+        assert rows[f"{stem}.py"]["indirect_via"] != "import", stem
 
 
 def test_a_bare_mention_of_a_package_member_is_not_coverage(tmp_path):
