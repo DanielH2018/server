@@ -883,10 +883,15 @@ cron's was 1200s until 2026-08-22, at which point this paragraph was wrong in th
 matters: the cron gave up mid-incident and skipped that week's rotation, with no retry until the
 next weekly tick.
 
-Both 3000s waits are derived from the same four timeouts and are machine-pinned against them —
-`tests/test_gitops_deploy_timeout_budgets.py`, `test_secret_rotate_lock_wait_clears_the_deployers_worst_case_hold`
-and `test_deploy_sh_lock_wait_clears_the_deployers_worst_case_hold`, which share one
-`_worst_lock_hold()` derivation so the two waits cannot disagree. Raising any of
+**All FOUR waiters on this lock are pinned as a census, not one test each.** `deploy.sh`,
+secret-rotate, docs-refresh and eval-run each wait 3000s, derived from the same four timeouts
+via `_LOCK_WAITERS` and `_worst_lock_hold()` in `tests/test_gitops_deploy_timeout_budgets.py`.
+Only the first two were pinned until 2026-09-05, and the two that were not had drifted: both sat
+at 2700, *inside* the 2940s hold, and docs-refresh's own comment claimed it matched
+secret-rotate while secret-rotate was 3000. PR #585 resized the staging gate and raised the two
+pinned copies; nothing recomputed the unpinned ones. A per-consumer test covers only the
+consumers somebody wrote one for, so the census plus `test_the_lock_waiter_census_is_non_vacuous`
+is what makes a new waiter fail rather than pass silently. Raising any of
 `gitops_deploy_k8s_timeout_s`, `gitops_deploy_k8s_rollback_timeout_s`,
 `gitops_deploy_staging_gate_timeout_s` or `gitops_deploy_staging_expect_timeout_s` fails those tests rather
 than silently shortening an operator's wait, which is how `deploy.sh`'s copy rotted once already

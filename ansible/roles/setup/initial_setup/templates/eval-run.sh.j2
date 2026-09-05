@@ -232,8 +232,13 @@ if ! jq -s 'add' "$REPORT_DIR"/*.json > "$COMBINED" 2>>"$LOG"; then
   exit 1
 fi
 
+# fd 9 held for the script's life. -w 3000 matches secret-rotate, docs-refresh and deploy.sh:
+# it must outlast gitops-deploy's worst-case hold on this lock (2940s), not a round number.
+# This sat at 2700 — inside that hold — because it was hand-copied from docs-refresh's own
+# stale figure. Giving up here throws away a sweep that already cost real API dollars.
+# ENFORCED by gitops_deploy/tests/test_gitops_deploy_timeout_budgets.py.
 exec 9>/var/lock/server-git-tree.lock
-flock -w 2700 9 || { alert "eval-run: git-tree lock held >45m; skipped"; exit 1; }
+flock -w 3000 9 || { alert "eval-run: git-tree lock held >50m; skipped"; exit 1; }
 
 # A dirty tree means a human or another job is mid-edit. The sweep already ran and cost real
 # API dollars; recording it against a tree someone else is changing would misattribute the
