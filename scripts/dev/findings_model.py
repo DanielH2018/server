@@ -51,6 +51,11 @@ for _d in DOMAINS:
 # is best-effort: `cmd_open` retries without it and warns rather than losing the finding.
 PROJECT_TITLE = "Claude findings"
 
+# DECIDED: the underscore-prefixed names below, and `_prefixed` further down, cross a module
+# boundary on purpose. They moved out of findings.py byte-for-byte, changing no behaviour;
+# renaming them would have turned that move into a rewrite. The underscore still carries what
+# it did before — internal to the findings modules, not an API another script may import.
+# Conventions for a new module: docs/python-code-organization.md.
 _LIST_FIELDS = "number,title,state,labels,body,createdAt,closedAt,url,comments"
 # `\s*$` rather than `$`: a body fetched from the API can carry CRLF line endings, and
 # `re.M`'s `$` matches before the `\n` but not before the `\r`.

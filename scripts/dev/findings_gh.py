@@ -4,8 +4,12 @@ Everything here takes a `FindingsTools`, so a test answers gh from a fake rather
 the network. `load_issues` defaults its own, which is how `scripts/docs/reference/backlog.py`
 calls it with nothing to inject.
 
-`run` is the whole write surface: it prints a plan under `--dry-run` and calls `tools.gh`
-otherwise, so no command has to remember which mode it is in.
+`run` carries almost all of the write surface: it prints a plan under `--dry-run` and calls
+`tools.gh` otherwise, so a command that goes through it does not have to remember which mode
+it is in. `_create_with_optional_project` is the exception, because it reads the created
+issue's URL back out of gh's stdout and a printed plan has no URL to read. It calls
+`tools.gh` unconditionally, so a dry run must be stopped BEFORE it — `cmd_open` does that at
+`findings.py:130`, branching on `args.dry_run` and calling `run` instead.
 """
 
 import subprocess
