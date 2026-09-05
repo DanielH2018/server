@@ -55,14 +55,15 @@ class ScriptedTick:
         paths: what `git diff --name-only local..origin` lists.
         files: `"<ref>:<path>"` to the content `git show` returns for it.
         tree_listing: what `git ls-tree` at origin lists under roles/k8s/.
-        diffs: k8s service to the `-U0` diff of its defaults file across the range.
+        diffs: k8s service to the `-U0` diff of its defaults file across the range. Every
+            service the image-diff read reaches for must have an entry, `""` included.
         playbook_outcomes: an exception to raise from each playbook run in turn; None runs
             clean, and the list running out means every later run is clean.
         run_error: raised by every `run()` call instead of answering, for the paths that must
             survive a git failure.
         healthy: what the Docker health gate reports, PER SERVICE. `render()` seeds a service
-            as healthy, so a test flips one name; a gate call for a name nobody rendered is an
-            AssertionError rather than a silent pass.
+            as healthy, so a test flips one name. A name nobody rendered is vacuously healthy,
+            exactly as production is; a RENDERED service with no entry is an AssertionError.
         staging_verdict: the word the staging scripts' exit codes stand for — "pass",
             "rejected" or "no_verdict". "skipped" is not settable here; it is what the real
             `consult_staging` returns when the gate is off or nothing is in scope.
@@ -156,7 +157,17 @@ class ScriptedTick:
         if sub == "diff" and argv[2] == "--name-only":
             return "\n".join(self.paths)
         if sub == "diff" and argv[2] == "-U0":
-            return self.diffs.get(argv[-1].split("/")[3], "")
+            service = argv[-1].split("/")[3]
+            # No `.get(..., "")` default. An empty diff is a REAL production answer (the
+            # range touched no line of that defaults file), so a silent default would let a
+            # test that forgot to script one read as "nothing changed" and pass. Every other
+            # `run()` path raises on an unscripted call; this is the one that did not.
+            assert service in self.diffs, (
+                f"the image-diff read asked for {service!r}, which no test scripted "
+                f"(scripted: {sorted(self.diffs)}). Script an empty diff as "
+                f"diffs[{service!r}] = '' when that is what the test means."
+            )
+            return self.diffs[service]
         if sub == "show":
             if argv[2] not in self.files:
                 raise RuntimeError(
@@ -205,8 +216,32 @@ class ScriptedTick:
         return self.ci
 
     def service_healthy(
-        self, _repo: str, service: str, _timeout: float, deadline: float | None = None
+        self, repo: str, service: str, _timeout: float, deadline: float | None = None
     ) -> bool:
+        """What production reports for `service`, INCLUDING its vacuously-healthy case.
+
+        `deploy_io.service_healthy` is `all(health_ok(c) for c in containers_for(...))`, and
+        `containers_for` returns [] for a service whose compose was never rendered on this
+        host (dozzle is daniel-pi-only). `all([])` is True, so that service passes the gate
+        without a container ever being polled. This fake reproduces that: no rendered compose
+        means True, which is what makes the vacuous path testable at all.
+
+        Everything else here is a scripting error rather than an answer. A RENDERED service
+        the test never scripted raises, as before. So does a `healthy[svc] = False` for a
+        service nobody rendered — production cannot report that, so a test leaning on it
+        would be asserting against a state the deployer never sees.
+        """
+        rendered = (
+            pathlib.Path(repo) / "containers" / service / "docker-compose.yml"
+        ).is_file()
+        if not rendered:
+            assert self.healthy.get(service, True), (
+                f"the test scripted {service!r} UNHEALTHY but never rendered its compose; "
+                f"production gates the containers of a rendered compose and reports a "
+                f"service with none as healthy (all([]) is True). Call render({service!r}) "
+                f"first if the gate is meant to see it."
+            )
+            return True
         assert service in self.healthy, (
             f"the health gate asked about {service!r}, which no test scripted "
             f"(scripted: {sorted(self.healthy)})"
