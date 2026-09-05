@@ -9,6 +9,7 @@ that wants the REAL derivation passes `Classifier()` and keeps the fake boundari
 `test_land_pipeline.py` has one that does.
 """
 
+import atexit
 import subprocess
 import tempfile
 from dataclasses import dataclass, field
@@ -32,9 +33,18 @@ MERGE_SHA = "0123456789abcdef0123456789abcdef01234567"
 # TemporaryDirectory rather than mkdtemp: mkdtemp leaves the directory behind for good, and
 # `-n auto` makes one per xdist worker on every run. The object is held at module scope so
 # its finalizer runs at interpreter exit and not before.
+#
+# The cleanup is done via an explicit atexit hook rather than relying on TemporaryDirectory's
+# own implicit finalizer. That finalizer fires from a `weakref.finalize` callback and emits a
+# `ResourceWarning` first, which `filterwarnings = ["error"]` (pyproject.toml) turns into an
+# exception raised inside atexit processing -- non-deterministically, since it depends on
+# whether pytest's warnings plugin has already restored the original filters by the time the
+# interpreter tears this module down. An explicit `.cleanup()` registered here runs first and
+# removes the directory, so the implicit finalizer finds nothing left to warn about (see #1231).
 _PRIMARY_TMP = tempfile.TemporaryDirectory(
     prefix="land-primary-", ignore_cleanup_errors=True
 )
+atexit.register(_PRIMARY_TMP.cleanup)
 PRIMARY = Path(_PRIMARY_TMP.name)
 STATE = Path("/state")
 
