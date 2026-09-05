@@ -9,7 +9,7 @@ Run: uv run pytest scripts/secrets_mgmt/tests/test_rotation_tools.py
 
 import subprocess
 
-import secret_rotation as sr
+from secrets_mgmt import secret_rotation as sr
 from _rotation_fakes import Fakes, build_tools, process_calls
 from secrets_mgmt.rotation_tools import RotationTools, load_registry, save_registry
 
@@ -46,12 +46,19 @@ def test_load_registry_missing_file_returns_empty_skeleton(tmp_path):
 
 
 def test_the_default_tier_table_is_the_one_secret_rotation_assigns():
-    """The cadence table is written out twice, and this is the only thing holding it once.
+    """The cadence table is written out twice, and this holds the two VALUES equal.
 
     `secret_rotation.TIER_DAYS` has to stay a literal there (gen_doc_fragments AST-reads it)
     and `rotation_tools` may not import its own facade to reach it, so each file spells the
     table out. Nothing else compares them: editing one cadence and not the other would ship a
     tool whose audit and whose published page disagree.
+
+    It does NOT guard the literal FORM the fragment reader needs — an equal value spelled
+    `dict(DEFAULT_TIER_DAYS)` would pass here and break `gen_doc_fragments.py`, whose
+    `module_constant` runs `ast.literal_eval` over the assignment rather than importing the
+    module. The guard for that half is
+    `test_every_committed_fragment_matches_what_the_generator_writes_now`, which runs the
+    generator.
     """
     assert RotationTools().tier_days == sr.TIER_DAYS
 

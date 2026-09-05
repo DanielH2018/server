@@ -1,4 +1,4 @@
-"""Fakes for every `RotationTools` boundary, so `test_secret_rotation.py` patches nothing.
+"""Fakes for every `RotationTools` boundary, so the tests around it patch nothing.
 
 Every fake appends `(name, args, kwargs)` to a shared `calls` list, which is how a test proves
 "the registry was saved after the value was written" without reading source.

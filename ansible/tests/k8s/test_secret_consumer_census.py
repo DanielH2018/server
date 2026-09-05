@@ -20,9 +20,17 @@ import pytest
 from _helpers import REPO
 
 _REPO = REPO
-_sys.path.insert(0, str(_REPO / "scripts" / "secrets_mgmt"))
+_sys.path.insert(0, str(_REPO / "scripts"))
 
-import secret_rotation as sr  # noqa: E402 — needs the path insert above
+# Both need the path insert above, hence the E402. The census is pure over the tree and lives
+# in `consumers`; `sops_names` reads the encrypted store's plaintext KEYS and so stays with
+# the other process boundaries in `rotation_tools`.
+from secrets_mgmt.consumers import (  # noqa: E402
+    consumer_commands,
+    consumer_tags,
+    tree_consumers,
+)
+from secrets_mgmt.rotation_tools import sops_names  # noqa: E402
 
 
 # The incident this file exists for, kept as the accept case. Verified by hand on 2026-08-29
@@ -47,7 +55,7 @@ def _phantom_tags(name: str, tags) -> list[str]:
     old token and stamped `last_rotated` green. The fix was a hand-run `grep -rl`; this makes
     that grep repeatable.
     """
-    census = sr.tree_consumers(name)
+    census = tree_consumers(name)
     return [tag for tag in tags if tag not in census]
 
 
@@ -63,21 +71,21 @@ def _setup_plane_blind_spots(name: str, tags) -> list[str]:
     if not tags:
         return []
     return sorted(
-        role for role, plane in sr.tree_consumers(name).items() if plane == "setup"
+        role for role, plane in tree_consumers(name).items() if plane == "setup"
     )
 
 
 def test_the_census_finds_every_known_consumer_of_the_secret_that_caused_the_incident():
-    assert sr.tree_consumers("sonarr_api_key") == SONARR_KEY_CONSUMERS
+    assert tree_consumers("sonarr_api_key") == SONARR_KEY_CONSUMERS
 
 
 def test_the_census_reports_nothing_for_a_name_no_role_references():
     """The control. Without it, a census that matched everything would pass the test above."""
-    assert sr.tree_consumers("sonarr_api_key_that_does_not_exist_anywhere") == {}
+    assert tree_consumers("sonarr_api_key_that_does_not_exist_anywhere") == {}
 
 
 def test_the_census_separates_the_plane_deploy_sh_cannot_reach():
-    consumers = sr.tree_consumers("sonarr_api_key")
+    consumers = tree_consumers("sonarr_api_key")
 
     assert consumers["fake_remux"] == "setup", (
         "fake_remux is the consumer deploy.sh cannot reach; if it stops being classified as "
@@ -87,7 +95,7 @@ def test_the_census_separates_the_plane_deploy_sh_cannot_reach():
 
 
 def test_the_repair_commands_route_each_plane_to_a_playbook_that_can_reach_it():
-    commands = sr.consumer_commands("sonarr_api_key")
+    commands = consumer_commands("sonarr_api_key")
 
     deploy_cmd = [c for c in commands if "deploy.sh" in c]
     setup_cmd = [c for c in commands if "initial_setup.yml" in c]
@@ -100,10 +108,10 @@ def test_the_repair_commands_route_each_plane_to_a_playbook_that_can_reach_it():
     assert "--tags fake_remux" in setup_cmd[0]
 
 
-@pytest.mark.parametrize("name", sr.sops_names())
+@pytest.mark.parametrize("name", sops_names())
 def test_no_declared_consumer_tag_names_a_role_that_never_references_the_secret(name):
     """Every tag consumer_tags() routes to must actually render the secret."""
-    phantom = _phantom_tags(name, sr.consumer_tags(name))
+    phantom = _phantom_tags(name, consumer_tags(name))
 
     assert not phantom, (
         f"{name} routes to {phantom}, which reference it nowhere in ansible/roles/. "
@@ -112,9 +120,9 @@ def test_no_declared_consumer_tag_names_a_role_that_never_references_the_secret(
     )
 
 
-@pytest.mark.parametrize("name", sr.sops_names())
+@pytest.mark.parametrize("name", sops_names())
 def test_no_auto_deployable_secret_hides_a_setup_plane_consumer(name):
-    blind = _setup_plane_blind_spots(name, sr.consumer_tags(name))
+    blind = _setup_plane_blind_spots(name, consumer_tags(name))
 
     assert not blind, (
         f"{name} is treated as auto-deployable but is also consumed by setup-plane role(s) "

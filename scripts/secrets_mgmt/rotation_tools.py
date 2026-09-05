@@ -4,9 +4,10 @@ A test replaces one field of `RotationTools` and never a module attribute. The d
 the real implementations, defined HERE rather than beside their callers: `secret_rotation.py`
 is the entry point, so a default imported from it would be a cycle — and, when that file runs
 as `__main__`, a second copy of the module under a second name. **This module names
-`secret_rotation` nowhere**, at import time or later, which is what makes it a leaf the split
-in Task 10 can move. The one fact both files hold is the tier table, and each spells the
-literal out; `_TIER_DAYS` below says why, and which test holds the two equal.
+`secret_rotation` nowhere**, at import time or later, which is what makes it a leaf every
+other module in the package can import. The one fact both files hold is the tier table, and
+each spells the literal out; `DEFAULT_TIER_DAYS` below says why, and which test holds the two
+equal.
 
 WHY THE REAL IMPLEMENTATIONS TAKE A `run` KEYWORD. `sops_set` and `decrypted_values` build
 an argv whose exact shape is the security property: a freshly minted token travels on stdin,
@@ -21,7 +22,6 @@ import contextlib
 import datetime as dt
 import os
 import subprocess
-import sys
 import urllib.parse
 import urllib.request
 from collections.abc import Callable, Mapping
@@ -32,7 +32,8 @@ from zoneinfo import ZoneInfo
 import yaml
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
-# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
+# directory on sys.path, and pyproject's `pythonpath` is a pytest setting. `sys` is spelled
+# `_sys` throughout so `run_deploy` below shares the one import the bootstrap needs.
 import sys as _sys
 from pathlib import Path as _Path
 
@@ -43,8 +44,6 @@ from lib.git import git
 
 REPO = str(_Path(__file__).resolve().parents[2])
 SECRETS_FILE = os.path.join(REPO, "ansible", "vars", "secrets.yml")
-# Repo-relative, for git revspecs — `git show <rev>:<path>` needs the tracked path.
-SECRETS_GIT_PATH = "ansible/vars/secrets.yml"
 REGISTRY_FILE = os.path.join(REPO, "ansible", "secret_rotation.yml")
 
 
@@ -176,19 +175,19 @@ def run_deploy(tags: list[str], *, run: Callable = subprocess.run) -> int:
     # it for ansible; anywhere else it is already clear and this does nothing. The
     # .claude/hooks/uv-python.sh fixup cannot reach here — this command names ansible
     # nowhere a hook reading the session's command text could see it.
-    for handle in (sys.stdin, sys.stdout, sys.stderr):
+    for handle in (_sys.stdin, _sys.stdout, _sys.stderr):
         with contextlib.suppress(OSError, ValueError):
             os.set_blocking(handle.fileno(), True)
     return run(cmd, cwd=REPO).returncode
 
 
-# The rotation cadence per tier. `secret_rotation.py` assigns the same table as a literal,
-# because `scripts/docs/gen_doc_fragments.py` AST-reads it out of THAT file and a leaf may not
-# import its own facade. The two literals are held equal by
-# `test_the_default_tier_table_is_the_one_secret_rotation_assigns`; Task 10 of the
-# module-splits plan gives the table one home. A MappingProxyType rather than a dict, because
-# a dataclass rejects a mutable default and this object is frozen.
-_TIER_DAYS = MappingProxyType(
+# The rotation cadence per tier, and the default `secret_registry.py` seeds, syncs and audits with.
+# `secret_rotation.py` assigns the same table AS A LITERAL, because
+# `scripts/docs/gen_doc_fragments.py` reads it out of THAT file with `ast.literal_eval` and a
+# leaf may not import its own facade. The two copies are held equal by
+# `test_the_default_tier_table_is_the_one_secret_rotation_assigns`. A MappingProxyType rather
+# than a dict, because a dataclass rejects a mutable default and this object is frozen.
+DEFAULT_TIER_DAYS = MappingProxyType(
     {"auto": 180, "assisted": 365, "external": 365, "pinned": 730, "ignore": None}
 )
 
@@ -206,4 +205,4 @@ class RotationTools:
     sops_set: Callable[[str, str], None] = sops_set
     kuma_push: Callable[[str, bool, str], None] = kuma_push
     deploy: Callable[[list[str]], int] = run_deploy
-    tier_days: Mapping[str, int | None] = _TIER_DAYS
+    tier_days: Mapping[str, int | None] = DEFAULT_TIER_DAYS

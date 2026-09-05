@@ -12,9 +12,11 @@ was the obvious alternative and is a bad test — the rendered page legitimately
 operator to run `sops`, so the scan fails on correct output while proving nothing about
 what the code reads.
 
-WHY IT IMPORTS secret_rotation. Due dates come from that module's TIER_DAYS and due_date(),
-rather than a second implementation here. Two implementations of a due date drift, and the
-page would then disagree with the audit cron that actually pages.
+WHY IT IMPORTS THE ROTATION TOOL'S OWN MODULES. Due dates come from `secrets_mgmt.secret_registry`'s
+`due_date()` and the cadence table behind it, rather than a second implementation here. Two
+implementations of a due date drift, and the page would then disagree with the audit cron that
+actually pages. `secrets_mgmt.rotation_tools` supplies the clock and the registry read for the
+same reason.
 
 Usage::
 
@@ -35,7 +37,8 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from lib.repo_paths import ANSIBLE
-from secrets_mgmt import secret_rotation
+from secrets_mgmt import secret_registry as rotation_registry
+from secrets_mgmt import rotation_tools
 
 REGISTRY = ANSIBLE / "secret_rotation.yml"
 
@@ -54,12 +57,12 @@ def build_rows(
     registry: Path = REGISTRY, today: dt.date | None = None
 ) -> list[dict[str, str]]:
     """One row per registered secret: name, tier, last rotated, due, days left."""
-    now = today or secret_rotation.today()
-    reg = secret_rotation.load_registry(str(registry))
+    now = today or rotation_tools.today()
+    reg = rotation_tools.load_registry(str(registry))
     rows = []
     for name, entry in sorted((reg.get("entries") or {}).items()):
         tier = str(entry.get("tier", "unknown"))
-        due = secret_rotation.due_date(entry)
+        due = rotation_registry.due_date(entry)
         rows.append(
             {
                 "name": name,
