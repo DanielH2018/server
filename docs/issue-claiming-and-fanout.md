@@ -66,7 +66,13 @@ Released: `worktree-issue-1132`
 ```
 
 Reading who holds an issue means folding the comment list forward in `createdAt` order: a
-`Claim:` line opens, a matching `Released:` line closes, and the last unclosed claim wins.
+`Claim:` line opens if no claim is open already, and a matching `Released:` line closes.
+
+**The first writer wins, not the last.** gh returns comments in `createdAt` order, so the
+earlier of two racing claims is the earlier comment. Letting a later claim overwrite a live
+one would mean a session could take an issue out from under another by claiming it again —
+and worse, the first claimant's own `release` would then be refused, so it could not clean up
+after losing.
 
 **Why a comment rather than a body edit.** Comments are append-only and carry `createdAt`.
 Two sessions commenting concurrently both succeed and the ordering is total, so a read-back
@@ -102,8 +108,9 @@ question — is this worktree done with — is a question that module already an
 
 ## Commands
 
-All six extend `findings.py`, matching its plan-then-run split: the argv goes in
-`findings_plans.py`, the parsing in `findings_model.py`, the `gh` calls in `findings_gh.py`.
+Five new subcommands, plus a change to `list` and one to `close`. All of them match
+`findings.py`'s plan-then-run split: the argv goes in `findings_plans.py`, the parsing in
+`findings_model.py`, the `gh` calls in `findings_gh.py`.
 
 ### `claim <n>… --worktree <name> [--session <id>]`
 
@@ -127,6 +134,12 @@ the way to see the state — a claim protocol with no way to list claims is a on
 Releases every stale claim, printing why each was judged stale. `--dry-run` plans and writes
 nothing, like every other command here.
 
+### `close` releases the claim it finds
+
+Closing a claimed issue posts its release and drops the `claimed` label first. `claims`,
+`reap` and `next` all read open issues, so a claim stranded on a closed issue leaves every
+view at once — invisible rather than wrong, which is harder to notice.
+
 ### `next [--limit N]`
 
 The picking command. Returns open issues that are: `claude`-labelled, not `manual`, not
@@ -136,11 +149,12 @@ live-claimed, and not already referenced by an open PR, ordered by the existing
 An ad-hoc session runs this instead of eyeballing `list` and guessing. The open-PR check is
 what stops a session picking up work another session has already finished but not landed.
 
-### `list --include-manual`
+### `list`
 
-`list` gains the flag, but the default **marks** manual rows rather than hiding them. Hiding
-them is how an issue like #1132 stops being visible to anyone, including the operator who
-reserved it.
+`list` gains no flag. It **marks** a manual row `[manual]` and a claimed one
+`[claimed:<worktree>]`, and hides neither. Hiding a manual row is how an issue like #1132
+stops being visible to anyone, including the operator who reserved it — and a flag defaulting
+to "show" that nothing can turn off is a flag that documents the opposite of what it does.
 
 ## What a fan-out agent may not do
 
@@ -216,7 +230,8 @@ scope here.
    worktree name, because a subagent's worktree name is auto-generated and unknown until it
    starts — and a claim naming a worktree that does not exist yet would read as stale
    immediately. The orchestrator's worktree is live for the whole fan-out, so the claim is too.
-3. **Spawn.** One Opus agent per batch, each in its own named worktree. The brief carries the
+3. **Spawn.** One Opus agent per batch, each in its own worktree — auto-named, per the
+   measurement below. The brief carries the
    issue bodies, the claim the agent already holds, the repo's `land-after-merge` contract, the
    `close --fixed` restriction above, and the instruction to file anything it does not fix with
    `findings.py open`.

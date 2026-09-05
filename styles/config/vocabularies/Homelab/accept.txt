@@ -389,3 +389,5 @@ monkeypatch
 [Oo]rchestrator
 [Oo]rchestrator's
 [Gg]itignored
+[Ss]ubcommand
+[Ss]ubcommands
