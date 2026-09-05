@@ -93,3 +93,24 @@ def test_a_nonzero_exit_is_a_failed_decrypt_not_an_empty_one():
 def test_decrypt_drops_the_sops_metadata_key():
     tools, _ = build_tools(Fakes(run_stdout="a_push_token: abc\nsops:\n  mac: xyz\n"))
     assert tools.sops_decrypt("whatever.yml") == {"a_push_token": "abc"}
+
+
+# ── both subprocess arms are time-bounded ───────────────────────────────────
+def test_both_sops_boundaries_bound_their_subprocess_with_a_timeout():
+    """A `sops` that never returns must not hang the cron that called it.
+
+    Both arms run unattended — `decrypted_values` from the daily audit and the prek gate,
+    `sops_set` from the weekly rotate cron, which holds the repo-tree lock the deploy
+    pipeline shares while it runs. `subprocess.run` waits forever without this kwarg, so the
+    bound is asserted where it is handed to the process rather than where it is written.
+    """
+    tools, recorded = build_tools(Fakes())
+    tools.sops_set("a_push_token", "deadbeef")
+    tools.sops_decrypt("whatever.yml")
+
+    timeouts = [
+        (cmd[1], kwargs.get("timeout")) for cmd, kwargs in process_calls(recorded)
+    ]
+    assert timeouts == [("set", 30), ("--decrypt", 30)], (
+        "every sops call must carry a timeout: %s" % timeouts
+    )

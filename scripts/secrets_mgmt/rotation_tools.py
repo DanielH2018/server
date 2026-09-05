@@ -107,6 +107,12 @@ def sops_set(name: str, value: str, *, run: Callable = subprocess.run) -> None:
         text=True,
         check=True,
         cwd=REPO,
+        # A hung `sops set` would otherwise hang the weekly secret-rotate cron forever,
+        # mid-batch, still holding the repo-tree lock the deploy pipeline shares. Bounded
+        # the same as the sibling `decrypted_values`; `cmd_rotate` catches the
+        # TimeoutExpired alongside its other failures, so the names already written to the
+        # store are still reported.
+        timeout=30,
     )
 
 

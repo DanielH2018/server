@@ -263,8 +263,8 @@ def cmd_rotate(args, tools: RotationTools) -> int:
     """Rotate `args.name`, or every coming-due auto-tier secret, and optionally redeploy.
 
     Dry-run by default; `--commit` writes new values via `sops set`. Exits 2 when
-    `args.name` names a non-auto-tier secret, 3 when a `sops set` fails partway through the
-    batch, 1 when `--deploy` is given and the redeploy fails (the new tokens are written but
+    `args.name` names a non-auto-tier secret, 3 when a `sops set` fails or times out partway
+    through the batch, 1 when `--deploy` is given and the redeploy fails (the new tokens are written but
     their consumers are not), 0 otherwise.
     """
     reg = tools.load_registry()
@@ -309,16 +309,24 @@ def cmd_rotate(args, tools: RotationTools) -> int:
         )  # 32 hex chars — the format Kuma push tokens require
         try:
             tools.sops_set(name, new)
-        except (subprocess.CalledProcessError, OSError) as exc:
+        except (
+            subprocess.CalledProcessError,
+            OSError,
+            subprocess.TimeoutExpired,
+        ) as exc:
             # Each `sops set` writes secrets.yml on its own, so a failure partway leaves the
             # file holding NEW values for the names already done while their dates were only
             # updated in memory. Save the registry first: the two files then agree about what
             # moved, whichever way the caller resolves it, and secret-rotate.sh reverts both
             # together. Do NOT deploy — the tokens that landed are about to be reverted out of
             # the tree, so deploying them would leave the cluster on values nothing records.
+            # A TimeoutExpired arrives here too: `sops_set` bounds its write, and a hang is
+            # the same half-state as a crash — earlier names are already in the store.
             # `exc` is safe to print: the argv `sops_set` builds carries the secret's NAME and
             # never its value, which is what
-            # `test_rotate_commit_sends_new_token_on_stdin_not_argv` pins.
+            # `test_rotate_commit_sends_new_token_on_stdin_not_argv` pins. TimeoutExpired
+            # renders that same argv, and its `.stdout`/`.stderr` are None here because
+            # `sops_set` captures neither.
             if written:
                 tools.save_registry(reg)
             print(
