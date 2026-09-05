@@ -238,6 +238,9 @@ _ROOT_BY_DESIGN = {
     # world-readable, so the non-root sidecar can read them (#990). Root over root-owned data
     # it reads as the owner; DAC_READ_SEARCH covers the sources if the image reowns them.
     ("traefik", "crowdsec-data-install"),
+    # Same container in the authelia pod, for the same reason (#1177). Both pods run the
+    # crowdsec agent sidecar non-root, so both need the datafiles copied in readable.
+    ("authelia", "crowdsec-data-install"),
 }
 
 # Runs as root over root-owned data. These are the ones with real work behind them: each needs an
