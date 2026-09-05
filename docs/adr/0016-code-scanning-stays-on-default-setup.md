@@ -135,6 +135,10 @@ one file each, and both are removed at source in the same way as the TLS floor:
   keys of that dict. The registry key is now `entries:` (the code already called them
   entries), and the function that lists the SOPS top-level keys is `sops_names()`. Every
   reader of the registry moved with it; the file format is otherwise unchanged.
+  PR #1144 has since split that file into leaves: the registry logic is in
+  `secret_registry.py` and `sops_names()` is in `rotation_tools.py`, with `secret_rotation.py`
+  left as the entry point. The path above is where CodeQL recorded the seven alerts, not where
+  the code that produced them lives now.
 
 A rename to satisfy a name heuristic is the kind of change the decision above rejected for
 the test assertions. It is accepted here because both new names are at least as accurate as
