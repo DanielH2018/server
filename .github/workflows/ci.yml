@@ -13,15 +13,27 @@ on:
   push:
     branches: [master]
 
-# Cancel a superseded run when new commits land on the same ref (PR force-push / stacked
-# pushes) so redundant lint/test runs don't pile up.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  # Cancel a superseded run on a PR branch only. On master every SHA needs its own verdict:
-  # the deployer's CI gate and `await_ci.py` read check-runs per commit, and a run cancelled by
-  # the next merge leaves that commit with no verdict forever. 4 of the 10 master runs before
-  # 2026-09-01 ended that way, each one restarting a ~5-minute full sweep that every landing
-  # behind it then waited on. Runner minutes are free on a public repo.
+  # A PR branch groups by ref, so a force-push supersedes its own earlier run. A push to
+  # master groups by SHA, which puts every master commit in a group of its own.
+  #
+  # Master needs that because every SHA needs its own verdict: the deployer's CI gate and
+  # `await_ci.py` read check-runs per commit, and a commit with no verdict reads `cancelled`
+  # forever — every landing behind it then waits on a later SHA's full sweep instead.
+  #
+  # `cancel-in-progress: false` was set on 2026-09-01 to buy that and DOES NOT. It governs the
+  # RUNNING run; it does not protect a QUEUED one. GitHub keeps at most one pending run per
+  # concurrency group, so when master moves faster than a ~3-minute sweep, each new push evicts
+  # the pending run ahead of it. Measured 2026-09-05, with eight sessions landing: nine master
+  # runs cancelled between 16:34:07 and 16:37:31, each 4-52s after creation, every one with
+  # `total_count: 0` jobs — evicted while queued, never started. Nine master SHAs left with no
+  # verdict in three and a half minutes.
+  #
+  # Grouping by SHA means a master run is never queued behind another and so can never be
+  # evicted. The cost is concurrent master sweeps rather than serialised ones, which is why
+  # this is safe here specifically: runner minutes are free on a public repo, and the queue
+  # measurement that prompted this found job start lag at 1-4s with nothing waiting on a slot.
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
