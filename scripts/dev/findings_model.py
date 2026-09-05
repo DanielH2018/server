@@ -24,13 +24,11 @@ DOMAINS = (
     "home-assistant",
 )
 
-# How a finding can stop being open. `fixed` closes as completed; the other two close as not
-# planned and carry a label of the same name. `refuted` means a skeptic disproved it, so the
-# register would be lying to keep it; `accepted` means it is TRUE and the operator chose to
-# live with it. Both are terminal — `plan_open` refuses to reopen either (`NO_REOPEN`), which
-# is the whole point: without `accepted`, an accepted trade-off had to be closed by hand and
-# the next review re-filed it as a regression.
-CLOSE_OUTCOMES = ("fixed", "refuted", "accepted")
+# The two closes nothing reopens. A finding closes as `fixed` (completed), or as one of these
+# two, which close as not planned and carry a label of the same name: `refuted` means a
+# skeptic disproved it, `accepted` means it is TRUE and the operator chose to live with it.
+# `plan_open` returning early on both is the whole point — without `accepted`, an accepted
+# trade-off had to be closed by hand, and the next review re-filed it as a regression.
 NO_REOPEN = frozenset(("refuted", "accepted"))
 
 # name -> (colour, description). Colours are Catppuccin Mocha so the label set reads as one
