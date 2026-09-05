@@ -15,8 +15,9 @@ class keeps the name the other seams use (`RotationTools`, `FindingsTools`).
 
 WHY `fetch_ci_verdict` LIVES HERE AND TAKES ITS CONFIG AS KEYWORDS. It is the one boundary
 whose exact request — the URL, the headers, and the fail-closed `pending` on any error — is
-the thing a test replacing the whole field would stop exercising. Only the pure `ci_verdict`
-reduction has a test today; the request path itself is covered by no test.
+the thing a test replacing the whole field would stop exercising, so the two halves are tested
+apart: `test_deploy_git_ci.py` covers the pure `ci_verdict` reduction and
+`test_deploy_toolbox_ci_request.py` drives this request path through a stubbed `urlopen`.
 `default_tools` binds `require_ci`, `repo` and `contexts` from the one `Config` the entry
 module already parsed, rather than re-reading config.env here: `load_config` LOGS when it
 disarms the CI gate on an empty context list, and a second parse would print that line twice
