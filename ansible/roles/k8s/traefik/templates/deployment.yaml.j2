@@ -91,12 +91,15 @@ spec:
         # world-readable, and the rsync's own `--ignore-existing` then leaves the files alone.
         #
         # ROOT-OWNED is the half that keeps it readable, not just a consequence of needing
-        # DAC_READ_SEARCH. rsync sets an existing destination directory's mode from the
-        # source, and the staged hub is root-only — reproduced locally, rsync chmodded a
-        # same-uid destination `hub/` to 000 and still exited 23. Here it runs as the pod uid
-        # against a root-owned directory, so that chmod is refused, the 0755 survives, and the
-        # refusal is one more error under the exit 23 the config install already tolerates.
-        # Creating this directory as the pod uid instead would undo the fix silently.
+        # DAC_READ_SEARCH. rsync gives an existing destination directory the SOURCE's mode.
+        # Measured both ways against a same-uid destination: a 000 source chmodded `hub/` to
+        # 000 (exit 23, it never recursed), a 0755 source left 0755 (exit 0), and in both the
+        # already-staged file kept its content and mode — `--ignore-existing` is what protects
+        # the files. Here the directory is root-owned and the rsync runs as the pod uid, so
+        # that chmod is refused whatever the source mode, and a refusal is one more error under
+        # the exit 23 the config install already tolerates. Create this directory as the pod
+        # uid and its mode goes back under rsync's control, which a root-only source would then
+        # take away again — silently, behind a green render and a healthy pod.
         - name: crowdsec-hub-install
           image: {{ crowdsec_k8s_image }}
           command:
