@@ -104,6 +104,17 @@ push() { # up|down msg
 # which is why 7 days of these flaps produced zero rows in `probe.py alerts`.
 fail() { push down "$1"; logger -t crowdsec-home-allowlist "status=down $1"; exit 1; }
 
+# Sourced directly by ansible/tests/services/test_crowdsec_allowlist_v6_failure_isolated.py: the
+# down-overrides-clean-sync decision (issue #1248) pulled out where it can be called with a fake
+# `push` instead of only read as text.
+decide_final_push() { # v6_status v6_msg changes
+  if [ "$1" = down ]; then
+    push down "${2}${3:+; $3}"
+  else
+    push up "home allowlist updated: $3"
+  fi
+}
+
 cscli_lapi() {
   /usr/local/bin/k3s kubectl -n {{ k8s_namespace }} exec deploy/crowdsec -c crowdsec -- cscli "$@"
 }
@@ -121,24 +132,45 @@ fi
 # Gated on the host actually HAVING global IPv6 (a v4-only host has nothing to allowlist; a
 # v6-capable host that cannot reach ipify6 is a real degradation — the prefix can rotate under
 # a stale entry and the next rotation 403s everyone at home).
+#
+# NOT `fail` on this branch (issue #1248). `fail` calls `exit 1`, and this used to sit ahead of
+# the IPv4 sync below — so a v6 routing loss (systemd-networkd's link entering `failed` state
+# during the 2026-09-05 daniel-box outage left `eno1` with SLAAC addresses whose valid_lft was
+# still counting down but no v6 default route: "Network is unreachable" to api6.ipify.org, not a
+# DNS failure, confirmed with `networkctl status eno1` and `ip -6 route show`) disabled the IPv4
+# half that had nothing wrong with it. V6_STATUS carries the fault forward instead, the same
+# split docs-refresh.sh.j2 uses for GENERATORS_OK: finish the work that still works, then report
+# the degradation rather than laundering it into a clean `up`.
+V6_STATUS=up
+V6_MSG=""
 CURRENT_PREFIX6=""
 if ip -6 addr show scope global 2>/dev/null | grep -q inet6; then
   if ! CURRENT_IP6=$(curl -sf --max-time 10 --retry 3 --retry-all-errors https://api6.ipify.org); then
-    fail "host has global IPv6 but failed to resolve public IPv6 from ipify"
-  fi
+    V6_STATUS=down
+    V6_MSG="host has global IPv6 but failed to resolve public IPv6 from ipify"
   # Validate AND mask to the /64 in one step; ip_network raises on junk, so a bad value fails
   # loudly instead of becoming an allowlist entry.
-  if ! CURRENT_PREFIX6=$(python3 -c 'import ipaddress,sys; print(ipaddress.ip_network(sys.argv[1] + "/64", strict=False))' "$CURRENT_IP6" 2>/dev/null); then
-    fail "invalid IPv6 from ipify: $CURRENT_IP6"
+  elif ! CURRENT_PREFIX6=$(python3 -c 'import ipaddress,sys; print(ipaddress.ip_network(sys.argv[1] + "/64", strict=False))' "$CURRENT_IP6" 2>/dev/null); then
+    V6_STATUS=down
+    V6_MSG="invalid IPv6 from ipify: $CURRENT_IP6"
   fi
 fi
 
 STORED_IP=$(cat "$STATE_FILE" 2>/dev/null || true)
 STORED_PREFIX6=$(cat "$STATE_FILE6" 2>/dev/null || true)
 
-# Fast path: BOTH families unchanged. The conjunction is load-bearing (an IPv4-only gate would
-# silently skip a rotated IPv6 prefix). Still pushes, so a healthy no-op keeps the monitor green.
-if [ "$CURRENT_IP" = "$STORED_IP" ] && [ "$CURRENT_PREFIX6" = "$STORED_PREFIX6" ]; then
+# A failed fetch must not fall through as an empty CURRENT_PREFIX6: sync_entry below treats an
+# empty `current` as "no v6 any more" and REMOVES the stored entry, truncating the state file —
+# actively harmful, and the opposite of sync_entry's own "a partial sync must not write state"
+# rule two lines below it. Falling back to the stored value makes sync_entry's equality check
+# skip v6 entirely, so the good entry survives untouched until a run that can reach ipify again.
+[ "$V6_STATUS" = up ] || CURRENT_PREFIX6="$STORED_PREFIX6"
+
+# Fast path: BOTH families unchanged AND v6 actually resolved. The v6 status check is load-
+# bearing — without it a v6 fetch failure with an otherwise-unchanged IPv4 falls straight through
+# to this branch (CURRENT_PREFIX6 was just forced equal to STORED_PREFIX6 above) and reports the
+# same `up` a fully healthy run gets, on exactly the fault this script exists to catch.
+if [ "$V6_STATUS" = up ] && [ "$CURRENT_IP" = "$STORED_IP" ] && [ "$CURRENT_PREFIX6" = "$STORED_PREFIX6" ]; then
   push up "home IPs unchanged (${CURRENT_IP}${CURRENT_PREFIX6:+, $CURRENT_PREFIX6})"
   exit 0
 fi
@@ -173,4 +205,9 @@ CHANGES=""
 if [ "$CURRENT_PREFIX6" != "$STORED_PREFIX6" ]; then
   CHANGES="${CHANGES:+$CHANGES; }IPv6 ${STORED_PREFIX6:-<none>} -> ${CURRENT_PREFIX6:-<none>}"
 fi
-push up "home allowlist updated: $CHANGES"
+
+# V6_STATUS down overrides an otherwise-clean sync: the IPv4 half worked (or had nothing to do)
+# but the v6 prefix could not be verified this run, and a stale entry there can rotate out from
+# under a green tile (see the BOTH FAMILIES comment above). Report the degradation rather than
+# laundering it into the same `up` a fully healthy run gets.
+decide_final_push "$V6_STATUS" "$V6_MSG" "$CHANGES"
