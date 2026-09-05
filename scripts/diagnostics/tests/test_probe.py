@@ -3,7 +3,7 @@
 These cover the pieces a subcommand is assembled from — the URL builders in `core`, the
 argparse surface in `cli_parser`, and the formatters each `run_*` prints through.
 
-`test_probe_pipeline.py` covers the routing itself: which host `plan()` asks and which URL it
+`test_probe_curl_pipeline.py` covers the routing itself: which host `plan()` asks and which URL it
 builds for each streaming subcommand.
 """
 

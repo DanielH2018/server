@@ -146,8 +146,8 @@ def main(argv=None):
         return run_pi_containers(ns)
     # Subcommands that answer from an API rather than streaming a shell pipeline. Each one is
     # `run_X(ns) -> int`, so the table is the whole dispatch — adding a subcommand is a parser
-    # entry plus a row here. Built inside main() deliberately: run_b2_longhorn and its B2/Longhorn
-    # siblings are defined BELOW main(), so a module-level table would name them before they exist.
+    # entry plus a row here. The run_* callables are top-level imports, so the table could sit at
+    # module level; it stays inside main() to keep the dispatch beside the parse it follows.
     handlers = {
         # `ha` resolves a token + talks to the HA REST API.
         "ha": run_ha,

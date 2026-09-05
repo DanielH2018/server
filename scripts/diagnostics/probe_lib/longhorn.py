@@ -31,7 +31,7 @@ from diagnostics.probe_lib import b2_ledger as ledger
 from diagnostics.probe_lib import core
 from diagnostics.probe_lib.b2_api import (
     B2_AUTHORIZE_URL,
-    # Re-exported only: probe.py imports it here as the `--prefix` default (probe.py:116).
+    # Re-exported only: cli_parser.py imports it here as the `--prefix` default.
     # Nothing in this module reads it, so ruff --fix deletes the import without the noqa,
     # and probe.py then fails at import.
     LONGHORN_PREFIX,  # noqa: F401
