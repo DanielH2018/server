@@ -48,6 +48,17 @@ def _stages_the_hub_readably(command: str) -> bool:
     return "chmod" in command and "a+rX" in command
 
 
+def _hands_the_hub_to(command: str, uid: int) -> bool:
+    """True when the command chowns the copied tree to the pod's own uid.
+
+    `cp -a` as root keeps root ownership, and the agent's entrypoint writes into the hub on
+    every start (`cscli parsers install`, then `cscli hub update`). A tree the agent can only
+    read fails that with `permission denied` and exits the sidecar, which took Traefik and
+    Authelia down together on the first deploy of this container (2026-09-05).
+    """
+    return f"chown -R {uid}:" in command and "u+w" in command
+
+
 def _hub_install_commands() -> dict[str, str]:
     found: dict[str, str] = {}
     for role, _template, doc in rendered_docs():
@@ -58,6 +69,47 @@ def _hub_install_commands() -> dict[str, str]:
             if container["name"] == INIT_NAME:
                 found[role] = " ".join(container["command"])
     return found
+
+
+def _hub_install_pod_uids() -> dict[str, int]:
+    found: dict[str, int] = {}
+    for role, _template, doc in rendered_docs():
+        if doc.get("kind") != "Deployment":
+            continue
+        spec = doc["spec"]["template"]["spec"]
+        if any(c["name"] == INIT_NAME for c in spec.get("initContainers") or []):
+            found[role] = spec["securityContext"]["runAsUser"]
+    return found
+
+
+def test_every_pod_with_the_sidecar_owns_its_hub_tree() -> None:
+    commands = _hub_install_commands()
+    uids = _hub_install_pod_uids()
+    assert EXPECTED_ROLES <= set(commands) & set(uids), (
+        f"census missing {sorted(EXPECTED_ROLES - (set(commands) & set(uids)))}"
+    )
+    for role, command in sorted(commands.items()):
+        assert _hands_the_hub_to(command, uids[role]), (
+            f"{role}'s {INIT_NAME} leaves the hub tree root-owned, so the agent's own "
+            "`cscli parsers install` fails with permission denied and the sidecar exits"
+        )
+
+
+def test_a_root_owned_hub_tree_is_flagged() -> None:
+    """The reject half: the shape that shipped on 2026-09-05 and took the edge down."""
+    assert not _hands_the_hub_to(
+        "mkdir -p /etc/crowdsec/hub && cp -a /staging/etc/crowdsec/hub/. /etc/crowdsec/hub/"
+        " && chmod -R a+rX /etc/crowdsec/hub || echo fail >&2; exit 0",
+        65532,
+    )
+
+
+def test_a_chown_to_the_wrong_uid_is_flagged() -> None:
+    assert not _hands_the_hub_to(
+        "cp -a /staging/etc/crowdsec/hub/. /etc/crowdsec/hub/ && chown -R 1000:1000"
+        " /etc/crowdsec/hub && chmod -R a+rX,u+w /etc/crowdsec/hub; exit 0",
+        65532,
+    )
 
 
 def test_every_pod_with_the_sidecar_stages_the_hub_tree() -> None:
@@ -89,6 +141,10 @@ def test_the_hub_install_runs_as_root_with_dac_read_search() -> None:
             assert "DAC_READ_SEARCH" in security["capabilities"]["add"], (
                 f"{role}'s {INIT_NAME} drops ALL capabilities, so root without "
                 "DAC_READ_SEARCH cannot read the 0600 staged hub files"
+            )
+            assert "CHOWN" in security["capabilities"]["add"], (
+                f"{role}'s {INIT_NAME} drops ALL capabilities, so root without CHOWN "
+                "cannot hand the copied hub tree to the pod uid and the chown fails"
             )
     assert EXPECTED_ROLES <= seen, f"census missing {sorted(EXPECTED_ROLES - seen)}"
 
