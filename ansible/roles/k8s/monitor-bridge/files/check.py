@@ -37,9 +37,9 @@ from gates import Gates
 def run_once(
     cfg: Config,
     checks: list[Check],
+    gates: Gates,
     dry_run: bool = False,
     only: frozenset[str] | None = None,
-    gates: Gates | None = None,
 ) -> None:
     """Runs one full check cycle: the reachability gates, then every enabled check.
 
@@ -59,13 +59,14 @@ def run_once(
         which is what the pod runs with, so it must be threaded to EVERY check_enabled call
         below — a filter validated in main() and not passed here would print an enabled count
         it does not honour.
-      gates: Which checks each gate suppresses, and the four gate bodies. None builds the
-        production `Gates()`. cli.main() builds one instance per process and passes it every
-        cycle, so `Gates.grace_streaks` binds `bridge.streaks._grace_streaks` once at start;
-        the dict is only ever mutated, never rebound, so the pin is safe.
+      gates: Which checks each gate suppresses, and the four gate bodies. REQUIRED: cli.main()
+        builds the one production `Gates()` per process and passes it every cycle, so
+        `Gates.grace_streaks` binds `bridge.streaks._grace_streaks` once at start; the dict is
+        only ever mutated, never rebound, so the pin is safe. A default here would let a caller
+        that forgot the argument build a SECOND production Gates with its own streak dict,
+        silently resetting startup-grace hysteresis every cycle.
     """
     only = cfg.CHECKS_ONLY if only is None else only
-    gates = Gates() if gates is None else gates
     skip = cfg.CHECKS_SKIP
     # Prometheus reachability is evaluated FIRST and gates the prom-dependent checks: a single
     # Prometheus outage would otherwise page all of them at once (one root cause, an alert storm).

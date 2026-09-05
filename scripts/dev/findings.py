@@ -394,7 +394,7 @@ def _parser() -> argparse.ArgumentParser:
     return p
 
 
-def main(argv: list[str] | None = None, tools: FindingsTools | None = None) -> int:
+def main(argv: list[str] | None, tools: FindingsTools) -> int:
     """Entry point: parses argv and dispatches to the matching subcommand handler.
 
     Catches gh failures at this outer layer so every subcommand handler can call ``gh``
@@ -402,7 +402,9 @@ def main(argv: list[str] | None = None, tools: FindingsTools | None = None) -> i
 
     Args:
         argv: command-line arguments, or None to use ``sys.argv``.
-        tools: the process boundaries; the real ones when omitted.
+        tools: the process boundaries. Required — the `__main__` block below is the only
+            place that builds the real ones, so a caller that drops the argument gets a
+            TypeError instead of silently reaching real `gh` and real subprocesses.
 
     Returns:
         The dispatched handler's exit code, or 1 if `gh` failed.
@@ -417,7 +419,7 @@ def main(argv: list[str] | None = None, tools: FindingsTools | None = None) -> i
         "verify": cmd_verify,
     }[args.cmd]
     try:
-        return handler(args, tools or FindingsTools())
+        return handler(args, tools)
     except (subprocess.SubprocessError, OSError) as exc:
         # OSError covers a missing `gh` binary; SubprocessError covers TimeoutExpired as
         # well as the CalledProcessError whose stderr is the message worth showing.
@@ -431,4 +433,8 @@ def main(argv: list[str] | None = None, tools: FindingsTools | None = None) -> i
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    # The ONE site that builds the real boundaries for this module. `main` takes them as a
+    # required argument so a library caller that forgets `tools` fails with a TypeError here
+    # rather than reaching real `gh` and real subprocesses. `findings_gh.load_issues` keeps its
+    # own default because `scripts/docs/reference/backlog.py` is a second production entry.
+    raise SystemExit(main(None, FindingsTools()))

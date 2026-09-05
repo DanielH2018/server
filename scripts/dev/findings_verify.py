@@ -122,7 +122,7 @@ def verify_close_comment(command: str, output: str, *, tail_lines: int = 20) -> 
 
 
 def run_verify_by(
-    command: str, timeout: float, tools: FindingsTools | None = None
+    command: str, timeout: float, tools: FindingsTools
 ) -> tuple[str, str]:
     """Runs a verify-by command and returns ``(verdict, detail)``.
 
@@ -135,7 +135,7 @@ def run_verify_by(
     if not reason:
         return "error", "refused: not read-only by the repo's classifier"
     try:
-        proc = (tools or FindingsTools()).run_verify(command, timeout)
+        proc = tools.run_verify(command, timeout)
     except subprocess.TimeoutExpired:
         return "error", f"timed out after {timeout:g}s"
     except OSError as exc:
@@ -145,7 +145,7 @@ def run_verify_by(
 
 
 def verify_finding(
-    issue: dict, timeout: float, tools: FindingsTools | None = None
+    issue: dict, timeout: float, tools: FindingsTools
 ) -> tuple[str, str, str]:
     """Verifies one issue. Returns ``(verdict, detail, command)``.
 

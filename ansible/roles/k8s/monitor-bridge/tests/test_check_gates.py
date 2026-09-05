@@ -244,3 +244,17 @@ def test_duration_seconds_parses_prometheus_durations():
     for bad in ("", "15", "m", "1y", "abc"):
         with pytest.raises(ValueError):
             bridge.parsing.duration_seconds(bad)
+
+
+# --- the gate configuration is required, not defaulted ---------------------------------------
+
+
+def test_run_once_requires_a_gates_value(cfg):
+    """The red-proof half: `run_once` used to read `gates = Gates() if gates is None else gates`.
+
+    Under that default this call ran a full cycle against a SECOND production `Gates()` — its
+    own `grace_streaks` binding aside, cli.main() already builds the one instance the pod uses,
+    so a second one is a silent divergence rather than an error.
+    """
+    with pytest.raises(TypeError):
+        check.run_once(cfg, [])  # ty: ignore[missing-argument]

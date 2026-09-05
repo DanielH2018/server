@@ -197,6 +197,10 @@ class Gates:
     Attributes:
       prom_dependent: Checks suppressed when the Prometheus gate is down.
       exporter_dependent: Prometheus `job` -> the checks a dead exporter suppresses.
+        HAZARD: the default factory hands back `EXPORTER_DEPENDENT` itself, not a copy.
+        `frozen=True` blocks rebinding the FIELD, never mutation THROUGH it, so
+        `Gates().exporter_dependent[job] = ...` edits the module table for the whole
+        process. A test that wants its own map states one; nothing may mutate this one.
       loki_dependent: Checks suppressed when the Loki gate is down.
       b2_dependent: Checks suppressed when the B2 gate is down.
       cluster_dependent: Checks suppressed when the cluster-Prometheus gate is down.
@@ -204,6 +208,11 @@ class Gates:
       grace_streaks: The name -> consecutive-down count the startup grace mutates in place.
         Defaults to `bridge.streaks._grace_streaks`, the process-wide dict the pod uses, so a
         test that wants isolation passes its own `{}`.
+        HAZARD: that default is the module's own dict, not a copy, and mutating it is the
+        POINT — the hysteresis has to survive across cycles. `frozen=True` blocks rebinding
+        the field, never mutation through it, so two `Gates()` built in one process share one
+        streak table. Copying here would silently reset startup grace every cycle; the fix for
+        cross-test bleed is an explicit `{}`, never a copying factory.
       probe_prometheus: The Prometheus gate's body.
       probe_loki: The Loki gate's body.
       probe_b2: The B2 gate's body.
