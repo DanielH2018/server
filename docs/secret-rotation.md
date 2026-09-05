@@ -35,7 +35,7 @@ registry, so git stays the source of truth.
 - `pinned` — **must not be naively swapped**. The special procedure, below.
 - `ignore` — not a secret: the domain, usernames, static addresses.
 
-Classification is by name in `scripts/secrets_mgmt/secret_rotation.py`; override per-secret by editing
+Classification is by name in `scripts/secrets_mgmt/secret_classify.py`; override per-secret by editing
 its `tier` in the registry (`sync` preserves overrides).
 
 ## `auto` — automated

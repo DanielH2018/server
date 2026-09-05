@@ -26,7 +26,8 @@ _CHECK = _REPO / "ansible/roles/setup/initial_setup/templates/setup-drift-check.
 _CRONS = _REPO / "ansible/roles/setup/initial_setup/tasks/crons.yml"
 _GROUP_VARS = _REPO / "ansible/inventory/group_vars/all.yml"
 _TILE = _REPO / "ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2"
-_ROTATION = _REPO / "scripts/secrets_mgmt/secret_rotation.py"
+# The cross-host set moved out of secret_rotation.py with the rest of the consumer routing.
+_CONSUMERS = _REPO / "scripts/secrets_mgmt/consumers.py"
 
 
 def _run_scan(tmp_path, deployed=(), rendered=(), repo_files=None):
@@ -412,7 +413,7 @@ def test_the_token_is_registered_as_cross_host():
     `rotate --deploy` can move both halves. Left out of the set, an unattended rotation would
     update the tile and leave the cron pushing the old value — silencing the only monitor that
     can report a stale render on the host that owns the UPS shutdown chain."""
-    assert '"setup_drift_push_token"' in _ROTATION.read_text(), (
+    assert '"setup_drift_push_token"' in _CONSUMERS.read_text(), (
         "setup_drift_push_token must be in CROSS_HOST_PUSH_TOKENS"
     )
 
