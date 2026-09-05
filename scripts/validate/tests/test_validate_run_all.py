@@ -10,7 +10,7 @@ Run: uv run pytest scripts/validate/tests/test_run_all.py
 import pytest
 
 import validate
-from lib.registry import Registry, package_entry_points
+from lib.cli_registry import Registry, package_entry_points
 from validate import run_all
 
 

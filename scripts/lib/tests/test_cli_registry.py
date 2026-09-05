@@ -2,7 +2,7 @@
 
 import pytest
 
-from lib.registry import Registry, package_entry_points
+from lib.cli_registry import Registry, package_entry_points
 
 # --- add / duplicate / lookup ---------------------------------------------------------
 

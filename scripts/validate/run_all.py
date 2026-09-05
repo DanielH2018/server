@@ -17,12 +17,12 @@ import argparse
 import sys
 from pathlib import Path as _Path
 
-# `scripts/` on sys.path for the `validate.<module>` and `lib.registry` imports below — a
+# `scripts/` on sys.path for the `validate.<module>` and `lib.cli_registry` imports below — a
 # directly-invoked script gets only its own directory, and pyproject's `pythonpath` is a
 # pytest-only setting (see CLAUDE.md's "Python & Tests").
 sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
-from lib.registry import Registry
+from lib.cli_registry import Registry
 from validate import (
     compose_templates,
     config_templates,

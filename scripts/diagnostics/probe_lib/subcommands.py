@@ -8,12 +8,12 @@ does NOT dispatch: `plan()` in `curl_pipeline.py` and the `handlers` table in `p
 still own that, unchanged. `scripts/diagnostics/tests/test_probe_registry.py` is the
 completeness guard that reads it.
 
-This module defines no `run_*` function of its own, so `lib.registry.package_entry_points`
+This module defines no `run_*` function of its own, so `lib.cli_registry.package_entry_points`
 still reports the same twelve subcommand backends — the `run_*` names below are imported, and
 that function counts only what a module defines.
 """
 
-# `probe_lib` is a namespace package under `scripts/`, and `lib.registry` is a sibling
+# `probe_lib` is a namespace package under `scripts/`, and `lib.cli_registry` is a sibling
 # directory of `diagnostics/`, so both need `scripts/` on sys.path — a module gets only its
 # importer's path otherwise, and pyproject's `pythonpath` is a pytest setting. This has to sit
 # ABOVE the imports below.
@@ -42,7 +42,7 @@ from diagnostics.probe_lib.pi_plane import run_pi_containers, run_pi_targets
 from diagnostics.probe_lib.readonly_rbac import run_readonly_rbac
 from diagnostics.probe_lib.releases import run_releases
 from diagnostics.probe_lib.vip_placement import run_vip_placement
-from lib.registry import Registry
+from lib.cli_registry import Registry
 
 # name, one-line description (matches the subparser's `help=`), backing `probe_lib` module
 # (None for a subcommand that only ever streams a curl pipeline through `plan()`), backing
