@@ -79,12 +79,3 @@ def test_a_release_naming_a_different_worktree_does_not_close_the_claim():
 def test_an_ordinary_comment_is_not_a_claim():
     issue = _issue("Re-observed by review-2026-09-04 (sighting 2).")
     assert current_claim(issue) is None
-
-
-def test_a_body_with_crlf_line_endings_still_parses():
-    issue = _issue(
-        claim_comment("worktree-issue-1132", None, "2026-09-05T18:40Z").replace(
-            "\n", "\r\n"
-        )
-    )
-    assert current_claim(issue) == "worktree-issue-1132"

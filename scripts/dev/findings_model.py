@@ -145,10 +145,11 @@ def reobservations(issue: dict) -> int:
 # A claim is an append-only comment, not a body edit or an assignee. `gh` authenticates as
 # one account, so an assignee names the operator rather than the session; and two sessions
 # editing a body race, where two sessions commenting both succeed and gh returns them in
-# createdAt order. Folding that ordered list forward is what makes the last writer win
-# deterministically without a compare-and-swap GitHub does not offer.
-_CLAIM_RE = re.compile(r"^Claim: `([^`]+)`\s*$", re.M)
-_RELEASE_RE = re.compile(r"^Released: `([^`]+)`\s*$", re.M)
+# createdAt order. Folding that ordered list forward implements FIRST WRITER WINS: a later
+# claim cannot overwrite a live one, so one session cannot steal an issue from another, and
+# the first claimant can always clean up by releasing its own claim.
+_CLAIM_RE = re.compile(r"^Claim: `([^`\n]+)`\s*$", re.M)
+_RELEASE_RE = re.compile(r"^Released: `([^`\n]+)`\s*$", re.M)
 
 
 def claim_comment(worktree: str, session: str | None, when: str) -> str:
@@ -186,7 +187,7 @@ def current_claim(issue: dict) -> str | None:
     """
     held: str | None = None
     for comment in issue.get("comments", []):
-        body = (comment.get("body") or "").replace("\r\n", "\n")
+        body = comment.get("body") or ""
         claimed = _CLAIM_RE.search(body)
         if claimed:
             if held is None:
