@@ -98,3 +98,27 @@ claude_code_rc_disable_bg_shell_pressure_reap: true
 # updates itself in the background, but a long-lived process keeps running the version it
 # started with. systemd OnCalendar syntax.
 claude_code_rc_restart_schedule: weekly
+
+# ── Login-session caps (issue #1213) ────────────────────────────────────────────────────
+# claude-rc.service's MemoryHigh, MemorySwapMax and PYTEST_XDIST_AUTO_NUM_WORKERS bound only
+# that unit's own cgroup. A session started with `claude agents` (or a bare `claude`) from
+# an interactive SSH shell lands in user.slice/user-{{ claude_code_login_uid }}.slice/
+# session-<n>.scope instead, which none of the three touch. On 2026-09-05 that gap put 965
+# processes and 20.4G anon in one such scope while claude-rc.service held 50.9 MB — every
+# bound the role had added up to then was scoped to the RC unit's cgroup alone.
+
+# Whether the two tasks below are applied. Unlike claude_code_rc_enabled this has no
+# "installed but stopped" middle state to fall back to — false removes the drop-in and the
+# environment.d file outright, which is the rollback if the cap ever needs to come off a
+# login session (e.g. while debugging a plain human `pytest -n auto` run that wants full
+# width).
+claude_code_login_caps_enabled: true
+
+# The numeric uid whose login-session slice (user-<uid>.slice) gets the same caps as
+# claude-rc.service's own cgroup. Confirmed to be 1000 for {{ sys_user }} on daniel-box by
+# the 2026-09-05 incident evidence itself: the runaway scope was
+# `user.slice/user-1000.slice/session-14505.scope`. Override per-host if a different uid
+# ever owns the account this role manages — a getent lookup was considered and rejected
+# here: it would need `become: true` just to read NSS and would make the render tests below
+# depend on a fact rather than a plain default.
+claude_code_login_uid: 1000

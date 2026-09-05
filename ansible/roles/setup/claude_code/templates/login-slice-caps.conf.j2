@@ -1,0 +1,21 @@
+# Managed by ansible/roles/setup/claude_code — do not edit by hand.
+#
+# Bounds user-{{ claude_code_login_uid }}.slice — every SSH/tty login session for
+# {{ sys_user }}, including a `claude` process started directly from one — the same way
+# claude-rc.service bounds its own cgroup. A session started that way never touches the
+# unit's Environment=/MemoryHigh=/MemorySwapMax= lines: it lands in
+# user.slice/user-{{ claude_code_login_uid }}.slice/session-<n>.scope instead. Issue #1213:
+# on 2026-09-05 that untouched plane held 965 processes and 20.4G anon in one session scope
+# while claude-rc.service held 50.9 MB.
+#
+# Same values as claude_code_rc_memory_high / claude_code_rc_memory_swap_max, not a separate
+# number — see this role's CLAUDE.md and defaults/main.yml for the derivation against the
+# box's total headroom; raise them together; a login session drawing more than the RC unit
+# would need re-deriving that arithmetic, not just this file.
+#
+# No MemoryMax here either, for the same reason the unit has none: systemd applies it to the
+# whole slice, so it would take out every process in every login session at once, including
+# the SSH connection running the deploy. MemoryHigh throttles allocation instead of killing.
+[Slice]
+MemoryHigh={{ claude_code_rc_memory_high }}
+MemorySwapMax={{ claude_code_rc_memory_swap_max }}
