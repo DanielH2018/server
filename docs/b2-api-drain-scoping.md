@@ -131,12 +131,12 @@ A host-side script plus a thin Ansible play to supply the SOPS credentials.
 
 ### Reuse
 
-`ansible/roles/k8s/monitor-bridge/files/check.py` already has a tested B2 client —
+`ansible/roles/k8s/monitor-bridge/files/checks/b2.py` already has a tested B2 client —
 `b2_authorize_data`, `b2_storage_api` (tolerant of the v1/v2/v3 response shapes),
 `b2_list_versions` (already the versions call, already paginating on
 `nextFileName`/`nextFileId`), and `b2_sum_versions`, with tests in `test_b2_storage.py`.
 
-Import it, or copy it? **Copy the roughly 60 lines.** `check.py` is 3,109 lines and evaluates
+Import it, or copy it? **Copy the roughly 60 lines.** `check.py` was 3,109 lines at the time (now split into `checks/` and `verdicts/`) and evaluates
 ~60 environment-derived constants at import time; pulling a monitor's entire configuration
 surface into a CLI tool to reuse four functions is the worse trade. The alternative — extract
 the client into a sibling module on `pythonpath`, following the `roles/setup/common/files`

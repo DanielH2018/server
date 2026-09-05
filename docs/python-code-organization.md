@@ -151,6 +151,15 @@ A test replaces one field and never a `PATH` entry or a module attribute. Refere
 `scripts/deploy_tools/tests/_land_fakes.py`. `monkeypatch` is the fallback for a module that
 has no such seam yet, and its count is a measure of how many modules still need one.
 
+The second shape, for a program whose boundary is configuration rather than I/O, is
+**config as data**: `monitor-bridge` builds one frozen `Config` from the environment in
+`load_config(env)` and one frozen `Gates` for the run loop, both constructed once in `cli.py`
+and passed down. A test builds its own with `load_config({...})` or `dataclasses.replace(cfg,
+X=...)` rather than a fakes module, because the fields are values, not callables. The
+transport underneath (`bridge.net`) is still patched, which is why
+`ansible/tests/services/test_bridge_patch_boundary.py` stays and why that role's monkeypatch
+entries have not reached zero.
+
 **Decision functions are pure.** A function that decides takes plain values and returns plain
 values. The transport that fetched them is a different function in a different module.
 Reference: `land_lib/merge.py`, which extracts a two-string comparison specifically so the
@@ -161,7 +170,7 @@ branch is testable without `gh`, and `monitor-bridge/files/verdicts/` against `c
 states) is a `StrEnum` or `Literal`, so `ty` catches a typo that a runtime frozenset only
 catches when the branch runs. Reference: `land_lib/outcome.py` (`Verdict`, `CAUSES`),
 `land_lib/tools.py` (`CiVerdict`, the `Classifier` Protocols) and
-`monitor-bridge/files/check.py` (`Check`, `CheckResult`). Before the 2026-09-04 review the
+`monitor-bridge/files/bridge/types.py` (`Check`, `CheckResult`). Before the 2026-09-04 review the
 tree had 28 dataclasses and no `NamedTuple`, `StrEnum`, `Protocol` or `Literal` at all.
 
 **Exit codes are named once.** A program that has an exit contract defines it in one place

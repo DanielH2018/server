@@ -795,7 +795,7 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
   **disjoint from every run_once skip set** (so a graced check reaches the eval path each cycle and
   its streak advances) — both invariants guarded by a test against `CHECKS`. `GRACE_CYCLES` is
   env-tunable. Pure `bridge.streaks.apply_startup_grace()` is unit-tested.
-- **Liveness probe (2026-06-10, k8s since the migration):** check.py touches `/tmp/heartbeat`
+- **Liveness probe (2026-06-10, k8s since the migration):** cli.py touches `/tmp/heartbeat`
   (tmpfs) after every cycle; the `livenessProbe` in `templates/deployment.yaml.j2` fails when the
   mtime exceeds ~3×INTERVAL, so **the kubelet** restarts a *hung* loop (death alone already exits
   the container). Kuma push silence remains the alerting path; the probe adds auto-recovery.

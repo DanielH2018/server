@@ -222,10 +222,10 @@ broad fast-forward, reached by a different route. `behind_since` is clear by the
 it.
 
 `hold_sha` carries it instead. It already pages through **GitOps Deploy — Status**
-(`monitor-bridge/files/check.py:1462`) with no new timer, which is the reuse the existing
+(`monitor-bridge/files/checks/service.py`, the GitOps check) with no new timer, which is the reuse the existing
 behind-origin watchdog design already argues for.
 
-Its message is service-shaped — `check.py:1463` reads `deploy held at %s — revert the offending PR`. A held *plane* needs a variant naming the playbook that failed, because reverting the PR is
+Its message is service-shaped — `checks/service.py` reads `deploy held at %s — revert the offending PR`. A held *plane* needs a variant naming the playbook that failed, because reverting the PR is
 not the remediation when the tree is already merged and the playbook is what broke.
 
 ## Tests
@@ -257,7 +257,7 @@ invocation does not.
 | `scripts/deploy_tools/deploy_detach_notify.py` | `--no-post` |
 | `ansible/roles/setup/gitops_deploy/files/deploy_logic.py` | broad split, setup-tag derivation |
 | `ansible/roles/setup/gitops_deploy/files/gitops_deploy.py` | the two apply arms |
-| `ansible/roles/k8s/monitor-bridge/files/check.py` | plane-aware hold message |
+| `ansible/roles/k8s/monitor-bridge/files/checks/service.py` | plane-aware hold message |
 | `CLAUDE.md` | the post-merge section collapses to one command plus the exceptions |
 | `ansible/roles/setup/gitops_deploy/CLAUDE.md` | broad-change behaviour, and the branch-protection correction below |
 
