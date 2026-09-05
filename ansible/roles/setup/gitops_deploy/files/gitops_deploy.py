@@ -297,7 +297,7 @@ def tick_config() -> Config:
 
     Every phase takes a `deploy_config.Config` rather than a type of the deployer's own.
 
-    FOUR of the seventeen kwargs below are load-bearing, and thirteen are not — that asymmetry
+    FOUR of the eighteen kwargs below are load-bearing, and fourteen are not — that asymmetry
     is deliberate, so do not prune the thirteen. The four:
 
       - `staging_subset` is derived from `C` here rather than parsed by `load_config`; its
@@ -306,15 +306,16 @@ def tick_config() -> Config:
         which is a decision this module makes and `load_config` cannot.
       - `repo` and `staging_gate` are what `tests/conftest.py`'s `tick` fixture repoints.
 
-    The other thirteen equal CONFIG's fields today and are passed anyway, so that a patch of ANY
+    The other fourteen equal CONFIG's fields today and are passed anyway, so that a patch of ANY
     module constant above reaches the phases. Dropping them would make the set of constants a
     test may repoint an implicit list nobody maintains, and the failure would be a fixture that
     silently describes the host's settings instead of the scripted ones.
 
     Called from `main()` and `entrypoint()`, never at import, and that is what keeps the
     constants above the single source: a phase reads `config.repo`, and `config.repo` is
-    whatever `REPO` holds at the moment the tick starts — which is how `tests/conftest.py`
-    repoints the repo and the staging gate without any phase importing this module.
+    whatever `REPO` holds at the moment the tick starts — which is how `tests/conftest.py`'s
+    `tick` fixture repoints `REPO`, `STAGING_GATE` and `STAGING_SUBSET` without any phase
+    importing this module.
     """
     return dataclasses.replace(
         CONFIG,

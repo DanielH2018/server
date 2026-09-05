@@ -31,7 +31,9 @@ sitting in the foreground while it resolves.
 
 **Hand-merging is one arm of the deployer.** An ordinary k8s manifest change already
 fast-forwards on its own — `deploy_handlers.handle_no_services` merges whenever `cs.services` is
-empty. Only `cs.broad` (`deploy_handlers.handle_broad`) returns *without* merging. A docs-only commit sharing a
+empty. Only one arm returns *without* merging: the `_BROAD_MANUAL_PREFIXES` deferral inside
+`deploy_handlers.handle_broad`, which parks a bring-up playbook change for a human. Every other
+broad change ff-merges first and then applies itself. A docs-only commit sharing a
 tick alongside another session's setup-plane change is therefore stranded too. The symptom is
 a tick that exits 0, logs nothing, and writes `behind_since`.
 

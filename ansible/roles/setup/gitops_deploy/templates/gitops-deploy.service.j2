@@ -67,8 +67,8 @@ Environment=PATH=/home/{{ sys_user }}/.local/bin:/usr/local/bin:/usr/bin:/bin
 SyslogLevel=notice
 # flock serializes against the weekly secret-rotate cron (secret-rotate.sh) — both mutate
 # this same git working tree, and this deployer's `git reset --hard` on a failed health gate
-# could silently discard a half-rotated secret. RUN_START (and so RUN_BUDGET_S, see
-# gitops_deploy.py) is measured from process start, AFTER flock acquires — so time spent
+# could silently discard a half-rotated secret. `DeployTools.run_start` (and so RUN_BUDGET_S,
+# see gitops_deploy.py) is set when entrypoint() builds the tools, AFTER flock acquires — so time spent
 # waiting here is pure overhead against this unit's TimeoutStartSec, uncounted by that
 # budget. -w 180 outlasts any normal deploy-step contention (secret-rotate is short — 0-2
 # tokens) but fails fast enough to leave the health-gate/rollback budget intact; /run/lock is

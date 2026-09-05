@@ -19,7 +19,8 @@ import yaml
 # "The rollback survives max flock contention" is an invariant split across two templates:
 #   config.env.j2            -> RUN_BUDGET_S (health-gate budget) + HEALTH_TIMEOUT_S (rollback redeploy)
 #   gitops-deploy.service.j2 -> flock -w <N> (max lock wait) + TimeoutStartSec (systemd hard kill)
-# RUN_START is measured AFTER flock acquires, but TimeoutStartSec counts from unit activation and so
+# `DeployTools.run_start` (built in entrypoint(), so AFTER flock acquires) is what the gate measures
+# its deadline from, but TimeoutStartSec counts from unit activation and so
 # INCLUDES the flock wait — so the worst case flock_wait + RUN_BUDGET_S + HEALTH_TIMEOUT_S must fit
 # inside TimeoutStartSec, else systemd SIGTERMs the deployer mid-rollback and the bad commit is
 # stranded live (the failure 1ba4fbb2 sized these four values to avoid, down to zero slack). Nothing
