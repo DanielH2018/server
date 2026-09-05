@@ -41,12 +41,16 @@ from secrets_mgmt.secret_bearing_host_paths import (
 #   * ups-secondary-health.sh  — the nut_host plane, pinning "walks every role, not just k8s"
 #   * qbittorrent-prefs-check.sh — a name that is not `*_push_token`, so the census cannot
 #     silently narrow to push-token-shaped matches and still pass
+#   * secret-rotate.sh — the path #1183 narrowed. It used to be reported for `email` as well
+#     as `secret_rotation_push_token`; tiering `email` `ignore` left the push token as its
+#     only reason to be in the census, so nothing else pins the path any more.
 # The NAME is pinned alongside the path deliberately: a path survives a `GENERIC_NAMES` entry
 # or a tier flipped to `ignore` while losing the very name that made it dangerous.
 MUST_FIND = {
     "/usr/local/bin/secret-rotation-audit.sh": "secret_rotation_push_token",
     "/usr/local/bin/ups-secondary-health.sh": "nut_monitor_password",
     "/usr/local/bin/qbittorrent-prefs-check.sh": "qbittorrent_password",
+    "/usr/local/bin/secret-rotate.sh": "secret_rotation_push_token",
 }
 
 # The hook's own copy of the prefix list. It short-circuits on this before importing anything,
@@ -100,6 +104,34 @@ def test_the_ignore_tier_is_excluded_from_the_tracked_names():
     """
     assert "domain" not in secret_names()
     assert "secret_rotation_push_token" in secret_names()
+
+
+def test_the_generic_address_name_is_not_tracked_but_its_password_is():
+    """`email` is an address, so it is tiered `ignore` rather than listed in GENERIC_NAMES.
+
+    The pair is the point (#1183). `email` word-matches in any script mentioning an address —
+    it reached `/usr/local/bin/secret-rotate.sh` through a `git -c user.email=` line that
+    embeds no credential — so a census that tracks it teaches sessions the guard is noise.
+    `smtp_notify_app_password` is the value that actually authenticates that SMTP session and
+    must stay tracked, so a sweep that tiered the whole SMTP family `ignore` fails here.
+    """
+    names = secret_names()
+    assert "email" not in names
+    assert "smtp_notify_app_password" in names
+
+
+def test_tiering_the_address_did_not_drop_its_script_from_the_census(real_census):
+    """Narrowing a name must not narrow the deny set.
+
+    `MUST_FIND` already pins the path; this says why it is there, and fails with the reason
+    rather than with a missing-key diff if a later change removes the push token too.
+    """
+    reported = real_census.get("/usr/local/bin/secret-rotate.sh", ())
+    assert "email" not in reported
+    assert "secret_rotation_push_token" in reported, (
+        "secret-rotate.sh left the census; the hook now permits a content-printing read of a "
+        "script that renders a push token inline"
+    )
 
 
 # ── the synthetic tree: one input it must flag, one it must not ──────────────────────────
