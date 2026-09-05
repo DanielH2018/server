@@ -1,0 +1,10 @@
+[Unit]
+Description=Sample claude-rc.service / user-1000.slice cgroup counters every 30s
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=30s
+Unit=claude-cgroup-metrics.service
+
+[Install]
+WantedBy=timers.target

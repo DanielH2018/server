@@ -14,3 +14,12 @@
     daemon_reload: true
   become: true
   when: claude_code_rc_enabled
+
+# Unconditional, unlike claude-rc above: this timer only samples cgroup counters, so unlike
+# the rc host there is no "deliberately stopped" state it could wrongly start.
+- name: Restart claude-cgroup-metrics timer
+  ansible.builtin.systemd:
+    name: claude-cgroup-metrics.timer
+    state: restarted
+    daemon_reload: true
+  become: true

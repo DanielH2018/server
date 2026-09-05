@@ -113,7 +113,7 @@ def test_discover_templates_finds_the_known_set():
         "gitops-deploy.timer.j2",
         "renovate-agent.timer.j2",
     } <= names
-    assert len(names) == 17
+    assert len(names) == 19
 
 
 def test_discover_templates_excludes_archive():
