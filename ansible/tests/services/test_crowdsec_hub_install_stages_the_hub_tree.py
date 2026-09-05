@@ -104,6 +104,36 @@ def test_the_hub_install_cannot_fail_the_pod() -> None:
         )
 
 
+def test_the_hub_install_runs_before_the_config_install() -> None:
+    """Order is load-bearing, not cosmetic.
+
+    `crowdsec-config-install`'s rsync recurses from the parent directory listing, so it
+    creates `/etc/crowdsec/hub` owned by the pod's own uid before it fails to read into it.
+    Root with ALL dropped cannot then write into another uid's directory — DAC_READ_SEARCH is
+    the read half of the permission-bit override, DAC_OVERRIDE is the write half. The copy
+    would fail, the trailing `exit 0` would swallow it, and the pod would come up 2/2 with the
+    warning intact. Going first, the hub install creates the directory itself, root-owned and
+    world-readable, in an emptyDir that is still empty.
+    """
+    seen: set[str] = set()
+    for role, _template, doc in rendered_docs():
+        if doc.get("kind") != "Deployment":
+            continue
+        names = [
+            c["name"]
+            for c in doc["spec"]["template"]["spec"].get("initContainers") or []
+        ]
+        if INIT_NAME not in names or "crowdsec-config-install" not in names:
+            continue
+        seen.add(role)
+        assert names.index(INIT_NAME) < names.index("crowdsec-config-install"), (
+            f"{role} runs {INIT_NAME} after the rsync, which leaves /etc/crowdsec/hub owned "
+            "by the pod uid and unwritable by root-without-DAC_OVERRIDE — the copy fails "
+            "silently behind exit 0"
+        )
+    assert EXPECTED_ROLES <= seen, f"census missing {sorted(EXPECTED_ROLES - seen)}"
+
+
 def test_the_rendered_commands_are_accepted() -> None:
     """The accept half, stated separately so a predicate that stopped matching is visible."""
     commands = _hub_install_commands()

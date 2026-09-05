@@ -87,8 +87,8 @@ the 0600 sources — and ends in `exit 0`, so an unreadable file leaves that one
 symlink path instead of taking SSO down under `Recreate`.
 `ansible/tests/services/test_crowdsec_optional.py` holds both pods to this.
 
-`crowdsec-hub-install` is the third init container, and it fixes the level above the
-datafiles. The rsync above skips the image's root-only staged **hub tree** — that is part of
+`crowdsec-hub-install` runs **first**, ahead of `crowdsec-config-install`, and it fixes the
+level above the datafiles. The rsync skips the image's root-only staged **hub tree** — that is part of
 the exit 23 it tolerates — while copying the parser *configs*, which are symlinks into that
 tree. `/etc/crowdsec/parsers/s02-enrich/geoip-enrich.yaml` therefore resolved to a hub file
 that was never staged, and the agent dropped the parser once per parser-load pass:
@@ -97,6 +97,14 @@ no such file or directory`. GeoIP enrichment stayed dead behind a 2/2 Running po
 the datafiles installed and the enrichers registered (#1211; traefik logged the identical
 warning, so this was never an authelia gap). It copies the tree as root with `DAC_READ_SEARCH`,
 `chmod -R a+rX`, and ends in `exit 0` for the same Recreate reason as `crowdsec-data-install`.
+
+**Running it after the rsync would no-op silently.** rsync recurses from the parent listing,
+so it creates `/etc/crowdsec/hub` owned by uid 1000 before it fails to read into it, and root
+with `ALL` dropped cannot write into another uid's directory — `DAC_READ_SEARCH` is the read
+half of the override, `DAC_OVERRIDE` the write half. The copy would fail, `exit 0` would
+swallow it, and the pod would come up 2/2 with the warning intact. Going first, it creates the
+directory root-owned and world-readable while the emptyDir is still empty, and the rsync's own
+`--ignore-existing` then leaves those files alone.
 `ansible/tests/services/test_crowdsec_hub_install_stages_the_hub_tree.py` holds both pods to
 this.
 
