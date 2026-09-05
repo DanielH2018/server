@@ -87,6 +87,23 @@ the 0600 sources — and ends in `exit 0`, so an unreadable file leaves that one
 symlink path instead of taking SSO down under `Recreate`.
 `ansible/tests/services/test_crowdsec_optional.py` holds both pods to this.
 
+`crowdsec-hub-install` is the third init container, and it fixes the level above the
+datafiles. The rsync above skips the image's root-only staged **hub tree** — that is part of
+the exit 23 it tolerates — while copying the parser *configs*, which are symlinks into that
+tree. `/etc/crowdsec/parsers/s02-enrich/geoip-enrich.yaml` therefore resolved to a hub file
+that was never staged, and the agent dropped the parser once per parser-load pass:
+`Ignoring file … lstat /etc/crowdsec/hub/parsers/s02-enrich/crowdsecurity/geoip-enrich.yaml:
+no such file or directory`. GeoIP enrichment stayed dead behind a 2/2 Running pod even with
+the datafiles installed and the enrichers registered (#1211; traefik logged the identical
+warning, so this was never an authelia gap). It copies the tree as root with `DAC_READ_SEARCH`,
+`chmod -R a+rX`, and ends in `exit 0` for the same Recreate reason as `crowdsec-data-install`.
+`ansible/tests/services/test_crowdsec_hub_install_stages_the_hub_tree.py` holds both pods to
+this.
+
+**The `DECIDED:` marker on the rsync tolerance was amended, not reversed.** Its reasoning
+against `|| true` stands; what #1211 disproved is the half claiming the skipped files are all
+re-downloaded by `cscli hub update` on start. They are not, or not before the parser load.
+
 Verify a deploy of this role by the sidecar's restart count, not just by pod readiness:
 
 ```

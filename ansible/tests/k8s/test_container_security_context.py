@@ -241,6 +241,11 @@ _ROOT_BY_DESIGN = {
     # Same container in the authelia pod, for the same reason (#1177). Both pods run the
     # crowdsec agent sidecar non-root, so both need the datafiles copied in readable.
     ("authelia", "crowdsec-data-install"),
+    # Copies the crowdsec image's root-only staged hub tree into /etc/crowdsec world-readable,
+    # so the parser configs that symlink into it resolve for the non-root sidecar (#1211).
+    # DAC_READ_SEARCH covers the root-only sources; it writes into a root-owned emptyDir.
+    ("traefik", "crowdsec-hub-install"),
+    ("authelia", "crowdsec-hub-install"),
 }
 
 # Runs as root over root-owned data. These are the ones with real work behind them: each needs an
