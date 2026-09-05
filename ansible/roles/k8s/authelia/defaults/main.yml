@@ -45,6 +45,8 @@ authelia_k8s_manage_oidc: true
 # (domain, name) pair — with a shared name, logging in at one portal overwrites the other's
 # cookie, and since sessions are in-memory per instance the overwritten side then bounces the
 # user back to login. Symptom: signing in here silently signs you out of daniel-server.
+# This is a cookie NAME, not a credential. The session secret is `authelia_secret`, which
+# the rotation registry tracks under that name — see this role's CLAUDE.md.
 authelia_k8s_cookie_name: authelia_session_k8s
 
 # Its own SQLite database on its own volume. This is the slice-1 hazard named in
