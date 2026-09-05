@@ -322,14 +322,12 @@ STAGING_GATE_BLOCKING = CONFIG.staging_gate_blocking
 # OFF unless config.env says otherwise, so a host that has not been re-templated keeps its current
 # behaviour, and REQUIRE_CI=false is the documented way back out.
 #
+# The gate itself is `DeployTools.fetch_ci_verdict`, which `deploy_toolbox.default_tools` binds to
+# CONFIG.require_ci, CONFIG.ci_repo and CONFIG.ci_contexts. No module global copies those three:
+# a copy rebound here could disagree with the frozen CONFIG it came from.
+#
 # The disarm for an empty CI_CONTEXTS/GITHUB_REPO (a half-rendered config.env) is decided inside
-# deploy_config.load_config, which is also where it logs — CONFIG.require_ci is the one value, so a
-# module global rebound separately here could disagree with the frozen CONFIG it was copied from.
-REQUIRE_CI = CONFIG.require_ci
-# GitHub check-run NAMES that must be green — the same strings branch protection calls contexts.
-# Comma-separated; the names contain spaces and parens, never commas.
-CI_CONTEXTS = CONFIG.ci_contexts
-CI_REPO = CONFIG.ci_repo
+# deploy_config.load_config, which is also where it logs.
 
 
 # ── what one phase hands the next ─────────────────────────────────────────────────────────────

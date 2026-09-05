@@ -71,6 +71,14 @@ forbids it. pytest names test modules by basename because `consider_namespace_pa
 off by default ([pytest pythonpath][pytest-path]), so two test files with the same basename
 collide at collection.
 
+**A new module may not take the name of a `scripts/` directory.** A regular module beats a
+namespace portion whatever the `sys.path` order, so a `deploy_tools.py` on the path shadows
+`scripts/deploy_tools/` and every `from deploy_tools.exit_codes import ...` raises
+`ModuleNotFoundError: 'deploy_tools' is not a package` — for the whole suite, not just for the
+role that added the file. That is why the deployer's boundaries object lives in
+`deploy_toolbox.py` while the class it holds is `DeployTools`. Before naming a new module,
+check it against `ls scripts/`.
+
 ### Per-module `sys.path` bootstraps, not `python -m`
 
 A directly run script gets only its own directory as `sys.path[0]` ([sys.path

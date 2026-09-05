@@ -459,9 +459,11 @@ frozen `Config`; a malformed numeric value is collected into `Config.errors` rat
 raised, and `CONFIG.validate()` at the top of `main()` turns it into one line naming the key
 plus a Discord post. Before that it was ~40 `int(C.get(...))` calls at module level, so a
 half-written config.env was an import traceback with no key name in it. The module-level
-constants in `gitops_deploy.py` are still derived from `CONFIG` and are what the suite patches
-— that is the remaining coupling, and threading `CONFIG` through every function instead is a
-separate change. Three keys keep a `C.get("<KEY>", "<literal>")` call in
+constants in `gitops_deploy.py` are still derived from `CONFIG`, and a few of them are what the
+suite patches — that is the remaining coupling, and threading `CONFIG` through every function
+instead is a separate change. The CI keys are already off that list: `require_ci`, `ci_repo` and
+`ci_contexts` reach the gate through `deploy_toolbox.default_tools`, so `gitops_deploy.py`
+declares no constant for them. Three keys keep a `C.get("<KEY>", "<literal>")` call in
 `gitops_deploy.py` because `scripts/docs/gen_doc_fragments.py` parses those calls out of
 that file by name: `STAGING_SUBSET` is read there for real, while the
 `STAGING_GATE_TIMEOUT_S` and `STAGING_EXPECT_TIMEOUT_S` calls are literals the generator
