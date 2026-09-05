@@ -1,4 +1,4 @@
-"""Shared pytest fixtures for the monitor-bridge check.py test suite."""
+"""Shared pytest fixtures for the monitor-bridge files/ test suite."""
 
 import bridge.streaks
 import pytest

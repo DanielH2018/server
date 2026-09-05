@@ -60,9 +60,9 @@ def run_once(
         below — a filter validated in main() and not passed here would print an enabled count
         it does not honour.
       gates: Which checks each gate suppresses, and the four gate bodies. None builds the
-        production `Gates()`. Constructed per call rather than defaulted to a shared instance,
-        so `Gates.grace_streaks`'s default factory re-reads `bridge.streaks._grace_streaks`
-        every cycle instead of pinning whatever dict existed at import.
+        production `Gates()`. cli.main() builds one instance per process and passes it every
+        cycle, so `Gates.grace_streaks` binds `bridge.streaks._grace_streaks` once at start;
+        the dict is only ever mutated, never rebound, so the pin is safe.
     """
     only = cfg.CHECKS_ONLY if only is None else only
     gates = Gates() if gates is None else gates
