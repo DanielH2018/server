@@ -25,6 +25,11 @@ reused, and a lock whose owner is gone is ignored rather than obeyed.
 Usage:
     uv run python scripts/dev/prune_worktrees.py            # report only (default)
     uv run python scripts/dev/prune_worktrees.py --prune    # also remove the removable ones
+    uv run python scripts/dev/prune_worktrees.py --brief    # short report, for a banner
+
+`--brief` chooses the report's shape and nothing else. It is orthogonal to `--prune`:
+`--prune --brief` removes the same worktrees `--prune` alone would, and prints a short
+report of what it removed.
 """
 
 import argparse
@@ -357,7 +362,23 @@ def survey(repo: str) -> list[tuple[str, Worktree, str]]:
     return out
 
 
-def brief() -> int:
+def prune_all(repo: str, trees: list[Worktree]) -> None:
+    """Remove each tree, printing one line per outcome.
+
+    Shared by both report shapes so that `--prune` cannot mean one thing with `--brief` and
+    another without it. It used to live inline in main(), below an early `return brief()`,
+    so `--prune --brief` printed the removable list and removed nothing while exiting 0 —
+    a silent no-op that read as a successful prune (#1190).
+    """
+    for tree in trees:
+        ok, error = remove(repo, tree)
+        if ok:
+            print(f"removed {tree.path}")
+        else:
+            print(f"could not remove {tree.path}: {error}")
+
+
+def brief(prune: bool = False) -> int:
     """One line per removable worktree; silent when there is nothing to remove.
 
     This exists for the SessionStart banner, which prints nothing on a healthy day and has to
@@ -377,11 +398,14 @@ def brief() -> int:
     print(f"\U0001f9f9 {len(removable)} merged worktree(s) can be removed:")
     for tree, reason in removable:
         print(f"  {Path(tree.path).name} — {reason}")
-    print("  → uv run python scripts/dev/prune_worktrees.py --prune")
+    if prune:
+        prune_all(repo, [tree for tree, _ in removable])
+    else:
+        print("  → uv run python scripts/dev/prune_worktrees.py --prune")
     return 0
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     """Report each session worktree's removable/keep/orphan verdict, and prune with `--prune`.
 
     Exits 1 when not inside a git repository, 0 otherwise.
@@ -395,12 +419,15 @@ def main() -> int:
     parser.add_argument(
         "--brief",
         action="store_true",
-        help="one line per removable worktree and nothing else; silent when clean",
+        help=(
+            "shorten the report to one line per removable worktree, silent when clean; "
+            "combines with --prune, which still removes them"
+        ),
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     if args.brief:
-        return brief()
+        return brief(prune=args.prune)
 
     repo = primary_checkout()
     if repo is None:
@@ -437,12 +464,7 @@ def main() -> int:
         print(f"\n{len(removable)} removable — re-run with --prune to remove")
         return 0
 
-    for tree in removable:
-        ok, error = remove(repo, tree)
-        if ok:
-            print(f"removed {tree.path}")
-        else:
-            print(f"could not remove {tree.path}: {error}")
+    prune_all(repo, removable)
     return 0
 
 
