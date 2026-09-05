@@ -37,7 +37,13 @@ spec:
             - --path.procfs=/host/proc
             - --path.rootfs=/rootfs
             - --path.sysfs=/host/sys
-            - --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc|var/lib/kubelet)($|/)
+            # var/lib/kubelet excluded only down to its pods/ subtree (#1243): the per-pod bind
+            # mounts there are unbounded (one set per running pod) and stay hidden, but Longhorn's
+            # CSI global mounts under var/lib/kubelet/plugins/ are now scraped — that's the only
+            # place node_filesystem_readonly can see a CSI volume's ext4 journal abort remount it
+            # read-only. Bound: ~40 attached volumes x ~7 filesystem-collector series each, ~300
+            # series, not the per-pod cardinality this exclusion exists to cut off.
+            - --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc|var/lib/kubelet/pods)($|/)
             - --collector.textfile.directory=/textfile
           ports:
             - containerPort: 9100
@@ -117,6 +123,14 @@ spec:
             - name: node-exporter-rootfs
               mountPath: /rootfs
               readOnly: true
+              # #1243: without this, a mount created on the HOST after this pod started never
+              # enters the container's view of /rootfs — the default for a hostPath volume is
+              # effectively private propagation. Longhorn creates a CSI global mount at attach
+              # time, almost always after node-exporter has been running since boot, so the
+              # filesystem collector's statfs() on that path would silently see nothing there
+              # without this. HostToContainer is one-way (host -> container only), matching the
+              # read-only mount above it — this pod must never be able to mount INTO the host.
+              mountPropagation: HostToContainer
             - name: node-exporter-textfile
               mountPath: /textfile
               readOnly: true

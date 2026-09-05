@@ -230,6 +230,20 @@ k3s_longhorn_backup_detached_volumes: "true"
 # files/longhorn-storageclass.yaml and ansible/tests/longhorn/test_longhorn_storageclass.py).
 k3s_longhorn_backup_block_size: 16
 
+# Memory REQUEST only (no limit) for longhorn-manager and the csi-* sidecar Deployments (#1243).
+# Upstream's deploy/longhorn.yaml ships every one of them with an empty `resources: {}`, which
+# gives BestEffort QoS and oom_score_adj 1000 — the worst possible score, so the kernel eats the
+# storage control plane first under any memory pressure. Measured live during the incident:
+# longhorn-manager held 137 MB anon-rss and a csi-* sidecar 97 MB when both were OOM-killed,
+# against instance-manager (already Burstable, 0 restarts through the same incident) surviving
+# untouched. A REQUEST alone moves the pod to Burstable and drops oom_score_adj without adding a
+# new kill path — a LIMIT set too low would trade "killed by badness" for "killed by cgroup cap",
+# which is the risk the diagnosis explicitly rejected. Headroom is roughly double the measured
+# RSS on both: enough to absorb ordinary growth without inflating node allocatable so far that
+# real pressure elsewhere goes unschedulable.
+k3s_longhorn_manager_memory_request: 256Mi
+k3s_longhorn_csi_sidecar_memory_request: 192Mi
+
 # Restore drill — proves the backups come BACK, which nothing else here checks. The heartbeat
 # watches Longhorn's own objects, and none of them can tell you whether the bytes in B2 restore.
 #

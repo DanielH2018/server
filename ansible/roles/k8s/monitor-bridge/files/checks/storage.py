@@ -16,6 +16,47 @@ from verdicts.storage import (
 )
 
 
+def check_kubelet_plugin_readonly(cfg: Config) -> tuple[bool, str]:
+    """CSI global-mount filesystems ext4 remounted read-only, named by host and mountpoint.
+
+    #1243: a reclaim stall dropped Longhorn's iSCSI sessions, and the replacement_timeout expiry
+    that followed aborted several ext4 journals and remounted them read-only. All of it happened
+    behind Volume CRs that read `attached healthy` throughout, Ready pods, and 50 minutes of
+    silence from every existing monitor — Longhorn's own state is structurally blind to a
+    filesystem-level fault under it. `node_filesystem_readonly` already carries this the instant
+    it happens; the only reason it went unwatched is the node-exporter daemonset excluding all of
+    var/lib/kubelet (fixed alongside this check, daemonset.yaml.j2), which hid the CSI global
+    mounts under var/lib/kubelet/plugins/ that this check now scopes to.
+
+    No grace/hysteresis, deliberately, matching check_pvc_fullness's fullness-breach arm: a
+    read-only remount does not self-heal like a Longhorn replica rebuild or a kubelet restart
+    does, so holding it through a streak only delays a real page. The schedule is fast enough
+    that a streak would buy nothing anyway — node-exporter's `node` job scrapes at 1m
+    (claude-otel/templates/prometheus.yaml.j2) and this check runs on the bridge's own
+    INTERVAL-second cadence (300s deployed), so a fault is visible on the very first cycle
+    that follows it, not several scrapes later.
+
+    host_metric_sel (not origin_sel) because this is a node_filesystem_* family: PROM_ORIGIN
+    resolves to `origin="daniel-server"` in the deployed env, and pinning would hide the same
+    fault on daniel-box behind a green tile — the exact mistake HOST_ORIGINS_MIN was added to
+    stop for check_disk/check_mem. An absent series is genuinely healthy here (no CSI global
+    mount is read-only), unlike the Longhorn/PVC arms above: node-exporter being entirely down
+    is check_targets_down's/check_disk's job, not this one's.
+    """
+    sel = bridge.net.host_metric_sel(cfg, 'mountpoint=~"/var/lib/kubelet/plugins/.*"')
+    vec = bridge.net.prom_vector(cfg, "node_filesystem_readonly%s == 1" % sel)
+    if not vec:
+        return True, "no read-only CSI global mounts"
+    offenders = sorted(
+        "%s %s" % (bridge.net._origin_name(labels), labels.get("mountpoint", "?"))
+        for labels, _ in vec
+    )
+    return False, "%d CSI global mount(s) read-only: %s" % (
+        len(offenders),
+        ", ".join(offenders[:5]),
+    )
+
+
 def check_longhorn_volumes(cfg: Config) -> tuple[bool, str]:
     """Longhorn volumes that have lost replica redundancy, named by PVC.
 

@@ -48,6 +48,7 @@ from checks.b2 import (
 )
 from checks.r2 import check_r2_usage
 from checks.storage import (
+    check_kubelet_plugin_readonly,
     check_longhorn_volumes,
     check_pvc_fullness,
 )
@@ -147,4 +148,9 @@ def build_checks(env: Mapping[str, str] | None = None) -> list[Check]:
             check_longhorn_volumes,
         ),
         Check("pvc_fullness", tok("KUMA_PUSH_PVC"), check_pvc_fullness),
+        Check(
+            "kubelet_plugin_readonly",
+            tok("KUMA_PUSH_KUBELET_READONLY"),
+            check_kubelet_plugin_readonly,
+        ),
     ]

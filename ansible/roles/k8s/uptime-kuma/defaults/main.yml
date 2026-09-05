@@ -172,7 +172,7 @@ kuma_status_page_groups:
   - name: Backups & Storage
     match:
       - "^longhorn-backup$"
-      - "^monitor-bridge-(longhorn-volumes|pvc-fullness)$"
+      - "^monitor-bridge-(longhorn-volumes|pvc-fullness|kubelet-readonly)$"
       - "^monitor-bridge-(b2-reachable|b2-storage|r2-usage)$"
       - "^etcd-"
   - name: Hosts & Power

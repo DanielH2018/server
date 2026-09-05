@@ -39,6 +39,7 @@ ansible/roles/k8s/monitor-bridge/tests/test_check_gates_exporters.py 5
 ansible/roles/k8s/monitor-bridge/tests/test_check_ha.py 5
 ansible/roles/k8s/monitor-bridge/tests/test_check_host.py 21
 ansible/roles/k8s/monitor-bridge/tests/test_check_k8s_workload_gates.py 1
+ansible/roles/k8s/monitor-bridge/tests/test_check_kubelet_readonly.py 6
 ansible/roles/k8s/monitor-bridge/tests/test_check_loki.py 9
 ansible/roles/k8s/monitor-bridge/tests/test_check_longhorn.py 3
 ansible/roles/k8s/monitor-bridge/tests/test_check_notify.py 14

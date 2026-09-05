@@ -632,6 +632,31 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     the partial outage the floor exists to catch, which is the `node`-only mistake that blinded
     Host Temperature on two hosts of three, not a fix for it. A fullness breach gets no grace —
     it is monotonic, not flappy — while the census arm rides `PVC_CLAIMS_CONSECUTIVE`.)
+  - **Kubelet CSI Mount Read-Only** (`node_filesystem_readonly{mountpoint=~"/var/lib/kubelet/
+    plugins/.*"} == 1`, added 2026-09-05, #1243 — a reclaim stall dropped Longhorn's iSCSI
+    sessions, `replacement_timeout` expiry then aborted several ext4 journals and remounted them
+    read-only, and every existing monitor stayed silent for 50 minutes because Volume CRs read
+    `attached healthy` throughout — Longhorn's own state is structurally blind to a
+    filesystem-level fault under it. The metric was already scraped; node-exporter's
+    `mount-points-exclude` hid it under a wholesale `var/lib/kubelet` exclusion, narrowed
+    alongside this check to `var/lib/kubelet/pods` (daemonset.yaml.j2) — the per-pod bind
+    mounts stay excluded (unbounded cardinality), the CSI global mounts under `plugins/` do
+    not (~40 volumes × ~7 series, ~300 total). **No grace**, unlike Longhorn Volume
+    Redundancy: a read-only remount does not self-heal the way a replica rebuild or a kubelet
+    restart does, and the schedule (node-exporter's `node` job at 1m, this check on the
+    bridge's own 300s cadence) means a streak would only delay a real page, never absorb a
+    routine blip. **`host_metric_sel`, not `origin_sel`**, for the same reason check_disk/
+    check_mem use it: `PROM_ORIGIN` resolves to `origin="daniel-server"` in the deployed env,
+    and pinning would hide the identical fault on daniel-box behind a green tile. An absent
+    series reads as healthy (no CSI global mount is read-only) rather than as blind — unlike
+    Longhorn Volume Redundancy/PVC Fullness, node-exporter being entirely down is
+    check_targets_down's/check_disk's job, not this one's. `ansible/tests/k8s/
+    test_node_exporter_filesystem_exclusion.py` guards the exclusion regex directly: this
+    check's own empty-is-healthy logic cannot tell a real all-clear from a re-widened
+    exclusion silently hiding the same fault again. **In `PROM_DEPENDENT`**: `prom_vector`
+    raises on an unreachable Prometheus, which `_evaluate` turns into a `down` — without the
+    gate, a Prometheus restart pages this monitor a second time for the one root cause the
+    Prometheus monitor already reports.)
   - **Loki Log Ingestion** (three-arm LogQL freshness against the cluster `loki-homelab` via
     its in-cluster Service, `down`
     if ANY arm is silent — a silently-dead Alloy→Loki pipeline (docker-proxy break,

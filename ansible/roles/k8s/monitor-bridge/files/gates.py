@@ -54,6 +54,12 @@ PROM_DEPENDENT = frozenset(
         # longhorn scrape job dies, so it must be suppressed when PROMETHEUS itself is the
         # cause — otherwise a Prometheus outage pages twice for one root cause.
         "longhorn_volumes",
+        # Reads node_filesystem_readonly (#1243). prom_vector RAISES on an unreachable
+        # Prometheus (unlike the empty-vector-is-healthy case this check's own docstring
+        # covers), and _evaluate turns that into a `down` — so without this entry a Prometheus
+        # restart pages this monitor a second time for the one root cause the `prometheus`
+        # gate already reports.
+        "kubelet_plugin_readonly",
     }
 )
 
