@@ -90,7 +90,28 @@ on_exit() {
 trap on_exit EXIT
 
 alert() { logger -t eval-run "$1"; PUSH_MSG="$1"; }
-say_failure() { alert "$1: $(tr '\n' ' ' < "$2" | tail -c 400)"; }
+
+# logger takes one line, so flatten and cap -- the full text stays in the file until the run ends.
+#
+# FILTER BEFORE THE TAIL, for the commit call site. prek runs every hook and keeps going past a
+# failure, printing Passed and Skipped lines after it, and mkdocs-strict is the last hook -- so a
+# plain tail of the whole run always ends `...Passed` and names no hook at all. The sibling
+# docs-refresh alert did exactly that on 2026-09-04 and again on 2026-09-05; two readers could not
+# identify the failing hook from it, and #1155 was filed with the cause undiagnosed as a result.
+#
+# THE FALLBACK IS LOAD-BEARING, and carries MORE weight here than in docs-refresh. There it covers
+# the edge cases of one call site (a signing failure, "nothing to commit"). Here only the commit
+# call site can ever carry a prek token at all: the other two pass $LOG from the report merge and
+# $TREND_OUT from the history-unchanged arm, neither of which has been near a hook. This script
+# runs without `set -e`, so a non-matching grep would leave those two alerts EMPTY -- strictly
+# worse than the uninformative tail they have today.
+say_failure() {
+  local detail
+  detail="$(grep -E -A2 'Failed|^- hook id:|files were modified by this hook' "$2" 2>/dev/null \
+    | tr '\n' ' ' | tail -c 400)"
+  [ -n "$detail" ] || detail="$(tr '\n' ' ' < "$2" | tail -c 400)"
+  alert "$1: $detail"
+}
 
 # on_exit removes the temp log, the cron entry redirects nothing and Loki has no stream for this
 # script, so without this copy the cause of a commit failure is unrecoverable the moment the run
