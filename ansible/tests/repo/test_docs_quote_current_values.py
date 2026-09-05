@@ -80,9 +80,9 @@ def _gitops_tick_minutes() -> str:
 
 def _python_constant(path: Path, name: str) -> Callable[[], str]:
     # Read by regex rather than import: secret_rotation.py bootstraps sys.path and reads the
-    # environment on import, and a value guard has no business running either. The same rule
-    # covers probe_lib/health_rollout.py, which carries no bootstrap of its own only because
-    # health.py — the module it was split out of — imports it after doing one.
+    # environment on import, and a value guard has no business running either.
+    # probe_lib/health_rollout.py needs no such treatment — it imports only `datetime` — but
+    # the same regex rule is applied for consistency, so both rows read the same way.
     def read() -> str:
         match = re.search(rf"^{name} = (\d+)$", path.read_text(), re.MULTILINE)
         assert match, f"{path.relative_to(REPO)}: no `{name} = <int>` line"

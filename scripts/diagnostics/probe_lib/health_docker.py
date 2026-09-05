@@ -154,7 +154,7 @@ def resolve_ip(container):
     return ip
 
 
-def declared_on_pi(container, host_vars=PI_HOST_VARS):
+def declared_on_pi(container, host_vars=None):
     """Does daniel-pi's inventory declare a Docker service by this name?
 
     The Pi is the only Docker host left, so its `containers_list` is the whole population an
@@ -162,16 +162,17 @@ def declared_on_pi(container, host_vars=PI_HOST_VARS):
 
     Args:
         container: The service name an absent container was asked about.
-        host_vars: The inventory file to read. A parameter rather than a module global so the
-            unreadable-inventory case is exercised by passing a path, not by patching this
-            module — a patch would pin the name here and break the moment it moved.
+        host_vars: The inventory file to read, defaulting to `PI_HOST_VARS`. A parameter
+            rather than a module global so the unreadable-inventory case is exercised by
+            passing a path, not by patching this module — a patch would pin the name here and
+            break the moment it moved. The default resolves per call rather than in the
+            signature, so rebinding `PI_HOST_VARS` on the module still reaches this.
     """
     import yaml
 
+    path = host_vars or PI_HOST_VARS
     try:
-        entries = (yaml.safe_load(host_vars.read_text()) or {}).get(
-            "containers_list"
-        ) or []
+        entries = (yaml.safe_load(path.read_text()) or {}).get("containers_list") or []
     except OSError, yaml.YAMLError:
         # Fail closed: an unreadable inventory must not turn a missing container into a skip.
         return True

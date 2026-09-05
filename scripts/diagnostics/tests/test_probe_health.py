@@ -281,8 +281,13 @@ def test_k8s_health_argv_targets_the_named_namespace():
 #
 
 
-def _target(namespace, kind, name, workload, pods=None):
-    return (namespace, kind, name, workload, pods)
+def _target(namespace, kind, name, workload, pods_doc=None):
+    """One entry of `format_role_health`'s `checked` list.
+
+    `pods_doc`, not `pods`: the parameter would otherwise shadow the `pods()` fixture this
+    module imports, and every call site passes `pods()` for it.
+    """
+    return (namespace, kind, name, workload, pods_doc)
 
 
 def test_role_health_all_present_is_clean():
