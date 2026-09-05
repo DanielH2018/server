@@ -101,9 +101,8 @@ def advance_last_rotated(
 
     Advance-only, for two reasons. Seed dates are deliberately staggered and backdated
     (`secret_registry.seed_last_rotated`) and most secrets predate this file's git history, so
-    taking the
-    derived date unconditionally would collapse them onto the same introduction commit and
-    un-stagger every due-date. It also means this can only ever clear an overdue secret that a real
+    taking the derived date unconditionally would collapse them onto the same introduction
+    commit and un-stagger every due-date. It also means this can only ever clear an overdue secret that a real
     rotation already fixed, never create one.
     """
     # DECIDED: git evidence beats the seed even though it can overstate freshness for a
