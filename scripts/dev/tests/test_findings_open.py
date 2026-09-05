@@ -78,6 +78,15 @@ def test_open_with_a_refuted_match_refuses_and_plans_nothing(issue):
     assert (outcome, code, plans) == ("refuted", 3, [])
 
 
+def test_open_with_an_accepted_match_refuses_and_plans_nothing(issue):
+    """The accepting half of the pair below: an accepted trade-off is never re-filed."""
+    existing = issue(3, state="CLOSED", labels=("accepted",), fp="f" * 12)
+    outcome, code, plans = plan_open(
+        existing, title="T", body="B", labels=_LABELS, fp="f" * 12, source="s"
+    )
+    assert (outcome, code, plans) == ("accepted", 3, [])
+
+
 def test_open_with_a_fixed_match_reopens_then_comments(issue):
     existing = issue(3, state="CLOSED", fp="f" * 12)
     outcome, code, plans = plan_open(
@@ -136,6 +145,19 @@ def test_open_cli_exits_3_on_refuted(tmp_path, issue, make_tools):
     tools, calls = make_tools(Fakes(issues=[refuted]))
     argv = [*_open_argv(body), "--file", "a.py:1"]
     assert findings.main(argv, tools) == 3
+    assert not calls.gh
+
+
+def test_open_cli_exits_3_on_accepted(tmp_path, capsys, issue, make_tools):
+    """Exit 3 is what the review skill reads as 'already decided'; 0 would be silent."""
+    body = tmp_path / "b.md"
+    body.write_text("B")
+    fp = fingerprint("T", "a.py:1")
+    accepted = issue(3, state="CLOSED", labels=("accepted",), fp=fp)
+    tools, calls = make_tools(Fakes(issues=[accepted]))
+    argv = [*_open_argv(body), "--file", "a.py:1"]
+    assert findings.main(argv, tools) == 3
+    assert "#3 accepted" in capsys.readouterr().out
     assert not calls.gh
 
 

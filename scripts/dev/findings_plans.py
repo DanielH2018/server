@@ -18,6 +18,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from dev.findings_model import (
     LABELS,
+    NO_REOPEN,
     PROJECT_TITLE,
     _REOBSERVED,
     label_names,
@@ -25,6 +26,11 @@ from dev.findings_model import (
     trailer,
     verify_by_section,
 )
+
+# The close comment each not-planned outcome opens with, keyed by the outcome name — which is
+# also the label name, so both argv come from the same key. A dict rather than an `if` so a
+# typo raises KeyError instead of planning the wrong write.
+_NOT_PLANNED_PREFIX = {"refuted": "Refuted", "accepted": "Accepted"}
 
 
 def plan_sync_labels(existing: set[str]) -> list[list[str]]:
@@ -80,8 +86,8 @@ def plan_open(
 
     Returns:
         A ``(outcome, exit_code, plans)`` tuple: outcome is one of ``created``, ``touched``,
-        ``reopened`` or ``refuted``; exit_code is 3 only for ``refuted``; plans is the gh
-        argv list to run.
+        ``reopened``, ``refuted`` or ``accepted``; exit_code is 3 for the last two, which
+        are the terminal closes nothing reopens; plans is the gh argv list to run.
     """
     if existing is None:
         full_body = body
@@ -102,8 +108,12 @@ def plan_open(
         return "created", 0, [argv]
     n = str(existing["number"])
     names = label_names(existing)
-    if existing.get("state") == "CLOSED" and "refuted" in names:
-        return "refuted", 3, []
+    terminal = sorted(NO_REOPEN & names)
+    if existing.get("state") == "CLOSED" and terminal:
+        # Refuted means the finding was disproved; accepted means it is true and the operator
+        # chose to live with it. Either way re-filing it would reopen a decision already made,
+        # so the caller gets exit 3 and no writes are planned.
+        return terminal[0], 3, []
     if existing.get("state") == "CLOSED":
         return (
             "reopened",
@@ -125,28 +135,35 @@ def plan_open(
 def plan_close(
     number: int,
     *,
-    fixed: bool,
-    pr: int | None,
-    reason: str | None,
+    outcome: str,
+    pr: int | None = None,
+    reason: str | None = None,
     comment: str | None = None,
 ) -> list[list[str]]:
-    """Plans the gh argv to close an issue as fixed or refuted.
+    """Plans the gh argv to close an issue as fixed, refuted or accepted.
 
     Args:
         number: the issue number.
-        fixed: True to close as completed, False to close as refuted.
+        outcome: one of ``fixed`` (closed as completed), ``refuted`` (a skeptic disproved it)
+            or ``accepted`` (true, and the operator chose to live with it). The last two
+            close as not planned and add a label of the same name.
         pr: the PR that fixed it, included in the close comment when given.
-        reason: required when ``fixed`` is False; what disproved the finding.
+        reason: required for every outcome but ``fixed``; what disproved the finding, or why
+            the trade-off was accepted.
         comment: overrides the default close comment (`verify` uses this to quote the
             verify-by command and its output instead of naming a PR).
+
+    Raises:
+        KeyError: if ``outcome`` is not one of the three names.
     """
     n = str(number)
-    if fixed:
+    if outcome == "fixed":
         by = f" by PR #{pr}" if pr else ""
         text = comment or f"Fixed{by}."
         return [["issue", "close", n, "--reason", "completed", "--comment", text]]
+    prefix = _NOT_PLANNED_PREFIX[outcome]
     return [
-        ["issue", "edit", n, "--add-label", "refuted"],
+        ["issue", "edit", n, "--add-label", outcome],
         [
             "issue",
             "close",
@@ -154,7 +171,7 @@ def plan_close(
             "--reason",
             "not planned",
             "--comment",
-            f"Refuted: {reason}",
+            f"{prefix}: {reason}",
         ],
     ]
 

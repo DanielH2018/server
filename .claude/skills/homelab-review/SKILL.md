@@ -262,7 +262,11 @@ control is the "fires on nothing" case the repo warns about, and it reads exactl
   file, so a re-filed finding touches the existing issue instead of duplicating it; an exit of 3
   means a skeptic refuted it in an earlier run, and the issue holds the evidence — read it before
   re-raising. When the skeptic REFUTES a finding that already has an issue, close it with
-  `findings.py close <n> --refuted --reason "<what disproved it>"`.
+  `findings.py close <n> --refuted --reason "<what disproved it>"`. When the operator instead
+  ACCEPTS a confirmed finding as a deliberate trade-off, close it with
+  `findings.py close <n> --accepted --reason "<why the trade-off stands>"` — never as refuted,
+  which would record a falsehood, and never by hand, which the dedup cannot see: a hand-closed
+  issue is reopened by the next run's `open` with a comment reading "treat as a regression".
 - **Verify-by.** Add `--verify-by '<read-only command>'` to the `open` call whenever a probe
   already exists that would exit non-zero on the broken state and 0 once fixed —
   `uv run python scripts/diagnostics/probe.py health <svc>` or `<check>` for a workload-health
