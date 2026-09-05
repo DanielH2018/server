@@ -98,6 +98,48 @@ def test_discord_unreachable_rides_grace(monkeypatch, cfg):
     assert "1/2" in msg
 
 
+def test_discord_unreachable_redacts_the_webhook_url(monkeypatch, cfg):
+    # The reported vector: a webhook URL configured with no scheme. urllib raises
+    # `ValueError: unknown url type: '<the whole URL>'`, and that URL is the channel's bearer
+    # credential — it must not reach the Kuma msg (which check.py also logs).
+    url = "discord.com/api/webhooks/1/s3cr3t-token"
+    cfg = replace(
+        cfg,
+        DISCORD_WEBHOOK_URL=url,
+        DISCORD_CROWDSEC_WEBHOOK_URL="",
+        DISCORD_GITOPS_WEBHOOK_URL="",
+    )
+
+    def boom(*a, **k):
+        raise ValueError("unknown url type: '%s'" % url)
+
+    monkeypatch.setattr(bridge.net, "_get_json", boom)
+    _, msg = checks.notify.check_discord(cfg)
+    assert "s3cr3t-token" not in msg
+    assert url not in msg
+    assert "redacted" in msg  # non-vacuous: the branch ran and said something
+    assert "Kuma webhook" in msg  # and still names which channel failed
+
+
+def test_discord_unreachable_preserves_an_ordinary_error(monkeypatch, cfg):
+    # The other half of the pair: redaction must not swallow the diagnosis. A DNS failure
+    # carries no credential, so its text reaches the operator unchanged.
+    cfg = replace(
+        cfg,
+        DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/1/abc",
+        DISCORD_CROWDSEC_WEBHOOK_URL="",
+        DISCORD_GITOPS_WEBHOOK_URL="",
+    )
+
+    def boom(*a, **k):
+        raise OSError("[Errno -2] Name or service not known")
+
+    monkeypatch.setattr(bridge.net, "_get_json", boom)
+    _, msg = checks.notify.check_discord(cfg)
+    assert "Name or service not known" in msg
+    assert "redacted" not in msg
+
+
 def test_discord_disabled_without_url(monkeypatch, cfg):
     cfg = replace(
         cfg,

@@ -43,6 +43,30 @@ def _discord_webhooks(cfg: Config) -> list[tuple[str, str]]:
     ]
 
 
+def _redact(text: str, secrets: list[str]) -> str:
+    """Replace every configured webhook URL found in `text` with a placeholder.
+
+    A Discord webhook URL IS the bearer credential for that channel — anyone holding it can post
+    to it — so it must never reach an alert message or the pod log. An exception raised while
+    fetching one can quote it back verbatim: a URL configured with no scheme makes
+    `urllib.request.Request` raise `ValueError: unknown url type: '<the whole URL>'`, and
+    check_discord's generic branch used to format that straight into the msg, which check.py
+    then logs and net.push sends to Kuma (and on to Discord).
+
+    Both forms of every configured URL are redacted — as configured, and with the scheme
+    stripped — because urllib quotes the scheme-less remainder in some of its own errors. Every
+    configured webhook is redacted, not just the one being fetched, so an error quoting a
+    sibling channel's URL is covered too.
+    """
+    for secret in secrets:
+        if not secret:
+            continue
+        for form in (secret, secret.split("://", 1)[-1]):
+            if form:
+                text = text.replace(form, "<redacted webhook URL>")
+    return text
+
+
 def _smtp_login_ok(cfg: Config) -> tuple[bool, str]:
     """Connect to the SMTP server over implicit TLS and AUTH with the notify creds. (ok, msg).
 
@@ -116,7 +140,14 @@ def check_discord(cfg: Config) -> tuple[bool, str]:
         except (
             Exception
         ) as e:  # network/DNS blip -> ride the streak, don't page on one cycle
-            w_ok, w_msg = False, "unreachable: %s" % e
+            # str(e) can quote the webhook URL back (a scheme-less URL raises
+            # `ValueError: unknown url type: '<the URL>'`), and that URL is the channel's
+            # bearer credential — see _redact. The message still carries the real reason, so
+            # an ordinary "Name or service not known" still reaches the operator.
+            w_ok, w_msg = (
+                False,
+                "unreachable: %s" % _redact(str(e), [u for _, u in webhooks]),
+            )
         if not w_ok:
             ok, msg = False, "%s webhook: %s" % (label, w_msg)
             break
