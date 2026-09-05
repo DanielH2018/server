@@ -86,6 +86,15 @@ def send_discord_notification(
     Never raises: a failed notification is logged, not fatal -- by the time we get here
     the caller has already found something worth reporting and we don't want to crash
     before the healthcheck ping.
+
+    DECIDED (#1230): not routed through host_lib.discord_post, even though scripts/watchers/
+    runs from the repo checkout and CAN reach that file (checked -- cert_expiry.py's cron runs
+    `cd .../server && uv run python scripts/watchers/...`, so reachability is not the blocker
+    the issue asked to confirm). The two differ on purpose: this one shares a `requests.Session`
+    across the availability bots' repeated polls (host_lib's is a one-shot urllib POST), and its
+    30s timeout and bare `None` return don't match host_lib's 10s/bool-for-dedupe contract. Both
+    already guard the same Cloudflare 1010 UA block. Unifying them means redesigning one set of
+    callers, not a mechanical substitution.
     """
     try:
         response = requests.post(

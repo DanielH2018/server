@@ -65,6 +65,12 @@ sys.path.insert(0, str(_HERE.parent))
 
 from lib import yaml_fast  # noqa: E402
 
+# `run_git` used to be a private `subprocess.run` wrapper here; `git_stdout` is the same
+# shape (join argv onto `git`, capture+strip stdout, raise on a non-zero exit) plus stripping
+# every `GIT_*` env var first, so `cwd` alone would decide the tree even under a hook that
+# sets GIT_DIR/GIT_WORK_TREE (#1230). No `cwd=` at any call site here, matching the original.
+from lib.git import git_stdout as run_git  # noqa: E402
+
 import deploy_logic  # noqa: E402
 import staging_gate  # noqa: E402
 
@@ -195,12 +201,6 @@ def report_ticks(ticks: list[TickRun]) -> list[str]:
             f"needs attributing to the gate or to the change"
         )
     return lines
-
-
-def run_git(*args: str) -> str:
-    return subprocess.run(
-        ["git", *args], capture_output=True, text=True, check=True
-    ).stdout.strip()
 
 
 def changed_paths(sha: str) -> list[str]:

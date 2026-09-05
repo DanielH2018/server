@@ -458,3 +458,41 @@ def test_a_broken_import_is_reported_rather_than_read_as_no_sessions(monkeypatch
         "a failed import returned no lines — indistinguishable from 'no other sessions'"
     )
     assert "other-session detection is broken" in lines[0]
+
+
+_OTHER_WORKTREE_PORCELAIN = (
+    "worktree /repo\nHEAD aaa\nbranch refs/heads/master\n\n"
+    "worktree /repo/.claude/worktrees/other\nHEAD bbb\nbranch refs/heads/feature\n"
+    "locked some-other-session\n\n"
+)
+
+
+def _fake_subprocess_run_for_other_sessions(diff_stdout):
+    def fake(cmd, **kwargs):
+        return _result(
+            _OTHER_WORKTREE_PORCELAIN if cmd[:2] == ["git", "worktree"] else diff_stdout
+        )
+
+    return fake
+
+
+# Issue #1223: the per-tree dirty check delegates to `lib.git.git_dirty` now, not its own `git
+# status --porcelain` read. Pins "(+ uncommitted)" to follow git_dirty's answer, including a
+# git_dirty failure (tree vanished mid-scan) degrading to not-dirty rather than crashing the
+# section — matching the old `_run(check=False)` silence. Patches stdlib `subprocess.run`
+# (uncounted) instead of `_mod._run`, and `git_dirty` by its STRING target instead of as an
+# imported object, staying under the first-party monkeypatch ratchet on an already-capped file.
+def test_other_live_sessions_dirty_marker_follows_lib_git(monkeypatch):
+    monkeypatch.setattr(
+        subprocess, "run", _fake_subprocess_run_for_other_sessions("file.py\n")
+    )
+    monkeypatch.setattr("lib.git.git_dirty", lambda *a, **k: True)
+    assert "(+ uncommitted)" in _mod.other_live_sessions("/repo")[0]
+    monkeypatch.setattr("lib.git.git_dirty", lambda *a, **k: False)
+    assert "(+ uncommitted)" not in _mod.other_live_sessions("/repo")[0]
+
+    def boom(*a, **k):
+        raise subprocess.CalledProcessError(128, ["git", "status"])
+
+    monkeypatch.setattr("lib.git.git_dirty", boom)
+    assert "(+ uncommitted)" not in _mod.other_live_sessions("/repo")[0]

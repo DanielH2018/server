@@ -222,8 +222,10 @@ def other_live_sessions(cwd):
     # is indistinguishable from "no other sessions are running" — so the banner's whole
     # other-sessions section was silently absent from 2026-08 until 2026-09-01.
     sys.path.insert(0, os.path.join(REPO, "scripts", "dev"))
+    sys.path.insert(0, os.path.join(REPO, "scripts"))
     try:
         from prune_worktrees import parse_worktree_list, session_is_alive
+        from lib.git import git_dirty
     except ImportError as exc:
         # Fail open, because a SessionStart banner must never block a session from starting —
         # but say so. The silence is what let the path bug live for a month.
@@ -240,12 +242,20 @@ def other_live_sessions(cwd):
         changed = _run(
             ["git", "-C", tree.path, "diff", "--name-only", "origin/master...HEAD"], 5
         ).stdout
-        dirty = _run(["git", "-C", tree.path, "status", "--porcelain"], 5).stdout
+        # Untracked counted: an unlanded scratch file in another live session's worktree is
+        # exactly the "+ uncommitted" this banner exists to surface. check=False here (not
+        # git_dirty's own check=True default) because a tree that vanished mid-scan must read
+        # as "not dirty", the same silent-degrade `_run(check=False)` gave before this routed
+        # through lib.git.
+        try:
+            dirty = git_dirty(tree.path, include_untracked=True)
+        except subprocess.CalledProcessError:
+            dirty = False
         paths = sorted({p for p in changed.splitlines() if p})
         shown = ", ".join(paths[:4]) or "no commits yet"
         if len(paths) > 4:
             shown += f", +{len(paths) - 4} more"
-        if dirty.strip():
+        if dirty:
             shown += " (+ uncommitted)"
         lines.append(f"  • {tree.branch or os.path.basename(tree.path)} — {shown}")
     return lines

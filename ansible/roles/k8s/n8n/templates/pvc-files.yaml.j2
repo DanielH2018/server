@@ -1,10 +1,6 @@
+{% from 'pvc.yml.j2' import pvc with context %}
 ---
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: {{ n8n_k8s_files_claim }}
-  namespace: {{ k8s_namespace }}
-spec:
+{% call pvc(n8n_k8s_files_claim, n8n_k8s_files_storage_class, n8n_k8s_files_size) %}
   # A plain claim rather than a seeded one: the source directory
   # (containers/n8n/local-files) is empty and has been since Oct 2025, so there is nothing to
   # copy and a seed pod would verify an empty tree against an empty tree.
@@ -16,9 +12,4 @@ spec:
   #
   # `longhorn` (backed up) rather than longhorn-nobackup: unlike a search index, nothing
   # regenerates a file a workflow wrote here.
-  accessModes:
-    - ReadWriteOnce
-  storageClassName: {{ n8n_k8s_files_storage_class }}
-  resources:
-    requests:
-      storage: {{ n8n_k8s_files_size }}
+{% endcall %}

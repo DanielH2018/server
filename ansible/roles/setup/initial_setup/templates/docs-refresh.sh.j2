@@ -193,6 +193,8 @@ EOF
   # in docs/reference) inside the run window. That window is small -- the top-of-script gate exits
   # on any dirty tree, so everything tracked and modified here arrived during this run -- and
   # fail-closed is the direction this script's own header demands.
+  # SCOPE (see lib.git.git_dirty, #1223): path-scoped to the two generated trees, untracked
+  # counted within them — the one of the three scopes limited by paths rather than by tracked-ness.
   [ -z "$(git status --porcelain -- docs/reference docs/assets/generated)" ] || rc=1
   return "$rc"
 }
