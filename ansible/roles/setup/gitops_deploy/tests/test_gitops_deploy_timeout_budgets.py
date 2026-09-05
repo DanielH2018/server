@@ -2,11 +2,17 @@
 
 "The rollback survives max flock contention" is split across config.env.j2 (the run and
 health budgets), defaults/main.yml (the k8s deploy, rollback and staging budgets) and
-gitops-deploy.service.j2 (the flock wait and TimeoutStartSec). The weekly secret-rotate cron
-and deploy.sh wait on the same lock, so their waits must clear the deployer's worst hold, and
+gitops-deploy.service.j2 (the flock wait and TimeoutStartSec). Four other jobs wait on the same
+lock, so every one of their waits must clear the deployer's worst hold, and
 K8S_ROLLBACK_TIMEOUT_S must cover one full revert cycle for the worst promoted service. Every
 value is read from its source rather than pinned, so a bump to any one of them fails here
 instead of silently reopening the gap.
+
+The lock waiters are checked as a CENSUS (`_LOCK_WAITERS`) rather than one test each. Two of
+the four were pinned individually and the other two were not, so docs-refresh and eval-run sat
+at 2700 against a 2940s hold with every check green — and docs-refresh's comment claimed it
+matched secret-rotate, which was 3000. A per-consumer test only ever covers the consumers
+somebody remembered to write one for.
 """
 
 # ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_timeout_budgets.py
@@ -14,6 +20,7 @@ instead of silently reopening the gap.
 import pathlib
 import re
 
+import pytest
 import yaml
 
 # "The rollback survives max flock contention" is an invariant split across two templates:
@@ -135,37 +142,84 @@ def test_an_uncounted_staging_budget_is_caught():
     )
 
 
-_SECRET_ROTATE = (
-    pathlib.Path(__file__).parents[2]
-    / "initial_setup"
-    / "templates"
-    / "secret-rotate.sh.j2"
+_INITIAL_SETUP_TEMPLATES = (
+    pathlib.Path(__file__).parents[2] / "initial_setup" / "templates"
 )
+_SECRET_ROTATE = _INITIAL_SETUP_TEMPLATES / "secret-rotate.sh.j2"
+_REPO = pathlib.Path(__file__).parents[5]
+
+# Every job that waits for /var/lock/server-git-tree.lock, with the regex that reads its wait.
+#
+# WHY A CENSUS AND NOT ONE TEST EACH. Two of these four were pinned individually (secret-rotate
+# from the 2026-08-22 review M4, deploy.sh from 2026-08-23b M13) and the other two were not, so
+# docs-refresh and eval-run sat at 2700 against a 2940s hold while every check read green.
+# docs-refresh's own comment claimed it "matches secret-rotate" while secret-rotate was 3000.
+# A per-consumer test only covers the consumers somebody remembered to write one for; this
+# table is the thing a new waiter has to be added to, and the non-vacuity test below is what
+# makes forgetting fail rather than pass silently.
+_LOCK_WAITERS = {
+    "secret-rotate.sh.j2": (_SECRET_ROTATE, r"^flock\s+-w\s+(\d+)\s+9"),
+    "docs-refresh.sh.j2": (
+        _INITIAL_SETUP_TEMPLATES / "docs-refresh.sh.j2",
+        r"^flock\s+-w\s+(\d+)\s+9",
+    ),
+    "eval-run.sh.j2": (
+        _INITIAL_SETUP_TEMPLATES / "eval-run.sh.j2",
+        r"^flock\s+-w\s+(\d+)\s+9",
+    ),
+    "deploy.sh": (_REPO / "scripts" / "deploy.sh", r"^LOCK_WAIT=(\d+)"),
+}
 
 
-def test_secret_rotate_lock_wait_clears_the_deployers_worst_case_hold():
-    # 2026-08-22 review M4. gitops-deploy.service wraps its whole ExecStart in
-    # /var/lock/server-git-tree.lock, and one activation can run the forward deploy budget and
-    # then, in the failure path, the rollback budget — sequentially, inside that one hold. The
-    # weekly secret-rotate cron waits on the same lock.
+def test_the_lock_waiter_census_is_non_vacuous():
+    # Guards _LOCK_WAITERS itself. A census that silently lost a member — a renamed template, a
+    # bad edit — would leave the parametrized test below iterating over whatever survived and
+    # still passing, which is the failure this whole table exists to stop. Assert the names, not
+    # a count, so the message says WHICH waiter went missing.
+    assert set(_LOCK_WAITERS) == {
+        "secret-rotate.sh.j2",
+        "docs-refresh.sh.j2",
+        "eval-run.sh.j2",
+        "deploy.sh",
+    }
+    for name, (path, _) in _LOCK_WAITERS.items():
+        assert path.is_file(), (
+            f"{name}: {path} is gone; the census now checks nothing for it"
+        )
+
+
+@pytest.mark.parametrize("name", sorted(_LOCK_WAITERS))
+def test_every_git_tree_lock_waiter_clears_the_deployers_worst_case_hold(name):
+    # gitops-deploy.service wraps its whole ExecStart in /var/lock/server-git-tree.lock, and one
+    # activation runs the staging gate, the expectation check, the forward deploy budget and
+    # then, in the failure path, the rollback budget — sequentially, inside that one hold. A
+    # waiter that gives up early does not fail safe: it fires its unit's OnFailure= alert for
+    # ordinary contention AND skips that run. For the weekly secret-rotate that means the next
+    # attempt is +7 days, and ROTATE_LEAD_DAYS=8 against a 7-day cadence means a token usually
+    # gets exactly one eligible run, so a skipped week can put a token overdue.
     #
-    # At `flock -w 1200` against a 2220s worst case the cron gave up mid-incident and SKIPPED
-    # that week's rotation. crons.yml installs one weekly entry with no retry, and
-    # ROTATE_LEAD_DAYS=8 against a 7-day cadence means a token usually gets exactly one eligible
-    # run — so a skipped week can put a token overdue.
-    #
-    # Derived from the same sources the two budgets above read, so bumping either deploy timeout
-    # fails this test instead of silently re-opening the gap. A single failing service reaches
-    # the worst case; it does not need a batch.
+    # Derived from the same defaults the deployer reads, so bumping any of the four budgets
+    # fails this instead of silently shortening every waiter at once.
+    path, pattern = _LOCK_WAITERS[name]
     defaults = yaml.safe_load(_DEFAULTS.read_text())
     worst_hold = _worst_lock_hold(defaults)
 
-    cron_wait = int(_search1(r"^flock\s+-w\s+(\d+)\s+9", _SECRET_ROTATE.read_text()))
-    assert cron_wait >= worst_hold, (
-        f"secret-rotate's `flock -w {cron_wait}` must clear gitops-deploy's worst-case lock hold "
-        f"({worst_hold}s: the staging gate and expectation check, then K8S_DEPLOY_TIMEOUT_S and "
-        f"K8S_ROLLBACK_TIMEOUT_S), or a legitimate long rollback makes the weekly rotation skip a week "
-        f"with no retry (2026-08-22 review M4)."
+    wait = int(_search1(pattern, path.read_text()))
+    assert wait >= worst_hold, (
+        f"{name}'s git-tree lock wait of {wait}s must clear gitops-deploy's worst-case lock "
+        f"hold ({worst_hold}s: the staging gate and expectation check, then K8S_DEPLOY_TIMEOUT_S "
+        f"and K8S_ROLLBACK_TIMEOUT_S), or a legitimate long rollback makes this job skip a run "
+        f"and page for ordinary contention."
+    )
+
+
+def test_a_short_lock_waiter_is_flagged():
+    # Red proof for the parametrized test above, which can only ever be observed passing. This
+    # is the real pre-fix shape: docs-refresh's 2700 against the current 2940s hold.
+    defaults = yaml.safe_load(_DEFAULTS.read_text())
+    assert 2700 < _worst_lock_hold(defaults), (
+        "the worst-case hold must exceed 2700 for this red proof to mean anything; if the "
+        "budgets shrank below it, re-derive this number rather than deleting the test."
     )
 
 
@@ -240,25 +294,4 @@ def test_k8s_rollback_budget_covers_the_worst_single_promoted_service():
         f"gitops_deploy_k8s_rollback_timeout_s ({rollback_timeout}s) — its rollback can be "
         f"SIGTERMed mid-revert. Raise that default (and TimeoutStartSec, and re-check this "
         f"test's own comment on the batch-summation gap it does not cover)."
-    )
-
-
-_DEPLOY_SH = pathlib.Path(__file__).parents[5] / "scripts" / "deploy.sh"
-
-
-def test_deploy_sh_lock_wait_clears_the_deployers_worst_case_hold():
-    # 2026-08-23b review M13. The sibling above pins the weekly secret-rotate cron's wait
-    # against the same worst case. deploy.sh computes the identical quantity by hand, and its
-    # own comment records that the hand-derived value already rotted once: 1500 stayed put
-    # through two TimeoutStartSec bumps. Deriving it from the same defaults the deployer reads
-    # means the next bump fails here instead of silently shortening an operator's wait.
-    defaults = yaml.safe_load(_DEFAULTS.read_text())
-    worst_hold = _worst_lock_hold(defaults)
-
-    lock_wait = int(_search1(r"^LOCK_WAIT=(\d+)", _DEPLOY_SH.read_text()))
-    assert lock_wait >= worst_hold, (
-        f"deploy.sh's LOCK_WAIT={lock_wait} must clear gitops-deploy's worst-case lock hold "
-        f"({worst_hold}s: the staging gate and expectation check, then K8S_DEPLOY_TIMEOUT_S and "
-        f"K8S_ROLLBACK_TIMEOUT_S), or an operator deploy queued behind a legitimately long rollback exits "
-        f"75 having deployed nothing (2026-08-23b review M13)."
     )
