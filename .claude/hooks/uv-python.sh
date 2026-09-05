@@ -76,8 +76,95 @@ STDIO_FIXUP="python3 -c 'import os; [os.set_blocking(f, True) for f in (0, 1, 3)
 # so quote state is tracked explicitly. Separators inside `$(...)` are left as
 # separators on purpose: `echo $(cd x; pytest)` really does run pytest as a command
 # there, so rewriting it is correct rather than a splice.
+#
+# A heredoc body is the other half of the same problem, and the newline is what makes it
+# one: the body arrives inside the Bash tool's command text, so every line of it read as a
+# command start. A commit message reached master as `uv run health.py had grown to 938
+# lines`, and auto mode writes files through `cat > foo.py <<'EOF'`, so prose and source
+# are both exposed. The body is therefore skipped opaquely — `i` jumps past the terminator
+# line rather than the walk continuing through it. Skipping rather than parsing is what
+# keeps an apostrophe in "doesn't" from flipping the quote state, and a body that itself
+# writes `<<EOF` from opening a second heredoc.
+
+# What must follow `<<` for it to open a heredoc: an optional `-`, optional blanks, then a
+# character a delimiter word can start with. It is checked before the delimiter parse
+# because the two disagree about how to fail. A `<<` that names no delimiter is not a
+# heredoc at all, and `parse_heredoc_delimiter` reports that by bailing on the WHOLE command
+# — correct for a heredoc it cannot read, wrong for a `<<` that was never one. Screening
+# here lets those fall through to the ordinary walk instead.
+HEREDOC_OPENER=$'^-?[ \t]*[^ \t\n;&|<>()]'
+
+# Read the delimiter word of a heredoc whose `<<` starts at $i, and leave $i on its last
+# character so the walk's own increment steps past it. `<<EOF`, `<< EOF`, `<<'EOF'`,
+# `<<"EOF"` and `<<\EOF` all name the same delimiter EOF — the quoting decides whether the
+# shell expands the body, which is not something this hook reads. Returns non-zero when the
+# delimiter cannot be read, which the caller treats as "leave the command alone".
+parse_heredoc_delimiter() {
+    local j=$((i + 2)) ch q
+    heredoc_dash=
+    heredoc_delim=
+    [[ ${cmd:j:1} == '-' ]] && heredoc_dash=1 && ((j++))
+    while [[ ${cmd:j:1} == ' ' || ${cmd:j:1} == $'\t' ]]; do ((j++)); done
+    while ((j < n)); do
+        ch=${cmd:j:1}
+        case "$ch" in
+            "'" | '"')
+                q=$ch
+                ((j++))
+                while ((j < n)) && [[ ${cmd:j:1} != "$q" ]]; do
+                    heredoc_delim+=${cmd:j:1}
+                    ((j++))
+                done
+                ((j < n)) || return 1
+                ((j++))
+                ;;
+            "\\")
+                ((j++))
+                heredoc_delim+=${cmd:j:1}
+                ((j++))
+                ;;
+            [[:space:]] | ';' | '&' | '|' | '<' | '>' | '(' | ')')
+                break
+                ;;
+            *)
+                heredoc_delim+=$ch
+                ((j++))
+                ;;
+        esac
+    done
+    [[ -n "$heredoc_delim" ]] || return 1
+    i=$((j - 1))
+}
+
+# Jump $i from the newline that opens a heredoc body to just past its terminator line, and
+# register that position as a command start — the body itself contributes none. A `<<-`
+# heredoc lets its terminator carry leading tabs (tabs only, never spaces). Returns
+# non-zero when no terminator line exists, the same posture as an unterminated quote: the
+# body's extent is a guess, so nothing is spliced.
+skip_heredoc_body() {
+    local pos=$((i + 1)) line
+    while ((pos < n)); do
+        line=${cmd:pos}
+        line=${line%%$'\n'*}
+        local raw=$line
+        if [[ -n "$heredoc_dash" ]]; then
+            while [[ "$line" == $'\t'* ]]; do line=${line#$'\t'}; done
+        fi
+        pos=$((pos + ${#raw} + 1))
+        if [[ "$line" == "$heredoc_delim" ]]; then
+            heredoc_delim=
+            ((pos < n)) && starts+=("$pos")
+            i=$pos
+            return 0
+        fi
+    done
+    return 1
+}
+
 declare -a starts=(0)
 state=none
+heredoc_delim=
+heredoc_dash=
 i=0
 n=${#cmd}
 while ((i < n)); do
@@ -88,7 +175,23 @@ while ((i < n)); do
                 "'") state=single ;;
                 '"') state=double ;;
                 "\\") ((i++)) ;;
-                ';' | '&' | '|' | $'\n') starts+=("$((i + 1))") ;;
+                '<')
+                    if [[ ${cmd:i:3} == '<<<' ]]; then
+                        # A here-string is a single-line redirection: no body to skip.
+                        ((i += 2))
+                    elif [[ ${cmd:i:2} == '<<' && ${cmd:i+2} =~ $HEREDOC_OPENER ]]; then
+                        # Two heredocs opened on one line (`cat <<A <<B`) is rare enough
+                        # that bailing beats queueing: leave the command alone.
+                        [[ -z "$heredoc_delim" ]] && parse_heredoc_delimiter || exit 0
+                    fi
+                    ;;
+                ';' | '&' | '|' | $'\n')
+                    if [[ "$c" == $'\n' && -n "$heredoc_delim" ]]; then
+                        skip_heredoc_body || exit 0
+                        continue
+                    fi
+                    starts+=("$((i + 1))")
+                    ;;
             esac
             ;;
         single)
