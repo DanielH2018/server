@@ -1,16 +1,21 @@
-"""`probe.py health <svc>`: the post-deploy gate.
+"""`probe.py health <svc>`: the Docker verdict, the rollout verdict, and the role rollup.
 
 It exits 0 only when the workload is fully rolled out AND nothing restarted in the last 180s.
 Both halves matter: readiness flips a Deployment to Available before a bad liveness probe starts
 killing it, so a rollout check alone reports green on a crashlooping pod. An unreadable restart
 time counts as recent, so the gate fails closed.
+
+The other two thirds of this gate have their own modules: `test_probe_health_resolver.py` for
+the deploy-tag-to-workload resolution and the pod selector, `test_probe_health_cronjobs.py` for
+the CronJob path. Shared fakes are in `_probe_health_fixtures.py`.
+
+Run: uv run pytest scripts/diagnostics/tests/test_probe_health.py
 """
 
-import collections
-import functools
-from datetime import datetime, timezone
+from _probe_health_fixtures import NOW, pods
 
-from diagnostics.probe_lib import health
+from diagnostics.probe_lib import health, health_docker, health_rollout
+from diagnostics.probe_lib import health_kubectl
 
 
 def _inspect(state, restarts=0):
@@ -18,7 +23,7 @@ def _inspect(state, restarts=0):
 
 
 def test_inspect_argv():
-    assert health.inspect_argv("jellyfin") == ["docker", "inspect", "jellyfin"]
+    assert health_docker.inspect_argv("jellyfin") == ["docker", "inspect", "jellyfin"]
 
 
 def test_health_running_and_healthy_exits_zero():
@@ -32,7 +37,7 @@ def test_health_running_and_healthy_exits_zero():
             },
         }
     )
-    text, code = health.format_health(data, "jellyfin")
+    text, code = health_docker.format_health(data, "jellyfin")
     assert code == 0
     assert "healthy" in text and "running" in text
 
@@ -48,26 +53,26 @@ def test_health_unhealthy_exits_one_and_shows_streak_and_last_log():
             },
         }
     )
-    text, code = health.format_health(data, "qbittorrent")
+    text, code = health_docker.format_health(data, "qbittorrent")
     assert code == 1
     assert "unhealthy" in text and "3" in text and "connection refused" in text
 
 
 def test_health_no_healthcheck_running_exits_zero():
-    text, code = health.format_health(_inspect({"Status": "running"}), "valheim")
+    text, code = health_docker.format_health(_inspect({"Status": "running"}), "valheim")
     assert code == 0
     assert "no healthcheck" in text
 
 
 def test_health_exited_exits_one():
-    text, code = health.format_health(_inspect({"Status": "exited"}), "valheim")
+    text, code = health_docker.format_health(_inspect({"Status": "exited"}), "valheim")
     assert code == 1
     assert "exited" in text
 
 
 def test_health_absent_and_undeclared_is_clean():
     """An undeclared name is a block tag or a typo — the one absence the notifier may skip."""
-    text, code = health.format_health([], "nope", declared=False)
+    text, code = health_docker.format_health([], "nope", declared=False)
     assert code == 1
     assert "not a declared service on any host" in text
 
@@ -79,10 +84,26 @@ def test_health_absent_but_declared_is_flagged():
     not create it — and until 2026-09-01 it shared the undeclared case's "not found (not created"
     message, which the notifier skipped.
     """
-    text, code = health.format_health([], "wg-easy", declared=True)
+    text, code = health_docker.format_health([], "wg-easy", declared=True)
     assert code == 1
     assert "MISSING" in text
     assert "not a declared service on any host" not in text
+
+
+#
+# daniel-pi's inventory is the population an absent container is measured against — the Pi is
+# the only Docker host left. `declared_on_pi` takes the inventory path as an argument so this
+# reads the fail-closed branch by passing one, rather than by patching a module global.
+
+
+def test_declared_on_pi_reads_the_pis_containers_list():
+    assert health_docker.declared_on_pi("wg-easy") is True
+    assert health_docker.declared_on_pi("definitely-not-a-service") is False
+
+
+def test_declared_on_pi_fails_closed_on_an_unreadable_inventory(tmp_path):
+    """Fail closed: an unreadable inventory must not turn a missing container into a skip."""
+    assert health_docker.declared_on_pi("wg-easy", tmp_path / "gone.yml") is True
 
 
 #
@@ -90,8 +111,6 @@ def test_health_absent_but_declared_is_flagged():
 # cluster nodes since the 2026-08-14 Docker retirement — neither has the binary, so it raised
 # FileNotFoundError. Every case below is a way the k8s replacement could report healthy when it
 # is not, which is the only direction that matters for a post-deploy gate.
-
-_NOW = datetime(2026, 8, 16, 12, 0, 0, tzinfo=timezone.utc)
 
 
 def _deploy(generation=1, observed=1, replicas=1, updated=1, ready=1, available=1):
@@ -107,60 +126,35 @@ def _deploy(generation=1, observed=1, replicas=1, updated=1, ready=1, available=
     }
 
 
-def _pods(*containers):
-    """containers: (name, restart_count, finished_at_or_None)."""
-    return {
-        "items": [
-            {
-                "metadata": {"name": "svc-abc"},
-                "status": {
-                    "containerStatuses": [
-                        {
-                            "name": name,
-                            "restartCount": count,
-                            "lastState": (
-                                {"terminated": {"finishedAt": finished}}
-                                if finished
-                                else {}
-                            ),
-                        }
-                        for name, count, finished in containers
-                    ]
-                },
-            }
-        ]
-    }
-
-
 def test_k8s_health_rolled_out_and_quiet_exits_zero():
-    text, code = health.format_k8s_health(
-        _deploy(), _pods(("app", 0, None)), "freshrss", _NOW
+    text, code = health_rollout.format_k8s_health(
+        _deploy(), pods(("app", 0, None)), "freshrss", NOW
     )
     assert code == 0
     assert "1/1 ready" in text
 
 
 def test_k8s_health_missing_deployment_exits_one():
-    text, code = health.format_k8s_health(None, None, "nope", _NOW)
+    text, code = health_rollout.format_k8s_health(None, None, "nope", NOW)
     assert code == 1
     assert "no Deployment" in text
 
 
 def test_k8s_health_stale_generation_exits_one():
     """The controller has not observed the spec change yet, so the OLD pod is what is ready."""
-    text, code = health.format_k8s_health(
-        _deploy(generation=5, observed=4), _pods(("app", 0, None)), "freshrss", _NOW
+    text, code = health_rollout.format_k8s_health(
+        _deploy(generation=5, observed=4), pods(("app", 0, None)), "freshrss", NOW
     )
     assert code == 1
     assert "not observed yet" in text
 
 
 def test_k8s_health_incomplete_rollout_exits_one():
-    text, code = health.format_k8s_health(
+    text, code = health_rollout.format_k8s_health(
         _deploy(replicas=2, updated=1, ready=1, available=1),
-        _pods(("app", 0, None)),
+        pods(("app", 0, None)),
         "freshrss",
-        _NOW,
+        NOW,
     )
     assert code == 1
     assert "rollout incomplete" in text
@@ -173,8 +167,8 @@ def test_k8s_health_recent_restart_exits_one_despite_being_ready():
     getting killed. Every readiness-derived field reads healthy while the pod crashloops.
     """
     just_now = "2026-08-16T11:59:30Z"
-    text, code = health.format_k8s_health(
-        _deploy(), _pods(("app", 3, just_now)), "kube-state-metrics", _NOW
+    text, code = health_rollout.format_k8s_health(
+        _deploy(), pods(("app", 3, just_now)), "kube-state-metrics", NOW
     )
     assert code == 1
     assert "RECENT RESTART" in text and "30s ago" in text
@@ -184,8 +178,8 @@ def test_k8s_health_old_restart_does_not_fail():
     """A pod that restarted last week and has been up since is healthy — restartCount alone
     would fail it forever."""
     last_week = "2026-08-09T12:00:00Z"
-    text, code = health.format_k8s_health(
-        _deploy(), _pods(("app", 3, last_week)), "freshrss", _NOW
+    text, code = health_rollout.format_k8s_health(
+        _deploy(), pods(("app", 3, last_week)), "freshrss", NOW
     )
     assert code == 0
     assert "restarts=3" in text
@@ -197,11 +191,11 @@ def test_k8s_health_unparseable_restart_timestamp_does_not_fail_open():
     Treating unknown as old is the one direction a gate must never fail. Reachable whenever
     kubectl's timestamp format shifts — fractional seconds, for instance, parse as None.
     """
-    assert health._seconds_since("not-a-timestamp", _NOW) is None
-    assert health._seconds_since(None, _NOW) is None
+    assert health_rollout._seconds_since("not-a-timestamp", NOW) is None
+    assert health_rollout._seconds_since(None, NOW) is None
 
-    text, code = health.format_k8s_health(
-        _deploy(), _pods(("app", 1, "2026-08-16T11:59:30.123456Z")), "freshrss", _NOW
+    text, code = health_rollout.format_k8s_health(
+        _deploy(), pods(("app", 1, "2026-08-16T11:59:30.123456Z")), "freshrss", NOW
     )
     assert code == 1
     assert "unreadable time" in text
@@ -209,8 +203,8 @@ def test_k8s_health_unparseable_restart_timestamp_does_not_fail_open():
 
 def test_k8s_health_restart_with_no_laststate_fails_closed():
     """restartCount > 0 with no terminated state is still an unexplained restart."""
-    text, code = health.format_k8s_health(
-        _deploy(), _pods(("app", 2, None)), "freshrss", _NOW
+    text, code = health_rollout.format_k8s_health(
+        _deploy(), pods(("app", 2, None)), "freshrss", NOW
     )
     assert code == 1
     assert "unreadable time" in text
@@ -219,8 +213,8 @@ def test_k8s_health_restart_with_no_laststate_fails_closed():
 def test_k8s_health_checks_every_container_in_the_pod():
     """A sidecar crashlooping while the main container is fine still fails the gate."""
     just_now = "2026-08-16T11:59:00Z"
-    text, code = health.format_k8s_health(
-        _deploy(), _pods(("app", 0, None), ("sidecar", 9, just_now)), "n8n", _NOW
+    text, code = health_rollout.format_k8s_health(
+        _deploy(), pods(("app", 0, None), ("sidecar", 9, just_now)), "n8n", NOW
     )
     assert code == 1
     assert "sidecar" in text
@@ -245,8 +239,8 @@ def test_k8s_health_reads_a_daemonset():
 
     They carry the same four numbers under different status field names.
     """
-    text, code = health.format_k8s_health(
-        _daemonset(), _pods(("app", 0, None)), "alloy", _NOW
+    text, code = health_rollout.format_k8s_health(
+        _daemonset(), pods(("app", 0, None)), "alloy", NOW
     )
     assert code == 0
     assert "2/2 ready" in text
@@ -255,25 +249,27 @@ def test_k8s_health_reads_a_daemonset():
 def test_k8s_health_daemonset_missing_a_node_exits_one():
     """Scheduled on 2 nodes, ready on 1 — a Deployment's readyReplicas would read 0 here, so
     the field mapping has to be per-kind rather than a shared default."""
-    text, code = health.format_k8s_health(
-        _daemonset(ready=1, available=1), _pods(("app", 0, None)), "alloy", _NOW
+    text, code = health_rollout.format_k8s_health(
+        _daemonset(ready=1, available=1), pods(("app", 0, None)), "alloy", NOW
     )
     assert code == 1
     assert "rollout incomplete" in text
 
 
 def test_k8s_health_argv_can_ask_for_a_daemonset():
-    assert "daemonset" in health.k8s_deploy_argv("alloy", "homelab", kind="daemonset")
+    assert "daemonset" in health_kubectl.k8s_deploy_argv(
+        "alloy", "homelab", kind="daemonset"
+    )
 
 
 def test_k8s_health_argv_targets_the_named_namespace():
-    assert health.k8s_deploy_argv("freshrss", "homelab")[:4] == [
+    assert health_kubectl.k8s_deploy_argv("freshrss", "homelab")[:4] == [
         "k3s",
         "kubectl",
         "-n",
         "homelab",
     ]
-    assert "app=freshrss" in health.k8s_pods_argv("freshrss", "homelab")
+    assert "app=freshrss" in health_kubectl.k8s_pods_argv("freshrss", "homelab")
 
 
 #
@@ -285,18 +281,23 @@ def test_k8s_health_argv_targets_the_named_namespace():
 #
 
 
-def _target(namespace, kind, name, workload, pods=None):
-    return (namespace, kind, name, workload, pods)
+def _target(namespace, kind, name, workload, pods_doc=None):
+    """One entry of `format_role_health`'s `checked` list.
+
+    `pods_doc`, not `pods`: the parameter would otherwise shadow the `pods()` fixture this
+    module imports, and every call site passes `pods()` for it.
+    """
+    return (namespace, kind, name, workload, pods_doc)
 
 
 def test_role_health_all_present_is_clean():
     text, code = health.format_role_health(
         "claude-otel",
         [
-            _target("observability", "Deployment", "grafana", _deploy(), _pods()),
-            _target("observability", "Deployment", "loki", _deploy(), _pods()),
+            _target("observability", "Deployment", "grafana", _deploy(), pods()),
+            _target("observability", "Deployment", "loki", _deploy(), pods()),
         ],
-        _NOW,
+        NOW,
     )
     assert code == 0
     assert "all 2 workloads healthy" in text
@@ -313,9 +314,9 @@ def test_role_health_absent_workload_is_flagged():
         "claude-otel",
         [
             _target("observability", "Deployment", "grafana", None),
-            _target("observability", "Deployment", "loki", _deploy(), _pods()),
+            _target("observability", "Deployment", "loki", _deploy(), pods()),
         ],
-        _NOW,
+        NOW,
     )
     assert code == 1
     assert "MISSING" in text
@@ -333,16 +334,16 @@ def test_role_health_unhealthy_sibling_is_flagged():
     text, code = health.format_role_health(
         "karakeep",
         [
-            _target("homelab", "Deployment", "karakeep", _deploy(), _pods()),
+            _target("homelab", "Deployment", "karakeep", _deploy(), pods()),
             _target(
                 "homelab",
                 "Deployment",
                 "karakeep-time-tagger",
                 _deploy(ready=0, available=0),
-                _pods(),
+                pods(),
             ),
         ],
-        _NOW,
+        NOW,
     )
     assert code == 1
     assert "karakeep-time-tagger" in text.splitlines()[0]
@@ -355,644 +356,8 @@ def test_role_health_verdict_rides_the_first_line():
         "scrutiny",
         [
             _target("homelab", "Deployment", "scrutiny-web", None),
-            _target("homelab", "Deployment", "scrutiny-influxdb", _deploy(), _pods()),
+            _target("homelab", "Deployment", "scrutiny-influxdb", _deploy(), pods()),
         ],
-        _NOW,
+        NOW,
     )
     assert "FAILED" in text.splitlines()[0]
-
-
-#
-# The derived corpus. The role -> workload mapping is rendered from the manifests rather than
-# listed, so a role that adds a workload is covered without anyone editing this file. What IS
-# pinned is the two ways the mapping can silently SHRINK: a role dropping out of the
-# multi-workload set, and a role joining the resolves-to-nothing set.
-#
-
-# Roles whose manifests declare no Deployment, DaemonSet or StatefulSet, each with what they
-# declare instead. Membership here means `probe.py health <role>` legitimately has nothing to
-# check, which the notifier skips — so a role arriving here by accident is a gate that stopped
-# running, exactly the PR #685 failure. Verified against the rendered manifests 2026-09-01.
-_ROLES_WITH_NO_WORKLOAD = {
-    "configarr": "a CronJob and its Secret; the sync runs to completion, nothing stays up",
-    "longhorn-ui": "an IngressRoute, Middleware and TLSOption onto longhorn-system's own UI",
-    "media-volume": "a StorageClass, PV, PVC and a one-shot Job — storage, not a workload",
-    "n8n-images": "only Dockerfiles — it delegates to image-builder and owns no manifest",
-    "netpol-baseline": "NetworkPolicies plus the Job that probes them",
-    "pi-peer-backup": "a CronJob, its PVC and its Secret",
-}
-
-# Roles where the tag is NOT the name of every workload to check. Pinned as a LOWER bound: the
-# resolver must still return at least these names. Extra workloads are fine and need no edit
-# here; a name disappearing is a workload that stopped being gated.
-_MULTI_WORKLOAD_ROLES = {
-    "claude-otel": {
-        "grafana",
-        "kube-state-metrics",
-        "loki",
-        "otel-collector",
-        "prometheus",
-        "tempo",
-    },
-    "cloudflare-ddns": {"cloudflare-ddns-direct", "cloudflare-ddns-proxied"},
-    "crowdsec": {"crowdsec", "crowdsec-node-agent"},
-    "freshrss": {"freshrss", "freshrss-feed-cache"},
-    "karakeep": {
-        "karakeep",
-        "karakeep-chrome",
-        "karakeep-meilisearch",
-        "karakeep-time-tagger",
-    },
-    "loki-homelab": {"alloy", "loki-homelab"},
-    "n8n": {"n8n", "n8n-runners"},
-    "pihole": {"pihole", "pihole-2"},
-    "prowlarr": {"flaresolverr", "prowlarr"},
-    "scrutiny": {"scrutiny-collector", "scrutiny-influxdb", "scrutiny-web"},
-}
-
-# Workloads that do not live in the default namespace. `probe.py health` asked the default
-# namespace for every name until 2026-09-01, so dri-device-plugin's DaemonSet — the only thing
-# its role deploys — was unreachable and the gate skipped it.
-_NON_DEFAULT_NAMESPACES = {
-    "claude-otel": "observability",
-    "dri-device-plugin": "kube-system",
-}
-
-_DEFAULT_NS = "homelab"
-
-
-@functools.cache
-def _resolved():
-    """{role: [(namespace, kind, name)]} for every k8s role the resolver handles.
-
-    Cached: this renders every role in the tree (~3s), six tests read it, and until 2026-09-01
-    each paid for its own render. The tree does not change under a test run.
-    """
-    from validate import k8s_manifests as validator
-
-    roles = sorted(d.name for d in validator.K8S_ROLES.iterdir() if d.is_dir())
-    out = {}
-    for role in roles:
-        targets = health.role_workload_targets(role, _DEFAULT_NS)
-        if targets is not None:
-            out[role] = targets
-    return out
-
-
-def test_resolver_covers_the_whole_k8s_tree():
-    """A resolver that returned None for everything would make every assertion below vacuous
-    while leaving the gate on the guess-the-name path it is replacing."""
-    resolved = _resolved()
-    assert len(resolved) > 40, resolved.keys()
-    assert "claude-otel" in resolved and "jellyfin" in resolved
-
-
-def test_roles_with_no_workload_have_not_grown():
-    resolved = _resolved()
-    empty = {role for role, targets in resolved.items() if not targets}
-    assert empty == set(_ROLES_WITH_NO_WORKLOAD), (
-        "a role resolving to no workload is a role probe.py health cannot gate. Add it to "
-        "_ROLES_WITH_NO_WORKLOAD with what it declares instead, or give it a workload."
-    )
-
-
-def test_multi_workload_roles_still_resolve_their_siblings():
-    resolved = _resolved()
-    for role, expected in _MULTI_WORKLOAD_ROLES.items():
-        names = {name for _, _, name in resolved[role]}
-        assert expected <= names, f"{role} lost {sorted(expected - names)}"
-
-
-def test_multi_workload_roles_are_not_named_after_their_tag():
-    """The reject half of the pin above: a multi-workload role is not named after its tag.
-
-    These roles are listed BECAUSE the tag alone is not enough. One that became a plain
-    single-workload role should leave the list rather than sit here asserting nothing.
-    """
-    resolved = _resolved()
-    for role in _MULTI_WORKLOAD_ROLES:
-        names = {name for _, _, name in resolved[role]}
-        assert names != {role}, f"{role} now resolves to just its own name"
-
-
-def test_workloads_outside_the_default_namespace_keep_their_own():
-    resolved = _resolved()
-    for role, namespace in _NON_DEFAULT_NAMESPACES.items():
-        namespaces = {ns for ns, _, _ in resolved[role]}
-        assert namespaces == {namespace}, f"{role}: {namespaces}"
-
-
-def test_workloads_without_an_explicit_namespace_take_the_default():
-    resolved = _resolved()
-    assert {ns for ns, _, _ in resolved["jellyfin"]} == {_DEFAULT_NS}
-
-
-def test_resolver_returns_none_for_a_tag_that_is_not_a_k8s_role():
-    """`config` is a block tag; glances and autoheal run only on daniel-pi.
-
-    None sends run_health down the guess-the-name path, which is what lets --docker reach the Pi.
-
-    Not wg-easy: it is a role on BOTH trees, and the resolver prefers the k8s one, matching
-    run_health's own k8s-first ordering.
-    """
-    assert health.role_workload_targets("config", _DEFAULT_NS) is None
-    assert health.role_workload_targets("glances", _DEFAULT_NS) is None
-    assert health.role_workload_targets("autoheal", _DEFAULT_NS) is None
-
-
-def test_resolver_respects_the_validators_skip_roles():
-    """volume-claim and image-builder render only with vars a CALLING role passes, so rendering
-    them standalone produces stub-filled manifests. Widening past that boundary would invent
-    workload names and report them MISSING."""
-    from validate import k8s_manifests as validator
-
-    for role in sorted(validator.SKIP_ROLES):
-        assert health.role_workload_targets(role, _DEFAULT_NS) is None, role
-
-
-def test_statefulset_is_resolvable_and_lookupable():
-    """No role deploys one today.
-
-    Resolving a kind the kubectl lookup cannot ask for would make the first StatefulSet added read
-    as MISSING, so the two sets have to agree.
-    """
-    assert "StatefulSet" in health.WORKLOAD_KINDS
-    assert health.WORKLOAD_KINDS["StatefulSet"] == "statefulset"
-    assert "statefulset" in health.k8s_deploy_argv(
-        "postgres", "homelab", kind="statefulset"
-    )
-
-
-#
-# The pod query behind the restart half of the gate. A selector matching NO pods yields
-# restarts=0 and an empty recent-restart list — byte-identical to a genuinely quiet workload —
-# so a wrong selector makes that half silently inert rather than failing.
-#
-
-
-def _workload(name, selector, template=None):
-    spec = {"selector": {"matchLabels": selector}}
-    if template is not None:
-        spec["template"] = {"metadata": {"labels": template}}
-    return {"metadata": {"name": name}, "spec": spec}
-
-
-def test_pod_selector_matches_a_workloads_own_labels():
-    assert (
-        health.pod_selector(_workload("grafana", {"app": "grafana"})) == "app=grafana"
-    )
-
-
-def test_pod_selector_is_flagged_when_it_would_differ_from_the_name():
-    """A pod selector that would differ from the workload name must be flagged.
-
-    pihole-2's Deployment selects `app: pihole`. `app=pihole-2` matched no pods at all, and
-    `app=pihole` matched BOTH piholes' — confirmed live 2026-09-01.
-    """
-    selector = health.pod_selector(_workload("pihole-2", {"app": "pihole"}))
-    assert selector == "app=pihole"
-    assert selector != "app=pihole-2"
-
-
-def test_pod_selector_separates_two_instances_sharing_one_selector():
-    """The accept half of the pihole fix (issue #802).
-
-    `spec.selector` is immutable, so both pihole Deployments select `app: pihole` and neither can
-    be given a discriminating selector label. The pod template carries `instance:` instead, and
-    reading the template is what makes each instance's query match only its own pods.
-    """
-    shared = {"app": "pihole"}
-    one = health.pod_selector(
-        _workload("pihole", shared, {"app": "pihole", "instance": "pihole"})
-    )
-    two = health.pod_selector(
-        _workload("pihole-2", shared, {"app": "pihole", "instance": "pihole-2"})
-    )
-    assert one == "app=pihole,instance=pihole"
-    assert two == "app=pihole,instance=pihole-2"
-    assert one != two
-
-
-def test_pod_selector_is_flagged_when_it_reads_only_the_shared_selector():
-    """The reject half.
-
-    Reading `spec.selector.matchLabels` — what this did until 2026-09-02 — returns the same
-    string for both instances, so each one's pod query matched the union of the two. A test that
-    only asserted the selector is non-empty would pass just as well with that rule back in place.
-    """
-    shared = {"app": "pihole"}
-    templates = [
-        {"app": "pihole", "instance": "pihole"},
-        {"app": "pihole", "instance": "pihole-2"},
-    ]
-    old_rule = {
-        ",".join(f"{k}={v}" for k, v in sorted(shared.items())) for _ in templates
-    }
-    new_rule = {
-        health.pod_selector(_workload("pihole", shared, template))
-        for template in templates
-    }
-    assert len(old_rule) == 1
-    assert len(new_rule) == 2
-
-
-def test_pod_selector_is_never_wider_than_the_workloads_own_selector():
-    """k8s requires the template labels to be a superset of the selector, so the query this
-    builds can only ever narrow. Asserting it directly keeps a future edit from widening it."""
-    selector = {"app": "pihole"}
-    template = {"app": "pihole", "instance": "pihole-2", "netpol-baseline": "enforced"}
-    built = dict(
-        pair.split("=", 1)
-        for pair in health.pod_selector(
-            _workload("pihole-2", selector, template)
-        ).split(",")
-    )
-    assert selector.items() <= built.items()
-
-
-def test_pod_selector_falls_back_rather_than_matching_every_pod():
-    """A workload with no selector is rejected by the k8s API, so this is unreachable — but an
-    empty `-l` would query the whole namespace, which is worse than the old guess."""
-    assert health.pod_selector({}) == ""
-    assert "app=pihole-2" in health.k8s_pods_argv("pihole-2", "homelab", "")
-
-
-def test_pods_argv_prefers_an_explicit_selector():
-    argv = health.k8s_pods_argv("pihole-2", "homelab", "app=pihole")
-    assert "app=pihole" in argv and "app=pihole-2" not in argv
-
-
-@functools.cache
-def _rendered_workloads():
-    """[(role, workload doc)] for every Deployment/DaemonSet/StatefulSet in the tree.
-
-    Cached for the same reason as `_resolved`: one full render per worker, not one per test.
-    """
-    return list(_iter_rendered_workloads())
-
-
-def _iter_rendered_workloads():
-    validator, base, entries = health._render_context()
-    for role_dir in sorted(d for d in validator.K8S_ROLES.iterdir() if d.is_dir()):
-        role = role_dir.name
-        if role in validator.SKIP_ROLES or role not in entries:
-            continue
-        ctx = {
-            **base,
-            **validator.role_defaults(role, base),
-            "container_item": entries[role],
-        }
-        for tpl in sorted(
-            p
-            for p in (role_dir / "templates").glob("*.j2")
-            if validator.is_manifest_template(p)
-        ):
-            err, docs = validator.check_template(role, tpl, ctx)
-            assert not err, f"{role}/{tpl.name}: {err}"
-            for doc in docs:
-                if isinstance(doc, dict) and doc.get("kind") in health.WORKLOAD_KINDS:
-                    yield role, doc
-
-
-def test_every_rendered_workload_yields_a_usable_pod_selector():
-    """The tree-wide pin.
-
-    Nothing else connects a manifest's selector to the query the gate runs, and a selector matching
-    nothing reads as a healthy quiet workload. An empty result here would send `kubectl get pods -l
-    ''` at the whole namespace.
-    """
-    workloads = list(_rendered_workloads())
-    assert len(workloads) > 50, len(workloads)
-    for role, doc in workloads:
-        name = (doc.get("metadata") or {}).get("name")
-        assert health.pod_selector(doc), f"{role}/{name} declares no matchLabels"
-
-
-def test_no_two_rendered_workloads_share_a_pod_selector():
-    """The tree-wide pin for issue #802.
-
-    Two workloads resolving to the same `-l` expression means each reads the union of both's
-    pods, so a restart in either fails the gate for both. The unit tests above pin the pihole
-    pair; this one catches the next role that grows a second instance off one pod template.
-    """
-    by_selector = collections.defaultdict(list)
-    for role, doc in _rendered_workloads():
-        name = (doc.get("metadata") or {}).get("name")
-        by_selector[health.pod_selector(doc)].append(f"{role}/{name}")
-    shared = {sel: names for sel, names in by_selector.items() if len(names) > 1}
-    assert not shared, shared
-
-
-def test_a_workload_selecting_labels_other_than_its_own_name_still_exists():
-    """The reject half.
-
-    `app=<name>` was the assumption until 2026-09-01, and it is right for every workload but one —
-    so a test asserting only that the selector is non-empty would pass just as well with the
-    assumption back in place. This names the counter-example.
-    """
-    divergent = {
-        (role, (doc.get("metadata") or {}).get("name"))
-        for role, doc in _rendered_workloads()
-        if health.pod_selector(doc) != f"app={(doc.get('metadata') or {}).get('name')}"
-    }
-    assert ("pihole", "pihole-2") in divergent, divergent
-    assert health.declared_on_pi("wg-easy") is True
-    assert health.declared_on_pi("definitely-not-a-service") is False
-
-
-def test_declared_on_pi_fails_closed_on_an_unreadable_inventory(monkeypatch, tmp_path):
-    """Fail closed: an unreadable inventory must not turn a missing container into a skip."""
-    monkeypatch.setattr(health, "PI_HOST_VARS", tmp_path / "gone.yml")
-    assert health.declared_on_pi("wg-easy") is True
-
-
-#
-# CronJob-only roles. configarr and pi-peer-backup declare no Deployment/DaemonSet/
-# StatefulSet, only a CronJob -- until this gate existed, `probe.py health` reported "declares
-# no rollout-checkable workload" for both, which deploy_detach_notify.py's
-# NOT_APPLICABLE_MARKERS turns into a `skipped` verdict rather than a checked one. Neither
-# role's post-deploy state was ever actually read outside the deploy-time k8s/cronjob-gate
-# run. format_cronjob_health closes that gap.
-#
-
-_CRONJOB_ONLY_ROLES = frozenset({"configarr", "pi-peer-backup"})
-
-
-def test_cronjob_only_census_finds_exactly_the_known_roles():
-    """Non-vacuity pinned against a concrete set, not a lower bound -- this repo's own rule for
-    a check that finds its own subject by pattern (KNOWN_CONSUMERS in test_probe_boundaries.py
-    is the worked example). Equality rather than `>=` so a THIRD role gaining a CronJob is
-    caught here too, pointing at
-    ansible/tests/deploy/test_cronjob_only_roles_include_the_gate.py for whether it is wired up.
-    """
-    resolved = _resolved()
-    cronjob_only = {
-        role
-        for role in resolved
-        if not resolved[role] and health.role_cronjob_targets(role, _DEFAULT_NS)
-    }
-    assert cronjob_only == _CRONJOB_ONLY_ROLES
-
-
-def test_the_no_rollout_checkable_workload_set_still_matches_outside_the_cronjob_roles():
-    """The other four roles in `_ROLES_WITH_NO_WORKLOAD` (longhorn-ui, media-volume,
-    n8n-images, netpol-baseline) still reach the unchanged skip message run_health prints --
-    only configarr and pi-peer-backup were pulled onto the new CronJob path."""
-    resolved = _resolved()
-    no_workload = {role for role in resolved if not resolved[role]}
-    assert (
-        no_workload - _CRONJOB_ONLY_ROLES
-        == set(_ROLES_WITH_NO_WORKLOAD) - _CRONJOB_ONLY_ROLES
-    )
-
-
-def _cronjob(schedule="30 4 * * *"):
-    return {"spec": {"schedule": schedule}}
-
-
-def _job_doc(name, created, succeeded=0, failed=0):
-    return {
-        "metadata": {"name": name, "creationTimestamp": created},
-        "status": {"succeeded": succeeded, "failed": failed},
-    }
-
-
-def _jobs_doc(cronjob_name, *jobs):
-    """jobs: (name, created, succeeded, failed) tuples, each owned by `cronjob_name`."""
-    return {
-        "items": [
-            {
-                "metadata": {
-                    "name": name,
-                    "creationTimestamp": created,
-                    "ownerReferences": [
-                        {"kind": "CronJob", "name": cronjob_name, "controller": True}
-                    ],
-                },
-                "status": {"succeeded": succeeded, "failed": failed},
-            }
-            for name, created, succeeded, failed in jobs
-        ]
-    }
-
-
-def test_latest_owned_job_picks_the_newest_by_creation_time():
-    jobs = _jobs_doc(
-        "configarr",
-        ("configarr-29123450", "2026-08-16T04:30:00Z", 1, 0),
-        ("configarr-deploy-gate", "2026-08-16T09:00:00Z", 1, 0),
-    )
-    latest = health.latest_owned_job(jobs, "configarr")
-    assert latest["metadata"]["name"] == "configarr-deploy-gate"
-
-
-def test_latest_owned_job_ignores_a_different_cronjobs_job():
-    jobs = _jobs_doc("other", ("other-deploy-gate", "2026-08-16T11:00:00Z", 1, 0))
-    assert health.latest_owned_job(jobs, "configarr") is None
-
-
-def test_latest_owned_job_ignores_a_non_controller_owner_reference():
-    """A Job merely referencing the CronJob without `controller: true` is not one it created --
-    `kubectl create job --from=cronjob` always sets `controller: true` (verified live, see
-    roles/k8s/cronjob-gate/CLAUDE.md)."""
-    jobs = {
-        "items": [
-            {
-                "metadata": {
-                    "name": "unrelated",
-                    "creationTimestamp": "2026-08-16T11:00:00Z",
-                    "ownerReferences": [
-                        {"kind": "CronJob", "name": "configarr", "controller": False}
-                    ],
-                },
-                "status": {},
-            }
-        ]
-    }
-    assert health.latest_owned_job(jobs, "configarr") is None
-
-
-def test_latest_owned_job_is_none_with_no_jobs():
-    assert health.latest_owned_job({"items": []}, "configarr") is None
-    assert health.latest_owned_job(None, "configarr") is None
-
-
-def test_job_outcome_succeeded_from_status_count():
-    assert health._job_outcome({"status": {"succeeded": 1}}) == "succeeded"
-
-
-def test_job_outcome_succeeded_from_condition():
-    job = {"status": {"conditions": [{"type": "Complete", "status": "True"}]}}
-    assert health._job_outcome(job) == "succeeded"
-
-
-def test_job_outcome_failed():
-    assert health._job_outcome({"status": {"failed": 1}}) == "failed"
-
-
-def test_job_outcome_running_with_no_terminal_state():
-    assert health._job_outcome({"status": {}}) == "running"
-    assert health._job_outcome({}) == "running"
-
-
-def test_schedule_interval_daily():
-    assert health._schedule_interval_seconds("30 4 * * *") == 86400
-
-
-def test_schedule_interval_weekly():
-    assert health._schedule_interval_seconds("30 4 * * 0") == 7 * 86400
-
-
-def test_schedule_interval_unrecognised_shape_fails_closed_to_none():
-    """Deliberately not a cron parser -- any shape but plain daily/weekly returns None, and
-    format_cronjob_health's caller fails closed on that rather than guessing an interval."""
-    assert health._schedule_interval_seconds("*/15 * * * *") is None
-    assert health._schedule_interval_seconds("0 0 1 * *") is None
-    assert health._schedule_interval_seconds(None) is None
-    assert health._schedule_interval_seconds("") is None
-
-
-def test_cronjob_health_no_cronjob_fails():
-    text, code = health.format_cronjob_health(
-        "homelab/configarr", None, None, None, None, _NOW
-    )
-    assert code == 1
-    assert "no CronJob" in text
-
-
-def test_cronjob_health_no_job_fails():
-    text, code = health.format_cronjob_health(
-        "homelab/configarr", _cronjob(), None, None, None, _NOW
-    )
-    assert code == 1
-    assert "no evidence it has ever run" in text
-
-
-def test_cronjob_health_fresh_success_passes():
-    job = _job_doc("configarr-deploy-gate", "2026-08-16T11:00:00Z", succeeded=1)
-    text, code = health.format_cronjob_health(
-        "homelab/configarr",
-        _cronjob(),
-        job,
-        _pods(("configarr", 0, None)),
-        "2026-08-16T10:00:00Z",
-        _NOW,
-    )
-    assert code == 0
-    assert "succeeded" in text
-
-
-def test_cronjob_health_fresh_failure_fails():
-    job = _job_doc("configarr-deploy-gate", "2026-08-16T11:00:00Z", failed=1)
-    text, code = health.format_cronjob_health(
-        "homelab/configarr", _cronjob(), job, None, "2026-08-16T10:00:00Z", _NOW
-    )
-    assert code == 1
-    assert "FAILED" in text
-
-
-def test_cronjob_health_still_running_fails():
-    job = _job_doc("configarr-deploy-gate", "2026-08-16T11:59:00Z")
-    text, code = health.format_cronjob_health(
-        "homelab/configarr", _cronjob(), job, None, "2026-08-16T10:00:00Z", _NOW
-    )
-    assert code == 1
-    assert "has not finished" in text
-
-
-def test_cronjob_health_restart_in_the_jobs_pod_fails():
-    job = _job_doc("configarr-deploy-gate", "2026-08-16T11:00:00Z", succeeded=1)
-    text, code = health.format_cronjob_health(
-        "homelab/configarr",
-        _cronjob(),
-        job,
-        _pods(("configarr", 1, None)),
-        "2026-08-16T10:00:00Z",
-        _NOW,
-    )
-    assert code == 1
-    assert "restarted" in text
-
-
-def test_cronjob_health_stale_but_within_schedule_passes():
-    """No run since the deploy, but the previous run succeeded recently against a daily
-    schedule -- the fallback this gate takes when the deploy-time k8s/cronjob-gate run hasn't
-    landed yet, or hasn't been read yet."""
-    job = _job_doc("configarr-29123450", "2026-08-16T04:30:00Z", succeeded=1)
-    text, code = health.format_cronjob_health(
-        "homelab/configarr",
-        _cronjob("30 4 * * *"),
-        job,
-        _pods(("configarr", 0, None)),
-        "2026-08-16T09:00:00Z",
-        _NOW,
-    )
-    assert code == 0
-    assert "within its" in text
-
-
-def test_cronjob_health_stale_and_overdue_fails():
-    job = _job_doc("configarr-29000000", "2026-08-13T04:30:00Z", succeeded=1)
-    text, code = health.format_cronjob_health(
-        "homelab/configarr",
-        _cronjob("30 4 * * *"),
-        job,
-        _pods(("configarr", 0, None)),
-        "2026-08-16T09:00:00Z",
-        _NOW,
-    )
-    assert code == 1
-    assert "overdue" in text
-
-
-def test_cronjob_health_stale_with_unrecognised_schedule_fails_closed():
-    job = _job_doc("configarr-29000000", "2026-08-16T04:30:00Z", succeeded=1)
-    text, code = health.format_cronjob_health(
-        "homelab/configarr",
-        _cronjob("*/15 * * * *"),
-        job,
-        _pods(("configarr", 0, None)),
-        "2026-08-16T09:00:00Z",
-        _NOW,
-    )
-    assert code == 1
-    assert "failing closed" in text
-
-
-def test_cronjob_health_unreadable_job_creation_time_fails_closed():
-    job = {
-        "metadata": {"name": "configarr-deploy-gate", "creationTimestamp": "garbage"},
-        "status": {"succeeded": 1},
-    }
-    text, code = health.format_cronjob_health(
-        "homelab/configarr", _cronjob(), job, None, None, _NOW
-    )
-    assert code == 1
-    assert "failing closed" in text
-
-
-def test_cronjob_health_no_deploy_stamp_checks_the_latest_job_directly():
-    """An unreadable release stamp means "nothing to compare against", not "assume stale" --
-    the schedule fallback exists for a Job that provably predates a KNOWN deploy time, not for
-    the absence of one."""
-    job = _job_doc("configarr-deploy-gate", "2026-08-16T11:00:00Z", succeeded=1)
-    text, code = health.format_cronjob_health(
-        "homelab/configarr", _cronjob(), job, _pods(("configarr", 0, None)), None, _NOW
-    )
-    assert code == 0
-    assert "since the last deploy" in text
-
-
-def test_deploy_applied_at_reads_the_release_stamp(tmp_path, monkeypatch):
-    from diagnostics.probe_lib import releases
-
-    monkeypatch.setattr(releases, "RELEASE_DIR", tmp_path)
-    (tmp_path / "configarr.json").write_text('{"applied_at": "2026-08-16T09:00:00Z"}')
-    assert health._deploy_applied_at("configarr") == "2026-08-16T09:00:00Z"
-
-
-def test_deploy_applied_at_is_none_when_unreadable(tmp_path, monkeypatch):
-    from diagnostics.probe_lib import releases
-
-    monkeypatch.setattr(releases, "RELEASE_DIR", tmp_path)
-    assert health._deploy_applied_at("configarr") is None

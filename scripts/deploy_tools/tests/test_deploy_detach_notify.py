@@ -465,7 +465,7 @@ def test_no_post_still_reports_an_unhealthy_verdict(monkeypatch, tmp_path):
 #
 from datetime import datetime, timezone  # noqa: E402
 
-from diagnostics.probe_lib import health  # noqa: E402 — resolved by pyproject's pythonpath, alongside notify_mod
+from diagnostics.probe_lib import health, health_docker, health_rollout  # noqa: E402 — resolved by pyproject's pythonpath, alongside notify_mod
 
 _NOW = datetime(2026, 9, 1, 12, 0, 0, tzinfo=timezone.utc)
 
@@ -480,7 +480,7 @@ def test_probes_absent_workload_messages_carry_no_skip_marker():
     Both messages mean "the thing that should exist is gone", which must fail the verdict rather
     than skip it.
     """
-    docker_missing, _ = health.format_health([], "wg-easy", declared=True)
+    docker_missing, _ = health_docker.format_health([], "wg-easy", declared=True)
     k8s_missing, _ = health.format_role_health(
         "claude-otel",
         [("observability", "Deployment", "grafana", None, None)],
@@ -495,8 +495,8 @@ def test_probes_not_applicable_messages_do_carry_a_skip_marker():
 
     Otherwise every block tag in a --tags list turns an otherwise good deploy red.
     """
-    undeclared, _ = health.format_health([], "config", declared=False)
-    no_workload, _ = health.format_k8s_health(None, None, "config", _NOW)
+    undeclared, _ = health_docker.format_health([], "config", declared=False)
+    no_workload, _ = health_rollout.format_k8s_health(None, None, "config", _NOW)
     for message in (undeclared, no_workload):
         assert _matches_a_marker(message), message
 

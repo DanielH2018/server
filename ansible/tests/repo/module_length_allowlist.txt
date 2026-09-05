@@ -38,10 +38,8 @@ scripts/deploy_tools/tests/test_deploy_detach_notify.py 511
 scripts/deploy_tools/tests/test_land_tags.py 684
 scripts/deploy_tools/tests/test_publish_pr.py 514
 scripts/diagnostics/probe.py 697
-scripts/diagnostics/probe_lib/health.py 938
 scripts/diagnostics/probe_lib/longhorn.py 630
 scripts/diagnostics/tests/test_probe.py 506
-scripts/diagnostics/tests/test_probe_health.py 998
 scripts/diagnostics/tests/test_ui_smoke.py 649
 scripts/docs/reference/scripts.py 697
 scripts/docs/service_catalog.py 655

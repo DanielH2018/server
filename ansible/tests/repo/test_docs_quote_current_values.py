@@ -60,7 +60,7 @@ from _helpers import REPO, load_yaml
 
 K3S_DEFAULTS = REPO / "ansible/roles/setup/k3s/defaults/main.yml"
 GITOPS_DEFAULTS = REPO / "ansible/roles/setup/gitops_deploy/defaults/main.yml"
-PROBE_HEALTH = REPO / "scripts/diagnostics/probe_lib/health.py"
+PROBE_HEALTH = REPO / "scripts/diagnostics/probe_lib/health_rollout.py"
 SECRET_ROTATION = REPO / "scripts/secrets_mgmt/secret_rotation.py"
 
 
@@ -79,9 +79,10 @@ def _gitops_tick_minutes() -> str:
 
 
 def _python_constant(path: Path, name: str) -> Callable[[], str]:
-    # Read by regex rather than import: probe_lib/health.py and secret_rotation.py bootstrap
-    # sys.path and read the environment on import, and a value guard has no business
-    # running either.
+    # Read by regex rather than import: secret_rotation.py bootstraps sys.path and reads the
+    # environment on import, and a value guard has no business running either.
+    # probe_lib/health_rollout.py needs no such treatment — it imports only `datetime` — but
+    # the same regex rule is applied for consistency, so both rows read the same way.
     def read() -> str:
         match = re.search(rf"^{name} = (\d+)$", path.read_text(), re.MULTILINE)
         assert match, f"{path.relative_to(REPO)}: no `{name} = <int>` line"
@@ -111,13 +112,13 @@ ROWS: list[Row] = [
     Row(
         "docs/deploying.md",
         r"a (\d+)-second restart window",
-        "health.RECENT_RESTART_SECONDS",
+        "health_rollout.RECENT_RESTART_SECONDS",
         _python_constant(PROBE_HEALTH, "RECENT_RESTART_SECONDS"),
     ),
     Row(
         "docs/claude-tooling.md",
         r"restarted in the last (\d+)s\.",
-        "health.RECENT_RESTART_SECONDS",
+        "health_rollout.RECENT_RESTART_SECONDS",
         _python_constant(PROBE_HEALTH, "RECENT_RESTART_SECONDS"),
     ),
     Row(

@@ -26,7 +26,8 @@ from diagnostics.probe_lib import core
 from datetime import datetime, timezone
 
 from diagnostics.probe_lib.core import SECRETS_PATH, prom_endpoint, prom_query_url
-from diagnostics.probe_lib.health import _seconds_since, k8s_pods_argv
+from diagnostics.probe_lib.health_kubectl import k8s_pods_argv
+from diagnostics.probe_lib.health_rollout import _seconds_since
 
 from lib.repo_paths import REPO
 
@@ -184,7 +185,7 @@ def format_kuma_drift(declared, live, kuma_age_seconds, gate_states=None):
     missing at 88s of uptime, which is what the first run of this check did.
 
     An unreadable pod age is treated as a long uptime: it fails loud rather than quiet, matching
-    `health`'s unreadable-restart-time rule.
+    `health_rollout`'s unreadable-restart-time rule.
     """
     gate_states = gate_states or {}
     missing, pending, gated, unverified = [], [], [], []

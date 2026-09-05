@@ -29,7 +29,7 @@ sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 import probe
 from diagnostics.probe_lib import core
 from diagnostics.probe_lib import arr
-from diagnostics.probe_lib import health
+from diagnostics.probe_lib import health_docker
 from diagnostics.probe_lib import ha
 
 TIMEOUT = 10
@@ -81,7 +81,7 @@ def service_ip(name):
     was fixed for exactly this on 2026-08-07; postflight kept the old resolver.
     """
     try:
-        return health.resolve_service_ip(name)
+        return health_docker.resolve_service_ip(name)
     except SystemExit as exc:
         raise Skip(str(exc)) from exc
 

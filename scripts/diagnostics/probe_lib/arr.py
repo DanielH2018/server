@@ -17,7 +17,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 # globals with a `from core import ...` would take a snapshot the patch never reaches.
 from diagnostics.probe_lib import core
 from diagnostics.probe_lib.core import config_get, ha_curl_argv
-from diagnostics.probe_lib.health import resolve_service_ip
+from diagnostics.probe_lib.health_docker import resolve_service_ip
 
 # Sonarr/Radarr speak /api/v3, Prowlarr /api/v1. The X-Api-Key comes from SOPS
 # and is fed to curl via stdin (arr_curl_config), never argv — same guard as ha.

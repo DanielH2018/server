@@ -43,7 +43,7 @@ _ALLOWED = frozenset(
         # Function-local `import yaml`, one call each, on paths that run once rather than per
         # test. Converting them would mean adding a module-level import to a cold path for no
         # measurable gain.
-        "scripts/diagnostics/probe_lib/health.py",
+        "scripts/diagnostics/probe_lib/health_docker.py",
         "ansible/tests/setup/test_host_python_invocations.py",
         "ansible/tests/setup/test_github_ruleset_drift.py",
     }

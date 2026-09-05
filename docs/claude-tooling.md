@@ -129,7 +129,7 @@ after the Docker retirement.
 
 A role with no Deployment/DaemonSet/StatefulSet but a CronJob — configarr and pi-peer-backup
 today — is gated the same way on its most recent Job instead
-(`scripts/diagnostics/probe_lib/health.py`'s `format_cronjob_health`): the Job must have
+(`scripts/diagnostics/probe_lib/health_cronjob.py`'s `format_cronjob_health`): the Job must have
 succeeded, be newer than the deploy that just ran (read from the `release_stamp.yml` record),
 and carry no restarted container. `homelab-readonly`, the identity `probe.py` runs as, cannot
 create a Job — verified live with `k3s kubectl auth can-i create jobs`, which the `view`
