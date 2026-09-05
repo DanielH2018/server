@@ -6,6 +6,13 @@ optional flags. monitor-bridge itself keeps its own copy (it ships inside a cont
 and must not import from ``scripts/``); this module is for everything that CAN import from
 ``scripts/`` — ``probe.py`` and ``scripts/validate/run_all.py`` today.
 
+The name carries the ``cli_`` prefix because monitor-bridge's copy is
+``ansible/roles/k8s/monitor-bridge/files/registry.py``, and both directories sit on
+``pythonpath``. That role's module is imported bare (``import registry``, from inside the
+container image), so a second top-level ``registry`` would shadow one of them depending on
+``sys.path`` order. ``test_no_two_pythonpath_roots_share_a_module_basename`` in
+``ansible/tests/repo/test_pythonpath_module_basenames.py`` enforces the separation.
+
 Argparse still owns argument parsing in every caller. This module owns three things argparse
 does not: `only`/`skip` selection (monitor-bridge's ``CHECKS_ONLY``/``CHECKS_SKIP``
 semantics — `only`, when non-empty, restricts to that set; `skip` always excludes), a
@@ -14,7 +21,7 @@ semantics — `only`, when non-empty, restricts to that set; `skip` always exclu
 Import it through the same bootstrap as any other ``lib`` module::
 
     _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
-    from lib.registry import Registry, package_entry_points
+    from lib.cli_registry import Registry, package_entry_points
 """
 
 import dataclasses

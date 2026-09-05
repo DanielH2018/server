@@ -13,7 +13,7 @@ import pytest
 import probe
 from diagnostics import probe_lib
 from diagnostics.probe_lib import subcommands
-from lib.registry import Registry, package_entry_points
+from lib.cli_registry import Registry, package_entry_points
 
 # The twelve probe_lib modules that define a run_*/main entry point (core.py doesn't — it's
 # helpers, not a subcommand backend). Every one of probe.py's 23 subcommands maps to one of
