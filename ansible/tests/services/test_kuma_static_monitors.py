@@ -241,6 +241,7 @@ EMAIL_TIER = {
     "SMART Data / Health",
     "UPS Battery Health",
     "Discord Delivery",
+    "Kubelet CSI Mount Read-Only",
 }
 
 

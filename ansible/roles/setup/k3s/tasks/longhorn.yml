@@ -55,6 +55,26 @@
   become: true
   changed_when: "'created' in k3s_longhorn_apply.stdout or 'configured' in k3s_longhorn_apply.stdout"
 
+- name: Give longhorn-manager a memory request so it leaves BestEffort
+  tags: [longhorn]
+  # #1243: upstream ships longhorn-manager with resources: {}, which is BestEffort QoS and
+  # oom_score_adj 1000 — the kernel's first pick under memory pressure. A request alone (no
+  # limit) moves it to Burstable without adding a new OOM-by-limit kill path. See the
+  # k3s_longhorn_manager_memory_request comment in defaults/main.yml for the measured RSS this
+  # is sized from. Strategic merge patches the one named container's resources without
+  # touching the driver/manager-proxy sidecars or the six other pinned fields in this pod spec.
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n longhorn-system patch daemonset longhorn-manager --type=strategic
+      -p {{ manager_patch | quote }}
+  vars:
+    manager_patch: >-
+      {"spec":{"template":{"spec":{"containers":[{"name":"longhorn-manager",
+      "resources":{"requests":{"memory":"{{ k3s_longhorn_manager_memory_request }}"}}}]}}}}
+  register: k3s_longhorn_manager_resources
+  become: true
+  changed_when: "'no change' not in k3s_longhorn_manager_resources.stdout"
+
 - name: Stage the Longhorn metrics NetworkPolicy
   tags: [longhorn]
   # Must follow the install: the upstream manifest ships the policies this one reopens a hole
@@ -83,6 +103,37 @@
     cmd: k3s kubectl -n longhorn-system rollout status deploy/longhorn-driver-deployer --timeout=600s
   become: true
   changed_when: false
+
+- name: Give the Longhorn CSI sidecars a memory request so they leave BestEffort
+  tags: [longhorn]
+  # Same fix as longhorn-manager above, for the four csi-* Deployments — csi-attacher,
+  # csi-provisioner, csi-resizer, csi-snapshotter — which upstream also ships at resources: {}.
+  # Measured during the #1243 incident: those four restarted 13/14/-/7 times while the
+  # Burstable instance-manager restarted zero. Unlike longhorn-manager, none of the four is IN
+  # deploy/longhorn.yaml — longhorn-driver-deployer creates them at runtime once it starts,
+  # the same asynchronous-appearance race `k3s_join_longhorn_sched` rides out above with
+  # `until: rc == 0` — so this MUST run after "Wait for the Longhorn driver deployer", never
+  # between "Install Longhorn" and that wait, or it 404s on a fresh bring-up. Each Deployment's
+  # single container shares its Deployment's name.
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n longhorn-system patch deployment {{ item }} --type=strategic
+      -p {{ sidecar_patch | quote }}
+  vars:
+    sidecar_patch: >-
+      {"spec":{"template":{"spec":{"containers":[{"name":"{{ item }}",
+      "resources":{"requests":{"memory":"{{ k3s_longhorn_csi_sidecar_memory_request }}"}}}]}}}}
+  loop:
+    - csi-attacher
+    - csi-provisioner
+    - csi-resizer
+    - csi-snapshotter
+  register: k3s_longhorn_csi_resources
+  become: true
+  changed_when: "'no change' not in k3s_longhorn_csi_resources.stdout"
+  retries: 12
+  delay: 10
+  until: k3s_longhorn_csi_resources.rc == 0
 
 - name: Set the default Longhorn replica count
   tags: [longhorn]
