@@ -55,15 +55,20 @@ def test_render_leaves_the_verify_by_cell_blank_without_one():
 
 
 def test_render_shows_the_claiming_worktree():
+    # Anchored on the full trailing shape, not just a substring: this also pins the Claim
+    # column BEFORE Verify-by, since "worktree-issue-1132" and "-" are distinguishable in
+    # either order — a column swap changes which cell comes last.
     md = g.render_markdown([_row(1, claimed="worktree-issue-1132")])
     row = next(line for line in md.splitlines() if line.startswith("| [#1]"))
-    assert "| worktree-issue-1132 |" in row
+    assert row.rstrip().endswith("| worktree-issue-1132 | - |")
 
 
 def test_render_leaves_the_claim_cell_blank_without_one():
-    md = g.render_markdown([_row(1, claimed=None)])
+    # verify_by=True gives the two trailing cells different values ("-" and "✓"), so a
+    # column swap changes this exact ending — two matching "-" cells would not have.
+    md = g.render_markdown([_row(1, claimed=None, verify_by=True)])
     row = next(line for line in md.splitlines() if line.startswith("| [#1]"))
-    assert "| - | - |" in row.rstrip()
+    assert row.rstrip().endswith("| - | ✓ |")
 
 
 def test_render_empty_says_so_instead_of_an_empty_table():

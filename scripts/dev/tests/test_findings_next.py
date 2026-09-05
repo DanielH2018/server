@@ -1,11 +1,14 @@
 """What `next` offers, and the four reasons it withholds an issue."""
 
+import json
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from dev.findings import pickable
+from _findings_fakes import Fakes, build_tools, make_issue
+
+from dev.findings import main, pickable
 from dev.findings_model import claim_comment, pr_refs
 
 WT = "worktree-issue-1132"
@@ -65,3 +68,34 @@ def test_pr_refs_finds_every_closing_keyword():
 
 def test_pr_refs_ignores_a_bare_issue_mention():
     assert pr_refs(["see #4", "closes issue 5"]) == set()
+
+
+# --- main(["next", ...]): the handler's own plumbing, not just pickable() -----------------
+
+
+def test_next_via_main_lists_an_ordinary_open_issue(capsys):
+    """Exercises the plumbing `pickable()` alone can't: parser wiring, dispatch, JSON."""
+    issue = make_issue(1132)
+    tools, _ = build_tools(Fakes(issues=[issue]))
+    assert main(["next", "--json"], tools) == 0
+    rows = json.loads(capsys.readouterr().out)
+    assert [r["number"] for r in rows] == [1132]
+
+
+def test_next_withholds_a_live_claim_when_the_git_read_fails(monkeypatch, capsys):
+    """The safety-critical branch: a git-read failure must not read as "no claims are live".
+
+    Pins the withhold end to end through `main`, not just through `pickable`.
+    """
+    import dev.findings as findings
+
+    monkeypatch.setattr(
+        findings,
+        "_worktree_facts",
+        lambda: ([], lambda _p: False, lambda _t: False, False),
+    )
+    held = make_issue(1132, comments=[claim_comment(WT, None, "t")])
+    tools, _ = build_tools(Fakes(issues=[held]))
+    assert main(["next", "--json"], tools) == 0
+    rows = json.loads(capsys.readouterr().out)
+    assert rows == []

@@ -38,10 +38,14 @@ def _add_dry_run(parser: argparse.ArgumentParser, *, suppress: bool) -> None:
     )
 
 
-def _parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(
-        description="File, re-observe, escalate and close findings."
-    )
+def _parser(description: str) -> argparse.ArgumentParser:
+    """Build the CLI parser.
+
+    Args:
+        description: the top-level ``--help`` banner. Passed in rather than restated here
+            so `findings.py`'s own docstring stays the one place that text is written.
+    """
+    p = argparse.ArgumentParser(description=description)
     _add_dry_run(p, suppress=False)
     sub = p.add_subparsers(dest="cmd", required=True)
 

@@ -485,7 +485,7 @@ def cmd_next(args: argparse.Namespace, tools: FindingsTools) -> int:
     conservative read instead of refusing to answer at all.
 
     Args:
-        args: parsed CLI namespace carrying ``limit``, ``json`` and ``dry_run``.
+        args: parsed CLI namespace carrying ``limit`` and ``json``.
         tools: the process boundaries every gh call goes through.
     """
     trees, dirty, merged, ok = _worktree_facts()
@@ -527,7 +527,7 @@ def main(argv: list[str] | None, tools: FindingsTools) -> int:
     Returns:
         The dispatched handler's exit code, or 1 if `gh` failed.
     """
-    args = _parser().parse_args(argv)
+    args = _parser(__doc__.splitlines()[1]).parse_args(argv)
     handler = {
         "sync-labels": cmd_sync_labels,
         "list": cmd_list,
