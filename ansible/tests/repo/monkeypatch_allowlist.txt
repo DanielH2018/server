@@ -7,15 +7,20 @@
 # module carrying any has no seam yet. Replace them with an injectable boundary object
 # (scripts/deploy_tools/land_lib/tools.py + scripts/deploy_tools/tests/_land_fakes.py) and
 # lower the entry; a file at 0 must lose its line. An entry may only fall or be deleted --
-# that is enforced against origin/master.
+# that is enforced against origin/master, and it has to MATCH the count rather than bound it,
+# so a test that sheds a patch lowers its line in the same PR.
 #
 # A path may be ADDED only when origin/master does not track the file (it is new, or renamed)
 # or when the same commit changes the guard itself (a widened heuristic finds patches that
 # were always there). Otherwise give the module a seam rather than listing the test.
 #
 # The counting heuristic and its blind spots are in ansible/tests/_ratchet.py's module
-# docstring. To see a file's count now, lower its entry here by 1 and run the guard -- the
-# failure names the real number:
+# docstring. The three test_gitops_deploy_* entries below were added on 2026-09-05 by the
+# widening that resolves a fixture-parameter name against the conftest fixture that returns
+# the module -- the patches were always there, counting 0.
+#
+# To see a file's count now, lower its entry here by 1 and run the guard -- the failure names
+# the real number:
 #   uv run pytest ansible/tests/repo/test_module_length_ratchet.py -k no_test_module_patches
 .claude/hooks/tests/test_auto_mode_bridge.py 1
 .claude/hooks/tests/test_block_footguns.py 2
@@ -49,6 +54,9 @@ ansible/roles/k8s/monitor-bridge/tests/test_host_temp.py 1
 ansible/roles/k8s/qbittorrent/tests/test_apply_prefs.py 1
 ansible/roles/setup/fake_remux/tests/test_fake_remux_replace_logic.py 2
 ansible/roles/setup/gitops_deploy/tests/conftest.py 6
+ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_alert_channels.py 5
+ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_fetch_skip.py 2
+ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_main_branches.py 4
 ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_subprocess.py 1
 ansible/roles/setup/k3s/tests/test_live_drift_check.py 3
 ansible/roles/setup/k3s/tests/test_longhorn_reap_delete_transport.py 5

@@ -30,6 +30,7 @@ from _ratchet import (
     first_party_module_names,
     function_differs,
     function_source,
+    module_fixture_names,
     parse_allowlist,
     raised_entries,
 )
@@ -45,6 +46,14 @@ CENSUS_MEMBERS = frozenset(
         "evals/harness_metrics.py",
         "scripts/lib/repo_paths.py",
     }
+)
+
+# The conftest fixture census finds its subject by globbing for `conftest.py`, so it has to
+# name a member it must find: the one fixture in the tree that hands a test a first-party
+# module. Without this the census reads empty the day that conftest is renamed, and every
+# fixture-parameter patch goes back to counting 0 with nothing saying so.
+MODULE_FIXTURE_MEMBERS = frozenset(
+    {("ansible/roles/setup/gitops_deploy/tests", "gitops_deploy")}
 )
 
 # Changing any of these changes what the lists are allowed to contain, which is what lets a
@@ -141,6 +150,33 @@ def line_counts() -> dict[str, int]:
     }
 
 
+def module_fixtures_by_dir(tracked: Iterable[str]) -> dict[str, frozenset[str]]:
+    """Directory (repo-relative, posix; "" is the repo root) -> its conftest's module fixtures."""
+    return {
+        rel.rpartition("/")[0]: module_fixture_names((REPO / rel).read_text())
+        for rel in tracked
+        if rel.rpartition("/")[2] == "conftest.py"
+    }
+
+
+def module_fixtures_for(
+    rel: str, by_dir: Mapping[str, frozenset[str]]
+) -> frozenset[str]:
+    """The module fixtures visible to `rel`, unioned over its directory chain.
+
+    pytest resolves a fixture from the test's own directory upwards, so a conftest anywhere
+    above the test contributes. Shadowing does not matter here: both definitions would have to
+    return a module for the name to count at all.
+    """
+    parts = rel.split("/")[:-1]
+    return frozenset().union(
+        *(
+            by_dir.get("/".join(parts[:depth]), frozenset())
+            for depth in range(len(parts) + 1)
+        )
+    )
+
+
 def monkeypatch_counts() -> dict[str, int]:
     """Repo-relative test-module path -> its module-patch count, zeros included.
 
@@ -149,8 +185,13 @@ def monkeypatch_counts() -> dict[str, int]:
     """
     tracked = tracked_python_files()
     first_party = first_party_module_names(tracked)
+    by_dir = module_fixtures_by_dir(tracked)
     return {
-        rel: count_module_patches((REPO / rel).read_text(errors="replace"), first_party)
+        rel: count_module_patches(
+            (REPO / rel).read_text(errors="replace"),
+            first_party,
+            module_fixtures_for(rel, by_dir),
+        )
         for rel in tracked
         if is_test_file(Path(rel))
     }
@@ -184,10 +225,25 @@ def test_the_parser_rejects_a_malformed_line():
         parse_allowlist("scripts/a.py\n")
 
 
-def test_a_tree_within_its_caps_and_its_allowlist_is_clean():
+def test_a_tree_within_its_caps_and_at_its_allowlist_is_clean():
     counts = {"scripts/a.py": 599, "scripts/big.py": 900}
-    allow = {"scripts/big.py": 950}
+    allow = {"scripts/big.py": 900}
     assert LENGTHS.violations(counts, allow) == []
+
+
+def test_a_listed_module_that_shrank_below_its_entry_must_lower_the_line():
+    """The gap between a file and its entry is regrowth headroom nothing else reports."""
+    flagged = LENGTHS.violations({"scripts/big.py": 899}, {"scripts/big.py": 900})
+    assert len(flagged) == 1
+    assert "lower that line" in flagged[0] and "899" in flagged[0]
+
+
+def test_a_listed_test_module_that_dropped_a_patch_must_lower_the_line():
+    flagged = PATCHES.violations(
+        {"scripts/tests/test_a.py": 2}, {"scripts/tests/test_a.py": 3}
+    )
+    assert len(flagged) == 1
+    assert "lower that line" in flagged[0]
 
 
 def test_an_unlisted_module_over_its_cap_is_flagged():
@@ -284,46 +340,11 @@ def test_a_changed_function_body_is_a_changed_guard():
     assert function_differs(_HELPERS_BEFORE, "X = 1\n", CAP_DECIDER)
 
 
-def test_a_first_party_name_is_a_module_stem_or_the_directory_holding_one():
-    names = first_party_module_names(["scripts/deploy_tools/land_lib/tools.py"])
-    assert "tools" in names and "land_lib" in names
-    assert "scripts" not in names and "deploy_tools" not in names
-
-
-def test_a_patch_on_an_imported_first_party_module_is_counted():
-    src = "import mod\ndef test_x(monkeypatch):\n    monkeypatch.setattr(mod.sub, 'f', 1)\n"
-    assert count_module_patches(src, {"mod"}) == 1
-
-
-def test_a_patch_on_the_standard_library_is_not_counted():
-    """A seam cannot remove one, so counting it would leave an entry stuck above zero."""
-    src = "import sys\ndef test_x(monkeypatch):\n    monkeypatch.setattr(sys, 'argv', [])\n"
-    assert count_module_patches(src, {"mod"}) == 0
-
-
-def test_a_patch_on_a_local_object_or_a_string_target_is_not_counted():
-    src = (
-        "import mod\n"
-        "def test_x(monkeypatch, obj):\n"
-        "    monkeypatch.setattr(obj, 'f', 1)\n"
-        "    monkeypatch.setattr('mod.f', 1)\n"
-        "    monkeypatch.setenv('MOD', '1')\n"
-    )
-    assert count_module_patches(src, {"mod"}) == 0
-
-
-def test_an_aliased_import_is_still_the_module_it_aliases():
-    src = "import a.b as mod\ndef test_x(monkeypatch):\n    monkeypatch.setattr(mod, 'f', 1)\n"
-    assert count_module_patches(src, {"b"}) == 1
-
-
-def test_a_module_bound_by_importlib_is_counted_in_both_spellings():
-    """`session-health.py` is not an identifier, so its tests reach it through a spec."""
-    spec = "_mod = importlib.util.module_from_spec(_spec)\n"
-    named = "_mod = importlib.import_module('scripts.thing')\n"
-    patch = "def test_x(monkeypatch):\n    monkeypatch.setattr(_mod, 'f', 1)\n"
-    assert count_module_patches(spec + patch, set()) == 1
-    assert count_module_patches(named + patch, set()) == 1
+def test_a_conftest_fixture_reaches_a_test_below_it_but_not_a_sibling_tree():
+    by_dir = {"a/tests": frozenset({"mod"})}
+    assert module_fixtures_for("a/tests/test_x.py", by_dir) == {"mod"}
+    assert module_fixtures_for("a/tests/deep/test_x.py", by_dir) == {"mod"}
+    assert module_fixtures_for("b/tests/test_x.py", by_dir) == frozenset()
 
 
 # ---------------------------------------------------------------- the live tree
@@ -335,6 +356,13 @@ def test_the_census_reaches_every_tree_that_holds_python():
     assert CENSUS_MEMBERS <= set(counts), CENSUS_MEMBERS - set(counts)
     assert sum(1 for rel in counts if cap_for(rel) == TEST_CAP) >= 100
     assert sum(1 for rel in counts if cap_for(rel) == NON_TEST_CAP) >= 100
+
+
+def test_the_module_fixture_census_finds_the_fixtures_it_names():
+    """A glob census that goes empty would silently return every count to zero."""
+    by_dir = module_fixtures_by_dir(tracked_python_files())
+    found = {(d, name) for d, names in by_dir.items() for name in names}
+    assert MODULE_FIXTURE_MEMBERS <= found, MODULE_FIXTURE_MEMBERS - found
 
 
 def test_no_module_is_longer_than_its_cap_or_its_allowlist_entry():

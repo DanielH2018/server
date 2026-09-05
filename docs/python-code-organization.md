@@ -215,7 +215,9 @@ already past either limit are listed one per line in
 `ansible/tests/repo/module_length_allowlist.txt` and
 `ansible/tests/repo/monkeypatch_allowlist.txt`, with the number each stands at today, and
 `ansible/tests/repo/test_module_length_ratchet.py` fails when one grows past its line, when a
-file over a cap has no line, or when a file that has come back under its cap keeps one. The
+file over a cap has no line, when a file that has come back under its cap keeps one, and when
+a file has shrunk below its line without the line following it down — an entry records what
+the file is today, and the gap between the two would be regrowth headroom nothing reports. The
 rules themselves are in `ansible/tests/_ratchet.py`, whose docstring is where the counting
 heuristic's blind spots are written down.
 
