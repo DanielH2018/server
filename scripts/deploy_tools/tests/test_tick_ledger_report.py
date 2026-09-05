@@ -89,15 +89,25 @@ def test_what_the_deployer_writes_is_what_the_backfill_reads(tmp_path, monkeypat
     recorder renamed would pass all of them and only fail on the host, an hour later, silently —
     `load_tick_ledger` skips a row it cannot construct rather than raising."""
     sys.path.insert(0, str(ROLE / "files"))
+    # The recorder is the staging gate's I/O shell, which lives with the handlers rather than
+    # in `deploy_staging` — that module stays import-pure so `deploy_logic` (and therefore
+    # `land.sh`) can be imported without `host_lib` on the path.
+    import deploy_handlers
+    import deploy_state
     import deploy_toolbox
-    import gitops_deploy as gd
 
-    ledger = tmp_path / "ticks.jsonl"
-    monkeypatch.setattr(gd, "STAGING_TICK_LEDGER", str(ledger))
+    # The recorder derives the ledger's path from the state object it is handed, so pointing
+    # that at tmp_path is what keeps the row out of /var/lib.
+    state = deploy_state.DeployerState(tmp_path)
+    ledger = pathlib.Path(state.path("staging_ticks"))
     # The real clock, from the deployer's own boundaries object: the row's `at` stamp is one of
     # the fields load_tick_ledger has to be able to construct from.
-    gd.record_staging_tick(
-        deploy_toolbox.DeployTools(), "c0ffee1234", {"freshrss"}, ds.STAGING_REJECTED
+    deploy_handlers.record_staging_tick(
+        deploy_toolbox.DeployTools(),
+        state,
+        "c0ffee1234",
+        {"freshrss"},
+        ds.STAGING_REJECTED,
     )
 
     loaded = bf.load_tick_ledger(ledger)

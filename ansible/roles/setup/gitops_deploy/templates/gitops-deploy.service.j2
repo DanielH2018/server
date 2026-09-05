@@ -24,7 +24,7 @@ Type=oneshot
 #     ansible/roles/k8s/volume-revert/CLAUDE.md for the drill that sized the two revert-role
 #     timeouts feeding K8S_ROLLBACK_TIMEOUT_S.
 #   - k8s path WITH the staging gate armed (STAGING_GATE, off by default), which is why this is
-#     60min rather than 45min. consult_staging runs INSIDE the same `if cs.k8s_deploy:` block,
+#     60min rather than 45min. consult_staging runs INSIDE the same k8s handler,
 #     before deploy_k8s, so its two budgets are additive to the pair above rather than
 #     alternative to them: 180 + STAGING_GATE_TIMEOUT_S (600) + STAGING_EXPECT_TIMEOUT_S (120)
 #     + 900 + 1320 = 3120s. The BROAD arm does not stack with any of it — it returns before the
@@ -67,8 +67,8 @@ Environment=PATH=/home/{{ sys_user }}/.local/bin:/usr/local/bin:/usr/bin:/bin
 SyslogLevel=notice
 # flock serializes against the weekly secret-rotate cron (secret-rotate.sh) — both mutate
 # this same git working tree, and this deployer's `git reset --hard` on a failed health gate
-# could silently discard a half-rotated secret. RUN_START (and so RUN_BUDGET_S, see
-# gitops_deploy.py) is measured from process start, AFTER flock acquires — so time spent
+# could silently discard a half-rotated secret. `DeployTools.run_start` (and so RUN_BUDGET_S,
+# see gitops_deploy.py) is set when entrypoint() builds the tools, AFTER flock acquires — so time spent
 # waiting here is pure overhead against this unit's TimeoutStartSec, uncounted by that
 # budget. -w 180 outlasts any normal deploy-step contention (secret-rotate is short — 0-2
 # tokens) but fails fast enough to leave the health-gate/rollback budget intact; /run/lock is

@@ -72,7 +72,7 @@ def test_a_dirty_tree_skips_without_merging(gitops_deploy, tick):
 
 
 def test_a_held_sha_is_skipped(gitops_deploy, tick):
-    gitops_deploy.write_hold(ORIGIN)
+    gitops_deploy.STATE.write_hold(ORIGIN)
     tick.paths = [DOCKER_TEMPLATE]
     assert gitops_deploy.main(tick.tools) == 0
     assert tick.merges == [] and tick.playbooks == []

@@ -1,5 +1,19 @@
 # ansible/roles/setup/gitops_deploy/files/deploy_staging.py
-"""Scoping a k8s batch to the staging subset and summarising its verdict."""
+"""The staging gate's vocabulary: scoping a k8s batch to it, and naming what it said.
+
+Pure by construction — `staging_scope`, `staging_verdict`, `staging_verdict_summary`,
+`staging_blocks`, `staging_tick_outcome` decide, and nothing here touches a disk, a clock or a
+subprocess. The I/O shell that asks staging and records the answer (`consult_staging`,
+`record_staging_tick`, `consume_staging_override`) lives in `deploy_handlers.py`.
+
+KEEP THIS MODULE IMPORT-PURE. `deploy_logic.py` re-exports these names, and three tools in the
+repo's `scripts/deploy_tools/` tree import that index with only this role's `files/` on
+`sys.path` — no `roles/setup/common/files`, so no `host_lib`. A module-level `import deploy_io`
+here reaches `deploy_config`'s `from host_lib import parse_env_file` and breaks `land.sh` with a
+`ModuleNotFoundError` five frames from anything staging-shaped. ENFORCED by
+test_deploy_logic_imports_without_the_common_files_path in
+ansible/tests/deploy/test_gitops_deploy_imports.py.
+"""
 
 from collections.abc import Set as AbstractSet
 from enum import StrEnum

@@ -30,15 +30,17 @@ later step reads as stale. That ordering is correct and stays. What is removable
 sitting in the foreground while it resolves.
 
 **Hand-merging is one arm of the deployer.** An ordinary k8s manifest change already
-fast-forwards on its own — `gitops_deploy.py:1221` merges whenever `cs.services` is empty. Only
-`cs.broad` (`gitops_deploy.py:1136`) returns *without* merging. A docs-only commit sharing a
+fast-forwards on its own — `deploy_handlers.handle_no_services` merges whenever `cs.services` is
+empty. Only one arm returns *without* merging: the `_BROAD_MANUAL_PREFIXES` deferral inside
+`deploy_handlers.handle_broad`, which parks a bring-up playbook change for a human. Every other
+broad change ff-merges first and then applies itself. A docs-only commit sharing a
 tick alongside another session's setup-plane change is therefore stranded too. The symptom is
 a tick that exits 0, logs nothing, and writes `behind_since`.
 
 ### Why the obvious fix is wrong
 
-Making the broad arm fast-forward clears `behind_since`. `_record_behind` (`gitops_deploy.py:1340`)
-recomputes from HEAD after `main()` returns, so a converged tree reads as not-behind. That marker
+Making the broad arm fast-forward clears `behind_since`. `DeployerState.record_behind`
+recomputes from HEAD in `entrypoint()` after `main()` returns, so a converged tree reads as not-behind. That marker
 is the only durable signal that an unapplied setup-plane change exists, and monitor-bridge pages
 on its age. The naive fix converges the tree, silences the watchdog, and leaves the host running
 a plane it never applied with every monitor green.

@@ -129,7 +129,7 @@ class Run:
 
 @dataclass
 class TickRun:
-    """One REAL gated tick, as `gitops_deploy.record_staging_tick` writes it.
+    """One REAL gated tick, as `deploy_handlers.record_staging_tick` writes it.
 
     A separate record and a separate file from `Run`, because the two are not interchangeable.
     A Run gates the services a commit CHANGED; a tick gates the narrower set the deployer
@@ -449,7 +449,7 @@ def main() -> int:
         "--tick-jsonl",
         type=Path,
         help="read (never write) the ledger the deployer records real gated ticks in, and "
-        "report it as a second section. Written by gitops_deploy.record_staging_tick; the "
+        "report it as a second section. Written by deploy_handlers.record_staging_tick; the "
         "path is gitops_deploy_staging_tick_ledger in the role's defaults.",
     )
     ap.add_argument(

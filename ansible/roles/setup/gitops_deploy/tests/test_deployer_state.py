@@ -56,13 +56,16 @@ def test_every_marker_resolves_to_the_constant_gitops_deploy_declares(gitops_dep
         ("ci_alerted", "CI_ALERT_FILE"),
         ("staging_alerted", "STAGING_ALERT_FILE"),
         ("dirty_alerted", "DIRTY_ALERT_FILE"),
+        ("pending_alerts", "PENDING_ALERTS_FILE"),
+        ("staging_ticks", "STAGING_TICK_LEDGER"),
+        ("staging_override", "STAGING_OVERRIDE_FILE"),
     ):
         assert live.path(marker) == getattr(gitops_deploy, constant), marker
 
 
 def test_the_marker_table_covers_every_constant_and_no_more():
-    """Non-vacuity for the loop above: it names fifteen markers, and so must the table."""
-    assert len(deploy_io.DeployerState.MARKERS) == 15
+    """Non-vacuity for the loop above: it names eighteen markers, and so must the table."""
+    assert len(deploy_io.DeployerState.MARKERS) == 18
 
 
 def test_an_unknown_marker_is_a_typo_not_a_new_file(state):

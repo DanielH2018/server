@@ -52,7 +52,6 @@ from deploy_failtext import (  # noqa: F401 — re-exported for `deploy_io.<name
 from deploy_health import HealthSample, containers_to_gate, health_decision
 from deploy_inventory import declared_services, stale_rendered_services
 from deploy_k8s import k8s_role_paths
-from deploy_staging import staging_tick_outcome
 from deploy_state import STATE_DIR, DeployerState  # noqa: F401 — re-exported
 
 
@@ -499,7 +498,7 @@ def consume_override(path: str) -> bool:
 
 
 def record_staging_tick(
-    ledger: str, tz: tzinfo, now, sha: str, gated: set[str], verdict: str
+    ledger: str, tz: tzinfo, now, sha: str, gated: set[str], verdict: str, outcome: str
 ) -> None:
     """Append this tick's verdict to the tick ledger. Never raises.
 
@@ -510,17 +509,17 @@ def record_staging_tick(
         sha: the commit the gate was asked about.
         gated: the services it was asked about, which is the promoted set, not the changed set.
         verdict: one of `staging_verdict`'s words, or STAGING_SKIPPED.
+        outcome: `deploy_staging.staging_tick_outcome`'s word for that verdict.
 
-    A tick that measured nothing writes nothing — `staging_tick_outcome` returns None for
-    SKIPPED, and the tick runs every ten minutes, so recording those would bury the real samples.
+    The caller decides whether there is anything to record: `deploy_handlers.record_staging_tick`
+    drops a verdict that measured nothing — `staging_tick_outcome` returns None for SKIPPED —
+    and only then calls this. Taking the word as an argument rather than deriving it here also
+    keeps this module from importing `deploy_staging`.
 
     Every failure is swallowed. This runs inside the staging consultation, which may not break a
     prod deploy for any reason; a full disk or a bad permission on the ledger must cost the
     measurement, never the deploy.
     """
-    outcome = staging_tick_outcome(verdict)
-    if outcome is None:
-        return
     record = {
         "at": now(tz).isoformat(timespec="seconds"),
         "sha": sha,

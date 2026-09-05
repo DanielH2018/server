@@ -6,9 +6,12 @@ fifteen files that record what this host believes. `gitops_deploy.py` still decl
 literals, because an Ansible default is pinned against one of them; this module holds the
 reading and the writing.
 
-This is a leaf: it imports `host_lib` and the standard library, and nothing else from this
-role. Callers reach these names qualified — `deploy_state.DeployerState(...)`. `deploy_io`
-re-exports them for the suite, which reads them through the module it has always read.
+This is a leaf: `deploy_config` for `log`, `deploy_git` for the two pure hold-marker decisions
+`clear_broad_hold` makes, `host_lib` and the standard library. Nothing else from this role,
+and nothing that reaches a process — a hold is written to a file, and who decides to write one
+is the caller's business. Callers reach these names qualified —
+`deploy_state.DeployerState(...)`. `deploy_io` re-exports them for the suite, which reads them
+through the module it has always read.
 
 Stdlib only: the unit runs under `uv run --no-project` and the host is still on Python 3.12.
 """
@@ -17,6 +20,8 @@ import os
 import pathlib
 from typing import ClassVar
 
+from deploy_config import log
+from deploy_git import behind_marker, broad_hold_cleared_by, hold_plane_marker
 from host_lib import atomic_write
 
 
@@ -26,8 +31,9 @@ STATE_DIR = "/var/lib/gitops-deploy"
 class DeployerState:
     """The marker files under /var/lib/gitops-deploy, as one object with typed accessors.
 
-    Fifteen files recorded what this host believes — the held SHA, the plane that failed, how
-    long it has been behind origin, and one dedupe marker per alert channel — through fifteen
+    Eighteen files record what this host believes — the held SHA, the plane that failed, how
+    long it has been behind origin, one dedupe marker per alert channel, the undelivered-alert
+    queue, the staging tick ledger and the operator's staging override — through eighteen
     module constants and a pair of bare `_read_marker`/`_write_marker` helpers, so nothing
     described the state as a whole. This is that description. The paths, the file contents and
     the empty-vs-missing semantics are unchanged; `gitops_deploy.py` still holds the literal
@@ -54,6 +60,14 @@ class DeployerState:
         "k8s_alerted": "k8s_alerted_sha",
         "stale_denylist_alerted": "stale_denylist_alerted_sha",
         "ci_alerted": "ci_alerted_sha",
+        # The three that are not per-SHA dedupe markers. They are here for the same reason as
+        # the rest — so a caller names a marker rather than carrying a path — and because the
+        # `state_dir` fixture repoints the whole object at once, which a path threaded through
+        # a function argument would escape. `deploy_alerts`, `deploy_staging` and
+        # `deploy_handlers` reach them through `state.path(...)`.
+        "pending_alerts": "pending_alerts.json",
+        "staging_ticks": "staging-ticks.jsonl",
+        "staging_override": "staging_gate_override",
         "staging_alerted": "staging_alerted_sha",
         "dirty_alerted": "dirty_alerted_date",
     }
@@ -123,3 +137,58 @@ class DeployerState:
     def behind_since(self) -> str | None:
         """`"<origin_sha> <unix_ts_first_seen>"` while behind origin, or None."""
         return self.read("behind")
+
+    # ── holding, and the two ways a hold clears ───────────────────────────────────────────
+
+    def write_hold(self, sha: str | None) -> None:
+        """Record `sha` as the commit this host refuses to redeploy, or clear the hold."""
+        self.write("hold", sha)
+
+    def clear_broad_hold(self, playbook: str, tags: list[str]) -> None:
+        """Clear the hold after a broad apply, but only if this apply covered the held plane.
+
+        A hold says one plane is unapplied, and every consumer gates on `hold_sha` — so
+        clearing it after a success in a DIFFERENT plane turns GitOps Deploy — Status green
+        over a plane nothing has applied (issue #878). When the hold survives, the tick still
+        succeeded: the marker is the only thing kept.
+        """
+        held = self.hold_plane or ""
+        if not broad_hold_cleared_by(held, playbook, tags):
+            log(
+                f"hold kept: {held} is still unapplied "
+                f"(this tick applied {hold_plane_marker(playbook, tags)})"
+            )
+            return
+        self.write("hold_plane", None)
+        self.write_hold(None)
+
+    def clear_service_hold(self) -> None:
+        """Clear a hold after a successful service deploy, unless a broad plane is unapplied.
+
+        A k8s or Docker deploy applies no plane, so it is never evidence that the plane a
+        broad hold names has been applied. Without this, an unrelated service deploy clears
+        `hold_sha` and orphans `hold_plane`, which `gitops_status` never reads on its own.
+        """
+        held = self.hold_plane
+        if held:
+            log(
+                f"hold kept: {held} is still unapplied; a service deploy does not clear it"
+            )
+            return
+        self.write_hold(None)
+
+    def record_behind(self, origin: str, behind: bool, now: float) -> None:
+        """Record whether this host ended the tick behind origin (see `behind_marker`).
+
+        Args:
+            origin: `origin/<branch>` as the tick pinned it.
+            behind: whether `local` is a strict ancestor of `origin` — the caller does the
+                ancestry query, because that reaches git and this object reaches only files.
+            now: the current time, in `time.time()` terms, for a first-seen stamp.
+
+        Called AFTER main() so it records the state the tick finished in, not the one it
+        started in: a tick that deployed successfully converged and must clear the marker
+        rather than leave a stale one for the next 30 minutes. The first-seen stamp inside
+        `behind_marker` is preserved across ticks and reset only on convergence.
+        """
+        self.write("behind", behind_marker(behind, origin, self.behind_since, now))

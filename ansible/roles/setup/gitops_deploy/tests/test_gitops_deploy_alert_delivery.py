@@ -33,7 +33,7 @@ def _pending(state_dir: pathlib.Path) -> dict[str, str]:
 
 # ── discord(): the transport contract ─────────────────────────────────────────────────────────
 def test_discord_posts_to_the_configured_webhook_with_its_own_user_agent(
-    gitops_deploy, monkeypatch
+    gitops_deploy, monkeypatch, settings
 ):
     seen: list[urllib.request.Request] = []
 
@@ -53,7 +53,7 @@ def test_discord_posts_to_the_configured_webhook_with_its_own_user_agent(
 
     monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
     # The REAL discord_post default, so what reaches urlopen is what a host would send.
-    assert gitops_deploy.discord(DeployTools(), "hello") is True
+    assert deploy_alerts.discord(DeployTools(), settings, "hello") is True
     (req,) = seen
     # The webhook comes from the config, not a literal; the UA is the deployer's own.
     assert req.full_url == "https://discord.example/webhook"
@@ -62,13 +62,15 @@ def test_discord_posts_to_the_configured_webhook_with_its_own_user_agent(
     assert json.loads(req.data)["content"] == "hello"
 
 
-def test_discord_reports_a_failed_post_as_undelivered(gitops_deploy, monkeypatch):
+def test_discord_reports_a_failed_post_as_undelivered(
+    gitops_deploy, monkeypatch, settings
+):
     # False, never an exception: the caller queues on False, and alerting must not crash a tick.
     def fake_urlopen(_req, timeout=None):
         raise OSError("connection reset")
 
     monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
-    assert gitops_deploy.discord(DeployTools(), "hello") is False
+    assert deploy_alerts.discord(DeployTools(), settings, "hello") is False
 
 
 # ── deliver(): queue-first, then clear on a confirmed send ────────────────────────────────────
@@ -90,10 +92,15 @@ def _sender(state_dir, result) -> tuple[DeployTools, list[dict[str, str]]]:
 
 
 def test_deliver_has_queued_the_alert_by_the_time_it_posts(
-    gitops_deploy, monkeypatch, state_dir
+    gitops_deploy, monkeypatch, state_dir, settings
 ):
     tools, at_send = _sender(state_dir, True)
-    assert gitops_deploy.deliver(tools, "secrets:abc", "rotated") is True
+    assert (
+        deploy_alerts.deliver(
+            tools, gitops_deploy.STATE, settings, "secrets:abc", "rotated"
+        )
+        is True
+    )
     assert at_send == [{"secrets:abc": "rotated"}], (
         "deliver() posts before it persists the queue — a death inside the 10s POST then drops "
         "the alert permanently, because alert_once has already advanced its marker"
@@ -101,27 +108,43 @@ def test_deliver_has_queued_the_alert_by_the_time_it_posts(
 
 
 def test_a_death_inside_the_post_leaves_the_alert_queued(
-    gitops_deploy, monkeypatch, state_dir
+    gitops_deploy, monkeypatch, state_dir, settings
 ):
     # The 2026-08-31 review M-1: a reboot, a `systemctl stop` or the UPS shutdown chain landing
     # inside urlopen. drain_pending() at the top of the next tick reposts what is queued here.
     tools, _at_send = _sender(state_dir, RuntimeError("SIGTERM mid-POST"))
     with pytest.raises(RuntimeError, match="mid-POST"):
-        gitops_deploy.deliver(tools, "secrets:abc", "rotated")
+        deploy_alerts.deliver(
+            tools, gitops_deploy.STATE, settings, "secrets:abc", "rotated"
+        )
     assert _pending(state_dir) == {"secrets:abc": "rotated"}
 
 
-def test_a_delivered_alert_leaves_the_queue(gitops_deploy, monkeypatch, state_dir):
+def test_a_delivered_alert_leaves_the_queue(
+    gitops_deploy, monkeypatch, state_dir, settings
+):
     # Queue-first has one trap: guard the post-send persist against the pre-queue dict and a
     # delivered alert is never removed, so drain_pending() reposts it every tick forever.
     tools, _at_send = _sender(state_dir, True)
-    assert gitops_deploy.deliver(tools, "secrets:abc", "rotated") is True
+    assert (
+        deploy_alerts.deliver(
+            tools, gitops_deploy.STATE, settings, "secrets:abc", "rotated"
+        )
+        is True
+    )
     assert _pending(state_dir) == {}
 
 
-def test_an_undelivered_alert_stays_queued(gitops_deploy, monkeypatch, state_dir):
+def test_an_undelivered_alert_stays_queued(
+    gitops_deploy, monkeypatch, state_dir, settings
+):
     tools, _at_send = _sender(state_dir, False)
-    assert gitops_deploy.deliver(tools, "secrets:abc", "rotated") is False
+    assert (
+        deploy_alerts.deliver(
+            tools, gitops_deploy.STATE, settings, "secrets:abc", "rotated"
+        )
+        is False
+    )
     assert _pending(state_dir) == {"secrets:abc": "rotated"}
 
 
@@ -132,7 +155,7 @@ def test_an_undelivered_alert_stays_queued(gitops_deploy, monkeypatch, state_dir
 
 
 def test_deliver_caps_the_queue_and_logs_each_drop(
-    gitops_deploy, monkeypatch, state_dir, capsys
+    gitops_deploy, monkeypatch, state_dir, capsys, settings
 ):
     """Without the cap the queue is unbounded.
 
@@ -140,12 +163,14 @@ def test_deliver_caps_the_queue_and_logs_each_drop(
     every 30 minutes forever. A drop must reach the journal (which Loki indexes) naming the alert
     discarded.
     """
-    limit = gitops_deploy.PENDING_ALERTS_MAX
+    limit = deploy_health.PENDING_ALERTS_MAX
     full = {f"tasks:{i:040x}": f"alert {i}" for i in range(limit)}
     deploy_alerts.write_pending(gitops_deploy.PENDING_ALERTS_FILE, full)
     tools, _at_send = _sender(state_dir, False)
 
-    gitops_deploy.deliver(tools, "secrets:new", "one more, undelivered")
+    deploy_alerts.deliver(
+        tools, gitops_deploy.STATE, settings, "secrets:new", "one more, undelivered"
+    )
 
     kept = _pending(state_dir)
     oldest = next(iter(full))
@@ -154,32 +179,32 @@ def test_deliver_caps_the_queue_and_logs_each_drop(
     assert f"dropping oldest undelivered {oldest}" in capsys.readouterr().out
 
 
-def test_cap_pending_is_the_tested_implementation(gitops_deploy):
+def test_cap_pending_is_the_tested_implementation():
     """The deployer must bound the queue with the pure function its tests cover, not a second
     copy that can drift from it."""
-    assert gitops_deploy.cap_pending is deploy_health.cap_pending
-    assert gitops_deploy.PENDING_ALERTS_MAX == deploy_health.PENDING_ALERTS_MAX
+    assert deploy_alerts.cap_pending is deploy_health.cap_pending
+    assert deploy_health.PENDING_ALERTS_MAX == deploy_health.PENDING_ALERTS_MAX
 
 
 # ── drain_pending(): resend, and clear only what was confirmed ────────────────────────────────
 def test_drain_pending_clears_exactly_what_it_delivered(
-    gitops_deploy, monkeypatch, state_dir
+    gitops_deploy, monkeypatch, state_dir, settings
 ):
     deploy_alerts.write_pending(
         gitops_deploy.PENDING_ALERTS_FILE, {"secrets:a": "first", "tasks:b": "second"}
     )
     tools = DeployTools(discord_post=lambda _webhook, content: content == "first")
-    gitops_deploy.drain_pending(tools)
+    deploy_alerts.drain_pending(tools, gitops_deploy.STATE, settings)
     assert _pending(state_dir) == {"tasks:b": "second"}
 
 
 def test_drain_pending_with_nothing_queued_posts_nothing(
-    gitops_deploy, monkeypatch, state_dir
+    gitops_deploy, monkeypatch, state_dir, settings
 ):
     posts: list[str] = []
     tools = DeployTools(
         discord_post=lambda _webhook, content: posts.append(content) or True
     )
-    gitops_deploy.drain_pending(tools)
+    deploy_alerts.drain_pending(tools, gitops_deploy.STATE, settings)
     assert posts == []
     assert not (state_dir / "pending_alerts.json").exists()

@@ -28,7 +28,7 @@ existed.
 
 ## What changes, precisely
 
-One arm of `gitops_deploy.py:main()`. Today:
+One arm of the tick, `deploy_handlers.handle_k8s`. Today:
 
 ```
 cs.k8s_deploy → git merge --ff-only origin → deploy_k8s(prod) → on failure: hold + reset + revert
