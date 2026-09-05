@@ -135,9 +135,9 @@ def test_markdown_ends_with_exactly_one_newline(tmp_path):
     assert not out.endswith("\n\n")
 
 
-def test_the_real_scripts_directory_yields_the_known_shape():
+def test_the_real_scripts_directory_yields_the_known_shape(live_script_rows):
     """Guards the exclusion rules against the live tree, not just fixtures."""
-    rows = g.build_rows()
+    rows = live_script_rows
     names = {r["name"] for r in rows}
     assert "probe.py" in names
     assert "deploy.sh" in names
@@ -357,7 +357,7 @@ def test_a_test_that_merely_says_the_word_is_not_coverage(tmp_path):
     assert cov.indirect_test("deploy.sh", files, scripts) == ("", "")
 
 
-def test_no_script_is_credited_to_another_scripts_own_test():
+def test_no_script_is_credited_to_another_scripts_own_test(live_script_rows):
     """A path inside `test_<other>.py` is that test talking about this script, not testing it.
 
     Caught twice: this generator's own test names every script in the tree, and
@@ -365,7 +365,7 @@ def test_no_script_is_credited_to_another_scripts_own_test():
     15 KB of shell that runs on every deploy to a test of the notifier. Asserted as a class
     rather than by name, so the next instance fails here instead of being noticed.
     """
-    rows = g.build_rows()
+    rows = live_script_rows
     stems = {Path(r["name"]).stem for r in rows}
     laundered = {
         r["name"]: r["indirect_tests"]
@@ -376,7 +376,7 @@ def test_no_script_is_credited_to_another_scripts_own_test():
     assert laundered == {}
 
 
-def test_an_import_counts_even_from_another_scripts_test():
+def test_an_import_counts_even_from_another_scripts_test(live_script_rows):
     """The reject above is about path mentions; an import is real exercise.
 
     Asserted on the MECHANISM and on the credited file really importing the module, not on
@@ -384,7 +384,7 @@ def test_an_import_counts_even_from_another_scripts_test():
     fail the moment probe.py was split and a different importer sorted first -- a rename in
     the suite is not a regression in the classifier.
     """
-    rows = {r["name"]: r for r in g.build_rows()}
+    rows = {r["name"]: r for r in live_script_rows}
     credited = rows["core.py"]["indirect_tests"]
     assert rows["core.py"]["indirect_via"] == "import"
     assert credited.startswith("test_")
@@ -396,7 +396,7 @@ def test_an_import_counts_even_from_another_scripts_test():
     )
 
 
-def test_deploy_sh_is_credited_to_the_test_that_reads_it():
+def test_deploy_sh_is_credited_to_the_test_that_reads_it(live_script_rows):
     """Not to `test_deploy_detach_notify.py`, whose first line merely names the path.
 
     The credit moved from `test_deploy_annotations.py` on 2026-09-02, when
@@ -404,7 +404,7 @@ def test_deploy_sh_is_credited_to_the_test_that_reads_it():
     Either is a test that reads deploy.sh; what the guard rules out is the notifier's test,
     which only mentions the path.
     """
-    rows = {r["name"]: r for r in g.build_rows()}
+    rows = {r["name"]: r for r in live_script_rows}
     assert rows["deploy.sh"]["indirect_tests"] == "test_deploy_exit_codes.py"
 
 
@@ -415,22 +415,22 @@ _FACADE_ONLY = {"constants", "inventory", "model"}
 _MEMBERS = {p.stem for p in (g.SCRIPTS / "infra_map").glob("*.py")} - {"gen_infra_map"}
 
 
-def test_every_package_member_import_counts_as_coverage():
+def test_every_package_member_import_counts_as_coverage(live_script_rows):
     """`from infra_map import live` is an import, not a mention.
 
     The census is derived; listing it froze it at `("live.py", "render.py")`, so the four
     members added 2026-09-04 went unchecked. `_IMPORTED` is the non-vacuity floor: #1113.
     """
     assert _IMPORTED | _FACADE_ONLY <= _MEMBERS, sorted(_MEMBERS)
-    rows = {r["name"]: r for r in g.build_rows()}
+    rows = {r["name"]: r for r in live_script_rows}
     for stem in sorted(_MEMBERS - _FACADE_ONLY):
         assert rows[f"{stem}.py"]["indirect_via"] == "import", stem
 
 
-def test_a_facade_only_member_gets_no_by_name_import_credit():
+def test_a_facade_only_member_gets_no_by_name_import_credit(live_script_rows):
     """RED half: an `import` credit needs a by-name import, not package membership."""
     assert _FACADE_ONLY <= _MEMBERS, sorted(_MEMBERS)
-    rows = {r["name"]: r for r in g.build_rows()}
+    rows = {r["name"]: r for r in live_script_rows}
     for stem in sorted(_FACADE_ONLY):
         assert rows[f"{stem}.py"]["indirect_via"] != "import", stem
 

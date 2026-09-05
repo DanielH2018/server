@@ -22,6 +22,7 @@ a package.
 Run: uv run pytest ansible/tests/services/test_bridge_patch_boundary.py
 """
 
+from functools import cache
 import ast
 
 from _helpers import (
@@ -33,6 +34,7 @@ from _helpers import (
 )
 
 
+@cache
 def _roles_with_files():
     """Role name -> {module id: path} for every k8s role that ships Python under files/."""
     return {
@@ -42,6 +44,7 @@ def _roles_with_files():
     }
 
 
+@cache
 def _consumer_roots():
     """Every k8s role's files/ that shares a runtime module with another role, either way."""
     per_role = _roles_with_files()

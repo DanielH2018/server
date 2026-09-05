@@ -151,7 +151,7 @@ def test_a_test_only_importer_cannot_stand_in_for_the_leafs_own_suite(tmp_path):
     assert cov._non_test_importers("leaf.py", scripts, imports) == []
 
 
-def test_the_split_findings_leaves_are_not_reported_untested():
+def test_the_split_findings_leaves_are_not_reported_untested(live_script_rows):
     """Non-vacuity against the real tree for the class this rule was written for.
 
     The fixtures above prove the rule fires on inputs handed to it; this proves it still
@@ -163,25 +163,27 @@ def test_the_split_findings_leaves_are_not_reported_untested():
     way. `test_the_infra_map_facade_members_inherit_the_facades_suite` below is what keeps
     the `importer` via itself non-vacuous.
     """
-    rows = {r["name"]: r for r in g.build_rows()}
+    rows = {r["name"]: r for r in live_script_rows}
     for name in ("findings_gh.py", "findings_model.py", "findings_plans.py"):
         assert rows[name]["indirect_via"] == "import", name
         assert rows[name]["indirect_tests"] == "test_findings.py", name
 
 
-def test_the_shell_template_validators_are_credited_to_their_canonical_suite():
+def test_the_shell_template_validators_are_credited_to_their_canonical_suite(
+    live_script_rows,
+):
     """Non-vacuity for the stem tie-break, against the real tree.
 
     Both were credited to `test_backup_health_shim.py`, a suite about one rendered shim.
     `shell_templates.py` can never win a DIRECT match: pytest names modules by basename
     repo-wide, so it is deliberately `test_validate_shell_templates.py`.
     """
-    rows = {r["name"]: r for r in g.build_rows()}
+    rows = {r["name"]: r for r in live_script_rows}
     for name in ("shell_templates.py", "shell_lint.py"):
         assert rows[name]["indirect_tests"] == "test_validate_shell_templates.py", name
 
 
-def test_every_inherited_credit_names_a_test_of_a_real_importer():
+def test_every_inherited_credit_names_a_test_of_a_real_importer(live_script_rows):
     """The `importer` via is exempt from the path-laundering guard, so it needs its own.
 
     `test_no_script_is_credited_to_another_scripts_own_test` filters `indirect_via == "path"`
@@ -192,7 +194,7 @@ def test_every_inherited_credit_names_a_test_of_a_real_importer():
     assert the relationship rather than trusting the via label: the credited
     `test_<X>.py` must name an `X` that really imports this module.
     """
-    rows = [r for r in g.build_rows() if r["indirect_via"] == "importer"]
+    rows = [r for r in live_script_rows if r["indirect_via"] == "importer"]
     assert rows, "no row uses the importer via -- this guard would pass vacuously"
     imports = sc.importers(g.SCRIPTS)
     unbacked = {
@@ -224,7 +226,7 @@ def test_inheritance_does_not_require_a_single_importer(tmp_path):
     assert rows["leaf.py"]["indirect_tests"] == "test_alpha.py"
 
 
-def test_the_infra_map_facade_members_inherit_the_facades_suite():
+def test_the_infra_map_facade_members_inherit_the_facades_suite(live_script_rows):
     """Non-vacuity on the real tree, and the other half of the census in the generator's suite.
 
     `test_a_facade_only_member_gets_no_by_name_import_credit` there asserts only that these
@@ -232,7 +234,7 @@ def test_the_infra_map_facade_members_inherit_the_facades_suite():
     leaves what they DO hold unpinned, so assert it here: nothing imports them by name, and
     `test_gen_infra_map.py` reaches them through the facade's re-exports.
     """
-    rows = {r["name"]: r for r in g.build_rows()}
+    rows = {r["name"]: r for r in live_script_rows}
     for stem in ("constants", "inventory", "model"):
         assert rows[f"{stem}.py"]["indirect_via"] == "importer", stem
         assert rows[f"{stem}.py"]["indirect_tests"] == "test_gen_infra_map.py", stem
@@ -274,7 +276,9 @@ def test_a_dotted_path_to_a_longer_name_credits_nothing(tmp_path):
     assert rows["leaf.py"]["indirect_via"] == ""
 
 
-def test_the_land_lib_modules_imported_by_dotted_path_are_not_reported_untested():
+def test_the_land_lib_modules_imported_by_dotted_path_are_not_reported_untested(
+    live_script_rows,
+):
     """Non-vacuity for the dotted-path branch, against the real tree.
 
     Named members rather than a count, so a failure says which module lost its credit.
@@ -287,7 +291,7 @@ def test_the_land_lib_modules_imported_by_dotted_path_are_not_reported_untested(
     `diagnostics` settles it. So a rename of either suite fails here without the
     dotted-path match having regressed -- read the failure before concluding it has.
     """
-    rows = {r["path"]: r for r in g.build_rows()}
+    rows = {r["path"]: r for r in live_script_rows}
     expected = {
         "scripts/deploy_tools/land_lib/landing.py": "test_land_landing.py",
         "scripts/deploy_tools/land_lib/ledger.py": "test_land_ledger.py",
