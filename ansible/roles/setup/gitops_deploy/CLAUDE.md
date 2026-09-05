@@ -288,8 +288,8 @@ stay).
     this way leaves every OTHER monitored marker clean while the cluster keeps running the old
     manifests. Renovate automerges digest bumps on the 20+ `k8s_autodeploy: false` roles
     (`renovate.json`), so this path runs unattended with the one Discord line as its entire
-    signal until someone happens to reread it. The `# DECIDED:` at the `cs.k8s` branch in
-    `gitops_deploy.py` points here. The durable signal is a daniel-box root cron
+    signal until someone happens to reread it. The `# DECIDED:` at the `cs.k8s` branch of
+    `deploy_alerts.alert_deferred` points here. The durable signal is a daniel-box root cron
     (`roles/setup/k3s/templates/release-staleness-check.sh.j2`, tag `release-staleness`, every
     `k3s_release_staleness_cron_minute`) reading `uv run python scripts/diagnostics/probe.py
     releases --stale-only`: it compares each service's release record (the applied commit
@@ -549,7 +549,7 @@ process-group kill),
 `_fetch_skip` (`entrypoint()`'s handler chain and the two retryable git failures, by calling
 them), `_alert_delivery` (`discord()`, `deliver()` and `drain_pending()`, by calling them
 against a tmp state dir), `_alert_channels` (`alert_once()`, `alert_deferred()`,
-`alert_secrets_deferred()`, `check_stale_composes()` and `_record_behind()`, the same way,
+`alert_secrets_deferred()`, `check_stale_composes()` and `DeployerState.record_behind()`, the same way,
 plus the guard that `state_dir` covers every state path the module names),
 `_main_branches` (`main()` itself, run against the `tick` fixture: a scripted checkout
 that answers git, `ansible-playbook`, the CI verdict, the health gate, the staging gate
@@ -577,9 +577,9 @@ each module's sibling imports must sit inside an explicit `ALLOWED` map, no leaf
 
 ## Which apply clears a hold
 
-**`hold_sha` clears only when the plane the hold names is applied** (`clear_broad_hold` /
-`clear_service_hold` in `gitops_deploy.py`, deciding through
-`deploy_logic.broad_hold_cleared_by`). Coverage, not equality: an untagged run applies the
+**`hold_sha` clears only when the plane the hold names is applied**
+(`DeployerState.clear_broad_hold` / `DeployerState.clear_service_hold` in `deploy_state.py`,
+deciding through `deploy_logic.broad_hold_cleared_by`). Coverage, not equality: an untagged run applies the
 whole playbook and covers any tag set held against it, a tagged run covers a held tag set it is
 a superset of, and a tagged run covers an untagged hold not at all.
 
@@ -721,9 +721,10 @@ every later push while the host stays stale.
 A set difference tells you what diverged, never why, so a remediation inferred from its
 direction is a guess. On a pull-based host origin is the source of truth, so the re-render is
 the right lead in both directions and the push case belongs as a secondary check. Fixed in
-`7f5f629b`. The alert-direction logic lives in `gitops_deploy.py`'s `main()`; the
-`test_deploy_*.py` family covers only the decision modules, and `main()` itself runs under the
-`tick` fixture in `tests/test_gitops_deploy_main_branches.py`.
+`7f5f629b`. The alert-direction logic lives in `deploy_phases._promote_k8s_auto_deploys`; the
+`test_deploy_*.py` family covers only the decision modules, and the phases run under the
+`settings` fixture in `tests/test_gitops_deploy_phases.py` and under the `tick` fixture in
+`tests/test_gitops_deploy_main_branches.py`.
 
 `test_gitops_deploy_subprocess.py` pins `deploy_k8s()`'s argv. Its two call sites inside
 `main()` are exercised by `test_gitops_deploy_main_branches.py`, which runs the failed-rollout

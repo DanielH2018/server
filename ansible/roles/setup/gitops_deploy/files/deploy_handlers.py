@@ -539,6 +539,17 @@ def consult_staging(
     """
     if not config.staging_gate:
         return STAGING_SKIPPED
+    # An ARMED gate with an empty subset can never gate anything, and the SKIPPED it returns
+    # below is the same word a tick that simply touched no staging service gets. Those two
+    # states are worth telling apart in the journal: the second is the ordinary case, the first
+    # means the operator turned the gate on and it is doing nothing. `load_config` does not
+    # parse STAGING_SUBSET — it is a `gitops_deploy.py` constant that `tick_config()` snapshots
+    # — so a Config built anywhere else carries the fail-safe empty default and lands here.
+    if not config.staging_subset:
+        log(
+            "staging: gate is ARMED but STAGING_SUBSET is empty — nothing can be gated, so "
+            "every service is reported unchecked"
+        )
     gated, ungated = staging_scope(services, config.staging_subset)
     if not gated:
         log(staging_verdict_summary(gated, ungated, 0, 0))

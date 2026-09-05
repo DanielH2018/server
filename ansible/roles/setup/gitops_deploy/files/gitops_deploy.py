@@ -173,16 +173,15 @@ REPO = CONFIG.repo
 BRANCH = CONFIG.branch
 HOSTNAME = CONFIG.hostname
 TIMEOUT = CONFIG.health_timeout_s
-# Wall-clock budget (measured from process start, RUN_START) for the whole run's health-gating
-# phase. Once spent, the gate stops and rolls back so the rollback (git reset + one redeploy)
-# still finishes inside the unit's TimeoutStartSec (25min) — otherwise systemd SIGTERMs the
-# deployer mid-gate, before write_hold()/rollback, and the bad commit is left live. RUN_START is
-# measured AFTER `flock -w 180` acquires, but TimeoutStartSec counts the flock wait too, so the
-# budget is sized 180 (max flock wait) + 1020 (this gate) + 300 (HEALTH_TIMEOUT_S) = 1500 = the
-# 25min timeout, keeping the rollback intact even under max lock contention with the weekly
-# secret-rotate. See gitops-deploy.service.j2.
+# Wall-clock budget (measured from process start, `DeployTools.run_start`) for the whole run's
+# health-gating phase. Once spent, the gate stops and rolls back so the rollback (git reset +
+# one redeploy) still finishes inside the unit's TimeoutStartSec (25min) — otherwise systemd
+# SIGTERMs the deployer mid-gate, before write_hold()/rollback, and the bad commit is left live.
+# `run_start` is measured AFTER `flock -w 180` acquires, but TimeoutStartSec counts the flock
+# wait too, so the budget is sized 180 (max flock wait) + 1020 (this gate) + 300
+# (HEALTH_TIMEOUT_S) = 1500 = the 25min timeout, keeping the rollback intact even under max lock
+# contention with the weekly secret-rotate. See gitops-deploy.service.j2.
 RUN_BUDGET_S = CONFIG.run_budget_s
-RUN_START = time.time()
 
 # ── k8s auto-deploy ───────────────────────────────────────────────────────────────────────────
 # OFF unless the host explicitly enables it, so a host that has not re-templated config.env
@@ -296,11 +295,21 @@ STAGING_GATE_BLOCKING = CONFIG.staging_gate_blocking
 def tick_config() -> Config:
     """The settings this tick runs on: CONFIG, with the module constants above snapshotted back.
 
-    Every phase takes a `deploy_config.Config` rather than a type of the deployer's own, and
-    almost every field of the one returned here already equals CONFIG's. The `replace` is for
-    the four that need not: `STAGING_SUBSET` is derived from `C` rather than parsed into
-    Config (its literal fallback is what the docs generator reads out of this file), and
-    `K8S_AUTODEPLOY_ENABLED` is the value AFTER the empty-denylist disarm above.
+    Every phase takes a `deploy_config.Config` rather than a type of the deployer's own.
+
+    FOUR of the seventeen kwargs below are load-bearing, and thirteen are not — that asymmetry
+    is deliberate, so do not prune the thirteen. The four:
+
+      - `staging_subset` is derived from `C` here rather than parsed by `load_config`; its
+        literal fallback in this file is what `scripts/docs/gen_doc_fragments.py` reads.
+      - `k8s_autodeploy_enabled` is the value AFTER the empty-denylist fail-closed disarm above,
+        which is a decision this module makes and `load_config` cannot.
+      - `repo` and `staging_gate` are what `tests/conftest.py`'s `tick` fixture repoints.
+
+    The other thirteen equal CONFIG's fields today and are passed anyway, so that a patch of ANY
+    module constant above reaches the phases. Dropping them would make the set of constants a
+    test may repoint an implicit list nobody maintains, and the failure would be a fixture that
+    silently describes the host's settings instead of the scripted ones.
 
     Called from `main()` and `entrypoint()`, never at import, and that is what keeps the
     constants above the single source: a phase reads `config.repo`, and `config.repo` is

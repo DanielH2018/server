@@ -138,8 +138,10 @@ class DeployTools:
     now: Callable[..., datetime] = datetime.now
     # When this process started, in `time.time()` terms — the only non-callable here, and a
     # boundary all the same: it is what the OS did, not what the config said. `handle_docker`
-    # measures the health gate's deadline from it, so the flock wait counts against the budget
-    # (see the unit's TimeoutStartSec arithmetic in gitops_deploy.py's RUN_BUDGET_S comment).
+    # measures the health gate's deadline from `tools.run_start`, so the flock wait counts
+    # against the budget (see the unit's TimeoutStartSec arithmetic in gitops_deploy.py's
+    # RUN_BUDGET_S comment). This field is the ONLY start-of-run clock: the entry module used to
+    # carry a `RUN_START` module constant beside RUN_BUDGET_S, and it is gone.
     # A default_factory rather than a literal: every `DeployTools()` a test builds gets its own
     # start, so a deadline never lands in the past.
     run_start: float = field(default_factory=time.time)

@@ -5,6 +5,7 @@ a gate that fires on everything and a gate that fires on nothing are indistingui
 passing side alone.
 """
 
+import dataclasses
 import itertools
 
 import pytest
@@ -87,3 +88,34 @@ def test_the_override_is_absent_by_default(gitops_deploy, state_dir) -> None:
     """The rejecting half: with nothing armed, nothing is spent and nothing is let through."""
     assert not (state_dir / "staging_gate_override").exists()
     assert not deploy_handlers.consume_staging_override(gitops_deploy.STATE)
+
+
+_ARMED_BUT_EMPTY = "gate is ARMED but STAGING_SUBSET is empty"
+
+
+def test_an_armed_gate_with_an_empty_subset_says_so(
+    gitops_deploy, tick, settings, capsys
+) -> None:
+    """`Config.staging_subset` defaults to empty and `load_config` never parses it, so a Config
+    built anywhere but `tick_config()` gates nothing while looking armed. The verdict it returns
+    is the same SKIPPED an ordinary tick gets, which is why the journal has to tell them apart."""
+    config = dataclasses.replace(settings, staging_subset=frozenset())
+    verdict = deploy_handlers.consult_staging(
+        tick.tools, gitops_deploy.STATE, config, {"sonarr"}, "c0ffee" * 6 + "abcd"
+    )
+    assert verdict == STAGING_SKIPPED
+    assert _ARMED_BUT_EMPTY in capsys.readouterr().out
+
+
+def test_an_armed_gate_with_a_real_subset_stays_quiet(
+    gitops_deploy, tick, settings, capsys
+) -> None:
+    """The rejecting half. A tick that simply touched no staging service is the ordinary case
+    and must not print the misconfiguration line — otherwise the line means nothing."""
+    verdict = deploy_handlers.consult_staging(
+        tick.tools, gitops_deploy.STATE, settings, {"grafana"}, "c0ffee" * 6 + "abcd"
+    )
+    out = capsys.readouterr().out
+    assert verdict == STAGING_SKIPPED
+    assert _ARMED_BUT_EMPTY not in out
+    assert "nothing to gate" in out
