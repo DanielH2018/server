@@ -340,6 +340,10 @@ def test_backup_target_url_reads_the_cr():
         longhorn_cluster.backup_target_url(_run=run)
         == "s3://bucket@us-east-005/longhorn"
     )
+    # b2_ledger.py:474 reaches this as `longhorn.backup_target_url()`, an attribute lookup at
+    # call time, so dropping the facade's re-export breaks `probe.py b2-deletions` at runtime
+    # while every import stays valid. Nothing else pins that re-export.
+    assert longhorn.backup_target_url is longhorn_cluster.backup_target_url
 
 
 def test_backup_target_url_is_empty_when_disarmed_or_unreadable():
