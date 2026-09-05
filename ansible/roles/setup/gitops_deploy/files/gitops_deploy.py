@@ -298,13 +298,14 @@ def tick_config() -> Config:
     Every phase takes a `deploy_config.Config` rather than a type of the deployer's own.
 
     FOUR of the eighteen kwargs below are load-bearing, and fourteen are not — that asymmetry
-    is deliberate, so do not prune the thirteen. The four:
+    is deliberate, so do not prune the fourteen. The four:
 
       - `staging_subset` is derived from `C` here rather than parsed by `load_config`; its
         literal fallback in this file is what `scripts/docs/gen_doc_fragments.py` reads.
       - `k8s_autodeploy_enabled` is the value AFTER the empty-denylist fail-closed disarm above,
         which is a decision this module makes and `load_config` cannot.
-      - `repo` and `staging_gate` are what `tests/conftest.py`'s `tick` fixture repoints.
+      - `repo`, `staging_gate` and `staging_subset` are what `tests/conftest.py`'s `tick`
+        fixture repoints — so `staging_subset` is load-bearing twice over.
 
     The other fourteen equal CONFIG's fields today and are passed anyway, so that a patch of ANY
     module constant above reaches the phases. Dropping them would make the set of constants a
