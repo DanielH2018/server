@@ -31,6 +31,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lib import yaml_fast
 
+# DECIDED: module-level and one-way in practice, not deferred — checks are a pure function of
+# the model, so this edge is the real dependency, not an artifact of split order. The reverse
+# edge (ha_state_model.py:520, `main()`'s `check` subcommand calling check_errors) is the
+# deferred one; see the DECIDED marker there for why it isn't worth a third module.
 from ha_state_model import (
     DERIVED_YAML,
     EXTERNAL_SERVICES_YAML,

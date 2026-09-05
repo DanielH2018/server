@@ -430,6 +430,12 @@ def cmd_refresh(get_states=None, get_services=None) -> int:
     if get_states is None or get_services is None:
         import json
 
+        # DECIDED: deferred, the reverse edge of probe_lib/ha.py:581's `run_ha_state`. That
+        # function needs build_model() to render `ha state`; `refresh` here needs core/ha's
+        # live-HTTP helpers (ha_base/ha_resolve/ha_token/ha_get) to snapshot external entities.
+        # Both edges stay inside the one function that needs them, so neither runs at import
+        # time. Fixing it means carving the HA HTTP client out of probe_lib.ha into a module
+        # neither side owns — real restructuring, so it is pinned in ALLOWED_CYCLES instead.
         from diagnostics.probe_lib import core
         from diagnostics.probe_lib import ha
 
@@ -517,6 +523,13 @@ def main(argv=None) -> int:
         return cmd_generate()
     if ns.cmd == "refresh":
         return cmd_refresh()
+    # DECIDED: deferred, the reverse edge of ha_state_checks.py:34's module-level import of this
+    # module's build_model/DERIVED_YAML/etc. That import is real and load-bearing (the checks are
+    # a pure function of the model), so it cannot move here instead. This one is deferred only
+    # because it exists to serve the CLI's `check` subcommand — every other subcommand
+    # (generate/refresh) never touches ha_state_checks at all. Moving the CLI dispatch itself
+    # into a third module would break the cycle but turns a working two-module split into three
+    # for one subcommand; pinned in ALLOWED_CYCLES instead.
     from ha_state_checks import check_errors
 
     errs = check_errors()
