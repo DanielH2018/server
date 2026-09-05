@@ -22,9 +22,15 @@ partial row.
 
 import argparse
 import json
+import sys as _sys
 from pathlib import Path
+from pathlib import Path as _Path
 
-OUTCOMES = Path(__file__).resolve().parents[2] / "evals" / "review_outcomes.jsonl"
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
+
+from lib.repo_paths import REPO
+
+OUTCOMES = REPO / "evals" / "review_outcomes.jsonl"
 
 REQUIRED_FIELDS = (
     "date",

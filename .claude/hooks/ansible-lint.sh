@@ -4,7 +4,7 @@
 # Read hook input from stdin
 input=$(cat)
 
-cd /home/ubuntu/server || exit 0
+cd /home/ubuntu/server || { echo "ansible-lint.sh: lint did not run (cd to /home/ubuntu/server failed) — the edit was NOT linted" >&2; exit 0; }
 
 # Extract the file path from tool input. This used to spin up `uv run --no-sync python`
 # to read one JSON field, which cost 39ms of the hook's 42ms on an edit this hook then

@@ -187,6 +187,33 @@ def test_main_says_nothing_on_an_unrelated_event(capsys):
     assert capsys.readouterr().out == ""
 
 
+def test_the_hooks_exit_code_table_matches_the_shared_contract():
+    """`_DEPLOY_EXITS` is the last decoder of deploy.sh's contract outside `exit_codes.py`.
+
+    The hook cannot import it: it is deliberately stdlib-only, because it runs under
+    `uv run --no-sync` on the per-command hot path. So the two are tied here instead, where
+    `scripts/` is on pytest's `pythonpath`. Every other decoder was consolidated into
+    `deploy_tools.exit_codes`; this table kept the bare integers 75/4/3/2/20 with nothing
+    holding them to the source, and it is the surface an operator reads when a deploy refuses.
+    """
+    from deploy_tools.exit_codes import DEPLOY_PLAYBOOK_FAILED, DEPLOY_SH_NO_VERDICT
+
+    assert set(_mod._DEPLOY_EXITS) == DEPLOY_SH_NO_VERDICT | {DEPLOY_PLAYBOOK_FAILED}
+
+
+def test_a_drifted_exit_code_table_is_flagged():
+    """Red proof for the check above, which can only ever be observed passing."""
+    from deploy_tools.exit_codes import DEPLOY_PLAYBOOK_FAILED, DEPLOY_SH_NO_VERDICT
+
+    expected = DEPLOY_SH_NO_VERDICT | {DEPLOY_PLAYBOOK_FAILED}
+    dropped = dict(_mod._DEPLOY_EXITS)
+    del dropped[75]
+    assert set(dropped) != expected, (
+        "removing deploy.sh's lock-busy code must make the table disagree with the contract; "
+        "if it does not, the comparison above is measuring nothing."
+    )
+
+
 class _StringIO:
     """Minimal stdin stand-in: json.load only needs read()."""
 

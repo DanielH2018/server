@@ -28,7 +28,6 @@ has a record, 1 otherwise.
 """
 
 import json
-import os
 import subprocess
 from pathlib import Path
 
@@ -46,11 +45,12 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 # two agree rather than trusting the comment.
 RELEASE_DIR = Path("/var/lib/homelab/k8s-releases.d")
 
+from lib.git import git as _lib_git  # noqa: E402
 from lib.repo_paths import REPO as REPO_ROOT  # noqa: E402
 
 
-def _git_env():
-    """The environment for a git subprocess that must target `repo_root` and nothing else.
+def _git(*args, cwd, **kwargs):
+    """Run git against `cwd` and nothing else, through the shared runner.
 
     `GIT_DIR`/`GIT_WORK_TREE`/`GIT_INDEX_FILE` in the environment override `cwd`, so a caller
     running this reader from inside another git operation -- prek's own `pytest` hook runs
@@ -59,8 +59,15 @@ def _git_env():
     `repo_root` reads as "commit unknown to this checkout". `repo_root` is the explicit
     parameter every function below already takes to be scoped and testable; honoring it means
     the ambient environment can't override it.
+
+    This module carried its own `_git_env()` building that stripped environment inline. It was
+    the same dict comprehension as `lib.git`, re-derived from the same hazard `lib.git`'s own
+    docstring records -- two copies of one safety fix, free to drift the moment either side
+    changes the strip rule. `lib.git.git` already strips every `GIT_*` variable and already
+    passes `capture_output=True, text=True`, so this is a thin wrapper for the default
+    arguments, the way `scripts/dev/prune_worktrees.py` wraps the same function.
     """
-    return {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    return _lib_git(*args, cwd=cwd, **kwargs)
 
 
 def load_records(release_dir=RELEASE_DIR, previous=False):
@@ -96,11 +103,13 @@ def merged_commits(commits, repo_root=REPO_ROOT):
     merged = set()
     for commit in {c for c in commits if c}:
         try:
-            rc = subprocess.run(
-                ["git", "merge-base", "--is-ancestor", commit, "origin/master"],
+            rc = _git(
+                "merge-base",
+                "--is-ancestor",
+                commit,
+                "origin/master",
                 cwd=repo_root,
-                env=_git_env(),
-                capture_output=True,
+                check=False,
                 timeout=10,
             ).returncode
         except OSError, subprocess.SubprocessError:
@@ -177,20 +186,14 @@ def _changed_files(commit, paths, repo_root, ref):
     than silently skip: a commit nobody can find is not evidence the manifests are current.
     """
     try:
-        result = subprocess.run(
-            [
-                "git",
-                "log",
-                "--name-only",
-                "--format=",
-                f"{commit}..{ref}",
-                "--",
-                *paths,
-            ],
+        result = _git(
+            "log",
+            "--name-only",
+            "--format=",
+            f"{commit}..{ref}",
+            "--",
+            *paths,
             cwd=repo_root,
-            env=_git_env(),
-            capture_output=True,
-            text=True,
             timeout=15,
             check=True,
         )
