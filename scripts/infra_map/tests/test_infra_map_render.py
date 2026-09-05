@@ -10,6 +10,10 @@ Run: uv run pytest scripts/infra_map/tests/test_infra_map_render.py
 
 from __future__ import annotations
 
+import inspect
+import re
+from pathlib import Path
+
 
 import gen_infra_map as g
 from infra_map import diagram
@@ -266,3 +270,63 @@ def test_a_status_with_no_dot_rule_is_caught():
     labels = {**style.STATUS_LABELS, "invented": "Invented"}
     missing = [k for k in labels if f".dot.{k}" not in style.STYLE]
     assert missing == ["invented"]
+
+
+_REPO = Path(diagram.__file__).resolve().parents[2]
+
+_SHAPE_CITATION = re.compile(
+    r"The diagram's <em>shape</em> is fixed in <code>(scripts/[^<]+)</code>"
+)
+
+
+def _cited_script_paths(page: str) -> list[str]:
+    """Every `<code>scripts/….py</code>` path the page points a reader at."""
+    return re.findall(r"<code>[^<]*?(scripts/[^\s<]+\.py)", page)
+
+
+def test_every_script_path_the_page_cites_exists_on_disk():
+    """The footer is a reader's route into the code, so a moved module strands them.
+
+    Nothing else guards it. `ansible/tests/repo/test_documented_paths_exist.py` only
+    checks citations carrying a `:line`, and these carry none.
+    """
+    cited = _cited_script_paths(rendered())
+    assert len(cited) >= 2, "the footer stopped citing any script path"
+    assert [p for p in cited if not (_REPO / p).is_file()] == []
+
+
+def test_a_cited_path_that_no_longer_exists_is_caught():
+    """The RED half of the pair above."""
+    stale = "<code>scripts/infra_map/render_html_views.py</code>"
+    cited = _cited_script_paths(stale)
+    assert [p for p in cited if not (_REPO / p).is_file()] == cited
+
+
+def _shape_citation(page: str) -> str:
+    """The path the page's shape sentence sends a reader to, `''` if it says nothing."""
+    match = _SHAPE_CITATION.search(page)
+    return match.group(1) if match else ""
+
+
+def _module_that_draws_the_diagram() -> str:
+    source = inspect.getsourcefile(diagram.diagram_svg_fragment)
+    assert source is not None, "diagram_svg_fragment has no source file"
+    return f"scripts/infra_map/{Path(source).name}"
+
+
+def test_the_footer_names_the_module_that_actually_draws_the_diagram():
+    """`gen_infra_map.py` is the CLI and has never held a coordinate (#1111).
+
+    The shape sentence sends a reader who wants to move a box, so it has to name the
+    module defining `diagram_svg_fragment` — wherever that module is split to next.
+    """
+    assert _shape_citation(rendered()) == _module_that_draws_the_diagram()
+
+
+def test_a_footer_naming_the_cli_for_the_shape_is_caught():
+    """The RED half: the pre-#1111 footer text, which named the CLI."""
+    stale = (
+        "The diagram's <em>shape</em> is fixed in "
+        "<code>scripts/infra_map/gen_infra_map.py</code> — those edges"
+    )
+    assert _shape_citation(stale) != _module_that_draws_the_diagram()
