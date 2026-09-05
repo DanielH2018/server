@@ -76,13 +76,20 @@ def indirect_test(
     if not name.endswith(".py"):
         import_re = None
     elif Path(name).stem.isidentifier():
-        # Two spellings reach the same module. `import live` and `from live import x` name
+        # Three spellings reach the same module. `import live` and `from live import x` name
         # it as a top-level module; `from infra_map import live` names it as a member of its
         # package, which is how a module in a subdirectory that shares its basename with
         # another one has to be imported. Matching only the first reported infra_map's `live`
         # and `render` as untested the moment they took the package form.
+        #
+        # The third spelling puts the stem INSIDE the dotted module path:
+        # `from deploy_tools.land_lib.landing import Landing` names no `landing` after
+        # `import`, and the names it does bind are capitalised, so neither of the other two
+        # branches sees it. That reported `land_lib/landing.py` untested while
+        # `test_land_landing.py` exercised it (issue #1169). The optional `(?:[\w.]+\.)?`
+        # prefix on the first branch is what admits it, and covers `import pkg.live` too.
         import_re = re.compile(
-            rf"^\s*(?:from|import)\s+{stem}\b"
+            rf"^\s*(?:from|import)\s+(?:[\w.]+\.)?{stem}\b"
             rf"|^\s*from\s+[\w.]+\s+import\s+.*\b{stem}\b",
             re.MULTILINE,
         )
