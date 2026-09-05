@@ -115,3 +115,59 @@ def test_arr_queue_msg_is_sanitized(monkeypatch, cfg):
     assert ok is False
     assert "@everyone" not in msg
     assert "(at)everyone" in msg
+
+
+# ── the config's own __repr__ must not carry a credential ───────────────────────────────────
+#
+# `Config` is a dataclass, so it gets an auto-generated __repr__ over EVERY field. A bare
+# `print(cfg)`, an f-string in a log line, or a traceback rendering locals would otherwise put
+# 16 secrets into the pod log — the HA long-lived token, both B2 keys, the Cloudflare analytics
+# token, the speedtest token, the SMTP password, five Discord webhook URLs and five *arr API
+# keys — and promtail ships that log to Loki. Each is marked `field(repr=False)` at its
+# declaration in the domain module.
+#
+# Listed by name rather than derived from `fields()`: a census that asks the dataclass which
+# fields are repr=False and then checks those are absent proves nothing, because a field that
+# lost its marker would leave the census along with it.
+_SECRET_ENV = {
+    "HA_TOKEN": "sentinel-ha-token",
+    "SPEEDTEST_TOKEN": "sentinel-speedtest-token",
+    "B2_PROBE_KEY_ID": "sentinel-b2-key-id",
+    "B2_PROBE_APPLICATION_KEY": "sentinel-b2-app-key",
+    "CF_ANALYTICS_TOKEN": "sentinel-cf-token",
+    "SMTP_PASSWORD": "sentinel-smtp-password",
+    "DISCORD_WEBHOOK_URL": "https://discord.example/sentinel-kuma",
+    "DISCORD_CROWDSEC_WEBHOOK_URL": "https://discord.example/sentinel-crowdsec",
+    "DISCORD_GITOPS_WEBHOOK_URL": "https://discord.example/sentinel-gitops",
+    "DISCORD_ARR_WEBHOOK_URL": "https://discord.example/sentinel-arr",
+    "DISCORD_HEALTHCHECKS_WEBHOOK_URL": "https://discord.example/sentinel-hc",
+    "N8N_API_KEY": "sentinel-n8n-key",
+    "SONARR_API_KEY": "sentinel-sonarr-key",
+    "RADARR_API_KEY": "sentinel-radarr-key",
+    "BAZARR_API_KEY": "sentinel-bazarr-key",
+    "PROWLARR_API_KEY": "sentinel-prowlarr-key",
+}
+
+
+def test_repr_hides_every_credential_but_not_ordinary_config():
+    """The rejecting half and the accepting half, so a repr that hid EVERYTHING would fail too.
+
+    `@dataclass(repr=False)` on the whole class would satisfy the secrecy assertion while making
+    the object useless to debug; the KUMA_URL assertion is what rules that out.
+    """
+    env = dict(_SECRET_ENV)
+    env["KUMA_URL"] = "http://uptime-kuma.sentinel:3001"
+    cfg = load_config(env)
+    rendered = repr(cfg)
+
+    leaked = sorted(n for n, v in _SECRET_ENV.items() if v in rendered)
+    assert not leaked, (
+        f"repr(Config) carries {leaked} — a print(cfg), an f-string in a log line or a "
+        "traceback would ship these to Loki. Mark each `field(repr=False)`."
+    )
+    # The values really were loaded, so the assertion above is about the repr rather than about
+    # a config that never held the secrets in the first place.
+    assert cfg.HA_TOKEN == "sentinel-ha-token"
+    assert cfg.SMTP_PASSWORD == "sentinel-smtp-password"
+    # ...and ordinary configuration is still visible, which is what a repr is for.
+    assert "http://uptime-kuma.sentinel:3001" in rendered

@@ -11,7 +11,7 @@ parsers arrive as arguments, so the split leaf never reaches back into its facad
 """
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
@@ -50,7 +50,7 @@ class HostConfig:
     PI_PORT_TIMEOUT: float
     PI_PORTS_CONSECUTIVE: int
     SPEEDTEST_URL: str
-    SPEEDTEST_TOKEN: str
+    SPEEDTEST_TOKEN: str = field(repr=False)
     SPEEDTEST_DOWNLOAD_MIN_MBPS: float
     SPEEDTEST_MAX_AGE_H: float
     SPEEDTEST_CONSECUTIVE: int

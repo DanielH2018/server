@@ -9,7 +9,7 @@ Composed into `Config` by `bridge/config.py`; imports nothing from it.
 """
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
@@ -21,19 +21,19 @@ class ServiceConfig:
     TRAEFIK_SLOW_BUCKET: str
     TRAEFIK_SLOW_PCT: float
     N8N_URL: str
-    N8N_API_KEY: str
+    N8N_API_KEY: str = field(repr=False)
     N8N_FAIL_WINDOW: str
     N8N_CONSECUTIVE_MAX: int
     N8N_SYSTEMIC_STREAK: int
     N8N_SYSTEMIC_MAX: int
     SONARR_URL: str
-    SONARR_API_KEY: str
+    SONARR_API_KEY: str = field(repr=False)
     RADARR_URL: str
-    RADARR_API_KEY: str
+    RADARR_API_KEY: str = field(repr=False)
     BAZARR_URL: str
-    BAZARR_API_KEY: str
+    BAZARR_API_KEY: str = field(repr=False)
     PROWLARR_URL: str
-    PROWLARR_API_KEY: str
+    PROWLARR_API_KEY: str = field(repr=False)
     PROWLARR_INDEXER_MIN_DOWN_MIN: float
     PROWLARR_INDEXER_IGNORE: str
     GITOPS_STATE_DIR: str
@@ -43,7 +43,7 @@ class ServiceConfig:
     STAGING_BACKFILL_MAX_AGE_S: float
     GITOPS_BEHIND_MAX_S: float
     HA_URL: str
-    HA_TOKEN: str
+    HA_TOKEN: str = field(repr=False)
     HA_HEARTBEAT_MAX_AGE_S: float
     HA_HEARTBEAT_ENTITY: str
     HA_CONSECUTIVE: int

@@ -86,8 +86,7 @@ from checks.logs import (
 )
 
 
-# The shape of every check body and every gate: it takes the configuration and decides.
-CheckFn = Callable[[Config], tuple[bool, str]]
+CheckFn = Callable[[Config], tuple[bool, str]]  # every check body and every gate
 
 
 class CheckResult(NamedTuple):
@@ -118,6 +117,8 @@ class Check:
     fn: CheckFn
 
 
+# The push tokens are the ONE thing here still read from os.environ at import — the frozen
+# Config covers every threshold and URL but not these. See the DECIDED note in main().
 CHECKS = [
     Check("disk", _env("KUMA_PUSH_DISK", ""), check_disk),
     Check("cert", _env("KUMA_PUSH_CERT", ""), check_cert),
@@ -428,7 +429,9 @@ def _gate(
     once instead of storming. A disabled gate returns `True` so the filter suppresses nothing.
 
     Args:
-      cfg: The gate body's config; its CHECKS_SKIP is the skip filter.
+      cfg: The gate body's config, and the skip filter. ASYMMETRIC with `only` on purpose:
+        `--check` can narrow `only` per run, so run_once has a value the config does not carry;
+        nothing narrows the skip set, so it is read off `cfg.CHECKS_SKIP` rather than threaded.
       name: The gate's own check name, as CHECKS_ONLY/CHECKS_SKIP and GATE_DEPENDENTS spell it.
       fn: The gate's check body.
       push_env: The env var holding this gate's Kuma push token.
@@ -630,15 +633,20 @@ def main(argv: list[str] | None = None, env: Mapping[str, str] | None = None) ->
 
     Args:
       argv: The argument list, without the program name. None reads sys.argv.
-      env: The environment `load_config` reads. None reads the real one.
+      env: The environment `load_config` reads. None reads the real one. See the DECIDED note.
 
     Returns:
       The process exit code: 0 after a completed --once run, 2 on a configuration fault.
     """
     args = build_parser().parse_args(argv)
-    # Building the config never raises: a malformed numeric is recorded and reported below.
-    # bridge.common.CONFIG_PROBLEMS carries HTTP_TIMEOUT's own parse failure, parsed there
-    # because autofix-bridge shares that module and does not ship bridge/config.py.
+    # Building the config never raises; bridge.common.CONFIG_PROBLEMS carries HTTP_TIMEOUT's own
+    # parse failure, parsed there because autofix-bridge shares that module.
+    #
+    # DECIDED: `env` reaches `load_config` and nothing else. The CHECKS registry above still
+    # reads its KUMA_PUSH_* tokens from os.environ at import, so `main(env={...})` does not
+    # change which monitor a result is pushed to. Deferred to slice 17b, which moves CHECKS to
+    # registry.py where it can take the environment as a parameter; threading it here would mean
+    # rebuilding a module-level list from inside main(), the global this seam removed.
     cfg = load_config(
         os.environ if env is None else env, problems=bridge.common.CONFIG_PROBLEMS
     )

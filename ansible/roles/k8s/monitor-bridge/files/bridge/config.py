@@ -50,6 +50,13 @@ class Config(HostConfig, ServiceConfig, ClusterConfig, IoConfig):
     field is documented at its read — that is where the env var name and the default sit, and
     most of the reasoning is about the default rather than the type.
 
+    EVERY CREDENTIAL-BEARING FIELD IS `field(repr=False)` in its domain module. A dataclass
+    generates a `__repr__` over all of its fields, so without that a `print(cfg)`, an f-string
+    in a log line, or a traceback rendering locals would put the HA token, both B2 keys, the
+    Cloudflare token, the SMTP password, five Discord webhook URLs and five *arr API keys into
+    the pod log — which promtail ships to Loki. `test_repr_hides_every_credential_but_not_
+    ordinary_config` pins both halves: the secrets absent, and ordinary config still present.
+
     Attributes:
       CONFIG_PROBLEMS: one operator-readable line per env value that could not be parsed.
         Empty on a good config. Collecting them instead of raising is what keeps building this
@@ -135,22 +142,6 @@ def load_config(env: Mapping[str, str], problems: list[str] | None = None) -> Co
             except OSError:
                 pass
         return _env(name, default)
-
-    def _published_ports(raw: str) -> tuple[tuple[str, int], ...]:
-        """`name:port` pairs from a comma-separated list, skipping a malformed port."""
-        pairs = []
-        for pair in raw.split(","):
-            if ":" not in pair:
-                continue
-            name, _, port = pair.partition(":")
-            try:
-                pairs.append((name.strip(), int(port)))
-            except ValueError:
-                problems.append(
-                    "PI_PUBLISHED_PORTS entry %r has a non-integer port; it is not watched"
-                    % pair
-                )
-        return tuple(pairs)
 
     def _name_set(value: str) -> frozenset[str]:
         """A comma-separated check-name list as a set, tolerating spaces and empty entries."""

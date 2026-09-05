@@ -10,7 +10,7 @@ successes. Composed into `Config` by `bridge/config.py`; imports nothing from it
 """
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
@@ -18,8 +18,8 @@ class IoConfig:
     """B2, R2, the Loki arms, the shipper drop counters, the webhooks and the SMTP backstop."""
 
     B2_PROBE_URL: str
-    B2_PROBE_KEY_ID: str
-    B2_PROBE_APPLICATION_KEY: str
+    B2_PROBE_KEY_ID: str = field(repr=False)
+    B2_PROBE_APPLICATION_KEY: str = field(repr=False)
     B2_PROBE_INTERVAL_S: float
     B2_TRANSPORT_RETRY_S: float
     B2_STORAGE_CAP_BYTES: float
@@ -28,7 +28,7 @@ class IoConfig:
     B2_STORAGE_MAX_PAGES: int
     CF_GRAPHQL_URL: str
     CF_ACCOUNT_ID: str
-    CF_ANALYTICS_TOKEN: str
+    CF_ANALYTICS_TOKEN: str = field(repr=False)
     R2_BUCKET: str
     R2_STORAGE_MAX_GB: float
     R2_CLASS_A_MAX: float
@@ -50,16 +50,16 @@ class IoConfig:
     SHIPPER_DROPPED_SERVER_METRIC: str
     SHIPPER_DROPPED_WINDOW: str
     SHIPPER_DROPPED_MAX: float
-    DISCORD_WEBHOOK_URL: str
-    DISCORD_CROWDSEC_WEBHOOK_URL: str
-    DISCORD_GITOPS_WEBHOOK_URL: str
-    DISCORD_ARR_WEBHOOK_URL: str
-    DISCORD_HEALTHCHECKS_WEBHOOK_URL: str
+    DISCORD_WEBHOOK_URL: str = field(repr=False)
+    DISCORD_CROWDSEC_WEBHOOK_URL: str = field(repr=False)
+    DISCORD_GITOPS_WEBHOOK_URL: str = field(repr=False)
+    DISCORD_ARR_WEBHOOK_URL: str = field(repr=False)
+    DISCORD_HEALTHCHECKS_WEBHOOK_URL: str = field(repr=False)
     DISCORD_CONSECUTIVE: int
     SMTP_HOST: str
     SMTP_PORT: int
     SMTP_USER: str
-    SMTP_PASSWORD: str
+    SMTP_PASSWORD: str = field(repr=False)
     EMAIL_PROBE_INTERVAL_S: float
 
 

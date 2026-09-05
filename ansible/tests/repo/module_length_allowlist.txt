@@ -15,7 +15,7 @@
 #   wc -l <path>
 .claude/hooks/auto-approve-readonly.py 753
 ansible/roles/k8s/artifacts/tests/test_artifact_server.py 519
-ansible/roles/k8s/monitor-bridge/files/check.py 674
+ansible/roles/k8s/monitor-bridge/files/check.py 682
 ansible/roles/k8s/monitor-bridge/tests/test_check_gates.py 654
 ansible/roles/k8s/monitor-bridge/tests/test_check_service.py 598
 ansible/roles/k8s/monitor-bridge/tests/test_host_temp.py 630
