@@ -178,23 +178,31 @@ What this buys:
 - The PR body carries `Closes #1132`, so the merge closes the issue and the `land.sh` verdict
   attaches to it.
 
-### The one thing to verify first
+### Measured: a subagent cannot own a named worktree
 
-Whether a spawned agent can own a *named* worktree is unverified, and the naming scheme depends
-on it. `isolation: "worktree"` on the Agent tool is what produces today's unattributable
-`agent-a1f5b…` names.
+The naming table above describes what an operator-driven session does. **A fanned-out subagent
+cannot reach it.** Measured 2026-09-05 with one probe agent:
 
-Two candidate mechanisms:
+| Mechanism | Result |
+|---|---|
+| Agent calls `EnterWorktree` with `name:` | Refused. "EnterWorktree cannot create a worktree from a subagent with a cwd override (isolation: "worktree" or explicit cwd) — it would mutate the parent session's process-wide working directory." |
+| Agent calls `EnterWorktree` with `path:` into a pre-created worktree | Accepted by the tool, then every subsequent command refused: "This agent is isolated in the worktree … Refusing to run it there." |
 
-1. The agent calls `EnterWorktree` with `name: issue-1132` itself.
-2. The orchestrator runs `git worktree add .claude/worktrees/issue-1132`, and the agent calls
-   `EnterWorktree` with `path`.
+The refusal names a third mechanism — spawn the agent with `cwd` set to the worktree — but the
+Agent tool as exposed here takes no `cwd` parameter. So a fanned-out agent gets the
+auto-generated `agent-a0291ece…` name and keeps it.
 
-The tool documentation says the `path` form works from an agent whose working directory was
-pinned at launch, which is exactly the subagent-isolation case, so (2) is the likelier one.
-**Settle this with one throwaway agent before anything else in the plan.** If neither works,
-attribution falls back to a claim comment naming the agent's assigned worktree, and the banner
-improvement is lost.
+**What this costs, and what it does not.** Issue-to-session attribution is unaffected: the
+claim comment records whatever worktree name the agent reports, auto-generated or not, and
+`claims` renders the mapping. Session-to-issue attribution loses the readable branch name, so
+the `session-health.py` banner keeps printing `worktree-agent-a0291ece…`.
+
+A session an operator drives can still name its own worktree `issue-1132`, because it has no
+cwd override. Only the fan-out is constrained.
+
+The banner improvement is recoverable later with a gitignored `.claim` marker file written into
+the worktree root, which `session-health.py` could read with no network call. That is not in
+scope here.
 
 ## The `/issue-fanout` skill
 
@@ -204,7 +212,10 @@ improvement is lost.
    agents. Present the grouping and **stop for approval**: spawning N Opus agents is not a
    routine action.
 2. **Claim, then spawn.** Claim every issue in every batch serially, before spawning anything.
-   This is what removes the race from the fan-out.
+   This is what removes the race from the fan-out. The claim goes under the **orchestrator's**
+   worktree name, because a subagent's worktree name is auto-generated and unknown until it
+   starts — and a claim naming a worktree that does not exist yet would read as stale
+   immediately. The orchestrator's worktree is live for the whole fan-out, so the claim is too.
 3. **Spawn.** One Opus agent per batch, each in its own named worktree. The brief carries the
    issue bodies, the claim the agent already holds, the repo's `land-after-merge` contract, the
    `close --fixed` restriction above, and the instruction to file anything it does not fix with
