@@ -20,9 +20,8 @@ session can run without a prompt) does not clear — a command stored by `open` 
 validated there is still only ever run through that gate.
 
 This file is the CLI: argument parsing, the ten `cmd_*` handlers and the exit contract. The
-vocabulary and the pure reads are `findings_model.py`, the gh argv are `findings_plans.py`,
-the gh calls are `findings_gh.py`, claim staleness is `findings_claim.py` (its git facts,
-`_worktree_facts`, are `prune_worktrees.py`), and the verify-by gate is `findings_verify.py`.
+vocabulary is `findings_model.py`, the gh argv are `findings_plans.py`, the gh calls are
+`findings_gh.py`, claim staleness is `findings_claim.py`, and verify-by is `findings_verify.py`.
 
 Usage::
 
@@ -54,14 +53,13 @@ CLAIMING AN ISSUE. `claim` posts a `Claim:` comment and adds the `claimed` label
 worktree fanning out several issues at once knows which are its own; `release` reverses
 that. Both refuse an issue another worktree already holds, `claim` also refuses `manual` and
 closed issues, and re-claiming an issue your own worktree already holds is a no-op. `claims`
-lists every open claim, live or stale by `findings_claim.claim_is_live`; `reap` releases
-every stale one. `claim` takes every issue argument it can and refuses the rest, so one
-`manual` issue in a batch does not cost the good claims in it.
+lists every claim, warning on stderr (but still rendering) if the worktree read failed;
+`reap` refuses outright on that same failure. `claim` takes every issue it can and refuses
+the rest, so one `manual` issue does not cost the good claims in the same batch.
 
-Exit codes: 0 done; 1 gh failed, or `reap` refused rather than call a git read failure
-"every worktree is gone"; 2 bad arguments; 3 nothing was written because the issue refuses
-it — closed as refuted/accepted, `touch` given a closed issue, or `claim`/`release` refused
-(closed, `manual`, held by another worktree, not claimed, or lost a race to another claim).
+Exit codes: 0 done; 1 gh failed, or `reap` refused a git read failure rather than call it
+"nothing is claimed"; 2 bad arguments; 3 nothing was written because the issue refuses it —
+closed, `manual`, held by another worktree, not claimed, or lost a race to another claim.
 """
 
 import argparse
@@ -271,8 +269,10 @@ def cmd_release(args: argparse.Namespace, tools: FindingsTools) -> int:
 
 def cmd_claims(args: argparse.Namespace, tools: FindingsTools) -> int:
     """Prints every open claim: issue, worktree, live or stale, and why."""
-    # A git failure just overstates staleness here, which a read can afford; `reap` can't.
-    trees, dirty, merged, _ok = _worktree_facts()
+    trees, dirty, merged, ok = _worktree_facts()
+    if not ok:
+        # `reap` refuses instead; a read can render, but must say staleness is a guess.
+        sys.stderr.write("warning: worktree read failed; STALE below is unverified\n")
     states = claim_states(load_issues("open", tools), trees, dirty, merged)
     if args.json:
         print(json.dumps([vars(s) for s in states], indent=2))

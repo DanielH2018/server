@@ -206,3 +206,39 @@ def test_reap_releases_when_the_worktree_list_is_genuinely_empty(monkeypatch):
     tools, calls = build_tools(Fakes(issues=[stale]))
     assert main(["reap"], tools) == 0
     assert ["issue", "edit", "1132", "--remove-label", "claimed"] in calls.gh
+
+
+def test_claims_warns_but_still_renders_when_git_fails(monkeypatch, capsys):
+    """A read can afford to render on a stale guess; it just has to say so.
+
+    Silently showing STALE rows during a git outage reads as fact rather than a guess an
+    operator could act on — releasing a claim by hand that was never actually stale.
+    """
+    import dev.findings as findings
+
+    monkeypatch.setattr(
+        findings,
+        "_worktree_facts",
+        lambda: ([], lambda _p: False, lambda _t: False, False),
+    )
+    held = make_issue(1132, comments=[claim_comment(WT, None, "t")])
+    tools, _ = build_tools(Fakes(issues=[held]))
+    assert main(["claims"], tools) == 0
+    captured = capsys.readouterr()
+    assert "1132" in captured.out
+    assert "read failed" in captured.err
+
+
+def test_reap_dry_run_still_refuses_when_git_fails(monkeypatch):
+    """The git-failure refusal runs before any dry-run branching."""
+    import dev.findings as findings
+
+    monkeypatch.setattr(
+        findings,
+        "_worktree_facts",
+        lambda: ([], lambda _p: False, lambda _t: False, False),
+    )
+    stale = make_issue(1132, comments=[claim_comment(WT, None, "t")])
+    tools, calls = build_tools(Fakes(issues=[stale]))
+    assert main(["reap", "--dry-run"], tools) != 0
+    assert calls.gh == []
