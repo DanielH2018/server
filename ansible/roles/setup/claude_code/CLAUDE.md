@@ -137,6 +137,24 @@ sessions" and nothing else.
   the two values equal: if they diverge, a session's fan-out depends on how it happened to
   start. A human's own `pytest` in their own shell, and CI, stay at full width either way —
   neither reads Claude's settings.
+- **Neither of those two covers a session started with `claude agents` from an interactive
+  SSH shell.** That process lands in
+  `user.slice/user-{{ claude_code_login_uid }}.slice/session-<n>.scope`, which reads none of
+  the unit's `Environment=`/`MemoryHigh=`/`MemorySwapMax=` lines and, depending on how the
+  shell was reached, may not load `~/.claude/settings.json` either — issue #1213 measured
+  965 processes and 20.4 GB anon in exactly that scope on 2026-09-05 while claude-rc.service
+  held 50.9 MB. Two more artifacts close the gap, both rendered by this role and driven by
+  the same variables as the unit rather than a second hardcoded number:
+  `templates/login-slice-caps.conf.j2` is a systemd drop-in on `user-<uid>.slice` carrying
+  the same `MemoryHigh`/`MemorySwapMax` as the unit (`claude_code_login_uid` names the uid;
+  default `1000`, confirmed by the incident's own scope path), and
+  `templates/pytest-fanout-cap.conf.j2` is a `~/.config/environment.d/` file carrying the
+  same `PYTEST_XDIST_AUTO_NUM_WORKERS`, read into the session's PAM environment by
+  `pam_systemd` at login. `claude_code_login_caps_enabled` (default `true`) turns both off
+  and removes the rendered files, if the cap on a login session ever needs to come off.
+  Effect timing differs from the unit: the slice drop-in applies live to an already-running
+  session on `daemon-reload`, but the environment.d file only takes effect on the *next*
+  login. ENFORCED by `ansible/tests/setup/test_claude_login_slice_caps.py`.
 - **The background-shell pressure reaper is turned off.** Claude Code registers
   `process.on("memoryPressure", ...)` and kills every running backgrounded Bash task with the
   reason `memory_pressure`, surfacing as "stopped because the system is running low on

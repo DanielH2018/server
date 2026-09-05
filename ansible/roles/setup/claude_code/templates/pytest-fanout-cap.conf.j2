@@ -1,0 +1,15 @@
+# Managed by ansible/roles/setup/claude_code — do not edit by hand.
+#
+# Caps pytest-xdist's fan-out for every login session belonging to {{ sys_user }} — ssh,
+# tty, or a `claude` process started directly from either. None of those read
+# claude-rc.service's own PYTEST_XDIST_AUTO_NUM_WORKERS Environment= line; that reaches only
+# the unit's cgroup. pam_systemd reads environment.d and exports it into the session's PAM
+# environment at login, so this is the mechanism that reaches a process none of the other
+# three locations do. Issue #1213.
+#
+# Same value as claude_code_rc_pytest_workers, not a separate number — raise them together,
+# or the cap depends on how the session started (this role's CLAUDE.md has the third
+# location, ~/.claude/settings.json's env block in the chezmoi repo).
+#
+# Takes effect on the NEXT login; an already-open session keeps whatever it started with.
+PYTEST_XDIST_AUTO_NUM_WORKERS={{ claude_code_rc_pytest_workers }}

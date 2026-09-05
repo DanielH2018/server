@@ -163,6 +163,76 @@
       claude_code_rc_enabled=true.
   when: not claude_code_rc_enabled
 
+# ── Login-session caps (issue #1213) ────────────────────────────────────────────────────
+# The RC unit's MemoryHigh/MemorySwapMax/PYTEST_XDIST_AUTO_NUM_WORKERS bound only its own
+# cgroup. A session started with `claude agents` (or a bare `claude`) from an interactive
+# SSH shell lands in user.slice/user-{{ claude_code_login_uid }}.slice instead, which none of
+# those touch — see defaults/main.yml for the incident this closes. Unconditional whenever
+# this role runs: unlike the RC host, a login shell is not something claude_code_rc_enabled
+# gates, so these two artifacts have their own on/off var instead.
+
+- name: Ensure the login-session slice drop-in directory exists
+  tags: [claude_code]
+  ansible.builtin.file:
+    path: "/etc/systemd/system/user-{{ claude_code_login_uid }}.slice.d"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  when: claude_code_login_caps_enabled
+
+- name: Bound the login-session slice the way the RC unit is bounded
+  tags: [claude_code]
+  ansible.builtin.template:
+    src: login-slice-caps.conf.j2
+    dest: "/etc/systemd/system/user-{{ claude_code_login_uid }}.slice.d/claude-caps.conf"
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  when: claude_code_login_caps_enabled
+  notify: Reload systemd
+
+# The reverse of the two tasks above: state: absent on both toggles this off cleanly rather
+# than leaving a drop-in dangling once nobody reads defaults/main.yml's comment again.
+- name: Remove the login-session slice drop-in when the cap is disabled
+  tags: [claude_code]
+  ansible.builtin.file:
+    path: "/etc/systemd/system/user-{{ claude_code_login_uid }}.slice.d/claude-caps.conf"
+    state: absent
+  become: true
+  when: not claude_code_login_caps_enabled
+  notify: Reload systemd
+
+- name: "Ensure the environment.d directory exists for {{ sys_user }}"
+  tags: [claude_code]
+  ansible.builtin.file:
+    path: "/home/{{ sys_user }}/.config/environment.d"
+    state: directory
+    mode: "0755"
+  become: false
+  when: claude_code_login_caps_enabled
+
+- name: Cap the pytest fan-out for every login session, not only the RC unit
+  tags: [claude_code]
+  # Takes effect at the next login (pam_systemd reads environment.d at session start, not
+  # continuously), so no handler applies it — there is nothing to reload.
+  ansible.builtin.template:
+    src: pytest-fanout-cap.conf.j2
+    dest: "/home/{{ sys_user }}/.config/environment.d/90-claude-pytest-cap.conf"
+    mode: "0644"
+  become: false
+  when: claude_code_login_caps_enabled
+
+- name: Remove the login pytest-fanout cap when disabled
+  tags: [claude_code]
+  ansible.builtin.file:
+    path: "/home/{{ sys_user }}/.config/environment.d/90-claude-pytest-cap.conf"
+    state: absent
+  become: false
+  when: not claude_code_login_caps_enabled
+
 # Render provenance for manifest-prune-check.sh's stale-script arm. This role landed on
 # 2026-08-23 rendering five files and stamping none, so an edit to any of them could sit
 # undeployed on this host with every repo-side check green — the H1 gap the 2026-08-23b sweep
@@ -180,3 +250,5 @@
       - ansible/roles/setup/claude_code/templates/claude-rc-restart.service.j2
       - ansible/roles/setup/claude_code/templates/claude-rc-restart.timer.j2
       - ansible/roles/setup/claude_code/templates/alert-webhook.env.j2
+      - ansible/roles/setup/claude_code/templates/login-slice-caps.conf.j2
+      - ansible/roles/setup/claude_code/templates/pytest-fanout-cap.conf.j2
