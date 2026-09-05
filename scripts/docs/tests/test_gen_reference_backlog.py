@@ -18,6 +18,7 @@ def _row(number, severity="high", escalated=False, title="t", **kw):
         "escalated": escalated,
         "no_vetted_remediation": False,
         "verify_by": False,
+        "claimed": None,
         "first_seen": "2026-08-15",
         "reobservations": 0,
         "url": f"https://github.com/o/r/issues/{number}",
@@ -51,6 +52,18 @@ def test_render_leaves_the_verify_by_cell_blank_without_one():
     md = g.render_markdown([_row(1, verify_by=False)])
     row = next(line for line in md.splitlines() if line.startswith("| [#1]"))
     assert row.rstrip().endswith("| - |")
+
+
+def test_render_shows_the_claiming_worktree():
+    md = g.render_markdown([_row(1, claimed="worktree-issue-1132")])
+    row = next(line for line in md.splitlines() if line.startswith("| [#1]"))
+    assert "| worktree-issue-1132 |" in row
+
+
+def test_render_leaves_the_claim_cell_blank_without_one():
+    md = g.render_markdown([_row(1, claimed=None)])
+    row = next(line for line in md.splitlines() if line.startswith("| [#1]"))
+    assert "| - | - |" in row.rstrip()
 
 
 def test_render_empty_says_so_instead_of_an_empty_table():

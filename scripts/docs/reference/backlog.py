@@ -54,9 +54,9 @@ def render_markdown(rows: list[dict]) -> str:
         parts.append("No open findings.\n")
         return "\n".join(parts)
     parts.append(
-        "| # | Severity | Kind | Domain | Finding | First seen | Re-observed | Verify-by |"
+        "| # | Severity | Kind | Domain | Finding | First seen | Re-observed | Claim | Verify-by |"
     )
-    parts.append("|---|---|---|---|---|---|---|---|")
+    parts.append("|---|---|---|---|---|---|---|---|---|")
     for r in sorted(rows, key=sort_key):
         flags = []
         if r["escalated"]:
@@ -64,11 +64,12 @@ def render_markdown(rows: list[dict]) -> str:
         if r["no_vetted_remediation"]:
             flags.append("*no vetted remediation*")
         title = md_cell(r["title"]) + (" — " + ", ".join(flags) if flags else "")
+        claimed = r.get("claimed") or "-"
         verify_by = "✓" if r.get("verify_by") else "-"
         parts.append(
             f"| [#{r['number']}]({r['url']}) | {r['severity'] or '-'} | {r['kind'] or '-'} | "
             f"{r['domain'] or '-'} | {title} | {r['first_seen']} | {r['reobservations']} | "
-            f"{verify_by} |"
+            f"{claimed} | {verify_by} |"
         )
     return "\n".join(parts).rstrip("\n") + "\n"
 

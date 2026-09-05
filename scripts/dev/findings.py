@@ -19,9 +19,10 @@ classifier (`.claude/hooks/auto-approve-readonly.py`, the same judgment that dec
 session can run without a prompt) does not clear — a command stored by `open` but never
 validated there is still only ever run through that gate.
 
-This file is the CLI: argument parsing, the ten `cmd_*` handlers and the exit contract. The
-vocabulary is `findings_model.py`, the gh argv are `findings_plans.py`, the gh calls are
-`findings_gh.py`, claim staleness is `findings_claim.py`, and verify-by is `findings_verify.py`.
+This file is the CLI: the `cmd_*` handlers and the exit contract. Argument parsing is
+`findings_cli.py`, the vocabulary and the pure reads are `findings_model.py`, the gh argv are
+`findings_plans.py`, the gh calls are `findings_gh.py`, claim staleness is `findings_claim.py`,
+and verify-by is `findings_verify.py`.
 
 Usage::
 
@@ -41,6 +42,7 @@ Usage::
     uv run python scripts/dev/findings.py list [--state open|closed|all] [--json]
     uv run python scripts/dev/findings.py verify --all [--close] [--timeout 120]
     uv run python scripts/dev/findings.py verify 688 701 [--close]
+    uv run python scripts/dev/findings.py next [--limit 10] [--json]
 
 CLOSING A FINDING. `--fixed` closes as completed. The other two close as not planned and are
 terminal, so `open` refuses to re-file the same fingerprint afterwards: `--refuted` records
@@ -57,6 +59,10 @@ lists every claim, warning on stderr (but still rendering) if the worktree read 
 `reap` refuses outright on that same failure. `claim` takes every issue it can and refuses
 the rest, so one `manual` issue does not cost the good claims in the same batch.
 
+PICKING UP WORK. `next` prints the issues a session may claim, best severity first,
+withholding `manual` issues, issues a live claim already holds, and issues an open PR already
+says it closes.
+
 Exit codes: 0 done; 1 gh failed, or `reap` refused a git read failure rather than call it
 "nothing is claimed"; 2 bad arguments; 3 nothing was written because the issue refuses it —
 closed, `manual`, held by another worktree, not claimed, or lost a race to another claim.
@@ -67,7 +73,6 @@ import json
 import subprocess
 import sys
 from datetime import UTC, datetime
-from pathlib import Path
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
@@ -81,6 +86,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 # `scripts/` on sys.path, so a bare `from findings_model import ...` would raise
 # ModuleNotFoundError under the docs-refresh cron while pytest stayed green.
 from dev.findings_claim import claim_states
+from dev.findings_cli import _parser
 from dev.findings_gh import (
     _create_with_optional_project,
     _existing_labels,
@@ -89,15 +95,13 @@ from dev.findings_gh import (
     run,
 )
 from dev.findings_model import (
-    DOMAINS,
-    KINDS,
     NO_REOPEN,
-    SEVERITIES,
     current_claim,
     find_by_fingerprint,
     fingerprint,
     issue_rows,
     label_names,
+    pr_refs,
     sort_key,
 )
 from dev.findings_plans import (
@@ -111,7 +115,6 @@ from dev.findings_plans import (
 )
 from dev.findings_tools import FindingsTools
 from dev.findings_verify import (
-    DEFAULT_VERIFY_TIMEOUT,
     verify_close_comment,
     verify_finding,
 )
@@ -424,6 +427,8 @@ def cmd_list(args: argparse.Namespace, tools: FindingsTools) -> int:
                 ("accepted", r["accepted"]),
                 ("no-vetted-remediation", r["no_vetted_remediation"]),
                 ("verify-by", r["verify_by"]),
+                ("manual", r["manual"]),
+                (f"claimed:{r['claimed']}", bool(r["claimed"])),
             )
             if on
         )
@@ -434,120 +439,70 @@ def cmd_list(args: argparse.Namespace, tools: FindingsTools) -> int:
     return 0
 
 
-def _add_dry_run(parser: argparse.ArgumentParser, *, suppress: bool) -> None:
-    """Add ``--dry-run`` to ``parser``.
+def pickable(
+    issues: list[dict], *, live_claims: set[int], pr_refs: set[int]
+) -> list[dict]:
+    """The issues a session may pick up, best first.
 
-    Every subparser gets its own copy so the flag parses on either side of the
-    subcommand name — argparse only accepts a parent-parser optional before the
-    subcommand token. ``suppress=True`` (used on the subparsers) sets
-    ``default=argparse.SUPPRESS`` so an absent subparser flag leaves the top-level
-    parser's own default in place instead of overwriting it back to ``False``.
+    Args:
+        live_claims: issue numbers whose claim is still live. A STALE claim does not
+            withhold an issue — that is the whole point of `reap`.
+        pr_refs: issue numbers an open PR already says it closes. Without this, a session
+            picks up work another session has finished but not yet landed.
     """
-    default = argparse.SUPPRESS if suppress else False
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        default=default,
-        help="print the gh commands, write nothing",
+    rows = [
+        r
+        for r in issue_rows(issues)
+        if not r["manual"]
+        and r["number"] not in live_claims
+        and r["number"] not in pr_refs
+    ]
+    return sorted(rows, key=sort_key)
+
+
+def _open_pr_refs(tools: FindingsTools) -> set[int]:
+    """Issue numbers the open PRs say they close."""
+    prs = tools.gh_json(
+        "pr", "list", "--state", "open", "--limit", "200", "--json", "body"
     )
+    return pr_refs([pr.get("body") or "" for pr in prs or []])
 
 
-def _parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(description=__doc__.splitlines()[1])
-    _add_dry_run(p, suppress=False)
-    sub = p.add_subparsers(dest="cmd", required=True)
+def cmd_next(args: argparse.Namespace, tools: FindingsTools) -> int:
+    """Handles the ``next`` subcommand: prints the issues a session may pick up, best first.
 
-    o = sub.add_parser(
-        "open", help="file a finding, or touch/reopen the existing issue"
-    )
-    _add_dry_run(o, suppress=True)
-    o.add_argument("--title", required=True)
-    o.add_argument("--body-file", required=True, type=Path)
-    o.add_argument("--severity", required=True, choices=SEVERITIES)
-    o.add_argument("--kind", required=True, choices=KINDS)
-    o.add_argument("--domain", choices=DOMAINS)
-    o.add_argument(
-        "--file",
-        help="primary file:line the finding cites; the line is dropped from the fingerprint",
-    )
-    o.add_argument("--source", default="session", help="review-<date> or session")
-    o.add_argument("--no-vetted-remediation", action="store_true")
-    o.add_argument(
-        "--verify-by",
-        help="read-only command; exit 0 means fixed, non-zero means it still reproduces",
-    )
+    A git-read failure cannot be read as "no claims are live" — that would hand a stale
+    guess a claimed issue to a second session. So on failure this withholds every issue that
+    is CURRENTLY claimed regardless of whether the claim would otherwise read as stale,
+    rather than `reap`'s outright refusal: `next` never writes, so it degrades to the more
+    conservative read instead of refusing to answer at all.
 
-    t = sub.add_parser(
-        "touch", help="record a re-observation; the third adds escalated"
-    )
-    _add_dry_run(t, suppress=True)
-    t.add_argument("number", type=int)
-    t.add_argument("--source", default="session")
-
-    cl = sub.add_parser("claim", help="claim issues for a worktree")
-    _add_dry_run(cl, suppress=True)
-    cl.add_argument("numbers", nargs="+", type=int)
-    cl.add_argument("--worktree", required=True, help="the branch doing the work")
-    cl.add_argument("--session", help="the Claude session id, for the thread to read")
-
-    rl = sub.add_parser("release", help="release this worktree's claim")
-    _add_dry_run(rl, suppress=True)
-    rl.add_argument("numbers", nargs="+", type=int)
-    rl.add_argument("--worktree", required=True)
-    rl.add_argument("--reason", help="why, for the release comment")
-
-    cs = sub.add_parser("claims", help="every open claim, live or stale")
-    _add_dry_run(cs, suppress=True)
-    cs.add_argument("--json", action="store_true")
-
-    rp = sub.add_parser("reap", help="release every stale claim")
-    _add_dry_run(rp, suppress=True)
-
-    c = sub.add_parser("close", help="close as fixed, refuted or accepted")
-    _add_dry_run(c, suppress=True)
-    c.add_argument("number", type=int)
-    how = c.add_mutually_exclusive_group(required=True)
-    how.add_argument("--fixed", action="store_true", help="a change fixed it")
-    how.add_argument(
-        "--refuted", action="store_true", help="a skeptic disproved the finding"
-    )
-    how.add_argument(
-        "--accepted",
-        action="store_true",
-        help="true, but the operator chose to live with the trade-off; never reopened",
-    )
-    c.add_argument("--pr", type=int, help="the PR that fixed it")
-    c.add_argument(
-        "--reason",
-        help="required with --refuted (what disproved it) and with --accepted (why the "
-        "trade-off stands)",
-    )
-
-    ls = sub.add_parser("list", help="rows for the review skill and the docs generator")
-    _add_dry_run(ls, suppress=True)
-    ls.add_argument("--state", default="open", choices=("open", "closed", "all"))
-    ls.add_argument("--json", action="store_true")
-
-    sl = sub.add_parser("sync-labels", help="create any missing label")
-    _add_dry_run(sl, suppress=True)
-
-    v = sub.add_parser(
-        "verify",
-        help="re-run each finding's verify-by command and report fixed/still-open",
-    )
-    _add_dry_run(v, suppress=True)
-    v.add_argument("numbers", nargs="*", type=int, help="issue numbers to verify")
-    v.add_argument("--all", action="store_true", help="verify every open finding")
-    v.add_argument(
-        "--close", action="store_true", help="close passing findings as fixed"
-    )
-    v.add_argument(
-        "--timeout",
-        type=float,
-        default=DEFAULT_VERIFY_TIMEOUT,
-        help="seconds before a verify-by command counts as an error",
-    )
-    return p
+    Args:
+        args: parsed CLI namespace carrying ``limit``, ``json`` and ``dry_run``.
+        tools: the process boundaries every gh call goes through.
+    """
+    trees, dirty, merged, ok = _worktree_facts()
+    issues = load_issues("open", tools)
+    if ok:
+        live = {s.number for s in claim_states(issues, trees, dirty, merged) if s.live}
+    else:
+        sys.stderr.write(
+            "warning: worktree read failed; withholding every currently claimed issue\n"
+        )
+        live = {i["number"] for i in issues if current_claim(i)}
+    rows = pickable(issues, live_claims=live, pr_refs=_open_pr_refs(tools))[
+        : args.limit
+    ]
+    if args.json:
+        print(json.dumps(rows, indent=2))
+        return 0
+    for r in rows:
+        print(
+            f"#{r['number']:<5} {r['severity'] or '-':<6} {r['domain'] or '-':<21} {r['title']}"
+        )
+    if not rows:
+        print("nothing to pick up")
+    return 0
 
 
 def main(argv: list[str] | None, tools: FindingsTools) -> int:
@@ -577,6 +532,7 @@ def main(argv: list[str] | None, tools: FindingsTools) -> int:
         "reap": cmd_reap,
         "close": cmd_close,
         "verify": cmd_verify,
+        "next": cmd_next,
     }[args.cmd]
     try:
         return handler(args, tools)

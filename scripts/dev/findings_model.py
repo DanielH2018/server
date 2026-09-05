@@ -199,6 +199,17 @@ def current_claim(issue: dict) -> str | None:
     return held
 
 
+# GitHub closes an issue on any of these, not just `Closes`. Matching `closes` alone would
+# let `next` offer an issue whose fix is already open as a PR, which is the exact duplicated
+# work `next` exists to prevent.
+_PR_REF_RE = re.compile(r"(?i)\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#(\d+)\b")
+
+
+def pr_refs(bodies: list[str]) -> set[int]:
+    """Issue numbers the given PR bodies say they close."""
+    return {int(m) for body in bodies for m in _PR_REF_RE.findall(body or "")}
+
+
 def _prefixed(names: set[str], prefix: str) -> str | None:
     """The first label under ``prefix``, alphabetically.
 
@@ -234,6 +245,8 @@ def issue_rows(issues: list[dict]) -> list[dict]:
                 "accepted": "accepted" in names,
                 "no_vetted_remediation": "no-vetted-remediation" in names,
                 "verify_by": parse_verify_by(issue.get("body") or "") is not None,
+                "manual": "manual" in names,
+                "claimed": current_claim(issue),
                 "first_seen": (issue.get("createdAt") or "")[:10],
                 "reobservations": reobservations(issue),
                 "url": issue.get("url", ""),
