@@ -9,15 +9,19 @@ as `pass` would have been reported by no test in the suite.
 `deploy_toolbox`'s docstring named this gap in prose ("the request path itself is covered by no
 test"). This file closes it, so that sentence goes with it.
 
-Every test drives the real function through a stubbed `urlopen`. `github_token` is stubbed with
-it: the real one shells out to the GitHub CLI, which would make the asserted headers depend on
-whether the runner happens to be logged in.
+NEITHER STUB PATCHES A FIRST-PARTY MODULE, which is what the monkeypatch ratchet asks for.
+`urlopen` is replaced on `urllib.request` itself — stdlib, and the name production resolves at
+call time. The token is supplied as `GH_TOKEN` in the environment rather than by replacing
+`deploy_toolbox.github_token`: `deploy_git.github_token` reads that variable first and returns
+before it would shell out to the GitHub CLI, so the asserted header does not depend on whether
+the runner happens to be logged in.
 
 Run: uv run pytest ansible/roles/setup/gitops_deploy/tests/test_deploy_toolbox_ci_request.py
 """
 
 import json
 import urllib.error
+import urllib.request
 from email.message import Message
 
 import pytest
@@ -27,10 +31,11 @@ import deploy_toolbox
 SHA = "a" * 40
 REPO = "DanielH2018/server"
 CONTEXTS = frozenset({"lint", "test"})
+TOKEN = "tok3n"
 
 
 def _stub_urlopen(monkeypatch, payload=None, error=None) -> list:
-    """Replace `deploy_toolbox`'s urlopen and capture the Request objects it was handed."""
+    """Replace the stdlib urlopen and capture the Request objects it was handed."""
     captured: list = []
 
     class _Resp:
@@ -49,9 +54,15 @@ def _stub_urlopen(monkeypatch, payload=None, error=None) -> list:
             raise error
         return _Resp()
 
-    monkeypatch.setattr(deploy_toolbox.urllib.request, "urlopen", fake_urlopen)
-    monkeypatch.setattr(deploy_toolbox, "github_token", lambda *a, **k: "tok3n")
+    monkeypatch.setenv("GH_TOKEN", TOKEN)
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
     return captured
+
+
+def _verdict(require_ci: bool = True) -> str:
+    return deploy_toolbox.fetch_ci_verdict(
+        SHA, require_ci=require_ci, repo=REPO, contexts=CONTEXTS
+    )
 
 
 def test_the_request_reads_the_check_runs_of_the_sha_it_was_asked_about(monkeypatch):
@@ -69,19 +80,14 @@ def test_the_request_reads_the_check_runs_of_the_sha_it_was_asked_about(monkeypa
             ]
         },
     )
-    assert (
-        deploy_toolbox.fetch_ci_verdict(
-            SHA, require_ci=True, repo=REPO, contexts=CONTEXTS
-        )
-        == "pass"
-    )
+    assert _verdict() == "pass"
     req, timeout = captured[0]
     assert req.full_url == (
         f"https://api.github.com/repos/{REPO}/commits/{SHA}/check-runs?per_page=100"
     )
     assert timeout == 15
     # urllib capitalises header keys on the way in, so these are not the literals above.
-    assert req.headers["Authorization"] == "Bearer tok3n"
+    assert req.headers["Authorization"] == f"Bearer {TOKEN}"
     assert req.headers["User-agent"] == "gitops-deploy"
     assert req.headers["Accept"] == "application/vnd.github+json"
 
@@ -101,12 +107,7 @@ def test_a_failed_check_run_reaches_the_caller_as_fail(monkeypatch):
             ]
         },
     )
-    assert (
-        deploy_toolbox.fetch_ci_verdict(
-            SHA, require_ci=True, repo=REPO, contexts=CONTEXTS
-        )
-        == "fail"
-    )
+    assert _verdict() == "fail"
 
 
 def test_a_malformed_body_defers_rather_than_passing(monkeypatch):
@@ -122,16 +123,9 @@ def test_a_malformed_body_defers_rather_than_passing(monkeypatch):
         def read(self):
             return b"<html>502</html>"
 
-    monkeypatch.setattr(
-        deploy_toolbox.urllib.request, "urlopen", lambda req, timeout=None: _Garbage()
-    )
-    monkeypatch.setattr(deploy_toolbox, "github_token", lambda *a, **k: None)
-    assert (
-        deploy_toolbox.fetch_ci_verdict(
-            SHA, require_ci=True, repo=REPO, contexts=CONTEXTS
-        )
-        == "pending"
-    )
+    monkeypatch.setenv("GH_TOKEN", TOKEN)
+    monkeypatch.setattr(urllib.request, "urlopen", lambda req, timeout=None: _Garbage())
+    assert _verdict() == "pending"
 
 
 @pytest.mark.parametrize(
@@ -153,12 +147,7 @@ def test_an_unreachable_github_defers_rather_than_passing(monkeypatch, error):
     fails here rather than letting a 503 escape as a crash.
     """
     _stub_urlopen(monkeypatch, error=error)
-    assert (
-        deploy_toolbox.fetch_ci_verdict(
-            SHA, require_ci=True, repo=REPO, contexts=CONTEXTS
-        )
-        == "pending"
-    )
+    assert _verdict() == "pending"
 
 
 def test_a_disarmed_gate_passes_without_asking_github(monkeypatch):
@@ -168,10 +157,5 @@ def test_a_disarmed_gate_passes_without_asking_github(monkeypatch):
     poll, so a disarmed gate that still fetched would be a real cost, not just a wasted call.
     """
     captured = _stub_urlopen(monkeypatch, payload={"check_runs": []})
-    assert (
-        deploy_toolbox.fetch_ci_verdict(
-            SHA, require_ci=False, repo=REPO, contexts=CONTEXTS
-        )
-        == "pass"
-    )
+    assert _verdict(require_ci=False) == "pass"
     assert captured == []
