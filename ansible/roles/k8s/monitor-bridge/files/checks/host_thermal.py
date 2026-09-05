@@ -104,7 +104,7 @@ def check_host_temp(cfg: Config) -> tuple[bool, str]:
     Ordering mirrors check_disk and check_mem: a host that IS reporting and IS too hot pages
     ahead of a complaint about the absent one. The two graces stay separate and are never
     compounded — down_streak is the thermal-spike grace and applies only to the hot-sensor path,
-    while the coverage shortfall carries its own hysteresis inside _host_origin_shortfall.
+    while the coverage shortfall carries its own hysteresis inside checks.host._host_origin_shortfall.
     """
     temps = bridge.net.prom_vector(cfg, "node_hwmon_temp_celsius")
     # node-exporter keeps the readable names in two side metrics rather than on the reading, so
