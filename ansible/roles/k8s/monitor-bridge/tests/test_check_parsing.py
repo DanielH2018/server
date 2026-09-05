@@ -5,14 +5,14 @@ timestamp that fails to parse makes a fresh reading look stale, and a sanitize()
 adversary-controlled alert text through reaches Discord verbatim.
 """
 
-from dataclasses import replace
+from dataclasses import fields, replace
 
 from datetime import datetime, timezone
 
 
 import bridge.common
 import bridge.parsing
-from bridge.config import load_config
+from bridge.config import Config, load_config
 import bridge.net
 import checks.service
 
@@ -128,7 +128,9 @@ def test_arr_queue_msg_is_sanitized(monkeypatch, cfg):
 #
 # Listed by name rather than derived from `fields()`: a census that asks the dataclass which
 # fields are repr=False and then checks those are absent proves nothing, because a field that
-# lost its marker would leave the census along with it.
+# lost its marker would leave the census along with it. The test below anchors this list against
+# `fields()` by EQUALITY instead, which is the non-vacuous form — it fails both when a marker is
+# added without a sentinel and when a marker is dropped from a name still listed here.
 _SECRET_ENV = {
     "HA_TOKEN": "sentinel-ha-token",
     "SPEEDTEST_TOKEN": "sentinel-speedtest-token",
@@ -155,6 +157,13 @@ def test_repr_hides_every_credential_but_not_ordinary_config():
     `@dataclass(repr=False)` on the whole class would satisfy the secrecy assertion while making
     the object useless to debug; the KUMA_URL assertion is what rules that out.
     """
+    # The non-vacuity anchor: this test is only as good as _SECRET_ENV is complete, and an
+    # empty or shrunken list would still pass every assertion below.
+    assert {f.name for f in fields(Config) if not f.repr} == set(_SECRET_ENV), (
+        "the marked fields and the sentinel list have diverged — a field gained or lost "
+        "`repr=False` without its sentinel following"
+    )
+
     env = dict(_SECRET_ENV)
     env["KUMA_URL"] = "http://uptime-kuma.sentinel:3001"
     cfg = load_config(env)

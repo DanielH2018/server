@@ -642,11 +642,11 @@ def main(argv: list[str] | None = None, env: Mapping[str, str] | None = None) ->
     # Building the config never raises; bridge.common.CONFIG_PROBLEMS carries HTTP_TIMEOUT's own
     # parse failure, parsed there because autofix-bridge shares that module.
     #
-    # DECIDED: `env` reaches `load_config` and nothing else. The CHECKS registry above still
-    # reads its KUMA_PUSH_* tokens from os.environ at import, so `main(env={...})` does not
-    # change which monitor a result is pushed to. Deferred to slice 17b, which moves CHECKS to
-    # registry.py where it can take the environment as a parameter; threading it here would mean
-    # rebuilding a module-level list from inside main(), the global this seam removed.
+    # DECIDED: `env` reaches `load_config` and nothing else.
+    # The CHECKS registry above still reads its KUMA_PUSH_* tokens from os.environ at import,
+    # so `main(env={...})` cannot change which monitor a result is pushed to. Slice 17b moves
+    # CHECKS to registry.py, where it can take the environment as a parameter; threading it
+    # here would rebuild a module-level list inside main(), the global this seam removed.
     cfg = load_config(
         os.environ if env is None else env, problems=bridge.common.CONFIG_PROBLEMS
     )
