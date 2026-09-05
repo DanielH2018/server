@@ -37,7 +37,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 # to be reachable too. It is under the shim (land.py's dir is sys.path[0]) and under pytest
 # (pythonpath lists it); this insert makes an interpreter-only import work as well.
 _sys.path.insert(1, str(_Path(__file__).resolve().parents[1]))  # scripts/deploy_tools
-from deploy_tools import await_ci, land_tags
+from deploy_tools import await_ci, land_reach, land_tags
 from deploy_tools.deploy_detach_notify import GateResult
 from deploy_tools.deploy_detach_notify import gate as health_gate
 from deploy_tools.exit_codes import CI_DISARMED
@@ -172,7 +172,7 @@ class SelfApplied(Protocol):
 
 
 class RemainingSetupHosts(Protocol):
-    """`land_tags.remaining_setup_hosts_note`: the hosts a self-applied role still owes."""
+    """`land_reach.remaining_setup_hosts_note`: the hosts a self-applied role still owes."""
 
     def __call__(
         self, files: list[str], local_host: str, /, *, quiet: Iterable[str] = ()
@@ -226,6 +226,6 @@ class Classifier:
 
     plane_note: PlaneNote = land_tags.plane_note
     self_applied: SelfApplied = land_tags.self_applied
-    remaining_setup_hosts: RemainingSetupHosts = land_tags.remaining_setup_hosts_note
+    remaining_setup_hosts: RemainingSetupHosts = land_reach.remaining_setup_hosts_note
     derive: Derive = land_tags.derive
     quiet_paths: Callable[[list[str], str], set[str]] = land_tags.quiet_paths
