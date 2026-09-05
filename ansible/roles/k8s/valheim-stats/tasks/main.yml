@@ -28,6 +28,25 @@
   become: true
   register: valheim_stats_script
 
+# valheim_stats.py does `import stats_lib` for the skeleton it shares with terraria-stats
+# (Loki fetch, cursor handling, metric rendering, the HTTP handler, the run loop). Staged
+# before the ConfigMap render, same as the entry script: a window in which the ConfigMap
+# exists without this sibling is a pod that dies at import on its next roll.
+- name: Install the shared stats_lib module beside the stats script
+  tags: [config]
+  ansible.builtin.import_tasks: "{{ role_path }}/../game-stats-lib/tasks/stage.yml"
+  vars:
+    game_stats_lib_dest_dir: /etc/rancher/k3s/valheim-stats
+
+# The pod-roll trigger must cover BOTH staged modules, not just valheim_stats.py — the
+# manifests role only restarts on manifest changes, and neither script is one. An edit
+# confined to stats_lib.py would deploy, read green, and change nothing live otherwise.
+- name: Combine the staged module checksums into one pod-roll trigger
+  tags: [config]
+  ansible.builtin.set_fact:
+    valheim_stats_script_checksum: >-
+      {{ [valheim_stats_script.checksum, game_stats_lib_stage.checksum] | join(',') | hash('sha1') }}
+
 # The script is Jinja-hostile (its Prometheus exposition strings carry {…} braces), so it
 # becomes a ConfigMap via kubectl --from-file, never via a template — the same reasoning
 # as terraria-stats, claude-otel's dashboards, and image-builder's context files.
@@ -38,17 +57,18 @@
       set -o pipefail;
       k3s kubectl -n {{ k8s_namespace }} create configmap valheim-stats-script
       --from-file=valheim_stats.py=/etc/rancher/k3s/valheim-stats/valheim_stats.py
+      --from-file=stats_lib.py=/etc/rancher/k3s/valheim-stats/stats_lib.py
       --dry-run=client -o yaml > /etc/rancher/k3s/valheim-stats/configmap.yaml
     executable: /bin/bash
   become: true
-  changed_when: valheim_stats_script is changed
+  changed_when: valheim_stats_script is changed or game_stats_lib_stage is changed
 
 # Server-side, like monitor-bridge's: client-side apply re-stores the whole object in an
 # annotation capped at 262144 bytes, which the bridge crossed on 2026-09-01. This script is far
 # smaller, but one apply form across the four script ConfigMaps is one thing to get right.
 # --force-conflicts takes the data keys from the client-side field manager that applied them
 # before the switch. Server-side apply prints the same line whether or not anything changed,
-# so the changed signal is the staged file. ENFORCED by
+# so the changed signal is the staged files. ENFORCED by
 # ansible/tests/k8s/test_script_configmaps_apply_server_side.py.
 - name: Apply the script ConfigMap
   tags: [deploy]
@@ -58,7 +78,7 @@
       -f /etc/rancher/k3s/valheim-stats/configmap.yaml
   become: true
   register: valheim_stats_cm_apply
-  changed_when: valheim_stats_script is changed
+  changed_when: valheim_stats_script is changed or game_stats_lib_stage is changed
 
 - name: Deploy valheim-stats to the cluster
   ansible.builtin.include_role:

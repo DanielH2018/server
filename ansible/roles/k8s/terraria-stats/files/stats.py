@@ -8,24 +8,29 @@ Prometheus metrics for Grafana. Stdlib only (python:3.14-alpine, no deps). The
 Terraria container is never touched. Deaths/chat are NOT emitted by the vanilla
 console (verified Phase 0, 2026-06-15) and are out of scope.
 
+The Loki fetch, cursor handling, metric rendering/escaping, the HTTP handler, the run loop
+and the env reader are shared with valheim-stats via `stats_lib` (see that module's
+docstring and `roles/k8s/game-stats-lib/tasks/stage.yml` for how it gets here). What stays
+here — the line parser, the state machine and the SQLite schema — is genuinely per-game:
+Terraria names the player on both join and leave and has no death/SteamID bookkeeping,
+where Valheim names a player only on spawn, resolves a disconnect by SteamID, and tracks
+deaths (see valheim_stats.py's docstring).
+
 Design: docs/superpowers/specs/2026-06-15-terraria-player-stats-design.md
 """
 
-import json
-import os
 import re
 import sqlite3
 import sys
-import threading
 import time
-import urllib.parse
-import urllib.request
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+import stats_lib
 
-def _env(name, default):
-    return os.environ.get(name, default)
-
+_env = stats_lib.env
+log = stats_lib.log
+extract_entries = stats_lib.extract_entries
+initial_cursor = stats_lib.initial_cursor
+escape_label_value = stats_lib.escape_label_value
 
 LOKI_URL = _env("LOKI_URL", "http://loki:3100").rstrip("/")
 LOKI_QUERY = _env("LOKI_QUERY", '{container="terraria"}')
@@ -39,7 +44,7 @@ BACKFILL_DAYS = float(_env("BACKFILL_DAYS", "28"))
 LOKI_PAGE_LIMIT = int(_env("LOKI_PAGE_LIMIT", "5000"))
 HEALTH_MAX_AGE = int(_env("HEALTH_MAX_AGE", str(3 * POLL_INTERVAL + 30)))
 
-# parsing (pure)
+# parsing (pure) — the genuinely per-game part; see the module docstring.
 JOIN_RE = re.compile(r"^(?P<name>.+) has joined\.$")
 LEAVE_RE = re.compile(r"^(?P<name>.+) has left\.$")
 RESTART_MARKERS = ("Listening on port", "Server started")
@@ -73,7 +78,7 @@ def is_unparsed_player_line(line):
     return "joined" in low or "has left" in low
 
 
-# state (pure, testable)
+# state (pure, testable) — per-game: no death/SteamID bookkeeping (Terraria emits neither).
 class StatsState:
     """In-memory all-time stats. Timestamps are unix seconds (float)."""
 
@@ -139,11 +144,6 @@ class StatsState:
         return base
 
 
-# Prometheus exposition (pure)
-def escape_label_value(v):
-    return v.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
-
-
 def render_metrics(state, now):
     """Renders `state` as Prometheus text exposition format.
 
@@ -156,47 +156,44 @@ def render_metrics(state, now):
         The full exposition text, HELP/TYPE lines included, newline-terminated.
     """
     out = []
-    out.append(
-        "# HELP terraria_player_playtime_seconds_total Total seconds a player has been connected."
+    stats_lib.render_family(
+        out,
+        "terraria_player_playtime_seconds_total",
+        "Total seconds a player has been connected.",
+        "counter",
+        [(name, int(state.playtime(name, now))) for name in sorted(state.players)],
+        label_name="player",
     )
-    out.append("# TYPE terraria_player_playtime_seconds_total counter")
-    for name in sorted(state.players):
-        out.append(
-            'terraria_player_playtime_seconds_total{player="%s"} %d'
-            % (escape_label_value(name), int(state.playtime(name, now)))
-        )
-    out.append("# HELP terraria_player_sessions_total Completed play sessions.")
-    out.append("# TYPE terraria_player_sessions_total counter")
-    for name in sorted(state.players):
-        out.append(
-            'terraria_player_sessions_total{player="%s"} %d'
-            % (escape_label_value(name), state.players[name]["sessions"])
-        )
-    out.append("# HELP terraria_players_online Currently connected players.")
-    out.append("# TYPE terraria_players_online gauge")
-    out.append("terraria_players_online %d" % state.online_count())
-    out.append(
-        "# HELP terraria_stats_last_event_timestamp Unix time of the last processed event."
+    stats_lib.render_family(
+        out,
+        "terraria_player_sessions_total",
+        "Completed play sessions.",
+        "counter",
+        [(name, state.players[name]["sessions"]) for name in sorted(state.players)],
+        label_name="player",
     )
-    out.append("# TYPE terraria_stats_last_event_timestamp gauge")
-    out.append("terraria_stats_last_event_timestamp %d" % int(state.last_event_ts))
-    out.append(
-        "# HELP terraria_stats_unmatched_player_lines_total Player-shaped lines that did not parse."
+    stats_lib.render_family(
+        out,
+        "terraria_players_online",
+        "Currently connected players.",
+        "gauge",
+        [state.online_count()],
     )
-    out.append("# TYPE terraria_stats_unmatched_player_lines_total counter")
-    out.append("terraria_stats_unmatched_player_lines_total %d" % state.unmatched)
+    stats_lib.render_family(
+        out,
+        "terraria_stats_last_event_timestamp",
+        "Unix time of the last processed event.",
+        "gauge",
+        [int(state.last_event_ts)],
+    )
+    stats_lib.render_family(
+        out,
+        "terraria_stats_unmatched_player_lines_total",
+        "Player-shaped lines that did not parse.",
+        "counter",
+        [state.unmatched],
+    )
     return "\n".join(out) + "\n"
-
-
-# Loki ingestion
-def extract_entries(loki_json):
-    """Flatten a Loki query_range response to [(ts_ns:int, line:str)] ascending."""
-    out = []
-    for stream in loki_json.get("data", {}).get("result", []):
-        for ts, line in stream.get("values", []):
-            out.append((int(ts), line))
-    out.sort(key=lambda tl: tl[0])
-    return out
 
 
 def apply_entries(state, entries):
@@ -220,7 +217,7 @@ def apply_entries(state, entries):
     return events, max_ts
 
 
-# SQLite source of truth
+# SQLite source of truth — per-game: no death/SteamID columns (Terraria has neither).
 class Store:
     """SQLite-backed source of truth for player stats, the ingest cursor, and the raw event log."""
 
@@ -317,99 +314,24 @@ class Store:
         c.commit()
 
 
-# HTTP I/O + main loop
-def http_get_json(url):
-    req = urllib.request.Request(url, headers={"User-Agent": "terraria-stats"})
-    with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:
-        return json.load(resp)
-
-
+# Loki fetch + the run loop — thin per-game bindings over stats_lib's shared skeleton.
 def loki_fetch(start_ns, end_ns):
     """Fetch entries in (start_ns, end_ns] as [(ts_ns, line)] (one page)."""
-    qs = urllib.parse.urlencode(
-        {
-            "query": LOKI_QUERY,
-            "start": start_ns + 1,
-            "end": end_ns,
-            "limit": LOKI_PAGE_LIMIT,
-            "direction": "forward",
-        }
+    url = stats_lib.build_query_range_url(
+        LOKI_URL, LOKI_QUERY, start_ns, end_ns, LOKI_PAGE_LIMIT
     )
-    return extract_entries(http_get_json(LOKI_URL + "/loki/api/v1/query_range?" + qs))
+    return extract_entries(stats_lib.http_get_json(url, HTTP_TIMEOUT, "terraria-stats"))
 
 
 def run_cycle(state, store, cursor, end_ns, fetch):
     """One poll: page through new entries from `cursor`, fold, persist. Returns new cursor.
 
-    `fetch(start_ns, end_ns) -> [(ts_ns, line)]`. Pages until a short/empty page.
-    State mutation + cursor advance are persisted together so a crash re-runs the
-    batch cleanly (events past the saved cursor simply re-apply on next start).
+    Thin wrapper over stats_lib.run_cycle binding this game's apply_entries + page limit —
+    see that function's docstring for the paging/persistence contract.
     """
-    while True:
-        entries = fetch(cursor, end_ns)
-        if not entries:
-            break
-        events, max_ts = apply_entries(state, entries)
-        if max_ts > cursor:
-            cursor = max_ts
-        store.save(state, cursor, events)
-        if len(entries) < LOKI_PAGE_LIMIT:
-            break
-    return cursor
-
-
-def log(*args):
-    print("[%s]" % time.strftime("%Y-%m-%dT%H:%M:%S"), *args, flush=True)
-
-
-_state = StatsState()
-_lock = threading.Lock()
-# _last_poll_ok is written by the poll loop and read by /healthz without a lock. Safe under
-# CPython's GIL (float assignment is atomic). If ever run on a free-threaded interpreter,
-# guard it with _lock in both places.
-_last_poll_ok = 0.0
-
-
-def _make_handler():
-    class Handler(BaseHTTPRequestHandler):
-        """Serves /metrics (Prometheus exposition) and /healthz (poll staleness)."""
-
-        # `format` is the parameter name BaseHTTPRequestHandler.log_message declares.
-        def log_message(self, format: str, *args: object) -> None:
-            pass
-
-        def do_GET(self):
-            """Routes the request path to /metrics, /healthz, or a 404."""
-            if self.path == "/metrics":
-                with _lock:
-                    body = render_metrics(_state, time.time()).encode()
-                self.send_response(200)
-                self.send_header("Content-Type", "text/plain; version=0.0.4")
-                self.end_headers()
-                self.wfile.write(body)
-            elif self.path == "/healthz":
-                fresh = (time.time() - _last_poll_ok) < HEALTH_MAX_AGE
-                self.send_response(200 if fresh else 503)
-                self.end_headers()
-                self.wfile.write(b"ok\n" if fresh else b"stale\n")
-            else:
-                self.send_response(404)
-                self.end_headers()
-
-    return Handler
-
-
-def initial_cursor(stored_cursor, backfill, now, backfill_days):
-    """Pick the starting cursor (ns).
-
-    On a fresh DB (stored_cursor==0) or an explicit --backfill, bound the start to the
-    last `backfill_days` rather than epoch. A first query spanning 1970->now exceeds
-    Loki's max_query_length (~30d) and returns HTTP 400; bounding it also makes the
-    first deploy backfill recent history. A normal run resumes from the stored cursor.
-    """
-    if backfill or stored_cursor == 0:
-        return int((now - backfill_days * 86400) * 1e9)
-    return stored_cursor
+    return stats_lib.run_cycle(
+        state, store, cursor, end_ns, fetch, apply_entries, LOKI_PAGE_LIMIT
+    )
 
 
 def main():
@@ -420,41 +342,36 @@ def main():
     POLL_INTERVAL. A poll cycle's own exception is caught and logged rather than
     allowed to kill the loop.
     """
-    global _state, _last_poll_ok
     once = "--once" in sys.argv
     backfill = "--backfill" in sys.argv
     store = Store(DB_PATH)
-    with _lock:
-        _state = store.load_state()
+    poll_state = stats_lib.PollState(store.load_state())
     cursor = initial_cursor(store.get_cursor(), backfill, time.time(), BACKFILL_DAYS)
     log(
         "terraria-stats starting (loki=%s once=%s backfill=%s players=%d)"
-        % (LOKI_URL, once, backfill, len(_state.players))
+        % (LOKI_URL, once, backfill, len(poll_state.value.players))
     )
     if not (once or backfill):
         # Threading server so a slow /metrics render can't head-of-line-block the /healthz
-        # probe (and trip autoheal). Handler reads in-memory _state under _lock, no SQLite.
-        threading.Thread(
-            target=lambda: ThreadingHTTPServer(
-                ("0.0.0.0", METRICS_PORT), _make_handler()
-            ).serve_forever(),
-            daemon=True,
-        ).start()
-    while True:
-        try:
-            end_ns = int(time.time() * 1e9)
-            with _lock:
-                cursor = run_cycle(_state, store, cursor, end_ns, loki_fetch)
-            _last_poll_ok = time.time()
-            log(
-                "poll ok: %d players, %d online"
-                % (len(_state.players), _state.online_count())
-            )
-        except Exception as e:  # an unreachable Loki must not kill the loop
-            log("poll error:", e)
-        if once or backfill:
-            break
-        time.sleep(POLL_INTERVAL)
+        # probe (and trip autoheal). Handler reads in-memory state under the lock, no SQLite.
+        stats_lib.start_metrics_server(
+            stats_lib.make_handler(poll_state, render_metrics, HEALTH_MAX_AGE),
+            METRICS_PORT,
+        )
+    stats_lib.poll_forever(
+        poll_state,
+        store,
+        cursor,
+        loki_fetch,
+        apply_entries,
+        LOKI_PAGE_LIMIT,
+        once,
+        backfill,
+        POLL_INTERVAL,
+        lambda state: (
+            "%d players, %d online" % (len(state.players), state.online_count())
+        ),
+    )
 
 
 if __name__ == "__main__":

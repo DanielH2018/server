@@ -403,6 +403,7 @@ def test_shared_k8s_roles_matches_the_known_set():
     every consumer of this function would go quiet rather than fail loudly."""
     assert pr.shared_k8s_roles() == {
         "cronjob-gate",
+        "game-stats-lib",
         "image-builder",
         "longhorn-api",
         "manifests",

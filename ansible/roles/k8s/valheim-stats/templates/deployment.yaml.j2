@@ -23,13 +23,12 @@ spec:
         app: valheim-stats
         netpol-baseline: enforced
       annotations:
-        # Recreate the pod when the script ConfigMap's source changes — the manifests
-        # role only restarts on manifest changes, and the script is not a manifest.
-        # DECIDED (was: no lookup|hash here, the offline render guard's Jinja env had no
-        # `hash` filter): scripts/validate/k8s_manifests.py now shims one
-        # (register_ansible_filters) and its lookup('file') shim takes rstrip, so the path
-        # form hashes the same raw bytes the `copy` task's own checksum register did.
-        {{ checksum_annotation('stats-script', path=playbook_dir + '/roles/k8s/valheim-stats/files/valheim_stats.py') }}
+        # Recreate the pod when the script ConfigMap's source changes — the manifests role
+        # only restarts on manifest changes, and neither staged script is a manifest. The
+        # fact is a hash over BOTH staged modules (tasks/main.yml), the same "value=" shape
+        # monitor-bridge's and autofix-bridge's checksum/check-script use, since valheim_stats.py
+        # imports stats_lib.py and an edit confined to that sibling must also roll the pod.
+        {{ checksum_annotation('stats-script', value=valheim_stats_script_checksum) }}
     spec:
       enableServiceLinks: false
       securityContext:

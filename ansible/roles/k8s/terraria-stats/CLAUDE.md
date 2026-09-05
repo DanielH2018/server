@@ -18,5 +18,10 @@ built into an image. See repo-root `CLAUDE.md` for shared conventions.
 - Stock `python:3.14-alpine`, not an `image-builder` build: `stats.py` has no
   dependencies, so the pod schedules on any node — the in-cluster `registry` is
   loopback-only and can't serve a cross-node pull.
-- The `checksum/stats-script` pod annotation restarts the Deployment when the
-  ConfigMap-mounted script changes, since a ConfigMap edit alone doesn't roll a pod.
+- The `checksum/stats-script` pod annotation restarts the Deployment when either staged
+  module changes, since a ConfigMap edit alone doesn't roll a pod (hashes `stats.py` +
+  `stats_lib.py` together — see tasks/main.yml).
+- The Loki fetch, cursor handling, metric rendering, the HTTP handler and the run loop live
+  in `k8s/game-stats-lib`'s `stats_lib.py`, shared with valheim-stats — see that role's
+  CLAUDE.md for how it ships (staged beside this script AND added to this role's own
+  ConfigMap). `parse_line`, `StatsState` and `Store` stay here; they are the per-game part.

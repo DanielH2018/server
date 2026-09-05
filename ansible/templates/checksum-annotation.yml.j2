@@ -19,15 +19,19 @@
     checksum_annotation('name', value=<already-computed checksum>)
       Renders the value verbatim, `| default('unstaged')`. Use this when the value comes from
       a task — a `copy` register, a fact hashing several files together (monitor-bridge,
-      autofix-bridge), an image digest (n8n's `checksum/image`) — anything other than one
-      file's raw bytes, so a role's own computation is preserved exactly rather than
-      approximated by this macro's own hashing.
+      autofix-bridge, valheim-stats and terraria-stats each stage TWO modules now and hash
+      both into one trigger — see their tasks/main.yml), an image digest (n8n's
+      `checksum/image`) — anything other than one file's raw bytes, so a role's own
+      computation is preserved exactly rather than approximated by this macro's own hashing.
 
     checksum_annotation('name', path=<absolute path to one file>)
       Hashes the file's raw bytes inline: `lookup('file', path, rstrip=False) | hash('sha1')`.
       `rstrip=False` is load-bearing — the file lookup's default strips trailing whitespace,
       which would hash different bytes than the file on disk and diverge from a `copy` task's
-      own (unstripped) checksum of the same file, e.g. valheim-stats' and terraria-stats'.
+      own (unstripped) checksum of the same file. No current caller uses this mode — valheim-
+      stats and terraria-stats moved to `value=` when a second staged module (stats_lib.py)
+      meant one file's bytes were no longer the whole story — but it stays correct for a
+      future role that stages exactly one file.
 
   `unstaged` is the value every existing checksum/ annotation falls back to on a config-only
   run (`--skip-tags deploy`), a `--dry-run` validator render, or a register/fact that never

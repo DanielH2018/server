@@ -59,6 +59,7 @@ NO_MANIFEST_ROLES = {
     "volume-snapshot",
     "longhorn-api",  # resolves a fact only, same as cronjob-gate/volume-snapshot
     "volume-revert",  # reverts a volume through kubectl and the Longhorn API
+    "game-stats-lib",  # ships stats_lib.py into valheim-stats/terraria-stats' ConfigMaps
 }
 
 # These DO carry manifest templates; they are exempt for a different reason. Their templates
