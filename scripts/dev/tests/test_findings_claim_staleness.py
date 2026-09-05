@@ -187,3 +187,15 @@ def test_age_days_returns_none_for_naive_datetime():
     rows = claim_states(issues, [_tree()], dirty=_always, merged=_never)
     assert len(rows) == 1
     assert rows[0].age_days is None
+
+
+def test_claim_is_stale_when_locked_with_dead_owner_clean_and_merged():
+    """Verify a worktree with dead owner, clean, and merged is stale.
+
+    This is the steady state of a worktree whose session died after its PR landed.
+    It must be judged STALE so `reap` can release the claim.
+    """
+    dead_owner = _tree(reason="claude session x (pid 999999 start 999999)", locked=True)
+    live, reason = claim_is_live(WT, [dead_owner], dirty=_never, merged=_always)
+    assert live is False
+    assert "lock owner is dead" in reason

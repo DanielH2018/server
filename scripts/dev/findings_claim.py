@@ -80,10 +80,7 @@ def claim_is_live(
     tree = next((t for t in trees if t.branch == worktree_name), None)
     if tree is None:
         return False, "no worktree — the claim names a branch nothing has checked out"
-    is_dirty = dirty(tree.path)
-    # Only compute merged if classify will need it: after live lock and dirty checks.
-    is_merged = merged(tree) if (not tree.locked and not is_dirty) else False
-    verdict, reason = classify(tree, merged=is_merged, dirty=is_dirty)
+    verdict, reason = classify(tree, merged=merged(tree), dirty=dirty(tree.path))
     return verdict != REMOVABLE, reason
 
 
@@ -121,7 +118,6 @@ def _claim_age_days(issue: dict, held: str) -> int | None:
     for comment in issue.get("comments", []):
         body = comment.get("body") or ""
 
-        # Check for a claim opening.
         m = _CLAIM_RE.search(body)
         if m:
             worktree = m.group(1)
@@ -131,7 +127,6 @@ def _claim_age_days(issue: dict, held: str) -> int | None:
                     claimed_at_comment = comment
             continue
 
-        # Check for a release closing.
         m = _RELEASE_RE.search(body)
         if m and m.group(1) == currently_held:
             currently_held = None
@@ -148,7 +143,9 @@ def _claim_age_days(issue: dict, held: str) -> int | None:
     except ValueError:
         return None
 
-    # Reject naive datetimes (missing timezone info).
+    # fromisoformat accepts date-only strings like "2026-09-01", parsing them as naive
+    # datetimes. Subtracting a naive datetime from datetime.now(UTC) raises TypeError,
+    # which is not caught by ValueError; return None to treat it as unparseable.
     if when.tzinfo is None:
         return None
 
