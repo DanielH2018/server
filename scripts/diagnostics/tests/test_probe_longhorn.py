@@ -7,7 +7,6 @@ credential-handling that keeps it safe to run, and the Class C budget projection
 
 import json
 
-import probe
 from diagnostics.probe_lib import b2_api, longhorn, longhorn_budget, longhorn_cluster
 
 LSF = [
@@ -130,14 +129,12 @@ def test_b2_longhorn_command_does_not_shell_out_to_docker_or_rclone():
 
         return Result()
 
-    # `probe.subprocess` is the shared stdlib module object, so swapping its `run` reaches
-    # b2_api.b2_curl too; the spelling predates the split.
-    real_run = probe.subprocess.run
-    probe.subprocess.run = fake_run
+    real_run = b2_api.subprocess.run
+    b2_api.subprocess.run = fake_run
     try:
         b2_api.b2_curl('url = "https://api.example"\n')
     finally:
-        probe.subprocess.run = real_run
+        b2_api.subprocess.run = real_run
 
     assert seen["argv"][0] == "curl"
     assert "docker" not in seen["argv"] and "rclone" not in seen["argv"]

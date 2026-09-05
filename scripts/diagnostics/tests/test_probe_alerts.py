@@ -9,9 +9,9 @@ first left the whole backup/drift plane with no episode history anywhere.
 from datetime import UTC, datetime
 
 from diagnostics.probe_lib import alerts
+from diagnostics.probe_lib import cli_parser
 from diagnostics.probe_lib import metrics
 from diagnostics.probe_lib.alerts import alert_episodes
-import probe
 from diagnostics.probe_lib import core
 
 
@@ -113,7 +113,7 @@ def _query_params(url):
 
 def test_run_query_sends_the_since_window_to_loki(monkeypatch):
     seen = _capture_fetch(monkeypatch)
-    ns = probe._build_parser().parse_args(
+    ns = cli_parser._build_parser().parse_args(
         ["loki-query", '{job="syslog"}', "--since", "3d", "--limit", "5000"]
     )
     assert metrics.run_query(ns) == 0
@@ -140,7 +140,7 @@ def test_run_query_omits_direction_so_limit_keeps_the_newest_lines(monkeypatch):
     # Copying that here would make --limit return the OLDEST N; Loki's default `backward` is
     # what makes it return the newest N, which format_loki then sorts.
     seen = _capture_fetch(monkeypatch)
-    ns = probe._build_parser().parse_args(
+    ns = cli_parser._build_parser().parse_args(
         ["loki-query", '{job="syslog"}', "--since", "6h"]
     )
     metrics.run_query(ns)
@@ -151,7 +151,7 @@ def test_run_query_serves_metric_which_has_no_since_flag(monkeypatch):
     # `metric`'s subparser declares no --since and run_query serves both commands, so a bare
     # `ns.since` on the shared path raises AttributeError and kills every `probe.py metric`.
     seen = _capture_fetch(monkeypatch)
-    ns = probe._build_parser().parse_args(["metric", "up"])
+    ns = cli_parser._build_parser().parse_args(["metric", "up"])
     assert not hasattr(ns, "since")
     assert metrics.run_query(ns) == 0
     assert "/api/v1/query?" in seen[0]
@@ -234,7 +234,7 @@ def _route_alert_fetch(monkeypatch, per_query):
 
 def test_alerts_queries_the_host_cron_stream_as_well_as_the_bridge(monkeypatch):
     seen = _route_alert_fetch(monkeypatch, {})
-    ns = probe._build_parser().parse_args(["alerts", "--days", "3"])
+    ns = cli_parser._build_parser().parse_args(["alerts", "--days", "3"])
     assert alerts.run_alerts(ns) == 0
     queries = [_query_params(u)["query"][0] for u in seen]
     assert alerts.ALERT_LOGQL in queries
@@ -256,7 +256,7 @@ def test_alerts_surfaces_a_host_cron_episode_the_bridge_stream_cannot_see(
             ],
         },
     )
-    ns = probe._build_parser().parse_args(["alerts", "--days", "3"])
+    ns = cli_parser._build_parser().parse_args(["alerts", "--days", "3"])
     assert alerts.run_alerts(ns) == 0
     out = capsys.readouterr().out
     assert "1 DOWN episode(s)" in out
@@ -282,7 +282,7 @@ def test_alerts_check_filter_matches_a_host_cron_tag(monkeypatch, capsys):
             alerts.SYSLOG_ALERT_LOGQL: [(minute, SYSLOG_DOWN)],
         },
     )
-    ns = probe._build_parser().parse_args(
+    ns = cli_parser._build_parser().parse_args(
         ["alerts", "--days", "3", "--check", "longhorn"]
     )
     assert alerts.run_alerts(ns) == 0
@@ -349,7 +349,7 @@ def test_alerts_pi_scopes_to_pi_attributed_rows_across_both_streams(
             ],
         },
     )
-    ns = probe._build_parser().parse_args(["alerts", "--days", "3", "--pi"])
+    ns = cli_parser._build_parser().parse_args(["alerts", "--days", "3", "--pi"])
     assert alerts.run_alerts(ns) == 0
     out = capsys.readouterr().out
     assert "pi_pressure" in out
@@ -361,7 +361,7 @@ def test_alerts_pi_scopes_to_pi_attributed_rows_across_both_streams(
 def test_alerts_dry_run_prints_a_command_per_stream(monkeypatch, capsys):
     monkeypatch.setattr(core, "sops_extract", lambda key: "example.test")
     monkeypatch.setattr(core, "metallb_vip", lambda: "10.0.0.240")
-    ns = probe._build_parser().parse_args(["--dry-run", "alerts", "--days", "3"])
+    ns = cli_parser._build_parser().parse_args(["--dry-run", "alerts", "--days", "3"])
     assert alerts.run_alerts(ns) == 0
     out = capsys.readouterr().out
     assert out.count("query_range") == len(alerts.ALERT_SOURCES)

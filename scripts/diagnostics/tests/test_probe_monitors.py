@@ -190,8 +190,7 @@ def test_run_kuma_drift_pi_end_to_end_reports_a_missing_pi_monitor(monkeypatch, 
     """
     import json
 
-    from diagnostics.probe_lib import core
-    import probe
+    from diagnostics.probe_lib import cli_parser, core
 
     pi_names = monitors.pi_monitor_names(REAL_STATIC_MONITORS_TEXT)
     live = (pi_names | {"k3s Grafana", "Root Disk"}) - {"Daniel Pi Recovery"}
@@ -207,7 +206,7 @@ def test_run_kuma_drift_pi_end_to_end_reports_a_missing_pi_monitor(monkeypatch, 
     monkeypatch.setattr(core, "metallb_vip", lambda: "10.0.0.240")
     monkeypatch.setattr(monitors, "kuma_pod_age_seconds", lambda: 86400 * 3)
 
-    ns = probe._build_parser().parse_args(["kuma-drift", "--pi", "--no-secrets"])
+    ns = cli_parser._build_parser().parse_args(["kuma-drift", "--pi", "--no-secrets"])
     assert monitors.run_kuma_drift(ns) == 1
     out = capsys.readouterr().out
     assert "Daniel Pi Recovery: declared, not live" in out

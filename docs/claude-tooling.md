@@ -17,12 +17,13 @@ uv run python scripts/diagnostics/probe.py <targets | metric '<promql>' | loki-q
 ```
 
 `uv run python scripts/diagnostics/probe.py --list` prints every subcommand with a one-line
-description, sourced from `SUBCOMMANDS`/`REGISTRY` near the top of `probe.py` (built on the
+description, sourced from `SUBCOMMANDS`/`REGISTRY` in `probe_lib/subcommands.py` (built on the
 shared `scripts/lib/registry.py`, the same only/skip-selection shape monitor-bridge's `CHECKS`
 uses — see that role's `check.py`). The registry is metadata only: `--list` and a completeness
 guard (`scripts/diagnostics/tests/test_probe_registry.py`, asserting every `probe_lib` module
-with a `run_*`/`main` entry point is covered) — argparse and the `plan()`/`handlers` dispatch
-in `main()` are unchanged and still own actually running a subcommand.
+with a `run_*`/`main` entry point is covered). Running a subcommand is owned elsewhere and is
+unchanged: argparse in `probe_lib/cli_parser.py`, `plan()` in `probe_lib/curl_pipeline.py`, and
+the `handlers` table in `probe.py`'s `main()`.
 
 ### `alerts [--days N --check X]`
 

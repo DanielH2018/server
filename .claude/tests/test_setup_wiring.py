@@ -112,7 +112,11 @@ def test_hook_wrappers_reference_existing_python():
 
 
 def _probe_subcommands():
-    body = _read(os.path.join(REPO, "scripts", "diagnostics", "probe.py"))
+    # probe.py's argparse surface moved into probe_lib/cli_parser.py; probe.py itself now
+    # holds only main() and its dispatch table, and scanning it returns an empty set.
+    body = _read(
+        os.path.join(REPO, "scripts", "diagnostics", "probe_lib", "cli_parser.py")
+    )
     return set(re.findall(r'\.add_parser\(\s*"([\w-]+)"', body))
 
 
