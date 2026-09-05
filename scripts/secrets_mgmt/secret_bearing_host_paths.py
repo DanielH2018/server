@@ -50,6 +50,17 @@ HOST_BIN_PREFIXES = ("/usr/local/bin", "/opt/homelab")
 # Names too generic to match on — a substring hit would flag every file mentioning the word.
 # Empty today; kept as the documented escape hatch so a future generic name is handled here
 # rather than by weakening the regex, matching test_release_bin_groups_have_no_secrets.py.
+#
+# DECIDED: `email` was the first candidate for this set (#1183) and went to the registry's
+# `ignore` tier instead, because it is an address rather than a credential — it renders as an
+# ACME contact, a git commit author, an Authelia user's email and an SMTP username, and the
+# value that authenticates that SMTP session is `smtp_notify_app_password`, tracked
+# separately. That is the `domain` precedent NON_SECRET_TIERS below already states: when the
+# registry can say a name is not a credential, it says it, and this derivation reads it.
+# GENERIC_NAMES stays for the case the registry CANNOT express — a name that really is a
+# credential but whose word is too common to match on. A registry comment could not have
+# carried this: `rotation_tools.save_registry` rewrites the file with `yaml.safe_dump`, so the
+# weekly rotate cron drops any comment added there.
 GENERIC_NAMES = frozenset()
 
 # The registry's own word for "tracked, but not a value anyone rotates". `domain` carries it,
