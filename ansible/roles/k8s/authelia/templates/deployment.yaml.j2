@@ -45,9 +45,11 @@ spec:
    it. Gate the key so it is absent rather than empty. #}
 {% if authelia_k8s_manage_crowdsec %}
       initContainers:
-        # Seeds the agent sidecar's /etc/crowdsec before its entrypoint fills in defaults:
-        # acquisition pointing at this pod's auth log, plus the same whitelist parsers both
-        # other agents use. Runs as the pod's uid 1000 (NOT root): it creates the log file
+        # Seeds the agent sidecar's /etc/crowdsec so its entrypoint never has to: the image's
+        # own staged tree first (see the rsync note below), then acquisition pointing at this
+        # pod's auth log, plus the same whitelist parsers both other agents use. The seeds are
+        # installed AFTER the rsync so they win over the staged copies of the same names.
+        # Runs as the pod's uid 1000 (NOT root): it creates the log file
         # Authelia must then write, and root-with-ALL-caps-dropped cannot chown — the same
         # trap slice 5 hit on Home Assistant's config seed. Owning the file by creating it
         # sidesteps the capability entirely. The agent reads these as root regardless.
@@ -57,11 +59,31 @@ spec:
             - /bin/sh
             - -c
             - >-
+              (rsync -a --ignore-existing /staging/etc/crowdsec/* /etc/crowdsec
+              || [ "$?" -eq 23 ]) &&
               install -m 644 /seed/acquis.yaml /etc/crowdsec/ &&
               install -d /etc/crowdsec/parsers/s02-enrich &&
               install -m 644 /seed/whitelist.yaml /seed/trusted-remote-whitelist.yaml
               /etc/crowdsec/parsers/s02-enrich/ &&
               install -m 640 /dev/null /var/log/authelia/authelia.log
+          # The rsync is the image entrypoint's own "Populating configuration directory"
+          # step, run here so the sidecar never runs it. It only runs while
+          # /etc/crowdsec/config.yaml is absent, and it runs under `set -e`: about twenty
+          # staged files are root-only (the LAPI/online credentials and the bundled hub
+          # tree), so a non-root rsync exits 23 and killed the sidecar's FIRST start on
+          # every pod start — `crowdsec-agent restarts=1 last=Error 23`, which
+          # `probe.py health authelia` fails closed on inside its 180s window, so every
+          # authelia deploy read `VERDICT: unhealthy` (#1173). The kubelet's restart then
+          # found config.yaml and skipped the block; this seeds the same state up front.
+          # Traefik's identical init container carries the long-form rationale (#976).
+          #
+          # DECIDED: tolerate exit 23 only, never `|| true`. This moves the failure from a
+          # sidecar restart to a failed init container, and authelia rolls under Recreate —
+          # the old pod is already gone, so a non-23 rsync failure takes SSO down rather
+          # than costing one restart. Exit 23 alone is safe because the files it skips are
+          # ones the agent regenerates (`cscli lapi register`) or re-downloads (`cscli hub
+          # update`) on start regardless; any OTHER rsync status is a real seed failure and
+          # must fail the pod rather than start an agent with a half-populated config.
 {{ hardened_security_context(non_root=true) }}
           volumeMounts:
             - name: crowdsec-secret
