@@ -12,6 +12,7 @@ the same way `test_k8s_autodeploy_batch_gates.py` catches a missing wait for a p
 Run: uv run pytest ansible/tests/deploy/test_cronjob_only_roles_include_the_gate.py
 """
 
+from functools import cache
 import sys
 
 from _autodeploy import _K8S_ROLES
@@ -34,6 +35,7 @@ _DEFAULT_NS = "homelab"
 _KNOWN_CRONJOB_ONLY_ROLES = frozenset({"configarr", "pi-peer-backup"})
 
 
+@cache
 def _cronjob_only_census():
     """{role: [(namespace, name)]} for every k8s role declaring a CronJob and no
     Deployment/DaemonSet/StatefulSet -- the same population `role_cronjob_targets` serves at

@@ -7,6 +7,7 @@ pattern" rule requires — see the two at the bottom.
 Run: uv run pytest scripts/docs/tests/test_gen_reference_decisions.py
 """
 
+from functools import cache
 from docs.reference import decisions as g
 from lib.repo_paths import REPO
 
@@ -204,6 +205,16 @@ def test_markdown_ends_with_exactly_one_newline(tmp_path):
     assert not out.endswith("\n\n")
 
 
+@cache
+def _live_rows() -> tuple[dict, ...]:
+    """The marker rows for the REAL tree, built once for this module.
+
+    The three non-vacuity tests below each want the identical full-tree scan; without
+    the cache each paid for its own. Rows are read-only here.
+    """
+    return tuple(g.build_rows(REPO, REPO))
+
+
 def test_live_tree_yields_at_least_100_markers():
     """Non-vacuity: this repo carried 151+ markers when this page was written (2026-09-03).
 
@@ -211,7 +222,7 @@ def test_live_tree_yields_at_least_100_markers():
     "A check that finds its own subject by pattern" rule — so this asserts a real floor
     against the live tree rather than only against a fixture.
     """
-    rows = g.build_rows(REPO, REPO)
+    rows = _live_rows()
     assert len(rows) >= 100
 
 
@@ -223,7 +234,7 @@ def test_live_tree_includes_the_gitops_deploy_origin_slice_marker():
     `deploy_handlers.py`, beside `_rollback_k8s`, which is the code that makes the trade-off —
     a marker travels with that code rather than with the module it was written in.
     """
-    rows = g.build_rows(REPO, REPO)
+    rows = _live_rows()
     matches = [
         r
         for r in rows
@@ -235,7 +246,7 @@ def test_live_tree_includes_the_gitops_deploy_origin_slice_marker():
 
 def test_live_tree_excludes_its_own_generator_and_test_file():
     """The self-exclusion applied against the real tree, not just a fixture."""
-    rows = g.build_rows(REPO, REPO)
+    rows = _live_rows()
     paths = {r["path"] for r in rows}
     assert "scripts/docs/reference/decisions.py" not in paths
     assert "scripts/docs/tests/test_gen_reference_decisions.py" not in paths

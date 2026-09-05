@@ -16,6 +16,7 @@ Run: uv run pytest ansible/tests/k8s/test_secret_consumer_census.py
 
 import sys as _sys
 
+from functools import cache
 import pytest
 from _helpers import REPO
 
@@ -46,6 +47,16 @@ SONARR_KEY_CONSUMERS = {
 }
 
 
+@cache
+def _consumers(name: str):
+    """`tree_consumers` for one secret, cached.
+
+    The two parametrized tests below both run over `sops_names()`, so without the cache
+    the tree is walked twice for every secret. The mapping is read-only here.
+    """
+    return tree_consumers(name)
+
+
 def _phantom_tags(name: str, tags) -> list[str]:
     """Tags claiming a role that does not reference the secret.
 
@@ -55,7 +66,7 @@ def _phantom_tags(name: str, tags) -> list[str]:
     old token and stamped `last_rotated` green. The fix was a hand-run `grep -rl`; this makes
     that grep repeatable.
     """
-    census = tree_consumers(name)
+    census = _consumers(name)
     return [tag for tag in tags if tag not in census]
 
 
@@ -70,9 +81,7 @@ def _setup_plane_blind_spots(name: str, tags) -> list[str]:
     """
     if not tags:
         return []
-    return sorted(
-        role for role, plane in tree_consumers(name).items() if plane == "setup"
-    )
+    return sorted(role for role, plane in _consumers(name).items() if plane == "setup")
 
 
 def test_the_census_finds_every_known_consumer_of_the_secret_that_caused_the_incident():

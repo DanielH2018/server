@@ -20,6 +20,7 @@ Run: uv run pytest ansible/tests/repo/test_adr_links.py
 """
 
 import re
+from functools import cache
 from pathlib import Path
 
 import pytest
@@ -65,7 +66,9 @@ def _frontmatter(path: Path) -> dict:
     return loaded
 
 
-def _source_files() -> list[Path]:
+@cache
+def _source_files() -> tuple[Path, ...]:
+    """Cached: this walks the whole repo, and two tests below each need the full set."""
     out = []
     for path in REPO.rglob("*"):
         if not path.is_file() or path.suffix not in SEARCH_SUFFIXES:
@@ -83,7 +86,7 @@ def _source_files() -> list[Path]:
         if path == Path(__file__).resolve():
             continue
         out.append(path)
-    return sorted(out)
+    return tuple(sorted(out))
 
 
 def _marker_block(lines: list[str], index: int) -> str:
@@ -101,8 +104,12 @@ def _marker_block(lines: list[str], index: int) -> str:
     return "\n".join(block)
 
 
-def _markers() -> list[tuple[Path, int, str]]:
-    """Every real marker as (path, 1-indexed line number, block text)."""
+@cache
+def _markers() -> tuple[tuple[Path, int, str], ...]:
+    """Every real marker as (path, 1-indexed line number, block text).
+
+    Cached: it re-reads every source file in the repo, and both callers want all of them.
+    """
     found = []
     for path in _source_files():
         try:
@@ -112,7 +119,7 @@ def _markers() -> list[tuple[Path, int, str]]:
         for i, line in enumerate(lines):
             if MARKER.search(line):
                 found.append((path, i + 1, _marker_block(lines, i)))
-    return found
+    return tuple(found)
 
 
 # Frontmatter schema — task 1 fixes these key names, and everything below parses them.
