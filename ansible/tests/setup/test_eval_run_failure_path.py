@@ -146,10 +146,34 @@ def test_the_restore_keeps_the_sweep_outside_the_checkout(tmp_path):
     """
     repo, stamp = _tree(tmp_path), tmp_path / "stamp"
     _stage_a_sweep(repo, stamp)
-    _bash("restore_history", repo, stamp)
+    run = _bash('restore_history; printf %s "$KEPT_NOTE"', repo, stamp)
     assert (
         stamp / "unpublished-history.json"
     ).read_text() == '{"runs": [{"score": 0.9}]}\n'
+    assert run.stdout == f"sweep kept at {stamp / 'unpublished-history.json'}"
+
+
+def test_a_copy_that_failed_is_reported_as_a_lost_sweep(tmp_path):
+    """REJECT: the note must not claim a copy that never happened.
+
+    `cp` is silenced, so a $STAMP_DIR that cannot be created — initial_setup not yet run since
+    this landed, a full disk, wrong ownership — would otherwise leave the alert asserting
+    `sweep kept at <path>` with nothing at that path. An alert reporting an outcome it did not
+    confirm is the failure mode the rest of this script exists to keep out.
+    """
+    repo, stamp = _tree(tmp_path), tmp_path / "stamp"
+    _stage_a_sweep(repo, stamp)
+    blocked = tmp_path / "blocked"
+    blocked.write_text("a file where the stamp directory should be\n")
+    run = _bash(
+        f"STAMP_DIR={blocked}; UNPUBLISHED_HISTORY={blocked}/unpublished-history.json; "
+        'restore_history; printf %s "$KEPT_NOTE"',
+        repo,
+        stamp,
+    )
+    assert run.stdout.startswith("SWEEP LOST"), run.stdout
+    # Losing the copy must not also park the deployer: the two outcomes are independent.
+    assert _porcelain(repo, stamp) == ""
 
 
 def test_the_old_reset_only_body_kept_no_copy_of_the_sweep(tmp_path):

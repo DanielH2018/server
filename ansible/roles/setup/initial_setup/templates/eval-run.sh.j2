@@ -114,9 +114,20 @@ keep_failure_log() {
 # is generator output the next run reproduces, so discarding it costs nothing. Here it is a week
 # of paid API calls that no rerun reproduces, so the sweep is copied outside the checkout BEFORE
 # the tree is put back. Trading a parked deployer for a lost eval sweep is not a fix.
+#
+# KEPT_NOTE says what actually happened, and is not decoration. A silenced `cp` that failed --
+# $STAMP_DIR absent because initial_setup has not run since this landed, a full disk, wrong
+# ownership -- would otherwise leave the alert asserting "sweep kept at <path>" with nothing at
+# that path. An alert that reports an outcome it did not confirm is the failure mode the rest of
+# this script exists to keep out.
 restore_history() {
   local rc=0
-  mkdir -p "$STAMP_DIR" 2>/dev/null && cp evals/history.json "$UNPUBLISHED_HISTORY" 2>/dev/null
+  if mkdir -p "$STAMP_DIR" 2>/dev/null && cp evals/history.json "$UNPUBLISHED_HISTORY" 2>/dev/null
+  then
+    KEPT_NOTE="sweep kept at ${UNPUBLISHED_HISTORY}"
+  else
+    KEPT_NOTE="SWEEP LOST - could not write ${UNPUBLISHED_HISTORY}"
+  fi
   git reset >/dev/null 2>&1
   # A file with no HEAD version needs `rm`, not `git checkout HEAD --`: the checkout fails on it
   # and leaves it UNTRACKED, which parks the deployer just as surely as a modified one.
@@ -273,10 +284,13 @@ git commit -m "evals: record weekly hermetic eval sweep" >"$LOG" 2>&1
 COMMIT_RC=$?
 if [ "$COMMIT_RC" -ne 0 ]; then
   keep_failure_log "$LOG"
+  # KEPT_NOTE is set by restore_history and reported on BOTH arms: whether the sweep survived and
+  # whether the tree came back clean are independent, and the alert has to carry both.
+  KEPT_NOTE="sweep unaccounted for"
   if restore_history; then
-    RESTORE_NOTE="tree restored, sweep kept at ${UNPUBLISHED_HISTORY}"
+    RESTORE_NOTE="tree restored, ${KEPT_NOTE}"
   else
-    RESTORE_NOTE="TREE STILL DIRTY - gitops-deploy is parked until it is cleaned"
+    RESTORE_NOTE="TREE STILL DIRTY - gitops-deploy is parked until it is cleaned; ${KEPT_NOTE}"
   fi
   say_failure "eval-run: commit failed (git exit ${COMMIT_RC}); ${RESTORE_NOTE}, nothing published" "$LOG"
   exit 1
