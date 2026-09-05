@@ -444,6 +444,22 @@
       - ansible/roles/setup/initial_setup/templates/setup-drift-check.sh.j2
       - ansible/roles/setup/initial_setup/templates/setup-drift-kuma-push.env.j2
 
+- name: Create the docs-refresh state directory (box only)
+  tags: [crons, docs]
+  # docs-refresh records a failed commit here so its NEXT run can tell its own leftover dirt from
+  # a human's mid-edit. It is outside the checkout on purpose: a stamp written under
+  # /home/{{ sys_user }}/server would be untracked dirt, which parks gitops-deploy exactly as the
+  # dirt it is recording does. Owned by the cron user because that cron runs without become; the
+  # parent /var/lib/homelab stays root-owned 0755, created by the k3s role's health crons.
+  when: inventory_hostname == 'daniel-box'
+  ansible.builtin.file:
+    path: /var/lib/homelab/docs-refresh.d
+    state: directory
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0755"
+  become: true
+
 - name: Install the docs refresh script (box only)
   tags: [crons, docs]
   when: inventory_hostname == 'daniel-box'
