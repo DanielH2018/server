@@ -76,7 +76,7 @@ def test_every_returned_dest_is_under_a_host_bin_prefix(real_census):
     assert not stray, f"{stray} would be invisible to the hook's cheap prefix gate"
 
 
-def test_the_hooks_prefix_gate_matches_the_modules(real_census):
+def test_the_hooks_prefix_gate_matches_the_modules():
     """Read the hook's literal rather than importing it — it reads stdin at import time."""
     tree = ast.parse(HOOK.read_text(), filename=str(HOOK))
     literals = [
