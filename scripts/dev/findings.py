@@ -20,10 +20,9 @@ session can run without a prompt) does not clear — a command stored by `open` 
 validated there is still only ever run through that gate.
 
 This file is the CLI: argument parsing, the ten `cmd_*` handlers and the exit contract. The
-vocabulary and the pure reads are `findings_model.py`, the gh argv every command plans are
-`findings_plans.py`, the gh calls are `findings_gh.py`, the claim staleness verdict and the
-git facts it reads (`_worktree_facts`) are `findings_claim.py`, and the verify-by gate is
-`findings_verify.py`.
+vocabulary and the pure reads are `findings_model.py`, the gh argv are `findings_plans.py`,
+the gh calls are `findings_gh.py`, claim staleness is `findings_claim.py` (its git facts,
+`_worktree_facts`, are `prune_worktrees.py`), and the verify-by gate is `findings_verify.py`.
 
 Usage::
 
@@ -54,17 +53,15 @@ decision and the comment on it reads "treat as a regression".
 CLAIMING AN ISSUE. `claim` posts a `Claim:` comment and adds the `claimed` label, so a
 worktree fanning out several issues at once knows which are its own; `release` reverses
 that. Both refuse an issue another worktree already holds, `claim` also refuses `manual` and
-closed issues, and re-claiming an issue your own worktree already holds is a no-op rather
-than a second comment. `claims` lists every open claim, marking each live or stale by asking
-`findings_claim.claim_is_live` whether the claiming worktree is still doing the work; `reap`
-releases every stale one. `claim` takes every issue argument it can and refuses the rest,
-so one `manual` issue in a batch does not cost the good claims in it.
+closed issues, and re-claiming an issue your own worktree already holds is a no-op. `claims`
+lists every open claim, live or stale by `findings_claim.claim_is_live`; `reap` releases
+every stale one. `claim` takes every issue argument it can and refuses the rest, so one
+`manual` issue in a batch does not cost the good claims in it.
 
-Exit codes: 0 done; 1 gh failed (its stderr is printed); 2 bad arguments;
-3 nothing was written because the issue refuses it — the fingerprint belongs to an issue
-closed as refuted or accepted, `touch` was given a closed issue, or `claim`/`release` was
-refused (closed, `manual`, held by another worktree, not claimed, or lost a race to a
-second worktree's claim).
+Exit codes: 0 done; 1 gh failed, or `reap` refused rather than call a git read failure
+"every worktree is gone"; 2 bad arguments; 3 nothing was written because the issue refuses
+it — closed as refuted/accepted, `touch` given a closed issue, or `claim`/`release` refused
+(closed, `manual`, held by another worktree, not claimed, or lost a race to another claim).
 """
 
 import argparse
@@ -85,7 +82,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 # `scripts/docs/reference/backlog.py` reaches this code as `dev.findings` with only
 # `scripts/` on sys.path, so a bare `from findings_model import ...` would raise
 # ModuleNotFoundError under the docs-refresh cron while pytest stayed green.
-from dev.findings_claim import _worktree_facts, claim_states
+from dev.findings_claim import claim_states
 from dev.findings_gh import (
     _create_with_optional_project,
     _existing_labels,
@@ -120,6 +117,7 @@ from dev.findings_verify import (
     verify_close_comment,
     verify_finding,
 )
+from dev.prune_worktrees import _worktree_facts
 
 
 def _now() -> str:
@@ -266,13 +264,15 @@ def cmd_release(args: argparse.Namespace, tools: FindingsTools) -> int:
             refused = True
             continue
         run(plans, args.dry_run, tools)
-        print(f"#{number} released by `{args.worktree}`")
+        verb = "would be released" if args.dry_run else "released"
+        print(f"#{number} {verb} by `{args.worktree}`")
     return 3 if refused else 0
 
 
 def cmd_claims(args: argparse.Namespace, tools: FindingsTools) -> int:
     """Prints every open claim: issue, worktree, live or stale, and why."""
-    trees, dirty, merged = _worktree_facts()
+    # A git failure just overstates staleness here, which a read can afford; `reap` can't.
+    trees, dirty, merged, _ok = _worktree_facts()
     states = claim_states(load_issues("open", tools), trees, dirty, merged)
     if args.json:
         print(json.dumps([vars(s) for s in states], indent=2))
@@ -290,7 +290,11 @@ def cmd_claims(args: argparse.Namespace, tools: FindingsTools) -> int:
 
 def cmd_reap(args: argparse.Namespace, tools: FindingsTools) -> int:
     """Releases every stale claim, printing why each was judged stale."""
-    trees, dirty, merged = _worktree_facts()
+    trees, dirty, merged, ok = _worktree_facts()
+    if not ok:
+        # Must not read a git failure as "every worktree is gone" and release everything.
+        print("reap: could not read git; refusing to release anything")
+        return 1
     issues = load_issues("open", tools)
     by_number = {i["number"]: i for i in issues}
     reaped = 0
@@ -304,9 +308,11 @@ def cmd_reap(args: argparse.Namespace, tools: FindingsTools) -> int:
             reason=f"reaped: {s.reason}",
         )
         run(plans, args.dry_run, tools)
-        print(f"#{s.number} released — {s.reason}")
+        verb = "would be released" if args.dry_run else "released"
+        print(f"#{s.number} {verb} — {s.reason}")
         reaped += 1
-    print(f"reap: {reaped} stale claim(s) released")
+    verb = "would be released" if args.dry_run else "released"
+    print(f"reap: {reaped} stale claim(s) {verb}")
     return 0
 
 

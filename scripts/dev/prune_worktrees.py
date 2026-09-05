@@ -37,6 +37,7 @@ import json
 import re
 import subprocess
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -44,7 +45,8 @@ from pathlib import Path
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from lib.git import git_dirty, git_stdout
+from lib.git import git, git_dirty, git_stdout
+from lib.repo_paths import REPO
 
 REMOVABLE = "removable"
 KEEP = "keep"
@@ -348,6 +350,28 @@ def primary_checkout() -> str | None:
     """
     common_dir = _git(["rev-parse", "--path-format=absolute", "--git-common-dir"])
     return str(Path(common_dir).parent) if common_dir else None
+
+
+def _worktree_facts() -> tuple[
+    list[Worktree], Callable[[str], bool], Callable[[Worktree], bool], bool
+]:
+    """(worktrees, dirty, merged, ok): the staleness inputs, plus whether the read worked.
+
+    `ok` is False only when the git call itself failed, never merely because it found no
+    worktrees — `findings.py`'s `reap` needs that distinction to avoid releasing every claim
+    in the register on a transient git error: `git worktree list --porcelain` run with
+    `check=False` returns an empty string on failure, which `parse_worktree_list` reads as
+    zero worktrees, which makes every claim read as "no worktree — stale".
+
+    Separated so a caller replaces one attribute rather than patching three modules, and so
+    `findings.py`'s `claims` and `reap` handlers share exactly one definition of the facts.
+    """
+    repo = primary_checkout() or str(REPO)
+    result = git("worktree", "list", "--porcelain", cwd=repo, check=False)
+    if result.returncode != 0:
+        return [], is_dirty, lambda t: is_merged(repo, t.head, t.branch or ""), False
+    trees = parse_worktree_list(result.stdout)
+    return trees, is_dirty, lambda t: is_merged(repo, t.head, t.branch or ""), True
 
 
 def survey(repo: str) -> list[tuple[str, Worktree, str]]:
