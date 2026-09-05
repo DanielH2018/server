@@ -18,6 +18,12 @@ from _k8s_render import rendered_docs
 # A key name that names a credential. `crowdsecLapiKeyFile` is the correct form — a path into a
 # mounted Secret — so a `File` suffix exempts the key. That exemption is the disarm vector, and
 # test_traefik_credential_guard_rejects_inline_credential_fixtures aims its first fixture at it.
+#
+# A bare `key` is deliberately absent: it is the commonest word in a manifest (`key`,
+# `secretKey`, `matchLabels` values, every ConfigMap projection) and matching it would flag the
+# whole corpus. The cost is that `crowdsecLapiKey` — the name this guard was written for —
+# matches only because "lapikey" contains "apikey". A sibling named `bouncerKey` or `sharedKey`
+# is NOT caught. Do not "simplify" the alternation without checking that case still fires.
 _CREDENTIAL_FIELD = re.compile(
     r"password|passwd|secret|token|apikey|api[-_]?key|credential", re.I
 )
