@@ -11,6 +11,11 @@ uncommitted edits, so each session was resumed in place rather than restarted. A
 or a TTL would have expired those claims while the work was still live, handing half-finished
 issues to a second agent. Keying on the worktree gets that case right with no timer at all:
 a worktree with uncommitted changes is holding work, whatever happened to the process.
+
+`_worktree_facts` shells out for the `(trees, dirty, merged)` inputs `claim_states` and
+`findings.py`'s `claims`/`reap` handlers need; it lives here rather than in `findings.py` so
+the module that decides "is this claim live" and the module that reads the git state feeding
+that decision are the same one.
 """
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
@@ -25,7 +30,17 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from dev.findings_model import _CLAIM_RE, _RELEASE_RE, current_claim
-from dev.prune_worktrees import REMOVABLE, Worktree, classify
+from dev.prune_worktrees import (
+    REMOVABLE,
+    Worktree,
+    classify,
+    is_dirty,
+    is_merged,
+    parse_worktree_list,
+    primary_checkout,
+)
+from lib.git import git_stdout
+from lib.repo_paths import REPO
 
 
 @dataclass(frozen=True)
@@ -150,3 +165,16 @@ def _claim_age_days(issue: dict, held: str) -> int | None:
         return None
 
     return (datetime.now(UTC) - when).days
+
+
+def _worktree_facts():
+    """(worktrees, dirty, merged) read from git — the three inputs staleness needs.
+
+    Separated so a caller replaces one attribute rather than patching three modules, and so
+    `findings.py`'s `claims` and `reap` handlers share exactly one definition of the facts.
+    """
+    repo = primary_checkout() or str(REPO)
+    trees = parse_worktree_list(
+        git_stdout("worktree", "list", "--porcelain", cwd=repo, check=False)
+    )
+    return trees, is_dirty, lambda t: is_merged(repo, t.head, t.branch or "")
