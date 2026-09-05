@@ -45,7 +45,7 @@ runway curve, because that check yields a pass/fail verdict rather than a series
 textfile collector is still live (`node-exporter` DaemonSet, `--collector.textfile.directory`),
 so the socket exists — but monitor-bridge cannot fill it: it runs `runAsNonRoot` with every
 capability dropped, and the directory is `root:root 0755`. That leaves a root host cron, and
-`scripts/diagnostics/probe_lib/longhorn.py` already holds tested B2 listing (`b2_longhorn_lines`)
+`scripts/diagnostics/probe_lib/b2_api.py` already holds tested B2 listing (`b2_longhorn_lines`)
 and `scripts/diagnostics/probe_lib/b2_ledger.py` a spend ledger, so the wrapper would be thin. The trap is the number: `b2_list_files`
 sums CURRENT objects, while B2 bills stored bytes including hidden versions until lifecycle
 clears them after 7 days. `check_b2_storage` uses `b2_list_versions` for exactly that reason.
