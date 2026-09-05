@@ -13,7 +13,7 @@ from pathlib import Path
 
 import bridge.config
 import bridge.net
-import checks.host
+import checks.host_edge
 import verdicts.host
 
 _REPO = Path(__file__).resolve().parents[5]
@@ -140,7 +140,7 @@ def test_speedtest_completed_row_without_a_download_figure_pages():
 
 def test_speedtest_disabled_without_url_or_token(monkeypatch, cfg):
     cfg = replace(cfg, SPEEDTEST_URL="", SPEEDTEST_TOKEN="")
-    ok, msg = checks.host.check_speedtest(cfg)
+    ok, msg = checks.host_edge.check_speedtest(cfg)
     assert ok
     assert "disabled" in msg
 
@@ -161,15 +161,19 @@ def test_speedtest_fetch_failure_rides_the_streak_but_a_bad_row_does_not(
         raise RuntimeError("connection refused")
 
     monkeypatch.setattr(bridge.net, "_get_json", _boom)
-    assert checks.host.check_speedtest(cfg)[0]  # first failure is held by the streak
-    assert not checks.host.check_speedtest(cfg)[0]  # second pages
+    assert checks.host_edge.check_speedtest(cfg)[
+        0
+    ]  # first failure is held by the streak
+    assert not checks.host_edge.check_speedtest(cfg)[0]  # second pages
 
     monkeypatch.setattr(
         bridge.net,
         "_get_json",
         lambda *a, **k: {"data": [_st_row(download_bits=13_800_312)]},
     )
-    assert not checks.host.check_speedtest(cfg)[0]  # a bad row pages on the FIRST cycle
+    assert not checks.host_edge.check_speedtest(cfg)[
+        0
+    ]  # a bad row pages on the FIRST cycle
 
 
 def test_speedtest_requests_the_newest_row_not_the_oldest(monkeypatch, cfg):
@@ -184,7 +188,7 @@ def test_speedtest_requests_the_newest_row_not_the_oldest(monkeypatch, cfg):
         return {"data": [_st_row()]}
 
     monkeypatch.setattr(bridge.net, "_get_json", _capture)
-    checks.host.check_speedtest(cfg)
+    checks.host_edge.check_speedtest(cfg)
     assert "sort=-created_at" in seen["url"]
     assert seen["headers"]["Authorization"] == "Bearer t"
 

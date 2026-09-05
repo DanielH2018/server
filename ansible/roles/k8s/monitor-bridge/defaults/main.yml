@@ -31,6 +31,8 @@ monitor_bridge_modules:
   - checks/b2.py
   - checks/r2.py
   - checks/host.py
+  - checks/host_thermal.py
+  - checks/host_edge.py
   - checks/cluster.py
   - checks/service.py
   - checks/notify.py

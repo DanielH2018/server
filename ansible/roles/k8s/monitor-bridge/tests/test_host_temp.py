@@ -9,10 +9,10 @@ matters most: it is the only test that can fail when a future edit narrows cover
 
 from pathlib import Path
 
-import bridge.config
 import bridge.streaks
 import bridge.net
 import checks.host
+import checks.host_thermal
 import check
 import pytest
 
@@ -44,7 +44,7 @@ def _stub_prom(monkeypatch, temps, maxes=(), chip_names=(), sensor_labels=(), cr
 
 
 def test_declared_max_is_clean_below_the_ratio():
-    limits = checks.host.hwmon_temp_limits(
+    limits = checks.host_thermal.hwmon_temp_limits(
         [_temp("daniel-server", "platform_coretemp_0", "temp1", 63.0)],
         [_temp("daniel-server", "platform_coretemp_0", "temp1", 100.0)],
         *HWMON_ARGS,
@@ -52,18 +52,18 @@ def test_declared_max_is_clean_below_the_ratio():
     assert limits == [
         ("daniel-server platform_coretemp_0/temp1", 63.0, 90.0, "declared")
     ]
-    ok, msg = checks.host.hwmon_temp_verdict(limits)
+    ok, msg = checks.host_thermal.hwmon_temp_verdict(limits)
     assert ok, msg
     assert "1 by declared limit" in msg
 
 
 def test_declared_max_is_flagged_above_the_ratio():
-    limits = checks.host.hwmon_temp_limits(
+    limits = checks.host_thermal.hwmon_temp_limits(
         [_temp("daniel-server", "platform_coretemp_0", "temp1", 91.0)],
         [_temp("daniel-server", "platform_coretemp_0", "temp1", 100.0)],
         *HWMON_ARGS,
     )
-    ok, msg = checks.host.hwmon_temp_verdict(limits)
+    ok, msg = checks.host_thermal.hwmon_temp_verdict(limits)
     assert not ok
     assert "91.0C over its 90.0C declared limit" in msg
     assert msg.startswith("1 of 1 sensors over limit:"), (
@@ -73,7 +73,7 @@ def test_declared_max_is_flagged_above_the_ratio():
 
 def test_declared_crit_is_clean_below_the_ratio():
     """issue #995: a driver that publishes crit but no max must not fall to the flat ceiling."""
-    limits = checks.host.hwmon_temp_limits(
+    limits = checks.host_thermal.hwmon_temp_limits(
         [_temp("daniel-server", "coretemp_crit_only", "temp1", 60.0)],
         [],
         *HWMON_ARGS,
@@ -82,19 +82,19 @@ def test_declared_crit_is_clean_below_the_ratio():
     assert limits == [
         ("daniel-server coretemp_crit_only/temp1", 60.0, 81.0, "declared")
     ]
-    ok, msg = checks.host.hwmon_temp_verdict(limits)
+    ok, msg = checks.host_thermal.hwmon_temp_verdict(limits)
     assert ok, msg
     assert "1 by declared limit" in msg
 
 
 def test_declared_crit_is_flagged_above_the_ratio():
-    limits = checks.host.hwmon_temp_limits(
+    limits = checks.host_thermal.hwmon_temp_limits(
         [_temp("daniel-server", "coretemp_crit_only", "temp1", 88.0)],
         [],
         *HWMON_ARGS,
         crits=[_temp("daniel-server", "coretemp_crit_only", "temp1", 90.0)],
     )
-    ok, msg = checks.host.hwmon_temp_verdict(limits)
+    ok, msg = checks.host_thermal.hwmon_temp_verdict(limits)
     assert not ok
     assert "88.0C over its 81.0C declared limit" in msg
 
@@ -106,7 +106,7 @@ def test_declared_max_wins_over_crit_when_both_are_plausible():
     crit instead of max would page closer to hardware failure than the 90%-of-max this estate
     already runs on, so max must win whenever both are declared and plausible.
     """
-    limits = checks.host.hwmon_temp_limits(
+    limits = checks.host_thermal.hwmon_temp_limits(
         [_temp("daniel-server", "coretemp_dual_declared", "temp1", 76.0)],
         [_temp("daniel-server", "coretemp_dual_declared", "temp1", 85.85)],
         *HWMON_ARGS,
@@ -117,7 +117,7 @@ def test_declared_max_wins_over_crit_when_both_are_plausible():
 
 def test_the_sentinel_crit_is_treated_as_undeclared():
     """The crit-side reject half of test_the_sentinel_max_is_treated_as_undeclared."""
-    limits = checks.host.hwmon_temp_limits(
+    limits = checks.host_thermal.hwmon_temp_limits(
         [_temp("daniel-box", "coretemp_sentinel_crit", "temp1", 90.0)],
         [],
         *HWMON_ARGS,
@@ -127,7 +127,7 @@ def test_the_sentinel_crit_is_treated_as_undeclared():
         "a sentinel crit must not be read as a declared limit"
     )
     assert limits[0][2] == 85.0
-    ok, _msg = checks.host.hwmon_temp_verdict(limits)
+    ok, _msg = checks.host_thermal.hwmon_temp_verdict(limits)
     assert not ok, "the sentinel arm must still be able to go RED"
 
 
@@ -142,33 +142,33 @@ def test_k10temp_tctl_declares_neither_max_nor_crit_and_falls_back_and_says_so()
     guess, not the hardware's own rating. Whether that reading is a real thermal problem or a
     Tctl offset over real die temperature stays unanswered by this check, by design.
     """
-    limits = checks.host.hwmon_temp_limits(
+    limits = checks.host_thermal.hwmon_temp_limits(
         [_temp("daniel-box", "pci0000:00_0000:00:18_3", "temp1", 93.5)],
         [],
         *HWMON_ARGS,
         crits=[],
     )
     assert limits[0][2:] == (85.0, "fallback")
-    ok, msg = checks.host.hwmon_temp_verdict(limits)
+    ok, msg = checks.host_thermal.hwmon_temp_verdict(limits)
     assert not ok
     assert "over its 85.0C fallback limit" in msg
 
 
 def test_fallback_is_clean_below_the_ceiling():
-    limits = checks.host.hwmon_temp_limits(
+    limits = checks.host_thermal.hwmon_temp_limits(
         [_temp("daniel-pi", "thermal_thermal_zone0", "temp0", 61.2)], [], *HWMON_ARGS
     )
     assert limits[0][2] == 85.0
     assert limits[0][3] == "fallback"
-    ok, _msg = checks.host.hwmon_temp_verdict(limits)
+    ok, _msg = checks.host_thermal.hwmon_temp_verdict(limits)
     assert ok
 
 
 def test_fallback_is_flagged_above_the_ceiling():
-    limits = checks.host.hwmon_temp_limits(
+    limits = checks.host_thermal.hwmon_temp_limits(
         [_temp("daniel-pi", "thermal_thermal_zone0", "temp0", 86.0)], [], *HWMON_ARGS
     )
-    ok, msg = checks.host.hwmon_temp_verdict(limits)
+    ok, msg = checks.host_thermal.hwmon_temp_verdict(limits)
     assert not ok
     assert "daniel-pi thermal_thermal_zone0/temp0" in msg
     assert "fallback limit" in msg, (
@@ -186,29 +186,29 @@ def test_the_sentinel_max_is_treated_as_undeclared():
     """
     hot = [_temp("daniel-box", "platform_coretemp_0", "temp1", 90.0)]
     sentinel = [_temp("daniel-box", "platform_coretemp_0", "temp1", 65261.85)]
-    limits = checks.host.hwmon_temp_limits(hot, sentinel, *HWMON_ARGS)
+    limits = checks.host_thermal.hwmon_temp_limits(hot, sentinel, *HWMON_ARGS)
     assert limits[0][3] == "fallback", (
         "a sentinel max must not be read as a declared limit"
     )
     assert limits[0][2] == 85.0
-    ok, _msg = checks.host.hwmon_temp_verdict(limits)
+    ok, _msg = checks.host_thermal.hwmon_temp_verdict(limits)
     assert not ok, "the sentinel arm must still be able to go RED"
 
 
 def test_an_implausibly_low_max_is_also_rejected():
     """Bounded at both ends: a max at or below the floor would page on an idle machine."""
-    limits = checks.host.hwmon_temp_limits(
+    limits = checks.host_thermal.hwmon_temp_limits(
         [_temp("daniel-box", "thermal_thermal_zone0", "temp0", 20.0)],
         [_temp("daniel-box", "thermal_thermal_zone0", "temp0", 5.0)],
         *HWMON_ARGS,
     )
     assert limits[0][3] == "fallback"
-    ok, _msg = checks.host.hwmon_temp_verdict(limits)
+    ok, _msg = checks.host_thermal.hwmon_temp_verdict(limits)
     assert ok, "an idle sensor must not page because its declared max was nonsense"
 
 
 def test_drive_chips_are_left_to_scrutiny():
-    limits = checks.host.hwmon_temp_limits(
+    limits = checks.host_thermal.hwmon_temp_limits(
         [
             _temp("daniel-box", "nvme_nvme0", "temp1", 99.0),
             _temp("daniel-box", "platform_coretemp_0", "temp1", 40.0),
@@ -236,11 +236,11 @@ def _sensor_label(instance, chip, sensor, label):
 
 def test_a_named_sensor_reads_as_its_hardware_name():
     """`daniel-box/pci0000:00_0000:00:18_3/temp1` is the sysfs path for k10temp's Tctl."""
-    names = checks.host.hwmon_name_maps(
+    names = checks.host_thermal.hwmon_name_maps(
         [_chip_name("daniel-box", "pci0000:00_0000:00:18_3", "k10temp")],
         [_sensor_label("daniel-box", "pci0000:00_0000:00:18_3", "temp1", "Tctl")],
     )
-    limits = checks.host.hwmon_temp_limits(
+    limits = checks.host_thermal.hwmon_temp_limits(
         [_temp("daniel-box", "pci0000:00_0000:00:18_3", "temp1", 92.6)],
         [],
         *HWMON_ARGS,
@@ -256,10 +256,10 @@ def test_an_unnamed_sensor_keeps_its_sysfs_identity():
     sensor does not is the common case, not an edge one — and the raw component is what a
     Prometheus query is written against.
     """
-    names = checks.host.hwmon_name_maps(
+    names = checks.host_thermal.hwmon_name_maps(
         [_chip_name("daniel-box", "thermal_thermal_zone0", "acpitz")], []
     )
-    limits = checks.host.hwmon_temp_limits(
+    limits = checks.host_thermal.hwmon_temp_limits(
         [_temp("daniel-box", "thermal_thermal_zone0", "temp0", 20.0)],
         [],
         *HWMON_ARGS,
@@ -267,23 +267,23 @@ def test_an_unnamed_sensor_keeps_its_sysfs_identity():
     )
     assert limits[0][0] == "daniel-box acpitz/temp0"
 
-    unnamed = checks.host.hwmon_temp_limits(
+    unnamed = checks.host_thermal.hwmon_temp_limits(
         [_temp("daniel-box", "thermal_thermal_zone0", "temp0", 20.0)],
         [],
         *HWMON_ARGS,
-        checks.host.hwmon_name_maps([], []),
+        checks.host_thermal.hwmon_name_maps([], []),
     )
     assert unnamed[0][0] == "daniel-box thermal_thermal_zone0/temp0"
 
 
 def test_an_estate_wide_breach_counts_the_sensors_it_does_not_list():
     """A truncated list must say so — a dropped tail reads as a smaller fault than it is."""
-    limits = checks.host.hwmon_temp_limits(
+    limits = checks.host_thermal.hwmon_temp_limits(
         [_temp("daniel-box", "chip%d" % i, "temp0", 99.0) for i in range(8)],
         [],
         *HWMON_ARGS,
     )
-    ok, msg = checks.host.hwmon_temp_verdict(limits)
+    ok, msg = checks.host_thermal.hwmon_temp_verdict(limits)
     assert not ok
     assert msg.startswith("8 of 8 sensors over limit:")
     assert "+3 more" in msg, msg
@@ -308,7 +308,7 @@ def test_covers_every_sensor_it_does_not_deliberately_exclude():
         _temp("daniel-server", "platform_coretemp_0", "temp1", 100.0),
         _temp("daniel-server", "nvme_nvme0", "temp2", 65261.85),
     ]
-    limits = checks.host.hwmon_temp_limits(temps, maxes, *HWMON_ARGS)
+    limits = checks.host_thermal.hwmon_temp_limits(temps, maxes, *HWMON_ARGS)
     excluded = [t for t in temps if "nvme_" in t[0]["chip"]]
     assert len(limits) == len(temps) - len(excluded), (
         "every non-excluded sensor must carry a limit — an uncovered sensor reads green forever"
@@ -321,7 +321,7 @@ def test_covers_every_sensor_it_does_not_deliberately_exclude():
 
 
 def test_no_sensors_scraped_pages_rather_than_passing():
-    ok, msg = checks.host.hwmon_temp_verdict([])
+    ok, msg = checks.host_thermal.hwmon_temp_verdict([])
     assert not ok
     assert "collector blind" in msg
 
@@ -332,9 +332,8 @@ def test_a_single_spike_is_held_and_sustained_heat_pages(monkeypatch, cfg):
     _stub_prom(
         monkeypatch, [_temp("daniel-pi", "thermal_thermal_zone0", "temp0", 99.0)]
     )
-    results = [
-        checks.host.check_host_temp(cfg) for _ in range(cfg.HWMON_TEMP_CONSECUTIVE)
-    ]
+    cycles = cfg.HWMON_TEMP_CONSECUTIVE
+    results = [checks.host_thermal.check_host_temp(cfg) for _ in range(cycles)]
     assert all(ok for ok, _msg in results[:-1]), (
         "a one-cycle thermal spike must not page"
     )
@@ -357,7 +356,7 @@ def test_the_check_fetches_the_names_it_reports(monkeypatch, cfg):
         ],
     )
     for _ in range(cfg.HWMON_TEMP_CONSECUTIVE):
-        _ok, msg = checks.host.check_host_temp(cfg)
+        _ok, msg = checks.host_thermal.check_host_temp(cfg)
     assert "daniel-box k10temp/Tctl" in msg, msg
     # A single-host estate also advances the module-global coverage-shortfall streak, which
     # would otherwise make a later test's clean cycle page.
@@ -378,7 +377,7 @@ def test_the_check_fetches_the_crit_series_it_prefers(monkeypatch, cfg):
         crits=[_temp("daniel-server", "platform_coretemp_0", "temp1", 90.0)],
     )
     for _ in range(cfg.HWMON_TEMP_CONSECUTIVE):
-        _ok, msg = checks.host.check_host_temp(cfg)
+        _ok, msg = checks.host_thermal.check_host_temp(cfg)
     assert "88.0C over its 81.0C declared limit" in msg, msg
     assert "1 by declared limit, 0 by fallback" in msg, (
         "the coverage tally must count this sensor as declared, not fallback — a wiring that "
@@ -393,7 +392,7 @@ def test_a_clean_cycle_clears_the_streak(monkeypatch, cfg):
     _stub_prom(
         monkeypatch, [_temp("daniel-pi", "thermal_thermal_zone0", "temp0", 40.0)]
     )
-    ok, _msg = checks.host.check_host_temp(cfg)
+    ok, _msg = checks.host_thermal.check_host_temp(cfg)
     assert ok
     assert bridge.streaks._down_streaks["host_temp"] == 0, (
         "a clean cycle must reset the hysteresis"
@@ -468,7 +467,7 @@ def _reset():
 def test_full_coverage_is_clean(monkeypatch, cfg):
     _reset()
     _stub_prom(monkeypatch, _cool_estate(ALL_THREE))
-    ok, msg = checks.host.check_host_temp(cfg)
+    ok, msg = checks.host_thermal.check_host_temp(cfg)
     assert ok
     assert "hosts reporting" not in msg, (
         "full coverage must not carry a shortfall complaint"
@@ -480,7 +479,7 @@ def test_a_missing_host_pages_once_the_grace_expires(monkeypatch, cfg):
     _reset()
     _stub_prom(monkeypatch, _cool_estate(("daniel-server", "daniel-box")))
     results = [
-        checks.host.check_host_temp(cfg)
+        checks.host_thermal.check_host_temp(cfg)
         for _ in range(cfg.HWMON_TEMP_ORIGINS_CONSECUTIVE)
     ]
     assert not results[-1][0], "a host absent for the whole grace must page"
@@ -497,7 +496,7 @@ def test_a_short_coverage_gap_is_held(monkeypatch, cfg):
     _reset()
     _stub_prom(monkeypatch, _cool_estate(("daniel-server", "daniel-box")))
     held = [
-        checks.host.check_host_temp(cfg)
+        checks.host_thermal.check_host_temp(cfg)
         for _ in range(cfg.HWMON_TEMP_ORIGINS_CONSECUTIVE - 1)
     ]
     assert all(ok for ok, _msg in held), "a brief gap must not page"
@@ -507,9 +506,9 @@ def test_a_short_coverage_gap_is_held(monkeypatch, cfg):
 def test_full_coverage_clears_the_shortfall_streak(monkeypatch, cfg):
     _reset()
     _stub_prom(monkeypatch, _cool_estate(("daniel-server", "daniel-box")))
-    checks.host.check_host_temp(cfg)
+    checks.host_thermal.check_host_temp(cfg)
     _stub_prom(monkeypatch, _cool_estate(ALL_THREE))
-    ok, _msg = checks.host.check_host_temp(cfg)
+    ok, _msg = checks.host_thermal.check_host_temp(cfg)
     assert ok
     assert checks.host._host_origin_streaks["host_temp"] == 0, (
         "a full-coverage cycle must reset the shortfall streak"
@@ -531,7 +530,7 @@ def test_a_hot_sensor_outranks_a_coverage_shortfall(monkeypatch, cfg):
         ],
     )
     for _ in range(cfg.HWMON_TEMP_CONSECUTIVE):
-        ok, msg = checks.host.check_host_temp(cfg)
+        ok, msg = checks.host_thermal.check_host_temp(cfg)
     assert not ok
     assert "over limit" in msg, msg
     assert "hosts reporting" not in msg, (
@@ -550,7 +549,7 @@ def test_the_two_graces_are_not_compounded(monkeypatch, cfg):
     _stub_prom(monkeypatch, _cool_estate(("daniel-server", "daniel-box")))
     fired = None
     for i in range(1, cfg.HWMON_TEMP_ORIGINS_CONSECUTIVE * 3 + 1):
-        if not checks.host.check_host_temp(cfg)[0] and fired is None:
+        if not checks.host_thermal.check_host_temp(cfg)[0] and fired is None:
             fired = i
     assert fired == cfg.HWMON_TEMP_ORIGINS_CONSECUTIVE, (
         "the shortfall must page on its own Nth cycle, with no second grace stacked on it"
@@ -571,7 +570,7 @@ def test_a_host_whose_only_sensors_are_excluded_does_not_count(monkeypatch, cfg)
         + [_origin_temp("daniel-pi", "nvme_nvme0", "temp1", 40.0)],
     )
     results = [
-        checks.host.check_host_temp(cfg)
+        checks.host_thermal.check_host_temp(cfg)
         for _ in range(cfg.HWMON_TEMP_ORIGINS_CONSECUTIVE)
     ]
     assert not results[-1][0], (

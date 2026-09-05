@@ -36,7 +36,7 @@ ansible/roles/k8s/monitor-bridge/tests/test_check_loki.py 9
 ansible/roles/k8s/monitor-bridge/tests/test_check_longhorn.py 3
 ansible/roles/k8s/monitor-bridge/tests/test_check_notify.py 14
 ansible/roles/k8s/monitor-bridge/tests/test_check_parsing.py 1
-ansible/roles/k8s/monitor-bridge/tests/test_check_pi.py 5
+ansible/roles/k8s/monitor-bridge/tests/test_check_pi.py 4
 ansible/roles/k8s/monitor-bridge/tests/test_check_r2.py 7
 ansible/roles/k8s/monitor-bridge/tests/test_check_scrutiny.py 1
 ansible/roles/k8s/monitor-bridge/tests/test_check_service.py 13

@@ -60,16 +60,9 @@ from checks.cluster import (
     check_traefik_5xx,
     check_traefik_latency,
 )
-from checks.host import (
-    check_cert,
-    check_disk,
-    check_host_temp,
-    check_mem,
-    check_pi_pressure,
-    check_scrutiny,
-    check_speedtest,
-    check_ups,
-)
+from checks.host import check_cert, check_disk, check_mem
+from checks.host_thermal import check_host_temp, check_scrutiny, check_ups
+from checks.host_edge import check_pi_pressure, check_speedtest
 from checks.b2 import (
     check_b2_reachable,
     check_b2_storage,
