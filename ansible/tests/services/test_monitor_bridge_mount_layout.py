@@ -15,7 +15,7 @@ likewise unread. `ansible/tests/services/test_monitor_bridge_modules.py` is what
 ship list itself honest against the tree.
 
 This lays out a directory exactly as the RENDERED Deployment's `items:` says the kubelet will,
-from the same source files the copy task stages, then imports the entrypoint from it in a
+from the same source files the copy task stages, then imports the entrypoint (`cli`) from it in a
 fresh interpreter whose only sys.path entry is that directory. That is the pod's import graph,
 proven before the deploy. Both bridges are covered: autofix-bridge mounts the shared
 `bridge/common.py` the same way.
@@ -78,7 +78,7 @@ def _import_from(app: Path, module: str) -> subprocess.CompletedProcess:
         [
             sys.executable,
             "-c",
-            # `-c` puts '' at sys.path[0]; `python /app/check.py` puts /app there. Same shape,
+            # `-c` puts '' at sys.path[0]; `python /app/cli.py` puts /app there. Same shape,
             # stdlib intact behind it.
             f"import sys; sys.path[0] = sys.argv[1]; import {module}",
             str(app),
@@ -111,7 +111,7 @@ def test_monitor_bridge_mount_layout_imports(tmp_path):
         _script_items("monitor-bridge", "monitor-bridge-script"),
         _monitor_bridge_sources(),
     )
-    proc = _import_from(app, "check")
+    proc = _import_from(app, "cli")
     assert proc.returncode == 0, proc.stderr
 
 
@@ -135,6 +135,6 @@ def test_a_module_missing_from_the_mount_is_caught(tmp_path):
         if k != "bridge_config.py"
     ]
     _lay_out(app, items, _monitor_bridge_sources())
-    proc = _import_from(app, "check")
+    proc = _import_from(app, "cli")
     assert proc.returncode != 0
     assert "No module named 'bridge.config'" in proc.stderr, proc.stderr

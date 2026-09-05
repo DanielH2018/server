@@ -22,6 +22,9 @@ import pytest
 import bridge.net
 import checks.b2
 import check
+from _check_gate_helpers import mk
+from bridge.types import Check
+from gates import Gates
 
 
 def _reset_b2_probe(
@@ -182,31 +185,25 @@ def test_b2_reachable_reprobes_after_the_interval(monkeypatch, cfg):
 
 
 def _wire_run_once_b2(cfg, monkeypatch, b2_result, checks, b2_dependent):
-    """Drive run_once with Prometheus+Loki UP and a stubbed B2-reachability result."""
+    """Drive run_once with Prometheus+Loki UP and a stated B2-reachability result."""
     ran, pushes = [], []
     monkeypatch.setattr(
         bridge.net, "push", lambda _cfg, t, ok, m: pushes.append((t, ok, m))
     )
-    monkeypatch.setattr(check, "check_prometheus", lambda _cfg: (True, "prom ok"))
     monkeypatch.setattr(bridge.net, "prom_vector", lambda _cfg, q: [])
-    monkeypatch.setattr(check, "check_loki_reachable", lambda _cfg: (True, "loki ok"))
-    monkeypatch.setattr(check, "PROM_DEPENDENT", frozenset())
-    monkeypatch.setattr(check, "LOKI_DEPENDENT", frozenset())
-    monkeypatch.setattr(check, "STARTUP_GRACE", frozenset())
-    monkeypatch.setattr(check, "B2_DEPENDENT", frozenset(b2_dependent))
-    monkeypatch.setattr(check, "check_b2_reachable", lambda _cfg: b2_result)
-
-    def _mk(name):
-        def fn(_cfg):
-            ran.append(name)
-            return True, "%s ok" % name
-
-        return fn
-
-    monkeypatch.setattr(
-        check, "CHECKS", [check.Check(n, "tok_%s" % n, _mk(n)) for n in checks]
+    check.run_once(
+        cfg,
+        [Check(n, "tok_%s" % n, mk(ran, n)) for n in checks],
+        gates=Gates(
+            prom_dependent=frozenset(),
+            loki_dependent=frozenset(),
+            startup_grace=frozenset(),
+            b2_dependent=frozenset(b2_dependent),
+            probe_prometheus=lambda _cfg: (True, "prom ok"),
+            probe_loki=lambda _cfg: (True, "loki ok"),
+            probe_b2=lambda _cfg: b2_result,
+        ),
     )
-    check.run_once(cfg)
     return ran, pushes
 
 

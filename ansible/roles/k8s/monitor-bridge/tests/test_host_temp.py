@@ -13,8 +13,13 @@ import bridge.streaks
 import bridge.net
 import checks.host
 import checks.host_thermal
-import check
 import pytest
+import gates
+import registry
+
+# The role directory, for the manifests these tests read back. `tests/` is its sibling, so this
+# is one hop up — it used to be derived from `check.__file__`, which pointed at `files/`.
+_ROLE = Path(__file__).resolve().parents[1]
 
 
 def _temp(instance, chip, sensor, value):
@@ -401,17 +406,15 @@ def test_a_clean_cycle_clears_the_streak(monkeypatch, cfg):
 
 def test_registered_tokened_and_prom_suppressed():
     """Registration, token and suppression are one unit — any one alone is a broken monitor."""
-    names = {c.name for c in check.CHECKS}
-    env_secret = (
-        Path(check.__file__).resolve().parents[1] / "templates" / "env-secret.yaml.j2"
-    ).read_text()
+    names = {c.name for c in registry.build_checks()}
+    env_secret = (_ROLE / "templates" / "env-secret.yaml.j2").read_text()
     registered = "host_temp" in names
     assert registered, "an unregistered check never runs; it would be dead code"
     assert registered == ("KUMA_PUSH_HOST_TEMP" in env_secret), (
         "the CHECKS entry and the KUMA_PUSH_HOST_TEMP env-secret key move together — one "
         "without the other is either a check that cannot page or a token nothing reads"
     )
-    assert "host_temp" in check.PROM_DEPENDENT, (
+    assert "host_temp" in gates.PROM_DEPENDENT, (
         "it reads Prometheus and pages on an empty vector, so a Prometheus outage must "
         "suppress it — otherwise one outage pages here and on the Prometheus monitor both"
     )
@@ -420,10 +423,7 @@ def test_registered_tokened_and_prom_suppressed():
 def test_the_kuma_tile_exists_for_the_token():
     """The tile deploys from uptime-kuma and the pusher from monitor-bridge — the pair that drifts."""
     tile = (
-        Path(check.__file__).resolve().parents[2]
-        / "uptime-kuma"
-        / "templates"
-        / "static-monitors.yaml.j2"
+        _ROLE.parent / "uptime-kuma" / "templates" / "static-monitors.yaml.j2"
     ).read_text()
     assert "monitor_bridge_host_temp_push_token" in tile, (
         "a token with no Kuma tile pushes into the void"
@@ -593,16 +593,14 @@ def test_the_floor_and_its_grace_are_pinned_and_overridable(cfg):
         "the Pi drops out for longer than either amd64 node: about 20 min observed over the 7d "
         "to 2026-08-29, against 15 min of the shared grace at INTERVAL=300"
     )
-    env_secret = (
-        Path(check.__file__).resolve().parents[1] / "templates" / "env-secret.yaml.j2"
-    ).read_text()
+    env_secret = (_ROLE / "templates" / "env-secret.yaml.j2").read_text()
     for key, value in (
         ("HWMON_TEMP_ORIGINS_MIN", "3"),
         ("HWMON_TEMP_ORIGINS_CONSECUTIVE", "5"),
     ):
         assert '%s: "%s"' % (key, value) in env_secret, (
             "%s must be rendered so an operator can stand the arm down for a planned "
-            "single-host maintenance window rather than editing check.py" % key
+            "single-host maintenance window rather than editing the check" % key
         )
 
 
@@ -611,8 +609,8 @@ def test_a_dead_node_exporter_suppresses_this_check():
 
     Without this entry one root cause pages twice — Scrape Targets plus a coverage complaint.
     """
-    assert "host_temp" in check.EXPORTER_DEPENDENT["node"]
-    assert check.down_exporters([({"job": "node"}, 0)]) == {"node"}
+    assert "host_temp" in gates.EXPORTER_DEPENDENT["node"]
+    assert gates.down_exporters([({"job": "node"}, 0)]) == {"node"}
 
 
 @pytest.mark.parametrize("job", ["node", "node-pi"])
@@ -624,6 +622,6 @@ def test_every_job_carrying_hwmon_series_suppresses_this_check(job):
     only the `node` key passes with the Pi's gap wide open, which is how it was missed.
     """
     suppressed = set()
-    for down in check.down_exporters([({"job": job}, 0)]):
-        suppressed |= check.EXPORTER_DEPENDENT[down]
+    for down in gates.down_exporters([({"job": job}, 0)]):
+        suppressed |= gates.EXPORTER_DEPENDENT[down]
     assert "host_temp" in suppressed

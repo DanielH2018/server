@@ -17,6 +17,7 @@ import check
 import checks.service
 import yaml
 from verdicts.service import staging_backfill_alive
+import registry
 
 _REPO = Path(__file__).resolve().parents[5]
 _TIMER = _REPO / "ansible/roles/setup/gitops_deploy/templates/staging-backfill.timer.j2"
@@ -113,7 +114,7 @@ def test_staging_backfill_is_registered_and_can_actually_push():
     Membership alone would pass for a check registered against a token nothing can set — it
     pushes to nowhere forever, present in the code and absent from the world.
     """
-    names = {c.name for c in check.CHECKS}
+    names = {c.name for c in registry.build_checks()}
     env_secret = (
         Path(check.__file__).resolve().parents[1] / "templates" / "env-secret.yaml.j2"
     ).read_text()

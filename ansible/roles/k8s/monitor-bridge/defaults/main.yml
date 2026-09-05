@@ -18,7 +18,11 @@ monitor_bridge_k8s_image: python:3.14-alpine@sha256:c6ead215bfd31f1e433d968853b7
 # Both derivations sit in tasks/main.yml and templates/deployment.yaml.j2; the copy loop
 # below creates the subdirectories first.
 monitor_bridge_modules:
+  - cli.py
   - check.py
+  - registry.py
+  - gates.py
+  - bridge/types.py
   - bridge/config.py
   - bridge/config_host.py
   - bridge/config_service.py

@@ -2,7 +2,7 @@
 
 > **THE bridge since the Docker uninstall (2026-08-14).** Born as the daniel-server
 > sidecar, split at the Phase F drain, whole again in-cluster: this role's
-> `files/check.py` runs every check. The gitops pair reads daniel-box's own deployer
+> `files/` runs every check, entered at `files/cli.py`. The gitops pair reads daniel-box's own deployer
 > via a hostPath (the pod is pinned there); disk_prune retired with the Docker daemon;
 > pi_peers and renovate_alive dissolved into direct pushers at the host flips
 > (k8s/pi-peer-backup CronJob; renovate-notify's ExecStartPost). check.py still
@@ -12,10 +12,11 @@
 > documentation below predates the moves — Docker-era plumbing details (compose, bind
 > mounts, networks) are history (`roles/containers/archive/monitor-bridge/`).
 >
-> **`files/check.py`'s `CHECKS` list is the authority on which checks exist.** This file is
-> prose and nothing tests it: until 2026-08-16 the three retired above were still written up
+> **`files/registry.py`'s `build_checks()` is the authority on which checks exist.** This file
+> is prose and nothing tests it: until 2026-08-16 the three retired above were still written up
 > here in the present tense, as live checks with unit-tested pure functions, four weeks after
-> the functions were deleted. If a bullet below disagrees with `CHECKS`, `CHECKS` is right.
+> the functions were deleted. If a bullet below disagrees with the registry, the registry is
+> right.
 
 A tiny sidecar that turns host-cron state files into Uptime Kuma **push** monitors, so
 threshold problems actually page. See repo-root `CLAUDE.md`. (The kopia backup checks
@@ -32,8 +33,8 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
 - **Config in:** `ansible/inventory/host_vars/daniel-box.yml` → `containers_list`
 
 ## Notable
-- `files/check.py` is a **static** Python loop (config via env vars, no Jinja). Every
-  `INTERVAL` (300 s) it runs every entry in `CHECKS` plus the four reachability
+- `files/cli.py` is a **static** Python loop (config via env vars, no Jinja). Every
+  `INTERVAL` (300 s) `check.run_once` runs every registry entry plus the four reachability
   gates (prometheus, loki_reachable, b2_reachable, cluster_prometheus) and pushes
   `status=up|down&msg=…` to one Kuma push monitor each:
   - **Prometheus Reachable** (a trivial `vector(1)` instant query — the root-cause GATE for the
@@ -872,7 +873,7 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
    check also reads the existing `r2_account_id` and `r2_bucket`. Run
    `uv run python scripts/secrets_mgmt/secret_rotation.py sync` after adding both, or the prek registry hook
    fails. Then smoke-test the query for real —
-   `sudo k3s kubectl -n homelab exec deploy/monitor-bridge -- python /app/check.py --once` — the
+   `sudo k3s kubectl -n homelab exec deploy/monitor-bridge -- python /app/cli.py --once` — the
    unit tests mock the payload, so this is the first thing that proves Cloudflare accepts the
    query and that the token is scoped correctly.
 
@@ -897,31 +898,38 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
 
 ## Module layout — and the one rule that governs it
 
-`files/` holds `check.py` and three packages: `bridge/` (the plumbing every check shares),
-`checks/` (one module per domain of `check_*` bodies, mirroring the test file for that domain)
-and `verdicts/` (pure logic that takes its inputs as arguments). `check.py` is the entrypoint
-the Deployment runs and owns the `CHECKS` registry, the gate sets and the run loop — nothing
-else. `bridge/config.py` owns the env-derived config; `bridge/net.py` owns fetching and the
-Kuma push. A module imports a sibling by package (`from bridge.config import Config`,
-`from checks.b2 import check_b2_storage`), which resolves because `/app` — where the pod
-mounts the ConfigMap — is `sys.path[0]` for `python /app/check.py`, and under pytest because
-`files/` is on `pythonpath`. There is no `__init__.py`; these are namespace packages like
-every other package in this repo.
+`files/` holds four flat modules — `cli.py`, `check.py`, `registry.py`, `gates.py` — and three
+packages: `bridge/` (the plumbing every check shares), `checks/` (one module per domain of
+`check_*` bodies, mirroring the test file for that domain) and `verdicts/` (pure logic that
+takes its inputs as arguments). `cli.py` is the entrypoint the Deployment runs; it builds the
+`Config`, the registry and the `Gates`, then loops `check.run_once` over them. Everything below
+it is a leaf: `registry.py` and `gates.py` import `bridge.types` and the `checks.*` bodies and
+never each other or `check`. `bridge/config.py` owns the env-derived config; `bridge/net.py`
+owns fetching and the Kuma push. A module imports a sibling by package (`from bridge.config
+import Config`, `from checks.b2 import check_b2_storage`), which resolves because `/app` —
+where the pod mounts the ConfigMap — is `sys.path[0]` for `python /app/cli.py`, and under
+pytest because `files/` is on `pythonpath`. There is no `__init__.py`; these are namespace
+packages like every other package in this repo.
 
 **The ConfigMap keys stay flat.** A key cannot contain `/`, so `monitor_bridge_modules` lists
 paths and each ships under the path with `/` replaced by `_`: `checks/b2.py` is key
 `checks_b2.py`. The Deployment's `items:` mounts every key back at its path, and the staging
 copy, the `--from-file` line and that `items:` list all derive from the one list.
 `ansible/tests/services/test_monitor_bridge_mount_layout.py` lays a directory out exactly as
-the rendered `items:` says the kubelet will and imports `check` from it in a fresh
+the rendered `items:` says the kubelet will and imports `cli` from it in a fresh
 interpreter — the pod's import graph, proven before a deploy, which pytest's own imports from
 `files/` cannot see. Design and history of the split:
 `docs/superpowers/specs/2026-09-01-monitor-bridge-check-split-design.md` (seven slices, all
-landed 2026-09-01, `check.py` from 3,732 lines to ~510).
+landed 2026-09-01, `check.py` from 3,732 lines to ~510; slice 17b took the last 675 down to the
+run loop alone on 2026-09-05).
 
 | module | holds |
 |---|---|
-| `check.py` | the `Check`/`CheckResult` types and the `CHECKS` registry, the `*_DEPENDENT` gate sets, `STARTUP_GRACE`, `check_enabled`, `_gate`, `run_once`, the `argparse` front end and `main(argv, env) -> int` which builds the `Config` |
+| `cli.py` | the `argparse` front end and `main(argv, env, checks, gate_config) -> int`, which builds the `Config`, the registry and the `Gates`, validates the check filter and loops `run_once` |
+| `check.py` | `run_once(cfg, checks, dry_run, only, gates)` — the run loop, and nothing else |
+| `registry.py` | `build_checks(env)`, the list of every `Check` with its `KUMA_PUSH_*` token read from the environment it is handed |
+| `gates.py` | the five `*_DEPENDENT` sets, `STARTUP_GRACE`, `GATE_DEPENDENTS`, `check_enabled`, `validate_check_filter`, `expand_gates_for_cli`, `down_exporters`, `_evaluate`, `_gate`, and the frozen `Gates` seam `run_once` reads every gate fact through |
+| `bridge/types.py` | `Check`, `CheckResult`, `CheckFn` — the types `registry.py` and `check.py` share without importing one another |
 | `checks/service.py` | `check_n8n` with `_n8n_streaks`, `check_arr_queue`, `check_bazarr` with `bazarr_problems`, `check_prowlarr_indexers`, the gitops pair with `gitops_status` and `_parse_behind`, `check_etcd_restore_drill`, `check_ha_heartbeat` with `with_ha_ban` |
 | `checks/notify.py` | `check_discord` with `_discord_webhooks`, `email_backstop` with `_smtp_login_ok` and `_email_probe` |
 | `checks/logs.py` | `check_loki_ingestion`, `check_shipper_dropped`, `check_loki_reachable`, `with_log_errors` (the Loki arm `check_k8s_workloads` folds in) |
@@ -955,10 +963,18 @@ caller and the helper stay together.
 
 ## Configuration is a parameter, not a module global
 
-`main()` calls `load_config(os.environ)` ONCE and hands the frozen `Config` to `run_once`, which
-passes it to every gate, every check body (`Check.fn(cfg)`) and every `bridge.net` helper that
-reads a URL. A check body still reads `cfg.X`; `cfg` is its first parameter rather than a
-module it imported. Nothing under `files/` holds env-derived state after import.
+`cli.py`'s `main()` calls `load_config(os.environ)` ONCE and hands the frozen `Config` to
+`check.run_once`, which passes it to every gate, every check body (`Check.fn(cfg)`) and every
+`bridge.net` helper that reads a URL. A check body still reads `cfg.X`; `cfg` is its first
+parameter rather than a module it imported. Nothing under `files/` holds env-derived state
+after import.
+
+The registry and the gates took the same shape on 2026-09-05. `main()` calls
+`registry.build_checks(env)` and builds one `gates.Gates`, then hands both to `run_once` — so
+which checks exist, which of them a gate suppresses, and which body each gate probes with are
+VALUES a caller states rather than tables a test has to patch. The four reachability gates' push
+tokens are the one thing left reading `os.environ` at push time; `gates._gate` does that, and no
+module-level table sits behind them.
 
 Two consequences worth knowing before you edit a check:
 
@@ -993,9 +1009,10 @@ A function reads its globals from the module it is DEFINED in. So a test that st
 layer patches `bridge.net._get_json`, and the check that reads it does so as
 `bridge.net._get_json` at call time; a `from bridge.net import _get_json` would copy the
 function into the importer's globals at import time and the patch would change nothing that
-runs. The same holds for every runtime module: patch `check.CHECKS` because `run_once` reads it
-there, patch a verdict on the module that from-imports it. Thresholds no longer participate —
-they are fields on the `Config` a test builds and passes in, per the section above. Getting this
+runs. The same holds for every runtime module: patch a verdict on the module that from-imports
+it. Thresholds no longer participate — they are fields on the `Config` a test builds and passes
+in — and neither do the registry or the gate sets, which are the `checks=` and `gates=`
+arguments of `run_once`, per the section above. Getting this
 wrong is silent — the setattr succeeds, creating an attribute nothing reads, and the test passes
 against unpatched production code — which is why two tests enforce it:
 
@@ -1030,15 +1047,16 @@ failure. pytest cannot catch that: it imports from `files/` on disk and never re
 
 ## Editing & testing
 - Manifests: `templates/deployment.yaml.j2`, `templates/env-secret.yaml.j2` · Logic:
-  `files/check.py` plus the modules beside it (see *Module layout* above)
+  `files/cli.py` plus the modules beside it (see *Module layout* above)
 - Unit tests (parsing + every check's decision logic):
   `uv run pytest ansible/roles/k8s/monitor-bridge/tests`.
   Also run automatically by the `pytest` prek hook (`prek run pytest --all-files`).
 - **The suite is split by subject, one file per domain** — `test_check_{ha,loki,gitops,r2,
   speedtest,scrutiny,ups,pi,longhorn,etcd_drill,cadvisor_floor,b2_dashboard}.py` beside
-  `test_check_{gates,gates_exporters,streaks,host,service,notify,parsing}.py`. Put a new test
-  with the domain it exercises rather than in whichever file is open.
-- **A shared test helper goes in `conftest.py`, never in a new module beside `check.py`.**
+  `test_check_{gates,gate_dependents,k8s_workload_gates,origin_pinning,gates_exporters,streaks,
+  host,service,notify,parsing}.py`. Put a new test with the domain it exercises rather than in
+  whichever file is open.
+- **A shared test helper goes under `tests/`, never in a new module beside `cli.py`.**
   `_runtime_modules()` in `ansible/tests/services/test_monitor_bridge_modules.py` treats every
   `.py` in `files/` as production code, so a `_fixtures.py` dropped there either fails that guard
   or — if someone adds it to `monitor_bridge_modules` to make the failure go away — ships test
@@ -1046,14 +1064,17 @@ failure. pytest cannot catch that: it imports from `files/` on disk and never re
   of it, is where the `seq` fixture lives instead. Share it as a **fixture**, not as
   `from conftest import ...` — that import resolves to whichever `conftest.py` sys.path reached
   first once the whole repo suite runs, so it passes on this directory alone and fails under a
-  bare `uv run pytest`.
+  bare `uv run pytest`. A helper that takes arguments and returns a value reads badly as a
+  fixture factory, so those go in an underscore-prefixed module in `tests/` instead —
+  `_check_gate_helpers.py`, which the four gate suites import the `run_once` drivers from. Its
+  basename has to be unique repo-wide, which is exactly what `conftest` is not.
 - Smoke test one pass:
-  `sudo k3s kubectl -n homelab exec deploy/monitor-bridge -- python /app/check.py --once`
+  `sudo k3s kubectl -n homelab exec deploy/monitor-bridge -- python /app/cli.py --once`
   (the readonly SA plain `kubectl` uses holds no exec verb). Add `--dry-run` to evaluate and
   print every check while pushing nothing, so a hand-run cycle cannot overwrite a live monitor's
   state; `--check <name>` (repeatable) narrows it to one check, validated exactly like
   `CHECKS_ONLY` — including the refusal to enable a gated check without its gate. The
-  Deployment's own command is `python /app/check.py` with no arguments, which is unchanged.
+  Deployment's own command is `python /app/cli.py` with no arguments.
 - Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "monitor-bridge"`
 
 ## Traps

@@ -1,6 +1,6 @@
-"""check.py's command line, and the config faults main() reports instead of raising at import.
+"""cli.py's command line, and the config faults main() reports instead of raising at import.
 
-The pod runs `python /app/check.py` with no arguments, so the no-argument behaviour is the
+The pod runs `python /app/cli.py` with no arguments, so the no-argument behaviour is the
 contract these tests exist to pin: the CLI may add options, it may not change what happens
 without them.
 """
@@ -14,21 +14,31 @@ import pytest
 import bridge.common
 from bridge.config import load_config
 import bridge.net
-import check
+import cli
+from _check_gate_helpers import mk
+from bridge.types import Check
+from gates import Gates
 
 
-def _silence(monkeypatch, pushes, ran):
-    """Stub the transport and the registry so main() runs one cycle without touching the world."""
+def _silence(monkeypatch, pushes, ran, names=("disk",), probe_prometheus=None):
+    """Stub the transport and STATE the registry, so main() runs one cycle touching nothing live.
+
+    Returns the `checks=` / `gate_config=` keyword arguments to hand `cli.main`, which is how a
+    test says which checks exist without mutating a module.
+
+    Args:
+      monkeypatch: The fixture, for the two transport stubs that are not yet parameters.
+      pushes: Collects every (token, ok, msg) the cycle would have pushed.
+      ran: Collects the name of every check body that ran.
+      names: The registry to run — one `Check` per name, each recording into `ran`.
+      probe_prometheus: A replacement Prometheus gate body. Only
+        `test_check_flag_unions_in_the_gate_a_named_check_depends_on` passes one, to watch that
+        gate actually run; the default reports the gate up without recording.
+    """
     monkeypatch.setattr(
         bridge.net, "push", lambda _cfg, t, ok, m: pushes.append((t, ok, m))
     )
     monkeypatch.setattr(bridge.common, "touch_heartbeat", lambda path: None)
-    monkeypatch.setattr(check, "check_prometheus", lambda _cfg: (True, "prom ok"))
-    monkeypatch.setattr(check, "check_loki_reachable", lambda _cfg: (True, "loki ok"))
-    monkeypatch.setattr(check, "check_b2_reachable", lambda _cfg: (True, "b2 ok"))
-    monkeypatch.setattr(
-        check, "check_cluster_prometheus", lambda _cfg: (True, "cluster ok")
-    )
     monkeypatch.setattr(bridge.net, "prom_vector", lambda _cfg, *a, **k: [])
 
     def _mk(name):
@@ -38,24 +48,32 @@ def _silence(monkeypatch, pushes, ran):
 
         return fn
 
-    monkeypatch.setattr(check, "CHECKS", [check.Check("disk", "tok_disk", _mk("disk"))])
+    return {
+        "checks": [Check(n, "tok_%s" % n, _mk(n)) for n in names],
+        "gate_config": Gates(
+            probe_prometheus=probe_prometheus or (lambda _cfg: (True, "prom ok")),
+            probe_loki=lambda _cfg: (True, "loki ok"),
+            probe_b2=lambda _cfg: (True, "b2 ok"),
+            probe_cluster=lambda _cfg: (True, "cluster ok"),
+        ),
+    }
 
 
 def test_no_arguments_means_loop_forever_and_push(monkeypatch, cfg):
     """The pod's own invocation: --once is off, --dry-run is off, so it loops and pushes.
 
-    The Deployment runs `python /app/check.py` with no arguments, so "keeps looping" is the one
+    The Deployment runs `python /app/cli.py` with no arguments, so "keeps looping" is the one
     behaviour the CLI may not change. Asserting the argparse defaults alone would pass even if
     main() returned after the first cycle, so this drives main() into the sleep and stops it
     there.
     """
-    args = check.build_parser().parse_args([])
+    args = cli.build_parser().parse_args([])
     assert args.once is False
     assert args.dry_run is False
     assert args.checks == []
 
     pushes, ran = [], []
-    _silence(monkeypatch, pushes, ran)
+    wired = _silence(monkeypatch, pushes, ran)
 
     class _Slept(Exception):
         pass
@@ -64,20 +82,20 @@ def test_no_arguments_means_loop_forever_and_push(monkeypatch, cfg):
         assert seconds == cfg.INTERVAL
         raise _Slept
 
-    monkeypatch.setattr(check.time, "sleep", _sleep)
+    monkeypatch.setattr(cli.time, "sleep", _sleep)
     with pytest.raises(_Slept):
-        check.main([])
+        cli.main([], **wired)
     assert ran == ["disk"]
     assert ("tok_disk", True, "disk ok") in pushes
 
 
 def test_once_runs_exactly_one_cycle_and_returns_zero(monkeypatch):
     pushes, ran = [], []
-    _silence(monkeypatch, pushes, ran)
+    wired = _silence(monkeypatch, pushes, ran)
     monkeypatch.setattr(
-        check.time, "sleep", lambda s: pytest.fail("--once must not sleep")
+        cli.time, "sleep", lambda s: pytest.fail("--once must not sleep")
     )
-    assert check.main(["--once"]) == 0
+    assert cli.main(["--once"], **wired) == 0
     assert ran == ["disk"]
     assert ("tok_disk", True, "disk ok") in pushes
 
@@ -89,42 +107,24 @@ def test_dry_run_evaluates_every_check_and_pushes_nothing(monkeypatch):
     terminal, which is exactly what the flag exists to make safe.
     """
     pushes, ran = [], []
-    _silence(monkeypatch, pushes, ran)
-    assert check.main(["--once", "--dry-run"]) == 0
+    wired = _silence(monkeypatch, pushes, ran)
+    assert cli.main(["--once", "--dry-run"], **wired) == 0
     assert ran == ["disk"]
     assert pushes == []
 
 
 def test_check_flag_is_repeatable_and_filters_like_checks_only(monkeypatch, cfg):
     pushes, ran = [], []
-    _silence(monkeypatch, pushes, ran)
-
-    def _mk(name):
-        def fn(_cfg):
-            ran.append(name)
-            return True, "%s ok" % name
-
-        return fn
-
-    monkeypatch.setattr(
-        check,
-        "CHECKS",
-        [
-            check.Check("disk", "tok_disk", _mk("disk")),
-            check.Check("memory", "tok_memory", _mk("memory")),
-            # The unnamed third entry is what makes this test discriminating. With only the two
-            # named checks registered, a --check that was parsed and then never threaded into
-            # run_once() produces exactly the same `ran` list, because an empty CHECKS_ONLY
-            # enables everything.
-            check.Check("host_temp", "tok_temp", _mk("host_temp")),
-        ],
-    )
+    # The unnamed third entry is what makes this test discriminating. With only the two named
+    # checks registered, a --check that was parsed and then never threaded into run_once()
+    # produces exactly the same `ran` list, because an empty CHECKS_ONLY enables everything.
+    wired = _silence(monkeypatch, pushes, ran, names=("disk", "memory", "host_temp"))
     cfg = replace(cfg, CHECKS_ONLY=frozenset(), CHECKS_SKIP=frozenset())
     # No need to also name `prometheus`: disk and memory are PROM_DEPENDENT, and
     # expand_gates_for_cli unions their gate in automatically (see the dedicated test below for
     # the regression this guards against).
     argv = ["--once", "--dry-run", "--check", "disk", "--check", "memory"]
-    assert check.main(argv) == 0
+    assert cli.main(argv, **wired) == 0
     assert sorted(ran) == ["disk", "memory"]
     assert "host_temp" not in ran
 
@@ -139,25 +139,14 @@ def test_check_flag_unions_in_the_gate_a_named_check_depends_on(monkeypatch, cfg
     CHECKS_ONLY below, which stays strict.
     """
     pushes, ran = [], []
-    _silence(monkeypatch, pushes, ran)
-
-    def _mk(name):
-        def fn(_cfg):
-            ran.append(name)
-            return True, "%s ok" % name
-
-        return fn
-
-    monkeypatch.setattr(check, "check_prometheus", _mk("prometheus"))
-    monkeypatch.setattr(
-        check,
-        "CHECKS",
-        [
-            check.Check("disk", "tok_disk", _mk("disk")),
-            check.Check("memory", "tok_memory", _mk("memory")),
-        ],
+    wired = _silence(
+        monkeypatch,
+        pushes,
+        ran,
+        names=("disk", "memory"),
+        probe_prometheus=mk(ran, "prometheus"),
     )
-    assert check.main(["--once", "--dry-run", "--check", "disk"]) == 0
+    assert cli.main(["--once", "--dry-run", "--check", "disk"], **wired) == 0
     assert sorted(ran) == ["disk", "prometheus"]
     assert "memory" not in ran
 
@@ -172,20 +161,15 @@ def test_checks_only_env_keeps_the_strict_gate_contract(monkeypatch):
     where `load_config` runs — narrowing a Config the test built would not reach it.
     """
     pushes, ran = [], []
-    _silence(monkeypatch, pushes, ran)
-    monkeypatch.setattr(
-        check,
-        "CHECKS",
-        [check.Check("disk", "tok_disk", lambda _cfg: (True, "disk ok"))],
-    )
-    assert check.main(["--once"], env={"CHECKS_ONLY": "disk"}) == 2
+    wired = _silence(monkeypatch, pushes, ran)
+    assert cli.main(["--once"], env={"CHECKS_ONLY": "disk"}, **wired) == 2
     assert ran == []
 
 
 def test_an_unknown_check_name_exits_two_without_running_anything(monkeypatch):
     pushes, ran = [], []
-    _silence(monkeypatch, pushes, ran)
-    assert check.main(["--once", "--check", "no_such_check"]) == 2
+    wired = _silence(monkeypatch, pushes, ran)
+    assert cli.main(["--once", "--check", "no_such_check"], **wired) == 2
     assert ran == []
 
 
@@ -196,8 +180,8 @@ def test_a_gate_disabled_under_its_dependents_exits_two(monkeypatch):
     is refused at startup rather than discovered during an outage.
     """
     pushes, ran = [], []
-    _silence(monkeypatch, pushes, ran)
-    assert check.main(["--once", "--check", "loki_ingestion"]) == 2
+    wired = _silence(monkeypatch, pushes, ran)
+    assert cli.main(["--once", "--check", "loki_ingestion"], **wired) == 2
     assert ran == []
 
 
@@ -246,11 +230,11 @@ def test_a_malformed_http_timeout_reaches_the_same_report(monkeypatch):
 
 def test_main_reports_config_problems_and_exits_two(monkeypatch):
     pushes, ran = [], []
-    _silence(monkeypatch, pushes, ran)
+    wired = _silence(monkeypatch, pushes, ran)
     logged = []
     monkeypatch.setattr(
         bridge.common, "log", lambda *a: logged.append(" ".join(map(str, a)))
     )
-    assert check.main(["--once"], env={"DISK_MAX_PCT": "ninety"}) == 2
+    assert cli.main(["--once"], env={"DISK_MAX_PCT": "ninety"}, **wired) == 2
     assert ran == []
     assert any("DISK_MAX_PCT" in line for line in logged)

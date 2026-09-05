@@ -41,7 +41,7 @@ from _helpers import (
 ROLE = REPO / "ansible" / "roles" / "k8s" / "monitor-bridge"
 FILES = ROLE / "files"
 TESTS = ROLE / "tests"
-ENTRYPOINT = "check.py"
+ENTRYPOINT = "cli.py"
 
 
 def _ship_list():
@@ -61,7 +61,7 @@ def test_ship_list_matches_the_runtime_modules_on_disk():
 
 
 def test_ship_list_carries_the_entrypoint():
-    """The Deployment runs `python /app/check.py`; shipping the rest without it deploys nothing."""
+    """The Deployment runs `python /app/cli.py`; shipping the rest without it deploys nothing."""
     assert ENTRYPOINT in _ship_list()
 
 
@@ -71,8 +71,8 @@ def test_ship_list_excludes_the_test_suite():
     assert not (shipped & tests)
 
 
-def test_every_module_check_py_imports_is_shipped():
-    """The direct check: whatever check.py imports from its own directory must travel with it.
+def test_every_module_the_entrypoint_imports_is_shipped():
+    """The direct check: whatever cli.py imports from its own directory must travel with it.
 
     Set equality above already implies this today. It is asserted separately because it is the
     property that actually breaks the pod, and it keeps holding if the runtime/test split above
@@ -83,7 +83,7 @@ def test_every_module_check_py_imports_is_shipped():
     tree = ast.parse((FILES / ENTRYPOINT).read_text())
     missing = imported_module_ids(tree, local) - shipped
     assert not missing, (
-        f"check.py imports {sorted(missing)}, absent from monitor_bridge_modules"
+        f"{ENTRYPOINT} imports {sorted(missing)}, absent from monitor_bridge_modules"
     )
 
 
@@ -202,11 +202,17 @@ def _unbound_patches(pairs, sources):
     )
 
 
-def test_the_patch_census_spans_more_than_the_entrypoint():
-    # Without this the assertion below passes vacuously if the AST walk stops matching, or if
-    # the suite quietly went back to patching everything on `check`.
+def test_the_patch_census_spans_more_than_one_module():
+    # Without this the assertion below passes vacuously if the AST walk stops matching.
+    #
+    # It named `check` until 2026-09-05, when the registry moved to registry.py and the gate
+    # sets and probes became the `Gates` value run_once is handed. Nothing patches the run loop
+    # any more — which is the point of that seam, not a lapsed census — so the pair that keeps
+    # this honest is `bridge.common` and `bridge.net`, the two the suite still stubs. Repoint it
+    # again rather than deleting it when the next module gets its seam.
     pairs = _patched_pairs()
-    assert "check" in pairs and len(pairs) >= 2, sorted(pairs)
+    assert {"bridge.common", "bridge.net"} <= pairs.keys(), sorted(pairs)
+    assert len(pairs) >= 2, sorted(pairs)
 
 
 def test_every_patched_name_is_bound_in_the_module_it_is_patched_on():

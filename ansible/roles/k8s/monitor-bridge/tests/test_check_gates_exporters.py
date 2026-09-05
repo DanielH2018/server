@@ -18,6 +18,11 @@ import bridge.config
 import bridge.net
 import checks.cluster
 import check
+import gates
+import registry
+from _check_gate_helpers import mk
+from bridge.types import Check
+from gates import Gates
 
 _REPO = Path(__file__).resolve().parents[5]
 
@@ -63,16 +68,16 @@ _REPO = Path(__file__).resolve().parents[5]
     ],
 )
 def test_down_exporters(up, expected):
-    assert check.down_exporters(up) == expected
+    assert gates.down_exporters(up) == expected
 
 
 def test_exporter_dependent_values_are_real_checks():
     # Guard (mirrors PROM_DEPENDENT): every suppressed dependent is a real check name, so the
     # exporter gate can't silently drift, and every dependent is also prom-dependent.
-    names = {c.name for c in check.CHECKS}
-    for deps in check.EXPORTER_DEPENDENT.values():
+    names = {c.name for c in registry.build_checks()}
+    for deps in gates.EXPORTER_DEPENDENT.values():
         assert deps <= names
-        assert deps <= check.PROM_DEPENDENT
+        assert deps <= gates.PROM_DEPENDENT
 
 
 # ── EXPORTER_DEPENDENT's KEYS, the axis the test above cannot cover ─────────────────────────
@@ -132,7 +137,7 @@ def test_every_node_exporter_job_is_mapped_in_exporter_dependent():
     HWMON_TEMP_ORIGINS_MIN. The map is keyed by Prometheus `job`, so an unmapped job means one root
     cause pages twice — Scrape Targets plus a coverage complaint naming the same host.
     """
-    unmapped = _node_exporter_jobs() - set(check.EXPORTER_DEPENDENT)
+    unmapped = _node_exporter_jobs() - set(gates.EXPORTER_DEPENDENT)
     assert not unmapped, (
         f"node-exporter scrape job(s) {sorted(unmapped)} have no EXPORTER_DEPENDENT entry, so a "
         "dead exporter there suppresses nothing. Decide which checks that job's hosts feed and add "
@@ -151,13 +156,13 @@ def test_a_job_whose_origins_are_all_excluded_suppresses_no_host_metric_check(cf
     excluded = re.compile(cfg.HOST_METRIC_ORIGIN_EXCLUDE)
     checked = 0
     for name, block in _scrape_job_blocks(_PROM_SCRAPE_CONFIG.read_text()):
-        if name not in check.EXPORTER_DEPENDENT:
+        if name not in gates.EXPORTER_DEPENDENT:
             continue
         origins = re.findall(r"^\s+origin:\s*(\S+)", block, flags=re.M)
         if not origins or not all(excluded.fullmatch(o) for o in origins):
             continue
         checked += 1
-        leaked = check.EXPORTER_DEPENDENT[name] & {"disk", "memory"}
+        leaked = gates.EXPORTER_DEPENDENT[name] & {"disk", "memory"}
         assert not leaked, (
             f"job {name!r} declares only origins excluded by HOST_METRIC_ORIGIN_EXCLUDE "
             f"({cfg.HOST_METRIC_ORIGIN_EXCLUDE!r}), so check_disk and check_mem never read them "
@@ -167,29 +172,28 @@ def test_a_job_whose_origins_are_all_excluded_suppresses_no_host_metric_check(cf
 
 
 def _wire_run_once_prom_up(cfg, monkeypatch, up_vector, checks, prom_dependent):
-    """Drive run_once with Prometheus UP and a stubbed `up` vector; capture what ran + pushed."""
+    """Drive run_once with Prometheus UP and a stated `up` vector; capture what ran + pushed.
+
+    The production EXPORTER_DEPENDENT map is deliberately left in place — this suite is about
+    which jobs it suppresses, so stating a sentinel map would test the driver rather than the
+    table.
+    """
     ran, pushes = [], []
     monkeypatch.setattr(
         bridge.net, "push", lambda _cfg, t, ok, m: pushes.append((t, ok, m))
     )
-    monkeypatch.setattr(check, "check_prometheus", lambda _cfg: (True, "prom ok"))
     monkeypatch.setattr(
         bridge.net, "prom_vector", lambda _cfg, q: up_vector if q == "up" else []
     )
-    monkeypatch.setattr(check, "PROM_DEPENDENT", frozenset(prom_dependent))
-    monkeypatch.setattr(check, "check_loki_reachable", lambda _cfg: (True, "loki ok"))
-
-    def _mk(name):
-        def fn(_cfg):
-            ran.append(name)
-            return True, "%s ok" % name
-
-        return fn
-
-    monkeypatch.setattr(
-        check, "CHECKS", [check.Check(n, "tok_%s" % n, _mk(n)) for n in checks]
+    check.run_once(
+        cfg,
+        [Check(n, "tok_%s" % n, mk(ran, n)) for n in checks],
+        gates=Gates(
+            prom_dependent=frozenset(prom_dependent),
+            probe_prometheus=lambda _cfg: (True, "prom ok"),
+            probe_loki=lambda _cfg: (True, "loki ok"),
+        ),
     )
-    check.run_once(cfg)
     return ran, pushes
 
 
@@ -328,18 +332,14 @@ def test_run_once_up_probe_failure_does_not_suppress(monkeypatch, cfg):
     monkeypatch.setattr(
         bridge.net, "push", lambda _cfg, t, ok, m: pushes.append((t, ok, m))
     )
-    monkeypatch.setattr(check, "check_prometheus", lambda _cfg: (True, "prom ok"))
     monkeypatch.setattr(bridge.net, "prom_vector", boom)
-    monkeypatch.setattr(check, "PROM_DEPENDENT", frozenset({"disk"}))
-    monkeypatch.setattr(check, "check_loki_reachable", lambda _cfg: (True, "loki ok"))
-
-    def _mk(name):
-        def fn(_cfg):
-            ran.append(name)
-            return True, "%s ok" % name
-
-        return fn
-
-    monkeypatch.setattr(check, "CHECKS", [check.Check("disk", "tok_disk", _mk("disk"))])
-    check.run_once(cfg)
+    check.run_once(
+        cfg,
+        [Check("disk", "tok_disk", mk(ran, "disk"))],
+        gates=Gates(
+            prom_dependent=frozenset({"disk"}),
+            probe_prometheus=lambda _cfg: (True, "prom ok"),
+            probe_loki=lambda _cfg: (True, "loki ok"),
+        ),
+    )
     assert "disk" in ran  # not suppressed

@@ -11,7 +11,8 @@ from dataclasses import replace
 import bridge.config
 import bridge.net
 import checks.b2
-import check
+import gates
+import registry
 
 
 def test_sum_versions_counts_every_version_including_hidden():
@@ -88,8 +89,8 @@ def test_storage_disabled_without_credentials(monkeypatch, cfg):
 def test_storage_is_gated_by_b2_reachable():
     """A transaction cap fails both this and b2_reachable; one root cause must not light two
     monitors, which is precisely what the B2 gate is for."""
-    assert "b2_storage" in check.B2_DEPENDENT
-    assert "b2_storage" in {c.name for c in check.CHECKS}
+    assert "b2_storage" in gates.B2_DEPENDENT
+    assert "b2_storage" in {c.name for c in registry.build_checks()}
 
 
 # ── the pagination cursor ─────────────────────────────────────────────────────────────────────

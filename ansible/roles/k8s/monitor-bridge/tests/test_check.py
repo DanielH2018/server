@@ -18,6 +18,8 @@ import bridge.streaks
 import bridge.net
 import checks.storage
 import check
+import gates
+import registry
 
 
 # ── loop heartbeat (container healthcheck reads this file's mtime) ─────────────
@@ -51,14 +53,25 @@ def test_checks_and_env_secret_push_tokens_agree():
     # Docker uninstall (2026-08-14) — the remnant compose this used to partition
     # against is archived.
 
-    # Matched as a bare quoted literal, NOT as `_env("...")`: the token reaches _env() through
-    # _gate() for the three reachability gates, and a scanner keyed to one call shape stops
-    # seeing a token the moment it moves one call outward — it reads green while checking
-    # nothing. Shape-independent is also exact here: every quoted KUMA_PUSH_* in check.py is a
-    # token this file reads.
-    in_code = set(
-        re.findall(r'"(KUMA_PUSH_[A-Z0-9_]+)"', _read_sibling("../files/check.py"))
-    )
+    # Matched as a bare quoted literal, NOT as a `tok("...")` call: the four reachability-gate
+    # tokens reach _env() through _gate() rather than through the registry's helper, and a
+    # scanner keyed to one call shape stops seeing a token the moment it moves one call outward —
+    # it reads green while checking nothing. Shape-independent is also exact here: every quoted
+    # KUMA_PUSH_* under files/ is a token the bridge reads.
+    #
+    # Scanned across EVERY runtime module rather than one file. The tokens live in two of them
+    # since the 17b split — the registry's in registry.py, the four gates' in check.py's
+    # run_once — and a single-file scan would have gone quiet for the larger half the moment the
+    # list moved. The tree is the census rather than the ship list because
+    # ansible/tests/services/test_monitor_bridge_modules.py already pins the two to be equal.
+    files = Path(__file__).resolve().parent.parent / "files"
+    in_code = set()
+    for module in sorted(files.rglob("*.py")):
+        in_code |= set(re.findall(r'"(KUMA_PUSH_[A-Z0-9_]+)"', module.read_text()))
+    # Non-vacuity, by name rather than by count: a scan that stopped finding the registry would
+    # otherwise compare an empty set against an empty set the day env-secret.yaml.j2 was emptied
+    # too, and the census has to name a member of EACH of the two modules that carry tokens.
+    assert {"KUMA_PUSH_DISK", "KUMA_PUSH_PROMETHEUS"} <= in_code, sorted(in_code)
     in_twin = set(
         re.findall(
             r"^\s*(KUMA_PUSH_[A-Z0-9_]+):",
@@ -101,12 +114,12 @@ SUBSET_ONLY = frozenset({"gitops_alive", "gitops_status"})
 
 
 def test_check_enabled_only_and_skip_semantics():
-    assert check.check_enabled("disk", frozenset(), frozenset())
-    assert check.check_enabled("gitops_alive", SUBSET_ONLY, frozenset())
-    assert not check.check_enabled("disk", SUBSET_ONLY, frozenset())
-    assert not check.check_enabled("disk", frozenset(), frozenset({"disk"}))
+    assert gates.check_enabled("disk", frozenset(), frozenset())
+    assert gates.check_enabled("gitops_alive", SUBSET_ONLY, frozenset())
+    assert not gates.check_enabled("disk", SUBSET_ONLY, frozenset())
+    assert not gates.check_enabled("disk", frozenset(), frozenset({"disk"}))
     # skip wins even against an explicit only-listing
-    assert not check.check_enabled("disk", frozenset({"disk"}), frozenset({"disk"}))
+    assert not gates.check_enabled("disk", frozenset({"disk"}), frozenset({"disk"}))
 
 
 def test_name_set_parses_csv_with_spaces():
@@ -120,8 +133,8 @@ def test_name_set_parses_csv_with_spaces():
 
 
 def test_validate_rejects_unknown_names():
-    problems = check.validate_check_filter(
-        frozenset({"no_such_check"}), frozenset({"also_bogus"}), check.CHECKS
+    problems = gates.validate_check_filter(
+        frozenset({"no_such_check"}), frozenset({"also_bogus"}), registry.build_checks()
     )
     assert any("no_such_check" in p for p in problems)
     assert any("also_bogus" in p for p in problems)
@@ -130,8 +143,8 @@ def test_validate_rejects_unknown_names():
 def test_validate_rejects_enabled_dependent_with_disabled_gate():
     # Skipping the prometheus gate while its dependents still run would reintroduce the
     # one-outage-N-page storm the gate exists to prevent.
-    problems = check.validate_check_filter(
-        frozenset(), frozenset({"prometheus"}), check.CHECKS
+    problems = gates.validate_check_filter(
+        frozenset(), frozenset({"prometheus"}), registry.build_checks()
     )
     assert len(problems) == 1
     assert "gate prometheus is disabled" in problems[0]
@@ -139,13 +152,19 @@ def test_validate_rejects_enabled_dependent_with_disabled_gate():
 
 def test_validate_accepts_only_and_skip_shapes():
     # Both filter directions of a gate-free subset must validate clean.
-    assert check.validate_check_filter(SUBSET_ONLY, frozenset(), check.CHECKS) == []
-    assert check.validate_check_filter(frozenset(), SUBSET_ONLY, check.CHECKS) == []
+    assert (
+        gates.validate_check_filter(SUBSET_ONLY, frozenset(), registry.build_checks())
+        == []
+    )
+    assert (
+        gates.validate_check_filter(frozenset(), SUBSET_ONLY, registry.build_checks())
+        == []
+    )
 
 
 def test_subset_names_are_real_checks():
     # Guard (mirrors the PROM_DEPENDENT guard): the subset must track CHECKS renames.
-    names = {c.name for c in check.CHECKS}
+    names = {c.name for c in registry.build_checks()}
     assert SUBSET_ONLY <= names
 
 
@@ -154,8 +173,11 @@ def test_run_once_with_only_filter_touches_no_gate(monkeypatch, cfg):
     # gate probe, no metric check, no push for anything else.
     cfg = replace(cfg, CHECKS_ONLY=SUBSET_ONLY, CHECKS_SKIP=frozenset())
     evaluated = []
+    # The one spy this file keeps: `_evaluate` is the single funnel every gate and every check
+    # body goes through, so recording there is what proves NOTHING outside the filter was
+    # evaluated. Stating a registry would only show which of the checks handed in ran.
     monkeypatch.setattr(
-        check,
+        gates,
         "_evaluate",
         lambda _cfg, name, fn: (evaluated.append(name), (True, "ok"))[1],
     )
@@ -163,7 +185,7 @@ def test_run_once_with_only_filter_touches_no_gate(monkeypatch, cfg):
     monkeypatch.setattr(
         bridge.net, "push", lambda _cfg, token, ok, msg: pushed.append(msg)
     )
-    check.run_once(cfg)
+    check.run_once(cfg, registry.build_checks())
     assert set(evaluated) == SUBSET_ONLY
     assert len(pushed) == len(SUBSET_ONLY)
 
@@ -309,11 +331,11 @@ def test_pvc_fullness_is_gated_by_the_cluster_prometheus():
     # It reads CLUSTER_PROM_URL, so the gate watching its source is cluster_prometheus.
     # Membership in PROM_DEPENDENT would gate it on an instance it does not query (mirrors the
     # cluster_targets guard in test_check_gates.py).
-    assert "pvc_fullness" in check.CLUSTER_DEPENDENT
-    assert "pvc_fullness" not in check.PROM_DEPENDENT
+    assert "pvc_fullness" in gates.CLUSTER_DEPENDENT
+    assert "pvc_fullness" not in gates.PROM_DEPENDENT
     # A job-keyed suppression would turn the claim-count floor green on exactly the partial
     # kubelet outage it exists to catch — those claims are scraped under two jobs.
-    for deps in check.EXPORTER_DEPENDENT.values():
+    for deps in gates.EXPORTER_DEPENDENT.values():
         assert "pvc_fullness" not in deps
 
 
