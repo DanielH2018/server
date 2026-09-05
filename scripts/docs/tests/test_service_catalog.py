@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
-"""Tests for scripts/docs/service_catalog.py.
+"""Tests for scripts/docs/service_catalog.py and the catalog_* leaves it assembles.
 
-Entirely fixture-driven — synthetic host_vars/roles under tmp_path, never the real
-inventory (which changes; see scripts/deploy_tools/tests/test_deploy_tags.py's REAL-inventory tests for
-the pattern this deliberately does NOT follow, since the catalog's job is deriving
-facts, not guarding a fixed tag set).
-
+Entirely fixture-driven — synthetic host_vars/roles under tmp_path, never the real inventory
+(which changes; see scripts/deploy_tools/tests/test_deploy_tags.py's REAL-inventory tests for the
+pattern this deliberately does NOT follow — the catalog derives facts rather than guarding a set).
 Run: uv run pytest scripts/docs/tests/test_service_catalog.py
 """
 
@@ -14,6 +12,10 @@ from __future__ import annotations
 import textwrap
 
 import service_catalog
+from catalog_backup import backup_tier
+from catalog_facts import route_for
+from catalog_model import ServiceRow
+from catalog_render import render_html, render_markdown
 
 
 def _write(path, content):
@@ -112,9 +114,11 @@ def test_k8s_route_uses_hostname_default_name_when_ingressroute_exists(tmp_path)
     paths = _make_repo(tmp_path)
     role = paths["k8s_roles"] / "jellyfin" / "templates"
     _write(role / "ingressroute.yaml.j2", "{{ ingressroute(...) }}\n")
-    rows = service_catalog.build_rows(**paths)
-    row = next(r for r in rows if r.name == "jellyfin")
+    row = next(r for r in service_catalog.build_rows(**paths) if r.name == "jellyfin")
     assert row.route.startswith("jellyfin.local.<domain>")
+    entry = {"name": "jellyfin", "hostname": "jellyfin"}
+    direct = route_for(entry, "k8s", {}, paths["k8s_roles"], paths["all_vars"])
+    assert direct == row.route
 
 
 def test_k8s_route_is_lan_only_when_public_route_is_off(tmp_path):
@@ -122,8 +126,7 @@ def test_k8s_route_is_lan_only_when_public_route_is_off(tmp_path):
     paths = _make_repo(tmp_path)
     role = paths["k8s_roles"] / "jellyfin" / "templates"
     _write(role / "ingressroute.yaml.j2", "{{ ingressroute(...) }}\n")
-    rows = service_catalog.build_rows(**paths)
-    row = next(r for r in rows if r.name == "jellyfin")
+    row = next(r for r in service_catalog.build_rows(**paths) if r.name == "jellyfin")
     assert row.route == "jellyfin.local.<domain> (LAN only)"
 
 
@@ -132,8 +135,7 @@ def test_k8s_route_names_both_tiers_when_public_route_is_on(tmp_path):
     _write(paths["all_vars"], "k8s_namespace: homelab\nk8s_public_route: true\n")
     role = paths["k8s_roles"] / "jellyfin" / "templates"
     _write(role / "ingressroute.yaml.j2", "{{ ingressroute(...) }}\n")
-    rows = service_catalog.build_rows(**paths)
-    row = next(r for r in rows if r.name == "jellyfin")
+    row = next(r for r in service_catalog.build_rows(**paths) if r.name == "jellyfin")
     assert row.route == "jellyfin.<domain> · jellyfin.local.<domain>"
 
 
@@ -143,8 +145,7 @@ def test_k8s_route_stays_lan_only_when_the_role_opts_out(tmp_path):
     _write(paths["all_vars"], "k8s_namespace: homelab\nk8s_public_route: true\n")
     role = paths["k8s_roles"] / "jellyfin" / "templates"
     _write(role / "ingressroute.yaml.j2", "{{ ingressroute(..., public=false) }}\n")
-    rows = service_catalog.build_rows(**paths)
-    row = next(r for r in rows if r.name == "jellyfin")
+    row = next(r for r in service_catalog.build_rows(**paths) if r.name == "jellyfin")
     assert row.route == "jellyfin.local.<domain> (LAN only)"
 
 
@@ -155,23 +156,19 @@ def test_markdown_route_cells_are_linkable_but_the_row_value_is_not(tmp_path):
     _write(role / "ingressroute.yaml.j2", "{{ ingressroute(...) }}\n")
     rows = service_catalog.build_rows(**paths)
     assert all("<span" not in r.route for r in rows)
-    assert 'class="fqdn" data-host="jellyfin.local"' in service_catalog.render_markdown(
-        rows
-    )
+    assert 'class="fqdn" data-host="jellyfin.local"' in render_markdown(rows)
 
 
 def test_k8s_route_is_no_route_when_role_has_no_ingressroute_template(tmp_path):
     paths = _make_repo(tmp_path)
     # authelia gets no ingressroute.yaml.j2 in this fixture (e.g. an infra-only role).
-    rows = service_catalog.build_rows(**paths)
-    row = next(r for r in rows if r.name == "authelia")
+    row = next(r for r in service_catalog.build_rows(**paths) if r.name == "authelia")
     assert row.route == "no route (infra role)"
 
 
 def test_docker_route_is_lan_direct_when_expose_mode_lan(tmp_path):
     paths = _make_repo(tmp_path)
-    rows = service_catalog.build_rows(**paths)
-    row = next(r for r in rows if r.name == "dozzle")
+    row = next(r for r in service_catalog.build_rows(**paths) if r.name == "dozzle")
     assert row.route == "LAN-direct (no Traefik route)"
 
 
@@ -188,8 +185,7 @@ def test_docker_route_is_unknown_when_expose_mode_not_lan(tmp_path):
             use_authelia: false
         """,
     )
-    rows = service_catalog.build_rows(**paths)
-    row = next(r for r in rows if r.name == "dozzle")
+    row = next(r for r in service_catalog.build_rows(**paths) if r.name == "dozzle")
     assert row.route.startswith("unknown")
 
 
@@ -205,8 +201,7 @@ def test_backup_tier_literal_pvc_name_in_r2_list(tmp_path):
           name: authelia-config
         """,
     )
-    rows = service_catalog.build_rows(**paths)
-    row = next(r for r in rows if r.name == "authelia")
+    row = next(r for r in service_catalog.build_rows(**paths) if r.name == "authelia")
     assert row.backup_tier == "daily -> R2"
 
 
@@ -222,8 +217,7 @@ def test_backup_tier_literal_pvc_name_in_weekly_list(tmp_path):
           name: jellyfin-config
         """,
     )
-    rows = service_catalog.build_rows(**paths)
-    row = next(r for r in rows if r.name == "jellyfin")
+    row = next(r for r in service_catalog.build_rows(**paths) if r.name == "jellyfin")
     assert row.backup_tier == "weekly -> B2 (default target)"
 
 
@@ -239,16 +233,17 @@ def test_backup_tier_pvc_not_in_either_list_defaults_to_daily_b2(tmp_path):
           name: some-other-claim
         """,
     )
-    rows = service_catalog.build_rows(**paths)
-    row = next(r for r in rows if r.name == "jellyfin")
+    row = next(r for r in service_catalog.build_rows(**paths) if r.name == "jellyfin")
     assert row.backup_tier == "daily -> B2 (default group)"
 
 
 def test_backup_tier_no_pvc_is_stateless_not_unknown(tmp_path):
     paths = _make_repo(tmp_path)
-    rows = service_catalog.build_rows(**paths)
-    row = next(r for r in rows if r.name == "authelia")
+    row = next(r for r in service_catalog.build_rows(**paths) if r.name == "authelia")
     assert row.backup_tier == "no PVC (stateless)"
+    entry = {"name": "authelia"}
+    tier = backup_tier(entry, "k8s", "homelab", set(), set(), paths["k8s_roles"])
+    assert tier == row.backup_tier
 
 
 def test_backup_tier_unresolvable_var_is_unknown(tmp_path):
@@ -264,8 +259,7 @@ def test_backup_tier_unresolvable_var_is_unknown(tmp_path):
         """,
     )
     # No defaults/main.yml giving jellyfin_k8s_claim a literal value.
-    rows = service_catalog.build_rows(**paths)
-    row = next(r for r in rows if r.name == "jellyfin")
+    row = next(r for r in service_catalog.build_rows(**paths) if r.name == "jellyfin")
     assert row.backup_tier.startswith("unknown")
 
 
@@ -285,8 +279,7 @@ def test_backup_tier_var_resolved_from_role_defaults(tmp_path):
         paths["k8s_roles"] / "jellyfin" / "defaults" / "main.yml",
         "jellyfin_k8s_claim: jellyfin-config\n",
     )
-    rows = service_catalog.build_rows(**paths)
-    row = next(r for r in rows if r.name == "jellyfin")
+    row = next(r for r in service_catalog.build_rows(**paths) if r.name == "jellyfin")
     assert row.backup_tier == "weekly -> B2 (default target)"
 
 
@@ -304,15 +297,13 @@ def test_backup_tier_finds_pvc_referenced_only_by_claimname(tmp_path):
               claimName: jellyfin-config
         """,
     )
-    rows = service_catalog.build_rows(**paths)
-    row = next(r for r in rows if r.name == "jellyfin")
+    row = next(r for r in service_catalog.build_rows(**paths) if r.name == "jellyfin")
     assert row.backup_tier == "weekly -> B2 (default target)"
 
 
 def test_backup_tier_docker_is_not_longhorn(tmp_path):
     paths = _make_repo(tmp_path)
-    rows = service_catalog.build_rows(**paths)
-    row = next(r for r in rows if r.name == "dozzle")
+    row = next(r for r in service_catalog.build_rows(**paths) if r.name == "dozzle")
     assert row.backup_tier == "n/a (Docker/Pi, not Longhorn-backed)"
 
 
@@ -322,8 +313,7 @@ def test_autodeploy_eligible_true(tmp_path):
         paths["k8s_roles"] / "jellyfin" / "defaults" / "main.yml",
         "k8s_autodeploy: true\nk8s_autodeploy_reason: image-pinned, low blast radius\n",
     )
-    rows = service_catalog.build_rows(**paths)
-    row = next(r for r in rows if r.name == "jellyfin")
+    row = next(r for r in service_catalog.build_rows(**paths) if r.name == "jellyfin")
     assert row.autodeploy == "eligible"
 
 
@@ -333,22 +323,19 @@ def test_autodeploy_denylisted_with_reason(tmp_path):
         paths["k8s_roles"] / "jellyfin" / "defaults" / "main.yml",
         "k8s_autodeploy: false\nk8s_autodeploy_reason: shared media volume coupling\n",
     )
-    rows = service_catalog.build_rows(**paths)
-    row = next(r for r in rows if r.name == "jellyfin")
+    row = next(r for r in service_catalog.build_rows(**paths) if r.name == "jellyfin")
     assert row.autodeploy == "denylisted (shared media volume coupling)"
 
 
 def test_autodeploy_unknown_when_role_declares_nothing(tmp_path):
     paths = _make_repo(tmp_path)
-    rows = service_catalog.build_rows(**paths)
-    row = next(r for r in rows if r.name == "jellyfin")
+    row = next(r for r in service_catalog.build_rows(**paths) if r.name == "jellyfin")
     assert row.autodeploy.startswith("unknown")
 
 
 def test_autodeploy_docker_is_na_when_host_has_no_gitops(tmp_path):
     paths = _make_repo(tmp_path)
-    rows = service_catalog.build_rows(**paths)
-    row = next(r for r in rows if r.name == "dozzle")
+    row = next(r for r in service_catalog.build_rows(**paths) if r.name == "dozzle")
     assert row.autodeploy == "n/a (host has no GitOps auto-deploy path)"
 
 
@@ -383,15 +370,14 @@ def test_multiple_pvcs_report_each_tier_deduplicated(tmp_path):
           name: authelia-config
         """,
     )
-    rows = service_catalog.build_rows(**paths)
-    row = next(r for r in rows if r.name == "jellyfin")
+    row = next(r for r in service_catalog.build_rows(**paths) if r.name == "jellyfin")
     assert row.backup_tier == "weekly -> B2 (default target); daily -> R2"
 
 
 def test_render_html_is_self_contained_and_lists_every_service(tmp_path):
     paths = _make_repo(tmp_path)
     rows = service_catalog.build_rows(**paths)
-    out = service_catalog.render_html(rows)
+    out = render_html(rows)
     assert "<!doctype html>" in out
     assert "<style>" in out
     assert "http" not in out.split("<style>")[0]  # no external asset before the CSS
@@ -423,7 +409,7 @@ def test_main_writes_output_file(tmp_path):
 
 # ── Markdown renderer (docs/reference/services.md) ─────────────────────────────────────
 
-_ROW = service_catalog.ServiceRow
+_ROW = ServiceRow
 
 
 def test_markdown_has_one_row_per_service():
@@ -431,7 +417,7 @@ def test_markdown_has_one_row_per_service():
         _ROW("sonarr", "daniel-box", "k8s", "sonarr", "authelia", "weekly", "yes"),
         _ROW("wg-easy", "daniel-pi", "docker", "LAN-direct", "none", "none", "no"),
     ]
-    out = service_catalog.render_markdown(rows)
+    out = render_markdown(rows)
     # Count ROWS, not substrings: a service whose route equals its name puts the same
     # "| name |" text in two cells of one line.
     lines = out.splitlines()
@@ -445,14 +431,14 @@ def test_markdown_groups_by_host():
         _ROW("sonarr", "daniel-box", "k8s", "sonarr", "authelia", "weekly", "yes"),
         _ROW("wg-easy", "daniel-pi", "docker", "LAN-direct", "none", "none", "no"),
     ]
-    out = service_catalog.render_markdown(rows)
+    out = render_markdown(rows)
     assert "## daniel-box" in out
     assert "## daniel-pi" in out
     assert out.index("## daniel-box") < out.index("| sonarr |")
 
 
 def test_markdown_opens_with_the_provenance_banner():
-    out = service_catalog.render_markdown([])
+    out = render_markdown([])
     assert out.startswith("---\n")
     assert "generated_from: scripts/docs/service_catalog.py" in out
     assert "do not edit" in out.lower()
@@ -465,7 +451,7 @@ def test_markdown_escapes_pipes_in_values():
     template text and nothing stops one appearing.
     """
     rows = [_ROW("odd", "daniel-box", "k8s", "a|b", "authelia", "none", "no")]
-    out = service_catalog.render_markdown(rows)
+    out = render_markdown(rows)
     row_line = next(ln for ln in out.splitlines() if ln.startswith("| odd |"))
     assert row_line.count("|") == 8, f"pipe count wrong, row split: {row_line}"
 
@@ -477,7 +463,7 @@ def test_markdown_counts_unknown_fields():
     'unknown' convention exists to prevent.
     """
     rows = [_ROW("x", "daniel-box", "k8s", "unknown", "authelia", "none", "no")]
-    out = service_catalog.render_markdown(rows)
+    out = render_markdown(rows)
     assert "unknown" in out.lower()
 
 
@@ -487,8 +473,8 @@ def test_markdown_is_stable_across_calls():
         _ROW("b", "daniel-box", "k8s", "b", "authelia", "none", "no"),
         _ROW("a", "daniel-pi", "docker", "LAN-direct", "none", "none", "no"),
     ]
-    first = service_catalog.render_markdown(rows)
-    second = service_catalog.render_markdown(list(reversed(rows)))
+    first = render_markdown(rows)
+    second = render_markdown(list(reversed(rows)))
     assert first == second, "row or host ordering depends on input order"
 
 
@@ -499,7 +485,7 @@ def test_markdown_ends_with_exactly_one_newline():
     hook keeps rewriting fails that commit on every run until someone fixes the
     generator. Canonical output at the source is what stops that.
     """
-    out = service_catalog.render_markdown(
+    out = render_markdown(
         [_ROW("a", "daniel-box", "k8s", "a", "authelia", "none", "no")]
     )
     assert out.endswith("\n")
