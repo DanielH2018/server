@@ -51,6 +51,14 @@ LABELS: dict[str, tuple[str, str]] = {
     ),
     "escalated": ("f5c2e7", "Re-observed three or more times; needs a durable owner"),
     "no-vetted-remediation": ("585b70", "Every proposed fix failed the fix-skeptic"),
+    "manual": (
+        "6c7086",
+        "Reserved for the operator; no Claude session claims or fans this out",
+    ),
+    "claimed": (
+        "9399b2",
+        "A session is working this issue; see the newest Claim: comment",
+    ),
 }
 for _d in DOMAINS:
     LABELS[f"domain/{_d}"] = ("b4befe", f"Reviewer domain: {_d}")
@@ -132,6 +140,62 @@ def reobservations(issue: dict) -> int:
         for c in issue.get("comments", [])
         if (c.get("body") or "").startswith(_REOBSERVED)
     )
+
+
+# A claim is an append-only comment, not a body edit or an assignee. `gh` authenticates as
+# one account, so an assignee names the operator rather than the session; and two sessions
+# editing a body race, where two sessions commenting both succeed and gh returns them in
+# createdAt order. Folding that ordered list forward is what makes the last writer win
+# deterministically without a compare-and-swap GitHub does not offer.
+_CLAIM_RE = re.compile(r"^Claim: `([^`]+)`\s*$", re.M)
+_RELEASE_RE = re.compile(r"^Released: `([^`]+)`\s*$", re.M)
+
+
+def claim_comment(worktree: str, session: str | None, when: str) -> str:
+    """The comment body that claims an issue for ``worktree``.
+
+    Args:
+        worktree: the git worktree doing the work; also the claim's identity.
+        session: the Claude session id, when one is known. Prose only — nothing parses it.
+        when: an ISO-8601 timestamp, for a human reading the thread.
+    """
+    who = f" (session `{session}`)" if session else ""
+    return f"Claimed by `{worktree}`{who} at {when}\n\nClaim: `{worktree}`\n"
+
+
+def release_comment(worktree: str, when: str, reason: str | None) -> str:
+    """The comment body that releases ``worktree``'s claim."""
+    why = f" — {reason}" if reason else ""
+    return f"Released by `{worktree}` at {when}{why}\n\nReleased: `{worktree}`\n"
+
+
+def current_claim(issue: dict) -> str | None:
+    """The worktree currently holding ``issue``, or None.
+
+    Folds the comment list forward in the order gh returned it: a ``Claim:`` line opens IF
+    nothing is currently held, and a ``Released:`` line naming the SAME worktree closes.
+
+    FIRST WRITER WINS, not last. gh returns comments in createdAt order, so the earlier of
+    two racing claims is the earlier comment. Letting a later claim overwrite a live one
+    would mean a session could take an issue out from under another by claiming it again,
+    and — worse — the first claimant's own ``release`` would then be refused, so it could
+    not even clean up after losing.
+
+    A release naming some other worktree is ignored, so one session cannot release
+    another's claim by accident.
+    """
+    held: str | None = None
+    for comment in issue.get("comments", []):
+        body = (comment.get("body") or "").replace("\r\n", "\n")
+        claimed = _CLAIM_RE.search(body)
+        if claimed:
+            if held is None:
+                held = claimed.group(1)
+            continue
+        released = _RELEASE_RE.search(body)
+        if released and released.group(1) == held:
+            held = None
+    return held
 
 
 def _prefixed(names: set[str], prefix: str) -> str | None:
