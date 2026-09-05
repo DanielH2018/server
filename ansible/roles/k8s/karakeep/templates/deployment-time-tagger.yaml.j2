@@ -47,7 +47,13 @@ spec:
                       break
                   except OSError:
                       time.sleep(5)
-{{ hardened_security_context() }}
+          # read_only, for the same reason as the identically shaped wait-for-deps init
+          # container in deployment.yaml.j2: the whole program is the `python3 -c` above, it
+          # imports two stdlib modules whose bytecode is already in the image, and it writes
+          # nothing — so it needs no writable path and gets no emptyDir. Even if the bytecode
+          # were missing, CPython's `__pycache__` write is best-effort and fails soft on a
+          # read-only tree, so the container still runs.
+{{ hardened_security_context(read_only=true) }}
 {{ container_resources(cpu_limit='250m', mem_limit='128Mi', cpu_request='10m', mem_request='16Mi') }}
       automountServiceAccountToken: false
       priorityClassName: homelab-standard
@@ -79,6 +85,17 @@ spec:
           # No DAC_OVERRIDE, unlike the compose template. That cap existed only because the
           # uv cache was a bind mount owned by uid 1000 while the container ran as root; an
           # emptyDir is created root-owned, so the reason is gone with the bind mount.
+          #
+          # DECIDED: no readOnlyRootFilesystem here, unlike the wait-for-karakeep init container
+          # above. The `uv pip install ... --system` in the command block installs five packages
+          # into the interpreter's site-packages, on the image's own root filesystem, on EVERY
+          # container start — `--system` is what targets it there rather than a venv. A read-only
+          # root makes that first command fail, so the container never reaches the script. This
+          # is readable off the template; it needed no live measurement.
+          # Redirecting the install into a mounted emptyDir instead (a venv on /work, or
+          # PYTHONUSERBASE) would make read-only reachable, but it re-resolves the same install
+          # against a cache that no longer persists and changes how the container boots — a
+          # bigger change than the hardening it buys, and out of scope for #1129.
 {{ hardened_security_context() }}
           env:
             # This container was the homelab's single largest Loki emitter — 22,786 lines per 30

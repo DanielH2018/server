@@ -50,7 +50,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from lib.docs_provenance import md_cell as _md_cell
 from lib.repo_paths import REPO, SCRIPTS
-from lib.script_classify import RUNS, candidates, classify
+from lib.script_classify import RUNS, candidates, classify, importers
 from lib.script_coverage import candidate_test_files, indirect_test
 
 # The reStructuredText usage marker the repo's scripts already use, and the indented block
@@ -103,6 +103,9 @@ def build_rows(scripts: Path = SCRIPTS, repo: Path = REPO) -> list[dict[str, str
     """One row per first-party script, sorted by name."""
     verdicts = classify(repo, scripts)
     test_files = candidate_test_files(repo, scripts)
+    # Built once: the coverage lookup runs per script and parsing the tree per call
+    # made the page quadratic in the number of scripts.
+    imports = importers(scripts)
     rows = []
     for path in candidates(scripts):
         if path.suffix == ".py":
@@ -131,7 +134,7 @@ def build_rows(scripts: Path = SCRIPTS, repo: Path = REPO) -> list[dict[str, str
             test, indirect, via = direct.name, "", ""
         else:
             test = ""
-            indirect, via = indirect_test(path.name, test_files, scripts)
+            indirect, via = indirect_test(path.name, test_files, scripts, imports)
         run, evidence = verdicts.get(
             path.name, ("adhoc", "no automated caller in the tree")
         )

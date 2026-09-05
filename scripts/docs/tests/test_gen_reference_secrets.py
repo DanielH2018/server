@@ -87,7 +87,9 @@ def test_due_dates_come_from_secret_rotation(tmp_path):
     from secrets_mgmt.secret_registry import due_date
 
     rows = {r["name"]: r for r in g.build_rows(_registry(tmp_path), TODAY)}
-    expected = due_date({"last_rotated": "2026-08-10", "tier": "auto"})
+    expected = due_date(
+        "arr_autoblock_push_token", {"last_rotated": "2026-08-10", "tier": "auto"}
+    )
     assert rows["arr_autoblock_push_token"]["due"] == expected.isoformat()
 
 

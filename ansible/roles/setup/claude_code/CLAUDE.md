@@ -102,7 +102,23 @@ sessions" and nothing else.
   rather than failing. ENFORCED by the same test.
 - **No `MemoryMax`.** systemd applies it to the whole cgroup, so one runaway session takes
   the OOM kill for the host and every other session, and `Restart=always` then returns an
-  empty host. `claude_code_rc_capacity` is the real bound. ENFORCED by the same test.
+  empty host. ENFORCED by the same test — which asserts the directive is absent, and says
+  nothing about what bounds memory instead.
+- **`claude_code_rc_capacity` does not bound memory.** It bounds session COUNT. The memory
+  belongs to what a session spawns, and nothing about a session's size follows from there
+  being ten of them. On 2026-09-05 two live sessions put 203 processes in the cgroup holding
+  6.96 GB anon and all 8 GB of the system's swap; the cgroup then stalled in reclaim 98.5% of
+  the time and remote control was unreachable for ~30 minutes while the unit read `active
+  (running)`. `MemoryHigh` did not prevent it — it throttles rather than caps, so the cgroup
+  kept allocating into swap past the threshold. Read `claude_code_rc_pytest_workers` for the
+  bound that does apply, and issue #1154 for the swap-bound question this does not settle.
+- **`claude_code_rc_pytest_workers` bounds the pytest fan-out**, via
+  `PYTEST_XDIST_AUTO_NUM_WORKERS` in the unit. `addopts` in `pyproject.toml` carries
+  `-n auto`; xdist reads this variable before any CPU detection, so a session's run gets 4
+  workers rather than one per core. It caps a single run, NOT how many runs a session starts
+  — nine concurrent runs is still nine times the cap, and a run-count limit would need a lock
+  across worktrees. Setting it on the unit rather than in `pyproject.toml` keeps CI and an
+  interactive shell at full width. ENFORCED by the same test.
 - **The background-shell pressure reaper is turned off.** Claude Code registers
   `process.on("memoryPressure", ...)` and kills every running backgrounded Bash task with the
   reason `memory_pressure`, surfacing as "stopped because the system is running low on

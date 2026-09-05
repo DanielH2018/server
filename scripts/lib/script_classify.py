@@ -42,6 +42,7 @@ __all__ = [
     "candidates",
     "classify",
     "file_text",
+    "importers",
     "is_candidate",
 ]
 
@@ -241,7 +242,7 @@ def _invocation_sites(repo: Path) -> list[tuple[Path, str, str]]:
     return sites
 
 
-def _importers(scripts: Path) -> dict[str, set[str]]:
+def importers(scripts: Path) -> dict[str, set[str]]:
     """Module stem -> the non-test scripts that import it.
 
     A test importing its subject does not make the subject a library, so `test_*` and
@@ -265,7 +266,7 @@ def _importers(scripts: Path) -> dict[str, set[str]]:
             i += 1
         return parts[i] if i < len(parts) else ""
 
-    importers: dict[str, set[str]] = {}
+    found: dict[str, set[str]] = {}
     for path in _all_py(scripts):
         if path.name.startswith("test_") or path.name in _EXCLUDED_NAMES:
             continue
@@ -288,8 +289,8 @@ def _importers(scripts: Path) -> dict[str, set[str]]:
                 continue
             for name in names:
                 if name in stems and name != path.stem:
-                    importers.setdefault(name, set()).add(path.name)
-    return importers
+                    found.setdefault(name, set()).add(path.name)
+    return found
 
 
 def classify(repo: Path = REPO, scripts: Path = SCRIPTS) -> dict[str, tuple[str, str]]:
@@ -310,7 +311,7 @@ def classify(repo: Path = REPO, scripts: Path = SCRIPTS) -> dict[str, tuple[str,
         for script in _invoked_by(path, scripts):
             record(script, kind, evidence)
 
-    for stem, callers in _importers(scripts).items():
+    for stem, callers in importers(scripts).items():
         record(f"{stem}.py", "library", f"imported by {', '.join(sorted(callers))}")
 
     # One script running another inherits the caller's kind, so the six reference

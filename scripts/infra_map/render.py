@@ -153,7 +153,7 @@ edits to the inventory and drift in the running fleet both show up here on their
 Sources: <code>ansible/inventory/</code> for declared state; live state from
 <code>kubectl</code> on daniel-box (deployments, nodes, pods, Longhorn volumes and
 backup targets) and one <code>docker ps</code> over ssh to daniel-pi.
-The diagram's <em>shape</em> is fixed in <code>scripts/infra_map/gen_infra_map.py</code> — those edges
+The diagram's <em>shape</em> is fixed in <code>scripts/infra_map/diagram.py</code> — those edges
 live in role templates, not in the inventory — while its labels, counts and status
 colours are read at render time.
 Regenerate with <code>uv run python scripts/infra_map/gen_infra_map.py</code>.

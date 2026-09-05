@@ -22,6 +22,14 @@ repo escalates from a comment into a check.
 whole cgroup, so one runaway session would take the OOM kill for the host and every other
 session with it.
 
+3. `PYTEST_XDIST_AUTO_NUM_WORKERS` must be exported, and both it and `MemoryHigh` must render
+   from variables rather than hardcoded numbers. This is the same silent class: on 2026-09-05
+   nine concurrent `-n auto` pytest runs resolved to ~144 workers, filled the cgroup and took
+   all 8 GB of the system's swap, and the host stalled unreachable for ~30 minutes while the
+   unit read `active (running)`. A cap hardcoded in the template would pass a presence check
+   while ignoring the default it is supposed to read, so each is tested as a pair: one render
+   it must accept, one override it must follow.
+
 Run: uv run pytest ansible/tests/setup/test_claude_rc_unit.py
 """
 
@@ -102,7 +110,56 @@ def test_no_memory_max(unit: str) -> None:
     """A cgroup-wide cap kills every session at once, not the one that overran."""
     assert not directive(unit, "MemoryMax"), (
         "MemoryMax applies to the whole cgroup, so one runaway session would OOM-kill the "
-        "host and every other session. Bound memory with claude_code_rc_capacity instead."
+        "host and every other session. Bound the fan-out with claude_code_rc_pytest_workers "
+        "instead — capacity bounds session count, not memory (see this role's CLAUDE.md)."
+    )
+
+
+def test_pytest_fanout_is_capped(unit: str) -> None:
+    """`-n auto` resolves per-core per RUN, so concurrent runs multiply it unchecked.
+
+    `addopts` in pyproject.toml carries `-n auto`. On daniel-box's 16 cores that is 16
+    workers for one run, and nothing caps how many runs the sessions on this host start at
+    once: on 2026-09-05 nine concurrent runs put ~144 workers in the cgroup and took all 8 GB
+    of the system's swap. xdist reads PYTEST_XDIST_AUTO_NUM_WORKERS before any CPU detection,
+    so setting it on the unit bounds every run a session makes while leaving CI at full width.
+    """
+    assert re.search(
+        r"^claude_code_rc_pytest_workers: *\d+", DEFAULTS.read_text(), re.M
+    ), "claude_code_rc_pytest_workers is gone from defaults — the fan-out cap is unset"
+    assert "Environment=PYTEST_XDIST_AUTO_NUM_WORKERS=4" in render(unit), (
+        "the unit must export PYTEST_XDIST_AUTO_NUM_WORKERS; without it a session's "
+        "`-n auto` resolves to one worker per core and concurrent runs multiply it"
+    )
+
+
+def test_pytest_fanout_cap_follows_the_variable(unit: str) -> None:
+    """The rejecting half: a hardcoded 4 would pass the test above and ignore the default."""
+    rendered = render(unit, claude_code_rc_pytest_workers=1)
+    assert "Environment=PYTEST_XDIST_AUTO_NUM_WORKERS=1" in rendered, (
+        "PYTEST_XDIST_AUTO_NUM_WORKERS must render from claude_code_rc_pytest_workers"
+    )
+    assert "PYTEST_XDIST_AUTO_NUM_WORKERS=4" not in rendered, (
+        "PYTEST_XDIST_AUTO_NUM_WORKERS is hardcoded to 4 — changing the default would "
+        "silently do nothing"
+    )
+
+
+def test_memory_high_follows_the_variable(unit: str) -> None:
+    """MemoryHigh throttles the whole cgroup, so its value is an operational decision.
+
+    It was hardcoded at 6G until 2026-09-05. Raising it is a trade against the ~13 GB k3s +
+    kubepods baseline on this 28 GB box — the throttle stalls whichever cgroup loses the
+    race, and the homelab plane is the one that must not. That belongs in defaults where the
+    reasoning sits beside the number, not inline in the template.
+    """
+    assert re.search(
+        r"^claude_code_rc_memory_high: *\S+", DEFAULTS.read_text(), re.M
+    ), "claude_code_rc_memory_high is gone from defaults — MemoryHigh has no owner"
+    assert "MemoryHigh=8G" in render(unit), "MemoryHigh must render from defaults' 8G"
+    rendered = render(unit, claude_code_rc_memory_high="12G")
+    assert "MemoryHigh=12G" in rendered and "MemoryHigh=8G" not in rendered, (
+        "MemoryHigh is hardcoded — changing claude_code_rc_memory_high would do nothing"
     )
 
 
@@ -134,6 +191,8 @@ def render(unit_text: str, **overrides: object) -> str:
         "claude_code_rc_workdir": "/home/ubuntu/server",
         "claude_code_rc_permission_mode": "auto",
         "claude_code_rc_capacity": 10,
+        "claude_code_rc_pytest_workers": 4,
+        "claude_code_rc_memory_high": "8G",
         REAP_VAR: True,
     }
     context.update(overrides)

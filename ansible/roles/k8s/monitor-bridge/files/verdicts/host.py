@@ -429,6 +429,23 @@ def hwmon_temp_limits(
         label = hwmon_display_name(key, names)
         cap = declared.get(key)
         if cap is None:
+            # DECIDED: k10temp subtracts no Tctl offset on daniel-box, so there is no lower
+            # series to prefer over the Tctl this arm caps at the flat fallback (issue #1003;
+            # #995 established only that k10temp declares no max/crit here). The driver sets
+            # `temp_offset` ONLY on a `tctl_offset_table` hit and reports
+            # `Tdie = get_raw_temp() - temp_offset`. Read out of the module this host actually
+            # runs — `strings` over
+            # /lib/modules/6.8.0-138-generic/kernel/drivers/hwmon/k10temp.ko.zst, confirmed
+            # against drivers/hwmon/k10temp.c at tag v6.8 — that table holds six family-0x17
+            # SKUs (Ryzen 1600X/1700X/1800X/2700X, Threadripper 19xx/29xx). Both halves of its
+            # match fail for `AMD Ryzen 7 8845HS w/ Radeon 780M Graphics` (family 25, model
+            # 117): the family is not 0x17, and no entry string is a substring of that model id.
+            # So `temp_offset` stays 0, and a Tdie here would be NUMERICALLY IDENTICAL to Tctl —
+            # reading it would be a no-op on the same number, not a correction. Live sysfs
+            # agrees: hwmon2 carries temp1_input and temp1_label (Tctl) alone, no Tdie, no Tccd,
+            # no max, no crit. This settles the offset and NOT the number: 85C is the
+            # estate-wide default rather than an 8845HS rating, and this sensor sits above it in
+            # ordinary use (90.25C read live 2026-09-05). That residual is #1158.
             out.append((label, temp, fallback_c, "fallback"))
         else:
             out.append((label, temp, cap * ratio, "declared"))
@@ -449,11 +466,11 @@ def hwmon_temp_verdict(limits: list[tuple[str, float, float, str]]) -> tuple[boo
     while a fallback breach means only that this chip declares no usable max or crit and 85C may
     not suit it — confirmed 2026-09-03 for daniel-box's k10temp: reading
     `/sys/class/hwmon/hwmon2/` directly shows only `temp1_input` and `temp1_label` (Tctl) exist,
-    no `temp1_max` or `temp1_crit` file at all, so nothing here — or anywhere in this estate —
-    can tell a genuine Tctl excursion from the fixed offset AMD applies over real die temperature
-    on this chip. A "fallback" breach on that sensor is legible as "this chip rates nothing", not
-    as "this chip is over its own rating"; whether 93.5C is a real thermal problem stays an open
-    question this check cannot answer (issue #995).
+    no `temp1_max` or `temp1_crit` file at all. There is no offset to correct for: the kernel
+    subtracts none on this chip, so a Tdie would carry the same number as the Tctl already read —
+    see the `DECIDED:` marker in hwmon_temp_limits. A "fallback" breach on that sensor is legible
+    as "this chip rates nothing", not as "this chip is over its own rating"; whether 85C is the
+    right number for a Ryzen 7 8845HS stays an open question this check cannot answer (#1158).
     """
     if not limits:
         return False, "no hwmon temperature sensors scraped (collector blind?)"
