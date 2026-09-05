@@ -19,9 +19,11 @@ from prune_worktrees import (
     cherry_says_merged,
     classify,
     find_orphan_dirs,
+    main,
     merge_tree_says_contained,
     parse_worktree_list,
     pr_head_says_merged,
+    prune_all,
     remove,
     session_is_alive,
 )
@@ -388,3 +390,77 @@ def test_pr_head_survives_malformed_json():
 
 def test_pr_head_survives_json_that_is_not_a_list():
     assert not pr_head_says_merged('{"headRefOid": "aaaa111"}', "aaaa111")
+
+
+# --- the --brief / --prune dispatch (#1190) ---------------------------------------------
+#
+# These drive main() rather than brief(), because the bug was in the dispatch: `if
+# args.brief: return brief()` returned before the prune block, so brief() itself was
+# innocent and a test calling brief(prune=True) would have passed against the broken build.
+
+
+def _main_recording_git(monkeypatch, argv, removable=2):
+    """Run main(argv) over a fabricated survey, returning every argv subprocess.run saw."""
+    calls = []
+
+    def fake_run(argv_, **kwargs):
+        calls.append(argv_)
+        return subprocess.CompletedProcess(argv_, 0, stdout="", stderr="")
+
+    trees = [
+        Worktree(
+            path=f"/repo/.claude/worktrees/w{i}",
+            head="abc",
+            branch=f"b{i}",
+            locked=False,
+        )
+        for i in range(removable)
+    ]
+    monkeypatch.setattr("prune_worktrees.primary_checkout", lambda: "/repo")
+    monkeypatch.setattr(
+        "prune_worktrees.survey", lambda repo: [(REMOVABLE, t, "merged") for t in trees]
+    )
+    monkeypatch.setattr("prune_worktrees.find_orphan_dirs", lambda *a, **k: [])
+    monkeypatch.setattr("prune_worktrees.parse_worktree_list", lambda porcelain: [])
+    monkeypatch.setattr("prune_worktrees._git", lambda *a, **k: "")
+    monkeypatch.setattr("prune_worktrees.subprocess.run", fake_run)
+    return main(argv), calls, trees
+
+
+def test_prune_with_brief_removes_every_removable_worktree(monkeypatch):
+    # the accepting half: --brief shortens the report, it does not cancel --prune
+    rc, calls, trees = _main_recording_git(monkeypatch, ["--prune", "--brief"])
+    assert rc == 0
+    removals = [c for c in calls if c[:3] == ["git", "worktree", "remove"]]
+    assert [c[3] for c in removals] == [t.path for t in trees]
+
+
+def test_brief_without_prune_removes_nothing(monkeypatch):
+    # the rejecting half: --brief alone is the SessionStart banner and must stay read-only
+    rc, calls, _ = _main_recording_git(monkeypatch, ["--brief"])
+    assert rc == 0
+    assert not any(c[:3] == ["git", "worktree", "remove"] for c in calls)
+
+
+def test_prune_with_brief_does_not_tell_the_caller_to_re_run_prune(capsys, monkeypatch):
+    # the hint that made the no-op read as a report; it must not survive an actual prune
+    _main_recording_git(monkeypatch, ["--prune", "--brief"])
+    out = capsys.readouterr().out
+    assert "--prune" not in out
+    assert out.count("removed /repo/.claude/worktrees/") == 2
+
+
+def test_prune_without_brief_still_removes_every_removable_worktree(monkeypatch):
+    # the long report is the path that always worked; it must keep working after the refactor
+    _, calls, trees = _main_recording_git(monkeypatch, ["--prune"])
+    removals = [c for c in calls if c[:3] == ["git", "worktree", "remove"]]
+    assert [c[3] for c in removals] == [t.path for t in trees]
+
+
+def test_prune_all_reports_a_removal_git_refused(capsys, monkeypatch):
+    def fake_run(argv_, **kwargs):
+        return subprocess.CompletedProcess(argv_, 1, stdout="", stderr="is dirty\n")
+
+    monkeypatch.setattr("prune_worktrees.subprocess.run", fake_run)
+    prune_all("/repo", [_tree()])
+    assert "could not remove /w: is dirty" in capsys.readouterr().out
