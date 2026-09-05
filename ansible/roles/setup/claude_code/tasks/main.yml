@@ -163,6 +163,48 @@
       claude_code_rc_enabled=true.
   when: not claude_code_rc_enabled
 
+# ── Cgroup resource metrics (issue #1238) ──────────────────────────────────────────────
+# claude-rc.service is bounded (MemoryHigh/MemorySwapMax) and user-1000.slice (SSH-started
+# sessions, #1213) is not, but neither cgroup's counters reached Prometheus — the box stalled
+# unreachable for ~30 min on 2026-09-05 with nothing narrating it (#1154/#1213). The counters
+# are already free (this host sets DefaultMemoryAccounting/CPUAccounting=yes) and
+# node-exporter's textfile collector is already deployed and scraped, so this drops a gauge
+# set into it every 30s with no exporter change. Read-only observation only — it does not
+# touch the cap mechanism #1213 is fixing separately.
+
+- name: Deploy the cgroup metrics script
+  tags: [claude_code]
+  ansible.builtin.copy:
+    src: claude-cgroup-metrics.sh
+    dest: /usr/local/bin/claude-cgroup-metrics.sh
+    mode: "0755"
+    owner: root
+    group: root
+  become: true
+
+- name: Install the cgroup metrics timer units
+  tags: [claude_code]
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    mode: "0644"
+  loop:
+    - claude-cgroup-metrics.service
+    - claude-cgroup-metrics.timer
+  become: true
+  notify:
+    - Reload systemd
+    - Restart claude-cgroup-metrics timer
+
+- name: Enable and start the cgroup metrics timer
+  tags: [claude_code]
+  ansible.builtin.systemd:
+    name: claude-cgroup-metrics.timer
+    enabled: true
+    state: started
+    daemon_reload: true
+  become: true
+
 # ── Login-session caps (issue #1213) ────────────────────────────────────────────────────
 # The RC unit's MemoryHigh/MemorySwapMax/PYTEST_XDIST_AUTO_NUM_WORKERS bound only its own
 # cgroup. A session started with `claude agents` (or a bare `claude`) from an interactive
@@ -250,5 +292,19 @@
       - ansible/roles/setup/claude_code/templates/claude-rc-restart.service.j2
       - ansible/roles/setup/claude_code/templates/claude-rc-restart.timer.j2
       - ansible/roles/setup/claude_code/templates/alert-webhook.env.j2
+      - ansible/roles/setup/claude_code/templates/claude-cgroup-metrics.service.j2
+      - ansible/roles/setup/claude_code/templates/claude-cgroup-metrics.timer.j2
       - ansible/roles/setup/claude_code/templates/login-slice-caps.conf.j2
       - ansible/roles/setup/claude_code/templates/pytest-fanout-cap.conf.j2
+
+# Sibling of the stamp above, for the ONE copy:-deployed (not template:-rendered) artifact
+# this role now carries — manifest-prune-check.sh's second arm (is the deployed code the repo's
+# code?) only sees a copy:-deployed script if it is registered here.
+- name: Record the deployed cgroup metrics script for drift checking
+  tags: [claude_code]
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_deployed.yml"
+  vars:
+    stamp_deployed_name: claude-code-cgroup-metrics
+    stamp_deployed_pairs:
+      - live: /usr/local/bin/claude-cgroup-metrics.sh
+        src: ansible/roles/setup/claude_code/files/claude-cgroup-metrics.sh

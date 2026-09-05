@@ -578,6 +578,9 @@ def run_ha_state(ns):
         ns: The parsed argparse namespace for the `ha state` subcommand.
     """
     import json
+
+    # DECIDED: deferred — `ha state` needs build_model(); ha_state_model.py:434 needs
+    # this module's ha_get/ha_token for `refresh`. Pinned in ALLOWED_CYCLES.
     from home_assistant import ha_state_model
 
     if ns.dry_run:
