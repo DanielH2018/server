@@ -52,7 +52,7 @@ The decisive one-line test compares the inode on the host and inside the contain
 
 The blast radius is wide because so much reads the daemon through these proxies. AutoKuma
 stops syncing, so monitors are silently never created — a `push failed … Monitor not found
-or not active` in `check.py --once` is the tell. Kuma's ~40 `docker`-type monitors go blind,
+or not active` in `cli.py --once` is the tell. Kuma's ~40 `docker`-type monitors go blind,
 and Alloy's docker_sd stream stops.
 
 If AutoKuma logs `Docker responded with status code 503`, or a newly-added Kuma monitor
