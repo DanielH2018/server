@@ -61,9 +61,10 @@ spec:
           # image default a future tag bump could drop silently, and runAsNonRoot alone would
           # not do it, because the kubelet only rejects a numeric root uid.
           # Safe for THIS container specifically because it mounts only the kubelet-created
-          # 0777 emptyDir at /tmp below and binds 9222, an unprivileged port; chromium's
-          # profile goes to a temp dir under /tmp, and no root-owned path in the image is
-          # written, so there is no volume here for uid 65534 to need chowned.
+          # 0777 emptyDirs at /tmp and /var/cache/fontconfig below and binds 9222, an
+          # unprivileged port; chromium's profile goes to a temp dir under /tmp, and no
+          # root-owned path in the image is written, so there is no volume here for uid 65534
+          # to need chowned.
           #
           # Do not copy it to the sibling
           # karakeep deployments without checking each one: karakeep's own /data seed tree and
@@ -76,9 +77,9 @@ spec:
           # its /headless-shell/run.sh passes no --user-data-dir, so headless chromium picks a
           # temp profile dir under /tmp. Running unprivileged over a root-owned image tree is
           # already the evidence that nothing outside a world-writable path is written; the
-          # only thing readOnlyRootFilesystem takes away is /tmp itself, which the emptyDir
-          # below gives back. The sibling karakeep container does NOT get this — see the
-          # DECIDED comment in deployment.yaml.j2.
+          # two paths readOnlyRootFilesystem takes away are /tmp and /var/cache/fontconfig,
+          # which the two emptyDirs below give back. The sibling karakeep container does NOT
+          # get this — see the DECIDED comment in deployment.yaml.j2.
 {{ hardened_security_context(read_only=true, non_root=true, run_as_user=65534) }}
           volumeMounts:
             # Chromium's profile, its crash dumps, and — because of --disable-dev-shm-usage
@@ -88,6 +89,19 @@ spec:
             # layer they replace was node disk.
             - name: chrome-tmp
               mountPath: /tmp
+            # DECIDED: an emptyDir alone, no env var.
+            # fontconfig's cache. This is the FIRST entry in the cachedir list the image's
+            # fonts.conf ships, so with a read-only root and no mount here fontconfig finds
+            # nothing writable — it logged `Fontconfig error: No writable cache directories`
+            # once per chrome process and rescanned the whole font tree on each start.
+            # An emptyDir is the whole fix: fontconfig needs the directory to be writable,
+            # not preserved, and one rescan per pod is what it costs. No env var goes with
+            # it — the two fallbacks in that log (`$HOME/.cache/fontconfig`,
+            # `$HOME/.fontconfig`, with HOME=/nonexistent for uid 65534) are only consulted
+            # when this path fails, so XDG_CACHE_HOME would be redundant, and FONTCONFIG_PATH
+            # names the CONFIG dir rather than the cache and would change font discovery.
+            - name: chrome-fontconfig-cache
+              mountPath: /var/cache/fontconfig
           readinessProbe:
             httpGet:
               path: /json/version
@@ -103,4 +117,9 @@ spec:
 {{ container_resources(cpu_limit=karakeep_k8s_chrome_cpu_limit, mem_limit=karakeep_k8s_chrome_mem_limit, cpu_request=karakeep_k8s_chrome_cpu_request, mem_request=karakeep_k8s_chrome_mem_request) }}
       volumes:
         - name: chrome-tmp
+          emptyDir: {}
+        # Default medium for the same reason as chrome-tmp, though the stake is smaller: a
+        # rendered fontconfig cache is a few hundred KiB, and node disk is the right place
+        # for it rather than the 2048Mi limit.
+        - name: chrome-fontconfig-cache
           emptyDir: {}

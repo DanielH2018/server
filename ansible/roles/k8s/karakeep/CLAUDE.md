@@ -28,3 +28,9 @@ loop to auto-tag bookmarks.
   pins it to the Docker role's checksum.
 - The snapshot/revert pair (`k8s/volume-snapshot`/`k8s/volume-revert`) covers `karakeep-data`
   only — reverting it alone desyncs the search index until a manual reindex.
+- `karakeep-chrome` runs on a read-only root, so every path headless chromium writes needs its
+  own emptyDir: `/tmp` (profile, crash dumps, the shm files `--disable-dev-shm-usage` moves out
+  of `/dev/shm`) and `/var/cache/fontconfig`. The fontconfig one fails quietly — chromium still
+  starts, logs `Fontconfig error: No writable cache directories`, and rescans the font tree on
+  every process start. `ansible/tests/services/test_karakeep_chrome_writable_paths.py` is the
+  guard; add a path there when a chromium flag makes it write somewhere new.
