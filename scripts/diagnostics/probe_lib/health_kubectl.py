@@ -7,6 +7,11 @@ every shape the gate depends on can be asserted without a cluster.
 health.py keeps the gate itself. `health_rollout.py` formats a Deployment/DaemonSet verdict,
 `health_cronjob.py` a CronJob one, and `health_docker.py` covers the Pi's remaining Docker
 services.
+
+The ClusterIP lookups — `k8s_service_ip_argv` and `resolve_service_ip` — are kubectl but live
+in `health_docker.py` beside the bridge-IP pair they replaced. Read the `# DECIDED:` marker
+above them before moving them here: `resolve_service_ip` runs a subprocess, which the paragraph
+above rules out for this module.
 """
 
 # The kinds a rollout gate can actually check, and kubectl's spelling for each. Deployment
