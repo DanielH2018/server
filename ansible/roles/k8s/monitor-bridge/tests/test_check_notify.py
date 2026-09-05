@@ -44,8 +44,10 @@ def test_discord_webhook_404_is_down():
     assert "404" in msg
 
 
-def _discord_cycle(cfg, monkeypatch, status=200, raises=None):
-    cfg = replace(cfg, DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/1/abc")
+def _discord_cycle(cfg, monkeypatch, status=200, raises=None, url=None):
+    cfg = replace(
+        cfg, DISCORD_WEBHOOK_URL=url or "https://discord.com/api/webhooks/1/abc"
+    )
     if raises is not None:
 
         def boom(*a, **k):
@@ -103,18 +105,12 @@ def test_discord_unreachable_redacts_the_webhook_url(monkeypatch, cfg):
     # `ValueError: unknown url type: '<the whole URL>'`, and that URL is the channel's bearer
     # credential — it must not reach the Kuma msg (which check.py also logs).
     url = "discord.com/api/webhooks/1/s3cr3t-token"
-    cfg = replace(
+    _, msg = _discord_cycle(
         cfg,
-        DISCORD_WEBHOOK_URL=url,
-        DISCORD_CROWDSEC_WEBHOOK_URL="",
-        DISCORD_GITOPS_WEBHOOK_URL="",
+        monkeypatch,
+        url=url,
+        raises=ValueError("unknown url type: '%s'" % url),
     )
-
-    def boom(*a, **k):
-        raise ValueError("unknown url type: '%s'" % url)
-
-    monkeypatch.setattr(bridge.net, "_get_json", boom)
-    _, msg = checks.notify.check_discord(cfg)
     assert "s3cr3t-token" not in msg
     assert url not in msg
     assert "redacted" in msg  # non-vacuous: the branch ran and said something
@@ -124,18 +120,9 @@ def test_discord_unreachable_redacts_the_webhook_url(monkeypatch, cfg):
 def test_discord_unreachable_preserves_an_ordinary_error(monkeypatch, cfg):
     # The other half of the pair: redaction must not swallow the diagnosis. A DNS failure
     # carries no credential, so its text reaches the operator unchanged.
-    cfg = replace(
-        cfg,
-        DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/1/abc",
-        DISCORD_CROWDSEC_WEBHOOK_URL="",
-        DISCORD_GITOPS_WEBHOOK_URL="",
+    _, msg = _discord_cycle(
+        cfg, monkeypatch, raises=OSError("[Errno -2] Name or service not known")
     )
-
-    def boom(*a, **k):
-        raise OSError("[Errno -2] Name or service not known")
-
-    monkeypatch.setattr(bridge.net, "_get_json", boom)
-    _, msg = checks.notify.check_discord(cfg)
     assert "Name or service not known" in msg
     assert "redacted" not in msg
 
