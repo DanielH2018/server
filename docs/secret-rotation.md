@@ -6,8 +6,12 @@ cron (`secret-rotation-audit.sh`, initial_setup) pushes the **"Secret Rotation"*
 Kuma monitor — it goes **down** when any secret is past its per-tier window, or when a
 secret exists in `secrets.yml` but not the registry.
 
-Rotation dates are **staggered** at registration (a deterministic per-name offset), so the
-registered secrets come due a few at a time across the year — never all on one day. The
+Due dates are **staggered** by a deterministic per-name offset, so the registered secrets
+come due a few at a time across the year — never all on one day. The offset lives in the
+due-date calculation rather than in `last_rotated`, which is what makes it survive a
+rotation: `rotate --commit` stamps the same date on every secret in a batch, and a batch
+that shared its stamp would otherwise share its next due date too. The offset only ever
+pulls a due date **earlier** than the tier cadence below, never later. The
 [Secrets reference](reference/secrets.md) lists them, with each one's tier and due date.
 
 ## Daily use
