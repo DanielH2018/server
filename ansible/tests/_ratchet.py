@@ -43,11 +43,15 @@ What the monkeypatch heuristic counts, and what it misses:
   `importlib.import_module(...)`. That is how the hook and cluster-side tests reach a module
   whose filename is not an identifier (`session-health.py`); 57 patches across five files
   were invisible while only `import` statements were read.
-- Not counted: a module handed to the test by a fixture. `gitops_deploy/tests/conftest.py`
-  returns the module itself, so `test_gitops_deploy_fetch_skip.py`,
-  `test_gitops_deploy_alert_delivery.py`, `test_gitops_deploy_main_branches.py` and
-  `test_staging_tick_ledger.py` all count 0 while patching a production module through the
-  fixture argument. Resolving that means following a fixture's return type across files.
+- Counted: a parameter named after a conftest fixture that hands back a module. A fixture is
+  read as module-returning when it is annotated `-> ModuleType`, or when it imports a name and
+  returns it. `gitops_deploy/tests/conftest.py` does both, and three of its sibling test
+  modules patched the deployer through that argument while counting 0 — five patches in
+  `test_gitops_deploy_alert_channels.py`, four and two in the other two. The caller collects the fixture names from
+  every `conftest.py` on a test's directory chain, the way pytest resolves one.
+- Not counted: a fixture that returns a module with neither the annotation nor a bare
+  `import`/`return` of the same name — a factory closure, say. The annotation is the signal
+  the repo already writes; a dataflow analysis across a conftest's own imports is not.
 - Not counted: the string-target form `monkeypatch.setattr("mod.attr", ...)`, a receiver
   spelled anything but `monkeypatch`, and `delattr`/`setitem`/`setenv`/`chdir`.
 - Not counted: a patch on an imported class or function, unless its name happens to match a
@@ -59,9 +63,15 @@ What the monkeypatch heuristic counts, and what it misses:
   adds another while removing no patching. That is inherent in the one-line-per-file format;
   a `# TOTAL n` line would conflict on every parallel PR. The added entry shows in the diff.
 
-A listed file may sit anywhere between its cap and its listed max without failing. That is
-deliberate: otherwise every one-line deletion in a 900-line module would force an allowlist
-edit, and parallel PRs would collide on lines they had no reason to touch.
+# DECIDED: an entry has to MATCH its file, not merely bound it. This module said the
+opposite until 2026-09-05 -- a listed file could sit anywhere between its cap and its listed
+max, so that a one-line deletion in a 900-line module would not force an allowlist edit. The
+gap that buys is regrowth headroom no check reports: three entries drifted during the
+module-split plan (PRs #1108-#1191) and every one was caught by a reviewer counting by hand.
+`Ratchet.violations` now flags `count < listed` too, naming the number to write. The cost is
+the one the old stance avoided -- a PR that shrinks a listed file edits its line -- and that is
+one line, in a sorted file, in the same PR that moved the number. Two PRs colliding there are
+two PRs already colliding in the file itself.
 
 The census that feeds these functions, and the tests for them, are in
 `ansible/tests/repo/test_module_length_ratchet.py`.
@@ -80,6 +90,51 @@ TEST_CAP = 500
 # `mod = importlib.util.module_from_spec(spec)` and `mod = importlib.import_module("x")` both
 # bind a module to a plain name, which no import statement records.
 DYNAMIC_IMPORTS = frozenset({"module_from_spec", "import_module"})
+
+# What a conftest fixture writes when it hands a test the module itself.
+MODULE_ANNOTATIONS = frozenset({"ModuleType", "types.ModuleType"})
+
+
+def _returns_a_module(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    """Whether this function hands back a module, by its annotation or by its body.
+
+    Two spellings, because a conftest writes either: `-> ModuleType`, or an `import x` inside
+    the fixture followed by `return x` (which is how a fixture defers an import that must not
+    run at collection).
+    """
+    if fn.returns is not None and ast.unparse(fn.returns) in MODULE_ANNOTATIONS:
+        return True
+    imported = {
+        alias.asname or alias.name.split(".")[0]
+        for node in ast.walk(fn)
+        if isinstance(node, ast.Import)
+        for alias in node.names
+    }
+    return any(
+        isinstance(node, ast.Return)
+        and isinstance(node.value, ast.Name)
+        and node.value.id in imported
+        for node in ast.walk(fn)
+    )
+
+
+def module_fixture_names(source: str) -> frozenset[str]:
+    """Every top-level `@pytest.fixture` in `source` that hands back a module.
+
+    A test module never imports these — it names one as a parameter and pytest passes the
+    module in, so `_bound_module_names` has no import statement to read. The caller unions
+    this over every `conftest.py` on a test's directory chain, the way pytest resolves one.
+    """
+    return frozenset(
+        node.name
+        for node in ast.parse(source).body
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
+        and any(
+            ast.unparse(dec).split("(")[0].endswith("fixture")
+            for dec in node.decorator_list
+        )
+        and _returns_a_module(node)
+    )
 
 
 def cap_for(rel: str) -> int:
@@ -178,11 +233,25 @@ def first_party_module_names(tracked: Iterable[str]) -> frozenset[str]:
     return frozenset(names)
 
 
-def _bound_module_names(tree: ast.AST, first_party: Collection[str]) -> set[str]:
-    """The local names in `tree` that hold a first-party module."""
+def _bound_module_names(
+    tree: ast.AST,
+    first_party: Collection[str],
+    module_fixtures: Collection[str] = (),
+) -> set[str]:
+    """The local names in `tree` that hold a first-party module.
+
+    `module_fixtures` are conftest fixture names that hand back a module; a function parameter
+    spelled with one of them holds that module without any import saying so.
+    """
     bound: set[str] = set()
     for node in ast.walk(tree):
         match node:
+            case ast.FunctionDef(args=args) | ast.AsyncFunctionDef(args=args):
+                bound |= {
+                    arg.arg
+                    for arg in (*args.posonlyargs, *args.args, *args.kwonlyargs)
+                    if arg.arg in module_fixtures
+                }
             case ast.Import(names=aliases):
                 for alias in aliases:
                     head, tail = alias.name.split(".")[0], alias.name.split(".")[-1]
@@ -205,13 +274,18 @@ def _bound_module_names(tree: ast.AST, first_party: Collection[str]) -> set[str]
     return bound
 
 
-def count_module_patches(source: str, first_party: Collection[str]) -> int:
+def count_module_patches(
+    source: str,
+    first_party: Collection[str],
+    module_fixtures: Collection[str] = (),
+) -> int:
     """How many `monkeypatch.setattr` calls in `source` target a first-party module.
 
-    The module docstring lists what this deliberately does not see.
+    `module_fixtures` names the conftest fixtures that hand back a module, so a patch on such
+    a parameter counts. The module docstring lists what this deliberately does not see.
     """
     tree = ast.parse(source)
-    bound = _bound_module_names(tree, first_party)
+    bound = _bound_module_names(tree, first_party, module_fixtures)
 
     counted = 0
     for node in ast.walk(tree):
@@ -263,6 +337,14 @@ class Ratchet:
                 found.append(
                     f"{rel}: {count} {self.unit}, at or under the cap of {cap} — remove it "
                     f"from {name}. The list records remaining work only."
+                )
+            # DECIDED: an entry has to MATCH its file, not merely bound it. The reasoning,
+            # and the stance this reversed, are in this module's docstring.
+            elif count < listed:
+                found.append(
+                    f"{rel}: {count} {self.unit}, under its allowlisted max of {listed} — "
+                    f"lower that line in {name} to {count}. An entry records what the file "
+                    f"is today; the gap is regrowth headroom nothing would report."
                 )
         for rel in sorted(set(allow) - set(counts)):
             found.append(
