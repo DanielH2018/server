@@ -147,6 +147,11 @@ def host_config(
         # the fallback arm is not optional: without it, 14 of 21 sensors — including BOTH
         # daniel-pi sensors, on the host with no fan — carry no limit at all.
         HWMON_TEMP_RATIO=_num("HWMON_TEMP_RATIO", "0.90"),
+        # 85C is an estate-wide flat default, not any chip's own rating. daniel-box's
+        # k10temp/Tctl is the sensor that breaches it, and it has no lower series to prefer
+        # instead: see the `DECIDED: k10temp subtracts no Tctl offset on daniel-box` marker in
+        # verdicts.host.hwmon_temp_limits for the driver evidence, and #1158 for the open
+        # question of whether 85 suits a Ryzen 7 8845HS.
         HWMON_TEMP_FALLBACK_C=_num("HWMON_TEMP_FALLBACK_C", "85"),
         HWMON_TEMP_MIN_PLAUSIBLE_C=_num("HWMON_TEMP_MIN_PLAUSIBLE_C", "20"),
         HWMON_TEMP_MAX_PLAUSIBLE_C=_num("HWMON_TEMP_MAX_PLAUSIBLE_C", "150"),
