@@ -48,7 +48,6 @@ Tiers (and default rotation cadence):
 from __future__ import annotations
 
 import argparse
-import contextlib
 import datetime as dt
 import hashlib
 import os
@@ -56,10 +55,8 @@ import re
 import secrets as pysecrets
 import subprocess
 import sys
-import urllib.parse
-import urllib.request
+from collections.abc import Mapping
 from pathlib import Path
-from zoneinfo import ZoneInfo
 
 import yaml
 
@@ -69,13 +66,18 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lib import yaml_fast
 
-from lib.git import git
+from secrets_mgmt import rotation_tools
+from secrets_mgmt.rotation_tools import REPO, SECRETS_GIT_PATH, RotationTools
 
-REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-SECRETS_FILE = os.path.join(REPO, "ansible", "vars", "secrets.yml")
-# Repo-relative, for git revspecs — `git show <rev>:<path>` needs the tracked path.
-SECRETS_GIT_PATH = "ansible/vars/secrets.yml"
-REGISTRY_FILE = os.path.join(REPO, "ansible", "secret_rotation.yml")
+# Re-exported, not called here: every subcommand reaches these three through `tools`. Callers
+# outside this file still read them off this module — scripts/docs/reference/secrets.py builds
+# the secrets page from `today` and `load_registry`, and ansible/tests/k8s parametrizes the
+# consumer census over `sops_names`. Assignments rather than an `import`, because a parameter
+# named `today` shadows an imported one and ruff reads that as a redefinition. Task 10 of the
+# module-splits plan settles their final home.
+today = rotation_tools.today
+load_registry = rotation_tools.load_registry
+sops_names = rotation_tools.sops_names
 
 TIER_DAYS = {
     "auto": 180,
@@ -376,8 +378,12 @@ def consumer_commands(name: str, repo: str = REPO) -> list[str]:
     return commands
 
 
-def cmd_consumers(args) -> int:
-    """Print every role that references `args.name`, and the commands to redeploy them."""
+def cmd_consumers(args, tools: RotationTools) -> int:
+    """Print every role that references `args.name`, and the commands to redeploy them.
+
+    Takes `tools` it does not use, so `main` can dispatch every subcommand the same way; the
+    tree read behind it is parameterised by `repo=` rather than by a boundary.
+    """
     consumers = tree_consumers(args.name)
     if not consumers:
         print(
@@ -407,23 +413,15 @@ def _stable_offset(name: str, span: int) -> int:
     return int(hashlib.sha256(name.encode()).hexdigest(), 16) % span
 
 
-def today() -> dt.date:
-    """The registry's calendar day.
-
-    Rotation dates are day-granular and the hosts, the crons and the operator all live in
-    America/Chicago, so the day is pinned to that zone rather than to whichever TZ the invoking
-    shell happens to carry.
-    """
-    return dt.datetime.now(tz=ZoneInfo("America/Chicago")).date()
-
-
-def seed_last_rotated(name: str, tier: str, today: dt.date) -> str | None:
+def seed_last_rotated(
+    name: str, tier: str, today: dt.date, tier_days: Mapping = TIER_DAYS
+) -> str | None:
     """A staggered seed date.
 
     `due = seed + cadence` lands in [today+lead, today+cadence], so nothing is overdue at
     registration and the due-dates are spread across the window.
     """
-    days = TIER_DAYS[tier]
+    days = tier_days[tier]
     if not days:
         return None
     lead = max(14, days // 12)
@@ -431,39 +429,9 @@ def seed_last_rotated(name: str, tier: str, today: dt.date) -> str | None:
     return (today - dt.timedelta(days=offset)).isoformat()
 
 
-def sops_names(path: str = SECRETS_FILE) -> list[str]:
-    """Top-level secret keys from the (encrypted) secrets.yml — values stay encrypted."""
-    with open(path) as fh:
-        data = yaml_fast.safe_load(fh) or {}
-    return sorted(k for k in data if k != "sops")
-
-
-def load_registry(path: str = REGISTRY_FILE) -> dict:
-    if not os.path.exists(path):
-        return {"entries": {}}
-    with open(path) as fh:
-        return yaml_fast.safe_load(fh) or {"entries": {}}
-
-
-_HEADER = """\
-# Secret rotation registry — MANAGED by scripts/secrets_mgmt/secret_rotation.py.
-# Plaintext on purpose (names + dates + tiers only, never values); lives outside vars/ so
-# SOPS does not encrypt it. Run `secret_rotation.py sync` after adding/removing a secret.
-# You MAY edit a `tier` to override classification (sync preserves it); don't hand-edit
-# `last_rotated` — `rotate` updates it, and `audit` reads the real date out of the git
-# history of secrets.yml when a value changed later than this file records.
-# Tiers: auto|assisted|external|pinned|ignore.
-"""
-
-
-def save_registry(reg: dict, path: str = REGISTRY_FILE) -> None:
-    body = yaml.safe_dump(reg, sort_keys=True, default_flow_style=False)
-    with open(path, "w") as fh:
-        fh.write(_HEADER)
-        fh.write(body)
-
-
-def sync(reg: dict, names: list[str], today: dt.date) -> tuple[list[str], list[str]]:
+def sync(
+    reg: dict, names: list[str], today: dt.date, tier_days: Mapping = TIER_DAYS
+) -> tuple[list[str], list[str]]:
     """Add missing secrets (classified + staggered seed); report stale registry entries."""
     entries = reg.setdefault("entries", {})
     added, stale = [], []
@@ -472,7 +440,7 @@ def sync(reg: dict, names: list[str], today: dt.date) -> tuple[list[str], list[s
             tier = classify(name)
             entries[name] = {
                 "tier": tier,
-                "last_rotated": seed_last_rotated(name, tier, today),
+                "last_rotated": seed_last_rotated(name, tier, today, tier_days),
             }
             added.append(name)
     live = set(names)
@@ -480,30 +448,27 @@ def sync(reg: dict, names: list[str], today: dt.date) -> tuple[list[str], list[s
     return added, stale
 
 
-def due_date(entry: dict) -> dt.date | None:
+def due_date(entry: dict, tier_days: Mapping = TIER_DAYS) -> dt.date | None:
+    """The date `entry`'s secret comes due, or None when its tier has no cadence."""
     tier = entry.get("tier", "assisted")
-    days = TIER_DAYS.get(tier)
+    days = tier_days.get(tier)
     lr = entry.get("last_rotated")
     if not days or not lr:
         return None
     return dt.date.fromisoformat(lr) + dt.timedelta(days=days)
 
 
-def _git(*args: str) -> str:
-    return git(*args, cwd=REPO).stdout
-
-
-def ciphertext_at(rev: str) -> dict[str, str]:
+def ciphertext_at(rev: str, tools: RotationTools) -> dict[str, str]:
     """name -> stored ciphertext at `rev`.
 
     Never decrypts: the `diff=sops` textconv driver rewrites diff output only, so `git show
     <rev>:<path>` streams the raw blob.
     """
-    data = yaml_fast.safe_load(_git("show", f"{rev}:{SECRETS_GIT_PATH}")) or {}
+    data = yaml_fast.safe_load(tools.git("show", f"{rev}:{SECRETS_GIT_PATH}")) or {}
     return {k: str(v) for k, v in data.items() if k != "sops"}
 
 
-def ciphertext_rotation_dates() -> dict[str, dt.date]:
+def ciphertext_rotation_dates(tools: RotationTools) -> dict[str, dt.date]:
     """name -> date of the newest commit that changed that secret's ciphertext.
 
     Compares the parsed value per key rather than the diff text. A commit that only
@@ -513,7 +478,7 @@ def ciphertext_rotation_dates() -> dict[str, dt.date]:
     """
     revs = [
         line.split(" ", 1)
-        for line in _git(
+        for line in tools.git(
             "log", "--format=%H %ad", "--date=short", "--", SECRETS_GIT_PATH
         ).splitlines()
         if line
@@ -521,11 +486,11 @@ def ciphertext_rotation_dates() -> dict[str, dt.date]:
     dates: dict[str, dt.date] = {}
     if not revs:
         return dates
-    tracked = set(ciphertext_at(revs[0][0]))
+    tracked = set(ciphertext_at(revs[0][0], tools))
     newer: dict[str, str] = {}
     newer_day = ""
     for rev, day in revs:
-        current = ciphertext_at(rev)
+        current = ciphertext_at(rev, tools)
         for name, value in newer.items():
             if name not in dates and current.get(name) != value:
                 dates[name] = dt.date.fromisoformat(newer_day)
@@ -539,14 +504,14 @@ def ciphertext_rotation_dates() -> dict[str, dt.date]:
     return dates
 
 
-def derived_rotation_dates() -> dict[str, dt.date]:
+def derived_rotation_dates(tools: RotationTools) -> dict[str, dt.date]:
     """Git-derived dates, or {} when git cannot answer (no checkout, shallow clone, git missing).
 
     The daily cron degrades to the recorded dates instead of failing — a broken derivation must not
     take the monitor down on its own.
     """
     try:
-        return ciphertext_rotation_dates()
+        return ciphertext_rotation_dates(tools)
     except subprocess.CalledProcessError, OSError, yaml.YAMLError, ValueError:
         return {}
 
@@ -584,11 +549,11 @@ def advance_last_rotated(
     return advanced
 
 
-def audit(reg: dict, today: dt.date) -> dict:
+def audit(reg: dict, today: dt.date, tier_days: Mapping = TIER_DAYS) -> dict:
     """Returns {overdue: [...], soon: [...], by_tier: {...}} sorted by urgency."""
     rows = []
     for name, entry in reg.get("entries", {}).items():
-        d = due_date(entry)
+        d = due_date(entry, tier_days)
         if d is None:
             continue
         rows.append((name, entry.get("tier"), d, (d - today).days))
@@ -602,20 +567,11 @@ def audit(reg: dict, today: dt.date) -> dict:
     return {"overdue": overdue, "soon": soon, "by_tier": by_tier, "all": rows}
 
 
-def _push(url: str, ok: bool, msg: str) -> None:
-    full = "%s?status=%s&msg=%s" % (
-        url,
-        "up" if ok else "down",
-        urllib.parse.quote(msg),
-    )
-    urllib.request.urlopen(full, timeout=10).read()
-
-
-def cmd_sync(args) -> int:
+def cmd_sync(args, tools: RotationTools) -> int:
     """Reconcile the registry with secrets.yml, save it, and print what changed."""
-    reg = load_registry()
-    added, stale = sync(reg, sops_names(), today())
-    save_registry(reg)
+    reg = tools.load_registry()
+    added, stale = sync(reg, tools.sops_names(), tools.today(), tools.tier_days)
+    tools.save_registry(reg)
     print("sync: %d added, %d stale" % (len(added), len(stale)))
     for n in added:
         print("  + %-40s %s" % (n, reg["entries"][n]["tier"]))
@@ -675,36 +631,6 @@ def malformed_push_tokens(values: dict) -> list[tuple[str, str]]:
     return bad
 
 
-def decrypted_values(path: str = SECRETS_FILE) -> dict | None:
-    """Plaintext secrets, or None when this host cannot decrypt (no age key — e.g. CI).
-
-    None is a legitimate answer, not an error: the audit's other arms are deliberately
-    decrypt-free so they run in CI, and this one simply has nothing to say there. Nothing from
-    the subprocess is echoed on failure — stdout holds the plaintext, so putting it in a
-    message or a traceback is the one way this helper could leak.
-    """
-    try:
-        r = subprocess.run(
-            ["sops", "--decrypt", path],
-            capture_output=True,
-            text=True,
-            check=True,
-            cwd=REPO,
-            # A hung `sops` would otherwise hang the daily cron and the prek gate, which runs
-            # `audit` on every commit touching secrets.yml / the registry / this file.
-            timeout=30,
-        )
-        data = yaml_fast.safe_load(r.stdout) or {}
-    except (
-        OSError,
-        subprocess.CalledProcessError,
-        subprocess.TimeoutExpired,
-        yaml.YAMLError,
-    ):
-        return None
-    return {k: v for k, v in data.items() if k != "sops"}
-
-
 def audit_summary(res: dict, missing: list, stale: list) -> str:
     """The one-line status pushed to the "Secret Rotation" Kuma monitor.
 
@@ -733,7 +659,7 @@ def audit_summary(res: dict, missing: list, stale: list) -> str:
     return summary
 
 
-def cmd_audit(args) -> int:
+def cmd_audit(args, tools: RotationTools) -> int:
     """Print each secret's rotation status, push the summary to Kuma, and gate on drift.
 
     Exits 2 when `--push` is given without SECRET_ROTATION_KUMA set, 1 when `--check` is
@@ -741,18 +667,22 @@ def cmd_audit(args) -> int:
     and malformed push tokens are reported but never fail this exit code; those are the
     daily Kuma push's concern, not a CI gate's.
     """
-    reg = load_registry()
+    reg = tools.load_registry()
     # Registry drift: warn by default (so a forgotten `sync` is visible); --check fails on it.
-    missing, stale = registry_drift(set(reg.get("entries", {})), set(sops_names()))
+    missing, stale = registry_drift(
+        set(reg.get("entries", {})), set(tools.sops_names())
+    )
     # A real rotation changes the ciphertext in git but leaves `last_rotated` behind,
     # because `sync` deliberately won't touch an existing value's date. Reading the date
     # back out of git closes that gap without writing the registry.
     advanced = (
-        [] if args.no_derive else advance_last_rotated(reg, derived_rotation_dates())
+        []
+        if args.no_derive
+        else advance_last_rotated(reg, derived_rotation_dates(tools))
     )
     for name, old, new in advanced:
         print("  rotated in git, date advanced: %-30s %s -> %s" % (name, old, new))
-    res = audit(reg, today())
+    res = audit(reg, tools.today(), tools.tier_days)
     n_over = len(res["overdue"])
     for name, tier, d, days_left in res["all"]:
         flag = "OVERDUE" if days_left < 0 else ("soon" if days_left <= 14 else "ok")
@@ -764,7 +694,7 @@ def cmd_audit(args) -> int:
     # code below: --check is the prek gate over secrets.yml / the registry / this file, and a
     # decrypt-dependent verdict there would pass in CI and fail on a developer's machine, turning
     # every future secrets PR red until an unrelated token was fixed.
-    values = decrypted_values()
+    values = tools.sops_decrypt()
     if values is None:
         print("  push-token shape: not checked (cannot decrypt here)")
         malformed = []
@@ -804,7 +734,7 @@ def cmd_audit(args) -> int:
             and not malformed
             and not extra_down
         )
-        _push(url, ok=ok, msg=summary)
+        tools.kuma_push(url, ok, summary)
     # --check: a CI/PR gate that the registry is in sync with secrets.yml. Fails ONLY on drift,
     # NOT on overdue (a time-based runtime state the daily Kuma push owns — blocking an unrelated
     # commit on a due-for-rotation secret would be wrong), and NOT on push-token shape (see the
@@ -830,16 +760,16 @@ def unattended_due(rows: list, rotate_all: bool = False) -> list:
     ]
 
 
-def cmd_rotate(args) -> int:
+def cmd_rotate(args, tools: RotationTools) -> int:
     """Rotate `args.name`, or every coming-due auto-tier secret, and optionally redeploy.
 
     Dry-run by default; `--commit` writes new values via `sops set`. Exits 2 when
     `args.name` names a non-auto-tier secret, 1 when `--deploy` is given and the redeploy
     fails (the new tokens are written but their consumers are not), 0 otherwise.
     """
-    reg = load_registry()
-    now = today()
-    res = audit(reg, now)
+    reg = tools.load_registry()
+    now = tools.today()
+    res = audit(reg, now, tools.tier_days)
     if args.name:
         targets = [r for r in res["all"] if r[0] == args.name]
         if targets and targets[0][1] != "auto":
@@ -876,48 +806,16 @@ def cmd_rotate(args) -> int:
         new = pysecrets.token_hex(
             16
         )  # 32 hex chars — the format Kuma push tokens require
-        # --value-stdin keeps the new token out of argv (world-readable via /proc/<pid>/cmdline
-        # here — no hidepid). It still requires a JSON-encoded value, same as the old argv
-        # form, so the quoting stays; only the transport moves to stdin.
-        subprocess.run(
-            ["sops", "set", "--value-stdin", SECRETS_FILE, '["%s"]' % name],
-            input='"%s"' % new,
-            text=True,
-            check=True,
-            cwd=REPO,
-        )
+        tools.sops_set(name, new)
         reg["entries"][name]["last_rotated"] = now.isoformat()
         tags.update(consumer_tags(name))
         print("  rotated %s" % name)
     if not args.commit:
         return 0
 
-    save_registry(reg)
+    tools.save_registry(reg)
     if args.deploy and tags:
-        cmd = [
-            "uv",
-            "run",
-            # --frozen: never mutate uv.lock (parity with the GitOps deployer) — a lock
-            # rewrite here leaves the tree dirty and wedges the next weekly run's
-            # clean-tree check in secret-rotate.sh.
-            "--frozen",
-            "ansible-playbook",
-            "ansible/deploy.yml",
-            "--tags",
-            ",".join(sorted(tags)),
-        ]
-        print("  deploying:", " ".join(cmd))
-        # Ansible exits at import on a non-blocking stdout or stderr, and Claude Code's
-        # Bash tool hands its child both with O_NONBLOCK set. The flag lives on the open
-        # file description this process shares with the child, so clearing it here clears
-        # it for ansible; anywhere else it is already clear and this does nothing. The
-        # .claude/hooks/uv-python.sh fixup cannot reach here — this command names ansible
-        # nowhere a hook reading the session's command text could see it.
-        for handle in (sys.stdin, sys.stdout, sys.stderr):
-            with contextlib.suppress(OSError, ValueError):
-                os.set_blocking(handle.fileno(), True)
-        r = subprocess.run(cmd, cwd=REPO)
-        if r.returncode != 0:
+        if tools.deploy(sorted(tags)) != 0:
             print(
                 "DEPLOY FAILED — new tokens written to secrets.yml but consumers NOT updated; "
                 "the caller should revert the working tree",
@@ -973,7 +871,9 @@ def main(argv=None) -> int:
     )
     pr.set_defaults(func=cmd_rotate)
     args = p.parse_args(argv)
-    return args.func(args)
+    # One `RotationTools` per run, built here and threaded down: every git call, sops call,
+    # registry read or write, Kuma push and clock read a subcommand makes goes through it.
+    return args.func(args, RotationTools())
 
 
 if __name__ == "__main__":

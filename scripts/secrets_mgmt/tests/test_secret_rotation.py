@@ -5,9 +5,9 @@ import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 
-import yaml
-
 import secret_rotation as sr
+from _rotation_fakes import Fakes, build_tools, named_calls, process_calls
+from secrets_mgmt.rotation_tools import SECRETS_FILE
 
 
 # ── classification ──────────────────────────────────────────────────────────
@@ -312,88 +312,49 @@ def test_sync_preserves_a_manual_tier_override():
     assert reg["entries"]["special_push_token"]["tier"] == "ignore"
 
 
-# The registry is the single plaintext source of names/tiers/dates. A save/load
-# corruption is SILENT (the next sync/audit reads garbage), so pin the contract:
-# round-trips losslessly, keeps the MANAGED header, and sorts keys deterministically
-# (sort_keys=True keeps the committed file diff-stable as secrets are added).
-
-
-def test_registry_round_trips_losslessly(tmp_path):
-    reg = {
-        "entries": {
-            "b_token": {"tier": "auto", "last_rotated": "2026-06-01"},
-            "a_token": {"tier": "assisted", "last_rotated": "2026-05-15"},
-        }
-    }
-    path = str(tmp_path / "reg.yml")
-    sr.save_registry(reg, path)
-    assert sr.load_registry(path) == reg
-
-
-def test_saved_registry_keeps_managed_header_and_sorts_keys(tmp_path):
-    path = str(tmp_path / "reg.yml")
-    sr.save_registry(
-        {"entries": {"z_tok": {"tier": "auto"}, "a_tok": {"tier": "auto"}}}, path
-    )
-    text = (tmp_path / "reg.yml").read_text()
-    assert text.startswith("# Secret rotation registry — MANAGED")
-    assert text.index("\n  a_tok:") < text.index("\n  z_tok:")  # sort_keys=True
-
-
-def test_load_registry_missing_file_returns_empty_skeleton(tmp_path):
-    assert sr.load_registry(str(tmp_path / "does-not-exist.yml")) == {"entries": {}}
+# The registry's own save/load contract, the decrypt arm and the tier table are
+# `rotation_tools`' now, and their tests moved with them: test_rotation_tools.py.
 
 
 # ── rotation dates derived from git ─────────────────────────────────────────
-def _fake_history(monkeypatch, revs):
-    """revs: newest-first [(sha, "YYYY-MM-DD", {name: ciphertext})]."""
-    log = "\n".join("%s %s" % (sha, day) for sha, day, _ in revs)
-    blobs = {sha: values for sha, _, values in revs}
-
-    def fake_git(*args):
-        if args[0] == "log":
-            return log + "\n"
-        return yaml.safe_dump(blobs[args[1].split(":", 1)[0]])
-
-    monkeypatch.setattr(sr, "_git", fake_git)
+def _history_tools(revs):
+    """A `RotationTools` whose git reads `revs`: newest-first (sha, "YYYY-MM-DD", blob)."""
+    return build_tools(Fakes(history=revs))[0]
 
 
-def test_derived_date_is_the_commit_that_changed_the_value(monkeypatch):
-    _fake_history(
-        monkeypatch,
+def test_derived_date_is_the_commit_that_changed_the_value():
+    tools = _history_tools(
         [
             ("c", "2026-08-01", {"tok": "ENC[new]"}),
             ("b", "2026-05-01", {"tok": "ENC[old]"}),
             ("a", "2026-01-01", {"tok": "ENC[old]"}),
-        ],
+        ]
     )
-    assert sr.ciphertext_rotation_dates()["tok"] == dt.date(2026, 8, 1)
+    assert sr.ciphertext_rotation_dates(tools)["tok"] == dt.date(2026, 8, 1)
 
 
-def test_unchanged_value_dates_to_the_oldest_revision(monkeypatch):
-    _fake_history(
-        monkeypatch,
+def test_unchanged_value_dates_to_the_oldest_revision():
+    tools = _history_tools(
         [
             ("b", "2026-08-01", {"tok": "ENC[same]"}),
             ("a", "2026-01-01", {"tok": "ENC[same]"}),
-        ],
+        ]
     )
-    assert sr.ciphertext_rotation_dates()["tok"] == dt.date(2026, 1, 1)
+    assert sr.ciphertext_rotation_dates(tools)["tok"] == dt.date(2026, 1, 1)
 
 
-def test_reordering_does_not_count_as_a_rotation(monkeypatch):
+def test_reordering_does_not_count_as_a_rotation():
     """A regroup rewrites most of the file's lines while changing no value.
 
     Comparing the parsed value per key is what stops that marking every secret freshly rotated.
     """
-    _fake_history(
-        monkeypatch,
+    tools = _history_tools(
         [
             ("b", "2026-08-01", {"b_tok": "ENC[b]", "a_tok": "ENC[a]"}),
             ("a", "2026-01-01", {"a_tok": "ENC[a]", "b_tok": "ENC[b]"}),
-        ],
+        ]
     )
-    dates = sr.ciphertext_rotation_dates()
+    dates = sr.ciphertext_rotation_dates(tools)
     assert dates["a_tok"] == dt.date(2026, 1, 1)
     assert dates["b_tok"] == dt.date(2026, 1, 1)
 
@@ -421,15 +382,11 @@ def test_advance_ignores_secrets_git_has_no_date_for():
     assert reg["entries"]["tok"]["last_rotated"] == "2025-08-24"
 
 
-def test_derivation_failure_degrades_to_recorded_dates(monkeypatch):
+def test_derivation_failure_degrades_to_recorded_dates():
     """A cron that cannot read git must fall back, not fail — a broken derivation taking
     the monitor down would be a worse outage than the drift it corrects."""
-
-    def boom(*args):
-        raise subprocess.CalledProcessError(128, "git")
-
-    monkeypatch.setattr(sr, "_git", boom)
-    assert sr.derived_rotation_dates() == {}
+    tools = build_tools(Fakes(git_error=subprocess.CalledProcessError(128, "git")))[0]
+    assert sr.derived_rotation_dates(tools) == {}
 
 
 # ── consumer_tag correctness ────────────────────────────────────────────────
@@ -498,7 +455,7 @@ def test_every_consumer_tag_is_a_real_deploy_tag():
 # ── cmd_rotate: the new token must not reach sops via argv ──────────────────
 
 
-def test_rotate_commit_sends_new_token_on_stdin_not_argv(monkeypatch):
+def test_rotate_commit_sends_new_token_on_stdin_not_argv():
     """Regression guard for the 2026-08-27 fix: the new token travels on stdin, not argv.
 
     `sops set` used to take the freshly minted token as a CLI argument, which sits in
@@ -507,27 +464,30 @@ def test_rotate_commit_sends_new_token_on_stdin_not_argv(monkeypatch):
     requires the JSON-quoted form.
     """
     name = "monitor_bridge_test_token"
-    reg = {"entries": {name: {}}}
-    monkeypatch.setattr(sr, "load_registry", lambda: reg)
-    monkeypatch.setattr(
-        sr, "audit", lambda reg, today: {"all": [(name, "auto", "2026-01-01", -5)]}
+    # A real overdue auto-tier row, so the REAL `audit` selects it — the row the rotation
+    # acts on is then the one the tool would compute, not one a fake asserted into place.
+    tools, recorded = build_tools(
+        Fakes(
+            registry={"entries": {name: {"tier": "auto", "last_rotated": "2026-01-01"}}}
+        )
     )
-    monkeypatch.setattr(sr, "save_registry", lambda reg: None)
-
-    calls = []
-
-    def fake_run(cmd, **kwargs):
-        calls.append((cmd, kwargs))
-        return SimpleNamespace(returncode=0)
-
-    monkeypatch.setattr(sr.subprocess, "run", fake_run)
 
     args = SimpleNamespace(name=name, all=False, commit=True, deploy=False)
-    assert sr.cmd_rotate(args) == 0
+    assert sr.cmd_rotate(args, tools) == 0
+    assert "save_registry" in named_calls(recorded), (
+        "the new date was never written back"
+    )
 
+    calls = process_calls(recorded)
     assert len(calls) == 1
     cmd, kwargs = calls[0]
-    assert cmd == ["sops", "set", "--value-stdin", sr.SECRETS_FILE, '["%s"]' % name], (
+    assert cmd == [
+        "sops",
+        "set",
+        "--value-stdin",
+        SECRETS_FILE,
+        '["%s"]' % name,
+    ], (
         "sops set must take only the file and index positionally — no value argument, "
         "which is where the token used to leak into argv: %s" % cmd
     )
@@ -630,27 +590,3 @@ def test_rotate_mints_a_token_the_shape_check_accepts():
     """The auto-rotation path and the guard must agree, or every rotation flips the monitor."""
     minted = {"x_push_token": sr.pysecrets.token_hex(16)}
     assert sr.malformed_push_tokens(minted) == []
-
-
-def test_decrypt_without_an_age_key_returns_none(monkeypatch):
-    """CI has no age key.
-
-    The arm must go quiet there, not raise — `audit --check` is a prek/CI gate over this very file,
-    so a hard failure would fail every secrets PR.
-    """
-
-    def no_key(*a, **kw):
-        raise sr.subprocess.CalledProcessError(1, "sops", stderr="no key")
-
-    monkeypatch.setattr(sr.subprocess, "run", no_key)
-    assert sr.decrypted_values("whatever.yml") is None
-
-
-def test_decrypt_drops_the_sops_metadata_key(monkeypatch):
-    def fake_sops(*a, **kw):
-        return sr.subprocess.CompletedProcess(
-            a[0], 0, stdout="a_push_token: abc\nsops:\n  mac: xyz\n", stderr=""
-        )
-
-    monkeypatch.setattr(sr.subprocess, "run", fake_sops)
-    assert sr.decrypted_values("whatever.yml") == {"a_push_token": "abc"}

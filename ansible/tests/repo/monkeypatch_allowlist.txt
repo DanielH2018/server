@@ -86,6 +86,5 @@ scripts/home_assistant/tests/test_ha_state_model.py 3
 scripts/infra_map/tests/test_gen_infra_map.py 1
 scripts/infra_map/tests/test_infra_map_live.py 10
 scripts/lib/tests/test_gh.py 4
-scripts/secrets_mgmt/tests/test_secret_rotation.py 8
 scripts/validate/tests/test_validate_k8s_manifests.py 1
 scripts/validate/tests/test_validate_unit_templates.py 4

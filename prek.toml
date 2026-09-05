@@ -290,7 +290,10 @@ name = "Secret-rotation registry in sync with secrets.yml"
 entry = "uv run python scripts/secrets_mgmt/secret_rotation.py audit --check"
 language = "system"
 pass_filenames = false
-files = "^(ansible/vars/secrets\\.yml|ansible/secret_rotation\\.yml|scripts/secrets_mgmt/secret_rotation\\.py)$"
+# The whole `scripts/secrets_mgmt/` tree, not `secret_rotation.py` alone: `load_registry`,
+# `sops_names` and every other process boundary the gate depends on moved into
+# `rotation_tools.py`, and a per-file list here is a list that goes stale on the next split.
+files = "^(ansible/vars/secrets\\.yml|ansible/secret_rotation\\.yml|scripts/secrets_mgmt/.*\\.py)$"
 
 # Assert uv.lock stays consistent with pyproject.toml. Every unattended production path
 # (gitops_deploy, secret-rotate, secret-rotation-audit) runs `uv run --frozen`, which ERRORS
