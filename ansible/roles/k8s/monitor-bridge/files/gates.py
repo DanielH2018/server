@@ -228,6 +228,21 @@ class Gates:
     probe_b2: CheckFn = check_b2_reachable
     probe_cluster: CheckFn = check_cluster_prometheus
 
+    def gate_dependents(self) -> dict[str, frozenset[str]]:
+        """This value's own gate -> dependents map, in GATE_DEPENDENTS' shape.
+
+        `run_once` reads the four dependent sets through this instance, so the startup filter
+        validation must read them from the same place. Reading the module table there instead
+        would validate a stated `Gates` against rules the run loop does not use — the asymmetry
+        would only show up as a filter accepted at startup and then behaving differently.
+        """
+        return {
+            "prometheus": self.prom_dependent,
+            "loki_reachable": self.loki_dependent,
+            "b2_reachable": self.b2_dependent,
+            "cluster_prometheus": self.cluster_dependent,
+        }
+
 
 def check_enabled(name: str, only: frozenset[str], skip: frozenset[str]) -> bool:
     """Is `name` enabled under the CHECKS_ONLY/CHECKS_SKIP filter?
@@ -243,12 +258,24 @@ def check_enabled(name: str, only: frozenset[str], skip: frozenset[str]) -> bool
 
 
 def validate_check_filter(
-    only: frozenset[str], skip: frozenset[str], checks: list[Check]
+    only: frozenset[str],
+    skip: frozenset[str],
+    checks: list[Check],
+    gate_dependents: Mapping[str, frozenset[str]] = GATE_DEPENDENTS,
 ) -> list[str]:
-    """Pure: return the list of problems with a CHECKS_ONLY/CHECKS_SKIP configuration."""
-    known = {c.name for c in checks} | set(GATE_DEPENDENTS)
+    """Pure: return the list of problems with a CHECKS_ONLY/CHECKS_SKIP configuration.
+
+    Args:
+      only: The enable-exactly-this-set filter. Empty enables everything.
+      skip: The names to drop.
+      checks: The registry the filter names checks from.
+      gate_dependents: The gate -> dependents map to validate against. Defaults to the module
+        table; `main` passes `Gates.gate_dependents()` so the rules validated here are the ones
+        `run_once` will actually apply.
+    """
+    known = {c.name for c in checks} | set(gate_dependents)
     problems = ["unknown check name: %s" % n for n in sorted((only | skip) - known)]
-    for gate, dependents in sorted(GATE_DEPENDENTS.items()):
+    for gate, dependents in sorted(gate_dependents.items()):
         if check_enabled(gate, only, skip):
             continue
         enabled = sorted(d for d in dependents if check_enabled(d, only, skip))
@@ -260,7 +287,10 @@ def validate_check_filter(
     return problems
 
 
-def expand_gates_for_cli(names: frozenset[str]) -> frozenset[str]:
+def expand_gates_for_cli(
+    names: frozenset[str],
+    gate_dependents: Mapping[str, frozenset[str]] = GATE_DEPENDENTS,
+) -> frozenset[str]:
     """Union in every gate a `--check`-selected check depends on.
 
     `--check disk` alone must not trip validate_check_filter's "gate disabled but its dependents
@@ -271,9 +301,11 @@ def expand_gates_for_cli(names: frozenset[str]) -> frozenset[str]:
 
     Args:
       names: The check names passed on the command line via `--check`.
+      gate_dependents: The gate -> dependents map to expand through. Defaults to the module
+        table; `main` passes `Gates.gate_dependents()`, the same map it validates against.
     """
     gates = set(names)
-    for gate, dependents in GATE_DEPENDENTS.items():
+    for gate, dependents in gate_dependents.items():
         if names & dependents:
             gates.add(gate)
     return frozenset(gates)

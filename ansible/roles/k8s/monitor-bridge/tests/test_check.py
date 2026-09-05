@@ -79,7 +79,7 @@ def test_checks_and_env_secret_push_tokens_agree():
             re.MULTILINE,
         )
     )
-    assert in_code == in_twin, "only in check.py=%s ; only in env-secret=%s" % (
+    assert in_code == in_twin, "only in files/=%s ; only in env-secret=%s" % (
         sorted(in_code - in_twin),
         sorted(in_twin - in_code),
     )

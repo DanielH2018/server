@@ -109,6 +109,23 @@ def test_cluster_dependent_disjoint_from_prom_dependent():
     assert gates.CLUSTER_DEPENDENT.isdisjoint(gates.B2_DEPENDENT)
 
 
+def test_a_gates_value_validates_against_its_own_dependent_sets():
+    """`Gates.gate_dependents()` is what the filter is validated against, not the module table.
+
+    `run_once` suppresses by the four sets on the VALUE it is handed, so a filter validated
+    against `GATE_DEPENDENTS` instead would accept a configuration the run loop then treats
+    differently. A `Gates` whose Prometheus gate suppresses nothing must therefore leave
+    `--check disk` alone, where the module table unions `prometheus` in.
+    """
+    stated = gates.Gates(prom_dependent=frozenset())
+    assert stated.gate_dependents()["prometheus"] == frozenset()
+    names = frozenset({"disk"})
+    assert gates.expand_gates_for_cli(names, stated.gate_dependents()) == names
+    assert "prometheus" in gates.expand_gates_for_cli(
+        names
+    )  # the module table still does
+
+
 def test_cluster_targets_is_cluster_dependent_not_prom_dependent():
     # It reads the CLUSTER Prometheus, so a Docker-side outage must not suppress it and vice
     # versa — the same separation k8s_workloads has.

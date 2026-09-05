@@ -41,15 +41,8 @@ def _silence(monkeypatch, pushes, ran, names=("disk",), probe_prometheus=None):
     monkeypatch.setattr(bridge.common, "touch_heartbeat", lambda path: None)
     monkeypatch.setattr(bridge.net, "prom_vector", lambda _cfg, *a, **k: [])
 
-    def _mk(name):
-        def fn(_cfg):
-            ran.append(name)
-            return True, "%s ok" % name
-
-        return fn
-
     return {
-        "checks": [Check(n, "tok_%s" % n, _mk(n)) for n in names],
+        "checks": [Check(n, "tok_%s" % n, mk(ran, n)) for n in names],
         "gate_config": Gates(
             probe_prometheus=probe_prometheus or (lambda _cfg: (True, "prom ok")),
             probe_loki=lambda _cfg: (True, "loki ok"),
@@ -111,6 +104,27 @@ def test_dry_run_evaluates_every_check_and_pushes_nothing(monkeypatch):
     assert cli.main(["--once", "--dry-run"], **wired) == 0
     assert ran == ["disk"]
     assert pushes == []
+
+
+def test_the_registry_is_built_from_the_passed_env_when_checks_is_none(monkeypatch):
+    """The pod's own path: `checks is None` builds the registry with `registry.build_checks`.
+
+    Every other test here STATES `checks=`, so the branch the Deployment actually takes would
+    otherwise be untested — and it is the branch that decides which Kuma monitor a result
+    reaches. `os.environ` carries a DIFFERENT token for the same monitor, so a build_checks
+    reading the process environment instead of its argument pushes to the wrong monitor and this
+    test sees it. `--check disk` rather than CHECKS_ONLY, because CHECKS_ONLY is strict about
+    naming the gate and `--check` unions it in.
+    """
+    pushes, ran = [], []
+    wired = _silence(monkeypatch, pushes, ran)
+    monkeypatch.setenv("KUMA_PUSH_DISK", "from_os_environ")
+    env = {"KUMA_PUSH_DISK": "from_the_argument"}
+    argv = ["--once", "--check", "disk"]
+    assert cli.main(argv, env=env, checks=None, gate_config=wired["gate_config"]) == 0
+    tokens = [t for t, _ok, _msg in pushes]
+    assert "from_the_argument" in tokens, tokens
+    assert "from_os_environ" not in tokens, tokens
 
 
 def test_check_flag_is_repeatable_and_filters_like_checks_only(monkeypatch, cfg):

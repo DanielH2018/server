@@ -185,3 +185,13 @@ def run_once(
             bridge.common.log("OK  " if ok else "DOWN", name, "-", msg)
         if not dry_run:
             bridge.net.push(cfg, token, ok, msg)
+
+
+if __name__ == "__main__":
+    # check.py was the entry point until this split, so `python check.py --once --dry-run` is
+    # what a stale runbook (or muscle memory) still reaches for. Without this it exits 0 having
+    # printed nothing and pushed nothing, which reads as a clean dry run rather than a no-op.
+    import sys
+
+    print("the entry point is cli.py — run `python cli.py` instead", file=sys.stderr)
+    sys.exit(2)

@@ -81,9 +81,11 @@ def main(
         one. See the DECIDED note below.
       checks: The registry to run. None builds it from `env`, which is what the pod does; a test
         passes the two entries it means rather than patching a module table.
-      gate_config: The gate configuration `run_once` reads. None builds the production
-        `Gates()`. Named `gate_config` rather than `gates` because this module imports the
-        `gates` MODULE, and a parameter of that name would shadow it in the body.
+      gate_config: The gate configuration `run_once` reads, and the one the check filter is
+        validated against — its `gate_dependents()` map is what `expand_gates_for_cli` and
+        `validate_check_filter` are handed here. None builds the production `Gates()`. Named
+        `gate_config` rather than `gates` because this module imports the `gates` MODULE, and a
+        parameter of that name would shadow it in the body.
 
     Returns:
       The process exit code: 0 after a completed --once run, 2 on a configuration fault.
@@ -107,12 +109,16 @@ def main(
             bridge.common.log("FATAL: bad monitor-bridge config:", problem)
         return 2
     checks = registry.build_checks(environment) if checks is None else checks
+    # Built here rather than left to run_once's own default, so the filter is validated against
+    # the same dependent sets the run loop will suppress by.
+    gate_config = Gates() if gate_config is None else gate_config
+    dependents = gate_config.gate_dependents()
     only = (
-        gates.expand_gates_for_cli(frozenset(args.checks))
+        gates.expand_gates_for_cli(frozenset(args.checks), dependents)
         if args.checks
         else cfg.CHECKS_ONLY
     )
-    problems = gates.validate_check_filter(only, cfg.CHECKS_SKIP, checks)
+    problems = gates.validate_check_filter(only, cfg.CHECKS_SKIP, checks, dependents)
     if problems:
         for p in problems:
             bridge.common.log("FATAL: bad CHECKS_ONLY/CHECKS_SKIP:", p)

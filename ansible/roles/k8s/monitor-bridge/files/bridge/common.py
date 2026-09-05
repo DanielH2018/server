@@ -52,7 +52,7 @@ def _env(name: str, default: str) -> str:
 # Every env value this module or bridge/config.py could not parse, one operator-readable line
 # each.
 #
-# IMPORTING A MODULE THAT USES THESE MUST NOT RAISE. `python /app/check.py` imports both this
+# IMPORTING A MODULE THAT USES THESE MUST NOT RAISE. `python /app/cli.py` imports both this
 # module and bridge/config.py transitively, so a ValueError on one malformed number used to kill
 # the pod during import — before the heartbeat file existed, before a single monitor could be
 # told, and with a traceback naming neither the env var nor its value. `_int`/`_num` below
