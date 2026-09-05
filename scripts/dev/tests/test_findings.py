@@ -10,6 +10,7 @@ Run: uv run pytest scripts/dev/tests/test_findings.py
 
 import json
 
+import pytest
 from _findings_fakes import Fakes
 from dev import findings
 from dev.findings_gh import run
@@ -221,7 +222,7 @@ def test_touch_refuses_a_closed_issue(capsys, issue, make_tools):
 
 
 def test_close_fixed_with_pr_names_the_pr():
-    plans = plan_close(5, fixed=True, pr=700, reason=None)
+    plans = plan_close(5, outcome="fixed", pr=700)
     (argv,) = plans
     assert (
         argv[:3] == ["issue", "close", "5"]
@@ -231,14 +232,29 @@ def test_close_fixed_with_pr_names_the_pr():
 
 
 def test_close_refuted_adds_the_label_then_closes_with_the_reason():
-    plans = plan_close(
-        5, fixed=False, pr=None, reason="the timer is disabled by design"
-    )
+    plans = plan_close(5, outcome="refuted", reason="the timer is disabled by design")
     assert plans[0] == ["issue", "edit", "5", "--add-label", "refuted"]
     assert plans[1][:3] == ["issue", "close", "5"]
-    assert (
-        "the timer is disabled by design" in plans[1][plans[1].index("--comment") + 1]
+    comment = plans[1][plans[1].index("--comment") + 1]
+    assert comment == "Refuted: the timer is disabled by design"
+    assert plans[1][plans[1].index("--reason") + 1] == "not planned"
+
+
+def test_close_accepted_adds_the_accepted_label_and_says_accepted():
+    """The accepted close must not read as a refutation: the register would be lying."""
+    plans = plan_close(
+        5, outcome="accepted", reason="one voter is the deliberate trade-off"
     )
+    assert plans[0] == ["issue", "edit", "5", "--add-label", "accepted"]
+    assert plans[1][plans[1].index("--reason") + 1] == "not planned"
+    comment = plans[1][plans[1].index("--comment") + 1]
+    assert comment == "Accepted: one voter is the deliberate trade-off"
+    assert "refuted" not in str(plans).lower()
+
+
+def test_close_rejects_an_outcome_that_is_not_one_of_the_three():
+    with pytest.raises(KeyError):
+        plan_close(5, outcome="wontfix", reason="r")
 
 
 def test_close_refuted_without_a_reason_is_rejected_before_any_write(make_tools):
@@ -258,6 +274,36 @@ def test_close_fixed_with_a_pr_is_accepted(make_tools):
     tools, calls = make_tools()
     assert findings.main(["close", "5", "--fixed", "--pr", "700"], tools) == 0
     assert calls.gh[0][:3] == ["issue", "close", "5"]
+
+
+def test_close_accepted_without_a_reason_is_rejected_before_any_write(make_tools):
+    tools, calls = make_tools()
+    assert findings.main(["close", "5", "--accepted"], tools) == 2
+    assert calls.none()
+
+
+def test_close_accepted_with_a_pr_is_rejected(make_tools):
+    tools, calls = make_tools()
+    argv = ["close", "5", "--accepted", "--reason", "r", "--pr", "700"]
+    assert findings.main(argv, tools) == 2
+    assert calls.none()
+
+
+def test_close_accepted_creates_the_label_before_it_applies_it(capsys, make_tools):
+    """`gh issue edit --add-label` fails on a label the repo lacks, and `accepted` is new."""
+    tools, calls = make_tools(Fakes(labels=set(LABELS) - {"accepted"}))
+    argv = ["close", "5", "--accepted", "--reason", "the operator ruled"]
+    assert findings.main(argv, tools) == 0
+    assert calls.gh[0][:3] == ["label", "create", "accepted"]
+    assert calls.gh[1] == ["issue", "edit", "5", "--add-label", "accepted"]
+    assert "#5 closed as accepted" in capsys.readouterr().out
+
+
+def test_close_fixed_creates_no_label(make_tools):
+    """The fixed close applies no label, so it must not pay for a label sync."""
+    tools, calls = make_tools(Fakes(labels=set(LABELS) - {"accepted"}))
+    assert findings.main(["close", "5", "--fixed"], tools) == 0
+    assert all(p[:2] != ["label", "create"] for p in calls.gh)
 
 
 # --- the fingerprint trailer across line endings -----------------------------------------------

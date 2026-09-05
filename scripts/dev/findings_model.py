@@ -24,6 +24,15 @@ DOMAINS = (
     "home-assistant",
 )
 
+# How a finding can stop being open. `fixed` closes as completed; the other two close as not
+# planned and carry a label of the same name. `refuted` means a skeptic disproved it, so the
+# register would be lying to keep it; `accepted` means it is TRUE and the operator chose to
+# live with it. Both are terminal — `plan_open` refuses to reopen either (`NO_REOPEN`), which
+# is the whole point: without `accepted`, an accepted trade-off had to be closed by hand and
+# the next review re-filed it as a regression.
+CLOSE_OUTCOMES = ("fixed", "refuted", "accepted")
+NO_REOPEN = frozenset(("refuted", "accepted"))
+
 # name -> (colour, description). Colours are Catppuccin Mocha so the label set reads as one
 # system with the artifacts; severity is red / yellow / green, state markers are greys.
 LABELS: dict[str, tuple[str, str]] = {
@@ -37,6 +46,10 @@ LABELS: dict[str, tuple[str, str]] = {
     "refuted": (
         "6c7086",
         "Closed because a skeptic disproved the finding; do not reopen",
+    ),
+    "accepted": (
+        "9399b2",
+        "Closed because the operator accepted the trade-off; true, but do not reopen",
     ),
     "escalated": ("f5c2e7", "Re-observed three or more times; needs a durable owner"),
     "no-vetted-remediation": ("585b70", "Every proposed fix failed the fix-skeptic"),
@@ -154,6 +167,8 @@ def issue_rows(issues: list[dict]) -> list[dict]:
                 "kind": _prefixed(names, "kind/"),
                 "domain": _prefixed(names, "domain/"),
                 "escalated": "escalated" in names,
+                "refuted": "refuted" in names,
+                "accepted": "accepted" in names,
                 "no_vetted_remediation": "no-vetted-remediation" in names,
                 "verify_by": parse_verify_by(issue.get("body") or "") is not None,
                 "first_seen": (issue.get("createdAt") or "")[:10],

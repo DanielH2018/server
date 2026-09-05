@@ -344,8 +344,9 @@ feedback + MLD discipline):
   improvement you noticed while doing something else. List the issue numbers in the end-of-job
   report. A memory file, `PLANS.md`, or a "3 pending" line in the session notes has no status
   field and no owner; an issue closes from the fixing PR's `Closes #<n>`. Refuted findings close
-  with `--refuted --reason`, and the wrapper refuses to reopen them, so the do-not-re-flag list
-  does not carry them. Open items are `findings.py list`'s register, not a memory file's.
+  with `--refuted --reason` and a true finding the operator decided to live with closes with
+  `--accepted --reason`; the wrapper refuses to reopen either, so the do-not-re-flag list does
+  not carry them. Open items are `findings.py list`'s register, not a memory file's.
 
 ## Parallel Claude Sessions
 Several sessions work this repo at once, each in its own `.claude/worktrees/<name>` checkout.

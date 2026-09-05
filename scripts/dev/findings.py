@@ -34,13 +34,21 @@ Usage::
     uv run python scripts/dev/findings.py touch 688 [--source review-2026-09-02]
     uv run python scripts/dev/findings.py close 688 --fixed [--pr 700]
     uv run python scripts/dev/findings.py close 688 --refuted --reason "..."
+    uv run python scripts/dev/findings.py close 688 --accepted --reason "..."
     uv run python scripts/dev/findings.py list [--state open|closed|all] [--json]
     uv run python scripts/dev/findings.py verify --all [--close] [--timeout 120]
     uv run python scripts/dev/findings.py verify 688 701 [--close]
 
+CLOSING A FINDING. `--fixed` closes as completed. The other two close as not planned and are
+terminal, so `open` refuses to re-file the same fingerprint afterwards: `--refuted` records
+that a skeptic disproved it, and `--accepted` records that it is TRUE and the operator chose
+to live with the trade-off. Both need `--reason`. Reach for `--accepted` rather than closing
+by hand — a hand-close is invisible to the dedup, so the next review re-files an accepted
+decision and the comment on it reads "treat as a regression".
+
 Exit codes: 0 done; 1 gh failed (its stderr is printed); 2 bad arguments;
 3 nothing was written because the issue refuses it — the fingerprint belongs to an issue
-closed as refuted, or `touch` was given a closed issue.
+closed as refuted or accepted, or `touch` was given a closed issue.
 """
 
 import argparse
@@ -70,6 +78,7 @@ from dev.findings_gh import (
 from dev.findings_model import (
     DOMAINS,
     KINDS,
+    NO_REOPEN,
     SEVERITIES,
     find_by_fingerprint,
     fingerprint,
@@ -99,7 +108,7 @@ def cmd_open(args: argparse.Namespace, tools: FindingsTools) -> int:
 
     Returns:
         The process exit code: 0 on success, 2 if the body file is missing, 3 if the
-        fingerprint belongs to an issue closed as refuted.
+        fingerprint belongs to an issue closed as refuted or accepted.
     """
     if not args.body_file.is_file():
         sys.stderr.write(f"open: body file not found: {args.body_file}\n")
@@ -136,9 +145,10 @@ def cmd_open(args: argparse.Namespace, tools: FindingsTools) -> int:
     # below has one to name. Checked here rather than in each branch: the two of them read
     # `existing` four times between them.
     assert existing is not None
-    if outcome == "refuted":
+    if outcome in NO_REOPEN:
         print(
-            f"#{existing['number']} refuted: closed on {(existing.get('closedAt') or '?')[:10]}; not reopened"
+            f"#{existing['number']} {outcome}: closed on "
+            f"{(existing.get('closedAt') or '?')[:10]}; not reopened"
         )
         return code
     run(plans, args.dry_run, tools)
@@ -158,7 +168,8 @@ def cmd_touch(args: argparse.Namespace, tools: FindingsTools) -> int:
     """
     issue = _load_issue(args.number, tools)
     if issue.get("state") == "CLOSED":
-        why = "refuted" if "refuted" in label_names(issue) else "fixed"
+        terminal = sorted(NO_REOPEN & label_names(issue))
+        why = terminal[0] if terminal else "fixed"
         print(f"#{args.number} is closed ({why}); use open to re-file")
         return 3
     plans = plan_touch(issue, args.source)
@@ -169,30 +180,37 @@ def cmd_touch(args: argparse.Namespace, tools: FindingsTools) -> int:
 
 
 def cmd_close(args: argparse.Namespace, tools: FindingsTools) -> int:
-    """Handles the ``close`` subcommand: closes an issue as fixed or refuted.
+    """Handles the ``close`` subcommand: closes an issue as fixed, refuted or accepted.
 
     Args:
         args: parsed CLI namespace for the ``close`` subcommand.
         tools: the process boundaries every gh call goes through.
 
     Returns:
-        2 if ``--refuted`` is combined with ``--pr`` or missing ``--reason``, 0 otherwise.
+        2 if ``--pr`` is combined with anything but ``--fixed``, or ``--reason`` is missing
+        from a not-planned close; 0 otherwise.
     """
+    outcome = "fixed" if args.fixed else "refuted" if args.refuted else "accepted"
     # argparse cannot express "--pr only with --fixed" across a mutually exclusive group.
-    if args.refuted and args.pr:
+    if outcome != "fixed" and args.pr:
         sys.stderr.write("close --pr goes with --fixed\n")
         return 2
-    if args.refuted and not args.reason:
+    if outcome != "fixed" and not args.reason:
         sys.stderr.write(
-            "close --refuted needs --reason: a bare refutation teaches the next run nothing\n"
+            f"close --{outcome} needs --reason: a bare verdict teaches the next run nothing\n"
         )
         return 2
+    if outcome != "fixed":
+        # `gh issue edit --add-label` fails on a label the repo does not have, and the
+        # not-planned outcomes are the only close that applies one. `refuted` exists only
+        # because some earlier `open` created it; `accepted` would not on its first use.
+        run(plan_sync_labels(_existing_labels(tools)), args.dry_run, tools)
     run(
-        plan_close(args.number, fixed=args.fixed, pr=args.pr, reason=args.reason),
+        plan_close(args.number, outcome=outcome, pr=args.pr, reason=args.reason),
         args.dry_run,
         tools,
     )
-    print(f"#{args.number} closed as {'fixed' if args.fixed else 'refuted'}")
+    print(f"#{args.number} closed as {outcome}")
     return 0
 
 
@@ -234,7 +252,7 @@ def cmd_verify(args: argparse.Namespace, tools: FindingsTools) -> int:
                 continue
             comment = verify_close_comment(command, detail)
             run(
-                plan_close(number, fixed=True, pr=None, reason=None, comment=comment),
+                plan_close(number, outcome="fixed", comment=comment),
                 args.dry_run,
                 tools,
             )
@@ -265,6 +283,8 @@ def cmd_list(args: argparse.Namespace, tools: FindingsTools) -> int:
             f" [{f}]"
             for f, on in (
                 ("escalated", r["escalated"]),
+                ("refuted", r["refuted"]),
+                ("accepted", r["accepted"]),
                 ("no-vetted-remediation", r["no_vetted_remediation"]),
                 ("verify-by", r["verify_by"]),
             )
@@ -327,14 +347,25 @@ def _parser() -> argparse.ArgumentParser:
     t.add_argument("number", type=int)
     t.add_argument("--source", default="session")
 
-    c = sub.add_parser("close", help="close as fixed or refuted")
+    c = sub.add_parser("close", help="close as fixed, refuted or accepted")
     _add_dry_run(c, suppress=True)
     c.add_argument("number", type=int)
     how = c.add_mutually_exclusive_group(required=True)
-    how.add_argument("--fixed", action="store_true")
-    how.add_argument("--refuted", action="store_true")
+    how.add_argument("--fixed", action="store_true", help="a change fixed it")
+    how.add_argument(
+        "--refuted", action="store_true", help="a skeptic disproved the finding"
+    )
+    how.add_argument(
+        "--accepted",
+        action="store_true",
+        help="true, but the operator chose to live with the trade-off; never reopened",
+    )
     c.add_argument("--pr", type=int, help="the PR that fixed it")
-    c.add_argument("--reason", help="required with --refuted: what disproved it")
+    c.add_argument(
+        "--reason",
+        help="required with --refuted (what disproved it) and with --accepted (why the "
+        "trade-off stands)",
+    )
 
     ls = sub.add_parser("list", help="rows for the review skill and the docs generator")
     _add_dry_run(ls, suppress=True)
