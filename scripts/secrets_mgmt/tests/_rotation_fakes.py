@@ -76,10 +76,12 @@ def build_tools(f: Fakes) -> tuple[RotationTools, list]:
         calls.append(("run", (cmd,), kwargs))
         if f.run_error is not None:
             raise f.run_error
-        # `check=True` raises here for the same reason it does in subprocess: all three
-        # callers pass it, and two of them read a non-zero exit as "this host cannot
-        # decrypt" / "the rotation must not be recorded". A runner that returned the
-        # CompletedProcess anyway would make the failure path untestable.
+        # `check=True` raises here for the same reason it does in subprocess. Two of the
+        # three callers pass it: `decrypted_values` reads the exception as "this host
+        # cannot decrypt", and `sops_set` reads it as "the rotation must not be recorded".
+        # `run_deploy` passes no `check` and reads `.returncode`, so a non-zero rc reaches
+        # it as a return value. A runner that returned the CompletedProcess to all three
+        # would make the two failure paths untestable.
         if kwargs.get("check") and f.run_rc:
             raise subprocess.CalledProcessError(f.run_rc, cmd)
         return subprocess.CompletedProcess(
