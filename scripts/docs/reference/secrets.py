@@ -62,7 +62,7 @@ def build_rows(
     rows = []
     for name, entry in sorted((reg.get("entries") or {}).items()):
         tier = str(entry.get("tier", "unknown"))
-        due = rotation_registry.due_date(entry)
+        due = rotation_registry.due_date(name, entry)
         rows.append(
             {
                 "name": name,
