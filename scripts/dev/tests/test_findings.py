@@ -270,8 +270,8 @@ def test_close_refuted_with_a_pr_is_rejected(make_tools):
     assert calls.none()
 
 
-def test_close_fixed_with_a_pr_is_accepted(make_tools):
-    tools, calls = make_tools()
+def test_close_fixed_with_a_pr_is_accepted(make_tools, issue):
+    tools, calls = make_tools(Fakes(view=issue(5)))
     assert findings.main(["close", "5", "--fixed", "--pr", "700"], tools) == 0
     assert calls.gh[0][:3] == ["issue", "close", "5"]
 
@@ -289,9 +289,11 @@ def test_close_accepted_with_a_pr_is_rejected(make_tools):
     assert calls.none()
 
 
-def test_close_accepted_creates_the_label_before_it_applies_it(capsys, make_tools):
+def test_close_accepted_creates_the_label_before_it_applies_it(
+    capsys, make_tools, issue
+):
     """`gh issue edit --add-label` fails on a label the repo lacks, and `accepted` is new."""
-    tools, calls = make_tools(Fakes(labels=set(LABELS) - {"accepted"}))
+    tools, calls = make_tools(Fakes(labels=set(LABELS) - {"accepted"}, view=issue(5)))
     argv = ["close", "5", "--accepted", "--reason", "the operator ruled"]
     assert findings.main(argv, tools) == 0
     assert calls.gh[0][:3] == ["label", "create", "accepted"]
@@ -299,9 +301,9 @@ def test_close_accepted_creates_the_label_before_it_applies_it(capsys, make_tool
     assert "#5 closed as accepted" in capsys.readouterr().out
 
 
-def test_close_fixed_creates_no_label(make_tools):
+def test_close_fixed_creates_no_label(make_tools, issue):
     """The fixed close applies no label, so it must not pay for a label sync."""
-    tools, calls = make_tools(Fakes(labels=set(LABELS) - {"accepted"}))
+    tools, calls = make_tools(Fakes(labels=set(LABELS) - {"accepted"}, view=issue(5)))
     assert findings.main(["close", "5", "--fixed"], tools) == 0
     assert all(p[:2] != ["label", "create"] for p in calls.gh)
 

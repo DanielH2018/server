@@ -345,11 +345,18 @@ def cmd_close(args: argparse.Namespace, tools: FindingsTools) -> int:
         # not-planned outcomes are the only close that applies one. `refuted` exists only
         # because some earlier `open` created it; `accepted` would not on its first use.
         run(plan_sync_labels(_existing_labels(tools)), args.dry_run, tools)
-    run(
-        plan_close(args.number, outcome=outcome, pr=args.pr, reason=args.reason),
-        args.dry_run,
-        tools,
-    )
+    # Closing ends the work, so it releases whoever holds the claim — not just the caller's
+    # own worktree. `claims`, `reap` and `next` all read open issues, so a claim left on a
+    # closed issue disappears from every view at once rather than showing up wrong.
+    issue = _load_issue(args.number, tools)
+    held = current_claim(issue)
+    plans = []
+    if held:
+        plans += plan_release(
+            issue, worktree=held, when=_now(), reason=f"closed as {outcome}"
+        )
+    plans += plan_close(args.number, outcome=outcome, pr=args.pr, reason=args.reason)
+    run(plans, args.dry_run, tools)
     print(f"#{args.number} closed as {outcome}")
     return 0
 

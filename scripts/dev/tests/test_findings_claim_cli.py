@@ -242,3 +242,20 @@ def test_reap_dry_run_still_refuses_when_git_fails(monkeypatch):
     tools, calls = build_tools(Fakes(issues=[stale]))
     assert main(["reap", "--dry-run"], tools) != 0
     assert calls.gh == []
+
+
+def test_closing_a_claimed_issue_releases_the_claim():
+    issue = make_issue(
+        1132, labels=["claimed"], comments=[claim_comment(WT, None, "t")]
+    )
+    tools, calls = build_tools(Fakes(issues=[issue], view=issue))
+    assert main(["close", "1132", "--fixed", "--pr", "1270"], tools) == 0
+    assert ["issue", "edit", "1132", "--remove-label", "claimed"] in calls.gh
+    assert any("Released: `" in a for c in calls.gh for a in c)
+
+
+def test_closing_an_unclaimed_issue_writes_no_release():
+    issue = make_issue(1132)
+    tools, calls = build_tools(Fakes(issues=[issue], view=issue))
+    assert main(["close", "1132", "--fixed"], tools) == 0
+    assert not any("Released: `" in a for c in calls.gh for a in c)
