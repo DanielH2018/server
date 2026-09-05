@@ -42,10 +42,21 @@ Environment=KUBECONFIG=/home/{{ sys_user }}/.kube/config
 # the session reads clean. Three kills in a row on 2026-09-04, issue #1096.
 #
 # Turning the reaper off removes no memory bound. MemoryHigh below still throttles the whole
-# cgroup and claude_code_rc_capacity is still the real bound. What the reaper adds over
-# those is a kill, and a kill is the one response this host cannot absorb.
+# cgroup, and claude_code_rc_pytest_workers below bounds the fan-out that fills it. What the
+# reaper adds over those is a kill, and a kill is the one response this host cannot absorb.
 Environment=CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1
 {% endif %}
+
+# Bound the pytest fan-out. `addopts` in pyproject.toml carries `-n auto`, which pytest-xdist
+# resolves to one worker per core — 16 on daniel-box. Nothing caps how many pytest runs the
+# sessions on this host launch at once, so on 2026-09-05 nine concurrent runs resolved `auto`
+# nine times over and put ~144 workers in this cgroup.
+#
+# xdist reads this variable FIRST in `pytest_xdist_auto_num_workers` and returns it before any
+# CPU detection (`xdist/plugin.py`, verified against the installed 3.8.0), so it governs both
+# `-n auto` and `-n logical`. Setting it here rather than in pyproject.toml is deliberate: it
+# scopes the cap to sessions this host spawns, leaving CI and a human's own shell at full width.
+Environment=PYTEST_XDIST_AUTO_NUM_WORKERS={{ claude_code_rc_pytest_workers }}
 
 # DECIDED: --spawn is passed EXPLICITLY and must stay that way. With it omitted the process
 # builds a readline interface on stdin to ask which spawn mode to use (it guards that on
@@ -63,9 +74,19 @@ RestartSec=10
 # DECIDED: MemoryHigh only, deliberately NO MemoryMax. systemd applies a memory cap to the
 # whole cgroup — the host process plus every session it has spawned — so one runaway
 # session would take the OOM kill for all of them, and Restart=always would then bring back
-# an empty host with every phone session gone. MemoryHigh throttles instead of killing, and
-# claude_code_rc_capacity is the real bound.
-MemoryHigh=6G
+# an empty host with every phone session gone. MemoryHigh throttles instead of killing.
+#
+# CONTRADICTED 2026-09-05, the clause that read "and claude_code_rc_capacity is the real
+# bound". The conclusion above stands — no MemoryMax — but that premise is false, and it is
+# why this host stalled for 30 minutes on 2026-09-05. Capacity bounds session COUNT. The
+# memory goes to what a session SPAWNS: two live sessions put 203 processes in this cgroup,
+# 143 of them pytest workers, holding 6.96 GB anon plus all 8 GB of the system's swap. The
+# `claude` processes themselves measured 404 MB and 376 MB, exactly as capacity's own
+# estimate predicts — the per-process figure was never the problem, the inference from it
+# was. claude_code_rc_pytest_workers below is what actually bounds the fan-out. Full
+# analysis in this role's CLAUDE.md; issue #1154 holds the swap-bound question this does
+# not settle.
+MemoryHigh={{ claude_code_rc_memory_high }}
 
 # Stopping the host is meant to stop the sessions it spawned; they are its children, so the
 # default control-group kill is the wanted behaviour. The timeout gives them a chance to
