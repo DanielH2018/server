@@ -4,7 +4,7 @@ The logic each subcommand runs on is tested beside it: test_secret_classify.py,
 test_secret_registry.py, test_secret_consumers.py, test_secret_git_dates.py, and
 test_rotation_tools.py for the process boundaries. What is left here is the CLI's own
 behaviour — the Kuma summary line, the unattended pick-up window, and the two ways
-`cmd_rotate` can fail partway through a batch. The push-token shape check its audit arm calls
+`cmd_rotate` can fail partway through a batch (a crash and a hang). The push-token shape check its audit arm calls
 is tested beside that module, in test_secret_sops_io.py.
 
 Run: uv run pytest scripts/secrets_mgmt/tests/test_secret_rotation.py
@@ -169,4 +169,46 @@ def test_rotate_records_the_names_a_failed_batch_already_wrote():
     assert reg["entries"][second]["last_rotated"] == "2025-06-01"  # never written
     assert "run" not in named_calls(recorded), (
         "a failed batch must not deploy — the tokens it wrote are about to be reverted"
+    )
+
+
+def test_rotate_reports_the_names_already_written_when_a_sops_set_hangs(capsys):
+    """A hung `sops set` is the same half-state as a crashed one, and reports the same way.
+
+    `sops_set` bounds its write at 30s, so a hang arrives at the batch as a
+    `subprocess.TimeoutExpired` rather than as a call that never returns. That is a
+    different exception class from the crash path, so leaving it out of the handler's
+    except tuple would let it escape past the `save_registry` — the exact half-state the
+    handler exists to record: NEW values in the store for the earlier names, with nothing
+    saying which.
+    """
+    first, second = "monitor_bridge_alpha_push_token", "monitor_bridge_beta_push_token"
+    reg = _reg((first, "auto", "2025-01-01"), (second, "auto", "2025-06-01"))
+    tools, recorded = build_tools(Fakes(registry=reg))
+
+    attempted: list[str] = []
+
+    def hanging_sops_set(name: str, _value: str) -> None:
+        attempted.append(name)
+        if len(attempted) == 2:
+            raise subprocess.TimeoutExpired(["sops", "set", "--value-stdin"], 30)
+
+    tools = replace(tools, sops_set=hanging_sops_set)
+
+    args = SimpleNamespace(name=None, all=True, commit=True, deploy=True)
+    assert sr.cmd_rotate(args, tools) == 3
+    assert attempted == [first, second]
+
+    err = capsys.readouterr().err
+    already = err.split("Already written to secrets.yml: ")[1].split(".")[0]
+    assert already == first, (
+        "the exit-3 message must still list the names already written: %r" % already
+    )
+    assert "save_registry" in named_calls(recorded)
+    assert (
+        reg["entries"][first]["last_rotated"] == "2026-09-01"
+    )  # _rotation_fakes.TODAY
+    assert reg["entries"][second]["last_rotated"] == "2025-06-01"  # never written
+    assert "run" not in named_calls(recorded), (
+        "a timed-out batch must not deploy, for the same reason a failed one must not"
     )
