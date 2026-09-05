@@ -5,8 +5,9 @@ deliver(): a webhook blip is redelivered by the queue, and an ff-merged path tha
 the next tick does not re-page. alert_deferred() and alert_secrets_deferred() choose the
 channel and the text; the tasks and meta channels subtract what this tick deployed, the k8s
 channel never does. check_stale_composes() pages once per distinct stale set and clears its
-marker when the set empties. _record_behind() stamps the behind-origin marker once and keeps
-the first-seen time across later pushes, and never lets a git failure page. Every test runs
+marker when the set empties. DeployerState.record_behind() stamps the behind-origin marker
+once and keeps the first-seen time across later pushes, and the entrypoint() that feeds it
+never lets a git failure page. Every test runs
 against the canned config and the tmp state dir from conftest.py; main()'s own branches
 are in test_gitops_deploy_main_branches.py.
 """
@@ -19,6 +20,7 @@ import pathlib
 
 import pytest
 
+import deploy_alerts
 from deploy_changes import ChangeSet
 from deploy_remediation import k8s_remediation
 from deploy_toolbox import DeployTools
@@ -27,24 +29,24 @@ ORIGIN = "a" * 40
 LATER = "b" * 40
 
 
-def _posts(gitops_deploy, monkeypatch, delivered: bool = True) -> list[tuple[str, str]]:
-    """Replace deliver() with one that records (key, content) and reports `delivered`."""
+def _posts(state_dir: pathlib.Path) -> tuple[DeployTools, list[tuple[str, str]]]:
+    """Tools whose webhook records the (queue key, content) of every alert posted.
+
+    The real `deliver` runs. It queues the alert BEFORE it posts, so the key it chose is in
+    `pending_alerts.json` at the moment the webhook is called — which is where the key is read
+    from here. Recording it that way rather than by replacing `deliver` keeps the assertion on
+    the key while leaving `discord_post`, the actual boundary, as the only thing faked.
+    """
     seen: list[tuple[str, str]] = []
 
-    def fake_deliver(_tools, key: str, content: str) -> bool:
+    def discord_post(_webhook: str, content: str) -> bool:
+        queued = json.loads((state_dir / "pending_alerts.json").read_text())
+        key = next((k for k, v in queued.items() if v == content), None)
+        assert key is not None, f"nothing was queued for {content!r} before the post"
         seen.append((key, content))
-        return delivered
+        return True
 
-    # deliver() is the module's own alert transport, not a process boundary: what a test here
-    # asserts is the QUEUE KEY it chose, which is exactly what a DeployTools field would hide.
-    # The boundary under it — discord_post — is the one the seam owns.
-    monkeypatch.setattr(gitops_deploy, "deliver", fake_deliver)
-    return seen
-
-
-# Every default is production; these tests reach only the paths deliver() shields, or override
-# the one boundary they exercise.
-TOOLS = DeployTools()
+    return DeployTools(discord_post=discord_post), seen
 
 
 def _marker(state_dir: pathlib.Path, name: str) -> str | None:
@@ -54,31 +56,51 @@ def _marker(state_dir: pathlib.Path, name: str) -> str | None:
 
 # ── alert_once(): the per-SHA dedupe ──────────────────────────────────────────────────────────
 def test_alert_once_delivers_and_advances_the_marker(
-    gitops_deploy, monkeypatch, state_dir
+    gitops_deploy, monkeypatch, state_dir, settings
 ):
-    seen = _posts(gitops_deploy, monkeypatch)
-    gitops_deploy.alert_once(TOOLS, "tasks_alerted", "tasks", ORIGIN, "changed")
+    tools, seen = _posts(state_dir)
+    deploy_alerts.alert_once(
+        tools,
+        gitops_deploy.STATE,
+        settings,
+        "tasks_alerted",
+        "tasks",
+        ORIGIN,
+        "changed",
+    )
     assert seen == [(f"tasks:{ORIGIN}", "changed")]
     assert _marker(state_dir, "tasks_alerted_sha") == ORIGIN
 
 
 def test_alert_once_is_silent_for_a_sha_already_alerted(
-    gitops_deploy, monkeypatch, state_dir
+    gitops_deploy, monkeypatch, state_dir, settings
 ):
-    seen = _posts(gitops_deploy, monkeypatch)
+    tools, seen = _posts(state_dir)
     for _ in range(3):
-        gitops_deploy.alert_once(TOOLS, "tasks_alerted", "tasks", ORIGIN, "changed")
+        deploy_alerts.alert_once(
+            tools,
+            gitops_deploy.STATE,
+            settings,
+            "tasks_alerted",
+            "tasks",
+            ORIGIN,
+            "changed",
+        )
     assert len(seen) == 1
-    gitops_deploy.alert_once(TOOLS, "tasks_alerted", "tasks", LATER, "again")
+    deploy_alerts.alert_once(
+        tools, gitops_deploy.STATE, settings, "tasks_alerted", "tasks", LATER, "again"
+    )
     assert seen[-1] == (f"tasks:{LATER}", "again")
     assert _marker(state_dir, "tasks_alerted_sha") == LATER
 
 
-def test_alert_once_marks_detection_not_delivery(gitops_deploy, state_dir):
+def test_alert_once_marks_detection_not_delivery(gitops_deploy, state_dir, settings):
     # A failed post must not re-page on the next tick through this path: the marker advances
     # anyway, and redelivery is the pending queue's job. Real deliver(), refused webhook.
     tools = DeployTools(discord_post=lambda _webhook, _content: False)
-    gitops_deploy.alert_once(tools, "meta_alerted", "meta", ORIGIN, "changed")
+    deploy_alerts.alert_once(
+        tools, gitops_deploy.STATE, settings, "meta_alerted", "meta", ORIGIN, "changed"
+    )
     assert _marker(state_dir, "meta_alerted_sha") == ORIGIN
     queued = json.loads((state_dir / "pending_alerts.json").read_text())
     assert queued == {f"meta:{ORIGIN}": "changed"}
@@ -86,40 +108,54 @@ def test_alert_once_marks_detection_not_delivery(gitops_deploy, state_dir):
 
 # ── alert_secrets_deferred() ──────────────────────────────────────────────────────────────────
 def test_a_secrets_change_pages_once_naming_the_sha(
-    gitops_deploy, monkeypatch, state_dir
+    gitops_deploy, monkeypatch, state_dir, settings
 ):
-    seen = _posts(gitops_deploy, monkeypatch)
-    gitops_deploy.alert_secrets_deferred(TOOLS, ORIGIN, ChangeSet(secrets=True))
-    gitops_deploy.alert_secrets_deferred(TOOLS, ORIGIN, ChangeSet(secrets=True))
+    tools, seen = _posts(state_dir)
+    deploy_alerts.alert_secrets_deferred(
+        tools, gitops_deploy.STATE, settings, ORIGIN, ChangeSet(secrets=True)
+    )
+    deploy_alerts.alert_secrets_deferred(
+        tools, gitops_deploy.STATE, settings, ORIGIN, ChangeSet(secrets=True)
+    )
     ((key, content),) = seen
     assert key == f"secrets:{ORIGIN}"
     assert ORIGIN[:8] in content and "nothing was redeployed" in content
     assert _marker(state_dir, "secrets_alerted_sha") == ORIGIN
 
 
-def test_no_secrets_change_pages_nothing(gitops_deploy, monkeypatch, state_dir):
-    seen = _posts(gitops_deploy, monkeypatch)
-    gitops_deploy.alert_secrets_deferred(TOOLS, ORIGIN, ChangeSet(services={"sonarr"}))
+def test_no_secrets_change_pages_nothing(
+    gitops_deploy, monkeypatch, state_dir, settings
+):
+    tools, seen = _posts(state_dir)
+    deploy_alerts.alert_secrets_deferred(
+        tools, gitops_deploy.STATE, settings, ORIGIN, ChangeSet(services={"sonarr"})
+    )
     assert seen == []
     assert _marker(state_dir, "secrets_alerted_sha") is None
 
 
 # ── alert_deferred(): tasks, meta and k8s channels ────────────────────────────────────────────
-def test_an_empty_changeset_pages_nothing(gitops_deploy, monkeypatch, state_dir):
-    seen = _posts(gitops_deploy, monkeypatch)
-    gitops_deploy.alert_deferred(TOOLS, ORIGIN, set(), ChangeSet())
+def test_an_empty_changeset_pages_nothing(
+    gitops_deploy, monkeypatch, state_dir, settings
+):
+    tools, seen = _posts(state_dir)
+    deploy_alerts.alert_deferred(
+        tools, gitops_deploy.STATE, settings, ORIGIN, set(), ChangeSet()
+    )
     assert seen == []
     assert not any(p.name.endswith("_alerted_sha") for p in state_dir.iterdir())
 
 
 def test_tasks_and_meta_name_only_what_this_tick_did_not_deploy(
-    gitops_deploy, monkeypatch, state_dir
+    gitops_deploy, monkeypatch, state_dir, settings
 ):
     # A combined push: svcA's template rode its scoped redeploy, svcB's tasks/ and svcC's
     # meta/deps.yml did not.
-    seen = _posts(gitops_deploy, monkeypatch)
+    tools, seen = _posts(state_dir)
     cs = ChangeSet(services={"svca"}, tasks={"svca", "svcb"}, meta={"svcc"})
-    gitops_deploy.alert_deferred(TOOLS, ORIGIN, {"svca"}, cs)
+    deploy_alerts.alert_deferred(
+        tools, gitops_deploy.STATE, settings, ORIGIN, {"svca"}, cs
+    )
     by_key = dict(seen)
     assert set(by_key) == {f"tasks:{ORIGIN}", f"meta:{ORIGIN}"}
     assert "`svcb`" in by_key[f"tasks:{ORIGIN}"]
@@ -130,20 +166,24 @@ def test_tasks_and_meta_name_only_what_this_tick_did_not_deploy(
 
 
 def test_a_structural_change_that_rode_its_own_redeploy_is_not_flagged(
-    gitops_deploy, monkeypatch, state_dir
+    gitops_deploy, monkeypatch, state_dir, settings
 ):
-    seen = _posts(gitops_deploy, monkeypatch)
+    tools, seen = _posts(state_dir)
     cs = ChangeSet(services={"svca"}, tasks={"svca"})
-    gitops_deploy.alert_deferred(TOOLS, ORIGIN, {"svca"}, cs)
+    deploy_alerts.alert_deferred(
+        tools, gitops_deploy.STATE, settings, ORIGIN, {"svca"}, cs
+    )
     assert seen == []
 
 
 def test_a_k8s_change_pages_with_the_remediation_for_this_host(
-    gitops_deploy, monkeypatch, state_dir
+    gitops_deploy, monkeypatch, state_dir, settings
 ):
-    seen = _posts(gitops_deploy, monkeypatch)
+    tools, seen = _posts(state_dir)
     cs = ChangeSet(k8s={"sonarr"})
-    gitops_deploy.alert_deferred(TOOLS, ORIGIN, set(), cs, declared_k8s={"sonarr"})
+    deploy_alerts.alert_deferred(
+        tools, gitops_deploy.STATE, settings, ORIGIN, set(), cs, declared_k8s={"sonarr"}
+    )
     ((key, content),) = seen
     assert key == f"k8s:{ORIGIN}"
     assert "`sonarr`" in content and ORIGIN[:8] in content
@@ -152,13 +192,15 @@ def test_a_k8s_change_pages_with_the_remediation_for_this_host(
 
 
 def test_a_k8s_change_is_flagged_even_when_something_else_deployed(
-    gitops_deploy, monkeypatch, state_dir
+    gitops_deploy, monkeypatch, state_dir, settings
 ):
     # Unlike tasks/meta there is no `- deployed` subtraction: this deployer never applies a k8s
     # role through deploy(cs.services), so nothing a k8s change could have ridden.
-    seen = _posts(gitops_deploy, monkeypatch)
-    gitops_deploy.alert_deferred(
-        TOOLS,
+    tools, seen = _posts(state_dir)
+    deploy_alerts.alert_deferred(
+        tools,
+        gitops_deploy.STATE,
+        settings,
         ORIGIN,
         {"sonarr"},
         ChangeSet(services={"sonarr"}, k8s={"sonarr"}),
@@ -168,13 +210,15 @@ def test_a_k8s_change_is_flagged_even_when_something_else_deployed(
 
 
 def test_an_unread_inventory_prescribes_the_full_deploy(
-    gitops_deploy, monkeypatch, state_dir
+    gitops_deploy, monkeypatch, state_dir, settings
 ):
     # declared_k8s=None is the caller that has not read host_vars. Treated as the empty set,
     # every changed role reads as untaggable and the remediation is the full deploy: slower,
     # but a `--tags` line for a role with no entry exits 0 having applied nothing.
-    seen = _posts(gitops_deploy, monkeypatch)
-    gitops_deploy.alert_deferred(TOOLS, ORIGIN, set(), ChangeSet(k8s={"sonarr"}))
+    tools, seen = _posts(state_dir)
+    deploy_alerts.alert_deferred(
+        tools, gitops_deploy.STATE, settings, ORIGIN, set(), ChangeSet(k8s={"sonarr"})
+    )
     ((_key, content),) = seen
     assert content.endswith(k8s_remediation({"sonarr"}, set(), set()))
 
@@ -205,11 +249,14 @@ DECLARES_SONARR = "containers_list:\n  - name: sonarr\n    platform: docker\n"
 def test_a_stale_compose_pages_once_per_distinct_set(
     gitops_deploy, monkeypatch, state_dir, tmp_path
 ):
-    seen = _posts(gitops_deploy, monkeypatch)
+    tools, seen = _posts(state_dir)
     repo = _repo_with(tmp_path, ["sonarr", "configarr"], DECLARES_SONARR)
     monkeypatch.setattr(gitops_deploy, "REPO", str(repo))
-    gitops_deploy.check_stale_composes(TOOLS)
-    gitops_deploy.check_stale_composes(TOOLS)
+    # Snapshotted AFTER the patch above: tick_config() reads REPO at call time, which is what
+    # main() does too.
+    settings = gitops_deploy.tick_config()
+    deploy_alerts.check_stale_composes(tools, gitops_deploy.STATE, settings)
+    deploy_alerts.check_stale_composes(tools, gitops_deploy.STATE, settings)
     ((key, content),) = seen
     assert key == "stale-composes:configarr"
     assert "`configarr`" in content and "test-host" in content
@@ -219,20 +266,23 @@ def test_a_stale_compose_pages_once_per_distinct_set(
 def test_a_grown_stale_set_pages_again_and_a_cleared_one_resets(
     gitops_deploy, monkeypatch, state_dir, tmp_path
 ):
-    seen = _posts(gitops_deploy, monkeypatch)
+    tools, seen = _posts(state_dir)
     repo = _repo_with(tmp_path, ["sonarr", "configarr"], DECLARES_SONARR)
     monkeypatch.setattr(gitops_deploy, "REPO", str(repo))
-    gitops_deploy.check_stale_composes(TOOLS)
+    # Snapshotted AFTER the patch above: tick_config() reads REPO at call time, which is what
+    # main() does too.
+    settings = gitops_deploy.tick_config()
+    deploy_alerts.check_stale_composes(tools, gitops_deploy.STATE, settings)
     (repo / "containers" / "kopia").mkdir()
     (repo / "containers" / "kopia" / "docker-compose.yml").write_text("services: {}\n")
-    gitops_deploy.check_stale_composes(TOOLS)
+    deploy_alerts.check_stale_composes(tools, gitops_deploy.STATE, settings)
     assert [key for key, _ in seen] == [
         "stale-composes:configarr",
         "stale-composes:configarr,kopia",
     ]
     for svc in ("configarr", "kopia"):
         (repo / "containers" / svc / "docker-compose.yml").unlink()
-    gitops_deploy.check_stale_composes(TOOLS)
+    deploy_alerts.check_stale_composes(tools, gitops_deploy.STATE, settings)
     assert len(seen) == 2, "an empty stale set is not an alert"
     assert _marker(state_dir, "stale_composes_alerted") is None
 
@@ -242,50 +292,46 @@ def test_a_k8s_entry_does_not_hide_a_leftover_render(
 ):
     # A service that migrated to k8s keeps its containers_list entry with platform: k8s; its
     # rendered compose on this host is exactly the stale dir the watchdog exists for.
-    seen = _posts(gitops_deploy, monkeypatch)
+    tools, seen = _posts(state_dir)
     declared = "containers_list:\n  - name: configarr\n    platform: k8s\n"
     repo = _repo_with(tmp_path, ["configarr"], declared)
     monkeypatch.setattr(gitops_deploy, "REPO", str(repo))
-    gitops_deploy.check_stale_composes(TOOLS)
+    # Snapshotted AFTER the patch above: tick_config() reads REPO at call time, which is what
+    # main() does too.
+    settings = gitops_deploy.tick_config()
+    deploy_alerts.check_stale_composes(tools, gitops_deploy.STATE, settings)
     assert [key for key, _ in seen] == ["stale-composes:configarr"]
 
 
 def test_an_unreadable_inventory_is_not_this_watchdogs_page(
     gitops_deploy, monkeypatch, state_dir, tmp_path
 ):
-    seen = _posts(gitops_deploy, monkeypatch)
+    tools, seen = _posts(state_dir)
     repo = _repo_with(tmp_path, ["configarr"], None)
     monkeypatch.setattr(gitops_deploy, "REPO", str(repo))
-    gitops_deploy.check_stale_composes(TOOLS)
+    # Snapshotted AFTER the patch above: tick_config() reads REPO at call time, which is what
+    # main() does too.
+    settings = gitops_deploy.tick_config()
+    deploy_alerts.check_stale_composes(tools, gitops_deploy.STATE, settings)
     assert seen == []
     assert _marker(state_dir, "stale_composes_alerted") is None
 
 
-# ── _record_behind(): the behind-origin marker ────────────────────────────────────────────────
-def _git_heads(local: str, origin: str, behind: bool) -> DeployTools:
-    """The two rev-parse answers and the ancestry verdict `_record_behind` reads."""
-
-    def fake_run(argv, **_kwargs):
-        assert argv[:2] == ["git", "rev-parse"], argv
-        return origin if argv[2].startswith("origin/") else local
-
-    return DeployTools(run=fake_run, is_ancestor=lambda _repo, _a, _d: behind)
-
-
-def test_a_tick_that_ended_behind_stamps_first_seen_once(
-    gitops_deploy, monkeypatch, state_dir
-):
-    gitops_deploy._record_behind(_git_heads("local", ORIGIN, behind=True))
+# ── DeployerState.record_behind(): the behind-origin marker ───────────────────────────────────
+# The marker itself is the state object's; the two rev-parses and the ancestry query that feed
+# it are entrypoint()'s, which is why the git-failure case below drives entrypoint instead.
+def test_a_tick_that_ended_behind_stamps_first_seen_once(gitops_deploy, state_dir):
+    gitops_deploy.STATE.record_behind(ORIGIN, behind=True, now=1700000000.0)
     sha, first_seen = _marker(state_dir, "behind_since").split()
     assert sha == ORIGIN
     # A later push to a still-stuck host refreshes the SHA and keeps the clock.
-    gitops_deploy._record_behind(_git_heads("local", LATER, behind=True))
+    gitops_deploy.STATE.record_behind(LATER, behind=True, now=1700009999.0)
     assert _marker(state_dir, "behind_since") == f"{LATER} {first_seen}"
 
 
-def test_convergence_clears_the_marker(gitops_deploy, monkeypatch, state_dir):
+def test_convergence_clears_the_marker(gitops_deploy, state_dir):
     (state_dir / "behind_since").write_text(f"{ORIGIN} 1700000000")
-    gitops_deploy._record_behind(_git_heads(ORIGIN, ORIGIN, behind=False))
+    gitops_deploy.STATE.record_behind(ORIGIN, behind=False, now=1700009999.0)
     assert _marker(state_dir, "behind_since") is None
 
 
@@ -298,7 +344,8 @@ def test_a_git_failure_here_logs_and_leaves_the_marker(
     def broken_run(_argv, **_kwargs):
         raise RuntimeError("git rev-parse HEAD -> 128")
 
-    gitops_deploy._record_behind(DeployTools(run=broken_run))
+    monkeypatch.setattr(gitops_deploy, "main", lambda _tools, _config: 0)
+    assert gitops_deploy.entrypoint(DeployTools(run=broken_run)) == 0
     assert "could not record behind-origin state" in capsys.readouterr().out
     assert _marker(state_dir, "behind_since") == f"{ORIGIN} 1700000000"
 

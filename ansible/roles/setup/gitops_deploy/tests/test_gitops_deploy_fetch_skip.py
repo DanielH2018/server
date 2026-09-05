@@ -103,7 +103,7 @@ def _tick(
         seen["git"].append(argv)
         return ORIGIN if argv[-1].startswith("origin/") else LOCAL
 
-    def fake_main(_tools) -> int:
+    def fake_main(_tools, _config) -> int:
         if isinstance(outcome, BaseException):
             raise outcome
         return outcome

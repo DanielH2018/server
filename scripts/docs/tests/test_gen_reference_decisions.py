@@ -219,16 +219,18 @@ def test_live_tree_includes_the_gitops_deploy_origin_slice_marker():
     """A named member the census must find, per the same CLAUDE.md rule.
 
     This is the marker CLAUDE.md's own "Review & Memory Hygiene" section cites as the
-    worked example (`origin[:8]` is a fixed slice ... a MINIMUM width).
+    worked example (`origin[:8]` is a fixed slice ... a MINIMUM width). It sits in
+    `deploy_handlers.py`, beside `_rollback_k8s`, which is the code that makes the trade-off —
+    a marker travels with that code rather than with the module it was written in.
     """
     rows = g.build_rows(REPO, REPO)
     matches = [
         r
         for r in rows
-        if r["path"] == "ansible/roles/setup/gitops_deploy/files/gitops_deploy.py"
+        if r["path"] == "ansible/roles/setup/gitops_deploy/files/deploy_handlers.py"
         and "origin[:8]" in r["text"]
     ]
-    assert matches, "expected the origin[:8] marker in gitops_deploy.py"
+    assert matches, "expected the origin[:8] marker in deploy_handlers.py"
 
 
 def test_live_tree_excludes_its_own_generator_and_test_file():

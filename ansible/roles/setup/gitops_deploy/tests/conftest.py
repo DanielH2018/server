@@ -7,8 +7,15 @@ host's /etc copy (0600, it carries the Discord webhook). The `gitops_deploy` fix
 that import; `state_dir` repoints every /var/lib/gitops-deploy marker at tmp_path.
 
 The AST fixtures below remain for the guards that pin a function's shape at the source
-(test_staging_gate_cannot_break_prod.py, test_gitops_deploy_timeout_budgets.py); `tick` runs
-main() itself against a scripted checkout (test_gitops_deploy_main_branches.py).
+(test_staging_gate_cannot_break_prod.py). One per module those guards read: `gitops_fn` for
+the entry module, `deploy_io_fn`, and `handlers_fn` for `deploy_handlers.py`, which holds both
+the handlers and the staging gate's I/O shell. `tick` runs main() itself against a scripted
+checkout
+(test_gitops_deploy_main_branches.py).
+
+`settings` is the `Config` a phase takes. It is a fixture rather than a constant because
+`gitops_deploy.tick_config()` snapshots the module globals `state_dir` and `tick` have just
+repointed, so it has to be built after them and not at import.
 
 Fixtures rather than importable functions: `from conftest import x` resolves to whichever
 conftest.py sys.path reached first once the whole repo suite runs, and this repo has three.
@@ -30,6 +37,7 @@ from _deploy_fakes import ScriptedTick, build_tools
 FILES = pathlib.Path(__file__).resolve().parents[1] / "files"
 GITOPS_SRC = FILES / "gitops_deploy.py"
 IO_SRC = FILES / "deploy_io.py"
+HANDLERS_SRC = FILES / "deploy_handlers.py"
 STATE_PREFIX = "/var/lib/gitops-deploy/"
 # What the `tick` fixture arms the staging gate over. The production literal stays in
 # gitops_deploy.py, where scripts/docs/gen_doc_fragments.py reads it; this is only what puts the
@@ -125,6 +133,20 @@ def _fn_finder(default_tree: ast.Module, filename: str):
 
 
 @pytest.fixture(scope="session")
+def handlers_tree() -> ast.Module:
+    """deploy_handlers.py's parsed source, for the guards that follow the handlers there."""
+    return ast.parse(HANDLERS_SRC.read_text())
+
+
+@pytest.fixture(scope="session")
+def handlers_fn(
+    handlers_tree: ast.Module,
+) -> Callable[[str, ast.AST | None], ast.FunctionDef]:
+    """`handlers_fn("handle_k8s")` is that FunctionDef; a missing name fails."""
+    return _fn_finder(handlers_tree, "deploy_handlers.py")
+
+
+@pytest.fixture(scope="session")
 def gitops_fn(
     gitops_tree: ast.Module,
 ) -> Callable[[str, ast.AST | None], ast.FunctionDef]:
@@ -180,3 +202,16 @@ def tick(gitops_deploy: ModuleType, monkeypatch, state_dir, tmp_path) -> Scripte
     monkeypatch.setattr(gitops_deploy, "STAGING_SUBSET", STAGING_SUBSET)
     scripted.tools = build_tools(scripted)
     return scripted
+
+
+@pytest.fixture
+def settings(gitops_deploy: ModuleType, tick: ScriptedTick):
+    """The `Config` a phase takes, snapshotted AFTER every fixture patch is in place.
+
+    It depends on `tick`, not on `state_dir`, and that is the whole point: `tick` repoints
+    `REPO`, `STAGING_GATE` and `STAGING_SUBSET` on the entry module, and `tick_config()` reads
+    those globals ONCE. A snapshot taken before them would silently describe the host's
+    settings instead of the scripted ones, and pytest orders sibling fixtures by the test's
+    parameter list — which is not something a test should have to get right.
+    """
+    return gitops_deploy.tick_config()

@@ -3,7 +3,7 @@
 
 A test replaces one field of `DeployTools` and never a module attribute. The defaults are the
 real implementations: `deploy_io`'s for git, the health gate and the staging scripts,
-`deploy_alerts.post` for the webhook, `datetime.now` for the clock. **This module names
+`post` below for the webhook, `datetime.now` for the clock. **This module names
 `gitops_deploy` nowhere**, at import time or later, which is what makes it a leaf the entry
 module can import.
 
@@ -28,17 +28,34 @@ Stdlib only, like the rest of the deployer.
 import json
 import os
 import subprocess
+import time
 import urllib.error
 import urllib.request
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from functools import partial
 
-import deploy_alerts
 import deploy_io
 from deploy_config import Config, log
 from deploy_git import ci_verdict, github_auth_headers, github_token
+from host_lib import discord_post
+
+
+def post(webhook: str, content: str, log_fn=log) -> bool:
+    """Post to the alert webhook via the shared host_lib.discord_post.
+
+    See there for the Cloudflare-1010 User-Agent + 2xx-only-success contract the per-SHA
+    dedupe markers gate on. A missing webhook or any error returns False, so the alert is
+    retried on the next tick.
+
+    It lives HERE rather than in `deploy_alerts` because it is a process boundary, and because
+    `deploy_alerts` now holds the alert ORCHESTRATION (`deliver`, `alert_once`, the per-SHA
+    markers) and so takes a `DeployTools`. An import in that direction plus the old
+    `deploy_toolbox -> deploy_alerts` edge would be a cycle; moving the webhook down here is
+    what removes it.
+    """
+    return discord_post(webhook, content, "gitops-deploy", log=log_fn)
 
 
 def fetch_ci_verdict(
@@ -109,7 +126,7 @@ class DeployTools:
     git_status: Callable[[str], subprocess.CompletedProcess] = deploy_io.git_status
     is_ancestor: Callable[[str, str, str], bool] = deploy_io.is_ancestor
     fetch_ci_verdict: Callable[[str], str] = _ci_unconfigured
-    discord_post: Callable[[str, str], bool] = deploy_alerts.post
+    discord_post: Callable[[str, str], bool] = post
     service_healthy: Callable[..., bool] = deploy_io.service_healthy
     run_staging_scripts: Callable[..., tuple[int, int]] = deploy_io.run_staging_scripts
     emit_deploy_annotation: Callable[[set[str], str], None] = (
@@ -119,6 +136,13 @@ class DeployTools:
     # the ledger's tzinfo, so a `lambda: datetime.now()` adapter would change what that
     # function receives.
     now: Callable[..., datetime] = datetime.now
+    # When this process started, in `time.time()` terms — the only non-callable here, and a
+    # boundary all the same: it is what the OS did, not what the config said. `handle_docker`
+    # measures the health gate's deadline from it, so the flock wait counts against the budget
+    # (see the unit's TimeoutStartSec arithmetic in gitops_deploy.py's RUN_BUDGET_S comment).
+    # A default_factory rather than a literal: every `DeployTools()` a test builds gets its own
+    # start, so a deadline never lands in the past.
+    run_start: float = field(default_factory=time.time)
 
 
 def default_tools(config: Config) -> DeployTools:

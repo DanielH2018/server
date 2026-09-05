@@ -19,8 +19,15 @@ Stdlib only: the unit runs under `uv run --no-project` and the host is still on 
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from zoneinfo import ZoneInfo
 
 from host_lib import parse_env_file
+
+
+# The host clock is UTC; the operator reads the dirty-tree reminder and the staging ledger in
+# local time. One definition, because `deploy_handlers` and `deploy_staging` both stamp with it
+# and two copies of a timezone are two things to move when the operator does.
+CHICAGO = ZoneInfo("America/Chicago")
 
 
 def log(msg: str) -> None:
@@ -76,12 +83,17 @@ class Config:
     staging_gate_blocking: bool = False
     staging_gate_timeout_s: int = 600
     staging_expect_timeout_s: int = 120
-    # STAGING_SUBSET is deliberately NOT here. Its literal fallback is parsed out of
-    # gitops_deploy.py by scripts/docs/gen_doc_fragments.py, which looks for a
-    # `C.get("<KEY>", "<literal>")` call in that file by name — so moving it here would leave
-    # the published fragment with no source. It stays a module constant there. The two staging
-    # timeouts above used to live there too; gitops_deploy.py keeps a vestigial `C.get(...)`
-    # call for each purely so the generator still has one to read — see the comment there.
+    # `load_config` does NOT parse staging_subset, and that is the point: its literal fallback
+    # is parsed out of gitops_deploy.py by scripts/docs/gen_doc_fragments.py, which looks for a
+    # `C.get("<KEY>", "<literal>")` call in that file by name — so a second parse here would
+    # either leave the published fragment with no source or duplicate the six-service literal.
+    # `STAGING_SUBSET` stays the module constant there, and `gitops_deploy.tick_config()`
+    # snapshots it onto the field below. The default is EMPTY, which reads as "staging speaks
+    # for nothing" — the fail-safe direction, since every service outside the subset is
+    # reported unchecked rather than passed. The two staging timeouts above used to live there
+    # too; gitops_deploy.py keeps a vestigial `C.get(...)` call for each purely so the
+    # generator still has one to read — see the comment there.
+    staging_subset: frozenset[str] = frozenset()
     errors: tuple[str, ...] = field(default=())
 
     def validate(self) -> None:

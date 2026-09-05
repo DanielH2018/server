@@ -8,6 +8,7 @@ passing side alone.
 import itertools
 
 import pytest
+import deploy_handlers
 from deploy_staging import (
     STAGING_NO_VERDICT,
     STAGING_PASS,
@@ -77,12 +78,12 @@ def test_the_override_is_spent_when_it_is_armed(gitops_deploy, state_dir) -> Non
     """Armed, it returns True once and removes itself — so it cannot become permanent."""
     marker = state_dir / "staging_gate_override"
     marker.touch()
-    assert gitops_deploy.consume_staging_override()
+    assert deploy_handlers.consume_staging_override(gitops_deploy.STATE)
     assert not marker.exists()
-    assert not gitops_deploy.consume_staging_override()
+    assert not deploy_handlers.consume_staging_override(gitops_deploy.STATE)
 
 
 def test_the_override_is_absent_by_default(gitops_deploy, state_dir) -> None:
     """The rejecting half: with nothing armed, nothing is spent and nothing is let through."""
     assert not (state_dir / "staging_gate_override").exists()
-    assert not gitops_deploy.consume_staging_override()
+    assert not deploy_handlers.consume_staging_override(gitops_deploy.STATE)

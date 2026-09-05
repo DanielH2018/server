@@ -416,10 +416,12 @@ Three layers, and which one a function belongs in is decided by what it touches.
 | layer | modules | holds |
 |---|---|---|
 | decisions (pure) | `deploy_changes`, `deploy_git`, `deploy_health`, `deploy_inventory`, `deploy_k8s`, `deploy_remediation`, `deploy_staging` | every branch the tick takes, as functions over plain values |
-| transport | `deploy_io`, `deploy_alerts` | subprocess, docker, the webhook, and every message body |
+| what a phase hands the next | `deploy_tick_types` | `TickTarget`, `TickPlan` and `RetryableFetchError`, no behaviour |
+| transport | `deploy_io`, `deploy_alerts` | subprocess, docker, every message body, and the alert queue's own I/O |
 | transport leaves | `deploy_config`, `deploy_state`, `deploy_failtext` | the config file, the state directory, and the text a failed run's alert quotes |
 | the seam | `deploy_toolbox` | `DeployTools`, one frozen object holding every boundary the tick crosses, and `default_tools(CONFIG)` which binds the CI gate to the parsed config |
-| the tick | `gitops_deploy` | `main()` sequencing named phases, and the delivery plumbing the phases share |
+| the phases | `deploy_phases`, `deploy_handlers` | `assess` and `plan_tick`; one `handle_*` per terminal branch, plus the staging gate's I/O shell (`consult_staging`, `record_staging_tick`, `consume_staging_override`) |
+| the tick | `gitops_deploy` | the config constants, `STATE`, `tick_config()`, `main()` sequencing the phases, and `entrypoint()` |
 
 **A transport leaf imports nothing from `deploy_io`.** `deploy_config` (the config file,
 `Config`, `log`), `deploy_state` (the marker files) and `deploy_failtext` (bounding a failed
@@ -428,10 +430,14 @@ transport that a test can call without faking one. `deploy_io` re-exports every 
 to them, and the role's own tests still read them as `deploy_io.<name>`; nothing in `files/`
 does, so the re-exports go when the suite stops needing them.
 
-**`main()` sequences, it does not decide.** `assess()` reads git and returns a frozen
-`TickTarget`; `plan_tick()` turns the incoming range into a frozen `TickPlan`; one `handle_*`
-function owns each terminal branch (`handle_dirty`, `handle_ci_failed`, `handle_broad`,
-`handle_k8s`, `handle_no_services`, `handle_docker`) and returns the exit code. The branch
+**`main()` sequences, it does not decide.** `deploy_phases.assess()` reads git and returns a
+frozen `TickTarget`; `deploy_phases.plan_tick()` turns the incoming range into a frozen
+`TickPlan`; one `deploy_handlers.handle_*` function owns each terminal branch (`handle_dirty`,
+`handle_ci_failed`, `handle_broad`, `handle_k8s`, `handle_no_services`, `handle_docker`) and
+returns the exit code. Every one of them takes the tick's `tools`, `state` and `config` and
+imports nothing from `gitops_deploy` — a leaf that did would get a second copy of the entry
+module whenever the deployer runs as `__main__`, with its own CONFIG and its own STATE
+(ENFORCED by `test_no_leaf_imports_the_entry_module`). The branch
 order in `main()` is load-bearing — broad before k8s before Docker — because one range can
 carry a broad change and a promoted image bump, and the broad plane has to win.
 `tests/test_gitops_deploy_phases.py` drives each phase alone;
@@ -442,7 +448,9 @@ only exist between phases.
 `DeployTools` (`deploy_toolbox.default_tools(CONFIG)`) and threads it through `assess`,
 `plan_tick`, every `handle_*`, `deliver`/`drain_pending`/`alert_once` and `consult_staging`.
 Its fields are the git runner, `git_status`, `git_fetch`, `is_ancestor`, the CI verdict, the
-Discord post, the Docker health gate, the staging scripts, the deploy annotation and the clock;
+Discord post, the Docker health gate, the staging scripts, the deploy annotation, the clock
+and `run_start` — the one non-callable, the process's own start time, which is what the health
+gate's deadline is measured from;
 the defaults are the real implementations. A test builds a `DeployTools` from
 `tests/_deploy_fakes.py` and passes it in, so almost nothing patches a module attribute any
 more. `main()` and `entrypoint()` both default the argument, so a host's `python
@@ -464,8 +472,11 @@ raised, and `CONFIG.validate()` at the top of `main()` turns it into one line na
 plus a Discord post. Before that it was ~40 `int(C.get(...))` calls at module level, so a
 half-written config.env was an import traceback with no key name in it. The module-level
 constants in `gitops_deploy.py` are still derived from `CONFIG`, and a few of them are what the
-suite patches — that is the remaining coupling, and threading `CONFIG` through every function
-instead is a separate change. The CI keys are already off that list: `require_ci`, `ci_repo` and
+suite patches. `tick_config()` closes the loop: once per tick it snapshots those constants back
+onto a `Config` with `dataclasses.replace`, and that object is the `config` every phase takes.
+Reading them at call time rather than at import is what keeps a `monkeypatch.setattr(
+gitops_deploy, "REPO", ...)` live while no phase imports the entry module. The CI keys are
+already off that list: `require_ci`, `ci_repo` and
 `ci_contexts` reach the gate through `deploy_toolbox.default_tools`, so `gitops_deploy.py`
 declares no constant for them. Three keys keep a `C.get("<KEY>", "<literal>")` call in
 `gitops_deploy.py` because `scripts/docs/gen_doc_fragments.py` parses those calls out of
@@ -474,8 +485,13 @@ that file by name: `STAGING_SUBSET` is read there for real, while the
 reads and nothing else does; both timeouts are parsed and validated in `load_config`, and a
 test pins the literals to `Config`'s defaults.
 
-**State is one object.** `deploy_state.DeployerState` wraps the fifteen marker files;
-`gitops_deploy.STATE` is the instance and the fifteen path literals stay declared there
+**State is one object.** `deploy_state.DeployerState` wraps the eighteen marker files — the
+fifteen dedupe and status markers plus the pending-alert queue, the staging tick ledger and
+the staging override — and holds the hold-marker writes (`write_hold`, `clear_broad_hold`,
+`clear_service_hold`) and `record_behind`. A caller names a marker (`state.path("hold")`)
+rather than carrying a path, which is what lets `state_dir` repoint the whole state directory
+by replacing one object. `gitops_deploy.STATE` is the instance and the eighteen path literals
+stay declared there
 (`tests/conftest.py`'s `state_dir` repoints them, and one Ansible default is pinned against
 `STAGING_TICK_LEDGER`'s literal). `read()` returns None for a missing AND an empty marker —
 a torn write is a disarmed hold, not a hold on `""` — and PROPAGATES any other `OSError`:
@@ -503,6 +519,18 @@ values are the words the journal prints and the tick ledger stores; the old modu
 stay as aliases. `tests/test_staging_vocabulary_is_a_strenum.py` pins the values against the
 literals they replaced, because `backfill_staging_gate.py` reads them back out of the JSONL in
 the other tree.
+
+**`deploy_staging` stays import-pure, and that is a constraint rather than a habit.** Its I/O
+shell — `consult_staging`, `record_staging_tick`, `consume_staging_override` — lives in
+`deploy_handlers.py`, one module up. `deploy_logic.py` re-exports `deploy_staging`, and
+`scripts/deploy_tools/await_ci.py`, `land_tags.py` and `backfill_staging_gate.py` import that
+index with only this role's `files/` on `sys.path`. They never add `roles/setup/common/files`,
+so a module-level `import deploy_io` here reaches `deploy_config`'s `from host_lib import
+parse_env_file` and breaks `land.sh` with a `ModuleNotFoundError` five frames from anything
+staging-shaped. That happened while this split was being written. ENFORCED by
+`test_deploy_logic_imports_without_the_common_files_path` and
+`test_the_pure_modules_the_index_re_exports_are_import_pure` in
+`ansible/tests/deploy/test_gitops_deploy_imports.py`.
 
 One test file per module, named for it: `tests/test_deploy_<module>.py`, with a second
 file where one module answers two separable questions — `test_deploy_changes_services.py`

@@ -22,6 +22,8 @@ from deploy_staging import (
     TICK_OK,
     staging_tick_outcome,
 )
+import deploy_io
+import deploy_handlers
 from deploy_toolbox import DeployTools
 
 # The real clock: the recorder only stamps `at`, which these tests assert is non-empty.
@@ -69,8 +71,8 @@ def _ledger(gitops_deploy: ModuleType) -> list[dict]:
 def test_every_real_verdict_appends_one_row(
     gitops_deploy: ModuleType, state_dir, verdict: str, outcome: str
 ) -> None:
-    gitops_deploy.record_staging_tick(
-        TOOLS, "c0ffee1234", {"freshrss", "ical-proxy"}, verdict
+    deploy_handlers.record_staging_tick(
+        TOOLS, gitops_deploy.STATE, "c0ffee1234", {"freshrss", "ical-proxy"}, verdict
     )
     rows = _ledger(gitops_deploy)
     assert len(rows) == 1
@@ -85,26 +87,32 @@ def test_every_real_verdict_appends_one_row(
 def test_a_skipped_tick_appends_nothing(gitops_deploy: ModuleType, state_dir) -> None:
     """The reject half. A row marked skipped would be worse than no row: the tick fires every
     ten minutes and almost never reaches the gate."""
-    gitops_deploy.record_staging_tick(TOOLS, "c0ffee1234", set(), STAGING_SKIPPED)
+    deploy_handlers.record_staging_tick(
+        TOOLS, gitops_deploy.STATE, "c0ffee1234", set(), STAGING_SKIPPED
+    )
     assert _ledger(gitops_deploy) == []
 
 
 def test_rows_accumulate_rather_than_replacing_each_other(
     gitops_deploy: ModuleType, state_dir
 ) -> None:
-    gitops_deploy.record_staging_tick(TOOLS, "aaaaaaaa", {"freshrss"}, STAGING_PASS)
-    gitops_deploy.record_staging_tick(TOOLS, "bbbbbbbb", {"freshrss"}, STAGING_REJECTED)
+    deploy_handlers.record_staging_tick(
+        TOOLS, gitops_deploy.STATE, "aaaaaaaa", {"freshrss"}, STAGING_PASS
+    )
+    deploy_handlers.record_staging_tick(
+        TOOLS, gitops_deploy.STATE, "bbbbbbbb", {"freshrss"}, STAGING_REJECTED
+    )
     assert [r["sha"] for r in _ledger(gitops_deploy)] == ["aaaaaaaa", "bbbbbbbb"]
 
 
 def test_an_unwritable_ledger_costs_the_measurement_and_not_the_deploy(
-    gitops_deploy: ModuleType, state_dir, monkeypatch
+    state_dir,
 ) -> None:
     """`consult_staging` may not break a prod deploy for any reason, this recorder included."""
-    monkeypatch.setattr(
-        gitops_deploy, "STAGING_TICK_LEDGER", str(state_dir / "no-such-dir" / "t.jsonl")
+    unwritable = deploy_io.DeployerState(state_dir / "no-such-dir")
+    deploy_handlers.record_staging_tick(
+        TOOLS, unwritable, "c0ffee1234", {"freshrss"}, STAGING_PASS
     )
-    gitops_deploy.record_staging_tick(TOOLS, "c0ffee1234", {"freshrss"}, STAGING_PASS)
 
 
 def test_consult_staging_records_the_verdict_it_returns(
@@ -113,7 +121,7 @@ def test_consult_staging_records_the_verdict_it_returns(
     """Textual, because the alternative is scripting a whole staging round trip. The recorder
     has to see the SAME word consult_staging returns — recording one verdict and returning
     another is the defect a separate call site invites."""
-    body = inspect.getsource(gitops_deploy.consult_staging)
+    body = inspect.getsource(deploy_handlers.consult_staging)
     assert "verdict = staging_verdict(deploy_rc, expect_rc)" in body
-    assert "record_staging_tick(tools, origin, gated, verdict)" in body
+    assert "record_staging_tick(tools, state, origin, gated, verdict)" in body
     assert "return verdict" in body

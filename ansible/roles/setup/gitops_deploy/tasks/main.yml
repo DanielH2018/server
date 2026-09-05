@@ -37,6 +37,9 @@
     - deploy_k8s.py
     - deploy_staging.py
     - deploy_toolbox.py
+    - deploy_tick_types.py
+    - deploy_phases.py
+    - deploy_handlers.py
   become: true
   notify: Run gitops-deploy once
 
@@ -230,6 +233,12 @@
         src: ansible/roles/setup/gitops_deploy/files/deploy_staging.py
       - live: /opt/gitops-deploy/deploy_toolbox.py
         src: ansible/roles/setup/gitops_deploy/files/deploy_toolbox.py
+      - live: /opt/gitops-deploy/deploy_tick_types.py
+        src: ansible/roles/setup/gitops_deploy/files/deploy_tick_types.py
+      - live: /opt/gitops-deploy/deploy_phases.py
+        src: ansible/roles/setup/gitops_deploy/files/deploy_phases.py
+      - live: /opt/gitops-deploy/deploy_handlers.py
+        src: ansible/roles/setup/gitops_deploy/files/deploy_handlers.py
       - live: /opt/gitops-deploy/host_lib.py
         src: ansible/roles/setup/common/files/host_lib.py
 

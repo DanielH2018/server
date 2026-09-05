@@ -53,7 +53,7 @@ def sys_executable_launches(fn: ast.FunctionDef) -> list[str]:
     return launched
 
 
-def test_consult_staging_returns_a_verdict_on_every_path(gitops_fn) -> None:
+def test_consult_staging_returns_a_verdict_on_every_path(handlers_fn) -> None:
     """Every exit from the gate hands back a word, including the broad `except`.
 
     A bare `return` there would give main() None, which `staging_blocks` reads as "does not
@@ -61,7 +61,7 @@ def test_consult_staging_returns_a_verdict_on_every_path(gitops_fn) -> None:
     reach the alert. It returned bare until slice 4, which was harmless only while nothing
     branched on the answer.
     """
-    fn = gitops_fn("consult_staging")
+    fn = handlers_fn("consult_staging")
     bare = [
         node
         for node in ast.walk(fn)
@@ -114,7 +114,7 @@ def test_the_staging_subprocesses_cannot_escape(deploy_io_fn) -> None:
 
 
 def test_the_k8s_phase_decides_through_staging_blocks_rather_than_inline(
-    gitops_fn,
+    handlers_fn,
 ) -> None:
     """The verdict must be routed through the checked decision, not compared in main().
 
@@ -122,7 +122,7 @@ def test_the_k8s_phase_decides_through_staging_blocks_rather_than_inline(
     can reach it. An inline `if verdict == "rejected"` in main() would be the same behaviour
     today and unreviewable the next time someone widens what blocks.
     """
-    main = gitops_fn("handle_k8s")
+    main = handlers_fn("handle_k8s")
     assert any(
         isinstance(node, ast.Call)
         and isinstance(node.func, ast.Name)
@@ -144,9 +144,9 @@ def test_the_k8s_phase_decides_through_staging_blocks_rather_than_inline(
     assert not inline, f"handle_k8s() compares a staging verdict inline: {inline}"
 
 
-def test_the_k8s_phase_consults_the_gate_before_deploying_prod(gitops_fn) -> None:
+def test_the_k8s_phase_consults_the_gate_before_deploying_prod(handlers_fn) -> None:
     """A gate consulted after the deploy gates nothing."""
-    main = gitops_fn("handle_k8s")
+    main = handlers_fn("handle_k8s")
     stmts = list(ast.walk(main))
 
     gate_calls = [
@@ -392,20 +392,20 @@ def merge_precedes_the_gate(fn: ast.FunctionDef) -> bool:
     return _out_of_order(fn)
 
 
-def test_the_gate_is_consulted_before_the_ff_merge(gitops_fn) -> None:
+def test_the_gate_is_consulted_before_the_ff_merge(handlers_fn) -> None:
     """The accepting half: handle_k8s() consults the gate, THEN merges."""
-    assert not merge_precedes_the_gate(gitops_fn("handle_k8s")), (
+    assert not merge_precedes_the_gate(handlers_fn("handle_k8s")), (
         "a `git merge --ff-only` runs before consult_staging() in handle_k8s() — a death in the "
         "gate window then strands the promoted SHA as a permanent noop with every monitor green"
     )
 
 
-def test_the_check_is_not_vacuous_on_the_live_function(gitops_fn) -> None:
+def test_the_check_is_not_vacuous_on_the_live_function(handlers_fn) -> None:
     """Non-vacuity. `merge_precedes_the_gate` returns False both for correct ordering and for a
     function it found neither call in, so the accepting half above passes either way — which is
     exactly what happened when the k8s branch moved out of main() into its own function and the
     walk stopped finding an enclosing `ast.If`."""
-    body = gitops_fn("handle_k8s")
+    body = handlers_fn("handle_k8s")
     calls = [n for n in ast.walk(body) if isinstance(n, ast.Call)]
     merges = [
         n
@@ -442,7 +442,7 @@ def test_a_merge_before_the_gate_is_flagged(gitops_fn) -> None:
     )
 
 
-def test_a_merge_before_the_gate_is_flagged_in_a_phase_function(gitops_fn) -> None:
+def test_a_merge_before_the_gate_is_flagged_in_a_phase_function(handlers_fn) -> None:
     """The rejecting half in TODAY's shape: no enclosing `if`, so only the body-scope walk sees it.
 
     Without this the guard could go back to an `ast.If`-only walk and still pass both halves —
@@ -454,6 +454,6 @@ def test_a_merge_before_the_gate_is_flagged_in_a_phase_function(gitops_fn) -> No
         "    verdict = consult_staging(cs.k8s_deploy, origin)\n"
         "    deploy_io.deploy_k8s(REPO, cs.k8s_deploy, K8S_DEPLOY_TIMEOUT_S)\n"
     )
-    assert merge_precedes_the_gate(gitops_fn("handle_k8s", before_the_fix)), (
+    assert merge_precedes_the_gate(handlers_fn("handle_k8s", before_the_fix)), (
         "the check no longer sees a merge that precedes the gate in a phase function"
     )
