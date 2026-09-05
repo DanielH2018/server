@@ -5,8 +5,6 @@ found running, and produces the single model dict ``infra_map.render`` draws.
 Pure functions over both inputs — nothing here touches the cluster or the repo.
 """
 
-from __future__ import annotations
-
 import sys as _sys
 from pathlib import Path as _Path
 

@@ -8,8 +8,6 @@ Fixture-driven: a synthetic scripts/ directory under tmp_path.
 Run: uv run pytest scripts/lib/tests/test_script_coverage.py
 """
 
-from __future__ import annotations
-
 import textwrap
 from pathlib import Path
 

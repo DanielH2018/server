@@ -5,8 +5,6 @@ config has gone stale against it. If the two drift, that detection false-alarms 
 auto-deploy on a host that is actually converged — so pin them together against the real roles.
 """
 
-from __future__ import annotations
-
 import tempfile
 from pathlib import Path
 

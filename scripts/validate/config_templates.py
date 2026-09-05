@@ -14,8 +14,6 @@ needed. Run directly or via the ``validate-config-templates`` prek hook. Exits n
 render failure or invalid YAML.
 """
 
-from __future__ import annotations
-
 import sys
 
 import yaml

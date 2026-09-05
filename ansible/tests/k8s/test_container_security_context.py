@@ -19,8 +19,6 @@ Rendering goes through validate.k8s_manifests' own machinery rather than a secon
 this cannot drift from what that validator considers a renderable manifest.
 """
 
-from __future__ import annotations
-
 from _helpers import K8S_ROLES
 from _k8s_render import rendered_docs
 

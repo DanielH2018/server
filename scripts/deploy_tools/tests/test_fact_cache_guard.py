@@ -5,8 +5,6 @@ everything and one that fires on nothing look identical from the passing side al
 each rule ships with the input it must accept as well as the input it must reject.
 """
 
-from __future__ import annotations
-
 import json
 import sys
 from pathlib import Path

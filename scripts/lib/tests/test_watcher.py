@@ -1,7 +1,5 @@
 """Tests for scripts/lib/watcher.py's generic fetch -> check -> notify loop."""
 
-from __future__ import annotations
-
 import logging
 
 import pytest

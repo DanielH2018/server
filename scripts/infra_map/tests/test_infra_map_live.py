@@ -9,8 +9,6 @@ the page is guarding against.
 Run: uv run pytest scripts/infra_map/tests/test_infra_map_live.py
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 

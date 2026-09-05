@@ -14,8 +14,6 @@ Rendering goes through the same `_k8s_render.rendered_docs()` machinery every ot
 a renderable manifest.
 """
 
-from __future__ import annotations
-
 import pytest
 from lib import yaml_fast
 

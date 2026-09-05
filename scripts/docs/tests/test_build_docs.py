@@ -6,8 +6,6 @@ run leaves every page stale, and the site build never happens at all.
 Run: uv run pytest scripts/docs/tests/test_build_docs.py
 """
 
-from __future__ import annotations
-
 import subprocess
 from pathlib import Path
 

@@ -6,8 +6,6 @@ one input it must accept and one it must reject — the repo's red-proof rule, a
 rather than per script.
 """
 
-from __future__ import annotations
-
 import sys as _sys
 from pathlib import Path as _Path
 

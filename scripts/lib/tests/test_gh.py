@@ -1,7 +1,5 @@
 """The shared gh runner: prompts and the update notifier are off, JSON is parsed."""
 
-from __future__ import annotations
-
 import json
 import subprocess
 

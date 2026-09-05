@@ -14,8 +14,6 @@ Usage::
     uv run python scripts/docs/reference/hosts.py --out docs/reference/hosts.md
 """
 
-from __future__ import annotations
-
 import argparse
 from pathlib import Path
 

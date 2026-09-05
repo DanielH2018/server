@@ -10,8 +10,6 @@ pinned by code that opens the file).
 Run: uv run pytest scripts/deploy_tools/tests/test_deploy_tags.py
 """
 
-from __future__ import annotations
-
 import textwrap
 
 import pytest

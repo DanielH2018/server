@@ -17,8 +17,6 @@ release-download URL guard is in `test_renovate_release_urls.py`.
 Run: uv run pytest scripts/tests/test_renovate_managers.py
 """
 
-from __future__ import annotations
-
 import re
 
 import pytest

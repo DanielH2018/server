@@ -15,8 +15,6 @@ behaviour the fakes already record breaks on a rewording and proves nothing extr
 Run: uv run pytest scripts/deploy_tools/tests/test_land_merge.py
 """
 
-from __future__ import annotations
-
 import subprocess
 from pathlib import Path
 

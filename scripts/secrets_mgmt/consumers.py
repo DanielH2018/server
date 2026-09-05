@@ -10,8 +10,6 @@ for — the question a rotation actually poses, and the one `audit` does not ans
 Both are pure reads: nothing here decrypts, writes or shells out.
 """
 
-from __future__ import annotations
-
 import os
 
 # Reach the sibling package directories: a directly-invoked script gets only its own

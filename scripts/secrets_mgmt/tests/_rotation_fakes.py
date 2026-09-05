@@ -10,8 +10,6 @@ the token must reach the process on stdin, never in argv. `process_calls` return
 what those three handed the runner.
 """
 
-from __future__ import annotations
-
 import datetime as dt
 import subprocess
 from dataclasses import dataclass, field

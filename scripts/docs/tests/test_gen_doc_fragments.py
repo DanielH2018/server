@@ -6,8 +6,6 @@ Each test reaches the module that owns the function, so a name that moves fails 
 than resolving through a re-export.
 """
 
-from __future__ import annotations
-
 import re
 import sys
 from pathlib import Path

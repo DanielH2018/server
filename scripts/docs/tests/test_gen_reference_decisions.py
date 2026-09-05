@@ -7,8 +7,6 @@ pattern" rule requires — see the two at the bottom.
 Run: uv run pytest scripts/docs/tests/test_gen_reference_decisions.py
 """
 
-from __future__ import annotations
-
 from docs.reference import decisions as g
 from lib.repo_paths import REPO
 

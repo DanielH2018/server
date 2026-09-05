@@ -7,8 +7,6 @@ two paths that measured nothing, and it runs every ten minutes, so a recorder th
 would bury the real samples under thousands of rows saying only that the gate did not run.
 """
 
-from __future__ import annotations
-
 import inspect
 import json
 from types import ModuleType

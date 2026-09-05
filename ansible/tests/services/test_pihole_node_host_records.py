@@ -16,8 +16,6 @@ stubs every `hostvars` lookup — so the addresses are pinned against the templa
 instead, where the thing worth asserting is that they are derived rather than typed in.
 """
 
-from __future__ import annotations
-
 import re
 
 from _helpers import REPO

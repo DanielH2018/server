@@ -4,8 +4,6 @@ No test opens a real socket: `expiring_soon` and `check_expiring` are pure funct
 `now` and the fetched state injected, and `build_current` is exercised with a stub `fetch`.
 """
 
-from __future__ import annotations
-
 from datetime import datetime, timedelta, timezone
 
 import pytest

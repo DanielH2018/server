@@ -8,8 +8,6 @@ git calls produce.
 Run: uv run pytest scripts/dev/tests/test_prune_worktrees.py
 """
 
-from __future__ import annotations
-
 import os
 import subprocess
 from pathlib import Path

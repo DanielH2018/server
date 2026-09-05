@@ -5,8 +5,6 @@ turn each into a Python `re` so a guard can run it over `git ls-files` and asser
 matches something. The `tracked` fixture in conftest.py is the file list they run over.
 """
 
-from __future__ import annotations
-
 import json
 import re
 import subprocess

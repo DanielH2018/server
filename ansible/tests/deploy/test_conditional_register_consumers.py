@@ -26,8 +26,6 @@ register must either carry the producer's condition too, or filter the skip resu
 its loop (`rejectattr('skipped', 'defined')`).
 """
 
-from __future__ import annotations
-
 import re
 from pathlib import Path
 

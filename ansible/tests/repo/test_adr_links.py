@@ -19,8 +19,6 @@ deliberate cost: a marker added to a role's `CLAUDE.md` is not checked here.
 Run: uv run pytest ansible/tests/repo/test_adr_links.py
 """
 
-from __future__ import annotations
-
 import re
 from pathlib import Path
 

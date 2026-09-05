@@ -18,8 +18,6 @@ Run directly (``python3 scripts/validate/compose_templates.py``) or via the
 render or produces invalid YAML.
 """
 
-from __future__ import annotations
-
 import hashlib
 import sys
 

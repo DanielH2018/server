@@ -8,8 +8,6 @@ neighbour alone.
 Run: uv run pytest scripts/dev/tests/test_split_module.py
 """
 
-from __future__ import annotations
-
 import json
 import textwrap
 from pathlib import Path

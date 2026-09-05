@@ -6,8 +6,6 @@ test here that asserts a raise is asserting that a broken repo state fails the d
 instead of silently widening what may be deployed unattended.
 """
 
-from __future__ import annotations
-
 import os
 from pathlib import Path
 

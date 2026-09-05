@@ -19,8 +19,6 @@ flag every one, and the fix for that noise would be to weaken the pattern until 
 catching real calls. Walking the AST separates a call from a mention exactly.
 """
 
-from __future__ import annotations
-
 import ast
 from pathlib import Path
 

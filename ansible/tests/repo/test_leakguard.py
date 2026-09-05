@@ -11,8 +11,6 @@ the hook wiring — `pytest_runtest_setup` putting the stub dir on PATH and
 prove the helpers work and say nothing about whether the plugin is loaded.
 """
 
-from __future__ import annotations
-
 import subprocess
 import sys
 from pathlib import Path

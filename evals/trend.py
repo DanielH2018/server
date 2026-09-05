@@ -12,8 +12,6 @@ Only HERMETIC runs are trended: subscription runs are too noisy to trend
 recording or comparing.
 """
 
-from __future__ import annotations
-
 import argparse
 import json
 import os

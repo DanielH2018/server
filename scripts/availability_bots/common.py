@@ -13,8 +13,6 @@ names; export them via your shell, a cron ``EnvironmentFile``, or a systemd unit
 ``Environment=`` directive.
 """
 
-from __future__ import annotations
-
 # A directly-invoked script gets only its OWN directory on sys.path (repo-root CLAUDE.md,
 # "Directory Structure"); reaching `lib.watcher` needs the explicit bootstrap.
 import sys as _sys

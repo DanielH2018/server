@@ -13,8 +13,6 @@ meant eligible, and two roles (volume-claim, image-builder) were eligible for mo
 purely because nobody had typed them into the list.
 """
 
-from __future__ import annotations
-
 import os
 
 import yaml

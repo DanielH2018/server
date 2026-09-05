@@ -35,8 +35,6 @@ so a far side still reading stdin would have executed whatever was piped.
 still count as configured. `identity_problem()` is; see its docstring.
 """
 
-from __future__ import annotations
-
 import argparse
 import re
 import subprocess

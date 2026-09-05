@@ -14,8 +14,6 @@ Two failure modes, both silent:
 follows. test_python_version_pins_in_lockstep already couples it to both workflows.
 """
 
-from __future__ import annotations
-
 import re
 
 from lib import yaml_fast

@@ -4,8 +4,6 @@ Reads the repo only — no cluster, no ssh. ``infra_map.live`` gathers what is
 actually running, and ``infra_map.model`` reconciles the two.
 """
 
-from __future__ import annotations
-
 import re
 import sys as _sys
 from dataclasses import dataclass, field

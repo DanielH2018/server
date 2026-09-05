@@ -16,8 +16,6 @@ Both are stated as comments at their definitions; these are the executable half,
 comment does not fail CI when someone rounds 5400 down to 1200.
 """
 
-from __future__ import annotations
-
 import json
 import re
 

@@ -31,8 +31,6 @@ gate. Orphans and stale files are reported but never fail the run: they are inpu
 call, not defects.
 """
 
-from __future__ import annotations
-
 import argparse
 import datetime as _dt
 import json

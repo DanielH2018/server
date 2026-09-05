@@ -60,8 +60,6 @@ they share is _autodeploy.py. What stays here is what reads the live tree — th
 partition, the roles/k8s/manifests contract, and the PVC/claim accounting.
 """
 
-from __future__ import annotations
-
 import re
 from pathlib import Path
 

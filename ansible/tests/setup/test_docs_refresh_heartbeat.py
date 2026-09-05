@@ -14,8 +14,6 @@ What these guard is the failure report added to close that, and the couplings it
 - **The status defaults to down.** Eleven exit paths, one of which is a bare crash.
 """
 
-from __future__ import annotations
-
 import json
 import re
 from itertools import pairwise

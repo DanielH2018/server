@@ -15,8 +15,6 @@ the **Scrape Targets** monitor goes red — but loud-at-3am is a poor substitute
 and the monitor cannot say WHY the target is down. This test can.
 """
 
-from __future__ import annotations
-
 from lib import yaml_fast
 from _helpers import ROLES as _ROLES
 

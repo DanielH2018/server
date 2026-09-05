@@ -36,8 +36,6 @@ in `test_volume_revert_include.py`. What stays here is the input check, the seam
 against the live API server, and the checks on the validator and dry-run lists.
 """
 
-from __future__ import annotations
-
 import ast
 import json
 import re

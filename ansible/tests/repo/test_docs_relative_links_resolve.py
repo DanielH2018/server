@@ -21,8 +21,6 @@ Clean/flagged pairs below, per the repo rule that a new check ships with a proof
 Run: uv run pytest ansible/tests/repo/test_docs_relative_links_resolve.py
 """
 
-from __future__ import annotations
-
 import re
 import subprocess
 from pathlib import Path

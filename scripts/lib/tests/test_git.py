@@ -1,7 +1,5 @@
 """The shared git runner: the repository is chosen by cwd, never by the environment."""
 
-from __future__ import annotations
-
 import subprocess
 
 import pytest

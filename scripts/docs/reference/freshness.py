@@ -11,8 +11,6 @@ Usage::
     uv run python scripts/docs/reference/freshness.py --out docs/reference/freshness.md
 """
 
-from __future__ import annotations
-
 import argparse
 import sys as _sys
 from pathlib import Path as _Path

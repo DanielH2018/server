@@ -19,8 +19,6 @@ truth itself shows this node running no manager pod right now — never when the
 test merely disagrees with that ground truth, which is a real failure, not a reason to skip.
 """
 
-from __future__ import annotations
-
 import os
 import shutil
 import socket

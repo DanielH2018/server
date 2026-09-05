@@ -32,8 +32,6 @@ citations) resets those pages' `changed` without anyone reading them. Accepted: 
 count is the more honest number, and it survives.
 """
 
-from __future__ import annotations
-
 import re
 import sys
 from dataclasses import dataclass, field

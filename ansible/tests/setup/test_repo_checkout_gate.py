@@ -18,8 +18,6 @@ cron SUCCESSFULLY against a path that does not exist — the deploy reads green 
 lands at 06:00 on a Sunday, on stderr nothing reads.
 """
 
-from __future__ import annotations
-
 import pytest
 import yaml
 from lib import yaml_fast

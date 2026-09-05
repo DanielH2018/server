@@ -8,8 +8,6 @@ zero, and the post-revert detach is verified by state. Each ordering assert here
 task by name; `_index` refuses an ambiguous match so a rename cannot satisfy it by accident.
 """
 
-from __future__ import annotations
-
 import yaml
 from _volume_ops import assert_every_api_call_pins_a_single_status_code
 from _volume_revert import _CLAIM, _GUARD, _MAIN, _guard_of, _index, _named, _task_names

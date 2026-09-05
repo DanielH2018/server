@@ -12,9 +12,6 @@ on exactly that broken shape, and a NetworkPolicy does not look at a Deployment'
 Run: uv run pytest ansible/tests/k8s/test_netpol_baseline_labels.py
 """
 
-from __future__ import annotations
-
-
 from _k8s_render import rendered_docs
 from _helpers import K8S_ROLES
 

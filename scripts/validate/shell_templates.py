@@ -23,8 +23,6 @@ This module is the entry point; the pieces it composes live in `scripts/lib/`:
 satisfy).
 """
 
-from __future__ import annotations
-
 import shutil
 import sys
 import tempfile

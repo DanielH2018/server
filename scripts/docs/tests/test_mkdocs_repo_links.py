@@ -6,8 +6,6 @@ gate, and they carry the two halves that must agree: the anchors injected into t
 page, and the links pointed at them.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import markdown

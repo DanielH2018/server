@@ -24,8 +24,6 @@ the API server refuses the pod if that limit lands below the request. See
 k8s_default_limitrange in group_vars/all.yml for why the ceiling is set where it is.
 """
 
-from __future__ import annotations
-
 import subprocess
 
 from lib import yaml_fast

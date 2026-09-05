@@ -17,8 +17,6 @@ any of that when it is sourced rather than executed. A stub `k3s` function stand
 `kuma-push-lib.sh`'s tests stub `curl`.
 """
 
-from __future__ import annotations
-
 import subprocess
 
 from _helpers import REPO

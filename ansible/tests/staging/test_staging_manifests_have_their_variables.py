@@ -18,8 +18,6 @@ the host's flags applied is what makes this meaningful — the gated branches ar
 holding the references staging lacks.
 """
 
-from __future__ import annotations
-
 import ast
 import re
 import sys

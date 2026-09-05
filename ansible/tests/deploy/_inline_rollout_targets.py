@@ -7,8 +7,6 @@ to `_UNRESOLVED` when the target is a Jinja expression these sources cannot reso
 from `test_inline_rollout_gates.py` on 2026-09-02; that module's docstring is the contract.
 """
 
-from __future__ import annotations
-
 import re
 from collections import defaultdict
 

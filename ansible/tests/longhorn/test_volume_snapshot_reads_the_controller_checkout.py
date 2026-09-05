@@ -17,8 +17,6 @@ rendered-expression test sees a `chdir` that is correct on its face. What is wro
 command runs, which is only visible in the task's own keywords.
 """
 
-from __future__ import annotations
-
 import sys
 
 import pytest

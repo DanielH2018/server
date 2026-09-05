@@ -3,8 +3,6 @@
 Run: uv run pytest scripts/deploy_tools/tests/test_land_outcome.py
 """
 
-from __future__ import annotations
-
 import pytest
 
 from deploy_tools.land_lib import outcome

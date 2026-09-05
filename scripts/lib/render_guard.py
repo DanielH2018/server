@@ -22,8 +22,6 @@ Imported as ``from lib.render_guard import ...`` after the caller's own ``sys.pa
 bootstrap puts ``scripts/`` on the path (repo-root CLAUDE.md, *Directory Structure*).
 """
 
-from __future__ import annotations
-
 import sys
 from pathlib import Path
 

@@ -43,8 +43,6 @@ or a target is stale. That third code matters — an unreachable guest is not a 
 and collapsing it into 1 would make a rebuilt VM look like a security regression.
 """
 
-from __future__ import annotations
-
 import subprocess
 import sys
 from pathlib import Path

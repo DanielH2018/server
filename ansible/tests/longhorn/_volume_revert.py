@@ -5,8 +5,6 @@ the snapshot selection, the manifests include, and the seam and input checks tha
 `test_volume_revert.py` -- and each reads the same task files through these.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 from _helpers import REPO as _REPO

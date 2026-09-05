@@ -5,8 +5,6 @@ importing one another. ``gen_infra_map`` re-exports the public names, so
 ``REPO_ROOT`` and ``HOSTS`` keep resolving through it.
 """
 
-from __future__ import annotations
-
 import re
 import sys
 from pathlib import Path

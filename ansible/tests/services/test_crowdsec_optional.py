@@ -21,8 +21,6 @@ What this suite does NOT prove: that either pod reaches Ready with CrowdSec off.
 here starts a container. That evidence comes from the staging bring-up.
 """
 
-from __future__ import annotations
-
 import sys
 
 import pytest

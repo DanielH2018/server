@@ -29,8 +29,6 @@ CLAUDE.md, *Directory Structure*)::
     from lib.invocation_sites import cron_jobs  # noqa: E402
 """
 
-from __future__ import annotations
-
 import json
 import tomllib
 from dataclasses import dataclass

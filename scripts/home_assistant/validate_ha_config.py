@@ -31,8 +31,6 @@ Run directly (`python3 scripts/home_assistant/validate_ha_config.py`) or via the
 Exits non-zero if any error is found.
 """
 
-from __future__ import annotations
-
 import shutil
 import sys
 import tempfile

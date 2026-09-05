@@ -8,8 +8,6 @@ differ between the page and the artifact. The provenance banner and the prose st
 FIELD NOTES those sentences point at.
 """
 
-from __future__ import annotations
-
 import sys as _sys
 from pathlib import Path as _Path
 

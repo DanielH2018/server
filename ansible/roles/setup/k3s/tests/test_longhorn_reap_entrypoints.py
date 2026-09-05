@@ -16,8 +16,6 @@ The per-subcommand CLI behaviour is in `test_longhorn_reap_backups_cli.py` and
 Run: uv run pytest ansible/roles/setup/k3s/tests/test_longhorn_reap_entrypoints.py
 """
 
-from __future__ import annotations
-
 from _reap_entrypoint_harness import (
     BACKUPS_ENTRY,
     SNAPSHOTS_ENTRY,

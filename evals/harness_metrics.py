@@ -18,8 +18,6 @@ Run: uv run python evals/harness_metrics.py [--json]
     `scripts/dev/review_metrics.py` and reused here rather than re-derived.
 """
 
-from __future__ import annotations
-
 import argparse
 import importlib.util
 import json

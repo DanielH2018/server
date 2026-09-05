@@ -7,8 +7,6 @@ Offline and free: this only checks each row's shape, matching the
 via review_metrics.validate_row rather than trusting the committed file to stay clean.
 """
 
-from __future__ import annotations
-
 import json
 import sys
 from pathlib import Path

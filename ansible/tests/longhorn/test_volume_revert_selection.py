@@ -7,8 +7,6 @@ injected here enter at the seam `test_volume_revert.py`'s `test_the_listing_json
 proves against the live API server.
 """
 
-from __future__ import annotations
-
 from _helpers import render_expr as _render
 from _volume_revert import _CLAIM, _named
 

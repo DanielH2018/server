@@ -18,8 +18,6 @@ Usage::
     uv run python scripts/docs/reference/networking.py --out docs/reference/networking.md
 """
 
-from __future__ import annotations
-
 import argparse
 import re
 import sys as _sys

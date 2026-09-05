@@ -8,8 +8,6 @@ guardrail checks consumed by the validate-ha-config prek/CI hook live in the sib
 any of that — `refresh` (snapshot integration entities) is the only live path.
 """
 
-from __future__ import annotations
-
 import argparse
 import re
 import sys

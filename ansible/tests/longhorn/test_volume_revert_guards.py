@@ -8,8 +8,6 @@ guarded one sets -- a skipped task still sets its register, so that read is the 
 failure the guard exists to prevent. The role also never scales a workload back up.
 """
 
-from __future__ import annotations
-
 import re
 
 import yaml

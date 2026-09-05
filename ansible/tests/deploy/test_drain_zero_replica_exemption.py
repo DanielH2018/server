@@ -10,8 +10,6 @@ desired count, so it still fails. Both halves are asserted below, because a chec
 everything and one that fires on nothing look identical from the passing side.
 """
 
-from __future__ import annotations
-
 from lib import yaml_fast
 from _helpers import REPO, render_expr
 

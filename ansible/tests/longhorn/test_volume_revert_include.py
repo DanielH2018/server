@@ -6,8 +6,6 @@ and never swallows a failed claim. Every role that takes snapshots must also res
 replicas, or a revert leaves the workload at zero.
 """
 
-from __future__ import annotations
-
 from lib import yaml_fast
 from _k8s_render import rendered_docs
 from _helpers import render_expr as _render

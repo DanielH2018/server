@@ -3,8 +3,6 @@
 Run: uv run pytest scripts/docs/tests/test_gen_reference_backlog.py
 """
 
-from __future__ import annotations
-
 import build_docs
 from docs.reference import backlog as g
 

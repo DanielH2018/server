@@ -1,7 +1,5 @@
 """_mkdocs_freshness: the footer's text, and which pages get one."""
 
-from __future__ import annotations
-
 import sys
 from pathlib import Path
 from types import SimpleNamespace

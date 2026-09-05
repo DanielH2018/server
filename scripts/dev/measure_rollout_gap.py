@@ -19,8 +19,6 @@ Usage:
 Exit code is 0 only when zero requests failed, so it is usable as a gate.
 """
 
-from __future__ import annotations
-
 import argparse
 import socket
 import ssl

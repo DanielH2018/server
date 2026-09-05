@@ -7,8 +7,6 @@ dir, so a plain ``from _hook_common import ...`` resolves in both. Stdlib-only â
 dependency-free.
 """
 
-from __future__ import annotations
-
 import json
 import shlex
 

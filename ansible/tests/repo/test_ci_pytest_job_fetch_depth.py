@@ -14,8 +14,6 @@ environment into a test that has none.
 Run: uv run pytest ansible/tests/repo/test_ci_pytest_job_fetch_depth.py
 """
 
-from __future__ import annotations
-
 from _helpers import REPO
 from lib import yaml_fast
 

@@ -16,8 +16,6 @@ browser harness the repo does not have.
 Run: uv run pytest scripts/tests/test_fqdn_links_js.py
 """
 
-from __future__ import annotations
-
 import json
 import shutil
 import subprocess

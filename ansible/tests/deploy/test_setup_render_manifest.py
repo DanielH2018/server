@@ -23,8 +23,6 @@ A shell template added to the k3s role without being stamped is a coverage regre
 else would report, so it fails here instead.
 """
 
-from __future__ import annotations
-
 import re
 from pathlib import Path
 

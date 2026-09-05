@@ -7,8 +7,6 @@ same service; what lives here is the per-entry dispatch — which platform's rul
 what the cell says when no rule does.
 """
 
-from __future__ import annotations
-
 import sys as _sys
 from pathlib import Path as _Path
 

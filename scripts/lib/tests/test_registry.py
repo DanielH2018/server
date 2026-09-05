@@ -1,7 +1,5 @@
 """Registry: only/skip selection and the completeness guard, each as a red-proof pair."""
 
-from __future__ import annotations
-
 import pytest
 
 from lib.registry import Registry, package_entry_points

@@ -38,8 +38,6 @@ Those fall through to `None` and are reported as `unresolvable`, not silently pa
 `test_no_import_bootstrap_is_unresolvable` below, which currently expects zero.
 """
 
-from __future__ import annotations
-
 import ast
 import tomllib
 from functools import lru_cache

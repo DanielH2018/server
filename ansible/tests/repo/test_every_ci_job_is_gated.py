@@ -23,8 +23,6 @@ daily, so this guard needs no network and still tracks the real gate.
 Run: uv run pytest ansible/tests/repo/test_every_ci_job_is_gated.py
 """
 
-from __future__ import annotations
-
 import json
 import re
 

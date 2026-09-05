@@ -7,8 +7,6 @@ nothing. The `wait`-shaped credit is in `test_k8s_autodeploy_batch_gates.py`; th
 roles come from the same `widget_role` fixture.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 from _autodeploy_batch import _batch_gated_names

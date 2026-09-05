@@ -9,8 +9,6 @@ alerts if a party size is offered at ``WANTED_TIME``, then pings the run healthc
 Required env (see .env.example): OSTERIA_DISCORD_WEBHOOK_URL, OSTERIA_HEALTHCHECK_URL
 """
 
-from __future__ import annotations
-
 import re
 from datetime import datetime
 from zoneinfo import ZoneInfo

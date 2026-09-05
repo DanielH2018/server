@@ -8,8 +8,6 @@ that a disarmed backup target is named.
 Run: uv run pytest scripts/infra_map/tests/test_infra_map_render.py
 """
 
-from __future__ import annotations
-
 import inspect
 import re
 from pathlib import Path

@@ -17,8 +17,6 @@ names `/etc/traefik-file/livesync-gate.yml`, which only the Secret's volume supp
 one without the other leaves Traefik reading a path nothing mounts.
 """
 
-from __future__ import annotations
-
 import sys
 
 import pytest

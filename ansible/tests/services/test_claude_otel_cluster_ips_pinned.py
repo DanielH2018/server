@@ -13,8 +13,6 @@ time it is created, so dropping the pin does not fail anything here — it fails
 later, on another machine, in a tool this repo does not contain. Hence a test.
 """
 
-from __future__ import annotations
-
 import ipaddress
 import pathlib
 import re

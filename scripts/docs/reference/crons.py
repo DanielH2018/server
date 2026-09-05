@@ -19,8 +19,6 @@ Usage::
     uv run python scripts/docs/reference/crons.py --out docs/reference/crons.md
 """
 
-from __future__ import annotations
-
 import argparse
 import re
 from pathlib import Path

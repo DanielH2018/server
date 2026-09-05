@@ -13,8 +13,6 @@ Container contexts are deliberately out of scope: a Dockerfile or compose health
 interpreter inside its own digest-pinned image, which has nothing to do with the host.
 """
 
-from __future__ import annotations
-
 import re
 from _helpers import REPO as _REPO
 

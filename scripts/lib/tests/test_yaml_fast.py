@@ -3,8 +3,6 @@
 Run: uv run pytest scripts/lib/tests/test_yaml_fast.py
 """
 
-from __future__ import annotations
-
 import pytest
 import yaml
 

@@ -1,7 +1,5 @@
 """docs.reference.freshness: the ranking and the table, from synthetic PageFreshness rows."""
 
-from __future__ import annotations
-
 import sys
 from pathlib import Path
 

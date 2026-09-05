@@ -18,8 +18,6 @@ do. Without JavaScript the span still reads as the placeholder text it always di
 STATIC PARSING ONLY: yaml.safe_load over the inventory, plain regex over template text.
 """
 
-from __future__ import annotations
-
 import html
 import re
 from pathlib import Path

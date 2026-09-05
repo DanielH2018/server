@@ -14,8 +14,6 @@ have held. So the two sets must be EQUAL, not merely overlapping.
 Run: uv run pytest ansible/tests/repo/test_ci_contexts_match_workflows.py
 """
 
-from __future__ import annotations
-
 import re
 import sys
 from _helpers import REPO

@@ -15,8 +15,6 @@ other, because a manifest that stops rendering the Job while the wait still name
 correct deploy into a NotFound failure.
 """
 
-from __future__ import annotations
-
 from lib import yaml_fast
 
 from _helpers import ROLES, jinja_env, task_named

@@ -23,8 +23,6 @@ This is the tool that split the 1,000-line guards under `ansible/tests/` during 
 appears inside a string or a comment is neither moved nor counted as a reference.
 """
 
-from __future__ import annotations
-
 import argparse
 import ast
 import json

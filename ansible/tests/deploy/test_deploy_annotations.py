@@ -14,8 +14,6 @@ This is the same failure class as HA_BAN_SELECTOR, which shipped selecting on an
 the shipper does not emit and reported "no ip_ban events" through a window containing a real ban.
 """
 
-from __future__ import annotations
-
 import re
 
 from _helpers import REPO

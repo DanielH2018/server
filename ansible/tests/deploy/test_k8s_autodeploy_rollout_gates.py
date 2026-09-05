@@ -10,8 +10,6 @@ readinessProbe passes `rollout status` the moment it reports Running, which prov
 exists and nothing else.
 """
 
-from __future__ import annotations
-
 import re
 from lib import yaml_fast
 from pathlib import Path

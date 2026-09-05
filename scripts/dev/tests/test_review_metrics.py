@@ -3,8 +3,6 @@
 Run: uv run pytest scripts/dev/tests/test_review_metrics.py
 """
 
-from __future__ import annotations
-
 import review_metrics as rm
 
 

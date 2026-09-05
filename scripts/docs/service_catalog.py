@@ -53,8 +53,6 @@ Run: uv run python scripts/docs/service_catalog.py --out /tmp/service_catalog.ht
 Tests: uv run pytest scripts/docs/tests/test_service_catalog.py
 """
 
-from __future__ import annotations
-
 import argparse
 from pathlib import Path
 

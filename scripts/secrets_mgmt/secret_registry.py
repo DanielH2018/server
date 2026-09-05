@@ -10,8 +10,6 @@ Cadence arrives as a `tier_days` mapping, defaulting to `rotation_tools.DEFAULT_
 entry point, so it reads the seam module's copy instead.
 """
 
-from __future__ import annotations
-
 import datetime as dt
 import hashlib
 from collections.abc import Mapping

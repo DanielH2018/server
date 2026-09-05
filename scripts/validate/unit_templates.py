@@ -52,8 +52,6 @@ available on PATH (fail loud, matching `shell_templates.py`'s policy — a missi
 not silently degrade to "renders, so it's fine").
 """
 
-from __future__ import annotations
-
 import re
 import shutil
 import subprocess

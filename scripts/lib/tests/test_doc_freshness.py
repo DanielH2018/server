@@ -1,7 +1,5 @@
 """doc_freshness: the git-log parse, the path extractor, the resolver, and the moved rule."""
 
-from __future__ import annotations
-
 import textwrap
 
 from lib import doc_freshness as f

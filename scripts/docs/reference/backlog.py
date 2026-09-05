@@ -17,8 +17,6 @@ Usage::
     uv run python scripts/docs/reference/backlog.py --out docs/reference/backlog.md
 """
 
-from __future__ import annotations
-
 import argparse
 from pathlib import Path
 

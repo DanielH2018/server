@@ -8,8 +8,6 @@ way on 2026-08-23. The config is River, not YAML, so this reads the rendered Con
 rather than a parsed document.
 """
 
-from __future__ import annotations
-
 import re
 
 import pytest

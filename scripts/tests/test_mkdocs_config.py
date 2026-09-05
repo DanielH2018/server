@@ -5,8 +5,6 @@ failure arrives late and reads as a build error rather than a broken link. This
 asserts the same property directly against the tree.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 from urllib.parse import urlparse
 

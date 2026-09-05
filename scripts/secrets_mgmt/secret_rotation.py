@@ -50,8 +50,6 @@ Tiers (and default rotation cadence):
   ignore   —     not a rotatable secret (domain, usernames, static interface addresses)
 """
 
-from __future__ import annotations
-
 import argparse
 import os
 import secrets as pysecrets

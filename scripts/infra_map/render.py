@@ -11,8 +11,6 @@ architecture figure. ``group_services`` is re-exported because ``gen_infra_map``
 imports it from here.
 """
 
-from __future__ import annotations
-
 import sys as _sys
 from pathlib import Path as _Path
 

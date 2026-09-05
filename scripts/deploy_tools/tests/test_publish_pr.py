@@ -5,8 +5,6 @@ properties of the inline block -- a PR is opened, only the run's branch is pushe
 text is kept, and the local master is reset after the push. Each has an executing test here.
 """
 
-from __future__ import annotations
-
 import os
 import stat
 import subprocess

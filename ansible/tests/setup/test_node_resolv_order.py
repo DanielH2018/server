@@ -24,8 +24,6 @@ The rendered file is checked in both cases, not just the variable, so a template
 interpolating the list cannot pass on the strength of correct defaults.
 """
 
-from __future__ import annotations
-
 import re
 
 from lib import yaml_fast

@@ -15,8 +15,6 @@ rendering its input reads green.
 Run: uv run pytest ansible/tests/setup/test_kuma_env_renders_for_every_cron_tag.py
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 from _helpers import ANSIBLE

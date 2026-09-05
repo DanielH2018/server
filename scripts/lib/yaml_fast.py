@@ -34,8 +34,6 @@ the cluster-side modules under `ansible/roles/*/files/` cannot import this and s
 call `yaml.safe_load`. They are not a CI cost and are deliberately left alone.
 """
 
-from __future__ import annotations
-
 import yaml
 
 # The C extension ships in PyYAML's manylinux wheels, so this resolves to CSafeLoader on

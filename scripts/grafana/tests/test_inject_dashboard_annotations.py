@@ -1,7 +1,5 @@
 """Unit tests for the dashboard annotation injector."""
 
-from __future__ import annotations
-
 import json
 
 import inject_dashboard_annotations as inject

@@ -9,8 +9,6 @@ the attach itself fails. The retention and naming decisions are in
 `test_volume_snapshot_retention.py`; the deploy-hygiene checks stay in `test_volume_snapshot.py`.
 """
 
-from __future__ import annotations
-
 from _volume_ops import assert_every_api_call_pins_a_single_status_code
 
 import yaml

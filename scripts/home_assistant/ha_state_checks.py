@@ -19,8 +19,6 @@ each check instead encodes one specific invariant someone added after it broke s
 they grow independently of each other and of the model they check.
 """
 
-from __future__ import annotations
-
 import sys
 from collections import defaultdict
 from collections.abc import Iterator

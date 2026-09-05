@@ -41,8 +41,6 @@ Usage::
     uv run python scripts/docs/reference/state.py --out docs/reference/state.md
 """
 
-from __future__ import annotations
-
 import argparse
 import datetime as dt
 import json

@@ -5,8 +5,6 @@ runs unattended and a partial map beats no map. ``infra_map.inventory`` supplies
 the declared skeleton this is overlaid onto.
 """
 
-from __future__ import annotations
-
 import json
 import os
 import shutil

@@ -45,8 +45,6 @@ Usage::
     uv run python scripts/docs/gen_doc_fragments.py --out-dir docs/assets/generated/fragments
 """
 
-from __future__ import annotations
-
 import argparse
 import sys as _sys
 from collections.abc import Callable

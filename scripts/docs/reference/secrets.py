@@ -23,8 +23,6 @@ Usage::
     uv run python scripts/docs/reference/secrets.py --out docs/reference/secrets.md
 """
 
-from __future__ import annotations
-
 import argparse
 import datetime as dt
 from pathlib import Path

@@ -46,8 +46,6 @@ cluster ran then, which excludes those commits by construction instead of asking
 attribute them.
 """
 
-from __future__ import annotations
-
 import argparse
 import json
 import subprocess

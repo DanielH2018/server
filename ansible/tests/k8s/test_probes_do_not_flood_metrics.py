@@ -25,8 +25,6 @@ That is deliberate: this repo's most-repeated review finding is a guard whose co
 narrowed to the one case its fix touched.
 """
 
-from __future__ import annotations
-
 import pytest
 
 from _k8s_render import rendered_docs

@@ -12,8 +12,6 @@ would satisfy "the annotation is present" while rolling nothing, so the second t
 DIFFERENT digest produces a different manifest.
 """
 
-from __future__ import annotations
-
 import sys
 
 from _helpers import REPO

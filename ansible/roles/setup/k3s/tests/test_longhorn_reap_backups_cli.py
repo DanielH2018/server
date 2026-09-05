@@ -13,8 +13,6 @@ The stub `k3s` and the staging harness are shared in `_reap_entrypoint_harness.p
 Run: uv run pytest ansible/roles/setup/k3s/tests/test_longhorn_reap_backups_cli.py
 """
 
-from __future__ import annotations
-
 from _reap_entrypoint_harness import (
     BACKUPS_ENTRY,
     _backup,

@@ -16,8 +16,6 @@ role's `manifests_prune_kinds`, independent of whether that role got the label r
 Run: uv run pytest ansible/tests/deploy/test_manifests_prune.py
 """
 
-from __future__ import annotations
-
 import re
 
 from _helpers import K8S_ROLES, ROLES, jinja_env, load_tasks, task_named, walk_tasks

@@ -7,8 +7,6 @@ comment arguing against one, and a dead wait are the shapes that must not be cre
 name-level credit (`_batch_gated_names`) is in `test_k8s_autodeploy_batch_gates.py`.
 """
 
-from __future__ import annotations
-
 from _autodeploy_batch import _has_completion_gate, _has_failure_escalation
 
 

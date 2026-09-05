@@ -37,8 +37,6 @@ guarded, argv-form kubectl, the `roles/k8s/manifests` include — and the two se
 against the live API server that the retention tests inject downstream of.
 """
 
-from __future__ import annotations
-
 import re
 import shutil
 import subprocess

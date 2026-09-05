@@ -18,8 +18,6 @@ The derivation is layered, base first, and each consumer imports from the layer 
     also holds the whole-tree assertions)
 """
 
-from __future__ import annotations
-
 import re
 from pathlib import Path
 

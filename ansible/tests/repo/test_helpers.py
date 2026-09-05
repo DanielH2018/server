@@ -6,8 +6,6 @@ passed — it just stopped seeing part of the tree — so the distinction needs 
 rather than relying on the callers to notice.
 """
 
-from __future__ import annotations
-
 import pytest
 from lib import yaml_fast
 

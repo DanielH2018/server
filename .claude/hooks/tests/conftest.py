@@ -16,8 +16,6 @@ Same mechanism as `ansible/tests/_helpers.py`'s `stub_logger_on_path` and
 change from fencing this suite's leak.
 """
 
-from __future__ import annotations
-
 import os
 
 import pytest

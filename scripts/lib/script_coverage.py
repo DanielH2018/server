@@ -11,8 +11,6 @@ never imports the facade it was split out of, and both modules need the same "wh
 scripts" answer.
 """
 
-from __future__ import annotations
-
 import sys as _sys
 from pathlib import Path as _Path
 

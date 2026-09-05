@@ -6,8 +6,6 @@ without a socket. Testing the HTTP transport instead would prove only that urlli
 and would leave the comparison — the part with the trap in it — unexercised.
 """
 
-from __future__ import annotations
-
 import os
 import sys
 

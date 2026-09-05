@@ -17,8 +17,6 @@ Import it through the same bootstrap as any other ``lib`` module::
     from lib.registry import Registry, package_entry_points
 """
 
-from __future__ import annotations
-
 import dataclasses
 import importlib
 import inspect

@@ -16,8 +16,6 @@ with a fake stops checking that argv. Injecting the runner instead lets a test d
 builder and keep asserting what it hands the process.
 """
 
-from __future__ import annotations
-
 import contextlib
 import datetime as dt
 import os

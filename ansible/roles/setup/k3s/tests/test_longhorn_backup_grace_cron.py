@@ -14,8 +14,6 @@ The stub `kubectl` and the required-env builder are shared with the reader suite
 Run: uv run pytest ansible/roles/setup/k3s/tests/test_longhorn_backup_grace_cron.py
 """
 
-from __future__ import annotations
-
 import subprocess
 import sys
 import time

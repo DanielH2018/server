@@ -6,8 +6,6 @@ call runs in, and `LAND_MERGE_POLL` is the merge wait's poll interval. A test th
 shim as a process has no other way to aim a landing away from the live checkout.
 """
 
-from __future__ import annotations
-
 import argparse
 import os
 from dataclasses import dataclass

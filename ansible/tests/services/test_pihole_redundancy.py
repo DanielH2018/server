@@ -12,9 +12,6 @@ Each of them fails green — the deploy succeeds and DNS goes down anyway:
     node receives nothing, so half the capacity would silently serve no traffic.
 """
 
-from __future__ import annotations
-
-
 from lib import yaml_fast
 
 from _k8s_render import rendered_docs

@@ -23,8 +23,6 @@ Why the two failure modes are asymmetric, and why the list is per-cluster:
 Neither is something a render can see on its own, which is the point of checking the pair.
 """
 
-from __future__ import annotations
-
 import sys
 
 import pytest

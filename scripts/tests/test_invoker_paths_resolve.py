@@ -36,8 +36,6 @@ non-comment line is scanned, including a `scripts/...` mention embedded in a str
 mention there is still worth catching even though it isn't strictly "invoking" anything.
 """
 
-from __future__ import annotations
-
 import re
 from pathlib import Path
 

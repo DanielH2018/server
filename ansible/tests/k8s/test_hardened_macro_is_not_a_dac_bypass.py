@@ -16,8 +16,6 @@ assertion passing proves nothing on its own; a rule matching nothing passes iden
 synthetic cases below are what show the rule can go red.
 """
 
-from __future__ import annotations
-
 import re
 import sys
 from pathlib import Path
