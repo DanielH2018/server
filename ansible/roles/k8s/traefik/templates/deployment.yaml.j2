@@ -72,69 +72,6 @@ spec:
 {{ container_resources(cpu_limit='250m', mem_limit='128Mi', cpu_request='10m', mem_request='16Mi') }}
 {% endif %}
 {% if traefik_k8s_manage_crowdsec %}
-        # FIRST, before crowdsec-config-install's rsync, and the order is the whole point.
-        # The image's staged hub tree is root-only, so that rsync — which runs as the pod's
-        # own uid — never copies it; that is part of the exit 23 it tolerates. It does copy
-        # the parser CONFIGS, which are symlinks into that tree, so
-        # /etc/crowdsec/parsers/s02-enrich/geoip-enrich.yaml resolved to a hub file that was
-        # never staged and the agent dropped the parser: `Ignoring file … lstat
-        # /etc/crowdsec/hub/parsers/s02-enrich/crowdsecurity/geoip-enrich.yaml: no such file
-        # or directory`, once per parser-load pass. GeoIP enrichment stayed dead even after
-        # the datafiles were installed, on BOTH pods carrying the sidecar (#1211).
-        #
-        # Running this AFTER the rsync was tried and is wrong: rsync recurses from the parent
-        # listing, so it creates /etc/crowdsec/hub owned by the pod uid before it fails to
-        # read into it, and root with ALL dropped cannot write into another uid's directory —
-        # DAC_READ_SEARCH is the READ half of the override, DAC_OVERRIDE is the write half.
-        # The copy would fail, `exit 0` would swallow it, and the pod would come up 2/2 with
-        # the warning intact. Going first, this creates the directory root-owned and
-        # world-readable, and the rsync's own `--ignore-existing` then leaves the files alone.
-        #
-        # ROOT-OWNED is the half that keeps it readable, not just a consequence of needing
-        # DAC_READ_SEARCH. rsync gives an existing destination directory the SOURCE's mode.
-        # Measured both ways against a same-uid destination: a 000 source chmodded `hub/` to
-        # 000 (exit 23, it never recursed), a 0755 source left 0755 (exit 0), and in both the
-        # already-staged file kept its content and mode — `--ignore-existing` is what protects
-        # the files. Here the directory is root-owned and the rsync runs as the pod uid, so
-        # that chmod is refused whatever the source mode, and a refusal is one more error under
-        # the exit 23 the config install already tolerates. Create this directory as the pod
-        # uid and its mode goes back under rsync's control, which a root-only source would then
-        # take away again — silently, behind a green render and a healthy pod.
-        - name: crowdsec-hub-install
-          image: {{ crowdsec_k8s_image }}
-          command:
-            - /bin/sh
-            - -c
-            # `cp -a` keeps the tree's own symlinks as symlinks; the chmod is what makes it
-            # readable to the non-root agent, and the hub holds public hub content only — the
-            # LAPI and online credentials sit beside it in /etc/crowdsec, not in it. Ends in
-            # `exit 0` for the same reason crowdsec-data-install does: traefik rolls under
-            # Recreate, so a non-zero init container takes the edge down (the #986 outage)
-            # rather than costing one parser.
-            - >-
-              mkdir -p /etc/crowdsec/hub &&
-              cp -a /staging/etc/crowdsec/hub/. /etc/crowdsec/hub/ &&
-              chmod -R a+rX /etc/crowdsec/hub ||
-              echo "hub stage incomplete" >&2;
-              exit 0
-          # Root, written out rather than built through hardened_security_context() — the macro
-          # refuses uid 0 so that ansible/tests/k8s/test_root_needs_dac_capability.py can still
-          # see this block in raw template text. DAC_READ_SEARCH is the read-only half of root's
-          # permission-bit override, which is what reaches the root-only staged hub tree. No
-          # write capability is needed because this runs first: /etc/crowdsec is the emptyDir
-          # root, root-owned and empty until this container writes to it.
-          securityContext:
-            allowPrivilegeEscalation: false
-            runAsUser: 0
-            capabilities:
-              add:
-                - DAC_READ_SEARCH
-              drop:
-                - ALL
-          volumeMounts:
-            - name: crowdsec-etc
-              mountPath: /etc/crowdsec
-{{ container_resources(cpu_limit='250m', mem_limit='128Mi', cpu_request='10m', mem_request='16Mi') }}
         # Seeds the agent sidecar's /etc/crowdsec before its entrypoint fills in defaults —
         # acquis pointing at the shared access log, and the same whitelist parsers as the
         # Docker edge (from the traefik-crowdsec Secret). Root like the sidecar itself.
@@ -161,7 +98,7 @@ spec:
           # same state up front. Exit 23 is the only status tolerated: the files it skips are
           # the LAPI and online credentials, which the agent regenerates (`cscli lapi
           # register`) on start regardless. It also skips the bundled hub tree, which is NOT
-          # re-downloaded in time for the parser load — crowdsec-hub-install above stages that
+          # re-downloaded in time for the parser load — crowdsec-hub-install below stages that
           # explicitly (#1211). Runs before the installs so the seeds win.
           # Pod default uid, not root: it creates the access log traefik must then write,
           # and root-with-ALL-caps-dropped cannot chown it back (measured on the authelia
@@ -181,6 +118,49 @@ spec:
             # on its first rollout; the authelia pod lost it outright.
             - name: traefik-logs
               mountPath: /var/log/traefik
+{{ container_resources(cpu_limit='250m', mem_limit='128Mi', cpu_request='10m', mem_request='16Mi') }}
+        # The staged hub tree is root-only, so the non-root rsync above never copies it — that
+        # is part of the exit 23 it tolerates. The parser CONFIGS the rsync did copy are
+        # symlinks into that tree, so /etc/crowdsec/parsers/s02-enrich/geoip-enrich.yaml points
+        # at a hub file that does not exist and the agent drops the parser: `Ignoring file …
+        # lstat /etc/crowdsec/hub/parsers/s02-enrich/crowdsecurity/geoip-enrich.yaml: no such
+        # file or directory`, once per parser-load pass. GeoIP enrichment therefore stayed dead
+        # even after the datafiles were installed below — a sibling defect one level up, on
+        # BOTH pods carrying the sidecar (#1211). Authelia's identical init container carries
+        # the same comment.
+        - name: crowdsec-hub-install
+          image: {{ crowdsec_k8s_image }}
+          command:
+            - /bin/sh
+            - -c
+            # Runs after crowdsec-config-install, so this fills in only what that rsync could
+            # not read. `cp -a` keeps the tree's own symlinks as symlinks; the chmod is what
+            # makes it readable to the non-root agent, and the hub holds public hub content
+            # only — the LAPI and online credentials sit beside it in /etc/crowdsec, not in it.
+            # Ends in `exit 0` for the same reason crowdsec-data-install does: traefik rolls
+            # under Recreate, so a non-zero init container takes the edge down (the #986
+            # outage) rather than costing one parser.
+            - >-
+              mkdir -p /etc/crowdsec/hub &&
+              cp -a /staging/etc/crowdsec/hub/. /etc/crowdsec/hub/ &&
+              chmod -R a+rX /etc/crowdsec/hub ||
+              echo "hub stage incomplete" >&2;
+              exit 0
+          # Root, written out rather than built through hardened_security_context() — the macro
+          # refuses uid 0 so that ansible/tests/k8s/test_root_needs_dac_capability.py can still
+          # see this block in raw template text. DAC_READ_SEARCH is the read-only half of root's
+          # permission-bit override, which is what reaches the root-only staged hub tree.
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsUser: 0
+            capabilities:
+              add:
+                - DAC_READ_SEARCH
+              drop:
+                - ALL
+          volumeMounts:
+            - name: crowdsec-etc
+              mountPath: /etc/crowdsec
 {{ container_resources(cpu_limit='250m', mem_limit='128Mi', cpu_request='10m', mem_request='16Mi') }}
         # The image ships its datafiles at /staging/var/lib/crowdsec/data mode 0600 root:root
         # (measured on the v1.7.8 image), and the entrypoint SYMLINKS them into the data volume

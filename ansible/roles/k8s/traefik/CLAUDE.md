@@ -18,13 +18,6 @@ Look" table's note that this role must render before anything referencing its CR
 - An initContainer runs `chmod 600 /data/acme.json` on every start: kubelet's `fsGroup`
   handling ORs group bits into every file on the volume at mount time, which flips
   Traefik's own `0600` back to `0660` and makes it refuse to load the ACME account.
-- An initContainer stages the CrowdSec image's bundled hub tree into `/etc/crowdsec`,
-  world-readable, and it runs **before** the config seed below. That rsync runs as the
-  pod's own uid and cannot read the root-only staged hub, so the parser configs it does
-  copy — symlinks into that tree — resolved to nothing and the agent dropped
-  `geoip-enrich` on every start (#1211). Ordering is the fix: after the rsync, the hub
-  directory already exists owned by the pod uid, and root with `ALL` dropped cannot
-  write into it.
 - A second initContainer seeds the CrowdSec bouncer sidecar's config
   (`traefik_k8s_manage_crowdsec`) — `crowdsec` deploys **before** traefik in
   `containers_list` specifically so its LAPI machine credential exists before this
