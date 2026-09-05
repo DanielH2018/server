@@ -69,3 +69,7 @@ Two things exist to make a mismatch visible rather than silent:
 ## Editing
 - Logic: `files/valheim_stats.py` · Tests: `tests/test_valheim_stats.py` (`uv run pytest ansible/roles/k8s/valheim-stats/tests`)
 - Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "valheim-stats" -e target=daniel-box`
+- The Loki fetch, cursor handling, metric rendering, the HTTP handler and the run loop live
+  in `k8s/game-stats-lib`'s `stats_lib.py`, shared with terraria-stats — see that role's
+  CLAUDE.md for how it ships (staged beside this script AND added to this role's own
+  ConfigMap). `parse_line`, `StatsState` and `Store` stay here; they are the per-game part.

@@ -1,0 +1,5 @@
+---
+# Covered by every guard in the ansible/tests/deploy/test_k8s_autodeploy_*.py family — see
+# volume-claim's defaults/main.yml for the shape this follows.
+k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "deploys no workload of its own — stats_lib.py is staged into valheim-stats' and terraria-stats' own ConfigMaps by their tasks, never applied here; it renders no manifest and pins no image for Renovate to bump"  # noqa var-naming[no-role-prefix]

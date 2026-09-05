@@ -1,0 +1,55 @@
+---
+# Install the shared game-stats-lib module (stats_lib.py) beside a consumer's own stats
+# script, the same reason install_host_lib.yml (setup/common) copies host_lib.py beside its
+# host-plane consumers: a directly-invoked script gets its own directory on `sys.path` and
+# nothing else, so `import stats_lib` only resolves once a copy of this file sits beside it
+# (the repo-root CLAUDE.md states the rule).
+#
+# WHY A NEW ROLE, NOT roles/setup/common/files/host_lib.py. host_lib.py is host-plane —
+# subprocess/kubectl/RFC3339 helpers for cron scripts running directly on a node. Neither
+# stats role runs on the host: this module ships into a ConfigMap and runs inside a
+# python:3.14-alpine pod with no kubectl binary and no /usr/local/bin, so pulling in
+# host_lib's host-plane surface would be dead weight, not a fit.
+#
+# WHY A NEW ROLE, NOT ONE STATS ROLE OWNING IT FOR THE OTHER (the bridge/common.py shape,
+# where monitor-bridge owns the file and autofix-bridge stages a copy). That fits an
+# asymmetric relationship — a real, larger service and a smaller derivative. valheim-stats
+# and terraria-stats are peers with no such asymmetry, so this role holds the shared file
+# instead of picking one arbitrarily. It ships no workload of its own, the same shape as
+# k8s/volume-claim and k8s/manifests.
+#
+# Unlike a host-plane script (install_host_lib.yml's mode 0755, executable), this file is
+# never executed directly — it lands in a ConfigMap alongside the entry script — so it is
+# staged the same way the entry scripts themselves already are: mode 0644, owner root.
+#
+# `src` is absolute off `{{ playbook_dir }}` rather than a bare basename, for the same
+# reason install_host_lib.yml's is: a task file imported from another role resolves `copy:`
+# src against the role that OWNS the file, and both stats roles import this from a sibling
+# role under the SAME plane — naming the path outright means the answer does not depend on
+# which role imported it.
+#
+# NO TAGS IN THIS FILE, deliberately, matching install_host_lib.yml, release_bin.yml,
+# stamp_render.yml and stamp_deployed.yml. Tags UNION in Ansible, so a tag here would also
+# inherit the caller's and become selectable two ways. Carrying none means the copy is
+# selected by exactly the caller's tag at the import site.
+#
+# Callers pass:
+#   game_stats_lib_dest_dir   the staging directory the caller's own script also lands in
+#
+# Callers must ALSO add `stats_lib.py` to their own ConfigMap ship list (the
+# `--from-file=stats_lib.py=...` argument) — this task only stages the file on the node,
+# same as install_host_lib.yml only installs it on the host; getting it into the pod is the
+# caller's own configmap-creation step. ENFORCED by
+# ansible/tests/k8s/test_game_stats_lib_sibling_copies.py, which asserts every role whose
+# files/ scripts `import stats_lib` includes this task file AND ships `stats_lib.py` in its
+# own ConfigMap creation command.
+
+- name: Stage the shared stats_lib module in {{ game_stats_lib_dest_dir }}
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/roles/k8s/game-stats-lib/files/stats_lib.py"
+    dest: "{{ game_stats_lib_dest_dir }}/stats_lib.py"
+    mode: "0644"
+    owner: root
+    group: root
+  become: true
+  register: game_stats_lib_stage

@@ -6,12 +6,17 @@ ingested into Loki, fold them into all-time per-player stats kept in SQLite (the
 of truth), serve Prometheus metrics for Grafana. Stdlib only (python:3.14-alpine, no
 deps). The Valheim container is never touched.
 
-Why it is a fork rather than a shared library: Valheim's console is a different language
-from Terraria's, not a dialect of it. Terraria names the player on both join and leave;
-Valheim names them only on spawn, identifies the disconnect by SteamID, and emits deaths
-(which Terraria's console cannot — see the terraria-stats docstring). That pushes a
-SteamID<->name mapping and a death counter into the state model, so the state machine
-differs more than the parsing does.
+The Loki fetch, cursor handling, metric rendering/escaping, the HTTP handler, the run loop
+and the env reader are shared with terraria-stats via `stats_lib` (see that module's
+docstring and `roles/k8s/game-stats-lib/tasks/stage.yml` for how it gets here). What stays
+here is the part that is genuinely per-game:
+
+Why it is a fork rather than a shared library for the REST: Valheim's console is a
+different language from Terraria's, not a dialect of it. Terraria names the player on both
+join and leave; Valheim names them only on spawn, identifies the disconnect by SteamID, and
+emits deaths (which Terraria's console cannot — see the terraria-stats docstring). That
+pushes a SteamID<->name mapping and a death counter into the state model, so the state
+machine differs more than the parsing does.
 
 Line formats (corroborated across the image's own valheim-logfilter, adaliszk's mtail
 program, and mbround18/valheim-docker; NOT yet observed on this server, which had no
@@ -28,21 +33,18 @@ so every pattern is SEARCHED, never anchored at ^. (Terraria's parser anchors be
 its image logs bare lines. Anchoring here would match nothing.)
 """
 
-import json
-import os
 import re
 import sqlite3
 import sys
-import threading
 import time
-import urllib.parse
-import urllib.request
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+import stats_lib
 
-def _env(name, default):
-    return os.environ.get(name, default)
-
+_env = stats_lib.env
+log = stats_lib.log
+extract_entries = stats_lib.extract_entries
+initial_cursor = stats_lib.initial_cursor
+escape_label_value = stats_lib.escape_label_value
 
 LOKI_URL = _env("LOKI_URL", "http://loki-homelab:3100").rstrip("/")
 LOKI_QUERY = _env("LOKI_QUERY", '{container="valheim"}')
@@ -57,7 +59,7 @@ BACKFILL_DAYS = float(_env("BACKFILL_DAYS", "28"))
 LOKI_PAGE_LIMIT = int(_env("LOKI_PAGE_LIMIT", "5000"))
 HEALTH_MAX_AGE = int(_env("HEALTH_MAX_AGE", str(3 * POLL_INTERVAL + 30)))
 
-# parsing (pure)
+# parsing (pure) — the genuinely per-game part; see the module docstring.
 HANDSHAKE_RE = re.compile(r"Got handshake from client (?P<steam_id>\d{5,25})")
 # Non-greedy name up to the ` : ` separator. The ZDO id is signed in the wild, and the
 # `0:0` form is the death sentinel — captured here and split by kind below rather than
@@ -120,7 +122,7 @@ def is_unparsed_player_line(line):
     return "zdoid" in low or "handshake from client" in low or "closing socket" in low
 
 
-# state (pure, testable)
+# state (pure, testable) — per-game: the death/SteamID bookkeeping has no Terraria analogue.
 class StatsState:
     """In-memory all-time stats. Timestamps are unix seconds (float)."""
 
@@ -224,11 +226,6 @@ class StatsState:
         return base
 
 
-# Prometheus exposition (pure)
-def escape_label_value(v):
-    return v.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
-
-
 def render_metrics(state, now):
     """Renders `state` as Prometheus text exposition format.
 
@@ -241,76 +238,80 @@ def render_metrics(state, now):
         The full exposition text, HELP/TYPE lines included, newline-terminated.
     """
     out = []
-    out.append(
-        "# HELP valheim_player_playtime_seconds_total Total seconds a player has been connected."
+    stats_lib.render_family(
+        out,
+        "valheim_player_playtime_seconds_total",
+        "Total seconds a player has been connected.",
+        "counter",
+        [(name, int(state.playtime(name, now))) for name in sorted(state.players)],
+        label_name="player",
     )
-    out.append("# TYPE valheim_player_playtime_seconds_total counter")
-    for name in sorted(state.players):
-        out.append(
-            'valheim_player_playtime_seconds_total{player="%s"} %d'
-            % (escape_label_value(name), int(state.playtime(name, now)))
-        )
-    out.append("# HELP valheim_player_sessions_total Completed play sessions.")
-    out.append("# TYPE valheim_player_sessions_total counter")
-    for name in sorted(state.players):
-        out.append(
-            'valheim_player_sessions_total{player="%s"} %d'
-            % (escape_label_value(name), state.players[name]["sessions"])
-        )
-    out.append("# HELP valheim_player_deaths_total Times a player has died.")
-    out.append("# TYPE valheim_player_deaths_total counter")
-    for name in sorted(state.players):
-        out.append(
-            'valheim_player_deaths_total{player="%s"} %d'
-            % (escape_label_value(name), state.players[name]["deaths"])
-        )
-    out.append("# HELP valheim_deaths_total Deaths across all players.")
-    out.append("# TYPE valheim_deaths_total counter")
-    out.append("valheim_deaths_total %d" % state.total_deaths())
-    out.append(
-        "# HELP valheim_players_online Currently connected players, derived from session tracking."
+    stats_lib.render_family(
+        out,
+        "valheim_player_sessions_total",
+        "Completed play sessions.",
+        "counter",
+        [(name, state.players[name]["sessions"]) for name in sorted(state.players)],
+        label_name="player",
     )
-    out.append("# TYPE valheim_players_online gauge")
-    out.append("valheim_players_online %d" % state.online_count())
+    stats_lib.render_family(
+        out,
+        "valheim_player_deaths_total",
+        "Times a player has died.",
+        "counter",
+        [(name, state.players[name]["deaths"]) for name in sorted(state.players)],
+        label_name="player",
+    )
+    stats_lib.render_family(
+        out,
+        "valheim_deaths_total",
+        "Deaths across all players.",
+        "counter",
+        [state.total_deaths()],
+    )
     # Cross-check gauge, not a duplicate. valheim_players_online is DERIVED from the
-    # session state machine; this is the number the server itself reports in its ~10 min
-    # heartbeat. They should agree, and a persistent disagreement is the cheapest signal
-    # that the session logic (whose join/leave lines could not be validated before first
-    # play) has drifted — worth more than either number alone.
-    out.append(
-        "# HELP valheim_connections Peers the server itself reported at its last heartbeat."
+    # session state machine; valheim_connections is the number the server itself reports
+    # in its ~10 min heartbeat. They should agree, and a persistent disagreement is the
+    # cheapest signal that the session logic (whose join/leave lines could not be
+    # validated before first play) has drifted — worth more than either number alone.
+    stats_lib.render_family(
+        out,
+        "valheim_players_online",
+        "Currently connected players, derived from session tracking.",
+        "gauge",
+        [state.online_count()],
     )
-    out.append("# TYPE valheim_connections gauge")
-    out.append("valheim_connections %d" % state.connections)
-    out.append(
-        "# HELP valheim_stats_last_event_timestamp Unix time of the last processed event."
+    stats_lib.render_family(
+        out,
+        "valheim_connections",
+        "Peers the server itself reported at its last heartbeat.",
+        "gauge",
+        [state.connections],
     )
-    out.append("# TYPE valheim_stats_last_event_timestamp gauge")
-    out.append("valheim_stats_last_event_timestamp %d" % int(state.last_event_ts))
-    out.append(
-        "# HELP valheim_stats_unmatched_player_lines_total Player-shaped lines that did not parse."
+    stats_lib.render_family(
+        out,
+        "valheim_stats_last_event_timestamp",
+        "Unix time of the last processed event.",
+        "gauge",
+        [int(state.last_event_ts)],
     )
-    out.append("# TYPE valheim_stats_unmatched_player_lines_total counter")
-    out.append("valheim_stats_unmatched_player_lines_total %d" % state.unmatched)
+    stats_lib.render_family(
+        out,
+        "valheim_stats_unmatched_player_lines_total",
+        "Player-shaped lines that did not parse.",
+        "counter",
+        [state.unmatched],
+    )
     return "\n".join(out) + "\n"
-
-
-# Loki ingestion
-def extract_entries(loki_json):
-    """Flatten a Loki query_range response to [(ts_ns:int, line:str)] ascending."""
-    out = []
-    for stream in loki_json.get("data", {}).get("result", []):
-        for ts, line in stream.get("values", []):
-            out.append((int(ts), line))
-    out.sort(key=lambda tl: tl[0])
-    return out
 
 
 def apply_entries(state, entries):
     """Apply ascending (ts_ns, line) entries to `state`.
 
     Returns (events, max_ts_ns) where events is [(ts_ns, subject, kind, raw)] for the
-    SQLite audit log. Pure: no I/O, so it is unit-tested directly.
+    SQLite audit log. Pure: no I/O, so it is unit-tested directly. Per-game: heartbeats
+    are excluded from the audit log (see below), which terraria-stats has no analogue
+    for.
     """
     events = []
     max_ts = 0
@@ -330,7 +331,7 @@ def apply_entries(state, entries):
     return events, max_ts
 
 
-# SQLite source of truth
+# SQLite source of truth — per-game: the schema carries deaths + the SteamID map.
 class Store:
     """SQLite-backed source of truth for player stats, the ingest cursor, and the raw event log."""
 
@@ -445,97 +446,24 @@ class Store:
         c.commit()
 
 
-# HTTP I/O + main loop
-def http_get_json(url):
-    req = urllib.request.Request(url, headers={"User-Agent": "valheim-stats"})
-    with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:
-        return json.load(resp)
-
-
+# Loki fetch + the run loop — thin per-game bindings over stats_lib's shared skeleton.
 def loki_fetch(start_ns, end_ns):
     """Fetch entries in (start_ns, end_ns] as [(ts_ns, line)] (one page)."""
-    qs = urllib.parse.urlencode(
-        {
-            "query": LOKI_QUERY,
-            "start": start_ns + 1,
-            "end": end_ns,
-            "limit": LOKI_PAGE_LIMIT,
-            "direction": "forward",
-        }
+    url = stats_lib.build_query_range_url(
+        LOKI_URL, LOKI_QUERY, start_ns, end_ns, LOKI_PAGE_LIMIT
     )
-    return extract_entries(http_get_json(LOKI_URL + "/loki/api/v1/query_range?" + qs))
+    return extract_entries(stats_lib.http_get_json(url, HTTP_TIMEOUT, "valheim-stats"))
 
 
 def run_cycle(state, store, cursor, end_ns, fetch):
     """One poll: page through new entries from `cursor`, fold, persist. Returns new cursor.
 
-    `fetch(start_ns, end_ns) -> [(ts_ns, line)]`. Pages until a short/empty page.
-    State mutation + cursor advance are persisted together so a crash re-runs the batch
-    cleanly (events past the saved cursor simply re-apply on next start).
+    Thin wrapper over stats_lib.run_cycle binding this game's apply_entries + page limit —
+    see that function's docstring for the paging/persistence contract.
     """
-    while True:
-        entries = fetch(cursor, end_ns)
-        if not entries:
-            break
-        events, max_ts = apply_entries(state, entries)
-        if max_ts > cursor:
-            cursor = max_ts
-        store.save(state, cursor, events)
-        if len(entries) < LOKI_PAGE_LIMIT:
-            break
-    return cursor
-
-
-def log(*args):
-    print("[%s]" % time.strftime("%Y-%m-%dT%H:%M:%S"), *args, flush=True)
-
-
-_state = StatsState()
-_lock = threading.Lock()
-# Written by the poll loop, read by /healthz without a lock. Safe under CPython's GIL
-# (float assignment is atomic). On a free-threaded interpreter, guard with _lock in both.
-_last_poll_ok = 0.0
-
-
-def _make_handler():
-    class Handler(BaseHTTPRequestHandler):
-        """Serves /metrics (Prometheus exposition) and /healthz (poll staleness)."""
-
-        # `format` is the parameter name BaseHTTPRequestHandler.log_message declares.
-        def log_message(self, format: str, *args: object) -> None:
-            pass
-
-        def do_GET(self):
-            """Routes the request path to /metrics, /healthz, or a 404."""
-            if self.path == "/metrics":
-                with _lock:
-                    body = render_metrics(_state, time.time()).encode()
-                self.send_response(200)
-                self.send_header("Content-Type", "text/plain; version=0.0.4")
-                self.end_headers()
-                self.wfile.write(body)
-            elif self.path == "/healthz":
-                fresh = (time.time() - _last_poll_ok) < HEALTH_MAX_AGE
-                self.send_response(200 if fresh else 503)
-                self.end_headers()
-                self.wfile.write(b"ok\n" if fresh else b"stale\n")
-            else:
-                self.send_response(404)
-                self.end_headers()
-
-    return Handler
-
-
-def initial_cursor(stored_cursor, backfill, now, backfill_days):
-    """Pick the starting cursor (ns).
-
-    On a fresh DB (stored_cursor==0) or an explicit --backfill, bound the start to the
-    last `backfill_days` rather than epoch: a first query spanning 1970->now exceeds
-    Loki's max_query_length and returns HTTP 400. A normal run resumes from the cursor.
-    """
-    if backfill or stored_cursor == 0:
-        return int((now - backfill_days * 86400) * 1e9)
-    return stored_cursor
+    return stats_lib.run_cycle(
+        state, store, cursor, end_ns, fetch, apply_entries, LOKI_PAGE_LIMIT
+    )
 
 
 def main():
@@ -546,40 +474,36 @@ def main():
     POLL_INTERVAL. A poll cycle's own exception is caught and logged rather than
     allowed to kill the loop.
     """
-    global _state, _last_poll_ok
     once = "--once" in sys.argv
     backfill = "--backfill" in sys.argv
     store = Store(DB_PATH)
-    with _lock:
-        _state = store.load_state()
+    poll_state = stats_lib.PollState(store.load_state())
     cursor = initial_cursor(store.get_cursor(), backfill, time.time(), BACKFILL_DAYS)
     log(
         "valheim-stats starting (loki=%s once=%s backfill=%s players=%d)"
-        % (LOKI_URL, once, backfill, len(_state.players))
+        % (LOKI_URL, once, backfill, len(poll_state.value.players))
     )
     if not (once or backfill):
         # Threading server so a slow /metrics render cannot head-of-line-block /healthz.
-        threading.Thread(
-            target=lambda: ThreadingHTTPServer(
-                ("0.0.0.0", METRICS_PORT), _make_handler()
-            ).serve_forever(),
-            daemon=True,
-        ).start()
-    while True:
-        try:
-            end_ns = int(time.time() * 1e9)
-            with _lock:
-                cursor = run_cycle(_state, store, cursor, end_ns, loki_fetch)
-            _last_poll_ok = time.time()
-            log(
-                "poll ok: %d players, %d online, %d deaths"
-                % (len(_state.players), _state.online_count(), _state.total_deaths())
-            )
-        except Exception as e:  # an unreachable Loki must not kill the loop
-            log("poll error:", e)
-        if once or backfill:
-            break
-        time.sleep(POLL_INTERVAL)
+        stats_lib.start_metrics_server(
+            stats_lib.make_handler(poll_state, render_metrics, HEALTH_MAX_AGE),
+            METRICS_PORT,
+        )
+    stats_lib.poll_forever(
+        poll_state,
+        store,
+        cursor,
+        loki_fetch,
+        apply_entries,
+        LOKI_PAGE_LIMIT,
+        once,
+        backfill,
+        POLL_INTERVAL,
+        lambda state: (
+            "%d players, %d online, %d deaths"
+            % (len(state.players), state.online_count(), state.total_deaths())
+        ),
+    )
 
 
 if __name__ == "__main__":

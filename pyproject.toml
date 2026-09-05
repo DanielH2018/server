@@ -45,6 +45,7 @@ testpaths = [                        # single source of truth for WHAT runs; exc
   "ansible/roles/setup/fake_remux/tests",          # generic {ts,ok,msg} state-file pusher
   "ansible/roles/k8s/terraria-stats/tests",       # player-stats aggregator logic (moved at the Phase F drain)
   "ansible/roles/k8s/valheim-stats/tests",        # the Valheim sibling: adds deaths + a steamid<->name map
+  "ansible/roles/k8s/game-stats-lib/tests",       # shared Loki-tail/Prometheus skeleton both stats roles stage
   "ansible/roles/k8s/ical-proxy/tests",
   "ansible/roles/k8s/homelab-mcp/tests",
   "ansible/roles/k8s/artifacts/tests",             # artifact index/search server + path confinement
@@ -128,12 +129,16 @@ markers = [
 # into autofix-bridge's ConfigMap rather than duplicated — without this, `uv run pytest
 # ansible/roles/k8s/autofix-bridge/files` alone can't resolve `from bridge.common import ...`
 # (it only worked when monitor-bridge/files happened to already be on sys.path from the same run).
+# game-stats-lib/files: stats_lib.py is the same shape again, staged into both valheim-stats' and
+# terraria-stats' ConfigMaps — without this, `import stats_lib` in either role's own script
+# resolves only when game-stats-lib/tests happened to run first in the same session.
 pythonpath = [
   # `ansible/tests` so the guards in its subdirectories reach the shared `_helpers.py` and
   # `_k8s_render.py` at its root: pytest prepends only a test's OWN directory.
   "ansible/tests",
   "ansible/filter_plugins",
   "ansible/roles/setup/common/files",
+  "ansible/roles/k8s/game-stats-lib/files",
   "ansible/roles/setup/gitops_deploy/files",
   "ansible/roles/k8s/monitor-bridge/files",
   # `scripts` resolves the cross-directory `from lib.docs_provenance import ...` form (a PEP 420
@@ -279,6 +284,7 @@ extra-paths = [
   "ansible/roles/setup/common/files",
   "ansible/roles/setup/gitops_deploy/files",
   "ansible/roles/k8s/monitor-bridge/files",
+  "ansible/roles/k8s/game-stats-lib/files",
   "ansible/roles/k8s/uptime-kuma/files",
   "scripts",
   "scripts/availability_bots",
