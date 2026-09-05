@@ -105,5 +105,10 @@ def test_a_config_whose_filter_is_not_inverted_is_flagged():
 
 def test_the_config_file_is_not_world_readable():
     # It carries the basic-auth password, so 0644 would hand it to every account on the Pi.
-    assert 'mode: "0640"' in TASKS.read_text()
-    assert 'mode: "0644"' not in TASKS.read_text()
+    text = TASKS.read_text()
+    # Scoped to the config task rather than asserting no 0644 anywhere in the role: an
+    # unrelated file task added later is not this property going wrong.
+    block = text[
+        text.index("src: config.alloy.j2") : text.index("register: alloy_config")
+    ]
+    assert 'mode: "0640"' in block
