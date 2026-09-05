@@ -85,7 +85,7 @@ not `scripts/` alone. `ansible/tests` is a root too, so `deploy`, `k8s`, `longho
 `pythonpath` list, then list what each root holds:
 
 ```bash
-ls scripts/ ansible/tests/ ansible/roles/k8s/monitor-bridge/files/
+ls -d scripts/*/ scripts/*/*/ ansible/tests/*/ ansible/roles/k8s/monitor-bridge/files/*/
 ```
 
 ### Per-module `sys.path` bootstraps, not `python -m`

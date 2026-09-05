@@ -87,13 +87,28 @@ def _from_imports(source: str, names: set[str]) -> set[str]:
 
 
 def _plain_imports(source: str, names: set[str]) -> set[str]:
-    """Every module in `names` that `source` reaches by a plain `import <module>`."""
+    """Every module in `names` that `source` reaches by an unaliased `import <module>`.
+
+    `import deploy_io as dio` is excluded on purpose: an alias is a second name for the module,
+    the same thing the qualified-access rule exists to forbid, so `_aliased_imports` reports it.
+    """
     return {
         alias.name
         for node in ast.walk(ast.parse(source))
         if isinstance(node, ast.Import)
         for alias in node.names
-        if alias.name in names
+        if alias.name in names and alias.asname is None
+    }
+
+
+def _aliased_imports(source: str, names: set[str]) -> set[str]:
+    """Every module in `names` that `source` imports under another name."""
+    return {
+        alias.name
+        for node in ast.walk(ast.parse(source))
+        if isinstance(node, ast.Import)
+        for alias in node.names
+        if alias.name in names and alias.asname is not None
     }
 
 
@@ -182,6 +197,10 @@ def test_deploy_io_and_deploy_alerts_are_reached_qualified():
             f"{name} from-imports {sorted(_from_imports(source, QUALIFIED))} — "
             f"reach them qualified instead"
         )
+        assert _aliased_imports(source, QUALIFIED) == set(), (
+            f"{name} aliases {sorted(_aliased_imports(source, QUALIFIED))} — "
+            f"reach them by their own name"
+        )
         if _plain_imports(source, QUALIFIED):
             plain.add(name)
     # Non-vacuity, against named members rather than a count: with no module importing either
@@ -193,9 +212,12 @@ def test_deploy_io_and_deploy_alerts_are_reached_qualified():
 
 def test_a_from_import_of_the_io_surface_is_flagged():
     """The reject half. The plain form beside it must NOT count as a from-import."""
-    source = "import deploy_io\nfrom deploy_alerts import post\n"
+    source = (
+        "import deploy_io\nfrom deploy_alerts import post\nimport deploy_alerts as da\n"
+    )
     assert _from_imports(source, QUALIFIED) == {"deploy_alerts"}
     assert _plain_imports(source, QUALIFIED) == {"deploy_io"}
+    assert _aliased_imports(source, QUALIFIED) == {"deploy_alerts"}
 
 
 def test_the_index_defines_nothing():

@@ -363,9 +363,10 @@ def test_a_staging_rejection_holds_and_never_touches_prod(
     assert _marker(state_dir, "hold_sha") == ORIGIN
     # Two posts, in this order. posts[0] is consult_staging's own verdict alert — it fires on
     # every non-PASS, before the branch below decides what to do about it. posts[1] is the
-    # block's page, the one that says prod was never touched. Positional and counted: an
-    # `any()` over both bodies passes on either alone, because `staging REJECTED` appears in
-    # both. The substrings below are each unique to one of deploy_alerts' two bodies.
+    # block's page, the one that says prod was never touched. Positional and counted: the two
+    # retired `any()` predicates both matched posts[1] alone (the verdict summary spells it
+    # `staging: REJECTED`), so posts[0] was never asserted. The substrings below are each
+    # unique to one body.
     assert len(tick.posts) == 2, tick.posts
     assert "staging: REJECTED" in tick.posts[0]
     assert "This gate BLOCKS" in tick.posts[0]
@@ -427,6 +428,8 @@ def test_the_override_is_only_read_when_the_gate_would_block(
     # this same file, so re-reading it would assert the line above twice.
     assert _marker(state_dir, "hold_sha") is None, "a passing tick wrote a hold"
     assert not any("staging override used" in post for post in tick.posts), tick.posts
+    # And the tick itself went through: a blocked tick leaves merges empty.
+    assert tick.merges == [ORIGIN]
 
 
 def test_a_failed_rollout_rolls_back_to_the_failed_shas_snapshot_under_its_own_budget(
