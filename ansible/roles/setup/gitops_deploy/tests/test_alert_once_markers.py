@@ -34,18 +34,21 @@ _KNOWN_MARKERS = frozenset(
 
 
 def _alert_once_markers(source: str) -> list[str]:
-    """Every string literal passed as `alert_once`'s first argument, in source order."""
+    """Every string literal passed as `alert_once`'s marker argument, in source order.
+
+    The marker is the SECOND argument: the first is the injected `DeployTools`.
+    """
     markers = []
     for node in ast.walk(ast.parse(source)):
         if (
             isinstance(node, ast.Call)
             and isinstance(node.func, ast.Name)
             and node.func.id == "alert_once"
-            and node.args
-            and isinstance(node.args[0], ast.Constant)
-            and isinstance(node.args[0].value, str)
+            and len(node.args) >= 2
+            and isinstance(node.args[1], ast.Constant)
+            and isinstance(node.args[1].value, str)
         ):
-            markers.append(node.args[0].value)
+            markers.append(node.args[1].value)
     return markers
 
 
@@ -66,7 +69,7 @@ def test_every_alert_once_call_site_names_a_real_deployerstate_marker():
 def test_an_unknown_marker_is_caught():
     # Red proof for the pair above: the same extractor, driven against a source whose literal
     # is a typo that does not name a real marker.
-    bad_source = 'alert_once("k9s_alerted", "k8s", origin, content)'
+    bad_source = 'alert_once(tools, "k9s_alerted", "k8s", origin, content)'
     markers = _alert_once_markers(bad_source)
     assert markers == ["k9s_alerted"]
     assert "k9s_alerted" not in deploy_io.DeployerState.MARKERS

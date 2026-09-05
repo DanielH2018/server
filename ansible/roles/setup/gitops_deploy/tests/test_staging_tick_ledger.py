@@ -24,6 +24,10 @@ from deploy_staging import (
     TICK_OK,
     staging_tick_outcome,
 )
+from deploy_toolbox import DeployTools
+
+# The real clock: the recorder only stamps `at`, which these tests assert is non-empty.
+TOOLS = DeployTools()
 
 
 def test_a_pass_is_recorded_as_a_pass() -> None:
@@ -67,7 +71,9 @@ def _ledger(gitops_deploy: ModuleType) -> list[dict]:
 def test_every_real_verdict_appends_one_row(
     gitops_deploy: ModuleType, state_dir, verdict: str, outcome: str
 ) -> None:
-    gitops_deploy.record_staging_tick("c0ffee1234", {"freshrss", "ical-proxy"}, verdict)
+    gitops_deploy.record_staging_tick(
+        TOOLS, "c0ffee1234", {"freshrss", "ical-proxy"}, verdict
+    )
     rows = _ledger(gitops_deploy)
     assert len(rows) == 1
     assert rows[0]["sha"] == "c0ffee1234"
@@ -81,15 +87,15 @@ def test_every_real_verdict_appends_one_row(
 def test_a_skipped_tick_appends_nothing(gitops_deploy: ModuleType, state_dir) -> None:
     """The reject half. A row marked skipped would be worse than no row: the tick fires every
     ten minutes and almost never reaches the gate."""
-    gitops_deploy.record_staging_tick("c0ffee1234", set(), STAGING_SKIPPED)
+    gitops_deploy.record_staging_tick(TOOLS, "c0ffee1234", set(), STAGING_SKIPPED)
     assert _ledger(gitops_deploy) == []
 
 
 def test_rows_accumulate_rather_than_replacing_each_other(
     gitops_deploy: ModuleType, state_dir
 ) -> None:
-    gitops_deploy.record_staging_tick("aaaaaaaa", {"freshrss"}, STAGING_PASS)
-    gitops_deploy.record_staging_tick("bbbbbbbb", {"freshrss"}, STAGING_REJECTED)
+    gitops_deploy.record_staging_tick(TOOLS, "aaaaaaaa", {"freshrss"}, STAGING_PASS)
+    gitops_deploy.record_staging_tick(TOOLS, "bbbbbbbb", {"freshrss"}, STAGING_REJECTED)
     assert [r["sha"] for r in _ledger(gitops_deploy)] == ["aaaaaaaa", "bbbbbbbb"]
 
 
@@ -100,7 +106,7 @@ def test_an_unwritable_ledger_costs_the_measurement_and_not_the_deploy(
     monkeypatch.setattr(
         gitops_deploy, "STAGING_TICK_LEDGER", str(state_dir / "no-such-dir" / "t.jsonl")
     )
-    gitops_deploy.record_staging_tick("c0ffee1234", {"freshrss"}, STAGING_PASS)
+    gitops_deploy.record_staging_tick(TOOLS, "c0ffee1234", {"freshrss"}, STAGING_PASS)
 
 
 def test_consult_staging_records_the_verdict_it_returns(
@@ -111,5 +117,5 @@ def test_consult_staging_records_the_verdict_it_returns(
     another is the defect a separate call site invites."""
     body = inspect.getsource(gitops_deploy.consult_staging)
     assert "verdict = staging_verdict(deploy_rc, expect_rc)" in body
-    assert "record_staging_tick(origin, gated, verdict)" in body
+    assert "record_staging_tick(tools, origin, gated, verdict)" in body
     assert "return verdict" in body

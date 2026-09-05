@@ -27,15 +27,10 @@ rather than an import traceback before the heartbeat exists.
 Stdlib only.
 """
 
-import json
 import os
-import subprocess
 import sys
 import time
-import urllib.error
-import urllib.request
 from dataclasses import dataclass
-from datetime import datetime
 from zoneinfo import ZoneInfo
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -53,11 +48,8 @@ from deploy_config import ConfigError, csv_set, load_config, log, read_config_fi
 from deploy_git import (
     behind_marker,
     broad_hold_cleared_by,
-    ci_verdict,
     dirty_alert_slot,
     dirty_summary,
-    github_auth_headers,
-    github_token,
     hold_plane_marker,
     is_diverged,
     next_action,
@@ -86,6 +78,7 @@ from deploy_staging import (
     staging_verdict,
     staging_verdict_summary,
 )
+from deploy_toolbox import DeployTools, default_tools
 
 
 class RetryableFetchError(Exception):
@@ -329,14 +322,12 @@ STAGING_GATE_BLOCKING = CONFIG.staging_gate_blocking
 # OFF unless config.env says otherwise, so a host that has not been re-templated keeps its current
 # behaviour, and REQUIRE_CI=false is the documented way back out.
 #
+# The gate itself is `DeployTools.fetch_ci_verdict`, which `deploy_toolbox.default_tools` binds to
+# CONFIG.require_ci, CONFIG.ci_repo and CONFIG.ci_contexts. No module global copies those three:
+# a copy rebound here could disagree with the frozen CONFIG it came from.
+#
 # The disarm for an empty CI_CONTEXTS/GITHUB_REPO (a half-rendered config.env) is decided inside
-# deploy_config.load_config, which is also where it logs — CONFIG.require_ci is the one value, so a
-# module global rebound separately here could disagree with the frozen CONFIG it was copied from.
-REQUIRE_CI = CONFIG.require_ci
-# GitHub check-run NAMES that must be green — the same strings branch protection calls contexts.
-# Comma-separated; the names contain spaces and parens, never commas.
-CI_CONTEXTS = CONFIG.ci_contexts
-CI_REPO = CONFIG.ci_repo
+# deploy_config.load_config, which is also where it logs.
 
 
 # ── what one phase hands the next ─────────────────────────────────────────────────────────────
@@ -383,47 +374,7 @@ class TickPlan:
 # ── git and CI ────────────────────────────────────────────────────────────────────────────────
 
 
-def fetch_ci_verdict(sha: str) -> str:
-    """`pass` / `pending` / `fail` for `sha`, from GitHub's check-runs API.
-
-    Authenticated through `gh auth token` when the CLI is logged in (deploy_logic.github_token
-    says why: the anonymous 60/hour limit is per source IP and shared with every landing's
-    `await_ci.py` poll, and two landings exhaust it), anonymous otherwise.
-
-    An unreachable or malformed API reads as `pending`, never `pass`: the gate has to fail closed
-    or it is not a gate. That defers the tick and retries in 30 minutes, and because the tick still
-    completes normally (writing `last_run`), a GitHub outage does NOT trip GitOps-Alive the way a
-    RetryableFetchError would. Sustained unavailability instead leaves the host behind origin,
-    which `behind_marker` records and the 6h behind-origin watchdog pages on.
-    """
-    if not REQUIRE_CI:
-        return "pass"
-    url = (
-        f"https://api.github.com/repos/{CI_REPO}/commits/{sha}/check-runs?per_page=100"
-    )
-    req = urllib.request.Request(
-        url,
-        headers={
-            "Accept": "application/vnd.github+json",
-            "User-Agent": "gitops-deploy",
-            **github_auth_headers(github_token(os.environ, subprocess.run)),
-        },
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            payload = json.load(resp)
-    except (urllib.error.URLError, TimeoutError, ValueError, OSError) as e:
-        log(f"CI status unavailable for {sha[:8]} ({e}) — deferring this tick")
-        return "pending"
-    return ci_verdict(payload.get("check_runs", []), CI_CONTEXTS)
-
-
-def is_ancestor(ancestor: str, descendant: str) -> bool:
-    """True if `ancestor` is an ancestor of (or equal to) `descendant`, in this host's repo."""
-    return deploy_io.is_ancestor(REPO, ancestor, descendant)
-
-
-def _record_behind() -> None:
+def _record_behind(tools: DeployTools) -> None:
     """Record whether this host ended the tick behind origin (see BEHIND_FILE).
 
     Runs after main() so it reads the state we actually finished in, not the one we started in —
@@ -435,9 +386,9 @@ def _record_behind() -> None:
     persistently broken repo surfaces through last_run/Alive anyway.
     """
     try:
-        local = deploy_io.run(["git", "rev-parse", "HEAD"], cwd=REPO)
-        origin = deploy_io.run(["git", "rev-parse", f"origin/{BRANCH}"], cwd=REPO)
-        behind = origin != local and is_ancestor(local, origin)
+        local = tools.run(["git", "rev-parse", "HEAD"], cwd=REPO)
+        origin = tools.run(["git", "rev-parse", f"origin/{BRANCH}"], cwd=REPO)
+        behind = origin != local and tools.is_ancestor(REPO, local, origin)
         STATE.write(
             "behind", behind_marker(behind, origin, STATE.behind_since, time.time())
         )
@@ -489,12 +440,12 @@ def clear_service_hold() -> None:
 # ── delivering an alert ───────────────────────────────────────────────────────────────────────
 
 
-def discord(content: str) -> bool:
+def discord(tools: DeployTools, content: str) -> bool:
     """Post to the alert webhook. False on any failure, so the alert is retried next tick."""
-    return deploy_alerts.post(CONFIG.discord_webhook, content, log_fn=log)
+    return tools.discord_post(CONFIG.discord_webhook, content)
 
 
-def deliver(key: str, content: str) -> bool:
+def deliver(tools: DeployTools, key: str, content: str) -> bool:
     """Post an alert now, queuing it (keyed by "<channel>:<sha>") for retry on a delivery failure.
 
     A transient webhook blip can't permanently drop it — the ff-merged secrets/tasks/meta/
@@ -519,7 +470,7 @@ def deliver(key: str, content: str) -> bool:
         # one that is about to be delivered anyway. The queue may sit at PENDING_ALERTS_MAX + 1 for
         # the length of one discord() call; the post-send write below is what enforces the cap.
         deploy_alerts.write_pending(PENDING_ALERTS_FILE, queued)
-    delivered = discord(content)
+    delivered = discord(tools, content)
     # `queued`, NOT `pending`, is the baseline from here on. Comparing the removal against the
     # pre-queue dict would make it a permanent no-op, so the entry would never leave and every
     # alert would repost on every tick.
@@ -537,7 +488,7 @@ def deliver(key: str, content: str) -> bool:
     return delivered
 
 
-def drain_pending() -> None:
+def drain_pending(tools: DeployTools) -> None:
     """Resend every queued-but-undelivered alert.
 
     Runs first thing each tick — BEFORE the noop/hold/dirty short-circuits — so an alert whose
@@ -547,13 +498,15 @@ def drain_pending() -> None:
     pending = deploy_alerts.read_pending(PENDING_ALERTS_FILE)
     if not pending:
         return
-    delivered = {k for k, c in pending.items() if discord(c)}
+    delivered = {k for k, c in pending.items() if discord(tools, c)}
     updated = apply_drain_result(pending, delivered)
     if updated != pending:
         deploy_alerts.write_pending(PENDING_ALERTS_FILE, updated)
 
 
-def alert_once(marker: str, channel: str, origin: str, content: str) -> None:
+def alert_once(
+    tools: DeployTools, marker: str, channel: str, origin: str, content: str
+) -> None:
     """Deliver a per-SHA-deduped alert on `channel`.
 
     Args:
@@ -571,10 +524,10 @@ def alert_once(marker: str, channel: str, origin: str, content: str) -> None:
     if STATE.read(marker) == origin:
         return
     STATE.write(marker, origin)
-    deliver(f"{channel}:{origin}", content)
+    deliver(tools, f"{channel}:{origin}", content)
 
 
-def alert_secrets_deferred(origin: str, cs: ChangeSet) -> None:
+def alert_secrets_deferred(tools: DeployTools, origin: str, cs: ChangeSet) -> None:
     """Alert (once per SHA) that `secrets.yml` was ff-merged with no consumer redeployed.
 
     Split out of the no-services branch on 2026-08-24 so the k8s auto-deploy path can fire it too.
@@ -594,6 +547,7 @@ def alert_secrets_deferred(origin: str, cs: ChangeSet) -> None:
     if not cs.secrets:
         return
     alert_once(
+        tools,
         "secrets_alerted",
         "secrets",
         origin,
@@ -602,6 +556,7 @@ def alert_secrets_deferred(origin: str, cs: ChangeSet) -> None:
 
 
 def alert_deferred(
+    tools: DeployTools,
     origin: str,
     deployed: set[str],
     cs: ChangeSet,
@@ -627,6 +582,7 @@ def alert_deferred(
     pending_tasks, pending_meta = deferred_service_alerts(cs, deployed)
     if pending_tasks:
         alert_once(
+            tools,
             "tasks_alerted",
             "tasks",
             origin,
@@ -634,6 +590,7 @@ def alert_deferred(
         )
     if pending_meta:
         alert_once(
+            tools,
             "meta_alerted",
             "meta",
             origin,
@@ -651,6 +608,7 @@ def alert_deferred(
         # `roles/k8s/manifests/tasks/release_stamp.yml` writes on every real apply -- see this
         # role's CLAUDE.md, "k8s-platform roles are auto-deployed ONLY for an image-pin bump...".
         alert_once(
+            tools,
             "k8s_alerted",
             "k8s",
             origin,
@@ -660,7 +618,7 @@ def alert_deferred(
         )
 
 
-def check_stale_composes() -> None:
+def check_stale_composes(tools: DeployTools) -> None:
     """Page (once per distinct set) when a rendered compose has no matching containers_list entry.
 
     containers/<svc>/docker-compose.yml exists on disk but <svc> has no containers_list entry —
@@ -677,6 +635,7 @@ def check_stale_composes() -> None:
     STATE.write("stale_composes", marker or None)
     if stale:
         deliver(
+            tools,
             f"stale-composes:{marker}",
             deploy_alerts.stale_composes_alert(HOSTNAME, stale),
         )
@@ -685,10 +644,12 @@ def check_stale_composes() -> None:
 # ── the staging gate ──────────────────────────────────────────────────────────────────────────
 
 
-def record_staging_tick(sha: str, gated: set[str], verdict: str) -> None:
+def record_staging_tick(
+    tools: DeployTools, sha: str, gated: set[str], verdict: str
+) -> None:
     """Append this tick's verdict to the tick ledger. Never raises. See deploy_io."""
     deploy_io.record_staging_tick(
-        STAGING_TICK_LEDGER, CHICAGO, datetime.now, sha, gated, verdict
+        STAGING_TICK_LEDGER, CHICAGO, tools.now, sha, gated, verdict
     )
 
 
@@ -697,7 +658,7 @@ def consume_staging_override() -> bool:
     return deploy_io.consume_override(STAGING_OVERRIDE_FILE)
 
 
-def consult_staging(services: set[str], origin: str) -> str:
+def consult_staging(tools: DeployTools, services: set[str], origin: str) -> str:
     """Ask the staging cluster about this commit, and return the one-word verdict.
 
     The verdict is `staging_verdict`'s vocabulary: pass, rejected, no_verdict, or skipped when
@@ -721,7 +682,7 @@ def consult_staging(services: set[str], origin: str) -> str:
         log(staging_verdict_summary(gated, ungated, 0, 0))
         return STAGING_SKIPPED
 
-    deploy_rc, expect_rc = deploy_io.run_staging_scripts(
+    deploy_rc, expect_rc = tools.run_staging_scripts(
         REPO,
         origin,
         ",".join(sorted(gated)),
@@ -735,20 +696,21 @@ def consult_staging(services: set[str], origin: str) -> str:
     # false-failure rate is made of.
     if deploy_rc != 0 or expect_rc != 0:
         alert_once(
+            tools,
             "staging_alerted",
             "staging",
             origin,
             deploy_alerts.staging_verdict_alert(origin, summary, STAGING_GATE_BLOCKING),
         )
     verdict = staging_verdict(deploy_rc, expect_rc)
-    record_staging_tick(origin, gated, verdict)
+    record_staging_tick(tools, origin, gated, verdict)
     return verdict
 
 
 # ── the phases ────────────────────────────────────────────────────────────────────────────────
 
 
-def assess() -> TickTarget:
+def assess(tools: DeployTools) -> TickTarget:
     """Read git, decide what kind of tick this is, and manage the divergence marker.
 
     Returns:
@@ -764,19 +726,19 @@ def assess() -> TickTarget:
     # remote-tracking refs.) Skipping is safe precisely because it does NOT write last_run: a
     # checkout that is genuinely broken keeps failing, ages the marker past GITOPS_MAX_AGE_S and
     # still pages via GitOps-Alive ~60min later, instead of double-paging 48x/day forever.
-    status = deploy_io.git_status(REPO)
+    status = tools.git_status(REPO)
     if status.returncode != 0:
         raise RetryableFetchError(
             status.stderr.strip() or f"git status exited {status.returncode}"
         )
     dirty = bool(status.stdout.strip())
 
-    fetch = deploy_io.git_fetch(REPO, BRANCH)
+    fetch = tools.git_fetch(REPO, BRANCH)
     if fetch.returncode != 0:
         raise RetryableFetchError(
             fetch.stderr.strip() or f"git fetch exited {fetch.returncode}"
         )
-    local = deploy_io.run(["git", "rev-parse", "HEAD"], cwd=REPO)
+    local = tools.run(["git", "rev-parse", "HEAD"], cwd=REPO)
     # Pinned ONCE, and every decision below plus every merge uses this value rather than
     # re-resolving `origin/<branch>`. The CI verdict, the changed-path diff, the denylist read and
     # the broad marker all evaluate against this exact commit; a merge that re-resolved the ref
@@ -790,20 +752,20 @@ def assess() -> TickTarget:
     # fetches) BEFORE it takes /var/lock/server-git-tree.lock, and --dry-run returns before the
     # lock entirely — so a dry run in another session moves this repo's remote-tracking ref
     # mid-tick. The ref lives in the shared .git dir every worktree points at.
-    origin = deploy_io.run(["git", "rev-parse", f"origin/{BRANCH}"], cwd=REPO)
+    origin = tools.run(["git", "rev-parse", f"origin/{BRANCH}"], cwd=REPO)
     hold = read_hold()
 
     # origin is "ahead" only if local is an ancestor of it — i.e. it carries commits we don't
     # have. If origin is behind (the operator committed locally but hasn't pushed) or the two
     # diverged, there is nothing to fast-forward and next_action() makes this a no-op instead of
     # mis-firing on the reverse diff.
-    origin_ahead = is_ancestor(local, origin)
+    origin_ahead = tools.is_ancestor(REPO, local, origin)
     # Divergence watchdog: if local and origin differ but neither is an ancestor of the other, the
     # deployer can't fast-forward and every tick noops while origin's new commits never deploy —
     # invisible otherwise (last_run keeps ticking, no hold). Record it so GitOps Status pages; clear
     # it once resolved. A committed-but-unpushed local commit (local_ahead — secret-rotate's domain)
     # is a plain noop, NOT flagged here. Managed every tick regardless of `action`.
-    local_ahead = is_ancestor(origin, local)
+    local_ahead = tools.is_ancestor(REPO, origin, local)
     STATE.write(
         "diverged",
         origin if is_diverged(origin, local, origin_ahead, local_ahead) else None,
@@ -813,7 +775,7 @@ def assess() -> TickTarget:
     # which keeps the gate's share of the GitHub rate limit at one request per 30 min.
     ci = "pass"
     if not dirty and origin_ahead and origin != local and origin != hold:
-        ci = fetch_ci_verdict(origin)
+        ci = tools.fetch_ci_verdict(origin)
     return TickTarget(
         local=local,
         origin=origin,
@@ -824,13 +786,13 @@ def assess() -> TickTarget:
     )
 
 
-def plan_tick(target: TickTarget) -> TickPlan:
+def plan_tick(tools: DeployTools, target: TickTarget) -> TickPlan:
     """Classify the incoming range into the ChangeSet this tick will act on.
 
     Runs BEFORE the ff-merge, so every read here is at the pinned `origin` rather than the
     working tree — see `deploy_io.k8s_declarations_at`.
     """
-    paths = deploy_io.run(
+    paths = tools.run(
         ["git", "diff", "--name-only", f"{target.local}..{target.origin}"], cwd=REPO
     ).splitlines()
     # A comment-only edit to a bring-up playbook is not a change the deployer must park on;
@@ -840,7 +802,7 @@ def plan_tick(target: TickTarget) -> TickPlan:
         paths,
         target.local,
         target.origin,
-        lambda ref, p: deploy_io.run(["git", "show", f"{ref}:{p}"], cwd=REPO),
+        lambda ref, p: tools.run(["git", "show", f"{ref}:{p}"], cwd=REPO),
     )
     if quiet:
         log(
@@ -858,12 +820,12 @@ def plan_tick(target: TickTarget) -> TickPlan:
     hostvars = deploy_io.host_vars_text(REPO, HOSTNAME)
     k8s_services = declared_k8s_services(hostvars) if hostvars is not None else set()
     cs = reroute_k8s_services(cs, k8s_services)
-    cs = _promote_k8s_auto_deploys(cs, paths, target)
+    cs = _promote_k8s_auto_deploys(tools, cs, paths, target)
     return TickPlan(cs=cs, paths=paths, k8s_services=k8s_services)
 
 
 def _promote_k8s_auto_deploys(
-    cs: ChangeSet, paths: list[str], target: TickTarget
+    tools: DeployTools, cs: ChangeSet, paths: list[str], target: TickTarget
 ) -> ChangeSet:
     """Move image-bump-only k8s changes from defer-and-alert into the auto-deploy channel.
 
@@ -919,6 +881,7 @@ def _promote_k8s_auto_deploys(
                 fix = "check the ref/path on the host — this clears on its own once it reads again"
             log(f"k8s auto-deploy disarmed — stale denylist ({detail})")
             alert_once(
+                tools,
                 "stale_denylist_alerted",
                 "stale_denylist",
                 target.origin,
@@ -948,7 +911,7 @@ def _promote_k8s_auto_deploys(
     )
 
 
-def handle_dirty(target: TickTarget) -> int:
+def handle_dirty(tools: DeployTools, target: TickTarget) -> int:
     """A dirty working tree: log the paths every tick, page at most twice a day."""
     # Say so in the journal on EVERY tick, before the throttle. The Discord page is throttled to
     # twice a day, so between slots `journalctl -t gitops-deploy` was the only place left to look
@@ -966,7 +929,7 @@ def handle_dirty(target: TickTarget) -> int:
     )
     # Healthy skip (operator mid-edit). Throttle the page to twice a day at ~08:00 and ~20:00 CT
     # instead of every 30-min tick (see DIRTY_ALERT_FILE).
-    now_ct = datetime.now(CHICAGO)
+    now_ct = tools.now(CHICAGO)
     if should_alert_dirty(
         now_ct,
         STATE.read("dirty_alerted"),
@@ -974,7 +937,7 @@ def handle_dirty(target: TickTarget) -> int:
         DIRTY_ALERT_EVENING_HOUR,
     ):
         # Mark as alerted only on confirmed delivery, else retry next tick (see discord()).
-        if discord(deploy_alerts.dirty_tree_alert(HOSTNAME)):
+        if discord(tools, deploy_alerts.dirty_tree_alert(HOSTNAME)):
             STATE.write(
                 "dirty_alerted",
                 dirty_alert_slot(
@@ -984,9 +947,10 @@ def handle_dirty(target: TickTarget) -> int:
     return 0
 
 
-def handle_ci_failed(target: TickTarget) -> int:
+def handle_ci_failed(tools: DeployTools, target: TickTarget) -> int:
     """Master is red: stay on `local`, page once per SHA."""
     alert_once(
+        tools,
         "ci_alerted",
         "ci",
         target.origin,
@@ -996,7 +960,7 @@ def handle_ci_failed(target: TickTarget) -> int:
     return 0
 
 
-def handle_broad(target: TickTarget, plan: TickPlan) -> int:
+def handle_broad(tools: DeployTools, target: TickTarget, plan: TickPlan) -> int:
     """A change to a whole plane: defer it, or ff-merge and apply the playbook it names."""
     cs, origin = plan.cs, target.origin
     setup_tags = setup_tags_for(plan.paths)
@@ -1014,6 +978,7 @@ def handle_broad(target: TickTarget, plan: TickPlan) -> int:
         # playbook per plane: deploy.yml applies only container roles, so a setup-plane change
         # needs initial_setup.yml (2026-07-16 review M1).
         alert_once(
+            tools,
             "broad_alerted",
             "broad",
             origin,
@@ -1032,7 +997,7 @@ def handle_broad(target: TickTarget, plan: TickPlan) -> int:
     # even if the apply below fails. Stranding a docs-only commit behind somebody else's setup
     # change — a tick that exits 0, logs nothing, and writes behind_since — was the original
     # complaint this arm exists to fix.
-    deploy_io.run(["git", "merge", "--ff-only", origin], cwd=REPO)
+    tools.run(["git", "merge", "--ff-only", origin], cwd=REPO)
 
     if setup_tags:
         playbook, tags = "ansible/initial_setup.yml", sorted(setup_tags)
@@ -1056,21 +1021,22 @@ def handle_broad(target: TickTarget, plan: TickPlan) -> int:
         write_hold(origin)
         STATE.write("hold_plane", hold_plane_marker(playbook, tags))
         posted = discord(
+            tools,
             deploy_alerts.broad_failure_alert(
                 HOSTNAME, playbook, tags, origin, exc, HOLD_FILE, HOLD_PLANE_FILE
-            )
+            ),
         )
         # Exit 0 on a delivered detailed post so systemd's OnFailure generic curl doesn't
         # double-page; exit 1 only if the post failed, leaving OnFailure the backstop.
         return 0 if posted else 1
 
     clear_broad_hold(playbook, tags)
-    alert_secrets_deferred(origin, cs)
-    alert_deferred(origin, set(), cs, plan.k8s_services)
+    alert_secrets_deferred(tools, origin, cs)
+    alert_deferred(tools, origin, set(), cs, plan.k8s_services)
     return 0
 
 
-def handle_k8s(target: TickTarget, plan: TickPlan) -> int:
+def handle_k8s(tools: DeployTools, target: TickTarget, plan: TickPlan) -> int:
     """The promoted k8s image bumps: consult staging, ff-merge, deploy, roll back on failure."""
     cs, local, origin = plan.cs, target.local, target.origin
     # DECIDED: consult the gate BEFORE the ff-merge, never after. consult_staging blocks for up
@@ -1081,13 +1047,14 @@ def handle_k8s(target: TickTarget, plan: TickPlan) -> int:
     # makes the same death self-healing: local is still behind, so the next tick re-evaluates.
     # Whether the verdict blocks is staging_blocks' decision; while STAGING_GATE_BLOCKING is
     # false it never does, and this branch is the slice-3 behaviour unchanged.
-    verdict = consult_staging(cs.k8s_deploy, origin)
+    verdict = consult_staging(tools, cs.k8s_deploy, origin)
     if staging_blocks(verdict, blocking=STAGING_GATE_BLOCKING):
         if consume_staging_override():
             discord(
+                tools,
                 deploy_alerts.staging_override_alert(
                     HOSTNAME, origin, STAGING_OVERRIDE_FILE
-                )
+                ),
             )
             log(f"staging rejected {origin[:8]}; override armed, deploying prod anyway")
         else:
@@ -1097,17 +1064,18 @@ def handle_k8s(target: TickTarget, plan: TickPlan) -> int:
             # without also moving the gate, or the two will disagree.
             write_hold(origin)
             posted = discord(
+                tools,
                 deploy_alerts.staging_rejected_alert(
                     HOSTNAME, local, origin, cs.k8s_deploy, STAGING_OVERRIDE_FILE
-                )
+                ),
             )
             log(f"staging rejected {origin[:8]}; holding, prod not deployed")
             return 0 if posted else 1
-    deploy_io.run(["git", "merge", "--ff-only", origin], cwd=REPO)
+    tools.run(["git", "merge", "--ff-only", origin], cwd=REPO)
     try:
         deploy_io.deploy_k8s(REPO, cs.k8s_deploy, K8S_DEPLOY_TIMEOUT_S)
     except Exception as exc:
-        return _rollback_k8s(target, plan, exc)
+        return _rollback_k8s(tools, target, plan, exc)
     # The ONLY place a hold can clear on an all-k8s host. write_hold(None) otherwise lives
     # solely in the Docker health-gate branch below, which such a host never reaches — so
     # without this the first rollback would leave GitOps Deploy — Status red forever and
@@ -1115,15 +1083,17 @@ def handle_k8s(target: TickTarget, plan: TickPlan) -> int:
     clear_service_hold()
     # Only after the gate inside deploy_k8s has passed and the hold is cleared — annotating
     # from inside the try would mark a deploy that the rollout gate went on to reject.
-    deploy_io.emit_deploy_annotation(cs.k8s_deploy, origin)
+    tools.emit_deploy_annotation(cs.k8s_deploy, origin)
     # A promoted k8s service is image-bump-only, so it is never the consumer of a secret that
     # rode along in the same tick. Without this the rotated value is ff-merged and forgotten.
-    alert_secrets_deferred(origin, cs)
-    alert_deferred(origin, cs.k8s_deploy, cs, plan.k8s_services)
+    alert_secrets_deferred(tools, origin, cs)
+    alert_deferred(tools, origin, cs.k8s_deploy, cs, plan.k8s_services)
     return 0
 
 
-def _rollback_k8s(target: TickTarget, plan: TickPlan, exc: Exception) -> int:
+def _rollback_k8s(
+    tools: DeployTools, target: TickTarget, plan: TickPlan, exc: Exception
+) -> int:
     """Undo a failed k8s deploy: hold, reset, redeploy the prior pin, revert claimed volumes."""
     cs, local, origin = plan.cs, target.local, target.origin
     # Hold BEFORE the reset, same as the Docker paths: a hung rollback redeploy would otherwise
@@ -1131,7 +1101,7 @@ def _rollback_k8s(target: TickTarget, plan: TickPlan, exc: Exception) -> int:
     # redeploy loop.
     log(f"k8s deploy failed for {sorted(cs.k8s_deploy)}: {exc}; rolling back")
     write_hold(origin)
-    deploy_io.run(["git", "reset", "--hard", local], cwd=REPO)
+    tools.run(["git", "reset", "--hard", local], cwd=REPO)
     rollback_failed: Exception | None = None
     try:
         # `origin`, not `local`: the tree is already reset to the last-good commit, so the
@@ -1166,33 +1136,34 @@ def _rollback_k8s(target: TickTarget, plan: TickPlan, exc: Exception) -> int:
         str(rollback_failed) if rollback_failed else None,
     )
     posted = discord(
+        tools,
         deploy_alerts.k8s_failure_alert(
             HOSTNAME, local, origin, cs.k8s_deploy, exc, revert_note
-        )
+        ),
     )
     return 0 if posted else 1
 
 
-def handle_no_services(target: TickTarget, plan: TickPlan) -> int:
+def handle_no_services(tools: DeployTools, target: TickTarget, plan: TickPlan) -> int:
     """Nothing maps to a deploy here: ff-merge, then flag what rode along unapplied."""
     cs, origin = plan.cs, target.origin
-    deploy_io.run(["git", "merge", "--ff-only", origin], cwd=REPO)  # docs-only etc.
+    tools.run(["git", "merge", "--ff-only", origin], cwd=REPO)  # docs-only etc.
     # A secrets-only push (rotated value, no service template changed) maps to nothing, so the
     # ff-merge above is all we can do automatically — but the new value only reaches a container
     # on its next deploy. Defer-and-alert (once per SHA) so the operator redeploys the
     # consumer(s); without this the rotated secret sits stale.
-    alert_secrets_deferred(origin, cs)
+    alert_secrets_deferred(tools, origin, cs)
     # tasks/ and meta/deps.yml changes aren't auto-deployed but DO change what a deploy does, so
     # they must not sit silently ff-merged. Nothing was deployed this tick (deployed=set()), so
     # the full sets are flagged. Same helper runs on the deploy path for a combined push.
-    alert_deferred(origin, set(), cs, plan.k8s_services)
+    alert_deferred(tools, origin, set(), cs, plan.k8s_services)
     return 0
 
 
-def handle_docker(target: TickTarget, plan: TickPlan) -> int:
+def handle_docker(tools: DeployTools, target: TickTarget, plan: TickPlan) -> int:
     """Deploy this host's Docker services, health-gate them, and roll back if the gate fails."""
     cs, local, origin = plan.cs, target.local, target.origin
-    deploy_io.run(["git", "merge", "--ff-only", origin], cwd=REPO)
+    tools.run(["git", "merge", "--ff-only", origin], cwd=REPO)
     try:
         deploy_io.deploy(REPO, cs.services)
     except Exception as exc:
@@ -1213,15 +1184,16 @@ def handle_docker(target: TickTarget, plan: TickPlan) -> int:
         # in a per-tick loop. Holding first makes the next tick skip_hold even if we're killed
         # mid-rollback. (A catchable raise below is already handled; this covers the kill/hang.)
         write_hold(origin)
-        deploy_io.run(["git", "reset", "--hard", local], cwd=REPO)
+        tools.run(["git", "reset", "--hard", local], cwd=REPO)
         try:
             deploy_io.deploy(REPO, cs.services)
         except Exception as exc2:
             log(f"rollback redeploy of the prior version also failed: {exc2}")
         posted = discord(
+            tools,
             deploy_alerts.deploy_failure_alert(
                 HOSTNAME, local, origin, cs.services, exc
-            )
+            ),
         )
         # A rollback already surfaces via THIS detailed post + the GitOps Deploy — Status monitor
         # (hold_sha). Exit 0 when the detailed post was delivered so systemd's
@@ -1246,7 +1218,7 @@ def handle_docker(target: TickTarget, plan: TickPlan) -> int:
     gate_deadline = RUN_START + RUN_BUDGET_S
     failed = gate_services(
         cs.services,
-        lambda svc, deadline: deploy_io.service_healthy(REPO, svc, TIMEOUT, deadline),
+        lambda svc, deadline: tools.service_healthy(REPO, svc, TIMEOUT, deadline),
         gate_deadline,
         time.time,
     )
@@ -1256,7 +1228,7 @@ def handle_docker(target: TickTarget, plan: TickPlan) -> int:
         # the one(s) just deployed is ff-merged but unapplied — flag that remainder (a bundled
         # change to a DEPLOYED service rode its own --tags redeploy, so it's excluded). Only on a
         # clean deploy: a rollback below git-resets the whole commit, reverting those changes too.
-        alert_deferred(origin, cs.services, cs, plan.k8s_services)
+        alert_deferred(tools, origin, cs.services, cs, plan.k8s_services)
         return 0
     if time.time() >= gate_deadline:
         log(f"health-gate budget ({RUN_BUDGET_S}s) exhausted before gating completed")
@@ -1269,18 +1241,20 @@ def handle_docker(target: TickTarget, plan: TickPlan) -> int:
     # SIGTERMed before write_hold, stranding the bad commit into a per-tick redeploy loop.
     log(f"health gate failed for {failed}; rolling back to {local[:8]}")
     write_hold(origin)
-    deploy_io.run(["git", "reset", "--hard", local], cwd=REPO)
+    tools.run(["git", "reset", "--hard", local], cwd=REPO)
     try:
         deploy_io.deploy(REPO, cs.services)
     except Exception as exc:
         log(f"rollback redeploy of the prior version also failed: {exc}")
-    posted = discord(deploy_alerts.rollback_alert(HOSTNAME, local, origin, failed))
+    posted = discord(
+        tools, deploy_alerts.rollback_alert(HOSTNAME, local, origin, failed)
+    )
     # Exit 0 on a delivered detailed post so OnFailure's generic curl doesn't double-page (see the
     # exec-failure path above); exit 1 only if the detailed post failed, leaving OnFailure the backstop.
     return 0 if posted else 1
 
 
-def main() -> int:
+def main(tools: DeployTools | None = None) -> int:
     """Run one gitops-deploy tick end to end, as a sequence of named phases.
 
     `assess()` reads git and classifies the tick; `plan_tick()` turns the incoming range into a
@@ -1297,6 +1271,7 @@ def main() -> int:
         RuntimeError: there is no config at all, so there is no repo to tick.
         RetryableFetchError: from `assess()`; entrypoint() skips the tick on it.
     """
+    tools = tools if tools is not None else default_tools(CONFIG)
     CONFIG.validate()
     if not REPO:
         # No config, no repo to tick: page via the crash handler rather than run every git
@@ -1305,15 +1280,15 @@ def main() -> int:
     # Resend any alert a prior tick failed to deliver, BEFORE any short-circuit below: the ff-merged
     # secrets/tasks/meta/combined paths never re-reach their alert code (local==origin -> noop), so a
     # transient webhook failure is only recoverable here, not by discord()'s per-tick re-eval.
-    drain_pending()
+    drain_pending(tools)
     # Disk-only, independent of git state, so it runs before any branch can short-circuit the
     # tick: page (once per distinct set) when a rendered compose has no containers_list entry —
     # the stale-compose trap, twice now the cause of a phantom health gate + false rollback + hold.
-    check_stale_composes()
+    check_stale_composes(tools)
 
-    target = assess()
+    target = assess(tools)
     if target.action == "dirty":
-        return handle_dirty(target)
+        return handle_dirty(tools, target)
     if target.action == "noop":
         return 0
     if target.action == "skip_hold":
@@ -1328,27 +1303,28 @@ def main() -> int:
         )
         return 0
     if target.action == "ci_failed":
-        return handle_ci_failed(target)
+        return handle_ci_failed(tools, target)
 
-    plan = plan_tick(target)
+    plan = plan_tick(tools, target)
     if plan.cs.broad:
-        return handle_broad(target, plan)
+        return handle_broad(tools, target, plan)
     if plan.cs.k8s_deploy:
-        return handle_k8s(target, plan)
+        return handle_k8s(tools, target, plan)
     if not plan.cs.services:
-        return handle_no_services(target, plan)
-    return handle_docker(target, plan)
+        return handle_no_services(tools, target, plan)
+    return handle_docker(tools, target, plan)
 
 
-def entrypoint() -> int:
+def entrypoint(tools: DeployTools | None = None) -> int:
     """One tick as systemd runs it.
 
     main() plus the exit-code contract around it. Returns the process exit code; the `__main__`
     guard below only hands it to sys.exit, so a test can call this directly
     (test_gitops_deploy_fetch_skip.py).
     """
+    tools = tools if tools is not None else default_tools(CONFIG)
     try:
-        rc = main()
+        rc = main(tools)
     except RetryableFetchError as e:
         # Transient `git fetch` failure: skip this tick without paging (no crash Discord, and exit 0
         # so the OnFailure alert unit doesn't fire either) and WITHOUT writing last_run — a one-off
@@ -1361,17 +1337,19 @@ def entrypoint() -> int:
         # until load_config deferred the parse, so it reached an operator as a stack trace with no
         # key name in it, before any of the alerting below existed in the process.
         log(f"gitops-deploy: {e}")
-        posted = discord(deploy_alerts.bad_config_alert(HOSTNAME, CONFIG_PATH, e))
+        posted = discord(
+            tools, deploy_alerts.bad_config_alert(HOSTNAME, CONFIG_PATH, e)
+        )
         # Exit 0 on a delivered detailed post so OnFailure's generic curl doesn't double-page,
         # same convention as the other `0 if posted else 1` branches; exit 1 only if the
         # detailed post itself failed, leaving OnFailure the backstop.
         return 0 if posted else 1
     except Exception as e:
-        discord(deploy_alerts.crash_alert(e))
+        discord(tools, deploy_alerts.crash_alert(e))
         raise
     # Liveness marker: a tick that completed without crashing (incl. a rollback, rc=1).
     # monitor-bridge reads this; a crash skips the write so the Alive monitor goes stale.
-    _record_behind()
+    _record_behind(tools)
     STATE.write("last_run", str(time.time()))
     return rc
 

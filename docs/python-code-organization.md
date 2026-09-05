@@ -71,6 +71,23 @@ forbids it. pytest names test modules by basename because `consider_namespace_pa
 off by default ([pytest pythonpath][pytest-path]), so two test files with the same basename
 collide at collection.
 
+**A new module may not take the name of a namespace-package directory.** A regular module
+beats a namespace portion whatever the `sys.path` order, so a `deploy_tools.py` on the path
+shadows `scripts/deploy_tools/` and every `from deploy_tools.exit_codes import ...` raises
+`ModuleNotFoundError: 'deploy_tools' is not a package` — for the whole suite, not just for the
+role that added the file. That is why the deployer's boundaries object lives in
+`deploy_toolbox.py` while the class it holds is `DeployTools`.
+
+The names at risk are the subdirectories of **every** `pythonpath` root in `pyproject.toml`,
+not `scripts/` alone. `ansible/tests` is a root too, so `deploy`, `k8s`, `longhorn`, `repo`,
+`services`, `setup` and `staging` are namespace portions by the same rule, and so are
+`bridge`, `checks` and `verdicts` under `ansible/roles/k8s/monitor-bridge/files`. Read the
+`pythonpath` list, then list what each root holds:
+
+```bash
+ls -d scripts/*/ scripts/*/*/ ansible/tests/*/ ansible/roles/k8s/monitor-bridge/files/*/
+```
+
 ### Per-module `sys.path` bootstraps, not `python -m`
 
 A directly run script gets only its own directory as `sys.path[0]` ([sys.path
@@ -225,7 +242,7 @@ remainder is not re-derived as a new finding.
 
 | Finding | What closed | What stayed, and why |
 |---|---|---|
-| 1 `main()` split | `main()` is 58 lines over `assess()`, `plan_tick()` and one `handle_*` per branch; I/O in `deploy_io.py`, composers and the queue's file I/O in `deploy_alerts.py` | `alert_once`, `deliver`, `drain_pending`, `discord`, `check_stale_composes`, `record_staging_tick`, `consult_staging` stay on the entry module: `test_gitops_deploy_patch_boundary.py` requires a patched name to be defined where it is patched, and about 30 tests patch them there |
+| 1 `main()` split | `main()` is 58 lines over `assess()`, `plan_tick()` and one `handle_*` per branch; I/O in `deploy_io.py`, composers and the queue's file I/O in `deploy_alerts.py` | `alert_once`, `deliver`, `drain_pending`, `discord`, `check_stale_composes`, `record_staging_tick`, `consult_staging` stay on the entry module. They were kept there because the retired `test_gitops_deploy_patch_boundary.py` required a patched name to be defined where it is patched; `DeployTools` (`deploy_toolbox.py`) removed the patches, so what keeps them there now is only that each closes over a module constant |
 | 3 two mappers | A test asserts the two mappers agree at the role level over a fixed corpus | `derive` was not rerouted: `role_for` on a `k8s/manifests/` path returns `manifests` where the shared mapper returns a service set, and putting `manifests` in `--tags` makes `deploy.sh` refuse the list |
 | 6 config at import | Both programs cannot raise on import; `gitops_deploy` builds a frozen `Config` validated in `main()`, `monitor-bridge` collects `CONFIG_PROBLEMS` and reports them from `main()` with exit 2 | `gitops_deploy` keeps its module constants, derived from `CONFIG`; `STAGING_SUBSET` and two timeouts stay as literal `C.get()` calls because `fragment_readers.config_default`, behind `gen_doc_fragments.py`, parses them by text. `HTTP_TIMEOUT` stays in `bridge/common.py` because autofix-bridge imports it from there and does not ship `bridge/config.py` |
 | 10 seams | `GateTools` and `NotifyTools`; every subprocess monkeypatch converted | `staging_gate` tests still patch `IDENTITY` and `AUTHORIZED_PUBKEY`, which are filesystem constants rather than process boundaries |

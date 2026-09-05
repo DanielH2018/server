@@ -8,9 +8,8 @@ failing task's own lines out first and spends what is left of the budget on the 
 
 This is a leaf: it imports the standard library and nothing else. No test patches a name
 defined here, so a caller may from-import one — unlike `deploy_io`, where a from-import would
-take its own reference and never see the `monkeypatch`. `test_gitops_deploy_patch_boundary.py`
-reports it if that ever stops being true. `deploy_io` also re-exports these names for the
-suite, which reads them through the module it always has.
+take its own reference and never see the one `monkeypatch` the suite still uses. `deploy_io`
+also re-exports these names for the suite, which reads them through the module it always has.
 
 Stdlib only: the unit runs under `uv run --no-project` and the host is still on Python 3.12.
 """
