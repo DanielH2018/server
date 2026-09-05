@@ -111,7 +111,17 @@ sessions" and nothing else.
   the time and remote control was unreachable for ~30 minutes while the unit read `active
   (running)`. `MemoryHigh` did not prevent it — it throttles rather than caps, so the cgroup
   kept allocating into swap past the threshold. Read `claude_code_rc_pytest_workers` for the
-  bound that does apply, and issue #1154 for the swap-bound question this does not settle.
+  bound on the fan-out, and `claude_code_rc_memory_swap_max` for the ceiling on the swap.
+- **`MemorySwapMax` caps the cgroup's swap, and `MemoryHigh` cannot.** A throttled cgroup's
+  anon pages go to swap, so an unbounded `memory.swap.max` left the throttle with no ceiling
+  — the mechanism behind the 2026-09-05 stall, and what issue #1154 asked for.
+  `claude_code_rc_memory_swap_max` sets it to 2G, a quarter of this host's 8 GiB
+  `/swap.img`, so the homelab plane keeps the rest. **Not 0:** with no swap outlet nothing
+  reclaims the cgroup's anon pages and, with `MemoryMax` deliberately infinity, the terminal
+  state becomes the global OOM killer choosing a victim by badness anywhere on the box. The
+  cap converts theft of the whole box's swap into a bounded share plus harder reclaim
+  throttling; it does not make the cgroup safe. ENFORCED by
+  `ansible/tests/setup/test_claude_rc_unit.py`.
 - **`claude_code_rc_pytest_workers` bounds the pytest fan-out**, via
   `PYTEST_XDIST_AUTO_NUM_WORKERS` in the unit. `addopts` in `pyproject.toml` carries
   `-n auto`; xdist reads this variable before any CPU detection, so a session's run gets 4

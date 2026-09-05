@@ -84,9 +84,27 @@ RestartSec=10
 # `claude` processes themselves measured 404 MB and 376 MB, exactly as capacity's own
 # estimate predicts — the per-process figure was never the problem, the inference from it
 # was. claude_code_rc_pytest_workers below is what actually bounds the fan-out. Full
-# analysis in this role's CLAUDE.md; issue #1154 holds the swap-bound question this does
-# not settle.
+# analysis in this role's CLAUDE.md. The swap half of that stall is bounded by
+# MemorySwapMax below, not by this directive.
 MemoryHigh={{ claude_code_rc_memory_high }}
+
+# DECIDED: MemorySwapMax is set, and set to a FRACTION of the box's swap rather than to 0.
+# MemoryHigh above throttles the cgroup instead of capping it, and a throttled cgroup's anon
+# pages go to swap — so with swap unbounded the throttle had no ceiling at all. That is how
+# this cgroup took all 8 GiB of the host's swap on 2026-09-05 and starved k3s and
+# kubepods.slice alongside it, while the unit read `active (running)`. Issue #1154.
+#
+# Zero would be the wrong cap. It contains nothing: with no swap outlet nothing reclaims the
+# cgroup's anon pages, MemoryMax is deliberately infinity, and the growth simply stays
+# resident in RAM until the GLOBAL OOM killer picks a victim by badness — which may be a k3s
+# process rather than anything in this cgroup. That is the same kill the no-MemoryMax
+# decision above rejects, minus the containment.
+#
+# Be clear about what this does NOT do. It converts silent theft of the whole box's swap
+# into a bounded share, harder reclaim throttling inside this cgroup, and global OOM as the
+# terminal state. It does not make the cgroup safe; claude_code_rc_pytest_workers is still
+# the bound on the fan-out that fills it.
+MemorySwapMax={{ claude_code_rc_memory_swap_max }}
 
 # Stopping the host is meant to stop the sessions it spawned; they are its children, so the
 # default control-group kill is the wanted behaviour. The timeout gives them a chance to

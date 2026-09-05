@@ -163,6 +163,28 @@ def test_memory_high_follows_the_variable(unit: str) -> None:
     )
 
 
+def test_memory_swap_max_bounds_the_cgroups_swap(unit: str) -> None:
+    """MemoryHigh throttles rather than caps, and a throttled cgroup's anon pages go to swap.
+
+    With no MemorySwapMax the throttle above therefore has no ceiling: on 2026-09-05 this
+    cgroup took all 8 GiB of the host's swap and starved k3s and kubepods.slice while the
+    unit read `active (running)`. Issue #1154. Like MemoryHigh, the value is an operational
+    trade against the rest of the box, so it renders from defaults rather than the template.
+    """
+    assert re.search(
+        r"^claude_code_rc_memory_swap_max: *\S+", DEFAULTS.read_text(), re.M
+    ), (
+        "claude_code_rc_memory_swap_max is gone from defaults — MemorySwapMax has no owner"
+    )
+    assert "MemorySwapMax=2G" in render(unit), (
+        "MemorySwapMax must render from defaults' 2G"
+    )
+    rendered = render(unit, claude_code_rc_memory_swap_max="4G")
+    assert "MemorySwapMax=4G" in rendered and "MemorySwapMax=2G" not in rendered, (
+        "MemorySwapMax is hardcoded — changing claude_code_rc_memory_swap_max would do nothing"
+    )
+
+
 def test_alert_unit_is_the_onfailure_target(unit: str) -> None:
     assert (TEMPLATES / "claude-rc-alert.service.j2").exists(), (
         "the alert unit is missing"
@@ -193,6 +215,7 @@ def render(unit_text: str, **overrides: object) -> str:
         "claude_code_rc_capacity": 10,
         "claude_code_rc_pytest_workers": 4,
         "claude_code_rc_memory_high": "8G",
+        "claude_code_rc_memory_swap_max": "2G",
         REAP_VAR: True,
     }
     context.update(overrides)
