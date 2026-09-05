@@ -386,6 +386,7 @@ def hwmon_temp_limits(
     names: tuple[dict[tuple[str, str], str], dict[tuple[str, str, str], str]]
     | None = None,
     crits: Sequence[tuple[dict, float]] = (),
+    rated: Sequence[tuple[tuple[str, str, str], float]] = (),
 ) -> list[tuple[str, float, float, str]]:
     """Pure: assign every scraped sensor a temperature limit.
 
@@ -412,9 +413,26 @@ def hwmon_temp_limits(
     Some NVMe controllers report 65261.85 for "no max declared" and a ratio of that never fires —
     the same sentinel check applies to `crits`.
 
+    `rated` is the operator-supplied third source, `((instance, chip, sensor), rated_max_c)`
+    pairs from HWMON_TEMP_RATED_MAX_C — the part's published rating for a sensor whose driver
+    declares nothing. It is seeded FIRST and both driver sources overwrite it, so a real
+    `max`/`crit` always beats a constant somebody typed; an implausible driver value has already
+    fallen through by then, so that precedence never trades a live reading for a sentinel. A
+    rated entry is sanity-bounded by the same (min_plausible, max_plausible] gate for the same
+    reason: a typo'd 1000 must not silently un-watch the sensor. Its basis reads "declared"
+    rather than a third string because that word already means "ratioed against a stated rating
+    for this part" everywhere it is read, and hwmon_temp_verdict's coverage tally counts exactly
+    two arms.
+
     `names` is the hwmon_name_maps pair; omitting it labels sensors by their raw sysfs path.
+    Entries in `rated` are keyed by the raw sysfs triple and NOT by that display name, which is
+    partial by construction: lose `node_hwmon_chip_names` for a chip and a name-keyed override
+    would silently stop matching while every test over the config still passed.
     """
     declared = {}
+    for key, value in rated or ():
+        if min_plausible < value <= max_plausible:
+            declared[key] = value
     for labels, value in crits or []:
         if min_plausible < value <= max_plausible:
             declared[_hwmon_sensor_key(labels)] = value
@@ -443,9 +461,18 @@ def hwmon_temp_limits(
             # So `temp_offset` stays 0, and a Tdie here would be NUMERICALLY IDENTICAL to Tctl —
             # reading it would be a no-op on the same number, not a correction. Live sysfs
             # agrees: hwmon2 carries temp1_input and temp1_label (Tctl) alone, no Tdie, no Tccd,
-            # no max, no crit. This settles the offset and NOT the number: 85C is the
-            # estate-wide default rather than an 8845HS rating, and this sensor sits above it in
-            # ordinary use (90.25C read live 2026-09-05). That residual is #1158.
+            # no max, no crit. This settles the offset and NOT the number, which is #1152 and is
+            # now settled too:
+            #
+            # DECIDED: daniel-box's k10temp/Tctl takes its limit from AMD's own published Tjmax
+            # of 100C via HWMON_TEMP_RATED_MAX_C, not from this flat fallback — `Max. Operating
+            # Temperature (Tjmax)` / `100°C` on amd.com's Ryzen 7 8845HS product page, matching
+            # this host's /proc/cpuinfo model name. **amd.com is reachable from here; a plain
+            # fetch is what is not** — #1003, #1152 and #1158 each recorded it as timing out, but
+            # with a browser User-Agent it returned 200 in 0.66s on 2026-09-05. Try the UA before
+            # concluding the page is unreachable. This role's CLAUDE.md holds the rest: why 90C
+            # is the same limit daniel-server's coretemp already carries, and the 9.3% of a
+            # 30-day window daniel-box still spends above it.
             out.append((label, temp, fallback_c, "fallback"))
         else:
             out.append((label, temp, cap * ratio, "declared"))
@@ -468,9 +495,10 @@ def hwmon_temp_verdict(limits: list[tuple[str, float, float, str]]) -> tuple[boo
     `/sys/class/hwmon/hwmon2/` directly shows only `temp1_input` and `temp1_label` (Tctl) exist,
     no `temp1_max` or `temp1_crit` file at all. There is no offset to correct for: the kernel
     subtracts none on this chip, so a Tdie would carry the same number as the Tctl already read —
-    see the `DECIDED:` marker in hwmon_temp_limits. A "fallback" breach on that sensor is legible
-    as "this chip rates nothing", not as "this chip is over its own rating"; whether 85C is the
-    right number for a Ryzen 7 8845HS stays an open question this check cannot answer (#1158).
+    see the `DECIDED:` marker in hwmon_temp_limits. A "fallback" breach is legible as "this chip
+    rates nothing", not as "this chip is over its own rating" — which is why daniel-box's k10temp
+    is no longer one: HWMON_TEMP_RATED_MAX_C carries AMD's published Tjmax of 100C for it, so it
+    now breaches as "declared" against 90C like any rating-backed sensor (#1152).
     """
     if not limits:
         return False, "no hwmon temperature sensors scraped (collector blind?)"

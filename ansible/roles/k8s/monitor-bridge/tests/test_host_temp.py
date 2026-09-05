@@ -11,6 +11,7 @@ from pathlib import Path
 
 import bridge.streaks
 import bridge.net
+import bridge.config_host
 import checks.host
 import checks.host_thermal
 import pytest
@@ -142,10 +143,9 @@ def test_k10temp_tctl_declares_neither_max_nor_crit_and_falls_back_and_says_so()
     `/sys/class/hwmon/hwmon2/` on daniel-box carries only `temp1_input` and `temp1_label` for
     this chip — no `temp1_max`, no `temp1_crit` — so `node_hwmon_temp_max_celsius` and
     `node_hwmon_temp_crit_celsius` both have no series for it. Nothing can invent a limit this
-    driver never declared; the check's whole obligation here is to fall back and say so, so an
-    operator reading "93.5C over its 85.0C fallback limit" for this chip knows the 85C is a
-    guess, not the hardware's own rating. It is not a Tctl offset: k10temp subtracts none on this
-    chip, so Tdie would read the same number (#1003, and the `DECIDED:` marker in verdicts.host).
+    driver never declared, so this pins the no-rating arm. Not a Tctl offset: k10temp subtracts
+    none here (#1003, and the `DECIDED:` markers in verdicts.host). In production this sensor
+    takes the rated arm instead — AMD's 100C Tjmax, held by test_host_temp_rated.py (#1152).
     """
     limits = checks.host_thermal.hwmon_temp_limits(
         [_temp("daniel-box", "pci0000:00_0000:00:18_3", "temp1", 93.5)],

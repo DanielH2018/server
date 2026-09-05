@@ -130,6 +130,9 @@ def check_host_temp(cfg: Config) -> tuple[bool, str]:
         # docstring for why max wins when both exist) would otherwise fall to the flat fallback
         # even though it declared a real limit.
         crits=bridge.net.prom_vector(cfg, "node_hwmon_temp_crit_celsius"),
+        # Config, not a query — the published rating for a sensor whose driver declares neither
+        # source. Both queries above still win over it wherever they answer.
+        rated=cfg.HWMON_TEMP_RATED_MAX_C,
     )
     # Counted over the series that survive exclusion, via the same predicate hwmon_temp_limits
     # uses — a host whose only sensors are excluded is not a host this check covers.
