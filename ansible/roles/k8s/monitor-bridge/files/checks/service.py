@@ -14,7 +14,7 @@ import os
 import time
 from datetime import datetime, timezone
 
-import bridge.config as cfg
+from bridge.config import Config
 import bridge.net
 import bridge.streaks
 from bridge.common import sanitize
@@ -57,11 +57,12 @@ def _parse_behind(marker: str | None) -> tuple[str, float | None]:
 
 
 def gitops_status(
+    cfg: Config,
     hold_sha: str | None,
     diverged_sha: str | None = None,
     behind_since: str | None = None,
     now: float | None = None,
-    max_behind_s: float = cfg.GITOPS_BEHIND_MAX_S,
+    max_behind_s: float | None = None,
     hold_plane: str | None = None,
 ) -> tuple[bool, str]:
     """Pure: is the deploy pipeline in a state needing operator action? Returns (ok, msg).
@@ -81,7 +82,15 @@ def gitops_status(
     the dirty-tree path is behind for a whole edit session by design. Only sustained behind-ness is
     a fault. hold/diverged are still reported ahead of it — they name the actual cause, where
     "behind" only names the symptom.
+
+    Args:
+      cfg: The configuration; `max_behind_s` defaults to its GITOPS_BEHIND_MAX_S.
+      max_behind_s: How long the host may sit behind origin before this pages. None reads
+        cfg.GITOPS_BEHIND_MAX_S — a None default rather than the config value itself, because a
+        default argument is evaluated once when the module is imported and there is no `cfg` to
+        read at that point any more.
     """
+    max_behind_s = cfg.GITOPS_BEHIND_MAX_S if max_behind_s is None else max_behind_s
     if hold_sha:
         # A held BROAD apply is a different fault with a different fix. That arm is
         # forward-only: the tree is already fast-forwarded and a plane playbook failed
@@ -112,7 +121,7 @@ def gitops_status(
     return True, "no held deploy"
 
 
-def check_n8n() -> tuple[bool, str]:
+def check_n8n(cfg: Config) -> tuple[bool, str]:
     """Consecutive failures of active ("Prod") n8n workflows (streak accumulated across cycles).
 
     Polls the n8n public API on the internal network (X-N8N-API-KEY header, no Authelia). n8n
@@ -143,7 +152,7 @@ def check_n8n() -> tuple[bool, str]:
     )
 
 
-def check_arr_queue() -> tuple[bool, str]:
+def check_arr_queue(cfg: Config) -> tuple[bool, str]:
     """Sonarr/Radarr queue warning/blocked-import watchdog (see queue_warnings).
 
     Empty SONARR_API_KEY/RADARR_API_KEY independently skip that app (like the multi-webhook
@@ -218,7 +227,7 @@ def bazarr_problems(status: dict | None, health: dict | None) -> list[str]:
     return problems
 
 
-def check_bazarr() -> tuple[bool, str]:
+def check_bazarr(cfg: Config) -> tuple[bool, str]:
     """Bazarr's own health, and whether it can still talk to Sonarr and Radarr.
 
     Bazarr is the one *arr with no exporter, and that is why the 2026-08-29 stale-key incident
@@ -257,7 +266,7 @@ def check_bazarr() -> tuple[bool, str]:
     )
 
 
-def check_prowlarr_indexers() -> tuple[bool, str]:
+def check_prowlarr_indexers(cfg: Config) -> tuple[bool, str]:
     """Prowlarr sustained-indexer watchdog (see indexers_down).
 
     Pages only when an indexer has been failing >= PROWLARR_INDEXER_MIN_DOWN_MIN, not on the
@@ -299,7 +308,7 @@ def check_prowlarr_indexers() -> tuple[bool, str]:
     )
 
 
-def check_gitops_alive() -> tuple[bool, str]:
+def check_gitops_alive(cfg: Config) -> tuple[bool, str]:
     """Checks that the GitOps deployer's last_run marker is fresh.
 
     Down when the marker is missing (the deployer never completed a tick) or unparseable.
@@ -315,7 +324,7 @@ def check_gitops_alive() -> tuple[bool, str]:
     return gitops_alive(time.time() - ts, cfg.GITOPS_MAX_AGE_S)
 
 
-def _read_gitops_marker(name: str) -> str | None:
+def _read_gitops_marker(cfg: Config, name: str) -> str | None:
     try:
         with open(os.path.join(cfg.GITOPS_STATE_DIR, name)) as fh:
             return fh.read().strip() or None
@@ -323,16 +332,17 @@ def _read_gitops_marker(name: str) -> str | None:
         return None
 
 
-def check_gitops_status() -> tuple[bool, str]:
+def check_gitops_status(cfg: Config) -> tuple[bool, str]:
     return gitops_status(
-        _read_gitops_marker("hold_sha"),
-        _read_gitops_marker("diverged_sha"),
-        _read_gitops_marker("behind_since"),
-        hold_plane=_read_gitops_marker("hold_plane"),
+        cfg,
+        _read_gitops_marker(cfg, "hold_sha"),
+        _read_gitops_marker(cfg, "diverged_sha"),
+        _read_gitops_marker(cfg, "behind_since"),
+        hold_plane=_read_gitops_marker(cfg, "hold_plane"),
     )
 
 
-def check_staging_backfill_alive() -> tuple[bool, str]:
+def check_staging_backfill_alive(cfg: Config) -> tuple[bool, str]:
     """Is the staging-gate backfill ratchet still running at all?
 
     `OnFailure=staging-backfill-alert.service` covers "ran and failed" and nothing else. A timer
@@ -369,7 +379,7 @@ def check_staging_backfill_alive() -> tuple[bool, str]:
     return staging_backfill_alive(armed, age_s, cfg.STAGING_BACKFILL_MAX_AGE_S)
 
 
-def check_etcd_restore_drill() -> tuple[bool, str]:
+def check_etcd_restore_drill(cfg: Config) -> tuple[bool, str]:
     """Is the off-box etcd snapshot still PROVABLY restorable?
 
     The snapshot half has been taken, uploaded and alarmed since 2026-08-16. Until 2026-08-28
@@ -430,7 +440,7 @@ def check_etcd_restore_drill() -> tuple[bool, str]:
     return True, "etcd restore drill passed %.1f days ago" % (age_s / 86400)
 
 
-def with_ha_ban(ok: bool, msg: str) -> tuple[bool, str]:
+def with_ha_ban(cfg: Config, ok: bool, msg: str) -> tuple[bool, str]:
     """Fold the ip_ban arm into a heartbeat verdict, ban winning the message.
 
     Folded into this monitor rather than given its own for the reason recorded at
@@ -447,7 +457,7 @@ def with_ha_ban(ok: bool, msg: str) -> tuple[bool, str]:
     # /config/ip_bans.yaml. See the HA_BAN_WINDOW comment for why that is the only signal available.
     """
     try:
-        banned = bridge.net.loki_count(cfg.HA_BAN_SELECTOR, cfg.HA_BAN_WINDOW)
+        banned = bridge.net.loki_count(cfg, cfg.HA_BAN_SELECTOR, cfg.HA_BAN_WINDOW)
     except Exception as e:
         return ok, "%s, ip_ban arm unavailable (%s)" % (msg, e)
     ban_ok, ban_msg = ha_ban_verdict(banned, cfg.HA_BAN_WINDOW)
@@ -456,7 +466,7 @@ def with_ha_ban(ok: bool, msg: str) -> tuple[bool, str]:
     return False, "%s | %s" % (ban_msg, msg)
 
 
-def check_ha_heartbeat() -> tuple[bool, str]:
+def check_ha_heartbeat(cfg: Config) -> tuple[bool, str]:
     """Poll HA's automation-driven heartbeat over the apps network (Bearer token).
 
     Empty HA_URL/HA_TOKEN -> disabled (stays up), like check_n8n.
@@ -484,11 +494,11 @@ def check_ha_heartbeat() -> tuple[bool, str]:
         ok, msg = False, "HA API unreachable: %s" % e
     if ok:
         bridge.streaks._down_streaks["ha"] = 0
-        return with_ha_ban(True, msg)
+        return with_ha_ban(cfg, True, msg)
     bridge.streaks._down_streaks["ha"], ok, msg = bridge.streaks.down_streak(
         bridge.streaks._down_streaks.get("ha", 0),
         cfg.HA_CONSECUTIVE,
         msg,
         "deploy/restart grace",
     )
-    return with_ha_ban(ok, msg)
+    return with_ha_ban(cfg, ok, msg)

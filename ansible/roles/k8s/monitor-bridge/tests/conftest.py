@@ -3,6 +3,26 @@
 import bridge.streaks
 import pytest
 
+from bridge.config import load_config
+
+
+@pytest.fixture
+def cfg():
+    """The configuration a check runs under, built from an EMPTY environment.
+
+    Every field therefore holds the documented default in `bridge/config.py`, which is what a
+    test wants unless it says otherwise. A test that needs a different value narrows this with
+    `dataclasses.replace(cfg, X=...)`, and one that is about the READ itself — a malformed
+    number, a derived field, a `_FILE`-mounted secret — calls `load_config({...})` directly
+    with the environment it means.
+
+    This replaces the 118 `monkeypatch.setattr(bridge.config, "X", ...)` sites the suite
+    carried until 2026-09-04. A patch mutates a process-wide global for the duration of one
+    test; a fixture hands the code under test the object it reads, so two tests can state
+    different configurations without either seeing the other's.
+    """
+    return load_config({})
+
 
 @pytest.fixture(autouse=True)
 def _reset_down_streaks():

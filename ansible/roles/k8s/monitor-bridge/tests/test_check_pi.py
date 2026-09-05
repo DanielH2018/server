@@ -6,6 +6,8 @@ port is dead while every container-level signal reads fine. It leads the message
 and a failed attribution fetch downgrades the diagnosis rather than the verdict.
 """
 
+from dataclasses import replace
+
 import pytest
 
 import bridge.config
@@ -117,29 +119,29 @@ def test_pi_pressure_missing_input_alerts(load, fs):
     assert "missing" in msg
 
 
-def test_pi_check_disabled_without_url():
+def test_pi_check_disabled_without_url(cfg):
     # PI_GLANCES_URL defaults to "" in tests -> monitoring disabled, never a false page
-    ok, msg = checks.host.check_pi_pressure()
+    ok, msg = checks.host.check_pi_pressure(cfg)
     assert ok
     assert "disabled" in msg.lower()
 
 
-def test_pi_check_down_on_pressure(monkeypatch, seq):
-    monkeypatch.setattr(bridge.config, "PI_GLANCES_URL", "http://pi:61208")
+def test_pi_check_down_on_pressure(monkeypatch, seq, cfg):
+    cfg = replace(cfg, PI_GLANCES_URL="http://pi:61208")
     monkeypatch.setattr(
         bridge.net, "_get_json", seq({"min5": 7.2, "cpucore": 4}, MEM_OK, FS_OK)
     )
-    ok, msg = checks.host.check_pi_pressure()
+    ok, msg = checks.host.check_pi_pressure(cfg)
     assert not ok
     assert "load5" in msg
 
 
-def test_pi_check_up_when_quiet(monkeypatch, seq):
-    monkeypatch.setattr(bridge.config, "PI_GLANCES_URL", "http://pi:61208")
+def test_pi_check_up_when_quiet(monkeypatch, seq, cfg):
+    cfg = replace(cfg, PI_GLANCES_URL="http://pi:61208")
     monkeypatch.setattr(
         bridge.net, "_get_json", seq({"min5": 0.4, "cpucore": 4}, MEM_OK, FS_OK)
     )
-    ok, _ = checks.host.check_pi_pressure()
+    ok, _ = checks.host.check_pi_pressure(cfg)
     assert ok
 
 
@@ -248,21 +250,23 @@ def test_non_publishing_containers_are_never_named():
         assert name not in msg
 
 
-def test_pi_check_arm_disabled_when_no_ports_configured(monkeypatch, seq):
-    monkeypatch.setattr(bridge.config, "PI_GLANCES_URL", "http://pi:61208")
-    monkeypatch.setattr(bridge.config, "PI_PUBLISHED_PORTS", ())
+def test_pi_check_arm_disabled_when_no_ports_configured(monkeypatch, seq, cfg):
+    cfg = replace(cfg, PI_GLANCES_URL="http://pi:61208", PI_PUBLISHED_PORTS=())
     monkeypatch.setattr(
         bridge.net, "_get_json", seq({"min5": 0.4, "cpucore": 4}, MEM_OK, FS_OK)
     )
-    ok, msg = checks.host.check_pi_pressure()
+    ok, msg = checks.host.check_pi_pressure(cfg)
     assert ok
     assert "listening" not in msg
 
 
-def _arm_ports(monkeypatch, open_ports, containers=None, streak=0):
-    monkeypatch.setattr(bridge.config, "PI_GLANCES_URL", "http://10.0.0.139:61208")
-    monkeypatch.setattr(bridge.config, "PI_PUBLISHED_PORTS", PUBLISHED)
-    monkeypatch.setattr(bridge.config, "PI_PORTS_CONSECUTIVE", 2)
+def _arm_ports(cfg, monkeypatch, open_ports, containers=None, streak=0):
+    cfg = replace(
+        cfg,
+        PI_GLANCES_URL="http://10.0.0.139:61208",
+        PI_PUBLISHED_PORTS=PUBLISHED,
+        PI_PORTS_CONSECUTIVE=2,
+    )
     bridge.streaks._down_streaks["pi_ports"] = streak
     monkeypatch.setattr(checks.host, "_tcp_open", lambda h, p, t: p in open_ports)
     fetched = []
@@ -280,53 +284,55 @@ def _arm_ports(monkeypatch, open_ports, containers=None, streak=0):
         }[url[len("http://10.0.0.139:61208") :]]
 
     monkeypatch.setattr(bridge.net, "_get_json", _get)
-    return fetched
+    return cfg, fetched
 
 
-def test_pi_check_does_not_fetch_containers_when_every_port_is_up(monkeypatch):
+def test_pi_check_does_not_fetch_containers_when_every_port_is_up(monkeypatch, cfg):
     # The whole point of the port-first design: /api/4/containers costs seconds on the Pi and
     # has been measured timing out, so the happy path must never touch it.
     all_ports = {p for _, p in PUBLISHED}
-    fetched = _arm_ports(monkeypatch, all_ports)
-    ok, msg = checks.host.check_pi_pressure()
+    cfg, fetched = _arm_ports(cfg, monkeypatch, all_ports)
+    ok, msg = checks.host.check_pi_pressure(cfg)
     assert ok
     assert fetched == []
     assert "5 pi port(s) listening" in msg
 
 
-def test_pi_check_detached_leads_the_message(monkeypatch):
+def test_pi_check_detached_leads_the_message(monkeypatch, cfg):
     all_ports = {p for _, p in PUBLISHED}
-    fetched = _arm_ports(
-        monkeypatch, all_ports - {8080}, _with("dozzle", ports=""), streak=1
+    cfg, fetched = _arm_ports(
+        cfg, monkeypatch, all_ports - {8080}, _with("dozzle", ports=""), streak=1
     )
-    ok, msg = checks.host.check_pi_pressure()
+    ok, msg = checks.host.check_pi_pressure(cfg)
     assert not ok
     assert fetched, "a dead port must trigger the attribution fetch"
     # The pager must see the fault, not the load figure it is not about.
     assert msg.startswith("1 pi container(s) up with no published ports")
 
 
-def test_pi_check_holds_the_first_dead_cycle_for_the_deploy_window(monkeypatch):
+def test_pi_check_holds_the_first_dead_cycle_for_the_deploy_window(monkeypatch, cfg):
     # A Pi deploy recreates containers, so one cycle of dead ports is expected.
     all_ports = {p for _, p in PUBLISHED}
-    _arm_ports(monkeypatch, all_ports - {8080}, _with("dozzle", ports=""), streak=0)
-    ok, msg = checks.host.check_pi_pressure()
+    cfg, _fetched = _arm_ports(
+        cfg, monkeypatch, all_ports - {8080}, _with("dozzle", ports=""), streak=0
+    )
+    ok, msg = checks.host.check_pi_pressure(cfg)
     assert ok
     assert "down streak 1/2" in msg
 
 
-def test_pi_check_reports_dead_port_when_attribution_fetch_fails(monkeypatch):
+def test_pi_check_reports_dead_port_when_attribution_fetch_fails(monkeypatch, cfg):
     all_ports = {p for _, p in PUBLISHED}
-    _arm_ports(monkeypatch, all_ports - {8080}, None, streak=1)
-    ok, msg = checks.host.check_pi_pressure()
+    cfg, _fetched = _arm_ports(cfg, monkeypatch, all_ports - {8080}, None, streak=1)
+    ok, msg = checks.host.check_pi_pressure(cfg)
     assert not ok
     assert "dozzle:8080 (cause unknown)" in msg
 
 
-def test_pi_check_resets_the_streak_once_ports_return(monkeypatch):
+def test_pi_check_resets_the_streak_once_ports_return(monkeypatch, cfg):
     all_ports = {p for _, p in PUBLISHED}
-    _arm_ports(monkeypatch, all_ports, streak=1)
-    ok, _ = checks.host.check_pi_pressure()
+    cfg, _fetched = _arm_ports(cfg, monkeypatch, all_ports, streak=1)
+    ok, _ = checks.host.check_pi_pressure(cfg)
     assert ok
     assert bridge.streaks._down_streaks["pi_ports"] == 0
 

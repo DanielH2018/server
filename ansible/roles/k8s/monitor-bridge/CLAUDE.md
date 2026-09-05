@@ -775,7 +775,7 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
   genuinely-dead dependency (~one extra INTERVAL later), and one `ok` resets the streak. The set is
   **disjoint from every run_once skip set** (so a graced check reaches the eval path each cycle and
   its streak advances) — both invariants guarded by a test against `CHECKS`. `GRACE_CYCLES` is
-  env-tunable. Pure `apply_startup_grace()` is unit-tested.
+  env-tunable. Pure `bridge.streaks.apply_startup_grace()` is unit-tested.
 - **Liveness probe (2026-06-10, k8s since the migration):** check.py touches `/tmp/heartbeat`
   (tmpfs) after every cycle; the `livenessProbe` in `templates/deployment.yaml.j2` fails when the
   mtime exceeds ~3×INTERVAL, so **the kubelet** restarts a *hung* loop (death alone already exits
@@ -902,7 +902,7 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
 and `verdicts/` (pure logic that takes its inputs as arguments). `check.py` is the entrypoint
 the Deployment runs and owns the `CHECKS` registry, the gate sets and the run loop — nothing
 else. `bridge/config.py` owns the env-derived config; `bridge/net.py` owns fetching and the
-Kuma push. A module imports a sibling by package (`from bridge import config as cfg`,
+Kuma push. A module imports a sibling by package (`from bridge.config import Config`,
 `from checks.b2 import check_b2_storage`), which resolves because `/app` — where the pod
 mounts the ConfigMap — is `sys.path[0]` for `python /app/check.py`, and under pytest because
 `files/` is on `pythonpath`. There is no `__init__.py`; these are namespace packages like
@@ -921,7 +921,7 @@ landed 2026-09-01, `check.py` from 3,732 lines to ~510).
 
 | module | holds |
 |---|---|
-| `check.py` | the `Check`/`CheckResult` types and the `CHECKS` registry, the `*_DEPENDENT` gate sets, `STARTUP_GRACE`, `check_enabled`, `apply_startup_grace`, `_gate`, `run_once`, the `argparse` front end and `main(argv) -> int` |
+| `check.py` | the `Check`/`CheckResult` types and the `CHECKS` registry, the `*_DEPENDENT` gate sets, `STARTUP_GRACE`, `check_enabled`, `_gate`, `run_once`, the `argparse` front end and `main(argv, env) -> int` which builds the `Config` |
 | `checks/service.py` | `check_n8n` with `_n8n_streaks`, `check_arr_queue`, `check_bazarr` with `bazarr_problems`, `check_prowlarr_indexers`, the gitops pair with `gitops_status` and `_parse_behind`, `check_etcd_restore_drill`, `check_ha_heartbeat` with `with_ha_ban` |
 | `checks/notify.py` | `check_discord` with `_discord_webhooks`, `email_backstop` with `_smtp_login_ok` and `_email_probe` |
 | `checks/logs.py` | `check_loki_ingestion`, `check_shipper_dropped`, `check_loki_reachable`, `with_log_errors` (the Loki arm `check_k8s_workloads` folds in) |
@@ -930,9 +930,13 @@ landed 2026-09-01, `check.py` from 3,732 lines to ~510).
 | `checks/b2.py` | the `b2_*` family with `check_b2_reachable` (the `B2_DEPENDENT` gate) and `check_b2_storage`, and the probe caches `_b2_probe` / `_b2_storage` |
 | `checks/r2.py` | the `r2_*` family with `check_r2_usage`, `R2_QUERY`, and `_r2_probe` |
 | `checks/storage.py` | `check_longhorn_volumes`, `check_pvc_fullness` — the cluster storage layer |
-| `bridge/config.py` | every `_env(...)` constant — thresholds, URLs, credentials, windows, and the `CHECKS_ONLY`/`CHECKS_SKIP` filter — with the commentary that justifies each value. Read as `cfg.X`, never from-imported. Parses through `_int`/`_num`, which record a malformed value in `CONFIG_PROBLEMS` instead of raising |
-| `bridge/net.py` | `_get_json`, `_post_json`, `prom_scalar`, `prom_vector`, the `loki_*` queries, `push`, and the selector builders (`origin_sel`, `cadvisor_sel`, `host_metric_sel`). Read as `bridge.net.X`; the tests stub the fetch layer here |
-| `bridge/streaks.py` | `_down_streaks` and `down_streak` — the consecutive-down counter four domains share. `conftest.py` clears it here |
+| `bridge/config.py` | the `_env`/`_int`/`_num`/`_env_file` parsers, `class Config(HostConfig, ServiceConfig, ClusterConfig, IoConfig)` and `load_config(env)` which composes the four builders. Its own fields are the ones every domain needs (interval, heartbeat, the three endpoint URLs) plus the check filter and the two reads a repo test greps for by text (`K8S_EXTENDED_RESOURCES`, `PVC_EXCLUDE`) |
+| `bridge/config_host.py` | `HostConfig` — disks, certificates, memory, SMART, hwmon temperatures, the UPS, the Pi, the speedtest, the host-origin coverage floors |
+| `bridge/config_service.py` | `ServiceConfig` — Traefik, n8n, the *arr stack, the deployer state dirs, the etcd drill, the staging backfill, Home Assistant |
+| `bridge/config_cluster.py` | `ClusterConfig` — the cluster Prometheus, the derived `PROM_ORIGIN` pin, the cAdvisor/target/workload/PVC floors, Longhorn, the restart windows |
+| `bridge/config_io.py` | `IoConfig` — B2, Cloudflare R2, the Loki ingestion and log-pattern arms, the shipper drop counters, the five Discord webhooks, SMTP |
+| `bridge/net.py` | `_get_json`, `_post_json`, `prom_scalar`, `prom_vector`, the `loki_*` queries, `push`, and the selector builders (`origin_sel`, `cadvisor_sel`, `host_metric_sel`). Read as `bridge.net.X`; the tests stub the fetch layer here. Every helper that reads a URL or the origin pin takes `cfg` FIRST; `cadvisor_sel`, `_origin_name`, `_get_json` and `_post_json` read no config and keep their signatures |
+| `bridge/streaks.py` | both streak mechanisms: `_down_streaks`/`down_streak` (the consecutive-down counter four domains share, cleared by `conftest.py`) and `_grace_streaks`/`apply_startup_grace` (the post-reboot startup grace for the reach-out checks) |
 | `bridge/common.py` | `_env`, `sanitize` — the two helpers shared verbatim with autofix-bridge's `autofix.py`, staged into that role's ConfigMap too (see its CLAUDE.md) |
 | `bridge/parsing.py` | duration/timestamp parsing, `endpoint_label`, `describe_fetch_failure` |
 | `verdicts/cluster.py` | `k8s_workloads_verdict`, `extended_resource_verdict`, `ksm_resource_label`, `targets_verdict` |
@@ -947,6 +951,32 @@ landed 2026-09-01, `check.py` from 3,732 lines to ~510).
 its threshold as an argument. Its private helper `_parse_behind` sits beside it, so the only
 caller and the helper stay together.
 
+## Configuration is a parameter, not a module global
+
+`main()` calls `load_config(os.environ)` ONCE and hands the frozen `Config` to `run_once`, which
+passes it to every gate, every check body (`Check.fn(cfg)`) and every `bridge.net` helper that
+reads a URL. A check body still reads `cfg.X`; `cfg` is its first parameter rather than a
+module it imported. Nothing under `files/` holds env-derived state after import.
+
+Two consequences worth knowing before you edit a check:
+
+- **A default argument cannot read the config.** Python evaluates a default once, when the
+  module is imported, and there is no `Config` at that point. `gitops_status`'s `max_behind_s`
+  defaults to `None` and resolves `cfg.GITOPS_BEHIND_MAX_S` in the body; `checks/b2.py`'s
+  `_b2_probe["ttl"]` seeds at `0` rather than at `B2_PROBE_INTERVAL_S`.
+- **A test states its configuration instead of patching one.** The `cfg` fixture in
+  `tests/conftest.py` is `load_config({})` — every documented default. Narrow it with
+  `dataclasses.replace(cfg, X=...)`, or call `load_config({...})` directly when the READ is what
+  is under test (a malformed number, a derived field like `PROM_ORIGIN`, a `_FILE`-mounted
+  secret). `main(argv, env={...})` is how a test reaches the load itself.
+
+This replaced 118 `monkeypatch.setattr(bridge.config, "X", ...)` sites and the two
+`importlib.reload(bridge.config)` tests on 2026-09-04. Building the config still MUST NOT raise:
+`_int`/`_num` record a malformed value, keep the documented default, and `main()` prints one
+line per problem and exits 2. `bridge.common.CONFIG_PROBLEMS` is passed in as `problems=` so
+`HTTP_TIMEOUT` — parsed in `bridge/common.py`, because autofix-bridge shares that module and
+does not ship `bridge/config.py` — reaches the same report.
+
 **A `verdicts/` module reads no `cfg`, and takes every threshold as an argument.** The check
 body resolves `cfg.X` at the call site — `ups_health(charge, runtime, replace,
 cfg.UPS_CHARGE_MIN_PCT, cfg.UPS_RUNTIME_MIN_S)` is the shape. The R2 action-class frozensets in
@@ -957,13 +987,15 @@ Cloudflare's pricing page decides which operations bill as Class A, no env var n
 in `templates/env-secret.yaml.j2`.
 
 **A test patches the module that READS the name, and a module reads a patched name qualified.**
-A function reads its globals from the module it is DEFINED in. So a test that stubs a threshold
-patches `bridge.config.X`, and the check that reads it does so as `cfg.X` at call time; a
-`from bridge.config import X` would copy the value into the importer's globals at import time
-and the patch would change nothing that runs. The same holds for every runtime module: patch
-`check.CHECKS` because `run_once` reads it there, patch a verdict on the module that from-imports
-it. Getting this wrong is silent — the setattr succeeds, creating an attribute nothing reads,
-and the test passes against unpatched production code — which is why two tests enforce it:
+A function reads its globals from the module it is DEFINED in. So a test that stubs the fetch
+layer patches `bridge.net._get_json`, and the check that reads it does so as
+`bridge.net._get_json` at call time; a `from bridge.net import _get_json` would copy the
+function into the importer's globals at import time and the patch would change nothing that
+runs. The same holds for every runtime module: patch `check.CHECKS` because `run_once` reads it
+there, patch a verdict on the module that from-imports it. Thresholds no longer participate —
+they are fields on the `Config` a test builds and passes in, per the section above. Getting this
+wrong is silent — the setattr succeeds, creating an attribute nothing reads, and the test passes
+against unpatched production code — which is why two tests enforce it:
 
 - `ansible/tests/services/test_monitor_bridge_modules.py` re-derives every `(module, name)` pair the
   suite patches, by AST, and fails when the module does not bind that name at its top level.
@@ -972,8 +1004,9 @@ and the test passes against unpatched production code — which is why two tests
 
 Until 2026-09-01 the rule was the inverse — a function could leave `check.py` only if nothing
 patched it — and that capped `check.py` near 2,500 lines, because every `check_*` reads
-`_get_json` or a threshold. The two tests that `importlib.reload()` to re-derive `PROM_ORIGIN`
-from the environment now reload `bridge.config`, the module whose body derives it.
+`_get_json` or a threshold. The two tests that re-derive `PROM_ORIGIN` from the environment used
+to `importlib.reload(bridge.config)`; since the seam they call `load_config({...})` with the two
+Prometheus URLs they mean, which asks the same question without mutating the process.
 
 `bridge/common.py` answers to the same rule twice over: it's imported by `check.py` like the
 other split modules, AND it's imported by autofix-bridge's `autofix.py`, whose own suite

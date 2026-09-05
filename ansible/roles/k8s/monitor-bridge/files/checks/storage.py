@@ -6,7 +6,7 @@ layer as `bridge.net.X` and the shared streak counter as `bridge.streaks.X`, so 
 patches on those modules reach it. Rule and enforcement: bridge/config.py's header.
 """
 
-import bridge.config as cfg
+from bridge.config import Config
 import bridge.net
 import bridge.streaks
 from verdicts.storage import (
@@ -16,7 +16,7 @@ from verdicts.storage import (
 )
 
 
-def check_longhorn_volumes() -> tuple[bool, str]:
+def check_longhorn_volumes(cfg: Config) -> tuple[bool, str]:
     """Longhorn volumes that have lost replica redundancy, named by PVC.
 
     `k3s_longhorn_replica_count` is 2, so a volume reading `degraded` is down to a single copy —
@@ -43,7 +43,7 @@ def check_longhorn_volumes() -> tuple[bool, str]:
     one-hot shape guarantees a `state="healthy"` series per volume even when its value is 0.
     """
     volumes = bridge.net.prom_scalar(
-        'count(longhorn_volume_robustness{state="healthy"})'
+        cfg, 'count(longhorn_volume_robustness{state="healthy"})'
     )
     # Only fetch the offender vector when the census says the job is answering: with no series
     # at all the verdict is already decided, and a second query would spend a request to learn
@@ -51,7 +51,7 @@ def check_longhorn_volumes() -> tuple[bool, str]:
     offenders = (
         longhorn_offenders(
             bridge.net.prom_vector(
-                'longhorn_volume_robustness{state=~"degraded|faulted"} == 1'
+                cfg, 'longhorn_volume_robustness{state=~"degraded|faulted"} == 1'
             )
         )
         if volumes
@@ -70,7 +70,7 @@ def check_longhorn_volumes() -> tuple[bool, str]:
     return ok, msg
 
 
-def check_pvc_fullness() -> tuple[bool, str]:
+def check_pvc_fullness(cfg: Config) -> tuple[bool, str]:
     """Filesystem fullness of every PersistentVolumeClaim the kubelet reports stats for.
 
     Nothing else covered this. check_disk iterates DISK_MOUNTPOINTS — `/`, `/boot`, `/boot/efi`
@@ -94,12 +94,14 @@ def check_pvc_fullness() -> tuple[bool, str]:
     if not cfg.CLUSTER_PROM_URL:
         return True, "PVC fullness check disabled (no CLUSTER_PROMETHEUS_URL)"
     claims = bridge.net.prom_scalar(
+        cfg,
         "count(count by (namespace, persistentvolumeclaim)"
         " (kubelet_volume_stats_capacity_bytes))",
         base=cfg.CLUSTER_PROM_URL,
         source="cluster prometheus",
     )
     vec = bridge.net.prom_vector(
+        cfg,
         "max by (namespace, persistentvolumeclaim) (100 *"
         " (1 - kubelet_volume_stats_available_bytes"
         " / kubelet_volume_stats_capacity_bytes))",

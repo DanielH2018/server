@@ -27,7 +27,7 @@ HWMON_ARGS = (0.90, 85.0, 20.0, 150.0, "nvme_")
 
 
 def _stub_prom(monkeypatch, temps, maxes=(), chip_names=(), sensor_labels=(), crits=()):
-    def fake(query, *args, **kwargs):
+    def fake(_cfg, query, *args, **kwargs):
         if query == "node_hwmon_temp_celsius":
             return list(temps)
         if query == "node_hwmon_temp_max_celsius":
@@ -326,15 +326,14 @@ def test_no_sensors_scraped_pages_rather_than_passing():
     assert "collector blind" in msg
 
 
-def test_a_single_spike_is_held_and_sustained_heat_pages(monkeypatch):
+def test_a_single_spike_is_held_and_sustained_heat_pages(monkeypatch, cfg):
     """Hysteresis, both halves: one hot cycle must not page, the Nth must."""
     bridge.streaks._down_streaks.pop("host_temp", None)
     _stub_prom(
         monkeypatch, [_temp("daniel-pi", "thermal_thermal_zone0", "temp0", 99.0)]
     )
     results = [
-        checks.host.check_host_temp()
-        for _ in range(bridge.config.HWMON_TEMP_CONSECUTIVE)
+        checks.host.check_host_temp(cfg) for _ in range(cfg.HWMON_TEMP_CONSECUTIVE)
     ]
     assert all(ok for ok, _msg in results[:-1]), (
         "a one-cycle thermal spike must not page"
@@ -342,7 +341,7 @@ def test_a_single_spike_is_held_and_sustained_heat_pages(monkeypatch):
     assert not results[-1][0], "sustained heat must page on the Nth consecutive cycle"
 
 
-def test_the_check_fetches_the_names_it_reports(monkeypatch):
+def test_the_check_fetches_the_names_it_reports(monkeypatch, cfg):
     """The pure tests are handed a name map; only this one proves check_host_temp builds one.
 
     The two name metrics are separate queries, so a wiring that forgets them still passes every
@@ -357,15 +356,15 @@ def test_the_check_fetches_the_names_it_reports(monkeypatch):
             _sensor_label("daniel-box", "pci0000:00_0000:00:18_3", "temp1", "Tctl")
         ],
     )
-    for _ in range(bridge.config.HWMON_TEMP_CONSECUTIVE):
-        _ok, msg = checks.host.check_host_temp()
+    for _ in range(cfg.HWMON_TEMP_CONSECUTIVE):
+        _ok, msg = checks.host.check_host_temp(cfg)
     assert "daniel-box k10temp/Tctl" in msg, msg
     # A single-host estate also advances the module-global coverage-shortfall streak, which
     # would otherwise make a later test's clean cycle page.
     checks.host._host_origin_streaks.clear()
 
 
-def test_the_check_fetches_the_crit_series_it_prefers(monkeypatch):
+def test_the_check_fetches_the_crit_series_it_prefers(monkeypatch, cfg):
     """The pure tests are handed `crits`; only this one proves check_host_temp fetches them.
 
     Same shape as test_the_check_fetches_the_names_it_reports and for the same reason: the crit
@@ -378,8 +377,8 @@ def test_the_check_fetches_the_crit_series_it_prefers(monkeypatch):
         [_temp("daniel-server", "platform_coretemp_0", "temp1", 88.0)],
         crits=[_temp("daniel-server", "platform_coretemp_0", "temp1", 90.0)],
     )
-    for _ in range(bridge.config.HWMON_TEMP_CONSECUTIVE):
-        _ok, msg = checks.host.check_host_temp()
+    for _ in range(cfg.HWMON_TEMP_CONSECUTIVE):
+        _ok, msg = checks.host.check_host_temp(cfg)
     assert "88.0C over its 81.0C declared limit" in msg, msg
     assert "1 by declared limit, 0 by fallback" in msg, (
         "the coverage tally must count this sensor as declared, not fallback — a wiring that "
@@ -389,12 +388,12 @@ def test_the_check_fetches_the_crit_series_it_prefers(monkeypatch):
     checks.host._host_origin_streaks.clear()
 
 
-def test_a_clean_cycle_clears_the_streak(monkeypatch):
+def test_a_clean_cycle_clears_the_streak(monkeypatch, cfg):
     bridge.streaks._down_streaks["host_temp"] = 2
     _stub_prom(
         monkeypatch, [_temp("daniel-pi", "thermal_thermal_zone0", "temp0", 40.0)]
     )
-    ok, _msg = checks.host.check_host_temp()
+    ok, _msg = checks.host.check_host_temp(cfg)
     assert ok
     assert bridge.streaks._down_streaks["host_temp"] == 0, (
         "a clean cycle must reset the hysteresis"
@@ -466,30 +465,30 @@ def _reset():
     bridge.streaks._down_streaks.pop("host_temp", None)
 
 
-def test_full_coverage_is_clean(monkeypatch):
+def test_full_coverage_is_clean(monkeypatch, cfg):
     _reset()
     _stub_prom(monkeypatch, _cool_estate(ALL_THREE))
-    ok, msg = checks.host.check_host_temp()
+    ok, msg = checks.host.check_host_temp(cfg)
     assert ok
     assert "hosts reporting" not in msg, (
         "full coverage must not carry a shortfall complaint"
     )
 
 
-def test_a_missing_host_pages_once_the_grace_expires(monkeypatch):
+def test_a_missing_host_pages_once_the_grace_expires(monkeypatch, cfg):
     """The rejecting half. Two of three hosts is exactly the state the shared floor of 2 met."""
     _reset()
     _stub_prom(monkeypatch, _cool_estate(("daniel-server", "daniel-box")))
     results = [
-        checks.host.check_host_temp()
-        for _ in range(bridge.config.HWMON_TEMP_ORIGINS_CONSECUTIVE)
+        checks.host.check_host_temp(cfg)
+        for _ in range(cfg.HWMON_TEMP_ORIGINS_CONSECUTIVE)
     ]
     assert not results[-1][0], "a host absent for the whole grace must page"
     msg = results[-1][1]
     assert "2 of 3" in msg and "NOT being checked" in msg, msg
 
 
-def test_a_short_coverage_gap_is_held(monkeypatch):
+def test_a_short_coverage_gap_is_held(monkeypatch, cfg):
     """The accepting half: a short coverage gap must be held, not paged on.
 
     The Pi's hwmon series went absent for about 20 minutes over the 7d to 2026-08-29, so a floor
@@ -498,26 +497,26 @@ def test_a_short_coverage_gap_is_held(monkeypatch):
     _reset()
     _stub_prom(monkeypatch, _cool_estate(("daniel-server", "daniel-box")))
     held = [
-        checks.host.check_host_temp()
-        for _ in range(bridge.config.HWMON_TEMP_ORIGINS_CONSECUTIVE - 1)
+        checks.host.check_host_temp(cfg)
+        for _ in range(cfg.HWMON_TEMP_ORIGINS_CONSECUTIVE - 1)
     ]
     assert all(ok for ok, _msg in held), "a brief gap must not page"
     assert "cycle" in held[-1][1], "a held gap must still say what it is holding"
 
 
-def test_full_coverage_clears_the_shortfall_streak(monkeypatch):
+def test_full_coverage_clears_the_shortfall_streak(monkeypatch, cfg):
     _reset()
     _stub_prom(monkeypatch, _cool_estate(("daniel-server", "daniel-box")))
-    checks.host.check_host_temp()
+    checks.host.check_host_temp(cfg)
     _stub_prom(monkeypatch, _cool_estate(ALL_THREE))
-    ok, _msg = checks.host.check_host_temp()
+    ok, _msg = checks.host.check_host_temp(cfg)
     assert ok
     assert checks.host._host_origin_streaks["host_temp"] == 0, (
         "a full-coverage cycle must reset the shortfall streak"
     )
 
 
-def test_a_hot_sensor_outranks_a_coverage_shortfall(monkeypatch):
+def test_a_hot_sensor_outranks_a_coverage_shortfall(monkeypatch, cfg):
     """Precedence, mirroring check_disk: a hot sensor outranks a coverage shortfall.
 
     A host that IS reporting and IS too hot pages ahead of a complaint about the absent one.
@@ -531,8 +530,8 @@ def test_a_hot_sensor_outranks_a_coverage_shortfall(monkeypatch):
             _origin_temp("daniel-box", "thermal_thermal_zone0", "temp0", 40.0),
         ],
     )
-    for _ in range(bridge.config.HWMON_TEMP_CONSECUTIVE):
-        ok, msg = checks.host.check_host_temp()
+    for _ in range(cfg.HWMON_TEMP_CONSECUTIVE):
+        ok, msg = checks.host.check_host_temp(cfg)
     assert not ok
     assert "over limit" in msg, msg
     assert "hosts reporting" not in msg, (
@@ -540,7 +539,7 @@ def test_a_hot_sensor_outranks_a_coverage_shortfall(monkeypatch):
     )
 
 
-def test_the_two_graces_are_not_compounded(monkeypatch):
+def test_the_two_graces_are_not_compounded(monkeypatch, cfg):
     """A missing host must page within its OWN grace, not that grace times the thermal one.
 
     down_streak is the thermal-spike grace. Routing the shortfall's failing verdict through it
@@ -550,15 +549,15 @@ def test_the_two_graces_are_not_compounded(monkeypatch):
     _reset()
     _stub_prom(monkeypatch, _cool_estate(("daniel-server", "daniel-box")))
     fired = None
-    for i in range(1, bridge.config.HWMON_TEMP_ORIGINS_CONSECUTIVE * 3 + 1):
-        if not checks.host.check_host_temp()[0] and fired is None:
+    for i in range(1, cfg.HWMON_TEMP_ORIGINS_CONSECUTIVE * 3 + 1):
+        if not checks.host.check_host_temp(cfg)[0] and fired is None:
             fired = i
-    assert fired == bridge.config.HWMON_TEMP_ORIGINS_CONSECUTIVE, (
+    assert fired == cfg.HWMON_TEMP_ORIGINS_CONSECUTIVE, (
         "the shortfall must page on its own Nth cycle, with no second grace stacked on it"
     )
 
 
-def test_a_host_whose_only_sensors_are_excluded_does_not_count(monkeypatch):
+def test_a_host_whose_only_sensors_are_excluded_does_not_count(monkeypatch, cfg):
     """The shared-predicate guard.
 
     HWMON_TEMP_EXCLUDE_CHIP drops the nvme chips, so a host that scrapes nothing else is a host this
@@ -572,8 +571,8 @@ def test_a_host_whose_only_sensors_are_excluded_does_not_count(monkeypatch):
         + [_origin_temp("daniel-pi", "nvme_nvme0", "temp1", 40.0)],
     )
     results = [
-        checks.host.check_host_temp()
-        for _ in range(bridge.config.HWMON_TEMP_ORIGINS_CONSECUTIVE)
+        checks.host.check_host_temp(cfg)
+        for _ in range(cfg.HWMON_TEMP_ORIGINS_CONSECUTIVE)
     ]
     assert not results[-1][0], (
         "an all-excluded host must not satisfy the floor; if it does, the origin count is "
@@ -581,20 +580,17 @@ def test_a_host_whose_only_sensors_are_excluded_does_not_count(monkeypatch):
     )
 
 
-def test_the_floor_and_its_grace_are_pinned_and_overridable():
+def test_the_floor_and_its_grace_are_pinned_and_overridable(cfg):
     """Pins the shipped values and their env keys together — the refuted M-9 fix was a key
     nothing read, which is indistinguishable from this test's absence."""
-    assert bridge.config.HWMON_TEMP_ORIGINS_MIN == 3, (
+    assert cfg.HWMON_TEMP_ORIGINS_MIN == 3, (
         "3, not the shared HOST_ORIGINS_MIN of 2: all three hosts declare non-excluded hwmon "
         "sensors (measured 2026-08-29: 9 / 5 / 2), so a floor of 2 is met by any two of them"
     )
-    assert bridge.config.HOST_ORIGINS_MIN == 2, (
+    assert cfg.HOST_ORIGINS_MIN == 2, (
         "the shared floor must stay 2 — disk and memory depend on it and test_check_host pins it"
     )
-    assert (
-        bridge.config.HWMON_TEMP_ORIGINS_CONSECUTIVE
-        > bridge.config.HOST_ORIGINS_CONSECUTIVE
-    ), (
+    assert cfg.HWMON_TEMP_ORIGINS_CONSECUTIVE > cfg.HOST_ORIGINS_CONSECUTIVE, (
         "the Pi drops out for longer than either amd64 node: about 20 min observed over the 7d "
         "to 2026-08-29, against 15 min of the shared grace at INTERVAL=300"
     )

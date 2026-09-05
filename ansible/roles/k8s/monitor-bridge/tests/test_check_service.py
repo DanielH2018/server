@@ -7,6 +7,8 @@ API and decides, where a host check reads a sensor.
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
+from dataclasses import replace
+
 import pytest
 
 import bridge.config
@@ -126,16 +128,16 @@ def test_n8n_naive_timestamp_treated_as_utc():
     }
 
 
-def test_n8n_disabled_without_key():
+def test_n8n_disabled_without_key(cfg):
     # N8N_API_KEY defaults to "" in tests -> monitoring disabled, never a false page
-    ok, msg = checks.service.check_n8n()
+    ok, msg = checks.service.check_n8n(cfg)
     assert ok
     assert "disabled" in msg.lower()
 
 
-def test_n8n_check_down_after_consecutive_failures(monkeypatch, seq):
+def test_n8n_check_down_after_consecutive_failures(monkeypatch, seq, cfg):
     # a workflow pages only once its streak reaches N8N_CONSECUTIVE_MAX (3) distinct failures
-    monkeypatch.setattr(bridge.config, "N8N_API_KEY", "x")
+    cfg = replace(cfg, N8N_API_KEY="x")
     monkeypatch.setattr(checks.service, "_n8n_streaks", {})
     wf = {"data": [{"id": "1", "name": "Prod Flow", "active": True}]}
 
@@ -147,7 +149,7 @@ def test_n8n_check_down_after_consecutive_failures(monkeypatch, seq):
             ]
         }
         monkeypatch.setattr(bridge.net, "_get_json", seq(wf, ex))
-        return checks.service.check_n8n()
+        return checks.service.check_n8n(cfg)
 
     assert cycle("e1")[0]  # streak 1 -> up
     assert cycle("e2")[0]  # streak 2 -> up
@@ -156,19 +158,19 @@ def test_n8n_check_down_after_consecutive_failures(monkeypatch, seq):
     assert "Prod Flow" in msg and "consecutive" in msg
 
 
-def test_n8n_check_ok_when_no_failures(monkeypatch, seq):
-    monkeypatch.setattr(bridge.config, "N8N_API_KEY", "x")
+def test_n8n_check_ok_when_no_failures(monkeypatch, seq, cfg):
+    cfg = replace(cfg, N8N_API_KEY="x")
     wf = {"data": [{"id": "1", "name": "Prod Flow", "active": True}]}
     ex = {"data": []}
     monkeypatch.setattr(bridge.net, "_get_json", seq(wf, ex))
-    ok, msg = checks.service.check_n8n()
+    ok, msg = checks.service.check_n8n(cfg)
     assert ok
     assert "no active-workflow failures" in msg
 
 
-def test_n8n_check_single_failure_does_not_page(monkeypatch, seq):
+def test_n8n_check_single_failure_does_not_page(monkeypatch, seq, cfg):
     # one failure -> streak 1 < N8N_CONSECUTIVE_MAX -> stays up (the one-transient grace)
-    monkeypatch.setattr(bridge.config, "N8N_API_KEY", "x")
+    cfg = replace(cfg, N8N_API_KEY="x")
     monkeypatch.setattr(checks.service, "_n8n_streaks", {})
     wf = {"data": [{"id": "1", "name": "Prod Flow", "active": True}]}
     now_iso = datetime.now(timezone.utc).isoformat()
@@ -178,7 +180,7 @@ def test_n8n_check_single_failure_does_not_page(monkeypatch, seq):
         ]
     }
     monkeypatch.setattr(bridge.net, "_get_json", seq(wf, ex))
-    ok, _ = checks.service.check_n8n()
+    ok, _ = checks.service.check_n8n(cfg)
     assert ok
 
 
@@ -318,15 +320,15 @@ def test_queue_warnings_multiple_records_all_named():
     assert titles == {"Bad One", "Bad Two"}
 
 
-def test_arr_queue_disabled_without_keys():
+def test_arr_queue_disabled_without_keys(cfg):
     # SONARR_API_KEY/RADARR_API_KEY default to "" in tests -> monitoring disabled
-    ok, msg = checks.service.check_arr_queue()
+    ok, msg = checks.service.check_arr_queue(cfg)
     assert ok
     assert "disabled" in msg.lower()
 
 
-def test_arr_queue_down_on_sonarr_warning(monkeypatch):
-    monkeypatch.setattr(bridge.config, "SONARR_API_KEY", "x")
+def test_arr_queue_down_on_sonarr_warning(monkeypatch, cfg):
+    cfg = replace(cfg, SONARR_API_KEY="x")
     q = _queue(
         {
             "title": "Poisoned.Episode.S01E01.exe",
@@ -336,14 +338,14 @@ def test_arr_queue_down_on_sonarr_warning(monkeypatch):
         }
     )
     monkeypatch.setattr(bridge.net, "_get_json", lambda *a, **k: q)
-    ok, msg = checks.service.check_arr_queue()
+    ok, msg = checks.service.check_arr_queue(cfg)
     assert not ok
     assert "Sonarr" in msg
     assert "Poisoned.Episode.S01E01.exe" in msg
 
 
-def test_arr_queue_down_on_radarr_warning(monkeypatch):
-    monkeypatch.setattr(bridge.config, "RADARR_API_KEY", "x")
+def test_arr_queue_down_on_radarr_warning(monkeypatch, cfg):
+    cfg = replace(cfg, RADARR_API_KEY="x")
     q = _queue(
         {
             "title": "Bad.Movie.2026",
@@ -352,27 +354,25 @@ def test_arr_queue_down_on_radarr_warning(monkeypatch):
         }
     )
     monkeypatch.setattr(bridge.net, "_get_json", lambda *a, **k: q)
-    ok, msg = checks.service.check_arr_queue()
+    ok, msg = checks.service.check_arr_queue(cfg)
     assert not ok
     assert "Radarr" in msg
     assert "Bad.Movie.2026" in msg
 
 
-def test_arr_queue_ok_when_both_clean(monkeypatch):
-    monkeypatch.setattr(bridge.config, "SONARR_API_KEY", "x")
-    monkeypatch.setattr(bridge.config, "RADARR_API_KEY", "x")
+def test_arr_queue_ok_when_both_clean(monkeypatch, cfg):
+    cfg = replace(cfg, SONARR_API_KEY="x", RADARR_API_KEY="x")
     monkeypatch.setattr(bridge.net, "_get_json", lambda *a, **k: _queue())
-    ok, msg = checks.service.check_arr_queue()
+    ok, msg = checks.service.check_arr_queue(cfg)
     assert ok
     assert "Sonarr" in msg and "Radarr" in msg
 
 
-def test_arr_queue_urls_include_unknown_items_flags(monkeypatch):
+def test_arr_queue_urls_include_unknown_items_flags(monkeypatch, cfg):
     # Both flags default FALSE upstream, hiding exactly the unmapped/poisoned queue items
     # this check exists for. Sonarr got its flag on day one; Radarr's twin was missed
     # (2026-07-02 review M1) — pin BOTH spellings so neither regresses again.
-    monkeypatch.setattr(bridge.config, "SONARR_API_KEY", "x")
-    monkeypatch.setattr(bridge.config, "RADARR_API_KEY", "x")
+    cfg = replace(cfg, SONARR_API_KEY="x", RADARR_API_KEY="x")
     calls = []
 
     def fake_get_json(url, headers=None):
@@ -380,7 +380,7 @@ def test_arr_queue_urls_include_unknown_items_flags(monkeypatch):
         return _queue()
 
     monkeypatch.setattr(bridge.net, "_get_json", fake_get_json)
-    ok, _ = checks.service.check_arr_queue()
+    ok, _ = checks.service.check_arr_queue(cfg)
     assert ok
     sonarr_url = next(u for u in calls if "sonarr" in u)
     radarr_url = next(u for u in calls if "radarr" in u)
@@ -388,9 +388,9 @@ def test_arr_queue_urls_include_unknown_items_flags(monkeypatch):
     assert "includeUnknownMovieItems=true" in radarr_url
 
 
-def test_arr_queue_only_checks_configured_app(monkeypatch):
+def test_arr_queue_only_checks_configured_app(monkeypatch, cfg):
     # Only Sonarr has a key; Radarr must not be queried at all.
-    monkeypatch.setattr(bridge.config, "SONARR_API_KEY", "x")
+    cfg = replace(cfg, SONARR_API_KEY="x")
     calls = []
 
     def fake_get_json(url, headers=None):
@@ -398,7 +398,7 @@ def test_arr_queue_only_checks_configured_app(monkeypatch):
         return _queue()
 
     monkeypatch.setattr(bridge.net, "_get_json", fake_get_json)
-    ok, _msg = checks.service.check_arr_queue()
+    ok, _msg = checks.service.check_arr_queue(cfg)
     assert ok
     assert len(calls) == 1
     assert "sonarr" in calls[0]
@@ -487,16 +487,15 @@ def test_indexers_down_ignore_only_named_indexer():
     assert [n for n, _ in out] == ["1337x"]
 
 
-def test_prowlarr_indexers_disabled_without_key(monkeypatch):
-    monkeypatch.setattr(bridge.config, "PROWLARR_API_KEY", "")
-    ok, msg = checks.service.check_prowlarr_indexers()
+def test_prowlarr_indexers_disabled_without_key(monkeypatch, cfg):
+    cfg = replace(cfg, PROWLARR_API_KEY="")
+    ok, msg = checks.service.check_prowlarr_indexers(cfg)
     assert ok is True
     assert "disabled" in msg
 
 
-def test_prowlarr_indexers_down_on_sustained(monkeypatch, seq):
-    monkeypatch.setattr(bridge.config, "PROWLARR_API_KEY", "k")
-    monkeypatch.setattr(bridge.config, "PROWLARR_INDEXER_MIN_DOWN_MIN", 30.0)
+def test_prowlarr_indexers_down_on_sustained(monkeypatch, seq, cfg):
+    cfg = replace(cfg, PROWLARR_API_KEY="k", PROWLARR_INDEXER_MIN_DOWN_MIN=30.0)
     status = _status(
         (1, "2000-01-01T00:00:00Z")
     )  # ancient -> definitely over threshold
@@ -504,26 +503,25 @@ def test_prowlarr_indexers_down_on_sustained(monkeypatch, seq):
     monkeypatch.setattr(
         bridge.net, "_get_json", seq(status, indexers)
     )  # status, then indexer list
-    ok, msg = checks.service.check_prowlarr_indexers()
+    ok, msg = checks.service.check_prowlarr_indexers(cfg)
     assert ok is False
     assert "EZTV down" in msg
 
 
-def test_prowlarr_indexers_up_when_none_failing(monkeypatch, seq):
-    monkeypatch.setattr(bridge.config, "PROWLARR_API_KEY", "k")
+def test_prowlarr_indexers_up_when_none_failing(monkeypatch, seq, cfg):
+    cfg = replace(cfg, PROWLARR_API_KEY="k")
     monkeypatch.setattr(bridge.net, "_get_json", seq([], [{"id": 1, "name": "EZTV"}]))
-    ok, msg = checks.service.check_prowlarr_indexers()
+    ok, msg = checks.service.check_prowlarr_indexers(cfg)
     assert ok is True
     assert "ok" in msg
 
 
-def test_prowlarr_indexers_ignore_list_suppresses_page(monkeypatch, seq):
-    monkeypatch.setattr(bridge.config, "PROWLARR_API_KEY", "k")
-    monkeypatch.setattr(bridge.config, "PROWLARR_INDEXER_IGNORE", "The Pirate Bay")
+def test_prowlarr_indexers_ignore_list_suppresses_page(monkeypatch, seq, cfg):
+    cfg = replace(cfg, PROWLARR_API_KEY="k", PROWLARR_INDEXER_IGNORE="The Pirate Bay")
     status = _status((1, "2000-01-01T00:00:00Z"))  # ancient -> over threshold
     indexers = [{"id": 1, "name": "The Pirate Bay"}]
     monkeypatch.setattr(bridge.net, "_get_json", seq(status, indexers))
-    ok, msg = checks.service.check_prowlarr_indexers()
+    ok, msg = checks.service.check_prowlarr_indexers(cfg)
     assert ok is True
     assert "ok" in msg
 
@@ -590,11 +588,11 @@ def test_bazarr_self_reported_health_issues_are_surfaced():
     ]
 
 
-def test_bazarr_check_is_disabled_without_an_api_key(monkeypatch):
+def test_bazarr_check_is_disabled_without_an_api_key(monkeypatch, cfg):
     """No key means stay up, the check_n8n convention — not a permanently red monitor."""
-    monkeypatch.setattr(bridge.config, "BAZARR_API_KEY", "")
+    cfg = replace(cfg, BAZARR_API_KEY="")
 
-    ok, msg = checks.service.check_bazarr()
+    ok, msg = checks.service.check_bazarr(cfg)
 
     assert ok
     assert "disabled" in msg

@@ -20,6 +20,10 @@ monitor_bridge_k8s_image: python:3.14-alpine@sha256:c6ead215bfd31f1e433d968853b7
 monitor_bridge_modules:
   - check.py
   - bridge/config.py
+  - bridge/config_host.py
+  - bridge/config_service.py
+  - bridge/config_cluster.py
+  - bridge/config_io.py
   - bridge/net.py
   - bridge/streaks.py
   - checks/logs.py

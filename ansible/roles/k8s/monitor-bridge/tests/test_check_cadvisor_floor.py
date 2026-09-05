@@ -6,6 +6,8 @@ will read empty as healthy. That split ran live from the Phase G retarget to 202
 all three logging OK, found by reading the code rather than by an alert.
 """
 
+from dataclasses import replace
+
 from pathlib import Path
 
 
@@ -24,10 +26,10 @@ _REPO = Path(__file__).resolve().parents[5]
 # by an alert. Each pair below is one input the floor must accept and one it must reject.
 
 
-def _reset_cadvisor(monkeypatch, min_pods=20, consecutive=2):
-    monkeypatch.setattr(bridge.config, "CADVISOR_PODS_MIN", min_pods)
-    monkeypatch.setattr(bridge.config, "CADVISOR_CONSECUTIVE", consecutive)
+def _reset_cadvisor(cfg, monkeypatch, min_pods=20, consecutive=2):
+    cfg = replace(cfg, CADVISOR_PODS_MIN=min_pods, CADVISOR_CONSECUTIVE=consecutive)
     monkeypatch.setattr(checks.cluster, "_cadvisor_streaks", {})
+    return cfg
 
 
 def test_cadvisor_coverage_above_the_floor_is_clean():
@@ -48,77 +50,77 @@ def test_cadvisor_empty_vector_is_flagged():
     assert "matching nothing" in msg
 
 
-def test_a_covered_vector_with_zero_offenders_still_reads_clean(monkeypatch):
+def test_a_covered_vector_with_zero_offenders_still_reads_clean(monkeypatch, cfg):
     # The inversion this floor could most easily introduce: "no OOM kills" is the common case and
     # must stay green. Without this the floor would page on every healthy cycle.
-    _reset_cadvisor(monkeypatch)
+    cfg = _reset_cadvisor(cfg, monkeypatch)
     monkeypatch.setattr(
         bridge.net,
         "prom_vector",
-        lambda *a, **k: [({"pod": "p%d" % i}, 0.0) for i in range(40)],
+        lambda _cfg, *a, **k: [({"pod": "p%d" % i}, 0.0) for i in range(40)],
     )
-    ok, msg = checks.cluster.check_oom()
+    ok, msg = checks.cluster.check_oom(cfg)
     assert ok is True
     assert "no OOM kills" in msg
 
 
-def test_check_oom_reads_unknown_not_green_when_blind(monkeypatch):
-    _reset_cadvisor(monkeypatch, consecutive=1)
-    monkeypatch.setattr(bridge.net, "prom_vector", lambda *a, **k: [])
-    ok, msg = checks.cluster.check_oom()
+def test_check_oom_reads_unknown_not_green_when_blind(monkeypatch, cfg):
+    cfg = _reset_cadvisor(cfg, monkeypatch, consecutive=1)
+    monkeypatch.setattr(bridge.net, "prom_vector", lambda _cfg, *a, **k: [])
+    ok, msg = checks.cluster.check_oom(cfg)
     assert ok is False
     assert "UNKNOWN" in msg
 
 
-def test_check_restarts_reads_unknown_not_green_when_blind(monkeypatch):
-    _reset_cadvisor(monkeypatch, consecutive=1)
-    monkeypatch.setattr(bridge.net, "prom_vector", lambda *a, **k: [])
-    ok, msg = checks.cluster.check_restarts()
+def test_check_restarts_reads_unknown_not_green_when_blind(monkeypatch, cfg):
+    cfg = _reset_cadvisor(cfg, monkeypatch, consecutive=1)
+    monkeypatch.setattr(bridge.net, "prom_vector", lambda _cfg, *a, **k: [])
+    ok, msg = checks.cluster.check_restarts(cfg)
     assert ok is False
     assert "UNKNOWN" in msg
 
 
-def test_check_cpu_throttle_reads_unknown_not_green_when_blind(monkeypatch):
-    _reset_cadvisor(monkeypatch, consecutive=1)
-    monkeypatch.setattr(bridge.net, "prom_vector", lambda *a, **k: [])
-    ok, msg = checks.cluster.check_cpu_throttle()
+def test_check_cpu_throttle_reads_unknown_not_green_when_blind(monkeypatch, cfg):
+    cfg = _reset_cadvisor(cfg, monkeypatch, consecutive=1)
+    monkeypatch.setattr(bridge.net, "prom_vector", lambda _cfg, *a, **k: [])
+    ok, msg = checks.cluster.check_cpu_throttle(cfg)
     assert ok is False
     assert "UNKNOWN" in msg
 
 
-def test_the_floor_holds_up_for_one_cycle_before_paging(monkeypatch):
+def test_the_floor_holds_up_for_one_cycle_before_paging(monkeypatch, cfg):
     # A kubelet restart briefly empties cAdvisor; three monitors going red together on one
     # transient is the storm the gates exist to prevent.
-    _reset_cadvisor(monkeypatch, consecutive=2)
-    monkeypatch.setattr(bridge.net, "prom_vector", lambda *a, **k: [])
-    ok, msg = checks.cluster.check_oom()
+    cfg = _reset_cadvisor(cfg, monkeypatch, consecutive=2)
+    monkeypatch.setattr(bridge.net, "prom_vector", lambda _cfg, *a, **k: [])
+    ok, msg = checks.cluster.check_oom(cfg)
     assert ok is True
     assert "cAdvisor coverage shortfall 1/2" in msg
-    ok, _ = checks.cluster.check_oom()
+    ok, _ = checks.cluster.check_oom(cfg)
     assert ok is False
 
 
-def test_each_check_ages_its_shortfall_independently(monkeypatch):
+def test_each_check_ages_its_shortfall_independently(monkeypatch, cfg):
     # A single shared counter would take three increments per cycle — all three checks run in the
     # same run_once pass — and blow through CADVISOR_CONSECUTIVE inside the first one.
-    _reset_cadvisor(monkeypatch, consecutive=2)
-    monkeypatch.setattr(bridge.net, "prom_vector", lambda *a, **k: [])
-    assert checks.cluster.check_oom()[0] is True
-    assert checks.cluster.check_restarts()[0] is True
-    assert checks.cluster.check_cpu_throttle()[0] is True
+    cfg = _reset_cadvisor(cfg, monkeypatch, consecutive=2)
+    monkeypatch.setattr(bridge.net, "prom_vector", lambda _cfg, *a, **k: [])
+    assert checks.cluster.check_oom(cfg)[0] is True
+    assert checks.cluster.check_restarts(cfg)[0] is True
+    assert checks.cluster.check_cpu_throttle(cfg)[0] is True
     assert checks.cluster._cadvisor_streaks == {"oom": 1, "restarts": 1, "cpu": 1}
 
 
-def test_a_covered_cycle_resets_the_streak(monkeypatch):
-    _reset_cadvisor(monkeypatch, consecutive=2)
-    monkeypatch.setattr(bridge.net, "prom_vector", lambda *a, **k: [])
-    checks.cluster.check_oom()
+def test_a_covered_cycle_resets_the_streak(monkeypatch, cfg):
+    cfg = _reset_cadvisor(cfg, monkeypatch, consecutive=2)
+    monkeypatch.setattr(bridge.net, "prom_vector", lambda _cfg, *a, **k: [])
+    checks.cluster.check_oom(cfg)
     monkeypatch.setattr(
         bridge.net,
         "prom_vector",
-        lambda *a, **k: [({"pod": "p%d" % i}, 0.0) for i in range(40)],
+        lambda _cfg, *a, **k: [({"pod": "p%d" % i}, 0.0) for i in range(40)],
     )
-    assert checks.cluster.check_oom()[0] is True
+    assert checks.cluster.check_oom(cfg)[0] is True
     assert checks.cluster._cadvisor_streaks["oom"] == 0
 
 

@@ -5,52 +5,54 @@ timestamp that fails to parse makes a fresh reading look stale, and a sanitize()
 adversary-controlled alert text through reaches Discord verbatim.
 """
 
+from dataclasses import replace
+
 from datetime import datetime, timezone
 
 
 import bridge.common
 import bridge.parsing
-import bridge.config
+from bridge.config import load_config
 import bridge.net
 import checks.service
 
 
-def test_env_file_reads_from_file_and_strips(monkeypatch, tmp_path):
+# The `_FILE` indirection is exercised through the field it produces rather than through
+# load_config's private reader, because the field is what every check actually consumes.
+
+
+def test_env_file_reads_from_file_and_strips(tmp_path):
     f = tmp_path / "secret"
     # trailing newline from a rendered file must be stripped
     f.write_text("s3cret-token\n")
-    monkeypatch.setenv("HA_TOKEN_FILE", str(f))
-    monkeypatch.setenv("HA_TOKEN", "inline-should-be-ignored")
-    assert bridge.config._env_file("HA_TOKEN", "") == "s3cret-token"
+    env = {"HA_TOKEN_FILE": str(f), "HA_TOKEN": "inline-should-be-ignored"}
+    assert load_config(env).HA_TOKEN == "s3cret-token"
 
 
-def test_env_file_falls_back_to_plain_env(monkeypatch):
-    monkeypatch.delenv("HA_TOKEN_FILE", raising=False)
-    monkeypatch.setenv("HA_TOKEN", "inline-token")
-    assert bridge.config._env_file("HA_TOKEN", "") == "inline-token"
+def test_env_file_falls_back_to_plain_env():
+    assert load_config({"HA_TOKEN": "inline-token"}).HA_TOKEN == "inline-token"
 
 
-def test_env_file_default_when_neither_set(monkeypatch):
-    monkeypatch.delenv("HA_TOKEN_FILE", raising=False)
-    monkeypatch.delenv("HA_TOKEN", raising=False)
-    assert bridge.config._env_file("HA_TOKEN", "") == ""
+def test_env_file_default_when_neither_set():
+    assert load_config({}).HA_TOKEN == ""
 
 
-def test_env_file_missing_file_falls_back_to_env(monkeypatch, tmp_path):
-    # A *_FILE path that doesn't exist must degrade to the plain env var, not raise — _env_file runs
-    # at import for HA_TOKEN, so an unguarded open() would crash the whole loop and silence every
-    # monitor over one missing file (2026-07-15 review L1).
-    monkeypatch.setenv("HA_TOKEN_FILE", str(tmp_path / "does-not-exist"))
-    monkeypatch.setenv("HA_TOKEN", "inline-fallback")
-    assert bridge.config._env_file("HA_TOKEN", "") == "inline-fallback"
+def test_env_file_missing_file_falls_back_to_env(tmp_path):
+    # A *_FILE path that doesn't exist must degrade to the plain env var, not raise — an
+    # unguarded open() would fail the whole config build and silence every monitor over one
+    # missing file (2026-07-15 review L1).
+    env = {
+        "HA_TOKEN_FILE": str(tmp_path / "does-not-exist"),
+        "HA_TOKEN": "inline-fallback",
+    }
+    assert load_config(env).HA_TOKEN == "inline-fallback"
 
 
-def test_env_file_directory_path_falls_back_to_env(monkeypatch, tmp_path):
-    # The specific Docker failure mode: an absent bind-mount source is created as a directory, so
+def test_env_file_directory_path_falls_back_to_env(tmp_path):
+    # The specific mount failure mode: an absent mount source is created as a directory, so
     # open() raises IsADirectoryError (an OSError subclass) — must still fall back to the env var.
-    monkeypatch.setenv("HA_TOKEN_FILE", str(tmp_path))  # tmp_path is a directory
-    monkeypatch.setenv("HA_TOKEN", "inline-fallback")
-    assert bridge.config._env_file("HA_TOKEN", "") == "inline-fallback"
+    env = {"HA_TOKEN_FILE": str(tmp_path), "HA_TOKEN": "inline-fallback"}
+    assert load_config(env).HA_TOKEN == "inline-fallback"
 
 
 def test_nanosecond_precision_with_z():
@@ -100,17 +102,16 @@ def test_sanitize_collapses_whitespace():
     assert bridge.common.sanitize("a\t b\n\nc") == "a b c"
 
 
-def test_arr_queue_msg_is_sanitized(monkeypatch):
+def test_arr_queue_msg_is_sanitized(monkeypatch, cfg):
     # An @everyone-laden release title reaches the alert msg defused, not as a live ping.
-    monkeypatch.setattr(bridge.config, "SONARR_API_KEY", "k")
-    monkeypatch.setattr(bridge.config, "RADARR_API_KEY", "")
+    cfg = replace(cfg, SONARR_API_KEY="k", RADARR_API_KEY="")
     queue = {
         "records": [
             {"title": "@everyone Free.Movie", "trackedDownloadStatus": "warning"}
         ]
     }
     monkeypatch.setattr(bridge.net, "_get_json", lambda *a, **k: queue)
-    ok, msg = checks.service.check_arr_queue()
+    ok, msg = checks.service.check_arr_queue(cfg)
     assert ok is False
     assert "@everyone" not in msg
     assert "(at)everyone" in msg

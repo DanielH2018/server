@@ -3,8 +3,14 @@
 Every check body reaches these as `bridge.net.prom_vector(...)`, never by from-import, and the
 test suite stubs them HERE — `monkeypatch.setattr(bridge.net, "_get_json", ...)` — where the
 callers look them up at call time. A from-import would copy the function into the caller's
-globals at import time and the stub would change nothing that runs. The same rule, and the
-tests that enforce it, are described in bridge/config.py's header.
+globals at import time and the stub would change nothing that runs. That rule is enforced by
+ansible/tests/services/test_bridge_patch_boundary.py.
+
+CONFIGURATION IS A PARAMETER, NOT A GLOBAL. Every helper that reads a URL or the origin pin
+takes the frozen `Config` as its FIRST argument, so this module holds no env-derived state and
+a test states the configuration it wants by handing one in. `cadvisor_sel`, `_origin_name`,
+`_get_json`, `_post_json` and `_instant_query` read no configuration and keep their signatures
+— which matters, because those are the two the suite stubs most.
 
 The selector builders (`origin_sel`, `cadvisor_sel`, `host_metric_sel`, `_origin_name`) live
 here rather than beside the checks because they are the query-building half of fetching, they
@@ -18,15 +24,15 @@ import urllib.parse
 import urllib.request
 
 import bridge.common
-import bridge.config as cfg
 from bridge.common import HTTP_TIMEOUT
+from bridge.config import Config
 from bridge.parsing import FETCH_BODY_MAX, describe_fetch_failure, endpoint_label
 
 
-def origin_sel(*matchers: str) -> str:
+def origin_sel(cfg: Config, *matchers: str) -> str:
     """A `{...}` label-matcher block: the given matchers plus the origin pin, when one applies.
 
-    Returns "" when there is nothing to select on, so `"up%s" % origin_sel()` is a bare `up`
+    Returns "" when there is nothing to select on, so `"up%s" % origin_sel(cfg)` is a bare `up`
     against the Docker Prometheus and `up{origin="daniel-server"}` against the cluster copy.
     """
     parts = [m for m in matchers if m]
@@ -58,7 +64,7 @@ def cadvisor_sel(*matchers: str) -> str:
     return "{%s}" % ", ".join(parts) if parts else ""
 
 
-def host_metric_sel(*matchers: str) -> str:
+def host_metric_sel(cfg: Config, *matchers: str) -> str:
     """A `{...}` block for the HOST-level node_* checks, minus origins owned by another check.
 
     node_* is estate-wide the moment a host runs node-exporter, so check_disk and check_mem
@@ -175,7 +181,7 @@ def _instant_query(base_url: str, path: str, query: str, source: str) -> list[di
 
 
 def prom_scalar(
-    promql: str, base: str | None = None, source: str = "prometheus"
+    cfg: Config, promql: str, base: str | None = None, source: str = "prometheus"
 ) -> float | None:
     """Run an instant query; return the first result's value as float, or None if empty.
 
@@ -193,7 +199,7 @@ def prom_scalar(
 
 
 def prom_vector(
-    promql: str, base: str | None = None, source: str = "prometheus"
+    cfg: Config, promql: str, base: str | None = None, source: str = "prometheus"
 ) -> list[tuple[dict, float]]:
     """Run an instant query; return [(labels: dict, value: float), ...] (empty if none).
 
@@ -208,7 +214,7 @@ def prom_vector(
     ]
 
 
-def loki_count(selector: str, window: str) -> float | None:
+def loki_count(cfg: Config, selector: str, window: str) -> float | None:
     """Instant LogQL query: total log lines for `selector` over `window`. None if no series.
 
     Loki's instant-query endpoint evaluates a metric query — here
@@ -222,7 +228,7 @@ def loki_count(selector: str, window: str) -> float | None:
     return float(result[0]["value"][1])
 
 
-def loki_vector(query: str) -> list[tuple[dict, float]]:
+def loki_vector(cfg: Config, query: str) -> list[tuple[dict, float]]:
     """Instant LogQL query keeping each series' labels — the loki_count peer of prom_vector.
 
     Not prom_vector(base=LOKI_URL): Loki's instant endpoint is /loki/api/v1/query, and
@@ -235,7 +241,11 @@ def loki_vector(query: str) -> list[tuple[dict, float]]:
 
 
 def log_error_counts(
-    selector: str, pattern: str, window: str, by_label: str = "container"
+    cfg: Config,
+    selector: str,
+    pattern: str,
+    window: str,
+    by_label: str = "container",
 ) -> tuple[list[tuple[dict, float]], float | None]:
     """(matches, total) — per-container counts of `pattern`, and the selector's total volume.
 
@@ -246,14 +256,15 @@ def log_error_counts(
     own volume separates "nothing is wrong" from "I asked the wrong question".
     """
     matches = loki_vector(
+        cfg,
         "sum by (%s) (count_over_time(%s |~ `%s` [%s]))"
-        % (by_label, selector, pattern, window)
+        % (by_label, selector, pattern, window),
     )
-    total = loki_count(selector, window)
+    total = loki_count(cfg, selector, window)
     return matches, total
 
 
-def loki_reachable() -> bool:
+def loki_reachable(cfg: Config) -> bool:
     """Is Loki itself reachable and answering queries? (the LOKI_DEPENDENT gate).
 
     Hits the labels endpoint — a fixed, ingestion-independent query that returns status=success
@@ -267,13 +278,14 @@ def loki_reachable() -> bool:
     return True
 
 
-def push(token: str, ok: bool, msg: str) -> None:
+def push(cfg: Config, token: str, ok: bool, msg: str) -> None:
     """Pushes an up/down heartbeat plus message to the Kuma push monitor for `token`.
 
     A no-op, logged, when token is unset. Best-effort: an unreachable Kuma is logged and
     swallowed rather than raised, so it never crashes the check loop.
 
     Args:
+        cfg: The configuration holding KUMA_URL.
         token: The Kuma push-monitor token; empty/None skips the push.
         ok: Whether the check succeeded (pushed as status "up") or not ("down").
         msg: The status message to attach to the push.

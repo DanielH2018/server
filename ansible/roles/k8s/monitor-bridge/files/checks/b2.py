@@ -11,23 +11,25 @@ import time
 import urllib.error
 import urllib.parse
 
-import bridge.config as cfg
+from bridge.config import Config
 import bridge.net
 from verdicts.storage import b2_storage_verdict, b2_sum_versions
 
 
 # `ttl` is how long THIS cached verdict is held, chosen per outcome by b2_reachable — a billed
-# answer from B2 holds B2_PROBE_INTERVAL_S, a transport failure holds B2_TRANSPORT_RETRY_S.
+# answer from B2 holds B2_PROBE_INTERVAL_S, a transport failure holds B2_TRANSPORT_RETRY_S. It
+# seeds at 0, meaning "nothing is cached yet, probe now": the first cycle probes regardless,
+# because `ts` is 0 and every real clock is further from it than any interval.
 _b2_probe = {
     "ts": 0.0,
     "ok": True,
     "msg": "not yet probed",
-    "ttl": cfg.B2_PROBE_INTERVAL_S,
+    "ttl": 0.0,
 }
 _b2_storage = {"ts": 0.0, "ok": False, "msg": "not yet probed"}
 
 
-def b2_authorize_data() -> dict:
+def b2_authorize_data(cfg: Config) -> dict:
     """The parsed b2_authorize_account response. Raises on any transport/HTTP failure."""
     token = base64.b64encode(
         ("%s:%s" % (cfg.B2_PROBE_KEY_ID, cfg.B2_PROBE_APPLICATION_KEY)).encode()
@@ -51,7 +53,7 @@ def b2_storage_api(auth: dict) -> tuple[str | None, str | None, str | None]:
     return api_url, auth.get("authorizationToken"), bucket_id
 
 
-def b2_storage_usage(now: float | None = None) -> tuple[bool, str]:
+def b2_storage_usage(cfg: Config, now: float | None = None) -> tuple[bool, str]:
     """Throttled B2 storage-headroom probe. (ok, msg).
 
     SUCCESSES are cached for B2_STORAGE_INTERVAL_S and a failure is not, the
@@ -71,14 +73,14 @@ def b2_storage_usage(now: float | None = None) -> tuple[bool, str]:
             (now - _b2_storage["ts"]) / 3600,
         )
     try:
-        api_url, token, bucket_id = b2_storage_api(b2_authorize_data())
+        api_url, token, bucket_id = b2_storage_api(b2_authorize_data(cfg))
         if not api_url or not token:
             raise RuntimeError("B2 auth response carried no storage apiUrl/token")
         if not bucket_id:
             raise RuntimeError(
                 "B2 key is not bucket-scoped (no bucketId) — cannot size a bucket"
             )
-        pages, truncated = b2_list_versions(api_url, token, bucket_id)
+        pages, truncated = b2_list_versions(cfg, api_url, token, bucket_id)
         used, versions = b2_sum_versions(pages)
         ok, msg = b2_storage_verdict(
             used,
@@ -97,7 +99,7 @@ def b2_storage_usage(now: float | None = None) -> tuple[bool, str]:
 
 
 def b2_list_versions(
-    api_url: str, token: str, bucket_id: str
+    cfg: Config, api_url: str, token: str, bucket_id: str
 ) -> tuple[list[dict], bool]:
     """(pages, truncated) — every b2_list_file_versions page for the bucket.
 
@@ -126,11 +128,11 @@ def b2_list_versions(
     return pages, True
 
 
-def check_b2_storage() -> tuple[bool, str]:
-    return b2_storage_usage()
+def check_b2_storage(cfg: Config) -> tuple[bool, str]:
+    return b2_storage_usage(cfg)
 
 
-def b2_authorize() -> tuple[bool, str]:
+def b2_authorize(cfg: Config) -> tuple[bool, str]:
     """Authenticate against B2. (ok, msg) — the msg carries B2's own error text on failure.
 
     Basic auth with the key id + application key is the whole protocol for b2_authorize_account.
@@ -154,7 +156,7 @@ def b2_authorize() -> tuple[bool, str]:
     return True, "B2 reachable"
 
 
-def b2_reachable(now: float | None = None) -> tuple[bool, str]:
+def b2_reachable(cfg: Config, now: float | None = None) -> tuple[bool, str]:
     """Throttled B2 reachability probe — the gate for the B2_DEPENDENT checks. (ok, msg).
 
     Empty credentials -> disabled (stays up), like check_n8n's empty API key. Outcomes are cached
@@ -191,7 +193,7 @@ def b2_reachable(now: float | None = None) -> tuple[bool, str]:
             (now - _b2_probe["ts"]) / 60,
         )
     try:
-        ok, msg = b2_authorize()
+        ok, msg = b2_authorize(cfg)
         ttl = cfg.B2_PROBE_INTERVAL_S
     except urllib.error.HTTPError as e:
         # B2 answered, so the call was billed — hold the full interval.
@@ -206,5 +208,5 @@ def b2_reachable(now: float | None = None) -> tuple[bool, str]:
     return ok, msg
 
 
-def check_b2_reachable() -> tuple[bool, str]:
-    return b2_reachable()
+def check_b2_reachable(cfg: Config) -> tuple[bool, str]:
+    return b2_reachable(cfg)

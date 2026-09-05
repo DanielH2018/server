@@ -11,10 +11,11 @@ import os
 import time
 from pathlib import Path
 
+from dataclasses import replace
+
 import pytest
 import yaml
 
-import bridge.config
 import checks.service
 import check
 
@@ -30,12 +31,12 @@ _REPO = Path(__file__).resolve().parents[5]
 # unproven, which is the only failure mode that matters here.
 
 
-def _stamp(tmp_path, monkeypatch, body, mode=0o644, name="last-success-list-only"):
+def _stamp(cfg, tmp_path, body, mode=0o644, name="last-success-list-only"):
+    """Write a drill stamp under tmp_path and return the config that reads it."""
     p = tmp_path / name
     p.write_text(body)
     p.chmod(mode)
-    monkeypatch.setattr(bridge.config, "ETCD_DRILL_STATE_DIR", str(tmp_path))
-    return p
+    return replace(cfg, ETCD_DRILL_STATE_DIR=str(tmp_path))
 
 
 def _stamp_body(age_days, mode="list-only"):
@@ -43,22 +44,22 @@ def _stamp_body(age_days, mode="list-only"):
     return "mode=%s\nsnapshot=x.zip\nutc=whenever\nepoch=%f\n" % (mode, epoch)
 
 
-def test_etcd_drill_passes_on_a_recent_stamp(tmp_path, monkeypatch):
-    _stamp(tmp_path, monkeypatch, _stamp_body(1))
-    ok, msg = checks.service.check_etcd_restore_drill()
+def test_etcd_drill_passes_on_a_recent_stamp(tmp_path, monkeypatch, cfg):
+    cfg = _stamp(cfg, tmp_path, _stamp_body(1))
+    ok, msg = checks.service.check_etcd_restore_drill(cfg)
     assert ok is True
     assert "1.0 days ago" in msg
 
 
-def test_etcd_drill_fails_when_it_has_never_run(tmp_path, monkeypatch):
+def test_etcd_drill_fails_when_it_has_never_run(tmp_path, monkeypatch, cfg):
     """The state most worth reporting, and the one `[[ -f $STAMP ]] && check_age` reports green."""
-    monkeypatch.setattr(bridge.config, "ETCD_DRILL_STATE_DIR", str(tmp_path))
-    ok, msg = checks.service.check_etcd_restore_drill()
+    cfg = replace(cfg, ETCD_DRILL_STATE_DIR=str(tmp_path))
+    ok, msg = checks.service.check_etcd_restore_drill(cfg)
     assert ok is False
     assert "has ever passed" in msg
 
 
-def test_etcd_drill_fails_when_the_stamp_is_unreadable(tmp_path, monkeypatch):
+def test_etcd_drill_fails_when_the_stamp_is_unreadable(tmp_path, monkeypatch, cfg):
     """An unreadable stamp is not hypothetical, and must report distinctly from an absent one.
 
     The first real run wrote 0640 root:root under UMASK 027 while this pod runs as uid 1000. An
@@ -67,39 +68,46 @@ def test_etcd_drill_fails_when_the_stamp_is_unreadable(tmp_path, monkeypatch):
     """
     if os.geteuid() == 0:
         pytest.skip("root ignores the mode bits this asserts")
-    _stamp(tmp_path, monkeypatch, _stamp_body(1), mode=0o000)
-    ok, msg = checks.service.check_etcd_restore_drill()
+    cfg = _stamp(cfg, tmp_path, _stamp_body(1), mode=0o000)
+    ok, msg = checks.service.check_etcd_restore_drill(cfg)
     assert ok is False
     assert "unreadable" in msg
 
 
-def test_etcd_drill_fails_on_a_stale_stamp(tmp_path, monkeypatch):
-    _stamp(tmp_path, monkeypatch, _stamp_body(9))
-    ok, msg = checks.service.check_etcd_restore_drill()
+def test_etcd_drill_fails_on_a_stale_stamp(tmp_path, monkeypatch, cfg):
+    cfg = _stamp(cfg, tmp_path, _stamp_body(9))
+    ok, msg = checks.service.check_etcd_restore_drill(cfg)
     assert ok is False
     assert "9.0 days ago" in msg
 
 
-def test_etcd_drill_fails_on_an_unparseable_stamp(tmp_path, monkeypatch):
-    _stamp(tmp_path, monkeypatch, "mode=list-only\nsnapshot=x.zip\n")
-    ok, msg = checks.service.check_etcd_restore_drill()
+def test_etcd_drill_fails_on_an_unparseable_stamp(tmp_path, monkeypatch, cfg):
+    cfg = _stamp(cfg, tmp_path, "mode=list-only\nsnapshot=x.zip\n")
+    ok, msg = checks.service.check_etcd_restore_drill(cfg)
     assert ok is False
     assert "epoch" in msg
 
 
-def test_etcd_drill_never_accepts_the_full_stamp_as_coverage(tmp_path, monkeypatch):
+def test_etcd_drill_never_accepts_the_full_stamp_as_coverage(
+    tmp_path, monkeypatch, cfg
+):
     """Only the list-only leg is scheduled.
 
     Accepting `last-success-full` would report the object-graph restore as proven when nothing on
     this host has ever proven it — the 'one tier hiding behind another tier's evidence' shape.
     """
-    _stamp(tmp_path, monkeypatch, _stamp_body(1, mode="full"), name="last-success-full")
-    ok, msg = checks.service.check_etcd_restore_drill()
+    cfg = _stamp(
+        cfg,
+        tmp_path,
+        _stamp_body(1, mode="full"),
+        name="last-success-full",
+    )
+    ok, msg = checks.service.check_etcd_restore_drill(cfg)
     assert ok is False, "a full-mode stamp must not satisfy the list-only reader"
     assert "has ever passed" in msg
 
 
-def test_etcd_drill_grace_is_derived_from_the_cron():
+def test_etcd_drill_grace_is_derived_from_the_cron(cfg):
     """A grace period must come from the schedule it interacts with, never be picked round.
 
     The drill runs weekly (Monday 10:20). A window at or under the cadence flaps on every normal
@@ -121,10 +129,10 @@ def test_etcd_drill_grace_is_derived_from_the_cron():
         "ETCD_DRILL_MAX_AGE_S has to move with it"
     )
     cadence_s = 7 * 86400
-    assert bridge.config.ETCD_DRILL_MAX_AGE_S > cadence_s, (
+    assert cfg.ETCD_DRILL_MAX_AGE_S > cadence_s, (
         "a window at or under the 7-day cadence flaps on every normal week"
     )
-    assert bridge.config.ETCD_DRILL_MAX_AGE_S < 2 * cadence_s, (
+    assert cfg.ETCD_DRILL_MAX_AGE_S < 2 * cadence_s, (
         "a window of two cadences tolerates a fully missed run, which is exactly what this "
         "check is for"
     )

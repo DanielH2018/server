@@ -480,3 +480,73 @@ def hwmon_temp_verdict(limits: list[tuple[str, float, float, str]]) -> tuple[boo
         desc,
         coverage,
     )
+
+
+def speedtest_verdict(
+    row: dict | None, min_mbps: float, max_age_h: float, now: datetime | None = None
+) -> tuple[bool, str]:
+    """Pure: judge the newest speedtest-tracker result row. (ok, msg).
+
+    `row` is one element of /api/v1/results' `data`, or None when the app returned no rows at
+    all.
+
+    THE TIMESTAMP IS UTC DESPITE CARRYING NO OFFSET. /api/v1/results serializes `created_at` as
+    a bare "2026-08-24 11:00:00", while /api/speedtest/latest serializes the SAME row as
+    "2026-08-24T06:00:00.000000-05:00" — verified against row id 780 on 2026-08-24. The bare
+    form is therefore UTC, not the DISPLAY_TIMEZONE local time it resembles, and
+    datetime.fromisoformat returns it naive. Attaching UTC explicitly is what keeps the age
+    arm from reading five hours off; a naive value compared against an aware `now` raises
+    instead, which is the safer of the two failures but still not a verdict.
+
+    Arms run status, then age, then floor, in that order and for that reason: `download_bits`
+    is null on a failed row, so a floor comparison ahead of the status arm compares None.
+    """
+    now = now or datetime.now(timezone.utc)
+    if not row:
+        return (
+            False,
+            "speedtest has no results at all — the scheduler has never completed a run",
+        )
+
+    status = row.get("status")
+    created = row.get("created_at")
+
+    if status != "completed":
+        detail = ((row.get("data") or {}).get("message") or "").strip()
+        return False, "last run (%s) %s%s" % (
+            created or "unknown time",
+            status or "has no status",
+            " — " + detail if detail else "",
+        )
+
+    if not created:
+        return False, "last run has no created_at — cannot judge freshness"
+    stamp = datetime.fromisoformat(created.strip().replace(" ", "T"))
+    if stamp.tzinfo is None:
+        stamp = stamp.replace(tzinfo=timezone.utc)
+    age_h = (now - stamp).total_seconds() / 3600
+    if age_h > max_age_h:
+        return (
+            False,
+            "last run was %.1fh ago (> %gh) — the 6-hourly schedule has stopped"
+            % (
+                age_h,
+                max_age_h,
+            ),
+        )
+
+    bits = row.get("download_bits")
+    if bits is None:
+        return False, "last run completed but recorded no download figure"
+    mbps = float(bits) / 1e6
+    server = ((row.get("data") or {}).get("server") or {}).get(
+        "name"
+    ) or "unknown server"
+    if mbps < min_mbps:
+        return False, "download %.1f Mbps (< %g) via %s — %.1fh ago" % (
+            mbps,
+            min_mbps,
+            server,
+            age_h,
+        )
+    return True, "download %.1f Mbps via %s, %.1fh ago" % (mbps, server, age_h)

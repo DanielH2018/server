@@ -4,6 +4,8 @@ These read a sensor and decide. The decision is the whole test — the HTTP glue
 live by `check.py --once` at deploy time, and the run-loop wiring is in test_check_gates.py.
 """
 
+from dataclasses import replace
+
 import pytest
 
 import bridge.parsing
@@ -13,38 +15,38 @@ import checks.host
 import checks.cluster
 
 
-def test_disk_under_threshold_is_ok(monkeypatch):
-    monkeypatch.setattr(bridge.config, "DISK_MOUNTPOINTS", ["/"])
+def test_disk_under_threshold_is_ok(monkeypatch, cfg):
+    cfg = replace(cfg, DISK_MOUNTPOINTS=["/"])
     monkeypatch.setattr(
         bridge.net,
         "prom_vector",
-        lambda q: [
+        lambda _cfg, q: [
             ({"origin": "daniel-box"}, 50.0),
             ({"origin": "daniel-server"}, 44.0),
         ],
     )
-    ok, msg = checks.host.check_disk()
+    ok, msg = checks.host.check_disk(cfg)
     assert ok
     assert "under" in msg
 
 
-def test_disk_over_threshold_names_mount(monkeypatch):
-    monkeypatch.setattr(bridge.config, "DISK_MOUNTPOINTS", ["/"])
+def test_disk_over_threshold_names_mount(monkeypatch, cfg):
+    cfg = replace(cfg, DISK_MOUNTPOINTS=["/"])
     monkeypatch.setattr(
         bridge.net,
         "prom_vector",
-        lambda q: [
+        lambda _cfg, q: [
             ({"origin": "daniel-box"}, 95.0),
             ({"origin": "daniel-server"}, 12.0),
         ],
     )
-    ok, msg = checks.host.check_disk()
+    ok, msg = checks.host.check_disk(cfg)
     assert not ok
     assert "/" in msg
     assert "95" in msg
 
 
-def test_disk_names_the_breaching_host_not_the_healthy_one(monkeypatch):
+def test_disk_names_the_breaching_host_not_the_healthy_one(monkeypatch, cfg):
     """THE BUG THIS PINS (2026-08-15): a full disk was paired with the other host's size.
 
     avail and size were two separate max() queries, so once both estates reported into one
@@ -52,31 +54,31 @@ def test_disk_names_the_breaching_host_not_the_healthy_one(monkeypatch):
     percentage keeps each host's numerator with its own denominator, and the alert has to name WHICH
     host is full to be actionable.
     """
-    monkeypatch.setattr(bridge.config, "DISK_MOUNTPOINTS", ["/"])
+    cfg = replace(cfg, DISK_MOUNTPOINTS=["/"])
     monkeypatch.setattr(
         bridge.net,
         "prom_vector",
-        lambda q: [
+        lambda _cfg, q: [
             ({"origin": "daniel-server"}, 96.0),
             ({"origin": "daniel-box"}, 24.0),
         ],
     )
-    ok, msg = checks.host.check_disk()
+    ok, msg = checks.host.check_disk(cfg)
     assert not ok
     assert "daniel-server" in msg
     assert "daniel-box" not in msg
 
 
-def test_disk_groups_by_origin_so_neither_host_is_unwatched(monkeypatch):
+def test_disk_groups_by_origin_so_neither_host_is_unwatched(monkeypatch, cfg):
     seen = {}
-    monkeypatch.setattr(bridge.config, "DISK_MOUNTPOINTS", ["/"])
+    cfg = replace(cfg, DISK_MOUNTPOINTS=["/"])
 
-    def fake_vector(promql):
+    def fake_vector(_cfg, promql):
         seen["q"] = promql
         return [({"origin": "daniel-box"}, 10.0)]
 
     monkeypatch.setattr(bridge.net, "prom_vector", fake_vector)
-    checks.host.check_disk()
+    checks.host.check_disk(cfg)
     assert "by (origin)" in seen["q"]
     # The division must be inside the query, so the two series are paired by Prometheus on all
     # their labels rather than by two independent aggregates here.
@@ -84,45 +86,45 @@ def test_disk_groups_by_origin_so_neither_host_is_unwatched(monkeypatch):
     assert "node_filesystem_size_bytes" in seen["q"]
 
 
-def test_disk_metric_unavailable_alerts(monkeypatch):
-    monkeypatch.setattr(bridge.config, "DISK_MOUNTPOINTS", ["/"])
-    monkeypatch.setattr(bridge.net, "prom_vector", lambda q: [])
-    ok, msg = checks.host.check_disk()
+def test_disk_metric_unavailable_alerts(monkeypatch, cfg):
+    cfg = replace(cfg, DISK_MOUNTPOINTS=["/"])
+    monkeypatch.setattr(bridge.net, "prom_vector", lambda _cfg, q: [])
+    ok, msg = checks.host.check_disk(cfg)
     assert not ok
     assert "unavailable" in msg
 
 
-def test_mem_names_the_breaching_host(monkeypatch):
+def test_mem_names_the_breaching_host(monkeypatch, cfg):
     monkeypatch.setattr(
         bridge.net,
         "prom_vector",
-        lambda q: [
+        lambda _cfg, q: [
             ({"origin": "daniel-server"}, 92.0),
             ({"origin": "daniel-box"}, 30.0),
         ],
     )
-    ok, msg = checks.host.check_mem()
+    ok, msg = checks.host.check_mem(cfg)
     assert not ok
     assert "daniel-server" in msg
 
 
-def test_mem_reports_the_worst_host_when_all_are_healthy(monkeypatch):
+def test_mem_reports_the_worst_host_when_all_are_healthy(monkeypatch, cfg):
     monkeypatch.setattr(
         bridge.net,
         "prom_vector",
-        lambda q: [
+        lambda _cfg, q: [
             ({"origin": "daniel-server"}, 41.0),
             ({"origin": "daniel-box"}, 63.0),
         ],
     )
-    ok, msg = checks.host.check_mem()
+    ok, msg = checks.host.check_mem(cfg)
     assert ok
     assert "63" in msg
 
 
-def test_mem_metric_unavailable_alerts(monkeypatch):
-    monkeypatch.setattr(bridge.net, "prom_vector", lambda q: [])
-    ok, msg = checks.host.check_mem()
+def test_mem_metric_unavailable_alerts(monkeypatch, cfg):
+    monkeypatch.setattr(bridge.net, "prom_vector", lambda _cfg, q: [])
+    ok, msg = checks.host.check_mem(cfg)
     assert not ok
     assert "unavailable" in msg
 
@@ -135,9 +137,9 @@ def test_mem_metric_unavailable_alerts(monkeypatch):
         (None, False, "unavailable"),
     ],
 )
-def test_cert(monkeypatch, days_left, ok, expect):
-    monkeypatch.setattr(bridge.net, "prom_scalar", lambda *a, **k: days_left)
-    result_ok, msg = checks.host.check_cert()
+def test_cert(monkeypatch, days_left, ok, expect, cfg):
+    monkeypatch.setattr(bridge.net, "prom_scalar", lambda _cfg, *a, **k: days_left)
+    result_ok, msg = checks.host.check_cert(cfg)
     assert result_ok is ok
     assert expect in msg
 
@@ -149,82 +151,82 @@ def _reset_origin_streaks():
     checks.host._host_origin_streaks.clear()
 
 
-def test_mem_pages_when_a_host_stops_reporting(monkeypatch):
+def test_mem_pages_when_a_host_stops_reporting(monkeypatch, cfg):
     _reset_origin_streaks()
-    monkeypatch.setattr(bridge.config, "HOST_ORIGINS_CONSECUTIVE", 1)
+    cfg = replace(cfg, HOST_ORIGINS_CONSECUTIVE=1)
     monkeypatch.setattr(
-        bridge.net, "prom_vector", lambda q: [({"origin": "daniel-server"}, 21.0)]
+        bridge.net, "prom_vector", lambda _cfg, q: [({"origin": "daniel-server"}, 21.0)]
     )
-    ok, msg = checks.host.check_mem()
+    ok, msg = checks.host.check_mem(cfg)
     assert not ok
     assert "1 of 2" in msg
     assert "daniel-server" in msg
 
 
-def test_disk_pages_when_a_host_stops_reporting(monkeypatch):
+def test_disk_pages_when_a_host_stops_reporting(monkeypatch, cfg):
     _reset_origin_streaks()
-    monkeypatch.setattr(bridge.config, "DISK_MOUNTPOINTS", ["/"])
-    monkeypatch.setattr(bridge.config, "HOST_ORIGINS_CONSECUTIVE", 1)
+    cfg = replace(cfg, DISK_MOUNTPOINTS=["/"], HOST_ORIGINS_CONSECUTIVE=1)
     monkeypatch.setattr(
-        bridge.net, "prom_vector", lambda q: [({"origin": "daniel-server"}, 30.0)]
+        bridge.net, "prom_vector", lambda _cfg, q: [({"origin": "daniel-server"}, 30.0)]
     )
-    ok, msg = checks.host.check_disk()
+    ok, msg = checks.host.check_disk(cfg)
     assert not ok
     assert "1 of 2" in msg
 
 
-def test_a_reboot_length_shortfall_does_not_page(monkeypatch):
+def test_a_reboot_length_shortfall_does_not_page(monkeypatch, cfg):
     """The weekly reboot removes a node's node-exporter for minutes against a 5m check loop, so a
     bare floor would page every Sunday. Only the HOST_ORIGINS_CONSECUTIVE'th cycle fails."""
     _reset_origin_streaks()
-    monkeypatch.setattr(bridge.config, "HOST_ORIGINS_CONSECUTIVE", 3)
+    cfg = replace(cfg, HOST_ORIGINS_CONSECUTIVE=3)
     monkeypatch.setattr(
-        bridge.net, "prom_vector", lambda q: [({"origin": "daniel-server"}, 21.0)]
+        bridge.net, "prom_vector", lambda _cfg, q: [({"origin": "daniel-server"}, 21.0)]
     )
-    assert checks.host.check_mem()[0] is True
-    assert checks.host.check_mem()[0] is True
-    assert checks.host.check_mem()[0] is False
+    assert checks.host.check_mem(cfg)[0] is True
+    assert checks.host.check_mem(cfg)[0] is True
+    assert checks.host.check_mem(cfg)[0] is False
 
 
-def test_full_coverage_resets_the_shortfall_streak(monkeypatch):
+def test_full_coverage_resets_the_shortfall_streak(monkeypatch, cfg):
     _reset_origin_streaks()
-    monkeypatch.setattr(bridge.config, "HOST_ORIGINS_CONSECUTIVE", 2)
+    cfg = replace(cfg, HOST_ORIGINS_CONSECUTIVE=2)
     one = [({"origin": "daniel-server"}, 21.0)]
     both = [({"origin": "daniel-server"}, 21.0), ({"origin": "daniel-box"}, 30.0)]
-    monkeypatch.setattr(bridge.net, "prom_vector", lambda q: one)
-    assert checks.host.check_mem()[0] is True
-    monkeypatch.setattr(bridge.net, "prom_vector", lambda q: both)
-    assert checks.host.check_mem()[0] is True
-    monkeypatch.setattr(bridge.net, "prom_vector", lambda q: one)
-    assert checks.host.check_mem()[0] is True
+    monkeypatch.setattr(bridge.net, "prom_vector", lambda _cfg, q: one)
+    assert checks.host.check_mem(cfg)[0] is True
+    monkeypatch.setattr(bridge.net, "prom_vector", lambda _cfg, q: both)
+    assert checks.host.check_mem(cfg)[0] is True
+    monkeypatch.setattr(bridge.net, "prom_vector", lambda _cfg, q: one)
+    assert checks.host.check_mem(cfg)[0] is True
 
 
-def test_a_breaching_present_host_outranks_the_coverage_complaint(monkeypatch):
+def test_a_breaching_present_host_outranks_the_coverage_complaint(monkeypatch, cfg):
     """A survivor that is genuinely full must still page as full.
 
     Ordering the floor ahead of the breach scan would have replaced a real disk-full alert with
     'only 1 of 2 hosts reporting'.
     """
     _reset_origin_streaks()
-    monkeypatch.setattr(bridge.config, "DISK_MOUNTPOINTS", ["/"])
-    monkeypatch.setattr(bridge.config, "HOST_ORIGINS_CONSECUTIVE", 1)
+    cfg = replace(cfg, DISK_MOUNTPOINTS=["/"], HOST_ORIGINS_CONSECUTIVE=1)
     monkeypatch.setattr(
-        bridge.net, "prom_vector", lambda q: [({"origin": "daniel-server"}, 97.0)]
+        bridge.net, "prom_vector", lambda _cfg, q: [({"origin": "daniel-server"}, 97.0)]
     )
-    ok, msg = checks.host.check_disk()
+    ok, msg = checks.host.check_disk(cfg)
     assert not ok
     assert "97" in msg
 
     _reset_origin_streaks()
     monkeypatch.setattr(
-        bridge.net, "prom_vector", lambda q: [({"origin": "daniel-server"}, 99.0)]
+        bridge.net, "prom_vector", lambda _cfg, q: [({"origin": "daniel-server"}, 99.0)]
     )
-    ok, msg = checks.host.check_mem()
+    ok, msg = checks.host.check_mem(cfg)
     assert not ok
     assert "99" in msg
 
 
-def test_crash_loop_arm_gates_on_a_recent_restart_not_just_the_hour_window(monkeypatch):
+def test_crash_loop_arm_gates_on_a_recent_restart_not_just_the_hour_window(
+    monkeypatch, cfg
+):
     """A recovered pod must drop out of the arm instead of holding the tile red for an hour.
 
     `increase(...[1h]) > 3` is a pure lookback, so zigbee2mqtt kept `k3s Workload Health` DOWN
@@ -236,27 +238,27 @@ def test_crash_loop_arm_gates_on_a_recent_restart_not_just_the_hour_window(monke
     """
     queries = []
 
-    def record(promql, *a, **k):
+    def record(_cfg, promql, *a, **k):
         queries.append(promql)
         return []
 
-    monkeypatch.setattr(bridge.config, "CLUSTER_PROM_URL", "http://cluster-prom:9090")
+    cfg = replace(cfg, CLUSTER_PROM_URL="http://cluster-prom:9090")
     monkeypatch.setattr(bridge.net, "prom_vector", record)
-    monkeypatch.setattr(bridge.net, "prom_scalar", lambda *a, **k: 66.0)
-    checks.cluster.check_k8s_workloads()
+    monkeypatch.setattr(bridge.net, "prom_scalar", lambda _cfg, *a, **k: 66.0)
+    checks.cluster.check_k8s_workloads(cfg)
 
     restart_queries = [q for q in queries if "status_restarts_total" in q]
     assert len(restart_queries) == 1
     q = restart_queries[0]
     # Both windows present, and the recency one joined with `and` so it filters rather than
     # replaces — an `or` here would widen the arm instead of narrowing it.
-    assert "[%s]" % bridge.config.K8S_RESTART_WINDOW in q
-    assert "[%s]) > 0" % bridge.config.K8S_RESTART_RECENT_WINDOW in q
+    assert "[%s]" % cfg.K8S_RESTART_WINDOW in q
+    assert "[%s]) > 0" % cfg.K8S_RESTART_RECENT_WINDOW in q
     assert " and " in q
     assert " or " not in q
 
 
-def test_the_recency_window_is_wider_than_the_worst_observed_restart_spacing():
+def test_the_recency_window_is_wider_than_the_worst_observed_restart_spacing(cfg):
     """Below the spacing the arm flaps, and `k3s Workload Health` is max_retries: 0.
 
     The 2026-08-13 homepage incident spread 31 restarts over a night, ~15-19 min apart. A
@@ -267,17 +269,14 @@ def test_the_recency_window_is_wider_than_the_worst_observed_restart_spacing():
     # 30m, not 20m: the observed spacing RANGE tops out at ~19 min, so a 20m floor sits at the
     # edge of the flapping band rather than outside it — and would let a later edit to 20m or
     # 25m pass the very test written to stop it.
-    assert (
-        bridge.parsing.duration_seconds(bridge.config.K8S_RESTART_RECENT_WINDOW)
-        >= 30 * 60
-    )
+    assert bridge.parsing.duration_seconds(cfg.K8S_RESTART_RECENT_WINDOW) >= 30 * 60
     # And it must still be shorter than the evidence window, or it gates nothing.
     assert bridge.parsing.duration_seconds(
-        bridge.config.K8S_RESTART_RECENT_WINDOW
-    ) < bridge.parsing.duration_seconds(bridge.config.K8S_RESTART_WINDOW)
+        cfg.K8S_RESTART_RECENT_WINDOW
+    ) < bridge.parsing.duration_seconds(cfg.K8S_RESTART_WINDOW)
 
 
-def test_host_origins_floor_defaults_to_both_nodes():
+def test_host_origins_floor_defaults_to_both_nodes(cfg):
     """The floor is 2 because node-exporter is a DaemonSet on both nodes.
 
     At 1 the arm is inert and check_disk/check_mem silently report the survivor's numbers as the
@@ -285,7 +284,7 @@ def test_host_origins_floor_defaults_to_both_nodes():
     unwatched for 5.4h behind two green tiles. Every other arm here monkeypatches the constant, so
     nothing pinned the shipped value (2026-08-23b review L3).
     """
-    assert bridge.config.HOST_ORIGINS_MIN == 2, (
+    assert cfg.HOST_ORIGINS_MIN == 2, (
         "HOST_ORIGINS_MIN must default to 2 — one per node. Below that the host-coverage arm "
         "cannot fire and both host checks go back to monitoring whichever node still reports."
     )
@@ -321,16 +320,16 @@ def test_host_origins_floor_is_overridable_from_the_env_secret():
 # dropped without a red test.
 
 
-def test_disk_query_excludes_the_pi_origin(monkeypatch):
+def test_disk_query_excludes_the_pi_origin(monkeypatch, cfg):
     seen = []
-    monkeypatch.setattr(bridge.config, "DISK_MOUNTPOINTS", ["/"])
+    cfg = replace(cfg, DISK_MOUNTPOINTS=["/"])
     monkeypatch.setattr(
         bridge.net,
         "prom_vector",
-        lambda q: (seen.append(q), [({"origin": "daniel-box"}, 10.0)])[1],
+        lambda _cfg, q: (seen.append(q), [({"origin": "daniel-box"}, 10.0)])[1],
     )
 
-    checks.host.check_disk()
+    checks.host.check_disk(cfg)
 
     assert seen, "check_disk must query Prometheus"
     assert 'origin!~"daniel-pi"' in seen[0], (
@@ -338,15 +337,15 @@ def test_disk_query_excludes_the_pi_origin(monkeypatch):
     )
 
 
-def test_mem_query_excludes_the_pi_origin(monkeypatch):
+def test_mem_query_excludes_the_pi_origin(monkeypatch, cfg):
     seen = []
     monkeypatch.setattr(
         bridge.net,
         "prom_vector",
-        lambda q: (seen.append(q), [({"origin": "daniel-box"}, 10.0)])[1],
+        lambda _cfg, q: (seen.append(q), [({"origin": "daniel-box"}, 10.0)])[1],
     )
 
-    checks.host.check_mem()
+    checks.host.check_mem(cfg)
 
     assert seen, "check_mem must query Prometheus"
     assert seen[0].count('origin!~"daniel-pi"') == 2, (
@@ -356,7 +355,7 @@ def test_mem_query_excludes_the_pi_origin(monkeypatch):
     )
 
 
-def test_the_exclusion_keeps_series_that_carry_no_origin_label():
+def test_the_exclusion_keeps_series_that_carry_no_origin_label(cfg):
     """`!~` on a named host must not filter out an unlabelled series.
 
     Prometheus reads an absent label as "", which does not match "daniel-pi" — so an
@@ -364,7 +363,7 @@ def test_the_exclusion_keeps_series_that_carry_no_origin_label():
     `origin=~"daniel-box|daniel-server"` allowlist, silently drops them instead, and the
     difference only shows up on a Prometheus that applies no origin label at all.
     """
-    sel = bridge.net.host_metric_sel()
+    sel = bridge.net.host_metric_sel(cfg)
 
     assert sel.startswith("{") and sel.endswith("}")
     assert "!~" in sel, "must be a negative match, not an origin allowlist"
@@ -391,14 +390,12 @@ def test_the_exclusion_is_rendered_in_the_env_secret():
     )
 
 
-def test_the_exclusion_is_overridable_without_editing_the_file(monkeypatch):
+def test_the_exclusion_is_overridable_without_editing_the_file(monkeypatch, cfg):
     """An operator can widen or clear the exclusion from the env, like every other threshold."""
-    monkeypatch.setattr(
-        bridge.config, "HOST_METRIC_ORIGIN_EXCLUDE", "daniel-pi|daniel-spare"
-    )
-    assert 'origin!~"daniel-pi|daniel-spare"' in bridge.net.host_metric_sel()
+    cfg = replace(cfg, HOST_METRIC_ORIGIN_EXCLUDE="daniel-pi|daniel-spare")
+    assert 'origin!~"daniel-pi|daniel-spare"' in bridge.net.host_metric_sel(cfg)
 
-    monkeypatch.setattr(bridge.config, "HOST_METRIC_ORIGIN_EXCLUDE", "")
-    assert bridge.net.host_metric_sel() == "", (
+    cfg = replace(cfg, HOST_METRIC_ORIGIN_EXCLUDE="")
+    assert bridge.net.host_metric_sel(cfg) == "", (
         "cleared, the selector must vanish entirely rather than render an empty matcher"
     )

@@ -7,26 +7,32 @@ without them.
 
 import importlib
 
+from dataclasses import replace
+
 import pytest
 
 import bridge.common
-import bridge.config
+from bridge.config import load_config
 import bridge.net
 import check
 
 
 def _silence(monkeypatch, pushes, ran):
     """Stub the transport and the registry so main() runs one cycle without touching the world."""
-    monkeypatch.setattr(bridge.net, "push", lambda t, ok, m: pushes.append((t, ok, m)))
+    monkeypatch.setattr(
+        bridge.net, "push", lambda _cfg, t, ok, m: pushes.append((t, ok, m))
+    )
     monkeypatch.setattr(bridge.common, "touch_heartbeat", lambda path: None)
-    monkeypatch.setattr(check, "check_prometheus", lambda: (True, "prom ok"))
-    monkeypatch.setattr(check, "check_loki_reachable", lambda: (True, "loki ok"))
-    monkeypatch.setattr(check, "check_b2_reachable", lambda: (True, "b2 ok"))
-    monkeypatch.setattr(check, "check_cluster_prometheus", lambda: (True, "cluster ok"))
-    monkeypatch.setattr(bridge.net, "prom_vector", lambda *a, **k: [])
+    monkeypatch.setattr(check, "check_prometheus", lambda _cfg: (True, "prom ok"))
+    monkeypatch.setattr(check, "check_loki_reachable", lambda _cfg: (True, "loki ok"))
+    monkeypatch.setattr(check, "check_b2_reachable", lambda _cfg: (True, "b2 ok"))
+    monkeypatch.setattr(
+        check, "check_cluster_prometheus", lambda _cfg: (True, "cluster ok")
+    )
+    monkeypatch.setattr(bridge.net, "prom_vector", lambda _cfg, *a, **k: [])
 
     def _mk(name):
-        def fn():
+        def fn(_cfg):
             ran.append(name)
             return True, "%s ok" % name
 
@@ -35,7 +41,7 @@ def _silence(monkeypatch, pushes, ran):
     monkeypatch.setattr(check, "CHECKS", [check.Check("disk", "tok_disk", _mk("disk"))])
 
 
-def test_no_arguments_means_loop_forever_and_push(monkeypatch):
+def test_no_arguments_means_loop_forever_and_push(monkeypatch, cfg):
     """The pod's own invocation: --once is off, --dry-run is off, so it loops and pushes.
 
     The Deployment runs `python /app/check.py` with no arguments, so "keeps looping" is the one
@@ -55,7 +61,7 @@ def test_no_arguments_means_loop_forever_and_push(monkeypatch):
         pass
 
     def _sleep(seconds):
-        assert seconds == bridge.config.INTERVAL
+        assert seconds == cfg.INTERVAL
         raise _Slept
 
     monkeypatch.setattr(check.time, "sleep", _sleep)
@@ -89,12 +95,12 @@ def test_dry_run_evaluates_every_check_and_pushes_nothing(monkeypatch):
     assert pushes == []
 
 
-def test_check_flag_is_repeatable_and_filters_like_checks_only(monkeypatch):
+def test_check_flag_is_repeatable_and_filters_like_checks_only(monkeypatch, cfg):
     pushes, ran = [], []
     _silence(monkeypatch, pushes, ran)
 
     def _mk(name):
-        def fn():
+        def fn(_cfg):
             ran.append(name)
             return True, "%s ok" % name
 
@@ -113,8 +119,7 @@ def test_check_flag_is_repeatable_and_filters_like_checks_only(monkeypatch):
             check.Check("host_temp", "tok_temp", _mk("host_temp")),
         ],
     )
-    monkeypatch.setattr(bridge.config, "CHECKS_ONLY", frozenset())
-    monkeypatch.setattr(bridge.config, "CHECKS_SKIP", frozenset())
+    cfg = replace(cfg, CHECKS_ONLY=frozenset(), CHECKS_SKIP=frozenset())
     # No need to also name `prometheus`: disk and memory are PROM_DEPENDENT, and
     # expand_gates_for_cli unions their gate in automatically (see the dedicated test below for
     # the regression this guards against).
@@ -124,7 +129,7 @@ def test_check_flag_is_repeatable_and_filters_like_checks_only(monkeypatch):
     assert "host_temp" not in ran
 
 
-def test_check_flag_unions_in_the_gate_a_named_check_depends_on(monkeypatch):
+def test_check_flag_unions_in_the_gate_a_named_check_depends_on(monkeypatch, cfg):
     """`--check disk` alone must not trip the "gate disabled under its dependents" refusal.
 
     disk is PROM_DEPENDENT; naming only it used to leave `prometheus` out of `only`, and
@@ -137,7 +142,7 @@ def test_check_flag_unions_in_the_gate_a_named_check_depends_on(monkeypatch):
     _silence(monkeypatch, pushes, ran)
 
     def _mk(name):
-        def fn():
+        def fn(_cfg):
             ran.append(name)
             return True, "%s ok" % name
 
@@ -152,8 +157,6 @@ def test_check_flag_unions_in_the_gate_a_named_check_depends_on(monkeypatch):
             check.Check("memory", "tok_memory", _mk("memory")),
         ],
     )
-    monkeypatch.setattr(bridge.config, "CHECKS_ONLY", frozenset())
-    monkeypatch.setattr(bridge.config, "CHECKS_SKIP", frozenset())
     assert check.main(["--once", "--dry-run", "--check", "disk"]) == 0
     assert sorted(ran) == ["disk", "prometheus"]
     assert "memory" not in ran
@@ -164,15 +167,18 @@ def test_checks_only_env_keeps_the_strict_gate_contract(monkeypatch):
 
     An operator setting CHECKS_ONLY by hand is expected to spell the gate out themselves, same
     as before expand_gates_for_cli existed; only the CLI convenience changed.
+
+    The filter is handed to `main` as the environment it would really read, because that is
+    where `load_config` runs — narrowing a Config the test built would not reach it.
     """
     pushes, ran = [], []
     _silence(monkeypatch, pushes, ran)
     monkeypatch.setattr(
-        check, "CHECKS", [check.Check("disk", "tok_disk", lambda: (True, "disk ok"))]
+        check,
+        "CHECKS",
+        [check.Check("disk", "tok_disk", lambda _cfg: (True, "disk ok"))],
     )
-    monkeypatch.setattr(bridge.config, "CHECKS_ONLY", frozenset({"disk"}))
-    monkeypatch.setattr(bridge.config, "CHECKS_SKIP", frozenset())
-    assert check.main(["--once"]) == 2
+    assert check.main(["--once"], env={"CHECKS_ONLY": "disk"}) == 2
     assert ran == []
 
 
@@ -198,56 +204,44 @@ def test_a_gate_disabled_under_its_dependents_exits_two(monkeypatch):
 # ── bridge/common.py and bridge/config.py must never raise at import ────────────────────────
 
 
-def _reload_config():
-    """Reload bridge.config, resetting bridge.common's CONFIG_PROBLEMS first.
+def test_a_malformed_number_is_recorded_rather_than_raised():
+    """Building the config with a garbage numeric must succeed and record one problem.
 
-    CONFIG_PROBLEMS now lives in bridge/common.py (see its header), and bridge.config only
-    from-imports the same list object — reloading bridge.config alone would keep appending to
-    THAT list across tests instead of starting fresh, since bridge.common itself is not
-    reloaded. Reloading bridge.common first re-executes its `CONFIG_PROBLEMS: list[str] = []`
-    line, giving each reload a clean list that bridge.config's own from-import then picks up.
+    A ValueError here used to kill the pod during import, before the heartbeat file existed and
+    before any monitor could be told, with a traceback naming neither the variable nor its
+    value. The environment is stated to `load_config` rather than set on the process and the
+    module reloaded, so nothing outside this call sees it.
     """
-    importlib.reload(bridge.common)
-    return importlib.reload(bridge.config)
+    cfg = load_config({"INTERVAL": "five minutes"})
+    assert cfg.INTERVAL == 300  # the documented default, not a crash
+    assert any("INTERVAL=" in p for p in cfg.CONFIG_PROBLEMS)
 
 
-def test_a_malformed_number_is_recorded_rather_than_raised(monkeypatch):
-    """Importing config with a garbage numeric must succeed and record one problem.
-
-    The check that matters is the reload: a ValueError here used to kill the pod during import,
-    before the heartbeat file existed and before any monitor could be told, with a traceback
-    naming neither the variable nor its value.
-    """
-    monkeypatch.setenv("INTERVAL", "five minutes")
-    cfg = _reload_config()
-    try:
-        assert cfg.INTERVAL == 300  # the documented default, not a crash
-        assert any("INTERVAL=" in p for p in cfg.CONFIG_PROBLEMS)
-    finally:
-        monkeypatch.delenv("INTERVAL")
-        _reload_config()
-
-
-def test_a_well_formed_config_records_no_problems(monkeypatch):
-    """The accepting half: the deployed environment must report an empty problem list."""
-    cfg = _reload_config()
-    assert cfg.CONFIG_PROBLEMS == []
+def test_a_well_formed_config_records_no_problems():
+    """The accepting half: a clean environment must report an empty problem list."""
+    cfg = load_config({"INTERVAL": "300"})
+    assert cfg.CONFIG_PROBLEMS == ()
     assert cfg.INTERVAL == 300
 
 
-def test_a_malformed_http_timeout_is_recorded_rather_than_raised(monkeypatch):
+def test_a_malformed_http_timeout_reaches_the_same_report(monkeypatch):
     """HTTP_TIMEOUT lives in bridge/common.py (shared with autofix-bridge), not bridge/config.py
-    — same must-not-raise contract as INTERVAL above, now guarded on the module that actually
-    parses it.
+    — same must-not-raise contract as INTERVAL above, and it must reach the SAME exit-2 report.
+
+    `load_config` takes bridge.common's own problem list as `problems`, which is the only thing
+    carrying a bad HTTP_TIMEOUT into `Config.CONFIG_PROBLEMS`; without it a malformed timeout
+    would fall back silently and the operator would never be told.
     """
     monkeypatch.setenv("HTTP_TIMEOUT", "abc")
     common = importlib.reload(bridge.common)
     try:
         assert common.HTTP_TIMEOUT == 10  # the documented default, not a crash
         assert any("HTTP_TIMEOUT=" in p for p in common.CONFIG_PROBLEMS)
+        carried = load_config({}, problems=common.CONFIG_PROBLEMS)
+        assert any("HTTP_TIMEOUT=" in p for p in carried.CONFIG_PROBLEMS)
     finally:
         monkeypatch.delenv("HTTP_TIMEOUT")
-        _reload_config()
+        importlib.reload(bridge.common)
 
 
 def test_main_reports_config_problems_and_exits_two(monkeypatch):
@@ -257,9 +251,6 @@ def test_main_reports_config_problems_and_exits_two(monkeypatch):
     monkeypatch.setattr(
         bridge.common, "log", lambda *a: logged.append(" ".join(map(str, a)))
     )
-    monkeypatch.setattr(
-        bridge.config, "CONFIG_PROBLEMS", ["DISK_MAX_PCT='ninety' is not a number"]
-    )
-    assert check.main(["--once"]) == 2
+    assert check.main(["--once"], env={"DISK_MAX_PCT": "ninety"}) == 2
     assert ran == []
     assert any("DISK_MAX_PCT" in line for line in logged)

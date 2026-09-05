@@ -7,6 +7,8 @@ same shape — a counter that must be read over a window rather than instantaneo
 
 from pathlib import Path
 
+from dataclasses import replace
+
 import pytest
 
 import bridge.config
@@ -85,7 +87,9 @@ def test_down_streak(
 def test_apply_startup_grace_single_down_is_suppressed():
     # One down cycle (a dependency still starting after the reboot) must NOT page.
     streaks = {}
-    ok, msg = check.apply_startup_grace("n8n", False, "Connection refused", 2, streaks)
+    ok, msg = bridge.streaks.apply_startup_grace(
+        "n8n", False, "Connection refused", 2, streaks
+    )
     assert ok
     assert "1/2" in msg
     assert "startup/redeploy grace" in msg
@@ -95,8 +99,8 @@ def test_apply_startup_grace_single_down_is_suppressed():
 def test_apply_startup_grace_second_consecutive_down_pages():
     # Default GRACE_CYCLES=2: the 2nd straight down is a genuinely-dead dependency -> down.
     streaks = {}
-    assert check.apply_startup_grace("n8n", False, "boom", 2, streaks)[0]
-    ok, msg = check.apply_startup_grace("n8n", False, "boom", 2, streaks)
+    assert bridge.streaks.apply_startup_grace("n8n", False, "boom", 2, streaks)[0]
+    ok, msg = bridge.streaks.apply_startup_grace("n8n", False, "boom", 2, streaks)
     assert not ok
     assert "boom" in msg
     assert "(2 cycles)" in msg
@@ -105,12 +109,16 @@ def test_apply_startup_grace_second_consecutive_down_pages():
 def test_apply_startup_grace_ok_resets_streak():
     # down, then ok -> never pages, and the streak restarts so the next down is suppressed again.
     streaks = {}
-    assert check.apply_startup_grace("backup", False, "down", 2, streaks)[0]
-    ok, msg = check.apply_startup_grace("backup", True, "recovered", 2, streaks)
+    assert bridge.streaks.apply_startup_grace("backup", False, "down", 2, streaks)[0]
+    ok, msg = bridge.streaks.apply_startup_grace(
+        "backup", True, "recovered", 2, streaks
+    )
     assert ok
     assert msg == "recovered"
     assert streaks["backup"] == 0
-    ok, msg = check.apply_startup_grace("backup", False, "down again", 2, streaks)
+    ok, msg = bridge.streaks.apply_startup_grace(
+        "backup", False, "down again", 2, streaks
+    )
     assert ok
     assert "1/2" in msg
 
@@ -118,8 +126,8 @@ def test_apply_startup_grace_ok_resets_streak():
 def test_apply_startup_grace_streaks_are_per_name():
     # Each monitor keeps its own streak — one flapping check can't age another toward paging.
     streaks = {}
-    check.apply_startup_grace("n8n", False, "x", 2, streaks)
-    ok, msg = check.apply_startup_grace("arr_queue", False, "y", 2, streaks)
+    bridge.streaks.apply_startup_grace("n8n", False, "x", 2, streaks)
+    ok, msg = bridge.streaks.apply_startup_grace("arr_queue", False, "y", 2, streaks)
     assert ok
     assert "1/2" in msg  # arr_queue is on its own first cycle, not n8n's second
 
@@ -170,35 +178,38 @@ def test_startup_grace_covers_every_ungated_reach_out_check():
     )
 
 
-def _wire_run_once_grace(monkeypatch, results):
+def _wire_run_once_grace(cfg, monkeypatch, results):
     """Drive run_once with Prometheus+Loki UP and one STARTUP_GRACE check whose eval returns
     `results` in order across calls; capture the (ok, msg) pushed for it each cycle."""
-    monkeypatch.setattr(check, "check_prometheus", lambda: (True, "prom ok"))
-    monkeypatch.setattr(bridge.net, "prom_vector", lambda q: [])
-    monkeypatch.setattr(check, "check_loki_reachable", lambda: (True, "loki ok"))
+    monkeypatch.setattr(check, "check_prometheus", lambda _cfg: (True, "prom ok"))
+    monkeypatch.setattr(bridge.net, "prom_vector", lambda _cfg, q: [])
+    monkeypatch.setattr(check, "check_loki_reachable", lambda _cfg: (True, "loki ok"))
     monkeypatch.setattr(check, "PROM_DEPENDENT", frozenset())
     monkeypatch.setattr(check, "LOKI_DEPENDENT", frozenset())
     monkeypatch.setattr(check, "STARTUP_GRACE", frozenset({"n8n"}))
-    monkeypatch.setattr(bridge.config, "GRACE_CYCLES", 2)
-    monkeypatch.setattr(check, "_grace_streaks", {})
+    cfg = replace(cfg, GRACE_CYCLES=2)
+    monkeypatch.setattr(bridge.streaks, "_grace_streaks", {})
     seq = iter(results)
     monkeypatch.setattr(
-        check, "CHECKS", [check.Check("n8n", "tok_n8n", lambda: next(seq))]
+        check, "CHECKS", [check.Check("n8n", "tok_n8n", lambda _cfg: next(seq))]
     )
     pushes = []
-    monkeypatch.setattr(bridge.net, "push", lambda t, ok, m: pushes.append((t, ok, m)))
+    monkeypatch.setattr(
+        bridge.net, "push", lambda _cfg, t, ok, m: pushes.append((t, ok, m))
+    )
     out = []
     for _ in range(len(results)):
-        check.run_once()
+        check.run_once(cfg)
         out.append(next((ok, m) for t, ok, m in pushes if t == "tok_n8n"))
         pushes.clear()
     return out
 
 
-def test_run_once_holds_graced_check_up_on_first_down_then_pages(monkeypatch):
+def test_run_once_holds_graced_check_up_on_first_down_then_pages(monkeypatch, cfg):
     # The weekly-reboot case end to end: first cycle down (dependency mid-start) is held up with a
     # streak msg; a second straight down (dependency really gone) pages with the real reason.
     out = _wire_run_once_grace(
+        cfg,
         monkeypatch,
         [(False, "Connection refused"), (False, "Connection refused")],
     )
@@ -206,9 +217,10 @@ def test_run_once_holds_graced_check_up_on_first_down_then_pages(monkeypatch):
     assert out[1][0] is False and "Connection refused" in out[1][1]
 
 
-def test_run_once_graced_check_recovers_without_paging(monkeypatch):
+def test_run_once_graced_check_recovers_without_paging(monkeypatch, cfg):
     # Down then up (the real reboot recovery) never pushes a down for the graced monitor.
     out = _wire_run_once_grace(
+        cfg,
         monkeypatch,
         [(False, "Connection refused"), (True, "queue clean")],
     )
@@ -268,7 +280,7 @@ def test_shipper_dropped(client_count, server_reasons, ok, must_contain):
         assert s in msg
 
 
-def test_check_shipper_dropped_reads_both_shippers_counters(monkeypatch):
+def test_check_shipper_dropped_reads_both_shippers_counters(monkeypatch, cfg):
     """One scalar query over a __name__ regex, no reason filter, for the CLIENT side.
 
     Both estates ship through Alloy and share `loki_write_dropped_entries_total`, but the
@@ -279,17 +291,17 @@ def test_check_shipper_dropped_reads_both_shippers_counters(monkeypatch):
     """
     queries = []
 
-    def fake_scalar(q):
+    def fake_scalar(_cfg, q):
         queries.append(q)
         return 5000.0
 
-    def fake_vector(q):
+    def fake_vector(_cfg, q):
         queries.append(q)
         return []
 
     monkeypatch.setattr(bridge.net, "prom_scalar", fake_scalar)
     monkeypatch.setattr(bridge.net, "prom_vector", fake_vector)
-    ok, _ = checks.logs.check_shipper_dropped()
+    ok, _ = checks.logs.check_shipper_dropped(cfg)
     assert not ok
     assert any(
         "increase(" in q
@@ -300,21 +312,21 @@ def test_check_shipper_dropped_reads_both_shippers_counters(monkeypatch):
     )
 
 
-def test_check_shipper_dropped_reads_server_side_by_reason(monkeypatch):
+def test_check_shipper_dropped_reads_server_side_by_reason(monkeypatch, cfg):
     """The SERVER-side arm queries Loki's own discard counter, grouped `by (reason)` (#993).
 
     Grouping by reason is what lets a fired alert name the cause (too_far_behind vs a
     throughput/limit reason) instead of just a bare count.
     """
-    monkeypatch.setattr(bridge.net, "prom_scalar", lambda q: 0.0)
+    monkeypatch.setattr(bridge.net, "prom_scalar", lambda _cfg, q: 0.0)
 
-    def fake_vector(q):
+    def fake_vector(_cfg, q):
         assert "sum by (reason)" in q
         assert '{__name__=~"' in q
         assert "loki_discarded_samples_total" in q
         return [({"reason": "too_far_behind"}, 161608.0)]
 
     monkeypatch.setattr(bridge.net, "prom_vector", fake_vector)
-    ok, msg = checks.logs.check_shipper_dropped()
+    ok, msg = checks.logs.check_shipper_dropped(cfg)
     assert not ok
     assert "too_far_behind" in msg
