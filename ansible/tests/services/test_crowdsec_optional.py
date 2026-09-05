@@ -216,22 +216,50 @@ def test_traefik_prestages_the_agent_config_so_the_entrypoint_never_rsyncs() -> 
     )
 
 
-def test_traefik_copies_the_staged_datafiles_in_so_geoip_can_initialise() -> None:
+def _copies_the_staged_datafiles(script: str) -> bool:
+    """True when the script copies the staged datafiles in per file, readable, and never fails.
+
+    Split out from the assertions below so the reject cases can drive it RED. A guard over the
+    rendered tree is only ever observed passing, which is indistinguishable from one that fires
+    on nothing.
+
+    Three properties, each with its own incident behind it. It must read the staged data
+    directory, or it seeds nothing. It must `install -m 644` per file rather than `cp -r`, or
+    the copies keep the 0600 the non-root agent cannot read and `trace/` (0700) fails the run.
+    And it must end in `exit 0`, because both pods roll under Recreate: the old pod is already
+    gone, so an init container that exits non-zero takes the workload down rather than costing
+    one dead parser.
+    """
+    if "/staging/var/lib/crowdsec/data/*" not in script:
+        return False
+    if "install -m 644" not in script:
+        return False
+    if "crowdsec.db*" not in script:
+        return False
+    return script.rstrip().endswith("exit 0")
+
+
+@pytest.mark.parametrize("role", sorted(_FLAGS))
+def test_the_staged_datafiles_are_copied_in_so_geoip_can_initialise(role: str) -> None:
     """The image ships its datafiles 0600 root:root and the entrypoint symlinks them into the
-    data volume, so the non-root agent could not read through the link and GeoIP never
-    initialised (#990). A root init container copies them in world-readable, which also defeats
-    the symlink: the entrypoint skips a name that already exists."""
-    spec = _pod_spec("traefik", True)
-    init = {c["name"]: c for c in spec["initContainers"]}["crowdsec-data-install"]
-    script = init["command"][-1]
-    assert "/staging/var/lib/crowdsec/data/*" in script
-    assert "install -m 644" in script, (
-        "the copies must be readable by the non-root agent"
+    data volume, so the non-root agent cannot read through the link and GeoIP never initialises
+    — `unable to open GeoLite2-City.mmdb: permission denied` behind a pod that reads healthy.
+    A root init container copies them in world-readable, which also defeats the symlink: the
+    entrypoint skips a name that already exists. Traefik was fixed for this in #990; authelia
+    carried the emptyDir but not the init container until #1177.
+
+    Parameterized over `_FLAGS`, which names both pods carrying the sidecar literally — a third
+    pod that gains the sidecar without the init container, or a rename of either, fails here
+    rather than shrinking the census to nothing.
+    """
+    spec = _pod_spec(role, True)
+    inits = {c["name"]: c for c in spec["initContainers"]}
+    assert "crowdsec-data-install" in inits, (
+        f"{role}'s pod runs the crowdsec agent non-root but has no crowdsec-data-install "
+        "init container, so GeoIP cannot initialise (#1177)"
     )
-    assert "crowdsec.db*" in script, "the entrypoint's own db skip must be honoured"
-    assert script.rstrip().endswith("exit 0"), (
-        "an init container that exits non-zero takes the edge down under Recreate"
-    )
+    init = inits["crowdsec-data-install"]
+    assert _copies_the_staged_datafiles(init["command"][-1])
 
     sc = init["securityContext"]
     assert sc["runAsUser"] == 0
@@ -241,6 +269,41 @@ def test_traefik_copies_the_staged_datafiles_in_so_geoip_can_initialise() -> Non
     mounts = {m["name"]: m["mountPath"] for m in init["volumeMounts"]}
     assert mounts == {"crowdsec-data": "/var/lib/crowdsec/data"}, (
         "this container must reach nothing but the data volume it seeds"
+    )
+
+
+@pytest.mark.parametrize(
+    ("label", "script"),
+    [
+        # `cp -r` keeps the source 0600 and dies on the 0700 trace/ directory.
+        (
+            "recursive copy instead of a per-file install",
+            "cp -r /staging/var/lib/crowdsec/data/* /var/lib/crowdsec/data/; exit 0",
+        ),
+        # Copying the db is the entrypoint's own documented skip.
+        (
+            "no db skip",
+            'for f in /staging/var/lib/crowdsec/data/*; do install -m 644 "$f" '
+            "/var/lib/crowdsec/data/; done; exit 0",
+        ),
+        # Without the trailing exit 0 an unreadable file fails the pod, and both roles roll
+        # under Recreate — for authelia that is SSO for the whole homelab.
+        (
+            "no trailing exit 0",
+            'for f in /staging/var/lib/crowdsec/data/*; do case "${f##*/}" in crowdsec.db*) '
+            'continue ;; esac; install -m 644 "$f" /var/lib/crowdsec/data/; done',
+        ),
+        # Seeding the wrong tree copies nothing the agent reads.
+        (
+            "the wrong staged tree",
+            'for f in /staging/etc/crowdsec/*; do case "${f##*/}" in crowdsec.db*) continue '
+            ';; esac; install -m 644 "$f" /var/lib/crowdsec/data/; done; exit 0',
+        ),
+    ],
+)
+def test_scripts_that_leave_geoip_broken_are_rejected(label: str, script: str) -> None:
+    assert not _copies_the_staged_datafiles(script), (
+        f"{label} should not have been accepted"
     )
 
 

@@ -74,6 +74,19 @@ a blanket `|| true` would trade that for an agent started on a half-populated co
 nothing saying so. `ansible/tests/services/test_crowdsec_config_install_seeds_staged_tree.py`
 holds both pods to this.
 
+`crowdsec-data-install` is the second init container, and it fixes a different half of the
+same image's staging behaviour. The image ships its datafiles at
+`/staging/var/lib/crowdsec/data` mode 0600 root:root and the entrypoint SYMLINKS them into the
+data volume rather than copying, so the non-root agent cannot read through the link. GeoIP then
+never initialises — `unable to open GeoLite2-City.mmdb: permission denied` — and the
+`geoip-enrich` parser is dead behind a pod that reads 2/2 Running (#1177; traefik hit the same
+thing first as #990). Copying the files in world-readable defeats the symlink, because the
+entrypoint's `[ ! -e ]` guard skips a name that already exists. It runs as root with
+`DAC_READ_SEARCH` — the read-only half of root's permission-bit override, which is what reaches
+the 0600 sources — and ends in `exit 0`, so an unreadable file leaves that one name on the
+symlink path instead of taking SSO down under `Recreate`.
+`ansible/tests/services/test_crowdsec_optional.py` holds both pods to this.
+
 Verify a deploy of this role by the sidecar's restart count, not just by pod readiness:
 
 ```
