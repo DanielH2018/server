@@ -110,21 +110,64 @@ def test_the_render_found_traefik_crd_roles_at_all():
     assert {"traefik", "authelia", "crowdsec", "freshrss"} <= TRAEFIK_CRD_ROLES
 
 
+# Roles whose route is behind a Jinja conditional the committed variables can switch off.
+# For these the textual scan is allowed to say yes while the render says no, and only in
+# that direction: an extra edge onto traefik costs an ordering constraint that is already
+# true, while a missing one applies a Traefik CRD before traefik owns it. The reason goes
+# beside the name.
+CONDITIONALLY_ROUTED_ROLES = {
+    "navidrome": (
+        "ingressroute.yaml.j2 renders only when navidrome_k8s_replicas > 0 — the workload "
+        "is parked at 0, and a route to an empty EndpointSlice makes traefik log "
+        "'no servers found' every ~20s (issue #1323)"
+    ),
+}
+
+
 def test_textual_scan_agrees_with_the_render(host):
     """build_k8s_dep_map's deploy-time detector must match the render, for every role.
 
     The detector textually scans a role's own templates for the traefik.io apiVersion or
     the shared ingressroute.yml.j2 macro import, standing in for a real Jinja render so the
-    deploy doesn't pay for one. That's only sound if it agrees with the render exactly.
+    deploy doesn't pay for one. That's only sound if it agrees with the render exactly --
+    except for CONDITIONALLY_ROUTED_ROLES, where over-detection is the safe direction and
+    under-detection is still a failure.
     """
     _path, entries, _idx = host
     for c in entries:
         name = c["name"]
         templates_dir = ANSIBLE / "roles" / "k8s" / name / "templates"
         detected = _role_renders_traefik_crd(str(templates_dir))
-        assert detected == (name in TRAEFIK_CRD_ROLES), (
+        rendered = name in TRAEFIK_CRD_ROLES
+        if name in CONDITIONALLY_ROUTED_ROLES:
+            assert detected >= rendered, (
+                f"{name}: textual scan says renders-Traefik-CRD=False while the render says "
+                "True. build_k8s_dep_map would drop the traefik edge and apply a Traefik CRD "
+                "before traefik owns it."
+            )
+            continue
+        assert detected == rendered, (
             f"{name}: textual scan says renders-Traefik-CRD={detected}, render says "
-            f"{name in TRAEFIK_CRD_ROLES}. build_k8s_dep_map would derive the wrong edge."
+            f"{rendered}. build_k8s_dep_map would derive the wrong edge."
+        )
+
+
+def test_every_conditionally_routed_role_is_a_real_role_the_scan_still_detects(host):
+    """The exemption list must not outlive what it exempts.
+
+    A name that no longer exists, or one whose templates the textual scan no longer flags,
+    silently widens the test above into an exemption for nothing.
+    """
+    _path, entries, _idx = host
+    names = {c["name"] for c in entries}
+    for name, reason in CONDITIONALLY_ROUTED_ROLES.items():
+        if name not in names:
+            continue
+        assert reason.strip(), f"{name} is exempted with no reason"
+        templates_dir = ANSIBLE / "roles" / "k8s" / name / "templates"
+        assert _role_renders_traefik_crd(str(templates_dir)), (
+            f"{name} is listed in CONDITIONALLY_ROUTED_ROLES but its templates no longer "
+            "look like they render a Traefik CRD at all — drop the exemption."
         )
 
 

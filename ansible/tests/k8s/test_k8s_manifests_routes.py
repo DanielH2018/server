@@ -4,12 +4,16 @@ An authed route without the forward-auth and rate-limit middlewares is an open s
 `https` route without `tls:` never matches at all; the CrowdSec LAPI route must never gain a
 public host rule; a public host rule must be reachable only from the Docker edge; and every
 route's TLSOption must exist and not be the one named `default`. None of these fails a render.
+
+Each route renders with its own role's defaults, not group_vars alone: a role may gate its
+route on one of them (navidrome renders no route while `navidrome_k8s_replicas` is 0, #1323),
+and rendering without them raises `UndefinedError` rather than reproducing what deploys.
 """
 
 import re
 
 from lib import yaml_fast
-from _manifest_guards import ALL_VARS, K8S, _k8s_entries, _render
+from _manifest_guards import ALL_VARS, K8S, _k8s_entries, _render, _role_defaults
 
 
 def _k8s_authelia_config() -> dict:
@@ -132,7 +136,7 @@ def test_every_authed_service_carries_forward_auth_and_rate_limit():
             route_tpl,
             container_item=entry,
             domain="example.com",
-            **ALL_VARS,
+            **_role_defaults(entry["name"]),
         )
         for doc in (d for d in yaml_fast.safe_load_all(rendered) if d):
             name = doc["metadata"]["name"]
@@ -173,7 +177,7 @@ def test_every_https_route_carries_tls():
                 route_tpl,
                 container_item=entry,
                 domain="example.com",
-                **ALL_VARS,
+                **_role_defaults(entry["name"]),
             )
             for doc in (d for d in yaml_fast.safe_load_all(rendered) if d):
                 if "https" not in doc["spec"].get("entryPoints", []):
@@ -224,7 +228,12 @@ def test_every_public_host_rule_is_reachable_only_from_the_docker_edge():
         route_tpl = K8S / entry["name"] / "templates" / "ingressroute.yaml.j2"
         if not route_tpl.exists():
             continue
-        rendered = _render(route_tpl, container_item=entry, domain=domain, **ALL_VARS)
+        rendered = _render(
+            route_tpl,
+            container_item=entry,
+            domain=domain,
+            **_role_defaults(entry["name"]),
+        )
         for doc in (d for d in yaml_fast.safe_load_all(rendered) if d):
             for route in doc["spec"]["routes"]:
                 match = route["match"]
@@ -273,7 +282,7 @@ def test_routes_reference_a_tlsoption_that_exists_and_is_not_named_default():
         tpl = K8S / entry["name"] / "templates" / "ingressroute.yaml.j2"
         if not tpl.exists():
             continue
-        rendered = _render(tpl, container_item=entry, **ALL_VARS)
+        rendered = _render(tpl, container_item=entry, **_role_defaults(entry["name"]))
         # Every document: a role may ship more than one IngressRoute, and a second one naming
         # a TLSOption that does not exist fails exactly as loudly as the first would.
         for doc in (d for d in yaml_fast.safe_load_all(rendered) if d):
@@ -314,7 +323,7 @@ def test_no_monitoring_route_serves_a_bare_path_prefix():
                 route_tpl,
                 container_item=entry,
                 domain="example.com",
-                **ALL_VARS,
+                **_role_defaults(entry["name"]),
             )
             for doc in (d for d in yaml_fast.safe_load_all(rendered) if d):
                 name = doc["metadata"]["name"]
