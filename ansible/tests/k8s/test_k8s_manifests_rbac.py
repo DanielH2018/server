@@ -65,6 +65,12 @@ def _grant_violations(rules: list[dict]) -> list[str]:
         # A bare wildcard over the core group sweeps secrets back in without naming them.
         if "*" in named and ("" in groups or "*" in groups):
             problems.append(f"wildcard resources over apiGroups {sorted(groups)}")
+        # A proxy subresource is an HTTP request to whatever a Service or pod serves, made as
+        # the API server. Unpinned, `get` on services/proxy reaches every Service in the
+        # namespace, so a proxy grant must name its target (Headlamp: `prometheus:9090`).
+        proxied = {r for r in named if r.endswith("/proxy")}
+        if proxied and not rule.get("resourceNames"):
+            problems.append(f"unpinned proxy grant on {sorted(proxied)}")
     return problems
 
 
@@ -83,6 +89,7 @@ def test_the_read_only_check_rejects_a_widened_role():
         {"apiGroups": [""], "resources": ["secrets"], "verbs": ["get"]},
         {"apiGroups": [""], "resources": ["*"], "verbs": ["get"]},
         {"apiGroups": [""], "resources": ["pods/exec"], "verbs": ["get"]},
+        {"apiGroups": [""], "resources": ["services/proxy"], "verbs": ["get"]},
     ):
         assert _grant_violations([rule]), f"widening not caught: {rule}"
 
@@ -115,7 +122,7 @@ def test_headlamp_cluster_identity_stays_read_only():
     rules = [
         rule
         for doc in _headlamp_rbac_docs()
-        if doc["kind"] == "ClusterRole"
+        if doc["kind"] in {"ClusterRole", "Role"}
         for rule in doc["rules"]
     ]
     assert rules, "no ClusterRole rendered"
@@ -126,7 +133,8 @@ def test_headlamp_binds_only_to_read_only_cluster_roles():
     """A roleRef pointing anywhere else routes around the rule audit above.
 
     Upstream's Helm chart binds `cluster-admin` — copying a fragment of it back in is the realistic
-    mistake.
+    mistake. The one namespaced binding is the Prometheus proxy grant, audited above like the
+    ClusterRoles; a second RoleBinding needs its own reason here.
     """
     allowed = {"view", "headlamp-cluster-read"}
     bindings = [d for d in _headlamp_rbac_docs() if d["kind"] == "ClusterRoleBinding"]
@@ -134,6 +142,43 @@ def test_headlamp_binds_only_to_read_only_cluster_roles():
     for binding in bindings:
         name = binding["roleRef"]["name"]
         assert name in allowed, f"{binding['metadata']['name']} binds to '{name}'"
+    role_bindings = [d for d in _headlamp_rbac_docs() if d["kind"] == "RoleBinding"]
+    assert [b["roleRef"]["name"] for b in role_bindings] == [
+        "headlamp-prometheus-proxy"
+    ]
+    assert role_bindings[0]["roleRef"]["kind"] == "Role"
+
+
+def test_headlamp_prometheus_proxy_grant_names_the_labelled_service():
+    """Two files must agree for a chart to render, and neither fails loudly when they don't.
+
+    The plugin finds Prometheus by the `headlamp-prometheus` label on a Service, then proxies
+    to `<name>:<port>` through the API server; the Role pins that exact string. A renamed
+    Service, a moved port, or a dropped label leaves the plugin loaded and every chart empty.
+    """
+    from _k8s_render import rendered_docs
+
+    services = [
+        doc
+        for _role, _tpl, doc in rendered_docs()
+        if doc.get("kind") == "Service"
+        and doc["metadata"].get("labels", {}).get("headlamp-prometheus") == "true"
+    ]
+    assert len(services) == 1, (
+        f"expected exactly one labelled Prometheus Service, got {len(services)}"
+    )
+    svc = services[0]
+    ports = [p["port"] for p in svc["spec"]["ports"]]
+    assert len(ports) == 1, "the plugin tries every TCP port; keep the Service to one"
+    expected = f"{svc['metadata']['name']}:{ports[0]}"
+
+    roles = [d for d in _headlamp_rbac_docs() if d["kind"] == "Role"]
+    assert len(roles) == 1
+    assert roles[0]["metadata"]["namespace"] == svc["metadata"]["namespace"]
+    (rule,) = roles[0]["rules"]
+    assert rule["resources"] == ["services/proxy"]
+    assert rule["verbs"] == ["get"]
+    assert rule["resourceNames"] == [expected]
 
 
 def test_headlamp_keeps_its_serviceaccount_token_mounted():

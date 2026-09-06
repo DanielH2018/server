@@ -775,6 +775,13 @@ kind: Service
 metadata:
   name: prometheus
   namespace: {{ k8s_observability_namespace }}
+  labels:
+    # Headlamp's Prometheus plugin finds its backend by this label (it checks
+    # `headlamp-prometheus=true` on a Service before the generic app.kubernetes.io names) and
+    # queries it via the API server's service proxy — roles/k8s/headlamp/templates/rbac.yaml.j2
+    # holds the matching grant. Dropping the label leaves the plugin loaded and every chart
+    # empty, with no error.
+    headlamp-prometheus: "true"
 spec:
   # Pinned: host-side query tools carry this address as a constant. See
   # claude_otel_prometheus_cluster_ip in defaults/main.yml for why.

@@ -85,3 +85,41 @@ subjects:
   - kind: ServiceAccount
     name: headlamp
     namespace: {{ k8s_namespace }}
+---
+# The Prometheus plugin (headlamp_k8s_plugins, defaults/main.yml) does not talk to Prometheus
+# itself: it asks the API server to proxy each query —
+#   /api/v1/namespaces/observability/services/prometheus:9090/proxy/api/v1/query_range
+# — so the grant is `services/proxy` on THAT one Service, namespaced, and the TCP hop to the
+# pod is the API server's, admitted by netpol_baseline_obs_node_cidrs (roles/k8s/netpol-baseline)
+# rather than by anything selecting the headlamp pod.
+#
+# The authoriser checks the resource name WITH the port: measured 2026-09-06, an unpinned call
+# was refused as `services "prometheus:9090" is forbidden`. Pinned to that exact name, so the
+# SA cannot proxy to any other Service in observability (Loki, Tempo, the collector). `get` on
+# a proxy is a read of whatever Prometheus serves on 9090 — the same port-wide caveat the
+# prometheus-callers NetworkPolicy documents, and safe for the same reason: Prometheus runs
+# without its admin, lifecycle and remote-write-receiver flags.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: headlamp-prometheus-proxy
+  namespace: {{ k8s_observability_namespace }}
+rules:
+  - apiGroups: [""]
+    resources: [services/proxy]
+    resourceNames: ["prometheus:9090"]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: headlamp-prometheus-proxy
+  namespace: {{ k8s_observability_namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: headlamp-prometheus-proxy
+subjects:
+  - kind: ServiceAccount
+    name: headlamp
+    namespace: {{ k8s_namespace }}

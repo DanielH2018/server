@@ -5,7 +5,11 @@
 # monitor-bridge, PROMETHEUS_URL on homelab-mcp, and the Headlamp tile's customapi widget URL on
 # homepage — roles/k8s/homepage/templates/services.yaml.j2). prometheus itself is ALSO read on host loopback
 # by `otelq` (a workstation host process — see claude-otel/CLAUDE.md), covered the same way as
-# tempo/otel-collector below, not by this file. The other four need no per-workload policy, each
+# tempo/otel-collector below, not by this file. Headlamp's Prometheus plugin is a fourth
+# in-cluster reader that this file also does NOT admit, on purpose: it queries through the API
+# server's service proxy (roles/k8s/headlamp/templates/rbac.yaml.j2), so the hop that reaches
+# the pod is the API server's, from the node's cni0/flannel.1 address — the same node-CIDR peer
+# that carries otelq. The other four need no per-workload policy, each
 # for a different reason — don't collapse them into one mechanism:
 #   - tempo, otel-collector: loopback-hostPort callers only, admitted by the node-CIDR `ipBlock`
 #     peer (`netpol_baseline_obs_node_cidrs`, networkpolicy-observability.yaml.j2), which carries

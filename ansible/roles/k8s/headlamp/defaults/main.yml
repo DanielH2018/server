@@ -30,3 +30,24 @@ headlamp_k8s_crd_api_groups:
   - longhorn.io
   - helm.cattle.io
   - k3s.cattle.io
+
+# Headlamp plugins, installed by the `fetch-plugins` init container in deployment.yaml.j2.
+# The upstream image ships NO plugins: Prometheus charts on workload pages, Flux views and the
+# rest are each a plugin from github.com/headlamp-k8s/plugins, released as
+# <name>-<version>.tar.gz and unpacked to /headlamp/plugins/<name>/. The init container
+# downloads each tarball on every pod start, refuses a checksum mismatch, and refuses to start
+# the pod when GitHub is unreachable — a dashboard down during a GitHub outage is the trade
+# for keeping the plugin out of the image and out of git.
+#
+# To add a plugin: one entry here. Renovate opens the version bump (renovate.json, the
+# `headlamp plugins` manager); the sha256 is NOT derivable from the release, so the PR is a
+# signal the operator finishes:
+#   gh release download <name>-<ver> -R headlamp-k8s/plugins -p '<name>-<ver>.tar.gz' -D /tmp
+#   sha256sum /tmp/<name>-<ver>.tar.gz
+headlamp_k8s_plugins:
+  # Charts on Pod/Deployment/... detail pages. It finds Prometheus by the
+  # `headlamp-prometheus: "true"` label on the Service in roles/k8s/claude-otel and queries it
+  # through the API server's service proxy, which is what the Role in rbac.yaml.j2 grants.
+  - name: prometheus
+    version: "0.9.1"
+    sha256: 06afabe42da69e8e0c5c2632acc3fee020566825d2ae71ff8e4f3dd7f78fc4ae
