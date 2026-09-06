@@ -46,6 +46,16 @@ WRAPPER = REPO_ROOT / "scripts" / "diagnostics" / "ui_mcp.sh"
 # they did not cause. One service per node placement, plus two that carry their own login.
 # (service, exact page title, path it should land on)
 SERVICES = [
+    # DECIDED: homepage's expectation stays `My Awesome Homepage`; do NOT relax it to
+    # `Homepage`. `Homepage` is the app's OWN fallback — `initialSettings.title || "Homepage"`
+    # at `src/pages/index.jsx:410` in gethomepage/homepage v1.13.2, the revision this cluster
+    # runs — so seeing it means the page rendered with NO settings at all, which is the
+    # failure this entry exists to catch. Verified 2026-09-06 against the live pod:
+    # `__NEXT_DATA__.props.pageProps.initialSettings.title` reads `My Awesome Homepage`, and
+    # `title:` at `roles/k8s/homepage/templates/config/settings.yaml.j2:2` is what puts it
+    # there. Issue #1399 read a `Homepage` failure as a stale expectation and proposed both
+    # relaxing this line and deleting that setting; both would have made the check permanently
+    # green on the broken state.
     ("homepage", "My Awesome Homepage", "/"),
     ("sonarr", "Sonarr", "/"),
     ("freshrss", "Login · FreshRSS", "/i/"),
@@ -280,7 +290,10 @@ def assert_serves_ui(
     seen = page_title(report) if observed_title is None else observed_title
     assert seen == title, (
         f"{service}: expected the page titled {title!r}, got {seen!r}. "
-        f"An absent title means Traefik answered rather than the app."
+        f"An absent title means Traefik answered rather than the app. A title that is the "
+        f"app's OWN config-less default means the app rendered without its config — read the "
+        f"config in, restart the pod, and do NOT relax this expectation to the default. "
+        f"Read the comment beside {service!r} in SERVICES before changing the expected string."
     )
     assert f"Page URL: https://{service}.local.{domain}{path}" in report, (
         f"{service}: expected to land on {path!r}; the app redirected somewhere else."
