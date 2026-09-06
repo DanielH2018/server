@@ -32,6 +32,25 @@
     url: https://kagi.com/search?q=
     target: _blank
 
+# Longhorn volume and node capacity. It dials `longhorn-frontend`, NOT `longhorn-backend`, and
+# the distinction is the whole reason this widget works. The manager's own API is fenced by
+# Longhorn's chart-owned `longhorn-manager` NetworkPolicy, which admits six same-namespace
+# Longhorn components and nothing else — homepage cannot reach it, and widening that object means
+# editing something the Longhorn deploy owns and would revert. `longhorn-frontend` is selected by
+# NO NetworkPolicy in longhorn-system, and its nginx proxies `/v1` through to the manager as
+# `app: longhorn-ui`, which that policy DOES admit. So the widget needs no NetworkPolicy change
+# on either side.
+#
+# This is also why the node-local-manager trap (only that node's manager answers a HOST caller)
+# does not apply: the caller is a pod, and it addresses the frontend Service rather than the
+# backend one. Verified 2026-09-06: `GET /v1/nodes` on the frontend ClusterIP answers 200 with
+# both nodes' disk conditions.
+- longhorn:
+    url: http://longhorn-frontend.longhorn-system.svc.cluster.local
+    expanded: true
+    total: true
+    labels: true
+
 - openmeteo:
     label: Current
     latitude: {{ lat }}

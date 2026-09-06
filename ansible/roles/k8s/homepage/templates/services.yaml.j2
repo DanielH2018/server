@@ -140,6 +140,22 @@
                     - field: data.result.3.value.1
                       label: Degraded
                       format: number
+        - Scrutiny:
+            icon: scrutiny.png
+            href: https://scrutiny.{{ domain }}/
+            description: Disk SMART health
+            # ClusterIP, not a Traefik route: scrutiny's native route is Authelia-gated and would
+            # 401 this session-less widget, and its monitoring route exposes no API path. Pod to
+            # pod bypasses both. Same shape as the sonarr/radarr/qbittorrent widgets below, and
+            # the same requirement — `networkpolicy-scrutiny-web.yaml.j2` must admit
+            # `app: homepage` on 8080 or this renders as a widget-proxy error.
+            #
+            # Scrutiny has no auth of its own (that is why longhorn-ui-style route middleware
+            # fronts it), so there is no key to hold here. Verified 2026-09-06:
+            # `GET /api/summary` on the ClusterIP answers 200 with the device summary.
+            widget:
+                type: scrutiny
+                url: http://scrutiny.{{ k8s_namespace }}.svc.cluster.local:8080
         - Home Assistant:
             icon: home-assistant.png
             href: https://home-assistant.{{ domain }}/
