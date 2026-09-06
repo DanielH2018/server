@@ -148,9 +148,10 @@ def _exprs_without_the_fixture_filter(exprs: list[str]) -> list[str]:
     DECIDED: the discriminator is the PR id, never an empty `sha`. Until `_no_syslog` landed
     on 2026-09-03 every test that ran the real `land.sh` wrote its annotation to the host's
     syslog, carrying `pr=939`, `pr=999`, `pr=999999`, or `pr=unknown`. The last was an
-    argparse failure, which reached the EXIT trap before the ledger had a PR; issue #1304
-    stopped the emitter writing those at all, so the `unknown` rows are historic and the
-    filter keeps dropping them for the rest of the 744h window. Measured against live
+    argparse failure, which reached the EXIT trap before the ledger had a PR, so those rows
+    carry no sha and no phase timing. Issue #1304 stopped the emitter writing those at all,
+    so the `unknown` rows are historic and the filter keeps dropping them for the rest of
+    the 744h window. Measured against live
     Loki on 2026-09-06, those are 8,282 of the 8,777 records in the 744h retention window,
     and they read the verdict mix as 72% `aborted` where the real figure is 8.7%.
 
