@@ -79,6 +79,40 @@ def test_it_is_skipped():
 """
 
 
+# The socket probe's half of the same exemption. 192.0.2.1 is TEST-NET-1 (RFC 5737): reserved,
+# never routed, so the exempt half reaches the real syscall without anything leaving the host.
+# The exempt test asserts only that the failure is NOT the guard's — which errno a real socket
+# returns varies by host, and a timeout raises rather than returning one.
+_UI_MARKED_AND_PLAIN_CONNECT = """
+import socket
+
+import pytest
+
+
+def _connect():
+    with socket.socket() as sock:
+        sock.settimeout(0.25)
+        sock.connect(("192.0.2.1", 9))
+
+
+@pytest.mark.ui
+def test_a_ui_test_connects_in_process():
+    try:
+        _connect()
+    except RuntimeError as exc:
+        raise AssertionError(f"the guard fired on an exempt test: {exc}") from exc
+    except OSError:
+        pass
+
+
+def test_a_plain_test_connects_in_process():
+    try:
+        _connect()
+    except OSError:
+        pass
+"""
+
+
 def _run_child(tmp_path: Path, body: str) -> subprocess.CompletedProcess[str]:
     (tmp_path / "pytest.ini").write_text(_CHILD_INI)
     test_file = tmp_path / "test_child.py"
@@ -183,6 +217,91 @@ def test_an_unmarked_test_in_the_same_run_is_flagged(tmp_path: Path) -> None:
         "the unmarked test alone should have been blamed:\n" + proc.stdout
     )
     assert "test_a_plain_test_shells_out" in blamed[0], proc.stdout
+
+
+def test_a_ui_marked_test_may_connect_in_process(tmp_path: Path) -> None:
+    """Accept case for the socket half of the `ui` exemption.
+
+    The marker lifted the PATH shims alone until 2026-09-06, so a `ui` test that curls a LAN
+    route from pytest itself — rather than from the browser subprocess — hit
+    `LEAKGUARD: blocked a network connect`, a message naming the guard but not the exemption.
+    """
+    proc = _run_child(tmp_path, _UI_MARKED_AND_PLAIN_CONNECT)
+    assert "1 passed" in proc.stdout, (
+        "the guard blocked an in-process connect from a `ui`-marked test:\n"
+        + proc.stdout
+    )
+    assert "test_a_ui_test_connects_in_process" not in proc.stdout, (
+        "the `ui`-marked test was named in the summary, so it did not pass clean:\n"
+        + proc.stdout
+    )
+
+
+def test_an_unmarked_test_connecting_in_process_is_flagged(tmp_path: Path) -> None:
+    """Reject case for the same pair: the socket probe is lifted by the marker, not by the run.
+
+    Guards against the fix over-reaching — a flag left set after the exempt test would exempt
+    every later test in the worker, which reads exactly like a pass.
+    """
+    proc = _run_child(tmp_path, _UI_MARKED_AND_PLAIN_CONNECT)
+    assert proc.returncode != 0, proc.stdout
+    blamed = [
+        line
+        for line in proc.stdout.splitlines()
+        if "reached outside the test process" in line
+    ]
+    assert len(blamed) == 1, (
+        "the unmarked test alone should have been blamed:\n" + proc.stdout
+    )
+    assert "test_a_plain_test_connects_in_process" in blamed[0], proc.stdout
+
+
+def test_the_guard_is_on_before_any_test_owns_the_process() -> None:
+    """A missing `exempt` key must fail closed — collection and session fixtures run there."""
+    saved = leakguard._state.pop("exempt", None)
+    try:
+        assert leakguard._is_exempt() is False
+        leakguard._state["exempt"] = True
+        assert leakguard._is_exempt() is True
+        leakguard._state["exempt"] = False
+        assert leakguard._is_exempt() is False
+    finally:
+        leakguard._state.pop("exempt", None)
+        if saved is not None:
+            leakguard._state["exempt"] = saved
+
+
+def test_every_deselected_marker_in_addopts_is_one_the_guard_exempts(
+    pytestconfig: pytest.Config,
+) -> None:
+    """A tier `addopts` deselects is a tier only a person typing `-m` by hand ever runs.
+
+    That is how leakguard made the whole `-m ui` suite error in fixture setup for four days
+    with every guard green (issue #1300): CI never reached it. Any marker deselected by
+    default is in the same position, so each one must also be exempt from the guard — a new
+    `-m 'not ui and not slow'` fails here rather than four days later.
+
+    Set EQUALITY, not containment: it doubles as the non-vacuity assertion, so a parse that
+    finds no markers fails instead of passing over an empty set.
+    """
+    # `getini` returns the ini value shell-split, so the expression after `-m` arrives as one
+    # element with its quoting already resolved — and it stays the ini's own value even when
+    # the run overrode `-m` on the command line.
+    addopts = list(pytestconfig.getini("addopts"))
+    deselected = set()
+    for flag, expression in zip(addopts, addopts[1:], strict=False):
+        if flag != "-m":
+            continue
+        for clause in expression.split(" and "):
+            clause = clause.strip()
+            if clause.startswith("not "):
+                deselected.add(clause.removeprefix("not ").strip())
+    assert deselected == {leakguard._LIVE_MARKER}, (
+        f"addopts deselects {sorted(deselected)} by default, but the leak guard exempts only "
+        f"`{leakguard._LIVE_MARKER}`. A deselected tier never runs in CI, so a guard that "
+        "breaks it stays green — exempt the marker in ansible/tests/leakguard.py, or say here "
+        "why this one is safe to leave guarded."
+    )
 
 
 @pytest.mark.parametrize("module", ["test_ui_smoke.py", "test_ui_smoke_grafana.py"])
