@@ -126,10 +126,15 @@ Each agent starts with none of this conversation's context, so its brief must ca
   timeout 1200 tail -f -n +1 <land.log> | grep -m1 '^VERDICT:'
   ```
 
-  `grep -m1` exits on the first match and `tail` dies on SIGPIPE, so it returns the instant
-  the line appears rather than at the timeout. One call, no watcher, and it cannot poll CI.
-  Four of four agents stopped short on the 2026-09-06 fan-out without it (issue #1291);
-  supplying it ended the stopping in every case.
+  One call, no watcher, and it cannot poll CI. Four of four agents stopped short on the
+  2026-09-06 fan-out without it (issue #1291); supplying it ended the stopping in every case.
+
+  **Tell the agent the wait prints the verdict at once but does not return at once.** `tail
+  -f` only takes SIGPIPE on its next write, and `VERDICT:` is the last line `land.sh` writes,
+  so the call runs to the timeout and the harness moves it to the background — which is not a
+  failure and must not end the turn. What the wait buys is keeping the agent in-turn, so the
+  backgrounded `land.sh` has a live session to notify when it exits. Issue #1298 tracks a
+  command that returns on the match.
 - That `deploy.sh` exit 75 is a **resume point to retry**, not a failure to report.
 - That it closes a fixed issue with exactly `findings.py close <n> --fixed --pr <n>`, and may
   **not** use `--refuted` or `--accepted` — those are terminal and operator-only; an agent

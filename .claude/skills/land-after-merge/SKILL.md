@@ -82,9 +82,22 @@ that is the grace period, so no landing is cut short for polling before CI start
 timeout 1200 tail -f -n +1 "$CLAUDE_JOB_DIR/tmp/land<n>.log" | grep -m1 '^VERDICT:'
 ```
 
-`grep -m1` exits on the first match and `tail` dies on SIGPIPE, so this returns the instant
-the line appears rather than at the timeout. One call, no watcher, and it reads a local file
-rather than CI, so it is not the hand-polling this skill forbids.
+One call, no watcher, and it reads a local file rather than CI, so it is not the hand-polling
+this skill forbids.
+
+**It prints the verdict at once but does not return at once — expect to be moved to the
+background, and do not treat that as a failure.** `grep -m1` does exit on the match, but `tail
+-f` is then blocked waiting for the file to grow and only takes SIGPIPE on its next write.
+`VERDICT:` is the last line `land.sh` writes, so there is no next write; the shell waits for
+every pipeline member, and the call runs to the timeout. The Bash tool caps its own timeout at
+600s besides, so `timeout 1200` never has effect. Measured 2026-09-06: `timeout 5 tail -f -n
++1` on a file already holding a `VERDICT:` line printed instantly and returned at 5.003s.
+
+**What the wait buys is that you stay in-turn**, which is the whole point. The backgrounded
+`land.sh` notifies a live session when it exits, so a session still blocked here is told; a
+session that ended its turn is finished, and nothing re-invokes it. Read the verdict from the
+logfile when either the wait or the notification returns. Issue #1298 tracks a command that
+returns on the match.
 
 **Do not end your turn on a backgrounded landing.** A backgrounded Bash call whose output is
 redirected to a file is not a harness-tracked child — nothing wakes you when it exits, so the
