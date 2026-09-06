@@ -1,0 +1,287 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "bf4q19tuivta8e"
+        },
+        "enable": true,
+        "hide": false,
+        "iconColor": "purple",
+        "name": "Deploys",
+        "target": {
+          "expr": "{job=\"syslog\"} |= \"event=deploy\" | logfmt",
+          "queryType": "range",
+          "refId": "DeployAnno"
+        },
+        "textFormat": "{{services}}",
+        "titleFormat": "deploy"
+      }
+    ]
+  },
+  "description": "The claude_cgroup_* textfile series for claude-rc.service and user.slice/user-1000.slice on daniel-box. Issue #1258: these were scraped from 2026-09-05 with nothing graphing them.",
+  "id": null,
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "title": "Memory pressure",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "EGdsQqhVk"
+      },
+      "description": "PSI memory.pressure, as the percent of wall time the cgroup spent stalled. `full` means EVERY task in the cgroup was stalled on memory — no forward progress at all; `some` means at least one was. monitor-bridge's check_mem arm pages when `full` holds over 10% for two consecutive cycles (CLAUDE_CGROUP_STALL_MAX_PCT). This is the signal that would have narrated the 2026-09-05 incident: the claude-rc cgroup stalled in reclaim for about ten minutes before anything downstream failed.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10
+          },
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 10
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 1
+      },
+      "id": 2,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "EGdsQqhVk"
+          },
+          "expr": "rate(claude_cgroup_memory_pressure_stalled_usec_total{kind=\"full\"}[5m]) / 10000",
+          "legendFormat": "{{cgroup}} full",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "EGdsQqhVk"
+          },
+          "expr": "rate(claude_cgroup_memory_pressure_stalled_usec_total{kind=\"some\"}[5m]) / 10000",
+          "legendFormat": "{{cgroup}} some",
+          "refId": "B"
+        }
+      ],
+      "title": "Memory stall (PSI)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "EGdsQqhVk"
+      },
+      "description": "memory.events, as the increase over 10 minutes. `oom`, `oom_kill`, `oom_group_kill` and `max` page on ANY increase (CLAUDE_CGROUP_EVENTS) — they mean the kernel killed something or a hard cap was hit. `high` is graphed but NOT alerted on: MemoryHigh throttling is the cap working, and its value is owned by roles/setup/claude_code. A rising `high` with a flat `oom_kill` is the cgroup being held at its ceiling; that is the state to watch here rather than page on.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 60
+          },
+          "min": 0,
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 10
+      },
+      "id": 3,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "EGdsQqhVk"
+          },
+          "expr": "increase(claude_cgroup_memory_events_total{event!=\"low\"}[10m])",
+          "legendFormat": "{{cgroup}} {{event}}",
+          "refId": "A"
+        }
+      ],
+      "title": "memory.events (10m increase)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "EGdsQqhVk"
+      },
+      "description": "Resident memory and swap held by each cgroup. On 2026-09-05 claude-rc held all 8 GiB of this box's swap plus 6.96 GB anon while k3s got 2.9 GB. The caps that bound this live in roles/setup/claude_code/defaults/main.yml (claude_code_rc_memory_high, claude_code_rc_memory_swap_max) and are not exposed as metrics, so read them there rather than off this panel.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10
+          },
+          "min": 0,
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 10
+      },
+      "id": 4,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "EGdsQqhVk"
+          },
+          "expr": "claude_cgroup_memory_current_bytes",
+          "legendFormat": "{{cgroup}} memory",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "EGdsQqhVk"
+          },
+          "expr": "claude_cgroup_memory_swap_current_bytes",
+          "legendFormat": "{{cgroup}} swap",
+          "refId": "B"
+        }
+      ],
+      "title": "Memory and swap held",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 19
+      },
+      "id": 5,
+      "title": "CPU and processes",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "EGdsQqhVk"
+      },
+      "description": "CPU the cgroup consumed, in cores. A pytest fan-out is the usual shape; claude_code_rc_pytest_workers bounds it.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10
+          },
+          "min": 0,
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 20
+      },
+      "id": 6,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "EGdsQqhVk"
+          },
+          "expr": "rate(claude_cgroup_cpu_usage_usec_total[5m]) / 1000000",
+          "legendFormat": "{{cgroup}}",
+          "refId": "A"
+        }
+      ],
+      "title": "CPU usage (cores)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "EGdsQqhVk"
+      },
+      "description": "pids.current. Two live sessions put 203 processes in the claude-rc cgroup (#1154), and one login-slice scope held 965 with 20.4G anon on 2026-09-05 (#1213) — the process count is the earliest visible sign of that shape.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10
+          },
+          "min": 0,
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 20
+      },
+      "id": 7,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "EGdsQqhVk"
+          },
+          "expr": "claude_cgroup_pids_current",
+          "legendFormat": "{{cgroup}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Processes in the cgroup",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "1m",
+  "schemaVersion": 39,
+  "tags": [
+    "homelab",
+    "claude-code",
+    "cgroups"
+  ],
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "timezone": "browser",
+  "title": "Claude Code — host cgroups",
+  "uid": "claude-code-host-cgroups",
+  "version": 1
+}

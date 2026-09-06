@@ -61,6 +61,14 @@ class HostConfig:
     SPEEDTEST_CONSECUTIVE: int
     HOST_ORIGINS_MIN: int
     HOST_ORIGINS_CONSECUTIVE: int
+    # The cgroups whose `claude_cgroup_*` textfile series MUST be reporting for the arm folded
+    # into check_mem to mean anything. Empty disables the whole arm, like PI_GLANCES_URL.
+    CLAUDE_CGROUPS: tuple[str, ...]
+    CLAUDE_CGROUP_STALL_WINDOW: str
+    CLAUDE_CGROUP_STALL_MAX_PCT: float
+    CLAUDE_CGROUP_EVENT_WINDOW: str
+    CLAUDE_CGROUP_EVENTS: str
+    CLAUDE_CGROUP_CONSECUTIVE: int
 
 
 def host_config(
@@ -343,4 +351,90 @@ def host_config(
         # real outage — so the floor is quiet in steady state and this grace only has to cover
         # reboots.
         HOST_ORIGINS_CONSECUTIVE=_int("HOST_ORIGINS_CONSECUTIVE", "3"),
+        # ── The claude-rc / login-slice cgroup arm (issue #1258) ────────────────────────────
+        # PR #1251 put `claude_cgroup_*` into Prometheus and nothing read them. The 2026-09-05
+        # incident (#1243) began with the claude-rc cgroup stalled in memory reclaim for about
+        # ten minutes before anything downstream failed, and this arm is what sees that shape
+        # while it is still only a stall.
+        #
+        # Folded into check_mem rather than given its own Kuma monitor, for the reason recorded
+        # at with_pi_ports: a new monitor costs a new push token in SOPS and a monitor created by
+        # hand in the Kuma UI. `memory` already owns "this box is running out of memory", and a
+        # cgroup taking the box is that — on 2026-09-05 this cgroup held all 8 GiB of swap plus
+        # 6.96 GB anon while k3s got 2.9 GB.
+        #
+        # The cgroups that must be REPORTING for the arm to mean anything — `claude-rc` and
+        # `fleet`, not `user-1000-slice`: the login slice's cgroup exists only once a login session
+        # has happened since boot, so requiring it would page after any reboot nobody had SSH'd
+        # into. Series from any other cgroup are still judged — the queries below filter by metric,
+        # not by cgroup — so user-1000-slice is covered when it exists and absent without paging
+        # when it does not.
+        # Empty disables the arm entirely, like PI_GLANCES_URL and PI_PUBLISHED_PORTS; the live
+        # value is set in templates/env-secret.yaml.j2, beside the host it describes.
+        CLAUDE_CGROUPS=tuple(
+            c.strip() for c in _env("CLAUDE_CGROUPS", "").split(",") if c.strip()
+        ),
+        # PSI `full` stall rate window. The writer's timer samples cgroupfs every 30s, but the
+        # BINDING sample interval is Prometheus's `job: node` scrape_interval of 1m
+        # (claude-otel/templates/prometheus.yaml.j2) — the extra timer tick only guarantees the
+        # textfile is fresh at every scrape. 5m is therefore 5 samples: enough that one missed
+        # scrape cannot empty the window, and short enough that the arm sees a stall inside the
+        # ten minutes the 2026-09-05 incident took to reach anything downstream.
+        CLAUDE_CGROUP_STALL_WINDOW=_env("CLAUDE_CGROUP_STALL_WINDOW", "5m"),
+        # Percent of wall time the cgroup spent with EVERY task stalled on memory (PSI `full`).
+        #
+        # DERIVATION, and what to re-derive. The floor is measured: over the whole retained
+        # history of this metric on 2026-09-06 (388 samples per series, ~6.5h, `resets()` = 0 —
+        # the series began when PR #1251 deployed), the highest 5m-window `full` stall rate was
+        # 0.00040% for claude-rc and 0.00128% for user-1000-slice, with p99 at 0.00024% and
+        # 0.00099%. Steady state is four to five orders of magnitude below any number here.
+        #
+        # The ceiling comes from what `full` MEANS, not from a measured breach: `full` counts
+        # time when no task in the cgroup made progress at all. 10% of a 5m window is 30 seconds
+        # of a cgroup doing nothing but reclaim. That is degraded by definition, at any load —
+        # which is the argument, because 6.5h of quiet data cannot bound the legitimate peak of a
+        # pytest fan-out or a large deploy. It is deliberately NOT derived from the "stalled in
+        # reclaim 98.5% of the time" figure in roles/setup/claude_code/defaults/main.yml: that
+        # number describes the 2026-09-05 incident, which predates this metric, so it is a
+        # different instrument and cannot bound this series.
+        #
+        # RE-DERIVE once there are seven days of history, which is 2026-09-12:
+        #   probe.py metric 'max_over_time((rate(claude_cgroup_memory_pressure_stalled_usec_total{kind="full"}[5m])/10000)[7d:1m])'
+        # If the observed max under real load lands anywhere near 10, lower this to sit between
+        # the two populations the way SPEEDTEST_DOWNLOAD_MIN_MBPS does. Tracked as issue #1288.
+        CLAUDE_CGROUP_STALL_MAX_PCT=_num("CLAUDE_CGROUP_STALL_MAX_PCT", "10"),
+        # memory.events increase window. Wider than the stall window because these are rare
+        # discrete events rather than a rate: 10m at a 1m scrape keeps an OOM kill visible across
+        # two check cycles, so a single missed cycle cannot lose it.
+        CLAUDE_CGROUP_EVENT_WINDOW=_env("CLAUDE_CGROUP_EVENT_WINDOW", "10m"),
+        # Which memory.events counters page on ANY increase, as a regex alternation.
+        #
+        # `oom`, `oom_kill` and `oom_group_kill` are unambiguous: the kernel killed something in
+        # this cgroup. `max` means memory.max was hit — a hard cap breach wherever one is set,
+        # and a no-op on claude-rc, where the unit template sets MemoryMax deliberately to
+        # infinity.
+        #
+        # `high` is EXCLUDED, and that is the one exclusion worth justifying. MemoryHigh throttles
+        # by design, so a `high` increase is the cap working rather than a fault, and it is keyed
+        # directly to a value another role owns and is actively changing (#1264 moves
+        # claude_code_rc_memory_high / _swap_max). Every event kept here means the same thing
+        # whatever those caps become. `high` is graphed instead, on the AI/claude-code-host-cgroups
+        # board.
+        CLAUDE_CGROUP_EVENTS=_env(
+            "CLAUDE_CGROUP_EVENTS", "max|oom|oom_kill|oom_group_kill"
+        ),
+        # Consecutive breaching cycles before the arm pages, doing double duty.
+        #
+        # It suppresses a burst: 2 cycles at INTERVAL=300 is ten minutes of sustained stall,
+        # which is the duration the 2026-09-05 stall ran before anything downstream failed — so
+        # this pages while the fault is still only a stall, and one transient window cannot.
+        #
+        # It also suppresses a counter-reset artifact. claude-rc-restart.timer restarts the unit
+        # weekly (claude_code_rc_restart_schedule), which destroys and recreates the cgroup and
+        # zeroes every counter here. Prometheus extrapolates across a reset, so a single
+        # `increase()` window spanning one can report a non-zero rise from a counter that went
+        # 0 -> 0 — a false page on restart week for an arm where any increase pages. No reset is
+        # visible in the retained data (`resets(...[7d])` = 0 on 2026-09-06, because the series
+        # is younger than one restart interval), so this is guarded rather than measured.
+        CLAUDE_CGROUP_CONSECUTIVE=_int("CLAUDE_CGROUP_CONSECUTIVE", "2"),
     )

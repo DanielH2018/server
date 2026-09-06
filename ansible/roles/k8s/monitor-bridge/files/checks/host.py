@@ -4,18 +4,29 @@ Covers disk, cert expiry and memory. `checks/host_thermal.py` covers SMART, host
 and the UPS; `checks/host_edge.py` covers Pi pressure with its published ports, and the
 speedtest.
 
-Slice 5 of the check.py split. Reads config as `cfg.X` and the fetch layer as `bridge.net.X`,
-so the tests' patches on those modules reach it. `_host_origin_streaks` lives here beside
+`check_mem` also carries the Claude Code cgroup arm (`with_claude_cgroups`, issue #1258).
+
+Slice 5 of the check.py split. Reads config as `cfg.X`, the fetch layer as `bridge.net.X` and
+the shared streak counter as `bridge.streaks.X`, so the tests' patches on those modules reach
+it; `claude_cgroup_verdict` is from-imported from verdicts.host_cgroups and is therefore patched on
+THIS module, where it is bound. `_host_origin_streaks` lives here beside
 `_host_origin_shortfall`, the only code that mutates it — `checks.host_thermal` reads the floor
 qualified, off this module, rather than from-importing it. Rule and enforcement:
 bridge/config.py's header.
 """
 
+from collections.abc import Callable
+
 from bridge.config import Config
 import bridge.net
+import bridge.streaks
+from verdicts.host_cgroups import claude_cgroup_verdict
 
 
 _host_origin_streaks: dict[str, int] = {}
+
+# The fetch seam's type: what `bridge.net.prom_vector` returns for one PromQL expression.
+type PromVector = Callable[[Config, str], list[tuple[dict, float]]]
 
 
 def _host_origin_shortfall(
@@ -127,13 +138,18 @@ def check_cert(cfg: Config) -> tuple[bool, str]:
     return True, "cert valid %.0fd" % days
 
 
-def check_mem(cfg: Config) -> tuple[bool, str]:
+def check_mem(cfg: Config, prom_vector: PromVector | None = None) -> tuple[bool, str]:
     """Checks whether any host's memory usage is over cfg.MEM_MAX_PCT.
 
     Host-level pressure only; per-container OOM kills are check_oom's job. Computed
     per-origin so a two-host estate can't pair one host's avail with another's total.
     Returns (ok, msg).
+
+    `prom_vector` is the fetch seam, an ARGUMENT rather than a module global a test patches —
+    the same shape check_pi_pressure gives `tcp_open`, and for the same reason. None resolves
+    `bridge.net.prom_vector` at call time, which is what the pod does.
     """
+    fetch = bridge.net.prom_vector if prom_vector is None else prom_vector
     # Host memory pressure only. Per-container OOM kills are reported (with the
     # offending container named) by check_oom — single source of truth.
     #
@@ -141,7 +157,7 @@ def check_mem(cfg: Config) -> tuple[bool, str]:
     # so which host it reported was an ordering artifact of Prometheus's response once both
     # estates emitted node_memory_*. The division pairs each host's avail with its own total.
     sel = bridge.net.host_metric_sel(cfg)
-    vec = bridge.net.prom_vector(
+    vec = fetch(
         cfg,
         "100 * (1 - node_memory_MemAvailable_bytes%s / node_memory_MemTotal_bytes%s)"
         % (sel, sel),
@@ -160,8 +176,87 @@ def check_mem(cfg: Config) -> tuple[bool, str]:
         if pct > cfg.MEM_MAX_PCT
     ]
     if breaching:
-        return False, "mem over %.0f%%: %s" % (cfg.MEM_MAX_PCT, ", ".join(breaching))
+        return with_claude_cgroups(
+            cfg,
+            False,
+            "mem over %.0f%%: %s" % (cfg.MEM_MAX_PCT, ", ".join(breaching)),
+            fetch,
+        )
     if short is not None:
-        return short
+        return with_claude_cgroups(cfg, *short, prom_vector=fetch)
     worst = max(pct for _, pct in vec)
-    return True, "mem %.0f%%" % worst
+    return with_claude_cgroups(cfg, True, "mem %.0f%%" % worst, fetch)
+
+
+def with_claude_cgroups(
+    cfg: Config, ok: bool, msg: str, prom_vector: PromVector | None = None
+) -> tuple[bool, str]:
+    """Fold the Claude Code cgroup arm into the host memory verdict, a cgroup fault winning.
+
+    Issue #1258: PR #1251 put `claude_cgroup_*` into Prometheus for `claude-rc.service` and
+    `user.slice/user-1000.slice`, and nothing read them. What they expose is the opening move of
+    the 2026-09-05 incident (#1243) — the claude-rc cgroup stalled in memory reclaim for about
+    ten minutes, holding all 8 GiB of this box's swap plus 6.96 GB anon, before anything
+    downstream failed.
+
+    # DECIDED: folded into `memory` rather than given its own Kuma monitor, for the reason
+    # recorded at with_pi_ports — a new monitor costs a new push token in SOPS and a monitor
+    # created by hand in the Kuma UI. This monitor already owns "this box is running out of
+    # memory", and a cgroup taking the box is exactly that.
+    # DECIDED: the message leads with the cgroup when the arm fires, like with_pi_ports, because
+    # "memory DOWN" otherwise sends someone to look at node_memory_* when the fault is one
+    # cgroup's reclaim.
+    # DECIDED: the queries filter by METRIC, not by cgroup. `CLAUDE_CGROUPS` is the set whose
+    # absence is a fault, not the set that is judged — so a cgroup that appears later
+    # (user-1000-slice exists only once someone has logged in since boot) is covered the moment
+    # it reports, without its absence paging.
+    # DECIDED: a down_streak, and it does double duty — see CLAUDE_CGROUP_CONSECUTIVE in
+    # bridge/config_host.py for both jobs (burst suppression and the weekly cgroup-recreate
+    # counter reset).
+    # DECIDED: the fetch arrives as an ARGUMENT (`prom_vector`, threaded from check_mem) rather
+    # than being reached through `bridge.net`, the same shape check_pi_pressure gives `tcp_open`.
+    # A test hands in a fake that answers each of the two queries separately; patching
+    # `bridge.net.prom_vector` would answer both with one value, which is how a fixture ends up
+    # proving the opposite of what it claims.
+    # DECIDED: neither query is a subquery. The distribution behind
+    # CLAUDE_CGROUP_STALL_MAX_PCT was derived with a `[6h:1m]` subquery, which is far more
+    # expensive than what runs here; measured against the live Prometheus three times each on
+    # 2026-09-06, both queries below returned in 0.125-0.139s end to end, including process
+    # start and the Traefik hop this check does not pay. That is the PR #482 trap — an
+    # exploration query measured in place of the production one.
+    """
+    if not cfg.CLAUDE_CGROUPS:
+        return ok, msg
+    fetch = bridge.net.prom_vector if prom_vector is None else prom_vector
+    stalls = fetch(
+        cfg,
+        'max by (cgroup) (rate(claude_cgroup_memory_pressure_stalled_usec_total{kind="full"}[%s]) / 10000)'
+        % cfg.CLAUDE_CGROUP_STALL_WINDOW,
+    )
+    events = fetch(
+        cfg,
+        'sum by (cgroup, event) (increase(claude_cgroup_memory_events_total{event=~"%s"}[%s]))'
+        % (cfg.CLAUDE_CGROUP_EVENTS, cfg.CLAUDE_CGROUP_EVENT_WINDOW),
+    )
+    arm_ok, arm_msg = claude_cgroup_verdict(
+        stalls,
+        events,
+        cfg.CLAUDE_CGROUPS,
+        cfg.CLAUDE_CGROUP_STALL_MAX_PCT,
+        cfg.CLAUDE_CGROUP_STALL_WINDOW,
+        cfg.CLAUDE_CGROUP_EVENT_WINDOW,
+    )
+    if arm_ok:
+        bridge.streaks._down_streaks["claude_cgroups"] = 0
+        return ok, "%s, %s" % (msg, arm_msg)
+    bridge.streaks._down_streaks["claude_cgroups"], arm_ok, arm_msg = (
+        bridge.streaks.down_streak(
+            bridge.streaks._down_streaks.get("claude_cgroups", 0),
+            cfg.CLAUDE_CGROUP_CONSECUTIVE,
+            arm_msg,
+            "burst/cgroup-recreate grace",
+        )
+    )
+    if arm_ok:
+        return ok, "%s, %s" % (msg, arm_msg)
+    return False, "%s | %s" % (arm_msg, msg)

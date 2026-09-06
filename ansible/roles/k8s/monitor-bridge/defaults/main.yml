@@ -44,6 +44,7 @@ monitor_bridge_modules:
   - bridge/parsing.py
   - verdicts/cluster.py
   - verdicts/host.py
+  - verdicts/host_cgroups.py
   - verdicts/service.py
   - verdicts/storage.py
   - verdicts/logs.py
