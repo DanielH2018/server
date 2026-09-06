@@ -225,6 +225,25 @@ def reconcile_denylist(state: DeployerState, config: Config, head: str) -> bool:
             f"could not read k8s declarations at {head[:8]}: {type(exc).__name__}: {exc}"
         )
         return False
+    # DECIDED: an EMPTY `declared` is damage, never evidence — guard it before the comparison,
+    # unconditionally, rather than only when the config denylist is empty too. A `git ls-tree`
+    # that lists no role under roles/k8s/ reads as `frozenset()`, which against a config whose
+    # denylist line was lost — also `frozenset()` — compared EQUAL and marked the damaged config
+    # reconciled for that checkout, so the repair never ran (issue #1331, reachable since #1321
+    # moved this gate to the file-level flag). The authoritative derivation takes the same stance
+    # for the same reason: `filter_plugins/k8s_autodeploy.py:156-160` raises rather than render an
+    # empty denylist, because an empty result means the derivation is broken. No marker write, as
+    # in the unreadable-ref branch above: an empty listing is one `git ls-tree` and zero `git
+    # show` reads, so retrying every tick is cheap — do not "fix" the log line by claiming the
+    # SHA, which is exactly the bug. The log wording differs from the branch above so an operator
+    # can tell an empty listing from a git failure.
+    if not declared:
+        log(
+            f"empty k8s declaration read at {head[:8]}: no role under ansible/roles/k8s/ "
+            "declared a stance, which is a broken read rather than an empty denylist "
+            "— leaving config.env alone and retrying next tick"
+        )
+        return False
     if declared == config.k8s_autodeploy_denylist:
         state.write("denylist_rendered", head)
         return False

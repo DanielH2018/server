@@ -148,6 +148,37 @@ def test_an_unreadable_ref_retries_next_tick_instead_of_claiming_the_sha(
     assert gitops_deploy.STATE.read("denylist_rendered") is None
 
 
+def test_an_empty_declaration_read_is_not_agreement_with_an_empty_denylist(
+    gitops_deploy, tick, state_dir, settings
+):
+    """The vacuity half of the comparison (issue #1331).
+
+    An empty tree listing derives `frozenset()`, which against a config that LOST its denylist
+    line — also `frozenset()` — used to compare equal and claim the SHA, marking the damaged
+    config reconciled for that checkout so the repair never ran. Empty is a broken read, so it
+    behaves like an unreadable ref: no render, and no marker, so the next tick tries again."""
+    tick.tree_listing = ""
+    assert not deploy_phases.reconcile_denylist(
+        gitops_deploy.STATE, _lost_the_denylist_line(settings), LOCAL
+    )
+    assert tick.playbooks == []
+    assert gitops_deploy.STATE.read("denylist_rendered") is None
+
+
+def test_an_empty_declaration_read_does_not_re_render_against_a_real_denylist(
+    gitops_deploy, tick, state_dir, settings
+):
+    """The same guard where the config is intact: empty `declared` vs a baked list is a
+    mismatch, and re-rendering off it would bake whatever the broken read produced. The guard is
+    on `declared`, not on the pairing, so this state also waits for a tick that can read."""
+    tick.tree_listing = ""
+    assert not deploy_phases.reconcile_denylist(
+        gitops_deploy.STATE, _armed(settings, ["sonarr"]), LOCAL
+    )
+    assert tick.playbooks == []
+    assert gitops_deploy.STATE.read("denylist_rendered") is None
+
+
 def test_it_is_inert_while_auto_deploy_is_off(gitops_deploy, tick, state_dir, settings):
     """Nothing reads the denylist when the feature is off, so nothing renders for it."""
     _declares(tick, "false")
