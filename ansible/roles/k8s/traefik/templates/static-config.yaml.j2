@@ -54,14 +54,18 @@ data:
             # rejecting a banned IP on its FIRST request rather than on the https one it is
             # redirected to.
             #
-            # DECIDED: keep it, and expect two error lines per container start. Traefik logs
+            # DECIDED: keep it, and expect one or two error lines per container start. Traefik
+            # logs
             #
             #   {"level":"error","entryPointName":"http","routerName":"http-to-443@internal",
             #    "error":"middleware \"<ns>-crowdsec@kubernetescrd\" does not exist"}
             #
-            # twice, within a second of startup, because the internal and file providers
-            # publish their configuration before the kubernetesCRD watch delivers its first
-            # one — the same window in which the livesync `@file` routers log "unknown TLS
+            # once or twice, within a second of startup, because the internal and file
+            # providers publish their configuration before the kubernetesCRD watch delivers its
+            # first one. The count is however many generations those two providers publish in
+            # that window, so both shapes are normal — #1356 measured a start that logged the
+            # line once and starts that logged it twice. It is the same window in which the
+            # livesync `@file` routers log "unknown TLS
             # options: <ns>-modern@kubernetescrd" and then resolve fine. Traefik skips the
             # offending router and rebuilds the whole entrypoint on the next configuration
             # event, so http 404s instead of 301ing for that second and is correct
@@ -76,7 +80,7 @@ data:
             # internal router: `applyModel` prepends an entrypoint's middlewares to every root
             # router and only then does the lookup fail, so an excluded router would log
             # nothing at all. Dropping crowdsec here would remove real enforcement to silence
-            # two startup lines. ENFORCED by
+            # a startup line or two. ENFORCED by
             # ansible/tests/services/test_traefik_http_entrypoint_crowdsec.py.
             - {{ k8s_namespace }}-crowdsec@kubernetescrd
 {% endif %}
