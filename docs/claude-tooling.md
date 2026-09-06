@@ -223,20 +223,18 @@ in and counts the panels a dashboard actually drew. A title check cannot do that
 gap is the reason the tier exists — 19 Angular panels were provisioned to a Grafana that had
 dropped Angular and rendered nothing for 55 minutes behind a 1/1 pod.
 
-It authenticates by POSTing Grafana's own `/login` from inside the page with the SOPS
-`grafana_admin_password`. Same origin, so the Authelia session `ui_mcp.sh` already minted
-carries it — no route is opened for a machine caller, and the password never leaves the
-pytest process and the MCP server. Grafana registers that endpoint behind its
-not-signed-in middleware, so the tier checks `/api/user` **before** posting: once a session
-exists the mint endpoint answers 404, which reads exactly like a wrong password.
+It authenticates through Authelia. Grafana is an OIDC client of the portal (issue #1374), so
+the tier signs out of whatever session the browser profile carried, navigates to
+`/login/generic_oauth`, and the Authelia cookie `ui_mcp.sh` already minted completes the
+redirect chain. **No credential is typed.** It then asserts `/api/user` reports the Authelia
+username, which is the half a 302 cannot prove: the forward-auth middleware redirects before
+the backend is reached, so only the logged-in identity shows the OIDC round trip finished.
 
-**This tier is how a Claude session verifies a Grafana board — driving the browser by hand is
-not.** Every other service in this file is reachable through the `homelab-ui` MCP tools with
-the Authelia session `ui_mcp.sh` mints. Grafana is the exception: a
-`mcp__homelab-ui__browser_navigate` to `/d/<uid>/` lands on `/login` (measured 2026-09-06,
-`status=302 userId=0`), and the only way past it by hand is typing the admin password into a
-tool call, which puts a live credential in the session transcript and forces a rotation. The
-tier already does that login inside Python. Run it instead:
+**This tier is still how a Claude session verifies a Grafana board.** A
+`mcp__homelab-ui__browser_navigate` to `/d/<uid>/` lands on Grafana's own login page — the
+admin form stays on for the public route and as break-glass — and getting past it by hand
+means clicking "Sign in with Authelia" and then re-checking the panels anyway. The tier does
+both in Python. Run it instead:
 
 ```bash
 uv run python scripts/diagnostics/ui_login.py --check   # mint one first if this says expired
