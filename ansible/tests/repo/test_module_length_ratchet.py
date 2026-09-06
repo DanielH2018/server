@@ -312,12 +312,15 @@ def test_adding_a_path_is_clean_when_this_commit_changes_the_guard():
     assert raised_entries({}, added, "list.txt", guard_changed=True) == []
 
 
-def test_a_raised_entry_is_flagged_even_when_the_guard_changed():
-    """The exemptions cover additions only — an existing entry never rises."""
-    flagged = raised_entries(
+def test_a_raised_entry_is_clean_when_this_commit_changes_the_guard():
+    """A widening finds patches that were always there in an already-listed file too.
+
+    The pair is `test_a_raised_entry_is_flagged` above: without a guard change, a rise fails.
+    """
+    clean = raised_entries(
         {"scripts/a.py": 900}, {"scripts/a.py": 901}, "list.txt", guard_changed=True
     )
-    assert len(flagged) == 1
+    assert clean == []
 
 
 _HELPERS_BEFORE = (

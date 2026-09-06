@@ -480,8 +480,10 @@ def _fake_subprocess_run_for_other_sessions(diff_stdout):
 # status --porcelain` read. Pins "(+ uncommitted)" to follow git_dirty's answer, including a
 # git_dirty failure (tree vanished mid-scan) degrading to not-dirty rather than crashing the
 # section — matching the old `_run(check=False)` silence. Patches stdlib `subprocess.run`
-# (uncounted) instead of `_mod._run`, and `git_dirty` by its STRING target instead of as an
-# imported object, staying under the first-party monkeypatch ratchet on an already-capped file.
+# (uncounted) instead of `_mod._run`, and `git_dirty` by its STRING target because
+# `other_live_sessions` imports it inside the function, so `_mod` never holds the name. That
+# string target IS counted by the monkeypatch ratchet (issue #1271) — these three patches are
+# three of this file's entry, and only a seam on `other_live_sessions` would shed them.
 def test_other_live_sessions_dirty_marker_follows_lib_git(monkeypatch):
     monkeypatch.setattr(
         subprocess, "run", _fake_subprocess_run_for_other_sessions("file.py\n")

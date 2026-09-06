@@ -12,12 +12,17 @@
 #
 # A path may be ADDED only when origin/master does not track the file (it is new, or renamed)
 # or when the same commit changes the guard itself (a widened heuristic finds patches that
-# were always there). Otherwise give the module a seam rather than listing the test.
+# were always there). Otherwise give the module a seam rather than listing the test. A commit
+# that changes the guard may also RAISE an entry, for the same reason: a widening finds
+# patches in a file that already has a line as well as in one that does not.
 #
 # The counting heuristic and its blind spots are in ansible/tests/_ratchet.py's module
 # docstring. The three test_gitops_deploy_* entries below were added on 2026-09-05 by the
 # widening that resolves a fixture-parameter name against the conftest fixture that returns
-# the module -- the patches were always there, counting 0.
+# the module -- the patches were always there, counting 0. On 2026-09-06 the counter began
+# reading the string-target form `monkeypatch.setattr("mod.attr", ...)`, which added
+# test_prune_worktrees.py (14) and test_watcher.py (5) and raised test_session_health.py from
+# 33 to 36 -- again patches that were always there, counting 0.
 #
 # To see a file's count now, lower its entry here by 1 and run the guard -- the failure names
 # the real number:
@@ -25,7 +30,7 @@
 .claude/hooks/tests/test_auto_mode_bridge.py 1
 .claude/hooks/tests/test_block_footguns.py 2
 .claude/hooks/tests/test_nudge_land_sh.py 8
-.claude/hooks/tests/test_session_health.py 33
+.claude/hooks/tests/test_session_health.py 36
 ansible/roles/k8s/artifacts/tests/test_artifact_server.py 1
 ansible/roles/k8s/autofix-bridge/tests/test_autofix.py 13
 ansible/roles/k8s/monitor-bridge/tests/_check_gate_helpers.py 7
@@ -79,6 +84,7 @@ scripts/deploy_tools/tests/test_tick_ledger_report.py 2
 scripts/dev/tests/test_findings_claim_cli.py 7
 scripts/dev/tests/test_findings_next.py 1
 scripts/dev/tests/test_memory_survey.py 3
+scripts/dev/tests/test_prune_worktrees.py 14
 scripts/diagnostics/tests/test_postflight.py 16
 scripts/diagnostics/tests/test_probe.py 7
 scripts/diagnostics/tests/test_probe_alerts.py 8
@@ -95,5 +101,6 @@ scripts/home_assistant/tests/test_ha_state_model.py 3
 scripts/infra_map/tests/test_gen_infra_map.py 1
 scripts/infra_map/tests/test_infra_map_live.py 10
 scripts/lib/tests/test_gh.py 4
+scripts/lib/tests/test_watcher.py 5
 scripts/validate/tests/test_validate_k8s_manifests.py 1
 scripts/validate/tests/test_validate_unit_templates.py 4

@@ -23,15 +23,17 @@ Two things enforce "only falls". A count over its own entry fails (`Ratchet.viol
 Beyond that, `raised_entries` diffs the lists as the working tree has them against
 `origin/master`, or a branch could grow a file and raise its own line in the same diff. An
 added path fails there — a split that produced another oversized module has not finished —
-with two exemptions, both passed in as plain values by the caller that reads git:
+and so does a raised entry, with two exemptions, both passed in as plain values by the caller
+that reads git:
 
-- A path `origin/master` does not track. That is a new or renamed file, and a rename would
-  otherwise read as a deletion plus a forbidden addition.
-- A changed guard. Widening the heuristic (as the `importlib` fix did) finds patches that were
-  always there, and those files have to be able to enter the list in the same branch. The
-  trigger is narrow on purpose: the whole of `_ratchet.py` and the test module, but only the
-  text of `_helpers.is_test_file` — 198 modules import `_helpers`, so any edit to it would
-  otherwise wave through an addition that has nothing to do with the guard.
+- A path `origin/master` does not track may be added. That is a new or renamed file, and a
+  rename would otherwise read as a deletion plus a forbidden addition.
+- A changed guard lets any path be added AND lets an entry rise. Widening the heuristic (as
+  the `importlib` fix did) finds patches that were always there, in files that already have an
+  entry as well as in files that do not, so both moves have to be possible in the branch that
+  widens. The trigger is narrow on purpose: the whole of `_ratchet.py` and the test module,
+  but only the text of `_helpers.is_test_file` — 198 modules import `_helpers`, so any edit to
+  it would otherwise wave through a change that has nothing to do with the guard.
 
 What the monkeypatch heuristic counts, and what it misses:
 
@@ -52,8 +54,17 @@ What the monkeypatch heuristic counts, and what it misses:
 - Not counted: a fixture that returns a module with neither the annotation nor a bare
   `import`/`return` of the same name — a factory closure, say. The annotation is the signal
   the repo already writes; a dataflow analysis across a conftest's own imports is not.
-- Not counted: the string-target form `monkeypatch.setattr("mod.attr", ...)`, a receiver
-  spelled anything but `monkeypatch`, and `delattr`/`setitem`/`setenv`/`chdir`.
+- Counted: the string-target form `monkeypatch.setattr("<mod>.<attr>", ...)`, when the first
+  dotted segment is a first-party module name. It is the object form's equal at runtime and
+  pins the same module name into the test, so counting one and not the other selected a
+  spelling rather than a design: `scripts/dev/tests/test_prune_worktrees.py` patched
+  first-party internals fourteen times and measured 0, and on 2026-09-05 an implementer chose
+  the string form there because it was the form the ratchet did not see. The string carries
+  the module's own dotted name rather than a local alias, so its root is matched against the
+  first-party names directly and not against what the test imported. `"subprocess.run"` stays
+  out for the same reason a patch on `sys` does.
+- Not counted: a receiver spelled anything but `monkeypatch`, and
+  `delattr`/`setitem`/`setenv`/`chdir`.
 - Not counted: a patch on an imported class or function, unless its name happens to match a
   first-party module name. Restricting roots to module names is what keeps the standard
   library out, and an import statement does not say which kind of object it binds.
@@ -178,12 +189,20 @@ def raised_entries(
         new: the list as the working tree has it.
         name: the allowlist's filename, for the message.
         untracked_on_master: paths `origin/master` does not track, which may be added.
-        guard_changed: whether the guard differs from `origin/master`, which may add any path.
+        guard_changed: whether the guard differs from `origin/master`, which may add any path
+            and may raise any entry.
     """
     found = []
     for path, limit in sorted(new.items()):
         if path in old:
-            if limit > old[path]:
+            # DECIDED: a changed guard may RAISE an entry, not only add one. A widening finds
+            # patches that were always there in files that already have a line, which is what
+            # the string-target fix hit: test_session_health.py went 33 -> 36 and no exemption
+            # covered it. The cost is that `raised_entries` serves both ratchets, so a branch
+            # editing _ratchet.py may also raise a module-length entry; the bound is that the
+            # trigger is narrow (this file, its test module, or _helpers.is_test_file) and the
+            # guard diff is in the same PR a reviewer reads.
+            if limit > old[path] and not guard_changed:
                 found.append(
                     f"{path}: {name} says {limit}, up from {old[path]} on origin/master. "
                     f"An entry only ever falls: lower the file, not the bar."
@@ -274,6 +293,31 @@ def _bound_module_names(
     return bound
 
 
+def _targets_a_first_party_module(
+    target: ast.expr,
+    bound: Collection[str],
+    first_party: Collection[str],
+) -> bool:
+    """Whether one `monkeypatch.setattr` target names a first-party module.
+
+    Two spellings, identical at runtime, resolved against different sets. The object form
+    walks the attribute chain down to its root name and asks whether an import bound that
+    name to a first-party module. The string form carries the module's own dotted name, so
+    there is no local binding to read and its root segment is matched against the first-party
+    names themselves.
+    """
+    # DECIDED: the string form counts, resolved against `first_party` rather than `bound`. It
+    # is the object form's equal at runtime, and counting only the object form taught authors
+    # which spelling the guard could not see. The rationale and the incident are in this
+    # module's docstring.
+    if isinstance(target, ast.Constant) and isinstance(target.value, str):
+        root, _, attr = target.value.partition(".")
+        return bool(attr) and root in first_party
+    while isinstance(target, ast.Attribute):
+        target = target.value
+    return isinstance(target, ast.Name) and target.id in bound
+
+
 def count_module_patches(
     source: str,
     first_party: Collection[str],
@@ -294,9 +338,7 @@ def count_module_patches(
                 func=ast.Attribute(value=ast.Name(id="monkeypatch"), attr="setattr"),
                 args=[target, *_],
             ):
-                while isinstance(target, ast.Attribute):
-                    target = target.value
-                if isinstance(target, ast.Name) and target.id in bound:
+                if _targets_a_first_party_module(target, bound, first_party):
                     counted += 1
     return counted
 
