@@ -188,6 +188,10 @@ kuma_status_page_groups:
       - "^monitor-bridge-(prometheus|targets|cluster-prometheus|cluster-targets)$"
       - "^monitor-bridge-(loki|loki-reachable|promtail-dropped|discord)$"
       - "^monitor-bridge-traefik"
+      # A routing signal, not a per-app tile: it probes ping@internal behind the edge's own
+      # self-check path, so it groups with the other edge observability tiles rather than
+      # with Services.
+      - "^homelab-edge-allclear$"
       - "^claude-otel-health$"
       - "^remember-logs-health$"
   - name: Backups & Storage

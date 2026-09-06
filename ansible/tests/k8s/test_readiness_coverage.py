@@ -31,7 +31,9 @@ _NO_READINESS = {
     (
         "uptime-kuma",
         "autokuma",
-    ): "sidecar; readiness would gate uptime-kuma's own Service",
+    ): "sidecar; readiness on /health would gate uptime-kuma's own Service until the first "
+    "reconcile lands — a measured 76s Service-endpoint gap per pod replacement, which is why "
+    "its startupProbe was removed for livenessProbe.initialDelaySeconds on 2026-09-06 (#1348)",
     # The exportarr metrics sidecars, same shape as the three above and one degree worse: a
     # readinessProbe here would let an EXPORTER outage pull its *arr out of its own Service,
     # so monitoring would take down the thing it monitors. They keep a livenessProbe, and a

@@ -33,8 +33,30 @@ way and fails when the pin moves off one.
 Two rc-2 facts the deployment depends on. `@/path` in an env value makes AutoKuma read the
 file and strip one trailing newline, so the admin password needs no shell wrapper — which
 matters because the rc-2 base is distroless. And `/health` on port 8090 answers 503 until the
-first sync lands, so it needs a startupProbe in front of the liveness probe, or the pod is
-killed mid-reconcile.
+first sync lands, so the liveness probe needs an allowance in front of it or the pod is killed
+mid-reconcile. That allowance is `initialDelaySeconds: 300` on the liveness probe — see the
+next trap for why it is not a startupProbe.
+
+### A startupProbe on the sidecar gated the whole pod's Service
+Until 2026-09-06 the allowance above was a startupProbe (`/health`, 30 x 10s). The kubelet holds
+`Ready = false` for a container whose startup probe has not succeeded, whether or not that
+container has a readinessProbe (`pkg/kubelet/prober/prober_manager.go`, `UpdatePodStatus`:
+`if !started { continue }`). Pod Ready is the AND of all containers, so the uptime-kuma Service
+had no endpoint until autokuma's first reconcile landed: a measured **76s** of Kuma serving with
+nothing routed to it, on every pod replacement, six of them in the 48h to 2026-09-06 (#1348).
+
+Most of that was not reconcile work. autokuma's first connect fails while Kuma is still starting,
+kuma-client then waits a hardcoded 9.0s for readiness (`for i in 0..10 { sleep(200ms * i) }` in
+`client.rs` at the pinned `v2.1.0-rc.2` — 200 x 45 = 9000ms, matching a measured 9.012s), and the
+sync loop sleeps a full `AUTOKUMA__SYNC_INTERVAL` before retrying. **`AUTOKUMA__KUMA__CONNECT_TIMEOUT`
+does not shorten it.** The option is real (default 30.0, `kuma-client/src/config.rs`) but that
+readiness loop reads no config value at all.
+
+The fix was to delete the startupProbe and move its 300s onto `livenessProbe.initialDelaySeconds`.
+Same allowance, same steady-state detection (3 x 30s); the one cost is that a fixed grace is not
+adaptive, so a container that never becomes healthy is killed at ~360s rather than ~300s.
+**Do not add a readinessProbe here to compensate** — it re-creates the same 76s gap by the same
+AND, and it is what `test_readiness_coverage.py` records this container's exemption for.
 
 ### AutoKuma compares notification configs by key count
 AutoKuma's `config_eq` (`kuma-client/src/models/notification.rs`) compares a notification's

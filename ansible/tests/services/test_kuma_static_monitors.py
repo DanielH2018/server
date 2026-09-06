@@ -242,6 +242,11 @@ EMAIL_TIER = {
     "UPS Battery Health",
     "Discord Delivery",
     "Kubelet CSI Mount Read-Only",
+    # Not a "the fix cannot wait a day" tile like the fifteen above — it is on the tier for the
+    # transport, not the urgency. A fleet-wide recovery bursts every tile's UP notification into
+    # the same second, and Discord's per-webhook bucket dropped five of them on 2026-09-06
+    # (#1342). SMTP is a different bucket, so this one all-clear lands.
+    "Homelab Edge (all-clear)",
 }
 
 
@@ -409,3 +414,58 @@ def test_no_live_monitor_accepts_404_without_checking_the_body():
         "monitor(s) accept 404 with no body check — green through a total-404 edge: %s"
         % sorted(offenders)
     )
+
+
+# ── the fleet-level all-clear tile (#1342) ────────────────────────────────────────────────
+# Its value rests on the target, not on the notification list. `Homelab Edge (all-clear)` is
+# the one tile that must go DOWN for a fleet-wide edge failure and come back with a single
+# message, so it has to probe something no workload can break: `ping@internal` behind
+# `PathPrefix(/.well-known/traefik-edge-selfcheck)`, which answers only when Traefik built a
+# routing table at all.
+#
+# Repointing it at an app route is the regression this guards, and it is a repeat of #1341:
+# `k3s homelab-mcp (edge gate)` was named for the edge while probing a body Traefik also
+# returns, and read 1 for all 3.5 hours of the total-404 outage of #1322. An app route fails
+# the other way too — the app can be down while the edge is fine, which pages a fleet outage
+# that is not happening.
+_EDGE_SELFCHECK_PATH = "/.well-known/traefik-edge-selfcheck"
+_ALL_CLEAR_ID = "homelab-edge-allclear.json"
+
+
+def _all_clear_is_app_coupled(entity: dict) -> bool:
+    return _EDGE_SELFCHECK_PATH not in entity.get("url", "")
+
+
+def test_an_all_clear_on_the_edge_selfcheck_path_is_clean():
+    assert not _all_clear_is_app_coupled(
+        {
+            "type": "keyword",
+            "url": "https://www.local.example.com" + _EDGE_SELFCHECK_PATH,
+            "keyword": "OK",
+        }
+    )
+
+
+def test_an_all_clear_pointed_at_an_app_route_is_flagged():
+    # The shape #1341 already paid for once: an app's own health path, named for the edge.
+    assert _all_clear_is_app_coupled(
+        {
+            "type": "keyword",
+            "url": "https://mcp.local.example.com/health",
+            "keyword": "ok",
+        }
+    )
+
+
+def test_the_fleet_all_clear_probes_the_edge_selfcheck_route():
+    entities = _entities()
+    # Non-vacuity by name: the render is gated on traefik_k8s_manage_crowdsec, so a template
+    # edit that dropped the tile would leave this rule inspecting nothing.
+    assert _ALL_CLEAR_ID in entities, sorted(entities)
+    entity = entities[_ALL_CLEAR_ID]
+    assert not _all_clear_is_app_coupled(entity), (
+        "the fleet all-clear must probe the edge self-check route, not an app: %s"
+        % entity.get("url")
+    )
+    # A status code alone reads green through a total-404 edge (#1341), so the body is checked.
+    assert entity["type"] == "keyword" and entity["keyword"] == "OK", entity
