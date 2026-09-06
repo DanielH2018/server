@@ -8,7 +8,12 @@
 # units change — so activation is fully IaC (no manual `systemctl start`) and the
 # unit is validated end-to-end at provision time. Steady-state runs are timer-driven.
 # A noop when the host is already in sync; fails the play if the deploy itself fails.
+#
+# Suppressed when `gitops_deploy_kick_after_change` is false, which is what the deployer's own
+# denylist reconcile passes: that apply runs inside this very unit, so `systemctl start` would
+# block on the activation already in flight. See `deploy_io.render_gitops_config`.
 - name: Run gitops-deploy once
+  when: gitops_deploy_kick_after_change | bool
   ansible.builtin.systemd:
     name: gitops-deploy.service
     state: started

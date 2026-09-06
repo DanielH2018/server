@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
-"""The two phases that run before a tick knows which branch it is on.
+"""The phases that run before a tick knows which branch it is on.
 
 `assess` reads both HEADs and classifies the tick into a `TickTarget`; `plan_tick` turns the
-incoming range into the `TickPlan` one `deploy_handlers` phase then acts on. Nothing here
-deploys: both read, decide and record, and `gitops_deploy.main()` owns the order.
+incoming range into the `TickPlan` one `deploy_handlers` phase then acts on. Neither deploys:
+both read, decide and record, and `gitops_deploy.main()` owns the order.
+
+`reconcile_denylist` is the one exception, and runs between them. It applies exactly one
+playbook — `initial_setup.yml --tags gitops_deploy`, which re-renders this deployer's OWN
+config.env — and it deploys no service. It sits here because it acts on the checkout the two
+phases around it have just read, not on a change set.
 
 Each takes the tick's `tools`, `state` and `config` — the `deploy_config.Config`
 `gitops_deploy.tick_config()` snapshots once per tick, never the entry module itself.
@@ -148,6 +153,99 @@ def plan_tick(
     cs = reroute_k8s_services(cs, k8s_services)
     cs = _promote_k8s_auto_deploys(tools, state, config, cs, paths, target)
     return TickPlan(cs=cs, paths=paths, k8s_services=k8s_services)
+
+
+# The one command that re-derives K8S_AUTODEPLOY_DENYLIST — the filter plugin reads every role
+# under roles/k8s/ at render time — and the same command the stale-denylist alert has always told
+# an operator to run.
+#
+# `gitops_deploy_kick_after_change=false` is load-bearing, not tidiness. Rendering config.env
+# notifies the role's "Run gitops-deploy once" handler, which runs `systemctl start
+# gitops-deploy.service` and BLOCKS until that job finishes. This render runs INSIDE that same
+# Type=oneshot unit, so systemd coalesces the request into the activation already in flight and
+# the handler would wait on the tick that is waiting on it — a self-deadlock broken only by the
+# timeout. The kick exists so a first install activates without a manual `systemctl start`; a
+# tick that is already running needs no kick. ENFORCED by
+# ansible/tests/deploy/test_denylist_render_suppresses_the_kick.py.
+RENDER_CONFIG_ARGV = [
+    "uv",
+    "run",
+    "--frozen",
+    "ansible-playbook",
+    "ansible/initial_setup.yml",
+    "--tags",
+    "gitops_deploy",
+    "-e",
+    "gitops_deploy_kick_after_change=false",
+]
+
+
+def reconcile_denylist(state: DeployerState, config: Config, head: str) -> bool:
+    """Re-render config.env when its denylist disagrees with the checkout it was rendered from.
+
+    `K8S_AUTODEPLOY_DENYLIST` is derived from every role under roles/k8s/ at RENDER time, and
+    the only thing that re-renders it is `initial_setup.yml --tags gitops_deploy`. A change
+    under roles/k8s/ matches no prefix that runs that playbook, so adding a role declaring
+    `k8s_autodeploy: false` left the baked list stale and `_promote_k8s_auto_deploys` disarmed
+    auto-deploy FLEET-WIDE until an operator re-rendered by hand — measured on game-stats-lib,
+    2026-09-05, disarmed 12:30 to 18:29 UTC (issues #1265, #1294).
+
+    This is the local half of that invariant: config.env must match the declarations at the
+    checkout's own HEAD. Stating it against HEAD rather than origin is what makes it fixable —
+    the render reads the working tree, so re-rendering can only ever produce HEAD's list. The
+    origin-side comparison in `_promote_k8s_auto_deploys` stays exactly as it was and remains
+    the fail-safe for the window where origin is ahead: this heals on disk, and the tick that
+    follows the ff-merge is the one that reads the fresh config.
+
+    Returns:
+        True when a re-render ran (whether or not it succeeded), False when nothing was needed.
+    """
+    if not config.k8s_autodeploy_enabled:
+        return False
+    if state.read("denylist_rendered") == head:
+        # Both halves of the once-per-SHA guard: the per-role `git show` reads below (64 roles as of 2026-09-06) are skipped on
+        # every idle tick, and a mismatch a re-render CANNOT fix — a config rendered from an
+        # unpushed tree — re-renders once for that checkout instead of every ten minutes.
+        return False
+    try:
+        declared = declared_denylist(deploy_io.k8s_declarations_at(config.repo, head))
+    except Exception as exc:
+        # No marker write: an unreadable ref is transient, so the next tick tries again.
+        log(
+            f"could not read k8s declarations at {head[:8]}: {type(exc).__name__}: {exc}"
+        )
+        return False
+    if declared == config.k8s_autodeploy_denylist:
+        state.write("denylist_rendered", head)
+        return False
+    # Written BEFORE the run, not after: a render that times out or is SIGTERMed mid-play must
+    # not be retried every tick against the same checkout.
+    state.write("denylist_rendered", head)
+    log(
+        f"config.env denylist is stale against the checkout at {head[:8]} "
+        f"(denied at HEAD but not in config: {sorted(declared - config.k8s_autodeploy_denylist) or 'none'}; "
+        f"in config but not at HEAD: {sorted(config.k8s_autodeploy_denylist - declared) or 'none'}) "
+        "— re-rendering it"
+    )
+    try:
+        # Built here rather than in deploy_io because that module is at its length ratchet;
+        # it still reaches `deploy_io.run` qualified, which is the one boundary the suite
+        # patches, so the argv above is what a test asserts on.
+        deploy_io.run(
+            RENDER_CONFIG_ARGV, cwd=config.repo, timeout=config.broad_deploy_timeout_s
+        )
+    except Exception as exc:
+        # DECIDED: a failed self-render does NOT write hold_sha, unlike `handle_broad`'s failed
+        # apply. The two failures contain differently. A half-applied broad plane leaves live
+        # state nothing recorded, so parking is the containment. This render only rewrites the
+        # deployer's own config.env; a failure leaves the OLD file, which is the state the tick
+        # already tolerates — auto-deploy stays disarmed by the origin comparison, which is the
+        # fail-safe direction. Parking every unrelated service deploy behind a config render
+        # would be a strictly larger outage than the one this heals.
+        log(f"denylist re-render failed: {type(exc).__name__}: {exc}")
+        return True
+    log("config.env re-rendered — the next tick reads the fresh denylist")
+    return True
 
 
 def _promote_k8s_auto_deploys(

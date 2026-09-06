@@ -275,3 +275,11 @@ gitops_deploy_staging_backfill_heartbeat: /var/lib/gitops-deploy/staging-backfil
 # own enable/stop task, in both directions — a marker only ever created would make the monitor
 # permanently red on the disarm it exists to explain.
 gitops_deploy_staging_backfill_armed_marker: /var/lib/gitops-deploy/staging-backfill-armed
+
+# ── self-render kick ──────────────────────────────────────────────────────────────────────────
+# Whether applying this role kicks an immediate `systemctl start gitops-deploy.service`. True for
+# every ordinary apply: it is what makes activation fully IaC on a first install. The deployer's
+# own denylist reconcile passes false, because that apply runs INSIDE the unit the kick would
+# start and the handler would block on the activation already in flight — see
+# `deploy_io.render_gitops_config`.
+gitops_deploy_kick_after_change: true

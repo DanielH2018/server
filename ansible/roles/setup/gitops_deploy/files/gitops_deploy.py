@@ -116,6 +116,11 @@ K8S_ALERT_FILE = "/var/lib/gitops-deploy/k8s_alerted_sha"
 # every tick, so it clears the moment an operator re-renders the config. Only the page is
 # throttled.
 STALE_DENYLIST_FILE = "/var/lib/gitops-deploy/stale_denylist_alerted_sha"
+# The checkout SHA the denylist reconcile last ran against — the once-per-SHA guard on
+# `deploy_phases.reconcile_denylist`. It bounds BOTH directions: the git read is skipped
+# entirely while the checkout has not moved, and a mismatch a re-render cannot fix (a config
+# rendered from an unpushed tree) re-renders once per SHA rather than every tick.
+DENYLIST_RENDER_FILE = "/var/lib/gitops-deploy/denylist_rendered_sha"
 # Same throttle for a master tip that FAILED CI: alert once per SHA so the operator fixes or
 # reverts, instead of re-paging every 30-min tick for as long as master stays red. There is no
 # marker for the `ci_pending` path — an unfinished run is the normal state for the first tick or
@@ -377,6 +382,19 @@ def main(tools: DeployTools | None = None, config: Config | None = None) -> int:
     target = deploy_phases.assess(tools, STATE, config)
     if target.action == "dirty":
         return deploy_handlers.handle_dirty(tools, STATE, config, target)
+    # Before any branch that could return: a stale denylist is healed on an IDLE tick, which is
+    # what the tick after an ff-merge is, and that is the tick whose checkout already carries the
+    # role that made the config stale. Deliberately after the dirty branch — the render derives
+    # the denylist from the working tree, so rendering from a tree an operator is mid-edit in
+    # would bake a list nobody pushed.
+    if deploy_phases.reconcile_denylist(STATE, config, target.local):
+        # A render ENDS the tick, for two reasons. The in-memory config still holds the list the
+        # render just proved wrong, so anything below would decide against it. And every arm of
+        # this unit is non-stacking by construction — the unit template sizes TimeoutStartSec as
+        # max(broad, staging + k8s + rollback), not a sum — so a render that ran on to a k8s
+        # deploy would be the first arm to add its budget to another's and could be SIGTERMed
+        # mid-rollback. The next tick is ten minutes away and reads the fresh config.
+        return 0
     if target.action == "noop":
         return 0
     if target.action == "skip_hold":

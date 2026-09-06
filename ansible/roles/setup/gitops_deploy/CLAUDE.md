@@ -242,11 +242,44 @@ stay).
     set rather than a per-role check. The `new-k8s-service` skill carries the re-render as a
     step for that reason.
 
-    The trigger for that re-render is asymmetric with what the denylist reads, and nothing
-    closes the gap automatically. `k8s_autodeploy_denylist` derives from every role under
-    `roles/k8s/`, while the only path that re-renders `config.env` is a change matching
-    `_BROAD_SETUP_PREFIXES` — `ansible/roles/setup/`. So a change that alters the derived
-    denylist matches no prefix that re-renders it, by construction.
+    The trigger for that re-render is asymmetric with what the denylist reads.
+    `k8s_autodeploy_denylist` derives from every role under `roles/k8s/`, while the only path
+    that re-renders `config.env` from a *changed path* is one matching `_BROAD_SETUP_PREFIXES` —
+    `ansible/roles/setup/`. So a change that alters the derived denylist matches no prefix that
+    re-renders it, by construction.
+
+    `deploy_phases.reconcile_denylist` closes that gap without touching the prefix sets (#1294).
+    It states the invariant LOCALLY — config.env must agree with the declarations at the
+    checkout's own HEAD — and re-renders when it does not, by running `initial_setup.yml --tags
+    gitops_deploy` itself. Stating it against HEAD rather than origin is what makes it fixable:
+    the render reads the working tree, so it can only ever produce HEAD's list. The heal
+    therefore lands on the tick AFTER the ff-merge, which is normally an idle one. Four
+    properties are worth knowing before changing it:
+
+    - **It passes `gitops_deploy_kick_after_change=false`.** Rendering config.env notifies this
+      role's "Run gitops-deploy once" handler, whose `systemctl start` blocks on the activation
+      the render is running under. Without the flag the heal self-deadlocks until its timeout.
+      ENFORCED by `ansible/tests/deploy/test_denylist_render_suppresses_the_kick.py`.
+    - **`denylist_rendered_sha` guards it once per checkout SHA.** That bounds both the cost (the
+      per-role `git show` reads are skipped on every idle tick) and the retry (a mismatch a
+      re-render cannot fix — a config rendered from an unpushed tree — renders once, not every
+      ten minutes). The marker is written BEFORE the run, so a SIGTERM mid-play cannot loop it.
+    - **A render ENDS that tick.** Two reasons, and the second is the harder one. The config in
+      memory still holds the list the render just disproved, so anything after it would decide
+      against a list known to be wrong. And every arm of this unit is non-stacking by
+      construction — the unit template sizes `TimeoutStartSec` as `max(broad, staging + k8s +
+      rollback)` rather than a sum — so a render that ran on to a k8s deploy would be the first
+      arm to add its budget to another's, and could be SIGTERMed mid-rollback. The next tick is
+      ten minutes away and reads the fresh config.
+    - **A dirty tree is never rendered from**, because the filter reads the working tree and
+      would bake a list nobody pushed.
+    - **A failed render writes no `hold_sha`**, unlike `handle_broad`'s failed apply. It rewrites
+      only this deployer's own config.env, so a failure leaves the old file — the state the tick
+      already tolerates, with auto-deploy disarmed by the origin comparison below. Parking every
+      unrelated deploy behind a config render would be a larger outage than the one it heals.
+
+    The origin-side comparison below is unchanged and stays the fail-safe for the window where
+    origin is ahead of the checkout.
 
     The deployer detects this itself instead of relying on an operator to remember it. Each
     tick, `k8s_declarations_at(origin)` reads every role's `defaults/main.yml` at the SHA the

@@ -31,9 +31,9 @@ STATE_DIR = "/var/lib/gitops-deploy"
 class DeployerState:
     """The marker files under /var/lib/gitops-deploy, as one object with typed accessors.
 
-    Eighteen files record what this host believes — the held SHA, the plane that failed, how
+    Nineteen files record what this host believes — the held SHA, the plane that failed, how
     long it has been behind origin, one dedupe marker per alert channel, the undelivered-alert
-    queue, the staging tick ledger and the operator's staging override — through eighteen
+    queue, the staging tick ledger and the operator's staging override — through nineteen
     module constants and a pair of bare `_read_marker`/`_write_marker` helpers, so nothing
     described the state as a whole. This is that description. The paths, the file contents and
     the empty-vs-missing semantics are unchanged; `gitops_deploy.py` still holds the literal
@@ -59,6 +59,7 @@ class DeployerState:
         "meta_alerted": "meta_alerted_sha",
         "k8s_alerted": "k8s_alerted_sha",
         "stale_denylist_alerted": "stale_denylist_alerted_sha",
+        "denylist_rendered": "denylist_rendered_sha",
         "ci_alerted": "ci_alerted_sha",
         # The three that are not per-SHA dedupe markers. They are here for the same reason as
         # the rest — so a caller names a marker rather than carrying a path — and because the
