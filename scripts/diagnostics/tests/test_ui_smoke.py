@@ -56,6 +56,14 @@ SERVICES = [
     # there. Issue #1399 read a `Homepage` failure as a stale expectation and proposed both
     # relaxing this line and deleting that setting; both would have made the check permanently
     # green on the broken state.
+    #
+    # The MECHANISM behind a `Homepage` failure here was settled by #1414 and is not an
+    # unreadable config Secret: the image bakes a config-less render of `/` (`en.json` reads
+    # `"initialSettings":{}`), and upstream re-renders only for a browser whose stored
+    # `/api/hash` value mismatches the pod's. This suite drives a FRESH Chromium with no
+    # localStorage, so it never triggered that re-render and saw the baked page. The
+    # `lifecycle.postStart` hook in the homepage role now revalidates at startup; that is what
+    # makes this entry deterministic rather than dependent on someone's browser having visited.
     ("homepage", "My Awesome Homepage", "/"),
     ("sonarr", "Sonarr", "/"),
     ("freshrss", "Login · FreshRSS", "/i/"),

@@ -80,6 +80,48 @@ spec:
             - name: homepage-icons
               mountPath: /app/public/icons
               readOnly: true
+          # Regenerate `/` from the config this pod can actually read, once, at startup.
+          #
+          # WHY: the image ships a build-time render of `/` that carries NO settings.
+          # gethomepage's `getStaticProps` (src/pages/index.jsx, v1.13.2) has no `revalidate`
+          # key, so `next build` bakes the page into the image — against the skeleton config
+          # the build has, whose settings.yaml is empty. Verified against the pinned digest:
+          # `/app/.next/server/pages/en.json` in the image reads
+          # `"initialSettings":{}` and `/app/.next/server/pages/en.html` reads
+          # `<title data-next-head="">Homepage</title>`, and prerender-manifest.json records
+          # `"initialRevalidateSeconds": false` — the cached page never expires on its own.
+          #
+          # Upstream's only re-render trigger is client-side: the browser compares
+          # `/api/hash` (config hashes plus HOMEPAGE_BUILDTIME, reset by docker-entrypoint.sh
+          # on every start) against its own localStorage, and calls `/api/revalidate` on a
+          # MISMATCH. A browser with no stored hash stores it and triggers nothing. So a fresh
+          # pod visited only by fresh browsers serves the config-less page for the container's
+          # whole life, while the Deployment stays 1/1 and `probe.py health homepage` exits 0.
+          # That is the 2026-09-06 `-m ui -k homepage` failure behind #1399/#1410.
+          #
+          # This hook removes the failure mode instead of detecting it: no CI-runnable detector
+          # exists (the pod IP is fenced by the netpol baseline, `pods/exec` is forbidden to the
+          # read-only ServiceAccount, and Traefik needs an Authelia session).
+          #
+          # `127.0.0.1:<port>` is allow-listed unconditionally by upstream's middleware, so no
+          # Host header is needed here — unlike the probes below, which arrive as the pod IP.
+          # It NEVER exits non-zero: a failing postStart kills the container, which would turn
+          # a cosmetic defect into a crashloop. Breaks on first success, so the container is
+          # held out of Running for seconds, not the full budget.
+          lifecycle:
+            postStart:
+              exec:
+                command:
+                  - sh
+                  - -c
+                  - >-
+                    i=0;
+                    while [ "$i" -lt 60 ]; do
+                    wget -q -O /dev/null "http://127.0.0.1:{{ container_item.port }}/api/revalidate" && break;
+                    i=$((i+1));
+                    sleep 1;
+                    done;
+                    exit 0
           readinessProbe:
             httpGet:
               path: /api/healthcheck
