@@ -10,7 +10,6 @@ from _findings_fakes import (
     Fakes,
     build_tools,
     facts,
-    fake_verify,
     live_worktree,
     make_issue,
 )
@@ -362,37 +361,32 @@ def test_claim_proceeds_when_the_worktree_read_fails(capsys):
 # --- #1277: every path that closes or reopens releases the claim ---------------------------
 
 
-def test_verify_close_releases_the_claim_it_closes():
-    """`verify --close` called `plan_close` directly, skipping the release `close` makes.
+def test_close_releases_the_claim_it_closes():
+    """A close ends the work, so it releases whoever holds the issue — not just the caller.
 
-    `claims`, `reap` and `next` all read OPEN issues, so the claim it left behind was
-    invisible to every view at once — and a later `open` reopening the issue brought it back
-    LIVE, blocking `claim` for as long as the claiming worktree existed.
+    `claims`, `reap` and `next` all read OPEN issues, so a claim left on a closed issue is
+    invisible to every view at once — and a later `open` reopening that issue brings it back
+    LIVE, blocking `claim` for as long as the claiming worktree exists.
 
-    The claim here is STALE — `STALE` registers no worktree at all — because a LIVE claim
-    withholds the close entirely since #1302, and the release this test is about only
-    happens on a close that goes ahead.
+    `verify --close` was the third caller of this helper until `verify` stopped closing
+    anything (#1313); `close` and `open`'s reopen path are the two that remain.
     """
     issue = make_issue(
         1132,
         labels=["claimed"],
         comments=[claim_comment(WT, None, "t")],
     )
-    issue["body"] = "details\n\n## Verify-by\n```\ntrue\n```\n"
-    tools, calls = build_tools(
-        Fakes(issues=[issue], view=issue, verify=fake_verify, worktree_facts=STALE)
-    )
-    assert main(["verify", "1132", "--close"], tools) == 0
+    tools, calls = build_tools(Fakes(issues=[issue], view=issue))
+    assert main(["close", "1132", "--fixed"], tools) == 0
     assert any(f"Released: `{WT}`" in a for c in calls.gh for a in c)
     assert ["issue", "edit", "1132", "--remove-label", "claimed"] in calls.gh
 
 
-def test_verify_close_writes_no_release_for_an_unclaimed_issue():
+def test_close_writes_no_release_for_an_unclaimed_issue():
     """The rejecting half: nothing to release, so nothing is posted."""
     issue = make_issue(1132)
-    issue["body"] = "details\n\n## Verify-by\n```\ntrue\n```\n"
-    tools, calls = build_tools(Fakes(issues=[issue], view=issue, verify=fake_verify))
-    assert main(["verify", "1132", "--close"], tools) == 0
+    tools, calls = build_tools(Fakes(issues=[issue], view=issue))
+    assert main(["close", "1132", "--fixed"], tools) == 0
     assert not any("Released: `" in a for c in calls.gh for a in c)
     assert any(c[:2] == ["issue", "close"] for c in calls.gh)
 

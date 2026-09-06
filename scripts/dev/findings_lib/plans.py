@@ -178,8 +178,8 @@ def plan_open(
         labels: labels to apply on create.
         fp: the finding's fingerprint.
         source: the review or session that produced this finding.
-        verify_by: a read-only command whose exit code later tells `verify` whether the
-            finding is fixed; stored only when creating a new issue.
+        verify_by: prose describing how to check whether the finding is fixed, which
+            `verify` prints back; stored only when creating a new issue.
 
     Returns:
         A ``(outcome, exit_code, plans)`` tuple: outcome is one of ``created``, ``touched``,
@@ -247,8 +247,8 @@ def plan_close(
         pr: the PR that fixed it, included in the close comment when given.
         reason: required for every outcome but ``fixed``; what disproved the finding, or why
             the trade-off was accepted.
-        comment: overrides the default close comment (`verify` uses this to quote the
-            verify-by command and its output instead of naming a PR).
+        comment: overrides the default close comment, for a caller that has something to
+            record other than the PR that fixed the finding.
 
     Raises:
         KeyError: if ``outcome`` is not one of the three names.

@@ -125,10 +125,10 @@ def test_open_with_verify_by_stores_it_in_the_created_body():
         labels=_LABELS,
         fp="f" * 12,
         source="s",
-        verify_by="uv run pytest scripts/dev",
+        verify_by="Run `uv run pytest scripts/dev`; it should pass.",
     )
     body = plans[0][plans[0].index("--body") + 1]
-    assert parse_verify_by(body) == "uv run pytest scripts/dev"
+    assert parse_verify_by(body) == "Run `uv run pytest scripts/dev`; it should pass."
     # The section sits before the fingerprint trailer, not after.
     assert body.index("## Verify-by") < body.index("Fingerprint: `")
 

@@ -182,23 +182,17 @@ Closing a claimed issue posts its release and drops the `claimed` label first. `
 `reap` and `next` all read open issues, so a claim stranded on a closed issue leaves every
 view at once — invisible rather than wrong, which is harder to notice.
 
-`close` is not the only such path, and the other two used to strand a claim exactly that way.
-`verify --close` called the close planner directly and skipped the release. And the closing
-mechanism this document itself names — the PR body's `Closes #<n>`, which GitHub honours —
-posts no release comment at all and leaves the label on; `open` then reopens that issue for a
-later re-observation and the stale claim comes back LIVE, blocking `claim` and withholding the
-issue from `next` for as long as the claiming worktree exists. All three now go through one
-helper, `_release_held_claim`, and release whoever holds the claim rather than only the caller.
+`close` is not the only such path. The closing mechanism this document itself names — the PR
+body's `Closes #<n>`, which GitHub honours — posts no release comment at all and leaves the
+label on; `open` then reopens that issue for a later re-observation and the stale claim comes
+back LIVE, blocking `claim` and withholding the issue from `next` for as long as the claiming
+worktree exists. Both paths now go through one helper, `_release_held_claim`, and release
+whoever holds the claim rather than only the caller.
 
-**`verify --close` releases only a claim it is allowed to close over.** Releasing whoever
-holds the issue stops the claim being stranded; it does not stop the close itself, so an
-unrelated `verify --all --close` could still close an issue out from under the session
-working it. Every other write in the protocol refuses on a live claim, so this one does too:
-a LIVE claim withholds the close, the run prints who holds the issue, and it exits 3.
-`--close-claimed` closes anyway, and skips the worktree read entirely. A FAILED worktree read
-withholds the close as well — `next`'s conservative degradation rather than `reap`'s outright
-refusal — because a git error must not read as "no claims are live." Nothing pays for the
-worktree read unless a claim really sits on an issue the run is about to close.
+`verify --close` was a third such path, and grew a live-claim refusal of its own in #1302 so
+that an unrelated verify run could not close an issue out from under the session working it.
+Both are gone: `verify` no longer closes anything (#1313). A command that only prints cannot
+take an issue from anyone, so there is nothing left for the refusal to guard.
 
 The reopen posts its release as its own comment rather than folding the trailer into the
 regression note, so no comment body ever carries a `Claim:` and a `Released:` line at once.

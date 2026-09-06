@@ -11,13 +11,15 @@ the third one escalates, and a refuted finding stays closed.
 Every command PLANS a list of gh argv first (pure, unit-tested), then runs it. `--dry-run`
 prints the plan and writes nothing.
 
-VERIFY-BY. `open --verify-by '<command>'` stores a read-only shell command in the issue body
-under a `## Verify-by` heading, in a fenced code block so it survives a human editing the
-prose around it. `verify` re-runs that command later: exit 0 means the finding is FIXED,
-non-zero means it still reproduces. It refuses to run anything the repo's own read-only
-classifier (`.claude/hooks/auto-approve-readonly.py`, the same judgment that decides what a
-session can run without a prompt) does not clear — a command stored by `open` but never
-validated there is still only ever run through that gate.
+VERIFY-BY. `open --verify-by '<how to check it>'` stores prose in the issue body under a
+`## Verify-by` heading; `verify` prints those descriptions back so a person or an agent can
+act on them. NOTHING IS EXECUTED. Until 2026-09-06 a verify-by was a shell command whose exit
+code `verify` read as a verdict, gated by the repo's read-only classifier — and of the 17
+findings that ever carried one, 12 were genuine read-only commands the classifier refused, so
+the executable half mostly never ran. Prose describes any check, including the ones no safe
+command can express, and it removes the need to execute text read out of a GitHub issue body
+(#1313, #1351). A verify-by written before that change is still read back correctly: the
+fence around it is stripped and the command shown as the instruction it always was.
 
 This file is the CLI: the `cmd_*` handlers and the exit contract. Argument parsing is
 `findings_lib/cli.py`, the vocabulary and the pure reads are `findings_lib/issue_model.py`, the gh argv are
@@ -30,7 +32,7 @@ Usage::
     uv run python scripts/dev/findings.py open --title "..." --body-file f.md \\
         --severity high --kind gap [--domain network] [--file path/to/file.py:12] \\
         [--source review-2026-09-02] [--no-vetted-remediation] \\
-        [--verify-by 'uv run python scripts/diagnostics/probe.py health <svc>'] [--dry-run]
+        [--verify-by 'Run probe.py health <svc>; it should exit 0.'] [--dry-run]
     uv run python scripts/dev/findings.py touch 688 [--source review-2026-09-02]
     uv run python scripts/dev/findings.py claim 688 701 --worktree worktree-foo \\
         [--session id] [--force]
@@ -41,9 +43,8 @@ Usage::
     uv run python scripts/dev/findings.py close 688 --refuted --reason "..."
     uv run python scripts/dev/findings.py close 688 --accepted --reason "..."
     uv run python scripts/dev/findings.py list [--state open|closed|all] [--json]
-    uv run python scripts/dev/findings.py verify --all [--close] [--close-claimed] \\
-        [--timeout 120]
-    uv run python scripts/dev/findings.py verify 688 701 [--close]
+    uv run python scripts/dev/findings.py verify --all
+    uv run python scripts/dev/findings.py verify 688 701
     uv run python scripts/dev/findings.py next [--limit N] [--json]
 
 CLOSING A FINDING. `--fixed` closes as completed. The other two close as not planned and are
@@ -54,12 +55,12 @@ by hand — a hand-close is invisible to the dedup, so the next review re-files 
 decision and the comment on it reads "treat as a regression".
 
 RELEASING A STRANDED CLAIM. Every path that ends or restarts an issue's life releases the
-claim on it first, whoever holds it — `close`, `verify --close`, and `open`'s reopen path
-alike, all through `_release_held_claim`. `claims`, `reap` and `next` read OPEN issues, so a
-claim left on a closed one is invisible to every view at once rather than merely wrong, and a
-reopen brings it back LIVE (#1277). `verify --close` releases only a claim it is allowed to
-close over: a LIVE claim withholds the close entirely rather than being released under the
-session working it, and `--close-claimed` is the way past that (#1302).
+claim on it first, whoever holds it — `close` and `open`'s reopen path alike, both through
+`_release_held_claim`. `claims`, `reap` and `next` read OPEN issues, so a claim left on a
+closed one is invisible to every view at once rather than merely wrong, and a reopen brings
+it back LIVE (#1277). `verify` was a third such path until it stopped closing anything; the
+live-claim refusal it grew in #1302 went with the close, since a command that only prints
+cannot take an issue out from under the session working it.
 
 CLAIMING AN ISSUE. `claim` posts a `Claim:` comment and adds the `claimed` label, so a
 worktree fanning out several issues at once knows which are its own; `release` reverses
@@ -87,8 +88,7 @@ Exit codes: 0 done; 1 gh failed, or `reap` refused a git read failure rather tha
 "nothing is claimed"; 2 bad arguments, which includes a `--worktree` name the claim trailer
 could not carry; 3 nothing was written because the issue refuses it — closed, `manual`,
 outside the register, held by another worktree, not claimed, or lost a race to another
-claim — or because `claim`'s own `--worktree` would read stale at birth, or because
-`verify --close` withheld a close a live claim holds.
+claim — or because `claim`'s own `--worktree` would read stale at birth.
 """
 
 import argparse
@@ -137,10 +137,7 @@ from dev.findings_lib.plans import (
     plan_touch,
 )
 from dev.findings_lib.boundaries import FindingsTools
-from dev.findings_lib.verify import (
-    verify_close_comment,
-    verify_finding,
-)
+from dev.findings_lib.verify import verification_report
 
 
 def _release_held_claim(issue: dict, reason: str) -> list[list[str]]:
@@ -150,11 +147,11 @@ def _release_held_claim(issue: dict, reason: str) -> list[list[str]]:
     `next` all read OPEN issues, so a claim left on a closed one is invisible to every view
     at once — wrong rather than merely stale, and unreapable.
 
-    Hoisted out of `cmd_close` so `cmd_verify`'s `--close` loop and `cmd_open`'s reopen path
-    release the same way (#1277). `verify --close` called `plan_close` directly and stranded
-    every claim it closed; a `Closes #<n>` merge strands one too, and `plan_open` reopening
-    that issue for a later re-observation brought the stale claim back LIVE, blocking `claim`
-    and withholding the issue from `next` for as long as the claiming worktree existed.
+    Hoisted out of `cmd_close` so `cmd_open`'s reopen path releases the same way (#1277).
+    A `Closes #<n>` merge strands a claim too, and `plan_open` reopening that issue for a
+    later re-observation brought the stale claim back LIVE, blocking `claim` and withholding
+    the issue from `next` for as long as the claiming worktree existed. `verify --close` was
+    the third caller until `verify` stopped closing anything.
     """
     held = current_claim(issue)
     if not held:
@@ -292,42 +289,18 @@ def cmd_close(args: argparse.Namespace, tools: FindingsTools) -> int:
 
 
 def cmd_verify(args: argparse.Namespace, tools: FindingsTools) -> int:
-    """Handles the ``verify`` subcommand: re-runs each finding's stored verify-by command.
+    """Handles the ``verify`` subcommand: prints how to check each finding, and runs nothing.
 
-    ``--dry-run`` only gates the gh writes a passing ``--close`` would make; the verify-by
-    commands themselves always run — producing a verdict requires it, and they were already
-    proven read-only by `classify_verify_command` before they run at all.
-
-    AN `error` IS NOT A REPRODUCTION (#1308). `run_verify_by` already separates a predicate
-    that RAN and failed (``still-open``) from one that never produced a verdict at all
-    (``error``: refused by the classifier, timed out, or could not be launched), and it
-    carries the reason. That reason used to be computed and dropped, so a predicate nothing
-    could ever run read as a finding that keeps reproducing. Each `error` row now prints its
-    reason, and a run with any of them ends with a count. The exit code stays 0: it answers
-    "did verify run", not "what did verify find", and every caller reads it that way.
-    A predicate that runs fine but can never pass — the unsatisfiable anchor in #1308's own
-    example — still reads ``still-open`` and is NOT covered here.
-
-    A LIVE CLAIM WITHHOLDS THE CLOSE (#1302). Every other write in the protocol refuses on a
-    live claim — `plan_claim` raises, `plan_release` refuses a claim but its own, `cmd_claim`
-    reaps only a claim it has proved stale, `cmd_next` withholds. `verify --close` was the one
-    write that read no claim before acting, so an unrelated verify run could close an issue
-    out from under the session working it; releasing the claim first (#1277) made the takeover
-    tidy rather than preventing it. A FAILED worktree read withholds the close too, matching
-    `cmd_next`'s conservative degradation rather than `cmd_reap`'s outright refusal.
-    ``--close-claimed`` is the way past both, and skips the git read entirely. So does an
-    ordinary run closing unclaimed findings: `current_claim` is a pure read of comments
-    already in hand, so nothing pays for `worktree_facts` unless a claim really sits on an
-    issue the run is about to close.
+    A verify-by is prose, so this command reports and does not decide. It executes no stored
+    text, reaches no verdict, and closes nothing — closing stays with `close`, where a human
+    or an agent chooses it after doing what the instructions describe (#1313).
 
     Args:
-        args: parsed CLI namespace carrying ``all``, ``numbers``, ``close``,
-            ``close_claimed``, ``timeout`` and ``dry_run``.
-        tools: the process boundaries every gh call and every verify-by command goes through.
+        args: parsed CLI namespace carrying ``all`` and ``numbers``.
+        tools: the process boundaries the issue reads go through.
 
     Returns:
-        2 if neither or both of ``--all``/issue numbers were given, 3 if a close was
-        withheld because a live claim holds the issue, 0 otherwise.
+        2 if neither or both of ``--all``/issue numbers were given, 0 otherwise.
     """
     if args.all and args.numbers:
         sys.stderr.write("verify: pass --all or issue numbers, not both\n")
@@ -340,72 +313,8 @@ def cmd_verify(args: argparse.Namespace, tools: FindingsTools) -> int:
         if args.all
         else [_load_issue(n, tools) for n in args.numbers]
     )
-    results = [
-        (
-            issue,
-            issue["number"],
-            issue["title"],
-            *verify_finding(issue, args.timeout, tools),
-        )
-        for issue in issues
-    ]
-    for _issue, number, title, verdict, detail, _command in results:
-        print(f"#{number:<5} {verdict:<11} {title}")
-        # The `error` reason is the whole of what distinguishes "the predicate never ran"
-        # from "the finding still reproduces", and printing the verdict word alone threw it
-        # away (#1308). Refused / timed out / could not launch are three different operator
-        # actions, so the reason is printed rather than a generic marker.
-        if verdict == "error":
-            print(f"       └─ {detail.strip() or 'no reason given'}")
-    errored = sum(1 for r in results if r[3] == "error")
-    if errored:
-        print(
-            f"verify: {errored} predicate(s) never ran — an `error` is not a reproduction; "
-            "fix the predicate before reading the finding as unfixed"
-        )
-    if not args.close:
-        return 0
-    withheld = False
-    live: set[int] = set()
-    # `current_claim` is a pure read of comments already in hand, so the expensive git read
-    # below is paid only when a close is actually on the table AND something holds one of
-    # those issues. A plain `verify`, a run that found nothing fixed, and the ordinary case
-    # of closing an unclaimed finding all cost no git at all.
-    claimed_fixed = [r[0] for r in results if r[3] == "fixed" and current_claim(r[0])]
-    if claimed_fixed and not args.close_claimed:
-        # Read under --dry-run too: it is not a gh write, and a dry run must show the same
-        # skip decisions the real run would make.
-        trees, dirty, merged, ok = tools.worktree_facts()
-        if ok:
-            live = {
-                s.number
-                for s in claim_states(claimed_fixed, trees, dirty, merged)
-                if s.live
-            }
-        else:
-            sys.stderr.write(
-                "warning: worktree read failed; withholding the close on every claimed "
-                "issue (pass --close-claimed to close anyway)\n"
-            )
-            live = {i["number"] for i in claimed_fixed}
-    for issue, number, _title, verdict, detail, command in results:
-        if verdict != "fixed":
-            continue
-        if number in live:
-            print(
-                f"#{number} not closed: `{current_claim(issue)}` holds a live claim; "
-                "pass --close-claimed to close it anyway"
-            )
-            withheld = True
-            continue
-        comment = verify_close_comment(command, detail)
-        # Same release `cmd_close` makes, for the same reason: this path called
-        # `plan_close` directly and stranded the claim on every issue it closed (#1277).
-        plans = _release_held_claim(issue, "closed as fixed by verify-by")
-        plans += plan_close(number, outcome="fixed", comment=comment)
-        run(plans, args.dry_run, tools)
-        print(f"#{number} closed as fixed (verify-by)")
-    return 3 if withheld else 0
+    print(verification_report(issues))
+    return 0
 
 
 def cmd_sync_labels(args: argparse.Namespace, tools: FindingsTools) -> int:

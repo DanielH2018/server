@@ -30,7 +30,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 
 from dev.findings_lib.issue_model import LABELS
-from dev.findings_lib.boundaries import FindingsTools, run_verify
+from dev.findings_lib.boundaries import FindingsTools
 from dev.prune_worktrees import Worktree
 
 CREATED_URL = "https://github.com/o/r/issues/42"
@@ -108,15 +108,6 @@ def make_issue(
     }
 
 
-def fake_verify(command: str, timeout: float) -> subprocess.CompletedProcess[str]:
-    """A verify-by shell that spawns nothing: `true` exits 0, anything else exits 1.
-
-    The CLI tests care which verdict a command produces, not that a shell produced it, and
-    a real `/bin/sh` per issue is a process per test for an answer this returns directly.
-    """
-    return subprocess.CompletedProcess(command, 0 if command == "true" else 1, "", "")
-
-
 @dataclass
 class Calls:
     """Every boundary call in order, `gh` and `gh_json` argv alike as lists."""
@@ -159,7 +150,6 @@ class Fakes:
     # Keyed by the same `issue list` / `label list` / `issue view` pair `gh_json` dispatches
     # on, so a test can fail the issue read while the label read still answers.
     json_errors: dict[str, BaseException] = field(default_factory=dict)
-    verify: Callable[[str, float], subprocess.CompletedProcess[str]] | None = None
 
 
 def facts(trees=(), *, dirty=False, merged=False, ok=True):
@@ -275,6 +265,6 @@ def build_tools(f: Fakes | None = None) -> tuple[FindingsTools, Calls]:
         return f.worktree_facts()
 
     return (
-        FindingsTools(gh_json, gh, f.verify or run_verify, worktree_facts),
+        FindingsTools(gh_json, gh, worktree_facts),
         calls,
     )

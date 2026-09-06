@@ -17,7 +17,6 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from dev.findings_lib.issue_model import DOMAINS, KINDS, SEVERITIES
-from dev.findings_lib.verify import DEFAULT_VERIFY_TIMEOUT
 
 
 def _add_dry_run(parser: argparse.ArgumentParser, *, suppress: bool) -> None:
@@ -66,7 +65,8 @@ def _parser(description: str) -> argparse.ArgumentParser:
     o.add_argument("--no-vetted-remediation", action="store_true")
     o.add_argument(
         "--verify-by",
-        help="read-only command; exit 0 means fixed, non-zero means it still reproduces",
+        help="prose describing how to check whether this finding is fixed; `verify` prints "
+        "it back and runs nothing",
     )
 
     t = sub.add_parser(
@@ -135,26 +135,11 @@ def _parser(description: str) -> argparse.ArgumentParser:
 
     v = sub.add_parser(
         "verify",
-        help="re-run each finding's verify-by command and report fixed/still-open",
+        help="print each finding's stored instructions for how to verify it; runs nothing",
     )
     _add_dry_run(v, suppress=True)
-    v.add_argument("numbers", nargs="*", type=int, help="issue numbers to verify")
-    v.add_argument("--all", action="store_true", help="verify every open finding")
-    v.add_argument(
-        "--close", action="store_true", help="close passing findings as fixed"
-    )
-    v.add_argument(
-        "--close-claimed",
-        action="store_true",
-        help="close a passing finding even when a live claim holds it; without this a "
-        "claimed issue is left open rather than closed under the session working it",
-    )
-    v.add_argument(
-        "--timeout",
-        type=float,
-        default=DEFAULT_VERIFY_TIMEOUT,
-        help="seconds before a verify-by command counts as an error",
-    )
+    v.add_argument("numbers", nargs="*", type=int, help="issue numbers to report on")
+    v.add_argument("--all", action="store_true", help="report on every open finding")
 
     nx = sub.add_parser("next", help="issues a session may pick up, best first")
     _add_dry_run(nx, suppress=True)
