@@ -315,6 +315,10 @@ _UNMEASURED_SHORT_LIVED = {
     ("registry", "crane"),
     ("registry", "probe"),
     ("registry", "pulled"),
+    # A `curl` retry loop from the scrutiny web image (debian-slim, default user root), gating
+    # the web container's start on scrutiny-influxdb answering — the web binary panics rather
+    # than retrying. Same family as crowdsec's wait-for-lapi above.
+    ("scrutiny", "wait-for-influxdb"),
 }
 
 _ROOT_ALLOWED = (

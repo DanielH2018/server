@@ -31,6 +31,48 @@ spec:
       # Preference, never a pin: daniel-box carries the storage- and VIP-pinned workloads and runs the hotter of the two nodes, so latency-insensitive services default here.
       # Weighted so the pod still schedules if daniel-server is cordoned or full.
 {{ node_affinity_preference('daniel-server') }}
+      initContainers:
+        # scrutiny-web calls InfluxDB's `/api/v2/setup` during AppEngine.Setup and PANICS on a
+        # connection error instead of retrying. The `panic(err)` is upstream in
+        # webapp/backend/pkg/web/middleware/repository.go and the error string is built in
+        # webapp/backend/pkg/database/scrutiny_repository.go. Both were read against upstream
+        # master on 2026-09-06: neither has gained a retry (the middleware file's last commit
+        # is from 2022), so the rolling `master-web` digest this role pins will not fix this on
+        # its own, and this gate stays needed until upstream retries.
+        #
+        # A readiness/liveness tweak cannot cover it — the panic happens during startup, before
+        # either probe is in play. Connecting to the SERVICE rather than a pod is what makes
+        # this a readiness gate: scrutiny-influxdb has no endpoints until its `influx ping`
+        # probe passes. The retry also absorbs kube-router's source-pod lookup lagging pod
+        # creation, which a single connect attempt at init time would trip over.
+        #
+        # Bounded, not unbounded — 60 x 2s, the same shape as crowdsec's wait-for-lapi. If
+        # influxdb is still unreachable after two minutes the init container fails and the pod
+        # backs off exactly as it does today, so this can only improve on the current behaviour,
+        # never mask a genuinely dead influxdb.
+        #
+        # The web image is debian-slim carrying `curl` (upstream docker/Dockerfile.web) and is
+        # already this pod's own image, so nothing extra is pulled. `-sf`, not bare `-s`: curl
+        # exits 0 on a 5xx without `-f`. `--max-time 5` so a half-open connection retries rather
+        # than stalling the loop. `/api/v2/setup` is the exact unauthenticated request that
+        # panics, so this gates on the request scrutiny actually makes rather than a neighbour.
+        - name: wait-for-influxdb
+          image: {{ scrutiny_k8s_web_image }}
+          command:
+            - /bin/sh
+            - -c
+            - >-
+              i=0;
+              until curl -sf --max-time 5 -o /dev/null http://scrutiny-influxdb:8086/api/v2/setup; do
+                i=$((i+1));
+                [ "$i" -ge 60 ] && echo "scrutiny-influxdb still unreachable after 120s" >&2 && exit 1;
+                sleep 2;
+              done;
+              echo "scrutiny-influxdb reachable after $((i*2))s"
+          # read_only: the whole program is the shell loop above, and curl writes to /dev/null.
+          # It needs no writable path, so no emptyDir goes with this.
+{{ hardened_security_context(read_only=true) }}
+{{ container_resources(cpu_limit='250m', mem_limit='128Mi', cpu_request='10m', mem_request='16Mi') }}
       containers:
         - name: web
           image: {{ scrutiny_k8s_web_image }}
