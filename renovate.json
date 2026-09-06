@@ -249,6 +249,20 @@
     },
     {
       "customType": "regex",
+      "description": "Headlamp plugin release pins in k8s/headlamp/defaults/main.yml (`headlamp_k8s_plugins`, one name/version/sha256 entry per plugin, installed by the fetch-plugins init container). Every plugin lives in ONE upstream repo, headlamp-k8s/plugins, whose releases are tagged `<plugin>-<version>` across all plugins — so the datasource is the same repo for each entry and extractVersionTemplate keys on the captured plugin name to select that plugin's tags and drop the prefix; without it every entry would be offered every other plugin's version. NO automerge (packageRule below): the sha256 the init container verifies is not published with the release and cannot be computed by a regex manager, so the PR is a SIGNAL the operator finishes with `gh release download` + `sha256sum` (the defaults file's header has the commands). Same manual-finish class as the SOPS, coredns and jellyfin-ani-sync pins above.",
+      "managerFilePatterns": [
+        "/(^|/)ansible/roles/k8s/headlamp/defaults/main\\.yml$/"
+      ],
+      "matchStrings": [
+        "- name: (?<pluginName>[a-z0-9-]+)\\s+version: \"(?<currentValue>\\d+\\.\\d+\\.\\d+)\""
+      ],
+      "depNameTemplate": "headlamp-plugin/{{{pluginName}}}",
+      "packageNameTemplate": "headlamp-k8s/plugins",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^{{{pluginName}}}-(?<version>\\d+\\.\\d+\\.\\d+)$"
+    },
+    {
+      "customType": "regex",
       "description": "Container images in k8s role defaults (ansible/roles/k8s/*/defaults/main.yml) AND in inventory/group_vars/all.yml. The cluster has no compose template to read, so these vars ARE the source of truth for what every pod runs \u2014 and until this manager existed none of them was tracked, so the whole cluster fleet aged with no update signal. group_vars/all.yml was added 2026-08-14: crowdsec_k8s_image had been hoisted out of its role defaults into group_vars, which put it outside this manager's patterns AND outside the coverage test's glob (scripts/tests/test_renovate_managers.py globbed roles/k8s/*/defaults/main.yml only) \u2014 so the WAF core, the one image whose staleness is a security problem, was the single pin neither could see. ansible/roles/setup/*/defaults/main.yml was added 2026-08-27: the same one-directory-short escape, this time for k3s_longhorn_restore_drill_image (busybox:stable) \u2014 an `_image:` pin one directory over from the *_version: pins the control-plane manager below already tracks in this same file. It is a mutable tag, so what Renovate can offer here is a digest bump (as with n8n's `stable` channel tag elsewhere in this file), not a version bump \u2014 that is enough signal to notice an upstream busybox re-push; the drill's own timeout/health assertions are the check that a bump didn't break it.",
       "managerFilePatterns": [
         "/^ansible/roles/k8s/[^/]+/defaults/main\\.yml$/",
@@ -464,6 +478,17 @@
         "vosmiic/jellyfin-ani-sync"
       ],
       "groupName": "jellyfin-ani-sync (manual — finish the targetAbi + MD5, raise jellyfin with it)",
+      "automerge": false
+    },
+    {
+      "description": "Headlamp plugins: NO automerge, positioned after the k8s-plane rules for the same reason as jellyfin-ani-sync above — the pin lives under ansible/roles/k8s/, so the custom.regex minor/patch rule would otherwise automerge it into the `k8s image headlamp` group. The paired sha256 in headlamp_k8s_plugins is uncomputable here; the fetch-plugins init container refuses the tarball until the operator records the new digest, so an automerged bump would deploy a Headlamp pod that never starts.",
+      "matchDatasources": [
+        "github-releases"
+      ],
+      "matchPackageNames": [
+        "headlamp-k8s/plugins"
+      ],
+      "groupName": "headlamp plugins (manual — record the new sha256)",
       "automerge": false
     }
   ]

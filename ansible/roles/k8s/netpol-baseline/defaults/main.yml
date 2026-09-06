@@ -91,9 +91,9 @@ netpol_baseline_obs_exempt_workloads: []
 # Verified per node with `ip -4 -o addr show flannel.1` (daniel-box: 10.42.0.0, daniel-server:
 # 10.42.1.0) — matches these entries exactly, same as the cni0 addresses below.
 netpol_baseline_obs_node_cidrs:
-  - 10.42.0.1/32    # daniel-box cni0 (otelq's loopback path when loki/prometheus/tempo land here)
+  - 10.42.0.1/32    # daniel-box cni0 (otelq's loopback path when loki/prometheus/tempo land here; the API server's proxy for Headlamp's Prometheus plugin, same condition)
   - 10.42.1.1/32    # daniel-server cni0 (otelq's loopback path when loki/prometheus/tempo land here)
-  - 10.42.0.0/32    # daniel-box flannel.1 (the claude-otel cron, when prometheus is cross-node)
+  - 10.42.0.0/32    # daniel-box flannel.1 (the claude-otel cron, and the API server's proxy for Headlamp's Prometheus plugin, when prometheus is cross-node)
   - 10.42.1.0/32    # daniel-server flannel.1 (no caller nameable today; deliberate over-inclusion)
 
 # The slice-4.5 probe's targets, in one place because THREE things must agree about them: the

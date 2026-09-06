@@ -35,6 +35,32 @@ spec:
       # Preference, never a pin: daniel-box carries the storage- and VIP-pinned workloads and runs the hotter of the two nodes, so latency-insensitive services default here.
       # Weighted so the pod still schedules if daniel-server is cordoned or full.
 {{ node_affinity_preference('daniel-server') }}
+      initContainers:
+        # Installs every entry of headlamp_k8s_plugins (defaults/main.yml) into the plugins
+        # emptyDir the main container reads. `set -eu` plus `sha256sum -c` make a bad download
+        # a failed pod start, never a silently plugin-less dashboard. Busybox wget speaks TLS
+        # on this image (alpine ships ssl_client), and the probe job already pins it.
+        - name: fetch-plugins
+          image: {{ headlamp_k8s_netpol_probe_image }}
+          command:
+            - sh
+            - -c
+            - |
+              set -eu
+              cd /tmp
+{% for plugin in headlamp_k8s_plugins %}
+              wget -q -O {{ plugin.name }}.tgz "https://github.com/headlamp-k8s/plugins/releases/download/{{ plugin.name }}-{{ plugin.version }}/{{ plugin.name }}-{{ plugin.version }}.tar.gz"
+              echo "{{ plugin.sha256 }}  {{ plugin.name }}.tgz" | sha256sum -c -
+              tar xzf {{ plugin.name }}.tgz -C /headlamp/plugins
+              echo "installed plugin {{ plugin.name }} {{ plugin.version }}"
+{% endfor %}
+{{ hardened_security_context(read_only=true) }}
+          volumeMounts:
+            - name: headlamp-plugins
+              mountPath: /headlamp/plugins
+            - name: headlamp-tmp
+              mountPath: /tmp
+{{ container_resources(cpu_limit='250m', mem_limit='64Mi', cpu_request='10m', mem_request='16Mi') }}
       containers:
         - name: headlamp
           image: {{ headlamp_k8s_image }}
@@ -61,6 +87,10 @@ spec:
               mountPath: /home/headlamp/.config
             - name: headlamp-tmp
               mountPath: /tmp
+            # Filled by the fetch-plugins init container; -plugins-dir above names this path.
+            - name: headlamp-plugins
+              mountPath: /headlamp/plugins
+              readOnly: true
           readinessProbe:
             httpGet:
               path: /
@@ -78,4 +108,6 @@ spec:
         - name: headlamp-config
           emptyDir: {}
         - name: headlamp-tmp
+          emptyDir: {}
+        - name: headlamp-plugins
           emptyDir: {}
