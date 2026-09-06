@@ -11,7 +11,8 @@ through without asking, and the *When to wait* list. This skill owns the mechani
 ## The procedure
 
 Record the pre-merge master SHA, then hand the whole procedure — arming the merge included —
-to ONE `land.sh` command with its output redirected to a file:
+to ONE `land.sh` command, backgrounded with `run_in_background` and its output redirected to a
+file. The wait for its `VERDICT:` line is a second, foreground command, below:
 
 ```bash
 git rev-parse origin/master          # keep this; land.sh needs it for the fallback
@@ -75,8 +76,24 @@ preserve. Push a fix and re-run the same `land.sh` command. The wait keeps going
 `await_ci.py` answers `pending`, which is what it answers until a required check registers —
 that is the grace period, so no landing is cut short for polling before CI started.
 
-Run that command with `run_in_background` and let the session be re-invoked when it exits;
-the `VERDICT:` line is the last line of the logfile. `land.sh` waits for master CI on the merge commit, ticks, deploys what the tick deferred, and prints a
+**Then block on the verdict in the foreground, with exactly this command:**
+
+```bash
+timeout 1200 tail -f -n +1 "$CLAUDE_JOB_DIR/tmp/land<n>.log" | grep -m1 '^VERDICT:'
+```
+
+`grep -m1` exits on the first match and `tail` dies on SIGPIPE, so this returns the instant
+the line appears rather than at the timeout. One call, no watcher, and it reads a local file
+rather than CI, so it is not the hand-polling this skill forbids.
+
+**Do not end your turn on a backgrounded landing.** A backgrounded Bash call whose output is
+redirected to a file is not a harness-tracked child — nothing wakes you when it exits, so the
+landing goes unwatched and whoever dispatched you pays a resume round to find out. Four of
+four fanned-out agents ended their turn at step 0/6 or 3/6 believing otherwise on 2026-09-06,
+three of them saying in as many words that a watcher was armed (issue #1291). Run the wait
+above instead.
+
+The `VERDICT:` line is the last line of the logfile. `land.sh` waits for master CI on the merge commit, ticks, deploys what the tick deferred, and prints a
 `VERDICT:` line — `settled`, `unhealthy`, `deploy-failed`, `nothing-to-deploy`, `blocked`,
 `needs-manual-apply`, `deferred`, `merge-conflict` (the PR cannot merge until it is
 rebased), `pr-ci-red` (the PR's own CI is red, so the armed auto-merge never fires — as
