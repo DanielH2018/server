@@ -3,7 +3,9 @@
 One issue per fingerprint is the rule that makes the register a register, so the fingerprint
 and the trailer that carries it live here rather than beside the code that files them. The
 same goes for the `## Verify-by` section: `findings.py open` writes it and `findings.py
-verify` reads it back, and neither owns the format.
+verify` reads it back, and neither owns the format. That section holds prose — a description
+of how to check the finding — and `parse_verify_by` also reads the fenced shell command every
+body filed before 2026-09-06 carries, because those bodies are still in the register.
 
 Everything here takes plain values and returns plain values. `findings_lib/plans.py` turns these
 answers into gh argv, `findings_lib/gh_calls.py` runs them, and `findings.py` is the CLI over both.
@@ -82,9 +84,21 @@ _LIST_FIELDS = "number,title,state,labels,body,createdAt,closedAt,url,comments"
 _FP_RE = re.compile(r"^Fingerprint: `([0-9a-f]{12})`\s*$", re.M)
 _LINE_SUFFIX = re.compile(r":\d+(?:-\d+)?$")
 _REOBSERVED = "Re-observed"
-# DOTALL so `.` crosses the command's own newlines; the heading anchors it against prose
-# a human added elsewhere in the body, and the fence is stripped by the capture group.
-_VERIFY_BY_RE = re.compile(r"^## Verify-by\s*\n```[^\n]*\n(.*?)\n```", re.M | re.S)
+# The section runs from its own heading to the next one, or to the trailer's `---` rule, or
+# to the end of the body. DOTALL so `.` crosses the paragraph's newlines.
+#
+# The heading must be `## Verify-by` ALONE on its line. `[ \t]*$` rather than `\s*` is
+# load-bearing, and the whole reason a wider match is not used: #1308, #1313 and #1351 each
+# carry a `## Verify-by, deliberately omitted` heading whose body explains why they have no
+# instructions. A heading pattern that admitted a suffix would read those explanations back
+# as the instructions themselves — the register would report three findings as verifiable
+# when what their sections say is the opposite.
+_VERIFY_BY_RE = re.compile(
+    r"^## Verify-by[ \t]*\n(.*?)(?=^## |^---[ \t]*$|\Z)", re.M | re.S
+)
+# A body filed before 2026-09-06 stores a shell command inside a fence. Seventeen of them are
+# in the register and every one is still valid prose once the fence comes off.
+_FENCED_RE = re.compile(r"\A```[^\n]*\n(.*?)\n?```[ \t]*\Z", re.S)
 
 
 def fingerprint(title: str, file: str | None) -> str:
@@ -104,23 +118,33 @@ def trailer(fp: str, source: str) -> str:
     )
 
 
-def verify_by_section(command: str) -> str:
-    """The `## Verify-by` body section `open --verify-by` appends before the trailer."""
-    return f"\n\n## Verify-by\n```\n{command}\n```\n"
+def verify_by_section(instructions: str) -> str:
+    """The `## Verify-by` body section `open --verify-by` appends before the trailer.
+
+    Writes the instructions as plain prose. They are not fenced: a fence says "this is a
+    command to run", and nothing runs a verify-by any more.
+    """
+    return f"\n\n## Verify-by\n{instructions.strip()}\n"
 
 
 def parse_verify_by(body: str) -> str | None:
-    """The verify-by command stored in an issue body, or None.
+    """The verification instructions stored in an issue body, or None.
 
-    Reads the `## Verify-by` heading and its fenced code block back out, the one format
-    `verify_by_section` writes, so a body a human has edited around still parses. A body
-    fetched from the API can carry CRLF line endings, so they are normalized first.
+    Reads the section `verify_by_section` writes, so a body a human has edited around still
+    parses. A body fetched from the API can carry CRLF line endings, so they are normalized
+    first.
+
+    A fence around the whole section is stripped, which is what keeps every body filed before
+    2026-09-06 readable: `open --verify-by` used to store a shell command in a code block.
     """
     m = _VERIFY_BY_RE.search((body or "").replace("\r\n", "\n"))
     if not m:
         return None
-    cmd = m.group(1).strip()
-    return cmd or None
+    section = m.group(1).strip()
+    fenced = _FENCED_RE.match(section)
+    if fenced:
+        section = fenced.group(1).strip()
+    return section or None
 
 
 def label_names(issue: dict) -> set[str]:

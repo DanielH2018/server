@@ -47,8 +47,9 @@ def render_markdown(rows: list[dict]) -> str:
         "been seen three times carries **escalated** (the filing plus two re-observations) "
         "and needs a durable owner: a "
         "test, a hook or a CLAUDE.md rule. Close one from a PR body with `Closes #<n>`. A "
-        "row marked in the Verify-by column carries a read-only command in its issue body — "
-        "run `findings.py verify --all` to re-check every one and close what now passes.\n"
+        "row marked in the Verify-by column carries a description of how to check it in its "
+        "issue body — run `findings.py verify --all` to print them. That command reports and "
+        "runs nothing; closing stays with `findings.py close`.\n"
     )
     if not rows:
         parts.append("No open findings.\n")

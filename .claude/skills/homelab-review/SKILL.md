@@ -267,18 +267,17 @@ control is the "fires on nothing" case the repo warns about, and it reads exactl
   `findings.py close <n> --accepted --reason "<why the trade-off stands>"` — never as refuted,
   which would record a falsehood, and never by hand, which the dedup cannot see: a hand-closed
   issue is reopened by the next run's `open` with a comment reading "treat as a regression".
-- **Verify-by.** Add `--verify-by '<read-only command>'` to the `open` call whenever a probe
-  already exists that would exit non-zero on the broken state and 0 once fixed —
-  `uv run python scripts/diagnostics/probe.py health <svc>` or `<check>` for a workload-health
-  finding, `uv run pytest <path>::<test>` for one a test already covers. Only those two `uv
-  run` shapes are recognized as read-only under `findings.py verify`'s own classifier — no
-  other `scripts/*.py` invocation, since most of them write (`b2_drain.py`,
-  `secret_rotation.py rotate`, ...). A command outside that pair, or anything else not
-  provably read-only, is refused when `verify` tries to run it, so don't invent one just to
-  attach a flag. Skip the flag when no such command exists; a finding without one still files
-  normally. Once filed, `uv run python scripts/dev/findings.py verify --all --close`
-  re-checks every finding carrying one and closes what now passes, without a human
-  re-deriving the repro.
+- **Verify-by.** Add `--verify-by '<how to check it>'` to the `open` call and write a clear
+  explanation of how someone would tell whether the finding is fixed. It is prose, and there
+  is no shape constraint: name a command where one exists
+  (`uv run python scripts/diagnostics/probe.py health <svc>`, `uv run pytest <path>::<test>`),
+  and describe the steps in words where none does — a deploy to make, a log line to look for,
+  a UI to open. Say what a fixed state looks like, not only what to run; the reader has to be
+  able to act on it without re-deriving your repro. Skip the flag only when you cannot
+  describe the check at all; a finding without one still files normally.
+  `uv run python scripts/dev/findings.py verify --all` prints every stored description. It
+  runs nothing and closes nothing — whoever follows the instructions closes the finding with
+  `findings.py close <n> --fixed`.
 - Offer to record a new `review-<date>-state` memory — the run narrative step 2 reads. Give it a
   one-line headline; then, **tagged by area**, each confirmed finding as `#<n>` plus what happened
   to it (shipped / filed / touched), each **refuted** finding *with the evidence that disproved it*,

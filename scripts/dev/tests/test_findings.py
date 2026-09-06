@@ -3,7 +3,7 @@
 The boundaries come from the `make_tools` fixture, which answers `gh_json` by argv, so
 `load_issues`, `_existing_labels` and the label planning they feed all run for real here.
 The `open` planner and its CLI are in test_findings_open.py; everything verify-by is in
-test_findings_lib/verify.py.
+test_findings_verify.py.
 
 Run: uv run pytest scripts/dev/tests/test_findings.py
 """
@@ -109,7 +109,7 @@ def test_sort_key_puts_escalated_high_before_plain_high_before_medium(issue):
 
 def test_issue_rows_reads_verify_by_presence(issue):
     with_it = issue(1, fp="a" * 12)
-    with_it["body"] += verify_by_section("true")
+    with_it["body"] += verify_by_section("Check the log.")
     without = issue(2, fp="b" * 12)
     rows = {r["number"]: r for r in issue_rows([with_it, without])}
     assert rows[1]["verify_by"] is True
