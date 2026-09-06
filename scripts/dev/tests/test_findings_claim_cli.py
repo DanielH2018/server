@@ -1,5 +1,6 @@
 """The claim, release, claims and reap subcommands, driven through main()."""
 
+import json
 import sys
 from pathlib import Path
 
@@ -78,6 +79,30 @@ def test_release_removes_the_label():
     assert ["issue", "edit", "1132", "--remove-label", "claimed"] in calls.gh
 
 
+def test_release_refuses_another_worktrees_claim_and_exits_3(capsys):
+    """Pairs with `test_release_removes_the_label` above, which exits 0.
+
+    Only the plan-level refusal was covered, so nothing proved `cmd_release` turns a
+    `ClaimRefused` into exit 3 rather than a traceback (#1275).
+    """
+    issue = make_issue(
+        1132,
+        labels=["claimed"],
+        comments=[claim_comment("worktree-someone-else", None, "t")],
+    )
+    tools, calls = build_tools(Fakes(issues=[issue], view=issue))
+    assert main(["release", "1132", "--worktree", WT], tools) == 3
+    assert "claimed by `worktree-someone-else`" in capsys.readouterr().out
+    assert not any(c[:2] == ["issue", "comment"] for c in calls.gh)
+
+
+def test_release_refuses_an_unclaimed_issue_and_exits_3(capsys):
+    tools, calls = build_tools(Fakes(issues=[make_issue(1132)], view=make_issue(1132)))
+    assert main(["release", "1132", "--worktree", WT], tools) == 3
+    assert "not claimed" in capsys.readouterr().out
+    assert calls.gh == []
+
+
 def test_claims_prints_one_row_per_claimed_issue(capsys):
     held = make_issue(1132, comments=[claim_comment(WT, None, "t")])
     tools, _ = build_tools(Fakes(issues=[held, make_issue(1140)], worktree_facts=STALE))
@@ -85,6 +110,26 @@ def test_claims_prints_one_row_per_claimed_issue(capsys):
     out = capsys.readouterr().out
     assert "1132" in out
     assert "1140" not in out
+
+
+def test_claims_json_carries_every_field_of_a_row(capsys):
+    """`claims --json` had no test at all (#1275), so nothing pinned the field names a
+    consumer reads — `live` and `reason` above all, since they carry the verdict."""
+    held = make_issue(1132, comments=[claim_comment(WT, None, "t")])
+    tools, _ = build_tools(Fakes(issues=[held], worktree_facts=STALE))
+    assert main(["claims", "--json"], tools) == 0
+    rows = json.loads(capsys.readouterr().out)
+    assert [r["number"] for r in rows] == [1132]
+    assert rows[0]["worktree"] == WT
+    assert rows[0]["live"] is False
+    assert "no worktree" in rows[0]["reason"]
+    assert rows[0]["age_days"] is None
+
+
+def test_claims_says_so_when_nothing_is_claimed(capsys):
+    tools, _ = build_tools(Fakes(issues=[make_issue(1132)], worktree_facts=STALE))
+    assert main(["claims"], tools) == 0
+    assert "no open claims" in capsys.readouterr().out
 
 
 def test_reap_releases_a_stale_claim_and_leaves_a_live_one():

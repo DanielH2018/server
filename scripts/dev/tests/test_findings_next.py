@@ -82,6 +82,45 @@ def test_next_via_main_lists_an_ordinary_open_issue(capsys):
     assert [r["number"] for r in rows] == [1132]
 
 
+def test_next_text_render_marks_a_stale_claim_and_names_reap(capsys):
+    """`next`'s whole text render was uncovered — every other test passes `--json` (#1275).
+
+    One test for the three things it prints: the row, the marker naming who holds a stale
+    claim, and the note pointing at `reap`. `next` offering a stale-claimed issue is the
+    behaviour `pickable` pins; this pins that the operator is TOLD, which is the half that
+    turned a correct offer into an unexplained exit 3 from `claim`.
+    """
+    stale_wt = "worktree-gone"
+    free = make_issue(1140, title="nobody holds this")
+    held = make_issue(
+        1132, title="stale claim on this", comments=[claim_comment(stale_wt, None, "t")]
+    )
+    tools, _ = build_tools(Fakes(issues=[free, held], worktree_facts=facts()))
+    assert main(["next"], tools) == 0
+    out = capsys.readouterr().out
+    assert "#1140" in out and "#1132" in out
+    assert f"[stale claim by `{stale_wt}`]" in out
+    assert "reap" in out
+
+
+def test_next_text_render_marks_nothing_when_no_claim_is_stale(capsys):
+    """The rejecting half: no marker and no `reap` note when every offered issue is free."""
+    tools, _ = build_tools(Fakes(issues=[make_issue(1140)], worktree_facts=facts()))
+    assert main(["next"], tools) == 0
+    out = capsys.readouterr().out
+    assert "#1140" in out
+    assert "stale claim" not in out
+    assert "reap" not in out
+
+
+def test_next_says_so_when_nothing_is_pickable(capsys):
+    tools, _ = build_tools(
+        Fakes(issues=[make_issue(1140, labels=["manual"])], worktree_facts=facts())
+    )
+    assert main(["next"], tools) == 0
+    assert "nothing to pick up" in capsys.readouterr().out
+
+
 def test_next_withholds_a_live_claim_when_the_git_read_fails(capsys):
     """The safety-critical branch: a git-read failure must not read as "no claims are live".
 
