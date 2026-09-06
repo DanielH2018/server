@@ -174,6 +174,33 @@ The wrapper supplies all three.
 `ui_login.py --verify <svc>` proves the cookie reaches the backend without involving the browser,
 and it reads a portal 302 as a failure rather than as a reachable service.
 
+### Recovering a stale browser session: `browser_close`, then navigate again
+
+The MCP server reads the state file when it builds a browser context, not on each navigation.
+So re-minting the session fixes the FILE and the browser keeps bouncing to the Authelia portal,
+because its context still holds the cookie it was built with at launch. That symptom reads
+exactly like a route that lost its session middleware, which is the trap worth knowing.
+
+`browser_close` is the reload. It disposes the context, and the next `browser_navigate` builds
+a fresh one — which re-reads the state file from disk. Recovering from inside a Claude session
+is three steps, and needs no session restart:
+
+```bash
+uv run python scripts/diagnostics/ui_login.py            # re-mint
+uv run python scripts/diagnostics/ui_login.py --verify homepage   # the file is good
+```
+
+then `mcp__homelab-ui__browser_close` followed by any `mcp__homelab-ui__browser_navigate`.
+
+Measured 2026-09-06 against a `playwright-mcp` launched on this host's own config, swapping the
+state file underneath it: an empty state at launch landed on the Authelia portal, copying a good
+state in and calling `browser_close` landed on the service, and writing the empty state back and
+calling `browser_close` again landed on the portal. The file decides, and `browser_close` is what
+makes it decide again.
+
+The `-m ui` suite is unaffected either way — it launches its own server per run, so it reads the
+state file as it stands.
+
 ### `--check` asks Authelia, never the clock
 
 The expiry stamped in the state file is a claim, and the two come apart in exactly the cases
@@ -238,7 +265,7 @@ both in Python. Run it instead:
 
 ```bash
 uv run python scripts/diagnostics/ui_login.py --check   # mint one first if this says expired
-uv run pytest -m ui -k grafana                          # ~30s for the four enrolled boards
+uv run pytest -m ui -k grafana                          # ~40s for the five enrolled boards
 ```
 
 To cover a board that is not enrolled, add its `(uid, min_headers)` to `GRAFANA_DASHBOARDS`
