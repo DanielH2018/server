@@ -22,7 +22,9 @@ a deferred import weighs exactly as much as a module-level one; both the ``impor
 both, because which form a module uses changes nothing about the direction of the edge.
 
 Two rules ride on that graph: the declared facade edges in ``FACADE_EDGES`` may not run
-backwards, and no cycle may appear beyond the three in ``ALLOWED_CYCLES``.
+backwards, and a depth-first walk may meet no back-edge beyond the three in
+``ALLOWED_CYCLES``. Back-edges, not cycles -- ``_cycles``'s own docstring says what that
+allowlist does and does not bound.
 
 Run: uv run pytest scripts/tests/test_scripts_import_direction.py
 """
@@ -82,9 +84,11 @@ FACADE_EDGES = frozenset(
     }
 )
 
-# The three cycles already in the tree on 2026-09-05, each one a pair of modules that reach each
-# other by a DEFERRED import inside a function. They are listed so a FOURTH cannot appear
-# unnoticed; nothing here says they are good, and shrinking this set is a fix, not a regression.
+# The three back-edges `_cycles` found in the tree on 2026-09-05, each one a pair of modules that
+# reach each other by a DEFERRED import inside a function. An entry is one back-edge, NOT a
+# complete cycle census -- `_cycles` says why, and the name is kept only because the entries here
+# happen to be two-module loops, where the two coincide. They are listed so a FOURTH cannot
+# appear unnoticed; nothing here says they are good, and shrinking this set is a fix.
 ALLOWED_CYCLES = frozenset(
     {
         # longhorn.py:16 states it: "b2_ledger imports this module back by module object, so no
@@ -180,10 +184,23 @@ def _module_graph() -> dict[str, set[str]]:
 
 
 def _cycles(graph: dict[str, set[str]]) -> set[frozenset[str]]:
-    """Every cycle in `graph`, as the frozenset of the modules on it.
+    """One entry per BACK-EDGE a depth-first walk of `graph` meets — NOT every cycle in it.
 
-    A set of members rather than an ordered path: the same cycle has as many spellings as it has
-    members, and the allowlist must match it whichever node the walk happens to enter from.
+    ``ALLOWED_CYCLES`` is an allowlist of what this returns, so the distinction decides how to
+    read it. The walk colours each node white/grey/black; an edge onto a grey node closes a
+    loop, and the entry recorded is the grey stack from that node onward.
+
+    Every entry is a real cycle: the stack slice is a path in the walk's tree, and the
+    back-edge closes it. The converse fails. Several cycles through one back-edge collapse to a
+    single entry, and which of them surfaces is decided by the order the walk reached the
+    nodes, so ``len(_cycles(g))`` is a count of back-edges rather than of cycles.
+
+    Detection is still sound, which is what the rule needs: any cycle puts at least one
+    back-edge in front of a DFS, so an empty result does mean an acyclic graph. And the walk is
+    deterministic — ``sorted`` at both loops — so one tree always yields the same entries.
+
+    A frozenset of members rather than an ordered path: the same loop has as many spellings as
+    it has members, and the allowlist must match it whichever node the walk entered from.
     """
     colour: dict[str, int] = {}
     found: set[frozenset[str]] = set()

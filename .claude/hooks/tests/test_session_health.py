@@ -26,8 +26,8 @@ _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
 
 
-def _result(stdout):
-    return types.SimpleNamespace(stdout=stdout, stderr="", returncode=0)
+def _result(stdout, returncode=0):
+    return types.SimpleNamespace(stdout=stdout, stderr="", returncode=returncode)
 
 
 def test_banner_empty_when_no_problems():
@@ -185,42 +185,42 @@ def test_target_problems_filters_scaled_to_zero_deployments(monkeypatch):
     assert not any("terraria-stats" in line for line in bad)
 
 
+# Issue #1263: the count comes from `lib.git.git`, patched by STRING target (see `git_dirty`).
 def test_master_moved_silent_when_current(monkeypatch):
-    monkeypatch.setattr(_mod, "_run", lambda *a, **k: _result("0\n"))
+    monkeypatch.setattr("lib.git.git", lambda *a, **k: _result("0\n"))
     assert _mod.master_moved_problems() == []
 
 
 def test_master_moved_reports_commit_count(monkeypatch):
-    monkeypatch.setattr(_mod, "_run", lambda *a, **k: _result("3\n"))
+    monkeypatch.setattr("lib.git.git", lambda *a, **k: _result("3\n"))
     lines = _mod.master_moved_problems()
     assert len(lines) == 1
     assert "3 commits behind origin/master" in lines[0]
 
 
 def test_master_moved_singular_commit(monkeypatch):
-    monkeypatch.setattr(_mod, "_run", lambda *a, **k: _result("1\n"))
+    monkeypatch.setattr("lib.git.git", lambda *a, **k: _result("1\n"))
     lines = _mod.master_moved_problems()
     assert "1 commit behind" in lines[0]  # not "1 commits"
 
 
-def test_master_moved_never_fetches(monkeypatch):
-    # The whole point of a read-only, always-runs SessionStart hook: this must be answerable
-    # from the local object store alone, never a network call.
+def test_master_moved_reads_this_checkout_without_fetching(monkeypatch):
+    # Two properties off one call, because the monkeypatch ratchet caps this file: the hook
+    # reads the local object store, never the network, and `cwd` names this checkout (which is
+    # load-bearing — `lib.git.git` strips `GIT_*`, so `cwd` alone decides the tree it reads).
     seen = []
     monkeypatch.setattr(
-        _mod, "_run", lambda cmd, *a, **k: seen.append(cmd) or _result("0\n")
+        "lib.git.git", lambda *a, **k: seen.append((a, k)) or _result("0\n")
     )
     _mod.master_moved_problems()
-    assert seen and "fetch" not in seen[0]
+    assert seen and "fetch" not in seen[0][0]
+    assert seen[0][1].get("cwd") == _mod.REPO
 
 
 def test_master_moved_silent_on_nonzero_git_exit(monkeypatch):
-    # e.g. no origin/master ref in this checkout at all -- not this hook's job to diagnose.
-    monkeypatch.setattr(
-        _mod,
-        "_run",
-        lambda *a, **k: types.SimpleNamespace(stdout="", stderr="x", returncode=128),
-    )
+    # No origin/master ref in this checkout at all, say — not this hook's job to diagnose.
+    # `check=False` is what makes this reachable: `lib.git.git` raises on a non-zero exit.
+    monkeypatch.setattr("lib.git.git", lambda *a, **k: _result("", returncode=128))
     assert _mod.master_moved_problems() == []
 
 
@@ -228,12 +228,12 @@ def test_master_moved_silent_on_timeout(monkeypatch):
     def boom(*a, **k):
         raise subprocess.TimeoutExpired("git", 5)
 
-    monkeypatch.setattr(_mod, "_run", boom)
+    monkeypatch.setattr("lib.git.git", boom)
     assert _mod.master_moved_problems() == []
 
 
 def test_master_moved_silent_on_unparseable_output(monkeypatch):
-    monkeypatch.setattr(_mod, "_run", lambda *a, **k: _result("not a number\n"))
+    monkeypatch.setattr("lib.git.git", lambda *a, **k: _result("not a number\n"))
     assert _mod.master_moved_problems() == []
 
 

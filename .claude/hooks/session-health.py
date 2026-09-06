@@ -191,9 +191,26 @@ def master_moved_problems():
     staleness gate (scripts/deploy_tools/deploy_staleness.py, exit 4) is what actually refuses a stale
     deploy -- this is only the earlier, cheaper warning. [] on any failure, including a
     checkout with no origin/master ref at all -- diagnosing that is not this hook's job.
+
+    The read goes through `lib.git.git` rather than `_run`, which strips every `GIT_*`
+    variable and so leaves `cwd` alone deciding which tree is counted. Neither `git -C` nor a
+    `cwd=` overrides an inherited `GIT_DIR`, and a session opened from inside a git hook
+    inherits one. The import is deferred into this function for the reason
+    `other_live_sessions` defers its own: an ImportError at module level stops the banner
+    instead of degrading it.
     """
     try:
-        res = _run(["git", "rev-list", "--count", "HEAD..origin/master"], 5)
+        sys.path.insert(0, os.path.join(REPO, "scripts"))
+        from lib.git import git
+
+        res = git(
+            "rev-list",
+            "--count",
+            "HEAD..origin/master",
+            cwd=REPO,
+            check=False,
+            timeout=5,
+        )
         if res.returncode != 0:
             return []
         count = int(res.stdout.strip())

@@ -15,8 +15,15 @@ import subprocess
 from pathlib import Path
 
 _LAND_SH = Path(__file__).resolve().parents[1] / "land.sh"
-# What `Options.primary` defaults to. Nothing here may run in it.
-_LIVE_PRIMARY = Path("/home/ubuntu/server")
+# The checkout `land.sh` cds into at line 16, whichever one holds this test. Every stubbed `gh`
+# call runs there, so it is the expected PWD rather than a forbidden one.
+_LAND_SH_CHECKOUT = _LAND_SH.resolve().parents[2]
+# The tree a landing is AIMED at, handed over as `LAND_PRIMARY`. A sentinel directory under
+# tmp_path, which cannot be any real checkout. Until issue #1268 this module instead asserted
+# that no gh call ran in the literal `/home/ubuntu/server`; from the primary checkout that path
+# IS `_LAND_SH_CHECKOUT`, so the test failed for anyone running `uv run pytest` from the repo
+# root while passing from every worktree and on CI, which checks out elsewhere.
+_SENTINEL_PRIMARY = "primary-under-test"
 
 
 def _stub_bin(tmp_path: Path) -> Path:
@@ -57,12 +64,14 @@ def _stub_bin(tmp_path: Path) -> Path:
 
 
 def _run_land(tmp_path: Path) -> subprocess.CompletedProcess[str]:
-    """One landing against the stubs, with `LAND_PRIMARY` aimed at tmp_path."""
+    """One landing against the stubs, with `LAND_PRIMARY` aimed at the sentinel checkout."""
     bin_dir = _stub_bin(tmp_path)
+    primary = tmp_path / _SENTINEL_PRIMARY
+    primary.mkdir(exist_ok=True)
     env = {
         **os.environ,
         "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
-        "LAND_PRIMARY": str(tmp_path),
+        "LAND_PRIMARY": str(primary),
     }
     # cwd is the stub tree, not the suite's own: land.sh's gh calls inherit the process cwd,
     # so from a worktree the assertion below held for the wrong reason and from the primary
@@ -97,14 +106,20 @@ def test_land_annotation_is_intercepted(tmp_path, logger_calls):
     assert "event=landing" in captured
     assert "pr=939" in captured
 
-    # This module's landings must reach no checkout at all: the run ends at the merge-commit
-    # read, which is before `fetch_branch`. Whether LAND_PRIMARY aims a landing that DOES
-    # reach git is pinned by test_land_arm_merge_through_the_shim.py, which runs that far.
+    # This module's landings must reach no target checkout at all: the run ends at the
+    # merge-commit read, which is before `fetch_branch`. Whether LAND_PRIMARY aims a landing
+    # that DOES reach git is pinned by test_land_arm_merge_through_the_shim.py, which runs
+    # that far. Stated positively, so it holds wherever this checkout sits: the only PWD any gh
+    # call may have is land.sh's own repo root. A landing that cd'd into the `LAND_PRIMARY`
+    # sentinel, or anywhere else, fails here — and no hardcoded live path is involved (#1268).
     gh_calls = (tmp_path / "gh-calls").read_text().splitlines()
     assert gh_calls, (
         "the gh stub recorded nothing, so this proves nothing about where it ran"
     )
-    assert str(_LIVE_PRIMARY) not in {line.split("\t")[0] for line in gh_calls}
+    pwds = {line.split("\t")[0] for line in gh_calls}
+    assert pwds == {str(_LAND_SH_CHECKOUT)}, (
+        f"every gh call must run in land.sh's own checkout, which it cds into; got {pwds}"
+    )
     assert (tmp_path / "git-calls").read_text() == "", (
         "the landing reached git, which this module's stubs do not answer for"
     )
