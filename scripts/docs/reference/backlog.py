@@ -64,7 +64,11 @@ def render_markdown(rows: list[dict]) -> str:
         if r["no_vetted_remediation"]:
             flags.append("*no vetted remediation*")
         title = md_cell(r["title"]) + (" — " + ", ".join(flags) if flags else "")
-        claimed = r.get("claimed") or "-"
+        # Through `md_cell` like the title above it: a claim is a branch name, and a branch
+        # name may carry a `|`, which silently adds a column and renders the table wrong.
+        # The author check in `current_claim` is what keeps the VALUE trustworthy (#1280);
+        # this keeps the row's shape intact whatever the value is.
+        claimed = md_cell(r.get("claimed") or "-")
         verify_by = "✓" if r.get("verify_by") else "-"
         parts.append(
             f"| [#{r['number']}]({r['url']}) | {r['severity'] or '-'} | {r['kind'] or '-'} | "

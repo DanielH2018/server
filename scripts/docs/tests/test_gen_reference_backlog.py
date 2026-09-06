@@ -63,6 +63,18 @@ def test_render_shows_the_claiming_worktree():
     assert row.rstrip().endswith("| worktree-issue-1132 | - |")
 
 
+def test_render_escapes_a_pipe_in_the_claiming_worktree():
+    """The claim cell goes through `md_cell` like the title does (#1280).
+
+    A branch name may carry a `|`, which silently adds a column and renders the whole table
+    wrong. Paired with `test_render_shows_the_claiming_worktree` above, which proves an
+    ordinary name still reaches the cell unescaped.
+    """
+    md = g.render_markdown([_row(1, claimed="worktree-a | b")])
+    row = next(line for line in md.splitlines() if line.startswith("| [#1]"))
+    assert row.rstrip().endswith("| worktree-a \\| b | - |")
+
+
 def test_render_leaves_the_claim_cell_blank_without_one():
     # verify_by=True gives the two trailing cells different values ("-" and "✓"), so a
     # column swap changes this exact ending — two matching "-" cells would not have.

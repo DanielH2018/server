@@ -6,7 +6,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from _findings_fakes import Fakes, build_tools, make_issue
+from _findings_fakes import Fakes, build_tools, make_issue, operator_comment
 
 from dev.findings import main, pickable
 from dev.findings_model import claim_comment, pr_refs
@@ -21,7 +21,7 @@ def _issue(number, labels=(), comments=()):
         "state": "OPEN",
         "body": "",
         "labels": [{"name": n} for n in ("claude", *labels)],
-        "comments": [{"body": b} for b in comments],
+        "comments": [operator_comment(b) for b in comments],
         "createdAt": "2026-09-01T00:00:00Z",
         "url": "",
     }

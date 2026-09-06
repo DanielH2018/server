@@ -20,12 +20,23 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
+import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from dev.findings_model import _CLAIM_RE, _RELEASE_RE, current_claim
+from dev.findings_model import (
+    _CLAIM_RE,
+    _RELEASE_RE,
+    current_claim,
+    is_operator_comment,
+)
 from dev.prune_worktrees import REMOVABLE, Worktree, classify
+
+# What a worktree read raises when the directory behind a registered worktree is gone.
+# `lib.git.git_dirty` runs git with `check=True`, so a missing cwd surfaces as OSError from
+# subprocess itself, and a git that ran but exited non-zero surfaces as CalledProcessError.
+_UNREADABLE = (OSError, subprocess.SubprocessError)
 
 
 @dataclass(frozen=True)
@@ -76,11 +87,27 @@ def claim_is_live(
     of origin/master and `is_merged` says True — every claim it makes would read as stale
     the moment it was written, and `reap` would release it while the fan-out was running.
     `classify` checks the live lock FIRST, which is exactly what that case needs.
+
+    AN UNREADABLE WORKTREE IS HELD, NOT RELEASED. A PRUNABLE worktree — one whose directory
+    was removed without `git worktree remove` — keeps appearing in `git worktree list
+    --porcelain`, so it reaches here in the ordinary course of events. `dirty` then runs git
+    with `check=True` in a directory that does not exist and RAISES, which took `claims`,
+    `reap` and `next` down together under an error blaming gh (#1276). Holding the claim is
+    the same fail-safe direction a dirty worktree with a dead owner already takes: releasing
+    a claim whose state cannot be read hands live work to a second session. The reason names
+    `git worktree prune`, because nothing else in the output points at a stale registration.
     """
     tree = next((t for t in trees if t.branch == worktree_name), None)
     if tree is None:
         return False, "no worktree — the claim names a branch nothing has checked out"
-    verdict, reason = classify(tree, merged=merged(tree), dirty=dirty(tree.path))
+    try:
+        tree_merged, tree_dirty = merged(tree), dirty(tree.path)
+    except _UNREADABLE:
+        return True, (
+            f"worktree state unreadable — {tree.path} is registered but gone; "
+            "run `git worktree prune`"
+        )
+    verdict, reason = classify(tree, merged=tree_merged, dirty=tree_dirty)
     return verdict != REMOVABLE, reason
 
 
@@ -111,11 +138,17 @@ def _claim_age_days(issue: dict, held: str) -> int | None:
     Folds the comment list forward like `current_claim` does, finding the LAST transition
     from None -> held that is still open (not released). Returns None when that comment
     carries no parseable `createdAt`, or when the datetime is naive (missing timezone info).
+
+    Skips comments `is_operator_comment` rejects, for the same reason `current_claim` does
+    (#1280) — and it has to skip exactly the same ones, or the two disagree about which claim
+    is current and a `claims` row ages a claim the register does not think exists.
     """
     claimed_at_comment: dict | None = None
     currently_held: str | None = None
 
     for comment in issue.get("comments", []):
+        if not is_operator_comment(comment):
+            continue
         body = comment.get("body") or ""
 
         m = _CLAIM_RE.search(body)

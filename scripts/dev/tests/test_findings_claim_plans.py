@@ -7,6 +7,8 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from _findings_fakes import operator_comment
+
 from dev.findings_model import claim_comment
 from dev.findings_plans import ClaimRefused, plan_claim, plan_release
 
@@ -18,7 +20,7 @@ def _issue(number=1132, labels=(), comments=()):
         "number": number,
         "state": "OPEN",
         "labels": [{"name": n} for n in labels],
-        "comments": [{"body": b} for b in comments],
+        "comments": [operator_comment(b) for b in comments],
     }
 
 

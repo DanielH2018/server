@@ -151,6 +151,31 @@ def reobservations(issue: dict) -> int:
 _CLAIM_RE = re.compile(r"^Claim: `([^`\n]+)`\s*$", re.M)
 _RELEASE_RE = re.compile(r"^Released: `([^`\n]+)`\s*$", re.M)
 
+# THIS REPOSITORY IS PUBLIC, so any GitHub account can comment on a `claude`-labelled issue.
+# A claim trailer is therefore only trusted from the operator: without this check a drive-by
+# comment reading ``Released: `<branch>` `` closed a live claim — handing an issue somebody
+# was working to a second session — and one reading ``Claim: `<any live branch>` `` withheld
+# an issue from `next` and made `claim` refuse it for as long as that branch existed (#1280).
+#
+# TWO SIGNALS, EITHER SUFFICES. `viewerDidAuthor` is true for the account gh is authenticated
+# as, which is the operator in a session and in the docs-refresh cron alike. The association
+# half keeps working if that account ever changes, since a claim the operator posted from
+# another of their machines still reads OWNER.
+_TRUSTED_ASSOCIATIONS = frozenset(("OWNER", "MEMBER", "COLLABORATOR"))
+
+
+def is_operator_comment(comment: dict) -> bool:
+    """Whether ``comment``'s claim trailer counts, from the author fields gh returns.
+
+    FAIL-CLOSED: a comment carrying neither field folds into nothing. gh populates both on
+    every comment — on `issue list` as well as `issue view`, verified against this repo — so
+    the missing case is a fixture that did not stamp authorship rather than a real comment,
+    and a comment nothing can attribute must not decide who holds an issue.
+    """
+    if comment.get("viewerDidAuthor"):
+        return True
+    return (comment.get("authorAssociation") or "") in _TRUSTED_ASSOCIATIONS
+
 
 def claim_comment(worktree: str, session: str | None, when: str) -> str:
     """The comment body that claims an issue for ``worktree``.
@@ -184,9 +209,14 @@ def current_claim(issue: dict) -> str | None:
 
     A release naming some other worktree is ignored, so one session cannot release
     another's claim by accident.
+
+    Only the OPERATOR's comments are folded — see `is_operator_comment`. This repo is public,
+    so a comment from any other account is prose on the thread and nothing more.
     """
     held: str | None = None
     for comment in issue.get("comments", []):
+        if not is_operator_comment(comment):
+            continue
         body = comment.get("body") or ""
         claimed = _CLAIM_RE.search(body)
         if claimed:

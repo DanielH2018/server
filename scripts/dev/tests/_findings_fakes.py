@@ -34,6 +34,38 @@ from dev.findings_tools import FindingsTools, run_verify
 
 CREATED_URL = "https://github.com/o/r/issues/42"
 
+# The author metadata `gh` returns on every comment, and which `is_operator_comment` reads.
+# Fixtures stamp it because the claim protocol is FAIL-CLOSED: a comment carrying no author
+# metadata folds into no claim at all, so a bare `{"body": ...}` reads as an unclaimed issue.
+OPERATOR = "DanielH2018"
+FOREIGNER = "drive-by-account"
+
+
+def operator_comment(body: str, **fields) -> dict:
+    """A comment the operator wrote — the only kind whose `Claim:` trailer counts."""
+    return {
+        "body": body,
+        "author": {"login": OPERATOR},
+        "authorAssociation": "OWNER",
+        "viewerDidAuthor": True,
+        **fields,
+    }
+
+
+def foreign_comment(body: str, **fields) -> dict:
+    """A comment any GitHub account could post on this PUBLIC repo's issues.
+
+    `authorAssociation` is `NONE` and `viewerDidAuthor` is False, which is what gh returns
+    for a drive-by commenter. Nothing it says may open, close or age a claim (#1280).
+    """
+    return {
+        "body": body,
+        "author": {"login": FOREIGNER},
+        "authorAssociation": "NONE",
+        "viewerDidAuthor": False,
+        **fields,
+    }
+
 
 def make_issue(
     number,
@@ -45,7 +77,12 @@ def make_issue(
     created="2026-08-15T10:00:00Z",
     title="t",
 ):
-    """One gh issue object, with the fingerprint trailer `open` writes when ``fp`` is given."""
+    """One gh issue object, with the fingerprint trailer `open` writes when ``fp`` is given.
+
+    A `comments` entry given as a string becomes an OPERATOR comment, since that is what a
+    claim test almost always means; pass `foreign_comment(...)` (or any dict) to build one
+    the claim protocol must ignore.
+    """
     body = (
         f"details\n\n---\nFingerprint: `{fp}`\nSource: review-2026-08-15\n"
         if fp
@@ -59,7 +96,9 @@ def make_issue(
         "body": body,
         "createdAt": created,
         "url": f"https://github.com/o/r/issues/{number}",
-        "comments": [{"body": c} for c in comments],
+        "comments": [
+            c if isinstance(c, dict) else operator_comment(c) for c in comments
+        ],
     }
 
 
@@ -187,7 +226,9 @@ def build_tools(f: Fakes | None = None) -> tuple[FindingsTools, Calls]:
             # read-back see the comment it just posted, the way real `gh` would.
             body = argv[argv.index("--body") + 1]
             for issue in _issues_named(f, int(argv[2])):
-                issue.setdefault("comments", []).append({"body": body})
+                # Stamped as the operator's: `gh` posts as the authenticated account, so a
+                # comment this script wrote is one whose claim trailer counts.
+                issue.setdefault("comments", []).append(operator_comment(body))
         return subprocess.CompletedProcess(list(argv), 0, f"{f.url}\n", "")
 
     return FindingsTools(gh_json, gh, f.verify or run_verify), calls
