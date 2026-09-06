@@ -13,7 +13,9 @@ Two relying parties, both in `templates/config-secret.yaml.j2` behind
 
 - `jellyfin` — `two_factor`, `client_secret_post` (the SSO plugin's PAR asymmetry, see the
   comment at the block).
-- `grafana` — `one_factor`, `client_secret_basic`, `consent_mode: implicit`. The policy
+- `grafana` — `one_factor`, `client_secret_basic`, `consent_mode: implicit`,
+  `claims_policy: with_groups` (Authelia keeps `groups` out of the ID token by default, and
+  Grafana reads its role mapping from the ID token before it looks at userinfo). The policy
   matches the `*.local.<domain>` access_control rule the Grafana route already falls under;
   `two_factor` here would stall the headless `-m ui` browser on a TOTP prompt no test can
   answer. Grafana's half of the wiring, and why `root_url` pins the callback to the LAN name,
