@@ -52,15 +52,21 @@ PROGS="(python3?|pytest|py\.test|$ANSIBLE_PROGS|[^[:space:]]*\.py)"
 # Clearing the flag in the shell itself, rather than reopening the fds, because
 # O_NONBLOCK lives on the open file description that fork/exec shares — one clear fixes
 # the shell and every later child, and leaves a single description so nothing has to
-# reason about interleaved appends. The system python3 is right here: this touches no repo
-# file, so the 3.14 requirement above does not apply, and `uv run` would cost a resolve.
+# reason about interleaved appends.
 #
-# `3>&2` is what makes the stderr half real. Without it the `2>/dev/null` that keeps this
-# quiet would hand the child /dev/null as fd 2, and it would clear the flag on that
-# instead. The Bash tool happens to give fds 1 and 2 one shared description today, so
-# stderr came right as a side effect of fixing stdout — a detail this must not depend on,
-# since it is exactly the kind of harness detail that changed here in the first place.
-STDIO_FIXUP="python3 -c 'import os; [os.set_blocking(f, True) for f in (0, 1, 3)]' 3>&2 2>/dev/null; "
+# `stdio-blocking` (the dotfiles repo, `home/dot_local/bin/executable_stdio-blocking`) is
+# the same fix as a standalone binary, added so this prefix stops matching the
+# `Bash(python3 -c:*)` ask rule there — that rule is right for arbitrary `python3 -c`, but
+# this fixup runs ahead of EVERY ansible invocation, so the ask rule prompted for the
+# whole compound chain regardless of what followed it. Preferred when it is on PATH.
+# The inline `python3 -c` form is the fallback for a machine the dotfiles have not
+# deployed to yet: `3>&2` routes the real stderr through fd 3 so `2>/dev/null` can quiet
+# the fixup's own output without clearing the flag on /dev/null instead.
+if command -v stdio-blocking >/dev/null 2>&1; then
+    STDIO_FIXUP="stdio-blocking; "
+else
+    STDIO_FIXUP="python3 -c 'import os; [os.set_blocking(f, True) for f in (0, 1, 3)]' 3>&2 2>/dev/null; "
+fi
 
 # Fast reject before any scanning. Measured on this repo's traffic the overwhelming
 # majority of Bash calls name none of these, and they should pay a single regex rather
@@ -242,7 +248,7 @@ done
 for p in "${starts[@]}"; do
     rest=${cmd:p}
     if [[ "$rest" =~ ^[[:space:]]*(uv[[:space:]]+run[[:space:]]+(--[^[:space:]]+[[:space:]]+)*)?$ANSIBLE_PROGS([[:space:];\&|\)]|$) ]]; then
-        [[ "$updated" == *"os.set_blocking"* ]] || updated="$STDIO_FIXUP$updated"
+        [[ "$updated" == *"os.set_blocking"* || "$updated" == *"stdio-blocking"* ]] || updated="$STDIO_FIXUP$updated"
         break
     fi
 done
