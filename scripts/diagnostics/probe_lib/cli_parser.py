@@ -279,7 +279,15 @@ def _build_parser():
     ar.add_argument("app", choices=sorted(ARR_PORTS))
     ar.add_argument("path", help="api path, e.g. health, indexerstatus, notification")
     ar.add_argument(
-        "--json", action="store_true", help="print raw JSON instead of pretty-printed"
+        "--json",
+        action="store_true",
+        help="print one-line JSON instead of pretty-printed",
+    )
+    ar.add_argument(
+        "--show-secrets",
+        action="store_true",
+        help="print credential-bearing field values instead of <redacted> "
+        "(they land in the transcript — see issue #1388)",
     )
     ha = sub.add_parser("ha", help="Home Assistant live state (read-only, GET)")
     hasub = ha.add_subparsers(dest="ha_cmd", required=True)

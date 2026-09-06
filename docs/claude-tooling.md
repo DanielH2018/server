@@ -42,6 +42,24 @@ fixed 30 minutes matched the `*/30` health crons exactly — a second of cron ji
 episode, so one 13.5-hour outage on 2026-09-04 rendered as 16 rows, none of them carrying the
 onset. `--gap-min` still pins the gap by hand for every check. See #1104.
 
+### `arr <app> <api-path>` redacts the credentials it reads
+
+`notification`, `downloadclient`, `indexer` and `importlist` return objects whose
+`fields[].value` hold a live credential — the Discord webhook URL, the qbittorrent password,
+an indexer API key. The subcommand is read-only against the app, which describes what it does
+to the app and not what it does to the transcript: one `arr sonarr notification` put the
+`arr_discord_webhook_url` value into an agent transcript on 2026-09-06, and that webhook then
+had to be rotated (#1388, rotated by #1389).
+
+`redact_arr_payload` in `probe_lib/arr.py` masks those values with `<redacted>` before
+anything is printed, on the `--json` path as well as the pretty-printed one. **Two signals
+decide, because neither is enough alone.** The *arr API labels a field's `privacy` as `apiKey`,
+`password` or `userName`, but it labels the Discord `webHookUrl` as `normal` — so a name-based
+list backs the label up, and a field is redacted as soon as it is *named* like a credential.
+
+Pass `--show-secrets` for the rare case where the value itself is what you need; it prints the
+raw response, and what it prints lands in the transcript.
+
 ### `monitors` vs `kuma-drift`
 
 `monitors` answers "what is down." **`kuma-drift` answers "what is missing,"** which `monitors`

@@ -77,6 +77,90 @@ def resolve_arr_ip(app):
     return resolve_service_ip(app)
 
 
+# --- credential redaction -------------------------------------------------------------
+#
+# `arr <app> notification|downloadclient|indexer|importlist` returns objects whose
+# `fields[]` carry live credentials — a Discord webhook URL, the qBittorrent password, an
+# indexer API key. The subcommand is read-only against the app, which says nothing about
+# what it does to the transcript it prints into: one `arr sonarr notification` put the
+# `arr_discord_webhook_url` value into an agent transcript on 2026-09-06 (issue #1388), and
+# the exposed value then had to be rotated.
+#
+# Two signals decide, because neither is sufficient alone. The *arr API labels a field's
+# `privacy` as `apiKey` / `password` / `userName`, but the Discord `webHookUrl` field is
+# labelled `normal` and so is invisible to `privacy`. The name list is the backstop: a
+# credential-bearing field is redacted as soon as it is NAMED like one, without waiting for
+# upstream to relabel it.
+ARR_SENSITIVE_PRIVACY = frozenset({"apiKey", "password", "userName"})
+
+# Matched as lowercase substrings against a field's `name`, or against a plain dict key.
+ARR_SENSITIVE_NAME_PARTS = (
+    "apikey",
+    "password",
+    "passkey",
+    "webhook",
+    "token",
+    "secret",
+    "credential",
+    "cookie",
+    "auth",
+)
+
+REDACTED = "<redacted>"
+
+
+def _name_is_sensitive(name):
+    """True when a field or key name reads as credential-bearing."""
+    low = str(name).lower()
+    return any(part in low for part in ARR_SENSITIVE_NAME_PARTS)
+
+
+def redact_arr_payload(obj):
+    """Return `obj` with credential-bearing values replaced by `<redacted>`.
+
+    Walks the whole decoded response rather than a path allow-list. The paths named in
+    #1388 — notification, downloadclient, indexer, importlist — are the ones known to carry
+    credentials, and a name or privacy match on any other path costs nothing.
+    """
+    if isinstance(obj, list):
+        return [redact_arr_payload(item) for item in obj]
+    if not isinstance(obj, dict):
+        return obj
+    # An *arr `fields[]` entry: {"name": "webHookUrl", "value": …, "privacy": "normal"}.
+    # Its own `name` is the label, so the key-name walk below would never see it.
+    if "name" in obj and "value" in obj:
+        sensitive = obj.get("privacy") in ARR_SENSITIVE_PRIVACY or _name_is_sensitive(
+            obj["name"]
+        )
+        if sensitive and obj["value"] not in (None, ""):
+            return {**obj, "value": REDACTED}
+    out = {}
+    for key, value in obj.items():
+        if _name_is_sensitive(key) and value not in (None, "", [], {}):
+            out[key] = REDACTED
+        else:
+            out[key] = redact_arr_payload(value)
+    return out
+
+
+def format_arr_response(body, *, as_json=False, show_secrets=False):
+    """Render a response body for printing, as `(text, exit_code)`.
+
+    The redaction seam: pure, so a test asserts what reaches stdout without stubbing the
+    kubectl / SOPS / curl boundary run_arr crosses to obtain `body`.
+    """
+    if as_json and show_secrets:
+        return body, 0
+    try:
+        payload = json.loads(body)
+    except json.JSONDecodeError:
+        # Not JSON — an error page rather than an API object, so there is no field to walk.
+        return body.strip() + "\n", 1
+    if not show_secrets:
+        payload = redact_arr_payload(payload)
+    return json.dumps(payload, indent=None if as_json else 2) + "\n", 0
+
+
 def run_arr(ns):
     """Read-only *arr API GET, resolved to the app's k8s Service ClusterIP.
 
@@ -87,7 +171,8 @@ def run_arr(ns):
     run time) via kubectl instead of docker — see the comment above ARR_PORTS for why
     this talks to the Service directly instead of going through k8s_endpoint like every
     other cluster subcommand. Pulls <app>_api_key from SOPS and passes it via stdin.
-    Pretty-prints JSON by default; `--json` prints the raw response.
+    Pretty-prints JSON by default; `--json` prints it on one line. Credential-bearing
+    values are redacted unless `--show-secrets` is passed — see redact_arr_payload.
     """
     if ns.dry_run:
         print(
@@ -97,12 +182,8 @@ def run_arr(ns):
         return 0
     url = arr_url(resolve_arr_ip(ns.app), ns.app, ns.path)
     body = config_get(url, arr_curl_config(core.sops_extract(f"{ns.app}_api_key")))
-    if ns.json:
-        print(body, end="")
-        return 0
-    try:
-        print(json.dumps(json.loads(body), indent=2))
-    except json.JSONDecodeError:
-        print(body.strip())
-        return 1
-    return 0
+    text, rc = format_arr_response(
+        body, as_json=ns.json, show_secrets=getattr(ns, "show_secrets", False)
+    )
+    print(text, end="")
+    return rc
