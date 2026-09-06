@@ -31,6 +31,22 @@ never `config` — so a mount reads unambiguously in a diff or a `kubectl descri
 and parses it as YAML. App config a manifest embeds via `lookup()` goes in `templates/config/`,
 static assets in `files/`. `Dockerfile*` is exempt and may sit in `templates/` directly.
 
+**Every role under `roles/k8s/` declares `k8s_autodeploy` and `k8s_autodeploy_reason` in
+`defaults/main.yml`.** `ansible/filter_plugins/k8s_autodeploy.py` derives the GitOps
+auto-deploy denylist from those declarations. It raises at template time on a role that
+declares nothing, so a missing stance fails `initial_setup.yml --tags gitops_deploy` rather
+than defaulting to either answer. Declare `true` for an ordinary service whose image pin
+Renovate bumps. Declare `false` for a role that deploys no workload of its own, or one an
+unattended image bump could break, and say which in the reason — the reason is what makes the
+stance reviewable. Copy the shape from a sibling:
+
+```yaml
+k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "deploys no workload of its own — …"  # noqa var-naming[no-role-prefix]
+```
+
+A `false` declaration also needs the extra command in step 4.
+
 ## 2. The inventory entry — ordering is automatic, position is not
 
 Add the service to `containers_list` in `ansible/inventory/host_vars/daniel-box.yml` with
@@ -70,6 +86,27 @@ split. Two limits specific to a *brand-new* service:
 - A green dry run says nothing about scheduling, PVC binding, probe or rollout behaviour.
   Those need a real deploy, gated with
   `uv run python scripts/diagnostics/probe.py health <name>`.
+
+**A role declaring `k8s_autodeploy: false` needs one more command, after it lands on master:**
+
+```bash
+uv run ansible-playbook ansible/initial_setup.yml --tags gitops_deploy
+```
+
+The denylist is baked into `/etc/gitops-deploy/config.env`, and only that playbook renders it.
+`deploy.sh` runs deploy.yml, which runs no setup role, so the new role's declaration never
+reaches the host on its own. Until you re-render, the deployer reads a denylist at origin that
+disagrees with its own config and disarms image-pin auto-deploy for **every** service, not just
+the new one, logging to `journalctl -u gitops-deploy.service`:
+
+```
+k8s auto-deploy disarmed — stale denylist (denied at origin but not in config: ['<name>'])
+```
+
+`changed=0` on the *Write deployer config* task means the host was already current. Render
+after the push, not before: rendering from an unpushed tree produces the opposite mismatch,
+which the deployer reports as *in config but not at origin*. A `k8s_autodeploy: true`
+declaration adds no denylist entry and needs none of this.
 
 ## 5. Verify the service, not just the pod
 

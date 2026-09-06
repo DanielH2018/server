@@ -233,6 +233,21 @@ stay).
     (`deploy_logic.py` around line 177) — naming `deploy.yml` for a setup-plane change leaves
     it unapplied while a plain ff-merge clears the divergence.
 
+    **Adding a NEW role that declares `k8s_autodeploy: false` is the same edit site with the
+    same consequence, and it is the one that recurs** — denying an existing role is a rare,
+    deliberate act, while adding a role is routine. `game-stats-lib` landed 2026-09-05 with
+    `k8s_autodeploy: false`, and the host disarmed for six hours until an operator re-rendered
+    (#1265). Note the blast radius: a stale denylist disarms image-pin auto-deploy for EVERY
+    service, not only the role that went stale, because the disarm is a comparison of the whole
+    set rather than a per-role check. The `new-k8s-service` skill carries the re-render as a
+    step for that reason.
+
+    The trigger for that re-render is asymmetric with what the denylist reads, and nothing
+    closes the gap automatically. `k8s_autodeploy_denylist` derives from every role under
+    `roles/k8s/`, while the only path that re-renders `config.env` is a change matching
+    `_BROAD_SETUP_PREFIXES` — `ansible/roles/setup/`. So a change that alters the derived
+    denylist matches no prefix that re-renders it, by construction.
+
     The deployer detects this itself instead of relying on an operator to remember it. Each
     tick, `k8s_declarations_at(origin)` reads every role's `defaults/main.yml` at the SHA the
     tick already pinned for the diff and the alert — not a re-resolved `origin/<branch>`, which
