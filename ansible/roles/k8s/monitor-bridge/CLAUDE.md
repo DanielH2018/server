@@ -785,7 +785,10 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     onHealthIssue alerts to via in-app Discord Connect (config lives in the app DBs, not templated —
     the Arr Queue check covers stuck downloads, NOT indexer/download-client health), and
     `healthchecks_discord_webhook_url`, the healthchecks.io app's own check-down/up webhook (a
-    "webhook" channel in hc.sqlite, not templated — a redundant secondary to its SMTP path). The
+    "webhook" channel in hc.sqlite, declared since 2026-09-06 by
+    `roles/k8s/healthchecks/files/seed_discord_channel.py` — and the app's ONLY working path,
+    not a secondary to SMTP, which has been broken since `healthchecks_smtp_password` was
+    retired). The
     latter four have NO Kuma backstop of their own. `down` if ANY is invalid,
     naming which; each empty URL is skipped. A
     rotated/revoked/deleted webhook makes those alerts silently fail to deliver while every monitor
