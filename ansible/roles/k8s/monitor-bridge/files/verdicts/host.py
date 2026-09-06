@@ -471,8 +471,9 @@ def hwmon_temp_limits(
             # fetch is what is not** — #1003, #1152 and #1158 each recorded it as timing out, but
             # with a browser User-Agent it returned 200 in 0.66s on 2026-09-05. Try the UA before
             # concluding the page is unreachable. This role's CLAUDE.md holds the rest: why 90C
-            # is the same limit daniel-server's coretemp already carries, and the 9.3% of a
-            # 30-day window daniel-box still spends above it.
+            # is the same limit daniel-server's coretemp already carries, and the 12.0% of a
+            # true 7 days (measured 2026-09-06; [30d] here truncates to ~11.4, #1314) daniel-box
+            # still spends above it — which #1186 answered with hysteresis, not a wider ratio.
             out.append((label, temp, fallback_c, "fallback"))
         else:
             out.append((label, temp, cap * ratio, "declared"))
