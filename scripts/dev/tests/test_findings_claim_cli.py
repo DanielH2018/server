@@ -16,7 +16,7 @@ from _findings_fakes import (
 )
 
 from dev.findings import main
-from dev.findings_model import claim_comment
+from dev.findings_lib.issue_model import claim_comment
 from dev.prune_worktrees import Worktree
 
 WT = "worktree-issue-1132"

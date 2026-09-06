@@ -14,8 +14,8 @@ dispatches Opus agents at a batch of issues after triage.
 ## What already exists
 
 `scripts/dev/findings.py` files, re-observes, escalates and closes findings as GitHub Issues.
-It is split four ways: the CLI, `findings_model.py` (vocabulary and pure reads),
-`findings_plans.py` (the `gh` argv every command plans) and `findings_gh.py` (the calls). Every
+It is split four ways: the CLI, `findings_lib/issue_model.py` (vocabulary and pure reads),
+`findings_lib/plans.py` (the `gh` argv every command plans) and `findings_lib/gh_calls.py` (the calls). Every
 command plans a list of argv first, then runs it, so `--dry-run` writes nothing.
 
 `scripts/dev/prune_worktrees.py` decides whether a session worktree is done with. It exports
@@ -34,7 +34,7 @@ session-level identity itself.
 
 ## Vocabulary
 
-Two labels join `LABELS` in `findings_model.py` and are created by the existing `sync-labels`:
+Two labels join `LABELS` in `findings_lib/issue_model.py` and are created by the existing `sync-labels`:
 
 | Label | Colour role | Meaning |
 |---|---|---|
@@ -48,7 +48,7 @@ enough that this has not been worth a longer name.
 ## The claim record
 
 A claim is a **comment**, following the machine-readable trailer convention
-`findings_model.trailer()` already uses for fingerprints:
+`issue_model.trailer()` already uses for fingerprints:
 
 ```
 Claimed by `worktree-issue-1132` (session `cse_01ABC…`) at 2026-09-05T18:40Z
@@ -108,8 +108,8 @@ question — is this worktree done with — is a question that module already an
 ## Commands
 
 Five new subcommands, plus a change to `list` and one to `close`. All of them match
-`findings.py`'s plan-then-run split: the argv goes in `findings_plans.py`, the parsing in
-`findings_model.py`, the `gh` calls in `findings_gh.py`.
+`findings.py`'s plan-then-run split: the argv goes in `findings_lib/plans.py`, the parsing in
+`findings_lib/issue_model.py`, the `gh` calls in `findings_lib/gh_calls.py`.
 
 ### `claim <n>… --worktree <name> [--session <id>] [--force]`
 
@@ -207,7 +207,7 @@ regression note, so no comment body ever carries a `Claim:` and a `Released:` li
 
 The picking command. Returns open issues that are: `claude`-labelled, not `manual`, not
 live-claimed, and not already referenced by an open PR, ordered by the existing
-`findings_model.sort_key`.
+`issue_model.sort_key`.
 
 **There is no default bound.** `--limit` defaulted to 10, and an orchestrator read
 `next --json`, took the ten rows for the whole free set, and never saw the twelve behind them.
@@ -350,7 +350,7 @@ The claim tests live in five files under `scripts/dev/tests/`, split by what eac
 |---|---|
 | `test_findings_claim_record.py` | the comment format and the fold: who holds an issue, and how the parser is hardened |
 | `test_findings_claim_plans.py` | the pure argv `plan_claim` and `plan_release` return |
-| `test_findings_claim_cli.py` | `claim`, `release`, `claims` and `reap` driven through `main()` |
+| `test_findings_lib/claim_cli.py` | `claim`, `release`, `claims` and `reap` driven through `main()` |
 | `test_findings_claim_staleness.py` | `claim_is_live` against invented worktree state |
 | `test_findings_claim_reap_then_claim.py` | the reap-then-claim path `next` sends a session down |
 

@@ -20,16 +20,16 @@ import sys
 import sys as _sys
 from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
-from dev.findings_model import (
+from dev.findings_lib.issue_model import (
     _LIST_FIELDS,
     PROJECT_TITLE,
     comment_cap_warning,
     pr_refs,
 )
-from dev.findings_plans import is_project_failure, without_project
-from dev.findings_tools import FindingsTools
+from dev.findings_lib.plans import is_project_failure, without_project
+from dev.findings_lib.boundaries import FindingsTools
 
 
 def _warn_at_the_comment_cap(issues: list[dict]) -> list[dict]:

@@ -1,7 +1,7 @@
 """The four claim subcommands: `claim`, `release`, `claims` and `reap`.
 
 Split out of `findings.py` to keep that file under its 600-line cap, the same reason
-`findings_cli.py` exists. These four belong together for a better reason than size, though:
+`findings_lib/cli.py` exists. These four belong together for a better reason than size, though:
 they are the only handlers that read the WORKTREES, and each takes a different position on
 what a FAILED read means. `reap` refuses outright, because it writes on that read and must
 not treat an error as "every worktree is gone". `claims` renders anyway and says on stderr
@@ -10,8 +10,8 @@ advisory, and a stale claim already sitting on an issue is left standing rather 
 on a guess. Keeping the four in one file keeps those three positions readable against each
 other.
 
-The layering is the same as elsewhere in this package: `findings_claim.py` decides whether a
-claim is live, `findings_plans.py` turns a decision into gh argv, `findings_gh.py` runs them,
+The layering is the same as elsewhere in this package: `findings_lib/claim.py` decides whether a
+claim is live, `findings_lib/plans.py` turns a decision into gh argv, `findings_lib/gh_calls.py` runs them,
 and this file is the CLI over the three.
 """
 
@@ -24,19 +24,24 @@ import sys
 import sys as _sys
 from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
-# DECIDED: imported as `dev.<leaf>`, never as bare siblings — see the marker in findings.py.
-from dev.findings_claim import (
+# DECIDED: imported as `dev.findings_lib.<leaf>`, never as bare siblings — see the marker in findings.py.
+from dev.findings_lib.claim import (
     another_claim_blocks,
     claim_is_live,
     claim_states,
     stale_holder,
 )
-from dev.findings_gh import _existing_labels, _load_issue, load_issues, run
-from dev.findings_model import current_claim, now_iso, validate_worktree_name
-from dev.findings_plans import ClaimRefused, plan_claim, plan_release, plan_sync_labels
-from dev.findings_tools import FindingsTools
+from dev.findings_lib.gh_calls import _existing_labels, _load_issue, load_issues, run
+from dev.findings_lib.issue_model import current_claim, now_iso, validate_worktree_name
+from dev.findings_lib.plans import (
+    ClaimRefused,
+    plan_claim,
+    plan_release,
+    plan_sync_labels,
+)
+from dev.findings_lib.boundaries import FindingsTools
 
 
 def cmd_claim(args: argparse.Namespace, tools: FindingsTools) -> int:

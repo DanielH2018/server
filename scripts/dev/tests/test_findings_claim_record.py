@@ -7,8 +7,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from _findings_fakes import foreign_comment, operator_comment
 
-from dev.findings_claim import _claim_age_days
-from dev.findings_model import (
+from dev.findings_lib.claim import _claim_age_days
+from dev.findings_lib.issue_model import (
     COMMENT_PAGE_CAP,
     LABELS,
     claim_comment,

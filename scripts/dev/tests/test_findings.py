@@ -3,7 +3,7 @@
 The boundaries come from the `make_tools` fixture, which answers `gh_json` by argv, so
 `load_issues`, `_existing_labels` and the label planning they feed all run for real here.
 The `open` planner and its CLI are in test_findings_open.py; everything verify-by is in
-test_findings_verify.py.
+test_findings_lib/verify.py.
 
 Run: uv run pytest scripts/dev/tests/test_findings.py
 """
@@ -14,8 +14,8 @@ import re
 import pytest
 from _findings_fakes import Fakes
 from dev import findings
-from dev.findings_gh import run
-from dev.findings_model import (
+from dev.findings_lib.gh_calls import run
+from dev.findings_lib.issue_model import (
     LABELS,
     _prefixed,
     claim_comment,
@@ -26,7 +26,7 @@ from dev.findings_model import (
     sort_key,
     verify_by_section,
 )
-from dev.findings_plans import plan_close, plan_sync_labels, plan_touch
+from dev.findings_lib.plans import plan_close, plan_sync_labels, plan_touch
 
 # --- fingerprint -----------------------------------------------------------------------
 

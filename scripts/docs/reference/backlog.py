@@ -5,8 +5,8 @@ WHY THIS PAGE IS WORTH HAVING. The issues are the record; this page is the view 
 beside the other generated references at docs.local, so "what is known-broken and unowned"
 is answered where "what runs here" is, without opening GitHub.
 
-WHAT IT READS. `scripts/dev/findings_model.py`'s row model over the `gh issue list --label
-claude` that `findings_gh.load_issues` runs.
+WHAT IT READS. `findings_lib/issue_model.py`'s row model over the `gh issue list --label
+claude` that `gh_calls.load_issues` runs.
 The docs-refresh cron runs as the user whose gh is already authenticated to open the docs
 PR, so this generator needs nothing it does not already have. A gh failure fails THIS
 generator loudly; build_docs.py keeps rendering the others and exits non-zero, which is the
@@ -27,8 +27,8 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
-from dev.findings_gh import load_issues
-from dev.findings_model import issue_rows, sort_key
+from dev.findings_lib.gh_calls import load_issues
+from dev.findings_lib.issue_model import issue_rows, sort_key
 from lib.docs_provenance import finish_generator, generated_banner, md_cell
 
 SOURCE = "scripts/docs/reference/backlog.py"
@@ -38,7 +38,7 @@ def render_markdown(rows: list[dict]) -> str:
     """Renders the backlog page: the provenance banner, intro prose, and the findings table.
 
     Args:
-        rows: open findings in `issue_rows` shape, as returned by `dev.findings_model.issue_rows`.
+        rows: open findings in `issue_rows` shape, as returned by `dev.findings_lib.issue_model.issue_rows`.
     """
     parts = [generated_banner(SOURCE), "# Backlog\n"]
     parts.append(

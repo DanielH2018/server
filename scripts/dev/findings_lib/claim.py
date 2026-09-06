@@ -18,14 +18,14 @@ a worktree with uncommitted changes is holding work, whatever happened to the pr
 import sys as _sys
 from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from dev.findings_model import (
+from dev.findings_lib.issue_model import (
     _CLAIM_RE,
     _RELEASE_RE,
     current_claim,
@@ -204,7 +204,7 @@ def _claim_age_days(issue: dict, held: str) -> int | None:
                     claimed_at_comment = comment
             # The same choice `current_claim` makes, and it has to stay the same: a body
             # carrying both trailers holds the claim rather than releasing it. Grep
-            # `DECIDED: \`Claim:\` wins over \`Released:\`` in findings_model.py for the
+            # `DECIDED: \`Claim:\` wins over \`Released:\`` in findings_lib/issue_model.py for the
             # reasoning; `test_a_body_carrying_both_trailers_ages_the_claim_from_the_comment_
             # that_opened_it` is what fails if the two diverge.
             continue

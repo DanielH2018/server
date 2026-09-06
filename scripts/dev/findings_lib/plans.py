@@ -2,10 +2,10 @@
 
 Every command in `findings.py` plans first and runs second, so the decision — file, touch,
 reopen, refuse, escalate, close — is a pure function of the issue it was handed. `--dry-run`
-prints what these return; `findings_gh.run` is the only thing that executes them.
+prints what these return; `gh_calls.run` is the only thing that executes them.
 
 `is_project_failure` and `without_project` are the exception that proves the shape: they are
-also pure, and they let `findings_gh._create_with_optional_project` decide whether a `gh`
+also pure, and they let `gh_calls._create_with_optional_project` decide whether a `gh`
 failure is worth retrying without ever looking at gh itself.
 """
 
@@ -14,9 +14,9 @@ failure is worth retrying without ever looking at gh itself.
 import sys as _sys
 from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
-from dev.findings_model import (
+from dev.findings_lib.issue_model import (
     LABELS,
     NO_REOPEN,
     PROJECT_TITLE,

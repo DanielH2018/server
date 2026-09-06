@@ -158,15 +158,23 @@ def test_the_split_findings_leaves_are_not_reported_untested(live_script_rows):
     finds the class it was written for. Named members, so a failure says which leaf moved.
 
     The via was `importer` until the dotted-path branch landed: `test_findings.py` says
-    `from dev.findings_gh import run`, which is the leaf imported directly and so a
-    stronger credit than inheriting the facade's suite. The suite named is the same either
-    way. `test_the_infra_map_facade_members_inherit_the_facades_suite` below is what keeps
-    the `importer` via itself non-vacuous.
+    `from dev.findings_lib.gh_calls import run`, which is the leaf imported directly and so a
+    stronger credit than inheriting the facade's suite. The leaves live in `findings_lib/`
+    and the suites in `dev/tests/`, so locality never decides here and the stem tie-break
+    does: `plans.py` goes to `test_findings_claim_plans.py`, which carries `_plans_` in its
+    name and imports the leaf, and the two leaves no suite is named after fall back to
+    `test_findings.py`. `test_the_infra_map_facade_members_inherit_the_facades_suite` below
+    is what keeps the `importer` via itself non-vacuous.
     """
     rows = {r["name"]: r for r in live_script_rows}
-    for name in ("findings_gh.py", "findings_model.py", "findings_plans.py"):
+    expected = {
+        "gh_calls.py": "test_findings.py",
+        "issue_model.py": "test_findings.py",
+        "plans.py": "test_findings_claim_plans.py",
+    }
+    for name, suite in expected.items():
         assert rows[name]["indirect_via"] == "import", name
-        assert rows[name]["indirect_tests"] == "test_findings.py", name
+        assert rows[name]["indirect_tests"] == suite, name
 
 
 def test_the_shell_template_validators_are_credited_to_their_canonical_suite(
@@ -188,7 +196,7 @@ def test_every_inherited_credit_names_a_test_of_a_real_importer(live_script_rows
 
     `test_no_script_is_credited_to_another_scripts_own_test` filters `indirect_via == "path"`
     and is therefore silent about this via, which produces exactly the shape it polices:
-    `findings_gh.py` credited to `test_findings.py`, and `findings` is a script stem in the
+    `findings_lib/gh_calls.py` credited to `test_findings.py`, and `findings` is a script stem in the
     tree. The exemption is right -- a parent's suite exercises the leaf THROUGH the import,
     where a path mention is only talk -- but that makes the import the thing to check. So
     assert the relationship rather than trusting the via label: the credited

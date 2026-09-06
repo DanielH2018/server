@@ -9,8 +9,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from _findings_fakes import operator_comment
 
-from dev.findings_model import claim_comment
-from dev.findings_plans import ClaimRefused, plan_claim, plan_release
+from dev.findings_lib.issue_model import claim_comment
+from dev.findings_lib.plans import ClaimRefused, plan_claim, plan_release
 
 WT = "worktree-issue-1132"
 
