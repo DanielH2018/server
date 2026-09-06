@@ -299,6 +299,39 @@ spec:
               mountPath: /plugins-storage
             - name: traefik-tmp
               mountPath: /tmp
+{% if traefik_k8s_manage_crowdsec %}
+          # #1322: /ping answers 200 from the moment the process is up, and says nothing about
+          # whether Traefik built a routing table. On 2026-09-06 the boot-time download of the
+          # bouncer plugin timed out, the `crowdsec` Middleware the https entrypoint names
+          # resolved to "invalid middleware type", every router on that entrypoint was
+          # rejected, and this pod sat 3/3 Ready serving 404 to the whole fleet for 3.5 hours.
+          # Traefik does not retry that download, and nothing restarted it.
+          #
+          # This probe makes the pod's start conditional on the routing table existing. Its
+          # target is edge-selfcheck-ingressroute.yaml.j2 — a router on the https entrypoint
+          # backed by ping@internal, so it carries the crowdsec middleware chain but depends
+          # on no other workload. Plugin loaded: 200. Plugin missing: the router is rejected
+          # with all the others and the probe reads 404, kubelet restarts the container, and
+          # the restart re-downloads. Minutes instead of hours, and a download that keeps
+          # failing shows as CrashLoopBackOff rather than a green pod.
+          #
+          # A startupProbe rather than a liveness one, on purpose. It is scoped to boot, which
+          # is when the download happens, so a steady-state wobble in CrowdSec can never
+          # restart-loop the edge. It also suppresses the readiness probe below until it
+          # passes, which is what keeps a routerless Traefik out of the Service.
+          #
+          # 3 minutes of tolerance (36 x 5s). The download takes ~1s when plugins.traefik.io
+          # answers, and the bouncer's own updateMaxFailure: 5 gives roughly 6 minutes before
+          # a dead LAPI turns into a blanket 403 — so this window closes well inside the one
+          # case where a healthy edge could still fail the probe.
+          startupProbe:
+            httpGet:
+              path: /.well-known/traefik-edge-selfcheck
+              port: https
+              scheme: HTTPS
+            periodSeconds: 5
+            failureThreshold: 36
+{% endif %}
           readinessProbe:
             httpGet:
               path: /ping

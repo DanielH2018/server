@@ -15,6 +15,18 @@ Look" table's note that this role must render before anything referencing its CR
   outage. Reason is in `defaults/main.yml`.
 
 ## Notable
+- **A startupProbe, not `/ping`, is what proves this pod has routers.** `/ping` answers 200
+  from the moment the process starts. On 2026-09-06 the boot-time download of the CrowdSec
+  bouncer plugin timed out, the `crowdsec` Middleware the https entrypoint names resolved to
+  "invalid middleware type", every router on that entrypoint was rejected, and the pod sat
+  3/3 Ready serving 404 to the whole fleet for 3.5 hours (#1322). Traefik does not retry the
+  download. The probe targets `edge-selfcheck-ingressroute.yaml.j2`, a router of Traefik's own
+  on the https entrypoint backed by `ping@internal`, so the same failure that kills every app
+  route kills it too and kubelet restarts the container instead. Three constraints hold it
+  together, all ENFORCED by `ansible/tests/services/test_traefik_edge_selfcheck.py`: the route
+  stays on an entrypoint whose chain names the crowdsec Middleware, the probe path stays the
+  route's own, and the route matches on a path rather than a Host (a kubelet probe sends no
+  SNI, and Traefik answers a matched `Host()` router with 421 when SNI and Host disagree).
 - An initContainer runs `chmod 600 /data/acme.json` on every start: kubelet's `fsGroup`
   handling ORs group bits into every file on the volume at mount time, which flips
   Traefik's own `0600` back to `0660` and makes it refuse to load the ACME account.

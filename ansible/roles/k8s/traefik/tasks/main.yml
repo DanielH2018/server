@@ -62,7 +62,8 @@
       {{ ['rbac-binding.yaml']
          + (['acme-pvc.yaml'] if traefik_k8s_manage_acme | bool else [])
          + ['static-config.yaml', 'dynamic.yaml', 'deployment.yaml', 'service.yaml',
-            'metrics-service.yaml', 'dashboard-ingressroute.yaml'] }}
+            'metrics-service.yaml', 'dashboard-ingressroute.yaml']
+         + (['edge-selfcheck-ingressroute.yaml'] if traefik_k8s_manage_crowdsec | bool else []) }}
     manifests_secret_files: >-
       {{ (['cf-token-secret.yaml'] if traefik_k8s_manage_acme | bool else [])
          + (['crowdsec-secret.yaml'] if traefik_k8s_manage_crowdsec | bool else [])
