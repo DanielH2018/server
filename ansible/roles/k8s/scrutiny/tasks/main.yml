@@ -24,6 +24,21 @@
     volume_claim_storage_class: "{{ scrutiny_k8s_config_storage_class }}"
     volume_claim_size: "{{ scrutiny_k8s_config_size }}"
 
+# The Secret derives scrutiny's shoutrrr notify URL by splitting the raw Discord webhook. A
+# value that is not a Discord webhook still splits, still renders and still boots — scrutiny
+# just never delivers a SMART failure, behind a green pod and a green health gate. This is the
+# only place the REAL value is seen (CI renders it stubbed), so the shape check belongs here.
+# The assertion text names the variable, never its value, so a failure prints no credential.
+- name: Assert the Discord webhook is the shape the notify URL is derived from
+  ansible.builtin.assert:
+    that:
+      - monitor_discord_webhook_url is match('^https://(canary\\.|ptb\\.)?discord(app)?\\.com/api/webhooks/[0-9]+/[A-Za-z0-9_-]+/?$')
+    fail_msg: >-
+      monitor_discord_webhook_url is not a Discord webhook URL
+      (https://discord.com/api/webhooks/<id>/<token>), so the discord:// URL scrutiny's
+      templates/secret.yaml.j2 derives from it would be silently undeliverable.
+    quiet: true
+
 - name: Deploy scrutiny to the cluster
   ansible.builtin.include_role:
     name: k8s/manifests
