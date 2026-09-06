@@ -53,6 +53,16 @@ BEHIND_PARK_SECONDS = 45 * 60
 # work it is; short enough to stay one line.
 PRIMARY_DIRTY_LIMIT = 8
 
+# How this hook asks the SHARED primary checkout whether it is dirty. `--no-optional-locks` is
+# load-bearing, not a nicety: a plain `git status` refreshes and WRITES `.git/index` in the tree
+# it reads. Without the flag a SessionStart hook running in a worktree would write the shared
+# checkout's index — the one thing the isolation guard exists to prevent — and could collide on
+# `index.lock` with the deployer's own `merge --ff-only`, which holds
+# /var/lock/server-git-tree.lock and knows nothing about this hook. The flag is global to git, so
+# it comes before the subcommand. A constant rather than an inline argv so a test can assert the
+# shape without patching `lib.git.git`.
+PRIMARY_STATUS_ARGV = ("--no-optional-locks", "status", "--porcelain")
+
 
 def primary_worktree_path(porcelain):
     """The main checkout's path from `git worktree list --porcelain`, or None.
@@ -82,6 +92,12 @@ def dirty_primary_lines(porcelain, path):
     Names the paths with their porcelain status codes, the way the deployer's own journal line
     does. `??` is the code worth seeing: `git status --porcelain` counts untracked files, so the
     tree can be dirty with nothing modified.
+
+    The parse is a deliberate COPY of `dirty_summary` in
+    `ansible/roles/setup/gitops_deploy/files/deploy_git.py`, not an import of it — importing
+    would drag the whole `deploy_git` module into a hook that must never fail to load. The cost
+    is that the two can drift apart silently if the deployer ever changes what counts as dirty,
+    so change them together.
     """
     entries = []
     for line in porcelain.splitlines():
@@ -159,7 +175,7 @@ def parked_deployer_problems(
     if status is None:
 
         def status(path):
-            return git("status", "--porcelain", cwd=path, check=False, timeout=5).stdout
+            return git(*PRIMARY_STATUS_ARGV, cwd=path, check=False, timeout=5).stdout
 
     if read_marker is None:
 
