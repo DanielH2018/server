@@ -60,6 +60,9 @@ NO_MANIFEST_ROLES = {
     "longhorn-api",  # resolves a fact only, same as cronjob-gate/volume-snapshot
     "volume-revert",  # reverts a volume through kubectl and the Longhorn API
     "game-stats-lib",  # ships stats_lib.py into valheim-stats/terraria-stats' ConfigMaps
+    # declares sonarr's/radarr's Discord Connect notification over the app's own API — a row in
+    # the app's database, which no manifest can express
+    "arr-notification",
 }
 
 # These DO carry manifest templates; they are exempt for a different reason. Their templates

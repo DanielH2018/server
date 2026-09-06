@@ -1,0 +1,91 @@
+---
+# Declares the Discord Connect notification of one *arr app. Included by sonarr and radarr
+# AFTER their own k8s/manifests call — see this role's CLAUDE.md for why the row is live state
+# rather than a manifest, and for the before-state it adopts.
+#
+# The caller passes `arr_notification_app`; everything else has a default here.
+
+- name: Assert the caller named an *arr app
+  tags: [deploy]
+  ansible.builtin.assert:
+    that: arr_notification_app in ['sonarr', 'radarr']
+    fail_msg: >-
+      arr_notification_app must be sonarr or radarr, got
+      {{ arr_notification_app | default('(unset)') }}
+    quiet: true
+
+# The seed talks HTTP to the app, so it needs a pod that is actually serving. k8s/manifests
+# deliberately does NOT wait — it queues the wait for k8s/rollout-drain at the end of the
+# play — so this role waits itself. The timeout matches sonarr's manifests_rollout_timeout: a
+# first boot installing DOCKER_MODS takes up to 10 minutes. The wait costs nothing on an
+# unchanged deploy, where the rollout is already complete.
+- name: Wait for the rollout before declaring the notification of {{ arr_notification_app }}
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} rollout status
+      deploy/{{ arr_notification_app }}
+      --timeout={{ arr_notification_rollout_timeout }}
+  become: true
+  changed_when: false
+  check_mode: false
+  when: not k8s_dry_run | bool
+
+# The Service ClusterIP, not the in-cluster DNS name: the controller is not in the cluster, so
+# `sonarr.homelab.svc` does not resolve here. Not Traefik either — neither app has an Authelia
+# bypass for /api/*, so a routed request 302s at the middleware and never reaches the app
+# (scripts/diagnostics/probe_lib/arr.py carries the same finding and reaches it the same way).
+# A ClusterIP is stable across pod restarts and redeploys, so this is the k8s equivalent of the
+# pre-migration container IP.
+- name: Resolve the Service ClusterIP of {{ arr_notification_app }}
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} get svc {{ arr_notification_app }}
+      -o jsonpath={.spec.clusterIP}
+  become: true
+  register: arr_notification_clusterip
+  changed_when: false
+  check_mode: false
+  when: not k8s_dry_run | bool
+
+# `no_log` because the environment carries the app's API key and the Discord webhook URL.
+# `failed_when: false` and an explicit failure below, because no_log censors the failure
+# message too — and the script is written never to print a field value, so its own stdout and
+# stderr are safe to show. That is the whole reason the diagnostics come back out through a
+# second task rather than out of this one.
+- name: Declare the Discord notification in {{ arr_notification_app }}
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      {{ ansible_playbook_python }} {{ role_path }}/files/seed_arr_notification.py
+  environment:
+    ARR_APP: "{{ arr_notification_app }}"
+    ARR_HOST: "{{ arr_notification_clusterip.stdout | default('') }}"
+    ARR_API_KEY: "{{ lookup('vars', arr_notification_app ~ '_api_key') }}"
+    ARR_DISCORD_WEBHOOK_URL: "{{ arr_discord_webhook_url }}"
+    ARR_NOTIFICATION_NAME: "{{ arr_notification_name }}"
+    ARR_NOTIFICATION_USERNAME: "{{ arr_notification_username }}"
+    ARR_NOTIFICATION_TRIGGERS: "{{ arr_notification_triggers | to_json }}"
+    ARR_NOTIFICATION_INCLUDE_HEALTH_WARNINGS: >-
+      {{ arr_notification_include_health_warnings | string | lower }}
+  no_log: true
+  register: arr_notification_seed
+  failed_when: false
+  # The script's last line is `SEED_CHANGED: <n>`. Selecting the marker rather than reading the
+  # last line keeps this honest if anything is ever printed after the script's own output.
+  changed_when: >-
+    (arr_notification_seed.stdout_lines | select('search', '^SEED_CHANGED: ')
+     | list | last | default('SEED_CHANGED: 0')
+     | regex_replace('^SEED_CHANGED: ', '') | int) > 0
+  when: not k8s_dry_run | bool
+
+- name: Report what the notification seed decided for {{ arr_notification_app }}
+  tags: [deploy]
+  ansible.builtin.fail:
+    msg: >-
+      {{ arr_notification_seed.stdout | default('') }}
+      {{ arr_notification_seed.stderr | default('') }}
+  when:
+    - not k8s_dry_run | bool
+    - arr_notification_seed.rc | default(0) != 0

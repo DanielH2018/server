@@ -35,3 +35,12 @@
       # The exportarr sidecar's API key. Listed as a SECRET file so it is rendered 0600 under
       # no_log, like every other decrypted SOPS value.
       - secret-exportarr.yaml
+
+# The Discord Connect notification is a row in radarr.db, not a manifest — live state a
+# Longhorn revert or a recreated claim drops silently. roles/k8s/arr-notification declares it.
+- name: Declare radarr's Discord notification
+  tags: [deploy]
+  ansible.builtin.include_role:
+    name: k8s/arr-notification
+  vars:
+    arr_notification_app: radarr

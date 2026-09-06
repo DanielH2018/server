@@ -402,6 +402,7 @@ def test_shared_k8s_roles_matches_the_known_set():
     directory move or an empty `ansible/roles/k8s/` would otherwise return an empty set and
     every consumer of this function would go quiet rather than fail loudly."""
     assert pr.shared_k8s_roles() == {
+        "arr-notification",
         "cronjob-gate",
         "game-stats-lib",
         "image-builder",
