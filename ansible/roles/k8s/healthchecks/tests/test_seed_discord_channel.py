@@ -1,9 +1,9 @@
-"""The Discord channel healthchecks alerts through must be declared, not clicked.
+"""The Discord channel healthchecks alerts through must be declared, not left as UI state.
 
-THE INJECTION POINT IS `stored_url` / `needs_update`, deliberately. Those decide whether a
-deploy rewrites the Channel row, which is the part with the trap in it: a channel that
-"exists" while holding a stale or malformed value delivers nothing and reads fine in the
-Integrations list. Driving Django instead would prove only that the ORM works.
+THE INJECTION POINT IS `desired_spec` / `needs_update`, deliberately. Those decide what the
+row holds and whether a deploy rewrites it, which is the part with the traps in it: a spec
+missing its `up` half raises inside `sendalerts` on the recovery flip, and a comparison that
+reads the stored value as text rewrites a matching row on every deploy.
 
 Every rule below is an accept/reject pair, so a check that stopped matching fails its own
 test rather than passing on both halves.
@@ -27,35 +27,54 @@ import seed_discord_channel as seed
 URL = "https://discord.com/api/webhooks/123/abc"
 
 
-def test_desired_value_is_read_back_through_the_transports_own_key_path() -> None:
-    # healthchecks' Discord transport reads json["webhook"]["url"]. If this shape drifts,
-    # sendalerts raises a KeyError per flip and every alert is dropped.
-    assert json.loads(seed.desired_value(URL))["webhook"]["url"] == URL
+def test_both_halves_of_the_spec_resolve_the_way_the_transport_reads_them() -> None:
+    # Channel.webhook_spec(status) reads method_/url_/body_/headers_ for the status it is
+    # given. sendalerts asks for "down" on the failure and "up" on the recovery, so a spec
+    # carrying only the down keys raises the first time a check comes back.
+    spec = seed.desired_spec(URL)
+    for status in ("down", "up"):
+        for field in ("method", "url", "body", "headers"):
+            assert spec[f"{field}_{status}"], f"{field}_{status} is missing or empty"
+    assert spec["url_down"] == URL
+    assert spec["url_up"] == URL
+    # The body has to be the JSON Discord reads a message out of, not a bare string.
+    assert spec["body_down"] == seed.BODY_DOWN
+    assert spec["body_up"] == seed.BODY_UP
+    assert json.loads(seed.BODY_DOWN)["content"]
+    assert json.loads(seed.BODY_UP)["content"]
 
 
-def test_needs_update_is_clean_when_the_stored_url_already_matches() -> None:
+def test_needs_update_is_clean_when_the_stored_spec_already_matches() -> None:
     assert seed.needs_update(seed.desired_value(URL), URL) is False
 
 
+def test_needs_update_is_clean_when_the_stored_keys_are_in_another_order() -> None:
+    # healthchecks' own form writes these keys in its order, not ours. Comparing text rather
+    # than documents would report a change on every deploy and rewrite a matching row.
+    shuffled = json.dumps(dict(reversed(list(seed.desired_spec(URL).items()))))
+    assert seed.needs_update(shuffled, URL) is False
+
+
 def test_needs_update_is_flagged_when_the_stored_url_differs() -> None:
-    stale = seed.desired_value("https://discord.com/api/webhooks/999/rotated-away")
-    assert seed.needs_update(stale, URL) is True
+    stale = seed.desired_spec("https://discord.com/api/webhooks/999/rotated-away")
+    assert seed.needs_update(json.dumps(stale), URL) is True
 
 
-def test_stored_url_reads_a_well_formed_value() -> None:
-    assert seed.stored_url(seed.desired_value(URL)) == URL
+def test_needs_update_is_flagged_when_the_stored_spec_has_only_its_down_half() -> None:
+    half = {k: v for k, v in seed.desired_spec(URL).items() if not k.endswith("_up")}
+    assert seed.needs_update(json.dumps(half), URL) is True
 
 
-def test_stored_url_rejects_every_unusable_shape() -> None:
-    # Each of these is a row a half-finished UI edit or an older healthchecks can leave
-    # behind. All mean the same thing to the caller: rewrite it.
-    for value in ("", "not json", "[]", '{"webhook": "a-string"}', '{"webhook": {}}'):
-        assert seed.stored_url(value) is None, value
+def test_stored_spec_rejects_every_unusable_shape() -> None:
+    # Each is a row a half-finished UI edit can leave behind. All mean the same thing to the
+    # caller: rewrite it.
+    for value in ("", "not json", "[]", '"a string"', "17"):
+        assert seed.stored_spec(value) is None, value
 
 
 def test_the_secret_carries_the_webhook_env_the_seed_reads() -> None:
-    # Without this key the seed raises SystemExit inside the pod rather than silently
-    # writing nothing — but the deploy fails, so the wiring is worth pinning here too.
+    # Without this key the seed raises SystemExit inside the pod rather than silently writing
+    # nothing — but the deploy fails, so the wiring is worth pinning here too.
     secrets = [
         doc
         for role, tpl, doc in rendered_docs()
