@@ -1,0 +1,74 @@
+{#
+  The edge's own probe target, and the only route on this cluster whose whole job is to prove
+  that Traefik built a routing table at all.
+
+  #1322: on 2026-09-06 Traefik's boot-time download of the CrowdSec bouncer plugin timed out
+  (`context deadline exceeded` against plugins.traefik.io). Traefik keeps running without the
+  plugin, so `spec.plugin.bouncer` in the `crowdsec` Middleware resolves to "invalid middleware
+  type", and the https entrypoint's middleware chain names that Middleware — which rejects
+  EVERY router on the entrypoint. The pod stayed 3/3 Ready with `/ping` answering 200 for 3.5
+  hours while every host in the homelab 404'd.
+
+  This route is the startupProbe's target (deployment.yaml.j2). It sits on the `https`
+  entrypoint on purpose: that entrypoint's chain in static-config.yaml.j2 carries
+  `{{ k8s_namespace }}-crowdsec@kubernetescrd`, so this router is rejected by exactly the
+  failure the probe exists to catch, and the probe 404s instead of 200ing. Moving it to
+  another entrypoint would leave the probe passing while detecting nothing — ENFORCED by
+  ansible/tests/services/test_traefik_edge_selfcheck.py against the RENDERED manifests.
+
+  `ping@internal` is Traefik's own ping handler, reached by name with `kind: TraefikService`
+  and no port — the same shape (and the same trap) as the dashboard's `api@internal`; give it
+  the default kind and Traefik looks for a k8s Service of that name, finds nothing, and 404s
+  silently. It is deliberately NOT a real backend: pointing the probe at an app would couple
+  the edge's boot to that app being up, and a startupProbe failure restarts the edge.
+
+  No Authelia. The dashboard route was the obvious existing target and is the wrong one: a 302
+  scores as probe success, but it makes an Authelia outage crashloop the ingress edge.
+
+  Gated on traefik_k8s_manage_crowdsec together with the probe, because with the flag false
+  there is no plugin, no crowdsec Middleware and no failure mode — see defaults/main.yml.
+
+  The response body is the literal `OK` Traefik's ping handler writes, so nothing about the
+  fleet leaks through it.
+#}
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: traefik-edge-selfcheck
+  namespace: {{ k8s_namespace }}
+spec:
+  entryPoints:
+    - https
+  routes:
+    - kind: Rule
+      # Path-only, and deliberately NOT a Host() rule. A kubelet httpGet probe connects to
+      # the pod IP, so it sends no TLS SNI, and Traefik answers a matched Host() router whose
+      # SNI does not agree with the Host header with `421 Misdirected Request` — measured
+      # 2026-09-06 against this very route, which 421'd where a non-matching host 404'd. A
+      # probe that can only ever return 421 or 404 never passes, so the edge would crashloop
+      # on a change meant to protect it. With no Host matcher there is nothing to disagree.
+      #
+      # The path is unroutable by any app here and the handler returns the literal `OK`, so
+      # matching it on every hostname — including the public ones — costs nothing. Rule
+      # priority is rule length, so this only ever wins for requests to this exact path.
+      match: "PathPrefix(`/.well-known/traefik-edge-selfcheck`)"
+      services:
+        # kind + absent port are both load-bearing. See the header.
+        - name: ping@internal
+          kind: TraefikService
+  # An https router with no tls block is a NON-TLS router and is never a candidate for an
+  # HTTPS request — see dashboard-ingressroute.yaml.j2. The SAN set is the existing wildcard,
+  # so this adds no ACME order.
+  tls:
+{% if k8s_tls_cert_resolver %}
+    certResolver: {{ k8s_tls_cert_resolver }}
+{% endif %}
+    options:
+      name: modern
+{% if k8s_tls_cert_resolver %}
+    domains:
+      - main: "{{ domain }}"
+        sans:
+          - "*.{{ domain }}"
+          - "*.local.{{ domain }}"
+{% endif %}
