@@ -385,7 +385,8 @@ stringData:
   etcd-restore-drill.json: |
     {"type": "push", "name": "etcd Restore Drill", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_etcd_drill_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   # Board and CPU temperature across all three hosts, pushed every bridge cycle. The hysteresis
-  # that keeps a transcode spike off this tile is HWMON_TEMP_CONSECUTIVE in check.py, not
+  # that keeps a boost excursion off this tile is HWMON_TEMP_CONSECUTIVE (12 cycles = 60 min)
+  # in the monitor-bridge role's files/bridge/config_host.py, not
   # max_retries here — a held cycle still pushes `up`, so the tile stays green through the grace.
   host-temperature.json: |
     {"type": "push", "name": "Host Temperature", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_host_temp_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}

@@ -211,9 +211,36 @@ def host_config(
         HWMON_TEMP_MIN_PLAUSIBLE_C=_num("HWMON_TEMP_MIN_PLAUSIBLE_C", "20"),
         HWMON_TEMP_MAX_PLAUSIBLE_C=_num("HWMON_TEMP_MAX_PLAUSIBLE_C", "150"),
         HWMON_TEMP_EXCLUDE_CHIP=_env("HWMON_TEMP_EXCLUDE_CHIP", "nvme_"),
-        # Hysteresis: a transcode or a compile spikes coretemp for one scrape. 3 cycles at the
-        # loop cadence is sustained heat, not a burst.
-        HWMON_TEMP_CONSECUTIVE=_int("HWMON_TEMP_CONSECUTIVE", "3"),
+        # Hysteresis: a transcode or a compile spikes coretemp for one scrape, so only the Nth
+        # consecutive breaching cycle pages. The streak is ONE counter for the whole check
+        # (bridge.streaks._down_streaks["host_temp"]), not one per sensor, so this number is
+        # estate-wide.
+        #
+        # DECIDED: 12 cycles (60 min at INTERVAL=300), not the 3 (15 min) this shipped with —
+        # daniel-box's k10temp/Tctl boosts into the low 90s as ordinary workload, and 3 cycles
+        # paged on 26 of those excursions in a week. Measured 2026-09-06 against Prometheus over
+        # a true 7 d (retention here is ~11.4 d, so a [30d] query silently returns ~11 d — #1314),
+        # sampling `node_hwmon_temp_celsius{chip="pci0000:00_0000:00:18_3",origin="daniel-box"}`
+        # at the 5 min loop cadence: 12.0% of samples above the 90C limit, p50 52.875C, p95
+        # 93.125C, max 93.75C against AMD's rated 100C. 115 separate excursions above 90C, run
+        # lengths in cycles: 66x1, 23x2, 12x3, 5x4, 2x5, 3x6, 3x7, 1x8, then ONE of 18
+        # (90 min, starting 2026-09-03T12:20Z). Nothing between 9 and 17 cycles — 12 sits in
+        # that empty gap, 1.5x the largest ordinary excursion and half the outlier.
+        # Pages per week by threshold: 3 -> 26, 5 -> 10, 8 -> 2, 9 -> 1, 12 -> 1, 19 -> 0.
+        # 12 keeps the ONE 90-minute excursion paging, deliberately: 90 min pinned above 90C is
+        # the shape of a cooling fault, and a threshold chosen to silence it would be fitted to
+        # the observed maximum with no margin left to detect one. The operator's reading is that
+        # the excursions themselves are normal (issue #1186) — every one of them falls in the
+        # 11:00-03:20Z daytime band with an 8 h overnight hole, so this is scheduled and
+        # interactive work rather than an idle-state thermal floor, which is what makes
+        # hysteresis the remedy rather than cooling or a wider HWMON_TEMP_RATIO.
+        # Estate-wide is acceptable because no other sensor is near its limit: over the same 7 d,
+        # daniel-server's coretemp peaked at 74C against a 90C limit and daniel-pi's thermal zone
+        # at 79.5C against the 85C fallback, so this delays nothing that is currently firing.
+        # Caveat: _down_streaks is module-global and resets on a bridge restart, so a deploy
+        # mid-excursion costs a full 60 min re-accumulation. That cuts toward quiet, not toward
+        # a missed fault.
+        HWMON_TEMP_CONSECUTIVE=_int("HWMON_TEMP_CONSECUTIVE", "12"),
         # Host-coverage floor for the thermal check, the peer of HOST_ORIGINS_MIN and
         # deliberately a DIFFERENT number. Until 2026-08-29 hwmon_temp_verdict paged only on a
         # fully empty vector, so any non-empty subset passed: lose one host's hwmon collector
