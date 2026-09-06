@@ -129,6 +129,26 @@ def eval_path_expr(
             return None
         if name == "str" and len(node.args) == 1:
             return eval_path_expr(node.args[0], file, index, seen)
+        # The `os.path` spelling of the same arithmetic. Test modules across this repo
+        # bootstrap with `os.path.dirname(os.path.dirname(os.path.abspath(__file__)))`
+        # rather than `Path(__file__).resolve().parents[1]`, and guard 3
+        # (test_test_module_bootstraps_present.py) reads them through this evaluator.
+        if name == "dirname" and len(node.args) == 1:
+            base = eval_path_expr(node.args[0], file, index, seen)
+            return base.parent if base is not None else None
+        if name in ("abspath", "realpath") and len(node.args) == 1:
+            base = eval_path_expr(node.args[0], file, index, seen)
+            return base.resolve() if base is not None else None
+        if name == "join" and node.args:
+            base = eval_path_expr(node.args[0], file, index, seen)
+            for arg in node.args[1:]:
+                if base is None:
+                    return None
+                if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                    base = base / arg.value
+                else:
+                    return None
+            return base
         if name == "resolve" and isinstance(node.func, ast.Attribute) and not node.args:
             return eval_path_expr(node.func.value, file, index, seen)
         return None
