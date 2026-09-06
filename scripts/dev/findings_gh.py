@@ -22,9 +22,31 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
-from dev.findings_model import _LIST_FIELDS, PROJECT_TITLE, pr_refs
+from dev.findings_model import (
+    _LIST_FIELDS,
+    PROJECT_TITLE,
+    comment_cap_warning,
+    pr_refs,
+)
 from dev.findings_plans import is_project_failure, without_project
 from dev.findings_tools import FindingsTools
+
+
+def _warn_at_the_comment_cap(issues: list[dict]) -> list[dict]:
+    """Passes ``issues`` through, warning on stderr about any at gh's comment page cap.
+
+    THE FOLD GOES BLIND PAST THE CAP (#1284). gh asks for `comments(first: 100)` and nothing
+    paginates, so a release comment past the cap would leave an issue claimed forever and a
+    claim past it would make the read-back find nothing. The read itself is unchanged —
+    paginating means leaving `gh issue list --json` for the REST API on every command, for a
+    case no issue in the register is near — so a claim verdict that may be wrong announces
+    itself instead of being silently wrong.
+    """
+    for issue in issues:
+        warning = comment_cap_warning(issue)
+        if warning:
+            sys.stderr.write(warning + "\n")
+    return issues
 
 
 def load_issues(state: str = "all", tools: FindingsTools | None = None) -> list[dict]:
@@ -36,7 +58,8 @@ def load_issues(state: str = "all", tools: FindingsTools | None = None) -> list[
             `scripts/docs/reference/backlog.py` calls it.
     """
     argv = ("issue", "list", "--label", "claude", "--state", state, "--limit", "1000")
-    return (tools or FindingsTools()).gh_json(*argv, "--json", _LIST_FIELDS) or []
+    issues = (tools or FindingsTools()).gh_json(*argv, "--json", _LIST_FIELDS) or []
+    return _warn_at_the_comment_cap(issues)
 
 
 def open_pr_refs(tools: FindingsTools) -> set[int]:
@@ -53,7 +76,9 @@ def _existing_labels(tools: FindingsTools) -> set[str]:
 
 
 def _load_issue(number: int, tools: FindingsTools) -> dict:
-    return tools.gh_json("issue", "view", str(number), "--json", _LIST_FIELDS)
+    issue = tools.gh_json("issue", "view", str(number), "--json", _LIST_FIELDS)
+    _warn_at_the_comment_cap([issue] if issue else [])
+    return issue
 
 
 def run(plans: list[list[str]], dry_run: bool, tools: FindingsTools) -> None:

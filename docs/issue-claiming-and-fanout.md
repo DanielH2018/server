@@ -136,9 +136,25 @@ holds its work.
 A git read that FAILS does not refuse. This guard is advisory and only declines to warn, which
 is the opposite of `reap` — `reap` writes on a bad read, so it refuses outright.
 
-### `release <n>… [--reason <text>]`
+### `release <n>… --worktree <name> [--reason <text>]`
 
 The reverse state. Posts the release comment and removes the `claimed` label.
+
+`--worktree` is **required**, not optional. A release names who is releasing, and
+`plan_release` refuses any claim but that worktree's own — without the name, one session
+could release the claim another session holds. It also creates the `claimed` label first if
+the repo lacks it. `gh issue edit --remove-label` fails on a label that does not exist, and
+the release comment is already posted by then. `reap` does the same, for the same reason.
+
+**The name must be one the trailer can carry.** `claim` and `release` both refuse a
+`--worktree` holding a backtick, a line break, or surrounding whitespace, and exit 2. Such a
+name used to write the comment and the label and then fail to parse its own trailer on
+read-back, which `claim` reported as a race lost to nobody.
+
+The reason is collapsed to one line before it is written. `current_claim` reads a `Claim:`
+line anywhere in a comment body, and the reason sits above the trailer, so a multi-line
+reason naming a worktree turned a release into a claim by that worktree. `reap` builds its
+own reason out of a worktree's lock reason, which is free text nobody here writes.
 
 ### The `claimed` label is repaired, in both directions
 
@@ -173,6 +189,16 @@ posts no release comment at all and leaves the label on; `open` then reopens tha
 later re-observation and the stale claim comes back LIVE, blocking `claim` and withholding the
 issue from `next` for as long as the claiming worktree exists. All three now go through one
 helper, `_release_held_claim`, and release whoever holds the claim rather than only the caller.
+
+**`verify --close` releases only a claim it is allowed to close over.** Releasing whoever
+holds the issue stops the claim being stranded; it does not stop the close itself, so an
+unrelated `verify --all --close` could still close an issue out from under the session
+working it. Every other write in the protocol refuses on a live claim, so this one does too:
+a LIVE claim withholds the close, the run prints who holds the issue, and it exits 3.
+`--close-claimed` closes anyway, and skips the worktree read entirely. A FAILED worktree read
+withholds the close as well — `next`'s conservative degradation rather than `reap`'s outright
+refusal — because a git error must not read as "no claims are live." Nothing pays for the
+worktree read unless a claim really sits on an issue the run is about to close.
 
 The reopen posts its release as its own comment rather than folding the trailer into the
 regression note, so no comment body ever carries a `Claim:` and a `Released:` line at once.
@@ -212,8 +238,8 @@ is what a rule becomes after it has actually been violated.
 
 ## Attribution: the worktree name is the record
 
-A worktree's name carries the issues it is working, so both lookups are derived and cannot go
-stale:
+A worktree's name carries the issues it is working, so the mapping is derived rather than
+recorded a second time:
 
 | Case | Worktree | Branch |
 |---|---|---|
@@ -226,7 +252,6 @@ which bounds a multi-issue name at roughly five issues.
 What this buys:
 
 - **Issue → session** is the `Claim:` comment.
-- **Session → issue** is the branch name, parsed.
 - The `session-health.py` banner prints `worktree-issue-1132` where it prints
   `worktree-agent-a1f5b5e3cdf2f9684` today, so the other-live-sessions list becomes readable
   at a glance.
@@ -319,15 +344,26 @@ the fan-out buys parallel *implementation* and no parallel *landing* at all.
 Following the repo's rule that a new check ships with a proof it can go red, and that a check
 finding its own subject by pattern ships with a named member it must find:
 
-- `test_findings_claim.py` — pure argv plan tests for `claim`, `release` and `reap`, in the same
-  style as the existing plan tests.
-- A fold-forward test over a synthetic comment list: claim, claim-and-release, and a
-  release with no matching claim.
+The claim tests live in five files under `scripts/dev/tests/`, split by what each reads:
+
+| File | What it covers |
+|---|---|
+| `test_findings_claim_record.py` | the comment format and the fold: who holds an issue, and how the parser is hardened |
+| `test_findings_claim_plans.py` | the pure argv `plan_claim` and `plan_release` return |
+| `test_findings_claim_cli.py` | `claim`, `release`, `claims` and `reap` driven through `main()` |
+| `test_findings_claim_staleness.py` | `claim_is_live` against invented worktree state |
+| `test_findings_claim_reap_then_claim.py` | the reap-then-claim path `next` sends a session down |
+
+Two of them carry the checks this page asked for by name:
+
 - The staleness pair, named so a rule that stops matching fails its own test:
   `test_claim_is_stale_when_its_worktree_is_gone` and
   `test_claim_is_not_stale_when_its_worktree_is_dirty_with_a_dead_owner`.
-- A non-vacuity assertion on the claim parser: it must find a named fixture set, not merely a
-  non-zero count.
+- The non-vacuity assertion on the claim parser, which the page asked for and nothing wrote
+  until #1285: `CLAIM_PARSER_FIXTURES` in `test_findings_claim_record.py` names each case,
+  `REQUIRED_CLAIM_PARSER_CASES` asserts every name is present, and the verdicts are asserted
+  per name. A rename then fails saying which member went missing, rather than passing over
+  whatever survived.
 
 ## Documentation changes, same PR
 

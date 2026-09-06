@@ -15,7 +15,7 @@ from _findings_fakes import foreign_comment, operator_comment
 
 from dev.findings_claim import claim_is_live, claim_states
 from dev.findings_model import claim_comment, release_comment
-from dev.prune_worktrees import Worktree
+from dev.prune_worktrees import Worktree, _memoised_merged
 
 WT = "worktree-issue-1132"
 PATH = "/home/ubuntu/server/.claude/worktrees/issue-1132"
@@ -267,3 +267,51 @@ def test_claim_is_stale_when_locked_with_dead_owner_clean_and_merged():
     live, reason = claim_is_live(WT, [dead_owner], dirty=_never, merged=_always)
     assert live is False
     assert "lock owner is dead" in reason
+
+
+# --- #1279: the merged read is asked once per worktree, not once per claim ------------------
+#
+# `claim_states` calls `merged(tree)` once per claimed issue, and a fan-out's claims all name
+# ONE orchestrator worktree. For an unmerged branch each of those calls is four git layers
+# ending in a `gh pr list` network read, so the memo lives with the callable rather than in
+# `classify`, which still receives an eagerly-computed bool.
+
+
+def _counting_ask():
+    """(ask, calls): an `is_merged` stand-in that records every call it is asked to make."""
+    calls: list[tuple[str, str, str]] = []
+
+    def ask(repo, head, branch=""):
+        calls.append((repo, head, branch))
+        return False
+
+    return ask, calls
+
+
+def test_the_merged_callable_asks_git_once_per_worktree():
+    """The accepting half: N claims on one worktree cost one read.
+
+    Exactly-once, not at-most-once: a memo that never calls through would answer without
+    asking git at all, and `claims` would report every worktree as unmerged.
+    """
+    ask, calls = _counting_ask()
+    merged = _memoised_merged("/repo", ask)
+    tree = _tree()
+    assert [merged(tree) for _ in range(5)] == [False] * 5
+    assert calls == [("/repo", tree.head, WT)]
+
+
+def test_two_different_worktrees_each_get_their_own_answer():
+    """The rejecting half: the memo is keyed on the TREE, so it must not answer for another.
+
+    A cache ignoring its key would return one verdict for every worktree, which is how a
+    live orchestrator would read as merged and have its claims reaped.
+    """
+    ask, calls = _counting_ask()
+    merged = _memoised_merged("/repo", ask)
+    one = Worktree(path="/w/one", head="abc", branch="b1", locked=False)
+    two = Worktree(path="/w/two", head="def", branch="b2", locked=False)
+    merged(one)
+    merged(two)
+    merged(one)
+    assert calls == [("/repo", "abc", "b1"), ("/repo", "def", "b2")]

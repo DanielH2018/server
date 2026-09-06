@@ -10,7 +10,7 @@ Run: uv run pytest scripts/dev/tests/test_findings_verify.py
 
 import subprocess
 
-from _findings_fakes import Fakes, fake_verify
+from _findings_fakes import Fakes, facts, fake_verify, live_worktree
 from dev import findings
 import pytest
 
@@ -228,3 +228,128 @@ def test_verify_finding_requires_the_tools_seam(issue):
     one["body"] += verify_by_section("true")
     with pytest.raises(TypeError):
         verify_finding(one, 5)  # ty: ignore[missing-argument]
+
+
+# --- an `error` is not a reproduction (#1308) --------------------------------------------
+
+
+def _refusing_verify(command, timeout):
+    """A shell nothing reaches: every command is refused before it runs."""
+    raise AssertionError(f"the classifier should have refused {command!r} first")
+
+
+def test_verify_prints_why_a_predicate_errored(capsys, issue, make_tools):
+    """The accepting half of #1308: the reason `run_verify_by` computes must reach the reader.
+
+    A predicate the classifier refuses never produces a verdict at all, and printing the word
+    `error` alone made that indistinguishable from a finding that keeps reproducing.
+    """
+    one = issue(1, title="Refused predicate")
+    one["body"] += verify_by_section("rm -rf /tmp/x")
+    tools, _ = make_tools(Fakes(issues=[one], verify=_refusing_verify))
+    assert findings.main(["verify", "--all"], tools) == 0
+    out = capsys.readouterr().out
+    assert "error" in out
+    assert "refused: not read-only by the repo's classifier" in out
+    assert "1 predicate(s) never ran" in out
+
+
+def test_verify_prints_no_error_summary_when_every_predicate_ran(
+    capsys, issue, make_tools
+):
+    """The rejecting half: a run whose predicates all RAN must not warn about predicates.
+
+    `still-open` is a real reproduction and reads as one; only a verdict that never ran gets
+    the extra line.
+    """
+    one = issue(1, title="Still broken")
+    one["body"] += verify_by_section("false")
+    tools, _ = make_tools(Fakes(issues=[one], verify=fake_verify))
+    assert findings.main(["verify", "--all"], tools) == 0
+    out = capsys.readouterr().out
+    assert "still-open" in out
+    assert "never ran" not in out
+
+
+# --- a live claim withholds the close (#1302) ---------------------------------------------
+
+
+def _claimed_fixed_issue(issue, number=1, worktree="worktree-someone-else"):
+    """An issue whose verify-by passes and whose claim is held by ``worktree``."""
+    one = issue(number, title="Fixed but claimed", comments=[f"Claim: `{worktree}`\n"])
+    one["body"] += verify_by_section("true")
+    return one
+
+
+def test_verify_close_withholds_a_close_a_live_claim_holds(capsys, issue, make_tools):
+    """The rejecting half of #1302: a session's issue must not close under it.
+
+    `live_worktree` is a locked worktree whose session `classify` reads as alive, which is
+    the shape a fan-out's orchestrator has for the whole run.
+    """
+    one = _claimed_fixed_issue(issue)
+    tools, calls = make_tools(
+        Fakes(
+            issues=[one],
+            verify=fake_verify,
+            worktree_facts=live_worktree("worktree-someone-else"),
+        )
+    )
+    assert findings.main(["verify", "--all", "--close"], tools) == 3
+    assert not any(c[:2] == ["issue", "close"] for c in calls.gh)
+    out = capsys.readouterr().out
+    assert "#1 not closed" in out
+    assert "worktree-someone-else" in out
+
+
+def test_verify_close_still_closes_an_issue_whose_claim_is_stale(
+    capsys, issue, make_tools
+):
+    """The accepting half: a claim `reap` would clear must not block the close.
+
+    `facts()` with no worktrees is the "the claim names a branch nothing has checked out"
+    case — stale, so the close proceeds and `_release_held_claim` posts the release first.
+    """
+    one = _claimed_fixed_issue(issue)
+    tools, calls = make_tools(
+        Fakes(issues=[one], verify=fake_verify, worktree_facts=facts())
+    )
+    assert findings.main(["verify", "--all", "--close"], tools) == 0
+    assert any(c[:3] == ["issue", "close", "1"] for c in calls.gh)
+    assert "#1 closed as fixed" in capsys.readouterr().out
+
+
+def test_close_claimed_closes_over_a_live_claim(capsys, issue, make_tools):
+    """The way out. A one-way door is a bug: `--close-claimed` is the reverse state.
+
+    It must also skip the git read, so `worktree_facts` is left unanswered — the fake
+    ASSERTS on an unanswered boundary, which is what proves the read was never made.
+    """
+    one = _claimed_fixed_issue(issue)
+    tools, calls = make_tools(Fakes(issues=[one], verify=fake_verify))
+    assert findings.main(["verify", "--all", "--close", "--close-claimed"], tools) == 0
+    assert any(c[:3] == ["issue", "close", "1"] for c in calls.gh)
+
+
+def test_verify_close_withholds_the_close_when_the_worktree_read_fails(
+    capsys, issue, make_tools
+):
+    """A failed git read is not "no claims are live" — it withholds, as `cmd_next` does."""
+    one = _claimed_fixed_issue(issue)
+    tools, calls = make_tools(
+        Fakes(issues=[one], verify=fake_verify, worktree_facts=facts(ok=False))
+    )
+    assert findings.main(["verify", "--all", "--close"], tools) == 3
+    assert not any(c[:2] == ["issue", "close"] for c in calls.gh)
+
+
+def test_verify_close_pays_no_git_read_for_an_unclaimed_finding(issue, make_tools):
+    """The common case stays free: no claim on the issue means no worktree read at all.
+
+    `worktree_facts` is left unanswered so the fake asserts if anything reaches it.
+    """
+    one = issue(1, title="Fixed and unclaimed")
+    one["body"] += verify_by_section("true")
+    tools, calls = make_tools(Fakes(issues=[one], verify=fake_verify))
+    assert findings.main(["verify", "--all", "--close"], tools) == 0
+    assert any(c[:3] == ["issue", "close", "1"] for c in calls.gh)

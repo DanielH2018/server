@@ -352,6 +352,37 @@ def primary_checkout() -> str | None:
     return str(Path(common_dir).parent) if common_dir else None
 
 
+def _memoised_merged(
+    repo: str, ask: Callable[[str, str, str], bool] = is_merged
+) -> Callable[[Worktree], bool]:
+    """`is_merged` for a worktree, answered once per tree and cached for the rest of the call.
+
+    A fan-out claims every issue under ONE orchestrator worktree, so `claim_states` asks the
+    identical question once per claimed issue — and for an unmerged branch `is_merged` is four
+    layers deep, ending in a `gh pr list` NETWORK call. N claimed issues meant N of those on
+    every `claims`, `reap` and `next` (#1279); the memory entry
+    `agent-polling-starves-the-deployers-ci-gate` records what that class of traffic costs.
+
+    The memo is keyed on the worktree PATH, whose answer is stable for the duration of one
+    command. It deliberately does NOT touch `classify`: an earlier attempt made the read lazy
+    by guarding on `not tree.locked`, which re-derived `classify`'s branch structure outside
+    `classify` and got it wrong — `classify` skips the merged read only on `locked AND
+    session_is_alive`. `classify` still receives an eagerly-computed bool.
+
+    ``ask`` is the read itself, defaulted to `is_merged`. A test counts its calls through
+    this parameter rather than by patching the module attribute, which is the direction the
+    monkeypatch ratchet in `ansible/tests/repo/` pushes callers.
+    """
+    cache: dict[str, bool] = {}
+
+    def merged(tree: Worktree) -> bool:
+        if tree.path not in cache:
+            cache[tree.path] = ask(repo, tree.head, tree.branch or "")
+        return cache[tree.path]
+
+    return merged
+
+
 def _worktree_facts() -> tuple[
     list[Worktree], Callable[[str], bool], Callable[[Worktree], bool], bool
 ]:
@@ -369,9 +400,9 @@ def _worktree_facts() -> tuple[
     repo = primary_checkout() or str(REPO)
     result = git("worktree", "list", "--porcelain", cwd=repo, check=False)
     if result.returncode != 0:
-        return [], is_dirty, lambda t: is_merged(repo, t.head, t.branch or ""), False
+        return [], is_dirty, _memoised_merged(repo), False
     trees = parse_worktree_list(result.stdout)
-    return trees, is_dirty, lambda t: is_merged(repo, t.head, t.branch or ""), True
+    return trees, is_dirty, _memoised_merged(repo), True
 
 
 def survey(repo: str) -> list[tuple[str, Worktree, str]]:

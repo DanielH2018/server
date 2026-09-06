@@ -31,6 +31,7 @@ from dev.findings_model import (
     current_claim,
     is_operator_comment,
     label_names,
+    ordered_comments,
 )
 from dev.prune_worktrees import REMOVABLE, Worktree, classify
 
@@ -189,7 +190,7 @@ def _claim_age_days(issue: dict, held: str) -> int | None:
     claimed_at_comment: dict | None = None
     currently_held: str | None = None
 
-    for comment in issue.get("comments", []):
+    for comment in ordered_comments(issue):
         if not is_operator_comment(comment):
             continue
         body = comment.get("body") or ""

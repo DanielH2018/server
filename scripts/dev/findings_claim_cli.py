@@ -34,7 +34,7 @@ from dev.findings_claim import (
     stale_holder,
 )
 from dev.findings_gh import _existing_labels, _load_issue, load_issues, run
-from dev.findings_model import current_claim, now_iso
+from dev.findings_model import current_claim, now_iso, validate_worktree_name
 from dev.findings_plans import ClaimRefused, plan_claim, plan_release, plan_sync_labels
 from dev.findings_tools import FindingsTools
 
@@ -72,6 +72,14 @@ def cmd_claim(args: argparse.Namespace, tools: FindingsTools) -> int:
     # retires the lazy read this function used to do — its point was to skip several git
     # calls per registered worktree on a batch where nothing was blocked, and the guard
     # needs them on every batch anyway.
+    bad = validate_worktree_name(args.worktree)
+    if bad:
+        sys.stderr.write(
+            f"claim: --worktree `{args.worktree}` {bad}. The claim comment and the label "
+            "would be written and the trailer would then fail to parse on read-back, which "
+            "reported a race against nobody (#1284).\n"
+        )
+        return 2
     facts = tools.worktree_facts()
     trees, dirty, merged, ok = facts
     if ok:
@@ -155,6 +163,17 @@ def cmd_claim(args: argparse.Namespace, tools: FindingsTools) -> int:
         # Read back. Two sessions can both post a claim comment; the FIRST one holds it,
         # and without this the loser prints success and starts work on someone else's issue.
         winner = current_claim(_load_issue(number, tools))
+        if winner is None:
+            # NOT a race. The comment was posted and the read-back found nothing holding the
+            # issue at all, so the READ is what failed — an unparseable trailer, or a
+            # comment past gh's 100-comment page cap. Reporting that as `lost the race to
+            # \`None\`` told the operator they lost to a rival that does not exist (#1284).
+            print(
+                f"#{number} claim posted, but the read-back found no claim at all — the "
+                "trailer did not parse, or the comment is past gh's comment page cap"
+            )
+            refused = True
+            continue
         if winner != args.worktree:
             print(f"#{number} lost the race to `{winner}`")
             refused = True
@@ -165,6 +184,16 @@ def cmd_claim(args: argparse.Namespace, tools: FindingsTools) -> int:
 
 def cmd_release(args: argparse.Namespace, tools: FindingsTools) -> int:
     """Releases this worktree's claim on one or more issues."""
+    bad = validate_worktree_name(args.worktree)
+    if bad:
+        sys.stderr.write(f"release: --worktree `{args.worktree}` {bad}\n")
+        return 2
+    # The same label sync `cmd_claim` makes, for the mirror-image reason (#1284): `gh issue
+    # edit --remove-label` fails on a label the repo does not have, and a claim can arrive
+    # with the label never created — hand-posted, or after an `--add-label` that failed.
+    # Without this the release comment is posted and THEN the label edit exits 1, leaving
+    # the claim released in the fold and the label standing.
+    run(plan_sync_labels(_existing_labels(tools)), args.dry_run, tools)
     refused = False
     for number in args.numbers:
         issue = _load_issue(number, tools)
@@ -210,6 +239,9 @@ def cmd_reap(args: argparse.Namespace, tools: FindingsTools) -> int:
         # Must not read a git failure as "every worktree is gone" and release everything.
         print("reap: could not read git; refusing to release anything")
         return 1
+    # Same reason as `cmd_release`: a `--remove-label` on a label the repo lacks fails after
+    # the release comment is already posted, leaving the reap half-applied (#1284).
+    run(plan_sync_labels(_existing_labels(tools)), args.dry_run, tools)
     issues = load_issues("open", tools)
     by_number = {i["number"]: i for i in issues}
     reaped = 0

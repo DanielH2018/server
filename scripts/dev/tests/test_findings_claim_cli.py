@@ -368,6 +368,10 @@ def test_verify_close_releases_the_claim_it_closes():
     `claims`, `reap` and `next` all read OPEN issues, so the claim it left behind was
     invisible to every view at once — and a later `open` reopening the issue brought it back
     LIVE, blocking `claim` for as long as the claiming worktree existed.
+
+    The claim here is STALE — `STALE` registers no worktree at all — because a LIVE claim
+    withholds the close entirely since #1302, and the release this test is about only
+    happens on a close that goes ahead.
     """
     issue = make_issue(
         1132,
@@ -375,7 +379,9 @@ def test_verify_close_releases_the_claim_it_closes():
         comments=[claim_comment(WT, None, "t")],
     )
     issue["body"] = "details\n\n## Verify-by\n```\ntrue\n```\n"
-    tools, calls = build_tools(Fakes(issues=[issue], view=issue, verify=fake_verify))
+    tools, calls = build_tools(
+        Fakes(issues=[issue], view=issue, verify=fake_verify, worktree_facts=STALE)
+    )
     assert main(["verify", "1132", "--close"], tools) == 0
     assert any(f"Released: `{WT}`" in a for c in calls.gh for a in c)
     assert ["issue", "edit", "1132", "--remove-label", "claimed"] in calls.gh
@@ -389,3 +395,84 @@ def test_verify_close_writes_no_release_for_an_unclaimed_issue():
     assert main(["verify", "1132", "--close"], tools) == 0
     assert not any("Released: `" in a for c in calls.gh for a in c)
     assert any(c[:2] == ["issue", "close"] for c in calls.gh)
+
+
+# --- #1284: the CLI half of the hardening -------------------------------------------------
+
+
+def test_claim_refuses_a_worktree_name_the_trailer_cannot_carry(capsys):
+    """The rejecting half of #1284.3: nothing is written, and the exit says bad argument.
+
+    This name used to write the comment AND the label, then fail to parse its own trailer on
+    read-back and report `lost the race to \\`None\\`` — a race against a rival that does not
+    exist, with the claim already posted.
+    """
+    issue = make_issue(1132)
+    tools, calls = build_tools(Fakes(issues=[issue], view=issue))
+    assert main(["claim", "1132", "--worktree", "worktree-`bad"], tools) == 2
+    assert calls.none()
+    assert "backtick" in capsys.readouterr().err
+
+
+def test_release_refuses_the_same_name(capsys):
+    """The same trailer, so the same refusal — a release must name a parseable worktree."""
+    issue = make_issue(1132)
+    tools, calls = build_tools(Fakes(issues=[issue], view=issue))
+    assert main(["release", "1132", "--worktree", "worktree-`bad"], tools) == 2
+    assert calls.none()
+
+
+def test_a_read_back_that_finds_no_claim_does_not_report_a_race(capsys):
+    """The rejecting half of the message: an empty read-back is not a rival.
+
+    The second `issue view` comes back with no claim at all, which is what an unparseable
+    trailer or a comment past gh's page cap looks like. Saying `lost the race to \\`None\\``
+    told the operator a rival took the issue.
+    """
+    before = make_issue(1132)
+    tools, _ = build_tools(
+        Fakes(
+            issues=[before],
+            view={1132: [before, make_issue(1132)]},
+            worktree_facts=LIVE,
+        )
+    )
+    assert main(["claim", "1132", "--worktree", WT], tools) == 3
+    out = capsys.readouterr().out
+    assert "read-back found no claim" in out
+    assert "lost the race" not in out
+
+
+def test_release_creates_the_claimed_label_before_it_removes_it():
+    """The accepting half of #1284.4: `--remove-label` fails on a label the repo lacks.
+
+    A claim can arrive with the label never created — hand-posted, or after an `--add-label`
+    that failed — and without this sync the release comment is posted and THEN the label
+    edit exits 1: released in the fold, labelled in GitHub.
+    """
+    issue = make_issue(
+        1132, labels=["claimed"], comments=[claim_comment(WT, None, "t")]
+    )
+    tools, calls = build_tools(Fakes(issues=[issue], view=issue, labels=set()))
+    assert main(["release", "1132", "--worktree", WT], tools) == 0
+    created = [c for c in calls.gh if c[:2] == ["label", "create"]]
+    assert any(c[2] == "claimed" for c in created)
+    assert calls.gh.index(
+        next(c for c in created if c[2] == "claimed")
+    ) < calls.gh.index(["issue", "edit", "1132", "--remove-label", "claimed"])
+
+
+def test_reap_creates_the_claimed_label_before_it_removes_it():
+    """The same for `reap`, which removes the label on every stale claim it clears."""
+    issue = make_issue(
+        1132, labels=["claimed"], comments=[claim_comment(WT, None, "t")]
+    )
+    tools, calls = build_tools(
+        Fakes(issues=[issue], labels=set(), worktree_facts=STALE)
+    )
+    assert main(["reap"], tools) == 0
+    created = [c for c in calls.gh if c[:2] == ["label", "create"]]
+    assert any(c[2] == "claimed" for c in created)
+    assert calls.gh.index(
+        next(c for c in created if c[2] == "claimed")
+    ) < calls.gh.index(["issue", "edit", "1132", "--remove-label", "claimed"])
