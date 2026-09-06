@@ -23,3 +23,27 @@
       - deployment.yaml
       - service.yaml
       - ingressroute.yaml
+
+# Rendering no route (see templates/ingressroute.yaml.j2) leaves the LIVE IngressRoute
+# serving: `kubectl apply` only adds and updates. k8s/manifests' opt-in `manifests_prune`
+# cannot reach this one either — the live object was applied before any `homelab/role` label
+# existed, so `--prune -l homelab/role=navidrome` structurally cannot match it (the DECIDED
+# comment in roles/k8s/manifests/defaults/main.yml names exactly this case). So the role
+# reconciles the route's ABSENCE explicitly, which is the desired state while parked.
+#
+# Idempotent: `--ignore-not-found` makes the steady state a no-op, and `changed_when` reads
+# the delete back out of stdout rather than assuming it happened. Tagged `deploy` alone to
+# match the apply it pairs with — a `[config, deploy]` task is dropped by --skip-tags of
+# either. Skipped under --dry-run, which must not mutate the cluster.
+- name: Remove the navidrome route while the workload is parked
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl delete ingressroute navidrome
+      -n {{ k8s_namespace }} --ignore-not-found
+  become: true
+  register: navidrome_route_delete
+  changed_when: "'deleted' in navidrome_route_delete.stdout"
+  when:
+    - navidrome_k8s_replicas | int == 0
+    - not k8s_dry_run | bool
