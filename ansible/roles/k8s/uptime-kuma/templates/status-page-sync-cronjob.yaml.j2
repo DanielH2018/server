@@ -49,9 +49,13 @@ spec:
 {# The kuma-cli image is distroless (Dockerfile.cli builds on gcr.io/distroless/cc-debian13:debug),
    so /busybox/sh is the only shell and /usr/local/bin/kuma the only binary — neither is on a PATH
    worth trusting, hence the absolute paths.
-   The retry is not defensive padding: kube-router's source-pod lookup lags pod creation, so a
-   brand-new pod's first connection to a policy-fenced peer can be dropped while the same
-   connection a second later is admitted. #}
+   The retry WAITS OUT a Kuma restart; it is not defensive padding. It covers two things:
+   kube-router's source-pod lookup lags pod creation, so a brand-new pod's first connection to a
+   policy-fenced peer can be dropped while the same connection a second later is admitted; and
+   Kuma's Service has no endpoint at all for ~100s of a deploy rollout and for ~16 minutes of the
+   Sunday reboot cron. The attempt count is DERIVED from the two budget variables rather than
+   written here, so the loop and the job deadline cannot drift apart — see the comments on
+   kuma_status_page_sync_deadline_seconds in this role's defaults for the measurements. #}
             - name: dump
               image: {{ kuma_cli_k8s_image }}
               command: ["/busybox/sh", "-c"]
@@ -59,7 +63,7 @@ spec:
                 - |
                   set -eu
                   attempt=1
-                  while [ "$attempt" -le 3 ]; do
+                  while [ "$attempt" -le {{ (kuma_status_page_sync_dump_budget_seconds // kuma_status_page_sync_dump_attempt_seconds) | int }} ]; do
                     if /usr/local/bin/kuma monitor list > /work/monitors.json &&
                        /usr/local/bin/kuma status-page get "$SLUG" > /work/page.json; then
                       exit 0
