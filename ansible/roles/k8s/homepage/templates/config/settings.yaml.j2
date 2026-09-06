@@ -27,3 +27,13 @@ layout:
     columns: 3
 providers:
   openweathermap: {{ weather_api_key }}
+  # The longhorn INFO WIDGET reads its URL from here, not from its own entry in widgets.yaml.
+  # Homepage splits that widget across the two files — `providers.longhorn` holds the connection,
+  # widgets.yaml holds only the display options — and a `url:` written beside those options is
+  # ignored, leaving the pod logging `<longhorn> Missing Longhorn URL` every refresh behind a
+  # 1/1 Deployment. Measured 2026-09-06: that is exactly how it shipped in PR #1391.
+  #
+  # longhorn-frontend, not longhorn-backend, and the reasoning is in widgets.yaml.j2 beside the
+  # display options.
+  longhorn:
+    url: http://longhorn-frontend.longhorn-system.svc.cluster.local
