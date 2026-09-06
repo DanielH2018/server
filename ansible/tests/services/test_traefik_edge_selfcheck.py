@@ -166,7 +166,11 @@ def test_the_probe_detects_a_missing_bouncer_plugin() -> None:
     route = _selfcheck_route(_HOST)
     config = _static_config(_HOST)
     chains = {
-        name: (spec.get("http") or {}).get("middlewares", [])
+        # `or []`, not a default: dropping the last entry leaves a bare `middlewares:` key,
+        # which parses to None. `.get(..., [])` returns that None and `selfcheck_gaps` raises
+        # a TypeError instead of naming the gap. Matches the sibling guard in
+        # test_traefik_http_entrypoint_crowdsec.py (#1355).
+        name: (spec.get("http") or {}).get("middlewares") or []
         for name, spec in config["entryPoints"].items()
     }
     problems = selfcheck_gaps(
