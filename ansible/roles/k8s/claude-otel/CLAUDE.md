@@ -30,10 +30,19 @@ the admin form is the public path in, and the break-glass path when Authelia is 
 `root_url` to the public name flips which route works; the Authelia client already registers
 both callbacks, so nothing else has to change.
 
-Two settings are written twice and fail silently when they drift — `require_pkce` against
-`GF_AUTH_GENERIC_OAUTH_USE_PKCE`, and the client's `groups` scope against
-`ROLE_ATTRIBUTE_PATH`. `ansible/tests/services/test_grafana_authelia_oidc.py` holds both
-roles to them. The client secret is one credential in two SOPS keys:
+**Granting the `groups` scope does not deliver the `groups` claim.** Authelia keeps it out of
+the ID token by default and serves it from the userinfo endpoint; Grafana evaluates
+`role_attribute_path` against the ID token FIRST and stops at the first value the expression
+yields. This expression always yields one, because `|| 'Viewer'` fires when the claim is
+simply absent — so userinfo is never consulted and every user is a Viewer. It shipped that way
+on 2026-09-06 behind a green pod, a green health gate and a passing `-m ui` suite;
+`/api/user/orgs` reporting the role is what caught it. The fix is the `with_groups`
+`claims_policy` on the Authelia client, which hydrates the claim into the ID token.
+
+Three settings are written twice and fail silently when they drift — `require_pkce` against
+`GF_AUTH_GENERIC_OAUTH_USE_PKCE`, the client's `groups` scope against `ROLE_ATTRIBUTE_PATH`,
+and that `claims_policy` against the same role path.
+`ansible/tests/services/test_grafana_authelia_oidc.py` holds both roles to all three. The client secret is one credential in two SOPS keys:
 `grafana_oidc_client_secret` (plaintext, into the `grafana-admin` Secret) and
 `grafana_oidc_client_secret_hash` (the pbkdf2 digest Authelia's config holds). Rotate them
 together.
