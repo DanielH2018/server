@@ -17,6 +17,7 @@ class ServiceConfig:
     """Traefik, n8n, the *arr stack, the deployer state files, the drills and Home Assistant."""
 
     TRAEFIK_5XX_PCT: float
+    TRAEFIK_404_PCT: float
     TRAEFIK_MIN_RPS: float
     TRAEFIK_SLOW_BUCKET: str
     TRAEFIK_SLOW_PCT: float
@@ -60,6 +61,12 @@ def service_config(
     """The app fields, read through the parsers `load_config` built over its environment."""
     return ServiceConfig(
         TRAEFIK_5XX_PCT=_num("TRAEFIK_5XX_PCT", "5"),
+        # The 404 SHARE of entrypoint traffic that means the edge has lost its routers.
+        # High, not low, on purpose: a homelab edge serves a steady trickle of ordinary
+        # 404s (favicons, probes, a stale bookmark), measured at 4.0% of 0.83 rps on
+        # 2026-09-06, while the total-404 outage that day was 100% of 0.61 rps. 90 sits in
+        # that gap with a wide margin on both sides.
+        TRAEFIK_404_PCT=_num("TRAEFIK_404_PCT", "90"),
         TRAEFIK_MIN_RPS=_num("TRAEFIK_MIN_RPS", "0.05"),
         # Slowness is measured at a histogram BUCKET BOUNDARY, not with histogram_quantile.
         # Traefik's default buckets are 0.1 / 0.3 / 1.2 / 5.0 / +Inf, so between 1.2s and 5.0s

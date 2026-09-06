@@ -358,6 +358,12 @@ stringData:
     {"type": "push", "name": "Traefik 5xx", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_traefik_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   monitor-bridge-traefik-latency.json: |
     {"type": "push", "name": "Traefik Latency", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_traefik_latency_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+  # Minted 2026-09-06 for #1340, ahead of the check that pushes to it. Its two siblings above
+  # are per-SERVICE and read green through the 3.5-hour total-404 edge of #1322, because zero
+  # routers means no traefik_service_* series to iterate; check_traefik_404_flood reads the
+  # entrypoint counter, which survives that failure.
+  monitor-bridge-traefik-404.json: |
+    {"type": "push", "name": "Traefik 404 Flood", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_traefik_404_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   monitor-bridge-n8n.json: |
     {"type": "push", "name": "n8n Prod Workflows", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_n8n_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   monitor-bridge-arr-queue.json: |
