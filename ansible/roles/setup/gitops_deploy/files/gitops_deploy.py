@@ -192,6 +192,11 @@ RUN_BUDGET_S = CONFIG.run_budget_s
 # OFF unless the host explicitly enables it, so a host that has not re-templated config.env
 # behaves exactly as it does today.
 K8S_AUTODEPLOY_ENABLED = CONFIG.k8s_autodeploy_enabled
+# The same key, kept as the file asked for it — the fail-closed disarm below mutates only
+# K8S_AUTODEPLOY_ENABLED. `deploy_phases.reconcile_denylist` gates on this one so that the
+# damaged state the disarm produces stays healable; the DECIDED marker at that gate is the long
+# form. No new config.env key: both read K8S_AUTODEPLOY_ENABLED.
+K8S_AUTODEPLOY_ENABLED_IN_FILE = CONFIG.k8s_autodeploy_enabled_in_file
 K8S_AUTODEPLOY_PILOT = CONFIG.k8s_autodeploy_pilot
 # 0 disables the cap. See split_k8s_auto_deploy: the whole promoted set shares one
 # ansible-playbook run and one K8S_DEPLOY_TIMEOUT_S, and a timeout rolls the batch back
@@ -214,6 +219,9 @@ if K8S_AUTODEPLOY_ENABLED and not K8S_AUTODEPLOY_DENYLIST:
     # Fail closed. An absent or empty denylist means "nothing is eligible", never "everything
     # is" — a truncated or half-rendered config.env must not silently widen what auto-deploys
     # to the whole cluster, platform roles included.
+    # K8S_AUTODEPLOY_ENABLED_IN_FILE above is deliberately NOT flipped: it is what makes this
+    # state distinguishable from a host that legitimately has the feature off, and therefore
+    # what lets `deploy_phases.reconcile_denylist` re-render the file whose damage caused it.
     log(
         "K8S_AUTODEPLOY_ENABLED is set but the denylist is empty — disabling k8s auto-deploy"
     )
@@ -302,13 +310,16 @@ def tick_config() -> Config:
 
     Every phase takes a `deploy_config.Config` rather than a type of the deployer's own.
 
-    FOUR of the eighteen kwargs below are load-bearing, and fourteen are not — that asymmetry
+    FIVE of the nineteen kwargs below are load-bearing, and fourteen are not — that asymmetry
     is deliberate, so do not prune the fourteen. The four:
 
       - `staging_subset` is derived from `C` here rather than parsed by `load_config`; its
         literal fallback in this file is what `scripts/docs/gen_doc_fragments.py` reads.
       - `k8s_autodeploy_enabled` is the value AFTER the empty-denylist fail-closed disarm above,
         which is a decision this module makes and `load_config` cannot.
+      - `k8s_autodeploy_enabled_in_file` is the value BEFORE it — the pair is what tells a host
+        that has the feature off from one whose denylist line was lost, which is the difference
+        `deploy_phases.reconcile_denylist` gates on.
       - `repo`, `staging_gate` and `staging_subset` are what `tests/conftest.py`'s `tick`
         fixture repoints — so `staging_subset` is load-bearing twice over.
 
@@ -331,6 +342,7 @@ def tick_config() -> Config:
         health_timeout_s=TIMEOUT,
         run_budget_s=RUN_BUDGET_S,
         k8s_autodeploy_enabled=K8S_AUTODEPLOY_ENABLED,
+        k8s_autodeploy_enabled_in_file=K8S_AUTODEPLOY_ENABLED_IN_FILE,
         k8s_autodeploy_pilot=K8S_AUTODEPLOY_PILOT,
         k8s_autodeploy_denylist=K8S_AUTODEPLOY_DENYLIST,
         k8s_autodeploy_max_per_tick=K8S_AUTODEPLOY_MAX_PER_TICK,

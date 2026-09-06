@@ -33,11 +33,40 @@ RENDER_CONFIG = [
 
 
 def _armed(settings, denylist=()):
-    """`settings` with auto-deploy on and `denylist` baked into the host config."""
+    """`settings` with auto-deploy on and `denylist` baked into the host config.
+
+    Both flags are set explicitly rather than inherited from the canned test settings, so each
+    state below is pinned by the test that names it.
+    """
     return dataclasses.replace(
         settings,
         k8s_autodeploy_enabled=True,
+        k8s_autodeploy_enabled_in_file=True,
         k8s_autodeploy_denylist=frozenset(denylist),
+    )
+
+
+def _disarmed(settings):
+    """`settings` for a host whose deployer config asks for the feature to be OFF."""
+    return dataclasses.replace(
+        settings,
+        k8s_autodeploy_enabled=False,
+        k8s_autodeploy_enabled_in_file=False,
+        k8s_autodeploy_denylist=frozenset(),
+    )
+
+
+def _lost_the_denylist_line(settings):
+    """The damaged state the fail-closed disarm produces: file says on, denylist is empty.
+
+    `gitops_deploy.py` flips `k8s_autodeploy_enabled` to False for exactly this shape, so the
+    two flags disagree — which is what tells this state from `_disarmed` above.
+    """
+    return dataclasses.replace(
+        settings,
+        k8s_autodeploy_enabled=False,
+        k8s_autodeploy_enabled_in_file=True,
+        k8s_autodeploy_denylist=frozenset(),
     )
 
 
@@ -122,8 +151,43 @@ def test_an_unreadable_ref_retries_next_tick_instead_of_claiming_the_sha(
 def test_it_is_inert_while_auto_deploy_is_off(gitops_deploy, tick, state_dir, settings):
     """Nothing reads the denylist when the feature is off, so nothing renders for it."""
     _declares(tick, "false")
-    assert not deploy_phases.reconcile_denylist(gitops_deploy.STATE, settings, LOCAL)
+    assert not deploy_phases.reconcile_denylist(
+        gitops_deploy.STATE, _disarmed(settings), LOCAL
+    )
     assert tick.playbooks == [] and tick.git == []
+
+
+def test_a_host_with_auto_deploy_off_renders_nothing_on_any_tick(
+    gitops_deploy, tick, state_dir, settings
+):
+    """The cost half of the file-level gate: reading the FILE flag must not turn a host that
+    legitimately has the feature off into one that renders every ten minutes. Ten ticks, no
+    playbook, no git read, and no marker claimed — so nothing here leans on the once-per-SHA
+    guard to stay quiet."""
+    _declares(tick, "false")
+    for _ in range(10):
+        assert not deploy_phases.reconcile_denylist(
+            gitops_deploy.STATE, _disarmed(settings), LOCAL
+        )
+    assert tick.playbooks == [] and tick.git == []
+    assert gitops_deploy.STATE.read("denylist_rendered") is None
+
+
+def test_a_config_that_lost_its_denylist_line_is_re_rendered(
+    gitops_deploy, tick, state_dir, settings
+):
+    """The state the fail-closed disarm creates, and used to make unhealable (issue #1317).
+
+    A truncated deployer config keeps `K8S_AUTODEPLOY_ENABLED=true` and drops the denylist, so
+    `gitops_deploy.py` disarms auto-deploy. Gating the reconcile on that disarmed value meant
+    the file whose damage caused the disarm was never re-rendered. An empty denylist is the
+    repair's trigger, not its blocker."""
+    _declares(tick, "false")
+    assert deploy_phases.reconcile_denylist(
+        gitops_deploy.STATE, _lost_the_denylist_line(settings), LOCAL
+    )
+    assert tick.playbooks == [RENDER_CONFIG]
+    assert gitops_deploy.STATE.read("denylist_rendered") == LOCAL
 
 
 # ── the same thing through a whole tick ───────────────────────────────────────────────────
@@ -162,6 +226,19 @@ def test_a_tick_that_renders_nothing_carries_on(
     assert gitops_deploy.main(tick.tools, _armed(settings, ["sonarr"])) == 0
     assert tick.playbooks == []
     assert tick.merges == [tick.origin], "a docs-only push still fast-forwards"
+
+
+def test_a_lost_denylist_line_heals_without_promoting_anything(
+    gitops_deploy, tick, state_dir, settings
+):
+    """One gate moved, not two. The reconcile runs on the damaged config while the promotion
+    path stays fail-closed on the disarmed flag — so the tick repairs the deployer's config and
+    deploys no service off the empty denylist it was repairing."""
+    _declares(tick, "false")
+    tick.paths = [K8S_DEFAULTS]
+    assert gitops_deploy.main(tick.tools, _lost_the_denylist_line(settings)) == 0
+    assert tick.playbooks == [RENDER_CONFIG], "the render, and nothing deployed"
+    assert tick.merges == []
 
 
 def test_a_dirty_checkout_is_never_rendered_from(

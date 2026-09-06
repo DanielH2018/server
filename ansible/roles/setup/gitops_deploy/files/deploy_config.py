@@ -72,6 +72,12 @@ class Config:
     ci_contexts: frozenset[str] = frozenset()
     ci_repo: str = ""
     k8s_autodeploy_enabled: bool = False
+    # What the FILE asked for, before `gitops_deploy.py`'s empty-denylist fail-closed disarm.
+    # Both fields parse the same K8S_AUTODEPLOY_ENABLED key and there is no second config.env
+    # key; they differ only after that disarm has fired. `deploy_phases.reconcile_denylist`
+    # reads this one so that a lost denylist line is a reason to re-render rather than a reason
+    # to skip the repair — see the DECIDED marker at that gate.
+    k8s_autodeploy_enabled_in_file: bool = False
     k8s_autodeploy_pilot: frozenset[str] = frozenset()
     k8s_autodeploy_denylist: frozenset[str] = frozenset()
     k8s_autodeploy_max_per_tick: int = 3
@@ -174,6 +180,7 @@ def load_config(env: Mapping[str, str]) -> Config:
         ci_contexts=ci_contexts,
         ci_repo=ci_repo,
         k8s_autodeploy_enabled=_bool("K8S_AUTODEPLOY_ENABLED"),
+        k8s_autodeploy_enabled_in_file=_bool("K8S_AUTODEPLOY_ENABLED"),
         k8s_autodeploy_pilot=csv_set(env.get("K8S_AUTODEPLOY_PILOT", "")),
         k8s_autodeploy_denylist=csv_set(env.get("K8S_AUTODEPLOY_DENYLIST", "")),
         k8s_autodeploy_max_per_tick=_int("K8S_AUTODEPLOY_MAX_PER_TICK", 3),
