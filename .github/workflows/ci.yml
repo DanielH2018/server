@@ -350,8 +350,9 @@ jobs:
       # measured 267s against the `hooks` job beside it at 29-46s, and a landing waits on CI twice.
       # The runner is ~4x slower per test than the workstation, so a local `--durations` run does
       # not tell you which tests dominate HERE. Printing it on every run means the next person to
-      # attack this reads the answer off a green build instead of guessing at the shape — and it
-      # is what `pytest_shard.py --record` is re-measured against when the shards go lopsided.
+      # attack this reads the answer off a green build instead of guessing at the shape. It is
+      # also the signal that the shards have gone lopsided: `pytest_shard.py --record` re-measures
+      # the weights locally, and these per-shard step times say when that is worth doing.
       - name: Run the test suite
         run: |
           set -euo pipefail
