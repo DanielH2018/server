@@ -22,3 +22,48 @@
       - ingressroute.yaml
     manifests_secret_files:
       - secret.yaml
+
+# The Discord integration is a Channel row in hc.sqlite, not a manifest — see
+# files/seed_discord_channel.py for why it is declared here rather than clicked into the UI.
+#
+# This waits for the rollout even though roles/k8s/manifests deliberately does not (it queues
+# the wait for roles/k8s/rollout-drain, at the end of the play). The seed reads the webhook
+# from the POD's environment, so it has to run against a pod that already carries the current
+# Secret; exec'ing the outgoing pod would read an environment without the key. The wait costs
+# nothing on an unchanged deploy, where the rollout is already complete.
+- name: Wait for the healthchecks rollout before seeding its notification channel
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} rollout status deploy/healthchecks --timeout=300s
+  become: true
+  changed_when: false
+  check_mode: false
+  when: not k8s_dry_run | bool
+
+# `exec deploy/healthchecks`, not a pod name resolved by a separate lookup: only one Deployment
+# carries `app: healthchecks`, so the Deployment's own selector picks the right pod, and the
+# rollout gate above has already retired the outgoing one.
+#
+# `s6-setuidgid abc` matches how the image's own init runs manage.py. Running as root would leave
+# root-owned sqlite journal and WAL files beside hc.sqlite, which the app (uid 1000) then cannot
+# write — a broken instance from a task meant to configure one.
+- name: Declare the Discord notification channel in healthchecks
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} exec -i deploy/healthchecks --
+      sh -c 'cd /app/healthchecks && exec s6-setuidgid abc python3 ./manage.py shell'
+    stdin: |
+      {{ lookup('file', role_path ~ '/files/seed_discord_channel.py') }}
+      main()
+  become: true
+  register: healthchecks_seed
+  # The script's last line is `SEED_CHANGED: <n>` — rows created, values rewritten and checks
+  # newly assigned. Selecting the marker rather than reading the last line keeps this honest
+  # if Django ever prints anything after the script's own output.
+  changed_when: >-
+    (healthchecks_seed.stdout_lines | select('search', '^SEED_CHANGED: ')
+     | list | last | default('SEED_CHANGED: 0')
+     | regex_replace('^SEED_CHANGED: ', '') | int) > 0
+  when: not k8s_dry_run | bool

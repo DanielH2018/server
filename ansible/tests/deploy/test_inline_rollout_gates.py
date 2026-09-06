@@ -353,6 +353,7 @@ _GATE_BUDGETS = {
         "no first-boot work does roll out well inside 180s, so this is plausible rather than "
         "verified; it is recorded as undocumented, not endorsed. Raise it if it ever times out",
     ),
+    "healthchecks": (300, "default"),
     "janitorr": (300, "default"),
     "jellyfin": (300, "default"),
     "n8n": (300, "default"),
