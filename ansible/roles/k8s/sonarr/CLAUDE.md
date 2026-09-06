@@ -25,7 +25,7 @@ conventions.
 - Sonarr is the only *arr whose sidecar gets `--enable-additional-metrics`
   (`additional_metrics=true` on the shared `exportarr` macro). The flag turns on the episode
   collector that publishes `sonarr_episode_monitored_total`, `_unmonitored_total` and
-  `_qualities_total`. It costs two extra Sonarr API calls per series per scrape, so the
+  `_quality_total`. It costs two extra Sonarr API calls per series per scrape, so the
   parameter exists to keep it off radarr and prowlarr, whose collectors have no block behind
   it. `test_only_sonarr_enables_the_additional_metrics_collector` asserts both halves.
 - `tasks/verify.yml` reads the Sonarr API through the Service ClusterIP (not the

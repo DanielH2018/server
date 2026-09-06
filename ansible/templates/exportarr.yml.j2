@@ -30,7 +30,7 @@
           #
           # `additional_metrics` is a PER-APP parameter, not a blanket arg, because the flag
           # only buys something on sonarr. It gates sonarr's episode collector — the
-          # `sonarr_episode_monitored_total` / `_unmonitored_total` / `_qualities_total`
+          # `sonarr_episode_monitored_total` / `_unmonitored_total` / `_quality_total`
           # series a quality-mix chart needs — and upstream annotates it `(slow)`: the
           # collector then issues two extra app API calls (`episodefile`, `episode`) per
           # series per scrape. radarr's collector has no such block and prowlarr's has none

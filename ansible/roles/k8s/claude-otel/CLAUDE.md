@@ -92,8 +92,11 @@ issue #1380 was filed on and that a live census at an idle moment appears to con
 v2.3.0 registers `NewQueueCollector` unconditionally for sonarr and radarr
 (`internal/commands/arr.go`), never for prowlarr; the flag gates per-series `episodefile` and
 `episode` calls that feed `sonarr_episode_monitored_total`, `_unmonitored_total` and
-`_qualities_total`, at two extra app API calls per series per scrape. The flag stays off — issue
-#1404 holds that separate trade-off.
+`_quality_total`, at two extra app API calls per series per scrape. Issue #1404 held that
+separate trade-off and shipped it for sonarr alone: sonarr's sidecar carries the flag, radarr's
+and prowlarr's do not, and `test_only_sonarr_enables_the_additional_metrics_collector` asserts
+both halves. Measured after the change, sonarr's `scrape_duration_seconds` moved from ~18 ms to
+335-403 ms while radarr's and prowlarr's stayed at ~12-15 ms.
 
 Every dashboard's datasource ref must resolve to a uid declared in this role's
 `templates/grafana.yaml.j2` — the `validate-grafana-dashboards` prek hook parses that file

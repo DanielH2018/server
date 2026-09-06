@@ -182,7 +182,7 @@ def test_only_sonarr_enables_the_additional_metrics_collector():
     """The flag is per-app, and both halves of that are assertions.
 
     `--enable-additional-metrics` gates sonarr's episode collector, which is what publishes
-    `sonarr_episode_qualities_total`. Upstream annotates it `(slow)`: the collector issues two
+    `sonarr_episode_quality_total`. Upstream annotates it `(slow)`: the collector issues two
     extra app API calls per series per scrape. radarr's and prowlarr's collectors have no such
     block, so the flag buys them nothing and would only add scrape cost — which is why the
     shared macro takes a parameter rather than a blanket arg.
@@ -199,7 +199,7 @@ def test_only_sonarr_enables_the_additional_metrics_collector():
     flag = "--enable-additional-metrics"
     assert flag in args["sonarr"], (
         f"sonarr's exportarr must carry {flag}; without it the scrape publishes no "
-        f"sonarr_episode_qualities_total. Got {args['sonarr']}"
+        f"sonarr_episode_quality_total. Got {args['sonarr']}"
     )
     for arr in ("radarr", "prowlarr"):
         assert flag not in args[arr], (
