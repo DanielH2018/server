@@ -140,3 +140,31 @@ Verify a deploy of this role by the sidecar's restart count, not just by pod rea
 ```
 kubectl get pod -n homelab -l app=authelia -o jsonpath='{.items[*].status.containerStatuses[*].restartCount}'
 ```
+
+## The `claude-ui` user
+
+The users database holds two users. The operator, and `claude-ui` — the identity the headless
+UI tier logs in as so it can reach the `two_factor` services (code-server, n8n, longhorn)
+without a code typed off a phone. `authelia_k8s_claude_user` in `defaults/main.yml` carries the
+reasoning; `scripts/diagnostics/ui_login.py` is the consumer.
+
+Its TOTP registration is **not** in the rendered `users_database.yml`. Authelia keeps
+registrations in its SQLite database whatever the authentication backend is, so the deploy
+seeds it with `authelia storage user totp generate --force` against the running pod, from
+`authelia_claude_totp_secret`. The secret is fixed, so re-seeding writes an identical row.
+
+**Rotating either password needs `-e authelia_k8s_rehash_passwords=true`.** The role reads each
+user's existing argon2 digest back out of the live Secret and reuses it — that is what stops a
+fresh random salt rewriting the Secret and rolling the pod on every deploy, and it is also why
+`sops set authelia_password` followed by an ordinary deploy changes nothing. The recap is green
+and the portal goes on accepting the old password:
+
+```
+./scripts/deploy.sh --tags authelia -e authelia_k8s_rehash_passwords=true
+```
+
+Rotating `authelia_claude_totp_secret` needs no flag — the seeding task re-seeds every deploy.
+
+**Revoking Claude's two_factor reach** is deleting the `claude-ui` block from
+`templates/config-secret.yaml.j2` and redeploying. The access_control rules are domain-scoped
+and never `subject:`-scoped, so there is no per-user rule to unpick.

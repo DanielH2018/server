@@ -58,19 +58,18 @@ SERVICES = [
 ]
 
 # `two_factor` in Authelia's access control, so a one_factor cookie is turned away at the
-# portal (config-secret.yaml.j2:85-99). These skip unless a live two_factor session exists,
-# which only `ui_login.py --totp <code>` can create — the shared secret stays on the phone,
-# so there is no unattended path here by design. Titles observed through a real two_factor
-# session; code-server carries its own login on top of Authelia, as FreshRSS does.
+# portal (config-secret.yaml.j2). The fixture below mints its own session as `claude-ui`,
+# whose TOTP shared secret is a SOPS value — until 2026-09-06 that took a code typed off a
+# phone, and these three skipped for eight days at a stretch instead of running. Titles
+# observed through a real two_factor session; code-server carries its own login on top of
+# Authelia, as FreshRSS does.
 TWO_FACTOR_SERVICES = [
     ("longhorn", "Longhorn", "/#/dashboard"),
     ("code-server", "code-server login", "/login"),
     ("n8n", "n8n.io - Workflow Automation", "/"),
 ]
 
-MINT_HINT = (
-    "mint one with `uv run python scripts/diagnostics/ui_login.py --totp <code>`"
-)
+MINT_HINT = "mint one with `uv run python scripts/diagnostics/ui_login.py --two-factor`"
 
 
 # Both budgets absorb a transient, not a slow load. Measured 2026-08-30: a settled title
@@ -322,11 +321,13 @@ def test_a_route_with_no_backend_is_not_scored_as_a_rendered_ui(browser, domain)
 
 @pytest.fixture(scope="module")
 def two_factor_browser(domain):
-    """A browser carrying a two_factor session, or a skip when none is live.
+    """A browser carrying a two_factor session, minting one when none is live.
 
-    Skipping rather than failing is the honest outcome: a two_factor session lasts about an
-    hour and can only be minted by a human typing a code, so its absence is the normal state
-    of this machine, not a regression in anything.
+    A two_factor session lasts about an hour, so its absence is the normal state of this
+    machine rather than a regression. It is no longer a reason to skip: the tier logs in as
+    `claude-ui`, whose password and TOTP secret are both SOPS values, so this fixture mints
+    on demand. A skip now means the mint itself failed — the portal was unreachable, or the
+    seeded secret and Authelia's own row disagree.
 
     **The gate is a real browse, not `/api/state`.** It used to ask `ui_login.py --check
     --two-factor`, and the two questions came apart: measured 2026-08-29, the check reported
@@ -335,27 +336,34 @@ def two_factor_browser(domain):
     fetch a `two_factor` route is the same question the tests ask, so the guard and the
     assertions cannot disagree by construction.
 
-    The `--check` call survives as a cheap pre-filter only, to avoid starting Chromium when
-    the session is plainly gone.
+    The `--check` call survives as a cheap pre-filter only — it decides whether to mint,
+    not whether to run.
     """
+
     # Through `uv run`, not the shebang: ui_login imports core, which uses PEP 758
     # syntax that Ubuntu's 3.12 /usr/bin/python3 cannot parse.
-    proc = subprocess.run(
-        [
-            "uv",
-            "run",
-            "--directory",
-            str(REPO_ROOT),
-            "python",
-            "scripts/diagnostics/ui_login.py",
-            "--check",
-            "--two-factor",
-        ],
-        capture_output=True,
-        text=True,
-    )
-    if proc.returncode != 0:
-        pytest.skip(f"no live two_factor session — {MINT_HINT}")
+    def ui_login(*args):
+        return subprocess.run(
+            [
+                "uv",
+                "run",
+                "--directory",
+                str(REPO_ROOT),
+                "python",
+                "scripts/diagnostics/ui_login.py",
+                *args,
+            ],
+            capture_output=True,
+            text=True,
+        )
+
+    if ui_login("--check", "--two-factor").returncode != 0:
+        minted = ui_login("--two-factor")
+        if minted.returncode != 0:
+            pytest.skip(
+                f"could not mint a two_factor session: "
+                f"{(minted.stderr or minted.stdout).strip()} — {MINT_HINT}"
+            )
 
     client = McpClient([str(WRAPPER), "--two-factor"])
     try:

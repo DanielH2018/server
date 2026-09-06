@@ -280,13 +280,25 @@ fault — check `Last State` for `OOMKilled`.
 ### The `two_factor` services
 
 **code-server, n8n and longhorn are `two_factor`**, so the ordinary session bounces off them at
-the portal. Reach them by minting a second, short-lived session with a code from your
-authenticator — `uv run python scripts/diagnostics/ui_login.py --totp <code>` — then launching
-`ui_mcp.sh --two-factor`. The `-m ui` tests for those three skip when no such session is live.
+the portal. Launching `ui_mcp.sh --two-factor` mints a second, short-lived session and browses
+with it; the `-m ui` tests for those three mint their own the same way. Neither asks for a code.
 
-**The TOTP secret is deliberately NOT in SOPS.** Storing it would put both factors under one age
-key, and unlike a password its rotation costs a phone re-enrollment; nothing here runs unattended
-anyway, since the `ui` marker is deselected in CI.
+**That tier logs in as `claude-ui`, not as the operator.** It is an Authelia user that exists
+only for the headless browser, and both of its credentials — `authelia_claude_password` and
+`authelia_claude_totp_secret` — are SOPS values, so `ui_login.py` derives the code rather than
+reading one off a phone. The TOTP registration is seeded into Authelia's SQLite database by the
+role's own deploy (`authelia storage user totp generate`), not templated.
+
+Deriving a code means the second factor is another value under the same age key as the first.
+The dedicated identity is what makes that trade acceptable: the operator's enrollment is
+untouched, revoking Claude's reach into those three services is deleting one block from the
+rendered `users_database.yml`, and rotating either credential is a `sops set` plus a deploy.
+Until 2026-09-06 the code was typed, and the consequence was that
+`test_two_factor_service_serves_its_own_ui` skipped rather than ran — the jar on disk was eight
+days stale when this was measured.
+
+`ui_login.py --totp <code>` still accepts a typed code, as break-glass for a seeded secret that
+has drifted from Authelia's own row.
 
 The two_factor session also gets its own state file and is never a fallback for the default one:
 `ui_mcp.sh` loads a jar unconditionally, so promoting it would put a shell as the repo user

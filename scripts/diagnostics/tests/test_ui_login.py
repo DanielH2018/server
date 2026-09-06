@@ -6,6 +6,7 @@ answers HTTP 302 to an *unauthenticated* request. A check that only ever sees th
 would score both as success.
 """
 
+import base64
 import json
 import os
 import re
@@ -232,3 +233,78 @@ def test_cookie_is_scoped_to_the_whole_lan_cookie_domain():
 
 def test_portal_host_is_the_authelia_url_of_the_lan_cookie():
     assert ui_login.portal_host("example.com") == "auth.local.example.com"
+
+
+# --- derive_totp: the RFC's own vectors, and the parameters both sides must agree on ---
+
+# RFC 6238 Appendix B. Its SHA1 vectors use the ASCII seed "12345678901234567890"; encoding
+# it here rather than pasting the base32 keeps the provenance visible, and keeps gitleaks from
+# reading a high-entropy literal as a real credential. The RFC prints 8-digit codes, so these
+# assert against `digits=8` — the vector is the point, not the width `claude-ui` uses.
+RFC6238_SECRET = base64.b32encode(b"12345678901234567890").decode()
+RFC6238_SHA1_VECTORS = [
+    (59, "94287082"),
+    (1111111109, "07081804"),
+    (1111111111, "14050471"),
+    (1234567890, "89005924"),
+    (2000000000, "69279037"),
+    (20000000000, "65353130"),
+]
+
+
+def derive_totp_at(now):
+    return ui_login.derive_totp(RFC6238_SECRET, now, digits=8)
+
+
+def test_derive_totp_matches_the_rfc6238_vectors():
+    for now, expected in RFC6238_SHA1_VECTORS:
+        assert derive_totp_at(now) == expected, f"wrong code at t={now}"
+
+
+def test_derive_totp_rejects_a_shifted_counter():
+    """The reject half: a code from the previous window must not equal this one.
+
+    Without it, a `derive_totp` that ignored `now` entirely — returning a constant — would
+    still satisfy a single-vector test.
+    """
+    for now, expected in RFC6238_SHA1_VECTORS:
+        assert derive_totp_at(now - ui_login.TOTP_PERIOD) != expected
+
+
+def test_derive_totp_accepts_an_unpadded_secret():
+    """Authelia stores the shared secret unpadded, so padding must not be required."""
+    padded = RFC6238_SECRET + "=" * (-len(RFC6238_SECRET) % 8)
+    assert ui_login.derive_totp(RFC6238_SECRET, 59) == ui_login.derive_totp(padded, 59)
+
+
+def test_claude_user_matches_the_authelia_role_default():
+    """The second fact this script cannot derive at runtime, alongside the cookie name.
+
+    A rename in the role leaves this script posting a username Authelia has no user for,
+    which Authelia answers with HTTP 200 and no cookie — the same shape as a wrong password.
+    """
+    with open(AUTHELIA_DEFAULTS) as f:
+        match = re.search(r"^authelia_k8s_claude_user:\s*(\S+)", f.read(), re.M)
+    assert match, f"authelia_k8s_claude_user not found in {AUTHELIA_DEFAULTS}"
+    assert ui_login.CLAUDE_USER == match.group(1)
+
+
+def test_totp_parameters_match_the_seeding_task():
+    """The derivation and the registration must use one set of TOTP parameters.
+
+    They are stated on both sides rather than defaulted, so this is what holds them
+    together: a code derived at a different period or width is simply rejected, with
+    nothing in the failure naming the mismatch.
+    """
+    tasks = os.path.join(
+        REPO_ROOT, "ansible", "roles", "k8s", "authelia", "tasks", "main.yml"
+    )
+    with open(tasks) as f:
+        seed = f.read()
+    assert "authelia storage user totp generate" in seed, (
+        "the TOTP seeding task is gone; derive_totp now has nothing to agree with"
+    )
+    assert f"--digits {ui_login.TOTP_DIGITS}" in seed
+    assert f"--period {ui_login.TOTP_PERIOD}" in seed
+    assert "--algorithm SHA1" in seed
+    assert ui_login.TOTP_ALGORITHM().name == "sha1"
