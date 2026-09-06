@@ -402,6 +402,15 @@ def host_config(
         #   probe.py metric 'max_over_time((rate(claude_cgroup_memory_pressure_stalled_usec_total{kind="full"}[5m])/10000)[7d:1m])'
         # If the observed max under real load lands anywhere near 10, lower this to sit between
         # the two populations the way SPEEDTEST_DOWNLOAD_MIN_MBPS does. Tracked as issue #1288.
+        #
+        # Re-read 2026-09-06 02:48 UTC, and the value is UNCHANGED because the precondition is
+        # still unmet. `count_over_time(...[7d])` returned 530 samples for claude-rc and
+        # user-1000-slice and 122 for fleet — under nine hours, not seven days. The queries above
+        # answered 0.017% max and 0.017% p99 (both `fleet`), which is still ~575x under 10, but
+        # that is a second read of the same quiet population rather than the peak under load the
+        # threshold needs to clear. Lowering it on this evidence would re-commit the one-sided
+        # derivation #1288 exists to correct, so the read moves the earliest honest re-derivation
+        # date and nothing else.
         CLAUDE_CGROUP_STALL_MAX_PCT=_num("CLAUDE_CGROUP_STALL_MAX_PCT", "10"),
         # memory.events increase window. Wider than the stall window because these are rare
         # discrete events rather than a rate: 10m at a 1m scrape keeps an OOM kill visible across
@@ -433,8 +442,15 @@ def host_config(
         # weekly (claude_code_rc_restart_schedule), which destroys and recreates the cgroup and
         # zeroes every counter here. Prometheus extrapolates across a reset, so a single
         # `increase()` window spanning one can report a non-zero rise from a counter that went
-        # 0 -> 0 — a false page on restart week for an arm where any increase pages. No reset is
-        # visible in the retained data (`resets(...[7d])` = 0 on 2026-09-06, because the series
-        # is younger than one restart interval), so this is guarded rather than measured.
+        # 0 -> 0 — a false page on restart week for an arm where any increase pages.
+        #
+        # This guard is now MEASURED, and it fires more often than the weekly timer explains.
+        # `resets(claude_cgroup_memory_pressure_stalled_usec_total{cgroup="claude-rc"}[7d])` = 1
+        # on 2026-09-06 02:48 UTC, on both `full` and `some`. The timer did not cause it:
+        # `systemctl list-timers claude-rc-restart.timer` last fired 2026-08-31 and fires next
+        # 2026-09-07, while `ActiveEnterTimestamp` on claude-rc.service reads 2026-09-06 00:44
+        # UTC — an ad-hoc restart two hours before the read. So the cgroup is recreated by
+        # anything that restarts the unit, not only by the weekly schedule, and a window
+        # spanning one is an ordinary event rather than a once-a-week edge case.
         CLAUDE_CGROUP_CONSECUTIVE=_int("CLAUDE_CGROUP_CONSECUTIVE", "2"),
     )
