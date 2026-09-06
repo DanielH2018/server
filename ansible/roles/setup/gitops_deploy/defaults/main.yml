@@ -60,6 +60,17 @@ gitops_deploy_expected_ruleset_contexts:
 gitops_deploy_ruleset_drift_cron_hour: "6"
 gitops_deploy_ruleset_drift_cron_minute: "40"
 
+# The repo's GitHub interaction limit: who may comment, react, open issues and open PRs on a
+# repo that stays public. `collaborators_only` closes every one of those to anyone not listed
+# as a collaborator; `none` clears the limit. GitHub caps the setting at six months and lets it
+# lapse silently, so github-interaction-limit.sh re-applies it daily — a PUT with the same body
+# resets the expiry. Change the declaration here, never in the GitHub UI: the cron applies
+# whatever this says on its next run. Ten minutes after the ruleset check, same token budget.
+gitops_deploy_interaction_limit: collaborators_only
+gitops_deploy_interaction_limit_expiry: six_months
+gitops_deploy_interaction_limit_cron_hour: "6"
+gitops_deploy_interaction_limit_cron_minute: "50"
+
 # k8s auto-deploy — design: docs/superpowers/specs/2026-08-14-renovate-k8s-autodeploy-design.md
 #
 # Ships OFF. Slice 1 enables it scoped to the pilot service; slice 3 clears the pilot list once

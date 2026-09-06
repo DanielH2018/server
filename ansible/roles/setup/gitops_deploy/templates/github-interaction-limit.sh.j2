@@ -1,0 +1,111 @@
+#!/bin/bash
+# Daily re-arm of the repo's GitHub interaction limit, and a Kuma beat saying it is armed.
+#
+# The interaction limit is the only lever GitHub offers that keeps a PUBLIC repo closed to
+# everyone but its collaborators: with `collaborators_only` set, nobody else can comment, react,
+# open an issue or open a PR, while reads, clones and forks stay open. It is the answer to "keep
+# the repo public but let only me act on it", chosen 2026-09-06 over moving the repo into an
+# organization (a private org repo caps Actions minutes and loses free code scanning).
+#
+# GitHub only offers the limit as a TEMPORARY setting: the longest expiry is six months, and when
+# it lapses nothing says so — the repo silently reopens. That expiry is the whole reason this cron
+# exists. A PUT with the same body is idempotent and resets the expiry to six months from now, so
+# a daily PUT turns a six-month lapse window into a one-day one.
+#
+# DECIDED: this script RECONCILES, where its sibling github-ruleset-drift.sh only alerts. The
+# ruleset is a setting a human changes on purpose, and reconciling it would undo that change with
+# no signal. The limit is not: the only way it changes without a human is by expiring, and
+# re-applying an expired setting is restoring the declared state, not overriding a decision. A
+# human who wants it off changes `gitops_deploy_interaction_limit` in defaults/main.yml — this
+# script applies whatever that declares, and `none` disarms it by way of a DELETE.
+#
+# Authenticated through the deploy user's `gh auth token`, which carries the `repo` scope this
+# endpoint needs (the setting is repo administration; anonymous callers cannot read it, let
+# alone write it). No token means the PUT cannot happen, and that is reported as DOWN with
+# UNVERIFIED — a check that could not act must not report the setting as armed.
+#
+# The token never lands in argv: curl reads it from a config file handed over as a process
+# substitution (`-K <(...)`), for the same reason the push library feeds the Kuma URL on
+# stdin — /proc is mounted without hidepid here.
+#
+# set -uo (not -euo): a failed curl must be captured + reported, not swallowed by an early exit.
+set -uo pipefail
+
+export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin # cron ships a bare PATH
+# What scripts/lib/gh.py sets for every Python caller, and this cron calls `gh` directly. A `gh`
+# that prompts hangs an unattended run forever, and the update notifier writes to stderr on the
+# first call of the day — which a caller reading stderr as an error message then reports as one.
+export GH_PROMPT_DISABLED=1 GH_NO_UPDATE_NOTIFIER=1
+
+# shellcheck source=/dev/null
+source /usr/local/lib/kuma-push-lib.sh || {
+  logger -t github-interaction-limit "kuma-push-lib.sh missing — run initial_setup on this host"
+  exit 1
+}
+
+KUMA_HOST="uptime-kuma.local.{{ domain }}"
+KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
+PUSH_URL="https://${KUMA_HOST}/api/push/{{ interaction_limit_push_token }}"
+
+# Via the shared library, which feeds the token-bearing URL to curl on stdin (`-K -`) rather than
+# as an argv element: /proc is mounted without hidepid here.
+push() { # up|down msg
+  kuma_push "$1" "$2" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" github-interaction-limit
+}
+
+LIMIT_URL="https://api.github.com/repos/{{ gitops_deploy_github_repo }}/interaction-limits"
+WANT_LIMIT="{{ gitops_deploy_interaction_limit }}"
+WANT_EXPIRY="{{ gitops_deploy_interaction_limit_expiry }}"
+
+# This cron runs as root; the gh login belongs to the deploy user, so the lookup drops to that
+# user. `-H` matters: gh finds its login under $HOME, and a plain runuser/sudo keeps root's.
+TOKEN=$(sudo -n -u "{{ sys_user }}" -H gh auth token 2>/dev/null || true)
+if [ -z "$TOKEN" ]; then
+  # Unlike the ruleset check there is no anonymous fallback: the endpoint needs the repo's
+  # admin, so without a token the limit cannot be re-armed AND cannot be read.
+  push down "no gh login for {{ sys_user }} — interaction limit NOT re-armed, state UNVERIFIED"
+  exit 1
+fi
+AUTH_CONFIG=$(printf 'header = "Authorization: Bearer %s"\n' "$TOKEN")
+
+# `none` means "no limit": the API expresses that as a DELETE, and a DELETE returns 204 with
+# no body. Everything else is a PUT that answers with the limit it stored.
+if [ "$WANT_LIMIT" = "none" ]; then
+  if ! curl -sf --max-time 20 -X DELETE -K <(printf '%s\n' "$AUTH_CONFIG") \
+    -H "Accept: application/vnd.github+json" "$LIMIT_URL" >/dev/null; then
+    push down "failed to clear the interaction limit — state UNVERIFIED"
+    exit 1
+  fi
+  push up "interaction limit declared none — cleared"
+  exit 0
+fi
+
+# Process substitution, not a pipe — see the sibling script for the pipefail/EPIPE reason.
+if ! BODY=$(curl -sf --max-time 20 -X PUT -K <(printf '%s\n' "$AUTH_CONFIG") \
+  -H "Accept: application/vnd.github+json" -H "Content-Type: application/json" \
+  -d "{\"limit\":\"${WANT_LIMIT}\",\"expiry\":\"${WANT_EXPIRY}\"}" "$LIMIT_URL"); then
+  # Unreachable, 401, 403 (token lacks the scope) and 422 (a value the API rejects) all land
+  # here. None of them is "armed": a re-arm that never happened must say so.
+  push down "failed to set interaction limit ${WANT_LIMIT} — NOT re-armed, state UNVERIFIED"
+  exit 1
+fi
+
+LIVE_LIMIT=$(printf '%s' "$BODY" | jq -r '.limit // empty')
+EXPIRES_AT=$(printf '%s' "$BODY" | jq -r '.expires_at // empty')
+if [ -z "$LIVE_LIMIT" ]; then
+  # A 200 carrying something that is not an interaction-limit object — an error object, an HTML
+  # interstitial, a truncated body. Reported as a bad response, never as "armed".
+  push down "interaction-limits response had no .limit — bad response, state UNVERIFIED"
+  exit 1
+fi
+
+if [ "$LIVE_LIMIT" != "$WANT_LIMIT" ]; then
+  # The API accepted the PUT and stored something else. Not a shape GitHub is documented to
+  # produce, which is exactly why it is checked: this is the one branch that would otherwise
+  # read "armed" while the setting was wrong.
+  push down "interaction limit is '${LIVE_LIMIT}' after PUT of '${WANT_LIMIT}' — declared state NOT applied"
+  exit 1
+fi
+
+push up "interaction limit ${LIVE_LIMIT} re-armed, expires ${EXPIRES_AT:-unknown}"
+exit 0

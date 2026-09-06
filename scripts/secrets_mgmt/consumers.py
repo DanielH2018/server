@@ -45,6 +45,9 @@ CROSS_HOST_PUSH_TOKENS = frozenset(
         # `initial_setup.yml --tags gitops_deploy`, by hand, because it is the role running the
         # tick.
         "ruleset_drift_push_token",
+        # Same role, same cron shape, same reason: daniel-box cron (setup/gitops_deploy) +
+        # k8s/uptime-kuma static tile, applied by `initial_setup.yml --tags gitops_deploy`.
+        "interaction_limit_push_token",
         # daniel-box cron (setup/initial_setup) + k8s/uptime-kuma static tile. Both halves embed
         # the token and must move together; initial_setup has no deploy tag, so a `--deploy
         # --tags uptime-kuma` would rotate the tile and leave the cron pushing the old value —
