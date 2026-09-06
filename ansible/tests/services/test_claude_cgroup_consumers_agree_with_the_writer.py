@@ -53,10 +53,14 @@ EMITTED = frozenset(
     }
 )
 
-# The two `cgroup` label values the writer labels its series with. `claude-rc` is the one whose
-# absence the alert arm treats as a fault; `user-1000-slice` exists only once somebody has logged
-# in since boot, so it is watched-when-present rather than required.
-LABELLED = frozenset({"claude-rc", "user-1000-slice"})
+# The `cgroup` label values the writer labels its series with. `claude-rc` is the one whose absence
+# the alert arm treats as a fault; `fleet` is the shared `user.slice` parent that carries the
+# fleet's single MemoryHigh/MemorySwapMax since #1264; `user-1000-slice` exists only once somebody
+# has logged in since boot, so it is watched-when-present rather than required. The alert arm and
+# the board both select by metric rather than by cgroup, so a label added here is judged and graphed
+# the moment it reports — this set exists so that ADDING one is a decision somebody makes rather
+# than a silent widening.
+LABELLED = frozenset({"claude-rc", "fleet", "user-1000-slice"})
 
 METRIC_RE = re.compile(r"claude_cgroup_[a-z0-9_]+")
 # The arm's module also names `claude_cgroup_verdict`, a function rather than a series, in both its
@@ -71,9 +75,18 @@ def _writer_metrics() -> set[str]:
 
 
 def _writer_cgroup_labels() -> set[str]:
-    """The keys of the script's `declare -A CGROUPS=(...)` map."""
-    body = WRITER.read_text().split("declare -A CGROUPS=(", 1)[1].split(")", 1)[0]
-    return set(re.findall(r"\[([A-Za-z0-9_-]+)\]=", body))
+    """Every key the script assigns into its `CGROUPS` map, in either form.
+
+    Both forms are read across the whole file rather than by slicing the `declare -A CGROUPS=(`
+    block: #1264 added a comment inside that block containing a `)`, and slicing to the first one
+    truncated the map to nothing — an empty set that a subset assertion would have passed. The
+    equality assertion at the call site is what caught it, which is the argument for asserting a
+    named set rather than a bound.
+    """
+    text = WRITER.read_text()
+    literal = re.findall(r"^\s*\[([A-Za-z0-9_-]+)\]=", text, re.MULTILINE)
+    assigned = re.findall(r"CGROUPS\[([A-Za-z0-9_-]+)\]=", text)
+    return set(literal) | set(assigned)
 
 
 def _board_exprs() -> list[str]:

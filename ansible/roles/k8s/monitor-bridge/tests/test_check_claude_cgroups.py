@@ -29,8 +29,10 @@ from verdicts.host_cgroups import claude_cgroup_verdict
 STALL_METRIC = "claude_cgroup_memory_pressure_stalled_usec_total"
 EVENT_METRIC = "claude_cgroup_memory_events_total"
 
-# The two cgroups the writer labels. `claude-rc` is the one whose absence is a fault;
-# `user-1000-slice` exists only once somebody has logged in since boot.
+# Two of the cgroups the writer labels (`fleet` is the third, added by #1264). `claude-rc` is the
+# one whose absence is a fault; `user-1000-slice` exists only once somebody has logged in since
+# boot. `ansible/tests/services/test_claude_cgroup_consumers_agree_with_the_writer.py` holds the
+# full set and fails when the writer's changes.
 RC = {"cgroup": "claude-rc"}
 LOGIN = {"cgroup": "user-1000-slice"}
 

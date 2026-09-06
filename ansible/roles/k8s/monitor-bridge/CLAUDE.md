@@ -86,7 +86,7 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     throttling is the cap working, and its value belongs to `roles/setup/claude_code`, so an arm
     keyed on it would move whenever those caps move. It is graphed instead, on the
     `AI/claude-code-host-cgroups` board.
-    `CLAUDE_CGROUPS` (rendered in `templates/env-secret.yaml.j2`, `claude-rc` only) is the set
+    `CLAUDE_CGROUPS` (rendered in `templates/env-secret.yaml.j2`, `claude-rc,fleet`) is the set
     whose ABSENCE is a fault, not the set that is judged — the queries filter by metric, so
     `user-1000-slice` is watched whenever it exists and its absence never pages, because its
     cgroup only exists once somebody has logged in since boot. **Empty disables the whole arm**,

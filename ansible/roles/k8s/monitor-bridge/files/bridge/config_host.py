@@ -363,11 +363,12 @@ def host_config(
         # cgroup taking the box is that — on 2026-09-05 this cgroup held all 8 GiB of swap plus
         # 6.96 GB anon while k3s got 2.9 GB.
         #
-        # The cgroups that must be REPORTING for the arm to mean anything. claude-rc alone:
-        # `user.slice/user-1000.slice` exists only once a login session has happened since boot,
-        # so requiring it would page after any reboot nobody had SSH'd into. Series from any
-        # other cgroup are still judged — the queries below filter by metric, not by cgroup — so
-        # user-1000-slice is covered when it exists and absent without paging when it does not.
+        # The cgroups that must be REPORTING for the arm to mean anything — `claude-rc` and
+        # `fleet`, not `user-1000-slice`: the login slice's cgroup exists only once a login session
+        # has happened since boot, so requiring it would page after any reboot nobody had SSH'd
+        # into. Series from any other cgroup are still judged — the queries below filter by metric,
+        # not by cgroup — so user-1000-slice is covered when it exists and absent without paging
+        # when it does not.
         # Empty disables the arm entirely, like PI_GLANCES_URL and PI_PUBLISHED_PORTS; the live
         # value is set in templates/env-secret.yaml.j2, beside the host it describes.
         CLAUDE_CGROUPS=tuple(
