@@ -178,6 +178,47 @@ def is_operator_comment(comment: dict) -> bool:
     return (comment.get("authorAssociation") or "") in _TRUSTED_ASSOCIATIONS
 
 
+def _one_line(text: str) -> str:
+    """``text`` with every line break collapsed to a space.
+
+    THE PROSE ABOVE A TRAILER IS PARSED TOO (#1284). `current_claim` tests `_CLAIM_RE` before
+    `_RELEASE_RE` on the WHOLE comment body, and `release_comment` puts the reason above the
+    trailer — so a reason carrying a line ``Claim: `x` `` makes a release read as a claim by
+    `x`. That is not a hypothetical hand-typed `--reason`: `cmd_reap` builds its own reason
+    from `classify`'s text, which embeds a worktree's `lock_reason`, which is free text
+    nobody in this repo writes.
+
+    Collapsing the breaks closes it at the builder rather than at argparse, which is where
+    the named vector arrives — `_CLAIM_RE` is anchored with `re.M`, so a trailer that cannot
+    start a line cannot match at all. Anchoring the parser to the body's last trailer line
+    was the alternative and is rejected: it inverts the DECIDED marker in `current_claim`
+    that makes a `Claim:` line win over a `Released:` one, which points the other way on
+    purpose.
+    """
+    return " ".join((text or "").splitlines())
+
+
+def validate_worktree_name(name: str) -> str | None:
+    """Why ``name`` cannot be carried by a claim trailer, or None when it can.
+
+    `_CLAIM_RE` captures `[^`\\n]+` between backticks, so a name holding a backtick or a line
+    break writes a comment and a label and then fails to parse its own trailer on read-back —
+    and `cmd_claim` reported `lost the race to \\`None\\``, telling the operator they lost a
+    race that never happened (#1284). Refusing the name up front is the fix; the read-back
+    message below it is the second half, for a read that comes back empty for any other
+    reason.
+    """
+    if not name.strip():
+        return "empty"
+    if name != name.strip():
+        return "has leading or trailing whitespace"
+    if "`" in name:
+        return "contains a backtick, which ends the claim trailer's own quoting"
+    if any(c in name for c in "\r\n"):
+        return "contains a line break, so the claim trailer would not parse"
+    return None
+
+
 def now_iso() -> str:
     """The `when` every claim and release comment is stamped with.
 
@@ -196,21 +237,73 @@ def claim_comment(worktree: str, session: str | None, when: str) -> str:
         session: the Claude session id, when one is known. Prose only — nothing parses it.
         when: an ISO-8601 timestamp, for a human reading the thread.
     """
-    who = f" (session `{session}`)" if session else ""
+    who = f" (session `{_one_line(session)}`)" if session else ""
     return f"Claimed by `{worktree}`{who} at {when}\n\nClaim: `{worktree}`\n"
 
 
 def release_comment(worktree: str, when: str, reason: str | None) -> str:
-    """The comment body that releases ``worktree``'s claim."""
-    why = f" — {reason}" if reason else ""
+    """The comment body that releases ``worktree``'s claim.
+
+    The reason is collapsed to one line — see `_one_line` for why a multi-line reason turns
+    a release into a claim by whoever the reason names (#1284).
+    """
+    why = f" — {_one_line(reason)}" if reason else ""
     return f"Released by `{worktree}` at {when}{why}\n\nReleased: `{worktree}`\n"
+
+
+# What `gh issue view --json comments` returns at most: its GraphQL query asks for
+# `comments(first: 100)` and nothing paginates. Past this the fold stops seeing new
+# trailers — a release at #101 would leave the issue claimed forever, and a claim at #101
+# would make `cmd_claim`'s read-back report a race against nobody (#1284). Latent while the
+# busiest issue in the register carries a handful of comments, so this WARNS rather than
+# changing the read: a wrong claim verdict that announces itself is the point.
+COMMENT_PAGE_CAP = 100
+
+
+def comment_cap_warning(issue: dict) -> str | None:
+    """A warning when ``issue`` carries as many comments as gh will return, else None.
+
+    Pure, so `findings_gh` decides where it is printed and the rule itself is testable
+    without a boundary.
+    """
+    n = len(issue.get("comments", []))
+    if n < COMMENT_PAGE_CAP:
+        return None
+    return (
+        f"warning: #{issue.get('number')} has {n} comments, gh's page cap — a claim or "
+        "release past the cap is invisible to the fold, so its claim verdict may be wrong"
+    )
+
+
+def ordered_comments(issue: dict) -> list[dict]:
+    """``issue``'s comments in `createdAt` order, or in gh's own order when it cannot say.
+
+    THE ORDER IS THE PROTOCOL. `current_claim` folds forward and implements FIRST WRITER
+    WINS, so the fold's answer is only correct if the list really is oldest-first. gh returns
+    them that way — measured ascending across 17 issues — but nothing enforced it (#1284).
+
+    SORTS ONLY WHEN EVERY COMMENT CARRIES A TIMESTAMP. A mixed list is the dangerous case: a
+    key of `c.get("createdAt") or ""` hoists every unstamped comment to the front, which can
+    flip the verdict of the one function in this protocol that must not change by accident.
+    Fixtures routinely omit `createdAt`, so the mixed list is not hypothetical. When any
+    comment lacks one, gh's own order stands — exactly the behaviour that shipped before.
+
+    `current_claim` and `_claim_age_days` in findings_claim.py carry the identical fold and
+    must consume the identical order, or a `claims` row ages a claim the register does not
+    think exists.
+    """
+    comments = list(issue.get("comments", []))
+    if not all(c.get("createdAt") for c in comments):
+        return comments
+    return sorted(comments, key=lambda c: c["createdAt"])
 
 
 def current_claim(issue: dict) -> str | None:
     """The worktree currently holding ``issue``, or None.
 
-    Folds the comment list forward in the order gh returned it: a ``Claim:`` line opens IF
-    nothing is currently held, and a ``Released:`` line naming the SAME worktree closes.
+    Folds the comment list forward oldest-first (see `ordered_comments`): a ``Claim:`` line
+    opens IF nothing is currently held, and a ``Released:`` line naming the SAME worktree
+    closes.
 
     FIRST WRITER WINS, not last. gh returns comments in createdAt order, so the earlier of
     two racing claims is the earlier comment. Letting a later claim overwrite a live one
@@ -225,7 +318,7 @@ def current_claim(issue: dict) -> str | None:
     so a comment from any other account is prose on the thread and nothing more.
     """
     held: str | None = None
-    for comment in issue.get("comments", []):
+    for comment in ordered_comments(issue):
         if not is_operator_comment(comment):
             continue
         body = comment.get("body") or ""

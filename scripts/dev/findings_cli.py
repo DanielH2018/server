@@ -144,6 +144,12 @@ def _parser(description: str) -> argparse.ArgumentParser:
         "--close", action="store_true", help="close passing findings as fixed"
     )
     v.add_argument(
+        "--close-claimed",
+        action="store_true",
+        help="close a passing finding even when a live claim holds it; without this a "
+        "claimed issue is left open rather than closed under the session working it",
+    )
+    v.add_argument(
         "--timeout",
         type=float,
         default=DEFAULT_VERIFY_TIMEOUT,
