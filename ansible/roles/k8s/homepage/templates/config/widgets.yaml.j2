@@ -32,7 +32,12 @@
     url: https://kagi.com/search?q=
     target: _blank
 
-# Longhorn volume and node capacity. It dials `longhorn-frontend`, NOT `longhorn-backend`, and
+# Longhorn volume and node capacity. THE URL IS NOT HERE — homepage splits this widget across two
+# files, and `providers.longhorn.url` in settings.yaml.j2 holds the connection while this entry
+# holds only the display options. A `url:` written here is ignored, which is how PR #1391 shipped
+# a widget that logged `<longhorn> Missing Longhorn URL` every refresh behind a 1/1 Deployment.
+#
+# It dials `longhorn-frontend`, NOT `longhorn-backend`, and
 # the distinction is the whole reason this widget works. The manager's own API is fenced by
 # Longhorn's chart-owned `longhorn-manager` NetworkPolicy, which admits six same-namespace
 # Longhorn components and nothing else — homepage cannot reach it, and widening that object means
@@ -46,7 +51,6 @@
 # backend one. Verified 2026-09-06: `GET /v1/nodes` on the frontend ClusterIP answers 200 with
 # both nodes' disk conditions.
 - longhorn:
-    url: http://longhorn-frontend.longhorn-system.svc.cluster.local
     expanded: true
     total: true
     labels: true

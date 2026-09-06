@@ -38,6 +38,12 @@ Edit the `.j2` files, never the live config: homepage seeds any missing file int
   default and the tile fails as a widget-proxy error while homepage stays 1/1. ENFORCED by
   `ansible/tests/services/test_homepage_widget_netpol_edges.py`, which resolves each widget URL's
   Service to the pod label it selects and checks the rendered policies.
+- **The longhorn widget is configured across TWO files, and the wrong half is silent.**
+  `providers.longhorn.url` in `templates/config/settings.yaml.j2` holds the connection;
+  `templates/config/widgets.yaml.j2` holds only the display options. A `url:` written beside those
+  options is ignored — the pod logs `<longhorn> Missing Longhorn URL` every refresh, the tile
+  renders empty, and the Deployment stays 1/1. PR #1391 shipped it that way. ENFORCED by
+  `ansible/tests/services/test_homepage_longhorn_widget_url.py`.
 - **The longhorn widget dials `longhorn-frontend`, not `longhorn-backend`.** Longhorn's own
   chart-owned `longhorn-manager` policy admits six same-namespace components and nothing else, and
   editing it means editing an object the Longhorn deploy would revert. `longhorn-frontend` is
