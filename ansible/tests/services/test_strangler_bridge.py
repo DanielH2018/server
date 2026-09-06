@@ -109,6 +109,7 @@ def test_gate_serves_every_token_router():
         "livesync-utils-local",
         "livesync-probe",
         "homelab-mcp-local",
+        "homelab-mcp-probe",
     }
     assert set(routers) == expected, f"gate routers drifted: {sorted(routers)}"
     for name, router in routers.items():
@@ -131,6 +132,17 @@ def test_gate_serves_every_token_router():
         "homelab-mcp-local lost the bearer predicate — the gate would forward ungated"
     )
     assert f"Host(`mcp.{DOMAIN}`)" not in mcp_rule
+    # The mcp probe router is the ONE ungated path through this gate, so the two things that
+    # keep it harmless are asserted rather than assumed: an exact Path (not a PathPrefix, which
+    # would open /health-anything) and LAN-only. It exists because the tile that used to probe
+    # /mcp accepted the edge's own 404 as health and so could not see a total-404 edge (#1341).
+    probe_rule = routers["homelab-mcp-probe"]["rule"]
+    assert "Path(`/health`)" in probe_rule
+    assert "PathPrefix" not in probe_rule, (
+        "homelab-mcp-probe must match one exact path — a prefix opens more than /health"
+    )
+    assert f"Host(`mcp.local.{DOMAIN}`)" in probe_rule
+    assert f"Host(`mcp.{DOMAIN}`)" not in probe_rule
 
 
 def test_gate_stays_out_of_crd_objects():
