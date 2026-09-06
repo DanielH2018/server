@@ -73,7 +73,9 @@ GRAFANA_DASHBOARDS = [
     # enrolled twice over, so under this list's own one-per-shape rule it adds nothing while
     # costing another board in the single browser the 2Gi limit bounds. Re-enrol it only
     # against a shape argument, not because it is unenrolled. Issue #1387.
-    ("exportarr-arr-stack", 13),
+    # Re-measured live 2026-09-06 after `Download queue depth` (panel id 14) landed:
+    # the board drew 13 headers when it was enrolled, and draws 14 now.
+    ("exportarr-arr-stack", 14),
 ]
 
 # Measured 2026-08-30: a dashboard that mounts draws its panels within ~2.2s, and 15 of 19
