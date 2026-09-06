@@ -1,21 +1,21 @@
 """The claim, release, claims and reap subcommands, driven through main()."""
 
+import json
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from _findings_fakes import Fakes, build_tools, make_issue
+from _findings_fakes import Fakes, build_tools, facts, make_issue
 
 from dev.findings import main
 from dev.findings_model import claim_comment
+from dev.prune_worktrees import Worktree
 
 WT = "worktree-issue-1132"
 
-
-def _stale_facts():
-    """No worktrees at all, so every claim reads stale. Git itself worked (`ok=True`)."""
-    return [], lambda _p: False, lambda _t: False, True
+# No worktrees at all, so every claim reads stale. Git itself worked (`ok=True`).
+STALE = facts()
 
 
 def test_claim_writes_a_comment_and_a_label():
@@ -79,40 +79,75 @@ def test_release_removes_the_label():
     assert ["issue", "edit", "1132", "--remove-label", "claimed"] in calls.gh
 
 
-def test_claims_prints_one_row_per_claimed_issue(capsys, monkeypatch):
-    import dev.findings as findings
+def test_release_refuses_another_worktrees_claim_and_exits_3(capsys):
+    """Pairs with `test_release_removes_the_label` above, which exits 0.
 
-    monkeypatch.setattr(findings, "_worktree_facts", _stale_facts)
+    Only the plan-level refusal was covered, so nothing proved `cmd_release` turns a
+    `ClaimRefused` into exit 3 rather than a traceback (#1275).
+    """
+    issue = make_issue(
+        1132,
+        labels=["claimed"],
+        comments=[claim_comment("worktree-someone-else", None, "t")],
+    )
+    tools, calls = build_tools(Fakes(issues=[issue], view=issue))
+    assert main(["release", "1132", "--worktree", WT], tools) == 3
+    assert "claimed by `worktree-someone-else`" in capsys.readouterr().out
+    assert not any(c[:2] == ["issue", "comment"] for c in calls.gh)
+
+
+def test_release_refuses_an_unclaimed_issue_and_exits_3(capsys):
+    tools, calls = build_tools(Fakes(issues=[make_issue(1132)], view=make_issue(1132)))
+    assert main(["release", "1132", "--worktree", WT], tools) == 3
+    assert "not claimed" in capsys.readouterr().out
+    assert calls.gh == []
+
+
+def test_claims_prints_one_row_per_claimed_issue(capsys):
     held = make_issue(1132, comments=[claim_comment(WT, None, "t")])
-    tools, _ = build_tools(Fakes(issues=[held, make_issue(1140)]))
+    tools, _ = build_tools(Fakes(issues=[held, make_issue(1140)], worktree_facts=STALE))
     assert main(["claims"], tools) == 0
     out = capsys.readouterr().out
     assert "1132" in out
     assert "1140" not in out
 
 
-def test_reap_releases_a_stale_claim_and_leaves_a_live_one(monkeypatch):
+def test_claims_json_carries_every_field_of_a_row(capsys):
+    """`claims --json` had no test at all (#1275), so nothing pinned the field names a
+    consumer reads — `live` and `reason` above all, since they carry the verdict."""
+    held = make_issue(1132, comments=[claim_comment(WT, None, "t")])
+    tools, _ = build_tools(Fakes(issues=[held], worktree_facts=STALE))
+    assert main(["claims", "--json"], tools) == 0
+    rows = json.loads(capsys.readouterr().out)
+    assert [r["number"] for r in rows] == [1132]
+    assert rows[0]["worktree"] == WT
+    assert rows[0]["live"] is False
+    assert "no worktree" in rows[0]["reason"]
+    assert rows[0]["age_days"] is None
+
+
+def test_claims_says_so_when_nothing_is_claimed(capsys):
+    tools, _ = build_tools(Fakes(issues=[make_issue(1132)], worktree_facts=STALE))
+    assert main(["claims"], tools) == 0
+    assert "no open claims" in capsys.readouterr().out
+
+
+def test_reap_releases_a_stale_claim_and_leaves_a_live_one():
     """The pair.
 
     A reap that releases everything and a reap that releases nothing are indistinguishable
     from a fixture where every claim is stale, which is what an earlier draft of this test
     had.
     """
-    import dev.findings as findings
-    from dev.prune_worktrees import Worktree
-
     live_wt = "worktree-issue-1140"
     tree = Worktree(
         path="/w/1140", head="abc", branch=live_wt, locked=False, lock_reason=""
     )
-    monkeypatch.setattr(
-        findings,
-        "_worktree_facts",
-        lambda: ([tree], lambda _p: True, lambda _t: False, True),
-    )
     stale = make_issue(1132, comments=[claim_comment(WT, None, "t")])
     live = make_issue(1140, comments=[claim_comment(live_wt, None, "t")])
-    tools, calls = build_tools(Fakes(issues=[stale, live]))
+    tools, calls = build_tools(
+        Fakes(issues=[stale, live], worktree_facts=facts([tree], dirty=True))
+    )
     assert main(["reap"], tools) == 0
     assert ["issue", "edit", "1132", "--remove-label", "claimed"] in calls.gh
     assert ["issue", "edit", "1140", "--remove-label", "claimed"] not in calls.gh
@@ -148,98 +183,58 @@ def test_release_dry_run_writes_nothing_and_says_so(capsys):
     assert "would be released" in capsys.readouterr().out
 
 
-def test_reap_dry_run_writes_nothing_and_says_so(monkeypatch, capsys):
-    import dev.findings as findings
-    from dev.prune_worktrees import Worktree
-
-    live_wt = "worktree-issue-1140"
-    tree = Worktree(
-        path="/w/1140", head="abc", branch=live_wt, locked=False, lock_reason=""
-    )
-    monkeypatch.setattr(
-        findings,
-        "_worktree_facts",
-        lambda: ([tree], lambda _p: True, lambda _t: False, True),
-    )
+def test_reap_dry_run_writes_nothing_and_says_so(capsys):
     stale = make_issue(1132, comments=[claim_comment(WT, None, "t")])
-    tools, calls = build_tools(Fakes(issues=[stale]))
+    tools, calls = build_tools(Fakes(issues=[stale], worktree_facts=STALE))
     assert main(["reap", "--dry-run"], tools) == 0
     assert calls.gh == []
     assert "would" in capsys.readouterr().out
 
 
-def test_reap_refuses_to_release_anything_when_git_fails(monkeypatch):
+def test_reap_refuses_to_release_anything_when_git_fails():
     """A transient git failure must not read as "every worktree is gone".
 
     `_worktree_facts` returns `ok=False` on a git failure, not merely an empty worktree
     list — without that distinction `reap` cannot tell a real git error from a register
     where nothing is claimed, and would release every live claim in it.
     """
-    import dev.findings as findings
-
-    monkeypatch.setattr(
-        findings,
-        "_worktree_facts",
-        lambda: ([], lambda _p: False, lambda _t: False, False),
-    )
     stale = make_issue(1132, comments=[claim_comment(WT, None, "t")])
-    tools, calls = build_tools(Fakes(issues=[stale]))
+    tools, calls = build_tools(Fakes(issues=[stale], worktree_facts=facts(ok=False)))
     assert main(["reap"], tools) != 0
     assert not any(c[:2] == ["issue", "edit"] for c in calls.gh)
 
 
-def test_reap_releases_when_the_worktree_list_is_genuinely_empty(monkeypatch):
+def test_reap_releases_when_the_worktree_list_is_genuinely_empty():
     """The other half of the pair above: `ok=True` with zero worktrees still reaps.
 
     Distinguishes "git failed" from "git succeeded and found nothing" — a fixture that
     conflated the two would pass on a reap that never fires as readily as one that always
     does.
     """
-    import dev.findings as findings
-
-    monkeypatch.setattr(
-        findings,
-        "_worktree_facts",
-        lambda: ([], lambda _p: False, lambda _t: False, True),
-    )
     stale = make_issue(1132, comments=[claim_comment(WT, None, "t")])
-    tools, calls = build_tools(Fakes(issues=[stale]))
+    tools, calls = build_tools(Fakes(issues=[stale], worktree_facts=STALE))
     assert main(["reap"], tools) == 0
     assert ["issue", "edit", "1132", "--remove-label", "claimed"] in calls.gh
 
 
-def test_claims_warns_but_still_renders_when_git_fails(monkeypatch, capsys):
+def test_claims_warns_but_still_renders_when_git_fails(capsys):
     """A read can afford to render on a stale guess; it just has to say so.
 
     Silently showing STALE rows during a git outage reads as fact rather than a guess an
     operator could act on — releasing a claim by hand that was never actually stale.
     """
-    import dev.findings as findings
-
-    monkeypatch.setattr(
-        findings,
-        "_worktree_facts",
-        lambda: ([], lambda _p: False, lambda _t: False, False),
-    )
     held = make_issue(1132, comments=[claim_comment(WT, None, "t")])
-    tools, _ = build_tools(Fakes(issues=[held]))
+    tools, _ = build_tools(Fakes(issues=[held], worktree_facts=facts(ok=False)))
     assert main(["claims"], tools) == 0
     captured = capsys.readouterr()
     assert "1132" in captured.out
     assert "read failed" in captured.err
 
 
-def test_reap_dry_run_still_refuses_when_git_fails(monkeypatch):
+def test_reap_dry_run_still_refuses_when_git_fails():
     """The git-failure refusal runs before any dry-run branching."""
-    import dev.findings as findings
-
-    monkeypatch.setattr(
-        findings,
-        "_worktree_facts",
-        lambda: ([], lambda _p: False, lambda _t: False, False),
-    )
     stale = make_issue(1132, comments=[claim_comment(WT, None, "t")])
-    tools, calls = build_tools(Fakes(issues=[stale]))
+    tools, calls = build_tools(Fakes(issues=[stale], worktree_facts=facts(ok=False)))
     assert main(["reap", "--dry-run"], tools) != 0
     assert calls.gh == []
 

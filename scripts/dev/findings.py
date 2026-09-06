@@ -55,15 +55,20 @@ finds first, whoever holds it — not just the caller's own worktree — so `cla
 
 CLAIMING AN ISSUE. `claim` posts a `Claim:` comment and adds the `claimed` label, so a
 worktree fanning out several issues at once knows which are its own; `release` reverses
-that. Both refuse an issue another worktree already holds, `claim` also refuses `manual` and
-closed issues, and re-claiming an issue your own worktree already holds is a no-op. `claims`
-lists every claim, warning on stderr (but still rendering) if the worktree read failed;
-`reap` refuses outright on that same failure. `claim` takes every issue it can and refuses
-the rest, so one `manual` issue does not cost the good claims in the same batch.
+that. A claim only counts from the operator's own comment — this repo is public, so any
+account can post a `Claim:` or `Released:` trailer and none of them decide anything. `claim`
+refuses an issue another worktree LIVE-holds, refuses `manual` and closed issues, RELEASES a
+claim it finds stale and takes the issue, and treats re-claiming its own claim as a no-op;
+`release` refuses any claim but its own. `claims` lists every claim, warning on stderr (but
+still rendering) if the worktree read failed; `reap` refuses outright on that same failure,
+and `claim` leaves a stale claim standing rather than reaping on a guess. `claim` takes every
+issue it can and refuses the rest, so one `manual` issue does not cost the good claims in the
+same batch.
 
 PICKING UP WORK. `next` prints the issues a session may claim, best severity first,
-withholding `manual` issues, issues a live claim already holds, and issues an open PR already
-says it closes.
+withholding `manual` issues, issues a LIVE claim already holds, and issues an open PR already
+says it closes. An issue whose claim is stale IS offered, marked with who holds it — `claim`
+reaps that claim on the way past, and `reap` clears every one of them at once.
 
 Exit codes: 0 done; 1 gh failed, or `reap` refused a git read failure rather than call it
 "nothing is claimed"; 2 bad arguments; 3 nothing was written because the issue refuses it —
@@ -87,13 +92,14 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 # `scripts/docs/reference/backlog.py` reaches this code as `dev.findings` with only
 # `scripts/` on sys.path, so a bare `from findings_model import ...` would raise
 # ModuleNotFoundError under the docs-refresh cron while pytest stayed green.
-from dev.findings_claim import claim_states
+from dev.findings_claim import another_claim_blocks, claim_states, stale_holder
 from dev.findings_cli import _parser
 from dev.findings_gh import (
     _create_with_optional_project,
     _existing_labels,
     _load_issue,
     load_issues,
+    open_pr_refs,
     run,
 )
 from dev.findings_model import (
@@ -103,7 +109,7 @@ from dev.findings_model import (
     fingerprint,
     issue_rows,
     label_names,
-    pr_refs,
+    pickable,
     sort_key,
 )
 from dev.findings_plans import (
@@ -120,7 +126,6 @@ from dev.findings_verify import (
     verify_close_comment,
     verify_finding,
 )
-from dev.prune_worktrees import _worktree_facts
 
 
 def _now() -> str:
@@ -212,11 +217,17 @@ def cmd_touch(args: argparse.Namespace, tools: FindingsTools) -> int:
 
 
 def cmd_claim(args: argparse.Namespace, tools: FindingsTools) -> int:
-    """Claims one or more issues for a worktree.
+    """Claims one or more issues for a worktree, reaping a stale claim that blocks one.
 
     Takes every issue it can and refuses the rest, rather than refusing the whole batch on
     one bad issue: a fan-out claims several issues at once, and losing four good claims
     because the fifth is `manual` would mean re-running and re-reading everything.
+
+    REAP-THEN-CLAIM. `next` offers an issue whose claim is stale — deliberately, since that
+    is what `reap` exists to clear — but `plan_claim` refused ANY claim, live or not. So a
+    session did what `next` told it to and got exit 3 with no route forward, and nothing in
+    the repo invoked `reap` to clear the claim (#1274). A stale claim is now released here,
+    under the reason `reap` would have given, and the claim proceeds.
 
     Returns 0 when every issue was taken, 3 when any was refused.
     """
@@ -225,8 +236,43 @@ def cmd_claim(args: argparse.Namespace, tools: FindingsTools) -> int:
     # exits 1; the retry then reads "already claimed" and the label is never added at all.
     run(plan_sync_labels(_existing_labels(tools)), args.dry_run, tools)
     refused = False
+    # Read once for the whole batch, and only if some issue in it is actually blocked.
+    facts: tuple | None = None
     for number in args.numbers:
         issue = _load_issue(number, tools)
+        if another_claim_blocks(issue, args.worktree):
+            if facts is None:
+                facts = tools.worktree_facts()
+                if not facts[3]:
+                    # Same fail-safe direction `cmd_reap` takes: a transient git error must
+                    # not read as "every worktree is gone". The claim blocks, as it did
+                    # before this path existed, and `plan_claim` refuses it below.
+                    sys.stderr.write(
+                        "warning: worktree read failed; a stale claim will refuse "
+                        "rather than reap\n"
+                    )
+            trees, dirty, merged, ok = facts
+            stale = stale_holder(issue, trees, dirty, merged) if ok else None
+            if stale:
+                holder, why = stale
+                run(
+                    plan_release(
+                        issue,
+                        worktree=holder,
+                        when=_now(),
+                        reason=f"reaped by `{args.worktree}`: {why}",
+                    ),
+                    args.dry_run,
+                    tools,
+                )
+                print(f"#{number} reaped stale claim by `{holder}` — {why}")
+                if args.dry_run:
+                    # The release was printed, not posted, so a re-read still shows the old
+                    # claim and `plan_claim` would refuse something that will really succeed.
+                    print(f"#{number} would be claimed by `{args.worktree}`")
+                    continue
+                # Re-read so `plan_claim` sees the release comment just posted.
+                issue = _load_issue(number, tools)
         try:
             plans = plan_claim(
                 issue, worktree=args.worktree, session=args.session, when=_now()
@@ -274,7 +320,7 @@ def cmd_release(args: argparse.Namespace, tools: FindingsTools) -> int:
 
 def cmd_claims(args: argparse.Namespace, tools: FindingsTools) -> int:
     """Prints every open claim: issue, worktree, live or stale, and why."""
-    trees, dirty, merged, ok = _worktree_facts()
+    trees, dirty, merged, ok = tools.worktree_facts()
     if not ok:
         # `reap` refuses instead; a read can render, but must say staleness is a guess.
         sys.stderr.write("warning: worktree read failed; STALE below is unverified\n")
@@ -295,7 +341,7 @@ def cmd_claims(args: argparse.Namespace, tools: FindingsTools) -> int:
 
 def cmd_reap(args: argparse.Namespace, tools: FindingsTools) -> int:
     """Releases every stale claim, printing why each was judged stale."""
-    trees, dirty, merged, ok = _worktree_facts()
+    trees, dirty, merged, ok = tools.worktree_facts()
     if not ok:
         # Must not read a git failure as "every worktree is gone" and release everything.
         print("reap: could not read git; refusing to release anything")
@@ -448,35 +494,6 @@ def cmd_list(args: argparse.Namespace, tools: FindingsTools) -> int:
     return 0
 
 
-def pickable(
-    issues: list[dict], *, live_claims: set[int], pr_refs: set[int]
-) -> list[dict]:
-    """The issues a session may pick up, best first.
-
-    Args:
-        live_claims: issue numbers whose claim is still live. A STALE claim does not
-            withhold an issue — that is the whole point of `reap`.
-        pr_refs: issue numbers an open PR already says it closes. Without this, a session
-            picks up work another session has finished but not yet landed.
-    """
-    rows = [
-        r
-        for r in issue_rows(issues)
-        if not r["manual"]
-        and r["number"] not in live_claims
-        and r["number"] not in pr_refs
-    ]
-    return sorted(rows, key=sort_key)
-
-
-def _open_pr_refs(tools: FindingsTools) -> set[int]:
-    """Issue numbers the open PRs say they close."""
-    prs = tools.gh_json(
-        "pr", "list", "--state", "open", "--limit", "200", "--json", "body"
-    )
-    return pr_refs([pr.get("body") or "" for pr in prs or []])
-
-
 def cmd_next(args: argparse.Namespace, tools: FindingsTools) -> int:
     """Handles the ``next`` subcommand: prints the issues a session may pick up, best first.
 
@@ -490,24 +507,36 @@ def cmd_next(args: argparse.Namespace, tools: FindingsTools) -> int:
         args: parsed CLI namespace carrying ``limit`` and ``json``.
         tools: the process boundaries every gh call goes through.
     """
-    trees, dirty, merged, ok = _worktree_facts()
+    trees, dirty, merged, ok = tools.worktree_facts()
     issues = load_issues("open", tools)
+    stale: dict[int, str] = {}
     if ok:
-        live = {s.number for s in claim_states(issues, trees, dirty, merged) if s.live}
+        states = claim_states(issues, trees, dirty, merged)
+        live = {s.number for s in states if s.live}
+        stale = {s.number: s.worktree for s in states if not s.live}
     else:
         sys.stderr.write(
             "warning: worktree read failed; withholding every currently claimed issue\n"
         )
         live = {i["number"] for i in issues if current_claim(i)}
-    rows = pickable(issues, live_claims=live, pr_refs=_open_pr_refs(tools))[
-        : args.limit
-    ]
+    rows = pickable(issues, live_claims=live, pr_refs=open_pr_refs(tools))[: args.limit]
     if args.json:
         print(json.dumps(rows, indent=2))
         return 0
     for r in rows:
+        # A stale claim does not withhold the issue, so say who holds it and what clears it.
+        # `claim` reaps it on the way past; `reap` is how the operator clears the register.
+        held = (
+            f"  [stale claim by `{stale[r['number']]}`]" if r["number"] in stale else ""
+        )
         print(
-            f"#{r['number']:<5} {r['severity'] or '-':<6} {r['domain'] or '-':<21} {r['title']}"
+            f"#{r['number']:<5} {r['severity'] or '-':<6} {r['domain'] or '-':<21} "
+            f"{r['title']}{held}"
+        )
+    if any(r["number"] in stale for r in rows):
+        print(
+            "note: a stale claim is released by `findings.py reap`; `claim` also reaps one "
+            "before taking the issue"
         )
     if not rows:
         print("nothing to pick up")

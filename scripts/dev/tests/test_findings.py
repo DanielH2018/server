@@ -17,6 +17,7 @@ from dev.findings_gh import run
 from dev.findings_model import (
     LABELS,
     _prefixed,
+    claim_comment,
     find_by_fingerprint,
     fingerprint,
     issue_rows,
@@ -153,6 +154,34 @@ def test_list_json_emits_rows(capsys, issue, make_tools):
     assert findings.main(["list", "--json"], tools) == 0
     rows = json.loads(capsys.readouterr().out)
     assert rows[0]["number"] == 5 and rows[0]["severity"] == "low"
+
+
+def test_list_renders_the_manual_and_claimed_markers(capsys, issue, make_tools):
+    """The two markers the spec's `list` section requires, in the TEXT render.
+
+    Every other `list` test passes `--json` or an empty issue set, so the render loop never
+    ran and neither marker had a test that could go red (#1275). They are the only way an
+    operator reading ordinary `list` output sees that an issue is reserved or being worked.
+    """
+    reserved = issue(5, labels=("manual",), title="operator only")
+    worked = issue(
+        6, comments=[claim_comment("worktree-issue-1132", None, "t")], title="taken"
+    )
+    tools, _ = make_tools(Fakes(issues=[reserved, worked]))
+    assert findings.main(["list"], tools) == 0
+    out = capsys.readouterr().out
+    assert "[manual]" in out
+    assert "[claimed:worktree-issue-1132]" in out
+
+
+def test_list_marks_neither_on_an_ordinary_issue(capsys, issue, make_tools):
+    """The rejecting half: a flag that renders on everything is as wrong as one that never
+    renders, and the pair above cannot tell those apart on its own."""
+    tools, _ = make_tools(Fakes(issues=[issue(5, labels=("severity/low",))]))
+    assert findings.main(["list"], tools) == 0
+    out = capsys.readouterr().out
+    assert "[manual]" not in out
+    assert "[claimed:" not in out
 
 
 def test_list_passes_the_state_filter_to_gh(make_tools):

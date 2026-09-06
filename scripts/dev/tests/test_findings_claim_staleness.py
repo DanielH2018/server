@@ -11,12 +11,32 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from _findings_fakes import foreign_comment, operator_comment
+
 from dev.findings_claim import claim_is_live, claim_states
 from dev.findings_model import claim_comment, release_comment
 from dev.prune_worktrees import Worktree
 
 WT = "worktree-issue-1132"
 PATH = "/home/ubuntu/server/.claude/worktrees/issue-1132"
+
+
+def _foreign_claim(worktree=WT, created=None):
+    """A claim trailer any GitHub account could post on this public repo (#1280)."""
+    fields = {"createdAt": created} if created else {}
+    return foreign_comment(claim_comment(worktree, None, "t"), **fields)
+
+
+def _claimed(worktree=WT, created=None):
+    """The operator's claim comment on ``worktree``, optionally aged."""
+    fields = {"createdAt": created} if created else {}
+    return operator_comment(claim_comment(worktree, None, "t"), **fields)
+
+
+def _released(worktree=WT, created=None):
+    """The operator's release comment for ``worktree``, optionally aged."""
+    fields = {"createdAt": created} if created else {}
+    return operator_comment(release_comment(worktree, "t", None), **fields)
 
 
 def _tree(locked=True, reason="claude session x (pid 1 start 1)", branch=WT):
@@ -92,7 +112,7 @@ def test_a_worktree_on_a_different_branch_does_not_satisfy_the_claim():
 
 def test_claim_states_reports_one_row_per_claimed_issue_and_skips_the_rest():
     issues = [
-        {"number": 1132, "comments": [{"body": claim_comment(WT, None, "t")}]},
+        {"number": 1132, "comments": [_claimed()]},
         {"number": 1140, "comments": []},
     ]
     rows = claim_states(issues, [_tree()], dirty=_always, merged=_never)
@@ -112,17 +132,7 @@ def test_age_days_computed_from_createdAt():
     # Create a comment with createdAt timestamp from 5 days ago.
     five_days_ago = (datetime.now(UTC) - timedelta(days=5)).isoformat()
 
-    issues = [
-        {
-            "number": 1132,
-            "comments": [
-                {
-                    "body": claim_comment(WT, None, "t"),
-                    "createdAt": five_days_ago,
-                }
-            ],
-        }
-    ]
+    issues = [{"number": 1132, "comments": [_claimed(created=five_days_ago)]}]
     rows = claim_states(issues, [_tree()], dirty=_always, merged=_never)
     assert len(rows) == 1
     assert rows[0].age_days == 5
@@ -144,18 +154,9 @@ def test_age_days_from_currently_open_episode_after_claim_release_reclaim():
         {
             "number": 2000,
             "comments": [
-                {
-                    "body": claim_comment(WT, None, "t"),
-                    "createdAt": five_days_ago,
-                },
-                {
-                    "body": release_comment(WT, "t", None),
-                    "createdAt": three_days_ago,
-                },
-                {
-                    "body": claim_comment(WT, None, "t"),
-                    "createdAt": one_day_ago,
-                },
+                _claimed(created=five_days_ago),
+                _released(created=three_days_ago),
+                _claimed(created=one_day_ago),
             ],
         }
     ]
@@ -173,20 +174,87 @@ def test_age_days_returns_none_for_naive_datetime():
     None.
     """
     # A date-only string (naive datetime).
+    issues = [{"number": 1132, "comments": [_claimed(created="2026-09-01")]}]
+    rows = claim_states(issues, [_tree()], dirty=_always, merged=_never)
+    assert len(rows) == 1
+    assert rows[0].age_days is None
+
+
+def _raises_missing_dir(arg):
+    """What `lib.git.git_dirty` does on a prunable worktree: git with check=True, no cwd."""
+    raise FileNotFoundError(2, "No such file or directory", str(arg))
+
+
+def test_a_prunable_worktree_holds_its_claim_instead_of_crashing():
+    """The accepting half: an unreadable worktree is a held claim, not a traceback.
+
+    `git worktree list --porcelain` keeps listing a worktree whose directory was removed by
+    hand, so `dirty` runs git in a directory that does not exist and raises. That took
+    `claims`, `reap` and `next` down at once under an error blaming gh (#1276).
+    """
+    live, reason = claim_is_live(
+        WT, [_tree()], dirty=_raises_missing_dir, merged=_never
+    )
+    assert live is True
+    assert "unreadable" in reason
+    assert "git worktree prune" in reason
+
+
+def test_a_merged_read_that_raises_also_holds_the_claim():
+    """`merged` raises too — `is_merged` shells out to git several times per tree."""
+    live, reason = claim_is_live(
+        WT, [_tree(locked=False)], dirty=_never, merged=_raises_missing_dir
+    )
+    assert live is True
+    assert "unreadable" in reason
+
+
+def test_a_readable_worktree_still_gets_the_ordinary_verdict():
+    """The rejecting half: the guard must not collapse every tree into "live".
+
+    Without this, a try/except that swallowed the whole verdict — or one that returned True
+    unconditionally — would pass the two tests above while `reap` never released anything.
+    """
+    live, reason = claim_is_live(
+        WT, [_tree(locked=False)], dirty=_never, merged=_always
+    )
+    assert live is False
+    assert "unreadable" not in reason
+
+
+def test_a_foreign_claim_produces_no_claim_row_at_all():
+    """`claim_states` folds through `current_claim`, so a drive-by claim is not a row.
+
+    Without this, a single foreign comment made `claims` show a claim, `next` withhold the
+    issue and `claim` refuse it (#1280).
+    """
+    issues = [{"number": 1132, "comments": [_foreign_claim()]}]
+    assert claim_states(issues, [_tree()], dirty=_always, merged=_never) == []
+
+
+def test_the_age_of_a_claim_ignores_a_foreign_comment_between_its_episodes():
+    """`_claim_age_days` must skip exactly what `current_claim` skips.
+
+    A foreign `Released:` between the operator's claim and now would, if folded, close the
+    episode `_claim_age_days` is measuring — so the row would age the claim from a later
+    comment than the one the register thinks is current, or report no age at all.
+    """
+    five_days_ago = (datetime.now(UTC) - timedelta(days=5)).isoformat()
+    two_days_ago = (datetime.now(UTC) - timedelta(days=2)).isoformat()
     issues = [
         {
             "number": 1132,
             "comments": [
-                {
-                    "body": claim_comment(WT, None, "t"),
-                    "createdAt": "2026-09-01",
-                }
+                _claimed(created=five_days_ago),
+                foreign_comment(
+                    release_comment(WT, "t", "not mine"), createdAt=two_days_ago
+                ),
             ],
         }
     ]
     rows = claim_states(issues, [_tree()], dirty=_always, merged=_never)
-    assert len(rows) == 1
-    assert rows[0].age_days is None
+    assert [r.worktree for r in rows] == [WT]
+    assert rows[0].age_days == 5
 
 
 def test_claim_is_stale_when_locked_with_dead_owner_clean_and_merged():

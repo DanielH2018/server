@@ -6,10 +6,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from _findings_fakes import Fakes, build_tools, make_issue
+from _findings_fakes import Fakes, build_tools, facts, make_issue, operator_comment
 
-from dev.findings import main, pickable
-from dev.findings_model import claim_comment, pr_refs
+from dev.findings import main
+from dev.findings_model import claim_comment, pickable, pr_refs
 
 WT = "worktree-issue-1132"
 
@@ -21,7 +21,7 @@ def _issue(number, labels=(), comments=()):
         "state": "OPEN",
         "body": "",
         "labels": [{"name": n} for n in ("claude", *labels)],
-        "comments": [{"body": b} for b in comments],
+        "comments": [operator_comment(b) for b in comments],
         "createdAt": "2026-09-01T00:00:00Z",
         "url": "",
     }
@@ -76,26 +76,58 @@ def test_pr_refs_ignores_a_bare_issue_mention():
 def test_next_via_main_lists_an_ordinary_open_issue(capsys):
     """Exercises the plumbing `pickable()` alone can't: parser wiring, dispatch, JSON."""
     issue = make_issue(1132)
-    tools, _ = build_tools(Fakes(issues=[issue]))
+    tools, _ = build_tools(Fakes(issues=[issue], worktree_facts=facts()))
     assert main(["next", "--json"], tools) == 0
     rows = json.loads(capsys.readouterr().out)
     assert [r["number"] for r in rows] == [1132]
 
 
-def test_next_withholds_a_live_claim_when_the_git_read_fails(monkeypatch, capsys):
+def test_next_text_render_marks_a_stale_claim_and_names_reap(capsys):
+    """`next`'s whole text render was uncovered — every other test passes `--json` (#1275).
+
+    One test for the three things it prints: the row, the marker naming who holds a stale
+    claim, and the note pointing at `reap`. `next` offering a stale-claimed issue is the
+    behaviour `pickable` pins; this pins that the operator is TOLD, which is the half that
+    turned a correct offer into an unexplained exit 3 from `claim`.
+    """
+    stale_wt = "worktree-gone"
+    free = make_issue(1140, title="nobody holds this")
+    held = make_issue(
+        1132, title="stale claim on this", comments=[claim_comment(stale_wt, None, "t")]
+    )
+    tools, _ = build_tools(Fakes(issues=[free, held], worktree_facts=facts()))
+    assert main(["next"], tools) == 0
+    out = capsys.readouterr().out
+    assert "#1140" in out and "#1132" in out
+    assert f"[stale claim by `{stale_wt}`]" in out
+    assert "reap" in out
+
+
+def test_next_text_render_marks_nothing_when_no_claim_is_stale(capsys):
+    """The rejecting half: no marker and no `reap` note when every offered issue is free."""
+    tools, _ = build_tools(Fakes(issues=[make_issue(1140)], worktree_facts=facts()))
+    assert main(["next"], tools) == 0
+    out = capsys.readouterr().out
+    assert "#1140" in out
+    assert "stale claim" not in out
+    assert "reap" not in out
+
+
+def test_next_says_so_when_nothing_is_pickable(capsys):
+    tools, _ = build_tools(
+        Fakes(issues=[make_issue(1140, labels=["manual"])], worktree_facts=facts())
+    )
+    assert main(["next"], tools) == 0
+    assert "nothing to pick up" in capsys.readouterr().out
+
+
+def test_next_withholds_a_live_claim_when_the_git_read_fails(capsys):
     """The safety-critical branch: a git-read failure must not read as "no claims are live".
 
     Pins the withhold end to end through `main`, not just through `pickable`.
     """
-    import dev.findings as findings
-
-    monkeypatch.setattr(
-        findings,
-        "_worktree_facts",
-        lambda: ([], lambda _p: False, lambda _t: False, False),
-    )
     held = make_issue(1132, comments=[claim_comment(WT, None, "t")])
-    tools, _ = build_tools(Fakes(issues=[held]))
+    tools, _ = build_tools(Fakes(issues=[held], worktree_facts=facts(ok=False)))
     assert main(["next", "--json"], tools) == 0
     rows = json.loads(capsys.readouterr().out)
     assert rows == []
