@@ -36,15 +36,32 @@ def test_a_patch_on_the_standard_library_is_not_counted():
     assert count_module_patches(src, {"mod"}) == 0
 
 
-def test_a_patch_on_a_local_object_or_a_string_target_is_not_counted():
+def test_a_patch_on_a_local_object_or_by_another_method_is_not_counted():
     src = (
         "import mod\n"
         "def test_x(monkeypatch, obj):\n"
         "    monkeypatch.setattr(obj, 'f', 1)\n"
-        "    monkeypatch.setattr('mod.f', 1)\n"
         "    monkeypatch.setenv('MOD', '1')\n"
     )
     assert count_module_patches(src, {"mod"}) == 0
+
+
+def test_a_string_target_naming_a_first_party_module_is_counted():
+    """The object form's equal at runtime, and it pins the same module name into the test."""
+    src = "def test_x(monkeypatch):\n    monkeypatch.setattr('mod.f', 1)\n"
+    assert count_module_patches(src, {"mod"}) == 1
+    nested = (
+        "def test_x(monkeypatch):\n    monkeypatch.setattr('mod.subprocess.run', 1)\n"
+    )
+    assert count_module_patches(nested, {"mod"}) == 1
+
+
+def test_a_string_target_naming_something_else_is_not_counted():
+    """No import binds the name, so the root segment is matched against first-party names."""
+    stdlib = "def test_x(monkeypatch):\n    monkeypatch.setattr('subprocess.run', 1)\n"
+    undotted = "def test_x(monkeypatch):\n    monkeypatch.setattr('mod', 1)\n"
+    assert count_module_patches(stdlib, {"mod"}) == 0
+    assert count_module_patches(undotted, {"mod"}) == 0
 
 
 def test_an_aliased_import_is_still_the_module_it_aliases():
