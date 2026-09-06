@@ -71,6 +71,27 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     `HOST_ORIGINS_MIN` is rendered in `templates/env-secret.yaml.j2` so a planned single-node
     maintenance window can lower it and put it back; **at 1 the arm is inert**, which is the
     original failure, so treat it as a temporary setting rather than a fix for a noisy tile.
+  - **Claude Code cgroups** — not a monitor of its own either, but a third arm inside **Memory**
+    (`with_claude_cgroups`, issue #1258). It reads the `claude_cgroup_*` node-exporter textfile
+    series PR #1251 added for `claude-rc.service` and `user.slice/user-1000.slice` on daniel-box.
+    Folded here rather than given its own tile for the reason recorded at `with_pi_ports`: a new
+    Kuma monitor costs a new push token in SOPS and a monitor created by hand in the UI, and
+    **Memory** already owns "this box is running out of memory" — which a cgroup taking the box
+    is. On 2026-09-05 (#1243) that cgroup held all 8 GiB of this box's swap plus 6.96 GB anon,
+    stalled in reclaim for about ten minutes, before anything downstream failed.
+    Three sub-arms, reported in this order: a watched `memory.events` counter increasing
+    (`CLAUDE_CGROUP_EVENTS` = `max|oom|oom_kill|oom_group_kill`, paging on ANY increase — a kill
+    outranks a stall), the PSI `full` stall rate over `CLAUDE_CGROUP_STALL_MAX_PCT`, and an
+    expected cgroup not reporting at all. `high` is deliberately NOT alerted on: MemoryHigh
+    throttling is the cap working, and its value belongs to `roles/setup/claude_code`, so an arm
+    keyed on it would move whenever those caps move. It is graphed instead, on the
+    `AI/claude-code-host-cgroups` board.
+    `CLAUDE_CGROUPS` (rendered in `templates/env-secret.yaml.j2`, `claude-rc` only) is the set
+    whose ABSENCE is a fault, not the set that is judged — the queries filter by metric, so
+    `user-1000-slice` is watched whenever it exists and its absence never pages, because its
+    cgroup only exists once somebody has logged in since boot. **Empty disables the whole arm**,
+    which is the code default; the full threshold derivation, and the query to re-derive it from
+    seven days of history, are at `CLAUDE_CGROUP_STALL_MAX_PCT` in `bridge/config_host.py`.
   - **Container Restarts** (`changes(container_start_time_seconds[15m]) > RESTART_MAX`)
   - **Container OOM** (`increase(container_oom_events_total[1h]) by (name)` — names the
     offender; supersedes the old host-aggregate OOM that lived in the Memory check)
@@ -977,14 +998,14 @@ run loop alone on 2026-09-05).
 | `checks/notify.py` | `check_discord` with `_discord_webhooks`, `email_backstop` with `_smtp_login_ok` and `_email_probe` |
 | `checks/logs.py` | `check_loki_ingestion`, `check_shipper_dropped`, `check_loki_reachable`, `with_log_errors` (the Loki arm `check_k8s_workloads` folds in) |
 | `checks/cluster.py` | the cAdvisor trio `check_restarts` / `check_oom` / `check_cpu_throttle` with `_cadvisor_blind`, `_cadvisor_streaks` and `_cpu_breach_streak`; `check_prometheus`, `check_targets_down`, `check_traefik_5xx`, `check_traefik_latency`, `check_k8s_workloads`, `check_cluster_targets`, `check_cluster_prometheus` |
-| `checks/host.py` | `check_disk`, `check_cert`, `check_mem` and the `_host_origin_shortfall` floor with `_host_origin_streaks`, which `checks/host_thermal.py` reads qualified off this module |
+| `checks/host.py` | `check_disk`, `check_cert`, `check_mem` with its `with_claude_cgroups` arm, and the `_host_origin_shortfall` floor with `_host_origin_streaks`, which `checks/host_thermal.py` reads qualified off this module |
 | `checks/host_thermal.py` | `check_scrutiny` with `scrutiny_wear_devices`, `check_host_temp`, `check_ups` — the hardware-health arms |
 | `checks/host_edge.py` | `check_pi_pressure` with `with_pi_ports` and `_tcp_open`, `check_speedtest`. Both entry points take the prober as `tcp_open`, defaulting to `_tcp_open`, so a test injects a fake port map instead of patching a module global |
 | `checks/b2.py` | the `b2_*` family with `check_b2_reachable` (the `B2_DEPENDENT` gate) and `check_b2_storage`, and the probe caches `_b2_probe` / `_b2_storage` |
 | `checks/r2.py` | the `r2_*` family with `check_r2_usage`, `R2_QUERY`, and `_r2_probe` |
 | `checks/storage.py` | `check_longhorn_volumes`, `check_pvc_fullness` — the cluster storage layer |
 | `bridge/config.py` | the `_env`/`_int`/`_num`/`_env_file` parsers, `class Config(HostConfig, ServiceConfig, ClusterConfig, IoConfig)` and `load_config(env)` which composes the four builders. Its own fields are the ones every domain needs (interval, heartbeat, the three endpoint URLs) plus the check filter and the two reads a repo test greps for by text (`K8S_EXTENDED_RESOURCES`, `PVC_EXCLUDE`) |
-| `bridge/config_host.py` | `HostConfig` — disks, certificates, memory, SMART, hwmon temperatures, the UPS, the Pi, the speedtest, the host-origin coverage floors |
+| `bridge/config_host.py` | `HostConfig` — disks, certificates, memory, SMART, hwmon temperatures, the UPS, the Pi, the speedtest, the host-origin coverage floors, the Claude Code cgroup arm |
 | `bridge/config_service.py` | `ServiceConfig` — Traefik, n8n, the *arr stack, the deployer state dirs, the etcd drill, the staging backfill, Home Assistant |
 | `bridge/config_cluster.py` | `ClusterConfig` — the cluster Prometheus, the derived `PROM_ORIGIN` pin, the cAdvisor/target/workload/PVC floors, Longhorn, the restart windows |
 | `bridge/config_io.py` | `IoConfig` — B2, Cloudflare R2, the Loki ingestion and log-pattern arms, the shipper drop counters, the five Discord webhooks, SMTP |
@@ -994,6 +1015,7 @@ run loop alone on 2026-09-05).
 | `bridge/parsing.py` | duration/timestamp parsing, `endpoint_label`, `describe_fetch_failure` |
 | `verdicts/cluster.py` | `k8s_workloads_verdict`, `extended_resource_verdict`, `ksm_resource_label`, `targets_verdict` |
 | `verdicts/host.py` | `ups_health`, the `scrutiny_*` family, `pi_pressure` |
+| `verdicts/host_cgroups.py` | `claude_cgroup_verdict`. Its own module because `verdicts/host.py` sits at the 600-line cap — same split idiom as `checks/host_edge.py` |
 | `verdicts/service.py` | n8n streaks, `queue_warnings`, `indexers_down`, `gitops_alive`, the HA verdicts |
 | `verdicts/storage.py` | the B2 and R2 decisions (`b2_storage_verdict`, `r2_usage_verdict`, `r2_classify_operations` with the Class A/B/free ACTION LISTS beside it) and the cluster storage ones (`longhorn_redundancy_verdict`, `pvc_fullness_verdict`) |
 | `verdicts/logs.py` | `loki_ingestion_fresh`, `shipper_dropped` |
