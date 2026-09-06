@@ -60,3 +60,11 @@ Edit the `.j2` files, never the live config: homepage seeds any missing file int
 - The `docker.yaml` status dots have no k8s equivalent yet, so `docker.yaml.j2` renders empty
   and `services.yaml.j2` drops the matching `server:`/`container:` keys — tiles render
   dot-less rather than erroring on a `my-docker` host that does not exist here.
+- **The browser tab title comes from `title:` in `templates/config/settings.yaml.j2`, and
+  `Homepage` is the app's config-less default.** `src/pages/index.jsx:410` in gethomepage
+  v1.13.2 renders `initialSettings.title || "Homepage"`, and `getStaticProps` returns
+  `initialSettings: {}` from its own catch — so a tab reading `Homepage` says the page
+  rendered with NO settings, not that the setting was dropped. Next caches that render
+  (`x-nextjs-cache: HIT`, `cache-control: s-maxage=31536000`), so a bad one survives for the
+  pod's life and only a restart clears it. The `-m ui` smoke test pins the configured title
+  for exactly this reason; issue #1399 misread a `Homepage` failure as a stale expectation.

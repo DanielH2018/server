@@ -125,3 +125,47 @@ def test_close_closes_every_pipe_and_reaps_the_process():
     assert client.proc.stdout.closed, "stdout was left open"
     assert client.proc.stderr.closed, "stderr was left open"
     assert client.proc.poll() is not None, "the wrapper process was never reaped"
+
+
+def _report(service: str, domain: str, path: str, title: str) -> str:
+    """A navigate report shaped the way `assert_serves_ui` reads one."""
+    return (
+        f"- Page URL: https://{service}.local.{domain}{path}\n- Page Title: {title}\n"
+    )
+
+
+def test_assert_serves_ui_passes_on_the_expected_title():
+    """The accepting half: a page carrying its configured title raises nothing."""
+    smoke.assert_serves_ui(
+        _report("homepage", "example.com", "/", "My Awesome Homepage"),
+        False,
+        "example.com",
+        "homepage",
+        "My Awesome Homepage",
+        "/",
+        smoke.MINT_HINT,
+        observed_title="My Awesome Homepage",
+    )
+
+
+def test_assert_serves_ui_names_the_config_less_default_on_a_wrong_title():
+    """The rejecting half, and the reason the message says what it says.
+
+    `Homepage` is gethomepage's own fallback for a page rendered with no settings. Issue #1399
+    read exactly that failure as a stale expectation and proposed relaxing the check to match
+    it. The message has to send the next reader at the app's config, not at this line.
+    """
+    with pytest.raises(AssertionError) as excinfo:
+        smoke.assert_serves_ui(
+            _report("homepage", "example.com", "/", "Homepage"),
+            False,
+            "example.com",
+            "homepage",
+            "My Awesome Homepage",
+            "/",
+            smoke.MINT_HINT,
+            observed_title="Homepage",
+        )
+    message = str(excinfo.value)
+    assert "config-less default" in message
+    assert "do NOT relax this expectation" in message
