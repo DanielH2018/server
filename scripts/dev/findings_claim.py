@@ -118,11 +118,17 @@ def another_claim_blocks(issue: dict, worktree: str) -> bool:
     Cheap and pure, so `cmd_claim` reads it before paying for `_worktree_facts` — several git
     calls per registered worktree, on a batch where most issues are unclaimed.
 
-    A closed or `manual` issue answers False even when a claim sits on it: `plan_claim` is the
-    single authority on those two refusals, and reaping a claim off an issue it would refuse
-    anyway would release a claim to no purpose.
+    An issue `plan_claim` would refuse anyway answers False even when a claim sits on it:
+    `plan_claim` is the single authority on those refusals, and reaping a claim off such an
+    issue would post a release to no purpose. There are three — closed, `manual`, and outside
+    the `claude` register (#1277) — and this list has to stay level with `plan_claim`'s.
     """
-    if issue.get("state", "OPEN") != "OPEN" or "manual" in label_names(issue):
+    names = label_names(issue)
+    if (
+        issue.get("state", "OPEN") != "OPEN"
+        or "manual" in names
+        or "claude" not in names
+    ):
         return False
     held = current_claim(issue)
     return bool(held) and held != worktree
@@ -195,6 +201,11 @@ def _claim_age_days(issue: dict, held: str) -> int | None:
                 currently_held = worktree
                 if worktree == held:
                     claimed_at_comment = comment
+            # The same choice `current_claim` makes, and it has to stay the same: a body
+            # carrying both trailers holds the claim rather than releasing it. Grep
+            # `DECIDED: \`Claim:\` wins over \`Released:\`` in findings_model.py for the
+            # reasoning; `test_a_body_carrying_both_trailers_ages_the_claim_from_the_comment_
+            # that_opened_it` is what fails if the two diverge.
             continue
 
         m = _RELEASE_RE.search(body)

@@ -3,6 +3,10 @@
 Run: uv run pytest scripts/docs/tests/test_gen_reference_backlog.py
 """
 
+import re
+
+import pytest
+
 import build_docs
 from docs.reference import backlog as g
 
@@ -99,3 +103,17 @@ def test_main_writes_the_page_with_a_provenance_banner(tmp_path, monkeypatch):
 def test_build_docs_registers_the_backlog_page():
     outs = [out for _argv, out in build_docs.GENERATORS]
     assert "docs/reference/backlog.md" in outs
+
+
+def test_help_carries_the_docstring_summary(capsys):
+    """#1272: the description came from `__doc__.splitlines()[1]`, which is the BLANK line
+    after the summary, so `--help` printed usage and then straight to `positional arguments`
+    with nothing saying what the tool is for. Asserts the summary text rather than merely
+    "non-empty", so a description that goes blank again fails here.
+    """
+    with pytest.raises(SystemExit):
+        g.main(["--help"])
+    # argparse wraps the description at the terminal width and the formatter colours it, so
+    # the rendered text is compared with the escapes stripped and the whitespace collapsed.
+    plain = " ".join(re.sub(r"\x1b\[[0-9;]*m", "", capsys.readouterr().out).split())
+    assert "the open findings Claude filed as GitHub Issues" in plain

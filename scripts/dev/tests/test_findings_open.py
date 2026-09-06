@@ -11,10 +11,17 @@ import subprocess
 
 from _findings_fakes import Fakes
 from dev import findings
-from dev.findings_model import LABELS, PROJECT_TITLE, fingerprint, parse_verify_by
+from dev.findings_model import (
+    LABELS,
+    PROJECT_TITLE,
+    claim_comment,
+    fingerprint,
+    parse_verify_by,
+)
 from dev.findings_plans import is_project_failure, plan_open, without_project
 
 _LABELS = ["claude", "severity/high", "kind/gap"]
+_HOLDER = "worktree-issue-3"
 
 
 def _open_argv(body):
@@ -159,6 +166,47 @@ def test_open_cli_exits_3_on_accepted(tmp_path, capsys, issue, make_tools):
     assert findings.main(argv, tools) == 3
     assert "#3 accepted" in capsys.readouterr().out
     assert not calls.gh
+
+
+def test_open_cli_reopen_releases_a_claim_the_closed_issue_still_carries(
+    tmp_path, issue, make_tools
+):
+    """#1277 path 2. The closing mechanism the spec names is the PR body's `Closes #<n>`,
+    which GitHub honours directly — it posts no release comment and leaves the `claimed`
+    label on. `plan_open` then reopens that issue for a later re-observation, and the stale
+    claim comes back LIVE: it blocks `claim` and withholds the issue from `next` for as long
+    as the claiming worktree exists, which for an orchestrator can be a long time.
+    """
+    body = tmp_path / "b.md"
+    body.write_text("B")
+    fp = fingerprint("T", "a.py:1")
+    closed = issue(
+        3,
+        state="CLOSED",
+        labels=("claimed",),
+        fp=fp,
+        comments=[claim_comment(_HOLDER, None, "t")],
+    )
+    tools, calls = make_tools(Fakes(issues=[closed]))
+    argv = [*_open_argv(body), "--file", "a.py:1"]
+    assert findings.main(argv, tools) == 0
+    assert ["issue", "reopen", "3"] in calls.gh
+    assert any(f"Released: `{_HOLDER}`" in a for c in calls.gh for a in c)
+    assert ["issue", "edit", "3", "--remove-label", "claimed"] in calls.gh
+
+
+def test_open_cli_reopen_writes_no_release_when_nothing_holds_the_issue(
+    tmp_path, issue, make_tools
+):
+    """The rejecting half: an unclaimed reopen posts the regression note and nothing else."""
+    body = tmp_path / "b.md"
+    body.write_text("B")
+    fp = fingerprint("T", "a.py:1")
+    tools, calls = make_tools(Fakes(issues=[issue(3, state="CLOSED", fp=fp)]))
+    argv = [*_open_argv(body), "--file", "a.py:1"]
+    assert findings.main(argv, tools) == 0
+    assert ["issue", "reopen", "3"] in calls.gh
+    assert not any("Released: `" in a for c in calls.gh for a in c)
 
 
 def test_open_cli_prints_the_created_number(tmp_path, capsys, make_tools):

@@ -6,7 +6,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from _findings_fakes import Fakes, build_tools, facts, make_issue
+from _findings_fakes import (
+    Fakes,
+    build_tools,
+    facts,
+    fake_verify,
+    live_worktree,
+    make_issue,
+)
 
 from dev.findings import main
 from dev.findings_model import claim_comment
@@ -15,12 +22,15 @@ from dev.prune_worktrees import Worktree
 WT = "worktree-issue-1132"
 
 # No worktrees at all, so every claim reads stale. Git itself worked (`ok=True`).
+# `LIVE` is the counterpart cmd_claim needs: WT itself checked out and held by a live
+# session, so the stale-at-birth guard lets the claim through (#1278, #1281).
 STALE = facts()
+LIVE = live_worktree(WT)
 
 
 def test_claim_writes_a_comment_and_a_label():
     issue = make_issue(1132)
-    tools, calls = build_tools(Fakes(issues=[issue], view=issue))
+    tools, calls = build_tools(Fakes(issues=[issue], view=issue, worktree_facts=LIVE))
     assert main(["claim", "1132", "--worktree", WT], tools) == 0
     assert calls.gh[-2][:3] == ["issue", "comment", "1132"]
     assert calls.gh[-1] == ["issue", "edit", "1132", "--add-label", "claimed"]
@@ -31,7 +41,9 @@ def test_claim_creates_the_claimed_label_before_it_adds_it():
     # for this reason. Without it the FIRST real claim posts its comment, fails the label
     # edit, and the retry says "already claimed" — so the label is never added at all.
     issue = make_issue(1132)
-    tools, calls = build_tools(Fakes(issues=[issue], view=issue, labels=set()))
+    tools, calls = build_tools(
+        Fakes(issues=[issue], view=issue, labels=set(), worktree_facts=LIVE)
+    )
     main(["claim", "1132", "--worktree", WT], tools)
     created = [c for c in calls.gh if c[:2] == ["label", "create"]]
     assert any(c[2] == "claimed" for c in created)
@@ -42,7 +54,7 @@ def test_claim_creates_the_claimed_label_before_it_adds_it():
 
 def test_claim_refuses_a_manual_issue_and_exits_3(capsys):
     issue = make_issue(1132, labels=["manual"])
-    tools, calls = build_tools(Fakes(issues=[issue], view=issue))
+    tools, calls = build_tools(Fakes(issues=[issue], view=issue, worktree_facts=LIVE))
     assert main(["claim", "1132", "--worktree", WT], tools) == 3
     assert not any(c[:2] == ["issue", "comment"] for c in calls.gh)
     assert "manual" in capsys.readouterr().out
@@ -50,7 +62,9 @@ def test_claim_refuses_a_manual_issue_and_exits_3(capsys):
 
 def test_claim_takes_every_issue_it_can_and_still_exits_3_on_a_refusal():
     good, bad = make_issue(1132), make_issue(1140, labels=["manual"])
-    tools, calls = build_tools(Fakes(issues=[good, bad], view={1132: good, 1140: bad}))
+    tools, calls = build_tools(
+        Fakes(issues=[good, bad], view={1132: good, 1140: bad}, worktree_facts=LIVE)
+    )
     assert main(["claim", "1132", "1140", "--worktree", WT], tools) == 3
     assert any(c[:3] == ["issue", "comment", "1132"] for c in calls.gh)
     assert not any(c[:3] == ["issue", "comment", "1140"] for c in calls.gh)
@@ -58,14 +72,14 @@ def test_claim_takes_every_issue_it_can_and_still_exits_3_on_a_refusal():
 
 def test_claim_refuses_a_closed_issue():
     issue = make_issue(1132, state="CLOSED")
-    tools, calls = build_tools(Fakes(issues=[issue], view=issue))
+    tools, calls = build_tools(Fakes(issues=[issue], view=issue, worktree_facts=LIVE))
     assert main(["claim", "1132", "--worktree", WT], tools) == 3
     assert not any(c[:2] == ["issue", "comment"] for c in calls.gh)
 
 
 def test_dry_run_writes_nothing():
     issue = make_issue(1132)
-    tools, calls = build_tools(Fakes(issues=[issue], view=issue))
+    tools, calls = build_tools(Fakes(issues=[issue], view=issue, worktree_facts=LIVE))
     assert main(["claim", "1132", "--worktree", WT, "--dry-run"], tools) == 0
     assert calls.gh == []
 
@@ -164,7 +178,11 @@ def test_claim_loses_a_race_and_reports_who_won(capsys):
     before = make_issue(1132)
     after_rival_won = make_issue(1132, comments=[claim_comment(rival, None, "t")])
     tools, calls = build_tools(
-        Fakes(issues=[before], view={1132: [before, after_rival_won]})
+        Fakes(
+            issues=[before],
+            view={1132: [before, after_rival_won]},
+            worktree_facts=LIVE,
+        )
     )
     assert main(["claim", "1132", "--worktree", WT], tools) == 3
     assert f"lost the race to `{rival}`" in capsys.readouterr().out
@@ -271,3 +289,103 @@ def test_closing_a_claimed_issue_as_refuted_releases_before_it_closes():
     add_refuted = calls.gh.index(["issue", "edit", "1132", "--add-label", "refuted"])
     closed = next(i for i, c in enumerate(calls.gh) if c[:2] == ["issue", "close"])
     assert remove_claimed < add_refuted < closed
+
+
+# --- the stale-at-birth guard: #1278 and #1281, one guard ---------------------------------
+
+
+def test_claim_is_clean_when_the_worktree_is_live():
+    """The accepting half. `WT` is checked out and held, so the claim will read live."""
+    issue = make_issue(1132)
+    tools, calls = build_tools(Fakes(issues=[issue], view=issue, worktree_facts=LIVE))
+    assert main(["claim", "1132", "--worktree", WT], tools) == 0
+    assert any(f"Claim: `{WT}`" in a for c in calls.gh for a in c)
+
+
+def test_claim_is_flagged_when_the_worktree_name_matches_no_branch(capsys):
+    """#1278: the spec's own table puts worktree `issue-1132` beside branch
+    `worktree-issue-1132`, and `claim_is_live` matches on the BRANCH. So the wrong one of two
+    adjacent names wrote a claim that `claim_states` immediately called stale — `reap`
+    released it and `next` re-offered the issue while the session was still working it.
+    """
+    issue = make_issue(1132)
+    tools, calls = build_tools(
+        Fakes(issues=[issue], view=issue, worktree_facts=live_worktree(WT))
+    )
+    assert main(["claim", "1132", "--worktree", "issue-1132"], tools) == 3
+    assert "no worktree" in capsys.readouterr().err
+    assert calls.none()
+
+
+def test_claim_is_flagged_when_the_worktree_state_makes_the_claim_stale(capsys):
+    """#1281: the name matches a real branch, but `classify` calls it REMOVABLE.
+
+    Merged, clean and unlocked is what the primary checkout looks like (`--worktree master`)
+    and what a crashed-and-resumed orchestrator looks like — the lock names a pid and a
+    process start time, and a container restart on 2026-09-05 brought 14 worktrees back
+    without theirs. Distinct from the test above: there the name matches nothing at all.
+    """
+    tree = Worktree(path="/w/wt", head="abc", branch=WT, locked=False, lock_reason="")
+    issue = make_issue(1132)
+    tools, calls = build_tools(
+        Fakes(issues=[issue], view=issue, worktree_facts=facts([tree], merged=True))
+    )
+    assert main(["claim", "1132", "--worktree", WT], tools) == 3
+    assert "merged, clean, unlocked" in capsys.readouterr().err
+    assert calls.none()
+
+
+def test_claim_force_overrides_the_stale_at_birth_refusal():
+    """The way out. A resumed orchestrator legitimately re-claims without its lock, so the
+    guard is a door and not a wall — and the refusal message names this flag."""
+    issue = make_issue(1132)
+    tools, calls = build_tools(Fakes(issues=[issue], view=issue, worktree_facts=STALE))
+    assert main(["claim", "1132", "--worktree", WT, "--force"], tools) == 0
+    assert any(f"Claim: `{WT}`" in a for c in calls.gh for a in c)
+
+
+def test_claim_proceeds_when_the_worktree_read_fails(capsys):
+    """The guard fails OPEN, the opposite direction from `reap` and for the opposite reason.
+
+    `reap` WRITES on a bad read, so it refuses. This guard only declines to warn, and a
+    transient git error must not stop a session claiming work at all.
+    """
+    issue = make_issue(1132)
+    tools, calls = build_tools(
+        Fakes(issues=[issue], view=issue, worktree_facts=facts(ok=False))
+    )
+    assert main(["claim", "1132", "--worktree", WT], tools) == 0
+    assert "read failed" in capsys.readouterr().err
+    assert any(f"Claim: `{WT}`" in a for c in calls.gh for a in c)
+
+
+# --- #1277: every path that closes or reopens releases the claim ---------------------------
+
+
+def test_verify_close_releases_the_claim_it_closes():
+    """`verify --close` called `plan_close` directly, skipping the release `close` makes.
+
+    `claims`, `reap` and `next` all read OPEN issues, so the claim it left behind was
+    invisible to every view at once — and a later `open` reopening the issue brought it back
+    LIVE, blocking `claim` for as long as the claiming worktree existed.
+    """
+    issue = make_issue(
+        1132,
+        labels=["claimed"],
+        comments=[claim_comment(WT, None, "t")],
+    )
+    issue["body"] = "details\n\n## Verify-by\n```\ntrue\n```\n"
+    tools, calls = build_tools(Fakes(issues=[issue], view=issue, verify=fake_verify))
+    assert main(["verify", "1132", "--close"], tools) == 0
+    assert any(f"Released: `{WT}`" in a for c in calls.gh for a in c)
+    assert ["issue", "edit", "1132", "--remove-label", "claimed"] in calls.gh
+
+
+def test_verify_close_writes_no_release_for_an_unclaimed_issue():
+    """The rejecting half: nothing to release, so nothing is posted."""
+    issue = make_issue(1132)
+    issue["body"] = "details\n\n## Verify-by\n```\ntrue\n```\n"
+    tools, calls = build_tools(Fakes(issues=[issue], view=issue, verify=fake_verify))
+    assert main(["verify", "1132", "--close"], tools) == 0
+    assert not any("Released: `" in a for c in calls.gh for a in c)
+    assert any(c[:2] == ["issue", "close"] for c in calls.gh)

@@ -9,6 +9,7 @@ Run: uv run pytest scripts/dev/tests/test_findings.py
 """
 
 import json
+import re
 
 import pytest
 from _findings_fakes import Fakes
@@ -376,3 +377,18 @@ def test_main_requires_the_tools_seam():
     """
     with pytest.raises(TypeError):
         findings.main(["list"])  # ty: ignore[missing-argument]
+
+
+def test_help_carries_the_docstring_summary(capsys, make_tools):
+    """#1272: the description came from `__doc__.splitlines()[1]`, which is the BLANK line
+    after the summary, so `--help` printed usage and then straight to `positional arguments`
+    with nothing saying what this eleven-subcommand entry point is for. Asserts the summary
+    text rather than merely "non-empty", so a description that goes blank again fails here.
+    """
+    tools, _ = make_tools()
+    with pytest.raises(SystemExit):
+        findings.main(["--help"], tools)
+    # argparse wraps the description at the terminal width and the formatter colours it, so
+    # the rendered text is compared with the escapes stripped and the whitespace collapsed.
+    plain = " ".join(re.sub(r"\x1b\[[0-9;]*m", "", capsys.readouterr().out).split())
+    assert "close Claude's unfixed findings as GitHub Issues" in plain

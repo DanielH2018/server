@@ -111,17 +111,44 @@ Five new subcommands, plus a change to `list` and one to `close`. All of them ma
 `findings.py`'s plan-then-run split: the argv goes in `findings_plans.py`, the parsing in
 `findings_model.py`, the `gh` calls in `findings_gh.py`.
 
-### `claim <n>… --worktree <name> [--session <id>]`
+### `claim <n>… --worktree <name> [--session <id>] [--force]`
 
 Claims one or more issues for a worktree. Refuses an issue labelled `manual`. Refuses an issue
-already held by a different live claim. Prints what it took and what it refused.
+already held by a different live claim. Refuses an issue that lacks the `claude` label —
+`load_issues` filters on it, so a claim on an issue outside the register is invisible to
+`claims`, `reap` and `next` alike and only a hand-typed `release` could ever clear it. Prints
+what it took and what it refused.
 
 Exit 3 on refusal, matching the existing contract in the CLI that 3 means *nothing was written
 because the issue refuses it*.
 
+**It checks its own `--worktree` first.** A claim that reads STALE the moment it lands is worse
+than no claim, because it reads as protection: `next` re-offers the issue and `reap` releases
+it while the session is still working it. Two shapes reach that state, and one guard covers
+both. The name may match no branch at all — the attribution table below puts worktree
+`issue-1132` beside branch `worktree-issue-1132`, and the liveness rule matches on the branch.
+Or it may match a real branch whose state is REMOVABLE: `master` and every other primary
+checkout, which git never locks, and a crashed-and-resumed orchestrator, whose lock named a pid
+and a process start time that a restart does not bring back. Either way the guard exits 3 and
+names the reason. `--force` claims anyway, for the resumed orchestrator that legitimately still
+holds its work.
+
+A git read that FAILS does not refuse. This guard is advisory and only declines to warn, which
+is the opposite of `reap` — `reap` writes on a bad read, so it refuses outright.
+
 ### `release <n>… [--reason <text>]`
 
 The reverse state. Posts the release comment and removes the `claimed` label.
+
+### The `claimed` label is repaired, in both directions
+
+The comment is the claim; the label is decorative, and every read path uses `current_claim`.
+The two can still disagree, because `claim` posts the comment first and a failed
+`--add-label` — a rate limit, a transient 502 — leaves the claim held with the label off. So
+a reclaim that finds its own claim already posted plans the missing label edit rather than
+nothing, and a `release` that finds no claim but a stuck label plans the label removal rather
+than refusing. Without those, a label that went wrong once stayed wrong permanently and
+silently: a wrong answer for anyone filtering GitHub by `label:claimed`.
 
 ### `claims [--json]`
 
@@ -133,17 +160,33 @@ the way to see the state — a claim protocol with no way to list claims is a on
 Releases every stale claim, printing why each was judged stale. `--dry-run` plans and writes
 nothing, like every other command here.
 
-### `close` releases the claim it finds
+### Every path that closes or reopens releases the claim it finds
 
 Closing a claimed issue posts its release and drops the `claimed` label first. `claims`,
 `reap` and `next` all read open issues, so a claim stranded on a closed issue leaves every
 view at once — invisible rather than wrong, which is harder to notice.
+
+`close` is not the only such path, and the other two used to strand a claim exactly that way.
+`verify --close` called the close planner directly and skipped the release. And the closing
+mechanism this document itself names — the PR body's `Closes #<n>`, which GitHub honours —
+posts no release comment at all and leaves the label on; `open` then reopens that issue for a
+later re-observation and the stale claim comes back LIVE, blocking `claim` and withholding the
+issue from `next` for as long as the claiming worktree exists. All three now go through one
+helper, `_release_held_claim`, and release whoever holds the claim rather than only the caller.
+
+The reopen posts its release as its own comment rather than folding the trailer into the
+regression note, so no comment body ever carries a `Claim:` and a `Released:` line at once.
 
 ### `next [--limit N]`
 
 The picking command. Returns open issues that are: `claude`-labelled, not `manual`, not
 live-claimed, and not already referenced by an open PR, ordered by the existing
 `findings_model.sort_key`.
+
+**There is no default bound.** `--limit` defaulted to 10, and an orchestrator read
+`next --json`, took the ten rows for the whole free set, and never saw the twelve behind them.
+A view that truncates without saying so is blind to real state in the same way the stranded
+claims above are. `--limit N` is still there for anyone who wants a bounded list.
 
 An ad-hoc session runs this instead of eyeballing `list` and guessing. The open-PR check is
 what stops a session picking up work another session has already finished but not landed.
@@ -229,14 +272,9 @@ scope here.
    worktree name, because a subagent's worktree name is auto-generated and unknown until it
    starts — and a claim naming a worktree that does not exist yet would read as stale
    immediately. The orchestrator's worktree is live for the whole fan-out, so the claim is too.
-3. **Spawn.** One Opus agent per batch, spawned with `isolation: "worktree"` and
-   `model: "opus"` on the `Agent` call. Both are load-bearing and neither is a default: an
-   `Agent` call without `isolation` runs in the orchestrator's own checkout, so every agent
-   shares one working tree and commits over the others — the race the claim protocol assumes
-   away. The worktree it gets is auto-named, per the measurement below. The brief carries the
+3. **Spawn.** One Opus agent per batch, each in its own worktree — auto-named, per the
+   measurement below. The brief carries the
    issue bodies, the claim the agent already holds, the repo's `land-after-merge` contract, the
-   blocking wait on the `VERDICT:` line (a backgrounded `land.sh` with redirected output is not
-   a harness-tracked child, so nothing wakes the agent when it finishes), the
    `close --fixed` restriction above, and the instruction to file anything it does not fix with
    `findings.py open`.
 4. **Land.** Each agent goes all the way to a verified deploy. Every agent's `land.sh` queues on
