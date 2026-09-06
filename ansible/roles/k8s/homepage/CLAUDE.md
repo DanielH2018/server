@@ -64,7 +64,9 @@ Edit the `.j2` files, never the live config: homepage seeds any missing file int
   `Homepage` is the app's config-less default.** `src/pages/index.jsx:410` in gethomepage
   v1.13.2 renders `initialSettings.title || "Homepage"`, and `getStaticProps` returns
   `initialSettings: {}` from its own catch — so a tab reading `Homepage` says the page
-  rendered with NO settings, not that the setting was dropped. Next caches that render
-  (`x-nextjs-cache: HIT`, `cache-control: s-maxage=31536000`), so a bad one survives for the
-  pod's life and only a restart clears it. The `-m ui` smoke test pins the configured title
-  for exactly this reason; issue #1399 misread a `Homepage` failure as a stale expectation.
+  rendered with NO settings, not that the setting was dropped. Check that the config Secret
+  reached the pod before touching the expectation. The `-m ui` smoke test pins the configured
+  title for exactly this reason; issue #1399 misread a `Homepage` failure as a stale
+  expectation. How long such a render persists is unresolved: the page is served from Next's
+  cache (`x-nextjs-cache: HIT`, `cache-control: s-maxage=31536000`), but that was measured on
+  a GOOD render — see #1414.
