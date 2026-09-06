@@ -42,13 +42,22 @@ share a role, and the operator has approved the grouping.
 
 ## 2. Claim before spawning, under the orchestrator's own worktree name
 
-Read the orchestrator's own branch name first, as its own command — command substitution
-(`$(git branch --show-current)`) is rejected outright by the auto-approve classifier and would
-prompt on every claim:
+Read the orchestrator's own branch name first, as its own command, and in this spelling:
 
 ```bash
-git branch --show-current
+git rev-parse --abbrev-ref HEAD
 ```
+
+**`rev-parse` is the form that auto-approves; `git branch --show-current` is not.**
+`.claude/hooks/auto-approve-readonly.py` allows `rev-parse` (`read-only: git rev-parse`) and
+deliberately omits `git branch`, because the bare form lists while `git branch <name>` and
+`-D` mutate. Measured 2026-09-06 by feeding each command to that hook on stdin.
+
+Keep the name on its own line rather than substituting it into the `claim` call. Two separate
+mechanisms punish substitution, and neither is the read-only hook: the auto-mode classifier
+rejects `$(…)`, backticks and `${…}` outright, and the read-only hook returns no verdict at
+all for a command containing them. The `claim` call does not auto-approve either way, so
+substituting buys nothing and costs the rejection.
 
 Paste that name into a `claim` call per batch, run serially, before spawning anything:
 
@@ -73,8 +82,25 @@ worktree, and every refusal is named out loud, not silently dropped.
 
 ## 3. Spawn
 
-One Opus agent per batch. Each agent starts with none of this conversation's context, so its
-brief must carry, in full:
+One Opus agent per batch. Spawn each with `isolation: "worktree"` and `model: "opus"` on the
+`Agent` call:
+
+```
+Agent(subagent_type: "general-purpose", model: "opus", isolation: "worktree", prompt: <the brief below>)
+```
+
+**Both parameters are load-bearing, and neither is a default.** An `Agent` call without
+`isolation` runs in the orchestrator's own checkout, so N agents edit one working tree at
+once and each commits over the others — the hazard `CLAUDE.md`'s parallel-sessions section
+exists to prevent, and the one thing the claim protocol assumes is not happening. Without
+`model`, the agent inherits whatever the default subagent model is, which is not necessarily
+the Opus this skill's description promises.
+
+The worktree is auto-named `agent-<hash>` and cannot be named otherwise — see *Measured: a
+subagent cannot own a named worktree* in `docs/issue-claiming-and-fanout.md`. That is why the
+claim stays under the orchestrator's name and why the brief's first act below exists.
+
+Each agent starts with none of this conversation's context, so its brief must carry, in full:
 
 - The **issue bodies verbatim** — not a paraphrase, not a summary.
 - That the issues are **already claimed** under the orchestrator's worktree, and it must not
@@ -84,12 +110,26 @@ brief must carry, in full:
   the claim stays under the orchestrator's:
 
   ```bash
-  git branch --show-current
+  git rev-parse --abbrev-ref HEAD
   gh issue comment <n> --body "Worked by \`<its own branch>\`"
   ```
 
 - That `land.sh` (the `land-after-merge` skill) is the landing path, and a hook denies
   hand-polling CI.
+- **How to wait for the landing, verbatim.** A backgrounded `land.sh` with its output
+  redirected to a file is not a harness-tracked child, so nothing wakes the agent when it
+  finishes. An agent that ends its turn there leaves the landing unwatched and costs the
+  orchestrator a `SendMessage` resume per stop. Give every agent this command and tell it to
+  run it in the foreground, once, instead of ending its turn:
+
+  ```bash
+  timeout 1200 tail -f -n +1 <land.log> | grep -m1 '^VERDICT:'
+  ```
+
+  `grep -m1` exits on the first match and `tail` dies on SIGPIPE, so it returns the instant
+  the line appears rather than at the timeout. One call, no watcher, and it cannot poll CI.
+  Four of four agents stopped short on the 2026-09-06 fan-out without it (issue #1291);
+  supplying it ended the stopping in every case.
 - That `deploy.sh` exit 75 is a **resume point to retry**, not a failure to report.
 - That it closes a fixed issue with exactly `findings.py close <n> --fixed --pr <n>`, and may
   **not** use `--refuted` or `--accepted` — those are terminal and operator-only; an agent
@@ -102,8 +142,9 @@ and `claude-rc.service` carry independent 8G `MemoryHigh` caps (issue #1264), an
 throttles rather than kills, so an over-wide fan-out stalls in reclaim instead of failing loudly.
 Keep batches to what the triage step actually produced; don't split further just to add width.
 
-Done when: every batch has a spawned agent, and every brief names the claim already held, the
-comment it must post first, the landing path, and the close restriction.
+Done when: every batch has a spawned agent carrying both `isolation: "worktree"` and
+`model: "opus"`, and every brief names the claim already held, the comment it must post first,
+the landing path, the blocking-wait command, and the close restriction.
 
 ## 4. Land
 
