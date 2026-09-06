@@ -29,8 +29,8 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 
-from dev.findings_model import LABELS
-from dev.findings_tools import FindingsTools, run_verify
+from dev.findings_lib.issue_model import LABELS
+from dev.findings_lib.boundaries import FindingsTools, run_verify
 from dev.prune_worktrees import Worktree
 
 CREATED_URL = "https://github.com/o/r/issues/42"

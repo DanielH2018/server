@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from _findings_fakes import Fakes, build_tools, facts, make_issue, operator_comment
 
 from dev.findings import main
-from dev.findings_model import claim_comment, pickable, pr_refs
+from dev.findings_lib.issue_model import claim_comment, pickable, pr_refs
 
 WT = "worktree-issue-1132"
 

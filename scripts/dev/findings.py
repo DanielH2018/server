@@ -20,9 +20,9 @@ session can run without a prompt) does not clear — a command stored by `open` 
 validated there is still only ever run through that gate.
 
 This file is the CLI: the `cmd_*` handlers and the exit contract. Argument parsing is
-`findings_cli.py`, the vocabulary and the pure reads are `findings_model.py`, the gh argv are
-`findings_plans.py`, the gh calls are `findings_gh.py`, claim staleness is `findings_claim.py`,
-the four claim subcommands are `findings_claim_cli.py`, and verify-by is `findings_verify.py`.
+`findings_lib/cli.py`, the vocabulary and the pure reads are `findings_lib/issue_model.py`, the gh argv are
+`findings_lib/plans.py`, the gh calls are `findings_lib/gh_calls.py`, claim staleness is `findings_lib/claim.py`,
+the four claim subcommands are `findings_lib/claim_cli.py`, and verify-by is `findings_lib/verify.py`.
 
 Usage::
 
@@ -103,14 +103,14 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
-# DECIDED: the leaves are imported as `dev.<leaf>`, never as bare siblings.
+# DECIDED: the leaves are imported as `dev.findings_lib.<leaf>`, never as bare siblings.
 # `scripts/docs/reference/backlog.py` reaches this code as `dev.findings` with only
-# `scripts/` on sys.path, so a bare `from findings_model import ...` would raise
+# `scripts/` on sys.path, so a bare `from issue_model import ...` would raise
 # ModuleNotFoundError under the docs-refresh cron while pytest stayed green.
-from dev.findings_claim import claim_states
-from dev.findings_claim_cli import cmd_claim, cmd_claims, cmd_reap, cmd_release
-from dev.findings_cli import _parser
-from dev.findings_gh import (
+from dev.findings_lib.claim import claim_states
+from dev.findings_lib.claim_cli import cmd_claim, cmd_claims, cmd_reap, cmd_release
+from dev.findings_lib.cli import _parser
+from dev.findings_lib.gh_calls import (
     _create_with_optional_project,
     _existing_labels,
     _load_issue,
@@ -118,7 +118,7 @@ from dev.findings_gh import (
     open_pr_refs,
     run,
 )
-from dev.findings_model import (
+from dev.findings_lib.issue_model import (
     NO_REOPEN,
     current_claim,
     now_iso,
@@ -129,15 +129,15 @@ from dev.findings_model import (
     pickable,
     sort_key,
 )
-from dev.findings_plans import (
+from dev.findings_lib.plans import (
     plan_close,
     plan_open,
     plan_release,
     plan_sync_labels,
     plan_touch,
 )
-from dev.findings_tools import FindingsTools
-from dev.findings_verify import (
+from dev.findings_lib.boundaries import FindingsTools
+from dev.findings_lib.verify import (
     verify_close_comment,
     verify_finding,
 )
@@ -548,6 +548,6 @@ def main(argv: list[str] | None, tools: FindingsTools) -> int:
 if __name__ == "__main__":
     # The ONE site that builds the real boundaries for this module. `main` takes them as a
     # required argument so a library caller that forgets `tools` fails with a TypeError here
-    # rather than reaching real `gh` and real subprocesses. `findings_gh.load_issues` keeps its
+    # rather than reaching real `gh` and real subprocesses. `gh_calls.load_issues` keeps its
     # own default because `scripts/docs/reference/backlog.py` is a second production entry.
     raise SystemExit(main(None, FindingsTools()))

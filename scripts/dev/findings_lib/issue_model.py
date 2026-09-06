@@ -5,8 +5,8 @@ and the trailer that carries it live here rather than beside the code that files
 same goes for the `## Verify-by` section: `findings.py open` writes it and `findings.py
 verify` reads it back, and neither owns the format.
 
-Everything here takes plain values and returns plain values. `findings_plans.py` turns these
-answers into gh argv, `findings_gh.py` runs them, and `findings.py` is the CLI over both.
+Everything here takes plain values and returns plain values. `findings_lib/plans.py` turns these
+answers into gh argv, `findings_lib/gh_calls.py` runs them, and `findings.py` is the CLI over both.
 """
 
 import hashlib
@@ -223,7 +223,7 @@ def now_iso() -> str:
     """The `when` every claim and release comment is stamped with.
 
     Lives beside the two comment builders that consume it: `findings.py` and
-    `findings_claim_cli.py` both stamp comments, and a private `_now` in one of them would
+    `findings_lib/claim_cli.py` both stamp comments, and a private `_now` in one of them would
     have to be imported across a CLI boundary by the other.
     """
     return datetime.now(UTC).isoformat()
@@ -263,7 +263,7 @@ COMMENT_PAGE_CAP = 100
 def comment_cap_warning(issue: dict) -> str | None:
     """A warning when ``issue`` carries as many comments as gh will return, else None.
 
-    Pure, so `findings_gh` decides where it is printed and the rule itself is testable
+    Pure, so `gh_calls` decides where it is printed and the rule itself is testable
     without a boundary.
     """
     n = len(issue.get("comments", []))
@@ -288,7 +288,7 @@ def ordered_comments(issue: dict) -> list[dict]:
     Fixtures routinely omit `createdAt`, so the mixed list is not hypothetical. When any
     comment lacks one, gh's own order stands — exactly the behaviour that shipped before.
 
-    `current_claim` and `_claim_age_days` in findings_claim.py carry the identical fold and
+    `current_claim` and `_claim_age_days` in findings_lib/claim.py carry the identical fold and
     must consume the identical order, or a `claims` row ages a claim the register does not
     think exists.
     """
@@ -335,7 +335,7 @@ def current_claim(issue: dict) -> str | None:
             # ambiguity is the one direction that hands live work to a second session,
             # which is the harm this protocol exists to prevent. This `continue` is what
             # implements the choice, so it is not a tidy-up — dropping it inverts the
-            # verdict. `_claim_age_days` in findings_claim.py carries the identical fold
+            # verdict. `_claim_age_days` in findings_lib/claim.py carries the identical fold
             # and must keep the identical skip, or a `claims` row ages a claim the
             # register does not think exists.
             continue

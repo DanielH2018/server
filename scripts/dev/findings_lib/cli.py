@@ -1,7 +1,7 @@
 """The argparse construction for `findings.py`: every subparser, no boundary calls.
 
 Pure argument-parsing, split out of `findings.py` to keep that file under its 600-line cap.
-`findings.py` imports `_parser` from here as `dev.findings_cli` (never as a bare sibling),
+`findings.py` imports `_parser` from here as `dev.findings_lib.cli` (never as a bare sibling),
 the same DECIDED rule that governs its other cross-module imports — `scripts/docs/reference/
 backlog.py` reaches `findings.py` with only `scripts/` on `sys.path`.
 """
@@ -14,10 +14,10 @@ from pathlib import Path
 import sys as _sys
 from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
-from dev.findings_model import DOMAINS, KINDS, SEVERITIES
-from dev.findings_verify import DEFAULT_VERIFY_TIMEOUT
+from dev.findings_lib.issue_model import DOMAINS, KINDS, SEVERITIES
+from dev.findings_lib.verify import DEFAULT_VERIFY_TIMEOUT
 
 
 def _add_dry_run(parser: argparse.ArgumentParser, *, suppress: bool) -> None:

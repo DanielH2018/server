@@ -31,7 +31,7 @@ from typing import Any
 import sys as _sys
 from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from dev.prune_worktrees import _worktree_facts
 from lib.gh import gh, gh_json

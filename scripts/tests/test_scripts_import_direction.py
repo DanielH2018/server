@@ -68,11 +68,11 @@ FACADE_EDGES = frozenset(
         ("docs.gen_doc_fragments", "docs.fragment_readers"),
         ("docs.gen_doc_fragments", "docs.fragment_renderers"),
         # scripts/dev/findings.py over the findings_* leaves.
-        ("dev.findings", "dev.findings_gh"),
-        ("dev.findings", "dev.findings_model"),
-        ("dev.findings", "dev.findings_plans"),
-        ("dev.findings", "dev.findings_tools"),
-        ("dev.findings", "dev.findings_verify"),
+        ("dev.findings", "dev.findings_lib.gh_calls"),
+        ("dev.findings", "dev.findings_lib.issue_model"),
+        ("dev.findings", "dev.findings_lib.plans"),
+        ("dev.findings", "dev.findings_lib.boundaries"),
+        ("dev.findings", "dev.findings_lib.verify"),
         # probe_lib/longhorn.py over the three modules split out of its 630 lines.
         ("diagnostics.probe_lib.longhorn", "diagnostics.probe_lib.longhorn_blocks"),
         ("diagnostics.probe_lib.longhorn", "diagnostics.probe_lib.longhorn_budget"),

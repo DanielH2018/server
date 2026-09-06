@@ -5,7 +5,7 @@ is the path production takes and the union with `_FALLBACK_VERIFY_RE` is the thi
 proving. The CLI tests answer the shell from `fake_verify` instead, so a run of this file
 spawns no processes.
 
-Run: uv run pytest scripts/dev/tests/test_findings_verify.py
+Run: uv run pytest scripts/dev/tests/test_findings_lib/verify.py
 """
 
 import subprocess
@@ -14,9 +14,9 @@ from _findings_fakes import Fakes, facts, fake_verify, live_worktree
 from dev import findings
 import pytest
 
-from dev.findings_model import parse_verify_by, trailer, verify_by_section
-from dev.findings_tools import FindingsTools
-from dev.findings_verify import (
+from dev.findings_lib.issue_model import parse_verify_by, trailer, verify_by_section
+from dev.findings_lib.boundaries import FindingsTools
+from dev.findings_lib.verify import (
     classify_verify_command,
     run_verify_by,
     verify_close_comment,

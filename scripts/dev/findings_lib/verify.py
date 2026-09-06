@@ -22,10 +22,10 @@ from collections.abc import Callable
 import sys as _sys
 from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
-from dev.findings_model import parse_verify_by
-from dev.findings_tools import FindingsTools
+from dev.findings_lib.issue_model import parse_verify_by
+from dev.findings_lib.boundaries import FindingsTools
 from lib.repo_paths import REPO
 
 _READONLY_HOOK = REPO / ".claude" / "hooks" / "auto-approve-readonly.py"

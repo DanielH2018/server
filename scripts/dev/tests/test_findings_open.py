@@ -11,14 +11,14 @@ import subprocess
 
 from _findings_fakes import Fakes
 from dev import findings
-from dev.findings_model import (
+from dev.findings_lib.issue_model import (
     LABELS,
     PROJECT_TITLE,
     claim_comment,
     fingerprint,
     parse_verify_by,
 )
-from dev.findings_plans import is_project_failure, plan_open, without_project
+from dev.findings_lib.plans import is_project_failure, plan_open, without_project
 
 _LABELS = ["claude", "severity/high", "kind/gap"]
 _HOLDER = "worktree-issue-3"

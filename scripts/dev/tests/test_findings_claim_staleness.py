@@ -13,8 +13,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from _findings_fakes import foreign_comment, operator_comment
 
-from dev.findings_claim import claim_is_live, claim_states
-from dev.findings_model import claim_comment, release_comment
+from dev.findings_lib.claim import claim_is_live, claim_states
+from dev.findings_lib.issue_model import claim_comment, release_comment
 from dev.prune_worktrees import Worktree, _memoised_merged
 
 WT = "worktree-issue-1132"
