@@ -38,14 +38,18 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
   gates (prometheus, loki_reachable, b2_reachable, cluster_prometheus) and pushes
   `status=up|down&msg=…` to one Kuma push monitor each:
   - **Prometheus Reachable** (a trivial `vector(1)` instant query — the root-cause GATE for the
-    prom-dependent checks. Evaluated FIRST each cycle: when Prometheus is unreachable, the ten
-    prom-dependent checks (disk/cert/memory/restarts/oom/cpu/targets/traefik5xx/ups/
-    shipper_dropped) are
+    prom-dependent checks. Evaluated FIRST each cycle: when Prometheus is unreachable, every
+    prom-dependent check (disk/cert/memory/restarts/oom/cpu/targets/traefik5xx/traefik_404/ups/
+    host_temp/shipper_dropped/longhorn_volumes/kubelet_plugin_readonly) is
     **suppressed** — pushed `up` with a "skipped — Prometheus unreachable" msg so their push-monitor
     heartbeats stay alive — and only THIS monitor pages. Without the gate one Prometheus outage
-    fires all ten at once: one root cause, a ten-monitor alert storm. A single scrape target down
-    (Prometheus up, one exporter gone) still surfaces separately on Scrape Targets. The
-    `PROM_DEPENDENT` set is guarded by a test against the live `CHECKS` so it can't drift.)
+    fires all of them at once: one root cause, one page per dependent check. A single scrape
+    target down (Prometheus up, one exporter gone) still surfaces separately on Scrape Targets.
+    The `PROM_DEPENDENT` set is guarded by a test against the live `CHECKS` so it can't drift,
+    and `tests/test_claude_md_prom_dependent_enumeration.py` pins the enumeration above to that
+    set so this prose can't drift either. It carried a hardcoded count of ten while the set held
+    more (#1359); the enumeration replaces the count because a count nothing reads goes stale
+    silently, and this one had.)
   - **Root Disk** (`node_filesystem_*` for `/`, `/boot` **and `/boot/efi`** — old kernels
     filling /boot quietly breaks upgrades, and a full ESP breaks firmware/bootloader
     updates the same way; server-only, the Pi's disk lives in the Pi Pressure check)
