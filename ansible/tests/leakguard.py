@@ -24,6 +24,17 @@ Two probes, both installed before the first test runs:
 
 Either probe firing fails the test that caused it, by nodeid, at teardown.
 
+An exemption lifts BOTH probes. `pytest_runtest_setup` asks `_runs_against_live_infra` once
+and writes the answer to `_state["exempt"]` in the same branch that picks the PATH, so the
+socket probe and the shims cannot disagree. They did disagree between 2026-09-02 and
+2026-09-06: the `ui` marker lifted the shims alone, so a `ui` test making an in-process
+request failed with `LEAKGUARD: blocked a network connect to (...)` — a message naming the
+guard but not the exemption meant to cover it. `guarded_connect` reads the flag as `is True`,
+which keeps the guard on wherever no test owns the process: collection, session-scoped
+fixtures, and the window before the first test's setup. Teardown deliberately leaves the flag
+alone; this hook runs before pytest finalizes fixtures, so clearing it here would fire the
+guard inside a `ui` fixture's own teardown.
+
 ## Two rules that keep it from breaking CI
 
 **Only a binary that already exists gets a shim.** Several tests skip on
@@ -128,6 +139,15 @@ exit 127
 _state: dict[str, object] = {}
 
 
+def _is_exempt() -> bool:
+    """True while the running test is one `_runs_against_live_infra` exempted.
+
+    `is True` rather than a truthiness test: an absent key means no test owns the process, and
+    the guard must stay on there.
+    """
+    return _state.get("exempt") is True
+
+
 def _is_loopback(address: object) -> bool:
     """True for anything that does not leave this host.
 
@@ -174,13 +194,13 @@ def pytest_configure(config: pytest.Config) -> None:
     real_connect_ex = socket.socket.connect_ex
 
     def guarded_connect(self, address):  # type: ignore[no-untyped-def]
-        if not _is_loopback(address):
+        if not _is_loopback(address) and not _is_exempt():
             _record(f"socket connect {address!r}")
             raise RuntimeError(f"LEAKGUARD: blocked a network connect to {address!r}")
         return real_connect(self, address)
 
     def guarded_connect_ex(self, address):  # type: ignore[no-untyped-def]
-        if not _is_loopback(address):
+        if not _is_loopback(address) and not _is_exempt():
             _record(f"socket connect_ex {address!r}")
             raise RuntimeError(f"LEAKGUARD: blocked a network connect to {address!r}")
         return real_connect_ex(self, address)
@@ -221,10 +241,10 @@ def pytest_runtest_setup(item: pytest.Item) -> None:
     # hand this test's calls to whichever test ran next. The five allowlisted tests all skip
     # on a runner with no cluster, so that path is exercised in CI and not here.
     _marks()[item.nodeid] = len(_calls_seen())
-    if _runs_against_live_infra(item):
-        os.environ["PATH"] = real_path
-    else:
-        os.environ["PATH"] = f"{stub_dir}:{real_path}"
+    # One decision, both probes. See the module docstring for why teardown does not clear it.
+    exempt = _runs_against_live_infra(item)
+    _state["exempt"] = exempt
+    os.environ["PATH"] = real_path if exempt else f"{stub_dir}:{real_path}"
 
 
 def pytest_runtest_teardown(item: pytest.Item) -> None:
