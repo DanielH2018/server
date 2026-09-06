@@ -128,8 +128,21 @@ def test_the_web_wrapper_exports_the_notify_url_under_the_name_scrutiny_reads():
     )
 
 
+# The census this guard scans is found by glob, so a rename or a move would hand it an empty
+# set and every assertion below would pass without running. Name the two templates that carry
+# the notify wiring: a failure then says which one went missing, not that a count moved.
+MUST_SCAN = frozenset({"secret.yaml.j2", "web.yaml.j2"})
+
+
 def test_no_manifest_sets_the_deprecated_notify_level():
-    for tpl in sorted(ROLE.rglob("*.j2")):
+    templates = sorted(ROLE.rglob("*.j2"))
+    missing = MUST_SCAN - {tpl.name for tpl in templates}
+    assert not missing, (
+        f"{sorted(missing)} is not under {ROLE}/templates any more, so this guard is scanning "
+        "a set that no longer holds the notify wiring"
+    )
+
+    for tpl in templates:
         assert "SCRUTINY_NOTIFY_LEVEL" not in tpl.read_text(), (
             f"{tpl} sets SCRUTINY_NOTIFY_LEVEL. Upstream's ValidateConfig rejects `notify.level` "
             "with a ConfigValidationError at startup — the pod would crashloop. The level is a "
