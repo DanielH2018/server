@@ -15,10 +15,18 @@ noticed instead of silently going quiet. See repo-root `CLAUDE.md` for shared co
   watching that), and it independently matches the migrating-state shape — Recreate + a real
   RWO PVC seeded through `k8s/volume-claim`.
 - **Secrets** (SOPS keys, not values): `healthchecks_smtp_user`, `healthchecks_password`
-  (the seed superuser).
+  (the seed superuser), `healthchecks_discord_webhook_url` (the notification channel).
 
 ## Notable
-- Outbound email is broken on purpose right now: `healthchecks_smtp_password` was retired
+- **Alerts leave over Discord, and the channel is declared rather than clicked.** A
+  Healthchecks integration is a `Channel` row in hc.sqlite on the PVC, so a hand-made one
+  disappears with a Longhorn restore and nothing says so. `files/seed_discord_channel.py`
+  writes it on every deploy: `tasks/main.yml` waits for the rollout, then pipes the script
+  into `manage.py shell` in the pod. The webhook URL reaches the script through the pod's
+  environment (`HOMELAB_DISCORD_WEBHOOK_URL` in `templates/secret.yaml.j2`), never on a
+  command line, so no transcript can capture it. The script assigns the channel to every
+  check in every project, additively — a check assigned by hand keeps its assignment.
+- Outbound email is broken on purpose: `healthchecks_smtp_password` was retired
   2026-08-30 after the credential turned up in transcript plaintext, but Django still reads
   `EMAIL_HOST`/`PORT`/`USE_TLS` from the Deployment, so it attempts SMTP auth and fails
   rather than skipping send — the same broken state as before the retirement, not a new one.
@@ -29,4 +37,8 @@ noticed instead of silently going quiet. See repo-root `CLAUDE.md` for shared co
 ## Editing
 - Manifests: `templates/deployment.yaml.j2`, `templates/ingressroute.yaml.j2`,
   `templates/secret.yaml.j2`, `templates/service.yaml.j2`.
+- Notification channel: `files/seed_discord_channel.py`, tested by
+  `tests/test_seed_discord_channel.py` (`uv run pytest ansible/roles/k8s/healthchecks/tests`).
+  Renaming `CHANNEL_NAME` orphans the live row and creates a second one — the match is on
+  (project, kind, name).
 - Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "healthchecks"`.
