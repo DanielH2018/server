@@ -6,6 +6,24 @@ Authelia guards most public routes as a Traefik forward-auth middleware. See rep
 **Deploy tag:** `--tags "authelia"`. Denylisted from GitOps auto-deploy (platform — SSO/OIDC
 gate; a failed deploy locks out access to everything behind it, including the tools to fix it).
 
+## OIDC clients
+
+Two relying parties, both in `templates/config-secret.yaml.j2` behind
+`authelia_k8s_manage_oidc`:
+
+- `jellyfin` — `two_factor`, `client_secret_post` (the SSO plugin's PAR asymmetry, see the
+  comment at the block).
+- `grafana` — `one_factor`, `client_secret_basic`, `consent_mode: implicit`. The policy
+  matches the `*.local.<domain>` access_control rule the Grafana route already falls under;
+  `two_factor` here would stall the headless `-m ui` browser on a TOTP prompt no test can
+  answer. Grafana's half of the wiring, and why `root_url` pins the callback to the LAN name,
+  is in `roles/k8s/claude-otel/CLAUDE.md`.
+
+Each client's secret is stored hashed. The digest is minted once with Authelia's own CLI —
+`authelia crypto hash generate pbkdf2 --variant sha512` — and the plaintext goes to the app,
+so a client that needs both (Grafana does; Jellyfin's plaintext lives in its plugin config)
+takes two SOPS keys that rotate together.
+
 ## Traps
 
 ### The one-time code lives in the pod's notification.txt

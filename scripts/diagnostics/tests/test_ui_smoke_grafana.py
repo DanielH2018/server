@@ -10,21 +10,20 @@ The tiers in `test_ui_smoke.py` stop at Grafana's login page, which proves ingre
 sat behind a 1/1 pod for 55 minutes, and a login-page check cannot see them. This tier logs in
 and counts rendered panels.
 
-`admin` + the SOPS `grafana_admin_password`, POSTed to Grafana's own `/login` from inside the
-page. Same origin, so the Authelia cookie `ui_mcp.sh` already minted rides along and no route
-has to be opened up for a machine caller. **The password never leaves this process and the MCP
-server**: it is inlined into the evaluated JS, which the server echoes back in its reply, so
-every path that could surface that reply scrubs it first (`_scrub`).
+**No credential is typed anywhere.** Grafana logs in through Authelia's OIDC provider
+(issue #1374), so this tier navigates to `/login/generic_oauth` and the Authelia session
+`ui_mcp.sh` already minted completes the round trip on its own. It used to POST the SOPS
+`grafana_admin_password` into the page and scrub it out of every reply the MCP server echoed
+back; that whole apparatus is gone with the second login it existed to perform.
 
     uv run pytest -m ui -k grafana
 
 That command is also how a Claude session verifies a Grafana board it changed — driving the
-browser by hand lands on `/login`, and the only way past it there is typing the admin password
-into a tool call, which puts a live credential in the session transcript. See
-`docs/claude-tooling.md` -> *The Grafana panel tier*.
+browser by hand still lands on Grafana's own login page, because the admin form stays on for
+the public route and for an Authelia outage. See `docs/claude-tooling.md` -> *The Grafana
+panel tier*.
 """
 
-import json
 import os
 import sys
 import time
@@ -97,24 +96,12 @@ class GrafanaPage:
     An evaluate that returns parsed JSON, and a navigate that survives the un-mounted race.
     """
 
-    def __init__(self, client: McpClient, base: str, secret: str) -> None:
+    def __init__(self, client: McpClient, base: str) -> None:
         self.client = client
         self.base = base
-        self._secret = secret
-
-    def _scrub(self, text: str) -> str:
-        return text.replace(self._secret, "<redacted>")
 
     def evaluate(self, js: str):
-        """The client's evaluate, with the password kept out of anything it raises.
-
-        The server echoes the JS it ran, and this tier's login inlines the credential into
-        that JS, so every failure message from here has to be scrubbed before it surfaces.
-        """
-        try:
-            return self.client.evaluate(js)
-        except AssertionError as exc:
-            raise AssertionError(self._scrub(str(exc))) from None
+        return self.client.evaluate(js)
 
     def _settle_on_grafana(self) -> str:
         """Navigate to Grafana and return once the page really is Grafana.
@@ -170,34 +157,29 @@ class GrafanaPage:
             " return JSON.stringify((await r.json()).login); }" % self._FETCH
         )
 
-    def login(self) -> str:
-        """Make sure the browser holds a Grafana session, and return whose it is.
+    def login(self, expected: str) -> str:
+        """Make sure the browser holds Grafana session for `expected`, and return whose it is.
 
-        **Checked before it is minted, not after.** Grafana registers `POST /login` behind
-        its not-signed-in middleware, so the endpoint that mints a session answers 404 once
-        one exists — and `ui_mcp.sh`'s browser profile carries the previous run's session.
-        Posting unconditionally therefore fails on every run after the first, with a 404 that
-        reads like a wrong password.
+        `ui_mcp.sh`'s browser profile carries the previous run's Grafana session, which may
+        belong to someone else — the admin account this tier used to log into, or a user from
+        before a role change. Signing out first makes the run deterministic; the OIDC hop that
+        follows costs one redirect chain, because the Authelia session is already held.
         """
         self._settle_on_grafana()
+        if self._signed_in_as() != expected:
+            self.client.navigate(self.base + "/logout")
+            # A full navigation, not a fetch: Grafana answers /login/generic_oauth with a
+            # 302 to Authelia's authorize endpoint, and only the browser can carry the
+            # Authelia cookie through that chain and back to the callback.
+            self.client.navigate(self.base + "/login/generic_oauth")
+            self._settle_on_grafana()
         who = self._signed_in_as()
-        if who:
-            return who
-        status = self.evaluate(
-            "async () => { const fetchOk = %s;"
-            " const r = await fetchOk('/login', {method: 'POST',"
-            " headers: {'content-type': 'application/json'},"
-            " body: JSON.stringify({user: 'admin', password: %s})});"
-            " return r ? r.status : 421; }" % (self._FETCH, json.dumps(self._secret))
+        assert who, (
+            "the Authelia OIDC round trip left Grafana with no session. Either the browser's "
+            "Authelia cookie lapsed — re-mint it with `uv run python "
+            "scripts/diagnostics/ui_login.py` — or the `grafana` client in Authelia and the "
+            "GF_AUTH_GENERIC_OAUTH_* env have drifted apart."
         )
-        assert status == 200, (
-            f"Grafana rejected the admin login with HTTP {status}. The SOPS "
-            f"`grafana_admin_password` and the live `grafana-admin` Secret have diverged — "
-            f"`kubectl apply` leaves stale Secret keys, so a rotation that was never applied "
-            f"looks exactly like this."
-        )
-        who = self._signed_in_as()
-        assert who, "Grafana accepted the login but /api/user still reports no session"
         return who
 
     def open_dashboard(self, uid: str, min_headers: int):
@@ -226,19 +208,20 @@ class GrafanaPage:
 
 @pytest.fixture(scope="module")
 def grafana(domain):
-    """A Grafana logged in as admin, or a skip when the credential is not readable.
+    """A Grafana logged in as the Authelia user, or a skip when SOPS is unreadable.
 
     Module-scoped for the same reason `browser` is: one Chromium and one login for the
-    whole tier.
+    whole tier. The Authelia username is read from SOPS only to know who the OIDC round trip
+    should have produced — it is an identifier, not a credential, and nothing types it in.
     """
     from diagnostics.probe_lib import core
 
     try:
-        password = core.sops_extract("grafana_admin_password")
+        expected = core.sops_extract("authelia_user")
     except (
         Exception
     ) as exc:  # a host with no age key, which is not a Grafana regression
-        pytest.skip(f"cannot read grafana_admin_password from SOPS: {exc}")
+        pytest.skip(f"cannot read authelia_user from SOPS: {exc}")
 
     client = McpClient([str(WRAPPER)])
     try:
@@ -251,9 +234,10 @@ def grafana(domain):
             },
         )
         client.notify("notifications/initialized")
-        page = GrafanaPage(client, f"https://grafana.local.{domain}", password)
-        assert page.login() == "admin", (
-            "logged into Grafana as someone other than admin"
+        page = GrafanaPage(client, f"https://grafana.local.{domain}")
+        assert page.login(expected) == expected, (
+            "Grafana logged in as someone other than the Authelia user — check "
+            "GF_AUTH_GENERIC_OAUTH_LOGIN_ATTRIBUTE_PATH and the client's `profile` scope"
         )
         yield page
     finally:

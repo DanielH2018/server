@@ -28,11 +28,12 @@ k8s_autodeploy_reason: "platform — SSO/OIDC gate; a failed deploy locks out ac
 # an emptyDir under the pod's fsGroup is group-writable and Authelia runs in that group.
 authelia_k8s_manage_crowdsec: true
 
-# The OpenID Connect provider block, and the one relying party it serves — Jellyfin. False
-# for a cluster whose subset holds no OIDC client: the block is then dead configuration whose
-# only effect is to demand three credentials (`authelia_oidc_hmac_secret`,
-# `authelia_oidc_rsa_key_content`, `authelia_client_password_hash`) that such a cluster has no
-# reason to hold. Turning it off is what lets staging's secrets file stay small, which is the
+# The OpenID Connect provider block, and the relying parties it serves — Jellyfin and
+# Grafana. False for a cluster whose subset holds no OIDC client: the block is then dead
+# configuration whose only effect is to demand four credentials
+# (`authelia_oidc_hmac_secret`, `authelia_oidc_rsa_key_content`,
+# `authelia_client_password_hash`, `grafana_oidc_client_secret_hash`) that such a cluster has
+# no reason to hold. Turning it off is what lets staging's secrets file stay small, which is the
 # point of Decision 5 in docs/staging-cluster.md.
 #
 # It gates the config block, not the portal: forward-auth, the session store and the user

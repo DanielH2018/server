@@ -11,6 +11,33 @@ read them. Their Services stay ClusterIP; the `hostIP` pin is what keeps the nod
 listener off the LAN. Tempo's second port (otlp-grpc 4317) has no `hostPort` on purpose:
 the collector owns 4317, and two hostPorts on one number wedge a pod in `Pending`.
 
+## Grafana logs in through Authelia (OIDC), and the admin form stays on
+
+Grafana is an OIDC client of the Authelia portal — client `grafana` in
+`roles/k8s/authelia/templates/config-secret.yaml.j2`, `GF_AUTH_GENERIC_OAUTH_*` in
+`templates/grafana.yaml.j2`. Forward-auth is unchanged and still runs in front of the route;
+what OIDC removes is the SECOND login Grafana asked for after Authelia had already
+authenticated the request. The Authelia `admins` group maps to Grafana Admin, every other
+authenticated user to Viewer.
+
+**`GF_SERVER_ROOT_URL` names the LAN host, and that is the whole design constraint.** Grafana
+builds its OAuth callback from `root_url` alone and does not vary it by request Host, so one
+of the two routes can carry the OIDC login. The LAN name wins because it is what the `-m ui`
+suite drives and what a browser on this network should reach without a round trip through
+Cloudflare. The consequence, stated plainly: **`grafana.<domain>` cannot complete an OAuth
+login.** That is why `GF_AUTH_DISABLE_LOGIN_FORM` and auto-login are deliberately absent —
+the admin form is the public path in, and the break-glass path when Authelia is down. Moving
+`root_url` to the public name flips which route works; the Authelia client already registers
+both callbacks, so nothing else has to change.
+
+Two settings are written twice and fail silently when they drift — `require_pkce` against
+`GF_AUTH_GENERIC_OAUTH_USE_PKCE`, and the client's `groups` scope against
+`ROLE_ATTRIBUTE_PATH`. `ansible/tests/services/test_grafana_authelia_oidc.py` holds both
+roles to them. The client secret is one credential in two SOPS keys:
+`grafana_oidc_client_secret` (plaintext, into the `grafana-admin` Secret) and
+`grafana_oidc_client_secret_hash` (the pbkdf2 digest Authelia's config holds). Rotate them
+together.
+
 ## Dashboards
 
 `files/dashboards/**/*.json` is the source of truth for every provisioned board, in six
