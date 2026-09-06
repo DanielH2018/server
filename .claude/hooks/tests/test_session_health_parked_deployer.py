@@ -168,6 +168,23 @@ def test_a_dirty_line_survives_a_failing_marker_read():
     assert "is dirty" in lines[0]
 
 
+def test_the_real_status_read_takes_no_optional_locks_on_the_shared_checkout():
+    """The default `status` seam must pass `--no-optional-locks`, before the subcommand.
+
+    A plain `git status` refreshes and WRITES `.git/index` in the tree it reads. This hook reads
+    the SHARED primary checkout from inside a worktree session, so without the flag it would
+    write the one tree the isolation guard exists to keep a worktree session out of, and could
+    collide on `index.lock` with the deployer's own `merge --ff-only`. This asserts the real
+    default rather than an injected fake, because the flag is exactly what a fake would hide.
+    """
+    argv = _mod.PRIMARY_STATUS_ARGV
+    assert argv[0] == "--no-optional-locks", f"a lock-taking status read: {argv}"
+    assert argv[1] == "status", (
+        "the flag is global to git and must precede the subcommand"
+    )
+    assert "--porcelain" in argv
+
+
 def test_both_lines_are_reported_together():
     lines = _problems(porcelain=_DIRTY, marker="bec43b1c 0.0", now=1e6)
     assert len(lines) == 2
