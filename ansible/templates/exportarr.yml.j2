@@ -19,14 +19,23 @@
 
    Invoke at the container-list indent, e.g.:
 
-       {{ exportarr('sonarr', sonarr_exportarr_image, container_item.port) }}
+       {{ exportarr('sonarr', sonarr_exportarr_image, container_item.port,
+                    additional_metrics=true) }}
 #}
-{% macro exportarr(app, image, app_port, metrics_port=9707) -%}
+{% macro exportarr(app, image, app_port, metrics_port=9707, additional_metrics=false) -%}
 - name: exportarr
           image: {{ image }}
           # The subcommand selects the API dialect — sonarr/radarr/prowlarr speak different
           # versions (v3/v3/v1) and expose different collectors.
-          args: ["{{ app }}"]
+          #
+          # `additional_metrics` is a PER-APP parameter, not a blanket arg, because the flag
+          # only buys something on sonarr. It gates sonarr's episode collector — the
+          # `sonarr_episode_monitored_total` / `_unmonitored_total` / `_qualities_total`
+          # series a quality-mix chart needs — and upstream annotates it `(slow)`: the
+          # collector then issues two extra app API calls (`episodefile`, `episode`) per
+          # series per scrape. radarr's collector has no such block and prowlarr's has none
+          # either, so passing it there would cost a flag's worth of drift for no series.
+          args: ["{{ app }}"{% if additional_metrics %}, "--enable-additional-metrics"{% endif %}]
           ports:
             - name: metrics
               containerPort: {{ metrics_port }}

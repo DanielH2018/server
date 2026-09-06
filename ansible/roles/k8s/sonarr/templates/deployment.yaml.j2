@@ -84,7 +84,7 @@ spec:
             initialDelaySeconds: 60
             periodSeconds: 30
 {{ container_resources(cpu_limit=sonarr_k8s_cpu_limit, mem_limit=sonarr_k8s_mem_limit, cpu_request=sonarr_k8s_cpu_request, mem_request=sonarr_k8s_mem_request) }}
-        {{ exportarr('sonarr', sonarr_exportarr_image, container_item.port) }}
+        {{ exportarr('sonarr', sonarr_exportarr_image, container_item.port, additional_metrics=true) }}
       volumes:
         - name: sonarr-config
           persistentVolumeClaim:

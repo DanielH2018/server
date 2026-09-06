@@ -164,6 +164,50 @@ def test_the_image_pins_stay_in_lockstep():
     assert len(set(pins.values())) == 1, f"exportarr pins have drifted: {pins}"
 
 
+def _sidecar_args():
+    """{role: the exportarr sidecar's rendered args} for the three *arr Deployments."""
+    args = {}
+    for role, name, doc in _docs():
+        if doc.get("kind") != "Deployment" or role not in ARRS:
+            continue
+        if name != "deployment.yaml.j2":
+            continue
+        for container in doc["spec"]["template"]["spec"]["containers"]:
+            if container.get("name") == "exportarr":
+                args[role] = container["args"]
+    return args
+
+
+def test_only_sonarr_enables_the_additional_metrics_collector():
+    """The flag is per-app, and both halves of that are assertions.
+
+    `--enable-additional-metrics` gates sonarr's episode collector, which is what publishes
+    `sonarr_episode_qualities_total`. Upstream annotates it `(slow)`: the collector issues two
+    extra app API calls per series per scrape. radarr's and prowlarr's collectors have no such
+    block, so the flag buys them nothing and would only add scrape cost — which is why the
+    shared macro takes a parameter rather than a blanket arg.
+
+    Non-vacuity first: a renamed role would otherwise leave both halves passing over an empty
+    set, which is the failure mode that broke nine guards in six pull requests.
+    """
+    args = _sidecar_args()
+    assert set(args) == set(ARRS), (
+        f"rendered no exportarr sidecar for {sorted(set(ARRS) - set(args))} — this guard "
+        "would pass vacuously"
+    )
+
+    flag = "--enable-additional-metrics"
+    assert flag in args["sonarr"], (
+        f"sonarr's exportarr must carry {flag}; without it the scrape publishes no "
+        f"sonarr_episode_qualities_total. Got {args['sonarr']}"
+    )
+    for arr in ("radarr", "prowlarr"):
+        assert flag not in args[arr], (
+            f"{arr}'s exportarr must NOT carry {flag} — its collector has no block behind "
+            f"the flag, so it is pure scrape cost. Got {args[arr]}"
+        )
+
+
 def test_prometheus_scrapes_the_sidecars_by_port_not_by_app_label():
     """Selecting on `app` would also match the *arr's own container port.
 
