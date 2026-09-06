@@ -24,6 +24,18 @@ To change a board: edit the JSON here (or edit in the Grafana UI and round-trip 
 `sudo k3s kubectl`, so expect a sudo prompt), then deploy **claude-otel**.
 `scripts/grafana/fetch_grafana_dashboards.py` refreshes the two community boards (1860, 14282).
 
+**A board in a folder `claude_otel_dashboard_folders` does not list is provisioned nowhere.**
+`tasks/dashboards.yml` bakes one ConfigMap per listed folder and the Deployment mounts each by
+explicit volume name, so the deploy stays green and the board simply never appears. ENFORCED by
+`ansible/tests/services/test_dashboard_folders_are_mounted.py`.
+
+**`Apps/exportarr-arr-stack.json` charts no queue depth, and that is the exporter's limit rather
+than an omission.** The three sidecars run without `--enable-additional-metrics`, so the scrape
+carries no `*_queue_*` series at all — verified live 2026-09-06 against `job="exportarr"`. Adding
+the flag costs an extra API call per scrape per app; issue #1380 holds that trade-off. Its
+`Open health issues` tiles read `sum(...) or vector(0)` because a `*_system_health_issues` series
+is ABSENT when an app is clean, and an absent series renders an empty tile rather than a zero.
+
 Every dashboard's datasource ref must resolve to a uid declared in this role's
 `templates/grafana.yaml.j2` — the `validate-grafana-dashboards` prek hook parses that file
 as the uid registry and fails on an unresolved reference, which is how a hand-imported
