@@ -200,7 +200,17 @@ def reconcile_denylist(state: DeployerState, config: Config, head: str) -> bool:
     Returns:
         True when a re-render ran (whether or not it succeeded), False when nothing was needed.
     """
-    if not config.k8s_autodeploy_enabled:
+    # DECIDED: the gate is the FILE-level flag (`k8s_autodeploy_enabled_in_file`), never the
+    # post-disarm `k8s_autodeploy_enabled`. `gitops_deploy.py` flips the latter to False when the
+    # rendered denylist is empty — fail-closed, so a truncated config.env cannot widen what
+    # auto-deploys. Gating here on the flipped value made that one state unhealable: a config.env
+    # that LOST its denylist line disarmed the very reconcile whose re-render is the repair, and
+    # the host stayed that way until an operator ran `initial_setup.yml --tags gitops_deploy`
+    # (issue #1317). Reading the file-level flag keeps the three states apart — the file says
+    # off, so skip; the file says on with no denylist, so re-render; the file says on with a
+    # denylist, so compare. A host that legitimately has auto-deploy off still renders nothing,
+    # on any tick, because its file flag is false.
+    if not config.k8s_autodeploy_enabled_in_file:
         return False
     if state.read("denylist_rendered") == head:
         # Both halves of the once-per-SHA guard: the per-role `git show` reads below (64 roles as of 2026-09-06) are skipped on

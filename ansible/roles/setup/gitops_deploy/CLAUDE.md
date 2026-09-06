@@ -253,9 +253,19 @@ stay).
     checkout's own HEAD — and re-renders when it does not, by running `initial_setup.yml --tags
     gitops_deploy` itself. Stating it against HEAD rather than origin is what makes it fixable:
     the render reads the working tree, so it can only ever produce HEAD's list. The heal
-    therefore lands on the tick AFTER the ff-merge, which is normally an idle one. Four
+    therefore lands on the tick AFTER the ff-merge, which is normally an idle one. Six
     properties are worth knowing before changing it:
 
+    - **It gates on the FILE-level enable flag, not the one the fail-closed disarm leaves
+      behind.** `gitops_deploy.py` flips `K8S_AUTODEPLOY_ENABLED` to False when the rendered
+      denylist is empty, so a config.env that LOST its denylist line used to disarm the very
+      reconcile whose re-render is the repair, and the host stayed that way until an operator
+      re-rendered by hand (#1317). `Config` therefore carries both values — the parsed one as
+      `k8s_autodeploy_enabled_in_file`, the post-disarm one as `k8s_autodeploy_enabled` — off
+      the same single config.env key. Three states, kept apart: the file says off, so skip; the
+      file says on with no denylist, so re-render; the file says on with a denylist, so compare.
+      `_promote_k8s_auto_deploys` still reads the post-disarm value, so the damaged state heals
+      without promoting anything.
     - **It passes `gitops_deploy_kick_after_change=false`.** Rendering config.env notifies this
       role's "Run gitops-deploy once" handler, whose `systemctl start` blocks on the activation
       the render is running under. Without the flag the heal self-deadlocks until its timeout.
