@@ -33,6 +33,24 @@ Edit the `.j2` files, never the live config: homepage seeds any missing file int
   as `homepage_k8s_headlamp_cluster_query`. That call is cross-namespace, so
   `prometheus-callers` (`roles/k8s/netpol-baseline/templates/networkpolicy-prometheus.yaml.j2`)
   names `homepage` — a widget-proxy error on that tile is the symptom of it being dropped.
+- **A widget dialling a ClusterIP needs the target's NetworkPolicy to name `app: homepage`.**
+  The namespace baseline admits traefik and prometheus, so pod-to-pod from homepage is denied by
+  default and the tile fails as a widget-proxy error while homepage stays 1/1. ENFORCED by
+  `ansible/tests/services/test_homepage_widget_netpol_edges.py`, which resolves each widget URL's
+  Service to the pod label it selects and checks the rendered policies.
+- **The longhorn widget dials `longhorn-frontend`, not `longhorn-backend`.** Longhorn's own
+  chart-owned `longhorn-manager` policy admits six same-namespace components and nothing else, and
+  editing it means editing an object the Longhorn deploy would revert. `longhorn-frontend` is
+  selected by no policy at all and proxies `/v1` through as `app: longhorn-ui`, which that policy
+  does admit. The node-local-manager trap does not apply here: the caller is a pod and the target
+  is the frontend Service.
+- **Four widgets are deliberately absent**, each blocked on a credential rather than on plumbing:
+  traefik (#1383 — `api.insecure: false` and the `DECIDED:` marker in
+  `roles/k8s/traefik/templates/dashboard-ingressroute.yaml.j2` mean `/api` is served nowhere the
+  widget can reach), grafana (#1384 — needs a service-account token; only the admin password
+  exists), crowdsec (#1385 — a LAPI machine credential is read/write on decisions) and
+  healthchecks (#1386 — needs a project API key created in the UI). Read the issue before adding
+  one; each records why it was not simply plumbed in.
 - The `docker.yaml` status dots have no k8s equivalent yet, so `docker.yaml.j2` renders empty
   and `services.yaml.j2` drops the matching `server:`/`container:` keys — tiles render
   dot-less rather than erroring on a `my-docker` host that does not exist here.

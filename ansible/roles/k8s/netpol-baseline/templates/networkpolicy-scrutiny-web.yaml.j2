@@ -7,6 +7,11 @@
 #                        cross-node pod -> ClusterIP -> pod both preserve the source pod IP here.
 #   monitor-bridge     — SCRUTINY_URL=http://scrutiny…:8080 (monitor-bridge/templates/
 #                        env-secret.yaml.j2) drives the Kuma disk-health tile.
+#   homepage           — the `scrutiny` dashboard widget (homepage/templates/services.yaml.j2)
+#                        reads /api/summary. It dials the ClusterIP rather than a Traefik route
+#                        because scrutiny's native route is Authelia-gated, so this rule is the
+#                        only thing admitting it; fenced out, the tile renders a widget-proxy
+#                        error that reads nothing like a NetworkPolicy problem.
 #
 # NOTE THE NAMES DIVERGE: the Service is `scrutiny`, the pod label is `app: scrutiny-web`. A
 # policy written against the Service name would select nothing and fence nothing.
@@ -35,6 +40,9 @@ spec:
         - podSelector:
             matchLabels:
               app: monitor-bridge
+        - podSelector:
+            matchLabels:
+              app: homepage
       ports:
         - port: 8080
           protocol: TCP
