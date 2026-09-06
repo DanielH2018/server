@@ -8,7 +8,16 @@ today" — see CLAUDE.md's "Python & Tests" on non-vacuity.
 Run: uv run pytest scripts/diagnostics/tests/test_probe_registry.py
 """
 
+import os
+import sys
+
 import pytest
+
+# `scripts/diagnostics` is deliberately absent from `pythonpath` in pyproject.toml, so this
+# module puts its own parent directory on `sys.path` — the insert every sibling here carries.
+# (`diagnostics.probe_lib` and `lib.cli_registry` below resolve through `scripts`, which IS on
+# `pythonpath`; the bare `probe` does not.)
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import probe
 from diagnostics import probe_lib

@@ -9,8 +9,14 @@ Run: uv run pytest scripts/diagnostics/tests/test_postflight.py
 """
 
 import json
+import os
+import sys
 
 import pytest
+
+# `scripts/diagnostics` is deliberately absent from `pythonpath` in pyproject.toml, so this
+# module puts its own parent directory on `sys.path` — the insert every sibling here carries.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import postflight
 
