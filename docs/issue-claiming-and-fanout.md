@@ -272,9 +272,14 @@ scope here.
    worktree name, because a subagent's worktree name is auto-generated and unknown until it
    starts — and a claim naming a worktree that does not exist yet would read as stale
    immediately. The orchestrator's worktree is live for the whole fan-out, so the claim is too.
-3. **Spawn.** One Opus agent per batch, each in its own worktree — auto-named, per the
-   measurement below. The brief carries the
+3. **Spawn.** One Opus agent per batch, spawned with `isolation: "worktree"` and
+   `model: "opus"` on the `Agent` call. Both are load-bearing and neither is a default: an
+   `Agent` call without `isolation` runs in the orchestrator's own checkout, so every agent
+   shares one working tree and commits over the others — the race the claim protocol assumes
+   away. The worktree it gets is auto-named, per the measurement below. The brief carries the
    issue bodies, the claim the agent already holds, the repo's `land-after-merge` contract, the
+   blocking wait on the `VERDICT:` line (a backgrounded `land.sh` with redirected output is not
+   a harness-tracked child, so nothing wakes the agent when it finishes), the
    `close --fixed` restriction above, and the instruction to file anything it does not fix with
    `findings.py open`.
 4. **Land.** Each agent goes all the way to a verified deploy. Every agent's `land.sh` queues on
