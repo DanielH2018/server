@@ -37,10 +37,18 @@ spec:
           # No _FILE convention in scrutiny, so a wrapper exports the influxdb token from
           # the Secret mount before exec'ing the binary — same idiom as the Docker copy
           # (there: keeping it out of docker-proxy-readable Env; here: out of the pod spec).
+          # SCRUTINY_NOTIFY_URLS rides the same wrapper for the same reason: it embeds the
+          # Discord webhook token. The name is `SCRUTINY_` + the dotted config path, and the
+          # path is top-level `notify.urls` — NOT `web.notify.urls`, so `SCRUTINY_WEB_NOTIFY_URLS`
+          # would render, boot and notify nothing. Upstream's `c.SetDefault("notify.urls", ...)`
+          # in webapp/backend/pkg/config/config.go is the source. Viper reads the single-URL
+          # string into the []string it expects. `notify.level` is deliberately NOT set: upstream
+          # rejects it at startup (ConfigValidationError, same file) — the level moved to the
+          # dashboard Settings page, which is SQLite state in the config PVC.
           command:
             - /bin/sh
             - -c
-            - 'export SCRUTINY_WEB_INFLUXDB_TOKEN="$(cat /etc/scrutiny-secrets/influxdb_token)"; exec /opt/scrutiny/bin/scrutiny start'
+            - 'export SCRUTINY_WEB_INFLUXDB_TOKEN="$(cat /etc/scrutiny-secrets/influxdb_token)"; export SCRUTINY_NOTIFY_URLS="$(cat /etc/scrutiny-secrets/notify_url)"; exec /opt/scrutiny/bin/scrutiny start'
           # Runs as root writing its SQLite config DB + WAL in the PVC mount; the
           # Docker copy leaned on the default cap set for the same reason.
 {{ hardened_security_context(add=['DAC_OVERRIDE']) }}
