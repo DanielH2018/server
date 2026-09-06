@@ -87,17 +87,22 @@ split. Two limits specific to a *brand-new* service:
   Those need a real deploy, gated with
   `uv run python scripts/diagnostics/probe.py health <name>`.
 
-**A role declaring `k8s_autodeploy: false` needs one more command, after it lands on master:**
+**A role declaring `k8s_autodeploy: false` heals itself within two ticks, but you can render it
+now.** The deployer re-renders its own config.env when the baked denylist disagrees with the
+declarations at its checkout's HEAD (`deploy_phases.reconcile_denylist`, #1294), so the command
+below is what you run to skip the wait — roughly ten minutes after the tick fast-forwards your
+role in — rather than the only thing that ever fixes it. Run it after the role lands on master:
 
 ```bash
 uv run ansible-playbook ansible/initial_setup.yml --tags gitops_deploy
 ```
 
 The denylist is baked into `/etc/gitops-deploy/config.env`, and only that playbook renders it.
-`deploy.sh` runs deploy.yml, which runs no setup role, so the new role's declaration never
-reaches the host on its own. Until you re-render, the deployer reads a denylist at origin that
-disagrees with its own config and disarms image-pin auto-deploy for **every** service, not just
-the new one, logging to `journalctl -u gitops-deploy.service`:
+`deploy.sh` runs deploy.yml, which runs no setup role, so the new role's declaration reaches the
+host only through that playbook — by your hand here, or by the deployer running it for itself on
+the tick after the fast-forward. Until it is re-rendered, the deployer reads a denylist at origin
+that disagrees with its own config and disarms image-pin auto-deploy for **every** service, not
+just the new one, logging to `journalctl -u gitops-deploy.service`:
 
 ```
 k8s auto-deploy disarmed — stale denylist (denied at origin but not in config: ['<name>'])
