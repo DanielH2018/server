@@ -232,7 +232,7 @@ the backend is reached, so only the logged-in identity shows the OIDC round trip
 
 **This tier is still how a Claude session verifies a Grafana board.** A
 `mcp__homelab-ui__browser_navigate` to `/d/<uid>/` lands on Grafana's own login page — the
-admin form stays on for the public route and as break-glass — and getting past it by hand
+admin form stays on as break-glass and as the intended public path — and getting past it by hand
 means clicking "Sign in with Authelia" and then re-checking the panels anyway. The tier does
 both in Python. Run it instead:
 

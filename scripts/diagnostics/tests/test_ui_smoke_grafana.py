@@ -11,17 +11,20 @@ sat behind a 1/1 pod for 55 minutes, and a login-page check cannot see them. Thi
 and counts rendered panels.
 
 **No credential is typed anywhere.** Grafana logs in through Authelia's OIDC provider
-(issue #1374), so this tier navigates to `/login/generic_oauth` and the Authelia session
-`ui_mcp.sh` already minted completes the round trip on its own. It used to POST the SOPS
-`grafana_admin_password` into the page and scrub it out of every reply the MCP server echoed
-back; that whole apparatus is gone with the second login it existed to perform.
+(issue #1374), so this tier signs out and navigates to `/login/generic_oauth`, and the Authelia
+session `ui_mcp.sh` already minted completes the round trip on its own. It used to POST the
+SOPS `grafana_admin_password` into the page and scrub it out of every reply the MCP server
+echoed back; that whole apparatus is gone with the second login it existed to perform.
+
+The sign-out is not tidiness. Grafana's session cookie persists in the browser profile for
+days, so reusing it would skip the Authelia hop on every run after the first and leave a tier
+that claims to exercise OIDC while exercising nothing.
 
     uv run pytest -m ui -k grafana
 
 That command is also how a Claude session verifies a Grafana board it changed — driving the
-browser by hand still lands on Grafana's own login page, because the admin form stays on for
-the public route and for an Authelia outage. See `docs/claude-tooling.md` -> *The Grafana
-panel tier*.
+browser by hand still lands on Grafana's own login page, because the admin form stays on as
+break-glass. See `docs/claude-tooling.md` -> *The Grafana panel tier*.
 """
 
 import os
@@ -157,22 +160,23 @@ class GrafanaPage:
             " return JSON.stringify((await r.json()).login); }" % self._FETCH
         )
 
-    def login(self, expected: str) -> str:
-        """Make sure the browser holds Grafana session for `expected`, and return whose it is.
+    def login(self) -> str:
+        """Log in through Authelia and return the identity Grafana ended up with.
 
-        `ui_mcp.sh`'s browser profile carries the previous run's Grafana session, which may
-        belong to someone else — the admin account this tier used to log into, or a user from
-        before a role change. Signing out first makes the run deterministic; the OIDC hop that
-        follows costs one redirect chain, because the Authelia session is already held.
+        **Unconditionally, even when the browser already holds a Grafana session.**
+        `ui_mcp.sh`'s profile persists Grafana's session cookie and Grafana's default lifetime
+        is days, so a reuse shortcut here would skip the Authelia round trip on every run
+        after the first — leaving a tier that claims to exercise OIDC and does not, which is
+        exactly how a broken login would go unnoticed. The hop costs one redirect chain,
+        because the Authelia session is already held.
         """
         self._settle_on_grafana()
-        if self._signed_in_as() != expected:
-            self.client.navigate(self.base + "/logout")
-            # A full navigation, not a fetch: Grafana answers /login/generic_oauth with a
-            # 302 to Authelia's authorize endpoint, and only the browser can carry the
-            # Authelia cookie through that chain and back to the callback.
-            self.client.navigate(self.base + "/login/generic_oauth")
-            self._settle_on_grafana()
+        self.client.navigate(self.base + "/logout")
+        # A full navigation, not a fetch: Grafana answers /login/generic_oauth with a
+        # 302 to Authelia's authorize endpoint, and only the browser can carry the
+        # Authelia cookie through that chain and back to the callback.
+        self.client.navigate(self.base + "/login/generic_oauth")
+        self._settle_on_grafana()
         who = self._signed_in_as()
         assert who, (
             "the Authelia OIDC round trip left Grafana with no session. Either the browser's "
@@ -235,7 +239,7 @@ def grafana(domain):
         )
         client.notify("notifications/initialized")
         page = GrafanaPage(client, f"https://grafana.local.{domain}")
-        assert page.login(expected) == expected, (
+        assert page.login() == expected, (
             "Grafana logged in as someone other than the Authelia user — check "
             "GF_AUTH_GENERIC_OAUTH_LOGIN_ATTRIBUTE_PATH and the client's `profile` scope"
         )

@@ -26,18 +26,30 @@ of the two routes can carry the OIDC login. The LAN name wins because it is what
 suite drives and what a browser on this network should reach without a round trip through
 Cloudflare. The consequence, stated plainly: **`grafana.<domain>` cannot complete an OAuth
 login.** That is why `GF_AUTH_DISABLE_LOGIN_FORM` and auto-login are deliberately absent —
-the admin form is the public path in, and the break-glass path when Authelia is down. Moving
-`root_url` to the public name flips which route works; the Authelia client already registers
-both callbacks, so nothing else has to change.
+the admin form is the intended public path in, and the break-glass path when Authelia is down.
+Moving `root_url` to the public name flips which route works; the Authelia client already
+registers both callbacks, so nothing else has to change.
 
-**Granting the `groups` scope does not deliver the `groups` claim.** Authelia keeps it out of
-the ID token by default and serves it from the userinfo endpoint; Grafana evaluates
-`role_attribute_path` against the ID token FIRST and stops at the first value the expression
-yields. This expression always yields one, because `|| 'Viewer'` fires when the claim is
-simply absent — so userinfo is never consulted and every user is a Viewer. It shipped that way
-on 2026-09-06 behind a green pod, a green health gate and a passing `-m ui` suite;
-`/api/user/orgs` reporting the role is what caught it. The fix is the `with_groups`
-`claims_policy` on the Authelia client, which hydrates the claim into the ID token.
+**UNVERIFIED since `root_url` was set (2026-09-06): whether an admin-form login on
+`grafana.<domain>` still lands somewhere reachable.** Grafana derives its post-login redirect
+from `root_url`, which now names the LAN host, so a public login may bounce the user to a name
+that does not resolve outside the network. Checking it costs a TOTP — the `*.<domain>`
+access_control rule is `two_factor` — and the `homelab-ui` browser pins only
+`*.local.<domain>`, so nobody has. Test it before relying on the public route.
+
+**Granting the `groups` scope does not deliver the `groups` claim.** Measured on 2026-09-06,
+both times through a real login: with the scope alone a user in `admins` got
+`[{"orgId":1,"name":"Main Org.","role":"Viewer"}]` from `/api/user/orgs`; with the `with_groups`
+`claims_policy` added to the Authelia client, the same user got `Admin`. Nothing else changed.
+The Viewer version shipped behind a green pod, a green health gate and a passing `-m ui` suite —
+none of which can see a role, which is why `/api/user/orgs` is the check.
+
+The working hypothesis for *why*, not itself measured: Authelia keeps `groups` out of the ID
+token by default and serves it from userinfo, Grafana evaluates `role_attribute_path` against
+the ID token first, and this expression always yields a value there because `|| 'Viewer'` fires
+when the claim is absent — so userinfo is never consulted. Confirming that needs
+`GF_LOG_FILTERS=oauth.generic_oauth:debug` and a deploy. **Do not drop the claims policy on the
+strength of this paragraph**; the two measurements above are what the config rests on.
 
 Three settings are written twice and fail silently when they drift — `require_pkce` against
 `GF_AUTH_GENERIC_OAUTH_USE_PKCE`, the client's `groups` scope against `ROLE_ATTRIBUTE_PATH`,
