@@ -90,12 +90,39 @@ jellyfin_k8s_anisync_version: "4.4.0.0"
 # against the actual download, not copied on trust.
 jellyfin_k8s_anisync_url: "https://github.com/vosmiic/jellyfin-ani-sync/releases/download/v4.4/10.11.11.-.ani-sync_4.4.0.0.zip"
 jellyfin_k8s_anisync_md5: "0d398377b33c27840c021779497c72dc"
-# The installer runs on python, not the alpine:3.24 the sibling init container uses. See the
-# deployment template for why: the release is a .zip and /config is owned by uid {{ puid }}, so
-# an alpine container would need `apk add unzip` as root — and root there holds no
-# DAC_OVERRIDE and so could not write what it had unpacked. Named here rather than written
-# into the template because Renovate's k8s-defaults manager only scans defaults/main.yml.
-jellyfin_k8s_anisync_init_image: python:3.14-alpine@sha256:c6ead215bfd31f1e433d968853b7a769989117115b728874824e6c0a27cb96fc
+# ── Intro Skipper (skip-intro / skip-credits media segments) ────────────────────────────────
+# Detects intro and credit sequences by audio fingerprint and publishes them through Jellyfin's
+# Media Segments API. Every client that speaks that API then draws the skip button itself —
+# upstream's README states plainly that "as of Jellyfin 10.10, Intro Skipper does NOT modify
+# the UI", so there is no index.html injection here and `/usr/share/jellyfin/web` is never
+# written. That is what lets this install stay a plain file drop into the config volume.
+#
+# The release line is per JELLYFIN version, not per plugin version: upstream tags are
+# `10.11/v1.10.11.23` and `12.0/v12.0.2.8`, two lines maintained in parallel. Take the 10.11
+# line while jellyfin_k8s_image is a 10.11 build; a 12.0 asset declares a targetAbi the loader
+# rejects, silently, exactly as the ani-sync note above describes.
+jellyfin_k8s_introskipper_version: "1.10.11.23"
+# The zip carries ONLY IntroSkipper.dll — no meta.json, unlike the ani-sync release. The init
+# container writes one from the fields below, so Jellyfin reads the plugin's real GUID and name
+# instead of falling back to a manifest it derives from the directory name (that fallback sets
+# the id to an MD5 of the folder and AutoUpdate to false).
+jellyfin_k8s_introskipper_target_abi: "10.11.11.0"
+jellyfin_k8s_introskipper_guid: "c83d86bb-a1e0-4c35-a113-e2101cf4ee6b"
+# URL and targetAbi come from the plugin's published manifest
+# (github.com/intro-skipper/manifest, 10.11/manifest.json). The checksum does NOT: upstream
+# publishes an MD5 there, and this pins the sha256 GitHub itself reports for the asset
+# (`gh release view --repo intro-skipper/intro-skipper 10.11/v1.10.11.23 --json assets`), the
+# same stronger digest headlamp_k8s_plugins uses. Verified against the actual download.
+jellyfin_k8s_introskipper_url: "https://github.com/intro-skipper/intro-skipper/releases/download/10.11/v1.10.11.23/intro-skipper-v1.10.11.23.zip"
+jellyfin_k8s_introskipper_sha256: "e882339c4f32ad07cc2975b6aa2adefc5e273c48d04bd0504c4e4960ccadba0a"
+
+# The image BOTH plugin installers run on — python, not the alpine:3.24 the sibling init
+# container uses. See the deployment template for why: the releases are .zips and /config is
+# owned by uid {{ puid }}, so an alpine container would need `apk add unzip` as root — and root
+# there holds no DAC_OVERRIDE and so could not write what it had unpacked. Named here rather
+# than written into the template because Renovate's k8s-defaults manager only scans
+# defaults/main.yml.
+jellyfin_k8s_plugin_init_image: python:3.14-alpine@sha256:c6ead215bfd31f1e433d968853b7a769989117115b728874824e6c0a27cb96fc
 
 jellyfin_k8s_cpu_limit: "4"
 jellyfin_k8s_mem_limit: 4096Mi

@@ -99,7 +99,7 @@ spec:
           # install runs as the owning uid and installs nothing at runtime.
 {{ container_resources(cpu_limit='500m', mem_limit='128Mi', cpu_request='10m', mem_request='32Mi') }}
         - name: install-ani-sync
-          image: {{ jellyfin_k8s_anisync_init_image }}
+          image: {{ jellyfin_k8s_plugin_init_image }}
           command:
             - python3
             - -c
@@ -187,6 +187,110 @@ spec:
                   print("removing " + str(legacy) + " (never scanned; installed there in error)")
                   shutil.rmtree(legacy)
               print("installed ani-sync " + VERSION)
+{{ hardened_security_context(non_root=true, run_as_user=puid, run_as_group=pgid) }}
+          volumeMounts:
+            - name: jellyfin-config
+              mountPath: /config
+{{ container_resources(cpu_limit='500m', mem_limit='128Mi', cpu_request='10m', mem_request='32Mi') }}
+          # ── Intro Skipper (skip-intro / skip-credits) ───────────────────────────────────────
+          # A second copy of the container above rather than one loop over both plugins, and
+          # deliberately so: the ani-sync installer's paths are asserted as literal strings by
+          # ansible/tests/services/test_anisync_pin_matches_server.py, and a textual guard
+          # stops seeing what it guards the moment the thing moves behind an indirection.
+          # The two installs also differ where it matters — see the meta.json note below.
+          #
+          # Intro Skipper publishes its timestamps through Jellyfin's Media Segments API, so
+          # the clients draw the skip button themselves. Nothing here touches
+          # /usr/share/jellyfin/web; upstream stopped modifying the web client at Jellyfin
+          # 10.10. The plugin's SETTINGS (detection parameters, per-library opt-outs) are
+          # deliberately unmanaged, exactly as ani-sync's are.
+        - name: install-intro-skipper
+          image: {{ jellyfin_k8s_plugin_init_image }}
+          command:
+            - python3
+            - -c
+            - |
+              import hashlib
+              import json
+              import shutil
+              import tempfile
+              import urllib.request
+              import zipfile
+              from pathlib import Path
+
+              VERSION = "{{ jellyfin_k8s_introskipper_version }}"
+              URL = "{{ jellyfin_k8s_introskipper_url }}"
+              WANT_SHA256 = "{{ jellyfin_k8s_introskipper_sha256 }}"
+              TARGET_ABI = "{{ jellyfin_k8s_introskipper_target_abi }}"
+              GUID = "{{ jellyfin_k8s_introskipper_guid }}"
+              DLL = "IntroSkipper.dll"
+              # /config/data/plugins, the only directory Jellyfin scans — the same trap the
+              # sibling container's comment records, and the same answer.
+              PLUGINS = Path("/config/data/plugins")
+              # `<Name>_<Version>`, with the space Jellyfin's own installer writes: the
+              # neighbouring `SSO Authentication_4.0.0.4` on this volume has one too. "Intro
+              # Skipper" is the name the published manifest declares.
+              PLUGIN_DIR = PLUGINS / ("Intro Skipper_" + VERSION)
+
+              if (PLUGIN_DIR / DLL).exists():
+                  print("intro-skipper " + VERSION + " already installed")
+                  raise SystemExit(0)
+
+              print("installing intro-skipper " + VERSION + " from " + URL)
+              PLUGINS.mkdir(parents=True, exist_ok=True)
+
+              with tempfile.TemporaryDirectory(dir=PLUGINS) as tmp:
+                  archive = Path(tmp) / "plugin.zip"
+                  with urllib.request.urlopen(URL, timeout=60) as response:
+                      with archive.open("wb") as handle:
+                          shutil.copyfileobj(response, handle)
+
+                  # sha256, not the md5 the sibling install checks. Upstream's manifest
+                  # publishes an MD5, but GitHub reports a sha256 digest for the asset itself,
+                  # so the stronger one is the one that can be re-derived from the release.
+                  got = hashlib.sha256(archive.read_bytes()).hexdigest()
+                  if got != WANT_SHA256:
+                      raise SystemExit("sha256 mismatch: got " + got + ", want " + WANT_SHA256)
+
+                  staged = Path(tmp) / "staged"
+                  with zipfile.ZipFile(archive) as bundle:
+                      bundle.extractall(staged)
+
+                  if not (staged / DLL).exists():
+                      found = sorted(path.name for path in staged.iterdir())
+                      raise SystemExit("archive has no " + DLL + ": " + repr(found))
+
+                  # THE DIFFERENCE FROM ani-sync: this release ships the DLL alone, with no
+                  # meta.json. Jellyfin's LoadManifest falls back to inventing one from the
+                  # directory name when the file is missing — id becomes an MD5 of the folder
+                  # name rather than the plugin's real GUID, and targetAbi becomes whatever
+                  # server happens to be running. Writing the real manifest keeps the dashboard
+                  # entry, the config page and the plugin's own configuration directory bound
+                  # to the GUID the plugin compiles against.
+                  meta = {
+                      "category": "MoviesAndShows",
+                      "description": "Analyzes the audio of television episodes and detects introduction sequences.",
+                      "guid": GUID,
+                      "name": "Intro Skipper",
+                      "overview": "Automatically detect and skip intros in television episodes",
+                      "owner": "AbandonedCart, rlauuzo, jumoog (forked from ConfusedPolarBear)",
+                      "targetAbi": TARGET_ABI,
+                      "version": VERSION,
+                  }
+                  (staged / "meta.json").write_text(json.dumps(meta, indent=4))
+
+                  if PLUGIN_DIR.is_dir():
+                      shutil.rmtree(PLUGIN_DIR)
+                  shutil.move(staged, PLUGIN_DIR)
+
+              # The name carries the version, so a bump leaves the old directory behind and
+              # Jellyfin loads two copies of one plugin. Swept after the rename, so a failure
+              # above leaves the working version untouched.
+              for stale in sorted(PLUGINS.glob("Intro Skipper_*")):
+                  if stale != PLUGIN_DIR:
+                      print("removing superseded " + stale.name)
+                      shutil.rmtree(stale)
+              print("installed intro-skipper " + VERSION)
 {{ hardened_security_context(non_root=true, run_as_user=puid, run_as_group=pgid) }}
           volumeMounts:
             - name: jellyfin-config

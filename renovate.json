@@ -249,6 +249,22 @@
     },
     {
       "customType": "regex",
+      "description": "Intro Skipper plugin release pin in k8s/jellyfin/defaults/main.yml. Same shape and same file as the ani-sync manager above, and it exists for the same reason — the k8s-images manager keys on `_image:`, so a plugin release, its URL and its checksum are invisible to every other manager. THREE matchStrings, because the pin carries the version three times: the release tag path (`/download/10.11/v1.10.11.23/`), the asset name (`intro-skipper-v1.10.11.23.zip`) and the `jellyfin_k8s_introskipper_version` var the init container reads. The ONE thing ani-sync's manager never had to solve is the release LINE: upstream maintains a 10.11 line and a 12.0 line in the same repository (`10.11/v1.10.11.23`, `12.0/v12.0.2.8`, plus rolling `10.11/prerelease` tags), so an unconstrained github-releases datasource ranks a 12.0 build highest and would offer a plugin the deployed 10.11 server's loader rejects — silently, behind a green rollout. extractVersionTemplate is anchored to `^10\\.11/v` for exactly that: a tag from another line, and the `prerelease` tags (no `v` segment), match nothing and are dropped. RAISE THAT ANCHOR when jellyfin_k8s_image moves to a new Jellyfin minor, or this manager goes inert rather than wrong. versioningTemplate spells out the four-part plugin version because plain semver rejects it. NEVER automerged (packageRule below): jellyfin_k8s_introskipper_sha256 and jellyfin_k8s_introskipper_target_abi cannot be computed by a regex manager — the operator takes both from the release and the published manifest.",
+      "managerFilePatterns": [
+        "/(^|/)ansible/roles/k8s/jellyfin/defaults/main\\.yml$/"
+      ],
+      "matchStrings": [
+        "intro-skipper/releases/download/10\\.11/v(?<currentValue>\\d+\\.\\d+\\.\\d+\\.\\d+)/",
+        "intro-skipper-v(?<currentValue>\\d+\\.\\d+\\.\\d+\\.\\d+)\\.zip",
+        "jellyfin_k8s_introskipper_version:\\s*\"(?<currentValue>\\d+\\.\\d+\\.\\d+\\.\\d+)\""
+      ],
+      "depNameTemplate": "intro-skipper/intro-skipper",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^10\\.11/v(?<version>.+)$",
+      "versioningTemplate": "regex:^(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)\\.(?<build>\\d+)$"
+    },
+    {
+      "customType": "regex",
       "description": "Container images in k8s role defaults (ansible/roles/k8s/*/defaults/main.yml) AND in inventory/group_vars/all.yml. The cluster has no compose template to read, so these vars ARE the source of truth for what every pod runs \u2014 and until this manager existed none of them was tracked, so the whole cluster fleet aged with no update signal. group_vars/all.yml was added 2026-08-14: crowdsec_k8s_image had been hoisted out of its role defaults into group_vars, which put it outside this manager's patterns AND outside the coverage test's glob (scripts/tests/test_renovate_managers.py globbed roles/k8s/*/defaults/main.yml only) \u2014 so the WAF core, the one image whose staleness is a security problem, was the single pin neither could see. ansible/roles/setup/*/defaults/main.yml was added 2026-08-27: the same one-directory-short escape, this time for k3s_longhorn_restore_drill_image (busybox:stable) \u2014 an `_image:` pin one directory over from the *_version: pins the control-plane manager below already tracks in this same file. It is a mutable tag, so what Renovate can offer here is a digest bump (as with n8n's `stable` channel tag elsewhere in this file), not a version bump \u2014 that is enough signal to notice an upstream busybox re-push; the drill's own timeout/health assertions are the check that a bump didn't break it.",
       "managerFilePatterns": [
         "/^ansible/roles/k8s/[^/]+/defaults/main\\.yml$/",
@@ -464,6 +480,17 @@
         "vosmiic/jellyfin-ani-sync"
       ],
       "groupName": "jellyfin-ani-sync (manual — finish the targetAbi + MD5, raise jellyfin with it)",
+      "automerge": false
+    },
+    {
+      "description": "Intro Skipper. NO automerge, and the position of this rule is load-bearing for the same reason the ani-sync rule above records: the pin lives in ansible/roles/k8s/jellyfin/defaults/main.yml, so the `custom.regex` + minor/patch rule near the top of this array already sets automerge: true for it, later rules win, and without this entry a bump would merge itself into the `k8s image jellyfin` group. Two things Renovate cannot compute make it a manual finish — jellyfin_k8s_introskipper_sha256 (GitHub's asset digest, not in any datasource) and jellyfin_k8s_introskipper_target_abi (from the plugin's published manifest). The operator also checks that the offered version is still on the Jellyfin line jellyfin_k8s_image runs; the manager's extractVersionTemplate anchors that, and the anchor is hand-raised.",
+      "matchDatasources": [
+        "github-releases"
+      ],
+      "matchPackageNames": [
+        "intro-skipper/intro-skipper"
+      ],
+      "groupName": "intro-skipper (manual — finish the sha256 + targetAbi, check the Jellyfin line)",
       "automerge": false
     }
   ]
