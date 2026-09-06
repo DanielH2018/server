@@ -190,3 +190,14 @@ def test_an_unrecorded_startup_gated_exemption_is_flagged():
 
 def test_a_recorded_startup_gated_exemption_is_clean():
     assert startup_gating_gaps(set(_STARTUP_GATED), _STARTUP_GATED) == []
+
+
+def test_a_startup_gated_entry_that_lost_its_probe_is_flagged():
+    """The stale arm's own red half, mirroring `test_the_record_has_no_stale_entries`.
+
+    Without it the `startup_gated - exempt_with_startup` loop is driven by no input in this
+    module and is only ever observed passing — the shape the repo has paid for twice.
+    """
+    problems = startup_gating_gaps(set(), _STARTUP_GATED)
+    assert len(problems) == len(_STARTUP_GATED), problems
+    assert all("remove it" in p for p in problems), problems
