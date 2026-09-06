@@ -284,10 +284,31 @@ jobs:
   # The whole pytest suite, unscoped on PRs and pushes alike — the same suite the prek `pytest`
   # hook runs, invoked the same way (`uv run python -m pytest`, addopts from pyproject.toml), so
   # a local `prek run --all-files` and this job cannot disagree about what a test run is.
+  #
+  # Sharded across a matrix since #1270, because this job is the pole of every run and a landing
+  # waits on it twice — once on the PR, once on the master merge commit that `land.sh` and the
+  # deployer's CI gate both read. Baseline on master run 34016222639: the test step 124s, the job
+  # 138s of which 11s is setup, the `hooks` job beside it 98s, the run 146s wall.
+  #
+  # THE MATRIX KEEPS THE JOB ID `pytest`, which is what makes this a one-file change.
+  # `needs.pytest.result` in the gate below is the AGGREGATE of every matrix leg, so the gate's
+  # step, its `needs` list, and `test_every_ci_job_is_gated.py` all keep working untouched. Shards
+  # as separate job ids (`pytest-1`, `pytest-2`, …) would instead make changing N a three-file
+  # edit: the gate's `needs`, the gate's result comparison, and the guard's `KNOWN_JOBS` and
+  # `GATE_READS` would each grow an entry per shard. Nothing outside this file names the bare
+  # `pytest` check-run — `gitops_deploy_ci_contexts` and `gitops_deploy_expected_ruleset_contexts`
+  # both name only "prek (lint + validate + tests + secrets)" — so renaming the legs costs nothing.
+  #
+  # `fail-fast: false` for the reason the `hooks` job states above: one shard's failure must not
+  # hide another's.
   pytest:
-    name: pytest
+    name: pytest (shard ${{ matrix.shard }} of ${{ strategy.job-total }})
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -310,13 +331,33 @@ jobs:
           key: galaxy-${{ runner.os }}-${{ hashFiles('ansible/requirements.yml') }}
       - name: Install Ansible collections
         run: uv run ansible-galaxy collection install -r ansible/requirements.yml -p ansible/collections
-      # --durations=15 because this job is the pole of the whole landing: its test step measured
-      # 267s against the `hooks` job beside it at 29-46s, and a landing waits on CI twice. The
-      # runner is ~4x slower per test than the workstation, so a local `--durations` run does not
-      # tell you which tests dominate HERE. Printing it on every run means the next person to
-      # attack this reads the answer off a green build instead of guessing at the shape.
+      # `--of "$SHARDS"` reads `strategy.job-total`, so the split follows the matrix above and
+      # cannot drift from it: changing the `shard:` list is the whole edit. The helper assigns
+      # whole test modules by greedy bin packing over recorded per-file durations — never part of
+      # a module, or `--dist loadscope`'s module-scoped fixtures would rebuild per shard. It
+      # exits non-zero rather than emit an empty list, because `pytest` with no collected tests
+      # exits 5 and a shard that has silently stopped covering anything must not read as green.
+      - name: Select this shard's test files
+        env:
+          SHARD: ${{ matrix.shard }}
+          SHARDS: ${{ strategy.job-total }}
+        run: |
+          set -euo pipefail
+          uv run python scripts/dev/pytest_shard.py --of "$SHARDS" --shard "$SHARD" --out "$RUNNER_TEMP/shard.txt"
+          echo "$(wc -l < "$RUNNER_TEMP/shard.txt") test file(s) in this shard"
+
+      # --durations=15 because this job is the pole of the whole landing: unsharded, its test step
+      # measured 267s against the `hooks` job beside it at 29-46s, and a landing waits on CI twice.
+      # The runner is ~4x slower per test than the workstation, so a local `--durations` run does
+      # not tell you which tests dominate HERE. Printing it on every run means the next person to
+      # attack this reads the answer off a green build instead of guessing at the shape. It is
+      # also the signal that the shards have gone lopsided: `pytest_shard.py --record` re-measures
+      # the weights locally, and these per-shard step times say when that is worth doing.
       - name: Run the test suite
-        run: uv run python -m pytest --color yes --durations=15
+        run: |
+          set -euo pipefail
+          mapfile -t files < "$RUNNER_TEMP/shard.txt"
+          uv run python -m pytest --color yes --durations=15 "${files[@]}"
 
   # The required status context. Branch protection, the deployer's CI_CONTEXTS, await_ci.py
   # and the ruleset-drift cron all name "prek (lint + validate + tests + secrets)", so that name

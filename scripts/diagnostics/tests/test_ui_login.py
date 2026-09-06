@@ -9,6 +9,13 @@ would score both as success.
 import json
 import os
 import re
+import sys
+
+# `scripts/diagnostics` is deliberately absent from `pythonpath` in pyproject.toml, so each test
+# here puts its own parent directory on `sys.path` — the same insert its siblings carry. Without
+# it this module imported only when a sibling that HAS the insert happened to be collected first,
+# which held for the whole suite and broke the moment CI sharded it (#1270).
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import ui_login
 
