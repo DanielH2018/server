@@ -144,11 +144,26 @@ class Fakes:
     # That asymmetry is what `_create_with_optional_project` needs: its retry drops
     # `--project` from an argv whose first two elements are still `issue create`, so an
     # error that fired on every match would fail the retry the test exists to prove.
+    # The claim-staleness read, as `facts(...)` builds it. Left None it ASSERTS rather than
+    # answering "no worktrees, git ok" — that particular answer makes every claim read stale,
+    # so a test that got it by default would pass for a reason it never stated. Same argument
+    # as the unanswered-argv assertion above.
+    worktree_facts: Callable[[], tuple] | None = None
     gh_errors: dict[str, BaseException] = field(default_factory=dict)
     # Keyed by the same `issue list` / `label list` / `issue view` pair `gh_json` dispatches
     # on, so a test can fail the issue read while the label read still answers.
     json_errors: dict[str, BaseException] = field(default_factory=dict)
     verify: Callable[[str, float], subprocess.CompletedProcess[str]] | None = None
+
+
+def facts(trees=(), *, dirty=False, merged=False, ok=True):
+    """A `tools.worktree_facts` replacement: the four values as constants.
+
+    `dirty` and `merged` are the verdicts `classify` reads, so `facts([tree], dirty=True)` is
+    a worktree still holding work and `facts([tree], merged=True)` is one whose PR landed.
+    `ok=False` is a FAILED git read, which every caller treats differently from an empty list.
+    """
+    return lambda: (list(trees), lambda _p: dirty, lambda _t: merged, ok)
 
 
 def _issues_named(f: Fakes, number: int) -> list[dict]:
@@ -231,4 +246,14 @@ def build_tools(f: Fakes | None = None) -> tuple[FindingsTools, Calls]:
                 issue.setdefault("comments", []).append(operator_comment(body))
         return subprocess.CompletedProcess(list(argv), 0, f"{f.url}\n", "")
 
-    return FindingsTools(gh_json, gh, f.verify or run_verify), calls
+    def worktree_facts():
+        if f.worktree_facts is None:
+            raise AssertionError(
+                "this command reads the worktrees; pass Fakes(worktree_facts=facts(...))"
+            )
+        return f.worktree_facts()
+
+    return (
+        FindingsTools(gh_json, gh, f.verify or run_verify, worktree_facts),
+        calls,
+    )

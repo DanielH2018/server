@@ -285,6 +285,28 @@ def issue_rows(issues: list[dict]) -> list[dict]:
     return rows
 
 
+def pickable(
+    issues: list[dict], *, live_claims: set[int], pr_refs: set[int]
+) -> list[dict]:
+    """The issues a session may pick up, best first.
+
+    Args:
+        live_claims: issue numbers whose claim is still live. A STALE claim does not
+            withhold an issue — `cmd_claim` reaps one on its way past, and `reap` clears
+            every one of them at once.
+        pr_refs: issue numbers an open PR already says it closes. Without this, a session
+            picks up work another session has finished but not yet landed.
+    """
+    rows = [
+        r
+        for r in issue_rows(issues)
+        if not r["manual"]
+        and r["number"] not in live_claims
+        and r["number"] not in pr_refs
+    ]
+    return sorted(rows, key=sort_key)
+
+
 def sort_key(row: dict) -> tuple:
     sev = (
         SEVERITIES.index(row["severity"])

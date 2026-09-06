@@ -12,12 +12,23 @@ fan-out race-free, and the rest of this skill exists to keep it that way.
 
 ## 1. Triage
 
+Clear the claims whose worktree is gone first, then read what is free:
+
 ```bash
+uv run python scripts/dev/findings.py reap
 uv run python scripts/dev/findings.py next --json
 ```
 
-`next` withholds `manual` issues, anything already live-claimed, and anything an open PR
-already closes — everything it prints is free to take.
+`reap` releases every claim whose worktree no longer holds work — a session that died after
+its PR landed, or a worktree somebody pruned. **This is the one place that invokes it**: no
+cron and no hook does, and without it a stale claim sits on the register indefinitely. It
+refuses outright rather than releasing anything if the git read fails, so a non-zero exit here
+is a stop, not a warning.
+
+`next` withholds `manual` issues, anything a LIVE claim holds, and anything an open PR already
+closes — everything it prints is free to take. An issue whose claim is stale is offered,
+marked `[stale claim by ...]`; `claim` reaps that claim itself on the way past, so a refusal
+from `claim` means the claim is live and another session is really working it.
 
 Group the results so that **no two agents touch the same Ansible role**. Read each issue's
 cited file to find its role; two agents editing one role concurrently is the hazard
@@ -26,8 +37,8 @@ cited file to find its role; two agents editing one role concurrently is the haz
 **Stop here for approval.** Present the grouping — which issues, which batch, why they're
 split this way — and wait. Spawning several Opus agents is not a routine action.
 
-Done when: every issue `next` returned is in exactly one batch, no two batches share a role,
-and the operator has approved the grouping.
+Done when: `reap` has run, every issue `next` returned is in exactly one batch, no two batches
+share a role, and the operator has approved the grouping.
 
 ## 2. Claim before spawning, under the orchestrator's own worktree name
 
@@ -114,8 +125,8 @@ finished:
 uv run python scripts/dev/findings.py release <n> --worktree <orchestrator-branch> --reason "..."
 ```
 
-Anything left claimed past this point sits until `reap` clears it later — releasing explicitly
-is faster and says why.
+Anything left claimed past this point sits until the next fan-out's triage step reaps it —
+releasing explicitly is faster and says why.
 
 Done when: the table accounts for every issue in every batch, and nothing is left claimed
 without an explicit reason in the report.

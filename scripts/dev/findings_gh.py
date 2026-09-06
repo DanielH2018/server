@@ -22,7 +22,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
-from dev.findings_model import _LIST_FIELDS, PROJECT_TITLE
+from dev.findings_model import _LIST_FIELDS, PROJECT_TITLE, pr_refs
 from dev.findings_plans import is_project_failure, without_project
 from dev.findings_tools import FindingsTools
 
@@ -37,6 +37,14 @@ def load_issues(state: str = "all", tools: FindingsTools | None = None) -> list[
     """
     argv = ("issue", "list", "--label", "claude", "--state", state, "--limit", "1000")
     return (tools or FindingsTools()).gh_json(*argv, "--json", _LIST_FIELDS) or []
+
+
+def open_pr_refs(tools: FindingsTools) -> set[int]:
+    """Issue numbers the open PRs say they close, for `next` to withhold."""
+    prs = tools.gh_json(
+        "pr", "list", "--state", "open", "--limit", "200", "--json", "body"
+    )
+    return pr_refs([pr.get("body") or "" for pr in prs or []])
 
 
 def _existing_labels(tools: FindingsTools) -> set[str]:

@@ -81,8 +81,6 @@ scripts/deploy_tools/tests/test_land_tags.py 5
 scripts/deploy_tools/tests/test_land_tools.py 2
 scripts/deploy_tools/tests/test_staging_gate.py 3
 scripts/deploy_tools/tests/test_tick_ledger_report.py 2
-scripts/dev/tests/test_findings_claim_cli.py 7
-scripts/dev/tests/test_findings_next.py 1
 scripts/dev/tests/test_memory_survey.py 3
 scripts/dev/tests/test_prune_worktrees.py 14
 scripts/diagnostics/tests/test_postflight.py 16
