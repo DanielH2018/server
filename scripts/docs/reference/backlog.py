@@ -79,7 +79,11 @@ def render_markdown(rows: list[dict]) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[1])
+    # The FIRST NON-BLANK line, not `[1]`. Line 1 of a module docstring is the blank line
+    # after the summary, so `[1]` passed argparse an empty description and `--help` printed
+    # none at all (#1272). `findings.py`'s `main` carries the same spelling.
+    summary = next(line for line in __doc__.splitlines() if line.strip())
+    parser = argparse.ArgumentParser(description=summary)
     parser.add_argument("--out", type=Path, required=True, help="output file path")
     args = parser.parse_args(argv)
     rows = issue_rows(load_issues("open"))

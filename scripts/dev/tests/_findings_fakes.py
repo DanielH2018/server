@@ -31,6 +31,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 
 from dev.findings_model import LABELS
 from dev.findings_tools import FindingsTools, run_verify
+from dev.prune_worktrees import Worktree
 
 CREATED_URL = "https://github.com/o/r/issues/42"
 
@@ -82,7 +83,12 @@ def make_issue(
     A `comments` entry given as a string becomes an OPERATOR comment, since that is what a
     claim test almost always means; pass `foreign_comment(...)` (or any dict) to build one
     the claim protocol must ignore.
+
+    `claude` is always in the labels, because every issue in the register carries it —
+    `load_issues` filters on it — and `plan_claim` refuses an issue without it (#1277). A
+    fixture that omitted it would be refused for a reason no test meant to state.
     """
+    labels = ("claude", *(n for n in labels if n != "claude"))
     body = (
         f"details\n\n---\nFingerprint: `{fp}`\nSource: review-2026-08-15\n"
         if fp
@@ -164,6 +170,21 @@ def facts(trees=(), *, dirty=False, merged=False, ok=True):
     `ok=False` is a FAILED git read, which every caller treats differently from an empty list.
     """
     return lambda: (list(trees), lambda _p: dirty, lambda _t: merged, ok)
+
+
+def live_worktree(branch: str):
+    """A `facts(...)` whose single worktree is LOCKED by a session `classify` calls alive.
+
+    `session_is_alive` treats a lock reason it cannot parse as live — "an unrecognized lock
+    is someone else's, and guessing wrong destroys work" — so a plain reason string is the
+    shortest live fixture there is, and `classify` short-circuits to KEEP before it looks at
+    merged or dirty. This is what `cmd_claim`'s stale-at-birth guard needs to let a claim
+    through (#1278, #1281); `facts()` with no worktrees is its refusing counterpart.
+    """
+    tree = Worktree(
+        path=f"/w/{branch}", head="abc", branch=branch, locked=True, lock_reason="held"
+    )
+    return facts([tree])
 
 
 def _issues_named(f: Fakes, number: int) -> list[dict]:

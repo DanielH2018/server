@@ -22,7 +22,7 @@ validated there is still only ever run through that gate.
 This file is the CLI: the `cmd_*` handlers and the exit contract. Argument parsing is
 `findings_cli.py`, the vocabulary and the pure reads are `findings_model.py`, the gh argv are
 `findings_plans.py`, the gh calls are `findings_gh.py`, claim staleness is `findings_claim.py`,
-and verify-by is `findings_verify.py`.
+the four claim subcommands are `findings_claim_cli.py`, and verify-by is `findings_verify.py`.
 
 Usage::
 
@@ -32,7 +32,8 @@ Usage::
         [--source review-2026-09-02] [--no-vetted-remediation] \\
         [--verify-by 'uv run python scripts/diagnostics/probe.py health <svc>'] [--dry-run]
     uv run python scripts/dev/findings.py touch 688 [--source review-2026-09-02]
-    uv run python scripts/dev/findings.py claim 688 701 --worktree worktree-foo [--session id]
+    uv run python scripts/dev/findings.py claim 688 701 --worktree worktree-foo \\
+        [--session id] [--force]
     uv run python scripts/dev/findings.py release 688 --worktree worktree-foo [--reason "..."]
     uv run python scripts/dev/findings.py claims [--json]
     uv run python scripts/dev/findings.py reap [--dry-run]
@@ -42,44 +43,53 @@ Usage::
     uv run python scripts/dev/findings.py list [--state open|closed|all] [--json]
     uv run python scripts/dev/findings.py verify --all [--close] [--timeout 120]
     uv run python scripts/dev/findings.py verify 688 701 [--close]
-    uv run python scripts/dev/findings.py next [--limit 10] [--json]
+    uv run python scripts/dev/findings.py next [--limit N] [--json]
 
 CLOSING A FINDING. `--fixed` closes as completed. The other two close as not planned and are
 terminal, so `open` refuses to re-file the same fingerprint afterwards: `--refuted` records
 that a skeptic disproved it, and `--accepted` records that it is TRUE and the operator chose
 to live with the trade-off. Both need `--reason`. Reach for `--accepted` rather than closing
 by hand — a hand-close is invisible to the dedup, so the next review re-files an accepted
-decision and the comment on it reads "treat as a regression". Closing releases any claim it
-finds first, whoever holds it — not just the caller's own worktree — so `claims`, `reap` and
-`next` all stop showing the issue at once rather than leaving a claim stranded on a closed row.
+decision and the comment on it reads "treat as a regression".
+
+RELEASING A STRANDED CLAIM. Every path that ends or restarts an issue's life releases the
+claim on it first, whoever holds it — `close`, `verify --close`, and `open`'s reopen path
+alike, all through `_release_held_claim`. `claims`, `reap` and `next` read OPEN issues, so a
+claim left on a closed one is invisible to every view at once rather than merely wrong, and a
+reopen brings it back LIVE (#1277).
 
 CLAIMING AN ISSUE. `claim` posts a `Claim:` comment and adds the `claimed` label, so a
 worktree fanning out several issues at once knows which are its own; `release` reverses
 that. A claim only counts from the operator's own comment — this repo is public, so any
 account can post a `Claim:` or `Released:` trailer and none of them decide anything. `claim`
-refuses an issue another worktree LIVE-holds, refuses `manual` and closed issues, RELEASES a
-claim it finds stale and takes the issue, and treats re-claiming its own claim as a no-op;
-`release` refuses any claim but its own. `claims` lists every claim, warning on stderr (but
-still rendering) if the worktree read failed; `reap` refuses outright on that same failure,
-and `claim` leaves a stale claim standing rather than reaping on a guess. `claim` takes every
-issue it can and refuses the rest, so one `manual` issue does not cost the good claims in the
-same batch.
+refuses an issue another worktree LIVE-holds, refuses `manual` issues, closed issues and
+issues outside the `claude` register, RELEASES a claim it finds stale and takes the issue,
+and treats re-claiming its own claim as a no-op; `release` refuses any claim but its own.
+Both repair a label that disagrees with the comments, in either direction. Before it writes
+anything, `claim` checks that `--worktree` would not read STALE the moment the claim lands,
+and refuses with `--force` named unless it is passed. `claims` lists every claim, warning on
+stderr (but still rendering) if the worktree read failed; `reap` refuses outright on that
+same failure, and `claim` leaves a stale claim standing rather than reaping on a guess.
+`claim` takes every issue it can and refuses the rest, so one `manual` issue does not cost
+the good claims in the same batch.
 
-PICKING UP WORK. `next` prints the issues a session may claim, best severity first,
+PICKING UP WORK. `next` prints EVERY issue a session may claim, best severity first,
 withholding `manual` issues, issues a LIVE claim already holds, and issues an open PR already
 says it closes. An issue whose claim is stale IS offered, marked with who holds it — `claim`
-reaps that claim on the way past, and `reap` clears every one of them at once.
+reaps that claim on the way past, and `reap` clears every one of them at once. `--limit N`
+bounds the list; there is no default bound, because one truncated the free set silently and
+the reader took ten rows for all of them.
 
 Exit codes: 0 done; 1 gh failed, or `reap` refused a git read failure rather than call it
 "nothing is claimed"; 2 bad arguments; 3 nothing was written because the issue refuses it —
-closed, `manual`, held by another worktree, not claimed, or lost a race to another claim.
+closed, `manual`, outside the register, held by another worktree, not claimed, or lost a race
+to another claim — or because `claim`'s own `--worktree` would read stale at birth.
 """
 
 import argparse
 import json
 import subprocess
 import sys
-from datetime import UTC, datetime
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
@@ -92,7 +102,8 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 # `scripts/docs/reference/backlog.py` reaches this code as `dev.findings` with only
 # `scripts/` on sys.path, so a bare `from findings_model import ...` would raise
 # ModuleNotFoundError under the docs-refresh cron while pytest stayed green.
-from dev.findings_claim import another_claim_blocks, claim_states, stale_holder
+from dev.findings_claim import claim_states
+from dev.findings_claim_cli import cmd_claim, cmd_claims, cmd_reap, cmd_release
 from dev.findings_cli import _parser
 from dev.findings_gh import (
     _create_with_optional_project,
@@ -105,6 +116,7 @@ from dev.findings_gh import (
 from dev.findings_model import (
     NO_REOPEN,
     current_claim,
+    now_iso,
     find_by_fingerprint,
     fingerprint,
     issue_rows,
@@ -113,8 +125,6 @@ from dev.findings_model import (
     sort_key,
 )
 from dev.findings_plans import (
-    ClaimRefused,
-    plan_claim,
     plan_close,
     plan_open,
     plan_release,
@@ -128,8 +138,23 @@ from dev.findings_verify import (
 )
 
 
-def _now() -> str:
-    return datetime.now(UTC).isoformat()
+def _release_held_claim(issue: dict, reason: str) -> list[list[str]]:
+    """The gh argv releasing whatever claim ``issue`` carries, or ``[]`` when it carries none.
+
+    Releases whoever holds it, not just the caller's own worktree. `claims`, `reap` and
+    `next` all read OPEN issues, so a claim left on a closed one is invisible to every view
+    at once — wrong rather than merely stale, and unreapable.
+
+    Hoisted out of `cmd_close` so `cmd_verify`'s `--close` loop and `cmd_open`'s reopen path
+    release the same way (#1277). `verify --close` called `plan_close` directly and stranded
+    every claim it closed; a `Closes #<n>` merge strands one too, and `plan_open` reopening
+    that issue for a later re-observation brought the stale claim back LIVE, blocking `claim`
+    and withholding the issue from `next` for as long as the claiming worktree existed.
+    """
+    held = current_claim(issue)
+    if not held:
+        return []
+    return plan_release(issue, worktree=held, when=now_iso(), reason=reason)
 
 
 def cmd_open(args: argparse.Namespace, tools: FindingsTools) -> int:
@@ -188,6 +213,14 @@ def cmd_open(args: argparse.Namespace, tools: FindingsTools) -> int:
             f"{(existing.get('closedAt') or '?')[:10]}; not reopened"
         )
         return code
+    if outcome == "reopened":
+        # A `Closes #<n>` merge closes an issue without going through `close`, so the claim
+        # is still on it. Reopening for a later re-observation brings that claim back LIVE,
+        # where it blocks `claim` and withholds the issue from `next` for as long as the
+        # claiming worktree exists — an orchestrator's can be a long time (#1277). Released
+        # as its OWN comment rather than folded into the regression note, so the body never
+        # carries two claim trailers at once (see `current_claim`'s DECIDED marker).
+        plans += _release_held_claim(existing, "reopened after a re-observation")
     run(plans, args.dry_run, tools)
     print(f"#{existing['number']} {outcome}  {existing.get('url', '')}")
     return 0
@@ -213,157 +246,6 @@ def cmd_touch(args: argparse.Namespace, tools: FindingsTools) -> int:
     run(plans, args.dry_run, tools)
     escalated = any(p[:2] == ["issue", "edit"] for p in plans)
     print(f"#{args.number} touched{' and escalated' if escalated else ''}")
-    return 0
-
-
-def cmd_claim(args: argparse.Namespace, tools: FindingsTools) -> int:
-    """Claims one or more issues for a worktree, reaping a stale claim that blocks one.
-
-    Takes every issue it can and refuses the rest, rather than refusing the whole batch on
-    one bad issue: a fan-out claims several issues at once, and losing four good claims
-    because the fifth is `manual` would mean re-running and re-reading everything.
-
-    REAP-THEN-CLAIM. `next` offers an issue whose claim is stale — deliberately, since that
-    is what `reap` exists to clear — but `plan_claim` refused ANY claim, live or not. So a
-    session did what `next` told it to and got exit 3 with no route forward, and nothing in
-    the repo invoked `reap` to clear the claim (#1274). A stale claim is now released here,
-    under the reason `reap` would have given, and the claim proceeds.
-
-    Returns 0 when every issue was taken, 3 when any was refused.
-    """
-    # `gh issue edit --add-label` fails on a label the repo lacks, which is why cmd_close
-    # syncs first. Without this the FIRST claim posts its comment, fails the label edit and
-    # exits 1; the retry then reads "already claimed" and the label is never added at all.
-    run(plan_sync_labels(_existing_labels(tools)), args.dry_run, tools)
-    refused = False
-    # Read once for the whole batch, and only if some issue in it is actually blocked.
-    facts: tuple | None = None
-    for number in args.numbers:
-        issue = _load_issue(number, tools)
-        if another_claim_blocks(issue, args.worktree):
-            if facts is None:
-                facts = tools.worktree_facts()
-                if not facts[3]:
-                    # Same fail-safe direction `cmd_reap` takes: a transient git error must
-                    # not read as "every worktree is gone". The claim blocks, as it did
-                    # before this path existed, and `plan_claim` refuses it below.
-                    sys.stderr.write(
-                        "warning: worktree read failed; a stale claim will refuse "
-                        "rather than reap\n"
-                    )
-            trees, dirty, merged, ok = facts
-            stale = stale_holder(issue, trees, dirty, merged) if ok else None
-            if stale:
-                holder, why = stale
-                run(
-                    plan_release(
-                        issue,
-                        worktree=holder,
-                        when=_now(),
-                        reason=f"reaped by `{args.worktree}`: {why}",
-                    ),
-                    args.dry_run,
-                    tools,
-                )
-                print(f"#{number} reaped stale claim by `{holder}` — {why}")
-                if args.dry_run:
-                    # The release was printed, not posted, so a re-read still shows the old
-                    # claim and `plan_claim` would refuse something that will really succeed.
-                    print(f"#{number} would be claimed by `{args.worktree}`")
-                    continue
-                # Re-read so `plan_claim` sees the release comment just posted.
-                issue = _load_issue(number, tools)
-        try:
-            plans = plan_claim(
-                issue, worktree=args.worktree, session=args.session, when=_now()
-            )
-        except ClaimRefused as exc:
-            print(f"#{number} refused: {exc.reason}")
-            refused = True
-            continue
-        if not plans:
-            print(f"#{number} already claimed by `{args.worktree}`")
-            continue
-        run(plans, args.dry_run, tools)
-        if args.dry_run:
-            print(f"#{number} would be claimed by `{args.worktree}`")
-            continue
-        # Read back. Two sessions can both post a claim comment; the FIRST one holds it,
-        # and without this the loser prints success and starts work on someone else's issue.
-        winner = current_claim(_load_issue(number, tools))
-        if winner != args.worktree:
-            print(f"#{number} lost the race to `{winner}`")
-            refused = True
-            continue
-        print(f"#{number} claimed by `{args.worktree}`")
-    return 3 if refused else 0
-
-
-def cmd_release(args: argparse.Namespace, tools: FindingsTools) -> int:
-    """Releases this worktree's claim on one or more issues."""
-    refused = False
-    for number in args.numbers:
-        issue = _load_issue(number, tools)
-        try:
-            plans = plan_release(
-                issue, worktree=args.worktree, when=_now(), reason=args.reason
-            )
-        except ClaimRefused as exc:
-            print(f"#{number} refused: {exc.reason}")
-            refused = True
-            continue
-        run(plans, args.dry_run, tools)
-        verb = "would be released" if args.dry_run else "released"
-        print(f"#{number} {verb} by `{args.worktree}`")
-    return 3 if refused else 0
-
-
-def cmd_claims(args: argparse.Namespace, tools: FindingsTools) -> int:
-    """Prints every open claim: issue, worktree, live or stale, and why."""
-    trees, dirty, merged, ok = tools.worktree_facts()
-    if not ok:
-        # `reap` refuses instead; a read can render, but must say staleness is a guess.
-        sys.stderr.write("warning: worktree read failed; STALE below is unverified\n")
-    states = claim_states(load_issues("open", tools), trees, dirty, merged)
-    if args.json:
-        print(json.dumps([vars(s) for s in states], indent=2))
-        return 0
-    for s in states:
-        age = f"{s.age_days}d" if s.age_days is not None else "?"
-        print(
-            f"#{s.number:<5} {'live ' if s.live else 'STALE'} {age:>4} "
-            f"{s.worktree:<40} {s.reason}"
-        )
-    if not states:
-        print("no open claims")
-    return 0
-
-
-def cmd_reap(args: argparse.Namespace, tools: FindingsTools) -> int:
-    """Releases every stale claim, printing why each was judged stale."""
-    trees, dirty, merged, ok = tools.worktree_facts()
-    if not ok:
-        # Must not read a git failure as "every worktree is gone" and release everything.
-        print("reap: could not read git; refusing to release anything")
-        return 1
-    issues = load_issues("open", tools)
-    by_number = {i["number"]: i for i in issues}
-    reaped = 0
-    for s in claim_states(issues, trees, dirty, merged):
-        if s.live:
-            continue
-        plans = plan_release(
-            by_number[s.number],
-            worktree=s.worktree,
-            when=_now(),
-            reason=f"reaped: {s.reason}",
-        )
-        run(plans, args.dry_run, tools)
-        verb = "would be released" if args.dry_run else "released"
-        print(f"#{s.number} {verb} — {s.reason}")
-        reaped += 1
-    verb = "would be released" if args.dry_run else "released"
-    print(f"reap: {reaped} stale claim(s) {verb}")
     return 0
 
 
@@ -397,12 +279,7 @@ def cmd_close(args: argparse.Namespace, tools: FindingsTools) -> int:
     # own worktree. `claims`, `reap` and `next` all read open issues, so a claim left on a
     # closed issue disappears from every view at once rather than showing up wrong.
     issue = _load_issue(args.number, tools)
-    held = current_claim(issue)
-    plans = []
-    if held:
-        plans += plan_release(
-            issue, worktree=held, when=_now(), reason=f"closed as {outcome}"
-        )
+    plans = _release_held_claim(issue, f"closed as {outcome}")
     plans += plan_close(args.number, outcome=outcome, pr=args.pr, reason=args.reason)
     run(plans, args.dry_run, tools)
     print(f"#{args.number} closed as {outcome}")
@@ -436,21 +313,26 @@ def cmd_verify(args: argparse.Namespace, tools: FindingsTools) -> int:
         else [_load_issue(n, tools) for n in args.numbers]
     )
     results = [
-        (issue["number"], issue["title"], *verify_finding(issue, args.timeout, tools))
+        (
+            issue,
+            issue["number"],
+            issue["title"],
+            *verify_finding(issue, args.timeout, tools),
+        )
         for issue in issues
     ]
-    for number, title, verdict, _detail, _command in results:
+    for _issue, number, title, verdict, _detail, _command in results:
         print(f"#{number:<5} {verdict:<11} {title}")
     if args.close:
-        for number, _title, verdict, detail, command in results:
+        for issue, number, _title, verdict, detail, command in results:
             if verdict != "fixed":
                 continue
             comment = verify_close_comment(command, detail)
-            run(
-                plan_close(number, outcome="fixed", comment=comment),
-                args.dry_run,
-                tools,
-            )
+            # Same release `cmd_close` makes, for the same reason: this path called
+            # `plan_close` directly and stranded the claim on every issue it closed (#1277).
+            plans = _release_held_claim(issue, "closed as fixed by verify-by")
+            plans += plan_close(number, outcome="fixed", comment=comment)
+            run(plans, args.dry_run, tools)
             print(f"#{number} closed as fixed (verify-by)")
     return 0
 
@@ -558,7 +440,13 @@ def main(argv: list[str] | None, tools: FindingsTools) -> int:
     Returns:
         The dispatched handler's exit code, or 1 if `gh` failed.
     """
-    args = _parser(__doc__.splitlines()[1]).parse_args(argv)
+    # The FIRST NON-BLANK line, not `[1]`. Line 1 of a module docstring is the blank line
+    # after the summary, so `[1]` passed argparse an empty description and `--help` printed
+    # none at all (#1272). Reading the line rather than restating it keeps one copy: an
+    # earlier round replaced the broken expression with a hardcoded paraphrase, which a
+    # reviewer rejected as a second copy that can drift.
+    summary = next(line for line in __doc__.splitlines() if line.strip())
+    args = _parser(summary).parse_args(argv)
     handler = {
         "sync-labels": cmd_sync_labels,
         "list": cmd_list,

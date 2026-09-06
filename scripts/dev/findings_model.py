@@ -11,6 +11,7 @@ answers into gh argv, `findings_gh.py` runs them, and `findings.py` is the CLI o
 
 import hashlib
 import re
+from datetime import UTC, datetime
 
 SEVERITIES = ("high", "medium", "low")
 KINDS = ("gap", "improvement", "addition")
@@ -177,6 +178,16 @@ def is_operator_comment(comment: dict) -> bool:
     return (comment.get("authorAssociation") or "") in _TRUSTED_ASSOCIATIONS
 
 
+def now_iso() -> str:
+    """The `when` every claim and release comment is stamped with.
+
+    Lives beside the two comment builders that consume it: `findings.py` and
+    `findings_claim_cli.py` both stamp comments, and a private `_now` in one of them would
+    have to be imported across a CLI boundary by the other.
+    """
+    return datetime.now(UTC).isoformat()
+
+
 def claim_comment(worktree: str, session: str | None, when: str) -> str:
     """The comment body that claims an issue for ``worktree``.
 
@@ -222,6 +233,18 @@ def current_claim(issue: dict) -> str | None:
         if claimed:
             if held is None:
                 held = claimed.group(1)
+            # DECIDED: `Claim:` wins over `Released:` within ONE comment body. Neither
+            # `claim_comment` nor `release_comment` ever emits both trailers, so a body
+            # carrying both is malformed input, and every fail-safe in this module points
+            # the same way: `is_operator_comment` folds an unattributable comment into
+            # nothing, `claim_is_live` HOLDS a claim whose worktree it cannot read,
+            # `cmd_reap` refuses on a git error, and `cmd_next` withholds. Releasing on
+            # ambiguity is the one direction that hands live work to a second session,
+            # which is the harm this protocol exists to prevent. This `continue` is what
+            # implements the choice, so it is not a tidy-up — dropping it inverts the
+            # verdict. `_claim_age_days` in findings_claim.py carries the identical fold
+            # and must keep the identical skip, or a `claims` row ages a claim the
+            # register does not think exists.
             continue
         released = _RELEASE_RE.search(body)
         if released and released.group(1) == held:

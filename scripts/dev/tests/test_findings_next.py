@@ -131,3 +131,58 @@ def test_next_withholds_a_live_claim_when_the_git_read_fails(capsys):
     assert main(["next", "--json"], tools) == 0
     rows = json.loads(capsys.readouterr().out)
     assert rows == []
+
+
+def test_next_withholds_an_issue_an_open_pr_already_closes(capsys):
+    """#1283: the open-PR filter was proven only through `pickable` with a hand-fed set.
+
+    No test drove `main(["next"])` with `Fakes(prs=[...])`, so `open_pr_refs` could return an
+    empty set and the whole suite stayed green. The `prs` field was added to the shared fake
+    for exactly this and then went unused.
+    """
+    spoken_for = make_issue(1132, title="a PR already says it closes this")
+    free = make_issue(1140, title="nobody has this")
+    tools, _ = build_tools(
+        Fakes(
+            issues=[spoken_for, free],
+            prs=[{"body": "Closes #1132"}],
+            worktree_facts=facts(),
+        )
+    )
+    assert main(["next", "--json"], tools) == 0
+    rows = json.loads(capsys.readouterr().out)
+    assert [r["number"] for r in rows] == [1140]
+
+
+def test_next_offers_an_issue_no_open_pr_mentions(capsys):
+    """The rejecting half of the pair above: an empty PR list withholds nothing."""
+    tools, _ = build_tools(
+        Fakes(issues=[make_issue(1132)], prs=[], worktree_facts=facts())
+    )
+    assert main(["next", "--json"], tools) == 0
+    rows = json.loads(capsys.readouterr().out)
+    assert [r["number"] for r in rows] == [1132]
+
+
+def test_next_limit_bounds_the_list(capsys):
+    """#1283: `--limit` had no test at all, so the slice could be deleted outright."""
+    tools, _ = build_tools(
+        Fakes(issues=[make_issue(1132), make_issue(1140)], worktree_facts=facts())
+    )
+    assert main(["next", "--limit", "1", "--json"], tools) == 0
+    assert len(json.loads(capsys.readouterr().out)) == 1
+
+
+def test_next_with_no_limit_returns_every_pickable_issue(capsys):
+    """The accepting half, and the operator-requested change it guards.
+
+    `--limit` defaulted to 10. An orchestrator read `next --json`, got 10 rows and took them
+    for the whole free set while 12 more sat invisible. A view blind to real state that does
+    not announce it is the same failure class as the four paths in #1277, so the default is
+    now unbounded and `--limit N` is the opt-in bound. Eleven issues, so a reintroduced
+    default of 10 fails here rather than passing by coincidence.
+    """
+    issues = [make_issue(1100 + n) for n in range(11)]
+    tools, _ = build_tools(Fakes(issues=issues, worktree_facts=facts()))
+    assert main(["next", "--json"], tools) == 0
+    assert len(json.loads(capsys.readouterr().out)) == 11

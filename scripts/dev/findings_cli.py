@@ -81,6 +81,12 @@ def _parser(description: str) -> argparse.ArgumentParser:
     cl.add_argument("numbers", nargs="+", type=int)
     cl.add_argument("--worktree", required=True, help="the branch doing the work")
     cl.add_argument("--session", help="the Claude session id, for the thread to read")
+    cl.add_argument(
+        "--force",
+        action="store_true",
+        help="claim even when --worktree names no branch, or one whose state makes the "
+        "claim read stale the moment it lands",
+    )
 
     rl = sub.add_parser("release", help="release this worktree's claim")
     _add_dry_run(rl, suppress=True)
@@ -146,7 +152,17 @@ def _parser(description: str) -> argparse.ArgumentParser:
 
     nx = sub.add_parser("next", help="issues a session may pick up, best first")
     _add_dry_run(nx, suppress=True)
-    nx.add_argument("--limit", type=int, default=10)
+    # No default bound. A default of 10 truncated silently: an orchestrator read
+    # `next --json`, got 10 rows and took them for the whole free set, while 12 more sat
+    # invisible. A view blind to real state that does not announce it is the same failure
+    # class as the four in #1277. `rows[:None]` returns every row, so the slice in
+    # `cmd_next` needs no branch.
+    nx.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="show at most N issues; every pickable issue by default",
+    )
     nx.add_argument("--json", action="store_true")
 
     return p

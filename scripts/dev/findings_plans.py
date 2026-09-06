@@ -81,26 +81,48 @@ def plan_claim(
 ) -> list[list[str]]:
     """Plans the gh argv to claim ``issue`` for ``worktree``.
 
-    Returns an EMPTY list when ``worktree`` already holds the claim, so re-running a claim
-    is idempotent rather than a second comment on the same thread.
+    Returns an EMPTY list when ``worktree`` already holds the claim AND the `claimed` label
+    is on, so re-running a claim is idempotent rather than a second comment on the same
+    thread. A reclaim whose label is MISSING plans the label edit alone — see below.
+
+    LABEL-AWARE, IN BOTH DIRECTIONS (#1277). The comment is the claim and the label is
+    decorative, so the two can disagree: `cmd_claim` posts the comment first, and a failed
+    `--add-label` (rate limit, transient 502) exits 1 with the claim held and the label off.
+    Returning `[]` for every reclaim made that unrepairable — the retry short-circuited
+    before the label plan, so the label could never be added. The damage is silent and
+    permanent: a wrong answer for anyone filtering GitHub by `label:claimed`.
 
     Raises:
-        ClaimRefused: the issue is closed, is labelled `manual`, or another worktree
-            already holds it.
+        ClaimRefused: the issue is closed, lacks the `claude` label, is labelled `manual`,
+            or another worktree already holds it.
     """
     if issue.get("state", "OPEN") != "OPEN":
         raise ClaimRefused("closed — nothing to work")
-    if "manual" in label_names(issue):
+    names = label_names(issue)
+    # An issue outside the register is invisible to `claims`, `reap` and `next` alike: all
+    # three read `load_issues`, which filters `--label claude`, while `_load_issue` does not.
+    # So a claim on one could only ever be cleared by a hand-typed `release`, and nothing
+    # would tell anyone it was there (#1277).
+    if "claude" not in names:
+        raise ClaimRefused(
+            "not in the register — no `claude` label, so `claims`, `reap` and `next` "
+            "would all be blind to the claim"
+        )
+    if "manual" in names:
         raise ClaimRefused("labelled `manual` — reserved for the operator")
+    n = str(issue["number"])
+    add_label = ["issue", "edit", n, "--add-label", "claimed"]
     held = current_claim(issue)
     if held == worktree:
-        return []
+        # The repair. A fresh claim below re-adds the label unconditionally, because
+        # `--add-label` on a label already present is a no-op; here the plan IS the repair,
+        # so an already-correct label has to plan nothing or the reclaim stops being a no-op.
+        return [] if "claimed" in names else [add_label]
     if held:
         raise ClaimRefused(f"already claimed by `{held}`")
-    n = str(issue["number"])
     return [
         ["issue", "comment", n, "--body", claim_comment(worktree, session, when)],
-        ["issue", "edit", n, "--add-label", "claimed"],
+        add_label,
     ]
 
 
@@ -109,20 +131,30 @@ def plan_release(
 ) -> list[list[str]]:
     """Plans the gh argv to release ``worktree``'s claim on ``issue``.
 
+    LABEL-AWARE, the mirror of `plan_claim` (#1277). A release whose `--remove-label` failed
+    left the comment posted and the label on, and the retry then raised `ClaimRefused("not
+    claimed")` — so a stuck `claimed` label could never be removed. An issue nobody holds
+    that still carries the label therefore plans the label edit alone rather than refusing.
+
     Raises:
-        ClaimRefused: nobody holds the issue, or somebody else does. One session releasing
-            another's claim is always a mistake, so it is refused rather than allowed with
-            a warning.
+        ClaimRefused: nobody holds the issue and no label needs removing, or somebody else
+            holds it. One session releasing another's claim is always a mistake, so it is
+            refused rather than allowed with a warning.
     """
+    n = str(issue["number"])
+    remove_label = ["issue", "edit", n, "--remove-label", "claimed"]
     held = current_claim(issue)
     if held is None:
+        # The repair: nobody holds it, but the label says somebody does. Removing the label
+        # is the whole of what is left to do, so plan that instead of refusing.
+        if "claimed" in label_names(issue):
+            return [remove_label]
         raise ClaimRefused("not claimed")
     if held != worktree:
         raise ClaimRefused(f"claimed by `{held}`, not by `{worktree}`")
-    n = str(issue["number"])
     return [
         ["issue", "comment", n, "--body", release_comment(worktree, when, reason)],
-        ["issue", "edit", n, "--remove-label", "claimed"],
+        remove_label,
     ]
 
 
