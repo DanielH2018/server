@@ -65,7 +65,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # scripts/
 from deploy_tools.land_lib import pipeline
 from deploy_tools.land_lib.landing import Landing
-from deploy_tools.land_lib.ledger import Ledger, annotation_line
+from deploy_tools.land_lib.ledger import annotation_line
 from deploy_tools.land_lib.options import parse_args
 from deploy_tools.land_lib.tools import Classifier, Tools
 
@@ -95,24 +95,16 @@ def main(
     tools: Tools | None = None,
     classifier: Classifier | None = None,
 ) -> int:
-    """Parse, run, print the outcome, and annotate -- whatever happened."""
+    """Parse, run, print the outcome, and annotate every run that became a landing."""
     tools = tools or Tools()
-    t_start = tools.clock()
-    try:
-        opts = parse_args(argv, __doc__ or "")
-    except SystemExit as exc:
-        # argparse raises before a Landing/Ledger exists, so a bad argument (exit 2) would
-        # otherwise reach the Landings board as nothing at all -- bash's EXIT trap covered
-        # this because it was installed before the arg loop. `--help` (exit 0) is NOT
-        # reproduced here: bash's trap logged a junk `verdict=aborted exit=0` line for it,
-        # which this port correctly dropped. `pr=unknown` is unavoidable: argparse hasn't
-        # handed back a parsed Options, so there is no PR number to name even when one was
-        # given before the argument that failed.
-        if exc.code == 2:
-            ledger = Ledger(pr="unknown", t_start=t_start)
-            with contextlib.suppress(Exception):
-                tools.logger(annotation_line(ledger, 2, tools.clock() - t_start))
-        raise
+    # DECIDED: a usage error is not a landing, so it annotates nothing. argparse raises
+    # SystemExit(2) before a Landing or a Ledger exists, so the only line this could write is
+    # `pr=unknown verdict=aborted` -- a row meaning "you typed the command wrong" in the same
+    # stream the Landings board counts. The bash original annotated it because its EXIT trap
+    # was installed before the arg loop, and this port reproduced that until issue #1304
+    # measured 592 such rows in Loki's 744h window. `--help` (exit 0) never annotated.
+    # Nothing wraps parse_args now: its SystemExit propagates untouched.
+    opts = parse_args(argv, __doc__ or "")
     _prepare_stdio()
     ln = Landing(opts, tools, classifier)
     rc = 1
