@@ -270,6 +270,10 @@ authelia_k8s_manage_crowdsec: false
 # is the mechanism freshrss exercises here.
 authelia_k8s_manage_oidc: false
 
+# No claude-ui user. It exists so the headless UI tier can reach prod's `two_factor`
+# services, and staging holds neither of the credentials it needs.
+authelia_k8s_manage_claude_user: false
+
 # No registry garbage collection. Its script pushes the GC result into prod's Kuma, same
 # reason as k3s_manage_health_crons above. Nothing here needs collecting either: this
 # registry holds one small image and the cluster is rebuilt rather than kept.

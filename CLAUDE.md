@@ -268,7 +268,8 @@ history, the `homelab-ui` DNS/auth/secrecy triad and its `-m ui` suite, per-file
   ClusterIP reaches only pods on the node you run from (the baseline NetworkPolicy admits the
   two cni0 gateways alone, `netpol-baseline/defaults/main.yml:41`), and `kubectl port-forward`
   is denied to the read-only ServiceAccount. code-server, n8n and longhorn are `two_factor` and
-  need `ui_login.py --totp <code>` plus `ui_mcp.sh --two-factor`.
+  need `ui_mcp.sh --two-factor`, which mints its own session as the `claude-ui` Authelia user —
+  no typed code, since that user's TOTP secret is a SOPS value.
 - **block-protected-edits** (PreToolUse) — *denies* direct edits to (a) anything under
   `containers/` (edit the `ansible/roles/containers/<svc>/templates/` source instead) and
   (b) SOPS-encrypted files like `ansible/vars/secrets.yml` (use `sops` / the `/add-secret` skill).

@@ -6,6 +6,23 @@
 # Read-back first, because argon2 salts are random: regenerating on every run would change
 # the Secret every deploy and trigger a rollout restart that changes nothing. This is the k8s
 # form of the Docker role's first-run-only users_database.yml guard.
+- name: Fail if the claude-ui credentials are missing
+  tags: [config]
+  # The role defaults carry empty stand-ins for both, so a cluster that manages this user and
+  # does NOT hold the SOPS values resolves them to '' rather than failing on an undefined
+  # name. Without this assert that reaches `authelia crypto hash generate`, which hashes the
+  # empty string into a well-formed digest — an account with a password nobody set, behind a
+  # green recap.
+  ansible.builtin.assert:
+    that:
+      - authelia_claude_password | default('') | length > 0
+      - authelia_claude_totp_secret | default('') | length > 0
+    fail_msg: >-
+      authelia_k8s_manage_claude_user is on, but authelia_claude_password or
+      authelia_claude_totp_secret is empty. Add both to ansible/vars/secrets.yml, or set
+      authelia_k8s_manage_claude_user to false for this cluster.
+  when: authelia_k8s_manage_claude_user | bool
+
 - name: Look for an existing Authelia users database in the cluster
   tags: [config]
   # Fetches the whole .data map rather than jsonpath={.data.users_database\.yml}. A key
@@ -29,17 +46,38 @@
   check_mode: false
   no_log: true
 
-- name: Reuse the password hash already in the cluster
+- name: Read the users already in the cluster's Authelia database
+  tags: [config]
+  # Parsed as YAML and keyed by username, NOT regex-searched for the first `$argon2` run.
+  # The database holds two users now — the operator and the UI tier's `claude-ui` — so a
+  # regex that anchors on the hash itself cannot say whose hash it found. It would hand
+  # both users the first block's digest, which is one password opening two accounts.
+  #
+  # default('{}', true) covers both a missing Secret and an empty stdout — from_json on ''
+  # raises. from_yaml on '' returns None, hence the second default before `.get`.
+  ansible.builtin.set_fact:
+    authelia_k8s_existing_users: >-
+      {{ ((authelia_k8s_existing.stdout | default('{}', true) | from_json).get('users_database.yml', '')
+          | b64decode | from_yaml | default({}, true)).get('users', {}) | default({}, true) }}
+  no_log: true
+
+- name: Reuse the operator password hash already in the cluster
   tags: [config]
   ansible.builtin.set_fact:
-    authelia_password_hash: "{{ authelia_k8s_existing_hash }}"
-  vars:
-    # default('{}', true) covers both a missing Secret and an empty stdout — from_json on ''
-    # raises. The regex tolerates the value being absent from the map on a partial Secret.
-    authelia_k8s_existing_hash: >-
-      {{ (authelia_k8s_existing.stdout | default('{}', true) | from_json).get('users_database.yml', '')
-         | b64decode | regex_search('\$argon2[^\s\']+') | default('', true) }}
-  when: authelia_k8s_existing_hash | length > 0
+    authelia_password_hash: "{{ authelia_k8s_existing_users[authelia_user]['password'] }}"
+  when:
+    - not authelia_k8s_rehash_passwords | bool
+    - authelia_k8s_existing_users.get(authelia_user, {}).get('password', '') | length > 0
+  no_log: true
+
+- name: Reuse the claude-ui password hash already in the cluster
+  tags: [config]
+  ansible.builtin.set_fact:
+    authelia_claude_password_hash: "{{ authelia_k8s_existing_users[authelia_k8s_claude_user]['password'] }}"
+  when:
+    - authelia_k8s_manage_claude_user | bool
+    - not authelia_k8s_rehash_passwords | bool
+    - authelia_k8s_existing_users.get(authelia_k8s_claude_user, {}).get('password', '') | length > 0
   no_log: true
 
 - name: Hash the Authelia password
@@ -86,15 +124,50 @@
   when: authelia_password_hash is not defined
   no_log: true
 
+- name: Hash the claude-ui password
+  tags: [config]
+  # A second one-shot pod rather than a loop over both users: every argument about stdin,
+  # IFS= and argv exposure on the operator task above applies here unchanged, and a loop
+  # would put both digests in one registered result that `no_log` then makes unreadable
+  # when one of them is malformed.
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} run authelia-hash-claude
+      --rm -i --attach --quiet --restart=Never --image={{ authelia_k8s_image }} --command --
+      sh -c 'IFS= read -r pw; authelia crypto hash generate argon2 --password "$pw"
+      --iterations 3 --memory 65536 --parallelism 4 --salt-size 16 --key-size 32'
+    stdin: "{{ authelia_claude_password }}"
+  register: authelia_k8s_claude_hash
+  become: true
+  changed_when: false
+  no_log: true
+  when:
+    - authelia_k8s_manage_claude_user | bool
+    - authelia_claude_password_hash is not defined
+
+- name: Extract the claude-ui digest
+  tags: [config]
+  ansible.builtin.set_fact:
+    authelia_claude_password_hash: "{{ authelia_k8s_claude_hash.stdout | regex_search('\\$argon2[^\\s]+') }}"
+  when:
+    - authelia_k8s_manage_claude_user | bool
+    - authelia_claude_password_hash is not defined
+  no_log: true
+
 - name: Fail if no password hash could be obtained
   tags: [config]
   # Without this the template renders an empty password and Authelia starts with an account
-  # nobody can log into — a green deploy with a locked portal.
+  # nobody can log into — a green deploy with a locked portal. Both users are asserted: a
+  # missing claude-ui digest locks out the headless UI tier the same way, and it would
+  # otherwise surface much later as a login the browser cannot complete.
   ansible.builtin.assert:
-    that: authelia_password_hash | default('') | length > 0
+    that:
+      - authelia_password_hash | default('') | length > 0
+      - not authelia_k8s_manage_claude_user | bool
+        or authelia_claude_password_hash | default('') | length > 0
     fail_msg: >-
-      Could not read or generate the Authelia password hash. Check that the authelia-hash
-      pod could pull {{ authelia_k8s_image }}.
+      Could not read or generate an Authelia password hash. Check that the authelia-hash
+      pods could pull {{ authelia_k8s_image }}.
 
 - name: Deploy Authelia to the cluster
   ansible.builtin.include_role:
@@ -113,3 +186,44 @@
     manifests_secret_files: >-
       {{ ['config-secret.yaml']
          + (['crowdsec-secret.yaml'] if authelia_k8s_manage_crowdsec | bool else []) }}
+
+# TOTP registrations live in Authelia's SQLite database, not in the rendered
+# users_database.yml, so `claude-ui`'s second factor cannot be templated with the rest of
+# the user. It is seeded through Authelia's own CLI against the running pod instead.
+- name: Wait for Authelia to be rolled out before seeding the claude-ui TOTP
+  tags: [config]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} rollout status deploy/authelia --timeout=300s
+  become: true
+  changed_when: false
+  # A read of rollout state, but `rollout status` blocks on a Deployment a no-mutation run
+  # never created, so it stays out of one. 300s is this tree's default inline-gate budget.
+  when: authelia_k8s_manage_claude_user | bool and not (k8s_no_mutate | bool)
+
+- name: Seed the claude-ui TOTP registration
+  tags: [config]
+  # Re-seeded on every deploy with --force rather than guarded by a read-back. The secret is
+  # fixed in SOPS, so the row this writes is identical each run — idempotent in effect, and
+  # `changed_when: false` says so. The alternative, `authelia storage user totp export`,
+  # would print live TOTP secrets into the Ansible output to decide whether to skip.
+  #
+  # --config, not --encryption-key: the pod's own configuration.yml already names the SQLite
+  # path and the storage encryption key, so neither reaches argv here. The shared secret
+  # still must — `--secret` has no file or env form — so it arrives on stdin and is expanded
+  # by the in-pod shell, the same shape as the password-hash tasks above.
+  #
+  # The three TOTP parameters are stated rather than left to the CLI defaults. ui_login.py
+  # derives its codes from the same three constants, and a default that moved in a later
+  # Authelia would put the two out of step with nothing but a rejected login to say so.
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} exec -i deploy/authelia -c authelia --
+      sh -c 'IFS= read -r s; authelia storage user totp generate {{ authelia_k8s_claude_user }}
+      --config /secrets/configuration.yml --secret "$s" --force
+      --algorithm SHA1 --digits 6 --period 30'
+    stdin: "{{ authelia_claude_totp_secret }}"
+  become: true
+  changed_when: false
+  no_log: true
+  when: authelia_k8s_manage_claude_user | bool and not (k8s_no_mutate | bool)

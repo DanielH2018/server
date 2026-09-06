@@ -42,13 +42,11 @@ export PATH="$NODE_BIN:$PATH"
 # Check the session, and mint one if it is missing or expired. --check exits non-zero in
 # both cases and is one API call, so it is cheap enough to do every launch.
 if ! uv --directory "$REPO_ROOT" run python scripts/diagnostics/ui_login.py --check "${TIER_ARGS[@]}" >/dev/null 2>&1; then
-  if [[ ${#TIER_ARGS[@]} -gt 0 ]]; then
-    # A two_factor session cannot be minted unattended — that is the design, not a gap.
-    echo "no live two_factor session. Mint one with:" >&2
-    echo "  uv run python scripts/diagnostics/ui_login.py --totp <code>" >&2
-    exit 1
-  fi
-  uv --directory "$REPO_ROOT" run python scripts/diagnostics/ui_login.py >&2
+  # Both tiers mint unattended. The two_factor one logs in as `claude-ui`, whose TOTP
+  # secret is a SOPS value, so `--two-factor` needs no typed code — see ui_login.py's
+  # module docstring. Its session still lasts about an hour, which is why this re-mints
+  # on every launch rather than expecting a jar to survive between them.
+  uv --directory "$REPO_ROOT" run python scripts/diagnostics/ui_login.py "${TIER_ARGS[@]}" >&2
 fi
 
 STATE_PATH="$(uv --directory "$REPO_ROOT" run python scripts/diagnostics/ui_login.py --path "${TIER_ARGS[@]}")"

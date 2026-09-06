@@ -23,24 +23,42 @@ two idle minutes of a Claude session; `remember_me: '1M'` applies only when the 
 asks for it. Without that flag this file would need re-minting continuously.
 
 Usage:
-    uv run python scripts/diagnostics/ui_login.py            # mint (or refresh) the state file
-    uv run python scripts/diagnostics/ui_login.py --check    # ask Authelia if the session still stands
-    uv run python scripts/diagnostics/ui_login.py --totp 123456   # a two_factor session, ~1h
+    uv run python scripts/diagnostics/ui_login.py                  # mint (or refresh) the state file
+    uv run python scripts/diagnostics/ui_login.py --check          # ask Authelia if the session still stands
+    uv run python scripts/diagnostics/ui_login.py --two-factor     # a two_factor session, ~1h
+    uv run python scripts/diagnostics/ui_login.py --path           # print the state file path
 
-The `--totp` form exists because code-server, n8n and longhorn are `two_factor`
-(`roles/k8s/authelia/templates/config-secret.yaml.j2:85-99`), and a one_factor cookie
-bounces off them. The code is typed, never derived: the TOTP shared secret stays on the
-phone. Storing it in SOPS would put both factors under one age key, and rotating it would
-mean re-enrolling the device — the one credential here whose rotation costs more than an
-edit. Nothing runs these unattended anyway, since the `ui` test marker is deselected in CI.
-    uv run python scripts/diagnostics/ui_login.py --path     # print the state file path
+The two tiers log in as DIFFERENT users. The one_factor tier is the operator
+(`authelia_user`). The two_factor tier is `claude-ui`, an Authelia identity that exists
+only for this script — its password and its TOTP shared secret are both SOPS values, and
+the code is derived here rather than typed.
+
+That split is what makes the two_factor tier unattended. code-server, n8n and longhorn are
+`two_factor` (`roles/k8s/authelia/templates/config-secret.yaml.j2`), so a one_factor cookie
+bounces off them, and until 2026-09-06 the only way past that was a code read off the
+operator's phone — which meant `test_two_factor_service_serves_its_own_ui` skipped rather
+than ran, for eight days at a stretch.
+
+Deriving a code needs the shared secret readable, so the second factor is another value
+under the same age key as the first. A dedicated user is what makes that an acceptable
+trade: the operator's own enrollment is untouched, revoking Claude's reach into those three
+services is deleting one block from `users_database.yml`, and rotating either credential is
+a `sops set` plus a deploy. `authelia_k8s_claude_user` in the role defaults carries the
+long form.
+
+`--totp <code>` still accepts a typed code, as break-glass for a seeded secret that has
+drifted from the row in Authelia's database.
 
 Exit 0 = a usable state file is on disk. Exit 1 = it is missing, expired or rejected.
 """
 
 import argparse
+import base64
+import hashlib
+import hmac
 import json
 import os
+import struct
 import subprocess
 import sys
 import tempfile
@@ -58,6 +76,49 @@ from diagnostics.probe_lib import core
 # `authelia_k8s_cookie_name` in roles/k8s/authelia/defaults/main.yml:48 — a rename there
 # must land here too, which test_ui_login.py asserts against the role default.
 COOKIE_NAME = "authelia_session_k8s"
+
+# The two_factor tier's Authelia identity. Mirrors `authelia_k8s_claude_user` in the role
+# defaults, the same way COOKIE_NAME mirrors the cookie name, and test_ui_login.py asserts
+# the pair still agree.
+CLAUDE_USER = "claude-ui"
+
+# The TOTP parameters the seeding task states explicitly when it registers CLAUDE_USER.
+# Restating them here rather than relying on either side's defaults is deliberate: a default
+# that moved in a later Authelia would desynchronise the two with nothing to show for it but
+# a login Authelia rejects.
+TOTP_ALGORITHM = hashlib.sha1
+TOTP_DIGITS = 6
+TOTP_PERIOD = 30
+
+
+def derive_totp(
+    secret_b32, now, period=TOTP_PERIOD, digits=TOTP_DIGITS, algorithm=TOTP_ALGORITHM
+):
+    """Compute the RFC 6238 TOTP code for a base32 shared secret.
+
+    Fifteen lines of stdlib HMAC rather than a dependency, because RFC 6238 publishes test
+    vectors: `test_ui_login.py` checks this against them, which is a stronger proof than
+    "the library is popular".
+
+    Args:
+        secret_b32: the shared secret, base32, with or without `=` padding.
+        now: Unix seconds to derive the code for. Passed in rather than read, so the test
+          can pin it to the RFC's timestamps.
+
+    Returns:
+        The code as a zero-padded string of `digits` characters.
+    """
+    padded = secret_b32.strip().upper()
+    padded += "=" * (-len(padded) % 8)
+    key = base64.b32decode(padded)
+    counter = struct.pack(">Q", int(now) // period)
+    digest = hmac.new(key, counter, algorithm).digest()
+    # Dynamic truncation: the low nibble of the last byte picks the 4-byte window, whose top
+    # bit is masked off so the result never reads as negative.
+    offset = digest[-1] & 0x0F
+    value = struct.unpack(">I", digest[offset : offset + 4])[0] & 0x7FFFFFFF
+    return str(value % (10**digits)).zfill(digits)
+
 
 # Authelia's own view of the caller's session. Cheaper than a service route and it needs no
 # service to be up, so `--check` stays a question about the cookie rather than about whatever
@@ -195,19 +256,26 @@ def post_json(host, path, body, cookie=None):
             return f.read()
 
 
-def mint(totp_code=None):
+def mint(two_factor=False, totp_code=None):
     """Log in and write the state file. Returns the path.
 
-    With `totp_code`, the first-factor session is upgraded through Authelia's second-factor
-    endpoint and written to the two_factor state file instead. The code is passed in rather
-    than derived: keeping the TOTP shared secret OFF this host is the point — storing it
-    beside the password in SOPS would put both factors under one age key, and rotating it
-    would mean re-enrolling the phone.
+    A two_factor mint logs in as CLAUDE_USER, not as the operator, and upgrades that session
+    through Authelia's second-factor endpoint. The code is derived from
+    `authelia_claude_totp_secret` unless `totp_code` overrides it — see the module docstring
+    for why that secret is readable here and what the dedicated identity buys.
     """
-    two_factor = totp_code is not None
+    two_factor = two_factor or totp_code is not None
     domain = core.sops_extract("domain")
-    user = core.sops_extract("authelia_user")
-    password = core.sops_extract("authelia_password")
+    if two_factor:
+        user = CLAUDE_USER
+        password = core.sops_extract("authelia_claude_password")
+        if totp_code is None:
+            totp_code = derive_totp(
+                core.sops_extract("authelia_claude_totp_secret"), time.time()
+            )
+    else:
+        user = core.sops_extract("authelia_user")
+        password = core.sops_extract("authelia_password")
     host = portal_host(domain)
 
     body = json.dumps(
@@ -414,10 +482,10 @@ def verify(service, two_factor=False):
 def main(argv=None):
     """Parse args and mint, check, verify, or locate an Authelia session state file.
 
-    With no flag, mints a new session (two_factor if `--totp` is given, else
-    one_factor). `--path` only prints the state file location; `--check` and `--verify`
-    inspect an existing session without minting a new one. Returns the exit code of the
-    action taken; a bare mint always returns 0.
+    With no inspection flag, mints a new session — two_factor when `--two-factor` or
+    `--totp` is given, else one_factor. `--path` only prints the state file location;
+    `--check` and `--verify` inspect an existing session without minting a new one. Returns
+    the exit code of the action taken; a bare mint always returns 0.
     """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -437,14 +505,14 @@ def main(argv=None):
     parser.add_argument(
         "--totp",
         metavar="CODE",
-        help="mint a two_factor session using this code from your authenticator, for "
-        "code-server / n8n / longhorn. Written to a separate, short-lived state file; the "
-        "TOTP secret itself is never stored here",
+        help="mint a two_factor session using this code instead of deriving one. "
+        "Break-glass, for a seeded secret that has drifted from Authelia's own row",
     )
     parser.add_argument(
         "--two-factor",
         action="store_true",
-        help="make --check / --verify / --path act on the two_factor state file",
+        help="act on the two_factor state file — mint one for code-server / n8n / longhorn "
+        "as the claude-ui user, or make --check / --verify / --path read that file",
     )
     args = parser.parse_args(argv)
 
@@ -456,11 +524,11 @@ def main(argv=None):
     if args.check:
         return check(two_factor=args.two_factor)
 
-    path = mint(totp_code=args.totp)
-    tier = "two_factor" if args.totp else "one_factor"
-    print(
-        f"minted a {tier} session as the authelia user; storage state written to {path}"
-    )
+    two_factor = args.two_factor or args.totp is not None
+    path = mint(two_factor=two_factor, totp_code=args.totp)
+    tier = "two_factor" if two_factor else "one_factor"
+    user = CLAUDE_USER if two_factor else "the operator"
+    print(f"minted a {tier} session as {user}; storage state written to {path}")
     return 0
 
 

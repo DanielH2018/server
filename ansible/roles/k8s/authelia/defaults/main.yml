@@ -83,3 +83,57 @@ authelia_k8s_agent_cpu_request: 50m
 authelia_k8s_agent_mem_request: 64Mi
 # Bounds a runaway auth log on the emptyDir shared with the sidecar.
 authelia_k8s_log_size: 512Mi
+
+# The dedicated identity the headless UI tier logs in as, for the `two_factor` services
+# (code-server, n8n, longhorn). Not a credential: the username is plaintext on purpose so
+# the manifest guards and `test_ui_login.py` can assert on it without decrypting anything.
+# Its password (`authelia_claude_password`) and TOTP shared secret
+# (`authelia_claude_totp_secret`) are SOPS values, both generated locally and rotatable
+# without touching the operator's enrolled phone.
+#
+# DECIDED: a second user rather than putting the OPERATOR's TOTP secret in SOPS. Making the
+# two_factor tier unattended means the second factor becomes another value under the age
+# key either way, so the factor count is not what this buys. What it buys is a blast radius
+# with an edge: revoking Claude's reach into code-server, n8n and longhorn is deleting one
+# block from `users_database.yml`, and rotating either credential is a `sops set` plus a
+# deploy rather than re-enrolling a phone. The operator's own login is untouched by both.
+#
+# Its groups match the operator's deliberately. The access_control rules here are
+# domain-scoped, never `subject:`-scoped, so groups change nothing about what this user can
+# REACH — they change only what the apps behind those routes render. A narrower set would
+# have the UI tier assert against a degraded page while still reporting green.
+authelia_k8s_claude_user: claude-ui
+authelia_k8s_claude_groups:
+  - 'admins'
+  - 'dev'
+
+# The claude-ui user, its TOTP registration, and the two credentials they need. False for a
+# cluster that does not run the headless UI tier — staging is one, and it holds neither
+# credential.
+#
+# The TOTP row lives in Authelia's SQLite database (a PVC), not in the rendered
+# users_database.yml — Authelia keeps registrations there whatever the authentication
+# backend is. So it is seeded by `authelia storage user totp generate` against the running
+# pod rather than templated, and re-seeded on every deploy with `--force`: the secret is
+# fixed in SOPS, so the row it writes is byte-identical each time and the task is
+# idempotent in effect.
+authelia_k8s_manage_claude_user: true
+
+# Empty stand-ins, NOT values. SOPS supplies both on a cluster that manages the user, and
+# play vars outrank role defaults, so these are what a cluster with the flag off resolves
+# instead of failing on an undefined name. An empty one reaching a cluster with the flag ON
+# is a misconfiguration, and tasks/main.yml asserts against exactly that — without the
+# assert, `authelia crypto hash generate` would happily hash the empty string and hand
+# claude-ui a well-formed digest for a password nobody set.
+authelia_claude_password: ''
+authelia_claude_totp_secret: ''
+
+# Force both users' argon2 digests to be regenerated from the SOPS passwords, discarding
+# whatever is in the live Secret. False by default, because the read-back exists to stop a
+# fresh random salt rewriting the Secret and rolling the pod on every deploy.
+#
+# It is also the ONLY way a rotated password takes effect. `sops set authelia_password` and
+# a deploy do nothing on their own: the read-back finds the old digest and reuses it, the
+# recap is green, and the portal goes on accepting the old password. Rotate with
+# `./scripts/deploy.sh --tags authelia -e authelia_k8s_rehash_passwords=true`.
+authelia_k8s_rehash_passwords: false
