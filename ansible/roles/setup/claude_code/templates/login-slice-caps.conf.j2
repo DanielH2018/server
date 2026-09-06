@@ -13,6 +13,13 @@
 # box's total headroom; raise them together; a login session drawing more than the RC unit
 # would need re-deriving that arithmetic, not just this file.
 #
+# These are ONE PLANE's sub-bounds, not the fleet's bound. Sharing a variable with the RC unit
+# does not make the two planes share a cap: they are separate cgroups, so until 2026-09-06 the
+# fleet's real throttle point was the SUM of the two — 16G of anon plus 4G of swap, twice what
+# the number read as (issue #1264). What bounds the fleet is claude_code_fleet_memory_high on
+# {{ claude_code_fleet_slice }}, the parent of this slice and, since that fix, of
+# claude-rc.service as well: templates/fleet-slice-caps.conf.j2.
+#
 # No MemoryMax here either, for the same reason the unit has none: systemd applies it to the
 # whole slice, so it would take out every process in every login session at once, including
 # the SSH connection running the deploy. MemoryHigh throttles allocation instead of killing.

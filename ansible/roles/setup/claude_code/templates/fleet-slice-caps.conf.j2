@@ -1,0 +1,30 @@
+# Managed by ansible/roles/setup/claude_code — do not edit by hand.
+#
+# The ONE bound for the whole Claude fleet on this host (issue #1264). The fleet occupies two
+# cgroups: claude-rc.service's own, and user-{{ claude_code_login_uid }}.slice for a session
+# started from an interactive shell. Both carry claude_code_rc_memory_high, which reads as one
+# bound and was two — siblings under different parents, neither seeing the other's usage, so
+# the real throttle point was their SUM: 16G of anon plus 4G of swap on a 28 GiB box that also
+# runs k3s, Longhorn and the rest of the homelab plane. This file is the parent that makes the
+# sum the number; the two per-plane caps stay as sub-bounds under it.
+#
+# {{ claude_code_fleet_slice }} is the tightest slice that can be that parent, and it is the
+# only one. systemd.slice(5): "The name of the slice encodes the location in the tree", and a
+# slice unit's own Slice= accepts "the only accepted value ... the parent slice" — so
+# user-{{ claude_code_login_uid }}.slice cannot be reparented at all, its name fixes it under
+# user.slice and systemd-logind creates it under that name. Nesting the RC unit in
+# user-{{ claude_code_login_uid }}.slice instead would have been the other way to share a
+# parent, and it is unsafe here: that slice is StopWhenUnneeded=yes with Linger=no on this
+# host, so logind stops it at the last logout and would take the RC host down with it (a unit
+# with Slice= gains an implicit Requires= on its slice). user.slice is StopWhenUnneeded=no.
+#
+# Derivation of the numbers — 28.2 GiB RAM, a 10 GiB budget for the homelab plane's anon, and
+# a measured fleet peak of 11.2 GiB — is in this role's defaults/main.yml beside
+# claude_code_fleet_memory_high. Re-derive it there, not here.
+#
+# No MemoryMax, for the same reason neither plane has one: systemd applies it to the whole
+# slice, so it would OOM-kill every login session and the RC host at once, including the SSH
+# connection running the deploy. MemoryHigh throttles allocation instead of killing.
+[Slice]
+MemoryHigh={{ claude_code_fleet_memory_high }}
+MemorySwapMax={{ claude_code_fleet_swap_max }}

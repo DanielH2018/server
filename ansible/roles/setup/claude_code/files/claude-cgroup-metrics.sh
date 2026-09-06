@@ -26,9 +26,23 @@ OUT="$TEXTFILE_DIR/claude_cgroup.prom"
 
 # label -> cgroup path relative to CGROOT
 declare -A CGROUPS=(
-  [claude-rc]=system.slice/claude-rc.service
+  # The fleet's shared parent (#1264). user.slice carries the ONE MemoryHigh/MemorySwapMax
+  # for the whole Claude fleet, so this is the cgroup whose memory.events{event="high"}
+  # counts the fleet hitting its bound; its counters include both planes below.
+  [fleet]=user.slice
   [user-1000-slice]=user.slice/user-1000.slice
 )
+
+# claude-rc.service moved out of system.slice and under the fleet's shared parent (#1264),
+# and claude_code_fleet_caps_enabled: false moves it back — so resolve the path instead of
+# hardcoding either one, or this label goes silently absent on whichever side of that toggle
+# the host is not, leaving a green scrape with one plane missing.
+for candidate in user.slice/claude-rc.service system.slice/claude-rc.service; do
+  if [ -d "$CGROOT/$candidate" ]; then
+    CGROUPS[claude-rc]=$candidate
+    break
+  fi
+done
 
 TMP=$(mktemp "$TEXTFILE_DIR/claude_cgroup.prom.XXXXXX") || exit 1
 trap 'rm -f "$TMP"' EXIT

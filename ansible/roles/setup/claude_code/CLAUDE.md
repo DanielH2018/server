@@ -115,8 +115,11 @@ sessions" and nothing else.
 - **`MemorySwapMax` caps the cgroup's swap, and `MemoryHigh` cannot.** A throttled cgroup's
   anon pages go to swap, so an unbounded `memory.swap.max` left the throttle with no ceiling
   — the mechanism behind the 2026-09-05 stall, and what issue #1154 asked for.
-  `claude_code_rc_memory_swap_max` sets it to 2G, a quarter of this host's 8 GiB
-  `/swap.img`, so the homelab plane keeps the rest. **Not 0:** with no swap outlet nothing
+  `claude_code_rc_memory_swap_max` sets one plane's ceiling to 2G, and
+  `claude_code_fleet_swap_max` holds the two planes together at the same 2G — a quarter of
+  this host's 8 GiB `/swap.img`, so the homelab plane keeps three quarters. Until the fleet
+  bound landed (#1264) the per-plane 2G was applied twice and the fleet's real ceiling was
+  4G. **Not 0:** with no swap outlet nothing
   reclaims the cgroup's anon pages and, with `MemoryMax` deliberately infinity, the terminal
   state becomes the global OOM killer choosing a victim by badness anywhere on the box. The
   cap converts theft of the whole box's swap into a bounded share plus harder reclaim
@@ -155,6 +158,65 @@ sessions" and nothing else.
   Effect timing differs from the unit: the slice drop-in applies live to an already-running
   session on `daemon-reload`, but the environment.d file only takes effect on the *next*
   login. ENFORCED by `ansible/tests/setup/test_claude_login_slice_caps.py`.
+- **Sharing a variable is not sharing a cap.** The two artifacts above render
+  `claude_code_rc_memory_high` at two render sites, which reads as one 8G bound and was two:
+  `claude-rc.service` and `user-<uid>.slice` are cgroup siblings under *different* parents
+  (`system.slice` and `user.slice`), so neither saw the other's usage and the fleet's real
+  throttle point was the SUM — 16G of anon plus 4G of swap on a box with 28 GiB of RAM.
+  Issue #1264. Closed by putting one cap on the slice that parents both planes; the section
+  below is the answer to the question that fix had to settle first.
+  ENFORCED by `ansible/tests/setup/test_claude_fleet_slice_cap.py`.
+
+## The fleet bound, and why it lives on `user.slice`
+
+One number for both Claude cgroups, on the one slice that is a parent of both:
+`claude_code_fleet_memory_high` / `claude_code_fleet_swap_max`, rendered by
+`templates/fleet-slice-caps.conf.j2` into
+`/etc/systemd/system/user.slice.d/claude-fleet-caps.conf`. `claude-rc.service` reaches that
+parent through a `Slice=` line; `user-<uid>.slice` is under `user.slice` already. The
+per-plane 8G/2G stay as sub-bounds, so either plane may take most of the budget while the
+other is idle and the parent is what holds the pair. `claude_code_fleet_caps_enabled: false`
+removes the drop-in and the `Slice=` line together, returning the unit to `system.slice`.
+
+**`user-<uid>.slice` cannot be reparented, and that is what picked the shape.** A slice's
+parent is its *name*: systemd.slice(5) says "The name of the slice encodes the location in
+the tree", and for a slice unit `Slice=` accepts "the only accepted value ... the parent
+slice". `systemd-logind` creates the slice under that name, so nothing in this role can move
+it. The unit this role *does* control is the one that moves instead.
+
+**Nesting the RC unit one level deeper — inside `user-<uid>.slice` — would also share a
+parent, and is unsafe here.** That slice is `StopWhenUnneeded=yes`
+(`/usr/lib/systemd/system/user-.slice.d/10-defaults.conf`) and this host has `Linger=no`
+(`loginctl show-user ubuntu`), so logind stops it at the last logout — and a unit with
+`Slice=` gains an implicit `Requires=` on its slice (systemd.resource-control(5)), so the RC
+host would be stopped with it and `Restart=always` does not bring back a dependency-stopped
+unit. `user.slice` measures `StopWhenUnneeded=no`.
+
+**A system service in a user-tree slice is systemd's own pattern**, not a workaround:
+`user@.service` and `user-runtime-dir@.service` both ship `Slice=user-%i.slice`, and
+systemd.special(7) describes `user.slice` as holding "all user processes and services started
+on behalf of the user" — which is what this unit is (`User=ubuntu`, `HOME=/home/ubuntu`, a
+per-user install reading that user's own OAuth token).
+
+**The derivation lives in `defaults/main.yml`** beside `claude_code_fleet_memory_high` —
+28.2 GiB of RAM, a 10 GiB budget for the homelab plane's anon, `SUnreclaim` and a page-cache
+floor, against a measured 24h fleet peak of 11.2 GiB. Re-derive it there, not from this page.
+Note that `memory.high` counts page cache, so the fleet touches this bound during an ordinary
+multi-agent pytest fan-out and reclaims cache; the anon budget is what the number is derived
+from, not what it throttles on.
+
+**Two effect-timing facts for the deploy.** The parent drop-in applies live on
+`daemon-reload`, so it lands on already-running login sessions. The `Slice=` line does not
+migrate a running unit — it takes effect at the next start, so the deploy that changes it
+restarts the RC host and drops the sessions it had spawned. Verify from cgroupfs rather than
+from `systemctl show`, which reports the configured slice before the restart has moved the
+processes:
+
+```bash
+systemctl show -p Slice -p MemoryHigh -p MemorySwapMax claude-rc.service user.slice user-1000.slice
+cat /sys/fs/cgroup/user.slice/memory.high /sys/fs/cgroup/user.slice/memory.swap.max
+ls -d /sys/fs/cgroup/user.slice/claude-rc.service
+```
 - **The background-shell pressure reaper is turned off.** Claude Code registers
   `process.on("memoryPressure", ...)` and kills every running backgrounded Bash task with the
   reason `memory_pressure`, surfacing as "stopped because the system is running low on
