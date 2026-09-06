@@ -148,3 +148,133 @@ def test_the_derivation_still_finds_the_incident_file():
     paths = _mod._secret_bearing_paths(_REPO)
     assert INCIDENT in paths
     assert "secret_rotation_push_token" in paths[INCIDENT]
+
+
+# ── arm 3: a write that escapes an isolated session's worktree ───────────────────────
+#
+# The pairs below are built on a tmp_path fixture rather than on this host's real layout, so
+# they mean the same thing in CI — where the checkout is NOT under `.claude/worktrees/` — as
+# they do in a worktree session. `_REPO` above resolves to the worktree root when the suite
+# runs from one, which is exactly why arm 3's scoping is never derived from it.
+
+HEREDOC = "python3 - <<'EOF'\nopen('x','w').write('y')\nEOF"
+
+
+@pytest.fixture
+def isolation(tmp_path):
+    """A fake primary checkout with a worktree under it, both real git checkouts on disk.
+
+    Returns (worktree, primary). `primary/.git` is a directory and `worktree/.git` a file,
+    the two shapes git itself uses, so `_inside_a_git_checkout` is exercised on both.
+    """
+    primary = tmp_path / "server"
+    (primary / ".git").mkdir(parents=True)
+    worktree = primary / ".claude" / "worktrees" / "agent-1"
+    worktree.mkdir(parents=True)
+    (worktree / ".git").write_text(f"gitdir: {primary}/.git/worktrees/agent-1\n")
+    return str(worktree), str(primary)
+
+
+def test_a_heredoc_carried_out_of_the_worktree_by_a_cd_is_flagged(isolation):
+    """The measured 2026-09-06 escape: the `cd` is the whole difference, and nothing saw it."""
+    worktree, primary = isolation
+    decision, reason = _mod.decide(
+        f"cd {primary} && {HEREDOC}", worktree, session_cwd=worktree
+    )
+    assert decision == "deny"
+    assert "#1419" in reason
+
+
+def test_the_same_heredoc_with_no_cd_is_clean(isolation):
+    worktree, _ = isolation
+    decision, _ = _mod.decide(HEREDOC, worktree, session_cwd=worktree)
+    assert decision is None
+
+
+def test_a_heredoc_after_a_cd_into_the_sessions_own_worktree_is_clean(isolation):
+    worktree, _ = isolation
+    decision, _ = _mod.decide(
+        f"cd {worktree}/scripts && {HEREDOC}", worktree, session_cwd=worktree
+    )
+    assert decision is None
+
+
+# The writer set issue #1419 names: heredoc redirect, `sed -i`, `tee`, `>`, `>>`.
+ESCAPING_WRITES = [
+    "cd {primary} && cat > notes.md <<'EOF'\nhi\nEOF",
+    "cd {primary} && sed -i s/a/b/ README.md",
+    "echo x | tee {primary}/README.md",
+    "echo x > {primary}/README.md",
+    "echo x >> {primary}/README.md",
+]
+
+# Near misses, each one token from a case above. A `cd` outside is not itself a write, and a
+# writer under a `cd` outside that names a scratch target is judged on the target.
+CONTAINED_WRITES = [
+    "echo x > README.md",
+    "echo x > {worktree}/README.md",
+    "sed -i s/a/b/ {worktree}/README.md",
+    "cd {primary} && grep -rn token .",
+    "cd {primary} && cat README.md > /tmp/copy.txt",
+    "cd {primary}",
+]
+
+
+@pytest.mark.parametrize("template", ESCAPING_WRITES)
+def test_a_write_escaping_the_worktree_is_flagged(isolation, template):
+    worktree, primary = isolation
+    command = template.format(primary=primary, worktree=worktree)
+    decision, reason = _mod.decide(command, worktree, session_cwd=worktree)
+    assert decision == "deny", f"should deny: {command}"
+    assert reason
+
+
+@pytest.mark.parametrize("template", CONTAINED_WRITES)
+def test_a_write_that_stays_inside_the_worktree_is_clean(isolation, template):
+    worktree, primary = isolation
+    command = template.format(primary=primary, worktree=worktree)
+    decision, _ = _mod.decide(command, worktree, session_cwd=worktree)
+    assert decision is None, f"should not act on: {command}"
+
+
+def test_arm_three_is_inert_outside_an_isolated_session(isolation):
+    """The same escaping command from a session that is not worktree-isolated.
+
+    Without this, arm 3 would deny every ordinary session's writes to its own checkout — and
+    the pairs above would pass either way, because `_REPO` is isolated only when the suite
+    happens to run from a worktree.
+    """
+    _, primary = isolation
+    decision, _ = _mod.decide(
+        f"cd {primary} && {HEREDOC}", primary, session_cwd=primary
+    )
+    assert decision is None
+
+
+def test_arm_three_denies_where_arm_one_would_only_ask(isolation):
+    """Ordering. A command matching both arms must take the stronger decision."""
+    worktree, primary = isolation
+    protected = os.path.join("ansible", "vars", "secrets.yml")
+    decision, reason = _mod.decide(
+        f"cd {primary} && sed -i s/a/b/ {protected}", worktree, session_cwd=worktree
+    )
+    assert decision == "deny"
+    assert "#1419" in reason
+
+
+def test_the_interpreter_set_contains_the_incidents_own_command_word():
+    """Non-vacuity. `_HEREDOC_INTERPRETERS` is the only thing standing between a target-less
+    heredoc and a silent escape; a rename emptying it would leave every pair above green."""
+    for word in ("python3", "bash", "uv"):
+        assert word in _mod._HEREDOC_INTERPRETERS
+
+
+def test_a_heredoc_body_is_not_scanned_for_redirects():
+    """A Markdown blockquote inside a heredoc body is a bare `>`, not a redirect.
+
+    Without the strip, this command reads as writing a file named `quote`, and arm 3 would
+    judge a target the command never touches.
+    """
+    stripped = _mod.strip_heredoc_bodies("cat > notes.md <<'EOF'\n> quote\nEOF")
+    assert "quote" not in stripped
+    assert "notes.md" in stripped

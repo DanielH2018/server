@@ -282,7 +282,12 @@ history, the `homelab-ui` DNS/auth/secrecy triad and its `-m ui` suite, per-file
   a content-printing read (`cat`, `head`, `grep` without `-o`/`-c`/`-l`) of a deployed host
   script that renders a credential inline; that set is derived from the tree by
   `scripts/secrets_mgmt/secret_bearing_host_paths.py`, not listed — run it to see the current
-  set rather than trusting a count written here.
+  set rather than trusting a count written here. A third arm **denies** a Bash write that
+  leaves an isolated session's worktree — `isolation-guard.sh` covers `Edit|Write` only, so
+  `cd /home/ubuntu/server && python3 - <<'EOF'` escaped into the primary checkout and parked
+  the GitOps deployer on 2026-09-06 (#1419). It carries the `cd` through the command a segment
+  at a time, and is inert outside a `.claude/worktrees/` session. A deny here, where a
+  protected-file write only asks: a write outside the worktree is never the right call.
 - **nudge-land-sh** (PreToolUse, Bash) — *denies* a command that blocks on CI (`gh run watch`,
   `gh pr checks --watch`) and the third or later CI-status read in one session, naming the
   `land.sh --pr <n> --since <sha>` form instead. The first two reads are an ordinary glance and
