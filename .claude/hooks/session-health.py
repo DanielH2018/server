@@ -189,8 +189,16 @@ def master_moved_problems():
     SessionStart hook: a live check would mean a network call on every session open. The
     line says "last fetched" rather than claiming to be current, and deploy.sh's own
     staleness gate (scripts/deploy_tools/deploy_staleness.py, exit 4) is what actually refuses a stale
-    deploy -- this is only the earlier, cheaper warning. [] on any failure, including a
-    checkout with no origin/master ref at all -- diagnosing that is not this hook's job.
+    deploy -- this is only the earlier, cheaper warning. [] on any failure of the git READ,
+    including a checkout with no origin/master ref at all -- diagnosing that is not this
+    hook's job.
+
+    A failure to IMPORT `lib.git` is the exception, and returns a `⚠` line naming it
+    (issue #1306). Both halves of this banner import from the same `scripts/` path insert,
+    and `other_live_sessions` already fails loudly for the reason recorded there: an empty
+    list is indistinguishable from "nothing to report", which is what let a stale insert
+    hide that whole section from 2026-08 until 2026-09-01. The two halves now fail the
+    same way.
 
     The read goes through `lib.git.git` rather than `_run`, which strips every `GIT_*`
     variable and so leaves `cwd` alone deciding which tree is counted. Neither `git -C` nor a
@@ -199,10 +207,12 @@ def master_moved_problems():
     `other_live_sessions` defers its own: an ImportError at module level stops the banner
     instead of degrading it.
     """
+    sys.path.insert(0, os.path.join(REPO, "scripts"))
     try:
-        sys.path.insert(0, os.path.join(REPO, "scripts"))
         from lib.git import git
-
+    except ImportError as exc:
+        return [f"  ⚠ behind-master detection is broken: {exc}"]
+    try:
         res = git(
             "rev-list",
             "--count",

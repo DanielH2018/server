@@ -59,23 +59,25 @@ def test_an_unexpected_exception_annotates_as_aborted_and_propagates(monkeypatch
     )
 
 
-def test_a_bad_argument_annotates_before_reraising_exit_2():
-    """argparse raises before a Landing/Ledger exists, so a bad flag used to reach the
-    Landings board as nothing at all -- bash's EXIT trap was installed before its arg loop
-    and covered this (#1085 item 2). Real `parse_args`, not the `land_run` fixture's
-    wrapper: the wrapper always calls the real parser first and only replaces `primary`
-    afterwards, so an unrecognized flag still raises SystemExit(2) through it same as here.
+@pytest.mark.parametrize("argv", [["--bogus"], []])
+def test_a_usage_error_does_not_annotate(argv):
+    """Issue #1304's rejecting half: a bad flag and a missing `--pr` are usage errors, not
+    landings, and must write nothing to the stream the Landings board counts. Both reach
+    argparse's SystemExit(2) before a Landing or a Ledger exists, so the only line they
+    could write is `pr=unknown verdict=aborted` -- 592 of which reached Loki's 744h window.
+
+    Real `parse_args`, not the `land_run` fixture's wrapper: the wrapper always calls the
+    real parser first and only replaces `primary` afterwards, so an unrecognized flag still
+    raises SystemExit(2) through it same as here.
     """
     import land
     from _land_fakes import build_tools
 
     tools, calls = build_tools(Fakes())
     with pytest.raises(SystemExit) as exc:
-        land.main(["--bogus"], tools=tools)
+        land.main(argv, tools=tools)
     assert exc.value.code == 2
-    logline = next(c[1][0] for c in calls if c[0] == "logger")
-    assert "event=landing pr=unknown" in logline
-    assert "verdict=aborted" in logline and "exit=2" in logline
+    assert not any(c[0] == "logger" for c in calls)
 
 
 def test_help_does_not_annotate():

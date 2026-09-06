@@ -22,7 +22,10 @@
 # the module -- the patches were always there, counting 0. On 2026-09-06 the counter began
 # reading the string-target form `monkeypatch.setattr("mod.attr", ...)`, which added
 # test_prune_worktrees.py (14) and test_watcher.py (5) and raised test_session_health.py from
-# 33 to 36 -- again patches that were always there, counting 0.
+# 33 to 36 -- again patches that were always there, counting 0. On 2026-09-06 the
+# `master_moved_problems` tests moved to a new sibling module, test_session_health_master_moved.py,
+# when issue #1306's rejecting half pushed test_session_health.py past the 500-line cap: that
+# split moved 7 of its patches, so its entry fell 36 -> 29 and the new file got its own.
 #
 # To see a file's count now, lower its entry here by 1 and run the guard -- the failure names
 # the real number:
@@ -30,7 +33,8 @@
 .claude/hooks/tests/test_auto_mode_bridge.py 1
 .claude/hooks/tests/test_block_footguns.py 2
 .claude/hooks/tests/test_nudge_land_sh.py 8
-.claude/hooks/tests/test_session_health.py 36
+.claude/hooks/tests/test_session_health.py 29
+.claude/hooks/tests/test_session_health_master_moved.py 7
 ansible/roles/k8s/artifacts/tests/test_artifact_server.py 1
 ansible/roles/k8s/autofix-bridge/tests/test_autofix.py 13
 ansible/roles/k8s/monitor-bridge/tests/_check_gate_helpers.py 7
