@@ -216,6 +216,10 @@ state in and calling `browser_close` landed on the service, and writing the empt
 calling `browser_close` again landed on the portal. The file decides, and `browser_close` is what
 makes it decide again.
 
+The procedure itself was run end to end on the live server the same day: `browser_close`, then a
+`browser_navigate` to `homepage.local.<domain>`, which returned the service's own title rather
+than the portal.
+
 The `-m ui` suite is unaffected either way — it launches its own server per run, so it reads the
 state file as it stands.
 
@@ -283,7 +287,7 @@ both in Python. Run it instead:
 
 ```bash
 uv run python scripts/diagnostics/ui_login.py --check   # mint one first if this says expired
-uv run pytest -m ui -k grafana                          # ~40s for the five enrolled boards
+uv run pytest -m ui -k grafana                          # ~30s for the five enrolled boards
 ```
 
 To cover a board that is not enrolled, add its `(uid, min_headers)` to `GRAFANA_DASHBOARDS`
