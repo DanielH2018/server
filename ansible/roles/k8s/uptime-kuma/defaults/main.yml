@@ -134,7 +134,28 @@ kuma_cli_k8s_image: ghcr.io/bigboot/kuma:2.1.0-rc.2
 # python:3.14-alpine consumer here, so Renovate tracks them one by one.
 kuma_status_page_sync_image: python:3.14-alpine@sha256:c6ead215bfd31f1e433d968853b7a769989117115b728874824e6c0a27cb96fc
 kuma_status_page_sync_schedule: "*/15 * * * *"
-kuma_status_page_sync_deadline_seconds: 300
+# The job WAITS OUT a Kuma restart rather than failing through it. Kuma is unreachable on two
+# routine events, and the 300s deadline this carried until 2026-09-06 covered neither:
+#   - a deploy rollout. `strategy: Recreate` plus autokuma's startupProbe (the pod is NotReady,
+#     and so out of the Service endpoints, until autokuma's first full reconcile lands) left a
+#     103s endpoint gap on 2026-09-06 — SIGTERM 11:03:35, pod Ready 11:05:18.
+#   - the Sunday "Weekly system restart" cron (initial_setup/tasks/crons.yml, 07:30 +
+#     `shutdown -r +5`). On 2026-09-06 daniel-server was down 07:35 to 07:48:25 and Kuma was
+#     Ready again at ~07:51, so the 07:45 run had no chance. That one is a GUARANTEED weekly
+#     failure, not a race.
+# 800s stays inside the 900s cron period, so `concurrencyPolicy: Forbid` skips at most the one
+# following tick. Move this and the schedule together.
+kuma_status_page_sync_deadline_seconds: 800
+# How long the `dump` stage keeps retrying, per pod. `backoffLimit: 1` runs two pods inside the
+# ONE job deadline above, so this is budgeted at under half of it, leaving room for pod startup
+# and for the render/apply/beat stages that follow.
+kuma_status_page_sync_dump_budget_seconds: 350
+# Measured worst case for one dump attempt: kuma-client gives up on the connect after ~9s
+# (42s / 3 attempts on the failed 2026-09-06 07:45 run, minus the 5s sleep), plus that sleep,
+# plus slack. The template divides the budget above by this to get the attempt count, so the
+# loop exits with its own `kuma read failed` diagnostic rather than being killed mid-attempt
+# by the deadline — a deadline kill reports DeadlineExceeded and says nothing about Kuma.
+kuma_status_page_sync_dump_attempt_seconds: 15
 
 # Ordered. Each declared monitor lands in the FIRST group one of whose patterns matches its
 # AutoKuma id (the filename in static-monitors.yaml.j2, not the display name), and group order
