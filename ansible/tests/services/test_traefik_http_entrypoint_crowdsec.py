@@ -1,6 +1,6 @@
 """The http entrypoint keeps the CrowdSec chain the https entrypoint carries.
 
-#1343 read Traefik's two startup lines
+#1343 read Traefik's startup error lines
 
     {"level":"error","entryPointName":"http","routerName":"http-to-443@internal",
      "error":"middleware \\"homelab-crowdsec@kubernetescrd\\" does not exist"}
@@ -115,8 +115,8 @@ def crowdsec_chain_gaps(
         out.append(
             f"the https entrypoint chains {crowdsec_ref} but the http entrypoint does not, so "
             f"a banned IP is admitted to http-to-443@internal and rejected only on its second "
-            f"request. The two startup 'does not exist' lines are a provider-ordering window, "
-            f"not a reason to drop it — see #1343 and this file's docstring."
+            f"request. The one or two startup 'does not exist' lines are a provider-ordering "
+            f"window, not a reason to drop it — see #1343 and this file's docstring."
         )
     if http_enforces and not https_enforces:
         out.append(
