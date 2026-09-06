@@ -77,12 +77,23 @@ To change a board: edit the JSON here (or edit in the Grafana UI and round-trip 
 explicit volume name, so the deploy stays green and the board simply never appears. ENFORCED by
 `ansible/tests/services/test_dashboard_folders_are_mounted.py`.
 
-**`Apps/exportarr-arr-stack.json` charts no queue depth, and that is the exporter's limit rather
-than an omission.** The three sidecars run without `--enable-additional-metrics`, so the scrape
-carries no `*_queue_*` series at all — verified live 2026-09-06 against `job="exportarr"`. Adding
-the flag costs an extra API call per scrape per app; issue #1380 holds that trade-off. Its
-`Open health issues` tiles read `sum(...) or vector(0)` because a `*_system_health_issues` series
-is ABSENT when an app is clean, and an absent series renders an empty tile rather than a zero.
+**Two panels on `Apps/exportarr-arr-stack.json` guard against an ABSENT series, and that is
+what a naive expression gets wrong here.** `Open health issues` reads `sum(...) or vector(0)`
+because a `*_system_health_issues` series is absent when an app is clean, and an absent series
+renders an empty tile rather than a zero. `Download queue depth` reads
+`max(<app>_queue_total) or 0 * max(<app>_system_status)` for the same reason plus one more:
+exportarr's queue collector emits NOTHING when the queue is empty, and when it does emit, it
+sends a single sample whose value is the whole queue depth but whose `status`/`download_status`/
+`download_state` labels describe only the last record it read. `max()` drops those labels, so a
+changing tail record does not fork the line.
+
+**`--enable-additional-metrics` does not gate the queue metrics** — a plausible reading that
+issue #1380 was filed on and that a live census at an idle moment appears to confirm. exportarr
+v2.3.0 registers `NewQueueCollector` unconditionally for sonarr and radarr
+(`internal/commands/arr.go`), never for prowlarr; the flag gates per-series `episodefile` and
+`episode` calls that feed `sonarr_episode_monitored_total`, `_unmonitored_total` and
+`_qualities_total`, at two extra app API calls per series per scrape. The flag stays off — issue
+#1404 holds that separate trade-off.
 
 Every dashboard's datasource ref must resolve to a uid declared in this role's
 `templates/grafana.yaml.j2` — the `validate-grafana-dashboards` prek hook parses that file

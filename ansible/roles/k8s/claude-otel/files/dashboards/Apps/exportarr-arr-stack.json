@@ -680,6 +680,53 @@
       ],
       "title": "Open health issues, in full",
       "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "EGdsQqhVk"
+      },
+      "description": "Items the app has in its download queue. sonarr and radarr only \u2014 exportarr registers no queue collector for prowlarr.\n\n`or 0 * max(<app>_system_status)` is load-bearing twice over. exportarr emits `<app>_queue_total` only when the queue is NON-EMPTY, so the bare series draws nothing for an idle app; the fallback gives a real 0 while the exporter is up, and a genuine gap only when it is down. `max()` also drops the `status`/`download_status`/`download_state` labels: exportarr sends ONE sample whose value is the whole queue depth but whose labels describe only the last record it read, so keying a line on them draws a new broken series every time the tail record changes.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 8,
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 37
+      },
+      "id": 14,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "EGdsQqhVk"
+          },
+          "expr": "max(sonarr_queue_total) or 0 * max(sonarr_system_status)",
+          "legendFormat": "sonarr",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "EGdsQqhVk"
+          },
+          "expr": "max(radarr_queue_total) or 0 * max(radarr_system_status)",
+          "legendFormat": "radarr",
+          "refId": "B"
+        }
+      ],
+      "title": "Download queue depth",
+      "type": "timeseries"
     }
   ],
   "refresh": "1m",
