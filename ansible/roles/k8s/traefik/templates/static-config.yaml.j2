@@ -47,8 +47,37 @@ data:
               scheme: https
 {% if traefik_k8s_manage_crowdsec %}
           middlewares:
-            # Entrypoint-wide, matching the Docker edge (slice-6 B1). Everything entering
-            # this entrypoint passes the CrowdSec ban-list + AppSec check before routing.
+            # Entrypoint-wide, matching the Docker edge (slice-6 B1). Once Traefik has a
+            # settled configuration, everything entering this entrypoint passes the CrowdSec
+            # ban-list + AppSec check before it is redirected. The only router here is
+            # `http-to-443@internal`, the redirection above, so what the chain buys is
+            # rejecting a banned IP on its FIRST request rather than on the https one it is
+            # redirected to.
+            #
+            # DECIDED: keep it, and expect two error lines per container start. Traefik logs
+            #
+            #   {"level":"error","entryPointName":"http","routerName":"http-to-443@internal",
+            #    "error":"middleware \"<ns>-crowdsec@kubernetescrd\" does not exist"}
+            #
+            # twice, within a second of startup, because the internal and file providers
+            # publish their configuration before the kubernetesCRD watch delivers its first
+            # one — the same window in which the livesync `@file` routers log "unknown TLS
+            # options: <ns>-modern@kubernetescrd" and then resolve fine. Traefik skips the
+            # offending router and rebuilds the whole entrypoint on the next configuration
+            # event, so http 404s instead of 301ing for that second and is correct
+            # afterwards. #1343 read those lines as proof that an internal router cannot
+            # resolve a `@kubernetescrd` middleware at all, and proposed dropping crowdsec
+            # from this chain. The log says otherwise: over the 7 days to 2026-09-06 every
+            # occurrence outside the #1322 outage landed 0-1s after a "Traefik version"
+            # startup line, and during #1322 — when the middleware really was unresolvable —
+            # the same line repeated on every configuration event for 11 minutes. A line that
+            # recurs while the reference is broken and stops once it resolves is evidence the
+            # reference resolves. The line is also proof Traefik attaches this chain to the
+            # internal router: `applyModel` prepends an entrypoint's middlewares to every root
+            # router and only then does the lookup fail, so an excluded router would log
+            # nothing at all. Dropping crowdsec here would remove real enforcement to silence
+            # two startup lines. ENFORCED by
+            # ansible/tests/services/test_traefik_http_entrypoint_crowdsec.py.
             - {{ k8s_namespace }}-crowdsec@kubernetescrd
 {% endif %}
       https:
