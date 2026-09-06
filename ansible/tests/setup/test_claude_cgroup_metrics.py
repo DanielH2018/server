@@ -23,15 +23,24 @@ SCRIPT = (
     ANSIBLE / "roles" / "setup" / "claude_code" / "files" / "claude-cgroup-metrics.sh"
 )
 
+# claude-rc.service sits under the fleet's shared parent since #1264 — user.slice, not
+# system.slice — and claude_code_fleet_caps_enabled: false puts it back. The script resolves
+# between the two, so both paths are exercised below.
+RC_UNDER_FLEET_PARENT = "user.slice/claude-rc.service"
+RC_UNDER_SYSTEM_SLICE = "system.slice/claude-rc.service"
+
 CGROUPS = {
-    "claude-rc": "system.slice/claude-rc.service",
+    "fleet": "user.slice",
+    "claude-rc": RC_UNDER_FLEET_PARENT,
     "user-1000-slice": "user.slice/user-1000.slice",
 }
 
 
 def _write_cgroup_fixture(cgroot: Path, rel: str) -> Path:
     d = cgroot / rel
-    d.mkdir(parents=True)
+    # exist_ok: the fleet parent (user.slice) and its two children are all fixtures here, so
+    # whichever is written second finds its directory already made.
+    d.mkdir(parents=True, exist_ok=True)
     (d / "memory.current").write_text("399777792\n")
     (d / "memory.swap.current").write_text("0\n")
     (d / "memory.events").write_text(
@@ -131,7 +140,7 @@ def test_missing_cgroup_directory_is_skipped_not_fatal(tmp_path: Path) -> None:
     crash the whole run — the other cgroup's metrics still need to land."""
     cgroot = tmp_path / "cgroup"
     _write_cgroup_fixture(cgroot, CGROUPS["user-1000-slice"])
-    # system.slice/claude-rc.service is deliberately absent.
+    # claude-rc.service is deliberately absent from BOTH slices it can live in.
     textfile_dir = tmp_path / "textfile"
     textfile_dir.mkdir()
 
@@ -140,6 +149,38 @@ def test_missing_cgroup_directory_is_skipped_not_fatal(tmp_path: Path) -> None:
     out = (textfile_dir / "claude_cgroup.prom").read_text()
     assert 'cgroup="user-1000-slice"' in out
     assert 'cgroup="claude-rc"' not in out
+
+
+def test_claude_rc_is_found_under_the_fleet_parent_slice(tmp_path: Path) -> None:
+    """The accepting half of the path resolution (#1264): the unit's Slice= line moved its
+    cgroup from system.slice to user.slice, so a hardcoded system.slice path would emit
+    nothing for this plane while the scrape stayed green."""
+    cgroot = tmp_path / "cgroup"
+    _write_cgroup_fixture(cgroot, RC_UNDER_FLEET_PARENT)
+    textfile_dir = tmp_path / "textfile"
+    textfile_dir.mkdir()
+
+    assert _run(cgroot, textfile_dir).returncode == 0
+    out = (textfile_dir / "claude_cgroup.prom").read_text()
+    assert 'claude_cgroup_memory_current_bytes{cgroup="claude-rc"}' in out, (
+        f"claude-rc.service under {RC_UNDER_FLEET_PARENT} was not found: {out}"
+    )
+
+
+def test_claude_rc_is_still_found_under_system_slice(tmp_path: Path) -> None:
+    """The rejecting half, and the rollback direction: claude_code_fleet_caps_enabled: false
+    returns the unit to system.slice, so resolving only the new path would lose the plane
+    exactly when the shared parent has been turned off."""
+    cgroot = tmp_path / "cgroup"
+    _write_cgroup_fixture(cgroot, RC_UNDER_SYSTEM_SLICE)
+    textfile_dir = tmp_path / "textfile"
+    textfile_dir.mkdir()
+
+    assert _run(cgroot, textfile_dir).returncode == 0
+    out = (textfile_dir / "claude_cgroup.prom").read_text()
+    assert 'claude_cgroup_memory_current_bytes{cgroup="claude-rc"}' in out, (
+        f"claude-rc.service under {RC_UNDER_SYSTEM_SLICE} was not found: {out}"
+    )
 
 
 def test_missing_textfile_directory_exits_clean(tmp_path: Path) -> None:

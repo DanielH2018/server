@@ -12,6 +12,33 @@ User={{ sys_user }}
 Group={{ sys_user }}
 WorkingDirectory={{ claude_code_rc_workdir }}
 
+{% if claude_code_fleet_caps_enabled %}
+# DECIDED: this unit lives in {{ claude_code_fleet_slice }}, not the default system.slice, so
+# that it shares ONE parent cgroup with the other half of the Claude fleet — the login-session
+# plane in user-{{ claude_code_login_uid }}.slice. Until 2026-09-06 both planes carried
+# claude_code_rc_memory_high independently, which reads as one 8G bound and was two: siblings
+# under different parents, neither seeing the other's usage, so the fleet could reach 16G of
+# anon plus 4G of swap before either throttled. Issue #1264. The single bound now sits on
+# {{ claude_code_fleet_slice }} (templates/fleet-slice-caps.conf.j2) and MemoryHigh below is
+# this plane's sub-bound under it.
+#
+# user.slice is the only slice that can be that parent. A slice unit's parent is its NAME —
+# systemd.slice(5), "The name of the slice encodes the location in the tree" — so
+# user-{{ claude_code_login_uid }}.slice cannot be moved, and logind creates it under that
+# name. Nesting this unit one level deeper, inside user-{{ claude_code_login_uid }}.slice,
+# would share a parent too and is unsafe: that slice is StopWhenUnneeded=yes with Linger=no on
+# this host, so logind stops it at the last logout, and Slice= adds an implicit Requires= on
+# the slice — the RC host would die with the last SSH session and Restart=always would not
+# bring back a dependency-stopped unit. user.slice measures StopWhenUnneeded=no, and
+# systemd.special(7) describes it as holding "all user processes and services started on behalf
+# of the user", which is what this unit is: User={{ sys_user }}, HOME below, a per-user install
+# reading that user's own OAuth token.
+#
+# Changing Slice= does not migrate a running unit — it takes effect at the next start, so the
+# deploy that lands this restarts the host and drops the sessions it had spawned.
+Slice={{ claude_code_fleet_slice }}
+{% endif %}
+
 # Claude Code is a PER-USER install (binary under ~/.local/share/claude, launcher symlinked
 # at ~/.local/bin/claude) and reads its OAuth token from ~/.claude/.credentials.json, so
 # HOME must be the real user's home and not systemd's default. Same reasoning the role's
@@ -86,6 +113,12 @@ RestartSec=10
 # was. claude_code_rc_pytest_workers below is what actually bounds the fan-out. Full
 # analysis in this role's CLAUDE.md. The swap half of that stall is bounded by
 # MemorySwapMax below, not by this directive.
+#
+# This is ONE PLANE's sub-bound since 2026-09-06, not the fleet's bound: the same value is
+# applied to user-{{ claude_code_login_uid }}.slice, and what holds the two of them together
+# is claude_code_fleet_memory_high on {{ claude_code_fleet_slice }}. It is deliberately more
+# than half the fleet bound, so this plane can use most of the budget while the login plane is
+# idle. Issue #1264.
 MemoryHigh={{ claude_code_rc_memory_high }}
 
 # DECIDED: MemorySwapMax is set, and set to a FRACTION of the box's swap rather than to 0.

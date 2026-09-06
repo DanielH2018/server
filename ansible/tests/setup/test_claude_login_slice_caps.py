@@ -45,6 +45,9 @@ CONTEXT: dict[str, object] = {
     "claude_code_rc_memory_high": "8G",
     "claude_code_rc_memory_swap_max": "2G",
     "claude_code_rc_pytest_workers": 4,
+    # The slice that parents this one and carries the fleet bound (#1264); the drop-in's
+    # header names it. test_claude_fleet_slice_cap.py owns that half.
+    "claude_code_fleet_slice": "user.slice",
 }
 
 

@@ -77,6 +77,49 @@
 # disconnects", so there is no built-in always-on host to enable and systemd supervises it
 # instead. See this role's CLAUDE.md.
 
+# ── The fleet bound (issue #1264) ──────────────────────────────────────────────────────
+# One cap for both Claude cgroup planes, on the slice that parents them: claude-rc.service
+# (moved into it by the unit's Slice= line) and user-{{ claude_code_login_uid }}.slice.
+# Applied BEFORE the unit is installed so the parent cap is already on disk when the first
+# daemon-reload of this play happens — otherwise the unit lands in a slice with no cap until
+# the next run. See defaults/main.yml for the derivation and for why user.slice is the only
+# slice that can hold both planes.
+
+- name: Ensure the fleet slice drop-in directory exists
+  tags: [claude_code]
+  ansible.builtin.file:
+    path: "/etc/systemd/system/{{ claude_code_fleet_slice }}.d"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  when: claude_code_fleet_caps_enabled
+
+- name: Bound the whole Claude fleet with one cap on the slice that parents both planes
+  tags: [claude_code]
+  ansible.builtin.template:
+    src: fleet-slice-caps.conf.j2
+    dest: "/etc/systemd/system/{{ claude_code_fleet_slice }}.d/claude-fleet-caps.conf"
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  when: claude_code_fleet_caps_enabled
+  notify: Reload systemd
+
+# The way out: removing the drop-in drops the shared ceiling, and the unit's own Slice= line
+# disappears with the same variable, which puts claude-rc.service back in system.slice on its
+# next restart. Both planes keep their per-plane caps.
+- name: Remove the fleet slice cap when the shared parent is disabled
+  tags: [claude_code]
+  ansible.builtin.file:
+    path: "/etc/systemd/system/{{ claude_code_fleet_slice }}.d/claude-fleet-caps.conf"
+    state: absent
+  become: true
+  when: not claude_code_fleet_caps_enabled
+  notify: Reload systemd
+
 - name: Install the Remote Control host units
   tags: [claude_code]
   ansible.builtin.template:
@@ -294,6 +337,7 @@
       - ansible/roles/setup/claude_code/templates/alert-webhook.env.j2
       - ansible/roles/setup/claude_code/templates/claude-cgroup-metrics.service.j2
       - ansible/roles/setup/claude_code/templates/claude-cgroup-metrics.timer.j2
+      - ansible/roles/setup/claude_code/templates/fleet-slice-caps.conf.j2
       - ansible/roles/setup/claude_code/templates/login-slice-caps.conf.j2
       - ansible/roles/setup/claude_code/templates/pytest-fanout-cap.conf.j2
 

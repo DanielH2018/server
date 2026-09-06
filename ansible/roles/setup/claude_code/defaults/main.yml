@@ -60,27 +60,89 @@ claude_code_rc_capacity: 10
 # Raise both together, or the cap depends on how the session started.
 claude_code_rc_pytest_workers: 4
 
-# The cgroup throttle for the whole rc host — the host process plus every session it spawns.
-# Raised 6G -> 8G on 2026-09-05 at user request, alongside the fan-out cap above. 8G leaves
-# roughly 7 GB clear of the ~13 GB k3s + kubepods baseline on this 28 GB box; that headroom
-# is the reason not to raise it further, since the throttle stalls whatever cgroup loses the
-# race and the homelab plane is the one that must not. See the unit template on why this is
-# MemoryHigh and not MemoryMax.
+# ── The fleet bound (issue #1264) ───────────────────────────────────────────────────────
+# The Claude fleet occupies TWO cgroups on this box: claude-rc.service's own, and
+# user-<claude_code_login_uid>.slice for a session started from an interactive shell. Both
+# used to carry claude_code_rc_memory_high directly, which reads as one bound and is two —
+# they are siblings under different parents, so neither saw the other's usage and the real
+# throttle point was the SUM. 16G of anon plus 4G of swap on a 28 GiB box that also runs
+# k3s, Longhorn and the rest of the homelab plane. The vars below make the sum the number,
+# applied to the one slice that is a parent of both planes.
+
+# Whether the fleet bound is applied: the drop-in on claude_code_fleet_slice, and the
+# Slice= line that moves claude-rc.service under it. false removes both — the drop-in is
+# deleted and the RC unit goes back to system.slice keeping only its own per-plane cap.
+# That is the rollback if a shared parent ever needs to come off, e.g. to give one plane the
+# whole box for a deliberate heavy run.
+claude_code_fleet_caps_enabled: true
+
+# The slice both planes live under. user.slice is not a choice among several — it is the
+# only slice that can hold both, and the reason is worth knowing before changing this.
+# systemd.slice(5): "The name of the slice encodes the location in the tree", and for a
+# slice unit Slice= takes "the only accepted value ... the parent slice", so
+# user-<uid>.slice cannot be moved anywhere: its name fixes it under user.slice, and
+# systemd-logind creates it under that name. user.slice is therefore the tightest legal
+# common ancestor, and measured on daniel-box it is safe to place a unit in:
+# StopWhenUnneeded=no, where user-<uid>.slice has StopWhenUnneeded=yes with Linger=no — a
+# service placed THERE would be stopped along with the slice at the last logout. This
+# role's CLAUDE.md carries the full answer to "can user-<uid>.slice be reparented".
+claude_code_fleet_slice: user.slice
+
+# DECIDED: 12G on the shared parent, with the per-plane caps below left at 8G as sub-bounds.
+# Lowering both planes to 6G would also make the sum 12G, and is the worse shape: a plane
+# would throttle at half the box's fleet budget while the other plane sat idle. A parent
+# ceiling shares elastically — either plane may take up to its own 8G, and the two together
+# are held to 12G by the parent.
+#
+# Derivation, measured on daniel-box 2026-09-06. Re-derive all of it if you change this:
+#   RAM: MemTotal 29,576,480 kB = 28.2 GiB.
+#   The homelab plane's unreclaimable footprint, read as cgroup anon rather than
+#     memory.current (which counts page cache and so overstates what must stay resident):
+#     kubepods.slice 5.7 GiB + system.slice minus claude-rc.service 1.4 GiB = 7.1 GiB.
+#     Budgeted at 10 GiB so k3s and Longhorn can grow ~40% without racing the fleet.
+#   Kernel: SUnreclaim 0.55 GiB. Page cache left free for Longhorn and etcd I/O: ~3 GiB.
+#   28.2 - 10 - 0.55 - 3 = 14.6 GiB available to the fleet. 12G leaves ~2.6 GiB of that
+#     unspent, because the throttle stalls whichever cgroup loses the race for reclaim and
+#     the homelab plane is the one that must not.
+# Checked against measurement, not only the arithmetic: the 24h peak memory.current was
+# 4.0 GiB for claude-rc.service and 7.2 GiB for user-1000.slice, a fleet peak of 11.2 GiB.
+# So 12G sits just above what the fleet actually reaches, which is where a throttle belongs.
+#
+# memory.high counts PAGE CACHE as well as anon, so an ordinary multi-agent pytest fan-out
+# will touch this bound and reclaim cache. That is the cheap half of reclaim and it is
+# intended; the anon budget above is what the number is derived from, not what it throttles
+# on.
+claude_code_fleet_memory_high: 12G
+
+# The fleet's swap ceiling. 2G is a quarter of this host's 8 GiB /swap.img, so the homelab
+# plane keeps three quarters — which is what the per-plane 2G was already documented as
+# meaning while actually delivering 4G across the two planes. Same not-zero reasoning as
+# the per-plane cap below.
+claude_code_fleet_swap_max: 2G
+
+# ── The per-plane sub-bounds ────────────────────────────────────────────────────────────
+# One plane's share of the fleet bound above, applied to claude-rc.service's own cgroup AND
+# to user-<uid>.slice's drop-in. Each must be <= the fleet bound: a sub-bound above its
+# parent's is a number that can never be reached. ENFORCED by
+# ansible/tests/setup/test_claude_fleet_slice_cap.py.
+#
+# 8G, unchanged from 2026-09-05 (raised 6G -> 8G at user request alongside the fan-out cap
+# above). Deliberately more than half of 12G: a plane doing real work while the other is
+# idle should be able to use most of the fleet's budget, and the parent is what stops the
+# two of them together. See the unit template on why this is MemoryHigh and not MemoryMax.
 claude_code_rc_memory_high: 8G
 
-# The cgroup's swap ceiling, written to memory.swap.max. Without it the cgroup swaps without
-# limit: on 2026-09-05 it held all 8 GiB of this box's swap plus 6.96 GB anon, stalled in
-# reclaim 98.5% of the time, and starved every other cgroup — k3s at 2.9 GB and
-# kubepods.slice at 10.8 GB. MemoryHigh cannot prevent that. It throttles rather than caps,
-# and swap is exactly where a throttled cgroup's anon pages go. Issue #1154.
+# One plane's swap ceiling, written to memory.swap.max. Without it a plane swaps without
+# limit: on 2026-09-05 claude-rc.service's cgroup held all 8 GiB of this box's swap plus
+# 6.96 GB anon, stalled in reclaim 98.5% of the time, and starved every other cgroup — k3s
+# at 2.9 GB and kubepods.slice at 10.8 GB. MemoryHigh cannot prevent that. It throttles
+# rather than caps, and swap is exactly where a throttled cgroup's anon pages go. Issue
+# #1154.
 #
-# Derivation, and what to re-derive if you change it: 2G is a quarter of this host's 8 GiB
-# /swap.img, so the three-quarters the incident took from the homelab plane stays with it.
-# The other half of the sum is MemoryHigh: 8G + 2G puts the cgroup's committed ceiling at
-# 10 GB against 28 GiB of RAM with a ~13 GB k3s + kubepods baseline, which leaves ~5 GB
-# clear. Raise this only alongside that arithmetic, not on its own.
+# 2G here equals claude_code_fleet_swap_max, so one plane may take the fleet's whole swap
+# share while the two together still cannot exceed it. Raise them together.
 #
-# NOT 0. Zero swap does not contain the cgroup, it relocates the same growth into RAM:
+# NOT 0. Zero swap does not contain a cgroup, it relocates the same growth into RAM:
 # nothing reclaims anon without swap, MemoryMax is deliberately infinity, so the terminal
 # state becomes the GLOBAL OOM killer choosing a victim by badness anywhere on the box —
 # a k3s process included. See the unit template on why a kill is the response this host

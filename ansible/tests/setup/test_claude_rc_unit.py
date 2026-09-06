@@ -216,6 +216,11 @@ def render(unit_text: str, **overrides: object) -> str:
         "claude_code_rc_pytest_workers": 4,
         "claude_code_rc_memory_high": "8G",
         "claude_code_rc_memory_swap_max": "2G",
+        # The fleet's shared parent (#1264) — the unit's Slice= line renders from these.
+        # test_claude_fleet_slice_cap.py owns what they must produce.
+        "claude_code_login_uid": 1000,
+        "claude_code_fleet_caps_enabled": True,
+        "claude_code_fleet_slice": "user.slice",
         REAP_VAR: True,
     }
     context.update(overrides)
