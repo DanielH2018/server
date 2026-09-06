@@ -45,3 +45,12 @@
 - name: Prove the library survived the move
   tags: [deploy]
   ansible.builtin.include_tasks: verify.yml
+
+# The Discord Connect notification is a row in sonarr.db, not a manifest — live state a
+# Longhorn revert or a recreated claim drops silently. roles/k8s/arr-notification declares it.
+- name: Declare sonarr's Discord notification
+  tags: [deploy]
+  ansible.builtin.include_role:
+    name: k8s/arr-notification
+  vars:
+    arr_notification_app: sonarr

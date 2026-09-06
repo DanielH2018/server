@@ -71,6 +71,10 @@ _UNCOVERED_ROLES = {
     "volume-snapshot",
     "longhorn-api",
     "volume-revert",
+    # Declares sonarr's/radarr's Discord Connect notification over the app's own API. The thing
+    # it writes is a row in the app's database, so it renders no manifest and starts no
+    # container — there is nothing here for a securityContext to be wrong about.
+    "arr-notification",
     # Dockerfiles and app config only — no Kubernetes objects at all.
     "n8n-images",
 }

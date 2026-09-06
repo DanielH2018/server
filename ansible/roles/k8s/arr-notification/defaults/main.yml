@@ -1,0 +1,40 @@
+---
+# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Declared false because this role renders no manifest and starts no workload: it is a shared
+# include the *arr roles call after their own deploy, so there is nothing here for `rollout
+# status` to gate. It is also not a containers_list entry, so a promoted bump would match no
+# play and deploy nothing while reporting success.
+k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "renders no manifest and starts no workload — a shared include the *arr roles call after their own deploy, so there is no workload for rollout status to gate; not a containers_list entry, so a promoted bump matches no play and deploys nothing while reporting success"  # noqa var-naming[no-role-prefix]
+
+# The caller passes arr_notification_app (sonarr | radarr). Everything below has a default.
+
+# The match key. `Discord (health)` is the name BOTH live notifications already carry — see
+# CLAUDE.md. Changing it adopts nothing and creates a second notification at the same webhook,
+# which is two Discord messages per event rather than one.
+arr_notification_name: "Discord (health)"
+
+# The triggers this role declares, as the *arr API's own `onX` keys. Every other trigger the
+# app supports is set FALSE, so this list is the whole truth about when Discord is notified.
+#
+# DECIDED: health-only, matching what both apps already carried as UI state. Issue #1377 asked
+# for grab + import + application-update as well. That is a behaviour change, not a
+# declaration: every episode and every movie import would post to the channel. Adopting the
+# live set first makes the adopting PR a no-op on behaviour, and widening it later is an edit
+# to this one list. The asymmetry is the argument — a too-narrow default costs a var edit, a
+# too-wide one spams the channel until someone notices.
+arr_notification_triggers:
+  - onHealthIssue
+  - onHealthRestored
+
+# Sonarr/Radarr's "Include Health Warnings" toggle — false live, so warnings stay out and only
+# health ERRORS post.
+arr_notification_include_health_warnings: false
+
+# The Discord "username" the message posts as. Live values are `Sonarr` and `Radarr`.
+arr_notification_username: "{{ arr_notification_app | capitalize }}"
+
+# The *arr apps take up to 10 min to come up on a first boot that installs DOCKER_MODS (see
+# sonarr's manifests_rollout_timeout). The seed talks HTTP to the app, so it has to wait for
+# the same rollout the caller queued for k8s/rollout-drain at the end of the play.
+arr_notification_rollout_timeout: 660s
