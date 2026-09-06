@@ -230,6 +230,31 @@ pytest process and the MCP server. Grafana registers that endpoint behind its
 not-signed-in middleware, so the tier checks `/api/user` **before** posting: once a session
 exists the mint endpoint answers 404, which reads exactly like a wrong password.
 
+**This tier is how a Claude session verifies a Grafana board — driving the browser by hand is
+not.** Every other service in this file is reachable through the `homelab-ui` MCP tools with
+the Authelia session `ui_mcp.sh` mints. Grafana is the exception: a
+`mcp__homelab-ui__browser_navigate` to `/d/<uid>/` lands on `/login` (measured 2026-09-06,
+`status=302 userId=0`), and the only way past it by hand is typing the admin password into a
+tool call, which puts a live credential in the session transcript and forces a rotation. The
+tier already does that login inside Python. Run it instead:
+
+```bash
+uv run python scripts/diagnostics/ui_login.py --check   # mint one first if this says expired
+uv run pytest -m ui -k grafana                          # ~30s for the four enrolled boards
+```
+
+To cover a board that is not enrolled, add its `(uid, min_headers)` to `GRAFANA_DASHBOARDS`
+in the same PR that changes the board — the list is deliberately hand-kept, so deriving it
+from `files/dashboards/` is not the fix. Pick `min_headers` by enrolling with a deliberately
+high number first: the failure names the count observed live (`drew N panel header(s),
+expected at least …`), and N is what to pin. Enroll sparingly — the tier opens every board in
+one browser, which is what the 2Gi limit below bounds.
+
+`ansible/tests/leakguard.py` exempts the `ui` marker from its PATH shims, because the fixtures
+decrypt SOPS before anything renders. Without that exemption every test in this file errors in
+setup on `could not decrypt domain`, which reads like a missing age key rather than a stubbed
+`sops`.
+
 `grafana_panel_report.classify()` holds the judgement and is unit-tested without a browser.
 Three things it separates, each of which cost a debugging session to find:
 

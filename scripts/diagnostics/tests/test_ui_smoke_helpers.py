@@ -12,6 +12,7 @@ stdlib-only `grafana_panel_report`.
 """
 
 import json
+import subprocess
 
 import pytest
 import test_ui_smoke as smoke
@@ -101,3 +102,26 @@ def test_settled_title_stops_reading_once_it_matches():
     """One reply only: a second read would raise IndexError off the empty queue."""
     client = client_returning(with_result("My Awesome Homepage"))
     assert client.settled_title("My Awesome Homepage") == "My Awesome Homepage"
+
+
+def test_close_closes_every_pipe_and_reaps_the_process():
+    """`close` must leave nothing for the garbage collector to warn about.
+
+    `filterwarnings = ["error"]` promotes the ResourceWarning an unclosed `stdout`/`stderr`
+    raises at GC into an ERROR, and it lands on whichever test happens to run last — reading
+    as that test having failed. Closing only `stdin`, as this did until 2026-09-06, errored
+    the final dashboard of every `-m ui -k grafana` run.
+    """
+    client = object.__new__(McpClient)
+    client.proc = subprocess.Popen(
+        ["cat"],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    client.close()
+    assert client.proc.stdin.closed, "stdin was left open"
+    assert client.proc.stdout.closed, "stdout was left open"
+    assert client.proc.stderr.closed, "stderr was left open"
+    assert client.proc.poll() is not None, "the wrapper process was never reaped"

@@ -23,7 +23,9 @@ from _helpers import REPO
 
 # A bare ini so the repo's own addopts (`-n auto`, `filterwarnings = error`) do not reach the
 # child run. The child needs only the plugin under test.
-_CHILD_INI = "[pytest]\n"
+# `markers` registers the one the `ui` exemption keys on, so the child does not emit an
+# unknown-mark warning that reads like the marker not having applied.
+_CHILD_INI = "[pytest]\nmarkers =\n    ui: stands in for the live-browser suite\n"
 
 _LEAKS = """
 import subprocess
@@ -36,6 +38,26 @@ def test_it_shells_out():
 _CLEAN = """
 def test_it_touches_nothing():
     assert 1 + 1 == 2
+"""
+
+# One child module carrying both halves of the `ui` exemption, so a single run shows the
+# marker deciding rather than the guard having been switched off. `curl` here resolves
+# `example.invalid`, which is NXDOMAIN by RFC 6761 — nothing leaves the host either way.
+_UI_MARKED_AND_PLAIN = """
+import subprocess
+
+import pytest
+
+
+@pytest.mark.ui
+def test_a_ui_test_shells_out():
+    proc = subprocess.run(["curl", "-sS", "https://example.invalid"], check=False,
+                          capture_output=True, text=True)
+    assert "is stubbed during tests" not in proc.stderr, proc.stderr
+
+
+def test_a_plain_test_shells_out():
+    subprocess.run(["curl", "-sS", "https://example.invalid"], check=False)
 """
 
 # A skipped test never reaches `pytest_runtest_setup`, but its teardown still runs. Ordered
@@ -127,6 +149,53 @@ def test_a_skipped_test_does_not_inherit_the_previous_test_s_calls(
     assert "test_it_shells_out" in blamed[0], proc.stdout
     assert "test_it_is_skipped" not in blamed[0], (
         "the skipped test was blamed for the leaking test's calls:\n" + proc.stdout
+    )
+
+
+def test_a_ui_marked_test_is_clean_when_it_shells_out(tmp_path: Path) -> None:
+    """Accept case for the `ui` exemption: a live-browser test reaches the real binaries.
+
+    Its fixtures decrypt SOPS before anything renders, so a shimmed `sops` errors the tier in
+    setup instead of catching a leak.
+    """
+    proc = _run_child(tmp_path, _UI_MARKED_AND_PLAIN)
+    # The guard fails a leaking test from teardown, which pytest reports as an error rather
+    # than a failure — so the passing count is what says the `ui` test came through.
+    assert "2 passed" in proc.stdout, (
+        "the guard failed a `ui`-marked test for shelling out:\n" + proc.stdout
+    )
+    assert "test_a_ui_test_shells_out" not in proc.stdout, (
+        "the `ui`-marked test was named in the summary, so it did not pass clean:\n"
+        + proc.stdout
+    )
+
+
+def test_an_unmarked_test_in_the_same_run_is_flagged(tmp_path: Path) -> None:
+    """Reject case for the same pair: the exemption is the marker, not the whole run."""
+    proc = _run_child(tmp_path, _UI_MARKED_AND_PLAIN)
+    assert proc.returncode != 0, proc.stdout
+    blamed = [
+        line
+        for line in proc.stdout.splitlines()
+        if "reached outside the test process" in line
+    ]
+    assert len(blamed) == 1, (
+        "the unmarked test alone should have been blamed:\n" + proc.stdout
+    )
+    assert "test_a_plain_test_shells_out" in blamed[0], proc.stdout
+
+
+@pytest.mark.parametrize("module", ["test_ui_smoke.py", "test_ui_smoke_grafana.py"])
+def test_the_live_marker_is_one_the_ui_suite_actually_carries(module: str) -> None:
+    """Non-vacuity: a renamed marker would exempt nothing and read exactly like a pass.
+
+    Both live-browser modules, not just one: the Grafana tier was split out of the other in
+    2026-09-06, and it is the half whose fixtures decrypt SOPS for a second credential.
+    """
+    suite = REPO / "scripts" / "diagnostics" / "tests" / module
+    assert f"pytestmark = pytest.mark.{leakguard._LIVE_MARKER}" in suite.read_text(), (
+        f"{suite} no longer carries the `{leakguard._LIVE_MARKER}` marker the leak guard "
+        "exempts, so its whole live-browser tier is back to erroring on a stubbed `sops`"
     )
 
 

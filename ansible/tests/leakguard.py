@@ -35,6 +35,16 @@ run, and fail CI. So the shim set is intersected with what is actually installed
 run the role's own argv against a live API server; handing them a stub would leave them
 passing while proving nothing, which is the failure mode this whole guard is about.
 
+**A `ui`-marked test runs with the real PATH too.** `scripts/diagnostics/tests/test_ui_smoke.py`
+drives a real Chromium against this homelab's LAN routes, and its fixtures read the SOPS
+`domain` and `grafana_admin_password` before anything renders. Reaching live infrastructure is
+the test there, so a stubbed `sops` errors the whole tier in fixture setup — measured
+2026-09-06, all 5 `-m ui -k grafana` tests errored on `could not decrypt domain`. The exemption
+keys on the marker rather than on nodeids because that tier is parametrized:
+`test_grafana_dashboard_renders_its_panels` gains a nodeid every time a dashboard is enrolled,
+so a nodeid allowlist would go stale on an enrollment instead of on a rename. `addopts` carries
+`-m 'not ui'`, so CI never reaches this branch.
+
 ## What is deliberately NOT shimmed
 
 `git` — too central to intercept safely, and the same sweep established the class is clean:
@@ -91,6 +101,20 @@ _LIVE_API_TESTS = frozenset(
         "ansible/tests/longhorn/test_volume_snapshot.py::test_the_listing_jsonpath_parses",
     }
 )
+
+# The marker `scripts/diagnostics/tests/test_ui_smoke.py` carries, whose tests drive a live
+# browser and read SOPS on purpose. Named here rather than spelled inline so the non-vacuity
+# test can assert that module still carries it — see the module docstring.
+_LIVE_MARKER = "ui"
+
+
+def _runs_against_live_infra(item: pytest.Item) -> bool:
+    """True for a test deliberately handed the real PATH — see the module docstring."""
+    return (
+        item.nodeid in _LIVE_API_TESTS
+        or item.get_closest_marker(_LIVE_MARKER) is not None
+    )
+
 
 # The shim records the call rather than only blocking it, so the failure message can name the
 # argv. It exits non-zero and says so on stderr: a test that leaks then fails with a message
@@ -197,7 +221,7 @@ def pytest_runtest_setup(item: pytest.Item) -> None:
     # hand this test's calls to whichever test ran next. The five allowlisted tests all skip
     # on a runner with no cluster, so that path is exercised in CI and not here.
     _marks()[item.nodeid] = len(_calls_seen())
-    if item.nodeid in _LIVE_API_TESTS:
+    if _runs_against_live_infra(item):
         os.environ["PATH"] = real_path
     else:
         os.environ["PATH"] = f"{stub_dir}:{real_path}"
