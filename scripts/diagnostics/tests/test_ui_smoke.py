@@ -431,6 +431,6 @@ def test_two_factor_service_serves_its_own_ui(
         title,
         path,
         # A two_factor session lapses after about an hour, so this is the usual reason.
-        remint="uv run python scripts/diagnostics/ui_login.py --totp <code>",
+        remint="uv run python scripts/diagnostics/ui_login.py --two-factor",
         observed_title=two_factor_browser.settled_title(title),
     )
