@@ -119,6 +119,20 @@ It also starts from the LIVE page and replaces one key, because `saveStatusPage`
 whole object and a hand-built document blanks `description`, `theme`, `published` and
 `domainNameList`.
 
+### A path-only route loses to a long enough Host() rule
+Traefik ranks routers by rule length. `Homelab Edge (all-clear)` probes the edge self-check
+path, whose rule `PathPrefix(`/.well-known/traefik-edge-selfcheck`)` is 48 characters — and
+littlelink's `Host(`www...`) || Host(`www.local...`)` is 68, so on `www.local` the tile got
+littlelink's own 404 body. Measured 2026-09-06, minutes after the deploy that added it.
+
+The probe host is now `edge-selfcheck.local.<domain>`, which fronts no workload and exists only
+as a literal `hostAliases` entry on this pod. With no Host() router for that name there is
+nothing for the path router to lose to, whatever gets added later.
+`test_the_all_clear_probe_host_fronts_no_route` keeps it unrouted and
+`test_the_all_clear_probe_host_is_pinned_to_the_ingress_vip` keeps the pin and the tile's URL
+in step. The generalisation: **a Kuma tile aimed at a path-only route must use a hostname no
+IngressRoute claims**, or its verdict silently becomes a statement about some other app.
+
 ### Adding a monitor
 Add the declaration as usual. `test_every_declared_monitor_lands_in_a_named_group` fails until
 one of the group rules matches its id, so a new tile cannot quietly land in the runtime `Other`

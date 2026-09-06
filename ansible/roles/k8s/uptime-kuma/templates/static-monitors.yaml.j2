@@ -524,8 +524,15 @@ stringData:
   # it answers the literal `OK` only when Traefik built a routing table, and it is rejected by
   # exactly the middleware failure that 404'd every host for 3.5 hours in #1322. A keyword, not
   # a bare http tile, for the #1341 reason — a status code alone reads green through a
-  # total-404 edge. Any hostname in hostAliases works: the router is path-only and Traefik
-  # ranks by rule length, so it wins for this path everywhere.
+  # total-404 edge.
+  #
+  # The HOSTNAME is not free to choose, which cost one deploy to learn. Traefik ranks routers
+  # by rule length, and an app's Host() rule can be longer than the 48-char
+  # `PathPrefix(`/.well-known/traefik-edge-selfcheck`)`: on `www.local` this tile got
+  # littlelink's own 404 body from its 68-char two-host rule, measured 2026-09-06 right after
+  # the deploy that added it. `edge-selfcheck.local` fronts no workload and is pinned to the
+  # ingress VIP in this pod's hostAliases for exactly this reason, so no Host() router exists
+  # to outrank the path — see deployment.yaml.j2.
   #
   # Gated on the same flag as the route it probes, so a checkout with the bouncer plugin off
   # (daniel-stage) renders no tile rather than one that sits permanently red. Plain truthiness,
@@ -533,5 +540,5 @@ stringData:
   # Jinja. The inventory value is a YAML boolean, so the two agree.
 {% if traefik_k8s_manage_crowdsec | default(true) %}
   homelab-edge-allclear.json: |
-    {"type": "keyword", "name": "Homelab Edge (all-clear)", "url": "https://www.local.{{ domain }}/.well-known/traefik-edge-selfcheck", "keyword": "OK", "interval": 60, "maxretries": 2, "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
+    {"type": "keyword", "name": "Homelab Edge (all-clear)", "url": "https://edge-selfcheck.local.{{ domain }}/.well-known/traefik-edge-selfcheck", "keyword": "OK", "interval": 60, "maxretries": 2, "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
 {% endif %}
