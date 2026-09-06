@@ -364,9 +364,19 @@ def classify_state(payload, required_level=1):
     if level < required_level:
         return False, (
             f"session is only one_factor (authentication_level {level}); the two_factor "
-            f"services need a fresh `--totp <code>`"
+            f"services need a fresh `--two-factor` mint"
         )
     return True, f"authenticated (authentication_level {level})"
+
+
+def mint_hint(two_factor):
+    """The flags that mint the tier being reported on.
+
+    A function rather than an inline conditional so a test can hold it to naming the
+    unattended path. Both tiers mint without a typed code since `claude-ui` arrived, and a
+    message still saying `--totp <code>` sends the reader to the phone they no longer need.
+    """
+    return "--two-factor" if two_factor else "no arguments"
 
 
 def check(two_factor=False):
@@ -384,16 +394,16 @@ def check(two_factor=False):
     session that cannot be confirmed.
     """
     path = state_path(two_factor)
-    mint_hint = "--totp <code>" if two_factor else "no arguments"
+    hint = mint_hint(two_factor)
     if not os.path.exists(path):
-        print(f"no state file at {path} — mint one by running with {mint_hint}")
+        print(f"no state file at {path} — mint one by running with {hint}")
         return 1
     with open(path) as f:
         state = json.load(f)
 
     problem = local_state_problem(state, time.time())
     if problem is not None:
-        print(f"{path} {problem} — re-mint with {mint_hint}")
+        print(f"{path} {problem} — re-mint with {hint}")
         return 1
 
     domain = core.sops_extract("domain")

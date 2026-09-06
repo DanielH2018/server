@@ -308,3 +308,28 @@ def test_totp_parameters_match_the_seeding_task():
     assert f"--period {ui_login.TOTP_PERIOD}" in seed
     assert "--algorithm SHA1" in seed
     assert ui_login.TOTP_ALGORITHM().name == "sha1"
+
+
+# --- the remint hints must name the unattended path ----------------------------------
+
+# Both tiers mint without a typed code since `claude-ui` arrived. A hint still naming
+# `--totp <code>` is not merely stale — it sends the reader to a phone to solve a problem a
+# flag solves, which is the exact failure the dedicated identity was added to remove. These
+# strings are the only place a person meets that instruction, so they get a guard.
+
+
+def test_the_two_factor_hint_names_the_unattended_flag():
+    assert ui_login.mint_hint(two_factor=True) == "--two-factor"
+
+
+def test_no_hint_sends_the_reader_to_a_typed_code():
+    """The reject half. `--totp` survives as break-glass and keeps its argparse help; what
+    must not survive is a hint offering it as the way to mint."""
+    for two_factor in (True, False):
+        assert "--totp" not in ui_login.mint_hint(two_factor)
+
+
+def test_an_insufficient_session_is_not_told_to_type_a_code():
+    _, detail = ui_login.classify_state(_state(1), required_level=2)
+    assert "--totp" not in detail
+    assert "--two-factor" in detail
