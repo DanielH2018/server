@@ -221,6 +221,7 @@ kuma_status_page_groups:
       - "^renovate-"
       - "-drift-check$"
       - "^github-ruleset-drift$"
+      - "^github-interaction-limit$"
       - "^secret-rotation$"
       - "^docs-refresh$"
       - "^manifest-prune-check$"

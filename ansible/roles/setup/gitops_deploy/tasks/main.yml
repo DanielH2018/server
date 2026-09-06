@@ -298,3 +298,30 @@
     job: "/usr/local/bin/github-ruleset-drift.sh"
     cron_file: github-ruleset-drift
   become: true
+
+- name: Deploy the GitHub interaction-limit re-arm
+  tags: [cron]
+  # The repo stays public but closed to non-collaborators through GitHub's interaction limit,
+  # which the API only grants for six months at a time and lets lapse with no signal. This
+  # re-applies the declared limit daily and beats its own Kuma monitor, in the ruleset-drift
+  # shape directly above. Unlike that check it reconciles — the script's DECIDED marker says why.
+  ansible.builtin.template:
+    src: github-interaction-limit.sh.j2
+    dest: /usr/local/bin/github-interaction-limit.sh
+    mode: "0750"
+    owner: root
+    group: root
+  become: true
+
+- name: Schedule the GitHub interaction-limit re-arm
+  tags: [cron]
+  # Daily, ten minutes after the ruleset check. The setting only moves when it expires, so the
+  # cadence is about how long a lapse can go unnoticed (one day) rather than about load.
+  ansible.builtin.cron:
+    name: "GitHub interaction limit"
+    minute: "{{ gitops_deploy_interaction_limit_cron_minute }}"
+    hour: "{{ gitops_deploy_interaction_limit_cron_hour }}"
+    user: root
+    job: "/usr/local/bin/github-interaction-limit.sh"
+    cron_file: github-interaction-limit
+  become: true

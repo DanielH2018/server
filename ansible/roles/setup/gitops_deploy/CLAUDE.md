@@ -461,6 +461,25 @@ stay).
     Revisit (a Pi-side deployer / a CI cross-host gate) only if Pi-service churn ever makes the manual
     step a real miss.
 
+## The two GitHub settings this role watches
+
+Both are daily root crons on the deploy host, each pushing its own Kuma tile through
+`kuma-push-lib.sh`, and both authenticate with the deploy user's `gh auth token`. They differ in
+one way that matters: one alerts, the other reconciles.
+
+- **`github-ruleset-drift.sh`** compares the live master ruleset against
+  `gitops_deploy_expected_ruleset_contexts` and alerts on any difference. It never writes: a
+  ruleset changes because a human changed it, and reconciling would undo that with no signal.
+- **`github-interaction-limit.sh`** re-applies `gitops_deploy_interaction_limit` every day.
+  GitHub grants an interaction limit for six months at most and lets it lapse silently, so the
+  only way it changes without a human is by expiring, and re-applying it restores the declared
+  state rather than overriding a decision. It is what keeps the public repo closed to anyone
+  but a collaborator, chosen on 2026-09-06 over moving the repo into an organization. To
+  change or clear the limit, edit the default; `none` clears it with a DELETE on the next run.
+  A missing token, a failed PUT and a stored value that differs from the declared one all push
+  DOWN with `UNVERIFIED` or `NOT applied`, never `armed` — the tests in
+  `ansible/tests/setup/test_github_interaction_limit.py` drive each of those branches.
+
 ## Config / secrets
 `/etc/gitops-deploy/config.env` (0600) is templated from the SOPS var
 `gitops_deploy_discord_webhook`. Liveness is now written to `/var/lib/gitops-deploy/last_run`
