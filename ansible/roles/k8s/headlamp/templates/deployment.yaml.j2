@@ -35,9 +35,11 @@ spec:
       # Preference, never a pin: daniel-box carries the storage- and VIP-pinned workloads and runs the hotter of the two nodes, so latency-insensitive services default here.
       # Weighted so the pod still schedules if daniel-server is cordoned or full.
 {{ node_affinity_preference('daniel-server') }}
+{% if headlamp_k8s_plugins %}
       initContainers:
         # Installs every entry of headlamp_k8s_plugins (defaults/main.yml) into the plugins
-        # emptyDir the main container reads. `set -eu` plus `sha256sum -c` make a bad download
+        # emptyDir the main container reads; rendered only when the list is non-empty. The
+        # image's own bundled plugins live in /headlamp/static-plugins, untouched by this. `set -eu` plus `sha256sum -c` make a bad download
         # a failed pod start, never a silently plugin-less dashboard. Busybox wget speaks TLS
         # on this image (alpine ships ssl_client), and the probe job already pins it.
         - name: fetch-plugins
@@ -61,6 +63,7 @@ spec:
             - name: headlamp-tmp
               mountPath: /tmp
 {{ container_resources(cpu_limit='250m', mem_limit='64Mi', cpu_request='10m', mem_request='16Mi') }}
+{% endif %}
       containers:
         - name: headlamp
           image: {{ headlamp_k8s_image }}
@@ -87,7 +90,8 @@ spec:
               mountPath: /home/headlamp/.config
             - name: headlamp-tmp
               mountPath: /tmp
-            # Filled by the fetch-plugins init container; -plugins-dir above names this path.
+            # Filled by the fetch-plugins init container when headlamp_k8s_plugins is non-empty;
+            # -plugins-dir above names this path. Empty otherwise, which Headlamp accepts.
             - name: headlamp-plugins
               mountPath: /headlamp/plugins
               readOnly: true

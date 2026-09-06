@@ -31,23 +31,26 @@ headlamp_k8s_crd_api_groups:
   - helm.cattle.io
   - k3s.cattle.io
 
-# Headlamp plugins, installed by the `fetch-plugins` init container in deployment.yaml.j2.
-# The upstream image ships NO plugins: Prometheus charts on workload pages, Flux views and the
-# rest are each a plugin from github.com/headlamp-k8s/plugins, released as
-# <name>-<version>.tar.gz and unpacked to /headlamp/plugins/<name>/. The init container
-# downloads each tarball on every pod start, refuses a checksum mismatch, and refuses to start
-# the pod when GitHub is unreachable — a dashboard down during a GitHub outage is the trade
-# for keeping the plugin out of the image and out of git.
+# Extra Headlamp plugins, installed by the `fetch-plugins` init container in
+# deployment.yaml.j2. EMPTY on purpose: the upstream image already BUNDLES the Prometheus
+# plugin (container/build-manifest.json in headlamp-k8s/headlamp names prometheus-0.9.1 for
+# v0.45.0), and the first cut of this list installed a second copy of it — GET /plugins on the
+# running pod listed `static-plugins/prometheus (shipped)` beside `plugins/prometheus`.
+# Before adding an entry here, read GET /plugins on the live pod, not the plugin's README.
 #
-# To add a plugin: one entry here. Renovate opens the version bump (renovate.json, the
-# `headlamp plugins` manager); the sha256 is NOT derivable from the release, so the PR is a
-# signal the operator finishes:
+# The mechanism stays for plugins the image does not ship (flux, cert-manager, kompose, ...),
+# each a release of github.com/headlamp-k8s/plugins named <name>-<version>.tar.gz. The init
+# container downloads each tarball on every pod start, refuses a checksum mismatch, and refuses
+# to start the pod when GitHub is unreachable — a dashboard down during a GitHub outage is the
+# trade for keeping the plugin out of the image and out of git. With the list empty the init
+# container is not rendered at all.
+#
+# One entry per plugin: name, version, sha256. NOTHING TRACKS THE VERSION while this list is
+# empty — a Renovate manager over an empty list is inert, and test_renovate_managers.py
+# rejects one. The first entry here also restores that manager: PR #1350 carried a
+# `headlamp plugins` regex manager plus its `automerge: false` packageRule, and
+# `git show 6185b261 -- renovate.json` is the copy to take. The sha256 is NOT derivable from
+# the release either way, so a bump PR is a signal the operator finishes:
 #   gh release download <name>-<ver> -R headlamp-k8s/plugins -p '<name>-<ver>.tar.gz' -D /tmp
 #   sha256sum /tmp/<name>-<ver>.tar.gz
-headlamp_k8s_plugins:
-  # Charts on Pod/Deployment/... detail pages. It finds Prometheus by the
-  # `headlamp-prometheus: "true"` label on the Service in roles/k8s/claude-otel and queries it
-  # through the API server's service proxy, which is what the Role in rbac.yaml.j2 grants.
-  - name: prometheus
-    version: "0.9.1"
-    sha256: 06afabe42da69e8e0c5c2632acc3fee020566825d2ae71ff8e4f3dd7f78fc4ae
+headlamp_k8s_plugins: []
