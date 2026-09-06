@@ -339,8 +339,10 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     would read green through a fire. A declared max or crit outside
     (`HWMON_TEMP_MIN_PLAUSIBLE_C`, `HWMON_TEMP_MAX_PLAUSIBLE_C`] is treated as UNDECLARED.
     An EMPTY sensor vector is `down`, not `up` — zero readings means EVERY collector went blind,
-    and "nothing is too hot" from no data is a lie. `HWMON_TEMP_CONSECUTIVE` (3) rides out a
-    transcode spike.
+    and "nothing is too hot" from no data is a lie. `HWMON_TEMP_CONSECUTIVE` (12, one hour at
+    `INTERVAL`=300) rides out a boost excursion; it is ONE streak for the whole check rather than
+    one per sensor. It was 3 until issue #1186 — see *The excursions are workload, so the remedy
+    is hysteresis* below.
     **The message names hardware, not sysfs paths** (2026-09-01): two extra instant queries
     (`node_hwmon_chip_names`, `node_hwmon_sensor_label`) turn
     `daniel-box/pci0000:00_0000:00:18_3/temp1` into `daniel-box k10temp/Tctl`. Both lookups are
@@ -376,9 +378,22 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     by construction, and a name-keyed entry would stop matching in silence. Three earlier attempts
     recorded amd.com as unreachable from this estate — **it is reachable; a plain fetch is not.**
     With a browser `User-Agent` the product page returned 200 in 0.66 s on 2026-09-05.
-    What this does NOT clear: daniel-box exceeds the new 90 °C for 9.3 % of a 30-day window
-    (12.2 % above the old 85 °C), so the calibration narrowed a true condition rather than
-    removing it.
+    What this does NOT clear: daniel-box still exceeds the new 90 °C routinely, so the
+    calibration narrowed a true condition rather than removing it. **The excursions are workload,
+    so the remedy is hysteresis** (issue #1186, shipped 2026-09-06 as
+    `HWMON_TEMP_CONSECUTIVE` 3 → 12). Measured over a true 7 days to 2026-09-06 at the 5 min loop
+    cadence — Prometheus retains ~11.4 days here, so the `[30d]` figures in #1152 and #1186 really
+    covered ~11 days (#1314): this sensor is above 90 °C for **12.0 %** of samples, p50 52.875 °C,
+    p95 93.125 °C, max 93.75 °C against the rated 100 °C. Those 241 hot samples are 115 separate
+    excursions, and their run lengths in cycles are 66×1, 23×2, 12×3, 5×4, 2×5, 3×6, 3×7, 1×8 and
+    then a single 18 (90 min, from 2026-09-03T12:20Z) — **nothing between 9 and 17**. 3 cycles
+    paged 26 times in that week; 12 pages once, on the 18-cycle outlier, which is kept on purpose
+    because an hour and a half pinned above 90 °C is the shape of a cooling fault. Every excursion
+    falls in the 11:00–03:20Z band with an 8-hour overnight hole, which is what settles it as
+    scheduled and interactive work rather than an idle-state thermal floor — the correlation #1186
+    asked for. `HWMON_TEMP_RATIO` was NOT raised: it is estate-wide and this is one sensor's
+    duty cycle. The derivation and the pages-per-week table are at the `DECIDED: 12 cycles` marker
+    in `files/bridge/config_host.py`.
     `crits` is still read for every OTHER sensor,
     because a driver that skips `max` but declares `crit` (none currently in this estate; added
     defensively) would otherwise take the flat fallback despite declaring a real limit. **`max`

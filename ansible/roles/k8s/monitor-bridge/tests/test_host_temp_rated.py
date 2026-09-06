@@ -167,3 +167,26 @@ def test_a_malformed_rating_is_reported_rather_than_guessed_at():
     cfg, problems = _host_config("daniel-box/onlytwo=100")
     assert cfg.HWMON_TEMP_RATED_MAX_C == ()
     assert any("HWMON_TEMP_RATED_MAX_C" in p for p in problems), problems
+
+
+def test_the_shipped_hysteresis_rides_out_this_sensors_boost_excursions():
+    """#1186: the same sensor's other half — the streak length, pinned to what was measured.
+
+    The rated arm above settles WHERE the limit is; this settles HOW LONG a breach must last to
+    page. Both are daniel-box's k10temp/Tctl, which spends 12.0% of a week above that 90C limit
+    as ordinary boost. Measured over the 7d to 2026-09-06 at the 5 min loop cadence, its 115
+    excursions ran to 8 cycles with one outlier of 18 and nothing in between; 3 cycles paged 26
+    times that week, 12 pages once. The env-secret value is the one the pod reads, so a code-only
+    change ships nothing — both are pinned here.
+    """
+    cfg, problems = _host_config("")
+    assert not problems, problems
+    assert cfg.HWMON_TEMP_CONSECUTIVE == 12, (
+        "12 cycles = 60 min at INTERVAL=300, from the empty 9-17 cycle gap in the measured "
+        "run-length distribution. Shortening it reinstates the 26-pages-a-week condition #1186 "
+        "closed; the derivation is at the `DECIDED: 12 cycles` marker in bridge/config_host.py"
+    )
+    assert (
+        'HWMON_TEMP_CONSECUTIVE: "12"'
+        in (_ROLE / "templates/env-secret.yaml.j2").read_text()
+    ), "the env-secret overrides the code default, so it must carry the same 12"
