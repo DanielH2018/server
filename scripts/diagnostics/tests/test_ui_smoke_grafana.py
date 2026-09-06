@@ -53,17 +53,22 @@ def domain() -> str:
 
 
 # Hardcoded for the reason `test_ui_smoke.SERVICES` is: deriving it from files/dashboards/
-# would enlist every new board into a suite CI never runs. One per rendering shape, and
-# `min_headers` is
-# the count observed live on 2026-08-30 — a deliberate dashboard change updates the number.
+# would enlist every new board into a suite CI never runs. One per rendering shape, and each
+# `min_headers` is a count observed live — a deliberate dashboard change updates the number.
 # (uid, minimum rendered panel headers)
 GRAFANA_DASHBOARDS = [
+    # The first four were observed live on 2026-08-30.
     ("longhorn-storage", 13),
     ("claude-code-otel", 25),
     ("ddmlqvk12uozka", 18),  # traefik-custom
     # 4 panels, every one a `row`: it mounts fully and draws no panel header until a row is
     # expanded, so 0 here means "assert on rows instead". See grafana_panel_report.py.
     ("6L2GdB47z", 0),  # crowdsec-details-per-machine
+    # Observed live 2026-09-06. The shape the four above do not have: no `row` at all, so
+    # every panel must draw on load and `min_headers` is the board's whole panel count.
+    # `speedtest-tracker` is the same flat shape with no panel type this board lacks, so it
+    # is deliberately not enrolled — see the PR that added this entry.
+    ("exportarr-arr-stack", 13),
 ]
 
 # Measured 2026-08-30: a dashboard that mounts draws its panels within ~2.2s, and 15 of 19
