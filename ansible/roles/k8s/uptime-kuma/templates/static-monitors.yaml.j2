@@ -500,3 +500,38 @@ stringData:
   status-page-sync.json: |
     {"type": "push", "name": "Status Page Sync", "interval": 1800, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ kuma_status_page_sync_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
 {% endif %}
+  # ── fleet-level all-clear ──────────────────────────────────────────────────────────────
+  # One tile whose recovery is ONE message, so a fleet-wide outage gets an all-clear at all.
+  # #1342: when the edge came back at 11:10:02Z on 2026-09-06, ~17 monitors recovered in the
+  # same second and Discord answered five of them with
+  # `429 {"message":"You are being rate limited.","retry_after":0.3,"global":false}`. That is
+  # the per-webhook bucket refilling, not a ban — but Kuma 2.5.3's discord.js posts once with
+  # no retry and no `retry_after` handling (server/notification-providers/discord.js), so those
+  # five were simply lost. The operator saw ~33 DOWN messages and then silence.
+  #
+  # The clustering is not a one-off: a Kuma pod recreate starts every monitor's schedule at the
+  # same instant, and essentially every tile here is `interval: 60`, so they stay aligned until
+  # the next restart. #1348 makes those restarts FASTER, not rarer, so this recurs.
+  #
+  # It carries `email` as well as discord for the delivery guarantee — SMTP cannot land in the
+  # same per-webhook bucket, so this one all-clear survives a burst that drops Discord messages.
+  # Both legs, not email alone: every other member of the email tier is declared that way, and
+  # test_every_monitor_is_linked_to_the_discord_notification enforces the discord leg fleet-wide.
+  #
+  # The TARGET is what makes this fleet-level rather than one more app tile. `ping@internal`
+  # behind `PathPrefix(/.well-known/traefik-edge-selfcheck)` on the https entrypoint
+  # (roles/k8s/traefik/templates/edge-selfcheck-ingressroute.yaml.j2) depends on no workload:
+  # it answers the literal `OK` only when Traefik built a routing table, and it is rejected by
+  # exactly the middleware failure that 404'd every host for 3.5 hours in #1322. A keyword, not
+  # a bare http tile, for the #1341 reason — a status code alone reads green through a
+  # total-404 edge. Any hostname in hostAliases works: the router is path-only and Traefik
+  # ranks by rule length, so it wins for this path everywhere.
+  #
+  # Gated on the same flag as the route it probes, so a checkout with the bouncer plugin off
+  # (daniel-stage) renders no tile rather than one that sits permanently red. Plain truthiness,
+  # not `| bool`: that filter is Ansible-only and test_kuma_static_monitors renders with bare
+  # Jinja. The inventory value is a YAML boolean, so the two agree.
+{% if traefik_k8s_manage_crowdsec | default(true) %}
+  homelab-edge-allclear.json: |
+    {"type": "keyword", "name": "Homelab Edge (all-clear)", "url": "https://www.local.{{ domain }}/.well-known/traefik-edge-selfcheck", "keyword": "OK", "interval": 60, "maxretries": 2, "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
+{% endif %}

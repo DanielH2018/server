@@ -155,21 +155,34 @@ spec:
           # about the process — the `grep autokuma /proc/1/comm` check it replaced on 2026-08-21
           # stayed green through a sidecar that had stopped syncing entirely.
           #
-          # The startupProbe is load-bearing, not decoration. is_healthy() returns false while
-          # last_sync_timestamp is still unset, so /health serves 503 from container start until
-          # the FIRST full pass over all 82 entities lands. A bare liveness probe would kill the
-          # pod mid-reconcile; startup gates liveness until the first pass reports, and 30 x 10s
-          # is the allowance for it.
-          startupProbe:
-            httpGet:
-              path: /health
-              port: 8090
-            periodSeconds: 10
-            failureThreshold: 30
+          # is_healthy() returns false while last_sync_timestamp is still unset, so /health serves
+          # 503 from container start until the first reconcile pass reports. That allowance is now
+          # `initialDelaySeconds: 300` on the liveness probe, where until 2026-09-06 it was a
+          # startupProbe of 30 x 10s. Same 300s, and steady-state detection is unchanged at
+          # 3 x 30s — but a startupProbe ALSO held the pod NotReady for as long as it ran, and
+          # pod Ready is the AND of both containers. That gated the uptime-kuma Service on this
+          # sidecar's first reconcile: a measured 76s of uptime-kuma serving with no Service
+          # endpoint, on every pod replacement, six of them in the 48h to 2026-09-06 (#1348).
+          #
+          # Most of that 76s was not the reconcile. The first connect failed 0.13s in because
+          # Kuma was not listening yet; kuma-client then spends a hardcoded 9.0s waiting for
+          # readiness (`for i in 0..10 { sleep(200ms * i) }`, client.rs at the pinned
+          # v2.1.0-rc.2 — 200 * 45 = 9000ms, matching a measured 9.012s) and the sync loop sleeps
+          # a full AUTOKUMA__SYNC_INTERVAL before retrying. So ~60 of the 76s was that sleep.
+          # AUTOKUMA__KUMA__CONNECT_TIMEOUT cannot shorten it: the loop reads no config value.
+          #
+          # DECIDED: no readinessProbe here, and none is possible. Pod Ready is the AND of all
+          # containers, so any readinessProbe on /health re-creates exactly the 76s Service gap
+          # this change removed — the same reason recorded for this container in
+          # ansible/tests/k8s/test_readiness_coverage.py. The cost of the swap is that
+          # initialDelaySeconds is a fixed grace where a startupProbe was adaptive: a container
+          # that never becomes healthy is now killed at ~360s rather than ~300s. Liveness here
+          # protects a reconcile loop whose death breaks no monitoring, so 60s is affordable.
           livenessProbe:
             httpGet:
               path: /health
               port: 8090
+            initialDelaySeconds: 300
             periodSeconds: 30
             failureThreshold: 3
 {{ container_resources(cpu_limit=autokuma_k8s_cpu_limit, mem_limit=autokuma_k8s_mem_limit, cpu_request=autokuma_k8s_cpu_request, mem_request=autokuma_k8s_mem_request) }}
