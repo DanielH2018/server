@@ -63,10 +63,22 @@ Edit the `.j2` files, never the live config: homepage seeds any missing file int
 - **The browser tab title comes from `title:` in `templates/config/settings.yaml.j2`, and
   `Homepage` is the app's config-less default.** `src/pages/index.jsx:410` in gethomepage
   v1.13.2 renders `initialSettings.title || "Homepage"`, and `getStaticProps` returns
-  `initialSettings: {}` from its own catch — so a tab reading `Homepage` says the page
-  rendered with NO settings, not that the setting was dropped. Check that the config Secret
-  reached the pod before touching the expectation. The `-m ui` smoke test pins the configured
-  title for exactly this reason; issue #1399 misread a `Homepage` failure as a stale
-  expectation. How long such a render persists is unresolved: the page is served from Next's
-  cache (`x-nextjs-cache: HIT`, `cache-control: s-maxage=31536000`), but that was measured on
-  a GOOD render — see #1414.
+  `initialSettings: {}` when it renders with no settings — so a tab reading `Homepage` says
+  the page rendered with NO settings, not that the setting was dropped. The `-m ui` smoke test
+  pins the configured title for exactly this reason; issue #1399 misread a `Homepage` failure
+  as a stale expectation.
+- **The image ships a config-less render of `/`, and only a startup hook replaces it** (#1414,
+  settled 2026-09-06 against the pinned digest). `getStaticProps` carries no `revalidate` key,
+  so `next build` bakes `/` into the image against the build's own skeleton config, whose
+  `settings.yaml` is empty. In the image: `/app/.next/server/pages/en.json` reads
+  `"initialSettings":{}`, `en.html` reads `<title data-next-head="">Homepage</title>`, and
+  `prerender-manifest.json` records `"initialRevalidateSeconds": false` — nothing expires it.
+  Upstream re-renders only when a browser's stored `/api/hash` value MISMATCHES the pod's
+  (`src/pages/index.jsx`), and a browser with no stored value stores it and triggers nothing.
+  A fresh pod visited only by fresh browsers therefore served the config-less page for the
+  container's whole life, at 1/1 and with `probe.py health homepage` exiting 0. The
+  `lifecycle.postStart` hook in `templates/deployment.yaml.j2` calls `/api/revalidate` once at
+  startup, which regenerates `/` from the config the pod can read. ENFORCED by
+  `ansible/tests/services/test_homepage_revalidates_on_start.py`. The catch branch of
+  `getStaticProps` is a DIFFERENT failure and logs `<index>`; the baked page came from the
+  success path and logs nothing, so a pod-log gate cannot see this one.
