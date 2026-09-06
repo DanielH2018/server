@@ -16,8 +16,12 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
+import re
 from pathlib import Path
 
+import yaml
+
+from lib import yaml_fast
 from lib.render_guard import HOST_VARS as HOST_VARS_DIR, load_yaml
 from lib.repo_paths import K8S_ROLES
 
@@ -29,6 +33,7 @@ __all__ = [
     "SKIP_ROLES",
     "is_manifest_template",
     "k8s_entries",
+    "role_callers",
 ]
 
 # The one host that declares k8s services, so this is a single file where the other inventory
@@ -101,3 +106,74 @@ def k8s_entries() -> dict[str, dict]:
     """containers_list entries for the k8s platform, keyed by service name."""
     entries = load_yaml(HOST_VARS).get("containers_list") or []
     return {c["name"]: c for c in entries if c.get("platform") == "k8s"}
+
+
+# The two ways one k8s role reaches another's tasks. `include_role`/`import_role` name it as
+# `k8s/<role>`; the game-stats-lib consumers instead `import_tasks` a sibling role's file by
+# path (`{{ role_path }}/../game-stats-lib/tasks/stage.yml`), which names no role at all. Both
+# are real edges: whoever deploys the caller runs the callee's tasks.
+_ROLE_KEYS = (
+    "ansible.builtin.include_role",
+    "include_role",
+    "ansible.builtin.import_role",
+    "import_role",
+)
+_TASKS_KEYS = (
+    "ansible.builtin.import_tasks",
+    "import_tasks",
+    "ansible.builtin.include_tasks",
+    "include_tasks",
+)
+_ROLE_NAME = re.compile(r"^k8s/([^/\s]+)$")
+_SIBLING_TASKS = re.compile(r"\.\./([^/]+)/tasks/")
+
+
+def _callees(node) -> set[str]:
+    """Every k8s role the tasks under `node` reach. Walks blocks, which nest tasks."""
+    found: set[str] = set()
+    if isinstance(node, list):
+        for item in node:
+            found |= _callees(item)
+        return found
+    if not isinstance(node, dict):
+        return found
+    for key in _ROLE_KEYS:
+        value = node.get(key)
+        name = value.get("name") if isinstance(value, dict) else value
+        if isinstance(name, str) and (m := _ROLE_NAME.match(name.strip())):
+            found.add(m.group(1))
+    for key in _TASKS_KEYS:
+        value = node.get(key)
+        path = value.get("file") if isinstance(value, dict) else value
+        if isinstance(path, str) and (m := _SIBLING_TASKS.search(path)):
+            found.add(m.group(1))
+    for value in node.values():
+        if isinstance(value, list | dict):
+            found |= _callees(value)
+    return found
+
+
+def role_callers() -> dict[str, set[str]]:
+    """For each k8s role reached from another role's tasks, the roles that reach it.
+
+    The deploy-coverage question a helper role poses: it has no `containers_list` entry and so
+    no deploy tag of its own, but `deploy.yml` runs it under every caller's tag. A change to it
+    is therefore applied by deploying its callers — which is what
+    `scripts/deploy_tools/land_tags.py` asks this to decide, so that landing a helper-role
+    change alongside all of its callers stops reading as `needs-manual-apply` (issue #1397).
+
+    Only ``roles/k8s`` is walked. The Pi's Compose roles include `containers/common`, not a k8s
+    role, and no k8s role is reachable from them.
+    """
+    callers: dict[str, set[str]] = {}
+    for tasks_dir in sorted(K8S_ROLES.glob("*/tasks")):
+        caller = tasks_dir.parent.name
+        for task_file in sorted(tasks_dir.glob("*.yml")):
+            try:
+                tasks = yaml_fast.safe_load(task_file.read_text())
+            except yaml.YAMLError:
+                continue
+            for callee in _callees(tasks):
+                if callee != caller:
+                    callers.setdefault(callee, set()).add(caller)
+    return callers

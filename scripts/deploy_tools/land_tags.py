@@ -53,6 +53,7 @@ from deploy_logic import (
 # answered identically here and in deploy.sh's own validation.
 import deploy_tags
 from land_reach import remaining_setup_hosts_note
+from lib.k8s_roles import role_callers
 
 _K8S = re.compile(r"^ansible/roles/k8s/([^/]+)/")
 _DOCKER = re.compile(r"^ansible/roles/containers/([^/]+)/")
@@ -123,6 +124,38 @@ def shared_roles(files, declared: set[str] | None = None) -> list[str]:
     return sorted(roles - declared)
 
 
+def derived_tags(files, declared: set[str] | None = None) -> set[str]:
+    """The tags this PR's own file list deploys. `derive` and `covered_roles` share it.
+
+    Two derivations of "what did this landing deploy" that disagree is how a coverage check
+    silently suppresses a note for a role nothing applied, so there is one.
+    """
+    declared = declared_tags() if declared is None else declared
+    return expand_build_couplings({t for p in files if (t := tag_for(p, declared))})
+
+
+def covered_roles(shared: list[str], deployed: set[str]) -> set[str]:
+    """The shared roles in `shared` that `deployed` already applied, through their callers.
+
+    A helper role has no tag of its own, but `deploy.yml` runs it under the tag of every role
+    whose tasks `include_role` (or `import_tasks`) it — so deploying ALL of its callers applies
+    it. PR #1393 changed `arr-notification` together with both callers, sonarr and radarr, land
+    deployed both, and land.sh still reported `needs-manual-apply` and asked for a full
+    `deploy.yml` for work already applied (issue #1397).
+
+    EVERY caller must be in `deployed`, not merely one. `manifests` has 54 callers and PR #617
+    deployed 22 of them: one caller's tag re-applies the helper for that caller alone, which is
+    not the same as applying the change. Requiring all of them keeps #617 reported while #1393
+    goes quiet, and errs toward reporting when it is wrong.
+
+    Not transitive. `longhorn-api`'s callers are themselves helpers (volume-revert,
+    volume-snapshot), so it can never be covered here — the safe direction, and following the
+    chain would only reach `manifests`, whose 54 callers no landing deploys whole.
+    """
+    callers = role_callers()
+    return {r for r in shared if (c := callers.get(r)) and c <= deployed}
+
+
 def plane_note(files, declared: set[str] | None = None, quiet=()) -> str:
     """What this PR still needs a HUMAN to apply, or "" if nothing.
 
@@ -138,7 +171,8 @@ def plane_note(files, declared: set[str] | None = None, quiet=()) -> str:
 
     A shared k8s role is the same shape, one plane over: `--tags manifests` matches nothing,
     so no derived tag can ever apply it and only a full deploy will. Reusing this note rather
-    than minting a verdict keeps one meaning for "landed, not live".
+    than minting a verdict keeps one meaning for "landed, not live". Unless this landing
+    deployed every caller that runs it -- `covered_roles`, issue #1397.
 
     A rotated secret is the third shape, and the one with no path to match at all. A secret's
     value lives in no role's template, so `ansible/vars/secrets.yml` derives zero tags however
@@ -158,6 +192,10 @@ def plane_note(files, declared: set[str] | None = None, quiet=()) -> str:
     declared = declared_tags() if declared is None else declared
     notes = []
     shared = shared_roles(files, declared)
+    # A helper role every one of whose callers this landing deployed is already applied --
+    # dropped from the note, never from the tags, which it can never have one of.
+    covered = covered_roles(shared, derived_tags(files, declared))
+    shared = [r for r in shared if r not in covered]
     if shared:
         # DECIDED: report the shared plane, do not fan it out to its dependents. 53 roles
         # include k8s/manifests, so a fan-out is a full deploy wearing a tag list — 20
@@ -267,8 +305,7 @@ def derive(files, changed_files: int, declared: set[str] | None = None) -> Deriv
     declared = declared_tags() if declared is None else declared
     # A build role whose workload lives in a different role must not deploy alone: the build
     # would push a new image that nothing rolls onto, and report green doing it.
-    tags = expand_build_couplings({t for p in files if (t := tag_for(p, declared))})
-    return Derivation(sorted(tags), DeriveSource.PR)
+    return Derivation(sorted(derived_tags(files, declared)), DeriveSource.PR)
 
 
 def quiet_paths(paths: list[str], range_: str) -> set[str]:

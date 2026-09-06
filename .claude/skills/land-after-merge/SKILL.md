@@ -178,8 +178,13 @@ and the line names the command that does apply it. Four things are in that posit
 no playbook) or a bring-up playbook, because the tick applies every other setup role itself
 and `deploy.yml` is a `containers_list` loop. A **shared k8s role** —
 `manifests`, `volume-claim`, `rollout-drain`, `volume-snapshot`, `volume-revert`,
-`image-builder`, `longhorn-api`, `cronjob-gate` — has no `containers_list` entry at all, so
-`--tags manifests` matches nothing and only a full `ansible/deploy.yml` applies it. A **rotated
+`image-builder`, `longhorn-api`, `cronjob-gate`, `arr-notification`, `game-stats-lib` — has no
+`containers_list` entry at all, so `--tags manifests` matches nothing and only a full
+`ansible/deploy.yml` applies it. The exception is a shared role the SAME PR already applied:
+`deploy.yml` runs a helper under the tag of every role that includes it, so when the PR's own
+tags cover EVERY caller — sonarr and radarr for `arr-notification` — the change is already
+live and nothing is reported. One caller short is not enough, which is why `manifests` (54
+callers) is always reported. A **rotated
 secret** has no path to match at all: a secret's value lives in no role's template, so
 `ansible/vars/secrets.yml` derives zero tags however many roles consume it. Run `uv run python
 scripts/secrets_mgmt/secret_rotation.py consumers <secret>` for who holds a stale copy and the
