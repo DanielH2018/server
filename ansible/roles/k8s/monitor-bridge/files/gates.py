@@ -45,6 +45,7 @@ PROM_DEPENDENT = frozenset(
         "cpu",
         "targets",
         "traefik5xx",
+        "traefik_404",
         "ups",  # queries HA's Prometheus-scraped UPS battery sensors
         # Reads node_hwmon_temp_celsius. Its empty-vector branch pages on a blind hwmon
         # collector, so a Prometheus outage must suppress it — same reason as longhorn_volumes.

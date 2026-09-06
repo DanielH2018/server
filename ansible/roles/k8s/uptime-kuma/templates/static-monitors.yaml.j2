@@ -81,8 +81,15 @@ stringData:
     {"type": "http", "name": "k3s FreshRSS", "url": "https://freshrss.local.{{ domain }}", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["302"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
   headlamp-k8s.json: |
     {"type": "http", "name": "k3s Headlamp", "url": "https://headlamp.local.{{ domain }}", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["302"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
+  # The 404 here is the healthy signal — /ping/<unknown-uuid> is the one healthchecks path the
+  # ingressroute bypasses Authelia for, and healthchecks answers it `not found`. Accepting the
+  # STATUS CODE alone read green through the 3.5-hour total-404 edge of #1322 (measured 1 at
+  # 09:17Z while 33 other monitors were 0), so the tile also has to prove WHICH 404 it got.
+  # An inverted keyword does that: Traefik's own 404 body is Go's `404 page not found`, which
+  # healthchecks' `not found` does not contain, and a positive keyword cannot separate them
+  # because the healthy body is a substring of the broken one. #1341.
   healthchecks-k8s.json: |
-    {"type": "http", "name": "k3s healthchecks", "url": "https://healthchecks.local.{{ domain }}/ping/00000000-0000-0000-0000-000000000000", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["404"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "keyword", "name": "k3s healthchecks", "url": "https://healthchecks.local.{{ domain }}/ping/00000000-0000-0000-0000-000000000000", "keyword": "404 page not found", "invertKeyword": true, "interval": 60, "maxretries": 2, "accepted_statuscodes": ["404"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
   livesync-k8s.json: |
     {"type": "http", "name": "k3s LiveSync", "url": "https://livesync.local.{{ domain }}/", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["401"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
   mosquitto-k8s.json: |
@@ -120,12 +127,15 @@ stringData:
     {"type": "port", "name": "k3s nut (upsd)", "hostname": "nut.{{ k8s_namespace }}.svc.cluster.local", "port": 3493, "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
   grafana-k8s.json: |
     {"type": "http", "name": "k3s Grafana", "url": "https://grafana.local.{{ domain }}", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["302"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
-  # Tokenless probe of the mcp gate: a request without the bearer matches no router and
-  # the edge itself answers 404 — that 404 IS the healthy signal (same shape as the
-  # livesync probe's expected 401). Edge-down/DNS breakage still fails the tile; a dead
-  # pod behind a live gate surfaces on k3s Workload Health instead.
+  # Tokenless probe of the mcp gate. It used to request /mcp with no bearer and accept the 404
+  # that matches no router — but that body is Traefik's own `404 page not found`, identical to
+  # what a router-less edge returns for every host, so a tile named "edge gate" was by
+  # construction incapable of seeing the total-404 outage of #1322 and read 1 throughout it.
+  # It now probes the app's own /health through a LAN-only Path router
+  # (roles/k8s/traefik/templates/livesync-gate-secret.yaml.j2, homelab-mcp-probe), which
+  # answers 200 `ok` only when the edge routes AND the pod answers. #1341.
   homelab-mcp-k8s.json: |
-    {"type": "http", "name": "k3s homelab-mcp (edge gate)", "url": "https://mcp.local.{{ domain }}/mcp", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["404"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "keyword", "name": "k3s homelab-mcp (edge gate)", "url": "https://mcp.local.{{ domain }}/health", "keyword": "ok", "interval": 60, "maxretries": 2, "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
   home-assistant-k8s.json: |
     {"type": "http", "name": "k3s Home Assistant", "url": "https://home-assistant.local.{{ domain }}", "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
   # Transcribed 2026-08-10 (Phase D.2 step 3): id `loki` was the grafana compose's
@@ -358,6 +368,12 @@ stringData:
     {"type": "push", "name": "Traefik 5xx", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_traefik_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   monitor-bridge-traefik-latency.json: |
     {"type": "push", "name": "Traefik Latency", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_traefik_latency_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+  # Minted 2026-09-06 for #1340, ahead of the check that pushes to it. Its two siblings above
+  # are per-SERVICE and read green through the 3.5-hour total-404 edge of #1322, because zero
+  # routers means no traefik_service_* series to iterate; check_traefik_404_flood reads the
+  # entrypoint counter, which survives that failure.
+  monitor-bridge-traefik-404.json: |
+    {"type": "push", "name": "Traefik 404 Flood", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_traefik_404_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   monitor-bridge-n8n.json: |
     {"type": "push", "name": "n8n Prod Workflows", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_n8n_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   monitor-bridge-arr-queue.json: |

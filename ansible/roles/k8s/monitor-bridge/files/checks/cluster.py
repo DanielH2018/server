@@ -363,6 +363,67 @@ def check_traefik_latency(cfg: Config) -> tuple[bool, str]:
     )
 
 
+def check_traefik_404_flood(cfg: Config) -> tuple[bool, str]:
+    """The 404 share of ENTRYPOINT traffic: an edge that answers but routes nothing.
+
+    The gap check_traefik_5xx and check_traefik_latency both leave open, and #1322 fell
+    straight through it. On 2026-09-06 a transient crowdsec middleware absence made Traefik
+    reject every router while the reload itself succeeded; every HTTPS route 404'd for 3.5
+    hours and both neighbours logged `0 service(s) above floor` throughout. They are blind
+    twice over: 404 is not `code=~"5.."`, and with zero routers the `traefik_service_*` series
+    vanish, so their per-service loops iterate an empty vector and take the healthy branch.
+
+    ENTRYPOINT, not service or router, is the whole design. Measured for that window:
+    `sum by (code)(rate(traefik_entrypoint_requests_total[10m] offset 3h))` returned
+    `code=404 = 0.61` and nothing else, while `count(traefik_router_requests_total offset 3h)`
+    returned no data at all. The entrypoint counter is incremented before routing, so it
+    survives exactly the failure that erases its per-service siblings.
+
+    A ratio rather than a rate, behind the shared TRAEFIK_MIN_RPS floor, for the same reason
+    the 5xx check uses one: a handful of 404s on a near-idle edge is ordinary browsing, not an
+    outage. The threshold is high rather than low — see TRAEFIK_404_PCT for the two measured
+    populations it separates.
+
+    Two absent-data branches, and neither pages. `total is None` means Traefik is not being
+    scraped at all, which is Scrape Targets' page under the same one-root-cause-one-alert rule
+    gates.py applies everywhere else; this check reads Prometheus in-cluster, so the edge it
+    watches cannot blind it, but a dead exporter still can and must not page twice. A 404 rate
+    with no series is a genuine zero — no 404s were served — so it reads as 0.0 rather than as
+    unknown.
+    """
+    total = bridge.net.prom_scalar(
+        cfg, "sum(rate(traefik_entrypoint_requests_total[5m]))"
+    )
+    if total is None:
+        return (
+            True,
+            "404 flood unmeasured: no traefik entrypoint series "
+            "(Scrape Targets owns a blind exporter)",
+        )
+    if total < cfg.TRAEFIK_MIN_RPS:
+        return True, "404 flood ok: %.2f rps total, below the %.2f rps floor" % (
+            total,
+            cfg.TRAEFIK_MIN_RPS,
+        )
+    notfound = (
+        bridge.net.prom_scalar(
+            cfg, 'sum(rate(traefik_entrypoint_requests_total{code="404"}[5m]))'
+        )
+        or 0.0
+    )
+    pct = 100.0 * notfound / total
+    if pct > cfg.TRAEFIK_404_PCT:
+        return False, (
+            "%.0f%% of %.2f rps entrypoint traffic is 404, over %.0f%% — the edge is "
+            "answering but routing nothing (see #1322)"
+            % (pct, total, cfg.TRAEFIK_404_PCT)
+        )
+    return True, "404 flood ok: %.1f%% of %.2f rps entrypoint traffic is 404" % (
+        pct,
+        total,
+    )
+
+
 def check_k8s_workloads(cfg: Config) -> tuple[bool, str]:
     """Deployment readiness for every workload in the k3s cluster.
 

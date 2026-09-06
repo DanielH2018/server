@@ -37,6 +37,7 @@ from checks.cluster import (
     check_oom,
     check_restarts,
     check_targets_down,
+    check_traefik_404_flood,
     check_traefik_5xx,
     check_traefik_latency,
 )
@@ -92,6 +93,14 @@ def build_checks(env: Mapping[str, str] | None = None) -> list[Check]:
             "traefik_latency",
             tok("KUMA_PUSH_TRAEFIK_LATENCY"),
             check_traefik_latency,
+        ),
+        # Minted 2026-09-06 after #1322: its two neighbours above are per-SERVICE, and a
+        # total-404 edge erases the traefik_service_* series they iterate, so both read green
+        # through a 3.5-hour outage. This one reads the entrypoint counter, which survives it.
+        Check(
+            "traefik_404",
+            tok("KUMA_PUSH_TRAEFIK_404"),
+            check_traefik_404_flood,
         ),
         Check("n8n", tok("KUMA_PUSH_N8N"), check_n8n),
         Check("arr_queue", tok("KUMA_PUSH_ARR_QUEUE"), check_arr_queue),

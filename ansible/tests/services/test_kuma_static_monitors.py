@@ -342,3 +342,70 @@ def test_email_tier_membership_is_exactly_declared():
         and "email" in e.get("notification_name_list", [])
     }
     assert named == EMAIL_TIER
+
+
+# A monitor that accepts 404 without also checking the BODY is green through a total-404 edge:
+# Traefik answers 404 for every host when it has lost its routers, which is what happened for
+# 3.5 hours on 2026-09-06 (#1322). Measured at 09:17Z that day, `k3s healthchecks` and
+# `k3s homelab-mcp (edge gate)` both read 1 while 33 other monitors read 0 (#1341).
+#
+# Accepting 404 is still legitimate — a probe path that legitimately 404s on a healthy service
+# is the cheapest unauthenticated signal several routes offer. What is not legitimate is
+# accepting it blind. A keyword monitor pins WHICH 404 came back, so the two are separable.
+#
+# The keyword must be INVERTED, and that half is asserted too. Traefik's 404 body is Go's
+# `404 page not found` and healthchecks' is `not found` — the healthy body is a substring of the
+# broken one, so only a keyword the healthy response must NOT contain separates them. A positive
+# keyword here matches both and the tile is back where it started.
+def _accepts_404_without_a_body_check(entity: dict) -> bool:
+    if "404" not in [str(c) for c in entity.get("accepted_statuscodes", [])]:
+        return False
+    return not (entity.get("keyword") and entity.get("invertKeyword"))
+
+
+def test_a_404_accepting_monitor_with_an_inverted_keyword_is_clean():
+    assert not _accepts_404_without_a_body_check(
+        {
+            "type": "keyword",
+            "accepted_statuscodes": ["404"],
+            "keyword": "404 page not found",
+            "invertKeyword": True,
+        }
+    )
+    # And a monitor that does not accept 404 at all is not this rule's business.
+    assert not _accepts_404_without_a_body_check(
+        {"type": "http", "accepted_statuscodes": ["302"]}
+    )
+
+
+def test_a_404_accepting_monitor_without_a_keyword_is_flagged():
+    # The exact shape both offending tiles carried until 2026-09-06.
+    assert _accepts_404_without_a_body_check(
+        {"type": "http", "accepted_statuscodes": ["404"], "max_redirects": 0}
+    )
+
+
+def test_a_404_accepting_monitor_whose_keyword_is_not_inverted_is_flagged():
+    # Keeping the keyword and dropping the inversion reverses the tile's meaning while looking
+    # like a smaller edit than removing it.
+    assert _accepts_404_without_a_body_check(
+        {
+            "type": "keyword",
+            "accepted_statuscodes": ["404"],
+            "keyword": "404 page not found",
+        }
+    )
+
+
+def test_no_live_monitor_accepts_404_without_checking_the_body():
+    entities = _entities()
+    # Non-vacuity by name, not by count: this rule inspects only the monitors that accept 404,
+    # and a render that stopped emitting them would leave an all() over nothing passing. These
+    # two are the census members the rule exists for.
+    named = {"healthchecks-k8s.json", "homelab-mcp-k8s.json"}
+    assert named.issubset(entities), sorted(entities)
+    offenders = [n for n, e in entities.items() if _accepts_404_without_a_body_check(e)]
+    assert not offenders, (
+        "monitor(s) accept 404 with no body check — green through a total-404 edge: %s"
+        % sorted(offenders)
+    )

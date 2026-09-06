@@ -11,6 +11,14 @@ routed tenant of the retired Docker edge. See repo-root `CLAUDE.md` for shared c
 - **Deploy tag:** `--tags "homelab-mcp"`. No IngressRoute — routed through the k8s edge's
   file-provider gate Secret (`roles/k8s/traefik/templates/livesync-gate-secret.yaml.j2`)
   instead, so its bearer token stays out of CRD objects the readonly kubeconfig can list.
+  **Two routers there, not one.** `homelab-mcp-local` carries the bearer predicate and serves
+  everything; `homelab-mcp-probe` is LAN-only, matches the single exact `Path(`/health`)`, and
+  requires no token — `_BearerAuth` in `files/app.py` exempts that path, and it returns the bare
+  string `ok`. It exists so the Kuma tile can prove the edge ROUTES: the old tile probed `/mcp`
+  with no bearer and accepted the 404 that matches no router, which is byte-identical to what a
+  router-less edge returns for every host, so it read green through the 3.5-hour outage of #1322
+  (#1341). Changing that router to a PathPrefix would open more than `/health`; a test asserts it
+  stays an exact Path.
 - **Storage:** none — no PVC, stateless RollingUpdate Deployment.
 - **Auto-deploy:** eligible, but the promotion cannot actually fire — the image is a
   registry-built `:latest` ref with no upstream version for Renovate to compare against;

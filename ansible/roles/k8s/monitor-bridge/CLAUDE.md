@@ -122,6 +122,14 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     `TRAEFIK_SLOW_BUCKET` on a boundary Traefik actually emits: an `le=` matching no series is
     reported as a config fault rather than read as 0 requests under the boundary, which would page
     every service at once.)
+  - **Traefik 404 Flood** (404 share of **entrypoint** traffic over 5m, behind the same
+    `TRAEFIK_MIN_RPS` floor — the gap BOTH checks above leave open, and the one #1322 fell
+    through. They are per-SERVICE, and an edge that has lost its routers emits no
+    `traefik_service_*` series at all, so their loops iterate an empty vector and report
+    `0 service(s) above floor` while every route 404s. The entrypoint counter is incremented
+    before routing, so it survives that. `TRAEFIK_404_PCT` is 90 rather than a low number
+    because a homelab edge serves a steady 404 trickle: measured 2026-09-06, 4.0% of 0.83 rps
+    healthy against 100% of 0.61 rps during the outage.)
   - **n8n Prod Workflows** (n8n public API: per-*active*-workflow **consecutive-failure
     streak**. n8n doesn't save successful executions (`EXECUTIONS_DATA_SAVE_ON_SUCCESS=none`, to
     bound `database.sqlite` + its B2 backup churn — 2026-07-03), so "consecutive" can't be read
