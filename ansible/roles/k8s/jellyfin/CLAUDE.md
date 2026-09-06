@@ -5,8 +5,10 @@ shared `media-data` library and owns its own config volume.
 
 ## At a glance
 - **Image:** `lscr.io/linuxserver/jellyfin` (`jellyfin_k8s_image`), pinned in lockstep with the
-  `jellyfin-ani-sync` plugin's `targetAbi` — raise the plugin and the image together, never one
-  alone (`ansible/tests/services/test_anisync_pin_matches_server.py` enforces this).
+  `targetAbi` of **both** installed plugins — `jellyfin-ani-sync` and Intro Skipper. Raise a
+  plugin and the image together, never one alone
+  (`ansible/tests/services/test_anisync_pin_matches_server.py` and
+  `ansible/tests/services/test_introskipper_install.py` enforce this).
 - **Deploy tag:** `--tags "jellyfin"`. `use_authelia: false` — **no auth**, public route.
 - **Route:** `jellyfin.<domain>`.
 - **Persists:** `jellyfin-config` (`longhorn`, backed up) — the library database, artwork and
@@ -26,3 +28,13 @@ shared `media-data` library and owns its own config volume.
 - `jellyfin-ani-sync` syncs watch status to AniList but never a score, so it is safe alongside a
   rating set by hand on AniList; its plugin zip is installed by a `python:3.14-alpine` init
   container (the `unzip`/uid-ownership prerequisites `defaults/main.yml` explains).
+- **Intro Skipper** is installed by a second init container of the same shape, into the same
+  `/config/data/plugins`. Two things differ. Its release line is per *Jellyfin* version — the
+  repository tags `10.11/v…` and `12.0/v…` in parallel, so "the latest release" is routinely
+  the wrong one — and its zip carries only `IntroSkipper.dll`, so the init container writes
+  `meta.json` itself rather than letting Jellyfin invent one from the directory name. It draws
+  no UI of its own: it publishes timestamps through Jellyfin's Media Segments API and the
+  clients render the skip button, so nothing here writes `/usr/share/jellyfin/web`.
+- Both installers duplicate rather than share a loop, deliberately — each is pinned by literal
+  string assertions in its own test, and a textual guard stops seeing what it guards once the
+  thing moves behind an indirection.
