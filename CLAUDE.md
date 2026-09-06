@@ -307,6 +307,11 @@ history, the `homelab-ui` DNS/auth/secrecy triad and its `-m ui` suite, per-file
   all four of which mean *nothing was deployed* and reach Claude as a bare `Exit code N`.
 - **session-health** (SessionStart) — on opening a session here, prints a banner of any unhealthy/
   restarting containers + down Prometheus targets (silent when all-green; read-only, timeout-bounded).
+  It also names a **dirty primary checkout** and a **GitOps deployer parked behind origin**. Those
+  two states stop every deploy in the fleet, and a worktree session cannot look at either for
+  itself — the isolation guard refuses a git command targeting the shared checkout, and the
+  failure it does see (`deploy.sh` exit 4) names its own tree instead. The banner is the only
+  place that cause reaches the session that pays for it.
 - **homelab-network-diagnostician** agent — connectivity/DNS/Traefik/WireGuard/CrowdSec triage (read-only).
 - **home-assistant-engineer** agent — read+write HA engineer (automations/scenes/scripts/macros)
   that knows the copy-not-template + tested-macro conventions and the verification traps; pairs
