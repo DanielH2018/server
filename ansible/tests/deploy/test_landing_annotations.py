@@ -137,3 +137,38 @@ def test_a_deploy_failed_line_names_its_cause():
     )
     assert "verdict=deploy-failed cause=tag-miss " in line
     assert " cause= " in annotation_line(Ledger(pr="1", t_start=0.0), 75, 5.0)
+
+
+_FIXTURE_FILTER = '| pr !~ "^(939|999|999999|unknown)$"'
+
+
+def _exprs_without_the_fixture_filter(exprs: list[str]) -> list[str]:
+    """The board exprs that do not drop the land.sh suite's syslog fixtures (issue #1255).
+
+    DECIDED: the discriminator is the PR id, never an empty `sha`. Until `_no_syslog` landed
+    on 2026-09-03 every test that ran the real `land.sh` wrote its annotation to the host's
+    syslog, carrying `pr=939`, `pr=999`, `pr=999999`, or — on an argparse failure, which
+    reaches the EXIT trap before the ledger has a PR — `pr=unknown`. Measured against live
+    Loki on 2026-09-06, those are 8,282 of the 8,777 records in the 744h retention window,
+    and they read the verdict mix as 72% `aborted` where the real figure is 8.7%.
+
+    Issue #1255 also proposed dropping `sha=""` rows. Measured, that is wrong: a real
+    landing that aborts before the merge leaves `sha` empty too (PRs 1266, 1256, 1236, 1205
+    and 1081 all did), so the board would lose most of its genuine `aborted` rows.
+
+    The regex is anchored because LogQL's `!~` is not. Unanchored, `999` also matches
+    `pr=999999` — which is how the two extra fixture rows were found — and would match a
+    real PR 1999 once the repo reaches it.
+    """
+    assert len(exprs) >= 13, exprs
+    return [e for e in exprs if _FIXTURE_FILTER not in e]
+
+
+def test_every_panel_drops_the_land_sh_test_fixtures():
+    assert _exprs_without_the_fixture_filter(_board_exprs()) == []
+
+
+def test_a_panel_without_the_fixture_filter_would_be_caught():
+    """The rejecting half: the check must name an unfiltered expr, not pass vacuously."""
+    planted = '{job="syslog"} |= "event=landing" | logfmt'
+    assert _exprs_without_the_fixture_filter([*_board_exprs(), planted]) == [planted]

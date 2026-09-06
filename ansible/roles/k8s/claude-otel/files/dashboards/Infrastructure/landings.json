@@ -2,7 +2,7 @@
   "annotations": {
     "list": []
   },
-  "description": "Where a landing's time goes, one point per land.sh run. land.sh writes a logfmt line to syslog from its EXIT trap (`logger -t landing-annotation`), promtail ships it to Loki, and this board reads it. wait_merge is `--await-merge` polling until the PR merged; wait_ci is master CI on the merge commit, plus any wait on a newer tip when another PR merged mid-landing; tick is the GitOps tick; deploy is the scoped deploy.sh run. Empty phases were never reached (a `blocked` landing has no wait_ci). `cause` names which deploy failure a `deploy-failed` verdict was, and is empty beside every other verdict. CLI equivalent: `uv run python scripts/diagnostics/probe.py loki-query '{job=\"syslog\"} |= \"event=landing\" | logfmt'`.",
+  "description": "Where a landing's time goes, one point per land.sh run. land.sh writes a logfmt line to syslog from its EXIT trap (`logger -t landing-annotation`), promtail ships it to Loki, and this board reads it. wait_merge is `--await-merge` polling until the PR merged; wait_ci is master CI on the merge commit, plus any wait on a newer tip when another PR merged mid-landing; tick is the GitOps tick; deploy is the scoped deploy.sh run. Empty phases were never reached (a `blocked` landing has no wait_ci). `cause` names which deploy failure a `deploy-failed` verdict was, and is empty beside every other verdict. Every panel drops the test fixtures the `land.sh` suite wrote to the real syslog until 2026-09-03 (`_no_syslog` in scripts/deploy_tools/tests/conftest.py closed the leak). They are 8,282 of the 8,777 records Loki holds, and the discriminator is the PR id alone: `pr` 939, 999 and 999999 are the numbers the fixtures pass, and `pr=unknown` is an argparse failure, which carries no sha and no phase timing whatever wrote it. The regex is anchored because `pr !~ \"999\"` unanchored also eats `pr=999999` and would eat a real PR 1999 later. Do NOT add `sha!=\"\"`: a real landing that aborts before the merge has an empty sha too, and filtering on it removes most genuine `aborted` rows. CLI equivalent: `uv run python scripts/diagnostics/probe.py loki-query '{job=\"syslog\"} |= \"event=landing\" | logfmt | pr !~ \"^(939|999|999999|unknown)$\"'`.",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
@@ -54,7 +54,7 @@
             "type": "loki",
             "uid": "bf4q19tuivta8e"
           },
-          "expr": "max_over_time({job=\"syslog\"} |= \"event=landing\" | logfmt | unwrap wait_merge [$__interval])",
+          "expr": "max_over_time({job=\"syslog\"} |= \"event=landing\" | logfmt | pr !~ \"^(939|999|999999|unknown)$\" | unwrap wait_merge [$__interval])",
           "legendFormat": "wait_merge",
           "refId": "A"
         },
@@ -63,7 +63,7 @@
             "type": "loki",
             "uid": "bf4q19tuivta8e"
           },
-          "expr": "max_over_time({job=\"syslog\"} |= \"event=landing\" | logfmt | unwrap wait_ci [$__interval])",
+          "expr": "max_over_time({job=\"syslog\"} |= \"event=landing\" | logfmt | pr !~ \"^(939|999|999999|unknown)$\" | unwrap wait_ci [$__interval])",
           "legendFormat": "wait_ci",
           "refId": "B"
         },
@@ -72,7 +72,7 @@
             "type": "loki",
             "uid": "bf4q19tuivta8e"
           },
-          "expr": "max_over_time({job=\"syslog\"} |= \"event=landing\" | logfmt | unwrap deploy [$__interval])",
+          "expr": "max_over_time({job=\"syslog\"} |= \"event=landing\" | logfmt | pr !~ \"^(939|999|999999|unknown)$\" | unwrap deploy [$__interval])",
           "legendFormat": "deploy",
           "refId": "C"
         },
@@ -81,7 +81,7 @@
             "type": "loki",
             "uid": "bf4q19tuivta8e"
           },
-          "expr": "max_over_time({job=\"syslog\"} |= \"event=landing\" | logfmt | unwrap total [$__interval])",
+          "expr": "max_over_time({job=\"syslog\"} |= \"event=landing\" | logfmt | pr !~ \"^(939|999|999999|unknown)$\" | unwrap total [$__interval])",
           "legendFormat": "total",
           "refId": "D"
         },
@@ -90,7 +90,7 @@
             "type": "loki",
             "uid": "bf4q19tuivta8e"
           },
-          "expr": "max_over_time({job=\"syslog\"} |= \"event=landing\" | logfmt | unwrap lock [$__interval])",
+          "expr": "max_over_time({job=\"syslog\"} |= \"event=landing\" | logfmt | pr !~ \"^(939|999|999999|unknown)$\" | unwrap lock [$__interval])",
           "legendFormat": "lock",
           "refId": "E"
         }
@@ -149,7 +149,7 @@
             "type": "loki",
             "uid": "bf4q19tuivta8e"
           },
-          "expr": "quantile_over_time(0.5, {job=\"syslog\"} |= \"event=landing\" | logfmt | unwrap wait_merge [$__range])",
+          "expr": "quantile_over_time(0.5, {job=\"syslog\"} |= \"event=landing\" | logfmt | pr !~ \"^(939|999|999999|unknown)$\" | unwrap wait_merge [$__range])",
           "legendFormat": "median wait_merge",
           "refId": "A"
         },
@@ -158,7 +158,7 @@
             "type": "loki",
             "uid": "bf4q19tuivta8e"
           },
-          "expr": "quantile_over_time(0.5, {job=\"syslog\"} |= \"event=landing\" | logfmt | unwrap wait_ci [$__range])",
+          "expr": "quantile_over_time(0.5, {job=\"syslog\"} |= \"event=landing\" | logfmt | pr !~ \"^(939|999|999999|unknown)$\" | unwrap wait_ci [$__range])",
           "legendFormat": "median wait_ci",
           "refId": "B"
         },
@@ -167,7 +167,7 @@
             "type": "loki",
             "uid": "bf4q19tuivta8e"
           },
-          "expr": "quantile_over_time(0.5, {job=\"syslog\"} |= \"event=landing\" | logfmt | unwrap deploy [$__range])",
+          "expr": "quantile_over_time(0.5, {job=\"syslog\"} |= \"event=landing\" | logfmt | pr !~ \"^(939|999|999999|unknown)$\" | unwrap deploy [$__range])",
           "legendFormat": "median deploy",
           "refId": "C"
         },
@@ -176,7 +176,7 @@
             "type": "loki",
             "uid": "bf4q19tuivta8e"
           },
-          "expr": "quantile_over_time(0.5, {job=\"syslog\"} |= \"event=landing\" | logfmt | unwrap total [$__range])",
+          "expr": "quantile_over_time(0.5, {job=\"syslog\"} |= \"event=landing\" | logfmt | pr !~ \"^(939|999|999999|unknown)$\" | unwrap total [$__range])",
           "legendFormat": "median total",
           "refId": "D"
         },
@@ -185,7 +185,7 @@
             "type": "loki",
             "uid": "bf4q19tuivta8e"
           },
-          "expr": "quantile_over_time(0.5, {job=\"syslog\"} |= \"event=landing\" | logfmt | unwrap lock [$__range])",
+          "expr": "quantile_over_time(0.5, {job=\"syslog\"} |= \"event=landing\" | logfmt | pr !~ \"^(939|999|999999|unknown)$\" | unwrap lock [$__range])",
           "legendFormat": "median lock",
           "refId": "E"
         }
@@ -198,7 +198,7 @@
         "type": "loki",
         "uid": "bf4q19tuivta8e"
       },
-      "description": "How the landings in the range ended. settled and nothing-to-deploy are the two that delivered; everything else stopped early. `aborted` is the EXIT-trap default, so it means a path that named no verdict rather than one particular failure.",
+      "description": "How the landings in the range ended. settled and nothing-to-deploy are the two that delivered; everything else stopped early. `aborted` is the EXIT-trap default, so it means a path that named no verdict rather than one particular failure. Measured 2026-09-06 over the default 7d range: 43 aborted of 495 real landings (8.7%), against 6,326 of 8,777 (72%) before the fixture filter.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -242,7 +242,7 @@
             "type": "loki",
             "uid": "bf4q19tuivta8e"
           },
-          "expr": "sum by (verdict) (count_over_time({job=\"syslog\"} |= \"event=landing\" | logfmt [$__range]))",
+          "expr": "sum by (verdict) (count_over_time({job=\"syslog\"} |= \"event=landing\" | logfmt | pr !~ \"^(939|999|999999|unknown)$\" [$__range]))",
           "legendFormat": "{{verdict}}",
           "refId": "A"
         }
@@ -299,7 +299,7 @@
             "type": "loki",
             "uid": "bf4q19tuivta8e"
           },
-          "expr": "sum by (cause) (count_over_time({job=\"syslog\"} |= \"event=landing\" | logfmt | verdict=\"deploy-failed\" [$__range]))",
+          "expr": "sum by (cause) (count_over_time({job=\"syslog\"} |= \"event=landing\" | logfmt | pr !~ \"^(939|999|999999|unknown)$\" | verdict=\"deploy-failed\" [$__range]))",
           "legendFormat": "{{cause}}",
           "refId": "A"
         }
@@ -336,7 +336,7 @@
             "type": "loki",
             "uid": "bf4q19tuivta8e"
           },
-          "expr": "{job=\"syslog\"} |= \"event=landing\"",
+          "expr": "{job=\"syslog\"} |= \"event=landing\" | logfmt | pr !~ \"^(939|999|999999|unknown)$\"",
           "refId": "A"
         }
       ],
