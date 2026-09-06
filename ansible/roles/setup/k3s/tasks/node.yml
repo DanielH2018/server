@@ -36,6 +36,25 @@
   become: true
   when: k3s_host_coredns_enabled
 
+# The pod-CIDR allow above admits the scrape only while Prometheus runs on THIS node. Flannel
+# masquerades a pod's traffic to any address outside the pod CIDR, and this node's LAN address
+# is outside it, so a scrape from the other node arrives from that node's LAN IP instead.
+# Prometheus is a single-replica Deployment with no nodeSelector, so it lands wherever the
+# scheduler puts it: on 2026-09-06 it moved to daniel-server and the coredns-host target sat
+# behind `[UFW BLOCK] SRC=10.0.0.161 DPT=9253` from 14:08 UTC. The 9100 entry in
+# k3s_join_server_ports is the same fix for the same reason (2026-08-23). Guarded by
+# ansible/tests/setup/test_coredns_metrics_port_allows_agent_nodes.py.
+- name: Allow Prometheus on an agent node to scrape the host forwarder
+  tags: [node-dns]
+  community.general.ufw:
+    rule: allow
+    from_ip: "{{ item }}"
+    port: "{{ k3s_host_dns_metrics_port }}"
+    proto: tcp
+  loop: "{{ k3s_agent_node_ips }}"
+  become: true
+  when: k3s_host_coredns_enabled
+
 - name: Create the host forwarder's directories
   tags: [node-dns]
   ansible.builtin.file:
