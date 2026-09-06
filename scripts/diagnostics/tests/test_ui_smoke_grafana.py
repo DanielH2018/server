@@ -66,8 +66,13 @@ GRAFANA_DASHBOARDS = [
     ("6L2GdB47z", 0),  # crowdsec-details-per-machine
     # Observed live 2026-09-06. The shape the four above do not have: no `row` at all, so
     # every panel must draw on load and `min_headers` is the board's whole panel count.
-    # `speedtest-tracker` is the same flat shape with no panel type this board lacks, so it
-    # is deliberately not enrolled — see the PR that added this entry.
+    # DECIDED: `speedtest-tracker` is not enrolled, and its `table` panel is not why
+    # `exportarr-arr-stack` is. Two of the four boards above already carry a `table`
+    # (claude-code-otel, traefik-custom), so `table` is not a new shape — flatness is.
+    # speedtest-tracker is that same flat shape carrying only `stat` and `timeseries`, both
+    # enrolled twice over, so under this list's own one-per-shape rule it adds nothing while
+    # costing another board in the single browser the 2Gi limit bounds. Re-enrol it only
+    # against a shape argument, not because it is unenrolled. Issue #1387.
     ("exportarr-arr-stack", 13),
 ]
 
