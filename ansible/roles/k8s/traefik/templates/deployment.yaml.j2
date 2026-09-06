@@ -320,6 +320,12 @@ spec:
           # restart-loop the edge. It also suppresses the readiness probe below until it
           # passes, which is what keeps a routerless Traefik out of the Service.
           #
+          # OPEN (#1345): a failing startupProbe restarts the CONTAINER, so /plugins-storage is
+          # the same emptyDir on every retry — where the #1322 repair was a rollout restart onto
+          # a fresh one. If a timed-out download leaves an archive Traefik then refuses to
+          # re-fetch, the loop cannot self-heal. The red path is reasoned, not measured; #1345
+          # carries the experiment that settles it.
+          #
           # 3 minutes of tolerance (36 x 5s). The download takes ~1s when plugins.traefik.io
           # answers, and the bouncer's own updateMaxFailure: 5 gives roughly 6 minutes before
           # a dead LAPI turns into a blanket 403 — so this window closes well inside the one
@@ -331,6 +337,11 @@ spec:
               scheme: HTTPS
             periodSeconds: 5
             failureThreshold: 36
+            # 3s, not kubelet's 1s default. Each attempt is a full TLS handshake plus the
+            # crowdsec, default-headers and compress chain — at cold boot on a loaded node,
+            # which is the exact scenario this probe exists for, 1s can expire on a Traefik
+            # that is fine. That would burn all 36 attempts and restart a healthy edge.
+            timeoutSeconds: 3
 {% endif %}
           readinessProbe:
             httpGet:
