@@ -31,6 +31,7 @@ Subcommands:
     health <service>         k8s rollout + recent-restart rollup (exit 0 = healthy)
                              [--docker inspects the Pi's container instead]
     arr <app> <api-path>     Read-only *arr API GET [--json] (sonarr/radarr/prowlarr)
+                             [--show-secrets prints the credential values it redacts]
     ha state <entity_id>     Live HA entity state + attrs    (home-assistant :8123)
     ha automation <id|alias> One automation's on/off + last_triggered (resolves alias!=id)
     ha get <api-path>        Raw GET /api/<path>, e.g. `ha get error_log`
@@ -46,7 +47,11 @@ to reshape the JSON — pass `--json` for the raw response.
 `ha` is read-only (GET) and authenticates with the SOPS-encrypted claude_ha_token
 (server-only — needs the host age key). The token is fed to curl via stdin, never argv.
 `arr` works the same way — it pulls `<app>_api_key` from SOPS and passes it via stdin,
-so the *arr key never lands in argv / `ps` / shell history.
+so the *arr key never lands in argv / `ps` / shell history. It also REDACTS the
+credentials in its own output: `notification`, `downloadclient`, `indexer` and
+`importlist` return objects whose `fields[].value` carry a Discord webhook URL, the
+qBittorrent password or an indexer API key, and printing them puts a live credential in
+the transcript. Pass `--show-secrets` when the value itself is what you need.
 Add `--dry-run` to print the command(s) instead of running them.
 
 NB: `cert <public-host>` shows the CLOUDFLARE EDGE cert, NOT Traefik's origin cert — public DNS
