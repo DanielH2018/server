@@ -15,15 +15,50 @@ own asset digest), where ani-sync pins the MD5 its manifest publishes.
 Run: uv run pytest ansible/tests/services/test_introskipper_install.py
 """
 
+import json
 import re
 
 import pytest
 
 from lib import yaml_fast
-from _helpers import ANSIBLE
+from _helpers import ANSIBLE, REPO
 
 DEFAULTS = ANSIBLE / "roles" / "k8s" / "jellyfin" / "defaults" / "main.yml"
 DEPLOYMENT = ANSIBLE / "roles" / "k8s" / "jellyfin" / "templates" / "deployment.yaml.j2"
+RENOVATE = REPO / "renovate.json"
+
+
+def _introskipper_manager() -> dict:
+    """The customManager in renovate.json that tracks this plugin."""
+    managers = json.loads(RENOVATE.read_text())["customManagers"]
+    manager = next(
+        (
+            m
+            for m in managers
+            if m.get("depNameTemplate") == "intro-skipper/intro-skipper"
+        ),
+        None,
+    )
+    assert manager, (
+        "renovate.json no longer carries a customManager for intro-skipper/intro-skipper — "
+        "the plugin pin ages with no update signal at all"
+    )
+    return manager
+
+
+def _assert_anchor_tracks_the_image(manager: dict, image: str) -> None:
+    """The manager's release-line anchor must name the Jellyfin minor the image runs."""
+    server = _version_tuple(image.rsplit(":", 1)[-1], "the jellyfin image tag")
+    anchor = manager["extractVersionTemplate"]
+
+    assert f"{server[0]}\\.{server[1]}" in anchor, (
+        f"jellyfin_k8s_image is a {server[0]}.{server[1]} build ({image}), but the "
+        f"intro-skipper Renovate manager anchors extractVersionTemplate to {anchor!r}.\n"
+        f"Raise the anchor with the image, or the manager tracks a release line upstream has "
+        f"moved off — it then matches nothing and offers nothing, which reads exactly like a "
+        f"plugin with no updates available."
+    )
+
 
 LEADING_VERSION = re.compile(r"^(\d+(?:\.\d+)*)")
 
@@ -176,3 +211,29 @@ def test_the_guard_rejects_a_template_missing_the_step(what, victim):
 
     with pytest.raises(AssertionError):
         _assert_install_step(mutated, _defaults()["jellyfin_k8s_introskipper_version"])
+
+
+def test_renovate_tracks_the_jellyfin_line_that_is_deployed():
+    """The Renovate manager's release-line anchor has to move with the image.
+
+    `extractVersionTemplate` is anchored to one Jellyfin line (`^10\\.11/v...`) so the
+    datasource cannot offer a 12.0 build against a 10.11 server. That anchor is hand-written in
+    renovate.json while the line itself is decided by `jellyfin_k8s_image` two files away, so a
+    Jellyfin minor bump that updates the pin and the URL leaves the manager anchored to a line
+    upstream has stopped releasing on. It then matches nothing, offers nothing, and reads
+    exactly like a plugin with no updates available — green and inert, which is the failure the
+    manager's own description says it was written to avoid.
+    """
+    _assert_anchor_tracks_the_image(
+        _introskipper_manager(), _defaults()["jellyfin_k8s_image"]
+    )
+
+
+def test_the_anchor_guard_rejects_a_manager_left_on_the_old_line():
+    """The red half: the guard must fail on the drift it exists to catch."""
+    stale = dict(
+        _introskipper_manager(), extractVersionTemplate="^9\\.9/v(?<version>.+)$"
+    )
+
+    with pytest.raises(AssertionError):
+        _assert_anchor_tracks_the_image(stale, _defaults()["jellyfin_k8s_image"])
