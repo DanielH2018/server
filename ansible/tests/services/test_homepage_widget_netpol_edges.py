@@ -12,6 +12,21 @@ The census walks services.yaml.j2 for in-namespace widget URLs, resolves each Se
 label it selects (they diverge: the `scrutiny` Service selects `app: scrutiny-web`), and checks the
 rendered NetworkPolicies for a rule admitting homepage on that port.
 
+TWO EXCLUSIONS, both deliberate, neither previously written down (#1401). This guard covers a
+subset of the widgets whose reachability depends on a NetworkPolicy, not all of them:
+
+1. `WIDGET_URL` matches `http://<svc>.{{ k8s_namespace }}.svc.cluster.local:<port>` only, so a
+   widget URL naming any OTHER namespace is invisible to the census.
+2. `_live_services_and_policies` reads `podSelector` peers — `matchLabels`, and an `app` `matchExpressions` `In`
+   list. A `namespaceSelector` + `podSelector` sibling pair is not read, so a cross-namespace
+   allow rule does not register as admitting homepage.
+
+Together they exclude the Headlamp tile, the one widget that reaches across namespaces: its
+reachability depends on `prometheus-callers` naming `homepage`
+(`ansible/roles/k8s/netpol-baseline/templates/networkpolicy-prometheus.yaml.j2`). Widening both
+halves to cover it is the larger option, and it needs its own non-vacuity member — the Headlamp
+target — before it can be trusted, for the reason immediately below.
+
 Paired, per the repo's red-proof rule, and non-vacuous: an empty census would pass an `all()`.
 
 Run: uv run pytest ansible/tests/services/test_homepage_widget_netpol_edges.py

@@ -1,10 +1,18 @@
 """Containers with no readinessProbe are a decision, not an oversight.
 
-A container with no readinessProbe is Ready the instant it starts, so a Service publishes it
-before it can serve. That is worth fixing where a Service fronts it — and actively harmful for
-a sidecar, because pod Ready is the AND of all containers: giving traefik's CrowdSec agent a
-readinessProbe would take every route in the homelab out of service whenever the agent
-hiccups. `traefik/templates/deployment.yaml.j2` says so in as many words.
+A container with no readinessProbe AND no startupProbe is Ready the instant it starts, so a
+Service publishes it before it can serve. That is worth fixing where a Service fronts it — and
+actively harmful for a sidecar, because pod Ready is the AND of all containers: giving traefik's
+CrowdSec agent a readinessProbe would take every route in the homelab out of service whenever
+the agent hiccups. `traefik/templates/deployment.yaml.j2` says so in as many words.
+
+The `startupProbe` half of that first sentence is load-bearing, and this guard used to omit it
+(#1354). The kubelet holds a container's Ready condition at its zero value — false — for as long
+as its startupProbe runs: `pkg/kubelet/prober/prober_manager.go`, `UpdatePodStatus`, which
+`continue`s past the readiness lookup when `isContainerStarted` is false. A container with a
+startupProbe and no readinessProbe therefore gates its pod's Ready condition anyway, which is the
+exact outcome a sidecar exemption below exists to avoid. `_STARTUP_GATED` records the containers
+where that gating is deliberate; any other exemption that grows a startupProbe is flagged.
 
 So this guard does not demand universal coverage. It demands that every container without a
 probe is listed below with the reason, which is the decision worth forcing on whoever adds the
@@ -80,6 +88,37 @@ _NO_READINESS = {
 }
 
 
+# Of the exemptions above, the ones that ALSO declare a startupProbe — so their pod is held
+# NotReady while it runs, and the exemption's reason has to say that rather than claim the
+# container never gates its Service. Both entries here say so in as many words.
+_STARTUP_GATED = frozenset({("terraria", "terraria"), ("valheim", "valheim")})
+
+
+def startup_gating_gaps(
+    exempt_with_startup: set[tuple[str, str]],
+    startup_gated: frozenset[tuple[str, str]],
+) -> list[str]:
+    """Problems in the `_NO_READINESS` x startupProbe overlap.
+
+    `exempt_with_startup` is every recorded-exempt container that declares a startupProbe. An
+    unrecorded one gates its Service despite being exempted on the grounds that it does not; a
+    recorded one that lost its probe leaves the record describing a mechanism that is gone.
+    """
+    problems = []
+    for role, name in sorted(exempt_with_startup - startup_gated):
+        problems.append(
+            f"{role}/{name} is exempt from readiness but declares a startupProbe, so it holds "
+            "its pod NotReady while that probe runs. Either the exemption's reason is wrong, "
+            "or the gating is deliberate — add it to _STARTUP_GATED"
+        )
+    for role, name in sorted(startup_gated - exempt_with_startup):
+        problems.append(
+            f"{role}/{name} is in _STARTUP_GATED but is no longer an exempt container with a "
+            "startupProbe — remove it"
+        )
+    return problems
+
+
 def _containers():
     for role, _tpl, doc in rendered_docs():
         if doc.get("kind") not in _POD_KINDS:
@@ -120,3 +159,34 @@ def test_the_record_has_no_stale_entries():
 def test_every_reason_is_substantive():
     thin = sorted(k for k, v in _NO_READINESS.items() if len(v.strip()) < 20)
     assert not thin, f"reason too thin to be a decision: {thin}"
+
+
+def _exempt_with_startup() -> set[tuple[str, str]]:
+    return {
+        (role, c["name"])
+        for role, _w, c in _containers()
+        if "readinessProbe" not in c
+        and "startupProbe" in c
+        and (role, c["name"]) in _NO_READINESS
+    }
+
+
+def test_no_exemption_gates_its_service_with_an_unrecorded_startupProbe():
+    census = _exempt_with_startup()
+    # Non-vacuity: the census filters the rendered tree, and returns an empty set the moment
+    # those two workloads are renamed — after which the assertion below checks nothing.
+    assert _STARTUP_GATED <= census, (
+        f"census lost a known startup-gated container: {sorted(_STARTUP_GATED - census)}"
+    )
+    problems = startup_gating_gaps(census, _STARTUP_GATED)
+    assert not problems, "\n  ".join(["startupProbe gating is unrecorded:", *problems])
+
+
+def test_an_unrecorded_startup_gated_exemption_is_flagged():
+    """The red half: (uptime-kuma, autokuma) was exactly this shape until #1348."""
+    problems = startup_gating_gaps({("uptime-kuma", "autokuma")}, _STARTUP_GATED)
+    assert any("uptime-kuma/autokuma" in p for p in problems), problems
+
+
+def test_a_recorded_startup_gated_exemption_is_clean():
+    assert startup_gating_gaps(set(_STARTUP_GATED), _STARTUP_GATED) == []
