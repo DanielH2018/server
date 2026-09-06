@@ -6,6 +6,9 @@ work doesn't start blind:
   * containers that are unhealthy or stuck restarting (fast, local `docker ps`)
   * Prometheus scrape targets that are down (fleet-wide, via scripts/diagnostics/probe.py)
   * this branch sitting behind origin/master's last-fetched ref (local-only, no `git fetch`)
+  * a dirty primary checkout, or a GitOps deployer parked behind origin — the two states that
+    stop every deploy in the fleet and that a worktree session cannot look at for itself,
+    because the isolation guard refuses a git command targeting the shared checkout
 
 Design contract (mirrors the other hooks here):
   - SILENT when all-green: prints nothing, so it adds zero context noise on a
@@ -35,6 +38,151 @@ import subprocess
 import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# The deployer's marker directory on the host that runs the tick (daniel-box). Mode 0750 owned
+# by `ubuntu`, so a session running as that user reads it; on any other host it is absent and
+# `parked_deployer_problems` degrades to silence.
+GITOPS_STATE_DIR = "/var/lib/gitops-deploy"
+
+# How long `behind_since` may stand before it reads as a park rather than a queue. The tick runs
+# every `gitops_deploy_tick_interval` (10 min), so 45 minutes is four ticks that all declined to
+# converge — a routine push clears in one.
+BEHIND_PARK_SECONDS = 45 * 60
+
+# How many dirty paths the banner names before it summarises the rest. Enough to recognise whose
+# work it is; short enough to stay one line.
+PRIMARY_DIRTY_LIMIT = 8
+
+
+def primary_worktree_path(porcelain):
+    """The main checkout's path from `git worktree list --porcelain`, or None.
+
+    git prints the main worktree first and every entry opens with a `worktree <path>` line, so
+    the first such line is the primary checkout. Parsed here rather than through
+    `prune_worktrees.parse_worktree_list` because this needs one field and must not inherit that
+    module's import risk — `other_live_sessions` already carries a `⚠` line for the day that
+    import breaks.
+    """
+    for line in porcelain.splitlines():
+        if line.startswith("worktree "):
+            return line[len("worktree ") :].strip() or None
+    return None
+
+
+def dirty_primary_lines(porcelain, path):
+    """One banner line naming what makes the primary checkout dirty, or [].
+
+    `gitops_deploy` skips a tick outright while `git status --porcelain` on the primary checkout
+    is non-empty, so ONE stray file there stops every deploy in the fleet. The session that hits
+    it sees `deploy.sh` exit 4 — "this tree is N commit(s) behind origin/master" — which names
+    its own worktree and points at `git rebase`, the wrong repair. Worse, no session can look:
+    the isolation guard refuses a git command targeting the shared checkout, correctly. This
+    banner is the way the cause reaches a worktree session at all (issues #1416, #1418).
+
+    Names the paths with their porcelain status codes, the way the deployer's own journal line
+    does. `??` is the code worth seeing: `git status --porcelain` counts untracked files, so the
+    tree can be dirty with nothing modified.
+    """
+    entries = []
+    for line in porcelain.splitlines():
+        if not line.strip():
+            continue
+        code, entry = line[:2].strip() or "??", line[3:].strip()
+        entries.append(f"{code} {entry}" if entry else code)
+    if not entries:
+        return []
+    shown = ", ".join(entries[:PRIMARY_DIRTY_LIMIT])
+    if len(entries) > PRIMARY_DIRTY_LIMIT:
+        shown += f", +{len(entries) - PRIMARY_DIRTY_LIMIT} more"
+    return [
+        f"  ✗ primary checkout {path} is dirty — the GitOps tick skips every run while it is, "
+        f"so nothing deploys and land.sh fails with exit 4 naming YOUR tree: {shown}"
+    ]
+
+
+def behind_park_lines(marker, now):
+    """One banner line when the deployer has been behind origin too long to be a queue, or [].
+
+    `behind_since` holds `"<origin_sha> <unix_ts_first_seen>"` while the host is behind
+    `origin/master`, and the stamp survives across ticks — it resets only on convergence. A
+    routine push clears in one tick; a stamp older than `BEHIND_PARK_SECONDS` means several ticks
+    in a row declined to converge, which is a park. This catches the parks a dirty tree does not
+    explain (a held SHA, an unapplied broad plane) as well as the one it does.
+
+    Malformed or unparsable content reads as "no park": the marker is written atomically, and a
+    banner that guessed an age from a torn value would be worse than one that said nothing.
+    """
+    if not marker:
+        return []
+    try:
+        first_seen = float(marker.split()[-1])
+    except ValueError, IndexError:
+        return []
+    age = now - first_seen
+    if age < BEHIND_PARK_SECONDS:
+        return []
+    return [
+        f"  ✗ the GitOps deployer has been behind origin/master for {int(age // 60)} min "
+        "— that is a park, not a queue; check `journalctl -t gitops-deploy` for the skip reason"
+    ]
+
+
+def parked_deployer_problems(
+    list_worktrees=None, status=None, read_marker=None, now=None
+):
+    """The primary-checkout and deployer-park banner lines, as one list.
+
+    The four seams are parameters rather than patched attributes so the tests can drive this
+    without pinning a module name (the repo's monkeypatch ratchet caps a new test module at
+    zero patches on a first-party module). Every default reaches the real thing.
+
+    Best-effort, like every other check here: any failure of a read returns [], because a
+    SessionStart banner must never block a session from starting. The exception matches
+    `master_moved_problems` — an ImportError is loud, since an empty list is indistinguishable
+    from "nothing to report" and that is what hid a whole banner section for a month.
+    """
+    sys.path.insert(0, os.path.join(REPO, "scripts"))
+    try:
+        from lib.git import git
+    except ImportError as exc:
+        return [f"  ⚠ parked-deployer detection is broken: {exc}"]
+
+    # `lib.git.git` strips every `GIT_*` variable, so `cwd` alone decides which tree is read —
+    # neither `git -C` nor a `cwd=` overrides an inherited `GIT_DIR`.
+    if list_worktrees is None:
+
+        def list_worktrees():
+            return git(
+                "worktree", "list", "--porcelain", cwd=REPO, check=False, timeout=5
+            ).stdout
+
+    if status is None:
+
+        def status(path):
+            return git("status", "--porcelain", cwd=path, check=False, timeout=5).stdout
+
+    if read_marker is None:
+
+        def read_marker():
+            with open(os.path.join(GITOPS_STATE_DIR, "behind_since")) as fh:
+                return fh.read().strip()
+
+    # Deferred like the `lib.git` import above, and for the same reason the rest of this file
+    # defers: nothing at module scope may be able to stop the banner.
+    import time
+
+    lines = []
+    try:
+        primary = primary_worktree_path(list_worktrees())
+        if primary:
+            lines += dirty_primary_lines(status(primary), primary)
+        # An absent marker is the healthy case — the deployer removes it on convergence — and
+        # arrives here as the FileNotFoundError this returns on, after the dirty lines are
+        # already collected. Whatever was gathered before the failure is still worth printing.
+        lines += behind_park_lines(read_marker(), time.time() if now is None else now)
+    except Exception:
+        return lines
+    return lines
 
 
 def _run(cmd, timeout):
@@ -348,7 +496,9 @@ def main():
     dock, _docker_ok = docker_problems()
     targets = target_problems()
     master_moved = master_moved_problems()
-    problems = dock + targets + master_moved
+    # Before master_moved deliberately: "this branch is behind origin/master" is the SYMPTOM of a
+    # parked deployer, so the cause reads first.
+    problems = dock + targets + parked_deployer_problems() + master_moved
 
     banner = format_banner(problems)
     if banner:
