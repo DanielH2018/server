@@ -29,6 +29,46 @@
  * clipping happens on the `div.service-card` inside it. Checking the `<li>` is what let this
  * ship in the first place.
  */
+/* THE PERSONAL LINKS RENDER AS ICON ONLY.
+ *
+ * `#my-calendar ~ li.service` is every tile AFTER the calendar in its own group — the five
+ * personal links, and nothing else on the page. A general-sibling selector is what scopes this,
+ * so a tile added to any other group is unaffected.
+ *
+ * `a:has(> .service-name)` rather than `a:last-child`: `.service-title` holds THREE children —
+ * the icon anchor, the name anchor, and a status-dot div that is last. Targeting `:last-child`
+ * hides the dot container and leaves the name, which is what the first attempt did.
+ *
+ * The name and description stay in services.yaml.j2 rather than being deleted. Both feed
+ * quicklaunch, which searches descriptions (`searchDescriptions: true` in settings.yaml.j2), so
+ * the links stay keyboard-reachable by name and by domain while showing neither.
+ *
+ * Measured 2026-09-09 at 1920px: five 48px-tall tiles on one row, icons centred, no clipping.
+ */
+#my-calendar ~ li.service .service-title > a:has(> .service-name) {
+  display: none;
+}
+
+#my-calendar ~ li.service .service-title {
+  justify-content: center;
+}
+
+/* A TILE'S NAME AND DESCRIPTION WRAP RATHER THAN CLIP.
+ *
+ * Same trap as the stat blocks below: the card carries Tailwind's `overflow-clip`, so a title
+ * row wider than the tile is cut off on the right with nothing logged. It bit the Monarch link
+ * at five columns — `app.monarch.com` wanted 170px in a 165px tile and lost 5px.
+ *
+ * This is a guard, not the fix for that one tile: the description there was shortened instead,
+ * because wrapping costs the whole grid row 16px of height. The rule only engages when a name
+ * or description genuinely does not fit, which is what makes it safe to leave in place for the
+ * next tile someone adds.
+ */
+li.service .service-title .service-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 /* THE CARD MUST FILL THE TILE, or one sparse widget still looks different.
  *
  * `.services-list` is a CSS grid, so every `<li>` in a row is stretched to the row's tallest
