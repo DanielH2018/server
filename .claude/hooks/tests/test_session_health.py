@@ -10,6 +10,7 @@ directly and stub `_run` so the suite needs no live docker/Prometheus.
 Run: uv run pytest .claude/hooks
 """
 
+import functools
 import importlib.util
 import io
 import os
@@ -195,10 +196,16 @@ def _run_main(
     ok=True,
     targets=None,
     master_moved=None,
+    parked=None,
     env=None,
     sessions=None,
     worktrees=None,
 ):
+    """Wire up main()'s dependencies and return the call to make.
+
+    Returns a zero-arg callable rather than calling main() itself, so every caller does
+    `assert _run_main(...)() == 0` instead of a bare `_mod.main()`.
+    """
     monkeypatch.setattr(_mod.sys, "stdin", io.StringIO(stdin))
     monkeypatch.setattr(_mod, "docker_problems", lambda: (dock or [], ok))
     monkeypatch.setattr(_mod, "target_problems", lambda: targets or [])
@@ -216,40 +223,74 @@ def _run_main(
     if env:
         for k, v in env.items():
             monkeypatch.setenv(k, v)
+    # Passed as a call argument, not monkeypatched like the four stubs above: main() reads the
+    # PRIMARY checkout's `git status --porcelain` here by default (PRIMARY_STATUS_ARGV), not
+    # this worktree's, and under the prek `pytest` hook that runs on the host driving the
+    # primary checkout, that tree is genuinely dirty every time docs-refresh has just staged
+    # its regenerated pages -- which turned "assert the banner stays silent" into a false
+    # failure on the reader's own uncommitted work and broke the cron's `git commit` for four
+    # days running. main() takes this as a keyword seam (see its own docstring) rather than a
+    # fifth patched module attribute because the monkeypatch ratchet
+    # (ansible/tests/_ratchet.py) caps this file's patches on a first-party module at its
+    # current allowlist entry.
+    return functools.partial(_mod.main, parked_deployer_problems=lambda: parked or [])
 
 
 def test_main_silent_on_compact(monkeypatch, capsys):
-    _run_main(
+    run_main = _run_main(
         monkeypatch,
         '{"source":"compact"}',
         dock=["  ✗ x — unhealthy (y)"],
         env={"SESSION_HEALTH_VERBOSE": "1"},
     )
-    assert _mod.main() == 0
+    assert run_main() == 0
     assert capsys.readouterr().out == ""  # no re-banner mid-session
 
 
 def test_main_silent_when_green(monkeypatch, capsys):
-    _run_main(monkeypatch, '{"source":"startup"}')
-    assert _mod.main() == 0
+    run_main = _run_main(monkeypatch, '{"source":"startup"}')
+    assert run_main() == 0
     assert capsys.readouterr().out == ""
 
 
 def test_main_lists_other_sessions_even_when_green(monkeypatch, capsys):
     # another session's open work is information this session needs whether or not the
     # homelab itself is healthy, so it is not gated on the health banner
-    _run_main(
+    run_main = _run_main(
         monkeypatch, '{"source":"startup"}', sessions=["  • other-branch — roles/k8s/x"]
     )
-    assert _mod.main() == 0
+    assert run_main() == 0
     out = capsys.readouterr().out
     assert "Other Claude sessions" in out and "other-branch" in out
 
 
 def test_main_stays_silent_when_no_other_session_is_live(monkeypatch, capsys):
-    _run_main(monkeypatch, '{"source":"startup"}', sessions=[])
-    assert _mod.main() == 0
+    run_main = _run_main(monkeypatch, '{"source":"startup"}', sessions=[])
+    assert run_main() == 0
     assert capsys.readouterr().out == ""
+
+
+def test_main_is_clean_when_the_parked_deployer_probe_is_quiet(monkeypatch, capsys):
+    """main() prints nothing when parked_deployer_problems() finds no dirty checkout or park."""
+    run_main = _run_main(monkeypatch, '{"source":"startup"}', parked=[])
+    assert run_main() == 0
+    assert capsys.readouterr().out == ""
+
+
+def test_main_is_flagged_when_the_parked_deployer_probe_reports(monkeypatch, capsys):
+    """main() prints the banner when parked_deployer_problems() finds a dirty primary checkout.
+
+    Paired with the _is_clean case above: this is the RED proof that isolating this seam in
+    _run_main did not just neuter the assert-silence tests — a genuine report from this probe
+    still reaches the banner.
+    """
+    run_main = _run_main(
+        monkeypatch,
+        '{"source":"startup"}',
+        parked=["  ✗ primary checkout /home/ubuntu/server is dirty — ..."],
+    )
+    assert run_main() == 0
+    assert "primary checkout" in capsys.readouterr().out
 
 
 def test_main_survives_a_broken_session_scan(monkeypatch, capsys):
@@ -257,17 +298,17 @@ def test_main_survives_a_broken_session_scan(monkeypatch, capsys):
     def boom(cwd):
         raise OSError("git exploded")
 
-    _run_main(monkeypatch, '{"source":"startup"}')
+    run_main = _run_main(monkeypatch, '{"source":"startup"}')
     monkeypatch.setattr(_mod, "other_live_sessions", boom)
-    assert _mod.main() == 0
+    assert run_main() == 0
     assert capsys.readouterr().out == ""
 
 
 def test_main_prints_banner_on_problem(monkeypatch, capsys):
-    _run_main(
+    run_main = _run_main(
         monkeypatch, '{"source":"startup"}', dock=["  ✗ jellyfin — unhealthy (x)"]
     )
-    assert _mod.main() == 0
+    assert run_main() == 0
     assert "jellyfin" in capsys.readouterr().out
 
 
@@ -282,7 +323,7 @@ def test_main_runs_targets_even_when_docker_down(monkeypatch, capsys):
         called["targets"] = True
         return ["  ✗ target loki [loki:3100] down"]
 
-    _run_main(
+    run_main = _run_main(
         monkeypatch,
         '{"source":"startup"}',
         dock=["  ✗ docker unreachable"],
@@ -291,7 +332,7 @@ def test_main_runs_targets_even_when_docker_down(monkeypatch, capsys):
     # _run_main stubs target_problems to a fixed-return lambda; override it here so the
     # assertion below proves main() actually CALLED it rather than just not crashing.
     monkeypatch.setattr(_mod, "target_problems", tp)
-    assert _mod.main() == 0
+    assert run_main() == 0
     assert called["targets"] is True
     out = capsys.readouterr().out
     assert "docker unreachable" in out
@@ -299,19 +340,19 @@ def test_main_runs_targets_even_when_docker_down(monkeypatch, capsys):
 
 
 def test_main_prints_master_moved_line(monkeypatch, capsys):
-    _run_main(
+    run_main = _run_main(
         monkeypatch,
         '{"source":"startup"}',
         master_moved=[
             "  ⚠ this branch is 3 commits behind origin/master (as of the last fetch)"
         ],
     )
-    assert _mod.main() == 0
+    assert run_main() == 0
     assert "3 commits behind origin/master" in capsys.readouterr().out
 
 
 def test_main_prints_the_removable_worktree_lines(monkeypatch, capsys):
-    _run_main(
+    run_main = _run_main(
         monkeypatch,
         '{"source":"startup"}',
         worktrees=[
@@ -319,7 +360,7 @@ def test_main_prints_the_removable_worktree_lines(monkeypatch, capsys):
             "  old-thing — x",
         ],
     )
-    assert _mod.main() == 0
+    assert run_main() == 0
     assert "old-thing" in capsys.readouterr().out
 
 
