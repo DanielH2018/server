@@ -29,6 +29,22 @@
  * clipping happens on the `div.service-card` inside it. Checking the `<li>` is what let this
  * ship in the first place.
  */
+/* A TILE'S NAME AND DESCRIPTION WRAP RATHER THAN CLIP.
+ *
+ * Same trap as the stat blocks below: the card carries Tailwind's `overflow-clip`, so a title
+ * row wider than the tile is cut off on the right with nothing logged. It bit the Monarch link
+ * at five columns — `app.monarch.com` wanted 170px in a 165px tile and lost 5px.
+ *
+ * This is a guard, not the fix for that one tile: the description there was shortened instead,
+ * because wrapping costs the whole grid row 16px of height. The rule only engages when a name
+ * or description genuinely does not fit, which is what makes it safe to leave in place for the
+ * next tile someone adds.
+ */
+li.service .service-title .service-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 /* THE CARD MUST FILL THE TILE, or one sparse widget still looks different.
  *
  * `.services-list` is a CSS grid, so every `<li>` in a row is stretched to the row's tallest

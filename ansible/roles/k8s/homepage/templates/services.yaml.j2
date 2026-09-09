@@ -237,7 +237,10 @@
             # see templates/icons-configmap.yaml.j2, which must carry any file named this way.
             icon: /icons/monarch.png
             href: https://app.monarch.com/dashboard
-            description: app.monarch.com
+            # `monarch.com`, not `app.monarch.com`: at five columns a link tile is 165px, and
+            # the longer form needed 170px — it clipped by 5px. The CSS guard below would wrap
+            # it instead, but wrapping costs the whole row 16px of height.
+            description: monarch.com
         - Twitter:
             icon: twitter.png
             href: https://twitter.com/home
