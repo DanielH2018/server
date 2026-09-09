@@ -51,6 +51,8 @@ claude_code_rc_enabled: false
 # With the RC unit disabled, user-1000.slice is the only plane here, so the 8G login cap is
 # the effective per-plane bound and the fleet cap only matters once a second plane appears.
 claude_code_fleet_memory_high: 10G
+# 2G is under a third of this host's 7 GiB swap (`free -g`, measured 2026-09-09) — the same
+# shape as daniel-box's "a quarter of its 8 GiB" reasoning in defaults/main.yml:117-119.
 claude_code_fleet_swap_max: 2G
 claude_code_rc_memory_high: 8G
 claude_code_rc_memory_swap_max: 2G
