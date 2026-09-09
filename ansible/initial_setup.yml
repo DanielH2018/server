@@ -29,7 +29,7 @@
     # other — both write firewall state, and doing them in one run in this order means they
     # never overlap.
     - { role: hypervisor, tags: ["hypervisor"] }
-    - { role: gitops_deploy, tags: ["gitops_deploy"], when: has_gitops }
+    - { role: gitops_deploy, tags: ["gitops_deploy"] }
     # Per-user, become: false throughout — they manage the connecting user's home, not
     # root's. Placed after docker_install so the OS is fully set up before the dotfiles
     # land on top of it.

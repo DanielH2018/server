@@ -1,0 +1,327 @@
+---
+- name: Create gitops-deploy directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0750"
+  loop:
+    - /opt/gitops-deploy      # deployer scripts
+    - /var/lib/gitops-deploy  # state (hold_sha, last_run, per-SHA alert markers, pending_alerts.json)
+    - /etc/gitops-deploy      # config.env (0600 secrets) — template won't mkdir its parent
+  become: true
+
+- name: Install deployer Python files
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "/opt/gitops-deploy/{{ item }}"
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0755"
+  # ENFORCED by ansible/tests/deploy/test_gitops_deploy_ship_list.py: this loop and the
+  # stamp_deployed_pairs below must both name every runtime module in files/.
+  loop:
+    - gitops_deploy.py
+    - deploy_logic.py
+    - deploy_io.py
+    - deploy_config.py
+    - deploy_state.py
+    - deploy_failtext.py
+    - deploy_alerts.py
+    - deploy_changes.py
+    - deploy_remediation.py
+    - deploy_git.py
+    - deploy_health.py
+    - deploy_inventory.py
+    - deploy_k8s.py
+    - deploy_staging.py
+    - deploy_toolbox.py
+    - deploy_tick_types.py
+    - deploy_phases.py
+    - deploy_handlers.py
+  become: true
+  notify: Run gitops-deploy once
+
+- name: Install the shared host_lib helper beside the deployer
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/install_host_lib.yml"
+  vars:
+    host_lib_dir: /opt/gitops-deploy
+    host_lib_owner: "{{ sys_user }}"
+    host_lib_notify: [Run gitops-deploy once]
+
+- name: Write deployer config (secrets, host-only)
+  ansible.builtin.template:
+    src: config.env.j2
+    dest: /etc/gitops-deploy/config.env
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0600"
+  become: true
+  no_log: true
+  notify: Run gitops-deploy once
+
+- name: Install systemd units
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    mode: "0644"
+  loop:
+    - gitops-deploy.service
+    - gitops-deploy.timer
+  become: true
+  notify:
+    - Reload systemd
+    - Run gitops-deploy once
+
+- name: Write the alert webhook where only systemd reads it
+  ansible.builtin.template:
+    src: alert-webhook.env.j2
+    dest: /etc/gitops-deploy/alert-webhook.env
+    owner: root
+    group: root
+    mode: "0600"
+  become: true
+  no_log: true
+  notify:
+    - Reload systemd
+    - Run gitops-deploy once
+
+# 2026-08-23b review M5. This unit used to embed the webhook and was installed 0600 to protect
+# it. The mode was real and did not protect the value: `systemctl show gitops-deploy-alert
+# -p ExecStart` as an unprivileged user with no sudo printed the full webhook URL, because
+# systemd serves unit content over the system bus regardless of file mode. Reproduced here, and
+# reproduced again to confirm the fix — with EnvironmentFile the same command prints the literal
+# `${ALERT_WEBHOOK}` and the value appears nowhere in `systemctl show` output. 0644 is now the
+# honest mode: the unit no longer contains a secret, and the 0600 was only ever guarding one.
+- name: Install the alert unit
+  ansible.builtin.template:
+    src: gitops-deploy-alert.service.j2
+    dest: /etc/systemd/system/gitops-deploy-alert.service
+    mode: "0644"
+  become: true
+  notify:
+    - Reload systemd
+    - Run gitops-deploy once
+
+- name: Allow the deploy user to trigger a tick without root (polkit)
+  ansible.builtin.template:
+    src: 50-gitops-deploy.rules.j2
+    dest: /etc/polkit-1/rules.d/50-gitops-deploy.rules
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  # No handler: polkitd watches rules.d and reloads a changed rule on its own, so
+  # there is nothing to restart. The rule's own header explains the narrow scope
+  # (this unit, `start` only) and why it must not test subject.active.
+
+- name: Install the staging-backfill units
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    mode: "0644"
+  loop:
+    - staging-backfill.service
+    - staging-backfill.timer
+    # Installed but deliberately NOT enabled, and not added to the gate-armed task below: an
+    # OnFailure= target is started by systemd on demand, so enabling it would only give it a
+    # boot-time WantedBy it has no use for. gitops-deploy-alert.service is installed the same way.
+    - staging-backfill-alert.service
+  become: true
+  # Deliberately NOT notifying "Run gitops-deploy once": this pair has nothing to do with
+  # whether a deploy is pending, and a template change here should not ship one.
+  notify: Reload systemd
+
+- name: Enable and start the timer
+  ansible.builtin.systemd:
+    name: gitops-deploy.timer
+    enabled: true
+    state: started
+    daemon_reload: true
+  become: true
+
+- name: Match the staging-backfill timer to whether the gate is armed
+  # Both directions in one task. The ratchet exists to measure the gate, so running it while the
+  # gate is off would deploy to staging hourly for a measurement nobody is collecting — and a
+  # switch that only turns something on is the half of a feature that gets noticed a month later.
+  ansible.builtin.systemd:
+    name: staging-backfill.timer
+    enabled: "{{ gitops_deploy_staging_gate }}"
+    state: "{{ 'started' if gitops_deploy_staging_gate else 'stopped' }}"
+    daemon_reload: true
+  become: true
+
+- name: Match the staging-backfill armed marker to whether the gate is armed
+  # The half of the disarm that monitoring can see. Stopping the timer makes the ratchet
+  # heartbeat-free by construction, which is indistinguishable from a ratchet that broke — so
+  # this marker says which, and check_staging_backfill_alive reads it before it reads the age.
+  # Both directions in one task for the same reason as the timer task above: a marker that is
+  # only ever created leaves the monitor permanently red on the disarm.
+  ansible.builtin.file:
+    path: "{{ gitops_deploy_staging_backfill_armed_marker }}"
+    state: "{{ 'touch' if gitops_deploy_staging_gate else 'absent' }}"
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0644"
+    # `touch` is idempotent for content but not for mtime, and nothing reads this file's mtime —
+    # the heartbeat carries the time. access_time/modification_time preserve keeps the task from
+    # reporting changed on every run.
+    access_time: preserve
+    modification_time: preserve
+  become: true
+
+# Render provenance for manifest-prune-check.sh's stale-script arm. Until 2026-08-23b that arm
+# hardcoded the k3s role's template directory, so these units were watched by nothing at all —
+# and the exit-75 fix sat merged-but-undeployed on this host for exactly that reason (review H1).
+# Last in the role so a failed run leaves the previous checksums rather than claiming these.
+- name: Stamp the rendered gitops-deploy units
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_render.yml"
+  vars:
+    stamp_render_name: gitops-deploy
+    stamp_render_templates:
+      - ansible/roles/setup/gitops_deploy/templates/gitops-deploy.service.j2
+      - ansible/roles/setup/gitops_deploy/templates/gitops-deploy-alert.service.j2
+      - ansible/roles/setup/gitops_deploy/templates/gitops-deploy.timer.j2
+      - ansible/roles/setup/gitops_deploy/templates/50-gitops-deploy.rules.j2
+      # The two .env.j2 sources were left out on the theory that stamping them would leak a
+      # secret. They would not: stamp_render.yml hashes the REPO SOURCE (:56), and the arm
+      # re-hashes that same source (manifest-prune-check.sh.j2:284) — the rendered file with
+      # the secret in it is never read by either side. Omitting them meant a change to the
+      # deployer's budget or CI lines rendered stale and nothing saw it (2026-08-24 review M-9).
+      - ansible/roles/setup/gitops_deploy/templates/staging-backfill.service.j2
+      - ansible/roles/setup/gitops_deploy/templates/staging-backfill.timer.j2
+      - ansible/roles/setup/gitops_deploy/templates/staging-backfill-alert.service.j2
+      - ansible/roles/setup/gitops_deploy/templates/config.env.j2
+      - ansible/roles/setup/gitops_deploy/templates/alert-webhook.env.j2
+
+# These three were the only pairs manifest-prune-check.sh's deployed-code arm knew about, and it
+# knew them by hardcoding. Declaring them here instead is what lets the sibling roles declare
+# theirs (2026-08-24 review M-5).
+- name: Record the deployed gitops-deploy code
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_deployed.yml"
+  vars:
+    stamp_deployed_name: gitops-deploy
+    stamp_deployed_pairs:
+      - live: /opt/gitops-deploy/gitops_deploy.py
+        src: ansible/roles/setup/gitops_deploy/files/gitops_deploy.py
+      - live: /opt/gitops-deploy/deploy_logic.py
+        src: ansible/roles/setup/gitops_deploy/files/deploy_logic.py
+      - live: /opt/gitops-deploy/deploy_io.py
+        src: ansible/roles/setup/gitops_deploy/files/deploy_io.py
+      - live: /opt/gitops-deploy/deploy_config.py
+        src: ansible/roles/setup/gitops_deploy/files/deploy_config.py
+      - live: /opt/gitops-deploy/deploy_state.py
+        src: ansible/roles/setup/gitops_deploy/files/deploy_state.py
+      - live: /opt/gitops-deploy/deploy_failtext.py
+        src: ansible/roles/setup/gitops_deploy/files/deploy_failtext.py
+      - live: /opt/gitops-deploy/deploy_alerts.py
+        src: ansible/roles/setup/gitops_deploy/files/deploy_alerts.py
+      - live: /opt/gitops-deploy/deploy_changes.py
+        src: ansible/roles/setup/gitops_deploy/files/deploy_changes.py
+      - live: /opt/gitops-deploy/deploy_remediation.py
+        src: ansible/roles/setup/gitops_deploy/files/deploy_remediation.py
+      - live: /opt/gitops-deploy/deploy_git.py
+        src: ansible/roles/setup/gitops_deploy/files/deploy_git.py
+      - live: /opt/gitops-deploy/deploy_health.py
+        src: ansible/roles/setup/gitops_deploy/files/deploy_health.py
+      - live: /opt/gitops-deploy/deploy_inventory.py
+        src: ansible/roles/setup/gitops_deploy/files/deploy_inventory.py
+      - live: /opt/gitops-deploy/deploy_k8s.py
+        src: ansible/roles/setup/gitops_deploy/files/deploy_k8s.py
+      - live: /opt/gitops-deploy/deploy_staging.py
+        src: ansible/roles/setup/gitops_deploy/files/deploy_staging.py
+      - live: /opt/gitops-deploy/deploy_toolbox.py
+        src: ansible/roles/setup/gitops_deploy/files/deploy_toolbox.py
+      - live: /opt/gitops-deploy/deploy_tick_types.py
+        src: ansible/roles/setup/gitops_deploy/files/deploy_tick_types.py
+      - live: /opt/gitops-deploy/deploy_phases.py
+        src: ansible/roles/setup/gitops_deploy/files/deploy_phases.py
+      - live: /opt/gitops-deploy/deploy_handlers.py
+        src: ansible/roles/setup/gitops_deploy/files/deploy_handlers.py
+      - live: /opt/gitops-deploy/host_lib.py
+        src: ansible/roles/setup/common/files/host_lib.py
+
+- name: Install the staging gate's ssh identity
+  # 0600 and owned by sys_user because that is who runs the gate, both under the timer and
+  # when an operator drives staging_gate.py by hand. ssh refuses a group- or world-readable
+  # private key outright, so a wrong mode here fails loudly rather than quietly widening.
+  #
+  # `content` rather than a template: the value is the whole file, and a template would invite
+  # someone to add a trailing edit to key material.
+  #
+  # `| trim` then an EXPLICIT newline, and this is load-bearing rather than tidiness. Ansible
+  # strips exactly one trailing newline when templating `{{ var }}` into a string, so a bare
+  # `content: "{{ staging_gate_ssh_key }}"` wrote the key one byte short and OpenSSH refused it
+  # with `error in libcrypto` — which reads as a corrupt or truncated key rather than as a
+  # missing line terminator. Measured 2026-08-29: the SOPS value is 399 bytes over 7 lines,
+  # what that form wrote was 398 over 6, and removing only the final newline from an otherwise
+  # good key reproduces the identical error.
+  #
+  # Doing both halves is what makes it idempotent in either direction: trim collapses whatever
+  # trailing whitespace the stored scalar carries, and the `\n` puts back exactly one. Neither
+  # alone is safe — trim alone leaves it unterminated, and appending alone doubles the newline
+  # if the strip behaviour ever changes.
+  ansible.builtin.copy:
+    content: "{{ staging_gate_ssh_key | trim }}\n"
+    dest: "{{ gitops_deploy_staging_gate_key_path }}"
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0600"
+  become: true
+  no_log: true
+
+- name: Deploy the GitHub ruleset drift check
+  tags: [cron]
+  # The ruleset is the merge gate this deployer's CI verdict rests on, and nothing watched it:
+  # an edit in the GitHub UI changed it with no commit and no signal. Two in-repo records of it
+  # had already gone stale unnoticed by 2026-08-31. Pushes its own Kuma monitor directly, in the
+  # cloudflare-ip-drift shape, with no monitor-bridge hop.
+  ansible.builtin.template:
+    src: github-ruleset-drift.sh.j2
+    dest: /usr/local/bin/github-ruleset-drift.sh
+    mode: "0750"
+    owner: root
+    group: root
+  become: true
+
+- name: Schedule the GitHub ruleset drift check
+  tags: [cron]
+  # Daily. Rulesets change on a human cadence, so the cadence is about the monitor's heartbeat,
+  # not about catching drift fast — and GitHub's unauthenticated limit is 60 req/hr per source
+  # IP, shared with renovate_notify on this same host.
+  ansible.builtin.cron:
+    name: "GitHub ruleset drift"
+    minute: "{{ gitops_deploy_ruleset_drift_cron_minute }}"
+    hour: "{{ gitops_deploy_ruleset_drift_cron_hour }}"
+    user: root
+    job: "/usr/local/bin/github-ruleset-drift.sh"
+    cron_file: github-ruleset-drift
+  become: true
+
+- name: Deploy the GitHub interaction-limit re-arm
+  tags: [cron]
+  # The repo stays public but closed to non-collaborators through GitHub's interaction limit,
+  # which the API only grants for six months at a time and lets lapse with no signal. This
+  # re-applies the declared limit daily and beats its own Kuma monitor, in the ruleset-drift
+  # shape directly above. Unlike that check it reconciles — the script's DECIDED marker says why.
+  ansible.builtin.template:
+    src: github-interaction-limit.sh.j2
+    dest: /usr/local/bin/github-interaction-limit.sh
+    mode: "0750"
+    owner: root
+    group: root
+  become: true
+
+- name: Schedule the GitHub interaction-limit re-arm
+  tags: [cron]
+  # Daily, ten minutes after the ruleset check. The setting only moves when it expires, so the
+  # cadence is about how long a lapse can go unnoticed (one day) rather than about load.
+  ansible.builtin.cron:
+    name: "GitHub interaction limit"
+    minute: "{{ gitops_deploy_interaction_limit_cron_minute }}"
+    hour: "{{ gitops_deploy_interaction_limit_cron_hour }}"
+    user: root
+    job: "/usr/local/bin/github-interaction-limit.sh"
+    cron_file: github-interaction-limit
+  become: true

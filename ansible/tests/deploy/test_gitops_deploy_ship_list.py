@@ -2,7 +2,7 @@
 """Every runtime module in gitops_deploy's files/ must be in BOTH of the role's ship lists.
 
 The deployer's Python lives in `roles/setup/gitops_deploy/files/`, and the role names each file
-twice in `tasks/main.yml`: the `loop:` of the copy task that installs it under
+twice in `tasks/install.yml`: the `loop:` of the copy task that installs it under
 `/opt/gitops-deploy/`, and the `stamp_deployed_pairs` that records its render provenance for
 `manifest-prune-check.sh`. Neither list is derived from the directory, and until this test
 nothing asserted that either covered `files/*.py`.
@@ -40,7 +40,7 @@ STAMP_TASK = "Record the deployed gitops-deploy code"
 
 
 def _tasks():
-    return yaml_fast.safe_load((ROLE / "tasks" / "main.yml").read_text())
+    return yaml_fast.safe_load((ROLE / "tasks" / "install.yml").read_text())
 
 
 def _task(name):

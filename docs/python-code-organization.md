@@ -366,7 +366,7 @@ in `merge.py` already wrapped a single call; the multi-statement block was the h
     change.
 
 15. **`host_lib.py`'s sibling-copy is re-implemented in seven roles.** Each carries its own
-    copy task, `/opt/<x>/host_lib.py` destination and stamp pair (`gitops_deploy/tasks/main.yml:37-40`,
+    copy task, `/opt/<x>/host_lib.py` destination and stamp pair (`gitops_deploy/tasks/install.yml:46-49`,
     `renovate_notify`, `renovate_agent`, `k3s/tasks/health-crons.yml`, `fake_remux`, `configarr`,
     `janitorr`). One included task file in `setup/common`, parameterised by destination.
 
