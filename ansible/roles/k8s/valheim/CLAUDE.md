@@ -90,15 +90,31 @@ Added 2026-09-09 with the wrapper bump to 1.2.0 and a fresh world.
 - **The built image is named `valheim`, not `valheim-mods`.** `k8s/manifests` keys
   `k8s_rebuilt_images` on `manifests_service`, so a mismatched name pushes a new image that no
   pod ever runs — the recorded `n8n-runners` failure. It contains no server.
-- **The set:** Jotunn 2.29.2, AdvancedPortals 1.2.0, AzuExtendedPlayerInventory 2.4.8,
+- **The set:** Jotunn 2.29.3, AdvancedPortals 1.2.0, AzuExtendedPlayerInventory 2.4.8,
   MultiUserChest 0.6.1, AzuCraftyBoxes 1.8.15, AAA_Crafting 2.1.6. Jotunn is a dependency of
   AdvancedPortals and MultiUserChest, not a request. BepInExPack is not listed — the image
   installs and updates it itself.
+- **Jotunn comes from `ReefTeam`, not `ValheimModding`, and that is temporary.** Upstream
+  2.29.2 (2026-07-13) predates Valheim 1.0 and MADE THE SERVER UNJOINABLE: it patches
+  `ZNet.RPC_PeerInfo` to buffer a joining client's packages, replaying them and calling
+  `socket.VersionMatch()` only once its own `SynchronizeInitialData` coroutine finishes, and
+  on `l-1.0.7` that coroutine throws `MissingFieldException: ZRoutedRpc.Everybody` on its
+  first send. The buffer is never flushed, so the player spawns and is stuck — unable to move,
+  camera shaking — while the server log shows an ordinary successful connect. **A join that
+  looks clean on the server side is not evidence the client can play.** ReefTeam-Jotunn 2.29.3
+  is that release rebuilt for 1.0.7; the swap was verified before pinning, not taken on trust
+  — the `Everybody` reference is absent from the assembly and the GUID is still
+  `com.jotunn.jotunn`, which is what lets the two dependents resolve it. Go back to upstream
+  once ValheimModding ships its own 1.0 build (fix merged to `dev`, PR #483, unreleased);
+  never list both packages, since they share a GUID and the higher version wins.
 - **Serverside_Simulations was requested and is DISABLED.** Its 1.1.9 release predates
   Valheim `l-1.0.7` and patches `ZNetScene.CreateDestroyObjects` against a
   `ZoneSystem.GetZone(Vector3)` the game no longer has — 4431 `MissingMethodException`s in
   three minutes, measured 2026-09-09, while the pod read 1/1 Ready and `probe.py health
   valheim` passed. The entry stays commented in `defaults/main.yml` with the evidence.
+- **Four mods referenced `ZRoutedRpc.Everybody`, which `l-1.0.7` removed.** Only Jotunn's
+  reference is fatal, because only Jotunn sits in the join path; Azumatt's three log the same
+  error at load and go on to complete their ServerSync handshake normally.
 - **Every mod live here is client-side too.** Azumatt's three use ServerSync, which can
   refuse a client whose version differs, so players need the same versions locally.
 - **The initContainer writes two directories, and neither is redundant.**
