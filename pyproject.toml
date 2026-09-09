@@ -42,7 +42,7 @@ testpaths = [                        # single source of truth for WHAT runs; exc
   "ansible/roles/k8s/configarr/tests",             # cluster-side configarr health-reader logic
   "ansible/roles/k8s/janitorr/tests",              # cluster-side janitorr health-reader logic
   "ansible/roles/k8s/qbittorrent/tests",           # throughput-preference diff logic
-  "ansible/roles/k8s/healthchecks/tests",          # Discord Channel seed: value shape + rewrite decision
+  "ansible/roles/k8s/healthchecks/tests",          # Discord Channel seed + the local_settings.py strip
   "ansible/roles/k8s/arr-notification/tests",      # *arr Discord Connect seed: match key + upsert decision
   "ansible/roles/setup/fake_remux/tests",          # generic {ts,ok,msg} state-file pusher
   "ansible/roles/k8s/terraria-stats/tests",       # player-stats aggregator logic (moved at the Phase F drain)
