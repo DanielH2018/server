@@ -9,6 +9,11 @@ metadata:
   name: homepage-icons
   namespace: {{ k8s_namespace }}
 binaryData:
-{% for icon in ['limitless.png', 'LoLalytics.png', 'monarch.png', 'opgg.png', 'tacticstools.png', 'tftacademy.png'] %}
+{# Only the icons a bookmark actually references. The other five PNGs in files/ — limitless,
+   LoLalytics, opgg, tacticstools, tftacademy — belonged to gaming bookmarks that were
+   commented out; they were still base64'd into this object until 2026-09-09, making it ~6x
+   the size it needed. They stay in files/ so reviving one is adding its name back here.
+   A name listed here and missing from files/ fails the render, not the deploy. #}
+{% for icon in ['monarch.png'] %}
   {{ icon }}: {{ lookup('pipe', 'base64 -w0 ' ~ playbook_dir ~ '/roles/k8s/homepage/files/' ~ icon) }}
 {% endfor %}

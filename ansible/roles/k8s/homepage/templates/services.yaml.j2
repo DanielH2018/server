@@ -264,9 +264,103 @@
             url: http://qbittorrent.{{ k8s_namespace }}.svc.cluster.local:8080  # literal: qbittorrent_k8s_webui_port is that role's default, not in scope here
             username: {{ qbittorrent_username }}
             password: {{ qbittorrent_password }}
+    # LINK-ONLY, and deliberately so — see the Admin group below for why no `widget:` block.
+    - Prowlarr:
+        icon: prowlarr.png
+        href: https://prowlarr.{{ domain }}/
+        description: Indexer management
+    - Bazarr:
+        icon: bazarr.png
+        href: https://bazarr.{{ domain }}/
+        description: Subtitle management
+    - Tdarr:
+        icon: tdarr.png
+        href: https://tdarr.{{ domain }}/
+        description: Transcode automation
+
+# ADMIN and TOOLS are LINK-ONLY GROUPS, and the absence of `widget:` blocks is the point.
+# Before 2026-09-09 this dashboard carried 14 tiles against ~30 routed web UIs, so the way to
+# reach the other sixteen was to remember the hostname. A link-only tile closes that gap at
+# zero risk: a widget dialling a ClusterIP needs the target's NetworkPolicy to name
+# `app: homepage` (ENFORCED by ansible/tests/services/test_homepage_widget_netpol_edges.py),
+# while a tile with only an `href:` reaches nothing from the pod at all.
+#
+# Adding a widget to one of these later is a per-service change, not a bulk one, and four of
+# them are already ruled on: traefik (#1383), grafana (#1384), crowdsec (#1385) and
+# healthchecks (#1386) each record a credential reason the widget was not simply plumbed in.
+# A link-only tile contradicts none of those — it adds a way in, not an API call.
+#
+# Two roles carry a `hostname:` in containers_list and are NOT here, both on purpose:
+# navidrome is scaled to 0 replicas, and livesync has no IngressRoute at all.
+- Admin:
+    - Grafana:
+        icon: grafana.png
+        href: https://grafana.{{ domain }}/
+        description: Metrics and dashboards
+    - Longhorn:
+        icon: longhorn.png
+        # LAN-only: longhorn-frontend's IngressRoute matches longhorn.local.<domain> and no
+        # public name, because Authelia is the entire access control on a UI that can delete
+        # volumes and their B2 backup chain.
+        href: https://longhorn.local.{{ domain }}/
+        description: Cluster storage
+    - Healthchecks:
+        icon: healthchecks.png
+        href: https://healthchecks.{{ domain }}/
+        description: Cron dead-man switch
+    - Traefik:
+        icon: traefik.png
+        # LAN-only, same as longhorn. The dashboard route exists; only the /api the homepage
+        # widget would need is served nowhere (#1383), which is why this is a link.
+        href: https://traefik.local.{{ domain }}/
+        description: Reverse proxy
+    - Authelia:
+        icon: authelia.png
+        href: https://auth.{{ domain }}/
+        description: SSO portal
+    - code-server:
+        icon: code-server.png
+        href: https://code-server.{{ domain }}/
+        description: Browser IDE
+    - Zigbee2MQTT:
+        icon: zigbee2mqtt.png
+        href: https://zigbee2mqtt.{{ domain }}/
+        description: Zigbee gateway
+    - WireGuard:
+        icon: wg-easy.png
+        href: https://wg-easy.{{ domain }}/
+        description: VPN peers
+
+- Tools:
+    - n8n:
+        icon: n8n.png
+        href: https://n8n.{{ domain }}/
+        description: Workflow automation
+    - Bento PDF:
+        icon: mdi-file-pdf-box
+        href: https://bento-pdf.{{ domain }}/
+        description: PDF toolkit
+    - TeXBrain:
+        icon: mdi-math-integral
+        href: https://texbrain.{{ domain }}/
+        description: LaTeX workspace
+    - Artifacts:
+        icon: mdi-file-document-multiple
+        href: https://artifacts.{{ domain }}/
+        description: Generated reports
+    - Docs:
+        icon: mdi-book-open-variant
+        href: https://docs.{{ domain }}/
+        description: Homelab reference
+    - LittleLink:
+        icon: mdi-link-variant
+        href: https://www.{{ domain }}/
+        description: Link-in-bio page
 
 - Tracking:
     - Crypto:
+        icon: mdi-currency-btc
+        description: Market prices
         widget:
             type: coinmarketcap
             currency: USD # Optional
