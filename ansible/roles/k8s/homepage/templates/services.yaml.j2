@@ -327,7 +327,11 @@
         href: https://zigbee2mqtt.{{ domain }}/
         description: Zigbee gateway
     - WireGuard:
-        icon: wg-easy.png
+        # `wireguard.png`, not `wg-easy.png`: the role and the containers_list entry are both
+        # named wg-easy, but dashboard-icons has no icon under that name and homepage renders a
+        # missing one as a broken image rather than falling back. Verified 2026-09-09 —
+        # .../dashboard-icons/png/wg-easy.png answers 404, wireguard.png answers 200.
+        icon: wireguard.png
         href: https://wg-easy.{{ domain }}/
         description: VPN peers
 
