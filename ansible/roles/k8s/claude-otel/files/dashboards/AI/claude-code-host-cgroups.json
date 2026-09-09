@@ -79,7 +79,7 @@
             "uid": "EGdsQqhVk"
           },
           "expr": "rate(claude_cgroup_memory_pressure_stalled_usec_total{kind=\"full\",origin=~\"$origin\"}[5m]) / 10000",
-          "legendFormat": "{{origin}} {{cgroup}}",
+          "legendFormat": "{{origin}} {{cgroup}} full",
           "refId": "A"
         },
         {
@@ -88,7 +88,7 @@
             "uid": "EGdsQqhVk"
           },
           "expr": "rate(claude_cgroup_memory_pressure_stalled_usec_total{kind=\"some\",origin=~\"$origin\"}[5m]) / 10000",
-          "legendFormat": "{{origin}} {{cgroup}}",
+          "legendFormat": "{{origin}} {{cgroup}} some",
           "refId": "B"
         }
       ],
@@ -126,7 +126,7 @@
             "uid": "EGdsQqhVk"
           },
           "expr": "increase(claude_cgroup_memory_events_total{event!=\"low\",origin=~\"$origin\"}[10m])",
-          "legendFormat": "{{origin}} {{cgroup}}",
+          "legendFormat": "{{origin}} {{cgroup}} {{event}}",
           "refId": "A"
         }
       ],
@@ -164,7 +164,7 @@
             "uid": "EGdsQqhVk"
           },
           "expr": "claude_cgroup_memory_current_bytes{origin=~\"$origin\"}",
-          "legendFormat": "{{origin}} {{cgroup}}",
+          "legendFormat": "{{origin}} {{cgroup}} memory",
           "refId": "A"
         },
         {
@@ -173,7 +173,7 @@
             "uid": "EGdsQqhVk"
           },
           "expr": "claude_cgroup_memory_swap_current_bytes{origin=~\"$origin\"}",
-          "legendFormat": "{{origin}} {{cgroup}}",
+          "legendFormat": "{{origin}} {{cgroup}} swap",
           "refId": "B"
         }
       ],
