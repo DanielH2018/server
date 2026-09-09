@@ -27,8 +27,19 @@ could come from either, and neither could see the other's usage.
 
 ## Decision
 
-Kopia is retired. Longhorn's backup target is the only writer to B2, and the `kopia_b2_*`
-secrets in SOPS are Longhorn's credentials despite the name.
+Kopia is retired. Longhorn's backup target is the only writer to B2, and the B2 credentials
+in SOPS are Longhorn's.
+
+**Amended 2026-09-09: the credentials were renamed `kopia_b2_*` → `longhorn_b2_*`.** The
+original decision kept the old names, on the reading that renaming a SOPS key amounts to a
+rotation. That reading was half right. A rename does re-encrypt the value — SOPS binds each
+ciphertext to its key path — so the rename commit reads as a rotation to
+`ciphertext_rotation_dates`, which would have advanced all four dates to the rename and
+overstated their freshness by three months. It is not a *real* rotation, though: the
+plaintext is untouched, so nothing in B2 or the cluster moves. Recording the old spelling in
+`RENAMED_FROM` (`scripts/secrets_mgmt/git_dates.py`) makes the derivation ignore that one
+commit, and the registry rows carry the pre-rename dates over by hand. The procedure is in
+[`docs/secret-rotation.md`](../secret-rotation.md).
 
 Kopia's ignore rules were not discarded. They were translated into Longhorn's vocabulary
 before the retirement — see
@@ -36,9 +47,14 @@ before the retirement — see
 
 ## Consequences
 
-**The SOPS key names lie.** `kopia_b2_*` are Longhorn's credentials. Renaming them means a
-rotation, so the names stayed and this record is the explanation. Never attribute B2 spend
-to Kopia on the strength of a key name.
+**The SOPS key names said Kopia until 2026-09-09.** They are `longhorn_b2_*` now. Never
+attribute B2 spend to Kopia on the strength of a key name — and note that the bucket itself
+is still called `daniel-server-kopia`, which no rename touches.
+
+**A SOPS rename is not free.** It re-encrypts, so it needs a `RENAMED_FROM` entry and a
+hand-carried `last_rotated` or it silently resets the secret's rotation clock. That cost
+generalises to every secret in the store, which is why the procedure landed in
+[`docs/secret-rotation.md`](../secret-rotation.md) rather than staying here.
 
 **`docs/kopia-disaster-recovery.md` describes a retired tool.** It is kept because the
 account, the bucket and the recovery vocabulary are still real, but the tool in its title is

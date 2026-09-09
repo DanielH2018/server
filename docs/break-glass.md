@@ -44,8 +44,8 @@ otherwise; none of the values below are secrets themselves, only names and locat
 
 4. **Longhorn's B2 and R2 backup targets.** Every PVC's data, split across two targets by
    volume: B2 (`s3://daniel-server-kopia@us-east-005/longhorn`, credential Secret
-   `longhorn-b2`, rendered from the `kopia_b2_*` SOPS keys — Longhorn's credentials
-   despite the name) holds everything not explicitly routed to R2; R2 (credential Secret
+   `longhorn-b2`, rendered from the `longhorn_b2_*` SOPS keys) holds everything not
+   explicitly routed to R2; R2 (credential Secret
    `longhorn-r2`, rendered from the `r2_*` SOPS keys) holds
    `traefik-acme`, `authelia-config`, `home-assistant-config`, and `zigbee2mqtt-data` — the
    TLS material, the SSO store, and the two slow-to-rebuild home-automation stores. Both
