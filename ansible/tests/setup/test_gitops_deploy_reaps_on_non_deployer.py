@@ -10,33 +10,81 @@ from _helpers import ANSIBLE, load_tasks, load_yaml, task_named
 
 ROLE = ANSIBLE / "roles" / "setup" / "gitops_deploy" / "tasks"
 
+_UNIT_DIR = "/etc/systemd/system/"
 
-def _units_install_writes() -> set[str]:
-    task = task_named(load_tasks(ROLE / "install.yml"), "Install systemd units")
-    return set(task["loop"])
+
+def _systemd_units_install_writes() -> set[str]:
+    """Every unit basename `install.yml` writes under `/etc/systemd/system/`.
+
+    Reads every `template`/`copy` task's `dest:`, expanding a bare `{{ item }}` over that
+    task's own `loop:` -- the shape every systemd-unit-installing task in this role uses.
+    """
+    units: set[str] = set()
+    for task in load_tasks(ROLE / "install.yml"):
+        for module_key in ("ansible.builtin.template", "ansible.builtin.copy"):
+            module = task.get(module_key)
+            if not isinstance(module, dict):
+                continue
+            dest = str(module.get("dest", ""))
+            if not dest.startswith(_UNIT_DIR):
+                continue
+            name = dest.removeprefix(_UNIT_DIR)
+            if name == "{{ item }}":
+                units.update(task.get("loop", []))
+            else:
+                units.add(name)
+    return units
+
+
+def test_the_units_census_is_not_vacuous():
+    """Guard against the discovery matcher silently finding nothing, or finding a subset --
+    a vacuous census would make the coverage assertion below pass by comparing against
+    itself."""
+    units = _systemd_units_install_writes()
+    assert len(units) >= 6, units
+    assert {"gitops-deploy.timer", "staging-backfill.timer"} <= units
 
 
 def test_the_teardown_removes_every_unit_install_writes():
-    absent = {
-        t["ansible.builtin.file"]["path"].rsplit("/", 1)[-1]
-        for t in load_tasks(ROLE / "teardown.yml")
-        if "ansible.builtin.file" in t
-        and t["ansible.builtin.file"].get("state") == "absent"
-    }
-    # The loop item is `{{ item }}`; the path list is the loop on the removal task.
+    units = _systemd_units_install_writes()
     removal = task_named(
         load_tasks(ROLE / "teardown.yml"), "Remove the deployer unit files"
     )
-    assert set(removal["loop"]) == _units_install_writes() >= {"gitops-deploy.timer"}
-    assert absent  # the removal task exists and is a file: absent task
+    assert removal["ansible.builtin.file"]["state"] == "absent"
+    assert units <= set(removal["loop"])
 
 
-def test_the_teardown_stops_the_timer_before_removing_it():
+def test_the_teardown_stops_both_timers_before_removing_them():
+    stat = task_named(
+        load_tasks(ROLE / "teardown.yml"),
+        "Check whether the GitOps deploy timers were ever installed here",
+    )
+    assert set(stat["loop"]) == {"gitops-deploy.timer", "staging-backfill.timer"}
+
     stop = task_named(
-        load_tasks(ROLE / "teardown.yml"), "Stop and disable the GitOps deploy timer"
+        load_tasks(ROLE / "teardown.yml"), "Stop and disable the GitOps deploy timers"
     )
     unit = stop["ansible.builtin.systemd"]
-    assert unit == {"name": "gitops-deploy.timer", "enabled": False, "state": "stopped"}
+    assert unit["enabled"] is False
+    assert unit["state"] == "stopped"
+    assert stop["when"] == "item.stat.exists"
+
+
+def test_the_teardown_reaps_both_crons_by_cron_file():
+    installed = {
+        t["ansible.builtin.cron"]["cron_file"]
+        for t in load_tasks(ROLE / "install.yml")
+        if "ansible.builtin.cron" in t
+    }
+    assert installed == {"github-ruleset-drift", "github-interaction-limit"}
+
+    removed = {
+        t["ansible.builtin.cron"]["cron_file"]
+        for t in load_tasks(ROLE / "teardown.yml")
+        if "ansible.builtin.cron" in t
+        and t["ansible.builtin.cron"].get("state") == "absent"
+    }
+    assert removed == installed
 
 
 def test_the_playbook_no_longer_gates_the_role():

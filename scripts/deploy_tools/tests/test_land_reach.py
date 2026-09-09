@@ -197,9 +197,12 @@ def test_an_unroutable_setup_role_has_no_remaining_hosts():
 
 @pytest.fixture
 def _synthetic_setup_role_tree(_synthetic_setup_inventory, tmp_path):
-    """`config_files` (no role gate) with tasks that ship four files under four gates: one
-    box-only task, one whose gate sits on the `import_tasks` above it, one ungated, and one
-    behind an `include_tasks` -- the docker_install/gitops_deploy dispatcher shape."""
+    """`config_files` (no role gate) with tasks that ship files under six gates: one
+    box-only task, one whose gate sits on the `import_tasks` above it, one ungated, one
+    behind an `include_tasks` -- the docker_install/gitops_deploy dispatcher shape -- and a
+    gated/ungated pair of `src: "{{ item }}.j2"` template loops -- the gitops-deploy systemd
+    unit shape, where the shipped file's basename carries a `.j2` suffix the loop items
+    themselves do not."""
     playbook, all_vars, host_vars_dir = _synthetic_setup_inventory
     roles_dir = tmp_path / "roles"
     tasks = roles_dir / "config_files" / "tasks"
@@ -218,6 +221,15 @@ def _synthetic_setup_role_tree(_synthetic_setup_inventory, tmp_path):
                     "ansible.builtin.include_tasks": "reap.yml",
                     "when": "not has_gitops",
                 },
+                {
+                    "name": "gated systemd templates",
+                    "ansible.builtin.import_tasks": "units.yml",
+                    "when": "has_gitops",
+                },
+                {
+                    "name": "ungated systemd templates",
+                    "ansible.builtin.import_tasks": "open_units.yml",
+                },
             ]
         )
     )
@@ -230,6 +242,34 @@ def _synthetic_setup_role_tree(_synthetic_setup_inventory, tmp_path):
                         "path": "/opt/reap_only.py",
                         "state": "absent",
                     },
+                }
+            ]
+        )
+    )
+    (tasks / "units.yml").write_text(
+        yaml.safe_dump(
+            [
+                {
+                    "name": "Install systemd units",
+                    "ansible.builtin.template": {
+                        "src": "{{ item }}.j2",
+                        "dest": "/etc/systemd/system/{{ item }}",
+                    },
+                    "loop": ["widget-a.service", "widget-a.timer"],
+                }
+            ]
+        )
+    )
+    (tasks / "open_units.yml").write_text(
+        yaml.safe_dump(
+            [
+                {
+                    "name": "Install open systemd units",
+                    "ansible.builtin.template": {
+                        "src": "{{ item }}.j2",
+                        "dest": "/etc/systemd/system/{{ item }}",
+                    },
+                    "loop": ["widget-b.service"],
                 }
             ]
         )
@@ -324,6 +364,42 @@ def test_setup_file_hosts_follows_include_tasks_the_same_as_import_tasks(
         host_vars_dir=host_vars_dir,
         roles_dir=roles_dir,
     ) == frozenset({"daniel-server", "daniel-pi"})
+
+
+def test_setup_file_hosts_narrows_a_looped_template_gated_by_the_include_chain(
+    _synthetic_setup_role_tree,
+):
+    """RED before the fix: `src: "{{ item }}.j2"` over a bare-name loop never appears
+    literally in `json.dumps(task)`, because the loop items ("widget-a.service") lack the
+    `.j2` suffix the shipped file's basename carries ("widget-a.service.j2"). Before the
+    fix, `_task_gates_naming` found no chain here and `setup_file_hosts` fell back to the
+    role's own (wide) answer -- reproducing the real gitops-deploy.timer.j2 false
+    hand-apply instructions this finding reported."""
+    playbook, all_vars, host_vars_dir, roles_dir = _synthetic_setup_role_tree
+    assert land_reach.setup_file_hosts(
+        "config_files",
+        "ansible/roles/setup/config_files/templates/widget-a.service.j2",
+        playbook=playbook,
+        all_vars=all_vars,
+        host_vars_dir=host_vars_dir,
+        roles_dir=roles_dir,
+    ) == frozenset({"daniel-box"})
+
+
+def test_setup_file_hosts_stays_wide_for_a_looped_template_with_no_gate(
+    _synthetic_setup_role_tree,
+):
+    """The reject half: the same loop + `{{ item }}.j2` shape with the `when:` chain
+    removed must not spuriously narrow -- it stays at the role's own (wide) answer."""
+    playbook, all_vars, host_vars_dir, roles_dir = _synthetic_setup_role_tree
+    assert land_reach.setup_file_hosts(
+        "config_files",
+        "ansible/roles/setup/config_files/templates/widget-b.service.j2",
+        playbook=playbook,
+        all_vars=all_vars,
+        host_vars_dir=host_vars_dir,
+        roles_dir=roles_dir,
+    ) == frozenset({"daniel-box", "daniel-server", "daniel-pi"})
 
 
 def test_setup_file_hosts_falls_back_to_the_role_when_no_task_names_the_file(

@@ -172,8 +172,11 @@ def _task_gates_naming(
     Reads the role's `tasks/` tree through its static imports, and `block:` bodies. A
     task names the file when the string appears anywhere in its body -- `src:`, a
     `loop:` item, a `lookup('file', ...)` -- matched by basename, which is how every
-    `template`/`copy` task in this tree refers to what it ships. Returns None when the
-    task file cannot be read, so the caller falls back rather than narrows.
+    `template`/`copy` task in this tree refers to what it ships. `_ships_via_loop` covers
+    the one shape that literal match cannot: a loop of bare names templated into `src:
+    "{{ item }}.j2"`, where the shipped file's basename carries the suffix the loop items
+    do not. Returns None when the task file cannot be read, so the caller falls back
+    rather than narrows.
     """
     path = role_dir / "tasks" / task_file
     try:
@@ -181,6 +184,32 @@ def _task_gates_naming(
     except OSError, yaml.YAMLError:
         return None
     return _gates_in(tasks, role_dir, basename, inherited)
+
+
+def _ships_via_loop(task: dict, basename: str) -> bool:
+    """Whether `task` ships `basename` through a `loop:` of bare names and `{{ item }}`.
+
+    `basename in json.dumps(task)` misses gitops-deploy's systemd-unit shape: `src: "{{
+    item }}.j2"` over `loop: [gitops-deploy.service, ...]` never puts the literal string
+    `gitops-deploy.timer.j2` (the shipped file's basename, under `templates/`) anywhere in
+    the task's own text -- the loop items are the bare unit names, without the `.j2` `src`
+    appends.
+
+    An exact loop-item match (no suffix involved) only needs `{{ item }}` present, same as
+    the existing literal-substring check one level up. The `.j2`-stripped match needs more:
+    `{{ item }}.j2` itself, not just `{{ item }}` anywhere, or this also matches a task that
+    loops over the SAME bare names for an unrelated reason -- this role's own teardown
+    removes `gitops-deploy.timer` by `path: "/etc/systemd/system/{{ item }}"`, no `.j2`
+    anywhere, and a looser check misread that removal as also shipping the template.
+    """
+    loop = task.get("loop")
+    if not isinstance(loop, list) or not all(isinstance(item, str) for item in loop):
+        return False
+    text = json.dumps(task)
+    if basename in loop and "{{ item }}" in text:
+        return True
+    stem = basename.removesuffix(".j2")
+    return stem != basename and stem in loop and "{{ item }}.j2" in text
 
 
 def _gates_in(tasks, role_dir: Path, basename: str, inherited: tuple) -> list[tuple]:
@@ -198,7 +227,7 @@ def _gates_in(tasks, role_dir: Path, basename: str, inherited: tuple) -> list[tu
             )
         elif "block" in task:
             found.extend(_gates_in(task["block"], role_dir, basename, chain))
-        elif basename in json.dumps(task):
+        elif basename in json.dumps(task) or _ships_via_loop(task, basename):
             found.append(chain)
     return found
 
