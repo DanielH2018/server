@@ -64,8 +64,20 @@ Edit the `.j2` files, never the live config: homepage seeds any missing file int
   the dashboard and giving it a live widget are two separate pieces of work. The `Admin` and
   `Tools` groups exist to make the first one cheap — before they landed, sixteen routed web UIs
   were reachable only by remembering the hostname.
-- **Two roles carry a `hostname:` in `containers_list` and are deliberately absent from the
-  dashboard:** `navidrome` (scaled to 0 replicas) and `livesync` (no IngressRoute at all).
+- **The tile list is CURATED, not a census of what is routed.** Nine link tiles were added on
+  2026-09-09 and removed again the same day at the operator's request — prowlarr, bazarr, tdarr,
+  authelia, healthchecks, wg-easy, zigbee2mqtt, littlelink and bento-pdf. They are routed and
+  reachable; they are simply not wanted on the dashboard. Do not "restore" them by comparing
+  `services.yaml.j2` against `containers_list`. `navidrome` and `livesync` are absent for a
+  different reason — navidrome is scaled to 0 replicas and livesync has no IngressRoute at all.
+- **A bookmark group cannot be laid out inside `Top Row`, at any depth.** Nested under
+  `Calendar:` and as a sibling of Services and Calendar were both tried and both silently
+  ignored: homepage v1.13.2 drops the group out of Top Row and renders it LAST at full width,
+  exactly as an unlaid-out group does (#1488, #1490). Nothing logs it and every repo-side check
+  stays green. The personal links therefore live in the `Calendar` group of `services.yaml.j2`
+  as SERVICE tiles, `bookmarks.yaml.j2` is an empty list, and there is no `Bookmarks:` layout
+  entry. That group is five columns wide so the links fill one row, with
+  `#my-calendar { grid-column: 1 / -1 }` spanning the calendar back across all five.
 - **The Headlamp tile's widget reads Prometheus, not Headlamp.** Headlamp exposes no service
   API — its backend only proxies the Kubernetes API — and dialling its ClusterIP is fenced off
   on purpose (`roles/k8s/headlamp/templates/networkpolicy.yaml.j2`, re-asserted every deploy by

@@ -212,6 +212,36 @@
                   color: emerald
                   params:
                       showName: true
+        # THE PERSONAL LINKS, as SERVICE tiles rather than bookmarks, and that is the only way
+        # they reach this column. A bookmark group cannot be laid out inside `Top Row` at any
+        # depth — nested under `Calendar:` and as a sibling of it were both tried, and homepage
+        # v1.13.2 silently dropped the group out of Top Row and rendered it last at full width
+        # each time (#1488, #1490). Nothing logs that and every repo-side check stays green.
+        #
+        # They live here rather than in bookmarks.yaml.j2, which is now empty. The visible cost:
+        # a service tile shows `description` where a bookmark tile showed the bare domain.
+        - Gmail:
+            icon: gmail.png
+            href: https://mail.google.com/mail/u/0/#inbox
+            description: mail.google.com
+        - YouTube:
+            icon: youtube.png
+            href: https://www.youtube.com
+            description: youtube.com
+        - Reddit:
+            icon: reddit.png
+            href: https://old.reddit.com/
+            description: old.reddit.com
+        - Monarch:
+            # /icons/ is the homepage-icons ConfigMap, not the bundled dashboard-icons set —
+            # see templates/icons-configmap.yaml.j2, which must carry any file named this way.
+            icon: /icons/monarch.png
+            href: https://app.monarch.com/dashboard
+            description: app.monarch.com
+        - Twitter:
+            icon: twitter.png
+            href: https://twitter.com/home
+            description: twitter.com
 
 - Media:
     # The four media services moved to the k8s cluster (slice 4), so the Docker-DNS widget URLs
@@ -265,18 +295,6 @@
             username: {{ qbittorrent_username }}
             password: {{ qbittorrent_password }}
     # LINK-ONLY, and deliberately so — see the Admin group below for why no `widget:` block.
-    - Prowlarr:
-        icon: prowlarr.png
-        href: https://prowlarr.{{ domain }}/
-        description: Indexer management
-    - Bazarr:
-        icon: bazarr.png
-        href: https://bazarr.{{ domain }}/
-        description: Subtitle management
-    - Tdarr:
-        icon: tdarr.png
-        href: https://tdarr.{{ domain }}/
-        description: Transcode automation
 
 # ADMIN and TOOLS are LINK-ONLY GROUPS, and the absence of `widget:` blocks is the point.
 # Before 2026-09-09 this dashboard carried 14 tiles against ~30 routed web UIs, so the way to
@@ -304,46 +322,22 @@
         # volumes and their B2 backup chain.
         href: https://longhorn.local.{{ domain }}/
         description: Cluster storage
-    - Healthchecks:
-        icon: healthchecks.png
-        href: https://healthchecks.{{ domain }}/
-        description: Cron dead-man switch
     - Traefik:
         icon: traefik.png
         # LAN-only, same as longhorn. The dashboard route exists; only the /api the homepage
         # widget would need is served nowhere (#1383), which is why this is a link.
         href: https://traefik.local.{{ domain }}/
         description: Reverse proxy
-    - Authelia:
-        icon: authelia.png
-        href: https://auth.{{ domain }}/
-        description: SSO portal
     - code-server:
         icon: code-server.png
         href: https://code-server.{{ domain }}/
         description: Browser IDE
-    - Zigbee2MQTT:
-        icon: zigbee2mqtt.png
-        href: https://zigbee2mqtt.{{ domain }}/
-        description: Zigbee gateway
-    - WireGuard:
-        # `wireguard.png`, not `wg-easy.png`: the role and the containers_list entry are both
-        # named wg-easy, but dashboard-icons has no icon under that name and homepage renders a
-        # missing one as a broken image rather than falling back. Verified 2026-09-09 —
-        # .../dashboard-icons/png/wg-easy.png answers 404, wireguard.png answers 200.
-        icon: wireguard.png
-        href: https://wg-easy.{{ domain }}/
-        description: VPN peers
 
 - Tools:
     - n8n:
         icon: n8n.png
         href: https://n8n.{{ domain }}/
         description: Workflow automation
-    - Bento PDF:
-        icon: mdi-file-pdf-box
-        href: https://bento-pdf.{{ domain }}/
-        description: PDF toolkit
     - TeXBrain:
         icon: mdi-math-integral
         href: https://texbrain.{{ domain }}/
@@ -356,10 +350,6 @@
         icon: mdi-book-open-variant
         href: https://docs.{{ domain }}/
         description: Homelab reference
-    - LittleLink:
-        icon: mdi-link-variant
-        href: https://www.{{ domain }}/
-        description: Link-in-bio page
 
 # Last group on the page, deliberately. This tile briefly sat in the Calendar column to fill
 # the space under the calendar; the bookmarks do that job now, and crypto prices read better at

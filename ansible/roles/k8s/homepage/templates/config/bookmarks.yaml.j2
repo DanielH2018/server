@@ -2,28 +2,16 @@
 # For configuration options and examples, please see:
 # https://gethomepage.dev/latest/configs/bookmarks
 #
-# PERSONAL LINKS ONLY. Anything this homelab hosts belongs in services.yaml.j2 as a tile —
-# n8n lived here as a bookmark until 2026-09-09 and is now a tile in the Admin group, so a
-# self-hosted service is reachable from one place rather than two.
+# DELIBERATELY EMPTY, and it must stay present rather than be deleted. homepage seeds any
+# config file it finds MISSING into /app/config at startup, which EROFSes on this role's
+# read-only mount and crash-loops the pod — an empty file is not a missing one.
 #
-# A `/icons/<file>.png` href reads from the homepage-icons ConfigMap
-# (templates/icons-configmap.yaml.j2), which base64s the PNGs in this role's files/ dir.
-# Add the PNG to BOTH or the tile renders a broken image. A bare `<name>.png` needs neither:
-# homepage resolves it against its bundled dashboard-icons set.
-
-- Bookmarks:
-  - Gmail:
-    - icon: gmail.png
-      href: https://mail.google.com/mail/u/0/#inbox
-  - YouTube:
-    - icon: youtube.png
-      href: https://www.youtube.com
-  - Reddit:
-    - icon: reddit.png
-      href: https://old.reddit.com/
-  - Monarch:
-    - icon: /icons/monarch.png
-      href: https://app.monarch.com/dashboard
-  - Twitter:
-    - icon: twitter.png
-      href: https://twitter.com/home
+# The five personal links that lived here are SERVICE tiles in the `Calendar` group of
+# services.yaml.j2 now. That is the only way to place them in the calendar column: a bookmark
+# group cannot be laid out inside `Top Row` at any depth, and homepage says nothing when it
+# refuses — it drops the group out and renders it last at full width (#1488, #1490).
+#
+# Re-adding a bookmark here also needs a `Bookmarks:` entry in settings.yaml.j2's `layout`, at
+# TOP LEVEL. Without one the group still renders, but below every laid-out group and one column
+# wide.
+[]

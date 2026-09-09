@@ -31,9 +31,17 @@ layout:
     Services:
       style: row
       columns: 3
+    # FIVE columns for a group whose first tile is a calendar, because the personal links sit
+    # under it. `columns` is uniform across a group, so the calendar would be a fifth of the
+    # width — `#my-calendar { grid-column: 1 / -1 }` in custom.css.j2 spans it back across all
+    # five, and the links then fill the row beneath. Measured 2026-09-09 at 1920px: calendar
+    # 856px wide, five links at 171px each on one row, column total 456px.
+    #
+    # `style: row` rather than `column` is load-bearing: `column` renders the list as
+    # `flex flex-col`, where grid-template-columns does nothing at all.
     Calendar:
-      style: column
-      columns: 1
+      style: row
+      columns: 5
     # DO NOT PUT `Bookmarks:` HERE. A BOOKMARK GROUP CANNOT LIVE INSIDE `Top Row` AT ALL, and
     # homepage says nothing when it refuses. Both depths were tried and measured on the deployed
     # page, 2026-09-09:
@@ -57,11 +65,10 @@ layout:
   Tools:
     style: row
     columns: 4
-  # Top level is the ONLY place a bookmark group is laid out — see the note in `Top Row` above
-  # for the two arrangements that were tried there and silently ignored.
-  Bookmarks:
-    style: row
-    columns: 5
+  # No `Bookmarks:` entry, and no bookmark group left to lay out — the five personal links are
+  # SERVICE tiles in the `Calendar` group now, which is the only way to get them into that
+  # column. See the note in `Top Row` above for the two bookmark-group arrangements that were
+  # tried there and silently ignored.
   Tracking:
     style: row
     columns: 2
