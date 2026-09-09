@@ -77,6 +77,17 @@ li.service:not(#my-calendar) .service-container .font-bold.w-10 {
   min-width: 3.25rem;
 }
 
+/* THE CALENDAR SPANS ITS WHOLE GROUP.
+ *
+ * The `Calendar` group is five columns wide (settings.yaml.j2) so the five personal links fill
+ * one row beneath the calendar. `columns` is uniform across a group, so without this the
+ * calendar itself would render a fifth of the width. Measured 2026-09-09 at 1920px: 856px wide
+ * with this rule, five links at 171px each on the row below, column total 456px.
+ */
+#my-calendar {
+  grid-column: 1 / -1;
+}
+
 #my-calendar .service-container > div {
   display: flex;
   flex-direction: column;
