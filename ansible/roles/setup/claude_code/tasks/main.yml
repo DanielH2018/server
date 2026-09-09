@@ -50,6 +50,16 @@
   become: false
   changed_when: false
 
+- name: Keep the user manager alive after logout (loginctl enable-linger)
+  # user-1000.slice is StopWhenUnneeded=yes, so a fan-out agent launched from an ssh login
+  # dies at logout unless the user lingers. This is what lets `systemd-run --user` hold a
+  # transient service after the launching ssh call returns (spec 2026-09-06 §3).
+  tags: [claude_code]
+  ansible.builtin.command: "loginctl enable-linger {{ sys_user }}"
+  args:
+    creates: "/var/lib/systemd/linger/{{ sys_user }}"
+  become: true
+
 - name: Check whether Claude Code has been authenticated
   tags: [claude_code]
   # ~/.claude/.credentials.json is written by an interactive `claude login` and holds a

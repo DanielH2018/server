@@ -31,3 +31,30 @@ has_gitops: false
 # control-plane role, so the second k3s runs here as a KVM guest rather than beside prod.
 # See docs/staging-cluster.md, Decision 1.
 has_hypervisor: true
+
+# Claude Code session host for issue-fanout agents (spec 2026-09-06). The Remote Control unit
+# stays on daniel-box; agents here stop at `gh pr create` and a daniel-box session lands the
+# PR, because the k8s play, the connection=local pin and the per-host lock keep deploys there.
+has_claude_code: true
+claude_code_rc_enabled: false
+
+# DECIDED: 10G fleet cap, derived the way defaults/main.yml derives daniel-box's 12G.
+# Measured on daniel-server 2026-09-09. Re-derive all of it if you change this:
+#   RAM: MemTotal 32,478,080 kB = 31.0 GiB.
+#   Unreclaimable footprint, as cgroup anon: kubepods.slice 4.98 GiB + machine.slice (the
+#     daniel-stage KVM guest) 4.75 GiB + system.slice 0.58 GiB = 10.3 GiB. Budgeted at
+#     14.4 GiB (+40%) so k3s and the guest can grow without racing the fleet.
+#   Kernel: SUnreclaim 0.48 GiB. Page cache left free for Longhorn I/O: ~3 GiB.
+#   31.0 - 14.4 - 0.5 - 3 = 13.1 GiB available to the fleet. 10G leaves ~3 GiB unspent, the
+#     same margin daniel-box keeps, because the throttle stalls whichever cgroup loses the
+#     reclaim race and the homelab plane is the one that must not.
+# With the RC unit disabled, user-1000.slice is the only plane here, so the 8G login cap is
+# the effective per-plane bound and the fleet cap only matters once a second plane appears.
+claude_code_fleet_memory_high: 10G
+claude_code_fleet_swap_max: 2G
+claude_code_rc_memory_high: 8G
+claude_code_rc_memory_swap_max: 2G
+# 8 cores against daniel-box's 16. The bound that matters is workers x concurrent runs, not
+# workers (defaults/main.yml): 4 x 3 fan-out agents is 12 workers, ~1.2 GB against the 8G
+# login cap. CPU is not what failed, so the count is not scaled down with the cores.
+claude_code_rc_pytest_workers: 4

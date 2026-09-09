@@ -191,6 +191,9 @@ parent, and is unsafe here.** That slice is `StopWhenUnneeded=yes`
 `Slice=` gains an implicit `Requires=` on its slice (systemd.resource-control(5)), so the RC
 host would be stopped with it and `Restart=always` does not bring back a dependency-stopped
 unit. `user.slice` measures `StopWhenUnneeded=no`.
+Since PR 2 of the fan-out placement work the role enables linger on every session host, so
+`user-1000.slice` no longer stops at logout; the placement stands on the first reason alone —
+a slice's parent is its name and cannot be reparented.
 
 **A system service in a user-tree slice is systemd's own pattern**, not a workaround:
 `user@.service` and `user-runtime-dir@.service` both ship `Slice=user-%i.slice`, and
