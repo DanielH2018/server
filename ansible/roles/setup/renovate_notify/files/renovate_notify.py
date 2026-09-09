@@ -32,6 +32,7 @@ from notify_logic import (
     fingerprint,
     parse_automerge,
     parse_pending,
+    pending_section_unreadable,
     pending_fingerprint,
     problems_fingerprint,
     render_digest,
@@ -274,7 +275,9 @@ def main() -> int:
     # held update is not a lookup failure (no Repository Problem) — the item just sits in
     # "Pending Status Checks" indefinitely, which is how promtail ran 3.3.0 for 111 days.
     body = dashboard_body(issues)
-    unparseable = body is not None and dashboard_headers_unrecognized(body)
+    unparseable = body is not None and (
+        dashboard_headers_unrecognized(body) or pending_section_unreadable(body)
+    )
     pending = parse_pending(body or "")
     now = time.time()
     seen_file = os.path.join(state_dir, "pending_seen.json")

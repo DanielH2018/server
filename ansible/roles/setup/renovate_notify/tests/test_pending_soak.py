@@ -14,6 +14,12 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "files"))
 import notify_logic as nl
 
 FIXTURE = (pathlib.Path(__file__).resolve().parent / "dashboard_body.txt").read_text()
+# The same dashboard a week later, after Renovate renamed the item marker `approvePr-branch=`
+# to `unpend-branch=`. Both captures are kept: the check must read either rendering, and one
+# fixture per marker is what proves it.
+FIXTURE_2026_09_09 = (
+    pathlib.Path(__file__).resolve().parent / "dashboard_body_2026-09-09.txt"
+).read_text()
 
 # Named members the fixture-driven parse MUST find. A count assertion alone would still pass
 # if Renovate renamed the section and parse_pending returned {} — five guards in this repo
@@ -22,6 +28,16 @@ FIXTURE = (pathlib.Path(__file__).resolve().parent / "dashboard_body.txt").read_
 _FIXTURE_MEMBERS = frozenset(
     {
         "renovate/k8s-image-grafanagrafana",
+        "renovate/k8s-image-ghcr.iogethomepagehomepage",
+    }
+)
+
+# Named members of the newer capture, chosen the same way: one version bump, one mutable-tag
+# digest bump. A count alone would have passed all through the week the marker rename made the
+# parse return nothing.
+_FIXTURE_2026_09_09_MEMBERS = frozenset(
+    {
+        "renovate/k8s-image-traefik",
         "renovate/k8s-image-ghcr.iogethomepagehomepage",
     }
 )
@@ -43,6 +59,38 @@ def test_parse_pending_reads_every_item_in_the_section():
     # Every approvePr-branch= checkbox in the captured body sits in this section; none may
     # be dropped.
     assert len(nl.parse_pending(FIXTURE)) == FIXTURE.count("approvePr-branch=")
+
+
+def test_parse_pending_reads_the_renamed_unpend_marker():
+    parsed = nl.parse_pending(FIXTURE_2026_09_09)
+    missing = _FIXTURE_2026_09_09_MEMBERS - set(parsed)
+    assert not missing, "parse_pending lost %s" % sorted(missing)
+    assert (
+        parsed["renovate/k8s-image-traefik"] == "Update traefik Docker tag to v3.7.13"
+    )
+    assert len(parsed) == FIXTURE_2026_09_09.count("unpend-branch=")
+
+
+def test_pending_section_unreadable_is_clean_on_both_captures():
+    assert nl.pending_section_unreadable(FIXTURE) is False
+    assert nl.pending_section_unreadable(FIXTURE_2026_09_09) is False
+
+
+def test_pending_section_unreadable_is_flagged_when_the_marker_is_renamed_again():
+    # Header intact, every item carrying a marker this module does not know: the exact shape
+    # that read 26 live items as zero. `dashboard_headers_unrecognized` cannot see it.
+    body = (
+        "## Pending Status Checks\n\n"
+        " - [ ] <!-- someNewName-branch=renovate/foo -->Update foo to v2\n"
+    )
+    assert nl.dashboard_headers_unrecognized(body) is False
+    assert nl.pending_section_unreadable(body) is True
+
+
+def test_pending_section_unreadable_is_false_when_nothing_is_pending():
+    # Renovate omits the header entirely when the section is empty, so no-header is the
+    # healthy state and must not page.
+    assert nl.pending_section_unreadable("## Open\n\nnothing pending") is False
 
 
 def test_parse_pending_stops_at_the_next_section():
