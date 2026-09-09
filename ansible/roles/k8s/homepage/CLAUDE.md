@@ -32,6 +32,14 @@ Edit the `.j2` files, never the live config: homepage seeds any missing file int
   key renders *below* every laid-out group at one column wide (`Tracking` sat that way). Neither
   state errors, logs, or fails a render — check both files when a group appears in the wrong
   place or a column count has no effect.
+- **A group's `columns:` is derived from its tile count, not chosen.** A count the columns do
+  not divide leaves an orphan on the last row and a hole beside it, and in `Top Row` it also
+  makes the Services column overshoot the Calendar beside it — nine tiles at two columns ran
+  600px against a 372px Calendar, so 228px sat dead under the Calendar and 424x120 beside Home
+  Assistant. Three columns divides nine exactly and lands at 396px. When you add or remove a
+  tile in a laid-out group, re-check that the count still divides, and measure in the browser
+  rather than reasoning about it — `getBoundingClientRect` on the `ul.services-list` gives the
+  column height and `scrollWidth > clientWidth` catches a tile whose stats no longer fit.
 - **The groups split by WIDGET, not by topic.** A widgeted tile is several lines tall and a
   link-only tile is one line, so a group holding both leaves ragged holes. `Services`, `Media`
   and `Tracking` hold the widgeted tiles; `Admin` and `Tools` hold link-only ones, four per row.

@@ -18,9 +18,19 @@ layout:
     style: row
     columns: 2
     header: false
+    # THREE columns, and the number is derived from the tile count rather than chosen. Services
+    # holds nine tiles. At two columns that is four full rows plus an orphan — Home Assistant
+    # alone on row five with a 424x120 hole beside it — and a 600px-tall column against a
+    # 372px Calendar, leaving 228px dead under the Calendar. Nine divides by three, so three
+    # columns gives three full rows, no orphan, and a 396px column that all but matches the
+    # Calendar. Measured in the browser 2026-09-09 at 1920px and 1280px: tiles land at 280px
+    # and 195px wide with no tile overflowing its box.
+    #
+    # Keep this in step with the tile count. Adding a tenth widgeted tile here reintroduces the
+    # orphan; either add two, or move one out to Media.
     Services:
       style: row
-      columns: 2
+      columns: 3
     Calendar:
       style: column
       columns: 1
