@@ -72,9 +72,9 @@ def run_b2_budget(ns):
 
     stats = {}
     lines = b2_longhorn_lines(
-        core.sops_extract("kopia_b2_key_id"),
-        core.sops_extract("kopia_b2_application_key"),
-        ns.bucket or core.sops_extract("kopia_b2_bucket"),
+        core.sops_extract("longhorn_b2_key_id"),
+        core.sops_extract("longhorn_b2_application_key"),
+        ns.bucket or core.sops_extract("longhorn_b2_bucket"),
         ns.prefix,
         _stats=stats,
     )
@@ -113,18 +113,18 @@ def run_b2_longhorn(ns):
     # Ahead of the credential read: --dry-run exists to describe the call WITHOUT making it,
     # so it must not decrypt anything either.
     if ns.dry_run:
-        bucket = ns.bucket or "<kopia_b2_bucket>"
+        bucket = ns.bucket or "<longhorn_b2_bucket>"
         print(
             f"GET {B2_AUTHORIZE_URL} then b2_list_file_names "
             f"bucket={bucket} prefix={ns.prefix.rstrip('/')}/"
         )
         return 0
 
-    bucket = ns.bucket or core.sops_extract("kopia_b2_bucket")
+    bucket = ns.bucket or core.sops_extract("longhorn_b2_bucket")
     stats = {}
     lines = b2_longhorn_lines(
-        core.sops_extract("kopia_b2_key_id"),
-        core.sops_extract("kopia_b2_application_key"),
+        core.sops_extract("longhorn_b2_key_id"),
+        core.sops_extract("longhorn_b2_application_key"),
         bucket,
         ns.prefix,
         _stats=stats,

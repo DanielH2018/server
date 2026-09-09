@@ -33,7 +33,7 @@ B2_AUTHORIZE_URL = (
 
 # This used to run `rclone lsf` inside the kopia container. Both halves of that are gone:
 # the k3s migration removed Docker from daniel-box and daniel-server (2026-08-14), and kopia
-# itself was retired — its `kopia_b2_*` secrets are Longhorn's credentials now. The command
+# itself was retired — its `longhorn_b2_*` secrets are Longhorn's credentials now. The command
 # therefore died with `FileNotFoundError: 'docker'` on every real run, while the tests kept
 # passing because they only ever exercised the argv builder and the parser. B2's native API
 # needs no SigV4 signing, so plain curl replaces both dependencies.

@@ -153,7 +153,7 @@ def _build_parser():
         "not just metadata (exit 1 if any volume has none)",
     )
     b2l.add_argument(
-        "--bucket", help="override the bucket read from the kopia_b2_bucket secret"
+        "--bucket", help="override the bucket read from the longhorn_b2_bucket secret"
     )
     b2l.add_argument(
         "--prefix", default=LONGHORN_PREFIX, help="B2 prefix Longhorn writes under"
@@ -164,7 +164,7 @@ def _build_parser():
         "(exit 1 if a weekly shard is over budget)",
     )
     b2b.add_argument(
-        "--bucket", help="override the bucket read from the kopia_b2_bucket secret"
+        "--bucket", help="override the bucket read from the longhorn_b2_bucket secret"
     )
     b2b.add_argument(
         "--prefix", default=LONGHORN_PREFIX, help="B2 prefix Longhorn writes under"

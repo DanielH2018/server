@@ -10,8 +10,9 @@ an off-box recovery recipient), so the capability survives a total loss.
 
 > **Kopia era closed 2026-08-14:** the repo was deleted 08-13, `kopia_password` retired with
 > it (8edb11cd), and the residual hidden object versions were hard-purged 08-14 (941
-> versions, 4.66 GB) — the bucket now holds `longhorn/` only. The `kopia_b2_*` secrets that
-> survive are the B2 *account* credentials, which render the `longhorn-b2` target Secret.
+> versions, 4.66 GB) — the bucket now holds `longhorn/` only. The B2 *account* credentials
+> survive and render the `longhorn-b2` target Secret; they were renamed from `kopia_b2_*` to
+> `longhorn_b2_*` on 2026-09-09. The bucket keeps its own name, `daniel-server-kopia`.
 
 ## Two targets: B2 is the default, R2 holds the crown jewels
 
@@ -20,7 +21,7 @@ which one holds the volume it wants. Routing is per-volume, via `spec.backupTarg
 
 | Target | Longhorn name | Holds | Credential Secret | Rendered from |
 |---|---|---|---|---|
-| Backblaze B2 | `default` | everything not listed below (weekly, weekday-sharded since 2026-08-16) | `longhorn-b2` | `kopia_b2_key_id` / `kopia_b2_application_key` |
+| Backblaze B2 | `default` | everything not listed below (weekly, weekday-sharded since 2026-08-16) | `longhorn-b2` | `longhorn_b2_key_id` / `longhorn_b2_application_key` |
 | Cloudflare R2 | `r2` | the four volumes below | `longhorn-r2` | `r2_access_key_id` / `r2_secret_access_key` / `r2_account_id` |
 
 The R2 set (`k3s_longhorn_r2_volumes`) is `homelab/traefik-acme`,
@@ -127,7 +128,7 @@ the per-volume map and each exclusion's rationale:
    off-box recovery key if no host survives), commit, pull.
 2. **Cluster bring-up**: `uv run ansible-playbook ansible/k3s-bringup.yml`. Set
    `k3s_longhorn_backup_armed: true` so the B2 target arms (it renders the `longhorn-b2`
-   credential Secret from `kopia_b2_key_id`/`kopia_b2_application_key` and points the
+   credential Secret from `longhorn_b2_key_id`/`longhorn_b2_application_key` and points the
    target at the bucket), and `k3s_longhorn_r2_armed: true` for the R2 target — the four
    volumes in the table above restore from *that* one, so a B2-only bring-up leaves them
    with nothing to restore from.

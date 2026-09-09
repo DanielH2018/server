@@ -26,6 +26,28 @@ uv run python scripts/secrets_mgmt/secret_rotation.py rotate --commit   # actual
 `sync` edits the (git-tracked) registry — **commit it**. The audit cron never writes the
 registry, so git stays the source of truth.
 
+## Renaming a secret (not a rotation, but the audit cannot tell)
+
+SOPS binds each value's ciphertext to its key path, so renaming a key re-encrypts it even
+though the plaintext never changes. `ciphertext_rotation_dates` compares stored ciphertext,
+so a plain rename reads as a fresh rotation and resets that secret's clock — which is how a
+genuinely overdue credential goes green without anyone touching it. Rename in four steps,
+and do not run `sync` between them:
+
+1. Record what git says the secret's date is now:
+   `uv run python scripts/secrets_mgmt/secret_rotation.py audit | grep '<old name>'`.
+2. Rename in the store: `EDITOR="sed -i s/^<old>/<new>/" sops ansible/vars/secrets.yml`.
+3. Add `"<new name>": "<old name>"` to `RENAMED_FROM` in
+   `scripts/secrets_mgmt/git_dates.py`, and rename the registry row in
+   `ansible/secret_rotation.yml` by hand, carrying `last_rotated` over as the date from
+   step 1. A bare `sync` here instead would seed a new row with a fictional backdate and
+   mark the old one stale.
+4. Prove it: `secret_rotation.py --check` (registry drift) and `audit` (the date held).
+
+Rename every consumer of the variable in the same commit. Every value is unchanged, so a
+deploy cannot detect a half-done rename — the template render is the only signal, and it
+fails on the undefined variable.
+
 ## Tiers
 
 <!-- Cadences and counts are generated from TIER_DAYS and the registry; edit those. -->
@@ -165,8 +187,9 @@ instances of this discipline:
   (`docs/archive/k3s-migration/backup-consolidation-longhorn.md`), and the residual hidden object
   versions were hard-purged 2026-08-14 — the value opens nothing anymore. Kept here as the
   worked example of a pinned secret leaving the registry: the anchored data is destroyed
-  first, deliberately, and only then does the key go. (The `kopia_b2_*` credentials are NOT
-  kopia's — they are the B2 account keys, still live as Longhorn's backup-target credential.)
+  first, deliberately, and only then does the key go. (The B2 account keys are a separate
+  thing and still live: they are Longhorn's backup-target credential, renamed `kopia_b2_*` →
+  `longhorn_b2_*` on 2026-09-09.)
 - **`authelia_storage`** — the Authelia DB encryption key. It encrypts the TOTP secrets and
   WebAuthn credentials in `/config/db.sqlite3` on the authelia Longhorn PVC. A raw swap makes
   that database undecryptable, and code-server, n8n and longhorn are `two_factor` — so a

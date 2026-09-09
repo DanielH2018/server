@@ -63,6 +63,51 @@ def test_reordering_does_not_count_as_a_rotation():
     assert dates["b_tok"] == dt.date(2026, 1, 1)
 
 
+def test_a_rename_is_not_a_rotation():
+    """SOPS binds a value's ciphertext to its key path, so a rename re-encrypts it.
+
+    Reject half of the `RENAMED_FROM` rule. Without it the rename commit dates the secret to
+    itself, which advances `last_rotated` to the rename and overstates the credential's
+    freshness by however long it had really been sitting there.
+    """
+    tools = _history_tools(
+        [
+            ("c", "2026-09-09", {"longhorn_b2_key_id": "ENC[rekeyed]"}),
+            ("b", "2026-05-29", {"kopia_b2_key_id": "ENC[old]"}),
+            ("a", "2026-01-01", {"kopia_b2_key_id": "ENC[older]"}),
+        ]
+    )
+    assert "longhorn_b2_key_id" not in ciphertext_rotation_dates(tools)
+
+
+def test_a_rotation_after_a_rename_is_still_derived():
+    """Accept half: once both revisions spell the key the new way, the rule is out of the path."""
+    tools = _history_tools(
+        [
+            ("d", "2026-11-02", {"longhorn_b2_key_id": "ENC[rotated]"}),
+            ("c", "2026-09-09", {"longhorn_b2_key_id": "ENC[rekeyed]"}),
+            ("b", "2026-05-29", {"kopia_b2_key_id": "ENC[old]"}),
+        ]
+    )
+    assert ciphertext_rotation_dates(tools)["longhorn_b2_key_id"] == dt.date(
+        2026, 11, 2
+    )
+
+
+def test_an_unrelated_new_secret_still_dates_to_its_introduction():
+    """A key absent from the older revision and NOT a recorded rename dates to where it appeared.
+
+    This is what stops `rotation_evidence` degrading into "absence is never evidence".
+    """
+    tools = _history_tools(
+        [
+            ("b", "2026-08-01", {"tok": "ENC[a]", "fresh_tok": "ENC[b]"}),
+            ("a", "2026-01-01", {"tok": "ENC[a]"}),
+        ]
+    )
+    assert ciphertext_rotation_dates(tools)["fresh_tok"] == dt.date(2026, 8, 1)
+
+
 def test_advance_moves_a_stale_date_forward():
     reg = {"entries": {"tok": {"tier": "assisted", "last_rotated": "2025-08-24"}}}
     advanced = advance_last_rotated(reg, {"tok": dt.date(2026, 3, 13)})

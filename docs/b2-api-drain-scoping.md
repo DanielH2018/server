@@ -86,7 +86,7 @@ remove a block another volume's backup depends on.
 
 ### Credentials
 
-The existing SOPS key `kopia_b2_key_id` / `kopia_b2_application_key` already carries
+The existing SOPS key `longhorn_b2_key_id` / `longhorn_b2_application_key` already carries
 `deleteFiles`. No new credential, no `secret_rotation.py sync`.
 
 It also carries `writeBuckets`, `writeBucketLifecycleRules` and `writeBucketReplications` — far

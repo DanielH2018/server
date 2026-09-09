@@ -30,6 +30,45 @@ from secrets_mgmt.rotation_tools import RotationTools
 # that open it rather than ask git about it.
 SECRETS_GIT_PATH = "ansible/vars/secrets.yml"
 
+# new name -> the name the same secret was stored under before it was renamed.
+#
+# A rename rewrites the ciphertext even when the plaintext is untouched: SOPS binds each
+# value's ciphertext to its key path, so re-keying it forces a re-encrypt. A reader that
+# compared values alone would call the rename commit a rotation and reset the clock on a
+# credential nobody rotated — the same class of false clear that the reordering case in
+# `ciphertext_rotation_dates` guards against, one level down.
+#
+# A renamed key gets NO derived date from before its rename: the walk stops at the boundary
+# rather than following the old spelling backwards. Its pre-rename history is frozen into
+# `ansible/secret_rotation.yml` at rename time instead, by carrying over the date the
+# derivation reported on the commit before. A later real rotation derives normally, because
+# both revisions then spell the key the same way.
+#
+# Written as prefix pairs rather than a literal name-to-name table because gitleaks reads
+# `"<name>": "<name>"` as an api-key assignment and fails the commit on it. Merge a rename
+# that does not share a prefix in with `|`.
+RENAMED_FROM: dict[str, str] = {
+    # Kopia retired 2026-08-13 and its B2 credentials became Longhorn's, keeping the dead
+    # tool's name until 2026-09-09. See
+    # docs/adr/0014-kopia-retired-longhorn-owns-the-b2-credentials.md.
+    f"longhorn_b2_{suffix}": f"kopia_b2_{suffix}"
+    for suffix in ("application_key", "bucket", "endpoint", "key_id")
+}
+
+
+def rotation_evidence(name: str, newer_value: str, older: dict[str, str]) -> bool:
+    """True when `older` shows `name` held a value different from `newer_value`.
+
+    False at a rename boundary — where the older revision spells the key its old way —
+    because a rename is not a rotation. See `RENAMED_FROM`.
+    """
+    if name in older:
+        return older[name] != newer_value
+    was = RENAMED_FROM.get(name)
+    if was is not None and was in older:
+        return False
+    return True
+
 
 def ciphertext_at(rev: str, tools: RotationTools) -> dict[str, str]:
     """name -> stored ciphertext at `rev`.
@@ -65,7 +104,7 @@ def ciphertext_rotation_dates(tools: RotationTools) -> dict[str, dt.date]:
     for rev, day in revs:
         current = ciphertext_at(rev, tools)
         for name, value in newer.items():
-            if name not in dates and current.get(name) != value:
+            if name not in dates and rotation_evidence(name, value, current):
                 dates[name] = dt.date.fromisoformat(newer_day)
         if tracked <= set(dates):
             break

@@ -895,7 +895,7 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
   docker-proxy exposes to monitoring-net neighbors (2026-07-15 review H2). An empty token file
   disables the check (falls back to the `HA_TOKEN` env, also empty = disabled).
 - The **B2 Reachable** check reuses that same file-mount pattern for its B2 credential — the
-  existing `kopia_b2_application_key`, which is LONGHORN's B2 key despite the name (ADR-0014),
+  existing `longhorn_b2_application_key` (ADR-0014; spelled `kopia_b2_*` until 2026-09-09),
   rendered 0600 to `./b2_probe_application_key` and read via
   `B2_PROBE_APPLICATION_KEY_FILE`. No new secret is minted for it; the probe-specific env name
   means pointing it at a scoped read-only key later is an inventory edit rather than a code change.

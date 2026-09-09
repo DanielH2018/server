@@ -13,7 +13,7 @@
   # Search-then-replace degrades to an empty string instead, which the assert reports.
   ansible.builtin.set_fact:
     k3s_longhorn_b2_region: >-
-      {{ kopia_b2_endpoint
+      {{ longhorn_b2_endpoint
          | regex_search('s3\.[a-z0-9-]+\.backblazeb2\.com')
          | default('', true)
          | regex_replace('^s3\.([a-z0-9-]+)\.backblazeb2\.com$', '\1') }}
@@ -23,12 +23,12 @@
   ansible.builtin.assert:
     that: k3s_longhorn_b2_region | length > 0
     fail_msg: >-
-      Could not derive a B2 region from kopia_b2_endpoint. Longhorn needs
+      Could not derive a B2 region from longhorn_b2_endpoint. Longhorn needs
       s3://<bucket>@<region>/<prefix>. Set k3s_longhorn_b2_region explicitly in host_vars
       rather than loosening the regex.
 
 # Reconciled on every run, not created-if-absent. It WAS created-if-absent, which made rotating
-# kopia_b2_application_key in SOPS a guaranteed no-op against the cluster: nothing compared the
+# longhorn_b2_application_key in SOPS a guaranteed no-op against the cluster: nothing compared the
 # live value, so the registry recorded a rotation as complete while Longhorn kept authenticating
 # with the old key — the dangerous direction if the rotation was prompted by a suspected leak.
 #
@@ -66,7 +66,7 @@
       --type=merge -p {{ target_patch | quote }}
   vars:
     target_patch: >-
-      {"spec":{"backupTargetURL":"{% if k3s_longhorn_backup_armed | bool %}s3://{{ kopia_b2_bucket }}@{{ k3s_longhorn_b2_region }}/{{ k3s_longhorn_backup_prefix }}{% endif %}"}}
+      {"spec":{"backupTargetURL":"{% if k3s_longhorn_backup_armed | bool %}s3://{{ longhorn_b2_bucket }}@{{ k3s_longhorn_b2_region }}/{{ k3s_longhorn_backup_prefix }}{% endif %}"}}
   register: k3s_longhorn_target
   become: true
   changed_when: "'no change' not in k3s_longhorn_target.stdout"
@@ -215,4 +215,4 @@
       Longhorn reports the backup target reachable. This does NOT prove an object was
       written. Before migrating any service (slice 1), snapshot a test volume, back it up,
       and confirm the object exists under the '{{ k3s_longhorn_backup_prefix }}/' prefix in
-      bucket '{{ kopia_b2_bucket }}' by listing it from outside the cluster.
+      bucket '{{ longhorn_b2_bucket }}' by listing it from outside the cluster.

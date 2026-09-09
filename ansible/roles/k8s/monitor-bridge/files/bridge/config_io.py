@@ -99,11 +99,11 @@ def io_config(
         ),
         # Read through _env_file for the same reason as HA_TOKEN: envFrom has no per-key filter,
         # so a secret in monitor-bridge-env is a secret in every process's environment
-        # (2026-07-15 review H2). Named B2_PROBE_* rather than KOPIA_B2_* even though the k8s
-        # Secret feeds it the `kopia_b2_*` values — those are LONGHORN's B2 credentials, not
-        # Kopia's (ADR-0014; Kopia retired 2026-08-13, the key name outlived it because renaming
-        # means a rotation). This probe only needs to authenticate, so swapping in a scoped
-        # read-only key later is an inventory edit, not a code one.
+        # (2026-07-15 review H2). Named B2_PROBE_* rather than LONGHORN_B2_* even though the k8s
+        # Secret feeds it the `longhorn_b2_*` values (ADR-0014; those keys were spelled
+        # `kopia_b2_*` until 2026-09-09, after the tool that named them retired). This probe
+        # only needs to authenticate, so swapping in a scoped read-only key later is an
+        # inventory edit, not a code one.
         B2_PROBE_KEY_ID=_env_file("B2_PROBE_KEY_ID"),
         B2_PROBE_APPLICATION_KEY=_env_file("B2_PROBE_APPLICATION_KEY"),
         # Probe at most this often, and cache BOTH outcomes until it expires. Every other gate

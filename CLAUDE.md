@@ -392,9 +392,12 @@ Several sessions work this repo at once, each in its own `.claude/worktrees/<nam
   `uv run python scripts/secrets_mgmt/secret_rotation.py sync` and commit. Runbook + the DANGER `pinned`
   procedure (authelia storage key): `docs/secret-rotation.md`. The kopia repo password was the
   other one and is **gone** — removed from SOPS with the repo on 2026-08-13, so there is nothing
-  left to rotate. The `kopia_b2_*` names that remain are **Longhorn's** live B2 credentials, not
-  Kopia's; see `docs/adr/0014-kopia-retired-longhorn-owns-the-b2-credentials.md` before acting on
-  the name.
+  left to rotate. The B2 account credentials Longhorn still uses were renamed `kopia_b2_*` →
+  `longhorn_b2_*` on 2026-09-09; see
+  `docs/adr/0014-kopia-retired-longhorn-owns-the-b2-credentials.md`. **A SOPS rename re-encrypts
+  the value** — sops binds each ciphertext to its key path — so the rename commit reads as a
+  rotation unless the new name is recorded in `RENAMED_FROM` (`scripts/secrets_mgmt/git_dates.py`)
+  and its `last_rotated` carried over by hand. Rename that way, or the clock silently resets.
 - **`git diff ansible/vars/secrets.yml` prints plaintext credentials.** `.gitattributes:1` sets
   `diff=sops`, so git decrypts the file before diffing it. The committed blob stays properly
   encrypted — this is a review-hygiene trap, not a repo defect, and the driver is worth keeping

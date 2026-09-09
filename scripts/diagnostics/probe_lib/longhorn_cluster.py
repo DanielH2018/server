@@ -79,7 +79,7 @@ def pvc_names(_run=None):
 # --- which BackupTarget is B2 -----------------------------------------------------------------
 
 # The cluster holds two BackupTargets and only one of them is B2: `default` carries the B2 URL
-# (`longhorn-backup.yml` patches it with `kopia_b2_bucket`), `r2` carries Cloudflare's
+# (`longhorn-backup.yml` patches it with `longhorn_b2_bucket`), `r2` carries Cloudflare's
 # (`longhorn-backuptarget-r2.yaml.j2`). R2's caps are monthly and vast, so charging an R2
 # deletion against B2's 2,500/day Class C cap would inflate the ledger against a cap that does
 # not apply to it. The deletion log line names the target URL, not the target NAME, so the

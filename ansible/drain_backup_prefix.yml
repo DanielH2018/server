@@ -79,8 +79,8 @@
                   + (['--apply'] if drain_apply | bool else []) }}"
         chdir: "{{ drain_repo }}"
       environment:
-        B2_KEY_ID: "{{ kopia_b2_key_id }}"
-        B2_APP_KEY: "{{ kopia_b2_application_key }}"
+        B2_KEY_ID: "{{ longhorn_b2_key_id }}"
+        B2_APP_KEY: "{{ longhorn_b2_application_key }}"
       register: drain_run
       changed_when: drain_apply | bool
       failed_when: drain_run.rc == 2
