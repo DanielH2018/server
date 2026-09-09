@@ -23,6 +23,8 @@ READ_COMMAND = (
 
 @dataclass(frozen=True)
 class HostReading:
+    """One host's memory-cgroup reading: its cap, current usage, and live agent count."""
+
     host: str
     cap_bytes: int | None
     current_bytes: int

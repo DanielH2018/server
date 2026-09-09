@@ -8,7 +8,7 @@ import json
 import socket
 import subprocess
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 # Reach the sibling package: a directly-invoked script gets only its own directory on
 # sys.path, and pyproject's `pythonpath` is a pytest setting.
@@ -70,9 +70,10 @@ def gh_issue(number: int) -> Issue:
 
 @dataclass(frozen=True)
 class Tools:
+    """The dispatcher's injectable process boundaries: run a command, fetch an issue."""
+
     run: Callable[..., subprocess.CompletedProcess] = run_command
     gh_issue: Callable[[int], Issue] = gh_issue
-    local_host: str = field(default_factory=_local_host)
 
 
 def read_host(tools: Tools, host: str) -> HostReading | str:

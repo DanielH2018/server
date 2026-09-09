@@ -29,12 +29,10 @@ class FakeRun:
         )
 
 
-def fake_tools(
-    answers=None, issues=None, local_host="daniel-box"
-) -> tuple[Tools, FakeRun]:
+def fake_tools(answers=None, issues=None) -> tuple[Tools, FakeRun]:
     run = FakeRun(answers or {})
     table = {i.number: i for i in (issues or [])}
-    return Tools(run=run, gh_issue=lambda n: table[n], local_host=local_host), run
+    return Tools(run=run, gh_issue=lambda n: table[n]), run
 
 
 def ok(stdout: str) -> subprocess.CompletedProcess:
