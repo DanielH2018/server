@@ -10,6 +10,10 @@
 # the name `valheim` so that k8s/manifests, which keys k8s_rebuilt_images on manifests_service,
 # rolls this Deployment when a mod version changes — see defaults/main.yml.
 - name: Build the valheim mods image
+  # Skipped when no mod is enabled: the Dockerfile would produce an image holding no DLLs and
+  # the initContainer's `cp /mods/*.dll` would fail on the unmatched glob. The deployment
+  # template drops the initContainer under the same condition.
+  when: valheim_k8s_mods | length > 0
   ansible.builtin.include_role:
     name: k8s/image-builder
   vars:
