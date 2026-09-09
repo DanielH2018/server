@@ -31,19 +31,24 @@ layout:
     Services:
       style: row
       columns: 3
-    # BOOKMARKS SIT IN THE CALENDAR COLUMN, nested inside Calendar rather than beside it. The
-    # calendar renders 372px against a 576px Services column, and the bookmarks fill what is
-    # left: measured in the browser 2026-09-09, the two columns come out dead level at 672px.
-    #
-    # Nested INSIDE Calendar, not as a third child of Top Row. A third child lands in the grid's
-    # SECOND ROW, and with Top Row at two columns that buys the space under the Calendar at the
-    # cost of an 856x96 empty band under Services — measured both ways, not assumed.
     Calendar:
       style: column
       columns: 1
-      Bookmarks:
-        style: row
-        columns: 5
+    # BOOKMARKS SIT IN THE CALENDAR COLUMN, as the third child of a two-column parent — so the
+    # grid puts them in row two, and `custom.css.j2` pins them to column two, under the Calendar.
+    #
+    # HOMEPAGE ACCEPTS ONLY ONE LEVEL OF NESTING HERE. Writing this entry one level deeper,
+    # under `Calendar:`, is the arrangement that needs no CSS and leaves no empty band — and
+    # homepage v1.13.2 IGNORES it. Measured on the deployed page 2026-09-09: the group fell out
+    # of Top Row entirely and rendered last, full width at 1728px, exactly as an unlaid-out
+    # group does. It does not warn, and every repo-side check stays green. Do not "simplify"
+    # this back to a nested entry.
+    #
+    # The cost of the arrangement that does work: row two's first column, under Services, is
+    # empty. That is 856px wide by the bookmarks' own height.
+    Bookmarks:
+      style: row
+      columns: 5
   Media:
     style: row
     columns: 4

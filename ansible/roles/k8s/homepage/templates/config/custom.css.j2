@@ -29,6 +29,23 @@
  * clipping happens on the `div.service-card` inside it. Checking the `<li>` is what let this
  * ship in the first place.
  */
+/* BOOKMARKS UNDER THE CALENDAR, not under Services.
+ *
+ * `Top Row` in settings.yaml.j2 is a two-column grid holding Services, Calendar and Bookmarks.
+ * Three children in two columns puts the third in row two, column ONE — under Services — and
+ * homepage offers no way to say which column a group takes. This pins it to column two.
+ *
+ * The honest alternative, nesting the Bookmarks entry under `Calendar:` in the layout, needs no
+ * CSS and leaves no empty column. homepage v1.13.2 ignores it: measured on the deployed page
+ * 2026-09-09, the group fell out of Top Row and rendered last at full width. Hence this rule.
+ *
+ * Scoped to the Top Row grid by `:has()` so it cannot reach a bookmark group laid out anywhere
+ * else on the page.
+ */
+div.grid:has(> div.services-group) > div.bookmark-group {
+  grid-column: 2;
+}
+
 /* THE CARD MUST FILL THE TILE, or one sparse widget still looks different.
  *
  * `.services-list` is a CSS grid, so every `<li>` in a row is stretched to the row's tallest
