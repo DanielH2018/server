@@ -25,6 +25,23 @@ Edit the `.j2` files, never the live config: homepage seeds any missing file int
 
 ## Notable
 - Pulls calendar data from the internal `ical-proxy`.
+- **A layout entry matches a group by NAME, and an unmatched one is silently dead.** `layout:`
+  in `templates/config/settings.yaml.j2` and the group headings in `services.yaml.j2` are two
+  lists that must agree. A layout key naming no group does nothing (a `Monitoring:` entry sat
+  there until 2026-09-09 for a group this dashboard has never declared); a group with no layout
+  key renders *below* every laid-out group at one column wide (`Tracking` sat that way). Neither
+  state errors, logs, or fails a render — check both files when a group appears in the wrong
+  place or a column count has no effect.
+- **The groups split by WIDGET, not by topic.** A widgeted tile is several lines tall and a
+  link-only tile is one line, so a group holding both leaves ragged holes. `Services`, `Media`
+  and `Tracking` hold the widgeted tiles; `Admin` and `Tools` hold link-only ones, four per row.
+- **A link-only tile is a config-only change; a widget is not.** A `widget:` dialling a ClusterIP
+  needs the target's NetworkPolicy to name `app: homepage` (see below), so adding a service to
+  the dashboard and giving it a live widget are two separate pieces of work. The `Admin` and
+  `Tools` groups exist to make the first one cheap — before they landed, sixteen routed web UIs
+  were reachable only by remembering the hostname.
+- **Two roles carry a `hostname:` in `containers_list` and are deliberately absent from the
+  dashboard:** `navidrome` (scaled to 0 replicas) and `livesync` (no IngressRoute at all).
 - **The Headlamp tile's widget reads Prometheus, not Headlamp.** Headlamp exposes no service
   API — its backend only proxies the Kubernetes API — and dialling its ClusterIP is fenced off
   on purpose (`roles/k8s/headlamp/templates/networkpolicy.yaml.j2`, re-asserted every deploy by

@@ -1,6 +1,15 @@
 ---
 # For configuration options and examples, please see:
 # https://gethomepage.dev/latest/configs/bookmarks
+#
+# PERSONAL LINKS ONLY. Anything this homelab hosts belongs in services.yaml.j2 as a tile —
+# n8n lived here as a bookmark until 2026-09-09 and is now a tile in the Admin group, so a
+# self-hosted service is reachable from one place rather than two.
+#
+# A `/icons/<file>.png` href reads from the homepage-icons ConfigMap
+# (templates/icons-configmap.yaml.j2), which base64s the PNGs in this role's files/ dir.
+# Add the PNG to BOTH or the tile renders a broken image. A bare `<name>.png` needs neither:
+# homepage resolves it against its bundled dashboard-icons set.
 
 - Bookmarks:
   - Gmail:
@@ -12,27 +21,9 @@
   - Reddit:
     - icon: reddit.png
       href: https://old.reddit.com/
-  #- LoLalytics:
-  #  - icon: /icons/LoLalytics.png
-  #    href: https://lolalytics.com/lol/tierlist/
-  #- Tactics.Tools:
-  #  - icon: /icons/tacticstools.png
-  #    href: https://tactics.tools/
-  #- TFTAcademy:
-  #    - icon: /icons/tftacademy.png
-  #      href: https://tftacademy.com/tierlist/comps
   - Monarch:
     - icon: /icons/monarch.png
       href: https://app.monarch.com/dashboard
-  - n8n:
-    - icon: n8n.png
-      href: https://n8n.{{ domain }}
-  #- Limitless:
-  #  - icon: /icons/limitless.png
-  #    href: https://limitlesstcg.com/
-  #- Play Limitless:
-  #  - icon: /icons/limitless.png
-  #    href: https://play.limitlesstcg.com/
   - Twitter:
     - icon: twitter.png
       href: https://twitter.com/home

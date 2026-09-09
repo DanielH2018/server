@@ -5,6 +5,14 @@ color: slate
 headerStyle: clean
 showStats: false
 target: _blank
+# Group order here IS display order, and a group services.yaml declares but this block omits
+# renders below the laid-out ones at one column wide. `Tracking` sat in exactly that state
+# until 2026-09-09, and a `Monitoring:` entry sat here naming a group services.yaml has never
+# declared — dead either way, because layout entries match a group by name.
+#
+# The split is by WIDGET, not by topic. A widgeted tile is several lines tall and a link-only
+# tile is one line, so mixing them in one group leaves ragged holes. Services, Media and
+# Tracking hold the widgeted tiles; Admin and Tools hold the link-only ones, four to a row.
 layout:
   Top Row:
     style: row
@@ -17,14 +25,28 @@ layout:
       style: column
       columns: 1
   Media:
-      style: row
-      columns: 4
+    style: row
+    columns: 4
+  Admin:
+    style: row
+    columns: 4
+  Tools:
+    style: row
+    columns: 4
   Bookmarks:
     style: row
-    columns: 6
-  Monitoring:
+    columns: 5
+  Tracking:
     style: row
-    columns: 3
+    columns: 2
+# Type-to-filter over every tile and bookmark on the page. This is what keeps the link-only
+# Admin and Tools groups usable as they grow — the keyboard reaches a service whether or not
+# its tile is in view. searchDescriptions widens the match to the `description:` line, so
+# "download" finds qBittorrent through its "Download management" text.
+quicklaunch:
+  searchDescriptions: true
+  hideInternetSearch: false
+  hideVisitURL: false
 providers:
   openweathermap: {{ weather_api_key }}
   # The longhorn INFO WIDGET reads its URL from here, not from its own entry in widgets.yaml.
