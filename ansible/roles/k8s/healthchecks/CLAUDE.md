@@ -14,8 +14,10 @@ noticed instead of silently going quiet. See repo-root `CLAUDE.md` for shared co
   fleet crons ping (a broken deploy stops noticing a stopped cron, with nothing else
   watching that), and it independently matches the migrating-state shape — Recreate + a real
   RWO PVC seeded through `k8s/volume-claim`.
-- **Secrets** (SOPS keys, not values): `healthchecks_smtp_user`, `healthchecks_password`
-  (the seed superuser), `healthchecks_discord_webhook_url` (the notification channel).
+- **Secrets** (SOPS keys, not values): `smtp_notify_app_password` (outbound mail, shared with
+  Uptime Kuma and monitor-bridge), `healthchecks_password` (the seed superuser),
+  `healthchecks_discord_webhook_url` (the notification channel). `healthchecks_smtp_user` is
+  no longer read here — #1453 tracks whether it can go.
 
 ## Notable
 - **Alerts leave over Discord, and the channel is declared rather than clicked.** A
@@ -33,10 +35,17 @@ noticed instead of silently going quiet. See repo-root `CLAUDE.md` for shared co
   halves of the spec are written for the same reason: `Channel.webhook_spec` reads
   `method_`/`url_`/`body_`/`headers_` for the status it is asked about, and `sendalerts`
   asks for `up` on the recovery flip.
-- Outbound email is broken on purpose: `healthchecks_smtp_password` was retired
-  2026-08-30 after the credential turned up in transcript plaintext, but Django still reads
-  `EMAIL_HOST`/`PORT`/`USE_TLS` from the Deployment, so it attempts SMTP auth and fails
-  rather than skipping send — the same broken state as before the retirement, not a new one.
+- **Outbound email works again, on the homelab's shared Gmail app password.**
+  `healthchecks_smtp_password` was retired 2026-08-30 after the credential turned up in
+  transcript plaintext, and outbound mail was dark from then until 2026-09-09 — Django kept
+  reading `EMAIL_HOST`/`PORT`/`USE_TLS` from the Deployment and failed auth on every send.
+  The Secret now fills `EMAIL_HOST_PASSWORD` from `smtp_notify_app_password`, the same key
+  Uptime Kuma's email notification and monitor-bridge's `email_backstop` authenticate with.
+  `EMAIL_HOST_USER` moved from `healthchecks_smtp_user` to `email` at the same time, because
+  Gmail authenticates the account its app password was minted for and the Deployment already
+  sends as `DEFAULT_FROM_EMAIL: {{ email }}`. `ansible/tests/services/test_smtp_wiring.py`
+  holds those two to each other. Discord remains the channel alerts actually leave over;
+  this is the reset/report path Django uses.
 - **A revert-past-creation coupling for any future auto-deploy promotion:** check UUIDs here
   are baked into ping URLs in unrelated fleet crons. A Longhorn revert past a check's
   creation leaves those crons pinging a dead UUID, silently.

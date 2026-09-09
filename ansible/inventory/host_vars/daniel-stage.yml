@@ -274,6 +274,14 @@ authelia_k8s_manage_oidc: false
 # services, and staging holds neither of the credentials it needs.
 authelia_k8s_manage_claude_user: false
 
+# No SMTP notifier. It reads `smtp_notify_app_password`, which lives in the production SOPS
+# file only — secrets-staging.yml is encrypted to daniel-stage's own age recipient, so the key
+# cannot be added from a workstation that holds the prod key alone. Staging keeps the file
+# notifier it had before 2026-09-09, which is the right end state regardless: a staging portal
+# should not be able to send mail from the operator's real Gmail account. Nothing is lost —
+# what staging exercises is the forward-auth middleware chain, not password recovery.
+authelia_k8s_smtp_notifier: false
+
 # No registry garbage collection. Its script pushes the GC result into prod's Kuma, same
 # reason as k3s_manage_health_crons above. Nothing here needs collecting either: this
 # registry holds one small image and the cluster is rebuilt rather than kept.

@@ -41,6 +41,12 @@ authelia_k8s_manage_crowdsec: true
 # every Authelia-fronted IngressRoute depends on.
 authelia_k8s_manage_oidc: true
 
+# Deliver identity-verification codes by email rather than to a file inside the pod. False
+# falls back to the filesystem notifier, which is what this role used before 2026-09-09 and
+# what daniel-stage still uses — the SMTP branch reads `smtp_notify_app_password`, and the
+# staging secrets file is encrypted to its own age recipient and cannot hold it.
+authelia_k8s_smtp_notifier: true
+
 # Session cookie name. MUST differ from the Docker instance's `authelia_session_local`.
 # Both portals serve the cookie domain local.<domain>, and a browser holds one cookie per
 # (domain, name) pair — with a shared name, logging in at one portal overwrites the other's
