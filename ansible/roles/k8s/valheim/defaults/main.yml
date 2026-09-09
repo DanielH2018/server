@@ -40,9 +40,12 @@ valheim_k8s_mods_image: "{{ k8s_registry_pull_host }}/valheim:latest"
 # rather than a degraded one. BepInExPack itself is NOT listed: the image installs and updates
 # it on its own.
 #
-# ALL SIX REQUESTED MODS ARE CLIENT-SIDE TOO, except Serverside_Simulations. Azumatt's three use
-# ServerSync, which pushes the server's config to matching clients and can refuse a client whose
-# version differs. Players need the same versions installed locally.
+# EVERY MOD LIVE HERE IS CLIENT-SIDE TOO. Azumatt's three use ServerSync, which pushes the
+# server's config to matching clients and can refuse a client whose version differs. Players
+# need the same versions installed locally.
+#
+# Six of the seven requested are live; Serverside_Simulations is disabled below, with the
+# reason at its entry.
 valheim_k8s_mods:
   - name: Jotunn
     version: 2.29.2
@@ -56,10 +59,20 @@ valheim_k8s_mods:
     version: 2.4.8
     url: https://thunderstore.io/package/download/Azumatt/AzuExtendedPlayerInventory/2.4.8/
     sha256: edc0048b3d5d82c2b77b4cb9285d4653d3610173cad0dcd6b9eb385864411af6
-  - name: Serverside_Simulations
-    version: 1.1.9
-    url: https://thunderstore.io/package/download/mvp/Serverside_Simulations/1.1.9/
-    sha256: 429c02d48f5f45c7eb9f7347e11259cd2d878f70fb15f712313363d41db156a5
+  # Serverside_Simulations 1.1.9 is REQUESTED BUT DISABLED — it does not work on Valheim
+  # l-1.0.7. Its last release is 2025-09-27 and it patches `ZNetScene.CreateDestroyObjects`
+  # against a `ZoneSystem.GetZone(Vector3)` the game no longer has, so every frame throws
+  # `MissingMethodException` — 4431 of them in three minutes, measured live on 2026-09-09.
+  # Object creation and destruction is what that patch governs, so leaving it in breaks
+  # spawning for players while the pod reads 1/1 Ready and `probe.py health valheim` passes.
+  #
+  # It is the only mod in the set referencing both missing members; the other six load and
+  # initialise cleanly on the same boot. Restore it by uncommenting when upstream ships a
+  # release built against l-1.0.7 or later — nothing else has to change.
+  # - name: Serverside_Simulations
+  #   version: 1.1.9
+  #   url: https://thunderstore.io/package/download/mvp/Serverside_Simulations/1.1.9/
+  #   sha256: 429c02d48f5f45c7eb9f7347e11259cd2d878f70fb15f712313363d41db156a5
   - name: MultiUserChest
     version: 0.6.1
     url: https://thunderstore.io/package/download/MSchmoecker/MultiUserChest/0.6.1/

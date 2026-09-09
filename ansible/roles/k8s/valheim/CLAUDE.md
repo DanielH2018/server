@@ -91,11 +91,16 @@ Added 2026-09-09 with the wrapper bump to 1.2.0 and a fresh world.
   `k8s_rebuilt_images` on `manifests_service`, so a mismatched name pushes a new image that no
   pod ever runs — the recorded `n8n-runners` failure. It contains no server.
 - **The set:** Jotunn 2.29.2, AdvancedPortals 1.2.0, AzuExtendedPlayerInventory 2.4.8,
-  Serverside_Simulations 1.1.9, MultiUserChest 0.6.1, AzuCraftyBoxes 1.8.15,
-  AAA_Crafting 2.1.6. Jotunn is a dependency of AdvancedPortals and MultiUserChest, not a
-  request. BepInExPack is not listed — the image installs and updates it itself.
-- **All but Serverside_Simulations are client-side too.** Azumatt's three use ServerSync,
-  which can refuse a client whose version differs, so players need the same versions locally.
+  MultiUserChest 0.6.1, AzuCraftyBoxes 1.8.15, AAA_Crafting 2.1.6. Jotunn is a dependency of
+  AdvancedPortals and MultiUserChest, not a request. BepInExPack is not listed — the image
+  installs and updates it itself.
+- **Serverside_Simulations was requested and is DISABLED.** Its 1.1.9 release predates
+  Valheim `l-1.0.7` and patches `ZNetScene.CreateDestroyObjects` against a
+  `ZoneSystem.GetZone(Vector3)` the game no longer has — 4431 `MissingMethodException`s in
+  three minutes, measured 2026-09-09, while the pod read 1/1 Ready and `probe.py health
+  valheim` passed. The entry stays commented in `defaults/main.yml` with the evidence.
+- **Every mod live here is client-side too.** Azumatt's three use ServerSync, which can
+  refuse a client whose version differs, so players need the same versions locally.
 - **The initContainer writes two directories, and neither is redundant.**
   `/config/bepinex/plugins/homelab` is the image's sanctioned drop point, which a BepInEx or
   Valheim update rebuilds the install tree from; `/opt/valheim/bepinex/BepInEx/plugins/homelab`
@@ -115,7 +120,10 @@ Added 2026-09-09 with the wrapper bump to 1.2.0 and a fresh world.
   `BepInEx/config` to `/config/bepinex`, so per-mod `.cfg` files sit beside the world.
 - **Verify by the plugin log lines, not by pod Ready.** The startup probe is a kernel-side
   bind check and passes identically with zero plugins loaded:
-  `k3s kubectl -n homelab logs deploy/valheim | grep -i 'Loading \[.*\]'` should name seven.
+  `k3s kubectl -n homelab logs deploy/valheim | grep -i 'Loading \[.*\]'` should name one per
+  live entry in `valheim_k8s_mods`. **Loading is not working** — read the log for
+  `MissingMethodException` afterwards as well, which is how Serverside_Simulations was caught:
+  it logged `Serverside Simulations installed` and then threw every frame.
 
 ## The world
 `Midgard` — a NEW world, created on first boot 2026-09-09 at the operator's request. It is a
