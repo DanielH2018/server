@@ -3,10 +3,11 @@
 Two things live here. The **install** (native installer, per-user, auto-updating) and
 **`claude-rc.service`**, the Remote Control host that lets sessions be created from a phone.
 
-Runs on daniel-box only, gated by `has_claude_code` in
-`inventory/host_vars/daniel-box.yml`. Invoked from `initial_setup.yml`, **not** `deploy.yml`
-— the role is not in `containers_list`, so `./scripts/deploy.sh --tags claude_code` exits 2
-on an unmatched tag. Deploy it with:
+Runs on every host with `has_claude_code: true` — daniel-box and daniel-server. The Remote
+Control unit is enabled only where `claude_code_rc_enabled` is also true (daniel-box);
+daniel-server carries its own cap numbers in its own host_vars. Invoked from
+`initial_setup.yml`, **not** `deploy.yml` — the role is not in `containers_list`, so
+`./scripts/deploy.sh --tags claude_code` exits 2 on an unmatched tag. Deploy it with:
 
 ```bash
 uv run ansible-playbook ansible/initial_setup.yml --tags claude_code
