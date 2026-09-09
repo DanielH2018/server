@@ -34,7 +34,13 @@ li.service:not(#my-calendar) .service-container {
 }
 
 li.service:not(#my-calendar) .service-container > div {
-  flex: 1 1 calc(50% - 0.5rem);
+  /* NO GROW — the `0` in the first position is the whole point. With `flex-grow: 1` an odd
+   * stat count left the last block stretched across the full row: the five three-stat widgets
+   * rendered 128px, 128px, then a 264px block, against a uniform 128px on the four-stat ones.
+   * Same tile height, visibly different blocks. Growth disabled, every block is 128px and an
+   * odd count simply leaves the last half-row empty, which reads as a grid rather than as a
+   * mistake. Measured 2026-09-09 at 1920px across all nine Services tiles. */
+  flex: 0 0 calc(50% - 0.5rem);
   min-width: 0;
 }
 

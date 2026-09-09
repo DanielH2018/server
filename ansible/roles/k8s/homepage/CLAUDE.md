@@ -50,8 +50,15 @@ Edit the `.j2` files, never the live config: homepage seeds any missing file int
   `custom.css.j2` now wraps those blocks two per row, which also equalises tile height — every
   widget carries two to four stats, so all of them occupy two stat rows.
 - **The groups split by WIDGET, not by topic.** A widgeted tile is several lines tall and a
-  link-only tile is one line, so a group holding both leaves ragged holes. `Services`, `Media`
-  and `Tracking` hold the widgeted tiles; `Admin` and `Tools` hold link-only ones, four per row.
+  link-only tile is one line, so a group holding both leaves ragged holes. `Services`,
+  `Calendar` and `Media` hold the widgeted tiles; `Admin` and `Tools` hold link-only ones, four
+  per row. There is no `Tracking` group: it held one tile (Crypto), which moved into the
+  `Calendar` column on 2026-09-09 to fill the 144px that sat dead under the calendar.
+- **Wrapped stat blocks must not grow.** `custom.css.j2` sets `flex: 0 0 calc(50% - 0.5rem)`,
+  and the leading `0` is load-bearing. With `flex-grow: 1` an odd stat count stretches the last
+  block across the full row, so a three-stat widget renders 128px, 128px, 264px against a
+  uniform 128px on a four-stat one — same tile height, visibly different blocks. Growth off, an
+  odd count leaves its last half-row empty and every block matches.
 - **A link-only tile is a config-only change; a widget is not.** A `widget:` dialling a ClusterIP
   needs the target's NetworkPolicy to name `app: homepage` (see below), so adding a service to
   the dashboard and giving it a live widget are two separate pieces of work. The `Admin` and
