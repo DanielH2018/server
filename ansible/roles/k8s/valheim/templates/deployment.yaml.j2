@@ -65,6 +65,7 @@ spec:
       # and it makes the set this repo owns removable without touching anything BepInEx put
       # there. Without the wipe, dropping a mod from valheim_k8s_mods would leave its DLL on the
       # PVC and BepInEx would keep loading it.
+{% if valheim_k8s_mods %}
       initContainers:
         - name: mods
           image: {{ valheim_k8s_mods_image }}
@@ -97,6 +98,7 @@ spec:
               mountPath: /config
             - name: valheim-server
               mountPath: /opt/valheim
+{% endif %}
       containers:
         - name: valheim
           image: {{ valheim_k8s_image }}
@@ -114,6 +116,10 @@ spec:
               value: "{{ valheim_k8s_world_name }}"
             - name: SERVER_PUBLIC
               value: "{{ valheim_k8s_server_public }}"
+            # Appended to the server's launch line unquoted by the image, so a multi-token
+            # value works. Carries the vanilla `portals casual` world modifier — see defaults.
+            - name: SERVER_ARGS
+              value: "{{ valheim_k8s_server_args }}"
             - name: TZ
               value: "{{ tz }}"
             # Installs BepInExPack beside the vanilla server and runs the server through it.

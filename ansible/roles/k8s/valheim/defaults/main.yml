@@ -18,7 +18,12 @@ valheim_k8s_image: ghcr.io/community-valheim-tools/valheim-server:1.2.0
 # BEPINEX=true makes the image install BepInExPack Valheim beside the vanilla server in
 # /opt/valheim/bepinex and run the server through it. Mutually exclusive with VALHEIM_PLUS,
 # which this server does not use.
-valheim_k8s_bepinex: "true"
+#
+# DERIVED, not set by hand: BepInEx is on exactly when there is a plugin to load. The two can
+# otherwise drift in both directions, and both are silent — mods listed with BepInEx off means
+# a vanilla server that reports every plugin copied into place, and BepInEx on with an empty
+# list means a modded launch path carrying nothing.
+valheim_k8s_bepinex: "{{ 'true' if valheim_k8s_mods | length > 0 else 'false' }}"
 
 # The plugin DLLs are baked into an image built by k8s/image-builder from templates/Dockerfile.j2
 # and copied into the plugins tree by the `mods` initContainer. Built rather than downloaded at
@@ -29,6 +34,7 @@ valheim_k8s_bepinex: "true"
 # n8n-runners is the recorded case of that mismatch shipping an image no pod ever ran.
 valheim_k8s_mods_image: "{{ k8s_registry_pull_host }}/valheim:latest"
 
+# ── The mod set, and the four-fifths of it that Valheim 1.0 broke ───────────────────────
 # Every entry is a Thunderstore release, pinned by version AND sha256 — the build verifies the
 # checksum before it unpacks, so a re-uploaded archive fails the build instead of reaching the
 # server. To bump one, read the new version and URL from
@@ -37,74 +43,102 @@ valheim_k8s_mods_image: "{{ k8s_registry_pull_host }}/valheim:latest"
 #
 # BepInExPack is NOT listed: the image installs and updates it on its own.
 #
-# EVERY MOD LIVE HERE IS CLIENT-SIDE TOO. Azumatt's three use ServerSync, which pushes the
-# server's config to matching clients and can refuse a client whose version differs. Players
-# need the same versions installed locally.
+# EVERY MOD HERE IS CLIENT-SIDE TOO. Azumatt's use ServerSync, which pushes the server's config
+# to matching clients and can refuse a client whose version differs. Players need the same
+# versions installed locally.
 #
-# SIX OF THE SEVEN ARE LIVE. Valheim 1.0 landed ahead of the mod ecosystem: Jotunn comes from
-# a third-party rebuild for now (see its entry), and Serverside_Simulations sits commented in
-# place with the evidence at its own entry. Restoring it is uncommenting and refreshing a pin.
+# ORE THROUGH PORTALS NEEDS NO MOD. `valheim_k8s_server_args` sets the vanilla `portals casual`
+# world modifier, which is why AdvancedPortals being disabled costs nothing.
+#
+# The prose below lives ABOVE the list rather than beside each entry: ansible-lint's YAML
+# parser rejects a long comment run inside a collection ("too many consecutive comments before
+# resolving collection entry"), while `yaml.safe_load` accepts it — so the same file parsed
+# clean in a scratch check and failed the commit gate.
+#
+# WHY EACH DISABLED ENTRY IS DISABLED, all measured on `l-1.0.7`, 2026-09-09. Each error was
+# attributed by reading the boot log between consecutive `Loading [...]` lines, so it belongs
+# to the plugin named above it.
+#
+#   Jotunn 2.29.3 (ReefTeam fork)
+#       Works, and is disabled only because nothing needs it now — it is a dependency of
+#       AdvancedPortals and MultiUserChest, never a request. Upstream ValheimModding-Jotunn
+#       2.29.2 does NOT work: it buffers the join handshake and its `SynchronizeInitialData`
+#       throws on `ZRoutedRpc.Everybody`, leaving the player connected but frozen with the
+#       camera shaking. If Jotunn comes back, take the fork until ValheimModding ships its own
+#       1.0 build (fix merged to `dev`, PR #483), and never list both — same GUID, higher
+#       version wins.
+#   AdvancedPortals 1.2.0
+#       Loads cleanly; superseded by the vanilla portals modifier above.
+#   MultiUserChest 0.6.1
+#       BadImageFormatException: Expected reference type but got type kind 17 — an IL-level
+#       mismatch against the 1.0 assemblies. Also needs Jotunn.
+#   AzuCraftyBoxes 1.8.15
+#       TypeInitializationException on `ZRoutedRpc.Everybody`; the plugin type never
+#       initialises, so it is inert rather than degraded.
+#   AzuExtendedPlayerInventory 2.4.8
+#       HarmonyException, `Undefined target method` for `InventoryPatches.AddItem_XY_Guard`.
+#   AAA_Crafting 2.1.6
+#       HarmonyException, `Undefined target method` for `RecipeTracking.InventoryAddItemPatch`.
+#   Serverside_Simulations 1.1.9
+#       MissingMethodException on `ZoneSystem.GetZone(Vector3)` from
+#       `ZNetScene.CreateDestroyObjects`, EVERY FRAME — 4431 in three minutes. Last release
+#       2025-09-27.
+#   AzuAutoStore 3.0.14
+#       Never deployed. Its assembly still references `ZRoutedRpc.Everybody`, the signature
+#       that leaves AzuCraftyBoxes dead, so adding it would reintroduce a known-broken plugin.
+#
+# A SERVERSYNC VERSION LINE IS NOT PROOF A MOD WORKS. The log prints
+# `Sending AzuCraftyBoxes version 1.8.15 ... to the client` on every join because ServerSync
+# registers statically — it kept printing for a plugin whose type initializer had thrown. That
+# line was read as evidence three mods were healthy, and they were not.
+#
+# The two live entries were vetted before being added, by checking each assembly for a
+# `ZRoutedRpc.Everybody` reference. That is necessary, NOT sufficient: the Harmony
+# `Undefined target method` failures above are invisible to any string check, so the boot log
+# is what decides. Re-enable a disabled entry ONE AT A TIME and read the log between its own
+# `Loading [...]` line and the next before adding another.
 valheim_k8s_mods:
-  # Jotunn, from ReefTeam's FORK rather than ValheimModding's own package — a deliberate,
-  # temporary swap, and the only third-party rebuild in this set.
-  #
-  # ValheimModding-Jotunn 2.29.2 (2026-07-13) predates Valheim 1.0 and BREAKS JOINING
-  # OUTRIGHT. Its SynchronizationManager patches `ZNet.RPC_PeerInfo` to BUFFER the joining
-  # client's packages, replaying them and calling `socket.VersionMatch()` only once its own
-  # `SynchronizeInitialData` coroutine finishes. On l-1.0.7 that coroutine throws
-  # `MissingFieldException: ZRoutedRpc.Everybody` on its first send, so the buffer is never
-  # flushed — the player spawns and is then stuck, unable to move, with the camera shaking,
-  # while the server log shows an ordinary successful connect. Observed live 2026-09-09 16:39,
-  # stack naming Jotunn.
-  #
-  # ReefTeam-Jotunn 2.29.3 is 2.29.2 rebuilt against 1.0.7. Checked rather than taken on
-  # trust, before it was pinned here: the `Everybody` reference is GONE from the assembly
-  # (upstream 2.29.2 has 1 occurrence, this has 0), and the plugin GUID is still
-  # `com.jotunn.jotunn`, which is what lets AdvancedPortals and MultiUserChest resolve it.
-  #
-  # GO BACK TO UPSTREAM once ValheimModding ships its own 1.0 build — the fix is merged to
-  # its `dev` branch (PR #483, 2026-09-09) but unreleased. Both packages carry the same GUID
-  # and the higher version wins, so never list both. The sha256 pin is what stops an
-  # unofficial rebuild changing under us.
-  - name: Jotunn
-    version: 2.29.3
-    url: https://thunderstore.io/package/download/ReefTeam/Jotunn/2.29.3/
-    sha256: 8e4449cfbad8a57c6542d9a5110e9f4e85475f3747050166dc0cf9a98e724f56
-  - name: AdvancedPortals
-    version: 1.2.0
-    url: https://thunderstore.io/package/download/RandyKnapp/AdvancedPortals/1.2.0/
-    sha256: a57f237a1aad1ecb297706870e132d2939c3b55dba47e27bdea74ce318e4cb01
-  - name: MultiUserChest
-    version: 0.6.1
-    url: https://thunderstore.io/package/download/MSchmoecker/MultiUserChest/0.6.1/
-    sha256: d12ce19bf48bbacb422fee1ea20d876ee03a4f986a68f0246e3711d7ce37213f
-  - name: AzuExtendedPlayerInventory
-    version: 2.4.8
-    url: https://thunderstore.io/package/download/Azumatt/AzuExtendedPlayerInventory/2.4.8/
-    sha256: edc0048b3d5d82c2b77b4cb9285d4653d3610173cad0dcd6b9eb385864411af6
-  # Serverside_Simulations 1.1.9 is REQUESTED BUT DISABLED — it does not work on Valheim
-  # l-1.0.7. Its last release is 2025-09-27 and it patches `ZNetScene.CreateDestroyObjects`
-  # against a `ZoneSystem.GetZone(Vector3)` the game no longer has, so every frame throws
-  # `MissingMethodException` — 4431 of them in three minutes, measured live on 2026-09-09.
-  # Object creation and destruction is what that patch governs, so leaving it in breaks
-  # spawning for players while the pod reads 1/1 Ready and `probe.py health valheim` passes.
-  #
-  # It is the only mod in the set referencing both missing members; the other six load and
-  # initialise cleanly on the same boot. Restore it by uncommenting when upstream ships a
-  # release built against l-1.0.7 or later — nothing else has to change.
+  - name: MouseTweaks
+    version: 1.0.3
+    url: https://thunderstore.io/package/download/Azumatt/MouseTweaks/1.0.3/
+    sha256: cfb2a7a3dc35ca12b8425ea78385d28cf621f85f202fd05de6a74e1989cdab2c
+  - name: AAABuildMenu
+    version: 1.0.1
+    url: https://thunderstore.io/package/download/Azumatt/AAABuildMenu/1.0.1/
+    sha256: 673bfffbc519d6722a7b8190072987a56396118eebe706b151353f0b700b3c3d
+  # Disabled — see the block above for the per-mod evidence.
+  # - name: Jotunn
+  #   version: 2.29.3
+  #   url: https://thunderstore.io/package/download/ReefTeam/Jotunn/2.29.3/
+  #   sha256: 8e4449cfbad8a57c6542d9a5110e9f4e85475f3747050166dc0cf9a98e724f56
+  # - name: AdvancedPortals
+  #   version: 1.2.0
+  #   url: https://thunderstore.io/package/download/RandyKnapp/AdvancedPortals/1.2.0/
+  #   sha256: a57f237a1aad1ecb297706870e132d2939c3b55dba47e27bdea74ce318e4cb01
+  # - name: MultiUserChest
+  #   version: 0.6.1
+  #   url: https://thunderstore.io/package/download/MSchmoecker/MultiUserChest/0.6.1/
+  #   sha256: d12ce19bf48bbacb422fee1ea20d876ee03a4f986a68f0246e3711d7ce37213f
+  # - name: AzuCraftyBoxes
+  #   version: 1.8.15
+  #   url: https://thunderstore.io/package/download/Azumatt/AzuCraftyBoxes/1.8.15/
+  #   sha256: 042c6821d35079fe30c01c0b817da06f0ec337aec33a956b33ad23b8adc26d91
+  # - name: AzuExtendedPlayerInventory
+  #   version: 2.4.8
+  #   url: https://thunderstore.io/package/download/Azumatt/AzuExtendedPlayerInventory/2.4.8/
+  #   sha256: edc0048b3d5d82c2b77b4cb9285d4653d3610173cad0dcd6b9eb385864411af6
+  # - name: AAA_Crafting
+  #   version: 2.1.6
+  #   url: https://thunderstore.io/package/download/Azumatt/AAA_Crafting/2.1.6/
+  #   sha256: 00c2a93046fb6f8de0a85e21888e3d44fe4ddfd39f5386dfeac9d15292f13667
   # - name: Serverside_Simulations
   #   version: 1.1.9
   #   url: https://thunderstore.io/package/download/mvp/Serverside_Simulations/1.1.9/
   #   sha256: 429c02d48f5f45c7eb9f7347e11259cd2d878f70fb15f712313363d41db156a5
-  - name: AzuCraftyBoxes
-    version: 1.8.15
-    url: https://thunderstore.io/package/download/Azumatt/AzuCraftyBoxes/1.8.15/
-    sha256: 042c6821d35079fe30c01c0b817da06f0ec337aec33a956b33ad23b8adc26d91
-  - name: AAA_Crafting
-    version: 2.1.6
-    url: https://thunderstore.io/package/download/Azumatt/AAA_Crafting/2.1.6/
-    sha256: 00c2a93046fb6f8de0a85e21888e3d44fe4ddfd39f5386dfeac9d15292f13667
-
+  # - name: AzuAutoStore
+  #   version: 3.0.14
+  #   url: https://thunderstore.io/package/download/Azumatt/AzuAutoStore/3.0.14/
+  #   sha256: 33b3dfd672da55938b7b99f4f6e8bd1e31ea66f6dc8e6dfe336c05fea2980a9b
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Two independent reasons, added 2026-08-16 with the pilot clearing: (1) probe-less — the
 # Deployment renders no readinessProbe at all, same shape as terraria; (2) migrating state —
@@ -159,6 +193,17 @@ valheim_k8s_world_name: Midgard
 # Listed in the in-game community browser, as before. Steam's server query (port 2457) only
 # answers for public servers; a private server is join-by-IP only.
 valheim_k8s_server_public: "true"
+
+# Extra Valheim CLI arguments, appended to the launch line by the image's `SERVER_ARGS`.
+#
+# `portals casual` lets ore and metal through portals, at the operator's request 2026-09-09.
+# It is a VANILLA world modifier — the game gained these with the world-modifier system, so
+# this needs no mod at all, which is why AdvancedPortals coming out costs nothing here.
+# The other values are `hard` (the default: no metals) and `veryhard` (no items at all).
+#
+# A modifier applies at launch and is not written into the world, so changing this line and
+# redeploying is the whole procedure, in both directions.
+valheim_k8s_server_args: "-modifier portals casual"
 
 # Mirrors the archived resources('4.0', '6144M', '0.5', '2048M') — the dedicated server
 # simulates the whole world in RAM and wants headroom, not a tight cap.

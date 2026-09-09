@@ -90,33 +90,43 @@ Added 2026-09-09 with the wrapper bump to 1.2.0 and a fresh world.
 - **The built image is named `valheim`, not `valheim-mods`.** `k8s/manifests` keys
   `k8s_rebuilt_images` on `manifests_service`, so a mismatched name pushes a new image that no
   pod ever runs — the recorded `n8n-runners` failure. It contains no server.
-- **The set:** Jotunn 2.29.3, AdvancedPortals 1.2.0, AzuExtendedPlayerInventory 2.4.8,
-  MultiUserChest 0.6.1, AzuCraftyBoxes 1.8.15, AAA_Crafting 2.1.6. Jotunn is a dependency of
-  AdvancedPortals and MultiUserChest, not a request. BepInExPack is not listed — the image
-  installs and updates it itself.
-- **Jotunn comes from `ReefTeam`, not `ValheimModding`, and that is temporary.** Upstream
-  2.29.2 (2026-07-13) predates Valheim 1.0 and MADE THE SERVER UNJOINABLE: it patches
-  `ZNet.RPC_PeerInfo` to buffer a joining client's packages, replaying them and calling
-  `socket.VersionMatch()` only once its own `SynchronizeInitialData` coroutine finishes, and
-  on `l-1.0.7` that coroutine throws `MissingFieldException: ZRoutedRpc.Everybody` on its
-  first send. The buffer is never flushed, so the player spawns and is stuck — unable to move,
-  camera shaking — while the server log shows an ordinary successful connect. **A join that
-  looks clean on the server side is not evidence the client can play.** ReefTeam-Jotunn 2.29.3
-  is that release rebuilt for 1.0.7; the swap was verified before pinning, not taken on trust
-  — the `Everybody` reference is absent from the assembly and the GUID is still
-  `com.jotunn.jotunn`, which is what lets the two dependents resolve it. Go back to upstream
-  once ValheimModding ships its own 1.0 build (fix merged to `dev`, PR #483, unreleased);
-  never list both packages, since they share a GUID and the higher version wins.
-- **Serverside_Simulations was requested and is DISABLED.** Its 1.1.9 release predates
-  Valheim `l-1.0.7` and patches `ZNetScene.CreateDestroyObjects` against a
-  `ZoneSystem.GetZone(Vector3)` the game no longer has — 4431 `MissingMethodException`s in
-  three minutes, measured 2026-09-09, while the pod read 1/1 Ready and `probe.py health
-  valheim` passed. The entry stays commented in `defaults/main.yml` with the evidence.
-- **Four mods referenced `ZRoutedRpc.Everybody`, which `l-1.0.7` removed.** Only Jotunn's
-  reference is fatal, because only Jotunn sits in the join path; Azumatt's three log the same
-  error at load and go on to complete their ServerSync handshake normally.
-- **Every mod live here is client-side too.** Azumatt's three use ServerSync, which can
-  refuse a client whose version differs, so players need the same versions locally.
+- **The set is two, and Valheim 1.0 is why.** Live: MouseTweaks 1.0.3, AAABuildMenu 1.0.1.
+  Eight further mods were requested across 2026-09-09 and every one of them fails on
+  `l-1.0.7`, or is only needed by one that does; each sits commented in `defaults/main.yml`
+  with the error that disabled it. BepInExPack is not listed — the image installs it itself.
+- **Ore through portals is a vanilla world modifier, not a mod.** `valheim_k8s_server_args`
+  passes `-modifier portals casual` through the image's `SERVER_ARGS`, so AdvancedPortals
+  being disabled costs nothing. The other values are `hard` (default, no metals) and
+  `veryhard` (no items at all). A modifier applies at launch and is not written into the
+  world, so changing that line and redeploying is the whole procedure, both ways.
+- **`valheim_k8s_bepinex` is DERIVED from the mod list, never set by hand.** The two drift in
+  both directions and both are silent: mods listed with BepInEx off is a vanilla server that
+  still reports every plugin copied into place, and BepInEx on with an empty list is a modded
+  launch path carrying nothing. The initContainer and the image build are gated on the same
+  condition — an empty list would otherwise build an image with no DLLs and fail the pod on
+  `cp /mods/*.dll` matching nothing.
+- **A ServerSync version line is NOT proof a mod works.** The log prints
+  `Sending AzuCraftyBoxes version 1.8.15 ... to the client` on every join because ServerSync
+  registers statically, and it kept printing for a plugin whose type initializer had already
+  thrown. That line was read here as evidence three mods were healthy; all three were dead.
+  **Attribute a load error by reading between consecutive `Loading [...]` lines** — the error
+  belongs to the plugin named above it.
+- **A clean server-side join is not evidence the client can play.** Upstream
+  ValheimModding-Jotunn 2.29.2 patches `ZNet.RPC_PeerInfo` to buffer a joining client's
+  packages, replaying them and calling `socket.VersionMatch()` only once its own
+  `SynchronizeInitialData` coroutine finishes; on `l-1.0.7` that coroutine throws
+  `MissingFieldException: ZRoutedRpc.Everybody` on its first send, so the buffer never
+  flushes. The player spawns and is stuck — unable to move, camera shaking — while the server
+  logs an ordinary successful connect. ReefTeam's fork 2.29.3 fixes that specific failure
+  (verified: the `Everybody` reference is absent and the GUID is still `com.jotunn.jotunn`),
+  but the mods needing Jotunn fail for their own reasons, so the whole group is off. **The
+  tell for the next one: no `Got character ZDOID` line for a peer that connected.**
+- **Vetting a candidate mod before adding it:** check its assembly for a `ZRoutedRpc.Everybody`
+  reference, the field `l-1.0.7` removed. Necessary, NOT sufficient — the Harmony
+  `Undefined target method` failures are invisible to any string check. Enable one at a time
+  and read the boot log before adding the next.
+- **Every mod here is client-side too.** Azumatt's use ServerSync, which can refuse a client
+  whose version differs, so players need the same versions locally.
 - **The initContainer writes two directories, and neither is redundant.**
   `/config/bepinex/plugins/homelab` is the image's sanctioned drop point, which a BepInEx or
   Valheim update rebuilds the install tree from; `/opt/valheim/bepinex/BepInEx/plugins/homelab`
