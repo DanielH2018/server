@@ -56,6 +56,34 @@ RENAMED_FROM: dict[str, str] = {
 }
 
 
+# DECIDED: a commit reads as a whole-file re-encrypt when it changes the ciphertext of at
+# least 90% of the keys the two revisions share, and at least 10 keys are shared (so a
+# file with only a handful of secrets can't hit the fraction on an ordinary rotation).
+# Measured: 3e731bcec (a merge-conflict re-encrypt) changed 165 of 166 shared keys
+# (99.4%); every other commit in the last 25 changed 0-2 (<=1.2%). 90% sits far above that
+# noise floor and well below "half the registry rotated at once", which a real bulk
+# rotation could plausibly do and this guard must not swallow.
+_REENCRYPT_FRACTION = 0.9
+_REENCRYPT_MIN_SHARED = 10
+
+
+def _is_whole_file_reencrypt(newer: dict[str, str], current: dict[str, str]) -> bool:
+    """True when `current` differs from `newer` at nearly every key both revisions share.
+
+    Resolving a merge conflict on secrets.yml means decrypting both sides and re-encrypting
+    the merged result, which assigns every value a fresh SOPS nonce whether or not its
+    plaintext changed. That is indistinguishable, key by key, from a real rotation — the
+    whole-file version of the single-key case `RENAMED_FROM` guards, where re-keying a
+    value also forces a re-encrypt with nothing rotated. See `_REENCRYPT_FRACTION` for the
+    threshold and the measurement behind it.
+    """
+    shared = set(newer) & set(current)
+    if len(shared) < _REENCRYPT_MIN_SHARED:
+        return False
+    changed = sum(1 for name in shared if newer[name] != current[name])
+    return changed / len(shared) >= _REENCRYPT_FRACTION
+
+
 def rotation_evidence(name: str, newer_value: str, older: dict[str, str]) -> bool:
     """True when `older` shows `name` held a value different from `newer_value`.
 
@@ -87,6 +115,12 @@ def ciphertext_rotation_dates(tools: RotationTools) -> dict[str, dt.date]:
     reorders or regroups secrets.yml rewrites lines without changing any value, and a
     line-level reader would call every secret freshly rotated — marking genuinely
     overdue ones green. ca5ae25b rewrote 149 of 156 lines doing exactly that.
+
+    A commit that resolves a merge conflict on secrets.yml is the same trap one level up:
+    decrypting both sides and re-encrypting the merged result assigns every value a fresh
+    SOPS nonce, so every ciphertext changes with no plaintext touched. `_is_whole_file_reencrypt`
+    is that case's guard, sitting beside `RENAMED_FROM` (its single-key analogue). 3e731bcec
+    changed 165 of 166 tracked keys resolving exactly this kind of conflict.
     """
     revs = [
         line.split(" ", 1)
@@ -103,8 +137,17 @@ def ciphertext_rotation_dates(tools: RotationTools) -> dict[str, dt.date]:
     newer_day = ""
     for rev, day in revs:
         current = ciphertext_at(rev, tools)
+        reencrypt = _is_whole_file_reencrypt(newer, current)
         for name, value in newer.items():
-            if name not in dates and rotation_evidence(name, value, current):
+            if name in dates:
+                continue
+            if reencrypt and name in current:
+                # Every shared key changed here because the whole file was re-encrypted,
+                # not because this one rotated. Leave it undated and let the walk carry on
+                # to the (pre-re-encrypt) value in `current`, so an earlier real rotation
+                # still gets found on a later iteration.
+                continue
+            if rotation_evidence(name, value, current):
                 dates[name] = dt.date.fromisoformat(newer_day)
         if tracked <= set(dates):
             break
