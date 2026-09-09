@@ -11,6 +11,7 @@ The fixture is shaped like the real file: the six assignments the 2023 copy carr
 four names it also sets, in the same flat top-level form.
 """
 
+import re
 import sys
 from pathlib import Path
 
@@ -93,3 +94,46 @@ def test_email_use_ssl_is_removed_too():
     """The role owns both switches, so the file must not pin either one."""
     _stripped, removed = strip_email_settings("EMAIL_USE_SSL = False\n")
     assert removed == 1
+
+
+# --- the convention that made this script's first deploy a silent no-op -----------
+
+FILES = Path(__file__).resolve().parents[1] / "files"
+TASKS = (Path(__file__).resolve().parents[1] / "tasks" / "main.yml").read_text()
+
+# Anchored at column 0 as a statement, not a substring: both scripts DESCRIBE the guard in
+# their docstrings, and a plain `in` check fires on the prose warning against it.
+GUARD = re.compile(r"^if __name__ == .__main__.:", re.M)
+
+
+def scripts_the_tasks_call_main_on():
+    """Every `files/*.py` that `tasks/main.yml` pipes into a pod and then calls `main()` on.
+
+    Derived from the task file rather than listed, so a third script added the same way is
+    covered without editing this test. The census is asserted non-empty below, because a glob
+    that matches nothing makes the rule pass over an empty set.
+    """
+    return [
+        p for p in sorted(FILES.glob("*.py")) if p.name in TASKS and "main()" in TASKS
+    ]
+
+
+def test_the_census_finds_both_known_scripts():
+    names = {p.name for p in scripts_the_tasks_call_main_on()}
+    assert {"seed_discord_channel.py", "strip_local_settings_email.py"} <= names, names
+
+
+def test_no_script_carries_a_main_guard():
+    """A guard plus the appended `main()` runs the script twice, because this is stdin.
+
+    `python3` reading a script from stdin sets `__name__` to `"__main__"`, so the guard fires
+    on its own and the appended call fires again. For an idempotent script the second pass
+    reports zero changes, `changed_when` reads the LAST marker, and the task reports `ok`
+    having done the work — skipping whatever the role gated on `changed`. That is how the
+    first deploy of this script stripped the file and never restarted the pod.
+    """
+    for path in scripts_the_tasks_call_main_on():
+        assert not GUARD.search(path.read_text()), (
+            f"{path.name} carries an `if __name__` guard while tasks/main.yml also appends "
+            f"main(); on stdin that runs it twice and the task under-reports `changed`"
+        )

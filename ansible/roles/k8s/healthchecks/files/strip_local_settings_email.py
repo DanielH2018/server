@@ -19,7 +19,13 @@ sessions and password-reset tokens, it exists nowhere else (not in SOPS, not in 
 registry), and rewriting the file wholesale would silently mint a new one and log everyone out.
 Removing six lines is the smallest edit that makes the role's own settings authoritative.
 
-Piped into the pod's `python3` by `tasks/main.yml`, which prints nothing else, so the
+Piped into the pod's `python3` by `tasks/main.yml`, which appends the `main()` call the way
+it does for `seed_discord_channel.py`. There is deliberately NO `if __name__ == "__main__"`
+guard: on stdin `__name__` IS `"__main__"`, so a guard plus the appended call runs main()
+TWICE. The first pass strips the file and reports its count, the second finds nothing and
+reports 0, and `changed_when` reads the LAST marker — so the work happens and the task
+reports `ok`, skipping the restart that makes the work take effect. That shipped once, in
+PR #1492. The task prints nothing else, so the
 `LOCAL_SETTINGS_CHANGED:` marker on the last line is what Ansible reads for `changed`.
 """
 
@@ -78,7 +84,3 @@ def main() -> None:
         with open(PATH, "w", encoding="utf-8") as fh:
             fh.write(stripped)
     print("LOCAL_SETTINGS_CHANGED: %d" % removed)
-
-
-if __name__ == "__main__":
-    main()
