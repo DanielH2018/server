@@ -115,10 +115,14 @@ valheim_k8s_server_storage_class: longhorn-nobackup
 # SOPS as valheim_server_pass.
 valheim_k8s_server_name: "DBoy's Server"
 # A NEW world, at the operator's request (2026-09-09), created on first boot because no
-# worlds_local entry of this name exists. The old `Dedicated` world is NOT deleted: it stays on
-# the valheim-config claim at ~7 M, so reverting is a one-line change back to `Dedicated` — and
-# it is the vanilla save, which matters because a modded world is not reliably readable by a
-# vanilla server afterwards.
+# worlds_local entry of this name exists.
+#
+# The old `Dedicated` world is NOT deleted, and nothing in the image touches it once this name
+# changes: the server is launched with `-world "$WORLD_NAME"` (valheim-server), and the hourly
+# backup archives `$WORLDS_DIR/$WORLD_NAME` rather than the worlds_local directory
+# (valheim-backup). Both read at v1.2.0. So reverting is this one line back to `Dedicated` —
+# worth keeping, because it is the VANILLA save and a modded world is not reliably readable by
+# a vanilla server afterwards.
 valheim_k8s_world_name: Midgard
 # Listed in the in-game community browser, as before. Steam's server query (port 2457) only
 # answers for public servers; a private server is join-by-IP only.

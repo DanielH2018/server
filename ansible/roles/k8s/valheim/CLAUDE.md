@@ -123,9 +123,10 @@ modded world; a vanilla server cannot be relied on to read it afterwards.
 
 The previous world, `Dedicated`, was seeded from
 `daniel-server:/home/ubuntu/server/containers/valheim/valheim/config` and last saved
-2025-11-22. It is **not deleted** — it stays on the `valheim-config` claim at ~7 M, so
-reverting is `valheim_k8s_world_name` back to `Dedicated`. The daniel-server directory it came
-from is still the rollback behind that.
+2025-11-22. It is **not deleted, and nothing touches it while another world is selected** —
+the server runs with `-world "$WORLD_NAME"` and the hourly backup archives
+`worlds_local/$WORLD_NAME`, not the directory. So reverting is `valheim_k8s_world_name` back
+to `Dedicated`, and the daniel-server directory it came from is the rollback behind that.
 
 **`valheim-stats` totals do not reset with the world.** Its SQLite DB carries all-time
 per-player deaths and playtime across worlds by design.
