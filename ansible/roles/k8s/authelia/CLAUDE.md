@@ -28,23 +28,29 @@ takes two SOPS keys that rotate together.
 
 ## Traps
 
-### The one-time code lives in the pod's notification.txt
-Authelia uses the file notifier, so identity-verification one-time codes land in
-`/config/notification.txt` inside the Authelia pod (namespace `homelab`). No email is sent.
-The user runs the retrieval in a real terminal, because `sudo` needs a TTY and is ask-listed:
+### The one-time code arrives by email, and the startup check is off on purpose
+Authelia used the **file** notifier until 2026-09-09, which put identity-verification codes in
+`/config/notification.txt` inside the pod and made every password reset an operator task. It
+now uses the SMTP notifier against Gmail on `submissions://smtp.gmail.com:465`, authenticating
+with `smtp_notify_app_password` — the same app password Uptime Kuma and monitor-bridge use.
+Codes go to the operator's inbox; nothing needs `exec`.
 
-```
-sudo k3s kubectl -n homelab exec deploy/authelia -c authelia -- cat /config/notification.txt
-```
+**`disable_startup_check: true` is deliberate, and it belongs to `notifier`, not to
+`notifier.smtp`.** Authelia probes the SMTP server at boot and refuses to start when the probe
+fails. This portal is the forward-auth gate in front of most public routes and rolls under
+`Recreate`, so a Gmail blip would take SSO down for the fleet — including the tools to fix
+it — to protect a mail nobody is waiting on. The credential is not unwatched: monitor-bridge's
+`email_backstop` re-authenticates it on a throttle and pages through Uptime Kuma. The
+`DECIDED:` marker sits at the line; `ansible/tests/services/test_smtp_wiring.py` holds the
+nesting, because one level deeper is valid YAML that renders and lints clean and then fails to
+boot.
 
-Three traps hit on 2026-08-09:
+Codes still expire in ~5 min, the Authelia elevated-session default. Resend in the browser if
+one goes stale.
 
-- k3s runs on **daniel-box**, not daniel-server — `ssh daniel-server sudo k3s …` fails with
-  "command not found". Run it locally.
-- The readonly SA (`homelab-readonly`) cannot `exec`. Only `sudo k3s kubectl`, which uses the
-  root kubeconfig, can.
-- Codes expire in ~5 min, the Authelia elevated-session default. Resend in the browser, then
-  re-read the file — it holds only the latest notification.
+If mail is down and you need the break-glass path, the file notifier is one edit away in
+`templates/config-secret.yaml.j2`; reading it back needs `sudo k3s kubectl` on **daniel-box**
+(the readonly SA cannot `exec`, and k3s does not run on daniel-server).
 
 ### `authelia_session*` is a cookie name, not a secret name
 
