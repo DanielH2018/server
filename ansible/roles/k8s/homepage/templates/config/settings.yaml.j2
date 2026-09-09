@@ -34,21 +34,20 @@ layout:
     Calendar:
       style: column
       columns: 1
-    # BOOKMARKS SIT IN THE CALENDAR COLUMN, as the third child of a two-column parent — so the
-    # grid puts them in row two, and `custom.css.j2` pins them to column two, under the Calendar.
+    # DO NOT PUT `Bookmarks:` HERE. A BOOKMARK GROUP CANNOT LIVE INSIDE `Top Row` AT ALL, and
+    # homepage says nothing when it refuses. Both depths were tried and measured on the deployed
+    # page, 2026-09-09:
     #
-    # HOMEPAGE ACCEPTS ONLY ONE LEVEL OF NESTING HERE. Writing this entry one level deeper,
-    # under `Calendar:`, is the arrangement that needs no CSS and leaves no empty band — and
-    # homepage v1.13.2 IGNORES it. Measured on the deployed page 2026-09-09: the group fell out
-    # of Top Row entirely and rendered last, full width at 1728px, exactly as an unlaid-out
-    # group does. It does not warn, and every repo-side check stays green. Do not "simplify"
-    # this back to a nested entry.
+    #   - nested under `Calendar:`  -> ignored
+    #   - a sibling of Services and Calendar -> ignored
     #
-    # The cost of the arrangement that does work: row two's first column, under Services, is
-    # empty. That is 856px wide by the bookmarks' own height.
-    Bookmarks:
-      style: row
-      columns: 5
+    # Both times the group fell out of Top Row and rendered LAST at full width (1728px), which
+    # is exactly what an unlaid-out group does. Nothing logs it, `k8s_manifests.py` stays at
+    # 287/287, and the homepage guards stay at 12 passed — only reading the rendered page shows
+    # it. A bookmark group is only ever laid out as a TOP-LEVEL entry, which is where it now is.
+    #
+    # So the calendar column cannot hold the bookmarks. To put something under the calendar, it
+    # has to be a SERVICE tile in services.yaml.j2's `Calendar` group, not a bookmark.
   Media:
     style: row
     columns: 4
@@ -58,8 +57,11 @@ layout:
   Tools:
     style: row
     columns: 4
-  # No top-level `Bookmarks:` entry — the group is laid out inside `Top Row` above, in the
-  # Calendar column. Two entries of the same name would be one group with the first winning.
+  # Top level is the ONLY place a bookmark group is laid out — see the note in `Top Row` above
+  # for the two arrangements that were tried there and silently ignored.
+  Bookmarks:
+    style: row
+    columns: 5
   Tracking:
     style: row
     columns: 2
