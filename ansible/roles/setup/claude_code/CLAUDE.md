@@ -3,10 +3,11 @@
 Two things live here. The **install** (native installer, per-user, auto-updating) and
 **`claude-rc.service`**, the Remote Control host that lets sessions be created from a phone.
 
-Runs on daniel-box only, gated by `has_claude_code` in
-`inventory/host_vars/daniel-box.yml`. Invoked from `initial_setup.yml`, **not** `deploy.yml`
-— the role is not in `containers_list`, so `./scripts/deploy.sh --tags claude_code` exits 2
-on an unmatched tag. Deploy it with:
+Runs on every host with `has_claude_code: true` — daniel-box and daniel-server. The Remote
+Control unit is enabled only where `claude_code_rc_enabled` is also true (daniel-box);
+daniel-server carries its own cap numbers in its own host_vars. Invoked from
+`initial_setup.yml`, **not** `deploy.yml` — the role is not in `containers_list`, so
+`./scripts/deploy.sh --tags claude_code` exits 2 on an unmatched tag. Deploy it with:
 
 ```bash
 uv run ansible-playbook ansible/initial_setup.yml --tags claude_code
@@ -191,6 +192,9 @@ parent, and is unsafe here.** That slice is `StopWhenUnneeded=yes`
 `Slice=` gains an implicit `Requires=` on its slice (systemd.resource-control(5)), so the RC
 host would be stopped with it and `Restart=always` does not bring back a dependency-stopped
 unit. `user.slice` measures `StopWhenUnneeded=no`.
+Since PR 2 of the fan-out placement work the role enables linger on every session host, so
+`user-1000.slice` no longer stops at logout; the placement stands on the first reason alone —
+a slice's parent is its name and cannot be reparented.
 
 **A system service in a user-tree slice is systemd's own pattern**, not a workaround:
 `user@.service` and `user-runtime-dir@.service` both ship `Slice=user-%i.slice`, and

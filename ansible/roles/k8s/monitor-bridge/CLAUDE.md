@@ -77,7 +77,11 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     original failure, so treat it as a temporary setting rather than a fix for a noisy tile.
   - **Claude Code cgroups** — not a monitor of its own either, but a third arm inside **Memory**
     (`with_claude_cgroups`, issue #1258). It reads the `claude_cgroup_*` node-exporter textfile
-    series PR #1251 added for `claude-rc.service` and `user.slice/user-1000.slice` on daniel-box.
+    series PR #1251 added for `claude-rc.service` and `user.slice/user-1000.slice`, on every
+    host with `has_claude_code: true` (daniel-box and daniel-server). Because both hosts emit
+    the same cgroup names, the two queries group by `(origin, cgroup)` / `(origin, cgroup,
+    event)` and the verdict's message names `origin/cgroup` (e.g. `daniel-server/fleet 40.0%`)
+    rather than the cgroup alone.
     Folded here rather than given its own tile for the reason recorded at `with_pi_ports`: a new
     Kuma monitor costs a new push token in SOPS and a monitor created by hand in the UI, and
     **Memory** already owns "this box is running out of memory" — which a cgroup taking the box
@@ -89,7 +93,8 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     expected cgroup not reporting at all. `high` is deliberately NOT alerted on: MemoryHigh
     throttling is the cap working, and its value belongs to `roles/setup/claude_code`, so an arm
     keyed on it would move whenever those caps move. It is graphed instead, on the
-    `AI/claude-code-host-cgroups` board.
+    `AI/claude-code-host-cgroups` board, which carries an `origin` template variable so either
+    host's curves can be isolated.
     `CLAUDE_CGROUPS` (rendered in `templates/env-secret.yaml.j2`, `claude-rc,fleet`) is the set
     whose ABSENCE is a fault, not the set that is judged — the queries filter by metric, so
     `user-1000-slice` is watched whenever it exists and its absence never pages, because its

@@ -224,18 +224,20 @@ def with_claude_cgroups(
     # 2026-09-06, both queries below returned in 0.125-0.139s end to end, including process
     # start and the Traefik hop this check does not pay. That is the PR #482 trap — an
     # exploration query measured in place of the production one.
+    # DECIDED: Grouped by origin as well since 2026-09: daniel-server reports the same
+    # cgroup names.
     """
     if not cfg.CLAUDE_CGROUPS:
         return ok, msg
     fetch = bridge.net.prom_vector if prom_vector is None else prom_vector
     stalls = fetch(
         cfg,
-        'max by (cgroup) (rate(claude_cgroup_memory_pressure_stalled_usec_total{kind="full"}[%s]) / 10000)'
+        'max by (origin, cgroup) (rate(claude_cgroup_memory_pressure_stalled_usec_total{kind="full"}[%s]) / 10000)'
         % cfg.CLAUDE_CGROUP_STALL_WINDOW,
     )
     events = fetch(
         cfg,
-        'sum by (cgroup, event) (increase(claude_cgroup_memory_events_total{event=~"%s"}[%s]))'
+        'sum by (origin, cgroup, event) (increase(claude_cgroup_memory_events_total{event=~"%s"}[%s]))'
         % (cfg.CLAUDE_CGROUP_EVENTS, cfg.CLAUDE_CGROUP_EVENT_WINDOW),
     )
     arm_ok, arm_msg = claude_cgroup_verdict(

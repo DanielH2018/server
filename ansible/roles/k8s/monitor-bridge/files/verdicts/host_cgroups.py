@@ -11,6 +11,11 @@ Decides; does not fetch. Takes its inputs as arguments and reads no module-level
 from collections.abc import Sequence
 
 
+def _where(m: dict) -> str:
+    """`origin/cgroup`, so a fault on the second session host names the host."""
+    return "%s/%s" % (m.get("origin", "?"), m.get("cgroup", "?"))
+
+
 def claude_cgroup_verdict(
     stalls: Sequence[tuple[dict, float]],
     events: Sequence[tuple[dict, float]],
@@ -41,7 +46,7 @@ def claude_cgroup_verdict(
     IS in trouble pages ahead of a complaint about the absent one.
     """
     firing = [
-        ("%s %s +%.0f" % (m.get("cgroup", "?"), m.get("event", "?"), v), v)
+        ("%s %s +%.0f" % (_where(m), m.get("event", "?"), v), v)
         for m, v in events
         if v > 0
     ]
@@ -52,7 +57,7 @@ def claude_cgroup_verdict(
             ", ".join(d for d, _ in firing[:5]),
         )
     stalled = [
-        ("%s %.1f%%" % (m.get("cgroup", "?"), pct), pct)
+        ("%s %.1f%%" % (_where(m), pct), pct)
         for m, pct in stalls
         if pct > stall_max_pct
     ]

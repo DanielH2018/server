@@ -19,6 +19,7 @@ Run: uv run pytest ansible/roles/k8s/monitor-bridge/tests/test_check_claude_cgro
 """
 
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
@@ -28,6 +29,8 @@ from verdicts.host_cgroups import claude_cgroup_verdict
 
 STALL_METRIC = "claude_cgroup_memory_pressure_stalled_usec_total"
 EVENT_METRIC = "claude_cgroup_memory_events_total"
+
+CHECKS = Path(__file__).resolve().parents[1] / "files" / "checks"
 
 # Two of the cgroups the writer labels (`fleet` is the third, added by #1264). `claude-rc` is the
 # one whose absence is a fault; `user-1000-slice` exists only once somebody has logged in since
@@ -215,3 +218,26 @@ def test_the_queries_are_instant_not_subqueries(armed):
     arm = [q for q in queries if STALL_METRIC in q or EVENT_METRIC in q]
     assert len(arm) == 2
     assert not any(":" in q.split("[")[-1] for q in arm), arm
+
+
+def test_a_stall_on_one_host_names_that_host():
+    stalls = [
+        ({"origin": "daniel-box", "cgroup": "fleet"}, 1.0),
+        ({"origin": "daniel-server", "cgroup": "fleet"}, 40.0),
+    ]
+    ok, msg = claude_cgroup_verdict(stalls, [], ["fleet"], 10.0, "5m", "10m")
+    assert ok is False
+    assert "daniel-server/fleet 40.0%" in msg
+    assert "daniel-box/fleet" not in msg
+
+
+def test_a_cgroup_reporting_from_either_host_is_not_missing():
+    stalls = [({"origin": "daniel-server", "cgroup": "claude-rc"}, 0.0)]
+    ok, msg = claude_cgroup_verdict(stalls, [], ["claude-rc"], 10.0, "5m", "10m")
+    assert ok is True, msg
+
+
+def test_the_queries_group_by_origin():
+    src = (CHECKS / "host.py").read_text()
+    assert "max by (origin, cgroup)" in src
+    assert "sum by (origin, cgroup, event)" in src

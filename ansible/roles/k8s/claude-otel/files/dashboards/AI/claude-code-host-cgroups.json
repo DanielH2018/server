@@ -20,7 +20,7 @@
       }
     ]
   },
-  "description": "The claude_cgroup_* textfile series for claude-rc.service and user.slice/user-1000.slice on daniel-box. Issue #1258: these were scraped from 2026-09-05 with nothing graphing them.",
+  "description": "The claude_cgroup_* textfile series for claude-rc.service and user.slice/user-1000.slice on every session host. Issue #1258: these were scraped from 2026-09-05 with nothing graphing them.",
   "id": null,
   "panels": [
     {
@@ -78,8 +78,8 @@
             "type": "prometheus",
             "uid": "EGdsQqhVk"
           },
-          "expr": "rate(claude_cgroup_memory_pressure_stalled_usec_total{kind=\"full\"}[5m]) / 10000",
-          "legendFormat": "{{cgroup}} full",
+          "expr": "rate(claude_cgroup_memory_pressure_stalled_usec_total{kind=\"full\",origin=~\"$origin\"}[5m]) / 10000",
+          "legendFormat": "{{origin}} {{cgroup}} full",
           "refId": "A"
         },
         {
@@ -87,8 +87,8 @@
             "type": "prometheus",
             "uid": "EGdsQqhVk"
           },
-          "expr": "rate(claude_cgroup_memory_pressure_stalled_usec_total{kind=\"some\"}[5m]) / 10000",
-          "legendFormat": "{{cgroup}} some",
+          "expr": "rate(claude_cgroup_memory_pressure_stalled_usec_total{kind=\"some\",origin=~\"$origin\"}[5m]) / 10000",
+          "legendFormat": "{{origin}} {{cgroup}} some",
           "refId": "B"
         }
       ],
@@ -125,8 +125,8 @@
             "type": "prometheus",
             "uid": "EGdsQqhVk"
           },
-          "expr": "increase(claude_cgroup_memory_events_total{event!=\"low\"}[10m])",
-          "legendFormat": "{{cgroup}} {{event}}",
+          "expr": "increase(claude_cgroup_memory_events_total{event!=\"low\",origin=~\"$origin\"}[10m])",
+          "legendFormat": "{{origin}} {{cgroup}} {{event}}",
           "refId": "A"
         }
       ],
@@ -163,8 +163,8 @@
             "type": "prometheus",
             "uid": "EGdsQqhVk"
           },
-          "expr": "claude_cgroup_memory_current_bytes",
-          "legendFormat": "{{cgroup}} memory",
+          "expr": "claude_cgroup_memory_current_bytes{origin=~\"$origin\"}",
+          "legendFormat": "{{origin}} {{cgroup}} memory",
           "refId": "A"
         },
         {
@@ -172,8 +172,8 @@
             "type": "prometheus",
             "uid": "EGdsQqhVk"
           },
-          "expr": "claude_cgroup_memory_swap_current_bytes",
-          "legendFormat": "{{cgroup}} swap",
+          "expr": "claude_cgroup_memory_swap_current_bytes{origin=~\"$origin\"}",
+          "legendFormat": "{{origin}} {{cgroup}} swap",
           "refId": "B"
         }
       ],
@@ -222,8 +222,8 @@
             "type": "prometheus",
             "uid": "EGdsQqhVk"
           },
-          "expr": "rate(claude_cgroup_cpu_usage_usec_total[5m]) / 1000000",
-          "legendFormat": "{{cgroup}}",
+          "expr": "rate(claude_cgroup_cpu_usage_usec_total{origin=~\"$origin\"}[5m]) / 1000000",
+          "legendFormat": "{{origin}} {{cgroup}}",
           "refId": "A"
         }
       ],
@@ -260,8 +260,8 @@
             "type": "prometheus",
             "uid": "EGdsQqhVk"
           },
-          "expr": "claude_cgroup_pids_current",
-          "legendFormat": "{{cgroup}}",
+          "expr": "claude_cgroup_pids_current{origin=~\"$origin\"}",
+          "legendFormat": "{{origin}} {{cgroup}}",
           "refId": "A"
         }
       ],
@@ -276,6 +276,25 @@
     "claude-code",
     "cgroups"
   ],
+  "templating": {
+    "list": [
+      {
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "EGdsQqhVk"
+        },
+        "includeAll": true,
+        "multi": true,
+        "name": "origin",
+        "query": "label_values(claude_cgroup_memory_current_bytes, origin)",
+        "type": "query"
+      }
+    ]
+  },
   "time": {
     "from": "now-24h",
     "to": "now"
