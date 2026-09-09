@@ -1,0 +1,39 @@
+# The BepInEx plugin DLLs, baked into an image so the game server never downloads a mod at boot.
+#
+# Named `valheim` rather than `valheim-mods` on purpose: k8s/manifests keys `k8s_rebuilt_images`
+# on `manifests_service`, so a rebuilt image rolls the workload only when the two names match.
+# It holds NO server — the server is the upstream `valheim_k8s_image`, pulled as before. This
+# image is mounted only by the `mods` initContainer, which copies /mods into the plugins tree.
+#
+# Why an image rather than a boot-time download: a Thunderstore outage would otherwise turn a
+# pod restart into a server that comes up vanilla, with the pod reporting Ready either way. The
+# versions and checksums live in defaults/main.yml, so a mod bump is a reviewed repo change that
+# rebuilds this image — the same posture terraria's build has.
+FROM alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b AS fetch
+RUN apk add --no-cache curl unzip
+WORKDIR /dl
+RUN mkdir -p /out
+{% for mod in valheim_k8s_mods %}
+
+# {{ mod.name }} {{ mod.version }}
+RUN curl -sfSL -o "{{ mod.name }}.zip" "{{ mod.url }}" \
+    && echo "{{ mod.sha256 }}  {{ mod.name }}.zip" | sha256sum -c - \
+    && mkdir -p "x/{{ mod.name }}" \
+    && unzip -q "{{ mod.name }}.zip" -d "x/{{ mod.name }}" \
+    && find "x/{{ mod.name }}" -path '*__MACOSX*' -prune -o -name '*.dll' -exec cp {} /out/ \;
+{% endfor %}
+
+# Thunderstore packages ship two shapes — the DLL at the archive root (the Azumatt mods,
+# MultiUserChest, Serverside_Simulations) or under `plugins/` (AdvancedPortals, Jotunn) — so the
+# copy above flattens by extension rather than by path. `__MACOSX` is pruned because
+# Serverside_Simulations was zipped on a Mac and carries an AppleDouble
+# `._Serverside_Simulations.dll` that BepInEx would try to load as an assembly.
+#
+# The count check is the build's own red proof: `find -exec cp` succeeds when it matches nothing,
+# so a repackaged archive that moved its DLL would otherwise ship an image missing that mod and
+# a pod that starts perfectly without it.
+RUN test "$(find /out -name '*.dll' | wc -l)" -ge {{ valheim_k8s_mods | length }} \
+    || { echo "expected at least {{ valheim_k8s_mods | length }} plugin DLLs in /out"; ls -l /out; exit 1; }
+
+FROM alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b
+COPY --from=fetch /out/ /mods/

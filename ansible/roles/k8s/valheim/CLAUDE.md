@@ -7,10 +7,14 @@ daniel-server, so both the archived compose role (`roles/containers/archive/valh
 that no longer exists. `k8s/terraria` is the sibling this role copies.
 
 ## At a glance
-- **Image:** `ghcr.io/community-valheim-tools/valheim-server:1.1.0` — pinned. The upstream
+- **Image:** `ghcr.io/community-valheim-tools/valheim-server:1.2.0` — pinned. The upstream
   repo was renamed from `lloesche/valheim-server-docker`; only the new ghcr package
-  publishes semver tags (the old one is stuck on `latest`/`dev`), and `1.1.0` and `latest`
-  are the same digest today. No rolling-tag exception needed, unlike terraria.
+  publishes semver tags (the old one is stuck on `latest`/`dev`). No rolling-tag exception
+  needed, unlike terraria. **The tag pins the wrapper, not the game** — SteamCMD fetches the
+  current Valheim build on every start, so the game is on the latest release either way.
+- **Mods:** BepInEx, with seven plugins pinned in `defaults/main.yml` — see *Modding* below.
+- **Second image:** `localhost:5000/valheim:latest`, built in-cluster from
+  `templates/Dockerfile.j2`, holding only the plugin DLLs.
 - **Host:** daniel-box, by a hard `nodeSelector` — a member of the **VIP unit** with
   traefik, pihole, mosquitto and terraria. The pin and the MetalLB L2Advertisement
   nodeSelector move together or not at all; see `roles/setup/k3s/templates/metallb-pool.yaml.j2`.
@@ -60,7 +64,10 @@ that no longer exists. `k8s/terraria` is the sibling this role copies.
   threading layer raises its own thread priority and warns on every boot without it.
 - **9001 (supervisord) is deliberately unpublished.** The archived compose exposed it; it is
   unauthenticated remote process control inside the container. `SUPERVISOR_HTTP` is off.
-- **2458 is unpublished too** — crossplay backend, only bound with `CROSSPLAY=true`.
+- **2458 is unpublished too** — crossplay backend, only bound with `CROSSPLAY=true`. The
+  image's README warns that mods using RPC want gameport+2 open; none of the seven installed
+  here has needed it. If a mod's sync misbehaves, that port plus a router forward is the first
+  thing to try.
 - The image's hourly world zips go to `/opt/valheim/backups` on the nobackup claim
   (`BACKUPS_DIRECTORY`), pruned at `BACKUPS_MAX_AGE=3` days. At the default `/config/backups`
   they sat on the backed-up claim, and since a zip shares no bytes with the previous one every
@@ -70,9 +77,58 @@ that no longer exists. `k8s/terraria` is the sibling this role copies.
 - cloudflare-ddns publishes `valheim.<domain>` direct/unproxied (game traffic cannot ride
   Cloudflare's HTTP proxy) — in **both** the k8s role and the Docker rollback role.
 
+## Modding
+Added 2026-09-09 with the wrapper bump to 1.2.0 and a fresh world.
+
+- **`BEPINEX=true`** makes the image install BepInExPack beside the vanilla server in
+  `/opt/valheim/bepinex` and run the server through it. Mutually exclusive with
+  `VALHEIM_PLUS`, which this server does not use.
+- **The plugins are baked into an image, not downloaded at boot.** `templates/Dockerfile.j2`
+  fetches each Thunderstore release, verifies its sha256 and flattens the DLL out; the `mods`
+  initContainer copies them in. A boot-time download would mean a Thunderstore outage brings
+  the server up vanilla with the pod Ready either way.
+- **The built image is named `valheim`, not `valheim-mods`.** `k8s/manifests` keys
+  `k8s_rebuilt_images` on `manifests_service`, so a mismatched name pushes a new image that no
+  pod ever runs — the recorded `n8n-runners` failure. It contains no server.
+- **The set:** Jotunn 2.29.2, AdvancedPortals 1.2.0, AzuExtendedPlayerInventory 2.4.8,
+  Serverside_Simulations 1.1.9, MultiUserChest 0.6.1, AzuCraftyBoxes 1.8.15,
+  AAA_Crafting 2.1.6. Jotunn is a dependency of AdvancedPortals and MultiUserChest, not a
+  request. BepInExPack is not listed — the image installs and updates it itself.
+- **All but Serverside_Simulations are client-side too.** Azumatt's three use ServerSync,
+  which can refuse a client whose version differs, so players need the same versions locally.
+- **The initContainer writes two directories, and neither is redundant.**
+  `/config/bepinex/plugins/homelab` is the image's sanctioned drop point, which a BepInEx or
+  Valheim update rebuilds the install tree from; `/opt/valheim/bepinex/BepInEx/plugins/homelab`
+  is the tree the server actually loads, and it is only re-synced during such an update — so a
+  mod bump alone, which moves neither, would otherwise keep running the old DLLs. Both are
+  wipe-then-copy into a `homelab/` subdirectory: BepInEx scans recursively, and owning a
+  subdirectory is what makes a dropped mod actually disappear instead of lingering on the PVC.
+- **`PRE_BEPINEX_CONFIG_HOOK` is one `mkdir`, and the whole mod set depends on it.** The image
+  syncs `/config/bepinex/plugins` into the install tree only when that tree already has a
+  `plugins` directory, and BepInExPack's archive ships none — so on a fresh install the
+  documented drop-point mechanism silently does nothing. The hook is eval'd inside that
+  function one line before the sync, with `plugins_path` in scope.
+- **`UPDATE_CRON` still runs at its default `*/15`, so the game can update out from under the
+  mods.** A Valheim release the mods have not caught up with can break them with no repo change
+  and no failing check. Set `UPDATE_CRON: ""` in the deployment to make updates deliberate.
+- **Mod configs land on the backed-up claim.** The image symlinks the install's
+  `BepInEx/config` to `/config/bepinex`, so per-mod `.cfg` files sit beside the world.
+- **Verify by the plugin log lines, not by pod Ready.** The startup probe is a kernel-side
+  bind check and passes identically with zero plugins loaded:
+  `k3s kubectl -n homelab logs deploy/valheim | grep -i 'Loading \[.*\]'` should name seven.
+
 ## The world
-`Dedicated`, seeded from `daniel-server:/home/ubuntu/server/containers/valheim/valheim/config`,
-last saved 2025-11-22. Nothing was moved — that directory is the rollback.
+`Midgard` — a NEW world, created on first boot 2026-09-09 at the operator's request. It is a
+modded world; a vanilla server cannot be relied on to read it afterwards.
+
+The previous world, `Dedicated`, was seeded from
+`daniel-server:/home/ubuntu/server/containers/valheim/valheim/config` and last saved
+2025-11-22. It is **not deleted** — it stays on the `valheim-config` claim at ~7 M, so
+reverting is `valheim_k8s_world_name` back to `Dedicated`. The daniel-server directory it came
+from is still the rollback behind that.
+
+**`valheim-stats` totals do not reset with the world.** Its SQLite DB carries all-time
+per-player deaths and playtime across worlds by design.
 
 ## Editing
 - Manifests: `templates/*.yaml.j2` · Defaults: `defaults/main.yml`

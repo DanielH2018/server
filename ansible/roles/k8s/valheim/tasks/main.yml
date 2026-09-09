@@ -6,6 +6,16 @@
 # the image populates it on first start — a ~1.8 G download that takes several minutes, so
 # the first rollout is slow and the startupProbe budget is sized for it.
 
+# The BepInEx plugin set, baked into an image the `mods` initContainer copies from. Built under
+# the name `valheim` so that k8s/manifests, which keys k8s_rebuilt_images on manifests_service,
+# rolls this Deployment when a mod version changes — see defaults/main.yml.
+- name: Build the valheim mods image
+  ansible.builtin.include_role:
+    name: k8s/image-builder
+  vars:
+    image_builder_name: valheim
+    image_builder_dockerfile: "{{ playbook_dir }}/roles/k8s/valheim/templates/Dockerfile.j2"
+
 - name: Create the valheim config volume claim
   tags: [deploy]
   ansible.builtin.include_role:
