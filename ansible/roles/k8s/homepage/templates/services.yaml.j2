@@ -212,25 +212,6 @@
                   color: emerald
                   params:
                       showName: true
-        # SECOND TILE IN THE CALENDAR COLUMN, and it is here to fill space rather than because
-        # crypto prices belong beside a calendar. The Calendar renders 372px against a 516px
-        # Services column beside it, so 144px sat dead underneath it; this tile is 164px and
-        # closes that to a 20px overshoot. It also had nowhere better to be — it was a `Tracking`
-        # group of exactly one tile, stranded alone at the very bottom of the page.
-        #
-        # The group heading above therefore reads `Calendar` while holding both. That is the
-        # cost of the arrangement, accepted because the calendar is the column's subject and a
-        # heading naming both would be worse. To undo: move this block back out to a top-level
-        # `- Tracking:` group and re-add its `Tracking:` entry to the layout in settings.yaml.j2.
-        - Crypto:
-            icon: mdi-currency-btc
-            description: Market prices
-            widget:
-                type: coinmarketcap
-                currency: USD # Optional
-                symbols: [BTC, ETH, DOGE]
-                key: {{ coinmarket_api_key }}
-                defaultinterval: 24h # Optional
 
 - Media:
     # The four media services moved to the k8s cluster (slice 4), so the Docker-DNS widget URLs
@@ -379,3 +360,17 @@
         icon: mdi-link-variant
         href: https://www.{{ domain }}/
         description: Link-in-bio page
+
+# Last group on the page, deliberately. This tile briefly sat in the Calendar column to fill
+# the space under the calendar; the bookmarks do that job now, and crypto prices read better at
+# the bottom than beside a calendar.
+- Tracking:
+    - Crypto:
+        icon: mdi-currency-btc
+        description: Market prices
+        widget:
+            type: coinmarketcap
+            currency: USD # Optional
+            symbols: [BTC, ETH, DOGE]
+            key: {{ coinmarket_api_key }}
+            defaultinterval: 24h # Optional

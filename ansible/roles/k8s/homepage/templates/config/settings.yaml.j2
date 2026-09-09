@@ -31,9 +31,19 @@ layout:
     Services:
       style: row
       columns: 3
+    # BOOKMARKS SIT IN THE CALENDAR COLUMN, nested inside Calendar rather than beside it. The
+    # calendar renders 372px against a 576px Services column, and the bookmarks fill what is
+    # left: measured in the browser 2026-09-09, the two columns come out dead level at 672px.
+    #
+    # Nested INSIDE Calendar, not as a third child of Top Row. A third child lands in the grid's
+    # SECOND ROW, and with Top Row at two columns that buys the space under the Calendar at the
+    # cost of an 856x96 empty band under Services — measured both ways, not assumed.
     Calendar:
       style: column
       columns: 1
+      Bookmarks:
+        style: row
+        columns: 5
   Media:
     style: row
     columns: 4
@@ -43,13 +53,11 @@ layout:
   Tools:
     style: row
     columns: 4
-  Bookmarks:
+  # No top-level `Bookmarks:` entry — the group is laid out inside `Top Row` above, in the
+  # Calendar column. Two entries of the same name would be one group with the first winning.
+  Tracking:
     style: row
-    columns: 5
-  # No `Tracking:` entry: that group held one tile (Crypto) and is gone, the tile having moved
-  # into the Calendar column to fill the space under the calendar. A layout key naming no group
-  # is silently dead, which is the state this block was in before 2026-09-09 — do not re-add
-  # one here without re-adding the group to services.yaml.j2.
+    columns: 2
 # Type-to-filter over every tile and bookmark on the page. This is what keeps the link-only
 # Admin and Tools groups usable as they grow — the keyboard reaches a service whether or not
 # its tile is in view. searchDescriptions widens the match to the `description:` line, so
