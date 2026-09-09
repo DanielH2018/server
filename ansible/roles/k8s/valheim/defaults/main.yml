@@ -6,10 +6,72 @@
 
 # The upstream repo moved: lloesche/valheim-server-docker is now community-valheim-tools,
 # and only the new package publishes semver tags (the old ghcr.io/lloesche/valheim-server
-# package is stuck on `latest`/`dev`). 1.1.0 and latest resolve to the same digest today, so
-# pinning costs nothing and hands the bump to Renovate — unlike terraria, this image does
-# NOT need a rolling-tag exception.
-valheim_k8s_image: ghcr.io/community-valheim-tools/valheim-server:1.1.0
+# package is stuck on `latest`/`dev`). Pinning the semver tag hands the bump to Renovate —
+# unlike terraria, this image does NOT need a rolling-tag exception.
+#
+# This tag pins the WRAPPER, not the game. SteamCMD fetches the current Valheim build on every
+# start, so the server is always on the latest release regardless of what this says; 1.2.0
+# (2026-09-09) is the wrapper's own release.
+valheim_k8s_image: ghcr.io/community-valheim-tools/valheim-server:1.2.0
+
+# ── BepInEx and the mod set ─────────────────────────────────────────────────────────────
+# BEPINEX=true makes the image install BepInExPack Valheim beside the vanilla server in
+# /opt/valheim/bepinex and run the server through it. Mutually exclusive with VALHEIM_PLUS,
+# which this server does not use.
+valheim_k8s_bepinex: "true"
+
+# The plugin DLLs are baked into an image built by k8s/image-builder from templates/Dockerfile.j2
+# and copied into the plugins tree by the `mods` initContainer. Built rather than downloaded at
+# boot so a Thunderstore outage cannot silently bring the server up vanilla — see the Dockerfile.
+#
+# `valheim`, not `valheim-mods`: k8s/manifests keys `k8s_rebuilt_images` on `manifests_service`,
+# so a rebuilt image rolls the Deployment only when the built image's name matches the role's.
+# n8n-runners is the recorded case of that mismatch shipping an image no pod ever ran.
+valheim_k8s_mods_image: "{{ k8s_registry_pull_host }}/valheim:latest"
+
+# Every entry is a Thunderstore release, pinned by version AND sha256 — the build verifies the
+# checksum before it unpacks, so a re-uploaded archive fails the build instead of reaching the
+# server. To bump one, read the new version and URL from
+# `https://thunderstore.io/api/experimental/package/<namespace>/<name>/`, download it and
+# `sha256sum` it, then redeploy: the rebuild changes the image digest and rolls the pod.
+#
+# Jotunn is not a request, it is a dependency — AdvancedPortals and MultiUserChest both declare
+# it, and BepInEx loads plugins in no guaranteed order, so its absence is a hard mod failure
+# rather than a degraded one. BepInExPack itself is NOT listed: the image installs and updates
+# it on its own.
+#
+# ALL SIX REQUESTED MODS ARE CLIENT-SIDE TOO, except Serverside_Simulations. Azumatt's three use
+# ServerSync, which pushes the server's config to matching clients and can refuse a client whose
+# version differs. Players need the same versions installed locally.
+valheim_k8s_mods:
+  - name: Jotunn
+    version: 2.29.2
+    url: https://thunderstore.io/package/download/ValheimModding/Jotunn/2.29.2/
+    sha256: c018eb5876ea0b4a509c32b7926055918ea95bc4698610df6b2acc58d72029ad
+  - name: AdvancedPortals
+    version: 1.2.0
+    url: https://thunderstore.io/package/download/RandyKnapp/AdvancedPortals/1.2.0/
+    sha256: a57f237a1aad1ecb297706870e132d2939c3b55dba47e27bdea74ce318e4cb01
+  - name: AzuExtendedPlayerInventory
+    version: 2.4.8
+    url: https://thunderstore.io/package/download/Azumatt/AzuExtendedPlayerInventory/2.4.8/
+    sha256: edc0048b3d5d82c2b77b4cb9285d4653d3610173cad0dcd6b9eb385864411af6
+  - name: Serverside_Simulations
+    version: 1.1.9
+    url: https://thunderstore.io/package/download/mvp/Serverside_Simulations/1.1.9/
+    sha256: 429c02d48f5f45c7eb9f7347e11259cd2d878f70fb15f712313363d41db156a5
+  - name: MultiUserChest
+    version: 0.6.1
+    url: https://thunderstore.io/package/download/MSchmoecker/MultiUserChest/0.6.1/
+    sha256: d12ce19bf48bbacb422fee1ea20d876ee03a4f986a68f0246e3711d7ce37213f
+  - name: AzuCraftyBoxes
+    version: 1.8.15
+    url: https://thunderstore.io/package/download/Azumatt/AzuCraftyBoxes/1.8.15/
+    sha256: 042c6821d35079fe30c01c0b817da06f0ec337aec33a956b33ad23b8adc26d91
+  - name: AAA_Crafting
+    version: 2.1.6
+    url: https://thunderstore.io/package/download/Azumatt/AAA_Crafting/2.1.6/
+    sha256: 00c2a93046fb6f8de0a85e21888e3d44fe4ddfd39f5386dfeac9d15292f13667
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Two independent reasons, added 2026-08-16 with the pilot clearing: (1) probe-less — the
@@ -52,7 +114,16 @@ valheim_k8s_server_storage_class: longhorn-nobackup
 # plaintext is still in the log), so it is treated as disclosed and a fresh one lives in
 # SOPS as valheim_server_pass.
 valheim_k8s_server_name: "DBoy's Server"
-valheim_k8s_world_name: Dedicated
+# A NEW world, at the operator's request (2026-09-09), created on first boot because no
+# worlds_local entry of this name exists.
+#
+# The old `Dedicated` world is NOT deleted, and nothing in the image touches it once this name
+# changes: the server is launched with `-world "$WORLD_NAME"` (valheim-server), and the hourly
+# backup archives `$WORLDS_DIR/$WORLD_NAME` rather than the worlds_local directory
+# (valheim-backup). Both read at v1.2.0. So reverting is this one line back to `Dedicated` —
+# worth keeping, because it is the VANILLA save and a modded world is not reliably readable by
+# a vanilla server afterwards.
+valheim_k8s_world_name: Midgard
 # Listed in the in-game community browser, as before. Steam's server query (port 2457) only
 # answers for public servers; a private server is join-by-IP only.
 valheim_k8s_server_public: "true"

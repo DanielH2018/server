@@ -250,6 +250,11 @@ _ROOT_BY_DESIGN = {
     # DAC_READ_SEARCH covers the root-only sources; it writes into a root-owned emptyDir.
     ("traefik", "crowdsec-hub-install"),
     ("authelia", "crowdsec-hub-install"),
+    # Places the BepInEx plugin DLLs into /config and /opt/valheim before the server starts.
+    # Both are root-owned because the server itself runs as uid 0 (PUID/PGID default to 0), so
+    # root here is the OWNER writing its own files — no DAC capability, and a non-root uid
+    # could not write either path without an fsGroup that would recursively chown both PVCs.
+    ("valheim", "mods"),
 }
 
 # Runs as root over root-owned data. These are the ones with real work behind them: each needs an

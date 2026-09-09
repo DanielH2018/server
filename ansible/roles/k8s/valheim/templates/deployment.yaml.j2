@@ -43,6 +43,60 @@ spec:
         kubernetes.io/hostname: {{ k8s_primary_node }}
       enableServiceLinks: false
       priorityClassName: homelab-standard
+      # Places the pinned BepInEx plugins before the server starts. Runs as root, like the
+      # server container: /config and /opt/valheim are root-owned (PUID/PGID default to 0), and
+      # root writing root-owned files needs no DAC_OVERRIDE.
+      #
+      # It writes BOTH locations, and each covers a gap the other has. Neither is redundant:
+      #
+      #   /config/bepinex/plugins   the image's sanctioned drop point. `merge_mod` rebuilds the
+      #                             install tree from scratch on every BepInEx or Valheim update
+      #                             and rsyncs this directory into it, so a plugin that lives
+      #                             only in the install tree is discarded by the next update.
+      #   /opt/valheim/bepinex/…    the live install tree the server actually loads from. That
+      #                             rsync runs ONLY inside a merge, so a pod restart with
+      #                             nothing to update — a mod bump, which changes neither the
+      #                             game nor BepInEx — would otherwise leave the old DLLs
+      #                             running. Guarded on the directory existing, because it does
+      #                             not until BepInEx has installed once.
+      #
+      # Both writes are wipe-then-copy into a `homelab/` subdirectory rather than into the
+      # plugins root. BepInEx scans plugins recursively, so a subdirectory loads identically —
+      # and it makes the set this repo owns removable without touching anything BepInEx put
+      # there. Without the wipe, dropping a mod from valheim_k8s_mods would leave its DLL on the
+      # PVC and BepInEx would keep loading it.
+      initContainers:
+        - name: mods
+          image: {{ valheim_k8s_mods_image }}
+          # Pushed to a mutable :latest by k8s/image-builder, so without this the node runs
+          # whatever it cached and a mod bump never reaches the pod.
+          imagePullPolicy: Always
+          command:
+            - sh
+            - -eu
+            - -c
+            - |
+              cfg=/config/bepinex/plugins/homelab
+              rm -rf "$cfg"
+              mkdir -p "$cfg"
+              cp /mods/*.dll "$cfg/"
+              live=/opt/valheim/bepinex/BepInEx/plugins
+              if [ -d "$live" ]; then
+                rm -rf "$live/homelab"
+                mkdir -p "$live/homelab"
+                cp /mods/*.dll "$live/homelab/"
+              fi
+              echo "installed plugins:"
+              ls -l "$cfg"
+{{ hardened_security_context() }}
+          # Seven file copies totalling ~7 M. Sized for that rather than left to the namespace
+          # LimitRange, whose default is a guard rail for something unmanaged.
+{{ container_resources(cpu_limit='200m', mem_limit='64Mi', cpu_request='10m', mem_request='16Mi') }}
+          volumeMounts:
+            - name: valheim-config
+              mountPath: /config
+            - name: valheim-server
+              mountPath: /opt/valheim
       containers:
         - name: valheim
           image: {{ valheim_k8s_image }}
@@ -62,6 +116,21 @@ spec:
               value: "{{ valheim_k8s_server_public }}"
             - name: TZ
               value: "{{ tz }}"
+            # Installs BepInExPack beside the vanilla server and runs the server through it.
+            - name: BEPINEX
+              value: "{{ valheim_k8s_bepinex }}"
+            # One `mkdir`, and the mod set depends on it. The image syncs
+            # /config/bepinex/plugins into the install tree only when that tree already has a
+            # plugins directory — and BepInExPack's archive ships none, so on a fresh install
+            # the sync is skipped and the server comes up with no plugins at all. This hook is
+            # eval'd inside the function that does the sync, one line before it, with
+            # `plugins_path` in scope, so creating the directory here is what makes the
+            # documented drop-point mechanism work.
+            #
+            # `$plugins_path` is NOT expanded by kubelet — Kubernetes only substitutes the
+            # `$(VAR)` form — so the literal reaches the container's shell.
+            - name: PRE_BEPINEX_CONFIG_HOOK
+              value: 'mkdir -p "$plugins_path"'
             # The image zips worlds_local hourly and keeps three days of zips. Left at the
             # default /config/backups those land on the backed-up claim, and because a zip
             # shares no bytes with the last one, every weekly Longhorn backup re-uploaded the

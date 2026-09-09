@@ -245,6 +245,10 @@ REGISTRY_BUILT_IMAGES = {
     "nut_k8s_image",  # ansible/roles/k8s/nut/templates/Dockerfile.j2
     "pi_peer_backup_k8s_image",  # ansible/roles/k8s/pi-peer-backup/templates/Dockerfile.j2
     "terraria_k8s_image",  # ansible/roles/k8s/terraria/templates/Dockerfile.j2
+    # ansible/roles/k8s/valheim/templates/Dockerfile.j2 — the BepInEx plugin DLLs. Its FROM is
+    # watched like the rest; the MOD versions inside it are Thunderstore releases Renovate has
+    # no manager for, and valheim/CLAUDE.md carries the by-hand bump procedure instead.
+    "valheim_k8s_mods_image",
 }
 
 
