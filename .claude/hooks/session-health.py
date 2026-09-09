@@ -493,12 +493,20 @@ def format_banner(problems):
     return "\n".join(out)
 
 
-def main():
+def main(*, parked_deployer_problems=parked_deployer_problems):
     """Print the SessionStart health banner for a genuine session open, then exit 0.
 
     Skips a mid-session compaction event. Combines container, Prometheus-target and
     stale-branch problems into one banner, then separately prints other live sessions in
     this repo and any worktrees ready to remove — both regardless of health status.
+
+    Args:
+        parked_deployer_problems: override for the parked-deployer probe. Defaults to the
+            module's own `parked_deployer_problems`; a test passes a fake here instead of
+            monkeypatching the module attribute, because the monkeypatch ratchet
+            (ansible/tests/_ratchet.py) caps this file's patches on a first-party module at
+            its current allowlist entry — the same reason `parked_deployer_problems` itself
+            takes its four reads as parameters rather than patched globals.
     """
     raw = sys.stdin.read()
     try:
