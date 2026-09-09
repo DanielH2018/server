@@ -35,26 +35,49 @@ valheim_k8s_mods_image: "{{ k8s_registry_pull_host }}/valheim:latest"
 # `https://thunderstore.io/api/experimental/package/<namespace>/<name>/`, download it and
 # `sha256sum` it, then redeploy: the rebuild changes the image digest and rolls the pod.
 #
-# Jotunn is not a request, it is a dependency — AdvancedPortals and MultiUserChest both declare
-# it, and BepInEx loads plugins in no guaranteed order, so its absence is a hard mod failure
-# rather than a degraded one. BepInExPack itself is NOT listed: the image installs and updates
-# it on its own.
+# BepInExPack is NOT listed: the image installs and updates it on its own.
 #
 # EVERY MOD LIVE HERE IS CLIENT-SIDE TOO. Azumatt's three use ServerSync, which pushes the
 # server's config to matching clients and can refuse a client whose version differs. Players
 # need the same versions installed locally.
 #
-# Six of the seven requested are live; Serverside_Simulations is disabled below, with the
-# reason at its entry.
+# SIX OF THE SEVEN ARE LIVE. Valheim 1.0 landed ahead of the mod ecosystem: Jotunn comes from
+# a third-party rebuild for now (see its entry), and Serverside_Simulations sits commented in
+# place with the evidence at its own entry. Restoring it is uncommenting and refreshing a pin.
 valheim_k8s_mods:
+  # Jotunn, from ReefTeam's FORK rather than ValheimModding's own package — a deliberate,
+  # temporary swap, and the only third-party rebuild in this set.
+  #
+  # ValheimModding-Jotunn 2.29.2 (2026-07-13) predates Valheim 1.0 and BREAKS JOINING
+  # OUTRIGHT. Its SynchronizationManager patches `ZNet.RPC_PeerInfo` to BUFFER the joining
+  # client's packages, replaying them and calling `socket.VersionMatch()` only once its own
+  # `SynchronizeInitialData` coroutine finishes. On l-1.0.7 that coroutine throws
+  # `MissingFieldException: ZRoutedRpc.Everybody` on its first send, so the buffer is never
+  # flushed — the player spawns and is then stuck, unable to move, with the camera shaking,
+  # while the server log shows an ordinary successful connect. Observed live 2026-09-09 16:39,
+  # stack naming Jotunn.
+  #
+  # ReefTeam-Jotunn 2.29.3 is 2.29.2 rebuilt against 1.0.7. Checked rather than taken on
+  # trust, before it was pinned here: the `Everybody` reference is GONE from the assembly
+  # (upstream 2.29.2 has 1 occurrence, this has 0), and the plugin GUID is still
+  # `com.jotunn.jotunn`, which is what lets AdvancedPortals and MultiUserChest resolve it.
+  #
+  # GO BACK TO UPSTREAM once ValheimModding ships its own 1.0 build — the fix is merged to
+  # its `dev` branch (PR #483, 2026-09-09) but unreleased. Both packages carry the same GUID
+  # and the higher version wins, so never list both. The sha256 pin is what stops an
+  # unofficial rebuild changing under us.
   - name: Jotunn
-    version: 2.29.2
-    url: https://thunderstore.io/package/download/ValheimModding/Jotunn/2.29.2/
-    sha256: c018eb5876ea0b4a509c32b7926055918ea95bc4698610df6b2acc58d72029ad
+    version: 2.29.3
+    url: https://thunderstore.io/package/download/ReefTeam/Jotunn/2.29.3/
+    sha256: 8e4449cfbad8a57c6542d9a5110e9f4e85475f3747050166dc0cf9a98e724f56
   - name: AdvancedPortals
     version: 1.2.0
     url: https://thunderstore.io/package/download/RandyKnapp/AdvancedPortals/1.2.0/
     sha256: a57f237a1aad1ecb297706870e132d2939c3b55dba47e27bdea74ce318e4cb01
+  - name: MultiUserChest
+    version: 0.6.1
+    url: https://thunderstore.io/package/download/MSchmoecker/MultiUserChest/0.6.1/
+    sha256: d12ce19bf48bbacb422fee1ea20d876ee03a4f986a68f0246e3711d7ce37213f
   - name: AzuExtendedPlayerInventory
     version: 2.4.8
     url: https://thunderstore.io/package/download/Azumatt/AzuExtendedPlayerInventory/2.4.8/
@@ -73,10 +96,6 @@ valheim_k8s_mods:
   #   version: 1.1.9
   #   url: https://thunderstore.io/package/download/mvp/Serverside_Simulations/1.1.9/
   #   sha256: 429c02d48f5f45c7eb9f7347e11259cd2d878f70fb15f712313363d41db156a5
-  - name: MultiUserChest
-    version: 0.6.1
-    url: https://thunderstore.io/package/download/MSchmoecker/MultiUserChest/0.6.1/
-    sha256: d12ce19bf48bbacb422fee1ea20d876ee03a4f986a68f0246e3711d7ce37213f
   - name: AzuCraftyBoxes
     version: 1.8.15
     url: https://thunderstore.io/package/download/Azumatt/AzuCraftyBoxes/1.8.15/
