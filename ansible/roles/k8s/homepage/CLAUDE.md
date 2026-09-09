@@ -39,7 +39,16 @@ Edit the `.j2` files, never the live config: homepage seeds any missing file int
   Assistant. Three columns divides nine exactly and lands at 396px. When you add or remove a
   tile in a laid-out group, re-check that the count still divides, and measure in the browser
   rather than reasoning about it — `getBoundingClientRect` on the `ul.services-list` gives the
-  column height and `scrollWidth > clientWidth` catches a tile whose stats no longer fit.
+  column height.
+- **A clipped widget is invisible to a check on the tile's `<li>`.** homepage lays a widget's
+  stat blocks out as a non-wrapping flex row inside a card carrying Tailwind's `overflow-clip`,
+  so a row wider than the card is cut off on the right with no console error, no pod log and a
+  still-rendering tile. The clipping happens on the `div.service-card` INSIDE the `<li>`, so the
+  `<li>`'s own `scrollWidth` equals its `clientWidth` and reads clean — that is exactly how the
+  three-column change shipped having cut 63px off Karakeep's fourth stat. Test every descendant:
+  `li.querySelectorAll('*')` filtered on `scrollWidth > clientWidth + 1 && clientWidth > 0`.
+  `custom.css.j2` now wraps those blocks two per row, which also equalises tile height — every
+  widget carries two to four stats, so all of them occupy two stat rows.
 - **The groups split by WIDGET, not by topic.** A widgeted tile is several lines tall and a
   link-only tile is one line, so a group holding both leaves ragged holes. `Services`, `Media`
   and `Tracking` hold the widgeted tiles; `Admin` and `Tools` hold link-only ones, four per row.

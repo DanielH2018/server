@@ -1,3 +1,52 @@
+/* WIDGET STAT BLOCKS — wrap at two per row instead of overflowing the card.
+ *
+ * homepage lays a widget's stat blocks out as a non-wrapping `flex-row` inside a card that
+ * carries Tailwind's `overflow-clip`, so a row wider than the card is SILENTLY CUT OFF on the
+ * right rather than wrapped or scrolled. Karakeep's four stats needed 335px in a 272px card:
+ * 63px of "HIGHLIGHTS" simply vanished. Nothing reports this — no console error, no pod log,
+ * and the tile keeps rendering.
+ *
+ * Two stats per row rather than three or a content-based fit, because it also EQUALISES TILE
+ * HEIGHT, which three does not. Every widget here carries two, three or four stats, so at two
+ * per row they all occupy exactly two stat rows and every widgeted tile lands on the same
+ * height. Measured 2026-09-09 at 1920px: 13 widgeted tiles, all 172px, against 120px/136px
+ * before. `.services-list` is a CSS grid, so tiles already stretch to their row's tallest
+ * member — making the content uniform is what makes the stretch invisible.
+ *
+ * `overflow-wrap: anywhere` is the backstop for a narrow viewport. At 1280px a single long
+ * label ("BOOKMARKS") still overran its half-width block by 7px, and a one-word label has no
+ * break opportunity of its own. It engages only when a label genuinely does not fit, so it
+ * changes nothing at 1920px.
+ *
+ * The `w-10` rule is the coinmarketcap widget's percent-change column: a fixed 2.5rem against
+ * "-0.46%", which needs 43px. Negative values with two decimals clipped by 3px.
+ *
+ * #my-calendar is excluded throughout — it is a single full-width child laid out as a column
+ * by the rules below, and a 50% flex-basis has no business there.
+ *
+ * VERIFY BY MEASURING, not by looking: `scrollWidth > clientWidth` on every descendant of
+ * `li.service` finds a clipped block; the tile's own `<li>` does NOT show it, because the
+ * clipping happens on the `div.service-card` inside it. Checking the `<li>` is what let this
+ * ship in the first place.
+ */
+li.service:not(#my-calendar) .service-container {
+  flex-wrap: wrap;
+}
+
+li.service:not(#my-calendar) .service-container > div {
+  flex: 1 1 calc(50% - 0.5rem);
+  min-width: 0;
+}
+
+li.service:not(#my-calendar) .service-container > div > div {
+  overflow-wrap: anywhere;
+}
+
+li.service:not(#my-calendar) .service-container .font-bold.w-10 {
+  width: auto;
+  min-width: 3.25rem;
+}
+
 #my-calendar .service-container > div {
   display: flex;
   flex-direction: column;
