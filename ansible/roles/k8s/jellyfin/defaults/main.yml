@@ -33,7 +33,8 @@ k8s_autodeploy_snapshot_pvcs: [jellyfin-config]  # noqa var-naming[no-role-prefi
 # what this role creates can see the coupling (2026-08-22 review M2).
 k8s_autodeploy_unreverted_claims: [media-data]  # noqa var-naming[no-role-prefix]
 
-# 206 M at B5, of which ~180 M is data/ (the library database, artwork, trickplay). longhorn, not
+# 206 M at B5 (2026-08-16); grew past 3Gi's headroom by 2026-09-09 — see the jellyfin_k8s_size
+# comment below. data/ holds the library database, artwork and trickplay. longhorn, not
 # longhorn-nobackup: re-scanning a library rebuilds the metadata but loses watch state, user
 # accounts and API keys.
 jellyfin_k8s_claim: jellyfin-config
@@ -44,7 +45,15 @@ jellyfin_k8s_claim: jellyfin-config
 # actually the problem cannot be read off anything Longhorn or B2 expose. So it is being tested
 # rather than assumed, with B2 Reachable as the readout. docs/b2-transaction-cap-monitoring-gaps.md.
 jellyfin_k8s_storage_class: longhorn
-jellyfin_k8s_size: 3Gi
+# Raised from 3Gi to 8Gi on 2026-09-09: the library database, artwork and trickplay data in
+# data/ outgrew 3Gi at 20 days old and tripped Jellyfin's own startup capacity check
+# (StorageHelper.TestDataDirectorySize requires 2GiB free). Cache and transcode scratch have
+# been on an emptyDir since 2026-08-16 (see the `jellyfin-cache` volume below), so this is
+# ordinary durable-data growth, not a leak of transient files onto this PVC. Longhorn's
+# `allowVolumeExpansion` is true on the `longhorn` StorageClass, and 8Gi (8589934592 bytes) is
+# a multiple of 16MiB and of every smaller block-size candidate, so the expansion is real
+# regardless of which size Longhorn checks against.
+jellyfin_k8s_size: 8Gi
 
 # READ-ONLY, and mounted TWICE — see the deployment template. Not a tidy-up target.
 jellyfin_k8s_media_claim: media-data
