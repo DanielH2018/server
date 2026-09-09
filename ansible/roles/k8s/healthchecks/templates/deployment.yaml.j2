@@ -60,9 +60,26 @@ spec:
               value: "{{ email }}"
             - name: EMAIL_HOST
               value: smtp.gmail.com
+            # Implicit TLS on 465, not STARTTLS on 587. Gmail answered 587 with
+            # `535 5.7.8 Username and Password not accepted` on 2026-09-09, using the same
+            # account and app password that Authelia authenticates on 465 and that
+            # monitor-bridge's `email_backstop` logs in with through `smtplib.SMTP_SSL`, also
+            # on 465. Username, password and Secret wiring were all ruled out first — the
+            # Secret reaches the pod through `envFrom` with `Optional: false`, the role sets
+            # no `EMAIL_HOST_PASSWORD_FILE` (which `envsecret` would prefer over the env
+            # var), and `DEFAULT_FROM_EMAIL` resolves to the account Authelia authenticated
+            # as. The transport was the only difference left, and every other consumer in the
+            # homelab was already on 465.
+            #
+            # EMAIL_USE_TLS and EMAIL_USE_SSL are mutually exclusive: Django raises when both
+            # are true, so the False below is load-bearing rather than tidiness. Healthchecks
+            # reads both through `envbool`, which accepts only "", "True" and "False" and
+            # raises on anything else — hence the exact literals.
             - name: EMAIL_PORT
-              value: "587"
+              value: "465"
             - name: EMAIL_USE_TLS
+              value: "False"
+            - name: EMAIL_USE_SSL
               value: "True"
             - name: SUPERUSER_EMAIL
               value: "{{ email }}"

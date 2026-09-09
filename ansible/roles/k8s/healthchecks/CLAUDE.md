@@ -46,6 +46,18 @@ noticed instead of silently going quiet. See repo-root `CLAUDE.md` for shared co
   sends as `DEFAULT_FROM_EMAIL: {{ email }}`. `ansible/tests/services/test_smtp_wiring.py`
   holds those two to each other. Discord remains the channel alerts actually leave over;
   this is the reset/report path Django uses.
+- **Gmail rejects this account's app password on STARTTLS/587 and accepts it on implicit
+  TLS/465.** A test notification on 2026-09-09 returned `535 5.7.8 Username and Password not
+  accepted` while Authelia was delivering on `submissions://smtp.gmail.com:465` with the same
+  `email` + `smtp_notify_app_password` pair, and monitor-bridge's `email_backstop` logs in
+  through `smtplib.SMTP_SSL` on 465 with it too. Username, password and Secret delivery were
+  each ruled out first: the Secret reaches the pod through `envFrom` with `Optional: false`,
+  the role sets no `EMAIL_HOST_PASSWORD_FILE` (healthchecks' `envsecret` prefers that over the
+  env var when it exists), and `DEFAULT_FROM_EMAIL` resolves to the account Authelia
+  authenticated as. So the Deployment sets `EMAIL_PORT: 465`, `EMAIL_USE_SSL: True` and
+  `EMAIL_USE_TLS: False`. **The False is load-bearing** — Django raises at startup when both
+  switches are true, and healthchecks reads each through `envbool`, which accepts only `""`,
+  `True` and `False`. Four consumers, one transport.
 - **A revert-past-creation coupling for any future auto-deploy promotion:** check UUIDs here
   are baked into ping URLs in unrelated fleet crons. A Longhorn revert past a check's
   creation leaves those crons pinging a dead UUID, silently.
