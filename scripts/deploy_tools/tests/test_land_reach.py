@@ -155,7 +155,7 @@ def test_setup_role_hosts_census_is_not_vacuous():
         "fake_remux",
     } <= set(roles)
     assert roles["initial_setup"] is None
-    assert roles["gitops_deploy"]  # a real `when:` gate, not None
+    assert roles["optimize_pi"]  # a real `when:` gate, not None
 
 
 def test_remaining_setup_hosts_note_flags_pr_1002():
@@ -197,8 +197,9 @@ def test_an_unroutable_setup_role_has_no_remaining_hosts():
 
 @pytest.fixture
 def _synthetic_setup_role_tree(_synthetic_setup_inventory, tmp_path):
-    """`config_files` (no role gate) with tasks that ship three files under three gates:
-    one box-only task, one whose gate sits on the `import_tasks` above it, one ungated."""
+    """`config_files` (no role gate) with tasks that ship four files under four gates: one
+    box-only task, one whose gate sits on the `import_tasks` above it, one ungated, and one
+    behind an `include_tasks` -- the docker_install/gitops_deploy dispatcher shape."""
     playbook, all_vars, host_vars_dir = _synthetic_setup_inventory
     roles_dir = tmp_path / "roles"
     tasks = roles_dir / "config_files" / "tasks"
@@ -212,6 +213,24 @@ def _synthetic_setup_role_tree(_synthetic_setup_inventory, tmp_path):
                     "ansible.builtin.import_tasks": "box.yml",
                     "when": "has_gitops",
                 },
+                {
+                    "name": "reap tools",
+                    "ansible.builtin.include_tasks": "reap.yml",
+                    "when": "not has_gitops",
+                },
+            ]
+        )
+    )
+    (tasks / "reap.yml").write_text(
+        yaml.safe_dump(
+            [
+                {
+                    "name": "Remove the retired script",
+                    "ansible.builtin.file": {
+                        "path": "/opt/reap_only.py",
+                        "state": "absent",
+                    },
+                }
             ]
         )
     )
@@ -287,6 +306,24 @@ def test_setup_file_hosts_inherits_the_gate_on_the_import_and_reads_a_loop(
         host_vars_dir=host_vars_dir,
         roles_dir=roles_dir,
     ) == frozenset({"daniel-box"})
+
+
+def test_setup_file_hosts_follows_include_tasks_the_same_as_import_tasks(
+    _synthetic_setup_role_tree,
+):
+    """The docker_install/gitops_deploy dispatcher shape: a file shipped behind an
+    `include_tasks` gate narrows the same way one behind `import_tasks` does. Without this,
+    a dispatcher's teardown-only file reads as reaching every host the role does, which is
+    the exact #723 regression this repo already paid for once."""
+    playbook, all_vars, host_vars_dir, roles_dir = _synthetic_setup_role_tree
+    assert land_reach.setup_file_hosts(
+        "config_files",
+        "ansible/roles/setup/config_files/files/reap_only.py",
+        playbook=playbook,
+        all_vars=all_vars,
+        host_vars_dir=host_vars_dir,
+        roles_dir=roles_dir,
+    ) == frozenset({"daniel-server", "daniel-pi"})
 
 
 def test_setup_file_hosts_falls_back_to_the_role_when_no_task_names_the_file(

@@ -17,7 +17,7 @@ _UNIT = (
     _REPO / "ansible/roles/setup/gitops_deploy/templates/staging-backfill.service.j2"
 )
 _TIMER = _REPO / "ansible/roles/setup/gitops_deploy/templates/staging-backfill.timer.j2"
-_TASKS = _REPO / "ansible/roles/setup/gitops_deploy/tasks/main.yml"
+_TASKS = _REPO / "ansible/roles/setup/gitops_deploy/tasks/install.yml"
 _HARNESS = _REPO / "scripts/deploy_tools/backfill_staging_gate.py"
 
 

@@ -123,8 +123,9 @@ def setup_role_hosts(
 
     THE HOLE THIS CLOSES. `self_applied()` says a setup role is the tick's to apply, but the
     tick only ever runs on ONE host -- the one `gitops_deploy` is armed on (`has_gitops`,
-    daniel-box only: `roles: [{role: gitops_deploy, when: has_gitops}, ...]` in
-    initial_setup.yml, and `has_gitops` is true only in daniel-box's host_vars).
+    daniel-box only: `roles: [{role: gitops_deploy}, ...]` in initial_setup.yml gates no
+    host at the playbook level -- the role dispatches internally, and `has_gitops` is true
+    only in daniel-box's host_vars).
     `initial_setup.yml`'s own `hosts:` is `{{ target | default(lookup('pipe','hostname')) }}`
     -- one host per run -- so a role with NO `when:` gate (`initial_setup` itself among them)
     reaches every host the playbook is EVER run on, and the tick converging on daniel-box says
@@ -148,7 +149,18 @@ def setup_role_hosts(
 
 
 _SETUP_ROLES_DIR = ANSIBLE / "roles" / "setup"
-_IMPORT_KEYS = ("ansible.builtin.import_tasks", "import_tasks")
+# include_tasks and import_tasks read alike here: the only place they diverge is a
+# runtime-templated target (`include_tasks: "{{ var }}.yml"`), and _gates_in already skips
+# that case (`"{{" in target`) rather than following it. A static include_tasks -- the
+# docker_install/gitops_deploy dispatcher shape, `include_tasks: install.yml` under
+# `when: has_gitops` -- carries that when: to the file it pulls in the same way a static
+# import_tasks does.
+_IMPORT_KEYS = (
+    "ansible.builtin.import_tasks",
+    "import_tasks",
+    "ansible.builtin.include_tasks",
+    "include_tasks",
+)
 _SHIPPED_DIRS = ("templates", "files")
 
 

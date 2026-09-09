@@ -42,7 +42,11 @@ _NEGATIVE = re.compile(r"^\s*when:\s*not\s+(has_\w+)\s*$", re.M)
 # with the member it dropped instead of quietly protecting nothing -- which is the exact way
 # this guard could go green while checking less than it did.
 KNOWN_DISPATCHERS = frozenset(
-    {("docker_install", "has_docker"), ("hypervisor", "has_hypervisor")}
+    {
+        ("docker_install", "has_docker"),
+        ("hypervisor", "has_hypervisor"),
+        ("gitops_deploy", "has_gitops"),
+    }
 )
 
 

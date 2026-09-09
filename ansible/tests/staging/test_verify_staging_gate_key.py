@@ -26,7 +26,7 @@ from _helpers import REPO
 _REPO = REPO
 _SCRIPT = _REPO / "scripts" / "deploy_tools" / "verify_staging_gate_key.sh"
 _GITOPS_TASKS = (
-    _REPO / "ansible" / "roles" / "setup" / "gitops_deploy" / "tasks" / "main.yml"
+    _REPO / "ansible" / "roles" / "setup" / "gitops_deploy" / "tasks" / "install.yml"
 )
 
 _MARKER = "staging-gate: refused: unknown operation"

@@ -1,0 +1,27 @@
+---
+# The false half. Only the units: /opt/gitops-deploy and /etc/gitops-deploy stay, because a
+# host flipped back to has_gitops: true re-renders them anyway and the config.env there holds
+# nothing the install half does not rewrite.
+
+- name: Check whether the deployer timer was ever installed here
+  ansible.builtin.stat:
+    path: /etc/systemd/system/gitops-deploy.timer
+  register: gitops_deploy_timer_unit
+
+- name: Stop and disable the GitOps deploy timer
+  ansible.builtin.systemd:
+    name: gitops-deploy.timer
+    enabled: false
+    state: stopped
+  become: true
+  when: gitops_deploy_timer_unit.stat.exists
+
+- name: Remove the deployer unit files
+  ansible.builtin.file:
+    path: "/etc/systemd/system/{{ item }}"
+    state: absent
+  become: true
+  loop:
+    - gitops-deploy.service
+    - gitops-deploy.timer
+  notify: Reload systemd
