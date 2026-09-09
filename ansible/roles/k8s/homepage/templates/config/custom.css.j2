@@ -29,8 +29,32 @@
  * clipping happens on the `div.service-card` inside it. Checking the `<li>` is what let this
  * ship in the first place.
  */
+/* THE CARD MUST FILL THE TILE, or one sparse widget still looks different.
+ *
+ * `.services-list` is a CSS grid, so every `<li>` in a row is stretched to the row's tallest
+ * member — but the visible `div.service-card` INSIDE it is not, and that card is what a reader
+ * sees. FreshRSS carries two stats where every other widget carries three or four, so it
+ * occupied one stat row instead of two: its `<li>` measured 172px like the rest while its card
+ * measured 112px against their 164px. Measuring the `<li>` says the tiles match; measuring the
+ * card says one of them is two thirds the height of its neighbours.
+ *
+ * `height: 100%` makes the card take the height the grid already gave the `<li>`, and the
+ * column flex lets the stat container absorb the difference. `align-content: flex-start` keeps
+ * the stat ROWS at their natural 44px — without it a single-row widget stretches that row to
+ * fill the card and FreshRSS's blocks come out 104px against everyone else's 44px, which trades
+ * one inconsistency for another. Measured 2026-09-09 at 1920px: all nine cards 172px, every
+ * block 44x128.
+ */
+li.service:not(#my-calendar) > div.service-card {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
 li.service:not(#my-calendar) .service-container {
   flex-wrap: wrap;
+  flex: 1 1 auto;
+  align-content: flex-start;
 }
 
 li.service:not(#my-calendar) .service-container > div {
