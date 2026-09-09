@@ -1,0 +1,62 @@
+This issue lists Renovate updates and detected dependencies. Read the [Dependency Dashboard](https://docs.renovatebot.com/key-concepts/dashboard/) docs to learn more.<br>[View this repository on the Mend.io Web Portal](https://developer.mend.io/github/DanielH2018/server).
+
+## Awaiting Schedule
+
+The following updates are awaiting their schedule. To get an update now, click on a checkbox below.
+
+ - [ ] <!-- unschedule-branch=renovate/prek -->Update dependency prek to v0.5.2
+ - [ ] <!-- unschedule-branch=renovate/k8s-image-crowdsecuritycrowdsec -->Update crowdsecurity/crowdsec Docker tag to v1.8.0
+ - [ ] <!-- unschedule-branch=renovate/lscr.io-linuxserver-code-server-4.x -->Update lscr.io/linuxserver/code-server Docker tag to v4.136.2-ls363
+ - [ ] <!-- unschedule-branch=renovate/k8s-image-mobybuildkit -->Update moby/buildkit Docker tag to v0.33.0
+ - [ ] <!-- unschedule-branch=renovate/lock-file-maintenance -->Lock file maintenance
+ - [ ] <!-- create-all-awaiting-schedule-prs -->🔐 **Create all awaiting schedule PRs at once** 🔐
+
+## Pending Status Checks
+
+The following updates await pending status checks. To force their creation now, click on a checkbox below.
+
+ - [ ] <!-- unpend-branch=renovate/k8s-image-ghcr.ioalam00000bentopdf -->Update ghcr.io/alam00000/bentopdf:latest Docker digest to 6ef493c
+ - [ ] <!-- unpend-branch=renovate/k8s-image-ghcr.iogethomepagehomepage -->Update ghcr.io/gethomepage/homepage:latest Docker digest to 753eeb0
+ - [ ] <!-- unpend-branch=renovate/k8s-image-ghcr.iohaveagitgattdarr -->Update ghcr.io/haveagitgat/tdarr:latest Docker digest to 45742f0
+ - [ ] <!-- unpend-branch=renovate/k8s-image-ghcr.iokarakeep-appkarakeep -->Update ghcr.io/karakeep-app/karakeep:release Docker digest to b069e43
+ - [ ] <!-- unpend-branch=renovate/k8s-image-ghcr.ioschakajanitorr -->Update ghcr.io/schaka/janitorr:jvm-stable Docker digest to fa86a05
+ - [ ] <!-- unpend-branch=renovate/k8s-image-lscr.iolinuxserverfreshrss -->Update lscr.io/linuxserver/freshrss:latest Docker digest to e5a2f19
+ - [ ] <!-- unpend-branch=renovate/k8s-image-lscr.iolinuxserverhealthchecks -->Update lscr.io/linuxserver/healthchecks:latest Docker digest to e762ed8
+ - [ ] <!-- unpend-branch=renovate/k8s-image-lscr.iolinuxserverqbittorrent -->Update lscr.io/linuxserver/qbittorrent:latest Docker digest to 8d48fa8
+ - [ ] <!-- unpend-branch=renovate/k8s-image-lscr.iolinuxserverspeedtest-tracker -->Update lscr.io/linuxserver/speedtest-tracker:latest Docker digest to 9ebe34d
+ - [ ] <!-- unpend-branch=renovate/k8s-image-lscr.iolinuxserverwireguard -->Update lscr.io/linuxserver/wireguard:latest Docker digest to bf03578
+ - [ ] <!-- unpend-branch=renovate/k8s-image-nginx -->Update nginx:alpine Docker digest to 72ba65e
+ - [ ] <!-- unpend-branch=renovate/k8s-image-autheliaauthelia -->Update authelia/authelia Docker tag to v4.39.24
+ - [ ] <!-- unpend-branch=renovate/intro-skipper-(manual-finish-the-sha256-+-targetabi-check-the-jellyfin-line) -->Update dependency intro-skipper/intro-skipper to v1.10.11.24
+ - [ ] <!-- unpend-branch=renovate/k8s-image-gcr.iogo-containerregistrycrane -->Update gcr.io/go-containerregistry/crane Docker tag to v0.22.1
+ - [ ] <!-- unpend-branch=renovate/meilisearch-(manual-upgrade-db-format-migration) -->Update getmeili/meilisearch Docker tag to v1.53.2
+ - [ ] <!-- unpend-branch=renovate/k8s-image-lscr.iolinuxserverradarr -->Update lscr.io/linuxserver/radarr Docker tag to v6.3.0.10514-ls315
+ - [ ] <!-- unpend-branch=renovate/k8s-image-lscr.iolinuxserversonarr -->Update lscr.io/linuxserver/sonarr Docker tag to v4.0.19.2979-ls323
+ - [ ] <!-- unpend-branch=renovate/k8s-image-traefik -->Update traefik Docker tag to v3.7.13
+ - [ ] <!-- unpend-branch=renovate/ansible-galaxy-collections-(manual-lockstep-with-ansible-core) -->Update ansible galaxy collections (manual — lockstep with ansible-core) (`community.docker`, `community.general`)
+ - [ ] <!-- unpend-branch=renovate/karakeep-time-tagger-pip-deps-(manual-track-the-pinned-app) -->Update dependency karakeep-python-api to v1.9.0
+ - [ ] <!-- unpend-branch=renovate/vale-clivale -->Update dependency vale-cli/vale to v3.20.0
+ - [ ] <!-- unpend-branch=renovate/k8s-image-ghcr.iokoenkkzigbee2mqtt -->Update ghcr.io/koenkk/zigbee2mqtt Docker tag to v2.14.1
+ - [ ] <!-- unpend-branch=renovate/k8s-image-lscr.iolinuxserverbazarr -->Update lscr.io/linuxserver/bazarr Docker tag to v1.6.0-ls363
+ - [ ] <!-- unpend-branch=renovate/k8s-image-lscr.iolinuxserverhomeassistant -->Update lscr.io/linuxserver/homeassistant Docker tag to v2026.9.1-ls245
+ - [ ] <!-- unpend-branch=renovate/k8s-image-lscr.iolinuxserverprowlarr -->Update lscr.io/linuxserver/prowlarr Docker tag to v2.5.2.5491-ls159
+ - [ ] <!-- unpend-branch=renovate/k8s-image-nginxincnginx-unprivileged -->Update nginxinc/nginx-unprivileged Docker tag to v1.31
+ - [ ] <!-- unpend-branch=renovate/k8s-image-otelopentelemetry-collector-contrib -->Update otel/opentelemetry-collector-contrib Docker tag to v0.160.0
+
+## Open
+
+The following updates have all been created. To force a retry/rebase of any, click on a checkbox below.
+
+ - [ ] <!-- rebase-branch=renovate/n8n-(lockstep-app-+-task-runners) -->[Update n8n (lockstep: app + task runners)](../pull/1440) (`n8nio/n8n`, `n8nio/runners`)
+ - [ ] <!-- rebase-branch=renovate/k3s-control-plane-(manual-plan-the-upgrade-mind-longhorn's-version-skips) -->[Update dependency k3s-io/k3s to v1.36.4+k3s1](../pull/1036)
+ - [ ] <!-- rebase-all-open-prs -->**Click on this checkbox to rebase all open PRs at once**
+
+## Detected Dependencies
+
+<details><summary>ansible (1)</summary>
+<blockquote>
+
+<details><summary>ansible/roles/k8s/n8n/tasks/main.yml</summary>
+
+
+<!-- Detected Dependencies listing truncated: nothing in notify_logic parses it. -->
