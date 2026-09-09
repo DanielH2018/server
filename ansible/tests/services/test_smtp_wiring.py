@@ -113,6 +113,83 @@ def test_empty_password_is_flagged():
     assert not smtp_password_is_present({"EMAIL_HOST_PASSWORD": ""})
 
 
+# Django's two TLS switches are mutually exclusive, and healthchecks reads each through
+# `envbool`, which accepts only "", "True" and "False" and raises on anything else. So a
+# transport is described by the triple, and three of its combinations are broken in different
+# ways: both true raises at startup, both false sends the AUTH in the clear, and the right
+# switch against the wrong port never connects.
+TRANSPORTS = {
+    "implicit-tls-465": {
+        "EMAIL_PORT": "465",
+        "EMAIL_USE_TLS": "False",
+        "EMAIL_USE_SSL": "True",
+    },
+    "starttls-587": {
+        "EMAIL_PORT": "587",
+        "EMAIL_USE_TLS": "True",
+        "EMAIL_USE_SSL": "False",
+    },
+}
+
+
+def uses_the_proven_gmail_transport(env):
+    """True when the transport is implicit TLS on 465, and coherently so.
+
+    Gmail answered STARTTLS on 587 with `535 Username and Password not accepted` on
+    2026-09-09, using the account and app password it accepts on 465. Every other consumer
+    here — Authelia, Uptime Kuma, monitor-bridge's `email_backstop` — was already on 465, so
+    this pins healthchecks to the one transport with live evidence behind it.
+    """
+    return (
+        env.get("EMAIL_PORT") == "465"
+        and env.get("EMAIL_USE_SSL") == "True"
+        and env.get("EMAIL_USE_TLS") == "False"
+    )
+
+
+def tls_switches_are_coherent(env):
+    """True when exactly one of Django's two TLS switches is on.
+
+    Both on is the one that bites hardest: Django raises `EMAIL_USE_TLS/EMAIL_USE_SSL are
+    mutually exclusive` at startup, so the pod crashloops rather than sending a bad message.
+    """
+    return (env.get("EMAIL_USE_TLS") == "True") != (env.get("EMAIL_USE_SSL") == "True")
+
+
+def test_implicit_tls_is_clean():
+    assert uses_the_proven_gmail_transport(TRANSPORTS["implicit-tls-465"])
+
+
+def test_starttls_is_flagged():
+    """The configuration Gmail rejected. It is coherent, which is why only the port rule catches it."""
+    assert not uses_the_proven_gmail_transport(TRANSPORTS["starttls-587"])
+    assert tls_switches_are_coherent(TRANSPORTS["starttls-587"])
+
+
+def test_right_switch_wrong_port_is_flagged():
+    assert not uses_the_proven_gmail_transport(
+        {"EMAIL_PORT": "587", "EMAIL_USE_TLS": "False", "EMAIL_USE_SSL": "True"}
+    )
+
+
+def test_coherent_switches_are_clean():
+    assert tls_switches_are_coherent(TRANSPORTS["implicit-tls-465"])
+
+
+def test_both_tls_switches_on_is_flagged():
+    """Django raises at startup on this pair, so the pod never reaches Ready."""
+    assert not tls_switches_are_coherent(
+        {"EMAIL_PORT": "465", "EMAIL_USE_TLS": "True", "EMAIL_USE_SSL": "True"}
+    )
+
+
+def test_both_tls_switches_off_is_flagged():
+    """Neither switch on sends the AUTH over an unencrypted connection."""
+    assert not tls_switches_are_coherent(
+        {"EMAIL_PORT": "465", "EMAIL_USE_TLS": "False", "EMAIL_USE_SSL": "False"}
+    )
+
+
 # --- authelia ---------------------------------------------------------------------
 
 
@@ -211,6 +288,10 @@ def healthchecks_smtp(docs):
     assert "DEFAULT_FROM_EMAIL" in env, (
         f"no DEFAULT_FROM_EMAIL in the rendered healthchecks Deployment; found {sorted(env)}"
     )
+    assert "EMAIL_PORT" in env, (
+        f"no EMAIL_PORT in the rendered healthchecks Deployment, so the transport rules below "
+        f"would assert over an absent key and pass; found {sorted(env)}"
+    )
     return secret, env
 
 
@@ -242,6 +323,23 @@ def test_healthchecks_smtp_password_renders_live(healthchecks_smtp):
     assert smtp_password_is_present(secret), (
         "healthchecks has EMAIL_HOST/PORT/USE_TLS but no EMAIL_HOST_PASSWORD — Django "
         "attempts SMTP and fails auth rather than skipping the send"
+    )
+
+
+def test_healthchecks_uses_the_proven_transport_live(healthchecks_smtp):
+    _secret, env = healthchecks_smtp
+    assert uses_the_proven_gmail_transport(env), (
+        f"healthchecks is not on implicit TLS/465: EMAIL_PORT={env.get('EMAIL_PORT')!r} "
+        f"EMAIL_USE_SSL={env.get('EMAIL_USE_SSL')!r} EMAIL_USE_TLS={env.get('EMAIL_USE_TLS')!r}. "
+        f"Gmail answered STARTTLS/587 with 535 on this account's app password"
+    )
+
+
+def test_healthchecks_tls_switches_are_coherent_live(healthchecks_smtp):
+    _secret, env = healthchecks_smtp
+    assert tls_switches_are_coherent(env), (
+        "EMAIL_USE_TLS and EMAIL_USE_SSL must not both be set the same way — Django raises "
+        "at startup when both are true, and sends AUTH in the clear when neither is"
     )
 
 
