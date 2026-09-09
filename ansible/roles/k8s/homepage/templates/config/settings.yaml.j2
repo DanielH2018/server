@@ -11,8 +11,8 @@ target: _blank
 # declared — dead either way, because layout entries match a group by name.
 #
 # The split is by WIDGET, not by topic. A widgeted tile is several lines tall and a link-only
-# tile is one line, so mixing them in one group leaves ragged holes. Services, Media and
-# Tracking hold the widgeted tiles; Admin and Tools hold the link-only ones, four to a row.
+# tile is one line, so mixing them in one group leaves ragged holes. Services, Calendar and
+# Media hold the widgeted tiles; Admin and Tools hold the link-only ones, four to a row.
 layout:
   Top Row:
     style: row
@@ -46,9 +46,10 @@ layout:
   Bookmarks:
     style: row
     columns: 5
-  Tracking:
-    style: row
-    columns: 2
+  # No `Tracking:` entry: that group held one tile (Crypto) and is gone, the tile having moved
+  # into the Calendar column to fill the space under the calendar. A layout key naming no group
+  # is silently dead, which is the state this block was in before 2026-09-09 — do not re-add
+  # one here without re-adding the group to services.yaml.j2.
 # Type-to-filter over every tile and bookmark on the page. This is what keeps the link-only
 # Admin and Tools groups usable as they grow — the keyboard reaches a service whether or not
 # its tile is in view. searchDescriptions widens the match to the `description:` line, so
