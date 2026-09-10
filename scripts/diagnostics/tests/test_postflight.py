@@ -122,6 +122,54 @@ def test_arr_key_ok(monkeypatch):
     assert postflight.check_arr_key("radarr")[0] == postflight.OK
 
 
+def test_the_arr_key_check_asks_for_the_path_its_route_admits_is_clean(monkeypatch):
+    """Each *arr is asked for the path its `-monitoring` IngressRoute admits.
+
+    `get_via_service` falls back to the Traefik route whenever the ClusterIP does not answer,
+    which is every run where the pod is on the other node. The check asked for
+    `/api/<ver>/system/status`, which is on no monitoring route's PathPrefix, so the fallback
+    fell through to the app's own Authelia'd route and 302'd — §9.3 was structurally SKIP
+    (#1642). The route side is guarded by
+    ansible/tests/k8s/test_arr_monitoring_routes_admit_postflight.py.
+    """
+    seen = []
+
+    def record(url, header=None, timeout=None, resolve=None):
+        seen.append(url)
+        return 200, "{}"
+
+    respond(monkeypatch, record)
+    for app in ("sonarr", "radarr", "prowlarr"):
+        assert postflight.check_arr_key(app)[0] == postflight.OK
+    # An exact list, not a subset check: a dropped app would leave a subset assertion passing.
+    assert seen == [
+        "http://10.0.0.1:8989/api/v3/queue",
+        "http://10.0.0.1:7878/api/v3/queue",
+        "http://10.0.0.1:9696/api/v1/indexer",
+    ]
+
+
+def test_asking_for_a_path_no_route_admits_is_flagged(monkeypatch):
+    """The rejecting half: a path outside the route's prefix reaches Authelia, not the app.
+
+    Rendered as the SKIP `_forward_auth_intercepted` produces, so the failure this guards
+    against is a check that reports nothing rather than a check that reports wrongly. The
+    assertion is on the response arm, because that is the only thing postflight can observe —
+    which is exactly why the path itself is pinned by the test above and by the route guard.
+    """
+
+    def only_the_monitored_path(url, header=None, timeout=None, resolve=None):
+        return (200, "{}") if url.endswith("/api/v1/indexer") else (302, "")
+
+    respond(monkeypatch, only_the_monitored_path)
+    monkeypatch.setitem(
+        postflight.ARR_MONITORED_PATH, "prowlarr", "/api/v1/system/status"
+    )
+    status, detail = postflight.check_arr_key("prowlarr")
+    assert status == postflight.SKIP
+    assert "forward-auth" in detail
+
+
 def test_an_unreachable_arr_skips_rather_than_blaming_the_key(monkeypatch):
     """`get()` returns status 0 when curl itself failed, which is a placement fact.
 

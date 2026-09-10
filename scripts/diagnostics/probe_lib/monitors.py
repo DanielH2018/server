@@ -29,6 +29,9 @@ from diagnostics.probe_lib.core import SECRETS_PATH, prom_endpoint, prom_query_u
 from diagnostics.probe_lib.health_kubectl import k8s_pods_argv
 from diagnostics.probe_lib.health_rollout import seconds_since
 
+import yaml
+
+from lib import yaml_fast
 from lib.repo_paths import REPO
 
 # Kuma's own numeric status codes, from the exporter that feeds monitor_status.
@@ -150,21 +153,71 @@ def parse_declared_monitors(text):
     return declared
 
 
+def declared_secret_names():
+    """The secrets file's top-level key names. No value is decrypted.
+
+    SOPS encrypts values, not keys, so the key list is plaintext in the committed file and a
+    plain YAML parse answers "is this key declared" without touching the age key. Same read as
+    `secrets_mgmt/rotation_tools.sops_names`, which the rotation registry has used since it
+    existed — duplicated rather than imported, because `probe_lib` reaching into
+    `secrets_mgmt` for one function would drag that module's git and registry helpers in with
+    it.
+
+    Returns None when the file cannot be read or parsed at all. That is not "no keys are
+    declared": a caller must not read an unreadable file as an absent key, which is the whole
+    distinction `gate_var_state` exists to keep.
+    """
+    try:
+        with open(SECRETS_PATH) as fh:
+            data = yaml_fast.safe_load(fh)
+    except OSError, yaml.YAMLError:
+        return None
+    if not isinstance(data, dict):
+        return None
+    return {name for name in data if name != "sops"}
+
+
+def judge_gate_read(var, extracted, declared):
+    """The three-way gate verdict, pure. `extracted` is the value or None if the read failed.
+
+    None means "could not be read" — no age key on this host, the secret tool missing, the
+    file unparseable — and is deliberately distinct from False. Reporting an unreadable gate
+    as unset is what made the old check silent; an unreadable input and an empty one must not
+    look alike.
+
+    A key that is not DECLARED in the store is the third case, and it is routine rather than a
+    failure: `homelab_eval_push_token` is deliberately absent (static-monitors.yaml.j2
+    explains why), so its monitor correctly renders away. The value read exits non-zero for
+    that and for a broken host alike, which left two permanently-unverified §9.1 lines and
+    trained the reader to skim the arm that catches a real failure to read a secret (#1644).
+    An undeclared key is therefore False — an unset gate, excused.
+
+    `declared` is consulted only when `extracted` is None, and never decides on its own.
+    Reading it first would turn a host with no age key into "every gate is unset", since the
+    plaintext key-list parse succeeds there — the exact regression the paragraph above forbids.
+    A `declared` of None is that parse having failed, which proves nothing either way.
+    """
+    if extracted is not None:
+        return bool(extracted.strip())
+    if declared is not None and var not in declared:
+        return False
+    return None
+
+
 def gate_var_state(var):
     """True / False / None for whether a gating secret has a non-empty value.
 
-    None means "could not be read" — no age key on this host, sops missing, key absent — and
-    is deliberately distinct from False. Reporting an unreadable gate as unset is what made
-    the old check silent; an unreadable input and an empty one must not look alike.
+    The reads; `judge_gate_read` holds the decision and its reasoning.
     """
     out = subprocess.run(
         ["sops", "-d", "--extract", f'["{var}"]', SECRETS_PATH],
         capture_output=True,
         text=True,
     )
-    if out.returncode != 0:
-        return None
-    return bool(out.stdout.strip())
+    extracted = out.stdout if out.returncode == 0 else None
+    return judge_gate_read(
+        var, extracted, None if extracted is not None else declared_secret_names()
+    )
 
 
 def resolve_gate_states(declared, live, no_secrets=False):
