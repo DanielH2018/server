@@ -36,18 +36,29 @@ HOOK = HOOKS / "uv-python.sh"
 
 HOOK_TEXT = HOOK.read_text(encoding="utf-8")
 
-# The prefix the hook puts in front of an ansible command. Kept verbatim rather than
+# The prefix the hook puts in front of an ansible command when `stdio-blocking` (the
+# dotfiles repo's standalone fixup binary) is not on PATH. Kept verbatim rather than
 # re-derived: a change to what the hook prepends should fail here and be read, since the
 # ansible CLIs refuse to start when it is missing.
-STDIO_FIXUP = "python3 -c 'import os; [os.set_blocking(f, True) for f in (0, 1, 3)]' 3>&2 2>/dev/null; "
+STDIO_FIXUP_FALLBACK = "python3 -c 'import os; [os.set_blocking(f, True) for f in (0, 1, 3)]' 3>&2 2>/dev/null; "
+
+# The prefix once `stdio-blocking` has deployed. This is the preferred form: it does not
+# match the dotfiles repo's `Bash(python3 -c:*)` ask rule, which the fallback's inline
+# `python3 -c` does.
+STDIO_FIXUP_STDIO_BLOCKING = "stdio-blocking; "
 
 _runnable = pytest.mark.skipif(
     not (shutil.which("bash") and shutil.which("jq")),
     reason="hook needs bash and jq",
 )
 
+# A PATH holding only the fixed system directories, so a test that wants the fallback
+# branch gets it regardless of whether some other tool on this machine happens to have
+# installed `stdio-blocking` onto the ambient PATH.
+_MINIMAL_PATH = "/usr/bin:/bin:/usr/local/bin"
 
-def rewrite(command, tool_name="Bash"):
+
+def rewrite(command, tool_name="Bash", env=None):
     """Feed the hook a PreToolUse payload; return the rewritten command, or None."""
     payload = json.dumps({"tool_name": tool_name, "tool_input": {"command": command}})
     proc = subprocess.run(
@@ -56,6 +67,7 @@ def rewrite(command, tool_name="Bash"):
         capture_output=True,
         text=True,
         timeout=60,
+        env=env,
     )
     assert proc.returncode == 0, proc.stderr
     if not proc.stdout.strip():
@@ -63,6 +75,21 @@ def rewrite(command, tool_name="Bash"):
     out = json.loads(proc.stdout)
     assert out["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
     return out["hookSpecificOutput"]["updatedInput"]["command"]
+
+
+def rewrite_without_stdio_blocking(command, tool_name="Bash"):
+    """Like `rewrite`, forced onto a PATH that cannot resolve `stdio-blocking`."""
+    env = dict(os.environ, PATH=_MINIMAL_PATH)
+    return rewrite(command, tool_name=tool_name, env=env)
+
+
+def rewrite_with_stub_stdio_blocking(command, tmp_path, tool_name="Bash"):
+    """Like `rewrite`, with a stub `stdio-blocking` executable placed on PATH."""
+    stub = tmp_path / "stdio-blocking"
+    stub.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    stub.chmod(0o755)
+    env = dict(os.environ, PATH=f"{tmp_path}:{_MINIMAL_PATH}")
+    return rewrite(command, tool_name=tool_name, env=env)
 
 
 # --- static: the fail-open posture --------------------------------------------------------
@@ -96,10 +123,11 @@ def test_hook_bails_on_an_unterminated_quote():
         ("py.test", "uv run py.test"),
         ("python -V", "uv run python -V"),
         ("python3 -m pytest", "uv run python3 -m pytest"),
-        # ansible carries the stdio fixup too; the pair below owns that half.
+        # ansible carries the stdio fixup too; the pair below owns that half. Forced onto
+        # a PATH without `stdio-blocking` so this pins the fallback prefix specifically.
         (
             "ansible-playbook ansible/deploy.yml --check",
-            STDIO_FIXUP + "uv run ansible-playbook ansible/deploy.yml --check",
+            STDIO_FIXUP_FALLBACK + "uv run ansible-playbook ansible/deploy.yml --check",
         ),
         # A shebang-invoked script names no interpreter, so nothing python-shaped
         # appears in the command at all — it would otherwise reach 3.12 unnoticed.
@@ -114,7 +142,7 @@ def test_hook_bails_on_an_unterminated_quote():
     ],
 )
 def test_bare_invocations_are_routed_through_uv(command, expected):
-    assert rewrite(command) == expected
+    assert rewrite_without_stdio_blocking(command) == expected
 
 
 @_runnable
@@ -227,9 +255,9 @@ def test_an_unterminated_quote_leaves_the_command_alone():
     ],
 )
 def test_ansible_commands_carry_the_stdio_fixup(command):
-    out = rewrite(command)
+    out = rewrite_without_stdio_blocking(command)
     assert out is not None, command
-    assert out.startswith(STDIO_FIXUP), out
+    assert out.startswith(STDIO_FIXUP_FALLBACK), out
 
 
 @_runnable
@@ -249,15 +277,39 @@ def test_ansible_commands_carry_the_stdio_fixup(command):
     ],
 )
 def test_non_ansible_commands_do_not_carry_the_stdio_fixup(command):
-    out = rewrite(command)
-    assert out is None or STDIO_FIXUP not in out, out
+    out = rewrite_without_stdio_blocking(command)
+    assert out is None or STDIO_FIXUP_FALLBACK not in out, out
 
 
 @_runnable
 def test_the_fixup_is_applied_once():
     """A command already carrying it must not collect a second copy."""
-    out = rewrite(STDIO_FIXUP + "uv run ansible-playbook ansible/deploy.yml")
+    out = rewrite_without_stdio_blocking(
+        STDIO_FIXUP_FALLBACK + "uv run ansible-playbook ansible/deploy.yml"
+    )
     assert out is None or out.count("os.set_blocking") == 1
+
+
+@_runnable
+def test_ansible_commands_prefer_stdio_blocking_when_it_is_on_path(tmp_path):
+    """When `stdio-blocking` has deployed, the hook prefers it over the inline fallback --
+    it does not match the dotfiles repo's `Bash(python3 -c:*)` ask rule, where the
+    fallback's inline `python3 -c` does."""
+    out = rewrite_with_stub_stdio_blocking(
+        "ansible-playbook ansible/deploy.yml --check", tmp_path
+    )
+    assert out is not None
+    assert out.startswith(STDIO_FIXUP_STDIO_BLOCKING), out
+    assert "os.set_blocking" not in out, out
+
+
+@_runnable
+def test_ansible_commands_fall_back_when_stdio_blocking_is_absent(tmp_path):
+    """The other half of the same pair: no `stdio-blocking` on PATH means the inline
+    fixup runs instead, so a machine the dotfiles have not deployed to yet still works."""
+    out = rewrite_without_stdio_blocking("ansible-playbook ansible/deploy.yml --check")
+    assert out is not None
+    assert out.startswith(STDIO_FIXUP_FALLBACK), out
 
 
 @_runnable
@@ -279,7 +331,7 @@ def test_the_fixup_restores_blocking_on_both_stdout_and_stderr(tmp_path):
         assert not os.get_blocking(out_fd) and not os.get_blocking(err_fd)
         probe = "python3 -c 'import os; print(os.get_blocking(1), os.get_blocking(2))'"
         subprocess.run(
-            ["bash", "-c", STDIO_FIXUP + probe],
+            ["bash", "-c", STDIO_FIXUP_FALLBACK + probe],
             stdout=out_fd,
             stderr=err_fd,
             check=True,
