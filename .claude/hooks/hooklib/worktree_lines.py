@@ -27,13 +27,18 @@ def fanout_manifest_dir() -> Path:
 
 
 def _batch_line(batch, run_id, me):
-    """One banner line for `batch`, or None if it's on this host or malformed.
+    """One banner line for `batch`, or None if it's on this host, cleaned, or malformed.
 
     Narrow except, on its own: a batch missing `host`/`branch`/`issues`, or with a
     non-list `issues`, is skipped without touching its siblings in the same manifest.
+
+    A batch carrying `removed_at` is skipped too: `clean` took its worktree, so the line
+    would advertise a directory that no longer exists on the other host, in every session
+    until the last batch of the run is cleaned. An older manifest has no such key and every
+    batch reads as live, which is what it was.
     """
     try:
-        if batch.get("host") == me:
+        if batch.get("host") == me or batch.get("removed_at"):
             return None
         issues = batch["issues"]
         if not isinstance(issues, list):

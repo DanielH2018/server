@@ -195,6 +195,28 @@ def test_stop_stops_the_unit_and_names_clean_as_the_next_step(tmp_path, capsys):
     assert "once its PR merges" in out
 
 
+def test_stop_makes_no_call_for_a_batch_clean_already_took(tmp_path, capsys):
+    cleaned = Batch(
+        "1",
+        "daniel-server",
+        "/w1",
+        "worktree-fanout-1",
+        "fanout-1",
+        [1],
+        "t",
+        removed_at="2026-09-10T12:00:00+00:00",
+    )
+    live = Batch("2", "daniel-box", "/w2", "worktree-fanout-2", "fanout-2", [2], "t")
+    manifest = Manifest("20260101T000010Z", "o", [cleaned, live])
+    save(manifest, root=tmp_path)
+    tools, run = fake_tools(answers={"daniel-box": ok("")})
+    assert main(["stop", manifest.run_id, "--manifest-root", str(tmp_path)], tools) == 0
+    assert [c[0] for c in run.calls] == ["daniel-box"]
+    out = capsys.readouterr().out
+    assert "1 on daniel-server: cleaned (2026-09-10T12:00:00+00:00)" in out
+    assert "2 on daniel-box: stopped" in out
+
+
 def test_a_failed_issue_fetch_launches_nothing_and_writes_no_manifest(tmp_path, capsys):
     for error in (
         subprocess.CalledProcessError(1, ["gh"], stderr="gh: issue not found"),

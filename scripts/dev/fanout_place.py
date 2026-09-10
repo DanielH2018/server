@@ -340,6 +340,12 @@ def cmd_stop(args, tools: Tools) -> int:
     for b in run.batches:
         if args.batch and b.batch != args.batch:
             continue
+        # `clean` already reset this batch's unit and took its worktree. Stopping it again
+        # reads systemd's "Unit … not loaded" as the batch's status and then tells the
+        # operator to clean a tree that is gone.
+        if b.removed_at:
+            print(f"{b.batch} on {b.host}: cleaned ({b.removed_at})")
+            continue
         try:
             proc = tools.run(b.host, status_mod.stop_command(b.unit), 30.0, None)
         except subprocess.TimeoutExpired:

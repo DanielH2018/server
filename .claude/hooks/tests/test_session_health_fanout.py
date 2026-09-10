@@ -178,3 +178,36 @@ def test_remote_fanout_lines_skips_a_malformed_batch_but_keeps_its_sibling(tmp_p
         "(uv run python scripts/dev/fanout_place.py status <run-id>):",
         "  • daniel-server b — #2 (run r3)",
     ]
+
+
+def test_a_cleaned_batch_leaves_the_banner_once_its_worktree_is_gone(tmp_path):
+    # `clean` records the removal in the manifest; the banner must stop naming that
+    # worktree, or it advertises a directory the other host no longer has until every
+    # batch of the run is cleaned.
+    (tmp_path / "r.json").write_text(
+        json.dumps(
+            {
+                "run_id": "r4",
+                "batches": [
+                    {
+                        "host": "daniel-server",
+                        "branch": "worktree-fanout-1",
+                        "issues": [1],
+                        "removed_at": "2026-09-10T12:00:00+00:00",
+                    },
+                    {
+                        "host": "daniel-server",
+                        "branch": "worktree-fanout-2",
+                        "issues": [2],
+                        "removed_at": None,
+                    },
+                ],
+            }
+        )
+    )
+    lines = _mod.remote_fanout_lines(manifest_dir=tmp_path, local_host="daniel-box")
+    assert lines == [
+        "🛰 fan-out worktrees on other hosts "
+        "(uv run python scripts/dev/fanout_place.py status <run-id>):",
+        "  • daniel-server worktree-fanout-2 — #2 (run r4)",
+    ]
