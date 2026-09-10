@@ -302,43 +302,61 @@ li.service > div.service-card {
   margin-bottom: 0;
 }
 
-/* THE CALENDAR'S HEIGHT IS DERIVED FROM THE SERVICES COLUMN BESIDE IT.
+/* THE CALENDAR COLUMN ENDS LEVEL WITH THE SERVICES COLUMN AT ANY WIDTH.
  *
  * The two Top Row columns are separate grids, so nothing makes them end level on its own — the
- * personal links hung 108px below the Services block. They are also not siblings in one grid
- * row, so `height: 100%` on the calendar's list does not match it to the Services list: tried on
- * the deployed page 2026-09-10, the calendar column GREW to 676px against Services' 360px,
- * because the height it resolved against was its own.
+ * personal links hung 108px below the Services block. A fixed height on the calendar squares
+ * them at ONE width and nowhere else: a Services card is 112px only while its name and
+ * description fit on one line each, and at 1024px they wrap to 148/128/144/132 and the column
+ * runs 104px longer. That is what the first version of this rule got wrong.
  *
- * So the calendar is pinned, and the pin is computed rather than typed. The Calendar column is
- * the calendar plus two rows of links; the Services column is four rows of widget cards. Setting
- * them equal and solving for the calendar leaves the `calc()` below, which reads as the same
- * sentence: four widget rows, minus the two link rows, minus one row gap of difference.
+ * WHAT MAKES IT WORK: the group WRAPPER is already stretched to the taller of the two columns —
+ * measured at 1024px, the calendar's `.services-group` was 628px around a 484px list. The slack
+ * is there; the list just has to claim it. Then `align-content: space-between` puts the calendar
+ * at the top of the list and the link rows at the BOTTOM, so the bottom edges match whatever the
+ * Services column does.
  *
- * At 1920px that is 4x112 + 3x12 - (2x50 + 2x12) = 360px, and both columns end at y=652.
+ * THE TRAP THAT COST NINE ATTEMPTS: the wrapper between the group and the list carries Tailwind's
+ * `block!` — `display: block !important` — for homepage's collapse animation. Every attempt to
+ * make it a flex container is silently dropped, so the list can never be a flex item and
+ * `flex: 1 1 auto` on it does nothing. `height: 100%` is the way in, because the wrapper IS a
+ * block of definite height once the group is a flex column. The `- 0.75rem` is the list's own
+ * `mt-3`.
  *
- * --widget-row IS MEASURED, --link-row IS IMPOSED, and the difference matters when one of them
- * looks wrong. --widget-row is what a widget card comes out at (4px padding twice, a 52px title
- * row, a 52px stat row) — nothing enforces it, so a tile whose content grows moves it and the
- * pin with it. --link-row is set on the link cards by the rule below, so it is a choice: 50px
- * rather than the 40px an icon-only card is naturally, which is what makes the two link rows
- * start at the same y as the last Services row rather than 20px below it.
+ * The calendar keeps a max-height so it cannot swallow the column when the Services side is tall;
+ * its event list scrolls under the cap. 22.5rem is three widget rows plus their gaps at the
+ * nominal 112px card — a starting size, not a constraint anything depends on.
  *
- * Re-measure --widget-row if a tile grows, and re-derive if the Services tile count stops
- * leaving four rows. `getBoundingClientRect().bottom` on the last tile of each column is the
- * check, and it has to run at more than one width — this pin was correct at 1920px and 16px out
- * at 1280px until a wrapped description was shortened.
+ * --link-row IS IMPOSED, unlike the cap: it is set on the link cards below, so 50px rather than
+ * the 40px an icon-only card is naturally.
+ *
+ * Verified on the deployed page 2026-09-10 at 900, 1024, 1280, 1920 and 2560px — both columns end
+ * on the same y at every one, including 900px where the grid collapses to two columns and six
+ * rows. `getBoundingClientRect().bottom` on the last tile of each column is the check, and it has
+ * to run at more than one width.
  */
 :root {
-  --widget-row: 7rem; /* 112px, measured */
   --link-row: 3.125rem; /* 50px, imposed by the rule below */
-  --services-rows: 4;
+}
+
+div.services-group:has(#my-calendar) {
+  display: flex;
+  flex-direction: column;
+}
+
+div.services-group:has(#my-calendar) > div {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+div.services-group:has(#my-calendar) ul.services-list {
+  height: calc(100% - 0.75rem);
+  align-content: space-between;
 }
 
 #my-calendar {
-  height: calc(
-    var(--services-rows) * var(--widget-row) + 0.75rem - 2 * var(--link-row)
-  );
+  max-height: 22.5rem;
+  align-self: start;
 }
 
 /* The link cards are taller than their content so the two link rows span the same height as the
