@@ -10,10 +10,16 @@ seven together outside of prek, e.g. before a broad change:
 ``uv run python scripts/validate/run_all.py`` (``--only``/``--skip`` take a comma-separated
 list of the names ``--list`` prints).
 
-``validate-ha-config`` is the one prek validator this script does not run. It lives in
-``scripts/home_assistant/`` rather than in the ``validate`` package this registry's
-completeness guard censuses, and it checks one role's config tree rather than a template
-plane. GitHub issue #1578 carries the question of whether to register it anyway.
+DECIDED: ``run_all`` covers the ``validate`` package; a role-scoped validator runs from its own
+prek hook. ``validate-ha-config`` (``prek.toml``) is the one prek validator this script does not
+run, and it stays that way. It lives in ``scripts/home_assistant/`` and checks the home-assistant
+role's own config tree, where every module registered here checks a template plane a broad change
+crosses. Registering it would cost the thing that makes this registry trustworthy: the
+completeness guard is a single-package census (``package_entry_points(validate)``), so a
+cross-package entry would have to weaken to a ``module=None`` row or widen across packages, and an
+unregistered validator would stop failing the guard. Settled on GitHub issue #1578; contradict it
+there rather than by adding an entry. The rule generalises — a validator scoped to one role is
+run by whoever changes that role, through its own hook.
 
 Each validator's ``main() -> int`` already prints its own report and returns an exit code;
 this script just calls them in sequence and reports which ones failed.
