@@ -143,7 +143,7 @@ def test_four_batches_pinned_to_one_host_is_refused_before_any_launch(tmp_path, 
     assert "split the fan-out" in capsys.readouterr().err
 
 
-def test_stop_stops_the_unit_and_prints_how_to_release_the_worktree(tmp_path, capsys):
+def test_stop_stops_the_unit_and_names_clean_as_the_next_step(tmp_path, capsys):
     batch = Batch(
         "1",
         "daniel-box",
@@ -161,8 +161,8 @@ def test_stop_stops_the_unit_and_prints_how_to_release_the_worktree(tmp_path, ca
     assert [c[1] for c in run.calls] == ["systemctl --user stop fanout-1"]
     out = capsys.readouterr().out
     assert "1 on daniel-box: stopped" in out
-    assert f"worktree unlock {launch_mod.worktree_path('1')}" in out
-    assert "prune_worktrees.py --prune" in out
+    assert f"clean {manifest.run_id}" in out
+    assert "once its PR merges" in out
 
 
 def test_a_failed_issue_fetch_launches_nothing_and_writes_no_manifest(tmp_path, capsys):

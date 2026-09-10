@@ -12,6 +12,7 @@ Usage::
     fanout_place.py launch --batch 1345,1386 [--batch 1288] [--host daniel-box] --orchestrator-branch <b>
     fanout_place.py status <run-id>
     fanout_place.py stop <run-id> [batch]
+    fanout_place.py clean <run-id>
 
 Exit codes: 0 ok · 1 usage or launch failure · 3 no headroom on any host, or a placement
 puts more than MAX_BATCHES_PER_REMOTE_HOST batches on one remote host · 4 no host readable
@@ -24,11 +25,10 @@ and chooses per batch. Calls to the host this script itself runs on go over `bas
 ssh, so they never count against `ufw limit ssh` — see MAX_BATCHES_PER_REMOTE_HOST below for
 the cap that keeps a placement on an actual remote host under it.
 
-Launch locks each worktree and nothing in this slice unlocks it. Until `clean` lands, release
-a stopped or failed batch's tree by hand::
-
-    git -C /home/ubuntu/server worktree unlock <worktree>
-    uv run python scripts/dev/prune_worktrees.py --prune
+Launch locks each worktree with reason `fanout-<batch>` so a merged-worktree prune cannot
+remove it while the unit still runs; `clean <run-id>` is the escape — it unlocks each
+batch's worktree, removes it once the batch's PR merged and the tree is clean, and leaves a
+batch that isn't ready to go both locked and in the manifest.
 """
 
 import argparse
@@ -295,12 +295,54 @@ def cmd_stop(args, tools: Tools) -> int:
         print(
             f"{b.batch} on {b.host}: {'stopped' if proc.returncode == 0 else proc.stderr.strip()}"
         )
-        # Nothing in this slice unlocks the tree, so the operator has to. Printing the
-        # command beside the stop is the only place it meets someone who needs it.
-        print(
-            f"  release its worktree: git -C {REPO} worktree unlock {b.worktree} "
-            "&& uv run python scripts/dev/prune_worktrees.py --prune"
-        )
+        # The worktree stays locked until `clean` runs it through prune_worktrees' content
+        # check — stopping a batch says nothing about whether its PR merged.
+        print(f"  run `clean {args.run_id}` once its PR merges")
+    return 0
+
+
+def cmd_clean_one(args, tools: Tools) -> int:
+    """Hidden: runs ON the host holding the worktree. `clean` calls it over Tools.run."""
+    from fanout_lib.clean import clean_one
+    from prune_worktrees import parse_worktree_list
+
+    porcelain = subprocess.run(
+        ["git", "-C", REPO, "worktree", "list", "--porcelain"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    tree = next(
+        (t for t in parse_worktree_list(porcelain) if t.path == args.worktree), None
+    )
+    if tree is None:
+        print(f"kept: {args.worktree} is not a registered worktree")
+        return 0
+    state, why = clean_one(REPO, tree)
+    print(f"{state}: {args.worktree} {why}".rstrip())
+    return 0
+
+
+def cmd_clean(args, tools: Tools) -> int:
+    from fanout_lib.clean import remote_clean_command
+
+    run = manifest_mod.load(args.run_id, root=args.manifest_root)
+    kept = []
+    for b in run.batches:
+        try:
+            proc = tools.run(b.host, remote_clean_command(b), 120.0, None)
+        except subprocess.TimeoutExpired:
+            print(f"{b.batch} on {b.host}: clean timed out")
+            kept.append(b.batch)
+            continue
+        line = (proc.stdout or proc.stderr).strip()
+        print(f"{b.batch} on {b.host}: {line}")
+        if not line.startswith("removed:"):
+            kept.append(b.batch)
+    if kept:
+        print(f"run {run.run_id}: kept {', '.join(kept)} — re-run clean once merged")
+    else:
+        (args.manifest_root / f"{run.run_id}.json").unlink(missing_ok=True)
     return 0
 
 
@@ -343,6 +385,25 @@ def main(argv=None, tools: Tools | None = None) -> int:
     stop_parser.add_argument("batch", nargs="?")
     _add_manifest_root(stop_parser)
     stop_parser.set_defaults(fn=cmd_stop)
+    clean_parser = sub.add_parser("clean")
+    clean_parser.add_argument("run_id")
+    _add_manifest_root(clean_parser)
+    clean_parser.set_defaults(fn=cmd_clean)
+    # No `help=` here, matching every other subparser above: argparse only lists a
+    # subcommand under "positional arguments" when its own help text is set, so leaving it
+    # unset is what keeps `clean-one` out of `--help`'s body. `help=argparse.SUPPRESS`
+    # looks like the right tool but isn't: argparse's subparser formatting doesn't filter a
+    # SUPPRESS'd choice the way it does a SUPPRESS'd ordinary argument, so it would print a
+    # literal "clean-one  ==SUPPRESS==" line instead of hiding it. Either way it still
+    # appears in the `{...}` choices list on the usage line — no argparse option removes
+    # that without also removing every visible subcommand from it.
+    clean_one_parser = sub.add_parser("clean-one")
+    clean_one_parser.add_argument("worktree")
+    # `branch` is unused by cmd_clean_one itself (clean_one reads the branch straight off
+    # the worktree it re-parses); it's a positional here only so `ps` on the host names the
+    # batch, the same reason systemd-run's --unit does at launch.
+    clean_one_parser.add_argument("branch")
+    clean_one_parser.set_defaults(fn=cmd_clean_one)
     args = p.parse_args(argv)
     return args.fn(args, tools or Tools())
 
