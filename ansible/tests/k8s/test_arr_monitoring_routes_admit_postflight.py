@@ -21,8 +21,11 @@ Run: uv run pytest ansible/tests/k8s/test_arr_monitoring_routes_admit_postflight
 import re
 
 import pytest
+from jinja2 import Environment
+from jinja2.exceptions import UndefinedError
 
 from lib import yaml_fast
+from _helpers import ANSIBLE
 from _manifest_guards import ALL_VARS, K8S, _k8s_entries, _render, _role_defaults
 
 # `scripts` is on pythonpath and `scripts/diagnostics` deliberately is not, so postflight is
@@ -121,6 +124,24 @@ def test_every_arr_route_admits_the_nodes_own_host_traffic_is_clean():
     assert _cidr_mismatches([f"{ALL_VARS['k8s_node_client_ip']}/32"])
 
 
+def test_no_arr_route_grants_the_dead_bridge_address():
+    """`k8s_bridge_client_ip` reaches none of these routes, so none of them may grant it (#1683).
+
+    The macro prepends it to every monitoring route by default — a leftover from when
+    monitor-bridge was a Docker container on daniel-server. A request from a daniel-server shell
+    to `prowlarr.local.<domain>/api/v1/indexer` arrived at Traefik as `ClientHost: 10.42.1.0`
+    (its flannel.1 address) and got a 302, so 10.0.0.161 never reaches the route. The three *arr
+    routes pass `include_bridge_ip=false`; this asserts the parameter is still doing that, which
+    a rendered-match check is the only thing that can see.
+    """
+    assert sorted(
+        _cidr_mismatches([f"{ALL_VARS['k8s_bridge_client_ip']}/32"])
+    ) == sorted(ARR_APPS), (
+        "an *arr monitoring route still grants k8s_bridge_client_ip, which no measured caller "
+        "arrives as — `include_bridge_ip=false` was dropped from its monitoring_route() call"
+    )
+
+
 def test_a_cidr_no_route_admits_is_flagged():
     assert sorted(_cidr_mismatches(["192.0.2.7/32"])) == sorted(ARR_APPS)
 
@@ -141,3 +162,47 @@ def test_the_app_route_itself_is_not_widened(app):
         **_role_defaults(app),
     )
     assert "ClientIP" not in rendered
+
+
+# ── monitoring_route(include_bridge_ip=...) ─────────────────────────────────────────────────
+#
+# The parameter that lets a call site drop the macro's default `k8s_bridge_client_ip` grant
+# (#1683). With it false and no `extra_client_cidrs`, the match would render `&& ()` — a rule
+# Traefik rejects, and one that reads as "no client restriction" to anyone skimming the
+# template. The macro fails at render instead; these are the accept/reject pair for that.
+
+_MACRO_SRC = (ANSIBLE / "templates" / "ingressroute.yml.j2").read_text()
+_MACRO_CTX = {
+    "domain": "example.com",
+    "k8s_namespace": "homelab",
+    "k8s_bridge_client_ip": "10.0.0.161",
+    "k8s_tls_cert_resolver": "",
+}
+
+
+def _render_monitoring_call(call: str) -> str:
+    return (
+        Environment(autoescape=False)
+        .from_string(_MACRO_SRC + "\n" + call)
+        .render(_MACRO_CTX)
+    )
+
+
+def test_dropping_the_bridge_grant_with_a_replacement_cidr_is_clean():
+    rendered = _render_monitoring_call(
+        "{{ monitoring_route('freshrss', 'freshrss', 8080, '/api',"
+        " extra_client_cidrs=['10.42.0.1/32'], include_bridge_ip=false) }}"
+    )
+    match = next(d for d in yaml_fast.safe_load_all(rendered) if d)["spec"]["routes"][
+        0
+    ]["match"]
+    assert "ClientIP(`10.42.0.1/32`)" in match
+    assert "10.0.0.161" not in match
+
+
+def test_dropping_the_bridge_grant_with_no_replacement_cidr_is_flagged():
+    with pytest.raises(UndefinedError):
+        _render_monitoring_call(
+            "{{ monitoring_route('freshrss', 'freshrss', 8080, '/api',"
+            " include_bridge_ip=false) }}"
+        )

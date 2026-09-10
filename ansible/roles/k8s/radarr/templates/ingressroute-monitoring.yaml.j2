@@ -1,25 +1,35 @@
 {% from 'ingressroute.yml.j2' import monitoring_route with context %}
 ---
 {#
-  Two readers, and both read /api/v3/queue only: monitor-bridge's check_arr_queue (check.py)
-  and postflight.py's §9.3 API-key check, which asks for this same path because it is the one
-  this route admits. Nothing else on the radarr API is reachable through this route.
+  ONE reader through this route: postflight.py's §9.3 API-key check, which asks for
+  /api/v3/queue because it is the path this route admits. monitor-bridge's check_arr_queue
+  (`monitor-bridge/files/checks/service.py`) reads RADARR_URL, a ClusterIP
+  (`radarr.<ns>.svc.cluster.local:7878`), and never touches Traefik — the template comment said
+  otherwise until 2026-09-10 (#1683), carried forward through two rewrites without being
+  checked. Nothing else on the radarr API is reachable through this route.
 
-  extra_client_cidrs admits the two cluster nodes' own host processes, which is what postflight
-  is. Without it §9.3 was structurally SKIP whenever radarr's pod sat on daniel-server: the
-  ClusterIP answers only a caller on the pod's own node, and this route admitted
-  `k8s_bridge_client_ip` alone, so the request fell through to radarr's own Authelia'd route
-  and 302'd (#1642).
+  extra_client_cidrs admits the cluster nodes' own host processes, which is what postflight is,
+  and `include_bridge_ip=false` drops the macro's default grant. That default is
+  `k8s_bridge_client_ip` (10.0.0.161, daniel-server's LAN address), left over from when
+  monitor-bridge was a Docker container ON daniel-server; it is dead on this route and was
+  measured dead on 2026-09-10. A request from a daniel-server shell to
+  `radarr.local.<domain>/api/v3/queue` arrived at Traefik as `ClientHost: 10.42.1.0` and got a 302,
+  so the route did not match — 10.0.0.161 never reaches it.
 
-  These are cni0 GATEWAY addresses, not the nodes' LAN addresses: host traffic to the ingress
-  VIP SNATs to them. Read off Traefik's own access log on 2026-09-10 — a request postflight
-  made from daniel-box arrived as `ClientHost: 10.42.0.1`, so a `k8s_node_client_ip` (10.0.0.215)
-  grant matched nothing and the SKIP survived its own fix. Same pair and the same reasoning as
-  loki-homelab's read route, whose `DECIDED 2026-08-24` marker verified it live first. A pod
-  arrives with its own 10.42.x.y address rather than a gateway, so this is the two nodes and
-  nothing else.
+  That measurement also bounds the gateway pair. The addresses are cni0 GATEWAYS, not the nodes'
+  LAN addresses: host traffic to the ingress VIP SNATs to a cluster-internal address. Which one
+  depends on where the traefik POD sits. Traefik is pinned to daniel-box
+  (`kubernetes.io/hostname` nodeSelector), so daniel-box's own host traffic stays local and
+  arrives as its cni0 gateway `10.42.0.1` — measured the same day, a 401 from radarr rather
+  than a 302, which is the route matching and radarr rejecting the absent X-Api-Key. Traffic
+  from daniel-server crosses the VXLAN overlay and arrives as its flannel.1 address `10.42.1.0`,
+  NOT as its cni0 gateway `10.42.1.1`. `10.42.1.1/32` is therefore inert while that pin holds.
+  Kept rather than dropped because postflight runs on daniel-box only, so nothing depends on it
+  either way, and unpinning traefik is what would make the pair matter. Same variable and the
+  same reasoning as loki-homelab's read route, whose `DECIDED 2026-08-24` marker verified the
+  daniel-box half live first.
 
   The path prefix, the LAN-only rule and radarr's own X-Api-Key are unchanged.
 #}
 {{ monitoring_route(container_item.name, container_item.hostname, container_item.port, '/api/v3/queue',
-                    extra_client_cidrs=k3s_cni0_gateways) }}
+                    extra_client_cidrs=k3s_cni0_gateways, include_bridge_ip=false) }}

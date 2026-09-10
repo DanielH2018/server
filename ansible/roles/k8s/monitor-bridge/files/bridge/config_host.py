@@ -507,6 +507,22 @@ def host_config(
         # threshold needs to clear. Lowering it on this evidence would re-commit the one-sided
         # derivation #1288 exists to correct, so the read moves the earliest honest re-derivation
         # date and nothing else.
+        #
+        # Re-read 2026-09-10 19:00 UTC, and the value is UNCHANGED. The window is still short —
+        # `count_over_time(...[7d])` returned 6887 samples for claude-rc, which is 4.8 days
+        # against the seven the re-derivation needs — but the population is no longer quiet: the
+        # max moved from 0.017% to 0.148% (daniel-box `fleet` and `user-1000-slice`, 0.042% for
+        # claude-rc), a ~9x rise as real load entered the window. p99 is 0.014%. The floor held
+        # at ~68x under 10 through that, which is the first evidence here that is not purely
+        # quiet-population, but 4.8 days still cannot bound a pytest fan-out's peak. Re-derive on
+        # 2026-09-12 as above.
+        #
+        # The CLAUDE_CGROUP_CONSECUTIVE half of #1288 is answered: `resets(...[7d])` is 4 for
+        # claude-rc and 2 for daniel-box's `fleet` and `user-1000-slice` (0 for both daniel-server
+        # series), so 2 of claude-rc's 4 are host-wide on daniel-box and 2 are its own unit
+        # restarting. The unit's own ExecMainStartTimestamp read 2026-09-09 20:10 UTC — under a
+        # day before this read. The weekly claude-rc-restart.timer is therefore NOT the only reset
+        # source, and the grace is guarding a real event class rather than a once-a-week one.
         CLAUDE_CGROUP_STALL_MAX_PCT=_num("CLAUDE_CGROUP_STALL_MAX_PCT", "10"),
         # memory.events increase window. Wider than the stall window because these are rare
         # discrete events rather than a rate: 10m at a 1m scrape keeps an OOM kill visible across
