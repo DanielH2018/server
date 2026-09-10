@@ -279,3 +279,27 @@ def test_the_briefs_worktree_path_matches_the_one_launch_creates():
     # the check that keeps the duplicate honest.
     for batch in ("1345-1386", "b"):
         assert brief_mod._worktree_path(batch) == launch_mod.worktree_path(batch)
+
+
+def test_a_batch_still_live_in_a_manifest_is_refused_before_any_host_is_read(
+    tmp_path, capsys
+):
+    """F4: the per-host existence check cannot see a relaunch placed on the OTHER host."""
+    live = Batch("1-2", "daniel-server", "/w", "b", "u", [1, 2], "t")
+    save(Manifest("20260101T000010Z", "o", [live]), root=tmp_path)
+    tools, run = fake_tools(answers={"daniel-box": ok(HEADROOM)}, issues=CLAIMED)
+    assert _launch(tools, tmp_path, "--batch", "1,2") == 1
+    assert not run.calls  # refused before the headroom read, so it costs no ssh
+    err = capsys.readouterr().err
+    assert "batch 1,2 is live in run 20260101T000010Z on daniel-server" in err
+    assert "run clean 20260101T000010Z first" in err
+
+
+def test_a_batch_already_cleaned_in_an_old_run_launches_again(tmp_path):
+    cleaned = Batch(
+        "1-2", "daniel-server", "/w", "b", "u", [1, 2], "t", "2026-09-10T12:00:00+00:00"
+    )
+    save(Manifest("20260101T000010Z", "o", [cleaned]), root=tmp_path)
+    tools, run = fake_tools(answers={"daniel-box": ok(HEADROOM)}, issues=CLAIMED)
+    assert _launch(tools, tmp_path, "--batch", "1,2", "--host", "daniel-box") == 0
+    assert len(run.calls) == 3

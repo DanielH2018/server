@@ -82,3 +82,31 @@ def load(run_id: str, root: Path = MANIFEST_DIR) -> Manifest:
         data["orchestrator_branch"],
         [Batch(**b) for b in data["batches"]],
     )
+
+
+def live_batches(root: Path = MANIFEST_DIR) -> dict[str, tuple[str, Batch]]:
+    """Every batch id still standing across every run under `root`, to its run and record.
+
+    "Still standing" means no `removed_at`: a batch cleaned in one run and relaunched in
+    another must not be found through the cleaned entry, so only live entries are keyed and
+    a later live one wins. Callers use this to refuse a duplicate launch, so a manifest it
+    cannot read is skipped on its own rather than raising — one unreadable file must not
+    refuse every launch on the host.
+
+    Returns:
+        `{batch id: (run_id, Batch)}` for every batch with no `removed_at`.
+    """
+    live: dict[str, tuple[str, Batch]] = {}
+    if not root.is_dir():
+        return live
+    for manifest_file in sorted(root.glob("*.json")):
+        try:
+            data = json.loads(manifest_file.read_text())
+            run_id = data["run_id"]
+            batches = [Batch(**b) for b in data["batches"]]
+        except OSError, ValueError, KeyError, TypeError:
+            continue
+        for b in batches:
+            if not b.removed_at:
+                live[b.batch] = (run_id, b)
+    return live

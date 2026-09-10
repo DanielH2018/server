@@ -166,7 +166,9 @@ def test_cli_launch_reports_no_headroom_when_the_host_is_uncapped(tmp_path):
 
 
 def test_a_failed_and_a_successful_health_read_both_surface_in_the_brief(tmp_path):
-    # Only the placed host is read, so each half of this is its own run.
+    # Only the placed host is read, so each half of this is its own run — and its own
+    # manifest root, since batch 1 is still live in the first half's manifest and `launch`
+    # refuses a batch id live in any run under the root it is given.
     tools, run = fake_tools(
         answers={"daniel-box": ok(HEADROOM)},
         issues=[Issue(1, "t", "b", ("claude",))],
@@ -186,7 +188,7 @@ def test_a_failed_and_a_successful_health_read_both_surface_in_the_brief(tmp_pat
         issues=[Issue(1, "t", "b", ("claude",))],
     )
     run.answers_by_call = [ok(HEADROOM), ok("line one\nline two\n")]
-    assert _launch(tools, tmp_path, "--host", "daniel-server") == 0
+    assert _launch(tools, tmp_path / "second-run", "--host", "daniel-server") == 0
     brief = _brief(run)
     assert "[daniel-server] line one" in brief and "[daniel-server] line two" in brief
 

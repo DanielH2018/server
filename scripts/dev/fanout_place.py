@@ -193,9 +193,34 @@ def _over_ssh_budget(placed: list[tuple[str, str]]) -> bool:
     return over
 
 
+def _live_elsewhere(specs: list[str], root: Path) -> bool:
+    """Print and return True when a `--batch` spec is still live in any run's manifest.
+
+    `exists_check_command` guards the host a batch is placed on, which is not the same
+    question: placement is free to send a relaunch to the OTHER host, where no worktree of
+    that name exists, and a second agent then starts on issues the first is still holding.
+    The manifests are the only record that spans both hosts, and reading them costs no ssh.
+    """
+    live = manifest_mod.live_batches(root)
+    refused = False
+    for spec in specs:
+        found = live.get(spec.replace(",", "-"))
+        if found:
+            run_id, batch = found
+            print(
+                f"launch: batch {spec} is live in run {run_id} on {batch.host}; "
+                f"run clean {run_id} first",
+                file=sys.stderr,
+            )
+            refused = True
+    return refused
+
+
 def cmd_launch(args, tools: Tools) -> int:
     batches = _parse_batches(args.batch)
     if batches is None:
+        return 1
+    if _live_elsewhere(args.batch, args.manifest_root):
         return 1
     fetched = _fetch_issues(tools, batches)
     if fetched is None:
