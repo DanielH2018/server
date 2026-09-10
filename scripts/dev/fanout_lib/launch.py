@@ -86,6 +86,19 @@ def _check(proc: subprocess.CompletedProcess, what: str) -> None:
         raise LaunchError(f"{what} failed ({proc.returncode}): {proc.stderr.strip()}")
 
 
+def _cleanup_worktree(tools: Tools, host: str, batch: str) -> str | None:
+    """Remove a half-made worktree; return a message suffix on failure, else None."""
+    try:
+        cleanup = _run(
+            tools, host, remove_worktree_command(batch), None, "worktree cleanup"
+        )
+    except LaunchError as exc:
+        return f"; {exc}"
+    if cleanup.returncode != 0:
+        return f"; cleanup failed ({cleanup.returncode}): {cleanup.stderr.strip()}"
+    return None
+
+
 def launch(
     tools: Tools, host: str, batch: str, brief_text: str, issues: list[int]
 ) -> Batch:
@@ -110,18 +123,12 @@ def launch(
     """
     try:
         proc = _run(tools, host, create_worktree_command(batch), None, "worktree add")
-    except LaunchError:
-        tools.run(host, remove_worktree_command(batch), LAUNCH_TIMEOUT_S, None)
-        raise
+    except LaunchError as exc:
+        message = str(exc) + (_cleanup_worktree(tools, host, batch) or "")
+        raise LaunchError(message) from None
     if proc.returncode != 0:
-        cleanup = tools.run(
-            host, remove_worktree_command(batch), LAUNCH_TIMEOUT_S, None
-        )
         message = f"worktree add failed ({proc.returncode}): {proc.stderr.strip()}"
-        if cleanup.returncode != 0:
-            message += (
-                f"; cleanup failed ({cleanup.returncode}): {cleanup.stderr.strip()}"
-            )
+        message += _cleanup_worktree(tools, host, batch) or ""
         raise LaunchError(message)
     _check(
         _run(tools, host, write_brief_command(batch), brief_text, "brief write"),

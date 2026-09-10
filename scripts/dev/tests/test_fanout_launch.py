@@ -152,6 +152,42 @@ def test_a_failed_brief_write_raises_and_skips_systemd_run():
     assert not any(c.startswith("systemd-run") for _, c, _ in run.calls)
 
 
+def test_a_failed_systemd_run_raises_with_its_stderr():
+    tools, run = fake_tools()
+    run.answers_by_call = [
+        ok(""),
+        ok(""),
+        subprocess.CompletedProcess(
+            [],
+            1,
+            stdout="",
+            stderr=(
+                "Failed to start transient service unit: "
+                "Unit fanout-b.service already exists."
+            ),
+        ),
+    ]
+    with pytest.raises(LaunchError, match="systemd-run") as excinfo:
+        launch(tools, "daniel-server", "b", "BRIEF", issues=[1])
+    assert "Unit fanout-b.service already exists." in str(excinfo.value)
+    assert len(run.calls) == 3
+    # The worktree stays for inspection after a systemd-run failure — no cleanup command.
+    assert not any("worktree remove" in c for _, c, _ in run.calls)
+
+
+def test_a_failed_add_and_a_timed_out_cleanup_are_both_reported():
+    tools, run = fake_tools()
+    run.answers_by_call = [
+        subprocess.CompletedProcess([], 128, stdout="", stderr="fatal: branch exists"),
+        subprocess.TimeoutExpired(cmd="git", timeout=120.0),
+    ]
+    with pytest.raises(LaunchError) as excinfo:
+        launch(tools, "daniel-server", "b", "BRIEF", issues=[1])
+    assert "branch exists" in str(excinfo.value)
+    assert "timed out" in str(excinfo.value)
+    assert not any(c.startswith("systemd-run") for _, c, _ in run.calls)
+
+
 def test_manifest_round_trips_outside_the_repo(tmp_path):
     now = datetime(2026, 9, 9, 20, 30, tzinfo=UTC)
     m = Manifest(
