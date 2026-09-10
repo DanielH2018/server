@@ -30,9 +30,18 @@ Equal SHAs mean the work is in. Leave the tree for the pruner rather than removi
 ```bash
 uv run python scripts/dev/prune_worktrees.py            # report
 uv run python scripts/dev/prune_worktrees.py --prune    # remove the merged, clean, unlocked
+uv run python scripts/dev/prune_worktrees.py --gc       # the object-store repair alone
 ```
 
 It applies the same content check, so it collects exactly what `ExitWorktree` refused.
+
+**A prune also repairs the shared object store.** Removing a worktree makes its branch's objects
+unreachable, and `git gc --auto` only runs once loose objects pass 6700 or packs pass 50 — so the
+churn accumulates below the threshold and `git fetch` warns about it (#1435). `--prune` and `--gc`
+both drop unreachable objects older than a day and remove a stale `gc.log`. A weekly cron on
+daniel-box runs `--gc` (`Weekly git object-store repair`), because a worktree-isolated session's
+git commands are refused against the primary checkout: the sessions that see the warning are the
+ones that cannot clear it.
 
 **Locks.** A lock held by a *running* session is never overridden. A lock whose process is gone
 is ignored, because Claude Code does not release the lock when a session ends — which is why

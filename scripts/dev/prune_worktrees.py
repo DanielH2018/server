@@ -26,10 +26,14 @@ Usage:
     uv run python scripts/dev/prune_worktrees.py            # report only (default)
     uv run python scripts/dev/prune_worktrees.py --prune    # also remove the removable ones
     uv run python scripts/dev/prune_worktrees.py --brief    # short report, for a banner
+    uv run python scripts/dev/prune_worktrees.py --gc       # object-store repair only
 
 `--brief` chooses the report's shape and nothing else. It is orthogonal to `--prune`:
 `--prune --brief` removes the same worktrees `--prune` alone would, and prints a short
 report of what it removed.
+
+A prune also repairs the shared object store the removed worktrees leave litter in, and
+`--gc` runs that repair alone. See repair_object_store.
 """
 
 import argparse
@@ -45,7 +49,7 @@ from pathlib import Path
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from lib.git import git, git_dirty, git_stdout
+from lib.git import git, git_dirty, git_stdout, repair_object_store
 from lib.repo_paths import REPO
 
 REMOVABLE = "removable"
@@ -433,6 +437,8 @@ def prune_all(repo: str, trees: list[Worktree]) -> None:
             print(f"removed {tree.path}")
         else:
             print(f"could not remove {tree.path}: {error}")
+    for line in repair_object_store(repo):
+        print(line)
 
 
 def brief(prune: bool = False) -> int:
@@ -481,7 +487,24 @@ def main(argv: list[str] | None = None) -> int:
             "combines with --prune, which still removes them"
         ),
     )
+    parser.add_argument(
+        "--gc",
+        action="store_true",
+        help=(
+            "run the object-store repair alone and exit: prune unreachable objects and clear "
+            "a stale gc.log, without touching any worktree"
+        ),
+    )
     args = parser.parse_args(argv)
+
+    if args.gc:
+        repo = primary_checkout()
+        if repo is None:
+            print("not inside a git repository", file=sys.stderr)
+            return 1
+        for line in repair_object_store(repo):
+            print(line)
+        return 0
 
     if args.brief:
         return brief(prune=args.prune)

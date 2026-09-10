@@ -256,6 +256,32 @@
   # a broken thing successfully is invisible to every check that watches the deploy.
   when: has_repo_checkout
 
+- name: Schedule the weekly git object-store repair (box only)
+  tags: [crons]
+  # Several Claude sessions branch, commit and retire worktrees in this checkout every day, and
+  # each removal leaves that branch's objects unreachable. `scripts/dev/prune_worktrees.py --gc`
+  # drops the ones older than a day and clears a stale gc.log — see repair_object_store for why
+  # the grace period is not `now`.
+  #
+  # A CRON RUNS IT BECAUSE THE SESSIONS THAT SEE THE SYMPTOM CANNOT FIX IT (#1435). A
+  # worktree-isolated session's git commands are refused against the primary checkout, so the
+  # warning `git fetch` prints reaches only the agents structurally unable to act on it. Arming
+  # it on the prune path alone would leave the repair waiting on someone typing `--prune`.
+  #
+  # daniel-box only: the primary checkout and every worktree under it live there.
+  when: inventory_hostname == 'daniel-box'
+  ansible.builtin.cron:
+    name: "Weekly git object-store repair"
+    minute: "20"
+    hour: "4"
+    weekday: "0" # 0 is Sunday
+    # PATH explicitly: cron inherits neither /usr/local/bin nor the user's ~/.local/bin, so a
+    # bare `uv` is not found and the job fails silently on stderr nothing reads.
+    job: "cd /home/{{ sys_user }}/server && PATH=/usr/local/bin:/usr/bin:/bin /home/{{ sys_user }}/.local/bin/uv run --quiet python scripts/dev/prune_worktrees.py --gc"
+    user: "{{ sys_user }}"
+    cron_file: git-object-store-repair
+  become: true
+
 - name: Schedule the infrastructure-map refresh (box only)
   tags: [crons, infra-map]
   # Regenerates the architecture diagram + declared-vs-live map (scripts/infra_map/gen_infra_map.py).

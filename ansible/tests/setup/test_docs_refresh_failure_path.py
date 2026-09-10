@@ -36,6 +36,7 @@ CRONS = (ANSIBLE / "roles/setup/initial_setup/tasks/crons.yml").read_text()
 SOURCED = (
     "say_failure",
     "keep_failure_log",
+    "keep_tree_evidence",
     "restore_generated_tree",
     "mark_commit_failed",
     "clear_commit_failed",
@@ -328,6 +329,57 @@ def test_the_failure_log_is_kept_outside_the_repo(tmp_path):
     assert "gen-doc-fragments" in (stamp / "last-commit-failure.log").read_text()
     assignment = SCRIPT[SCRIPT.index("STAMP_DIR=") :].split("\n")[0]
     assert "$REPO" not in assignment and STAMP_DIR in assignment, assignment
+
+
+def _hook_rewrites_a_staged_page(repo: Path) -> None:
+    """What prek's `files were modified by this hook` means on disk.
+
+    The page is already staged, so a hook that rewrites it leaves the worktree ahead of the
+    index — which is the difference `git diff --stat` reports and the hook's own stdout does not.
+    """
+    (repo / "docs/reference/state.md").write_text("rewritten by a hook\n")
+
+
+def test_the_kept_log_names_the_file_a_hook_rewrote(tmp_path):
+    """ACCEPT: the evidence capture names the modified path.
+
+    The 2026-09-06 18:18 failure said `files were modified by this hook` over 9063 passing tests
+    and named no file, so the recurrence could not be attributed (#1436).
+    """
+    repo, stamp = _tree(tmp_path), tmp_path / "stamp"
+    _stage_a_regeneration(repo, stamp)
+    _hook_rewrites_a_staged_page(repo)
+    run = _bash("keep_tree_evidence", repo, stamp)
+    assert run.returncode == 0, run.stderr
+    log = (stamp / "last-commit-failure.log").read_text()
+    assert "docs/reference/state.md" in log, log
+    assert "git diff --stat" in log, log
+
+
+def test_the_evidence_is_gone_once_the_restore_has_run(tmp_path):
+    """REJECT: capturing after the restore names nothing, which is why the order is pinned.
+
+    restore_generated_tree puts every staged path back and clears the index. Run it first and the
+    same capture reports a clean tree — a log that proves only that the failure was cleaned up.
+    """
+    repo, stamp = _tree(tmp_path), tmp_path / "stamp"
+    staged = _stage_a_regeneration(repo, stamp)
+    _hook_rewrites_a_staged_page(repo)
+    run = _bash(
+        f"restore_generated_tree {shlex.quote(staged)}; keep_tree_evidence", repo, stamp
+    )
+    log = (stamp / "last-commit-failure.log").read_text()
+    assert "docs/reference/state.md" not in log, log
+    assert run.returncode == 0, run.stderr
+
+
+def test_the_capture_runs_before_the_restore_on_the_commit_failure_path():
+    """The production call site, not a copy of it: the two tests above only bracket the ordering."""
+    branch = SCRIPT[SCRIPT.index('if [ "$COMMIT_RC" -ne 0 ]; then') :]
+    branch = branch[: branch.index("\nfi\n")]
+    assert branch.index("keep_tree_evidence") < branch.index(
+        "restore_generated_tree"
+    ), branch
 
 
 def test_the_stamp_directory_is_created_and_writable_by_the_cron_user():
