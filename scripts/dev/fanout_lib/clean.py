@@ -109,16 +109,32 @@ def _clean_missing_tree(
     empirically: `git worktree remove` accepts a path whose directory no longer exists,
     without needing `--force`). The branch is a separate question: it may still hold commits
     this worktree never landed, so it is dropped only when `merged` says it already landed.
+
+    A branch delete that FAILS reports `kept`, naming the branch and git's own first line.
+    It used to report `removed: … (already gone)` regardless, which told the operator the
+    branch was gone while it was still there — and `cmd_clean` deleted the run manifest on
+    that word, leaving nothing pointing at what survived. `kept` keeps the manifest.
+
+    Returns:
+        `("removed", "(already gone)")` once the registration and any merged branch are
+        gone, or `("kept", "— branch <name> not deleted: <git's first stderr line>")`.
     """
     ok, err = remover(repo, tree)
     if not ok:
         return "kept", err
     if tree.branch and merged:
-        subprocess.run(
+        deleted = subprocess.run(
             ["git", "-C", repo, "branch", "-D", tree.branch],
             capture_output=True,
+            text=True,
             check=False,
         )
+        if deleted.returncode != 0:
+            first_line = next(
+                (ln for ln in deleted.stderr.splitlines() if ln.strip()),
+                f"git branch -D exited {deleted.returncode}",
+            )
+            return "kept", f"— branch {tree.branch} not deleted: {first_line.strip()}"
     return "removed", "(already gone)"
 
 

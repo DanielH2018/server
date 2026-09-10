@@ -241,6 +241,39 @@ def test_a_missing_worktree_directory_keeps_its_unmerged_branch(tmp_path, monkey
     assert "gone-branch" in _branches(repo)
 
 
+def test_a_failed_branch_delete_on_a_missing_tree_is_reported_as_kept(
+    tmp_path, monkeypatch
+):
+    """Ruling 23: `removed: … (already gone)` used to be printed even when the branch stayed.
+
+    Real git refuses the delete here — the registered tree is renamed onto a branch that
+    does not exist — so this exercises the same `git branch -D` the code runs, not a stub.
+    """
+    _scrub_git_env(monkeypatch)
+    repo = tmp_path / "repo"
+    _init_scratch_repo(repo)
+    wt = tmp_path / "wt"
+    _git(repo, "worktree", "add", "-q", "-b", "gone-branch", str(wt))
+    shutil.rmtree(wt)
+    registered = next(
+        t for t in parse_worktree_list(_worktree_list(repo)) if t.path == str(wt)
+    )
+    tree = Worktree(
+        path=registered.path,
+        head=registered.head,
+        branch="no-such-branch",
+        locked=registered.locked,
+        lock_reason=registered.lock_reason,
+    )
+
+    state, why = clean_one(str(repo), tree, ask=lambda *a, **k: True, remover=remove)
+
+    assert state == "kept"
+    assert "branch no-such-branch not deleted" in why and "not found" in why
+    # The registration really is gone; it is only the branch claim that was wrong.
+    assert str(wt) not in _worktree_list(repo)
+
+
 def test_the_remote_command_resets_fetches_then_runs_the_worktrees_own_copy_of_the_script():
     cmd = remote_clean_command(B)
     assert cmd.startswith(
