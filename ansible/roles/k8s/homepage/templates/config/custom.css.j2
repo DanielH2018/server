@@ -347,6 +347,11 @@ li.service > div.service-card {
  * size. */
 #my-calendar ~ li.service > div.service-card {
   height: var(--link-row);
+  /* `justify-content`, NOT `align-items`, because the card above is `flex-direction: column` —
+   * so the main axis is vertical and `align-items` centres horizontally, which it already is.
+   * Tried the other one first on the deployed page: the icon stayed 4px from the top with 14px
+   * below it. Centred, the icon sits 9px from each edge. */
+  justify-content: center;
 }
 
 #my-calendar > div.service-card {

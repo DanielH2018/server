@@ -8,96 +8,6 @@
 #}
 - Top Row:
     - Services:
-        - Uptime-Kuma:
-            icon: uptime-kuma.png
-            href: https://uptime-kuma.{{ domain }}/
-            description: Monitoring
-            # No server/container pair since the Phase D cutover (2026-08-10): Kuma runs in
-            # k3s now. Widget re-targets the -k8s name (bridged names hairpin from here);
-            # /api/status-page bypasses Authelia LAN-only on the k8s side.
-            widget:
-                type: uptimekuma
-                url: https://uptime-kuma.local.{{ domain }}
-                slug: containers
-                # `fields:` picks which blocks render, and every name in it must be one the
-                # widget's own component declares — homepage drops an unknown name silently,
-                # leaving a shorter tile and no error anywhere. The valid set for a widget is
-                # the `label="<type>.<name>"` list in
-                # src/widgets/<type>/component.jsx upstream; read it before editing one of
-                # these. uptimekuma also offers `uptime`, `incident` and `incidents`.
-                fields: [up, down]
-        - Pihole:
-            icon: pi-hole.png
-            href: https://pihole.{{ domain }}/admin
-            description: DNS Ad Blocker
-            widget:
-                type: pihole
-                url: http://pihole:80
-                version: 6
-                key: {{ pihole_password }}
-                # Dropped: blocked_percent, gravity.
-                fields: [queries, blocked]
-        - Speedtest:
-            icon: speedtest-tracker.png
-            href: https://speedtest.{{ domain }}/
-            description: Internet tracking
-            # No server/container: speedtest runs in k3s now, so there is no Docker container
-            # for the status dot. The -k8s name is the ClientIP-gated monitoring route (no
-            # Authelia) — the unsuffixed name's native route is Authelia'd and 401s this
-            # session-less widget (broke when the slice-7 teardown removed the bridge route).
-            widget:
-                type: speedtest
-                url: https://speedtest.local.{{ domain }}
-                # Dropped: upload.
-                fields: [download, ping]
-        - FreshRSS:
-            icon: freshrss.png
-            href: https://freshrss.{{ domain }}/
-            description: RSS Aggregator
-            # No server/container: freshrss runs in k3s now. Same as speedtest above — the
-            # -k8s monitoring route, because the native route's Authelia 401s the widget.
-            widget:
-                type: freshrss
-                url: https://freshrss.local.{{ domain }}
-                username: {{ freshrss_username }}
-                password: {{ freshrss_password }}
-                # Dropped: subscriptions. This is the only single-stat tile on the dashboard.
-                fields: [unread]
-        - Karakeep:
-            icon: karakeep.png
-            href: https://karakeep.{{ domain }}/
-            description: Karakeep
-            # No server/container: karakeep runs in k3s now. Same as speedtest and freshrss
-            # above — the -k8s monitoring route, because the native route's Authelia 401s
-            # the widget.
-            widget:
-                type: karakeep
-                url: https://karakeep.local.{{ domain }}
-                key: {{ karakeep_homepage_api_key }}
-                # UNARCHIVED IS NOT AVAILABLE, so this shows the two numbers it subtracts
-                # from. karakeep's /api/v1/users/me/stats returns numBookmarks (the total)
-                # and numArchived, and homepage renders each `field` verbatim — no widget
-                # type on this dashboard can express arithmetic over two of them. A computed
-                # tile would mean a customapi widget, and customapi maps a JSON path to a
-                # label with no expression support either. Dropped: favorites, highlights,
-                # lists, tags.
-                fields: [bookmarks, archived]
-        - UPS:
-            icon: apc.png
-            href: https://peanut.{{ domain }}/
-            description: APC BR1500MS2
-            widget:
-                type: peanut
-                # The -k8s monitoring route (ClientIP-gated, no Authelia) — the old
-                # Docker-internal name died with the shared bridge. peanut's own basic
-                # auth (username/password below) is the gate on this path.
-                url: https://peanut.local.{{ domain }}
-                key: {{ nut_ups_name | default('apc-ups') }}
-                username: {{ peanut_username }}
-                password: {{ peanut_password }}
-                # Dropped: ups_load. peanut names these `battery_charge` and `ups_status`,
-                # not `charge` and `status`.
-                fields: [battery_charge, ups_status]
         - Headlamp:
             icon: kubernetes.png
             href: https://headlamp.{{ domain }}/
@@ -158,24 +68,66 @@
                     - field: data.result.1.value.1
                       label: Down
                       format: number
-        - Scrutiny:
-            icon: scrutiny.png
-            href: https://scrutiny.{{ domain }}/
-            description: Disk Health
-            # ClusterIP, not a Traefik route: scrutiny's native route is Authelia-gated and would
-            # 401 this session-less widget, and its monitoring route exposes no API path. Pod to
-            # pod bypasses both. Same shape as the sonarr/radarr/qbittorrent widgets below, and
-            # the same requirement — `networkpolicy-scrutiny-web.yaml.j2` must admit
-            # `app: homepage` on 8080 or this renders as a widget-proxy error.
-            #
-            # Scrutiny has no auth of its own (that is why longhorn-ui-style route middleware
-            # fronts it), so there is no key to hold here. Verified 2026-09-06:
-            # `GET /api/summary` on the ClusterIP answers 200 with the device summary.
+        - Uptime-Kuma:
+            icon: uptime-kuma.png
+            href: https://uptime-kuma.{{ domain }}/
+            description: Monitoring
+            # No server/container pair since the Phase D cutover (2026-08-10): Kuma runs in
+            # k3s now. Widget re-targets the -k8s name (bridged names hairpin from here);
+            # /api/status-page bypasses Authelia LAN-only on the k8s side.
             widget:
-                type: scrutiny
-                url: http://scrutiny.{{ k8s_namespace }}.svc.cluster.local:8080
-                # Dropped: unknown.
-                fields: [passed, failed]
+                type: uptimekuma
+                url: https://uptime-kuma.local.{{ domain }}
+                slug: containers
+                # `fields:` picks which blocks render, and every name in it must be one the
+                # widget's own component declares — homepage drops an unknown name silently,
+                # leaving a shorter tile and no error anywhere. The valid set for a widget is
+                # the `label="<type>.<name>"` list in
+                # src/widgets/<type>/component.jsx upstream; read it before editing one of
+                # these. uptimekuma also offers `uptime`, `incident` and `incidents`.
+                fields: [up, down]
+        - Pihole:
+            icon: pi-hole.png
+            href: https://pihole.{{ domain }}/admin
+            description: DNS Ad Blocker
+            widget:
+                type: pihole
+                url: http://pihole:80
+                version: 6
+                key: {{ pihole_password }}
+                # Dropped: blocked_percent, gravity.
+                fields: [queries, blocked]
+        - FreshRSS:
+            icon: freshrss.png
+            href: https://freshrss.{{ domain }}/
+            description: RSS Aggregator
+            # No server/container: freshrss runs in k3s now. Same as speedtest and karakeep —
+            # the -k8s monitoring route, because the native route's Authelia 401s the widget.
+            widget:
+                type: freshrss
+                url: https://freshrss.local.{{ domain }}
+                username: {{ freshrss_username }}
+                password: {{ freshrss_password }}
+                # Dropped: subscriptions. This is the only single-stat tile on the dashboard.
+                fields: [unread]
+        - Karakeep:
+            icon: karakeep.png
+            href: https://karakeep.{{ domain }}/
+            description: Karakeep
+            # No server/container: karakeep runs in k3s now. Same as speedtest and freshrss —
+            # the -k8s monitoring route, because the native route's Authelia 401s the widget.
+            widget:
+                type: karakeep
+                url: https://karakeep.local.{{ domain }}
+                key: {{ karakeep_homepage_api_key }}
+                # UNARCHIVED IS NOT AVAILABLE, so this shows the two numbers it subtracts
+                # from. karakeep's /api/v1/users/me/stats returns numBookmarks (the total)
+                # and numArchived, and homepage renders each `field` verbatim — no widget
+                # type on this dashboard can express arithmetic over two of them. A computed
+                # tile would mean a customapi widget, and customapi maps a JSON path to a
+                # label with no expression support either. Dropped: favorites, highlights,
+                # lists, tags.
+                fields: [bookmarks, archived]
         - Home Assistant:
             icon: home-assistant.png
             href: https://home-assistant.{{ domain }}/
@@ -195,6 +147,53 @@
                       label: CO₂
                     - state: sensor.bedroom_airgradient_one_voc_index
                       label: VOC
+        - UPS:
+            icon: apc.png
+            href: https://peanut.{{ domain }}/
+            description: APC BR1500MS2
+            widget:
+                type: peanut
+                # The -k8s monitoring route (ClientIP-gated, no Authelia) — the old
+                # Docker-internal name died with the shared bridge. peanut's own basic
+                # auth (username/password below) is the gate on this path.
+                url: https://peanut.local.{{ domain }}
+                key: {{ nut_ups_name | default('apc-ups') }}
+                username: {{ peanut_username }}
+                password: {{ peanut_password }}
+                # Dropped: ups_load. peanut names these `battery_charge` and `ups_status`,
+                # not `charge` and `status`.
+                fields: [battery_charge, ups_status]
+        - Scrutiny:
+            icon: scrutiny.png
+            href: https://scrutiny.{{ domain }}/
+            description: Disk Health
+            # ClusterIP, not a Traefik route: scrutiny's native route is Authelia-gated and would
+            # 401 this session-less widget, and its monitoring route exposes no API path. Pod to
+            # pod bypasses both. Same shape as the sonarr/radarr/qbittorrent widgets below, and
+            # the same requirement — `networkpolicy-scrutiny-web.yaml.j2` must admit
+            # `app: homepage` on 8080 or this renders as a widget-proxy error.
+            #
+            # Scrutiny has no auth of its own (that is why longhorn-ui-style route middleware
+            # fronts it), so there is no key to hold here. Verified 2026-09-06:
+            # `GET /api/summary` on the ClusterIP answers 200 with the device summary.
+            widget:
+                type: scrutiny
+                url: http://scrutiny.{{ k8s_namespace }}.svc.cluster.local:8080
+                # Dropped: unknown.
+                fields: [passed, failed]
+        - Speedtest:
+            icon: speedtest-tracker.png
+            href: https://speedtest.{{ domain }}/
+            description: Internet tracking
+            # No server/container: speedtest runs in k3s now, so there is no Docker container
+            # for the status dot. The -k8s name is the ClientIP-gated monitoring route (no
+            # Authelia) — the unsuffixed name's native route is Authelia'd and 401s this
+            # session-less widget (broke when the slice-7 teardown removed the bridge route).
+            widget:
+                type: speedtest
+                url: https://speedtest.local.{{ domain }}
+                # Dropped: upload.
+                fields: [download, ping]
         # THE THREE MEDIA TILES MOVED HERE FROM A `Media` GROUP on 2026-09-10, which is why this
         # group holds twelve tiles rather than nine. They are here to make the Services column
         # four rows deep, which is what squares its bottom edge with the personal links in the
