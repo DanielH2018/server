@@ -111,6 +111,19 @@ k3s_service_cidr: "10.43.0.0/16"
 k3s_cni0_gateways:
   - 10.42.0.1/32
   - 10.42.1.1/32
+# DECIDED: cni0 alone, for netpol_baseline_node_cidrs. The censused host caller has a fallback.
+# `netpol_baseline_node_cidrs` reads the pair above and NOT the flannel pair below, deliberately.
+# A host process reaching a baseline-selected pod on the other node is denied — measured
+# 2026-09-10 (#1725) with the pod's node as the only variable: from daniel-box, sonarr's
+# ClusterIP (pod on daniel-box) answered 200 while prowlarr's (pod on daniel-server) timed out,
+# and from daniel-server the two verdicts swapped. The census found ONE host caller of that
+# shape, `get_via_service()` in scripts/diagnostics/postflight.py, and it already falls back to
+# the workload's Traefik route when the ClusterIP does not answer (#1633) — which is why the
+# *arr `-monitoring` routes had to admit the flannel pair in #1697. Traefik itself is immune: its
+# policy's first ingress rule carries ports 8000/8443 with no `from:`, so the three host crons
+# that dial it are unaffected by this list. Adding the flannel pair here would re-scope every pod
+# the namespace-scoped baseline selects, to buy a fast path that already has a working fallback.
+# Contradict this with a NAMED host caller that has no route fallback.
 # The two nodes' flannel.1 VXLAN addresses — the OTHER source a host process can arrive as.
 # Which of the two sets a host request carries depends on where the traefik pod sits: traffic
 # to a pod on the SAME node leaves via cni0 and arrives as that node's cni0 gateway above,
