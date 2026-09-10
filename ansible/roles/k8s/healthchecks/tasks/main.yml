@@ -45,19 +45,24 @@
 # ends by importing it, AFTER the environment is read, so a name it assigns is a name the
 # Deployment and the Secret only appear to control. This instance's copy dates from January
 # 2023 and pinned all six email settings, which is why three separate email fixes on
-# 2026-09-09 all deployed green and changed nothing Django saw.
+# 2026-09-09 all deployed green and changed nothing Django saw. It also carried the only copy
+# of `SECRET_KEY` until 2026-09-10 (#1491); the Secret now renders a fresh one and the script
+# deletes the file's assignment, which is a one-off round of logged-out sessions.
 #
 # Ordered AFTER the rollout gate above, like every other exec in this role: exec'ing before
 # the gate targets whichever pod is still running, which during a manifest change is the
-# outgoing one. `ansible/tests/deploy/test_inline_rollout_gates.py` enforces that.
-- name: Take healthchecks' email settings back from the PVC's local_settings.py
+# outgoing one. `ansible/tests/deploy/test_inline_rollout_gates.py` enforces that. The gate
+# matters more for `SECRET_KEY` than for the email names: the image regenerates one into the
+# file whenever the env var is empty, so the strip must run against a pod that already carries
+# the Secret's key, or the next boot writes the assignment straight back.
+- name: Take the settings this role owns back from healthchecks' local_settings.py
   tags: [deploy]
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n {{ k8s_namespace }} exec -i deploy/healthchecks --
       sh -c 'exec s6-setuidgid abc python3'
     stdin: |
-      {{ lookup('file', role_path ~ '/files/strip_local_settings_email.py') }}
+      {{ lookup('file', role_path ~ '/files/strip_local_settings_owned.py') }}
       main()
   become: true
   register: healthchecks_local_settings
