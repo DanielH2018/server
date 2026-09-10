@@ -35,6 +35,11 @@ def new_run_id(now: datetime) -> str:
     return now.astimezone(UTC).strftime("%Y%m%dT%H%M%SZ")
 
 
+def path(run_id: str, root: Path = MANIFEST_DIR) -> Path:
+    """The manifest file `save` and `load` read and write for `run_id`."""
+    return root / f"{run_id}.json"
+
+
 def save(m: Manifest, root: Path = MANIFEST_DIR) -> Path:
     """Write the manifest as `<root>/<run_id>.json`, creating `root` if needed.
 
@@ -42,14 +47,14 @@ def save(m: Manifest, root: Path = MANIFEST_DIR) -> Path:
         The path written.
     """
     root.mkdir(parents=True, exist_ok=True)
-    path = root / f"{m.run_id}.json"
-    path.write_text(json.dumps(asdict(m), indent=2) + "\n")
-    return path
+    manifest_path = path(m.run_id, root)
+    manifest_path.write_text(json.dumps(asdict(m), indent=2) + "\n")
+    return manifest_path
 
 
 def load(run_id: str, root: Path = MANIFEST_DIR) -> Manifest:
     """Read back the manifest written by `save` for `run_id`."""
-    data = json.loads((root / f"{run_id}.json").read_text())
+    data = json.loads(path(run_id, root).read_text())
     return Manifest(
         data["run_id"],
         data["orchestrator_branch"],

@@ -26,12 +26,13 @@ ssh, so they never count against `ufw limit ssh` — see MAX_BATCHES_PER_REMOTE_
 the cap that keeps a placement on an actual remote host under it.
 
 Launch locks each worktree with reason `fanout-<batch>` so a merged-worktree prune cannot
-remove it while the unit still runs; `clean <run-id>` is the escape — it unlocks each
-batch's worktree, removes it once the batch's PR merged and the tree is clean, and leaves a
-batch that isn't ready to go both locked and in the manifest.
+remove it while the unit still runs; `clean <run-id>` is the escape — it removes a batch's
+worktree, unlocking it in the process, once the batch's PR merged and the tree is clean, and
+leaves a batch that isn't ready to go both locked and in the manifest.
 """
 
 import argparse
+import os
 import re
 import subprocess
 import sys
@@ -301,24 +302,58 @@ def cmd_stop(args, tools: Tools) -> int:
     return 0
 
 
-def cmd_clean_one(args, tools: Tools) -> int:
-    """Hidden: runs ON the host holding the worktree. `clean` calls it over Tools.run."""
-    from fanout_lib.clean import clean_one
-    from prune_worktrees import parse_worktree_list
+def cmd_clean_one(
+    args,
+    tools: Tools,
+    list_worktrees=None,
+    ask=None,
+    dirty=None,
+    remover=None,
+) -> int:
+    """Hidden: runs ON the host holding the worktree. `clean` calls it over Tools.run.
 
-    porcelain = subprocess.run(
-        ["git", "-C", REPO, "worktree", "list", "--porcelain"],
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout
+    `list_worktrees`, `ask`, `dirty` and `remover` are seams — parameters rather than
+    patched module attributes, so a test can drive this without pinning a first-party
+    module name. Every default reaches the real thing.
+
+    An absent worktree (already removed by an earlier `clean` run, or by hand) is the goal
+    state, not a failure: it reads `removed`, not `kept`, so a re-run of `clean` after a
+    partial first pass still sees every batch as removed and deletes the manifest.
+    """
+    from fanout_lib.clean import clean_one
+    from prune_worktrees import is_dirty, is_merged, parse_worktree_list, remove
+
+    if list_worktrees is None:
+
+        def list_worktrees():
+            return subprocess.run(
+                ["git", "-C", REPO, "worktree", "list", "--porcelain"],
+                capture_output=True,
+                text=True,
+                check=True,
+            ).stdout
+
+    # realpath, not exact string: a worktree launched through one spelling of REPO (a
+    # symlink, say) is still the tree `git worktree list` names by its target.
+    target = os.path.realpath(args.worktree)
     tree = next(
-        (t for t in parse_worktree_list(porcelain) if t.path == args.worktree), None
+        (
+            t
+            for t in parse_worktree_list(list_worktrees())
+            if os.path.realpath(t.path) == target
+        ),
+        None,
     )
     if tree is None:
-        print(f"kept: {args.worktree} is not a registered worktree")
+        print(f"removed: {args.worktree} (already gone)")
         return 0
-    state, why = clean_one(REPO, tree)
+    state, why = clean_one(
+        REPO,
+        tree,
+        ask=ask if ask is not None else is_merged,
+        dirty=dirty if dirty is not None else is_dirty,
+        remover=remover if remover is not None else remove,
+    )
     print(f"{state}: {args.worktree} {why}".rstrip())
     return 0
 
@@ -342,7 +377,7 @@ def cmd_clean(args, tools: Tools) -> int:
     if kept:
         print(f"run {run.run_id}: kept {', '.join(kept)} — re-run clean once merged")
     else:
-        (args.manifest_root / f"{run.run_id}.json").unlink(missing_ok=True)
+        manifest_mod.path(run.run_id, args.manifest_root).unlink(missing_ok=True)
     return 0
 
 
