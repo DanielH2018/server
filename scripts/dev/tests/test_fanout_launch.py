@@ -389,3 +389,36 @@ def test_a_body_carrying_its_own_fence_gets_a_longer_one_and_the_title_sits_insi
     title = text.index("title: Fix the parser")
     assert opened < title < closed
     assert "````\n```\nstill inside\n```\n````" in text
+
+
+def _one_batch_manifest(run_id="20260101T000000Z"):
+    return Manifest(run_id, "o", [Batch("b", "h", "/w", "br", "u", [1], "t")])
+
+
+def test_saving_a_manifest_leaves_no_temporary_file_behind(tmp_path):
+    save(_one_batch_manifest(), root=tmp_path)
+    assert [p.name for p in tmp_path.iterdir()] == ["20260101T000000Z.json"]
+
+
+def test_a_save_that_fails_mid_write_leaves_the_previous_manifest_intact(tmp_path):
+    """#1677: `clean` saves after every removal, so a crash mid-write is not a rare edge.
+
+    An in-place write would truncate the file: `remote_fanout_lines` then skips the run in
+    the SessionStart banner without a word, and `cmd_clean` cannot load it at all, leaving
+    the worktrees it named locked on another host with nothing pointing at them.
+    """
+
+    first = _one_batch_manifest()
+    manifest_file = save(first, root=tmp_path)
+    before = manifest_file.read_text()
+
+    def boom(_src, _dst):
+        raise OSError("disk full")
+
+    second = Manifest(first.run_id, "o", [])
+    with pytest.raises(OSError):
+        save(second, root=tmp_path, replace=boom)
+    assert manifest_file.read_text() == before
+    assert load(first.run_id, root=tmp_path) == first
+    # The failed attempt cleans up after itself rather than leaving a stray .tmp.
+    assert [p.name for p in tmp_path.iterdir()] == [manifest_file.name]

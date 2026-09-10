@@ -1,6 +1,7 @@
 """The run manifest: ~/.claude/fanout/<run-id>.json, outside every checkout — spec §4."""
 
 import json
+import os
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -55,15 +56,34 @@ def path(run_id: str, root: Path = MANIFEST_DIR) -> Path:
     return root / f"{run_id}.json"
 
 
-def save(m: Manifest, root: Path = MANIFEST_DIR) -> Path:
+def save(m: Manifest, root: Path = MANIFEST_DIR, replace=os.replace) -> Path:
     """Write the manifest as `<root>/<run_id>.json`, creating `root` if needed.
+
+    The write is atomic — a temporary file in the same directory, then `os.replace`. `clean`
+    saves after every single removal, so a crash mid-write is a crash mid-run rather than a
+    rare edge: a truncated file leaves `remote_fanout_lines` silently skipping the run in the
+    SessionStart banner and `cmd_clean` unable to load it at all, with the worktrees it
+    named still locked on the other host and nothing left pointing at them.
+
+    Args:
+        m: the manifest to write.
+        root: the directory to write it under, created if absent.
+        replace: `os.replace`-shaped — a seam, so a test can fail the rename and check that
+            the previous manifest survived. Patching the module's `os` instead is what the
+            repo's monkeypatch ratchet exists to refuse.
 
     Returns:
         The path written.
     """
     root.mkdir(parents=True, exist_ok=True)
     manifest_path = path(m.run_id, root)
-    manifest_path.write_text(json.dumps(asdict(m), indent=2) + "\n")
+    tmp = manifest_path.with_name(f"{manifest_path.name}.{os.getpid()}.tmp")
+    try:
+        tmp.write_text(json.dumps(asdict(m), indent=2) + "\n")
+        replace(tmp, manifest_path)
+    except OSError:
+        tmp.unlink(missing_ok=True)
+        raise
     return manifest_path
 
 

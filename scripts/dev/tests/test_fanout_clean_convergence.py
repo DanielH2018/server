@@ -68,19 +68,24 @@ def test_the_merged_test_asks_the_forge_because_this_repo_squash_merges():
     assert cmd.index("merged=0;; esac") < cmd.index('if [ "${merged}" -gt 0 ]')
 
 
-def test_the_gone_tree_branch_prunes_its_own_stale_registration():
-    """Ruling 37: prune skips a locked tree, so the launch lock is released first."""
+def test_the_gone_tree_branch_deregisters_only_its_own_worktree():
+    """#1677: scoped to this batch's path, where Ruling 37 swept the whole repo.
+
+    `worktree remove` refuses a locked tree, so the launch lock is released first — the same
+    ordering Ruling 37's prune needed for the same reason.
+    """
     cmd = remote_clean_command(B1)
+    assert "worktree prune" not in cmd
     assert (
         "git -C /home/ubuntu/server worktree unlock /w1 2>/dev/null; "
-        "git -C /home/ubuntu/server worktree prune;" in cmd
+        "git -C /home/ubuntu/server worktree remove --force /w1 2>/dev/null || true;"
+        in cmd
     )
-    # Inside the gone-tree branch, after both branch outcomes — not on the path that still
-    # has a tree to hand to `clean-one`.
-    assert cmd.index("worktree prune") < cmd.index("else cd /home/ubuntu/server")
-    assert cmd.index(
-        'echo "kept: /w1 — branch worktree-fanout-1 unmerged, tree gone"'
-    ) < (cmd.index("worktree prune"))
+    # Inside the gone-tree branch — not on the path that still has a tree for `clean-one`.
+    assert cmd.index("worktree remove") < cmd.index("else cd /home/ubuntu/server")
+    # BEFORE the branch is touched: git refuses `branch -D` while a registration holds it,
+    # so the old order printed `kept: … not deleted` for every merged gone-tree batch.
+    assert cmd.index("worktree remove") < cmd.index("branch -D worktree-fanout-1")
 
 
 def test_a_second_pass_makes_no_remote_call_for_a_batch_already_removed(tmp_path):
