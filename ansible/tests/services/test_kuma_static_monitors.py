@@ -193,9 +193,16 @@ def _bridge_push_tokens() -> set[str]:
     something else entirely (CrowdSec Home Allowlist moved to a cron on daniel-box, and the two
     Pi monitors and Arr Auto-Block never were bridge checks). A hand-kept list here would put
     those on the bridge's heartbeat window and relax a tile whose feeder runs on another clock.
+
+    A token awaiting its secret renders as `{{ var | default('') }}` (snapshot_headroom, #1627),
+    so the filter is optional in the pattern. Without that the check's own tile read as a
+    non-bridge monitor wired to the bridge's window, which is the opposite of what it is.
     """
     return set(
-        re.findall(r"\{\{ ([a-z0-9_]+_push_token) \}\}", BRIDGE_ENV_SECRET.read_text())
+        re.findall(
+            r"\{\{ ([a-z0-9_]+_push_token)(?: \| default\(''\))? \}\}",
+            BRIDGE_ENV_SECRET.read_text(),
+        )
     )
 
 

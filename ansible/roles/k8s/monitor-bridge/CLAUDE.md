@@ -40,7 +40,7 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
   - **Prometheus Reachable** (a trivial `vector(1)` instant query — the root-cause GATE for the
     prom-dependent checks. Evaluated FIRST each cycle: when Prometheus is unreachable, every
     prom-dependent check (disk/cert/memory/restarts/oom/cpu/targets/traefik5xx/traefik_404/ups/
-    host_temp/shipper_dropped/longhorn_volumes/kubelet_plugin_readonly) is
+    host_temp/shipper_dropped/longhorn_volumes/snapshot_headroom/kubelet_plugin_readonly) is
     **suppressed** — pushed `up` with a "skipped — Prometheus unreachable" msg so their push-monitor
     heartbeats stay alive — and only THIS monitor pages. Without the gate one Prometheus outage
     fires all of them at once: one root cause, one page per dependent check. A single scrape
@@ -753,6 +753,36 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     the partial outage the floor exists to catch, which is the `node`-only mistake that blinded
     Host Temperature on two hosts of three, not a fix for it. A fullness breach gets no grace —
     it is monotonic, not flappy — while the census arm rides `PVC_CLAIMS_CONSECUTIVE`.)
+  - **Longhorn Snapshot Headroom** (`longhorn_snapshot_actual_size_bytes` joined to
+    `longhorn_volume_capacity_bytes` for the claim name, added 2026-09-10, #1627 — the SNAPSHOT
+    axis, where PVC Fullness is the filesystem axis and Longhorn Volume Redundancy the replica
+    axis. Snapshots live in the Longhorn backend, so a volume can fill its
+    `spec.snapshotMaxSize` while its claim reads 12% full and every replica reads healthy. A cap
+    that is REACHED does not prune, it refuses: Longhorn stops accepting new snapshots, and
+    `k8s/volume-snapshot` snapshots before it prunes, so the first deploy past the cap fails and
+    every later one fails identically until snapshots are deleted by hand (#1560). That role's
+    own gate fires only during a deploy of the capped service; this arm is what watches a volume
+    filling BETWEEN deploys, which a recurring Longhorn backup job does with nobody deploying.
+    **The caps are DECLARED in `SNAPSHOT_CAPS`**, `<pvc>=<bytes>`, because nothing exports the
+    field: Longhorn's exporter publishes snapshot sizes and no cap, this pod runs with
+    `automountServiceAccountToken: false`, and the Longhorn HTTP API answers only from the
+    node-local manager. Ansible is the only writer of a cap — `roles/k8s/jellyfin/tasks/main.yml`
+    patches the only one (jellyfin-config, 16 GiB = 2 x the PVC size, the smallest Longhorn
+    accepts) — and `tests/test_check_snapshot_headroom.py` derives the capped set from the tree,
+    so a second capped volume missing from the declaration fails CI rather than going unwatched.
+    `"0"` is Longhorn's UNCAPPED value and the fleet default, so it is dropped rather than read
+    as a cap of zero; a check treating 0 as a cap would report every volume full. **Usage is a
+    SUPERSET of what the deploy gate sums**: the gate skips `status.markRemoved` snapshots and
+    the metric carries no such label (2026-09-10: 25 of 114 Snapshot CRs were markRemoved and
+    every one still had a series), which errs safely — those blocks are still held until
+    Longhorn purges them — but can overstate usage for a cycle after a prune, so a breach rides
+    `SNAPSHOT_CAP_CONSECUTIVE`. Deduped by (volume, snapshot) before summing, like PVC
+    Fullness's `max by`: both longhorn-manager pods are scraped independently. A declared cap
+    whose volume has NO series is a breach, not green. **INERT until its push token exists** —
+    `monitor_bridge_snapshot_headroom_push_token` is not in SOPS, so `KUMA_PUSH_SNAPSHOT_HEADROOM`
+    renders empty, the verdict reaches the pod log alone, and the Kuma declaration is guarded on
+    the same variable. Adding the secret and redeploying uptime-kuma + monitor-bridge arms both
+    halves.)
   - **Kubelet CSI Mount Read-Only** (`node_filesystem_readonly{mountpoint=~"/var/lib/kubelet/
     plugins/.*"} == 1`, added 2026-09-05, #1243 — a reclaim stall dropped Longhorn's iSCSI
     sessions, `replacement_timeout` expiry then aborted several ext4 journals and remounted them

@@ -348,3 +348,149 @@ def pvc_fullness_verdict(
         worst[2],
     )
     return breach_msg, census_msg, summary
+
+
+def parse_snapshot_caps(raw: str) -> dict[str, int]:
+    """Pure: the `SNAPSHOT_CAPS` env string as a PVC-name -> cap-in-bytes map.
+
+    The format is `<pvc>=<bytes>`, comma separated — the same shape as the PVC_EXCLUDE list
+    rendered beside it, with a value attached. A malformed or non-positive entry is DROPPED
+    rather than raising: building the config must not raise (bridge/config.py's header), and the
+    check reading this map reports an unparseable non-empty string as a breach rather than as
+    green, so a dropped entry cannot read as "nothing to watch".
+
+    `"0"` is Longhorn's UNCAPPED value and the fleet default, so a 0 is dropped too — a check
+    that treated 0 as a cap would report every volume full.
+
+    The cap is DECLARED rather than read live because nothing exports it. Longhorn's exporter
+    publishes snapshot sizes (`longhorn_snapshot_actual_size_bytes`) and no cap, the pod runs
+    with `automountServiceAccountToken: false` so it cannot ask the Kubernetes API for the
+    Volume CR, and the Longhorn HTTP API answers only from the node-local manager behind a
+    NetworkPolicy admitting longhorn-system pods alone. Ansible is the only writer of a cap
+    (roles/k8s/jellyfin/tasks/main.yml patches the one that exists), which is what makes a
+    declared value sound; `tests/test_check_snapshot_headroom.py` derives the capped set from the
+    tree and fails when a role caps a volume this map does not name.
+    """
+    caps: dict[str, int] = {}
+    for entry in raw.split(","):
+        name, _, value = entry.partition("=")
+        name, value = name.strip(), value.strip()
+        if not name or not value.isdigit() or int(value) <= 0:
+            continue
+        caps[name] = int(value)
+    return caps
+
+
+def snapshot_used_by_pvc(
+    snapshots: list[tuple[dict, float]], volumes: list[tuple[dict, float]]
+) -> dict[str, int]:
+    """Pure: aggregate snapshot bytes per PVC name, from two Prometheus vectors.
+
+    The snapshot metric carries `volume` (the `pvc-<uuid>` Longhorn name) and `snapshot`, never
+    the claim name, so the claim is joined in from `longhorn_volume_capacity_bytes`, which
+    carries both `volume` and `pvc`. Joining here rather than in PromQL keeps the arithmetic in a
+    function a test states inputs for.
+
+    DEDUPED by (volume, snapshot) before summing, for the same reason check_pvc_fullness groups
+    with `max by`: the `longhorn` job scrapes both longhorn-manager pods independently, and a
+    snapshot reported by both would be counted twice and read as double its real size. The
+    subsets are disjoint today (measured 2026-09-10: every jellyfin-config snapshot comes from
+    longhorn-manager-m6x4s alone), which is exactly why a plain sum would look correct and be a
+    latent 2x false page.
+
+    Args:
+      snapshots: `longhorn_snapshot_actual_size_bytes` as (labels, value) pairs.
+      volumes: `longhorn_volume_capacity_bytes` as (labels, value) pairs — read for its labels,
+        not its values.
+    """
+    pvc_of = {
+        labels.get("volume"): labels.get("pvc")
+        for labels, _value in volumes
+        if labels.get("volume") and labels.get("pvc")
+    }
+    biggest: dict[tuple[str, str], float] = {}
+    for labels, value in snapshots:
+        key = (labels.get("volume", "?"), labels.get("snapshot", "?"))
+        biggest[key] = max(biggest.get(key, 0.0), value)
+    used: dict[str, int] = {}
+    for (volume, _snapshot), value in biggest.items():
+        pvc = pvc_of.get(volume)
+        if pvc:
+            used[pvc] = used.get(pvc, 0) + int(value)
+    return used
+
+
+def snapshot_headroom_verdict(
+    used: dict[str, int], caps: dict[str, int], warn_ratio: float
+) -> tuple[bool, str, str]:
+    """(ok, msg, grace_label) for snapshot space against each declared cap.
+
+    `grace_label` names the hysteresis the caller applies to a `down`, and is "" when ok.
+
+    A cap is only dangerous as it is APPROACHED. When it is reached Longhorn refuses new
+    snapshots rather than pruning to make room, and k8s/volume-snapshot snapshots BEFORE it
+    prunes, so the first deploy past the cap fails and every later one fails identically until
+    snapshots are deleted by hand (#1560). That role's own gate fires only during a deploy of
+    the capped service; this arm watches a volume filling BETWEEN deploys, which a recurring
+    Longhorn backup job snapshotting the same volume does with nobody deploying at all (#1627).
+
+    A declared cap whose PVC has NO snapshot series is a breach, not green — the same fail-closed
+    rule as longhorn_redundancy_verdict above. A capped volume is snapshotted on every deploy of
+    its service, so an empty reading means the exporter or the join went away rather than that
+    the volume holds no snapshots.
+
+    The usage this reads is a SUPERSET of what the deploy gate sums. The gate skips
+    `status.markRemoved` snapshots; the metric carries no markRemoved label, so this check cannot
+    distinguish one (measured 2026-09-10: 25 of the 114 Snapshot CRs were markRemoved and every
+    one still had a metric series). That errs in the safe direction — a markRemoved snapshot
+    still holds its blocks until Longhorn purges it — but it can overstate usage for a cycle
+    after a prune, which is why the caller rides `down_streak` rather than paging at once.
+
+    Args:
+      used: PVC name -> aggregate snapshot bytes, from `snapshot_used_by_pvc`.
+      caps: PVC name -> cap in bytes, from `parse_snapshot_caps`.
+      warn_ratio: The fraction of a cap that counts as a breach (0.9 = breach at 90% used).
+    """
+    if not caps:
+        return True, "no capped Longhorn volumes declared (SNAPSHOT_CAPS empty)", ""
+    unseen = sorted(name for name in caps if name not in used)
+    if unseen:
+        return (
+            False,
+            "no snapshot series for capped volume(s) %s — snapshot headroom is UNMONITORED for "
+            "them, which is not the same as empty" % ", ".join(unseen),
+            "scrape gap grace",
+        )
+    breaching = [
+        "%s %.1f%% of cap (%d of %d bytes, %d bytes headroom)"
+        % (
+            name,
+            100.0 * used[name] / caps[name],
+            used[name],
+            caps[name],
+            caps[name] - used[name],
+        )
+        for name in sorted(caps)
+        if used[name] >= caps[name] * warn_ratio
+    ]
+    if breaching:
+        return (
+            False,
+            "snapshot space at or past %.0f%% of spec.snapshotMaxSize: %s — Longhorn refuses new "
+            "snapshots at the cap rather than pruning, so the next deploy of the service would "
+            "fail" % (100.0 * warn_ratio, "; ".join(breaching)),
+            "prune lag grace",
+        )
+    worst = max(caps, key=lambda name: used[name] / caps[name])
+    return (
+        True,
+        "%d capped volume(s) under %.0f%% of cap; worst %s at %.1f%% (%d bytes headroom)"
+        % (
+            len(caps),
+            100.0 * warn_ratio,
+            worst,
+            100.0 * used[worst] / caps[worst],
+            caps[worst] - used[worst],
+        ),
+        "",
+    )
