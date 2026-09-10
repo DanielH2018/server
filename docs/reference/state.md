@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/state.py
-generated_at: 2026-09-09 22:50 UTC
-generated_sha: 02af13398
+generated_at: 2026-09-10 06:17 UTC
+generated_sha: af3e4e492
 ---
 
 !!! warning "Generated file — do not edit"
@@ -19,10 +19,10 @@ generated_sha: 02af13398
 
 | Loop | Last run | Age | Cadence | Status | Last outcome |
 |---|---|---|---|---|---|
-| gitops-deploy | 2026-09-09T22:45:58+0000 | 4m | 10m | ok | ticked, no hold |
-| renovate-agent | 2026-09-05T11:35:25+0000 | 4d11h | 1d | late | session completed |
-| renovate-notify | 2026-09-09T21:42:35+0000 | 1h8m | 1d | ok | notified |
-| docs-refresh | 2026-09-09T18:17:00+0000 | 4h33m | 12h | ok | generators: skipped |
-| secret-rotate | 2026-09-09T22:14:19+0000 | 36m | 7d | ok | last touched by: Guard the git-derived rotation date against a whole-file SOPS re-encrypt |
-| longhorn-restore-drill | 2026-09-09T04:10:57+0000 | 18h39m | 1d | ok | PVC restore proven |
-| etcd-restore-drill | 2026-09-07T10:20:02+0000 | 2d12h | 7d | ok | list-only restore proven (snapshot offbox-daniel-box-1788749102.zip) |
+| gitops-deploy | 2026-09-10T06:12:51+0000 | 4m | 10m | ok | ticked, no hold |
+| renovate-agent | 2026-09-05T11:35:25+0000 | 4d18h | 1d | late | session completed |
+| renovate-notify | 2026-09-10T03:31:53+0000 | 2h45m | 1d | ok | notified |
+| docs-refresh | 2026-09-09T22:50:00+0000 | 7h27m | 12h | ok | generators: ok |
+| secret-rotate | 2026-09-10T03:38:59+0000 | 2h38m | 7d | ok | last touched by: Rotate renovate_agent_kuma_push_token after it reached an agent transcript |
+| longhorn-restore-drill | 2026-09-10T04:10:48+0000 | 2h6m | 1d | ok | PVC restore proven |
+| etcd-restore-drill | 2026-09-07T10:20:02+0000 | 2d19h | 7d | ok | list-only restore proven (snapshot offbox-daniel-box-1788749102.zip) |
