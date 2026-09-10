@@ -195,6 +195,56 @@
                       label: CO₂
                     - state: sensor.bedroom_airgradient_one_voc_index
                       label: VOC
+        # THE THREE MEDIA TILES MOVED HERE FROM A `Media` GROUP on 2026-09-10, which is why this
+        # group holds twelve tiles rather than nine. They are here to make the Services column
+        # four rows deep, which is what squares its bottom edge with the personal links in the
+        # Calendar column beside it — see the calendar height in custom.css.j2, which is derived
+        # from that row count. Jellyfin was the fourth media tile and was dropped entirely; it
+        # stays routed and reachable by hostname.
+        #
+        # THEIR URL SHAPE DIFFERS FROM THE TILES ABOVE ON PURPOSE — do not normalise it. The
+        # sonarr/radarr/qbittorrent routes are Authelia-gated, and their monitoring IngressRoutes
+        # deliberately expose only /api/v3/queue, so no Traefik URL reaches their widget APIs.
+        # These three therefore address the ClusterIP directly, which bypasses Traefik and
+        # Authelia entirely and leaves `monitoring_route` (ansible/templates/ingressroute.yml.j2)
+        # as narrow as it was. Same URL shape monitor-bridge already uses
+        # (roles/k8s/monitor-bridge/templates/env-secret.yaml.j2).
+        #
+        # Reaching a ClusterIP is pod → pod, so each target's NetworkPolicy must admit
+        # `app: homepage` on that port — see
+        # roles/k8s/{sonarr,radarr,qbittorrent}/templates/networkpolicy.yaml.j2. Fenced out, the
+        # widget fails as a widget-proxy error, not as an auth error.
+        - Sonarr:
+            icon: sonarr.png
+            href: https://sonarr.{{ domain }}/
+            description: Series management
+            widget:
+                type: sonarr
+                url: http://sonarr.{{ k8s_namespace }}.svc.cluster.local:8989
+                key: {{ sonarr_api_key }}
+                # Dropped: series.
+                fields: [wanted, queued]
+        - Radarr:
+            icon: radarr.png
+            href: https://radarr.{{ domain }}/
+            description: Movie management
+            widget:
+                type: radarr
+                url: http://radarr.{{ k8s_namespace }}.svc.cluster.local:7878
+                key: {{ radarr_api_key }}
+                # Dropped: movies, missing.
+                fields: [wanted, queued]
+        - qBittorrent:
+            icon: qbittorrent.png
+            href: https://qBittorrent.{{ domain }}
+            description: Download management
+            widget:
+                type: qbittorrent
+                url: http://qbittorrent.{{ k8s_namespace }}.svc.cluster.local:8080  # literal: qbittorrent_k8s_webui_port is that role's default, not in scope here
+                username: {{ qbittorrent_username }}
+                password: {{ qbittorrent_password }}
+                # Dropped: seed, upload.
+                fields: [leech, download]
     - Calendar:
         - Calendar:
             id: my-calendar
@@ -296,65 +346,6 @@
             icon: /icons/metatft.png
             href: https://www.metatft.com/
             description: metatft.com
-
-- Media:
-    # The four media services moved to the k8s cluster (slice 4), so the Docker-DNS widget URLs
-    # (http://jellyfin:8096, …) stopped resolving — each dashboard load burned ~15 widget-proxy
-    # 500s (the Traefik `homepage@docker` 5xx signal, 2026-08-08). The `server:`/`container:`
-    # docker-status pairs referenced containers that no longer exist on this host and are gone.
-    #
-    # THE THREE URL SHAPES BELOW DIFFER ON PURPOSE — do not normalise them.
-    # Jellyfin's -k8s route carries no Authelia, so its widget goes through Traefik at
-    # `jellyfin.local.{{ domain }}`. The sonarr/radarr/qbittorrent routes ARE Authelia-gated, and
-    # their monitoring IngressRoutes deliberately expose only /api/v3/queue, so no Traefik URL
-    # reaches their widget APIs. Those three therefore address the ClusterIP directly, which
-    # bypasses Traefik and Authelia entirely and leaves `monitoring_route`
-    # (ansible/templates/ingressroute.yml.j2) as narrow as it was. Same URL shape monitor-bridge
-    # already uses (roles/k8s/monitor-bridge/templates/env-secret.yaml.j2).
-    #
-    # Reaching a ClusterIP is pod → pod, so each target's NetworkPolicy must admit `app: homepage`
-    # on that port — see roles/k8s/{sonarr,radarr,qbittorrent}/templates/networkpolicy.yaml.j2.
-    # Fenced out, the widget fails as a widget-proxy error, not as an auth error.
-    - Jellyfin:
-        href: https://jellyfin.{{ domain }}
-        icon: jellyfin.png
-        description: Mediaserver
-        widget:
-            type: jellyfin
-            url: https://jellyfin.local.{{ domain }}
-            key: {{ jellyfin_api_key }}
-    - Sonarr:
-        icon: sonarr.png
-        href: https://sonarr.{{ domain }}/
-        description: Series management
-        widget:
-            type: sonarr
-            url: http://sonarr.{{ k8s_namespace }}.svc.cluster.local:8989
-            key: {{ sonarr_api_key }}
-            # Dropped: series.
-            fields: [wanted, queued]
-    - Radarr:
-        icon: radarr.png
-        href: https://radarr.{{ domain }}/
-        description: Movie management
-        widget:
-            type: radarr
-            url: http://radarr.{{ k8s_namespace }}.svc.cluster.local:7878
-            key: {{ radarr_api_key }}
-            # Dropped: movies, missing.
-            fields: [wanted, queued]
-    - qBittorrent:
-        icon: qbittorrent.png
-        href: https://qBittorrent.{{ domain }}
-        description: Download management
-        widget:
-            type: qbittorrent
-            url: http://qbittorrent.{{ k8s_namespace }}.svc.cluster.local:8080  # literal: qbittorrent_k8s_webui_port is that role's default, not in scope here
-            username: {{ qbittorrent_username }}
-            password: {{ qbittorrent_password }}
-            # Dropped: seed, upload.
-            fields: [leech, download]
-    # LINK-ONLY, and deliberately so — see the Admin group below for why no `widget:` block.
 
 # ADMIN and TOOLS are LINK-ONLY GROUPS, and the absence of `widget:` blocks is the point.
 # Before 2026-09-09 this dashboard carried 14 tiles against ~30 routed web UIs, so the way to

@@ -172,10 +172,8 @@ li.service:not(#my-calendar) .service-container:has(> :first-child:last-child) >
  * empty 44px band in every card. 3.25rem is one stat row — a block is 44px, plus its margins.
  *
  * A widget that later carries three or four stats wraps to a second row and takes its grid row
- * with it, which is correct: the reservation is a floor, not a cap. Jellyfin is the one to
- * watch — its widget declares four blocks and currently renders none, because the tile is
- * erroring (#1457).
- *
+ * with it, which is correct: the reservation is a floor, not a cap. It also takes the calendar
+ * beside it out of alignment, because that height is derived from this row height.
  */
 li.service:not(#my-calendar) .service-container {
   min-height: 3.25rem;
@@ -296,10 +294,55 @@ li.service > div.service-card {
   margin-bottom: 0;
 }
 
+/* THE CALENDAR'S HEIGHT IS DERIVED FROM THE SERVICES COLUMN BESIDE IT.
+ *
+ * The two Top Row columns are separate grids, so nothing makes them end level on its own — the
+ * personal links hung 108px below the Services block. They are also not siblings in one grid
+ * row, so `height: 100%` on the calendar's list does not match it to the Services list: tried on
+ * the deployed page 2026-09-10, the calendar column GREW to 676px against Services' 360px,
+ * because the height it resolved against was its own.
+ *
+ * So the calendar is pinned, and the pin is computed rather than typed. The Calendar column is
+ * the calendar plus two rows of links; the Services column is four rows of widget cards. Setting
+ * them equal and solving for the calendar leaves the `calc()` below, which reads as the same
+ * sentence: four widget rows, minus the two link rows, minus one row gap of difference.
+ *
+ * At 1920px that is 4x112 + 3x12 - (2x40 + 2x12) = 380px, and both columns end at y=652.
+ *
+ * THE THREE MEASUREMENTS ARE NOT ARBITRARY, but neither are they enforced — they are what the
+ * cards come out at, so a change to the tile content can move them. --widget-row is a card's
+ * height (4px padding twice, a 52px title row, a 52px stat row); --link-row is an icon-only
+ * card. Re-measure both if a tile grows, and re-derive if the Services tile count leaves four
+ * rows: `getBoundingClientRect().bottom` on the last tile of each column is the check.
+ */
+:root {
+  --widget-row: 7rem; /* 112px */
+  --link-row: 2.5rem; /* 40px */
+  --services-rows: 4;
+}
+
+#my-calendar {
+  height: calc(
+    var(--services-rows) * var(--widget-row) + 0.75rem - 2 * var(--link-row)
+  );
+}
+
+#my-calendar > div.service-card {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+#my-calendar .service-container {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 #my-calendar .service-container > div {
   display: flex;
   flex-direction: column;
-  max-height: 427px;
+  height: 100%;
+  min-height: 0;
   overflow: hidden;
 }
 
