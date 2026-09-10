@@ -41,3 +41,11 @@ volume_snapshot_api_timeout: 60
 # defaults/main.yml — the same choice cronjob-gate and image-builder make for the same reason.
 k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
 k8s_autodeploy_reason: "deploys no workload of its own — a pre-apply snapshot step other roles include; it renders no manifest and pins no image for Renovate to bump"  # noqa var-naming[no-role-prefix]
+
+# Fraction of a volume's `spec.snapshotMaxSize` at which claim.yml warns that the snapshot
+# space is nearly full. A cap is only dangerous as it is approached: when it is REACHED,
+# Longhorn refuses new snapshots instead of pruning, and this role snapshots before it prunes,
+# so the deploy that first hits the cap fails and every later one fails identically until
+# snapshots are deleted by hand (#1560). Only volumes with a non-zero cap are ever measured —
+# `"0"` is Longhorn's uncapped value and the fleet default.
+volume_snapshot_cap_warn_ratio: 0.9
