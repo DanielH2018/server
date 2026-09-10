@@ -54,6 +54,16 @@ Edit the `.j2` files, never the live config: homepage seeds any missing file int
   `Calendar` and `Media` hold the widgeted tiles; `Admin` and `Tools` hold link-only ones, four
   per row. There is no `Tracking` group: it held one tile (Crypto), which moved into the
   `Calendar` column on 2026-09-09 to fill the 144px that sat dead under the calendar.
+- **Stat blocks are laid out by COUNT: two or four per widget wrap two to a row, three span the
+  full width.** Two and four divide evenly at a 50% basis; three does not, and five of the nine
+  Services widgets carry exactly three stats, so `custom.css.j2` gives those a 33.3% basis via
+  `:has(> :nth-child(3):last-child)` — "a third child that is also the last". A widget whose
+  stat count changes moves between these automatically; nothing needs updating by hand.
+- **Reserve two stat rows or a whole grid row shrinks.** `.services-list` sizes each grid row to
+  its tallest member, so when every tile in one row holds a single stat row, that row alone
+  drops to 120px while the rows below stay 172px — uniform across, visibly different down.
+  `min-height: 6.5rem` on `.service-container` (two 44px blocks plus margins) makes the tallest
+  case the only case.
 - **Wrapped stat blocks must not grow.** `custom.css.j2` sets `flex: 0 0 calc(50% - 0.5rem)`,
   and the leading `0` is load-bearing. With `flex-grow: 1` an odd stat count stretches the last
   block across the full row, so a three-stat widget renders 128px, 128px, 264px against a
