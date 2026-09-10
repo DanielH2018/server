@@ -269,6 +269,20 @@ k3s_metallb_pool: 10.0.0.241-10.0.0.250
 # numberOfReplicas — so raising this at slice 7 stays a settings patch.
 k3s_longhorn_replica_count: 2
 
+# How hard Longhorn checks a snapshot disk file against its recorded checksum. Upstream's
+# default is `fast-check`, which re-hashes only when the file is unhashed or its mtime moved —
+# and upstream states plainly that "filesystem-unaware corruption cannot be detected" in that
+# mode (longhorn-manager v1.12.1, types/setting.go). Bit rot does not move mtime, so the exact
+# failure this setting exists to catch went uncovered until 2026-09-10 (#1364).
+#
+# `enabled` hashes every snapshot disk file on the snapshot-data-integrity-cronjob schedule
+# (`0 0 */7 * *` here — the 1st, 8th, 15th, 22nd and 29th). That is CPU and disk-read work on a
+# two-node cluster whose storage control plane was OOM-killed once under memory pressure
+# (#1243), so the cost is being MEASURED across the 2026-09-15 fire before this is kept. If the
+# cost is not acceptable, this returns to `fast-check` and the measurement is recorded in this
+# role's CLAUDE.md so the question is settled rather than re-opened.
+k3s_longhorn_snapshot_data_integrity: enabled
+
 # Whether joined agent nodes participate in Longhorn replica scheduling. false through
 # the join window (agent_verify patches allowScheduling:false and asserts zero replicas
 # landed); flipped true at the §F replica raise (2026-08-14) so daniel-server holds the

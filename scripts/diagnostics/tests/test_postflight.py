@@ -471,7 +471,14 @@ def test_credentials_never_reach_argv(monkeypatch):
 # still what the parser accepts, so it cannot have swallowed the interface.
 
 
-def test_help_exits_zero_without_running_a_single_check(capsys):
+def test_help_exits_zero_without_running_a_single_check(capsys, monkeypatch):
+    # Pin the colour setting rather than inheriting it. Python 3.14's argparse colourises help
+    # when FORCE_COLOR is set, TTY or not, and it wraps `usage: ` and the program name in
+    # SEPARATE escape runs — so the phrase below survives in CI (which sets neither variable)
+    # and is split on any host whose shell exports FORCE_COLOR. Stating the dependency here is
+    # what stops this passing remotely and failing locally (#1727).
+    monkeypatch.delenv("FORCE_COLOR", raising=False)
+    monkeypatch.setenv("NO_COLOR", "1")
     with pytest.raises(SystemExit) as exc:
         postflight.main(["--help"])
     assert exc.value.code == 0
