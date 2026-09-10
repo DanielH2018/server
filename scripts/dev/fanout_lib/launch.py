@@ -36,18 +36,28 @@ def unit_name(batch: str) -> str:
 
 
 def create_worktree_command(batch: str) -> str:
+    # The lock keeps prune_worktrees.py off this tree: its `--reason` doesn't match the
+    # `claude session ... (pid ... start ...)` shape prune_worktrees.session_is_alive
+    # recognizes, so an unrecognized reason reads as alive and the tree survives every
+    # prune until Task 10's `clean` unlocks it. Without this a merged, clean, unlocked
+    # tree is removable the moment the PR lands — even while the unit is still running.
     return (
         f"git -C {REPO} fetch origin && "
-        f"git -C {REPO} worktree add -b {branch_name(batch)} {worktree_path(batch)} origin/master"
+        f"git -C {REPO} worktree add -b {branch_name(batch)} {worktree_path(batch)} origin/master && "
+        f"git -C {REPO} worktree lock --reason {unit_name(batch)} {worktree_path(batch)}"
     )
 
 
 def remove_worktree_command(batch: str) -> str:
-    # `&&`, not `;`: `worktree add -b` fails precisely when the branch already exists, so
-    # a bare `;` would force-delete a branch this launch did not create whenever the add
-    # failed for that reason. Chaining on success means the branch survives when no tree
-    # was created, and goes with the tree when the add did half-create it.
+    # `git worktree remove` refuses a locked tree, so unlock first. A bare `;` here is
+    # correct: on a tree that was never locked (or never fully created) the unlock fails
+    # harmlessly, and the `&&` that follows still decides whether the branch dies —
+    # `worktree add -b` fails precisely when the branch already exists, so a `;` there
+    # would force-delete a branch this launch did not create whenever the add failed for
+    # that reason. Chaining remove and branch -D on success means the branch survives
+    # when no tree was created, and goes with the tree when the add did half-create it.
     return (
+        f"git -C {REPO} worktree unlock {worktree_path(batch)}; "
         f"git -C {REPO} worktree remove --force {worktree_path(batch)} && "
         f"git -C {REPO} branch -D {branch_name(batch)}"
     )
@@ -103,6 +113,10 @@ def launch(
     tools: Tools, host: str, batch: str, brief_text: str, issues: list[int]
 ) -> Batch:
     """Create the worktree, write the brief over stdin, then start the agent unit.
+
+    The worktree is locked with reason `fanout-<batch>` (`unit_name(batch)`) so a
+    merged-worktree prune cannot remove it while the unit is still running; Task 10's
+    `clean` is what unlocks it once the unit finishes.
 
     Args:
         tools: the injectable process boundary.

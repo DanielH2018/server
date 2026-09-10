@@ -69,7 +69,11 @@ def test_the_worktree_command_fetches_before_adding_from_origin_master():
     assert cmd.index("git -C /home/ubuntu/server fetch origin") < cmd.index(
         "worktree add"
     )
-    assert "-b worktree-fanout-b" in cmd and cmd.rstrip().endswith("origin/master")
+    assert "-b worktree-fanout-b" in cmd and "origin/master" in cmd
+    # The lock follows the add so a merged-worktree prune never sees the tree unlocked.
+    assert cmd.index("worktree add") < cmd.index("worktree lock")
+    assert "worktree lock --reason fanout-b" in cmd
+    assert cmd.rstrip().endswith(worktree_path("b"))
 
 
 def test_the_launch_command_is_a_transient_user_service_reading_the_brief():
