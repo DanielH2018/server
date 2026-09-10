@@ -12,23 +12,37 @@ from dataclasses import dataclass
 # against claude_cgroup_memory_current_bytes / claude_cgroup_pids_current before raising.
 RESERVATION_BYTES = 2_684_354_560
 
-# One line each: user.slice memory.current, its memory.high (an integer, or `max` when no
-# drop-in caps it), and the count of live `claude` processes for uid 1000. `pgrep -c` exits 1
-# on a zero count, which is why it is the last command and not the exit status we read.
+# Five lines: user.slice's memory.current and memory.high, then user-1000.slice's, then the
+# count of live `claude` processes for uid 1000. Either memory.high is an integer, or `max`
+# when no drop-in caps it. `pgrep -c` exits 1 on a zero count, which is why it is the last
+# command and not the exit status we read.
+#
+# Both slices are read because an agent is throttled by both. A launch starts a transient
+# user service, which systemd places in user-1000.slice (the login plane, capped by
+# claude_code_rc_memory_high), nested under user.slice (the fleet, capped by
+# claude_code_fleet_memory_high). Reading the fleet alone picks a host whose 12G/10G fleet
+# cap has room while the 8G cap that actually binds the agent is full: daniel-box's login
+# slice peaked at 8.58 GB against that 8G cap on 2026-09-10.
 READ_COMMAND = (
-    "cat /sys/fs/cgroup/user.slice/memory.current /sys/fs/cgroup/user.slice/memory.high; "
+    "cat /sys/fs/cgroup/user.slice/memory.current /sys/fs/cgroup/user.slice/memory.high "
+    "/sys/fs/cgroup/user.slice/user-1000.slice/memory.current "
+    "/sys/fs/cgroup/user.slice/user-1000.slice/memory.high; "
     "pgrep -c -x claude -u 1000"
 )
 
 
 @dataclass(frozen=True)
 class HostReading:
-    """One host's memory-cgroup reading: its cap, current usage, and live agent count.
+    """One host's memory-cgroup reading: both caps, both current usages, live agent count.
 
     Attributes:
         host: the host the reading came from.
-        cap_bytes: user.slice memory.high, or None when no drop-in caps it.
+        cap_bytes: the fleet cap — user.slice memory.high, or None when no drop-in caps it.
         current_bytes: user.slice memory.current.
+        plane_cap_bytes: the login-plane cap — user-1000.slice memory.high, or None when no
+            drop-in caps it. An agent runs as a transient user service inside that slice, so
+            this bounds it as surely as the fleet cap above does.
+        plane_current_bytes: user-1000.slice memory.current.
         live_agents: how many `claude` processes uid 1000 is running. Read and reported —
             `read` prints it and NoHeadroom names it — but never scored: placement decides
             on headroom alone (spec §2), because a host's agents are already priced into
@@ -38,6 +52,8 @@ class HostReading:
     host: str
     cap_bytes: int | None
     current_bytes: int
+    plane_cap_bytes: int | None
+    plane_current_bytes: int
     live_agents: int
 
 
@@ -46,35 +62,56 @@ class NoHeadroom(Exception):
 
 
 def parse_reading(host: str, stdout: str) -> HostReading:
-    """Parse READ_COMMAND's three-line output into a HostReading.
+    """Parse READ_COMMAND's five-line output into a HostReading.
+
+    A host still answering the older three-line shape is a parse error naming the host, not
+    a reading with the plane half guessed at: the read and this parser ship together, and a
+    fabricated plane cap is exactly the bad placement the plane read exists to prevent.
 
     Args:
         host: the host the reading came from.
-        stdout: the command's stdout — memory.current, memory.high (or `max`), then the
+        stdout: the command's stdout — user.slice's memory.current and memory.high (or
+            `max`), user-1000.slice's memory.current and memory.high (or `max`), then the
             live-agent count, one per line.
 
     Returns:
         The parsed reading.
 
     Raises:
-        ValueError: the output is not exactly three non-blank lines, or a numeric field
+        ValueError: the output is not exactly five non-blank lines, or a numeric field
             does not parse as an integer.
     """
     lines = [ln.strip() for ln in stdout.splitlines() if ln.strip()]
-    if len(lines) != 3:
+    if len(lines) != 5:
         raise ValueError(
-            "%s: expected 3 lines from the headroom read, got %r" % (host, stdout)
+            "%s: expected 5 lines from the headroom read, got %r" % (host, stdout)
         )
-    current, high, agents = lines
+    current, high, plane_current, plane_high, agents = lines
     cap = None if high == "max" else int(high)
-    return HostReading(host, cap, int(current), int(agents))
+    plane_cap = None if plane_high == "max" else int(plane_high)
+    return HostReading(
+        host, cap, int(current), plane_cap, int(plane_current), int(agents)
+    )
 
 
 def headroom(reading: HostReading, reservation: int = RESERVATION_BYTES) -> int | None:
-    """Bytes free under the cap after one reservation, or None when the host is uncapped."""
-    if reading.cap_bytes is None:
-        return None
-    return reading.cap_bytes - reading.current_bytes - reservation
+    """Bytes free under the TIGHTER of the two caps after one reservation, or None.
+
+    An agent is throttled by whichever of the fleet cap (user.slice) and the login-plane cap
+    (user-1000.slice) it reaches first, so the smaller headroom is the host's real headroom.
+    A cap read as `max` does not bound that side and drops out of the comparison; when
+    neither side is capped the host is uncapped and returns None, which `place` reads as
+    "not a candidate" — nothing bounds an agent there.
+    """
+    rooms = [
+        cap - current - reservation
+        for cap, current in (
+            (reading.cap_bytes, reading.current_bytes),
+            (reading.plane_cap_bytes, reading.plane_current_bytes),
+        )
+        if cap is not None
+    ]
+    return min(rooms) if rooms else None
 
 
 def _describe(

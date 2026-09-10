@@ -20,7 +20,7 @@ B = Batch(
     [1],
     "t",
 )
-HEADROOM = "1\n12884901888\n0\n"
+HEADROOM = "1\n12884901888\n1\n12884901888\n0\n"
 
 RUNNING = "=== b\nActiveState=active\nResult=success\nExecMainStatus=0\n--- stderr\n--- report\n"
 DONE = (
@@ -157,7 +157,7 @@ def test_cli_launch_places_and_starts_the_agent_with_one_launch_call(tmp_path):
 
 def test_cli_launch_reports_no_headroom_when_the_host_is_uncapped(tmp_path):
     tools, run = fake_tools(
-        answers={"daniel-box": ok("1\nmax\n0\n")},
+        answers={"daniel-box": ok("1\nmax\n1\nmax\n0\n")},
         issues=[Issue(1, "t", "b", ("claude",))],
     )
     assert _launch(tools, tmp_path) == 3

@@ -16,7 +16,12 @@ from fanout_lib.transport import ISSUE_FIELDS, issue_from_view
 from fanout_place import main
 from _fanout_fakes import fake_tools, ok
 
-HEADROOM = "1\n12884901888\n0\n"
+# Fleet current, fleet cap, login-plane current, login-plane cap, live agents. The plane
+# side is as roomy as the fleet side on purpose: these tests measure call counts, placement
+# order and the ssh budget, so the plane must not become the binding cap and turn a refusal
+# meant to come from the budget into a NoHeadroom. The plane's own arithmetic is
+# test_fanout_placement.py's.
+HEADROOM = "1\n12884901888\n1\n12884901888\n0\n"
 CLAIMED = [
     Issue(1, "one", "body one", ("claude",)),
     Issue(2, "two", "body two", ("claude",)),
@@ -88,7 +93,7 @@ def test_an_unpinned_launch_reads_both_hosts_and_places_on_the_emptier_one(tmp_p
         answers={
             # ~4.5 GiB headroom on daniel-box, ~9.5 GiB on daniel-server — both are
             # candidates, daniel-server wins on room alone.
-            "daniel-box": ok("5368709120\n12884901888\n1\n"),
+            "daniel-box": ok("5368709120\n12884901888\n5368709120\n12884901888\n1\n"),
             "daniel-server": ok(HEADROOM),
         },
         issues=[CLAIMED[0]],

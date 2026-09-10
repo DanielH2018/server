@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Place issue-fanout batches on the session host with the most memory headroom.
 
-Reads user.slice memory.current against its MemoryHigh on daniel-box and daniel-server, picks
-the host with the most headroom per batch, creates a fresh worktree there, and starts a headless
+Reads memory.current against MemoryHigh for BOTH cgroups an agent lives in — user.slice (the
+fleet) and user-1000.slice (the login plane) — on daniel-box and daniel-server, scores each host
+on the tighter of the two, picks the host with the most headroom per batch, creates a fresh
+worktree there, and starts a headless
 Opus agent as a transient user service. daniel-box agents land their PR; daniel-server agents
 stop at `gh pr create`. Spec: docs/superpowers/specs/2026-09-06-claude-fanout-placement-design.md
 
@@ -77,8 +79,12 @@ def _readings(tools: Tools, hosts):
 def cmd_read(args, tools: Tools) -> int:
     good, bad = _readings(tools, HOSTS)
     for r in good:
+        # Both caps, because placement scores the tighter of the two: a fleet number with
+        # room says nothing on its own about whether a batch fits.
         print(
-            f"{r.host}: cap={r.cap_bytes} current={r.current_bytes} agents={r.live_agents}"
+            f"{r.host}: fleet cap={r.cap_bytes} current={r.current_bytes} "
+            f"plane cap={r.plane_cap_bytes} current={r.plane_current_bytes} "
+            f"agents={r.live_agents}"
         )
     for msg in bad:
         print(msg, file=sys.stderr)
