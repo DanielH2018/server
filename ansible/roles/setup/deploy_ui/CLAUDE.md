@@ -13,6 +13,7 @@ visible decision:
   node IP, because flannel masquerades pod→LAN traffic to the sending node).
   ENFORCED: `ansible/tests/setup/test_deploy_ui_firewall_sources.py`.
 - Authelia `two_factor` gates `deploy.local` (`roles/k8s/authelia/templates/config-secret.yaml.j2`).
+  ENFORCED: `ansible/tests/k8s/test_deploy_ui_is_two_factor.py`.
   The `roles/k8s/deploy-ui` route role ships the guard that pins that.
 
 DECIDED: a pod inside the cluster reaches the daemon without Authelia. Accepted 2026-09-10 —

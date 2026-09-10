@@ -2,7 +2,7 @@
 | Stance | Roles |
 |---|---|
 | Eligible | 26 |
-| Denied | 39 |
+| Denied | 40 |
 | Not declaring | 2 |
 
-Denylisted (`k8s_autodeploy: false`): `arr-notification`, `authelia`, `autofix-bridge`, `claude-otel`, `cloudflare-ddns`, `code-server`, `cronjob-gate`, `crowdsec`, `dri-device-plugin`, `game-stats-lib`, `healthchecks`, `image-builder`, `janitorr`, `karakeep`, `livesync`, `loki-homelab`, `longhorn-api`, `longhorn-ui`, `monitor-bridge`, `mosquitto`, `n8n`, `navidrome`, `nut`, `pihole`, `qbittorrent`, `registry`, `scrutiny`, `tdarr`, `terraria`, `terraria-stats`, `traefik`, `uptime-kuma`, `valheim`, `valheim-stats`, `volume-claim`, `volume-revert`, `volume-snapshot`, `wg-easy`, `zigbee2mqtt`.
+Denylisted (`k8s_autodeploy: false`): `arr-notification`, `authelia`, `autofix-bridge`, `claude-otel`, `cloudflare-ddns`, `code-server`, `cronjob-gate`, `crowdsec`, `deploy-ui`, `dri-device-plugin`, `game-stats-lib`, `healthchecks`, `image-builder`, `janitorr`, `karakeep`, `livesync`, `loki-homelab`, `longhorn-api`, `longhorn-ui`, `monitor-bridge`, `mosquitto`, `n8n`, `navidrome`, `nut`, `pihole`, `qbittorrent`, `registry`, `scrutiny`, `tdarr`, `terraria`, `terraria-stats`, `traefik`, `uptime-kuma`, `valheim`, `valheim-stats`, `volume-claim`, `volume-revert`, `volume-snapshot`, `wg-easy`, `zigbee2mqtt`.
