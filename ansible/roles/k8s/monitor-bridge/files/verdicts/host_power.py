@@ -5,9 +5,11 @@ Its own module rather than a section of `verdicts/host.py` for the reason
 `ansible/tests/repo/test_module_length_ratchet.py`. Same split idiom as `checks/host_edge.py`
 and `checks/host_thermal.py`.
 
-Both verdicts are read by `check_host_temp`'s two newer arms (issue #1471). They share that
-monitor rather than having their own, so the naming stays "host temperature" on the Kuma side —
-see `checks/host_thermal.py` for why folding beat a new push token.
+The first two verdicts are read by `check_host_temp`'s two newer arms (issue #1471). They share
+that monitor rather than having their own, so the naming stays "host temperature" on the Kuma
+side — see `checks/host_thermal.py` for why folding beat a new push token.
+`thermal_monitor_verdict` is the composer that decides which of that monitor's four arms
+reaches Kuma, split out here so the propagation has a test (issue #1547).
 
 Decides; does not fetch. Takes its inputs as arguments and reads no module-level config — see
 `bridge/parsing.py`'s header for the rule and why breaking it fails silently rather than loudly.
@@ -104,3 +106,53 @@ def thermal_throttle_verdict(
             )
         )
     return True, "not throttling; %s" % coverage
+
+
+def thermal_monitor_verdict(
+    undervoltage: tuple[bool, str] | None,
+    temperature: tuple[bool, str] | None,
+    throttle: tuple[bool, str] | None,
+    coverage: tuple[bool, str] | None,
+    temperature_msg: str,
+) -> tuple[bool, str]:
+    """Pure: compose `check_host_temp`'s four arms into the one verdict its monitor reports.
+
+    Each arm arrives already decided, as `(ok, msg)` or None for "nothing to say". The check
+    fetches and evaluates; this decides the ORDER the arms speak in and which of them reaches
+    the monitor. Splitting it out is what gives propagation a direct test (issue #1547): the
+    arms had accept/reject pairs of their own, but nothing could see a missing `return` at a
+    call site, because the structural test reads `co_names` and a deleted return leaves the
+    name in place.
+
+    `temperature` follows the same convention as the other arms and is None exactly when the
+    hwmon verdict was clean. It is NOT None when that verdict was red, whether the thermal-spike
+    grace is still holding (ok True) or has expired (ok False) — either way the temperature arm
+    is speaking and it short-circuits everything after it, which is why an `ok` arm can still
+    end the composition here. `temperature_msg` is the clean verdict's message; it leads the
+    up-path message and is unread on every other path.
+
+    The order, and what each step suppresses:
+
+      1. an asserted undervoltage alarm returns alone. The firmware has already decided, and the
+         damage it does is not undone by cooling down.
+      2. a red temperature verdict returns alone. The caller has not fetched the throttle arm on
+         this path, so `throttle` is None here by construction rather than by choice.
+      3. a red throttle arm returns alone.
+      4. a coverage shortfall returns last of the not-ok arms: a host that IS reporting and IS
+         too hot outranks a complaint about the absent one.
+      5. otherwise up, with the clean temperature message leading and only the arms still
+         HOLDING inside their own grace appending a note. A clean arm passes None and adds
+         nothing, so an ordinary cycle reads exactly as it did before any of these arms existed.
+    """
+    if undervoltage is not None and not undervoltage[0]:
+        return undervoltage
+    if temperature is not None:
+        return temperature
+    if throttle is not None and not throttle[0]:
+        return throttle
+    if coverage is not None:
+        return coverage
+    notes = [temperature_msg] + [
+        arm[1] for arm in (undervoltage, throttle) if arm is not None
+    ]
+    return True, "; ".join(notes)

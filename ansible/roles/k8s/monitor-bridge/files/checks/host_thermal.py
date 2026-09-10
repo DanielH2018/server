@@ -27,7 +27,11 @@ from verdicts.host import (
     scrutiny_wear_verdict,
     ups_health,
 )
-from verdicts.host_power import thermal_throttle_verdict, undervoltage_verdict
+from verdicts.host_power import (
+    thermal_monitor_verdict,
+    thermal_throttle_verdict,
+    undervoltage_verdict,
+)
 
 
 def _source_is_up(cfg: Config, up_query: str) -> bool:
@@ -210,6 +214,14 @@ def check_host_temp(cfg: Config) -> tuple[bool, str]:
     Arms 2 and 3 landed for issue #1471. Both signals were already plotted on
     Infrastructure/hardware-thermal.json and alerted on by nothing.
 
+    This function FETCHES and holds the streak state; `verdicts.host_power.thermal_monitor_verdict`
+    decides which arm reaches the monitor. That split is issue #1547: the arms had accept/reject
+    pairs of their own, but a deleted `return` at a call site left every test green, because the
+    structural test reads `co_names` and the clean-path integration tests drive only the cycle
+    where all three arms defer. Read the composer for the ordering; read here for what each path
+    costs in Prometheus queries — the throttle arm's two are spent only on a cycle whose
+    temperature verdict came back clean.
+
     Answers the one thermal question nothing else here asks: is a host cooking? A hot box
     throttles, then corrupts, then dies, and every existing monitor reads green throughout —
     check_cpu_throttle sees CFS throttling (a cgroup limit, not heat), and the Grafana
@@ -287,38 +299,37 @@ def check_host_temp(cfg: Config) -> tuple[bool, str]:
         alarms,
         bool(alarms) or _source_is_up(cfg, cfg.UNDERVOLTAGE_UP_QUERY),
     )
-    if under is not None and not under[0]:
-        return under
     ok, msg = hwmon_temp_verdict(limits)
-    if not ok:
-        bridge.streaks._down_streaks["host_temp"], ok, msg = bridge.streaks.down_streak(
-            bridge.streaks._down_streaks.get("host_temp", 0),
-            cfg.HWMON_TEMP_CONSECUTIVE,
-            msg,
-            "thermal spike grace",
-        )
-        return ok, msg
-    bridge.streaks._down_streaks["host_temp"] = 0
-    states = (
-        bridge.net.prom_vector(cfg, cfg.THERMAL_THROTTLE_QUERY)
-        if cfg.THERMAL_THROTTLE_QUERY
-        else []
-    )
-    throttle = _thermal_throttle_arm(
-        cfg,
-        states,
-        bool(states) or _source_is_up(cfg, cfg.THERMAL_THROTTLE_UP_QUERY),
-    )
-    if throttle is not None and not throttle[0]:
-        return throttle
-    if short is not None:
-        return short
-    # Only an arm HOLDING inside its own grace speaks on the up path — a monitor that is up
-    # while a fault accumulates must say so, or the tile reads identical to a clean cycle. A
-    # clean arm returns None and adds nothing, so an ordinary cycle's message is byte-identical
-    # to what this monitor reported before the two arms existed.
-    notes = [msg] + [arm[1] for arm in (under, throttle) if arm is not None]
-    return True, "; ".join(notes)
+    temperature: tuple[bool, str] | None = None
+    throttle: tuple[bool, str] | None = None
+    # An asserted undervoltage alarm ends the cycle, so nothing below it runs — not the
+    # temperature streak, not the throttle fetch. The ORDER and the propagation live in
+    # thermal_monitor_verdict, which is pure and directly tested; what stays here is the
+    # fetching and the streak state, which is what the arms cannot be given.
+    if under is None or under[0]:
+        if not ok:
+            bridge.streaks._down_streaks["host_temp"], ok, msg = (
+                bridge.streaks.down_streak(
+                    bridge.streaks._down_streaks.get("host_temp", 0),
+                    cfg.HWMON_TEMP_CONSECUTIVE,
+                    msg,
+                    "thermal spike grace",
+                )
+            )
+            temperature = (ok, msg)
+        else:
+            bridge.streaks._down_streaks["host_temp"] = 0
+            states = (
+                bridge.net.prom_vector(cfg, cfg.THERMAL_THROTTLE_QUERY)
+                if cfg.THERMAL_THROTTLE_QUERY
+                else []
+            )
+            throttle = _thermal_throttle_arm(
+                cfg,
+                states,
+                bool(states) or _source_is_up(cfg, cfg.THERMAL_THROTTLE_UP_QUERY),
+            )
+    return thermal_monitor_verdict(under, temperature, throttle, short, msg)
 
 
 def check_ups(cfg: Config) -> tuple[bool, str]:

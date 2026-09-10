@@ -489,11 +489,14 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     say so. Both are unit-tested in `test_host_thermal_arms.py` as accept/reject pairs, plus one
     structural test that reads `check_host_temp.__code__.co_names` to prove the check calls both
     arms and calls the undervoltage one first: testing an arm alone would pass even if the check
-    never called it. That structural test proves the call sites exist and their order. It cannot
-    prove the check PROPAGATES an arm's verdict — drop a `return` and it still passes — and
-    `test_host_temp.py` drives only the clean path, so nothing yet asserts that an asserted
-    undervoltage alarm makes `check_host_temp` itself return not-ok. Issue #1547 carries the fix:
-    a pure composer in `verdicts/host_power.py` the check delegates to, testable without patching.
+    never called it. That structural test proves the call sites exist and their order, and it
+    cannot prove the check PROPAGATES an arm's verdict — drop a `return` and the name stays in
+    `co_names`. **`verdicts/host_power.thermal_monitor_verdict` is where the propagation lives**
+    (issue #1547): the check fetches and holds the streak state, the composer decides which of
+    the four arms reaches Kuma, and every ordering and propagation rule has a direct test in
+    `test_host_thermal_arms.py` with nothing patched. Deleting the undervoltage `return` turns
+    `test_an_asserted_undervoltage_alarm_reaches_the_monitor` red, which is the deletion the
+    structural test could not see.
 
     Transport, measured before shipping because the arms read Prometheus: both queries answered
     in 0.48-0.58 ms, three runs each, against Prometheus's loopback on daniel-server (the node
