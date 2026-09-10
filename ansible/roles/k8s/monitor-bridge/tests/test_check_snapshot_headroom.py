@@ -178,14 +178,24 @@ def _declared_caps() -> dict[str, int]:
 def _roles_that_cap_a_volume() -> dict[str, str]:
     """Role name -> the claim it caps, derived from the tree rather than from the declaration.
 
-    A role caps a volume by PATCHING `spec.snapshotMaxSize` (roles/k8s/jellyfin/tasks/main.yml is
-    the only one today); roles/k8s/volume-snapshot only READS the field, which is why the census
-    matches the patch payload rather than the field name. The claim comes from the role's own
-    `<role>_k8s_claim` default, which is the variable the patch resolves its volume through.
+    A role caps a volume by writing `spec.snapshotMaxSize` (roles/k8s/jellyfin/tasks/main.yml is
+    the only one today). The census matches the FIELD NAME anywhere under a k8s role's tasks,
+    minus the roles that only READ it, rather than jellyfin's `kubectl patch` payload: a future
+    role capping a volume through `kubernetes.core.k8s` or `--type=json` writes the same field
+    with different syntax, and a payload-shaped pattern would miss it and pass. The claim comes
+    from the role's own `<role>_k8s_claim` default, which is the variable the write resolves its
+    volume through.
     """
+    # The known readers. volume-snapshot reads the cap to gate its pre-deploy snapshot and never
+    # writes one; volume-revert reads the same volumes. A role added here needs the reason in
+    # writing, because every entry narrows what this guard can see.
+    READERS = {"volume-snapshot", "volume-revert"}
     census = {}
     for tasks in sorted((ROLES / "k8s").glob("*/tasks/*.yml")):
-        if '"spec":{"snapshotMaxSize"' not in tasks.read_text():
+        if (
+            "snapshotMaxSize" not in tasks.read_text()
+            or tasks.parents[1].name in READERS
+        ):
             continue
         role = tasks.parents[1].name
         defaults = (tasks.parents[1] / "defaults" / "main.yml").read_text()

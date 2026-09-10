@@ -170,6 +170,10 @@ EMAIL_TIER = {
     "UPS Battery Health",
     "Discord Delivery",
     "Kubelet CSI Mount Read-Only",
+    # The snapshot-space axis of the same storage layer as the three Longhorn/PVC tiles above,
+    # and on the tier for the same reason: the fix is an operator deleting snapshots or raising
+    # the cap, and a reached cap fails every later deploy of that service (#1560, #1627).
+    "Longhorn Snapshot Headroom",
     # Not a "the fix cannot wait a day" tile like the fifteen above — it is on the tier for the
     # transport, not the urgency. A fleet-wide recovery bursts every tile's UP notification into
     # the same second, and Discord's per-webhook bucket dropped five of them on 2026-09-06
