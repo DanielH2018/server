@@ -454,6 +454,41 @@ data:
             action: keep
           - source_labels: [__meta_kubernetes_pod_node_name]
             target_label: node
+      # Issue #1694: the third CrowdSec agent. The traefik pod runs a crowdsec-agent SIDECAR
+      # that parses the edge access log — the busiest log source in the fleet — and it was in
+      # neither of the jobs above, so its acquisition and parsing counters existed nowhere.
+      # A sidecar that stops parsing (a bad parser, a log it lost) then reads as nothing at
+      # all rather than as a drop.
+      #
+      # No `node` target_label, unlike crowdsec-node-agents: the edge is a single Recreate
+      # Deployment, so the job name identifies it on its own — the same shape the LAPI job
+      # above uses. The per-node CrowdSec boards therefore do not show it, deliberately.
+      #
+      # The keep on the container port is what makes this job select the sidecar rather than
+      # traefik itself: pod-role SD emits one target per DECLARED containerPort, and 6060 is
+      # declared only by the crowdsec-agent container (traefik/templates/deployment.yaml.j2).
+      # The sidecar binds 0.0.0.0:6060 from the image's own staged config.yaml, which
+      # crowdsec-config-install rsyncs in (build/docker/config.yaml at v1.8.0 —
+      # `prometheus.listen_addr: 0.0.0.0`; the entrypoint rewrites only the PORT, and only
+      # when METRICS_PORT is set, which this pod does not set).
+      #
+      # Reaching it needs the matching netpol grant: traefik's baseline policy fences every
+      # port but the two front-door ones, so 6060 is admitted to prometheus alone
+      # (netpol-baseline/templates/networkpolicy-traefik.yaml.j2). That grant and this job
+      # only work as a pair.
+      - job_name: crowdsec-traefik-agent
+        scrape_interval: 1m
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names: [{{ k8s_namespace }}]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            regex: traefik
+            action: keep
+          - source_labels: [__meta_kubernetes_pod_container_port_number]
+            regex: "6060"
+            action: keep
       # E7 (2026-08-13): the `traefik` job (Docker edge metrics on 9104) retired with the
       # edge. The bare `traefik` job name retires with it — the cluster edge stays
       # `traefik-k8s`, and monitor-bridge's traefik/cert checks are unpinned so they

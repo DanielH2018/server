@@ -61,3 +61,33 @@ against a DB holding 424 alerts younger than that. Use `cscli decisions list` an
 Upstream `crowdsecurity/grafana-dashboards` cannot fill the gap either: it is Prometheus-only,
 was last touched 2023-06-20 targeting CrowdSec v1.5.x, and its `dashboards_v5` panel set is
 already what this repo ships (identical titles, `instance` relabelled to `machine`).
+
+## Which Prometheus job covers which agent
+
+Four CrowdSec containers run in this cluster and three scrape jobs cover them, all defined in
+`roles/k8s/claude-otel/templates/prometheus.yaml.j2`:
+
+| Container | Job | Node dimension |
+|---|---|---|
+| the engine pod (LAPI + AppSec) | `crowdsec` | none — a singleton |
+| the `crowdsec-node-agent` DaemonSet | `crowdsec-node-agents` | `node`, from the pod's node name |
+| the traefik pod's `crowdsec-agent` sidecar | `crowdsec-traefik-agent` | none — a singleton |
+| the authelia pod's `crowdsec-agent` sidecar | **none — see #1706** | — |
+
+Read the job before writing a CrowdSec query: `node` is not a CrowdSec label, and only the
+DaemonSet job attaches one. A per-node selector on an engine or sidecar metric matches nothing,
+which is how `Alerts per Scenario` and `Bucket pour time` sat dead on the per-machine board
+(#1690). `ansible/tests/services/test_dashboard_queries_match_this_clusters_labels.py` enforces
+that.
+
+**A sidecar job needs two edits, not one.** Pod-role SD emits a target per *declared*
+containerPort, so the sidecar declares 6060 (`roles/k8s/traefik/templates/deployment.yaml.j2`),
+and traefik's baseline NetworkPolicy admits prometheus to that port
+(`roles/k8s/netpol-baseline/templates/networkpolicy-traefik.yaml.j2`). Either one missing gives
+a job that discovers nothing or reads `up == 0` forever — both indistinguishable from the job
+nobody added. `ansible/tests/k8s/test_crowdsec_traefik_sidecar_is_scraped.py` holds all three
+together.
+
+`Bucket pour time` on the per-machine board reads `{job="crowdsec"}` — the engine's AppSec
+pours alone. The traefik sidecar's own pour series are excluded on purpose: the panel legends
+by `le` only, so two datasources would collide into one set of bars.

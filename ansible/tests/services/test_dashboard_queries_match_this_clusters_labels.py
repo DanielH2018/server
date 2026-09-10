@@ -84,6 +84,15 @@ LAPI_ONLY_METRICS = frozenset(
     {"cs_alerts", "cs_active_decisions", "cs_lapi_request_duration_seconds_bucket"}
 )
 
+# Metrics the node agents cannot emit, so pinning one to their job is the same dead panel with
+# the selector written the other way round (#1690). `cs_bucket_pour_seconds_bucket` comes from
+# the central pod's AppSec datasource and from the traefik sidecar (`crowdsec-traefik-agent`,
+# #1694); the node agents read auth.log and pour into no bucket, which is why `Bucket pour
+# time` matched nothing while carrying `job="crowdsec-node-agents"` alongside `node="$node"`.
+NOT_ON_THE_NODE_AGENTS = frozenset(
+    {"cs_bucket_pour_seconds_bucket"} | LAPI_ONLY_METRICS
+)
+
 
 def _panels(doc):
     """Every panel in a board, flattened through row children."""
@@ -185,6 +194,26 @@ def test_no_board_filters_a_lapi_only_metric_by_node():
     assert {k: v for k, v in offenders.items() if v} == {}
 
 
+def engine_metrics_pinned_to_the_node_agents(board: Path) -> list[str]:
+    """Every selector pinning a metric the node agents never emit to the node-agent job."""
+    doc = json.loads(board.read_text())
+    return [
+        e
+        for e in _prometheus_exprs(doc)
+        for m in NOT_ON_THE_NODE_AGENTS
+        if m + "{" in e and NODE_AGENT_JOB in e
+    ]
+
+
+def test_no_board_pins_an_engine_metric_to_the_node_agent_job():
+    """The other half of #1690: `node` scoping and job scoping fail the same panel."""
+    offenders = {
+        b.name: engine_metrics_pinned_to_the_node_agents(b)
+        for b in SECURITY.glob("*.json")
+    }
+    assert {k: v for k, v in offenders.items() if v} == {}
+
+
 def test_no_crowdsec_board_reads_an_acquisition_metric_this_cluster_cannot_emit():
     offenders = {
         b.name: exprs_naming_an_unemitted_metric(b) for b in SECURITY.glob("*.json")
@@ -281,6 +310,22 @@ def test_a_board_that_broke_each_rule_would_be_reported(tmp_path):
     )
     assert lapi_metrics_filtered_by_node(lapi) == ['cs_alerts{node="$node"}']
 
+    pour = tmp_path / "pour.json"
+    pour_expr = (
+        'cs_bucket_pour_seconds_bucket{job="crowdsec-node-agents", node="$node", '
+        'type="$datasource_type", source="$source"}'
+    )
+    pour.write_text(
+        json.dumps(
+            {
+                "annotations": {"list": []},
+                "templating": {"list": []},
+                "panels": [{"title": "planted", "targets": [{"expr": pour_expr}]}],
+            }
+        )
+    )
+    assert engine_metrics_pinned_to_the_node_agents(pour) == [pour_expr]
+
 
 def test_the_boards_the_rules_read_are_all_still_there():
     """Non-vacuity. Every rule above walks a glob or a name set, and both can go empty."""
@@ -301,3 +346,12 @@ def test_the_boards_the_rules_read_are_all_still_there():
         for e in _prometheus_exprs(json.loads(b.read_text()))
     )
     assert scoped >= 15, scoped
+    # And the metric #1690's rule reads is still on a board, so that rule is not a no-op.
+    named = {
+        m
+        for b in SECURITY.glob("*.json")
+        for e in _prometheus_exprs(json.loads(b.read_text()))
+        for m in NOT_ON_THE_NODE_AGENTS
+        if m + "{" in e
+    }
+    assert "cs_bucket_pour_seconds_bucket" in named, named
