@@ -196,7 +196,51 @@ jellyfin_k8s_mergeversions_sha256: "79afd80219176cadccb05752971072a9fc74dc112232
 # name and targetAbi above. Without it Jellyfin's LoadManifest invents one from the directory
 # name, setting the id to an MD5 of the folder and AutoUpdate to false.
 
-# The image ALL THREE plugin installers run on — python, not the alpine:3.24 the sibling init
+
+# ── Media Cleaner (rule-based deletion of watched media) ─────────────────────────────────────
+# Fifth plugin installed by this role, and the one with the largest blast radius: it DELETES
+# MEDIA FILES on a schedule, by rule. It ran unmanaged on the `jellyfin-config` PVC from a
+# dashboard install until #1619 — no pinned version, no checksum, no recorded targetAbi and no
+# test — which for a plugin that deletes is a different risk class from the four beside it. The
+# operator's call on #1619 was to KEEP it and pin it, so it is installed here on the pattern the
+# other four use, and an image bump can no longer drop it silently.
+#
+# WHAT IS STILL NOT IN GIT, and cannot be: which libraries it may delete from, and every rule
+# that decides what goes. That is plugin configuration under
+# /config/data/plugins/configurations/, the same shape as bazarr's provider list — the repo owns
+# that the plugin is installed and at which version, never what it is pointed at. Read the rules
+# from the dashboard's Troubleshooting tab, which renders a DRY-RUN report of what a real run
+# would delete, before changing anything there.
+#
+# 3.2.0.101109 is what the pod already loaded before this pin existed (read from
+# `kubectl -n homelab logs <pod> -c jellyfin | grep 'Loaded plugin:'`, 2026-09-10), so pinning it
+# changes no running version — it only makes the version a thing git decides.
+#
+# THE VERSION ENCODES THE SERVER ABI IN ITS FOURTH SEGMENT, which no sibling pin here does.
+# Upstream ships ONE release tag (`v3.2.0`) carrying three per-ABI assets —
+# MediaCleaner-10.10.7.zip, MediaCleaner-10.11.0.zip, MediaCleaner-10.11.9.zip — and publishes
+# each as its own manifest version: `3.2.0.101007`, `3.2.0.101100`, `3.2.0.101109`. The fourth
+# segment is `<major><minor:02d><patch:02d>` of the targetAbi, so 10.11.9 becomes 101109. Picking
+# the wrong asset is therefore a SILENT choice: all three are the same plugin release and only
+# the embedded ABI differs, and Jellyfin rejects one built for a newer server without logging a
+# failure. ansible/tests/services/test_mediacleaner_install.py re-derives that encoding from the
+# targetAbi rather than trusting the three values to have been copied consistently.
+jellyfin_k8s_mediacleaner_version: "3.2.0.101109"
+# The NEWEST ABI variant this release ships, and the newest the 10.11.11 image satisfies.
+jellyfin_k8s_mediacleaner_target_abi: "10.11.9.0"
+jellyfin_k8s_mediacleaner_url: "https://github.com/shemanaev/jellyfin-plugin-media-cleaner/releases/download/v3.2.0/MediaCleaner-10.11.9.zip"
+# sha256, the digest GitHub reports for the asset itself — verified by downloading the zip and
+# hashing it (2026-09-10). The plugin's published manifest (shemanaev/jellyfin-plugin-repo,
+# master manifest.json) carries an MD5, 765cbb16756bad5c0f5fda654e02ba5c, and it agrees on the
+# same bytes, so two independent digests attest to one download.
+jellyfin_k8s_mediacleaner_sha256: "473e9382d12ccada1a63c240588c7410ce68fa57c9020c751004bc1fd89ebeb1"
+# The zip carries its own meta.json beside MediaCleaner.dll and MediaCleaner.Core.dll, so this
+# install is WEBHOOK's shape, not Intro Skipper's: nothing here writes a manifest, and no guid
+# is needed as an input. For the record, the manifest declares
+# 607fee77-97eb-41fe-bf22-26844d99ffb0 — that is the id the plugin's configuration directory is
+# already bound to, which is why a dashboard-installed copy and this one are the same plugin to
+# Jellyfin rather than two.
+# The image ALL FIVE plugin installers run on — python, not the alpine:3.24 the sibling init
 # container uses. See the deployment template for why: the releases are .zips and /config is
 # owned by uid {{ puid }}, so an alpine container would need `apk add unzip` as root — and root
 # there holds no DAC_OVERRIDE and so could not write what it had unpacked. Named here rather

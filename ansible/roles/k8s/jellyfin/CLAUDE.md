@@ -5,16 +5,18 @@ shared `media-data` library and owns its own config volume.
 
 ## At a glance
 - **Image:** `lscr.io/linuxserver/jellyfin` (`jellyfin_k8s_image`), pinned in lockstep with the
-  `targetAbi` of **all four** installed plugins — `jellyfin-ani-sync`, Intro Skipper, Webhook
-  and Merge Versions. Raise a plugin and the image together, never one alone
+  `targetAbi` of **all five** installed plugins — `jellyfin-ani-sync`, Intro Skipper, Webhook,
+  Merge Versions and Media Cleaner. Raise a plugin and the image together, never one alone
   (`ansible/tests/services/test_anisync_pin_matches_server.py`,
   `ansible/tests/services/test_introskipper_install.py`,
-  `ansible/tests/services/test_webhook_plugin_install.py` and
-  `ansible/tests/services/test_mergeversions_install.py` enforce this). **Each addition
-  TIGHTENS the pin**: the image cannot move to a new Jellyfin line until every one of the four
-  has a release for that ABI, so the constraint is the slowest plugin, not the newest. Two more
-  plugins are loaded from the config PVC and are outside that lockstep — *Every plugin the pod
-  actually loads* below has the census.
+  `ansible/tests/services/test_webhook_plugin_install.py`,
+  `ansible/tests/services/test_mergeversions_install.py` and
+  `ansible/tests/services/test_mediacleaner_install.py` enforce this). **Each addition
+  TIGHTENS the pin**: the image cannot move to a new Jellyfin line until every one of the five
+  has a release for that ABI, so the constraint is the slowest plugin, not the newest — and
+  Media Cleaner's `10.11.9.0` is the tightest of them today. One more plugin is loaded from the
+  config PVC and is outside that lockstep — *Every plugin the pod actually loads* below has the
+  census.
 - **Deploy tag:** `--tags "jellyfin"`. `use_authelia: false` — **no auth**, public route.
 - **Route:** `jellyfin.<domain>`.
 - **Persists:** `jellyfin-config` (`longhorn`, backed up, 8Gi) — the library database, artwork
@@ -62,13 +64,29 @@ shared `media-data` library and owns its own config volume.
   Skipper's parallel tags and Webhook's major bump record. Its zip carries the DLL alone, so
   this install is **Intro Skipper's shape, not Webhook's**: the init container writes `meta.json`
   from the guid, name and targetAbi. Which libraries it merges is dashboard state on the PVC.
-- All four installers duplicate rather than share a loop, deliberately — each is pinned by
+- **Media Cleaner** is the fifth, and the one whose blast radius justifies the pin: it **deletes
+  media files** on a schedule, by rule. It ran as unmanaged dashboard state on the PVC until
+  #1619, when the operator's call was to keep it and pin it. Webhook's shape — the zip carries
+  its own `meta.json`, so nothing writes one. What is unique here is that **the plugin version's
+  fourth segment encodes the server ABI**: one upstream release tag (`v3.2.0`) ships three
+  per-ABI assets and the published manifest publishes each as its own version (`3.2.0.101007`,
+  `3.2.0.101100`, `3.2.0.101109` for `10.10.7`, `10.11.0`, `10.11.9`), where the segment is
+  `<major><minor:02d><patch:02d>`. All three are the same plugin release, so **picking the wrong
+  asset is silent** — it installs cleanly and never loads.
+  `test_mediacleaner_install.py::test_the_version_suffix_decodes_to_the_target_abi` re-derives
+  the encoding rather than trusting the three hand-copied values to agree.
+  **Which libraries it may delete from, and every rule deciding what goes, stay dashboard state
+  on the PVC either way** — plugin configuration under `/config/data/plugins/configurations/`,
+  which the repo never touches. Pinning changes what version runs, not what it is pointed at.
+  The dashboard's Troubleshooting tab renders a dry-run report of what a real run would delete;
+  read it before changing a rule. Same shape as bazarr's provider list.
+- All five installers duplicate rather than share a loop, deliberately — each is pinned by
   literal string assertions in its own test, and a textual guard stops seeing what it guards
   once the thing moves behind an indirection.
 
 ## Every plugin the pod actually loads
 
-The four installers above are not the whole set, so the lockstep rule at the top of this file
+The five installers above are not the whole set, so the lockstep rule at the top of this file
 covers only part of what runs. Read the live census from the pod's own log, which needs no API
 key:
 
@@ -79,19 +97,51 @@ kubectl -n homelab logs <pod> -c jellyfin | grep 'Loaded plugin:'
 Read 2026-09-10 (#1569), grouped by who owns the version:
 
 - **Installed by this role**, version-pinned, checksum-pinned and each guarded by its own test
-  file: `Ani-Sync 4.4.0.0`, `Intro Skipper 1.10.11.23`, `Webhook 21.0.0.0`.
+  file: `Ani-Sync 4.4.0.0`, `Intro Skipper 1.10.11.23`, `Webhook 21.0.0.0`, `Merge Versions
+  10.11.0.1` (#1616) and `Media Cleaner 3.2.0.101109` (#1619). The last two were added after this
+  census was first read, which is why the list is five where the log of 2026-09-10 showed three
+  in this group.
 - **Bundled with the image**, so they move with `jellyfin_k8s_image` and need no pin here:
   `AudioDB`, `MusicBrainz`, `OMDb`, `Studio Images`, `TMDb` — all `10.11.11.0`, the server
   version.
 - **Unmanaged state on the `jellyfin-config` PVC**, installed through the dashboard and
-  described nowhere else: `Media Cleaner 3.2.0.101109` and `SSO-Auth 4.0.0.4`. Neither has a
-  pinned version, a checksum or a recorded `targetAbi`, so an image bump can silently drop
-  either — Jellyfin's loader rejects a plugin built for a newer server without logging a
-  failure. **Media Cleaner deletes media files**, which puts it in a different risk class from
-  everything else in this list; which libraries it may delete from is itself dashboard state.
-  Installing it under the init-container pattern, or removing it, is an operator decision
-  (filed as a follow-up to #1569). Same shape as bazarr's provider list: state that lives in a
-  PVC and that git cannot describe.
+  described nowhere else: `SSO-Auth 4.0.0.4`, and that is now the only one. It has no pinned
+  version, no checksum and no recorded `targetAbi`, so an image bump can silently drop it —
+  Jellyfin's loader rejects a plugin built for a newer server without logging a failure. It
+  deletes nothing, which is the whole reason #1619 treated it as the lower-stakes half of the
+  same call; whether it gets the same pin is filed separately. Same shape as bazarr's provider
+  list: state that lives in a PVC and that git cannot describe.
+
+## Declined and deferred plugins
+
+Recorded here so the next reader does not re-derive the analysis or re-open the decision.
+
+**Trakt (`Jellyfin.Plugin.Trakt`) — deferred, not declined (#1617).** Watch-history sync, the
+non-anime counterpart to ani-sync. Two prerequisites are operator-only: a dashboard OAuth
+device-authorisation step, which is per-account state on this PVC and cannot be templated, and
+the decision below.
+
+*The write-back analysis, read from `jellyfin/jellyfin-plugin-trakt` at master on 2026-09-10.*
+ani-sync's justification above is an **absence** — `score` appears nowhere in its AniList
+client, so no path can overwrite a rating set by hand. **Trakt has no such absence.** It carries
+`POST /sync/ratings` and a `SendItemRating` that posts a 1–10 score to it
+(`Trakt/Api/TraktApi.cs`). What holds instead is a narrower claim: *nothing on the plugin's
+automatic paths reaches that method.* `SendItemRating` has exactly one caller, the HTTP route
+`POST /Trakt/Users/{guid}/Items/{id}/Rate` (`Trakt/Api/TraktController.cs`). Neither scheduled
+task nor either event helper calls it — those push only collection membership, watched history,
+playback position and the scrobbler's start/pause/stop. So background sync writes no score, but
+**a rating-write path is live as soon as the plugin loads**, reachable by anything holding a
+Jellyfin API key, and `rating=0` unrates. That is safe *by nobody calling the endpoint*, where
+ani-sync is safe *by construction*.
+
+*The larger hazard, which #1617 did not name.* `SyncFromTraktTask` runs the other direction and
+writes Jellyfin's own user data from Trakt's, through `SaveUserData(…, UserDataSaveReason.Import)`
+— `Played`, `LastPlayedDate`, playback progress. It imports no ratings, but it **clears watch
+state**: when Trakt reports an item unwatched and Jellyfin has it played, it sets
+`userData.Played = false` (`Trakt/ScheduledTasks/SyncFromTraktTask.cs`). Watch state is exactly
+what `jellyfin-config`'s `longhorn` storage class exists to protect — this file's defaults record
+that a rescan rebuilds metadata and loses watch state. A wrong or half-populated Trakt account
+therefore has a scheduled path to erasing it. Which direction runs is plugin config on the PVC.
 
 ## The snapshot-space cap on `jellyfin-config`
 `tasks/main.yml` patches `spec.snapshotMaxSize` on the volume backing `jellyfin-config`, to
