@@ -24,12 +24,30 @@
 
     cache {{ k3s_host_dns_cache_ttl }}
 
-    # Bound to the node's LAN address because Prometheus scrapes from a pod, where
+    # Bound on the wildcard, not on 127.0.0.1: Prometheus scrapes from a pod, where
     # 127.0.0.1 is the pod's own loopback. The series that answers "what fraction of this
     # node's DNS actually reached Pi-hole" is
     # coredns_proxy_request_duration_seconds_count{proxy_name="forward",to="..."} — NOT
     # coredns_forward_requests_total, which this build does not export.
-    prometheus {{ server_ip }}:{{ k3s_host_dns_metrics_port }}
+    #
+    # DECIDED: the wildcard, rather than the node's own routable address. This line
+    # interpolated `server_ip` until 2026-09-10, and a bind to a specific address
+    # depends on that address already being assigned when CoreDNS starts. On the 2026-09-09
+    # boot it was not: CoreDNS came up, served DNS on `bind 127.0.0.1` above, bound no metrics
+    # listener, and systemd reported the unit healthy with NRestarts=0 throughout — `ss -lnt`
+    # counted zero sockets on the metrics port for the rest of the day, and the only thing that
+    # went red was a Prometheus target several layers away, naming a connection refusal rather
+    # than a bind failure (GitHub issue #1476). A wildcard bind cannot fail that way, because
+    # it depends on no address being assigned first. The exposure is unchanged: UFW's INPUT is
+    # default-deny and node.yml opens this port only to the pod CIDR and the agent nodes.
+    #
+    # The alternative that issue offered — an `ExecStartPost` asserting the listener, so a
+    # missing one fails the unit — is deliberately NOT taken. The unit carries
+    # `Restart=always` because a clean exit is still a DNS outage, so a failing ExecStartPost
+    # would restart CoreDNS in a loop and turn a missing metrics listener into no DNS on this
+    # node. That trades a Medium fault for a worse one. Contradict this with a way to assert
+    # the listener that cannot take DNS down with it.
+    prometheus 0.0.0.0:{{ k3s_host_dns_metrics_port }}
 
     errors
 }
