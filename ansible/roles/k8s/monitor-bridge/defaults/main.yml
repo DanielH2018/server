@@ -46,6 +46,7 @@ monitor_bridge_modules:
   - verdicts/host.py
   - verdicts/host_cgroups.py
   - verdicts/host_power.py
+  - verdicts/host_smart.py
   - verdicts/service.py
   - verdicts/storage.py
   - verdicts/logs.py

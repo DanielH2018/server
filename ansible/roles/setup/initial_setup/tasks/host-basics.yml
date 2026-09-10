@@ -196,3 +196,60 @@
     state: link
     force: true
   become: true
+
+- name: Pin the Vale version this host installs
+  tags: [tooling]
+  # The prek `vale` hook is `language = "system"`, so it runs whatever binary is on PATH and
+  # fails with exit 127 where there is none. .github/workflows/ci.yml installs the same version
+  # on the runner, so CI passed while a commit touching any top-level docs page died on a
+  # workstation (#1703) — and the way round it is a hand-fetched tarball or `--no-verify`.
+  #
+  # ONE copy of the version, set here rather than in group_vars: Renovate's Vale manager reads
+  # this file and ci.yml together, and a version in group_vars/all.yml would land in the k8s
+  # image group instead (renovate.json's matchFileNames). The two copies agreeing is ENFORCED by
+  # ansible/tests/repo/test_vale_matches_the_ci_pin.py.
+  ansible.builtin.set_fact:
+    initial_setup_vale_version: "3.20.0"
+
+- name: Read the Vale version this host already has
+  tags: [tooling]
+  # `creates:` would be wrong here — it is satisfied by ANY vale on the path, so a version bump
+  # would never install. Reading the version is what makes the bump take effect.
+  #
+  # The ABSOLUTE path, not a bare `vale`: a bare one resolves against the remote PATH, which on
+  # a host carrying a hand-installed ~/.local/bin/vale (what PR #1702 left on daniel-server)
+  # reports that copy's version. The task would then skip, /usr/local/bin/vale would never be
+  # written, and the role would report success having installed nothing. Remove a hand-installed
+  # copy once this has run — it shadows /usr/local/bin on an interactive PATH.
+  ansible.builtin.command: /usr/local/bin/vale --version
+  register: initial_setup_vale_installed
+  changed_when: false
+  failed_when: false
+  become: false
+  when: has_repo_checkout
+
+- name: Install the pinned Vale binary
+  tags: [tooling]
+  # Only where the repo is checked out: this exists for the prek hook, and a host Ansible drives
+  # over ssh with no checkout never runs one.
+  #
+  # No checksum pin, unlike sops_setup's binary. That one is the root of the secret-decryption
+  # trust chain; this is a prose linter for Markdown, and ci.yml fetches it unverified from the
+  # same release. Pinning a per-arch sha256 here would make every Renovate bump a manual finish
+  # for no trust gained over what CI already does.
+  ansible.builtin.unarchive:
+    src: >-
+      https://github.com/vale-cli/vale/releases/download/v{{ initial_setup_vale_version }}/vale_{{ initial_setup_vale_version }}_Linux_{{ vale_asset_arch }}.tar.gz
+    dest: /usr/local/bin
+    remote_src: true
+    include: [vale]
+    mode: "0755"
+    owner: root
+    group: root
+  vars:
+    # Vale's own asset naming, not Debian's: `64-bit` where apt would say `amd64`.
+    vale_asset_arch: "{{ '64-bit' if ansible_facts.architecture == 'x86_64' else 'arm64' }}"
+  become: true
+  when:
+    - has_repo_checkout
+    - initial_setup_vale_version not in (initial_setup_vale_installed.stdout | default('')).split()

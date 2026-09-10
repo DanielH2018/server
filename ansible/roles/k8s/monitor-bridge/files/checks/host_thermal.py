@@ -21,17 +21,19 @@ from verdicts.host import (
     hwmon_name_maps,
     hwmon_temp_limits,
     hwmon_temp_verdict,
-    scrutiny_device_wear,
-    scrutiny_freshness,
-    scrutiny_health,
-    scrutiny_wear_verdict,
-    ups_health,
 )
 from verdicts.host_power import (
     thermal_monitor_verdict,
     thermal_throttle_verdict,
     undervoltage_verdict,
+    ups_health,
     ups_on_battery_verdict,
+)
+from verdicts.host_smart import (
+    scrutiny_device_wear,
+    scrutiny_freshness,
+    scrutiny_health,
+    scrutiny_wear_verdict,
 )
 
 

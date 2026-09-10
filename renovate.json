@@ -99,13 +99,15 @@
     },
     {
       "customType": "regex",
-      "description": "Pinned Vale binary in the CI workflow. TWO matchStrings on purpose: the download URL carries the version TWICE (the tag `v3.18.0` and the asset name `vale_3.18.0_Linux_64-bit.tar.gz`), and a manager that rewrites only the tag produces a 404 URL. That 404 used to surface two lines later as `tar xzf`'s \"not in gzip format\", because the curl carried no `-f`; the workflow now runs `curl -fsSL`, so a partial rewrite fails at the download naming the URL. The two matchStrings are still the fix — failing loudly is not the same as not breaking. Asset naming is stable across releases.",
+      "description": "Pinned Vale binary in the CI workflow. TWO matchStrings on purpose: the download URL carries the version TWICE (the tag `v3.18.0` and the asset name `vale_3.18.0_Linux_64-bit.tar.gz`), and a manager that rewrites only the tag produces a 404 URL. That 404 used to surface two lines later as `tar xzf`'s \"not in gzip format\", because the curl carried no `-f`; the workflow now runs `curl -fsSL`, so a partial rewrite fails at the download naming the URL. The two matchStrings are still the fix — failing loudly is not the same as not breaking. Asset naming is stable across releases. A THIRD copy lives on the host side: `initial_setup_vale_version` in roles/setup/initial_setup/tasks/host-basics.yml installs the binary the prek hook runs, and a bump that moved only ci.yml would leave every workstation on the old rules (#1703). The two files agreeing is ENFORCED by ansible/tests/repo/test_vale_matches_the_ci_pin.py.",
       "managerFilePatterns": [
-        "/(^|/)\\.github/workflows/ci\\.yml$/"
+        "/(^|/)\\.github/workflows/ci\\.yml$/",
+        "/(^|/)ansible/roles/setup/initial_setup/tasks/host-basics\\.yml$/"
       ],
       "matchStrings": [
         "vale-cli/vale/releases/download/v(?<currentValue>[\\d.]+)/",
-        "vale_(?<currentValue>[\\d.]+)_Linux"
+        "vale_(?<currentValue>[\\d.]+)_Linux",
+        "initial_setup_vale_version:\\s*\"(?<currentValue>[\\d.]+)\""
       ],
       "depNameTemplate": "vale-cli/vale",
       "datasourceTemplate": "github-releases"
@@ -365,13 +367,14 @@
       "groupName": "k8s image {{depName}}"
     },
     {
-      "description": "CI toolchain + docs-lint pins under .github/workflows/** and .vale.ini are not container images, and the catch-all 'container images (non-major)' rule above has no matchFileNames scoping it away from them — it matches every custom.regex dep by default. That is how PR #939 opened titled \"Update dependency prek to v0.5.0\" on branch renovate/container-images-(non-major) while its diff carried only the Vale binary bump (2026-09 finding, issue #980): both prek (ci.yml) and vale-cli/vale (ci.yml) fell into this one shared group with no file scoping, so Renovate reused a single group branch across two unrelated deps and the surviving title no longer matched the surviving diff. Giving each dependency its own group by depName makes the branch and title self-name, so a stale one can never wear another's label. {{depName}} still groups python's ci.yml + image-smoke.yml pins together (same depName, two files) — only the shared catch-all name is removed, not that lockstep. automerge/platformAutomerge/minimumReleaseAge inherited from the catch-all rule above are unaffected; only groupName changes.",
+      "description": "CI toolchain + docs-lint pins under .github/workflows/** and .vale.ini are not container images, and the catch-all 'container images (non-major)' rule above has no matchFileNames scoping it away from them — it matches every custom.regex dep by default. That is how PR #939 opened titled \"Update dependency prek to v0.5.0\" on branch renovate/container-images-(non-major) while its diff carried only the Vale binary bump (2026-09 finding, issue #980): both prek (ci.yml) and vale-cli/vale (ci.yml) fell into this one shared group with no file scoping, so Renovate reused a single group branch across two unrelated deps and the surviving title no longer matched the surviving diff. Giving each dependency its own group by depName makes the branch and title self-name, so a stale one can never wear another's label. The Ansible task file that installs Vale on the hosts is named here too, for the same reason: it carries the same depName as ci.yml's pin, so both copies belong in one PR, and without the path it would fall into the k8s-image group above instead. {{depName}} still groups python's ci.yml + image-smoke.yml pins together (same depName, two files) — only the shared catch-all name is removed, not that lockstep. automerge/platformAutomerge/minimumReleaseAge inherited from the catch-all rule above are unaffected; only groupName changes.",
       "matchManagers": [
         "custom.regex"
       ],
       "matchFileNames": [
         ".github/workflows/**",
-        ".vale.ini"
+        ".vale.ini",
+        "ansible/roles/setup/initial_setup/tasks/host-basics.yml"
       ],
       "groupName": "{{depName}}"
     },
