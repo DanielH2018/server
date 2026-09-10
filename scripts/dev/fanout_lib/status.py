@@ -41,16 +41,29 @@ def status_command(batches: Sequence[Batch]) -> str:
     return "; ".join(_one(b) for b in batches)
 
 
-def stop_command(batch: str) -> str:
-    return f"systemctl --user stop fanout-{batch}"
+def stop_command(unit: str) -> str:
+    return f"systemctl --user stop {unit}"
+
+
+_SECTION_NAMES = ("stderr", "report")
 
 
 def _section(block: str, name: str) -> str:
+    # Bound the section only at a KNOWN marker ("--- stderr" / "--- report"), never at
+    # any line starting "--- " — the section's own content (a stderr line, report prose)
+    # can start that way without ending the section early.
     marker = f"--- {name}\n"
     if marker not in block:
         return ""
     rest = block.split(marker, 1)[1]
-    return rest.split("\n--- ", 1)[0]
+    ends = [
+        idx
+        for other in _SECTION_NAMES
+        if other != name
+        for idx in [rest.find(f"\n--- {other}\n")]
+        if idx != -1
+    ]
+    return rest[: min(ends)] if ends else rest
 
 
 def _final_text(report: str) -> str:
@@ -65,10 +78,21 @@ def _final_text(report: str) -> str:
 
 
 def parse_status(batches: Sequence[Batch], stdout: str) -> list[BatchStatus]:
-    blocks = {}
-    for chunk in stdout.split("=== ")[1:]:
+    known = {b.batch for b in batches}
+    blocks: dict[str, str] = {}
+    order: list[str] = []
+    # Split only at a genuine block header (start of line). A block's own content — a
+    # report's result prose, a stderr line — can still start with "=== "; when the header
+    # name that produces isn't one of ours, it's not a new block, so fold it back into the
+    # block already open.
+    for chunk in re.split(r"(?m)^=== ", stdout)[1:]:
         name, _, body = chunk.partition("\n")
-        blocks[name.strip()] = body
+        name = name.strip()
+        if name in known:
+            blocks[name] = body
+            order.append(name)
+        elif order:
+            blocks[order[-1]] += "=== " + chunk
     out = []
     for b in batches:
         body = blocks.get(b.batch, "")

@@ -28,6 +28,15 @@ DONE = (
 )
 FAILED = "=== b\nActiveState=failed\nResult=exit-code\nExecMainStatus=1\n--- stderr\nError: not logged in\n--- report\n"
 VANISHED = "=== b\nActiveState=inactive\nResult=success\nExecMainStatus=\n--- stderr\n--- report\n"
+DONE_WITH_EQUALS_IN_RESULT = (
+    "=== b\nActiveState=inactive\nResult=success\nExecMainStatus=0\n--- stderr\n--- report\n"
+    '{"type":"result","result":"Fixed the === marker parsing bug; opened https://github.com/o/r/pull/9"}\n'
+)
+DONE_WITH_STRAY_MARKER_IN_STDERR = (
+    "=== b\nActiveState=inactive\nResult=success\nExecMainStatus=0\n"
+    "--- stderr\n=== 12 boom\n--- report\n"
+    '{"type":"result","result":"Opened https://github.com/o/r/pull/9"}\n'
+)
 
 
 def test_status_command_is_one_string_naming_every_unit():
@@ -57,8 +66,20 @@ def test_a_vanished_unit_with_no_report_is_failed_not_done():
     assert parse_status([B], VANISHED)[0].state == "failed"
 
 
+def test_a_result_containing_equals_marker_text_is_not_mis_split():
+    done = parse_status([B], DONE_WITH_EQUALS_IN_RESULT)[0]
+    assert done.state == "done"
+    assert done.pr_url == "https://github.com/o/r/pull/9"
+
+
+def test_a_stray_marker_line_inside_stderr_does_not_split_the_block():
+    done = parse_status([B], DONE_WITH_STRAY_MARKER_IN_STDERR)[0]
+    assert done.state == "done"
+    assert "=== 12 boom" in done.stderr_tail
+
+
 def test_stop_never_removes_the_worktree():
-    assert stop_command("b") == "systemctl --user stop fanout-b"
+    assert stop_command("fanout-b") == "systemctl --user stop fanout-b"
 
 
 def test_cli_launch_places_and_starts_the_agent_with_one_systemd_run_call(tmp_path):
@@ -113,7 +134,10 @@ def test_cli_launch_reports_no_headroom_when_both_hosts_are_uncapped(tmp_path):
 
 def test_a_failed_and_a_successful_health_read_both_surface_in_the_brief(tmp_path):
     tools, run = fake_tools(
-        answers={"daniel-server": ok("1\n12884901888\n0\n")},
+        answers={
+            "daniel-box": ok("1\n12884901888\n0\n"),
+            "daniel-server": ok("1\n12884901888\n0\n"),
+        },
         issues=[Issue(1, "t", "b")],
     )
     run.answers_by_call = [
@@ -157,3 +181,44 @@ def test_cli_status_reports_a_read_timeout_as_exit_1_not_a_traceback(tmp_path, c
     code = main(["status", run.run_id, "--manifest-root", str(tmp_path)], tools)
     assert code == 1
     assert "1 on daniel-box: status read timed out" in capsys.readouterr().out
+
+
+def test_a_health_read_timeout_surfaces_in_the_brief(tmp_path):
+    tools, run = fake_tools(
+        answers={
+            "daniel-box": ok("1\n12884901888\n0\n"),
+            "daniel-server": ok("1\n12884901888\n0\n"),
+        },
+        issues=[Issue(1, "t", "b")],
+    )
+    run.answers_by_call = [
+        ok("1\n12884901888\n0\n"),  # headroom read, daniel-box
+        ok("1\n12884901888\n0\n"),  # headroom read, daniel-server
+        subprocess.TimeoutExpired(cmd="ssh", timeout=40.0),  # daniel-box health
+    ]
+    code = main(
+        [
+            "launch",
+            "--batch",
+            "1",
+            "--orchestrator-branch",
+            "o",
+            "--manifest-root",
+            str(tmp_path),
+        ],
+        tools,
+    )
+    assert code == 0
+    brief_calls = [c for c in run.calls if c[1].startswith("mkdir -p")]
+    assert len(brief_calls) == 1
+    assert "session-health read failed (timed out)" in brief_calls[0][2]
+
+
+def test_cli_status_prints_exit_unknown_for_a_vanished_unit(tmp_path, capsys):
+    batch = Batch("b", "daniel-box", "/w/b", "worktree-fanout-b", "fanout-b", [1], "t")
+    run = Manifest("20260101T000002Z", "o", [batch])
+    save(run, root=tmp_path)
+    tools, _ = fake_tools(answers={"daniel-box": ok(VANISHED)})
+    code = main(["status", run.run_id, "--manifest-root", str(tmp_path)], tools)
+    assert code == 1
+    assert "(exit unknown)" in capsys.readouterr().out

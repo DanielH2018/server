@@ -140,7 +140,8 @@ def cmd_status(args, tools: Tools) -> int:
             if s.pr_url:
                 line += f" {s.pr_url}"
             if s.state == "failed":
-                line += f" (exit {s.exit_code}) {s.stderr_tail[-300:]}"
+                exit_text = "unknown" if s.exit_code is None else str(s.exit_code)
+                line += f" (exit {exit_text}) {s.stderr_tail[-300:]}"
                 worst = 1
             print(line)
     return worst
@@ -152,7 +153,7 @@ def cmd_stop(args, tools: Tools) -> int:
         if args.batch and b.batch != args.batch:
             continue
         try:
-            proc = tools.run(b.host, status_mod.stop_command(b.batch), 30.0, None)
+            proc = tools.run(b.host, status_mod.stop_command(b.unit), 30.0, None)
         except subprocess.TimeoutExpired:
             print(f"{b.batch} on {b.host}: stop timed out")
             continue
@@ -162,47 +163,41 @@ def cmd_stop(args, tools: Tools) -> int:
     return 0
 
 
+def _add_manifest_root(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--manifest-root",
+        type=Path,
+        default=manifest_mod.MANIFEST_DIR,
+        help=argparse.SUPPRESS,
+    )
+
+
 def main(argv=None, tools: Tools | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0], allow_abbrev=False)
     sub = p.add_subparsers(dest="cmd", required=True)
     sub.add_parser("read").set_defaults(fn=cmd_read)
-    l = sub.add_parser("launch")
-    l.add_argument(
+    launch_parser = sub.add_parser("launch")
+    launch_parser.add_argument(
         "--batch",
         action="append",
         required=True,
         help="issue numbers joined by commas; repeatable",
     )
-    l.add_argument("--host", choices=HOSTS)
-    l.add_argument(
+    launch_parser.add_argument("--host", choices=HOSTS)
+    launch_parser.add_argument(
         "--orchestrator-branch", required=True, help="the branch holding the claims"
     )
-    l.add_argument(
-        "--manifest-root",
-        type=Path,
-        default=manifest_mod.MANIFEST_DIR,
-        help=argparse.SUPPRESS,
-    )
-    l.set_defaults(fn=cmd_launch)
-    s = sub.add_parser("status")
-    s.add_argument("run_id")
-    s.add_argument(
-        "--manifest-root",
-        type=Path,
-        default=manifest_mod.MANIFEST_DIR,
-        help=argparse.SUPPRESS,
-    )
-    s.set_defaults(fn=cmd_status)
-    st = sub.add_parser("stop")
-    st.add_argument("run_id")
-    st.add_argument("batch", nargs="?")
-    st.add_argument(
-        "--manifest-root",
-        type=Path,
-        default=manifest_mod.MANIFEST_DIR,
-        help=argparse.SUPPRESS,
-    )
-    st.set_defaults(fn=cmd_stop)
+    _add_manifest_root(launch_parser)
+    launch_parser.set_defaults(fn=cmd_launch)
+    status_parser = sub.add_parser("status")
+    status_parser.add_argument("run_id")
+    _add_manifest_root(status_parser)
+    status_parser.set_defaults(fn=cmd_status)
+    stop_parser = sub.add_parser("stop")
+    stop_parser.add_argument("run_id")
+    stop_parser.add_argument("batch", nargs="?")
+    _add_manifest_root(stop_parser)
+    stop_parser.set_defaults(fn=cmd_stop)
     args = p.parse_args(argv)
     return args.fn(args, tools or Tools())
 
