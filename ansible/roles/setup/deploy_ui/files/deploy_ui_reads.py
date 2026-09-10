@@ -64,16 +64,21 @@ def read_state(state_dir: Path) -> dict[str, str]:
     """Read the five markers as strings.
 
     A missing marker is ''. The override is presence-only, so it reads 'set' or ''.
+
+    Raises:
+        OSError: a marker exists but can't be read (e.g. permission denied). Only a
+            missing marker is a clear state; anything else that stops the read must not
+            be mistaken for one.
     """
     st = {}
     for name in MARKERS:
         p = state_dir / name
-        if not p.exists():
+        try:
+            text = p.read_text()
+        except FileNotFoundError:
             st[name] = ""
-        elif name == "staging_gate_override":
-            st[name] = "set"
-        else:
-            st[name] = p.read_text().strip()
+            continue
+        st[name] = "set" if name == "staging_gate_override" else text.strip()
     return st
 
 

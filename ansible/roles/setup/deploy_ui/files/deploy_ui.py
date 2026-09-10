@@ -15,8 +15,10 @@ pending" — the deadman trap this repo has paid for.
 import json
 import os
 import subprocess
+import threading
 import time
 import urllib.parse
+
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -27,6 +29,7 @@ import deploy_ui_writes as writes
 
 LOCK = "/var/lock/server-git-tree.lock"
 PAGE = Path(__file__).with_name("deploy_ui.html")
+STALE_CACHE_S = 60
 
 
 @dataclass(frozen=True)
@@ -61,7 +64,11 @@ class App:
 
     def __init__(self, config: Config, run=subprocess.run) -> None:
         self.cfg, self.run = config, run
-        self._prs: tuple[float, list] = (0.0, [])
+        # Guards both caches so a concurrent miss on either collapses to one fetch,
+        # rather than two threads both seeing "stale" and both spawning the subprocess.
+        self._cache_lock = threading.Lock()
+        self._prs_cache: tuple[float, list] | None = None
+        self._stale_cache: tuple[float, list] | None = None
 
     # ---- subprocess edge ----
     def _out(self, argv: list[str], timeout: int, ok_rcs=(0,)) -> str:
@@ -99,49 +106,70 @@ class App:
         return {"landings": landings, "lock_holder": holder}
 
     def stale(self) -> dict:
-        text = self._out(
-            [
-                "uv",
-                "run",
-                "python",
-                "scripts/diagnostics/probe.py",
-                "releases",
-                "--stale-only",
-            ],
-            120,
-            ok_rcs=(0, 1),
-        )
-        return {"stale": reads.parse_stale(text)}
+        with self._cache_lock:
+            if self._stale_cache is not None:
+                at, cached = self._stale_cache
+                if time.monotonic() - at < STALE_CACHE_S:
+                    return {"stale": cached, "cached": True}
+            text = self._out(
+                [
+                    "uv",
+                    "run",
+                    "python",
+                    "scripts/diagnostics/probe.py",
+                    "releases",
+                    "--stale-only",
+                ],
+                120,
+                ok_rcs=(0, 1),
+            )
+            rows = reads.parse_stale(text)
+            self._stale_cache = (time.monotonic(), rows)
+            return {"stale": rows, "cached": False}
 
     def state(self) -> dict:
-        return reads.read_state(self.cfg.state_dir)
+        try:
+            return reads.read_state(self.cfg.state_dir)
+        except OSError as exc:
+            raise Unavailable(f"state: {exc}") from exc
 
     def prs(self) -> dict:
-        at, cached = self._prs
-        if time.monotonic() - at < self.cfg.pr_cache_s:
-            return {"prs": cached, "cached": True}
-        raw = self._out(
-            [
-                "gh",
-                "pr",
-                "list",
-                "--json",
-                "number,title,headRefName,isDraft,statusCheckRollup",
-            ],
-            30,
-        )
-        rows = reads.parse_prs(raw)
-        self._prs = (time.monotonic(), rows)
-        return {"prs": rows, "cached": False}
+        with self._cache_lock:
+            if self._prs_cache is not None:
+                at, cached = self._prs_cache
+                if time.monotonic() - at < self.cfg.pr_cache_s:
+                    return {"prs": cached, "cached": True}
+            raw = self._out(
+                [
+                    "gh",
+                    "pr",
+                    "list",
+                    "--json",
+                    "number,title,headRefName,isDraft,statusCheckRollup",
+                ],
+                30,
+            )
+            rows = reads.parse_prs(raw)
+            self._prs_cache = (time.monotonic(), rows)
+            return {"prs": rows, "cached": False}
 
     def log_tail(self, path: str) -> str:
         p = Path(path)
-        if self.cfg.log_dir.resolve() not in p.resolve().parents:
-            return "refused: not a deploy-ui log"
         try:
-            return p.read_text()[-20000:]
+            resolved = p.resolve()
         except OSError as exc:
             return f"unavailable: {exc}"
+        if self.cfg.log_dir.resolve() not in resolved.parents:
+            return "refused: not a deploy-ui log"
+        try:
+            with resolved.open("rb") as f:
+                f.seek(0, os.SEEK_END)
+                size = f.tell()
+                f.seek(max(0, size - 20000))
+                data = f.read()
+        except OSError as exc:
+            return f"unavailable: {exc}"
+        return data.decode("utf-8", errors="replace")
 
     # ---- writes ----
     def _known_tags(self) -> set[str]:
@@ -182,7 +210,10 @@ class App:
         return 202, json.dumps({"log": str(log)})
 
     def cancel(self, body: dict) -> tuple[int, str]:
-        pid = int(body.get("pid", 0))
+        try:
+            pid = int(body.get("pid", 0))
+        except TypeError, ValueError:
+            return 400, "pid must be an integer"
         listed = {l["pid"] for l in self.inflight()["landings"]}
         refusal = writes.guard_cancel(pid, listed)
         if refusal:
@@ -249,6 +280,8 @@ class App:
             body = json.loads(raw or "{}")
         except ValueError:
             return 400, "body is not JSON"
+        if not isinstance(body, dict):
+            return 400, "body must be a JSON object"
         try:
             return getattr(self, name)(body)
         except Unavailable as exc:

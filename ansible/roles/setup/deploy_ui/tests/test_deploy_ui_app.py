@@ -2,6 +2,7 @@
 
 import json
 import subprocess
+import urllib.parse
 
 import pytest
 
@@ -26,8 +27,8 @@ class FakeRun:
 
 PS = " 4321   125 /x/python3 scripts/deploy_tools/land.py --pr 1543 --since abc\n"
 TABLE = {
-    ("ps",): (PS, 0),
-    ("fuser",): ("4321", 0),
+    ("ps", "-eo", "pid=,etimes=,args="): (PS, 0),
+    ("fuser", "/var/lock/server-git-tree.lock"): ("4321", 0),
     (
         "uv",
         "run",
@@ -74,7 +75,7 @@ def test_inflight_lists_landings_and_holder_is_clean(app):
 
 def test_inflight_degrades_when_ps_fails_is_flagged(tmp_path, state_dir):
     t = dict(TABLE)
-    t[("ps",)] = ("", "raise")
+    t[("ps", "-eo", "pid=,etimes=,args=")] = ("", "raise")
     cfg = deploy_ui.Config(
         repo=tmp_path, state_dir=state_dir, log_dir=tmp_path, bind="", port=0
     )
@@ -88,14 +89,49 @@ def test_stale_rows_is_clean(app):
     ]
 
 
+def test_stale_is_cached_is_clean(app):
+    app.get("/api/stale")
+    app.get("/api/stale")
+    assert sum(1 for c in app.run.calls if c[:1] == ["uv"]) == 1
+
+
 def test_state_reads_markers_is_clean(app, state_dir):
     (state_dir / "hold_sha").write_text("deadbeef")
     assert body(app.get("/api/state"))["hold_sha"] == "deadbeef"
 
 
+def test_state_unreadable_marker_is_unavailable_and_land_refuses(app, state_dir):
+    marker = state_dir / "hold_sha"
+    marker.write_text("deadbeef")
+    marker.chmod(0o000)
+    try:
+        assert "unavailable" in body(app.get("/api/state"))
+        status, _ = app.post(
+            "/api/land", HDRS, json.dumps({"pr": "9999", "since": "abc"})
+        )
+        assert status == 503
+    finally:
+        marker.chmod(0o644)
+
+
 def test_prs_are_cached_is_clean(app):
     app.get("/api/prs")
     app.get("/api/prs")
+    assert sum(1 for c in app.run.calls if c[:2] == ["gh", "pr"]) == 1
+
+
+def test_prs_first_call_after_boot_runs_gh_is_clean(tmp_path, state_dir, monkeypatch):
+    """A fresh App's cache sentinel must not read as fresher than an early-boot clock."""
+    cfg = deploy_ui.Config(
+        repo=tmp_path,
+        state_dir=state_dir,
+        log_dir=tmp_path / "logs",
+        bind="127.0.0.1",
+        port=0,
+    )
+    app = deploy_ui.App(cfg, run=FakeRun(dict(TABLE)))
+    monkeypatch.setattr(deploy_ui.time, "monotonic", lambda: 5.0)
+    body(app.get("/api/prs"))
     assert sum(1 for c in app.run.calls if c[:2] == ["gh", "pr"]) == 1
 
 
@@ -106,6 +142,11 @@ def test_post_without_header_is_flagged(app):
         json.dumps({"pr": "1", "since": "a"}),
     )
     assert status == 403
+
+
+def test_post_non_dict_body_is_flagged(app):
+    status, _ = app.post("/api/land", HDRS, json.dumps([1, 2, 3]))
+    assert status == 400
 
 
 def test_land_spawns_land_sh_is_clean(app, monkeypatch, tmp_path):
@@ -141,6 +182,21 @@ def test_deploy_unknown_tag_is_flagged(app):
     assert status == 409 and "nope" in text
 
 
+def test_deploy_known_tag_spawns_deploy_sh_is_clean(app, monkeypatch, tmp_path):
+    spawned = {}
+    monkeypatch.setattr(
+        deploy_ui.writes,
+        "spawn_logged",
+        lambda argv, cwd, log_dir, action: (
+            spawned.setdefault("argv", argv) and tmp_path / "d.log"
+        ),
+    )
+    monkeypatch.setattr(deploy_ui.writes, "audit", lambda line: None)
+    status, _ = app.post("/api/deploy", HDRS, json.dumps({"tag": "n8n"}))
+    assert status == 202
+    assert spawned["argv"] == ["./scripts/deploy.sh", "--tags", "n8n"]
+
+
 def test_hold_clear_pair_is_clean(app, state_dir, monkeypatch):
     monkeypatch.setattr(deploy_ui.writes, "audit", lambda line: None)
     (state_dir / "hold_sha").write_text("deadbeef")
@@ -154,3 +210,35 @@ def test_hold_clear_pair_is_clean(app, state_dir, monkeypatch):
 def test_cancel_unlisted_pid_is_flagged(app):
     status, _ = app.post("/api/cancel", HDRS, json.dumps({"pid": 99}))
     assert status == 409
+
+
+def test_cancel_non_numeric_pid_is_flagged(app):
+    status, _ = app.post("/api/cancel", HDRS, json.dumps({"pid": "abc"}))
+    assert status == 400
+
+
+def test_log_tail_serves_path_under_log_dir_is_clean(app, tmp_path):
+    log_dir = tmp_path / "logs"
+    log_dir.mkdir(exist_ok=True)
+    f = log_dir / "l.log"
+    f.write_text("hello log")
+    status, text = app.get("/api/log?path=" + urllib.parse.quote(str(f)))
+    assert status == 200 and text == "hello log"
+
+
+def test_log_tail_refuses_path_outside_log_dir_is_flagged(app, tmp_path):
+    outside = tmp_path / "outside.log"
+    outside.write_text("secret")
+    status, text = app.get("/api/log?path=" + urllib.parse.quote(str(outside)))
+    assert status == 200 and text == "refused: not a deploy-ui log"
+
+
+def test_log_tail_refuses_symlink_escaping_log_dir_is_flagged(app, tmp_path):
+    log_dir = tmp_path / "logs"
+    log_dir.mkdir(exist_ok=True)
+    outside = tmp_path / "secret.log"
+    outside.write_text("secret")
+    link = log_dir / "l.log"
+    link.symlink_to(outside)
+    status, text = app.get("/api/log?path=" + urllib.parse.quote(str(link)))
+    assert status == 200 and text == "refused: not a deploy-ui log"
