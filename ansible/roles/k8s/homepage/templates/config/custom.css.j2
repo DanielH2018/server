@@ -315,17 +315,23 @@ li.service > div.service-card {
  * them equal and solving for the calendar leaves the `calc()` below, which reads as the same
  * sentence: four widget rows, minus the two link rows, minus one row gap of difference.
  *
- * At 1920px that is 4x112 + 3x12 - (2x40 + 2x12) = 380px, and both columns end at y=652.
+ * At 1920px that is 4x112 + 3x12 - (2x50 + 2x12) = 360px, and both columns end at y=652.
  *
- * THE THREE MEASUREMENTS ARE NOT ARBITRARY, but neither are they enforced — they are what the
- * cards come out at, so a change to the tile content can move them. --widget-row is a card's
- * height (4px padding twice, a 52px title row, a 52px stat row); --link-row is an icon-only
- * card. Re-measure both if a tile grows, and re-derive if the Services tile count leaves four
- * rows: `getBoundingClientRect().bottom` on the last tile of each column is the check.
+ * --widget-row IS MEASURED, --link-row IS IMPOSED, and the difference matters when one of them
+ * looks wrong. --widget-row is what a widget card comes out at (4px padding twice, a 52px title
+ * row, a 52px stat row) — nothing enforces it, so a tile whose content grows moves it and the
+ * pin with it. --link-row is set on the link cards by the rule below, so it is a choice: 50px
+ * rather than the 40px an icon-only card is naturally, which is what makes the two link rows
+ * start at the same y as the last Services row rather than 20px below it.
+ *
+ * Re-measure --widget-row if a tile grows, and re-derive if the Services tile count stops
+ * leaving four rows. `getBoundingClientRect().bottom` on the last tile of each column is the
+ * check, and it has to run at more than one width — this pin was correct at 1920px and 16px out
+ * at 1280px until a wrapped description was shortened.
  */
 :root {
-  --widget-row: 7rem; /* 112px */
-  --link-row: 2.5rem; /* 40px */
+  --widget-row: 7rem; /* 112px, measured */
+  --link-row: 3.125rem; /* 50px, imposed by the rule below */
   --services-rows: 4;
 }
 
@@ -333,6 +339,14 @@ li.service > div.service-card {
   height: calc(
     var(--services-rows) * var(--widget-row) + 0.75rem - 2 * var(--link-row)
   );
+}
+
+/* The link cards are taller than their content so the two link rows span the same height as the
+ * Services row beside them. At their natural 40px the pair spanned 92px against that row's
+ * 112px, starting 20px lower than it. The icon stays 32px and centred — this adds padding, not
+ * size. */
+#my-calendar ~ li.service > div.service-card {
+  height: var(--link-row);
 }
 
 #my-calendar > div.service-card {
