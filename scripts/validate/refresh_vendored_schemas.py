@@ -18,7 +18,7 @@ serves, with no signal — the failure mode this repo has a memory entry for. Tw
 kind with no schema here, so a NEW kind cannot arrive unvalidated. And this script is
 idempotent: run it, and a non-empty `git diff` under schemas/ is the drift.
 
-Refresh: uv run python scripts/validate/refresh_crd_schemas.py
+Refresh: uv run python scripts/validate/refresh_vendored_schemas.py
 """
 
 import sys

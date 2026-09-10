@@ -15,7 +15,7 @@ Authelia publishes a JSON Schema of its own configuration, per minor release, wi
 replaces the per-area frozensets with one check that needs no cluster, no credentials and no
 container runtime. The schema is vendored under `scripts/validate/schemas/authelia.com/` for the
 same reason the CRD schemas are: a hook that resolves DNS fails when DNS is down, and this repo
-IS the DNS. Refresh it with `uv run python scripts/validate/refresh_crd_schemas.py`.
+IS the DNS. Refresh it with `uv run python scripts/validate/refresh_vendored_schemas.py`.
 
 UNKNOWN KEYS ARE ASSERTED ACROSS THE WHOLE DOCUMENT, values only under
 `authentication_backend.file.password`, and that narrowing is deliberate rather than timidity.
@@ -221,7 +221,7 @@ def test_the_vendored_schema_declares_the_sections_this_guard_reads(schema):
     assert not missing, (
         f"the vendored schema is missing {sorted(missing)}. Every check above would validate "
         f"against a schema that declares nothing and report a clean config. Re-run "
-        f"scripts/validate/refresh_crd_schemas.py and read the diff"
+        f"scripts/validate/refresh_vendored_schemas.py and read the diff"
     )
 
 
@@ -246,6 +246,6 @@ def test_the_vendored_schema_matches_the_pinned_image():
     major, minor = tag.split(".")[:2]
     assert f"v{major}.{minor}" == SCHEMA_MINOR, (
         f"{image} is a {major}.{minor} release but the vendored schema is {SCHEMA_MINOR}. "
-        f"Bump AUTHELIA_SCHEMA_MINOR in scripts/validate/refresh_crd_schemas.py, re-run it, "
+        f"Bump AUTHELIA_SCHEMA_MINOR in scripts/validate/refresh_vendored_schemas.py, re-run it, "
         f"and update SCHEMA_MINOR here"
     )

@@ -400,7 +400,7 @@ def main() -> int:
         print(
             f"\n{total} object(s) matched neither the v{K8S_SCHEMA_VERSION} core schema nor a "
             f"vendored CRD schema, and were NOT schema-checked: {detail}\n"
-            "Vendor one with scripts/validate/refresh_crd_schemas.py."
+            "Vendor one with scripts/validate/refresh_vendored_schemas.py."
         )
 
     print(f"\n{checked} k8s manifest template(s) checked, {failures} failure(s).")

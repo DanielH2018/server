@@ -90,8 +90,9 @@ REGISTRY.add(
 )
 
 # Two modules in this package define a `main()` without being validators, so a blind
-# `package_entry_points(validate)` census over-counts: `refresh_crd_schemas.py` re-downloads the
-# vendored CRD schemas k8s_manifests.py checks against, and `run_all.py` is this dispatcher
+# `package_entry_points(validate)` census over-counts: `refresh_vendored_schemas.py`
+# re-downloads the vendored schemas (traefik CRDs + Authelia's configuration schema), and
+# `run_all.py` is this dispatcher
 # itself. Neither has a prek hook. This set stays a literal — deriving it at import time would
 # import every module in the package on every run — and the completeness test subtracts those
 # two exclusions BY NAME from the census and requires the remainder to equal it. That test is

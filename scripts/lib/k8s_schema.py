@@ -6,7 +6,7 @@ name here, so an existing importer keeps working.
 
 ``CRD_SCHEMA_DIR`` is built from ``repo_paths.SCRIPTS`` rather than from this file's own
 ``__file__``, because the vendored schemas stay beside the validator that reads them
-(``scripts/validate/schemas/``) and ``refresh_crd_schemas.py`` writes them there.
+(``scripts/validate/schemas/``) and ``refresh_vendored_schemas.py`` writes them there.
 """
 
 import sys as _sys
@@ -80,7 +80,7 @@ def crd_schema_path(doc: dict) -> Path | None:
     """Where a vendored JSON Schema for this object's apiVersion/kind would live, or None.
 
     Mirrors datreeio/CRDs-catalog's layout — ``<group>/<lowercase kind>_<version>.json`` — so
-    refresh_crd_schemas.py can pull straight from it with no per-kind mapping. A core object
+    refresh_vendored_schemas.py can pull straight from it with no per-kind mapping. A core object
     (apiVersion ``v1``, no group) has no slash and returns None; kubernetes_validate owns those.
     """
     api_version = doc.get("apiVersion")

@@ -167,6 +167,34 @@ def gate_var_state(var):
     return bool(out.stdout.strip())
 
 
+def resolve_gate_states(declared, live, no_secrets=False):
+    """{gate_var: True/False/None} for the gates format_kuma_drift has to judge.
+
+    Resolved only for gates whose monitor is actually absent — a sops call per gate is the
+    cost, and a monitor that is live needs no explanation for why it might not be.
+
+    Shared by `run_kuma_drift` and `postflight.check_kuma_drift`. postflight called
+    format_kuma_drift with no gate_states until 2026-09-10, which excused all seven gated
+    monitors unconditionally (#1632) — the same miss the one below records, reintroduced by a
+    second caller rather than by the default. One constructor is what stops a third caller
+    repeating it.
+
+    DECIDED: the decrypt stays ON by default, and `no_secrets` is the opt-out — not the
+    reverse. `probe.py kuma-drift` is allow-listed and so runs unprompted, which is a fair
+    reason to want no SOPS read on the path; but assuming a gate was unset is exactly the miss
+    16cf5721 fixed on 2026-08-22, and defaulting to no_secrets would reinstate it. The read is
+    narrow: `var` comes from _JINJA_IF_COND_RE, constrained to [a-zA-Z_][a-zA-Z0-9_]*, and is
+    passed as an argv element rather than through a shell, so no value and no injection point
+    escapes gate_var_state — only bool(stdout) does. Reach for no_secrets when the age key
+    should not be touched at all; accept "unverified" as the cost.
+    """
+    return {
+        spec["gate"]: None if no_secrets else gate_var_state(spec["gate"])
+        for name, spec in declared.items()
+        if spec["gate"] and name not in live
+    }
+
+
 def format_kuma_drift(declared, live, kuma_age_seconds, gate_states=None):
     """Compare declared monitor names against the live exporter's. Pure.
 
@@ -292,22 +320,7 @@ def run_kuma_drift(ns):
     live.discard(None)
     if ns.pi:
         live &= pi_names
-    # Resolved only for gates whose monitor is actually absent — a sops call per gate is the
-    # cost, and a monitor that is live needs no explanation for why it might not be.
-    #
-    # DECIDED: the decrypt stays ON by default, and `--no-secrets` is the opt-out — not the
-    # reverse. This subcommand is allow-listed and so runs unprompted, which is a fair reason to
-    # want no SOPS read on the path; but assuming a gate was unset is exactly the miss 16cf5721
-    # fixed on 2026-08-22, and defaulting to --no-secrets would reinstate it. The read is
-    # narrow: `var` comes from _JINJA_IF_COND_RE, constrained to [a-zA-Z_][a-zA-Z0-9_]*, and is
-    # passed as an argv element rather than through a shell, so no value and no injection point
-    # escapes gate_var_state — only bool(stdout) does. Reach for --no-secrets when the age key
-    # should not be touched at all; accept "unverified" as the cost.
-    gate_states = {
-        spec["gate"]: None if ns.no_secrets else gate_var_state(spec["gate"])
-        for name, spec in declared.items()
-        if spec["gate"] and name not in live
-    }
+    gate_states = resolve_gate_states(declared, live, no_secrets=ns.no_secrets)
     text, code = format_kuma_drift(
         declared, live, kuma_pod_age_seconds(), gate_states=gate_states
     )

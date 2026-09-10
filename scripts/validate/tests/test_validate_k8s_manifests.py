@@ -99,7 +99,7 @@ def test_the_real_tree_leaves_no_object_unchecked(real_tree_stdout):
 
     This is the staleness answer for the vendored schemas: a new CRD kind — or a rename that
     stops an existing schema matching — makes the validator report the object as uncovered, and
-    this fails. Refresh or add one with scripts/validate/refresh_crd_schemas.py.
+    this fails. Refresh or add one with scripts/validate/refresh_vendored_schemas.py.
     """
     rc, out = real_tree_stdout
     assert rc == 0
