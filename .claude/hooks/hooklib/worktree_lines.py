@@ -10,7 +10,18 @@ import json
 import socket
 from pathlib import Path
 
-FANOUT_MANIFEST_DIR = Path.home() / ".claude" / "fanout"
+
+def fanout_manifest_dir() -> Path:
+    """Where fanout_place.py writes its run manifests.
+
+    A function, not a module constant: `Path.home()` raises `RuntimeError` when there is no
+    `HOME` and no passwd entry for the uid, and at module scope that fires during the
+    hook's `from hooklib.worktree_lines import ...`, which `except ImportError` does not
+    catch. The whole banner then dies on a traceback over a directory it may never read —
+    the #1566 failure class. Called instead, the raise lands inside the hook's own
+    per-section isolation.
+    """
+    return Path.home() / ".claude" / "fanout"
 
 
 def _batch_line(batch, run_id, me):
@@ -31,7 +42,7 @@ def _batch_line(batch, run_id, me):
         return None
 
 
-def remote_fanout_lines(manifest_dir=FANOUT_MANIFEST_DIR, local_host=None):
+def remote_fanout_lines(manifest_dir: Path | None = None, local_host=None):
     """Fan-out worktrees on the OTHER host: git worktree list here cannot see them.
 
     Reads scripts/dev/fanout_place.py's run manifests under ~/.claude/fanout/ instead of
@@ -41,13 +52,17 @@ def remote_fanout_lines(manifest_dir=FANOUT_MANIFEST_DIR, local_host=None):
     elsewhere.
 
     Args:
-        manifest_dir: run-manifest directory (a test passes `tmp_path`).
+        manifest_dir: run-manifest directory (a test passes `tmp_path`). Defaults to
+            `fanout_manifest_dir()`, resolved here rather than at import — see that
+            function on why the default cannot be a module constant.
         local_host: this host's name (a test passes a fixed value).
 
     Returns:
         Ready-to-print banner lines, or [] on any read/parse error, or with no batches
         on another host.
     """
+    if manifest_dir is None:
+        manifest_dir = fanout_manifest_dir()
     me = local_host or socket.gethostname()
     found = []
     for path in sorted(manifest_dir.glob("*.json")):

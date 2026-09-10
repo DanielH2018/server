@@ -90,6 +90,29 @@ def test_remote_fanout_lines_name_each_batch_on_another_host(tmp_path):
     ]
 
 
+def test_the_default_manifest_dir_is_resolved_at_call_time_not_at_import(
+    tmp_path, monkeypatch
+):
+    """Ruling 28: `Path.home()` at module scope raises past the hook's `except ImportError`.
+
+    A HOME set after import is what proves the default is lazy: bound at import, the
+    planted manifest below would be invisible and the banner empty.
+    """
+    monkeypatch.setenv("HOME", str(tmp_path))
+    fanout = tmp_path / ".claude" / "fanout"
+    fanout.mkdir(parents=True)
+    (fanout / "r.json").write_text(
+        json.dumps(
+            {
+                "run_id": "r5",
+                "batches": [{"host": "daniel-server", "branch": "b", "issues": [7]}],
+            }
+        )
+    )
+    lines = _mod.remote_fanout_lines(local_host="daniel-box")
+    assert lines[-1] == "  • daniel-server b — #7 (run r5)"
+
+
 def test_remote_fanout_lines_are_silent_with_no_manifest(tmp_path):
     assert (
         _mod.remote_fanout_lines(manifest_dir=tmp_path, local_host="daniel-box") == []
