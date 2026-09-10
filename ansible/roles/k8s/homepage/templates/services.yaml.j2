@@ -245,6 +245,33 @@
             icon: twitter.png
             href: https://twitter.com/home
             description: twitter.com
+        - GitHub:
+            icon: github.png
+            href: https://github.com/
+            description: github.com
+        - Google Maps:
+            icon: google-maps.png
+            href: https://www.google.com/maps
+            description: maps.google.com
+        - MetaTFT:
+            # /icons/, not the CDN: dashboard-icons answers 404 for metatft under every name
+            # tried. The logo came from the site's own /myicon3.ico, which is where it keeps
+            # it — every ordinary icon path there returns the SPA shell as HTML instead.
+            icon: /icons/metatft.png
+            href: https://www.metatft.com/
+            description: metatft.com
+        - Tactics.tools:
+            # Already in files/ from the gaming bookmarks that were commented out; this is the
+            # first tile to reference it since, so it rejoins the icons ConfigMap.
+            icon: /icons/tacticstools.png
+            href: https://tactics.tools/
+            description: tactics.tools
+        - AniList:
+            # /icons/ for the same reason as metatft — no dashboard-icons entry. Fetched from
+            # anilist.co's own android-chrome-192x192.png.
+            icon: /icons/anilist.png
+            href: https://anilist.co/
+            description: anilist.co
 
 - Media:
     # The four media services moved to the k8s cluster (slice 4), so the Docker-DNS widget URLs
