@@ -14,9 +14,9 @@ from fanout_lib.brief import Issue
 from fanout_lib.manifest import Batch, Manifest, save
 from fanout_lib.transport import ISSUE_FIELDS, issue_from_view
 from fanout_place import main
-from _fanout_fakes import fake_tools, ok
+from _fanout_fakes import HOST_KEY, fake_tools, ok
 
-HEADROOM = "1\n12884901888\n0\n"
+HEADROOM = f"1\n12884901888\n0\n{HOST_KEY}\n"
 CLAIMED = [
     Issue(1, "one", "body one", ("claude",)),
     Issue(2, "two", "body two", ("claude",)),
@@ -88,7 +88,7 @@ def test_an_unpinned_launch_reads_both_hosts_and_places_on_the_emptier_one(tmp_p
         answers={
             # ~4.5 GiB headroom on daniel-box, ~9.5 GiB on daniel-server — both are
             # candidates, daniel-server wins on room alone.
-            "daniel-box": ok("5368709120\n12884901888\n1\n"),
+            "daniel-box": ok(f"5368709120\n12884901888\n1\n{HOST_KEY}\n"),
             "daniel-server": ok(HEADROOM),
         },
         issues=[CLAIMED[0]],
@@ -196,6 +196,58 @@ def test_an_unlabelled_issue_is_refused_and_a_labelled_one_launches(tmp_path, ca
     assert _launch(tools, tmp_path, "--batch", "3", "--host", "daniel-box") == 0
     # headroom read, health read, one launch call for the one batch.
     assert len(run.calls) == 3
+
+
+def test_a_host_whose_signing_key_github_verifies_is_placed_on(tmp_path):
+    """The accept half of the #1615 gate: HOST_KEY is in the fake's registered set."""
+    tools, run = fake_tools(answers={"daniel-server": ok(HEADROOM)}, issues=CLAIMED)
+    assert _launch(tools, tmp_path, "--batch", "1", "--host", "daniel-server") == 0
+    assert [c for c in run.calls if "worktree add" in c[1]]
+
+
+def test_a_host_whose_signing_key_github_does_not_verify_is_not_placed_on(
+    tmp_path, capsys
+):
+    """The reject half: its commits would read verified=false, so the PR could not merge."""
+    tools, run = fake_tools(
+        answers={"daniel-server": ok(HEADROOM)},
+        issues=CLAIMED,
+        signing_keys=frozenset({"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIZZZZ"}),
+    )
+    assert _launch(tools, tmp_path, "--batch", "1", "--host", "daniel-server") == 6
+    assert not [c for c in run.calls if "worktree add" in c[1]]
+    err = capsys.readouterr().err
+    assert "daniel-server: its commit-signing key" in err and "SHA256:" in err
+    assert not list(tmp_path.glob("*.json"))
+
+
+def test_a_launch_is_refused_when_the_registered_keys_cannot_be_read(tmp_path, capsys):
+    """Fail closed, and before the first ssh: a gh outage spends no ssh connection."""
+    tools, run = fake_tools(
+        answers={"daniel-server": ok(HEADROOM)},
+        issues=CLAIMED,
+        signing_error=subprocess.CalledProcessError(
+            1, ["gh"], stderr="gh: not logged in"
+        ),
+    )
+    assert _launch(tools, tmp_path, "--batch", "1", "--host", "daniel-server") == 6
+    assert not run.calls
+    assert "registered signing keys" in capsys.readouterr().err
+
+
+def test_an_unpinned_launch_places_on_the_only_host_github_verifies(tmp_path):
+    """daniel-box has more headroom here, but its key is unregistered, so the batch moves."""
+    box_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+    tools, run = fake_tools(
+        answers={
+            "daniel-box": ok(f"1\n99999999999\n0\n{box_key}\n"),
+            "daniel-server": ok(HEADROOM),
+        },
+        issues=[CLAIMED[0]],
+    )
+    assert _launch(tools, tmp_path, "--batch", "1") == 0
+    launched = [c for c in run.calls if "worktree add" in c[1]]
+    assert len(launched) == 1 and launched[0][0] == "daniel-server"
 
 
 def test_the_issue_fetch_asks_for_labels_and_carries_them_onto_the_issue():

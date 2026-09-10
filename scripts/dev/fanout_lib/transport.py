@@ -17,6 +17,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
+from fanout_lib import signing
 from fanout_lib.brief import Issue
 from fanout_lib.placement import READ_COMMAND, HostReading, parse_reading
 
@@ -25,6 +26,10 @@ REPO = "/home/ubuntu/server"
 SSH_OPTS = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=8"]
 READ_TIMEOUT_S = 20.0
 GH_TIMEOUT_S = 30.0
+# The one read every host gets: READ_COMMAND's three memory lines plus the signing-key line
+# the launch gate needs, folded into the same connection because the ssh budget (2 reads plus
+# MAX_BATCHES_PER_REMOTE_HOST launches = the 5 `ufw limit ssh` allows per 30s) has none spare.
+HOST_READ_COMMAND = f"{READ_COMMAND}; {signing.signing_key_read_command(REPO)}"
 # `labels` is what the launch gate reads; dropping it from this list would refuse every
 # issue rather than fail loudly, which is why issue_from_view indexes it.
 ISSUE_FIELDS = "number,title,body,labels"
@@ -119,10 +124,11 @@ def gh_issue(number: int) -> Issue:
 
 @dataclass(frozen=True)
 class Tools:
-    """The dispatcher's injectable process boundaries: run a command, fetch an issue."""
+    """The dispatcher's boundaries: run a command, fetch an issue, read the signing keys."""
 
     run: Callable[..., subprocess.CompletedProcess] = run_command
     gh_issue: Callable[[int], Issue] = gh_issue
+    signing_keys: Callable[[], frozenset[str]] = signing.registered_signing_keys
 
 
 def read_host(tools: Tools, host: str) -> HostReading | str:
@@ -132,7 +138,7 @@ def read_host(tools: Tools, host: str) -> HostReading | str:
     as a one-line string rather than a fabricated `HostReading`.
     """
     try:
-        proc = tools.run(host, READ_COMMAND, READ_TIMEOUT_S, None)
+        proc = tools.run(host, HOST_READ_COMMAND, READ_TIMEOUT_S, None)
     except subprocess.TimeoutExpired:
         return "%s: headroom read timed out" % host
     if proc.returncode not in (0, 1):  # 1 is pgrep's zero-count exit
