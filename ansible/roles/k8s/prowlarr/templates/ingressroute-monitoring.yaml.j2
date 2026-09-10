@@ -17,20 +17,26 @@
   `prowlarr.local.<domain>/api/v1/indexer` arrived at Traefik as `ClientHost: 10.42.1.0` and got a 302,
   so the route did not match — 10.0.0.161 never reaches it.
 
-  That measurement also bounds the gateway pair. The addresses are cni0 GATEWAYS, not the nodes'
-  LAN addresses: host traffic to the ingress VIP SNATs to a cluster-internal address. Which one
-  depends on where the traefik POD sits. Traefik is pinned to daniel-box
-  (`kubernetes.io/hostname` nodeSelector), so daniel-box's own host traffic stays local and
-  arrives as its cni0 gateway `10.42.0.1` — measured the same day, a 401 from prowlarr rather
-  than a 302, which is the route matching and prowlarr rejecting the absent X-Api-Key. Traffic
-  from daniel-server crosses the VXLAN overlay and arrives as its flannel.1 address `10.42.1.0`,
-  NOT as its cni0 gateway `10.42.1.1`. `10.42.1.1/32` is therefore inert while that pin holds.
-  Kept rather than dropped because postflight runs on daniel-box only, so nothing depends on it
-  either way, and unpinning traefik is what would make the pair matter. Same variable and the
-  same reasoning as loki-homelab's read route, whose `DECIDED 2026-08-24` marker verified the
+  That measurement also bounds both grants. These are cluster-internal addresses, not the nodes'
+  LAN addresses: host traffic to the ingress VIP SNATs to one of them, and which one depends on
+  where the traefik POD sits. Traffic to a traefik pod on the SAME node stays on the local
+  bridge and arrives as that node's cni0 gateway; traffic from the OTHER node crosses the VXLAN
+  overlay and arrives as the SENDING node's flannel.1 address. Traefik is pinned to daniel-box
+  (`kubernetes.io/hostname` nodeSelector), so daniel-box arrives as its cni0 gateway
+  `10.42.0.1` — measured the same day, a 401 from prowlarr rather than a 302, which is the route
+  matching and prowlarr rejecting the absent X-Api-Key — while daniel-server arrives as its
+  flannel.1 address `10.42.1.0`, NOT as its cni0 gateway `10.42.1.1`.
+
+  Both lists, therefore. The cni0 pair alone matches only while traefik sits on the node
+  postflight runs on: moving the pod to daniel-server, or unpinning it, makes postflight's
+  request arrive as `10.42.0.0`, which no clause grants, and §9.3 returns to the permanent SKIP
+  that #1642 and #1675 were both filed to fix (#1697). Nothing ties the traefik nodeSelector to
+  this route, so the route admits both address sets instead. Same variables and the same
+  reasoning as loki-homelab's read route, whose `DECIDED 2026-08-24` marker verified the
   daniel-box half live first.
 
   The path prefix, the LAN-only rule and prowlarr's own X-Api-Key are unchanged.
 #}
 {{ monitoring_route(container_item.name, container_item.hostname, container_item.port, '/api/v1/indexer',
-                    extra_client_cidrs=k3s_cni0_gateways, include_bridge_ip=false) }}
+                    extra_client_cidrs=k3s_cni0_gateways + k3s_flannel_node_ips,
+                    include_bridge_ip=false) }}

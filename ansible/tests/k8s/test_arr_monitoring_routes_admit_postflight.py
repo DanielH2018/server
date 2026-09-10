@@ -124,6 +124,23 @@ def test_every_arr_route_admits_the_nodes_own_host_traffic_is_clean():
     assert _cidr_mismatches([f"{ALL_VARS['k8s_node_client_ip']}/32"])
 
 
+def test_every_arr_route_admits_the_overlay_addresses_too_is_clean():
+    """The flannel.1 pair as well, because the cni0 pair depends on where traefik is pinned.
+
+    A host request to the ingress VIP arrives as the sending node's cni0 gateway only when the
+    traefik pod is on that same node; from the other node it crosses the VXLAN overlay and
+    arrives as the sending node's flannel.1 address. Traefik is pinned to daniel-box and
+    postflight runs on daniel-box, so 10.42.0.1 is what arrives today — but nothing ties that
+    nodeSelector to these routes, and moving the pod would make postflight arrive as 10.42.0.0
+    and match no clause, returning §9.3 to the SKIP of #1642/#1675 (#1697).
+    """
+    overlay = ALL_VARS["k3s_flannel_node_ips"]
+    assert not _cidr_mismatches(overlay), (
+        f"monitoring route(s) do not admit the nodes' flannel.1 addresses ({overlay}), so §9.3 "
+        f"is SKIP for any node not running the traefik pod: {_cidr_mismatches(overlay)}"
+    )
+
+
 def test_no_arr_route_grants_the_dead_bridge_address():
     """`k8s_bridge_client_ip` reaches none of these routes, so none of them may grant it (#1683).
 
