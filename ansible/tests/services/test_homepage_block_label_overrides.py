@@ -37,6 +37,7 @@ EXPECTED_LABELS = {
     ("karakeep.", 1): "bookmarks",
     ("peanut.", 1): "battery_charge",
     ("peanut.", 2): "ups_status",
+    ("qBittorrent.", 2): "download",
 }
 
 # li.service:has(a[href*="peanut."]) .service-block:nth-child(2) > .font-bold::after {
