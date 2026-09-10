@@ -23,9 +23,9 @@ homepage_k8s_mem_request: 32Mi
 # rather than inline because services.yaml.j2 renders it through `| urlencode` into a GET query
 # string, and the percent-encoded form is unreviewable.
 #
-# ONE QUERY, FOUR COUNTERS, and the shape is load-bearing. homepage's customapi widget takes a
-# single URL, so four counts have to arrive in one response. Each counter is wrapped
-# `label_replace(vector(scalar(<count> or vector(0))), "k", "<name>", "", "")` and the four are
+# ONE QUERY, TWO COUNTERS, and the shape is load-bearing. homepage's customapi widget takes a
+# single URL, so both counts have to arrive in one response. Each counter is wrapped
+# `label_replace(vector(scalar(<count> or vector(0))), "k", "<name>", "", "")` and the two are
 # joined with `or`:
 #   - `scalar()` collapses a count to a bare number and `vector()` lifts it back to a one-sample
 #     series, which is what lets `or` concatenate four otherwise-unrelated counts.
@@ -33,7 +33,7 @@ homepage_k8s_mem_request: 32Mi
 #     over nothing returns no series, `scalar()` of that is NaN, and the tile reads "NaN" for
 #     exactly the healthy case (zero degraded deployments) it exists to confirm.
 #   - `label_replace` is LOAD-BEARING, and not for display: `or` is set union over series
-#     SIGNATURES, and four bare `vector()` samples all carry the empty signature — so without a
+#     SIGNATURES, and bare `vector()` samples all carry the empty signature — so without a
 #     distinguishing label the union collapses to ONE result and the tile renders a single
 #     number. Measured 2026-08-23: dropping label_replace returned `result` of length 1, not 4.
 #     The names it assigns are also what makes the query legible when curled by hand, which is
@@ -42,15 +42,16 @@ homepage_k8s_mem_request: 32Mi
 # (config/widgets.yaml.j2's kubernetes info widget, and this tile's own namespace/podSelector pod
 # stats), so repeating them here would add nothing visible.
 #
-# DECIDED: the third counter is named "Stopped" but matches Pending|Failed|Unknown, and a Pending
-# pod is starting rather than stopped. The mismatch is deliberate and chosen for the dashboard,
+# DECIDED: the second counter is named "Down" but matches Pending|Failed|Unknown, and a Pending
+# pod is starting rather than down. The mismatch is deliberate and chosen for the dashboard,
 # where one word fits the block and "Not Running" wrapped to two lines. Do not "correct" the name
 # to match the phases; the two honest alternatives are to keep a two-word label, or to narrow the
 # match to Failed|Unknown and lose sight of a pod stuck Pending — which is the failure this
 # counter is most likely to catch. The visible consequence: every rollout, including homepage's
-# own, briefly shows a non-zero STOPPED while new pods schedule.
+# own, briefly shows a non-zero DOWN while new pods schedule.
+#
+# The node and degraded-deployment counters were dropped on 2026-09-10 at the operator's
+# request, along with the mappings that rendered them — the tile shows pod Up and Down only.
 homepage_k8s_headlamp_cluster_query: >-
-  label_replace(vector(scalar(count(kube_node_status_condition{condition="Ready",status="true"} == 1) or vector(0))), "k", "Nodes", "", "")
-  or label_replace(vector(scalar(count(kube_pod_status_phase{phase="Running"} == 1) or vector(0))), "k", "Running", "", "")
-  or label_replace(vector(scalar(count(kube_pod_status_phase{phase=~"Pending|Failed|Unknown"} == 1) or vector(0))), "k", "Stopped", "", "")
-  or label_replace(vector(scalar(count(kube_deployment_status_replicas_unavailable > 0) or vector(0))), "k", "Degraded", "", "")
+  label_replace(vector(scalar(count(kube_pod_status_phase{phase="Running"} == 1) or vector(0))), "k", "Up", "", "")
+  or label_replace(vector(scalar(count(kube_pod_status_phase{phase=~"Pending|Failed|Unknown"} == 1) or vector(0))), "k", "Down", "", "")

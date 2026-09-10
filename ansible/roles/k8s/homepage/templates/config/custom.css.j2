@@ -126,9 +126,9 @@ li.service:not(#my-calendar) .service-container > div {
 /* A THREE-STAT WIDGET SPANS ITS THREE BOXES ACROSS THE FULL WIDTH.
  *
  * At two per row an odd count leaves the last box alone on a half-empty row. Two and four
- * divide evenly; three does not, and five of the nine Services widgets carry exactly three
- * stats — Uptime-Kuma, Pi-hole, Speedtest, UPS and Scrutiny. Giving those a third each puts
- * all three on one row and leaves no ragged half.
+ * divide evenly; three does not. No widget carries three stats since the 2026-09-10 field
+ * pruning, so this rule matches nothing today — it stays because it costs nothing and applies
+ * itself the moment a widget's stat count lands on three again.
  *
  * `:has(> :nth-child(3):last-child)` is "exactly three children": a third child that is also
  * the last. It matches nothing on a two- or four-stat widget, so those keep the 50% basis
@@ -142,21 +142,23 @@ li.service:not(#my-calendar) .service-container:has(> :nth-child(3):last-child) 
   flex-basis: calc(33.333% - 0.5rem);
 }
 
-/* RESERVE TWO STAT ROWS IN EVERY WIDGET, so a one-row widget does not shrink its whole grid row.
+/* RESERVE ONE STAT ROW IN EVERY WIDGET, so a sparser widget does not shrink its whole grid row.
  *
  * `.services-list` sizes each grid row to its tallest member, and `height: 100%` above makes
- * every card fill that. Both are per-ROW: when all three tiles in a row hold one stat row —
- * which is what the rule above did to Uptime-Kuma, Pi-hole and Speedtest, all three of them in
- * grid row one — that row shrinks to 120px while the rows below stay 172px. Uniform within a
- * row, visibly different down the column.
+ * every card fill that. Both are per-ROW, so a row whose tiles all hold fewer stat rows than
+ * the rows below it shrinks on its own and the column reads uneven down its length.
  *
- * 6.5rem is two stat rows: a block is 44px and the pair with margins comes to 104px. Reserving
- * it makes the tallest case the ONLY case, so every card is 172px whatever its stat count.
- * Verified 2026-09-09 at 1920px and 1280px — nine Services cards and four Media cards, one
- * distinct height between them.
+ * ONE row, not two, since the 2026-09-10 field pruning: no widget on this dashboard carries
+ * more than two stats now, and two fit one row at the 50% basis above. Reserving two left an
+ * empty 44px band in every card. 3.25rem is one stat row — a block is 44px, plus its margins.
+ *
+ * A widget that later carries three or four stats wraps to a second row and takes its grid row
+ * with it, which is correct: the reservation is a floor, not a cap. Jellyfin is the one to
+ * watch — its widget declares four blocks and currently renders none, because the tile is
+ * erroring (#1457).
  */
 li.service:not(#my-calendar) .service-container {
-  min-height: 6.5rem;
+  min-height: 3.25rem;
 }
 
 li.service:not(#my-calendar) .service-container > div > div {
@@ -177,6 +179,21 @@ li.service:not(#my-calendar) .service-container .font-bold.w-10 {
  */
 #my-calendar {
   grid-column: 1 / -1;
+}
+
+/* THE LINK ROWS GET VERTICAL BREATHING ROOM.
+ *
+ * Ten links at five columns is two rows, and homepage's own grid sets no row gap — the two rows
+ * of icons met edge to edge and read as one block. `row-gap` on the grid is the whole fix: it
+ * separates the two link rows from each other and the first of them from the calendar above,
+ * and it costs the column only the gap itself because the tiles keep their height.
+ *
+ * `:has(> #my-calendar)` scopes it to this one group's list. Every other group is a single row
+ * of tiles, where a row gap would do nothing at 1920px and add height when a narrow viewport
+ * wrapped them.
+ */
+ul.services-list:has(> #my-calendar) {
+  row-gap: 0.5rem;
 }
 
 #my-calendar .service-container > div {
