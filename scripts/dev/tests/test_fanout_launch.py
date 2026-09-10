@@ -4,6 +4,7 @@ Run: uv run pytest scripts/dev/tests/test_fanout_launch.py
 """
 
 import json
+import subprocess
 from datetime import UTC, datetime
 
 import pytest
@@ -14,6 +15,7 @@ from fanout_lib.launch import (
     create_worktree_command,
     launch,
     launch_command,
+    remove_worktree_command,
     unit_name,
     worktree_path,
 )
@@ -30,6 +32,7 @@ def test_daniel_box_brief_lands_and_daniel_server_brief_stops_at_the_pr():
     box = render_brief(ISSUES, "daniel-box", "1345-1386", "worktree-orch", [])
     server = render_brief(ISSUES, "daniel-server", "1345-1386", "worktree-orch", [])
     assert "land.sh" in box and "grep -m1 '^VERDICT:'" in box
+    assert ".fanout/land" in box and "$CLAUDE_JOB_DIR" not in box
     assert "land.sh" not in server and "gh pr create" in server
     assert "do not merge" in server.lower()
 
@@ -97,8 +100,6 @@ def test_launch_writes_the_brief_over_stdin_then_starts_the_unit():
 
 
 def test_a_failed_worktree_add_removes_the_half_made_tree_and_launches_nothing():
-    import subprocess
-
     tools, run = fake_tools(
         {
             "daniel-server": subprocess.CompletedProcess(
@@ -108,7 +109,46 @@ def test_a_failed_worktree_add_removes_the_half_made_tree_and_launches_nothing()
     )
     with pytest.raises(LaunchError, match="branch exists"):
         launch(tools, "daniel-server", "b", "BRIEF", issues=[1])
+    assert len(run.calls) == 2
+    # The cleanup command chains removal and branch deletion with `&&`, not `;` — a bare
+    # `;` would force-delete the branch even when the tree was never created.
+    assert run.calls[1][1] == remove_worktree_command("b")
+    assert not any(c.startswith("systemd-run") for _, c, _ in run.calls)
+
+
+def test_a_failed_cleanup_is_folded_into_the_launch_error():
+    tools, run = fake_tools()
+    run.answers_by_call = [
+        subprocess.CompletedProcess([], 128, stdout="", stderr="fatal: branch exists"),
+        subprocess.CompletedProcess(
+            [], 128, stdout="", stderr="fatal: not a working tree"
+        ),
+    ]
+    with pytest.raises(LaunchError) as excinfo:
+        launch(tools, "daniel-server", "b", "BRIEF", issues=[1])
+    assert "branch exists" in str(excinfo.value)
+    assert "not a working tree" in str(excinfo.value)
+
+
+def test_a_worktree_add_timeout_still_cleans_up_and_raises():
+    tools, run = fake_tools({"daniel-server": ok("")})
+    run.answers_by_call = [subprocess.TimeoutExpired(cmd="git", timeout=120.0)]
+    with pytest.raises(LaunchError, match="timed out"):
+        launch(tools, "daniel-server", "b", "BRIEF", issues=[1])
     assert len(run.calls) == 2 and "worktree remove --force" in run.calls[1][1]
+    assert not any(c.startswith("systemd-run") for _, c, _ in run.calls)
+
+
+def test_a_failed_brief_write_raises_and_skips_systemd_run():
+    tools, run = fake_tools({"daniel-server": ok("")})
+    run.answers_by_call = [
+        ok(""),
+        subprocess.CompletedProcess([], 1, stdout="", stderr="cat: No such file"),
+    ]
+    with pytest.raises(LaunchError, match="brief write") as excinfo:
+        launch(tools, "daniel-server", "b", "BRIEF", issues=[1])
+    assert "No such file" in str(excinfo.value)
+    assert len(run.calls) == 2
     assert not any(c.startswith("systemd-run") for _, c, _ in run.calls)
 
 

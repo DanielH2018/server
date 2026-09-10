@@ -15,13 +15,30 @@ from fanout_lib.transport import Tools
 
 @dataclass
 class FakeRun:
-    """Answers run(host, command) from a table, records every call."""
+    """Answers run(host, command) from a table, records every call.
+
+    Attributes:
+        answers: per-host answer, used once `answers_by_call` is exhausted.
+        answers_by_call: per-call answers, consumed in call order before falling back to
+            `answers`. An entry that is a `BaseException` instance is raised instead of
+            returned, so a test can script a `subprocess.TimeoutExpired` on a given call.
+        calls: every call made, in order.
+    """
 
     answers: dict[str, subprocess.CompletedProcess] = field(default_factory=dict)
+    answers_by_call: list[subprocess.CompletedProcess | BaseException] = field(
+        default_factory=list
+    )
     calls: list[tuple[str, str, str | None]] = field(default_factory=list)
 
     def __call__(self, host, command, timeout, stdin=None):
         self.calls.append((host, command, stdin))
+        call_index = len(self.calls) - 1
+        if call_index < len(self.answers_by_call):
+            answer = self.answers_by_call[call_index]
+            if isinstance(answer, BaseException):
+                raise answer
+            return answer
         if host in self.answers:
             return self.answers[host]
         return subprocess.CompletedProcess(

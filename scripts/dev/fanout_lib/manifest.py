@@ -2,7 +2,7 @@
 
 import json
 from dataclasses import asdict, dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 MANIFEST_DIR = Path.home() / ".claude" / "fanout"
@@ -32,7 +32,7 @@ class Manifest:
 
 def new_run_id(now: datetime) -> str:
     """Derive a run id from a timestamp, sortable and filesystem-safe."""
-    return now.strftime("%Y%m%dT%H%M%SZ")
+    return now.astimezone(UTC).strftime("%Y%m%dT%H%M%SZ")
 
 
 def save(m: Manifest, root: Path = MANIFEST_DIR) -> Path:

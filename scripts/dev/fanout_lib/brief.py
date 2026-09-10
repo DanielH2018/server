@@ -17,19 +17,29 @@ class Issue:
     body: str
 
 
+def _worktree_path(batch: str) -> str:
+    # Mirrors launch.worktree_path. Duplicated rather than imported: transport already
+    # imports brief, and launch imports transport, so brief importing launch would cycle.
+    return f"/home/ubuntu/server/.claude/worktrees/fanout-{batch}"
+
+
 def _landing(host: str, batch: str) -> str:
     if host == LANDS:
-        return """## Landing
+        # $CLAUDE_JOB_DIR may be unset for a headless `claude -p` under systemd-run, which
+        # would silently fall back to /tmp. The worktree's own git-ignored .fanout/ dir is
+        # always there.
+        log = f"{_worktree_path(batch)}/.fanout/land<n>.log"
+        return f"""## Landing
 Land with `land.sh` (the `land-after-merge` skill); a hook denies hand-polling CI:
 
 ```bash
 git rev-parse origin/master
 ./scripts/deploy_tools/land.sh --pr <n> --since <pre-merge-sha> --arm-merge --await-merge \\
-  > "$CLAUDE_JOB_DIR/tmp/land<n>.log" 2>&1
+  > "{log}" 2>&1
 ```
 Run that backgrounded, then wait in the foreground, once, instead of ending your turn:
 ```bash
-timeout 1200 tail -f -n +1 "$CLAUDE_JOB_DIR/tmp/land<n>.log" | grep -m1 '^VERDICT:'
+timeout 1200 tail -f -n +1 "{log}" | grep -m1 '^VERDICT:'
 ```
 It prints the verdict at once and returns at the timeout; that is not a failure.
 `deploy.sh` exit 75 is a resume point to retry, not a failure to report.
