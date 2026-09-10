@@ -152,6 +152,34 @@ def tag_for(path: str, declared: set[str] | None = None) -> str | None:
     return role if role in declared else None
 
 
+def is_role_test_path(path: str) -> bool:
+    """Whether a changed path is a role's own `tests/` file.
+
+    Answers about segment 4 of `ansible/roles/<plane>/<role>/<sub>/...` alone, so it is only
+    meaningful for a path `role_for` has already named a role for. `shared_roles` is the caller,
+    which drops such a path: a role's `tests/` is work no deploy applies, the same class as the
+    `.md` rule in `role_for` (#1701). Pytest guards over the role's `files/*.py` are staged by
+    nothing — `ansible/tests/repo/test_no_role_ships_a_test_file.py` holds that tree-wide — so
+    they reach no cluster and no deploy can apply them. `_is_real_change` in
+    `scripts/diagnostics/probe_lib/releases.py` drops a role's `tests/` for that reason.
+
+    `tasks/` is NOT dropped, which is what issue #1729 proposed and three facts refute. A role
+    with no `containers_list` entry and no caller has no path to being applied at all, and a
+    tasks-only PR adding one must still be reported
+    (`tests/test_land_classify.py:110`, issue #1544). A helper's tasks apply live state to each
+    caller separately — arr-notification's seed a Discord Connect notification into the *arr's
+    own database — so deploying one caller is not the change applied
+    (`tests/test_land_tags_caller_coverage.py:76`, issue #1397). And `_supplies_manifest_bytes`,
+    the predicate #1729 cites as its precedent, puts `volume-claim` in the reported set by name:
+    the role ships `templates/pvc.yaml.j2`.
+
+    Read HERE rather than folded into `role_for`, which stays the plain "which role directory is
+    this path in" mapper `test_land_tags_shared_mapper_agreement.py` pins against the deployer's
+    own `services_from_changed_paths`.
+    """
+    return path.split("/")[4:5] == ["tests"]
+
+
 def shared_roles(files, declared: set[str] | None = None) -> list[str]:
     """The changed role directories that have no `containers_list` entry.
 
@@ -159,9 +187,11 @@ def shared_roles(files, declared: set[str] | None = None) -> list[str]:
     includes, `volume-claim` and `volume-revert` are storage paths several include. Naming one
     in `--tags` makes deploy.sh refuse the ENTIRE list (exit 2), so they must be split off the
     tags and reported as work a human still owes. PR #617 is the measured case.
+
+    A role's own `tests/` does not put it here at all — `is_role_test_path`.
     """
     declared = declared_tags() if declared is None else declared
-    roles = {r for p in files if (r := role_for(p))}
+    roles = {r for p in files if (r := role_for(p)) and not is_role_test_path(p)}
     return sorted(roles - declared)
 
 
