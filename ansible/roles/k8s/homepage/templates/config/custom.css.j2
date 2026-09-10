@@ -149,9 +149,16 @@ li.service:not(#my-calendar) .service-container:has(> :nth-child(3):last-child) 
  * load rather than as a tile with one number. FreshRSS is the only one — `fields: [unread]`.
  *
  * `:has(> :first-child:last-child)` is "exactly one child".
+ *
+ * `calc(100% - 0.5rem)`, NOT `100%`, and the subtraction is the same one the 50% and 33.3% bases
+ * make: a block carries `m-1`, so 8px of horizontal margin sits outside the basis. At a flat
+ * `100%` the block came to 280px inside a 272px container and the card's `overflow-clip` cut the
+ * last 4px off — measured on the deployed page 2026-09-10, the only clipped element on the page.
+ * A basis that ignores the margin overflows by exactly that margin, which is small enough to
+ * read as a rendering quirk rather than as a bug.
  */
 li.service:not(#my-calendar) .service-container:has(> :first-child:last-child) > div {
-  flex-basis: 100%;
+  flex-basis: calc(100% - 0.5rem);
 }
 
 /* RESERVE ONE STAT ROW IN EVERY WIDGET, so a sparser widget does not shrink its whole grid row.
