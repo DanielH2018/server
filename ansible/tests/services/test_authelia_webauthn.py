@@ -23,27 +23,27 @@ import pytest
 from _k8s_render import rendered_docs
 from lib import yaml_fast
 
-# The keys the pinned image's own `config.template.yml` declares under `webauthn`. Read off
-# https://raw.githubusercontent.com/authelia/authelia/v4.39.21/config.template.yml — bump this
-# set from that file when `authelia_k8s_image` moves, never from the docs site, which
-# documents the unreleased schema.
-PINNED_WEBAUTHN_KEYS = frozenset(
+# The keys this role deliberately writes, and the whole set it may write. Deliberately NARROWER
+# than the surface Authelia 4.39.21 accepts: a rule that admitted every key the pinned version
+# declares would admit `metadata` and `filtering` too, which is exactly the copy-paste from the
+# docs site this file exists to reject — the docs describe a wider schema than any one release
+# validates, and the failure is at startup rather than at render.
+#
+# Adding a key here is the deliberate act: check it against the tag `authelia_k8s_image` names,
+# in that tag's own `config.template.yml`
+# (https://raw.githubusercontent.com/authelia/authelia/v4.39.21/config.template.yml) and its
+# `internal/configuration/validator/webauthn.go`, then add it to this set with the rest.
+WRITTEN_WEBAUTHN_KEYS = frozenset(
     {
         "disable",
         "enable_passkey_login",
-        "experimental_enable_passkey_uv_two_factors",
-        "experimental_enable_passkey_upgrade",
         "display_name",
         "attestation_conveyance_preference",
         "timeout",
-        "filtering",
         "selection_criteria",
-        "metadata",
     }
 )
-PINNED_SELECTION_CRITERIA_KEYS = frozenset(
-    {"attachment", "discoverability", "user_verification"}
-)
+WRITTEN_SELECTION_CRITERIA_KEYS = frozenset({"attachment", "user_verification"})
 
 
 def webauthn_is_an_optional_second_factor(webauthn):
@@ -51,12 +51,17 @@ def webauthn_is_an_optional_second_factor(webauthn):
     return webauthn.get("disable") is False and not webauthn.get("enable_passkey_login")
 
 
-def keys_are_known_to_the_pinned_version(webauthn):
-    """True when no key here is one Authelia 4.39.21 would reject at startup."""
-    if not set(webauthn) <= PINNED_WEBAUTHN_KEYS:
+def only_the_keys_this_role_writes(webauthn):
+    """True when the block carries no key beyond the checked set above.
+
+    Every key in that set was read off the pinned version's own sources. A key from anywhere
+    else renders, parses and lints, and then Authelia refuses to start on it — under
+    `Recreate`, on the SSO gate, with the old pod already gone.
+    """
+    if not set(webauthn) <= WRITTEN_WEBAUTHN_KEYS:
         return False
     selection = webauthn.get("selection_criteria") or {}
-    return set(selection) <= PINNED_SELECTION_CRITERIA_KEYS
+    return set(selection) <= WRITTEN_SELECTION_CRITERIA_KEYS
 
 
 GOOD_WEBAUTHN: dict[str, object] = {
@@ -84,18 +89,25 @@ def test_disabled_webauthn_is_flagged():
     assert not webauthn_is_an_optional_second_factor({**GOOD_WEBAUTHN, "disable": True})
 
 
-def test_pinned_keys_are_clean():
-    assert keys_are_known_to_the_pinned_version(GOOD_WEBAUTHN)
+def test_the_written_key_set_is_clean():
+    assert only_the_keys_this_role_writes(GOOD_WEBAUTHN)
 
 
-def test_key_from_a_newer_schema_is_flagged():
-    """A key from a newer schema renders and parses; 4.39.21 refuses to boot on it."""
-    assert not keys_are_known_to_the_pinned_version(
+def test_a_key_copied_from_the_docs_site_is_flagged():
+    """`webauthn.metadata` is real in the docs and unchecked here — the copy-paste case."""
+    assert not only_the_keys_this_role_writes(
+        {**GOOD_WEBAUTHN, "metadata": {"enabled": True}}
+    )
+
+
+def test_an_unchecked_selection_criterion_is_flagged():
+    """The nested half of the same rule."""
+    assert not only_the_keys_this_role_writes(
         {
             **GOOD_WEBAUTHN,
             "selection_criteria": {
                 "user_verification": "preferred",
-                "residency": "preferred",
+                "discoverability": "preferred",
             },
         }
     )
@@ -130,10 +142,10 @@ def test_rendered_webauthn_is_an_optional_second_factor(authelia_webauthn):
     )
 
 
-def test_rendered_webauthn_keys_are_known_to_the_pinned_version(authelia_webauthn):
-    assert keys_are_known_to_the_pinned_version(authelia_webauthn), (
-        f"webauthn carries a key Authelia 4.39.21 does not declare: "
-        f"{sorted(set(authelia_webauthn) - PINNED_WEBAUTHN_KEYS)} "
-        f"{sorted(set(authelia_webauthn.get('selection_criteria') or {}) - PINNED_SELECTION_CRITERIA_KEYS)}. "
+def test_rendered_webauthn_writes_only_checked_keys(authelia_webauthn):
+    assert only_the_keys_this_role_writes(authelia_webauthn), (
+        f"webauthn carries a key nobody checked against the pinned Authelia version: "
+        f"{sorted(set(authelia_webauthn) - WRITTEN_WEBAUTHN_KEYS)} "
+        f"{sorted(set(authelia_webauthn.get('selection_criteria') or {}) - WRITTEN_SELECTION_CRITERIA_KEYS)}. "
         f"It renders, it parses, and the pod refuses to start on it"
     )
