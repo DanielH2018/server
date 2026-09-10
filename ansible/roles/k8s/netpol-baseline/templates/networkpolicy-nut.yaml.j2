@@ -14,9 +14,14 @@ spec:
 {# `| bool` for the reason networkpolicy.yaml.j2 spells out in full: a string
    `-e netpol_baseline_enforced=false` is truthy to bare Jinja and False to Ansible's `when:`. #}
 {% if netpol_baseline_enforced | bool %}
-    # Four in-cluster callers plus the host-side shutdown chain, all on upsd's :3493.
+    # Five in-cluster callers plus the host-side shutdown chain, all on upsd's :3493.
     #
     # peanut is the web UI in-cluster.
+    #
+    # nut-exporter reads UPS variables anonymously and renders them as network_ups_tools_*
+    # series for Prometheus (roles/k8s/nut-exporter). It is a pod like peanut and
+    # home-assistant, so it needs a podSelector for the reason spelled out below: pod ->
+    # ClusterIP -> pod traffic keeps the caller's pod IP and never arrives as a node address.
     #
     # home-assistant runs HA's NUT integration. `sensor.ups_power` is live and updating
     # (360.0 at 2026-08-20 01:03). HA sits on daniel-box, nut is pinned to daniel-server, and
@@ -57,6 +62,9 @@ spec:
         - podSelector:
             matchLabels:
               app: uptime-kuma
+        - podSelector:
+            matchLabels:
+              app: nut-exporter
 {% for cidr in netpol_baseline_node_cidrs %}
         - ipBlock:
             cidr: {{ cidr }}

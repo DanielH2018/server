@@ -416,6 +416,11 @@ containers_list:
   # 127.0.0.1:3493 target via hostPort.
   - name: nut
     platform: k8s
+  # The Prometheus face of the same upsd, as its own workload rather than a sidecar: the nut pod
+  # is privileged and USB-pinned, and a sidecar there would restart the shutdown chain on every
+  # exporter bump. No port and no route derive — it is a scrape target only.
+  - name: nut-exporter
+    platform: k8s
   # Nightly CronJob: the Pi's WireGuard peer keys land on a Longhorn PVC the WEEKLY tier
   # carries to B2 on its Saturday shard (`k3s_longhorn_weekly_volumes`, `# Sat`), and the job
   # pushes the "WG Pi Peer Backup" monitor directly. The job is nightly; the OFF-SITE copy is

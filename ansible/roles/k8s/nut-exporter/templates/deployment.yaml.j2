@@ -1,0 +1,84 @@
+{% from 'container-resources.yml.j2' import container_resources with context %}
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
+{% from 'pod-affinity.yml.j2' import node_affinity_preference with context %}
+---
+# The Prometheus face of the UPS. It is a NUT network client, not a second UPS driver: it dials
+# upsd over the `nut` ClusterIP and reads variables anonymously, which upsd permits by default
+# (confirmed on daniel-server 2026-09-10 — `upsc apc-ups@127.0.0.1` returns every variable with
+# no credentials, and the nut pod's own livenessProbe already relies on that). So this workload
+# holds no secret and no upsd.users entry.
+#
+# A SEPARATE Deployment rather than a sidecar in the nut pod, deliberately. That pod is
+# privileged, USB-passthrough, `Recreate`, and pinned to daniel-server because the UPS is
+# physically attached there; it is also the pod half of the emergency-shutdown chain. A sidecar
+# would inherit all of that and would restart the shutdown chain on every exporter image bump.
+# This pod needs none of it — it holds no device and can schedule on either node.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nut-exporter
+  namespace: {{ k8s_namespace }}
+spec:
+  revisionHistoryLimit: 3
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nut-exporter
+  template:
+    metadata:
+      labels:
+        app: nut-exporter
+        netpol-baseline: enforced
+    spec:
+      enableServiceLinks: false
+      securityContext:
+        runAsUser: {{ puid }}
+        runAsGroup: {{ pgid }}
+        runAsNonRoot: true
+      automountServiceAccountToken: false
+      # Metrics, not power protection — the UPS keeps working when this pod does not.
+      priorityClassName: homelab-best-effort
+      # Preference, never a pin: daniel-box carries the storage- and VIP-pinned workloads and runs
+      # the hotter of the two nodes, so latency-insensitive services default to daniel-server.
+      # Weighted so the pod still schedules if daniel-server is cordoned or full. Reaching upsd
+      # costs one ClusterIP hop from either node, so neither placement is privileged here.
+{{ node_affinity_preference('daniel-server') }}
+      containers:
+        - name: nut-exporter
+          image: {{ nut_exporter_k8s_image }}
+          args:
+            - --nut.server=nut.{{ k8s_namespace }}.svc.cluster.local
+            - --nut.serverport=3493
+            - --nut.vars_enable={{ nut_exporter_k8s_variables | join(',') }}
+            - --web.listen-address=:{{ nut_exporter_k8s_port }}
+{{ hardened_security_context(read_only=true, non_root=true) }}
+          env:
+            - name: TZ
+              value: "{{ tz }}"
+          ports:
+            - name: metrics
+              containerPort: {{ nut_exporter_k8s_port }}
+          # tcpSocket, not httpGet, on both counts.
+          #
+          # Not /ups_metrics: that request fails whenever upsd is unreachable, so probing it
+          # would crash-loop this pod every time the nut pod restarts — turning a metrics gap
+          # into a second outage. Prometheus already reports an unreachable upsd as `up == 0` for
+          # the `nut` job, which is where that signal belongs.
+          #
+          # Not /metrics either, even though this exporter's own registry is small: a kubelet
+          # httpGet on a metrics route is the shape ansible/tests/k8s/test_probes_do_not_flood_metrics.py
+          # refuses below a 300s period, after node-exporter's probes produced 97% of the
+          # namespace's Loki ingest. A TCP connect proves the listener is up and serialises
+          # nothing, which is all a probe needs here.
+          livenessProbe:
+            tcpSocket:
+              port: {{ nut_exporter_k8s_port }}
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            failureThreshold: 3
+          readinessProbe:
+            tcpSocket:
+              port: {{ nut_exporter_k8s_port }}
+            initialDelaySeconds: 3
+            periodSeconds: 10
+{{ container_resources(cpu_limit=nut_exporter_k8s_cpu_limit, mem_limit=nut_exporter_k8s_mem_limit, cpu_request=nut_exporter_k8s_cpu_request, mem_request=nut_exporter_k8s_mem_request) }}
