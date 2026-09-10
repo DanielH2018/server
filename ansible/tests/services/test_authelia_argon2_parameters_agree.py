@@ -15,6 +15,11 @@ The flag-to-key mapping is NOT identity — `--salt-size` is `salt_length` and `
 
 Each rule is a predicate with a passing and a rejecting input, then applied to the real
 rendered manifest and the real task file behind non-vacuity assertions.
+
+Those non-vacuity assertions carry the #1621 case itself, so do not simplify them away. A revert
+to the legacy flat spelling empties `password.argon2`, and the comparison would then hold two
+empty mappings and pass; what fails instead is the fixture's own assertion, naming the parameters
+the mapping lost.
 """
 
 import re
@@ -40,6 +45,11 @@ FLAG_TO_CONFIG_KEY = {
 # flag on the generate command is a parameter this guard must compare — including a `--variant`
 # nobody has added yet. Rather than enumerate CLI defaults that cannot be read off the tree,
 # the flag set is held to exactly the table above and an unrecognised flag fails naming itself.
+#
+# On the command as written today the regex already excludes it: the value is `"$pw"`, and the
+# value class below cannot match a leading quote. This set is what covers an unquoted
+# `--password=<value>` form, which the regex WOULD match — `test_an_unquoted_password_flag_is_ignored`
+# is its red proof, because the quoted case passes with or without this filter.
 IGNORED_FLAGS = frozenset({"--password"})
 
 # The one-shot pods whose commands must be found. A count would fail saying a number moved; a
@@ -131,6 +141,12 @@ def test_the_non_identity_mapping_is_not_crossed():
 def test_kubectl_run_flags_are_not_parsed_as_parameters():
     """`--image` and `--quiet` sit before the subcommand and must not reach the table."""
     assert unexpected_flags(argon2_flags(GOOD_CMD)) == set()
+
+
+def test_an_unquoted_password_flag_is_ignored():
+    """`--password` carries the input, not a parameter, in the form the regex does match."""
+    unquoted = GOOD_CMD.replace('--password "$pw"', "--password=hunter2")
+    assert unexpected_flags(argon2_flags(unquoted)) == set()
 
 
 def test_an_unrecognised_parameter_flag_is_flagged():
