@@ -8,7 +8,7 @@ gate; a failed deploy locks out access to everything behind it, including the to
 
 ## OIDC clients
 
-Two relying parties, both in `templates/config-secret.yaml.j2` behind
+Three relying parties, all in `templates/config-secret.yaml.j2` behind
 `authelia_k8s_manage_oidc`:
 
 - `jellyfin` — `two_factor`, `client_secret_post` (the SSO plugin's PAR asymmetry, see the
@@ -20,6 +20,13 @@ Two relying parties, both in `templates/config-secret.yaml.j2` behind
   `two_factor` here would stall the headless `-m ui` browser on a TOTP prompt no test can
   answer. Grafana's half of the wiring, and why `root_url` pins the callback to the LAN name,
   is in `roles/k8s/claude-otel/CLAUDE.md`.
+- **Headlamp's client (#1390) is the one whose relying party is not the app.** Headlamp
+  forwards the `id_token` to the KUBERNETES API SERVER, which accepts or rejects it, so the
+  client's `claims_policy: with_groups_and_username` exists for the API server's
+  `oidc-username-claim` and `oidc-groups-claim` (`roles/setup/k3s`) rather than for Headlamp.
+  Its `redirect_uris` list the LAN name ONLY: this portal's `iss` follows the host the request
+  arrived on, and the API server's `oidc-issuer-url` compares one value exactly, so a
+  public-route login would present a token the API server rejects.
 
 Each client's secret is stored hashed. The digest is minted once with Authelia's own CLI —
 `authelia crypto hash generate pbkdf2 --variant sha512` — and the plaintext goes to the app,

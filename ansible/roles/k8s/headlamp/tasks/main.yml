@@ -15,6 +15,11 @@
       - deployment.yaml
       - service.yaml
       - ingressroute.yaml
+    # Its own list, not `manifests_files`: the shared role renders these under no_log at 0600
+    # and reconciles their keys, because `kubectl apply` cannot remove a key a template
+    # dropped (roles/k8s/manifests/CLAUDE.md).
+    manifests_secret_files:
+      - oidc-secret.yaml
 
 # ── prove the policy is enforced, rather than merely applied ────────────────────────────────
 # Its own directory: `kubectl apply -f <dir>` reads every file in the directory it is given, and

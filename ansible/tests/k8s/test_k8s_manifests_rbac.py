@@ -294,6 +294,125 @@ def test_headlamp_oidc_group_carries_the_apiserver_prefix():
     assert not group.startswith("system:"), f"{group!r} impersonates a built-in group"
 
 
+def _headlamp_pod_spec(**overrides) -> dict:
+    """The rendered pod spec.
+
+    `domain` is a SOPS value, so `_role_defaults` expands the URL defaults that read it with an
+    empty host. The assertions below are therefore about each URL's SHAPE — which name it pins
+    and which path it ends on — which is the property that has to hold anyway.
+    """
+    context = {
+        "container_item": next(c for c in _k8s_entries() if c["name"] == "headlamp"),
+        **_role_defaults("headlamp"),
+        **overrides,
+    }
+    doc = yaml_fast.safe_load(
+        _render(K8S / "headlamp" / "templates" / "deployment.yaml.j2", **context)
+    )
+    return doc["spec"]["template"]["spec"]
+
+
+# The flags an OIDC-enabled Headlamp must carry. Named, because the failure mode of a missing
+# one is never an error: no `-oidc-callback-url` and Headlamp builds the callback from the
+# request host, no `-oidc-scopes=...groups` and the RBAC group subject matches nothing.
+OIDC_ARG_NAMES = frozenset(
+    {
+        "-oidc-client-id",
+        "-oidc-idp-issuer-url",
+        "-oidc-scopes",
+        "-oidc-callback-url",
+        "-oidc-use-pkce",
+    }
+)
+
+
+def _oidc_arg_names(args: list[str]) -> set[str]:
+    return {arg.split("=", 1)[0] for arg in args if arg.startswith("-oidc-")}
+
+
+def test_headlamp_with_oidc_off_browses_as_its_serviceaccount():
+    """The default, and the state the cluster is in: no OIDC flags at all, the SA-token flag
+    present. This is the half that must not change while the API server carries no
+    `--kube-apiserver-arg=oidc-*` flags — dropping the SA-token flag before then leaves a
+    dashboard that authenticates nobody.
+    """
+    args = _headlamp_pod_spec()["containers"][0]["args"]
+    assert "-unsafe-use-service-account-token" in args
+    assert _oidc_arg_names(args) == set()
+
+
+def test_headlamp_with_oidc_on_swaps_the_serviceaccount_flag_for_the_oidc_flags():
+    """The rejecting half of the pair above, and the arming state.
+
+    The two identities are alternatives, not layers. Headlamp accepts both flag sets at once —
+    `newInClusterContextFromConfig` in backend/pkg/kubeconfig/kubeconfig.go puts a TokenFile and
+    an OidcConf on the same context — and then the SA token stays in force for API calls behind
+    a sign-in button, which is worse than either state alone. So the SA flag has to GO here,
+    and this test is what fails if a later edit makes the branches additive.
+    """
+    args = _headlamp_pod_spec(headlamp_k8s_oidc_enabled=True)["containers"][0]["args"]
+    assert "-unsafe-use-service-account-token" not in args
+    assert _oidc_arg_names(args) == OIDC_ARG_NAMES
+
+
+def test_headlamp_never_passes_its_client_secret_as_an_argument():
+    """An argument is part of the pod spec, and this cluster's read-only ServiceAccount can
+    read Deployments — so a secret passed as `-oidc-client-secret=...` is readable by anything
+    that can `kubectl get deploy`. It arrives as an env var from a Secret instead.
+    """
+    spec = _headlamp_pod_spec(headlamp_k8s_oidc_enabled=True)
+    container = spec["containers"][0]
+    assert not [a for a in container["args"] if a.startswith("-oidc-client-secret")]
+    (env,) = [
+        e for e in container["env"] if e["name"] == "HEADLAMP_CONFIG_OIDC_CLIENT_SECRET"
+    ]
+    assert env["valueFrom"]["secretKeyRef"] == {
+        "name": "headlamp-oidc",
+        "key": "client_secret",
+    }
+    assert "value" not in env
+
+
+def test_headlamp_oidc_scopes_leave_openid_to_headlamp():
+    """Headlamp prepends it: `Scopes: append([]string{oidc.ScopeOpenID}, ...Scopes...)` in
+    backend/cmd/headlamp.go at v0.45.0. Listing it here sends it twice. `groups` is the scope
+    that carries the RBAC subject, so its absence is a login onto an empty dashboard.
+    """
+    args = _headlamp_pod_spec(headlamp_k8s_oidc_enabled=True)["containers"][0]["args"]
+    (scopes,) = [
+        a.removeprefix("-oidc-scopes=") for a in args if a.startswith("-oidc-scopes=")
+    ]
+    listed = scopes.split(",")
+    assert "openid" not in listed, "Headlamp prepends openid; listing it sends it twice"
+    assert "groups" in listed
+
+
+def test_headlamp_oidc_urls_pin_the_lan_names():
+    """Authelia's `iss` follows the host the request arrived on, and the API server's
+    `oidc-issuer-url` compares one value exactly — so both URLs are LAN-only, and the callback
+    is pinned rather than derived from the request host as Headlamp would otherwise do.
+    """
+    args = _headlamp_pod_spec(headlamp_k8s_oidc_enabled=True)["containers"][0]["args"]
+    flags = dict(a.split("=", 1) for a in args if a.startswith("-oidc-") and "=" in a)
+    issuer = flags["-oidc-idp-issuer-url"]
+    assert issuer.startswith("https://auth.local."), f"{issuer} is not the LAN portal"
+    callback = flags["-oidc-callback-url"]
+    assert callback.startswith("https://headlamp.local."), callback
+    assert callback.endswith("/oidc-callback"), (
+        f"{callback} is not the path Headlamp serves the callback on"
+    )
+
+
+def test_headlamp_keeps_the_serviceaccount_token_mounted_under_oidc_too():
+    """`-in-cluster` calls rest.InClusterConfig(), which reads the API server address and the
+    cluster CA from the projected mount and ERRORS without it. Turning the mount off along with
+    the SA-token flag reads like tidying up and stops the pod from starting.
+    """
+    spec = _headlamp_pod_spec(headlamp_k8s_oidc_enabled=True)
+    assert spec["automountServiceAccountToken"] is True
+    assert spec["serviceAccountName"] == "headlamp"
+
+
 def test_homepage_kubernetes_widget_wiring_holds_together():
     """Three pieces have to agree or the widget renders EMPTY rather than erroring.
 
