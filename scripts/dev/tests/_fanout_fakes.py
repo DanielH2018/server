@@ -12,6 +12,15 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/dev
 
 from fanout_lib.transport import Tools
 
+# A syntactically real ed25519 public key line (32 zero bytes), standing in for a host's
+# signing key, plus the registered set it is a member of. Both are test data: the gate
+# compares what a host prints against what GitHub answers, never against a constant.
+HOST_KEY = (
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    " ubuntu@fake-host"
+)
+REGISTERED_KEYS = frozenset({" ".join(HOST_KEY.split()[:2])})
+
 
 @dataclass
 class FakeRun:
@@ -46,7 +55,9 @@ class FakeRun:
         )
 
 
-def fake_tools(answers=None, issues=None, issue_errors=None) -> tuple[Tools, FakeRun]:
+def fake_tools(
+    answers=None, issues=None, issue_errors=None, signing_keys=None, signing_error=None
+) -> tuple[Tools, FakeRun]:
     """Build a Tools whose boundaries answer from tables, plus the FakeRun behind it.
 
     Args:
@@ -54,6 +65,9 @@ def fake_tools(answers=None, issues=None, issue_errors=None) -> tuple[Tools, Fak
         issues: the issues `gh_issue` returns, looked up by number.
         issue_errors: exceptions `gh_issue` raises instead, keyed by issue number — a fetch
             that fails part-way through a run is what the hoisted fetch has to survive.
+        signing_keys: the normalized signing keys GitHub verifies for the account; defaults
+            to the one HOST_KEY is, so a test that says nothing about signing passes the gate.
+        signing_error: an exception `signing_keys` raises instead, for the refusal path.
 
     Returns:
         The Tools and the FakeRun it holds, so a test can script and read the calls.
@@ -67,7 +81,12 @@ def fake_tools(answers=None, issues=None, issue_errors=None) -> tuple[Tools, Fak
             raise errors[number]
         return table[number]
 
-    return Tools(run=run, gh_issue=gh_issue), run
+    def keys():
+        if signing_error is not None:
+            raise signing_error
+        return frozenset(REGISTERED_KEYS if signing_keys is None else signing_keys)
+
+    return Tools(run=run, gh_issue=gh_issue, signing_keys=keys), run
 
 
 def ok(stdout: str) -> subprocess.CompletedProcess:

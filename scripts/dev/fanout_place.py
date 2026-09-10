@@ -15,7 +15,8 @@ Usage::
 
 Exit codes: 0 ok · 1 usage or launch failure · 3 no headroom on any host, or a placement
 puts more than MAX_BATCHES_PER_REMOTE_HOST batches on one remote host · 4 no host readable
-· 5 a batch reports failed (`status` only).
+· 5 a batch reports failed (`status` only) · 6 no candidate host signs commits GitHub
+verifies, or the account's registered signing keys could not be read.
 
 A launch costs two remote ssh connections per host it reads (headroom, health) plus one
 per batch placed there — worktree add+lock, brief write and systemd-run folded into one
@@ -44,10 +45,46 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from fanout_lib import launch as launch_mod
 from fanout_lib import manifest as manifest_mod
+from fanout_lib import signing as signing_mod
 from fanout_lib import status as status_mod
 from fanout_lib.brief import REQUIRED_LABEL, Issue, render_brief
-from fanout_lib.placement import NoHeadroom, place
+from fanout_lib.placement import HostReading, NoHeadroom, place
 from fanout_lib.transport import HOSTS, REPO, Tools, read_host
+
+
+def _registered_keys(tools: Tools) -> frozenset[str] | str:
+    """The account's registered signing keys, or a one-line reason they could not be read."""
+    try:
+        return tools.signing_keys()
+    except (
+        subprocess.CalledProcessError,
+        subprocess.TimeoutExpired,
+        ValueError,
+    ) as exc:
+        return (
+            "could not read the GitHub account's registered signing keys "
+            f"({_error_text(exc)})"
+        )
+
+
+def _signing_verified(
+    readings: list[HostReading], registered: frozenset[str]
+) -> list[HostReading]:
+    """Drop every host GitHub would not verify, saying which and why.
+
+    A dropped host is not a failure to retry: its commits would read `verified=false
+    reason=unknown_key`, and the PR the agent opens there cannot merge past the
+    verified-signatures rule until someone re-signs the branch by hand (#1615).
+    """
+    keep = []
+    for r in readings:
+        reason = signing_mod.unverified_reason(r.host, r.signing_key, registered)
+        if reason is None:
+            keep.append(r)
+        else:
+            print(f"launch: not placing on {reason}", file=sys.stderr)
+    return keep
+
 
 BATCH_RE = re.compile(r"^\d+(,\d+)*$")
 # The host this script normally runs on; its launches go over `bash -c`, never ssh, so the
@@ -76,10 +113,24 @@ def _readings(tools: Tools, hosts):
 
 def cmd_read(args, tools: Tools) -> int:
     good, bad = _readings(tools, HOSTS)
+    # `signing=` makes the launch gate's verdict readable before a launch spends an agent on
+    # it. `unknown` means the registered-key read itself failed, which `launch` refuses on.
+    registered = _registered_keys(tools)
     for r in good:
+        if isinstance(registered, str):
+            verdict = "unknown"
+        else:
+            verdict = (
+                "unverified"
+                if signing_mod.unverified_reason(r.host, r.signing_key, registered)
+                else "ok"
+            )
         print(
-            f"{r.host}: cap={r.cap_bytes} current={r.current_bytes} agents={r.live_agents}"
+            f"{r.host}: cap={r.cap_bytes} current={r.current_bytes} "
+            f"agents={r.live_agents} signing={verdict}"
         )
+    if isinstance(registered, str):
+        print(registered, file=sys.stderr)
     for msg in bad:
         print(msg, file=sys.stderr)
     return 0 if good else 4
@@ -193,12 +244,26 @@ def cmd_launch(args, tools: Tools) -> int:
     fetched = _fetch_issues(tools, batches)
     if fetched is None:
         return 1
+    # Read the registered keys before the first ssh: a gh outage then refuses having spent no
+    # connection against the per-host ssh limit.
+    registered = _registered_keys(tools)
+    if isinstance(registered, str):
+        print(f"launch: {registered} — refusing to launch", file=sys.stderr)
+        return 6
     hosts = [args.host] if args.host else list(HOSTS)
     good, bad = _readings(tools, hosts)
     for msg in bad:
         print(f"placing without {msg}", file=sys.stderr)
     if not good:
         return 4
+    good = _signing_verified(good, registered)
+    if not good:
+        print(
+            "launch: no candidate host signs commits GitHub verifies — a batch placed there "
+            "opens a PR that cannot merge",
+            file=sys.stderr,
+        )
+        return 6
     try:
         placed = place(list(batches), good, pin=args.host)
     except NoHeadroom as exc:

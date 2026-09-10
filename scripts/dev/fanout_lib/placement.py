@@ -1,6 +1,7 @@
 """Pure placement over (host, cap, current, live_agents) — spec 2026-09-06 §2.
 
-Decides; does not fetch. The one read it needs is READ_COMMAND, run by transport.read_host.
+Decides; does not fetch. The one read it needs is transport.HOST_READ_COMMAND — READ_COMMAND's
+memory lines plus the signing-key line transport appends — run by transport.read_host.
 """
 
 from collections.abc import Sequence
@@ -15,6 +16,9 @@ RESERVATION_BYTES = 2_684_354_560
 # One line each: user.slice memory.current, its memory.high (an integer, or `max` when no
 # drop-in caps it), and the count of live `claude` processes for uid 1000. `pgrep -c` exits 1
 # on a zero count, which is why it is the last command and not the exit status we read.
+# transport.HOST_READ_COMMAND appends a fourth line, the host's signing key, to this same
+# read: the ssh budget (2 reads + 3 launches = the 5 `ufw limit ssh` allows per 30s) has no
+# room for a connection of its own.
 READ_COMMAND = (
     "cat /sys/fs/cgroup/user.slice/memory.current /sys/fs/cgroup/user.slice/memory.high; "
     "pgrep -c -x claude -u 1000"
@@ -33,12 +37,18 @@ class HostReading:
             `read` prints it and NoHeadroom names it — but never scored: placement decides
             on headroom alone (spec §2), because a host's agents are already priced into
             the memory the reading measures.
+        signing_key: what the host's signing-key read printed, carried for the launch gate
+            in fanout_place (fanout_lib.signing) and, like live_agents, never scored here.
     """
 
     host: str
     cap_bytes: int | None
     current_bytes: int
     live_agents: int
+    # Defaults empty, which `signing.unverified_reason` refuses: a reading built without a
+    # key — a test double, or a future caller that forgets it — must fail the gate closed
+    # rather than pass it for want of a value.
+    signing_key: str = ""
 
 
 class NoHeadroom(Exception):
@@ -46,28 +56,30 @@ class NoHeadroom(Exception):
 
 
 def parse_reading(host: str, stdout: str) -> HostReading:
-    """Parse READ_COMMAND's three-line output into a HostReading.
+    """Parse transport.HOST_READ_COMMAND's four-line output into a HostReading.
 
     Args:
         host: the host the reading came from.
-        stdout: the command's stdout — memory.current, memory.high (or `max`), then the
-            live-agent count, one per line.
+        stdout: the command's stdout — memory.current, memory.high (or `max`), the
+            live-agent count, then the host's signing key, one per line.
 
     Returns:
         The parsed reading.
 
     Raises:
-        ValueError: the output is not exactly three non-blank lines, or a numeric field
-            does not parse as an integer.
+        ValueError: the output is not exactly four non-blank lines, or a numeric field does
+            not parse as an integer. The message names the line count and never the output:
+            `user.signingkey` can point at a private key file, and a read on a host
+            configured that way would put its contents in this message.
     """
     lines = [ln.strip() for ln in stdout.splitlines() if ln.strip()]
-    if len(lines) != 3:
+    if len(lines) != 4:
         raise ValueError(
-            "%s: expected 3 lines from the headroom read, got %r" % (host, stdout)
+            "%s: expected 4 lines from the host read, got %d" % (host, len(lines))
         )
-    current, high, agents = lines
+    current, high, agents, signing_key = lines
     cap = None if high == "max" else int(high)
-    return HostReading(host, cap, int(current), int(agents))
+    return HostReading(host, cap, int(current), int(agents), signing_key)
 
 
 def headroom(reading: HostReading, reservation: int = RESERVATION_BYTES) -> int | None:
