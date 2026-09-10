@@ -35,6 +35,43 @@ Each binding in `templates/rbac.yaml.j2` names two subjects: the ServiceAccount,
   `oidc-groups-prefix` plus the Authelia group — so it is not a free choice. The prefix is what
   stops an Authelia group name from being read as a built-in `system:` group.
 
+## OIDC login (off)
+`headlamp_k8s_oidc_enabled: false`. Everything the login needs is in the repo; the switch is
+off because the third piece is not in this repo at all.
+
+- **Turning it on REPLACES the ServiceAccount identity, it does not add to it.** The
+  Deployment's two argument sets are alternatives: on, the five `-oidc-*` flags render and
+  `-unsafe-use-service-account-token` is gone. Headlamp accepts both at once — it puts a
+  TokenFile and an OidcConf on the same context — and the result is the SA still authorising
+  every API call behind a sign-in button, which is why the template branches rather than
+  appends.
+- **It cannot work until the API server trusts Authelia.** Headlamp forwards the browser's
+  `id_token`; the API server accepts or rejects it. With no `--kube-apiserver-arg=oidc-*` flags
+  on daniel-box, arming this leaves a dashboard nobody can use. That is part 1 of #1390, in
+  `roles/setup/k3s` (`k3s_oidc_*`), applied by hand through `k3s-bringup.yml`.
+- **Three values must agree across three places**, and none of the disagreements produces an
+  error: the client id (here, Authelia's client, the API server's `oidc-client-id`), the issuer
+  URL (here, the API server's `oidc-issuer-url`), and the group (`headlamp_k8s_oidc_group`, the
+  API server's `oidc-groups-prefix` plus the Authelia group).
+- **Both URLs pin the LAN name, and that is a constraint rather than a preference.** Authelia's
+  `iss` follows the host the authorization request arrived on — measured 2026-09-10, the
+  discovery document returns `auth.local.<domain>` on the LAN name and `auth.<domain>` publicly
+  — while `oidc-issuer-url` compares one value exactly. The callback is pinned for the same
+  reason: Headlamp otherwise builds it from the request host, so a public-route login would
+  send an unregistered `redirect_uri`.
+- **`headlamp_k8s_oidc_scopes` omits `openid` on purpose.** Headlamp prepends it
+  (`backend/cmd/headlamp.go` at v0.45.0), so listing it sends it twice. `groups` is the scope
+  that carries the RBAC subject.
+- **The client secret is one credential in two forms.** `headlamp_oidc_client_secret` is the
+  plaintext, rendered into the `headlamp-oidc` Secret and read as
+  `HEADLAMP_CONFIG_OIDC_CLIENT_SECRET`; `headlamp_oidc_client_secret_hash` is the pbkdf2 digest
+  in Authelia's config. Rotate them together. It is an env var rather than a seventh flag
+  because arguments are part of the pod spec, and the cluster's read-only ServiceAccount can
+  read Deployments.
+- **`automountServiceAccountToken` stays true** even with the SA-token flag gone: `-in-cluster`
+  reads the API server address and the cluster CA from that same projected mount, and errors
+  without it.
+
 ## Plugins
 - **The image bundles the Prometheus plugin.** `container/build-manifest.json` in
   `headlamp-k8s/headlamp` names `prometheus-0.9.1` for v0.45.0, and `GET /plugins` on the
@@ -76,6 +113,7 @@ Each binding in `templates/rbac.yaml.j2` names two subjects: the ServiceAccount,
 
 ## Editing
 - Manifests: `templates/deployment.yaml.j2`, `templates/rbac.yaml.j2` (cluster identity plus the Prometheus proxy Role),
+  `templates/oidc-secret.yaml.j2` (rendered under `no_log` through the manifests role's secret list),
   `templates/networkpolicy.yaml.j2`, `templates/netpol-probe-job.yaml.j2`,
   `templates/ingressroute.yaml.j2`, `templates/service.yaml.j2`.
 - Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "headlamp"`.
