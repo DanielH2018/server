@@ -78,8 +78,15 @@ class Fakes:
     )
     plane: str = ""
     self_applied: bool = False
+    self_applied_command: str = "`ansible-playbook ansible/initial_setup.yml --tags x`"
     remaining_setup: str = ""
     derived: tuple[list[str], str] = field(default_factory=lambda: (["sonarr"], "pr"))
+    # What `containers_list` declares at the merge commit. None is the read having failed,
+    # which is what every land_lib reader falls back to its own tree on.
+    declared_at: set[str] | None = None
+    # `git merge-base --is-ancestor <merge_sha> <recorded apply>`: 0 means the recorded broad
+    # apply included this PR, non-zero means it ran at a commit that did not contain it.
+    is_ancestor_rc: int = 0
     state: dict[str, str] = field(default_factory=dict)
     lock_holder: list[str] = field(default_factory=lambda: ["42 flock deploy"])
     hostname: str = "daniel-box"
@@ -115,8 +122,9 @@ def build_classifier(f: Fakes, calls: list | None = None) -> Classifier:
         return f.remaining_setup
 
     return Classifier(
-        plane_note=lambda paths, quiet=(): f.plane,
+        plane_note=lambda paths, declared=None, quiet=(): f.plane,
         self_applied=lambda paths, quiet=(): f.self_applied,
+        self_applied_command=lambda paths, quiet=(): f.self_applied_command,
         remaining_setup_hosts=remaining_setup_hosts,
         derive=lambda paths, changed, declared=None: Derivation(
             list(f.derived[0]), DeriveSource(f.derived[1])
@@ -173,6 +181,8 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
             return _cp(f.fetch_rc)
         if args == ("rev-parse", "FETCH_HEAD"):
             return _cp(0, "prhead\n")
+        if args[0] == "merge-base" and "--is-ancestor" in args:
+            return _cp(f.is_ancestor_rc)
         if args[0] == "merge-base":
             return _cp(0, "prbase\n")
         if args == ("rev-parse", f"origin/{landing_mod.BRANCH}"):
@@ -215,6 +225,7 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         deploy=_seq(f.deploy, calls, "deploy"),
         deploy_tags=deploy_tags,
         gate=gate,
+        declared_at=lambda ref, primary: f.declared_at,
         read_state=lambda root, name: f.state.get(name, ""),
         lock_holder=_seq(f.lock_holder, calls, "lock_holder"),
         hostname=lambda: f.hostname,

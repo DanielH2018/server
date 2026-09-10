@@ -102,15 +102,27 @@ BLOCK_TAGS = frozenset({"config", "deploy", "cron"})
 RESERVED_TAGS = frozenset({"always"})
 
 
+# host_vars as git names it: `git show` and `git ls-tree` address a path in a tree, not on disk.
+HOST_VARS_IN_TREE = HOST_VARS.relative_to(REPO).as_posix()
+
+
+def entry_tags(entry: dict) -> list[str]:
+    """The tags one `containers_list` entry selects under.
+
+    deploy.yml:116 — `container_item.tags | default([container_item.name])`. Mirror that
+    precedence exactly, or an entry that overrides its tags is validated against a name that
+    no longer selects it. One definition, because `service_tags` reads the working tree and
+    `service_tags_at` reads a git ref.
+    """
+    return list(entry.get("tags") or [entry["name"]])
+
+
 def service_tags(host_vars: Path = HOST_VARS) -> set[str]:
     """Every tag that selects a service, across all hosts and both platforms."""
     tags: set[str] = set()
     for path in host_files(host_vars):
         for entry in containers_entries(path):
-            # deploy.yml:116 — `container_item.tags | default([container_item.name])`.
-            # Mirror that precedence exactly, or an entry that overrides its tags would
-            # be validated against a name that no longer selects it.
-            tags.update(entry.get("tags") or [entry["name"]])
+            tags.update(entry_tags(entry))
     return tags
 
 

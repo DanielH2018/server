@@ -13,11 +13,13 @@ That failure is invisible standalone — the run that can't see it is the one th
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from deploy_staleness import (
     STALE_EXIT,
@@ -25,6 +27,7 @@ from deploy_staleness import (
     format_refusal,
     main,
 )
+from lib.deployer_park import BEHIND_PARK_SECONDS, BEHIND_SINCE
 
 
 def _git(repo: Path, *args: str) -> str:
@@ -118,6 +121,47 @@ def test_refusal_names_the_count_and_the_fix(repos):
     assert "48" in msg
     assert "rebase" in msg
     assert "--skip-staleness-check" in msg
+
+
+def _behind_marker(tmp_path: Path, age_s: float, now: float = 2_000_000_000.0) -> Path:
+    """A deployer state directory whose `behind_since` is `age_s` seconds old."""
+    state = tmp_path / "gitops-state"
+    state.mkdir()
+    (state / BEHIND_SINCE).write_text(f"abc123 {now - age_s}\n")
+    return state
+
+
+def test_exit_four_names_the_parked_deployer_when_one_is_parked(
+    repos, tmp_path, capsys
+):
+    """A rebase of THIS tree is the wrong repair when the primary checkout is what is stuck.
+
+    Time is not injectable through the CLI, so the stamp is dated against the real clock.
+    """
+    origin, clone = repos
+    _commit(origin, "theirs")
+    _git(clone, "fetch", "-q", "origin")
+    state = _behind_marker(tmp_path, BEHIND_PARK_SECONDS + 600, now=time.time())
+    rc = main(["--repo", str(clone), "--no-fetch", "--state-dir", str(state)])
+    err = capsys.readouterr().err
+    assert rc == STALE_EXIT
+    assert "primary checkout" in err
+    assert "journalctl -t gitops-deploy" in err
+
+
+def test_exit_four_says_nothing_extra_when_the_deployer_is_converged(
+    repos, tmp_path, capsys
+):
+    origin, clone = repos
+    _commit(origin, "theirs")
+    _git(clone, "fetch", "-q", "origin")
+    state = tmp_path / "gitops-state"
+    state.mkdir()
+    rc = main(["--repo", str(clone), "--no-fetch", "--state-dir", str(state)])
+    err = capsys.readouterr().err
+    assert rc == STALE_EXIT
+    assert "rebase" in err
+    assert "primary checkout" not in err
 
 
 def test_an_unresolvable_ref_does_not_refuse(repos):

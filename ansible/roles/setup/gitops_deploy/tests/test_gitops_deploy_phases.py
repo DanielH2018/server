@@ -224,6 +224,44 @@ def test_handle_broad_merges_before_it_applies_the_setup_plane(
     assert tick.playbooks[0][-2:] == ["--tags", "gitops_deploy"]
 
 
+def test_a_successful_broad_apply_records_what_it_applied(
+    gitops_deploy, tick, state_dir, settings
+):
+    """The evidence `land.sh` needs to tell an applied plane from one it fast-forwarded past.
+
+    `behind_since` empty says only local == origin, which any session's `git merge --ff-only`
+    produces too — PR #1529 landed `settled` over a plane four days stale on disk (#1537).
+    """
+    plan = _plan(
+        gitops_deploy,
+        ChangeSet(broad=True, broad_setup=True, setup_roles={"gitops_deploy"}),
+        paths=["ansible/roles/setup/gitops_deploy/templates/config.env.j2"],
+    )
+    deploy_handlers.handle_broad(
+        tick.tools, gitops_deploy.STATE, settings, _target(gitops_deploy), plan
+    )
+    assert gitops_deploy.STATE.broad_applied == (
+        f"{ORIGIN} ansible/initial_setup.yml gitops_deploy"
+    )
+
+
+def test_a_failed_broad_apply_records_no_apply(
+    gitops_deploy, tick, state_dir, settings
+):
+    """The must-not-fire half: an attempted apply is not an apply, so the marker stays absent
+    and `land.sh` keeps saying the plane is unfinished."""
+    tick.playbook_outcomes = [RuntimeError("uv run ansible-playbook -> 2\nboom")]
+    plan = _plan(
+        gitops_deploy,
+        ChangeSet(broad=True, broad_setup=True, setup_roles={"gitops_deploy"}),
+        paths=["ansible/roles/setup/gitops_deploy/templates/config.env.j2"],
+    )
+    deploy_handlers.handle_broad(
+        tick.tools, gitops_deploy.STATE, settings, _target(gitops_deploy), plan
+    )
+    assert gitops_deploy.STATE.broad_applied is None
+
+
 def test_a_failed_broad_apply_holds_the_plane_and_does_not_reset(
     gitops_deploy, tick, state_dir, settings
 ):

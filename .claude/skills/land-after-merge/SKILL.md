@@ -184,6 +184,16 @@ merge's CI is still running. The next tick does it; nothing is wrong with the PR
 reads that from the deployer's own `behind_since` and `hold_sha` markers, since a PR with no
 service tag leaves no other evidence of being applied. A held `hold_sha` is `deploy-failed`.
 
+**Converging is not applying, and `land.sh` no longer treats it as such.** `behind_since` empty
+says local == origin, which any session's `git merge --ff-only` produces too — and once it
+holds, `next_action()` returns `noop` for every later tick, so a plane the tick never applied is
+stranded permanently. PR #1529 read `settled` that way on 2026-09-10 while
+`/opt/renovate-agent/renovate_agent.py` was four days stale (issue #1537). A self-applied
+landing now also requires the deployer's `broad_applied` marker — written by
+`deploy_handlers.handle_broad` only after the apply returned, holding the origin SHA it ran at —
+to contain the PR's own merge commit. When it does not, the verdict is `needs-manual-apply` and
+the line names the `initial_setup.yml --tags <role>` (or `deploy.yml`) run that applies it.
+
 `needs-manual-apply` means the PR reaches something neither a deploy tag nor the tick covers,
 and the line names the command that does apply it. Four things are in that position. A
 **setup role `initial_setup.yml` does not include** (`k3s` is in `k3s-bringup.yml`, `common` in
@@ -202,6 +212,13 @@ secret** has no path to match at all: a secret's value lives in no role's templa
 scripts/secrets_mgmt/secret_rotation.py consumers <secret>` for who holds a stale copy and the
 repair command per plane. The other services in the same PR still deploy normally; the verdict
 is about the half that did not.
+
+**A role the PR itself registers is not one of these.** Which tags exist is read at the MERGE
+COMMIT (`land_tags.service_tags_at`), not from a checkout — a `containers_list` entry added by
+the same PR is absent from every tree until the tick fast-forwards, and `land.sh` used to report
+the new role as unregistered and ask for a full `ansible/deploy.yml`. PR #1539 landed that way
+and `./scripts/deploy.sh --tags pihole-exporter` deployed it a minute later (issue #1544). The
+new role now deploys under its own tag on its first landing.
 
 **A self-applied setup role reaching a host beyond the tick's own** is the fourth (issue #1009).
 `initial_setup.yml`'s `hosts:` is one target per run, and the tick runs it on whichever host
