@@ -1,8 +1,16 @@
 {% from 'ingressroute.yml.j2' import monitoring_route with context %}
 ---
 {#
-  check_prowlarr_indexers reads /api/v1/indexerstatus and /api/v1/indexer. One prefix covers
-  both, and covers nothing else — /api/v1/indexer is not a prefix of any write endpoint the
-  check does not use.
+  Three reads, one prefix: monitor-bridge's check_prowlarr_indexers reads /api/v1/indexerstatus
+  and /api/v1/indexer, and postflight.py's §9.3 API-key check reads /api/v1/indexer because it
+  is the one this route admits. The prefix covers those and covers nothing else —
+  /api/v1/indexer is not a prefix of any write endpoint the checks do not use.
+
+  extra_client_cidrs adds daniel-box, the host postflight runs on. Without it postflight's §9.3
+  check was structurally SKIP whenever prowlarr's pod sat on daniel-server — which it did when
+  #1642 was measured: the ClusterIP answers only a caller on the pod's own node, and this route
+  admitted daniel-server alone, so the request fell through to prowlarr's own Authelia'd route
+  and 302'd. The path prefix, the LAN-only rule and prowlarr's own X-Api-Key are unchanged.
 #}
-{{ monitoring_route(container_item.name, container_item.hostname, container_item.port, '/api/v1/indexer') }}
+{{ monitoring_route(container_item.name, container_item.hostname, container_item.port, '/api/v1/indexer',
+                    extra_client_cidrs=[k8s_node_client_ip ~ '/32']) }}

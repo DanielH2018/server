@@ -241,3 +241,68 @@ def test_resolve_gate_states_covers_only_the_gates_whose_monitor_is_absent():
     assert monitors.resolve_gate_states(declared, {"Live Gated"}, no_secrets=True) == {
         "tok_b": None
     }
+
+
+def test_an_undeclared_gate_key_reads_as_genuinely_unset_is_clean():
+    """The #1644 case: a key that is not in the store at all is an unset gate.
+
+    `homelab_eval_push_token` is deliberately absent — static-monitors.yaml.j2 says so — and
+    its monitor correctly renders away, which is exactly the False arm. It reported None
+    instead, so two §9.1 lines read "gated on <var>, which could not be read" on every run and
+    trained the reader to skim the arm that catches a real failure to read a secret.
+    """
+    verdict = monitors.judge_gate_read("homelab_eval_push_token", None, {"other_token"})
+    assert verdict is False
+
+
+def test_a_declared_gate_key_that_will_not_resolve_is_flagged_unverified():
+    """The rejecting half, and the arm the split exists to protect.
+
+    A key the store DOES declare whose value still cannot be read is the broken host this arm
+    was written for — no age key, the secret tool missing. Collapsing it into False is the
+    regression `judge_gate_read`'s own docstring forbids, and without this case there is no
+    evidence the None arm survives the split.
+    """
+    verdict = monitors.judge_gate_read(
+        "etcd_snapshot_push_token", None, {"etcd_snapshot_push_token"}
+    )
+    assert verdict is None
+
+
+def test_an_unreadable_key_list_stays_unverified():
+    """A key list that cannot be read proves nothing about whether the key is declared.
+
+    Ordering matters here: the plaintext key-list parse succeeds on a host with no age key, so
+    consulting it FIRST would report every gate as unset. `declared_secret_names` returning
+    None is the same refusal one level down, and this is `gate_var_state` passing it through.
+    """
+    assert monitors.judge_gate_read("etcd_snapshot_push_token", None, None) is None
+
+
+def test_a_resolvable_gate_key_is_judged_by_its_value():
+    """A value that was read decides on its own — the key list is not consulted.
+
+    `declared` is passed as the empty set, which would make an undeclared key False if the
+    order were wrong; the value still wins.
+    """
+    assert (
+        monitors.judge_gate_read("etcd_snapshot_push_token", "s3cret\n", set()) is True
+    )
+    assert monitors.judge_gate_read("etcd_snapshot_push_token", "\n", set()) is False
+
+
+def test_declared_secret_names_reads_the_real_stores_key_list():
+    """Against the committed file, not a fixture — the plaintext-keys assumption is the point.
+
+    The store encrypts values and not key names, which is what lets this read answer "is the
+    key declared" with no age key and no decrypted value. If that ever stopped holding, the
+    split above would report every gate as unset on this host. Asserted against named members
+    rather than a count, so a shrinking store names what went missing.
+    """
+    names = monitors.declared_secret_names()
+    assert names is not None
+    assert {"etcd_snapshot_push_token", "jellyfin_api_key", "sonarr_api_key"} <= names
+    # The metadata block is not a secret, and treating it as one would make a gate named
+    # after it resolve.
+    assert "sops" not in names
+    assert "homelab_eval_push_token" not in names
