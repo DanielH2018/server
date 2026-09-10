@@ -4,9 +4,10 @@ These decide; check.py fetches. Each takes its inputs as arguments and reads no 
 config, which is what makes it safe to live here — see bridge/parsing.py's header for the rule
 and why breaking it fails silently rather than loudly.
 
-The partial-absence handling in `ups_health` is the subtle part: a missing arm can mean the
-whole scrape is down, the NUT server dropped, or one entity was renamed, and only the last
-should page here. The other two belong to monitors that own that fault.
+`ups_health` judges the three arms it is handed and no more. Absence is `check_ups`'s
+(checks/host_thermal.py), whose `configured`/`missing` census covers four arms since #1630: a
+missing arm can mean the whole scrape is down, the NUT server dropped, or one entity was
+renamed, and only the last should page — the other two belong to monitors that own that fault.
 """
 
 from collections.abc import Sequence
