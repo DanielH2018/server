@@ -23,11 +23,12 @@
 # what the SA already holds is what makes the two identities see the same thing.
 #
 # `headlamp_k8s_oidc_group` (defaults/main.yml) is the Authelia group with the API server's
-# `oidc-groups-prefix` applied. The prefix is not cosmetic: it is what stops an Authelia group
-# name from ever colliding with a built-in `system:` group. The API server end of that pair —
-# `oidc-groups-claim` and `oidc-groups-prefix` — is part 1 of #1390 and lives in
-# roles/setup/k3s, whose PR carries the test that the two spellings agree. A mismatch is the
-# same empty dashboard with no error, so the value here is not a free choice.
+# groups prefix applied. The prefix is not cosmetic: it is what stops an Authelia group name
+# from ever colliding with a built-in `system:` group. The API server end of that pair is the
+# `claimMappings.groups` block of its authentication config, in roles/setup/k3s, whose
+# `ansible/tests/setup/test_k3s_oidc_trusts_authelia.py` carries the test that the two
+# spellings agree. A mismatch is the same empty dashboard with no error, so the value here is
+# not a free choice.
 #
 # GRANTS NOBODY ANYTHING TODAY. Nothing in this cluster authenticates as a Group: the API
 # server has no `--kube-apiserver-arg=oidc-*` flags, so no request ever arrives with a group

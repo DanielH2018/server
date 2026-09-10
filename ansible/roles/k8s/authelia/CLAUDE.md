@@ -22,11 +22,12 @@ Three relying parties, all in `templates/config-secret.yaml.j2` behind
   is in `roles/k8s/claude-otel/CLAUDE.md`.
 - **Headlamp's client (#1390) is the one whose relying party is not the app.** Headlamp
   forwards the `id_token` to the KUBERNETES API SERVER, which accepts or rejects it, so the
-  client's `claims_policy: with_groups_and_username` exists for the API server's
-  `oidc-username-claim` and `oidc-groups-claim` (`roles/setup/k3s`) rather than for Headlamp.
-  Its `redirect_uris` list the LAN name ONLY: this portal's `iss` follows the host the request
-  arrived on, and the API server's `oidc-issuer-url` compares one value exactly, so a
-  public-route login would present a token the API server rejects.
+  client's `claims_policy: with_groups_and_username` exists for the username and groups claim
+  mappings in the API server's authentication config (`roles/setup/k3s`) rather than for
+  Headlamp. Its `redirect_uris` list BOTH hostnames, because Headlamp derives the
+  `redirect_uri` from each request and serves both from one instance. That needed the API
+  server to trust both of this portal's issuers first: `iss` follows the host the request
+  arrived on, so a public login mints `auth.<domain>` and a LAN one `auth.local.<domain>`.
 
 Each client's secret is stored hashed. The digest is minted once with Authelia's own CLI —
 `authelia crypto hash generate pbkdf2 --variant sha512` — and the plaintext goes to the app,

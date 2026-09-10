@@ -21,9 +21,9 @@ Each binding in `templates/rbac.yaml.j2` names two subjects: the ServiceAccount,
 - **The Group is what the dashboard uses since 2026-09-10.** Under OIDC, Headlamp does not
   authorise: it forwards the browser's `id_token` and the **API server** decides. The login
   arrives as a `User` in a `Group` carrying none of the SA's RBAC, which is why the Group is
-  bound everywhere the SA is. The API server accepts those tokens because it carries the
-  `--kube-apiserver-arg=oidc-*` flags — part 1 of #1390, in `roles/setup/k3s`, applied by hand
-  through `k3s-bringup.yml`.
+  bound everywhere the SA is. The API server accepts those tokens because it reads an
+  `AuthenticationConfiguration` trusting Authelia — `roles/setup/k3s`, applied by hand through
+  `k3s-bringup.yml`.
 - **The SA is the fallback the other branch uses.** With `headlamp_k8s_oidc_enabled: false`,
   `-unsafe-use-service-account-token` makes the pod browse as its own account and the Authelia
   forward-auth Middleware on the IngressRoute is the perimeter in front of it. Keep the SA
@@ -32,40 +32,49 @@ Each binding in `templates/rbac.yaml.j2` names two subjects: the ServiceAccount,
   succeeded, with nothing logged. `test_headlamp_oidc_group_is_bound_wherever_the_serviceaccount_is`
   in `ansible/tests/k8s/test_k8s_manifests_rbac.py` is the guard; adding a fourth binding for
   the SA alone is what it exists to catch.
-- **`headlamp_k8s_oidc_group` is two things concatenated** — the API server's
-  `oidc-groups-prefix` plus the Authelia group — so it is not a free choice. The prefix is what
-  stops an Authelia group name from being read as a built-in `system:` group.
+- **`headlamp_k8s_oidc_group` is two things concatenated** — the API server's groups prefix
+  plus the Authelia group — so it is not a free choice. The prefix is what stops an Authelia
+  group name from being read as a built-in `system:` group.
 
 ## OIDC login (on)
-`headlamp_k8s_oidc_enabled: true` since 2026-09-10, when part 1 of #1390 (PR #1665) put the
-`oidc-*` flags on the API server. All three pieces are now live: the flags on daniel-box, the
-Authelia client, and these defaults.
+`headlamp_k8s_oidc_enabled: true` since 2026-09-10. Three pieces are live: the API server's
+trust in Authelia (`roles/setup/k3s`), the Authelia client, and these defaults.
 
 - **This switch is not independently safe to flip.** It depends on state in `roles/setup/k3s`,
   which the k8s deploy play never runs and a person applies through `k3s-bringup.yml`. Turning
-  it on without those flags leaves a dashboard that logs in and Forbids every call; if the
-  flags are ever removed, turn this off in the same change.
+  it on without that trust leaves a dashboard that logs in and Forbids every call; if the trust
+  is ever removed, turn this off in the same change.
 - **On REPLACES the ServiceAccount identity, it does not add to it.** The Deployment's two
-  argument sets are alternatives: on, the five `-oidc-*` flags render and
+  argument sets are alternatives: on, the four `-oidc-*` flags render and
   `-unsafe-use-service-account-token` is gone. Headlamp accepts both at once — it puts a
   TokenFile and an OidcConf on the same context — and the result is the SA still authorising
   every API call behind a sign-in button, which is why the template branches rather than
   appends.
-- **A wrong value fails silently, in both directions.** The API server's OIDC authenticator
-  initialises asynchronously (`plugin/pkg/authenticator/token/oidc/oidc.go`), so a bad issuer
-  leaves the API server up and rejecting only OIDC logins; the root kubeconfig and every
-  ServiceAccount authenticate by other means and are unaffected. Verify a change here by
-  logging in, not by a healthy pod.
+- **A wrong value fails silently, in both directions.** A bad issuer leaves the API server up
+  and rejecting only OIDC logins; the root kubeconfig and every ServiceAccount authenticate by
+  other means and are unaffected. Verify a change here by logging in, not by a healthy pod.
 - **Three values must agree across three places**, and none of the disagreements produces an
-  error: the client id (here, Authelia's client, the API server's `oidc-client-id`), the issuer
-  URL (here, the API server's `oidc-issuer-url`), and the group (`headlamp_k8s_oidc_group`, the
-  API server's `oidc-groups-prefix` plus the Authelia group).
-- **Both URLs pin the LAN name, and that is a constraint rather than a preference.** Authelia's
-  `iss` follows the host the authorization request arrived on — measured 2026-09-10, the
-  discovery document returns `auth.local.<domain>` on the LAN name and `auth.<domain>` publicly
-  — while `oidc-issuer-url` compares one value exactly. The callback is pinned for the same
-  reason: Headlamp otherwise builds it from the request host, so a public-route login would
-  send an unregistered `redirect_uri`.
+  error: the client id (here, Authelia's client, and the `audiences` of each issuer in the API
+  server's authentication config), the issuer URL (here, and one of that config's `jwt`
+  issuers), and the group (`headlamp_k8s_oidc_group`, and that config's groups prefix plus the
+  Authelia group).
+- **The issuer is the PUBLIC name, and Headlamp's code is what forces one value.** It reads
+  `-oidc-idp-issuer-url` once at server start and builds one provider for every request
+  (`oidcAuthConfig.IdpIssuerURL`, `backend/cmd/headlamp.go` at v0.45.0) — there is no
+  per-request issuer. Authelia's `iss` meanwhile follows the host the request arrived on
+  (measured 2026-09-10: `auth.local.<domain>` on the LAN name, `auth.<domain>` publicly), so
+  this one value decides where logins on BOTH hostnames go. The LAN name sent public-route
+  logins to a host an off-LAN browser cannot resolve; the public name works from either side.
+  The cost is that a LAN login now traverses Cloudflare, so an edge outage takes it out.
+- **The callback is NOT pinned, and that is the working state.** `headlamp_k8s_oidc_callback_url`
+  is empty, so Headlamp derives the `redirect_uri` from each request (`getOidcCallbackURL`
+  reads the request host and `X-Forwarded-Proto`) and one instance serves both hostnames. Both
+  URIs are registered on the Authelia client to match. Pinning it sends every login to one
+  hostname's callback, which is half of what broke the public route.
+- **The API server trusts both Authelia issuers**, which is why the issuer choice above is no
+  longer a lockout. `k3s_oidc_issuer_urls` (`roles/setup/k3s`) lists both, and an
+  `AuthenticationConfiguration` file is the only kube-apiserver mechanism that accepts more
+  than one — the `--oidc-*` flags took exactly one and are mutually exclusive with the file.
 - **`headlamp_k8s_oidc_scopes` omits `openid` on purpose.** Headlamp prepends it
   (`backend/cmd/headlamp.go` at v0.45.0), so listing it sends it twice. `groups` is the scope
   that carries the RBAC subject.
