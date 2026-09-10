@@ -8,6 +8,7 @@ Run: uv run pytest scripts/dev/tests/test_fanout_clean_convergence.py
 """
 
 import json
+import subprocess
 
 from fanout_lib.clean import remote_clean_command
 from fanout_lib.manifest import Batch, Manifest, path as manifest_path, save
@@ -74,3 +75,27 @@ def test_a_batch_removed_earlier_is_named_rather_than_silently_skipped(
     assert _clean(tools, tmp_path, manifest.run_id) == 0
     out = capsys.readouterr().out
     assert "1 on daniel-box: removed earlier (2026-09-10T12:00:00+00:00)" in out
+
+
+def test_an_unreachable_host_is_a_failure_not_a_kept_tree(tmp_path, capsys):
+    """F7: `kept` sends the operator to wait for a merge that already happened."""
+    manifest = _manifest(tmp_path, [B2])
+    refused = subprocess.CompletedProcess(
+        [], 255, stdout="", stderr="ssh: connect to host daniel-server port 22: refused"
+    )
+    tools, _calls = fake_tools(answers={"daniel-server": refused})
+    assert _clean(tools, tmp_path, manifest.run_id) == 1
+    assert manifest_path(manifest.run_id, tmp_path).exists()
+    out = capsys.readouterr().out
+    assert "2 on daniel-server: clean failed (exit 255): ssh: connect" in out
+    assert "clean failed for 2 — see above" in out
+    assert "re-run clean once merged" not in out
+
+
+def test_a_kept_verdict_stays_exit_zero(tmp_path):
+    """The leg spoke, so its verdict stands whatever the exit status."""
+    manifest = _manifest(tmp_path, [B2])
+    spoke = subprocess.CompletedProcess([], 1, stdout=UNMERGED, stderr="")
+    tools, _calls = fake_tools(answers={"daniel-server": spoke})
+    assert _clean(tools, tmp_path, manifest.run_id) == 0
+    assert manifest_path(manifest.run_id, tmp_path).exists()

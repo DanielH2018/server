@@ -397,11 +397,15 @@ def cmd_clean(args, tools: Tools) -> int:
     act: the remote leg reads the worktree, and the worktree is what it deletes. So the
     manifest is saved after each `removed:` verdict, a batch already carrying `removed_at`
     is skipped without an ssh call, and the file is deleted only once no batch is left.
+
+    A leg that reached no verdict at all — ssh refused, the fetch failed, a timeout — is
+    reported as failed and exits 1, rather than joining the trees deliberately kept back.
+    Those two need opposite things from the operator.
     """
-    from fanout_lib.clean import remote_clean_command
+    from fanout_lib.clean import read_clean_result, remote_clean_command
 
     run = manifest_mod.load(args.run_id, root=args.manifest_root)
-    kept = []
+    kept, failed = [], []
     for i, b in enumerate(run.batches):
         if b.removed_at:
             print(f"{b.batch} on {b.host}: removed earlier ({b.removed_at})")
@@ -410,22 +414,26 @@ def cmd_clean(args, tools: Tools) -> int:
             proc = tools.run(b.host, remote_clean_command(b), 120.0, None)
         except subprocess.TimeoutExpired:
             print(f"{b.batch} on {b.host}: clean timed out")
-            kept.append(b.batch)
+            failed.append(b.batch)
             continue
-        line = (proc.stdout or proc.stderr).strip()
+        verdict, line = read_clean_result(proc)
         print(f"{b.batch} on {b.host}: {line}")
-        if line.startswith("removed:"):
+        if verdict == "removed":
             run.batches[i] = dataclasses.replace(
                 b, removed_at=datetime.now(UTC).isoformat()
             )
             manifest_mod.save(run, root=args.manifest_root)
+        elif verdict == "failed":
+            failed.append(b.batch)
         else:
             kept.append(b.batch)
+    if failed:
+        print(f"clean failed for {', '.join(failed)} — see above")
     if kept:
         print(f"run {run.run_id}: kept {', '.join(kept)} — re-run clean once merged")
-    else:
+    if not kept and not failed:
         manifest_mod.path(run.run_id, args.manifest_root).unlink(missing_ok=True)
-    return 0
+    return 1 if failed else 0
 
 
 def _add_manifest_root(parser: argparse.ArgumentParser) -> None:

@@ -138,6 +138,32 @@ def _clean_missing_tree(
     return "removed", "(already gone)"
 
 
+def read_clean_result(proc: subprocess.CompletedProcess) -> tuple[str, str]:
+    """Judge one remote clean leg: what happened, and the line to print for it.
+
+    A leg that never reached a verdict is a transport or environment failure, not a tree
+    that must stay — ssh refused, the fetch failed, `uv` missing. Reading those as `kept`
+    told the operator to re-run once the PR merged, when the PR had merged and the host was
+    the problem, and `clean` exited 0 on it.
+
+    Args:
+        proc: the finished remote call.
+
+    Returns:
+        `("removed" | "kept" | "failed", line)`. The verdict comes from the output's own
+        prefix, so a `kept:` verdict stays `kept` whatever the exit status: the leg spoke.
+    """
+    line = (proc.stdout or "").strip()
+    for verdict in ("removed", "kept"):
+        if line.startswith(f"{verdict}:"):
+            return verdict, line
+    detail = next(
+        (ln.strip() for ln in (proc.stderr or "").splitlines() if ln.strip()),
+        line or "no output",
+    )
+    return "failed", f"clean failed (exit {proc.returncode}): {detail}"
+
+
 def remote_clean_command(b: Batch) -> str:
     """The command `clean` runs on `b.host` to clean up one batch.
 
