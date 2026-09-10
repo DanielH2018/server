@@ -25,6 +25,30 @@ Edit the `.j2` files, never the live config: homepage seeds any missing file int
 
 ## Notable
 - Pulls calendar data from the internal `ical-proxy`.
+- **`mode: cluster` switches Ingress discovery ON unless `kubernetes.yaml.j2` says otherwise.**
+  Upstream reads `traefik` and `gateway` as absent-is-off, but `ingress-list.js` destructures
+  `const { ingress = true }`, so an omitted key is a cluster-wide `ingresses.networking.k8s.io`
+  list on every page load. `rbac.yaml.j2` grants no such read, so the pod logged an RBAC denial
+  per load for its whole life (#1428, #1459) — no user-visible effect, but a 13-line log where
+  two lines were the denial buries the widget errors that matter. `ingress: false` removes the
+  call rather than permitting it; this cluster routes with `IngressRoute` CRDs and owns no
+  `Ingress` object, so the grant would list an empty set forever. The two halves are asserted
+  together by `ansible/tests/k8s/test_k8s_manifests_rbac.py`.
+- **A widget's credential goes in `key:`, never in `url:`.** Each widget's `proxy.js` logs the
+  full request URL on any non-2xx, so a credential in a query string is published to the pod log
+  and to Loki on the target's next outage. `jellyfin_api_key` leaked that way during the
+  2026-09-09 Jellyfin crash loop (#1499) and was rotated on 2026-09-10. ENFORCED by
+  `ansible/tests/services/test_homepage_widget_urls_carry_no_credentials.py`.
+- **A re-added Jellyfin tile needs `version: 2`.** The tile was dropped on 2026-09-10 (see the
+  group note below) and stays dropped; this is what to do if it comes back. The widget's default
+  v1 mappings are `emby/Sessions?api_key={key}` and `emby/Items/Counts?api_key={key}` — Emby's
+  path prefix, which this Jellyfin 404s, and which is what erred on every refresh in #1457.
+  `version: 2` in the widget block selects the `SessionsV2`/`CountV2` mappings instead: `Sessions`
+  and `Items/Counts`, with the key sent as `Authorization: MediaBrowser Token=...` and nothing
+  credential-shaped in the URL. Restoring the tile is more than a `services.yaml.j2` edit — the
+  `Services` group is pinned at twelve tiles over three columns, and `#my-calendar`'s height in
+  `custom.css.j2` is a `calc()` derived from that row count, so a thirteenth tile means
+  re-deriving both and re-measuring in the browser.
 - **A layout entry matches a group by NAME, and an unmatched one is silently dead.** `layout:`
   in `templates/config/settings.yaml.j2` and the group headings in `services.yaml.j2` are two
   lists that must agree. A layout key naming no group does nothing (a `Monitoring:` entry sat

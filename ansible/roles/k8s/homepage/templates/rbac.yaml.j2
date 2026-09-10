@@ -21,8 +21,10 @@ rules:
     resources: [namespaces, pods, nodes]
     verbs: [get, list]
   # Ingress/IngressRoute reads back homepage's own service-discovery feature, which this
-  # homelab deliberately leaves off (kubernetes.yaml.j2 sets no `ingress:`/`traefik:` keys) —
-  # every tile is hand-authored in services.yaml. Omitted rather than granted-and-unused.
+  # homelab deliberately leaves off — every tile is hand-authored in services.yaml. Omitted
+  # rather than granted-and-unused, and the omission is only silent because
+  # kubernetes.yaml.j2 sets `ingress: false`: that key defaults to TRUE upstream, so leaving
+  # it out made the pod list Ingresses on every page load and log the denial (#1428, #1459).
   - apiGroups: [metrics.k8s.io]
     resources: [nodes, pods]
     verbs: [get, list]

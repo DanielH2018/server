@@ -13,7 +13,19 @@
 # What it says: `cluster` mode makes homepage authenticate to the API with the pod's mounted
 # ServiceAccount — the one rbac.yaml.j2 creates and deployment.yaml.j2 names. That backs both
 # the kubernetes info widget (cluster/node CPU + memory) and the per-tile pod stats in
-# services.yaml. No `ingress:`/`traefik:`/`gateway:` keys: homepage's automatic service
-# DISCOVERY stays off, because every tile here is hand-authored and a discovered duplicate of
-# one is worse than no tile at all.
+# services.yaml. Homepage's automatic service DISCOVERY stays off, because every tile here is
+# hand-authored and a discovered duplicate of one is worse than no tile at all.
 mode: cluster
+
+# `ingress: false` turns OFF the Ingress half of that discovery, and it is the ONLY half that
+# has to be turned off explicitly. `traefik` and `gateway` are read straight out of this file and
+# are falsy when absent (`traefik-list.js`, `httproute-list.js` in v1.13.2), so omitting them
+# leaves those calls unmade. `ingress-list.js` instead destructures `const { ingress = true }`,
+# so an absent key means the pod lists `ingresses.networking.k8s.io` cluster-wide on every page
+# load. rbac.yaml.j2 does not grant that read, so each load logged an RBAC denial the pod's whole
+# life (#1428, #1459) — a handful of lines that buried the widget errors worth reading.
+#
+# `false` rather than granting the read: this cluster routes with Traefik `IngressRoute` CRDs and
+# has no `Ingress` objects, so the permission would widen a read-only identity to list an empty
+# set forever.
+ingress: false
