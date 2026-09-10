@@ -159,7 +159,11 @@ class Landing:
 
         `broad_applied` is written by `deploy_handlers.handle_broad` only after
         `deploy_io.deploy_broad` returned, and holds the origin SHA that apply ran at. `sha`
-        being an ancestor of it means the apply included this PR.
+        being an ancestor of it means A BROAD APPLY RAN AT A COMMIT CONTAINING THIS PR — not
+        that it named this PR's own roles, since `handle_broad` scopes `--tags` to the roles in
+        the range it crossed. That is the right strength for the bug: the tick that crosses this
+        landing's range carries its paths, and the failure #1537 describes leaves the marker at
+        an OLDER commit, which fails the ancestry test.
 
         False for an absent marker, an unreadable state directory, and a marker whose SHA this
         checkout cannot resolve. Reporting work as unfinished when it was done costs one hand

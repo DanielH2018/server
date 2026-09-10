@@ -148,9 +148,15 @@ def declared_tags_at(ref: str, primary: Path) -> set[str] | None:
     forgot to register (issue #1544). None restores exactly the previous answer — `land_tags`
     then reads the tree it lives in — so a ref this checkout cannot resolve costs nothing more
     than it used to.
+
+    AN EMPTY READ IS DAMAGE, NEVER EVIDENCE. `set()` says no service exists anywhere, which
+    would make every changed role read as unregistered and every landing print
+    `needs-manual-apply` with a full-`deploy.yml` remedy — fleet-wide, silently, and green in
+    the suite. `deploy_phases.reconcile_denylist` carries the same guard and the longer argument
+    (issue #1331). It is `None` here, so the fallback to this checkout takes over.
     """
     try:
-        return land_tags.service_tags_at(ref, primary)
+        return land_tags.service_tags_at(ref, primary) or None
     except subprocess.SubprocessError, OSError, ValueError:
         return None
 

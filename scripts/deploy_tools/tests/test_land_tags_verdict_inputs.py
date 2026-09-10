@@ -15,6 +15,7 @@ and patches `declared_tags` away, while these read real git and the real remedia
 Run: uv run pytest scripts/deploy_tools/tests/test_land_tags_verdict_inputs.py
 """
 
+import subprocess
 import sys
 from pathlib import Path
 
@@ -24,6 +25,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import deploy_tags
 import land_tags
+from deploy_tools.land_lib import tools
 
 
 # ── service_tags_at: which tags exist AT A REF, not in the working tree (issue #1544) ──
@@ -84,6 +86,24 @@ def test_the_example_host_is_not_a_source_of_tags_at_a_ref_either(two_commit_rep
     """`host_files` excludes `_example.yml` on disk; the ref reader must exclude it too."""
     repo, _first, second = two_commit_repo
     assert "not-a-host" not in land_tags.service_tags_at(second, repo)
+
+
+def test_an_unreadable_ref_raises_rather_than_reading_as_no_services(two_commit_repo):
+    """An empty answer here would make every changed role read as unregistered fleet-wide.
+
+    `declared_tags_at` turns this into None, and pins the same thing at its own seam."""
+    repo, _first, _second = two_commit_repo
+    with pytest.raises(subprocess.CalledProcessError):
+        land_tags.service_tags_at("deadbeefdeadbeef", repo)
+
+
+def test_an_empty_read_reaches_the_landing_as_none_not_as_an_empty_set(tmp_path):
+    """The seam `land_lib` actually reads. `set()` says no service exists anywhere."""
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    _repo_git(empty, "init", "-q", "-b", "master")
+    _repo_git(empty, "commit", "-q", "--allow-empty", "-m", "nothing", "--no-gpg-sign")
+    assert tools.declared_tags_at("HEAD", empty) is None
 
 
 def test_this_repo_at_head_agrees_with_its_own_working_tree():
