@@ -21,6 +21,13 @@ registry round trip. See repo-root `CLAUDE.md` for shared conventions.
 - A weekly garbage collection (`gc-job.yaml.j2`, Sunday 04:20) takes the registry
   offline for up to 20 minutes — nothing else reclaims space, and every rebuild pushing
   the same `latest` tag orphans the previous manifest.
+- **The four job manifests stage in `/etc/rancher/k3s/manifests/registry-jobs/`, not in this
+  role's own manifest directory** (#1669). `k8s/manifests` prunes every file in
+  `manifests/registry/` that `manifests_files` does not name, which deleted all four on every
+  deploy. `gc-job.yaml` is the one that mattered: `registry-gc.sh` reads it at cron time, so
+  the prune left a window in which GC failed on a missing manifest. Nothing sweeps
+  `registry-jobs/`, so a host with `registry_k8s_manage_gc: false` gets an explicit removal
+  task outside the GC block.
 - `registry-gc.sh` proves itself with `crane` push/pull round trips
   (`registry_k8s_probe_source`, `registry_k8s_probe_repo`) rather than trusting the GC
   ran clean.

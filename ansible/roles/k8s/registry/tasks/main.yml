@@ -58,11 +58,40 @@
 # two things it checks are host and cluster state that can regress without anyone touching this
 # role. registries.yaml is written by roles/setup/k3s, so a change there — or a containerd
 # restart that never re-read it — breaks the pull path silently.
+
+# THE JOB MANIFESTS GO IN THEIR OWN DIRECTORY, not `manifests/registry/` (#1669). That
+# directory belongs to `k8s/manifests`, whose prune task deletes every file in it that the
+# caller does not name in `manifests_files`/`manifests_secret_files`. These four are this
+# role's own files rather than manifests of the workload, so no caller names them and the
+# prune deleted all four at the start of every registry deploy, re-rendering them a few tasks
+# later — four permanently `changed` prune items on an idempotent run. `manifests_prune: true`
+# above is the LIVE-object prune and is orthogonal to that staged-file prune.
+#
+# `gc-job.yaml` is why this is more than cosmetic. `registry-gc.sh` reads it at CRON time, not
+# at deploy time, so the window between the prune and the re-render was one in which a GC run
+# failed on a missing manifest. `registry_k8s_manage_gc: false` (daniel-stage) widened it to
+# permanent: the render was skipped while the prune still fired.
+#
+# ONE directory for all four, rather than a `-selftest`/`-netpol`/`-gc` split. The reason
+# headlamp gives for a probe's own directory is that `kubectl apply -f <dir>` sweeps a whole
+# directory; registry applies each of these per-FILE, so that reason does not bite here, and
+# every additional sibling name is another reservation under the manifest root that nothing
+# enforces (#1670).
+- name: Create the registry job manifest directory
+  tags: [config, deploy, registry-gc]
+  ansible.builtin.file:
+    path: /etc/rancher/k3s/manifests/registry-jobs
+    state: directory
+    mode: "0700"
+    owner: root
+    group: root
+  become: true
+
 - name: Render the registry self-test jobs
   tags: [config]
   ansible.builtin.template:
     src: "{{ item }}.j2"
-    dest: "/etc/rancher/k3s/manifests/registry/{{ item }}"
+    dest: "/etc/rancher/k3s/manifests/registry-jobs/{{ item }}"
     mode: "0644"
     owner: root
     group: root
@@ -88,7 +117,7 @@
   ansible.builtin.command:
     cmd: >-
       k3s kubectl apply -f
-      /etc/rancher/k3s/manifests/registry/selftest-push-job.yaml
+      /etc/rancher/k3s/manifests/registry-jobs/selftest-push-job.yaml
   become: true
   changed_when: true
 
@@ -110,7 +139,7 @@
   ansible.builtin.command:
     cmd: >-
       k3s kubectl apply -f
-      /etc/rancher/k3s/manifests/registry/selftest-pull-job.yaml
+      /etc/rancher/k3s/manifests/registry-jobs/selftest-pull-job.yaml
   become: true
   changed_when: true
 
@@ -149,7 +178,7 @@
   tags: [deploy]
   ansible.builtin.template:
     src: netpol-probe-job.yaml.j2
-    dest: /etc/rancher/k3s/manifests/registry/netpol-probe-job.yaml
+    dest: /etc/rancher/k3s/manifests/registry-jobs/netpol-probe-job.yaml
     mode: "0644"
     owner: root
     group: root
@@ -167,7 +196,7 @@
 - name: Run the registry netpol-isolation probe
   tags: [deploy]
   ansible.builtin.command:
-    cmd: "k3s kubectl apply -f /etc/rancher/k3s/manifests/registry/netpol-probe-job.yaml"
+    cmd: "k3s kubectl apply -f /etc/rancher/k3s/manifests/registry-jobs/netpol-probe-job.yaml"
   become: true
   changed_when: true
 
@@ -201,6 +230,18 @@
 # a real operator. Same reasoning as k3s_manage_health_crons and
 # traefik_k8s_manage_cloudflare_drift_check, and the same shape — the gate is on the whole
 # unit, because a GC script with no cron and a cron with no script are both worse than neither.
+# The inverse of the block below, and OUTSIDE it — a task inside a `when:`-guarded block can
+# never run when the flag is false. The staged-file prune used to clear this file for a host
+# that does not manage GC; nothing sweeps `registry-jobs/` now, so the removal is explicit.
+# daniel-stage sets the flag false.
+- name: Remove the registry garbage-collection job manifest where GC is unmanaged
+  tags: [config, registry-gc]
+  when: not (registry_k8s_manage_gc | bool)
+  ansible.builtin.file:
+    path: /etc/rancher/k3s/manifests/registry-jobs/gc-job.yaml
+    state: absent
+  become: true
+
 - name: Manage the registry garbage collection
   when: registry_k8s_manage_gc | bool
   block:
@@ -208,7 +249,7 @@
       tags: [config, registry-gc]
       ansible.builtin.template:
         src: gc-job.yaml.j2
-        dest: /etc/rancher/k3s/manifests/registry/gc-job.yaml
+        dest: /etc/rancher/k3s/manifests/registry-jobs/gc-job.yaml
         mode: "0644"
         owner: root
         group: root
