@@ -188,19 +188,16 @@ def test_headlamp_keeps_its_serviceaccount_token_mounted():
     Setting automountServiceAccountToken false — or omitting serviceAccountName, which silently
     falls back to the namespace `default` SA with no permissions — leaves a dashboard that loads,
     authenticates nobody, and shows an empty cluster.
+
+    Asserted in BOTH branches, because the mount is not the SA-token flag's to own: `-in-cluster`
+    reads the API server address and the cluster CA from that same projected mount and errors
+    without it, so the mount has to survive OIDC removing the flag. The SA-token flag itself is
+    pinned by the off-branch test, not here.
     """
-    doc = yaml_fast.safe_load(
-        _render(
-            K8S / "headlamp" / "templates" / "deployment.yaml.j2",
-            container_item=next(c for c in _k8s_entries() if c["name"] == "headlamp"),
-            **_role_defaults("headlamp"),
-        )
-    )
-    spec = doc["spec"]["template"]["spec"]
-    assert spec["serviceAccountName"] == "headlamp"
-    assert spec["automountServiceAccountToken"] is True
-    args = spec["containers"][0]["args"]
-    assert "-unsafe-use-service-account-token" in args
+    for enabled in (False, True):
+        spec = _headlamp_pod_spec(headlamp_k8s_oidc_enabled=enabled)
+        assert spec["serviceAccountName"] == "headlamp", enabled
+        assert spec["automountServiceAccountToken"] is True, enabled
 
 
 # The three bindings the OIDC identity has to join. Named rather than counted: the whole
@@ -331,14 +328,28 @@ def _oidc_arg_names(args: list[str]) -> set[str]:
 
 
 def test_headlamp_with_oidc_off_browses_as_its_serviceaccount():
-    """The default, and the state the cluster is in: no OIDC flags at all, the SA-token flag
-    present. This is the half that must not change while the API server carries no
-    `--kube-apiserver-arg=oidc-*` flags — dropping the SA-token flag before then leaves a
-    dashboard that authenticates nobody.
+    """The fallback branch: no OIDC flags at all, the SA-token flag present.
+
+    `headlamp_k8s_oidc_enabled` is passed explicitly rather than left to the role default,
+    which is what this test did until the default was armed (#1390 part 3, 2026-09-10) and
+    the assertion then read the ON branch. Both halves of the pair pin their own branch, so
+    neither tracks whichever default happens to be set.
     """
-    args = _headlamp_pod_spec()["containers"][0]["args"]
+    args = _headlamp_pod_spec(headlamp_k8s_oidc_enabled=False)["containers"][0]["args"]
     assert "-unsafe-use-service-account-token" in args
     assert _oidc_arg_names(args) == set()
+
+
+def test_headlamp_oidc_is_armed_by_default():
+    """The role default is ON, so a revert to the SA-token identity fails here.
+
+    The pair above passes the flag explicitly and therefore cannot see the default move. A
+    default silently flipped back would leave every OIDC assertion green while the deployed
+    dashboard browsed as its ServiceAccount again — the disarmed-behind-a-green-test shape
+    this repo has paid for. Arming depends on the `--kube-apiserver-arg=oidc-*` flags in
+    roles/setup/k3s, applied by hand through k3s-bringup.yml; turn both off together.
+    """
+    assert _role_defaults("headlamp")["headlamp_k8s_oidc_enabled"] is True
 
 
 def test_headlamp_with_oidc_on_swaps_the_serviceaccount_flag_for_the_oidc_flags():

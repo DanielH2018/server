@@ -68,16 +68,22 @@ headlamp_k8s_plugins: []
 headlamp_k8s_oidc_group: "oidc:admins"
 
 # ── OIDC login (#1390 part 3) ───────────────────────────────────────────────────────────────
-# OFF, and it must stay off until part 1 of #1390 is applied by hand. Turning it on REPLACES
-# the ServiceAccount identity with the browser's: Headlamp forwards the `id_token` and the API
-# SERVER decides, so with no `--kube-apiserver-arg=oidc-*` flags on daniel-box the token is
-# rejected and the dashboard is unusable. Nothing here is a substitute for reading the k3s
-# role's `k3s_oidc_*` block first.
+# ON since 2026-09-10. Turning it on REPLACES the ServiceAccount identity with the browser's:
+# Headlamp forwards the `id_token` and the API SERVER decides, so this switch is only safe
+# while daniel-box carries the `--kube-apiserver-arg=oidc-*` flags. Those are part 1 of #1390
+# (PR #1665, merged f4aa06c5f), applied by hand through `k3s-bringup.yml` because
+# `roles/setup/k3s` is in `_BROAD_MANUAL_PREFIXES` and no tick applies it.
+#
+# So this variable is NOT independently safe to flip: it depends on state in a role the k8s
+# deploy play never runs, and on a playbook a person runs. Read the k3s role's `k3s_oidc_*`
+# block before changing it, and if those flags are ever removed from the API server, turn this
+# off in the same change — a token the API server does not trust leaves a dashboard that logs
+# in and Forbids every call.
 #
 # The Authelia client and its credential are rendered EITHER WAY. An unused client authorises
 # nobody, and keeping them out of the switch means arming this is one variable rather than a
 # second round of secret work.
-headlamp_k8s_oidc_enabled: false
+headlamp_k8s_oidc_enabled: true
 # The client id, which is also the audience: Authelia's default
 # `id_token_audience_mode: specification` puts only the client id in `aud`, and the API server
 # matches it against its own `oidc-client-id`. One value, three places.

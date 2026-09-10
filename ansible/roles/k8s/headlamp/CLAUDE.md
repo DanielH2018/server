@@ -18,15 +18,16 @@ groups it doesn't cover. See repo-root `CLAUDE.md` for shared conventions.
 Each binding in `templates/rbac.yaml.j2` names two subjects: the ServiceAccount, and the
 `headlamp_k8s_oidc_group` Group. They are deliberately the same grant twice.
 
-- **The SA is what the dashboard uses today.** `-unsafe-use-service-account-token` makes the
-  pod browse as its own account, and the Authelia forward-auth Middleware on the IngressRoute
-  is the perimeter in front of it.
-- **The Group is for OIDC, and it grants nobody anything yet.** Under OIDC, Headlamp does not
+- **The Group is what the dashboard uses since 2026-09-10.** Under OIDC, Headlamp does not
   authorise: it forwards the browser's `id_token` and the **API server** decides. The login
-  therefore arrives as a `User` in a `Group` carrying none of the SA's RBAC. Nothing in this
-  cluster authenticates as a Group today, because the API server has no
-  `--kube-apiserver-arg=oidc-*` flags — that is part 1 of #1390, which lives in
-  `roles/setup/k3s` and is applied by hand through `k3s-bringup.yml`.
+  arrives as a `User` in a `Group` carrying none of the SA's RBAC, which is why the Group is
+  bound everywhere the SA is. The API server accepts those tokens because it carries the
+  `--kube-apiserver-arg=oidc-*` flags — part 1 of #1390, in `roles/setup/k3s`, applied by hand
+  through `k3s-bringup.yml`.
+- **The SA is the fallback the other branch uses.** With `headlamp_k8s_oidc_enabled: false`,
+  `-unsafe-use-service-account-token` makes the pod browse as its own account and the Authelia
+  forward-auth Middleware on the IngressRoute is the perimeter in front of it. Keep the SA
+  bound: it is what the dashboard falls back to, and the Prometheus proxy Role is the SA's.
 - **A binding the Group is missing from is an empty resource list**, behind a login that
   succeeded, with nothing logged. `test_headlamp_oidc_group_is_bound_wherever_the_serviceaccount_is`
   in `ansible/tests/k8s/test_k8s_manifests_rbac.py` is the guard; adding a fourth binding for
@@ -35,20 +36,26 @@ Each binding in `templates/rbac.yaml.j2` names two subjects: the ServiceAccount,
   `oidc-groups-prefix` plus the Authelia group — so it is not a free choice. The prefix is what
   stops an Authelia group name from being read as a built-in `system:` group.
 
-## OIDC login (off)
-`headlamp_k8s_oidc_enabled: false`. Everything the login needs is in the repo; the switch is
-off because the third piece is not in this repo at all.
+## OIDC login (on)
+`headlamp_k8s_oidc_enabled: true` since 2026-09-10, when part 1 of #1390 (PR #1665) put the
+`oidc-*` flags on the API server. All three pieces are now live: the flags on daniel-box, the
+Authelia client, and these defaults.
 
-- **Turning it on REPLACES the ServiceAccount identity, it does not add to it.** The
-  Deployment's two argument sets are alternatives: on, the five `-oidc-*` flags render and
+- **This switch is not independently safe to flip.** It depends on state in `roles/setup/k3s`,
+  which the k8s deploy play never runs and a person applies through `k3s-bringup.yml`. Turning
+  it on without those flags leaves a dashboard that logs in and Forbids every call; if the
+  flags are ever removed, turn this off in the same change.
+- **On REPLACES the ServiceAccount identity, it does not add to it.** The Deployment's two
+  argument sets are alternatives: on, the five `-oidc-*` flags render and
   `-unsafe-use-service-account-token` is gone. Headlamp accepts both at once — it puts a
   TokenFile and an OidcConf on the same context — and the result is the SA still authorising
   every API call behind a sign-in button, which is why the template branches rather than
   appends.
-- **It cannot work until the API server trusts Authelia.** Headlamp forwards the browser's
-  `id_token`; the API server accepts or rejects it. With no `--kube-apiserver-arg=oidc-*` flags
-  on daniel-box, arming this leaves a dashboard nobody can use. That is part 1 of #1390, in
-  `roles/setup/k3s` (`k3s_oidc_*`), applied by hand through `k3s-bringup.yml`.
+- **A wrong value fails silently, in both directions.** The API server's OIDC authenticator
+  initialises asynchronously (`plugin/pkg/authenticator/token/oidc/oidc.go`), so a bad issuer
+  leaves the API server up and rejecting only OIDC logins; the root kubeconfig and every
+  ServiceAccount authenticate by other means and are unaffected. Verify a change here by
+  logging in, not by a healthy pod.
 - **Three values must agree across three places**, and none of the disagreements produces an
   error: the client id (here, Authelia's client, the API server's `oidc-client-id`), the issuer
   URL (here, the API server's `oidc-issuer-url`), and the group (`headlamp_k8s_oidc_group`, the
