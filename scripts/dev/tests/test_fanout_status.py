@@ -82,6 +82,7 @@ def test_cli_launch_places_and_starts_the_agent_with_one_systemd_run_call(tmp_pa
     assert code == 0
     systemd_calls = [c for c in run.calls if c[1].startswith("systemd-run")]
     assert len(systemd_calls) == 1
+    assert [p.name for p in tmp_path.glob("*.json")]
 
 
 def test_cli_launch_reports_no_headroom_when_both_hosts_are_uncapped(tmp_path):
