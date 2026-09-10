@@ -175,6 +175,12 @@ repo-side check still reads green (`scripts/deploy_tools/deploy_staleness.py`). 
 of `--check` and `--dry-run` too, since a green dry run against a stale tree is itself the
 misleading signal. Being *ahead* of master is normal branch work and is never refused.
 
+**Exit 4 is decided before exit 2.** `deploy.sh` asks whether the tree is stale before it
+validates `--tags`, so a stale tree carrying a tag it does not recognise reports 4, not 2
+(issue #1566). A tag check against a stale tree answers about the wrong tree: the first
+landing of a new role reads as a tag miss until the tick fast-forwards the merge commit, and
+`land.sh` retries a stale tree while it reports a tag miss as a failed deploy.
+
 **Read the second paragraph of an exit 4 before you rebase.** When the deployer's own
 `behind_since` marker is older than four ticks, the refusal appends a line saying so: the tree
 is behind because the PRIMARY checkout is parked, not because this worktree is stale, and

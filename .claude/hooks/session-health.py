@@ -44,13 +44,38 @@ REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 # The marker directory and the threshold are re-exported under their original names: this
 # module's tests read `_mod.BEHIND_PARK_SECONDS`, and `GITOPS_STATE_DIR` is mode 0750 owned by
 # `ubuntu`, so a session running as that user reads it and any other host degrades to silence.
+#
+# Wrapped, because NOTHING at module scope may be able to stop the banner (issue #1566). This
+# file is run by `session-health.sh`, which sends stderr to /dev/null and exits 0, so an
+# ImportError here would take out the docker, scrape-target, live-session and stale-worktree
+# sections as well — silently, and for a reason no session could see. The failure is reported
+# in `parked_deployer_problems` instead, the same way its deferred `lib.git` import already is.
 sys.path.insert(0, os.path.join(REPO, "scripts"))
-from lib.deployer_park import (  # noqa: E402
-    BEHIND_PARK_SECONDS,
-    GITOPS_STATE_DIR,
-    park_age,
-    read_behind_marker,
-)
+try:
+    from lib.deployer_park import (
+        BEHIND_PARK_SECONDS,
+        GITOPS_STATE_DIR,
+        park_age,
+        read_behind_marker,
+    )
+
+    DEPLOYER_PARK_IMPORT_ERROR = ""
+except ImportError as exc:
+    DEPLOYER_PARK_IMPORT_ERROR = str(exc)
+
+    # Inert placeholders, never read: `parked_deployer_problems` returns its `⚠` line before it
+    # asks the park question. They exist so the names stay defined and singly-typed for the type
+    # checker. NOT a fallback copy of the real values — a second BEHIND_PARK_SECONDS here would
+    # be the second derivation issue #1429 removed, so these are deliberately not the real
+    # threshold or the real marker directory, and the raising stubs say so if one is ever called.
+    BEHIND_PARK_SECONDS = 0
+    GITOPS_STATE_DIR = ""
+
+    def _park_unavailable(*_args, **_kwargs):
+        raise ImportError(DEPLOYER_PARK_IMPORT_ERROR)
+
+    park_age = _park_unavailable
+    read_behind_marker = _park_unavailable
 
 __all__ = ["BEHIND_PARK_SECONDS", "GITOPS_STATE_DIR"]
 
@@ -184,14 +209,26 @@ def parked_deployer_problems(
             return read_behind_marker(GITOPS_STATE_DIR)
 
     # Deferred like the `lib.git` import above, and for the same reason the rest of this file
-    # defers: nothing at module scope may be able to stop the banner.
+    # defers: nothing at module scope may be able to stop the banner. The one module-scope
+    # import this file does keep — `lib.deployer_park` — is wrapped up there and reported here.
     import time
 
     lines = []
+    if DEPLOYER_PARK_IMPORT_ERROR:
+        # Added BEFORE the reads below rather than after them, so a `list_worktrees` that raises
+        # cannot swallow it: an empty list is indistinguishable from "nothing to report", and
+        # that is what hid a whole banner section for a month.
+        lines.append(
+            f"  ⚠ parked-deployer detection is broken: {DEPLOYER_PARK_IMPORT_ERROR}"
+        )
     try:
         primary = primary_worktree_path(list_worktrees())
         if primary:
             lines += dirty_primary_lines(status(primary), primary)
+        if DEPLOYER_PARK_IMPORT_ERROR:
+            # The dirty-primary half still answered and is kept; only the park half is
+            # unanswerable, and `park_age` raises if it is asked.
+            return lines
         # An absent marker is the healthy case — the deployer removes it on convergence — and
         # `read_behind_marker` answers None for it, which reads as "no park". An INJECTED
         # read_marker may still raise, and the dirty lines gathered before it are still worth
