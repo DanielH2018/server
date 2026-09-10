@@ -23,7 +23,17 @@ READ_COMMAND = (
 
 @dataclass(frozen=True)
 class HostReading:
-    """One host's memory-cgroup reading: its cap, current usage, and live agent count."""
+    """One host's memory-cgroup reading: its cap, current usage, and live agent count.
+
+    Attributes:
+        host: the host the reading came from.
+        cap_bytes: user.slice memory.high, or None when no drop-in caps it.
+        current_bytes: user.slice memory.current.
+        live_agents: how many `claude` processes uid 1000 is running. Read and reported —
+            `read` prints it and NoHeadroom names it — but never scored: placement decides
+            on headroom alone (spec §2), because a host's agents are already priced into
+            the memory the reading measures.
+    """
 
     host: str
     cap_bytes: int | None
