@@ -73,6 +73,14 @@ jobs:
   # a cheerful "Passed"), and $RUNNER_TEMP is per-job, so the new job computes its own changed-
   # file list rather than reading one this job wrote.
   #
+  # A third was checked and settled the Galaxy cache step out of this job. Nothing here ever
+  # installed the collections explicitly — the ansible-lint hook's own entry did it as a side
+  # effect, and that hook is skipped on both paths now. That is the shape the `pytest` job's own
+  # comment describes, and it would have failed only on a cache MISS, pointing nowhere near this
+  # change. Measured 2026-09-10 with `ansible/collections` moved aside: every hook left in this
+  # job still passes, so the remaining sweep reads no collection and the cache step is gone
+  # rather than kept for reassurance. `ansible_lint` and `pytest` both still carry it.
+  #
   # NB the FIRST run on any given branch is slower, once — the merge of #166 took 108s, not 77s.
   # A branch restores its hook-env cache via restore-keys from an older entry and rebuilds the
   # rest in-step (measured: a 44s hook step), saving the union key at the end. Caches are scoped
@@ -81,7 +89,7 @@ jobs:
   hooks:
     name: hooks (lint + validate + secrets + docs)
     runs-on: ubuntu-latest
-    timeout-minutes: 20  # cap a wedged network hook (ansible-galaxy install) so it can't burn to the 6h default
+    timeout-minutes: 20  # cap a wedged network hook so it can't burn to the 6h default
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -127,17 +135,6 @@ jobs:
             ~/.cache/prek/tools
           key: prek-${{ runner.os }}-${{ hashFiles('prek.toml') }}
           restore-keys: prek-${{ runner.os }}-
-
-      # The ansible-lint hook's entry runs `ansible-galaxy collection install` before linting.
-      # ansible/collections/ is gitignored, so that is a ~40 MB download of four collections on
-      # every run; warm, the same command is a 0.4s no-op ("Nothing to do. All requested
-      # collections are already installed"). Versions are exactly pinned in requirements.yml,
-      # so hashing it is an exact key with no staleness window — hence no restore-keys.
-      - name: Cache Ansible collections
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ansible/collections
-          key: galaxy-${{ runner.os }}-${{ hashFiles('ansible/requirements.yml') }}
 
       - name: Install prek
         run: pip install prek==0.5.2  # pinned for a reproducible hook toolchain; Renovate (pypi) bumps it
@@ -316,12 +313,17 @@ jobs:
           mapfile -t deleted < <(git diff --name-only --no-renames --diff-filter=D "$base")
           # --diff-filter=d (lowercase) drops deletions: passing a path that no longer exists is
           # a hook error, not a lint finding.
+          git diff --name-only --no-renames --diff-filter=d "$base" > "$RUNNER_TEMP/changed.txt"
           # Filtered with grep rather than a git pathspec glob (`ansible/**/*.yml` behaves
           # differently under git's wildmatch than it reads). secrets.yml is dropped here as well
           # as by the hook's own exclude: were it the ONLY changed ansible file, the hook would
           # filter the list to empty and fall straight into the tree walk warned about below.
-          git diff --name-only --no-renames --diff-filter=d "$base" \
-            | grep -E '^ansible/.*\.ya?ml$' \
+          #
+          # The greps read the FILE rather than continuing the pipe, so that `|| true` — which
+          # is there for grep's empty-match exit 1 — cannot also swallow a `git diff` failure.
+          # Swallowed, that would produce an empty list, read as `mode=none`, and lint nothing
+          # while reporting green.
+          grep -E '^ansible/.*\.ya?ml$' "$RUNNER_TEMP/changed.txt" \
             | grep -v '^ansible/vars/secrets\.yml$' > "$RUNNER_TEMP/ansible.txt" || true
           if [ "${#deleted[@]}" -gt 0 ]; then
             echo "mode=full" >> "$GITHUB_OUTPUT"
