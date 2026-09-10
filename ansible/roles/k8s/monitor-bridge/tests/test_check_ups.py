@@ -114,7 +114,9 @@ def test_check_ups_healthy_is_up(monkeypatch, cfg):
 
 def test_check_ups_absent_data_defers_to_scrape_targets(monkeypatch, cfg):
     # HA scrape down (ha_up None via the fake) -> all arms absent defers to Scrape Targets.
-    _ups_scalars(cfg, monkeypatch, None, None, replace=None)
+    # on_battery=None with the rest: the on-battery arm is in the same census since #1630, so
+    # "all arms absent" now means all FOUR.
+    _ups_scalars(cfg, monkeypatch, None, None, replace=None, on_battery=None)
     ok, msg = checks.host_thermal.check_ups(cfg)
     assert ok and "no UPS data" in msg
 
@@ -123,7 +125,9 @@ def test_check_ups_all_absent_but_ha_scraping_pages(monkeypatch, cfg):
     # Every UPS entity renamed/removed at once while HA keeps scraping (up{home-assistant}==1):
     # Scrape Targets can't see it, so the old all-absent defer silently unmonitored the UPS. Now it
     # pages through the streak (naming the missing arms) instead of deferring.
-    _ups_scalars(cfg, monkeypatch, None, None, replace=None, source_up=1.0)
+    _ups_scalars(
+        cfg, monkeypatch, None, None, replace=None, source_up=1.0, on_battery=None
+    )
     ok1, msg1 = checks.host_thermal.check_ups(cfg)
     assert ok1 and "streak 1/2" in msg1
     ok2, msg2 = checks.host_thermal.check_ups(cfg)
@@ -134,7 +138,9 @@ def test_check_ups_all_absent_but_ha_scraping_pages(monkeypatch, cfg):
 def test_check_ups_all_absent_ha_down_still_defers(monkeypatch, cfg):
     # HA scrape affirmatively down (up==0) with all arms absent -> still defer (Scrape Targets owns
     # the HA-source outage); the up-gate only flips the all-absent case to a page when HA is UP.
-    _ups_scalars(cfg, monkeypatch, None, None, replace=None, source_up=0.0)
+    _ups_scalars(
+        cfg, monkeypatch, None, None, replace=None, source_up=0.0, on_battery=None
+    )
     ok, msg = checks.host_thermal.check_ups(cfg)
     assert ok and "no UPS data" in msg
 
@@ -188,7 +194,13 @@ def test_check_ups_recovery_resets_streak(monkeypatch, cfg):
 
 
 def test_check_ups_disabled_when_no_queries(monkeypatch, cfg):
-    cfg = replace(cfg, UPS_CHARGE_QUERY="", UPS_RUNTIME_QUERY="", UPS_REPLACE_QUERY="")
+    cfg = replace(
+        cfg,
+        UPS_CHARGE_QUERY="",
+        UPS_RUNTIME_QUERY="",
+        UPS_REPLACE_QUERY="",
+        UPS_ON_BATTERY_QUERY="",
+    )
     ok, msg = checks.host_thermal.check_ups(cfg)
     assert ok and "disabled" in msg
 
@@ -250,6 +262,42 @@ def test_restored_mains_clears_the_on_battery_streak(monkeypatch, cfg):
     ok, _ = checks.host_thermal.check_ups(cfg)
     assert ok
     assert bridge.streaks._down_streaks.get("ups_on_battery", 0) == 0
+
+
+def test_the_on_battery_series_going_missing_alone_pages(monkeypatch, cfg):
+    """The absence half of the arm: a rename of the OB series alone must not go quiet (#1630).
+
+    The three runway arms report normally, so nothing else in the check has anything to say and
+    the monitor would read green while mains-loss monitoring was off — the inert-check shape.
+    The arm is in `configured`, so its absence is a partial absence and pages through the same
+    UPS_CONSECUTIVE streak as a charge or runtime rename.
+    """
+    _ups_scalars(cfg, monkeypatch, 100, 900, on_battery=None)
+    ok1, msg1 = checks.host_thermal.check_ups(cfg)
+    assert ok1 and "streak 1/2" in msg1
+    ok2, msg2 = checks.host_thermal.check_ups(cfg)
+    assert not ok2 and "on-battery" in msg2 and "absent" in msg2
+
+
+def test_the_on_battery_series_present_is_not_flagged_absent(monkeypatch, cfg):
+    """The accepting half: a reporting OB series leaves the up message as it was."""
+    _ups_scalars(cfg, monkeypatch, 100, 900, on_battery=0.0)
+    ok, msg = checks.host_thermal.check_ups(cfg)
+    assert ok and "absent" not in msg
+
+
+def test_a_nut_outage_still_defers_rather_than_naming_the_on_battery_rename(
+    monkeypatch, cfg
+):
+    """OB is absent in a NUT outage too, and that must not read as a rename.
+
+    The numeric-arms-absent defer is judged before the partial-absence page, so an exporter
+    death reaches the nut liveness probe's message rather than "entity renamed?" — adding OB to
+    the census must not reorder that.
+    """
+    _ups_scalars(cfg, monkeypatch, None, None, replace=0.0, on_battery=None)
+    ok, msg = checks.host_thermal.check_ups(cfg)
+    assert ok and "NUT server/integration down" in msg
 
 
 def test_the_on_battery_arm_is_off_when_no_query_is_configured(monkeypatch, cfg):
