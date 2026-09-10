@@ -5,11 +5,21 @@
   and postflight.py's §9.3 API-key check, which asks for this same path because it is the one
   this route admits. Nothing else on the sonarr API is reachable through this route.
 
-  extra_client_cidrs adds daniel-box, the host postflight runs on. Without it postflight's §9.3
-  check was structurally SKIP whenever sonarr's pod sat on daniel-server: the ClusterIP answers
-  only a caller on the pod's own node, and this route admitted daniel-server alone, so the
-  request fell through to sonarr's own Authelia'd route and 302'd (#1642). The path prefix, the
-  LAN-only rule and sonarr's own X-Api-Key are unchanged.
+  extra_client_cidrs admits the two cluster nodes' own host processes, which is what postflight
+  is. Without it §9.3 was structurally SKIP whenever sonarr's pod sat on daniel-server: the
+  ClusterIP answers only a caller on the pod's own node, and this route admitted
+  `k8s_bridge_client_ip` alone, so the request fell through to sonarr's own Authelia'd route
+  and 302'd (#1642).
+
+  These are cni0 GATEWAY addresses, not the nodes' LAN addresses: host traffic to the ingress
+  VIP SNATs to them. Read off Traefik's own access log on 2026-09-10 — a request postflight
+  made from daniel-box arrived as `ClientHost: 10.42.0.1`, so a `k8s_node_client_ip` (10.0.0.215)
+  grant matched nothing and the SKIP survived its own fix. Same pair and the same reasoning as
+  loki-homelab's read route, whose `DECIDED 2026-08-24` marker verified it live first. A pod
+  arrives with its own 10.42.x.y address rather than a gateway, so this is the two nodes and
+  nothing else.
+
+  The path prefix, the LAN-only rule and sonarr's own X-Api-Key are unchanged.
 #}
 {{ monitoring_route(container_item.name, container_item.hostname, container_item.port, '/api/v3/queue',
-                    extra_client_cidrs=[k8s_node_client_ip ~ '/32']) }}
+                    extra_client_cidrs=k3s_cni0_gateways) }}

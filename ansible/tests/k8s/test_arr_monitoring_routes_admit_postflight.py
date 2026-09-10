@@ -64,12 +64,12 @@ def _path_mismatches(monitored_paths: dict[str, str]) -> list[str]:
     return problems
 
 
-def _cidr_mismatches(cidr: str) -> list[str]:
-    """Apps whose monitoring route does not admit `cidr` as a client."""
+def _cidr_mismatches(cidrs: list[str]) -> list[str]:
+    """Apps whose monitoring route does not admit every one of `cidrs` as a client."""
     return [
         app
         for app, match in _monitoring_matches().items()
-        if f"ClientIP(`{cidr}`)" not in match
+        if any(f"ClientIP(`{cidr}`)" not in match for cidr in cidrs)
     ]
 
 
@@ -104,17 +104,25 @@ def test_a_path_the_route_does_not_admit_is_flagged():
     assert all("system/status" in problem for problem in problems)
 
 
-def test_every_arr_route_admits_daniel_box_is_clean():
-    box = ALL_VARS["k8s_node_client_ip"]
-    assert not _cidr_mismatches(f"{box}/32"), (
-        f"monitoring route(s) do not admit daniel-box ({box}), the only host postflight runs "
-        f"on: {_cidr_mismatches(f'{box}/32')}. §9.3 is then SKIP whenever the pod is on "
-        "daniel-server (#1642)."
+def test_every_arr_route_admits_the_nodes_own_host_traffic_is_clean():
+    """The cni0 gateways, not the nodes' LAN addresses.
+
+    Host traffic to the ingress VIP SNATs to the gateway, so a `k8s_node_client_ip`
+    (10.0.0.215) grant matches nothing — read off Traefik's access log on 2026-09-10, after a
+    first attempt at #1642 shipped that address and left the SKIP in place.
+    """
+    gateways = ALL_VARS["k3s_cni0_gateways"]
+    assert not _cidr_mismatches(gateways), (
+        f"monitoring route(s) do not admit the nodes' own host traffic ({gateways}), which is "
+        f"what postflight is: {_cidr_mismatches(gateways)}. §9.3 is then SKIP whenever the pod "
+        "is on the other node (#1642)."
     )
+    # The LAN address is the wrong grant and must not be what makes the assertion above pass.
+    assert _cidr_mismatches([f"{ALL_VARS['k8s_node_client_ip']}/32"])
 
 
 def test_a_cidr_no_route_admits_is_flagged():
-    assert sorted(_cidr_mismatches("192.0.2.7/32")) == sorted(ARR_APPS)
+    assert sorted(_cidr_mismatches(["192.0.2.7/32"])) == sorted(ARR_APPS)
 
 
 @pytest.mark.parametrize("app", sorted(ARR_APPS))
