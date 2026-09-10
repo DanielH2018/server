@@ -16,8 +16,12 @@ noticed instead of silently going quiet. See repo-root `CLAUDE.md` for shared co
   RWO PVC seeded through `k8s/volume-claim`.
 - **Secrets** (SOPS keys, not values): `smtp_notify_app_password` (outbound mail, shared with
   Uptime Kuma and monitor-bridge), `healthchecks_password` (the seed superuser),
-  `healthchecks_discord_webhook_url` (the notification channel). `healthchecks_smtp_user` is
-  no longer read here — #1453 tracks whether it can go.
+  `healthchecks_discord_webhook_url` (the notification channel), `healthchecks_secret_key`
+  (Django's session and password-reset signing key). `healthchecks_smtp_user` was removed on
+  2026-09-10 (#1453): it lost its last reader when `EMAIL_HOST_USER` moved to `email`, and its
+  value compared EQUAL to `email`, so it was a duplicate rather than a separate login. The
+  retired Docker role under `roles/containers/archive/healthchecks/` still names it and now
+  renders nothing — that tree is reference-only and no `containers_list` entry reaches it.
 
 ## Notable
 - **Alerts leave over Discord, and the channel is declared rather than clicked.** A
@@ -59,15 +63,24 @@ noticed instead of silently going quiet. See repo-root `CLAUDE.md` for shared co
   not being read, not that the credential is bad** — that was the first symptom, and the
   second was `EMAIL_USE_TLS/EMAIL_USE_SSL are mutually exclusive`, raised when the
   Deployment's new `EMAIL_USE_SSL: True` met the file's `EMAIL_USE_TLS = True`.
-  `files/strip_local_settings_email.py` now deletes those assignments on every deploy, and
+  `files/strip_local_settings_owned.py` now deletes those assignments on every deploy, and
   `tasks/main.yml` restarts the pod when it removes one. **It deletes rather than comments**,
   because the file held a plaintext Gmail password on the PVC.
-- **The strip leaves `SECRET_KEY` alone, deliberately.** It signs sessions and password-reset
-  tokens, it lives in that 2023 file and nowhere else — not in SOPS, not in the rotation
-  registry — so rewriting `local_settings.py` wholesale would mint a new one and log everyone
-  out. Removing six lines is the smallest edit that makes this role's settings authoritative.
-  `tests/test_strip_local_settings_email.py` asserts the survivors byte-for-byte, which is
-  the half a truncating script would otherwise pass.
+- **`SECRET_KEY` came out of that file on 2026-09-10 and into SOPS (#1491).** The image
+  generated it there on first boot in 2023 and it existed nowhere else, so nothing this repo
+  runs could rotate it and a lost PVC lost the key with it. The Secret now renders a **fresh**
+  `healthchecks_secret_key` — not the 2023 value lifted across, which would have meant reading
+  a live credential out of a pod — so the change cost one round of logged-out sessions and
+  broken password-reset links. `SECRET_KEY` is in the strip's `OWNED` tuple, and
+  `tests/test_strip_local_settings_owned.py` still asserts the survivors byte-for-byte, which
+  is the half a truncating script would otherwise pass.
+- **The env var is what stops the image minting a replacement key.**
+  `init-healthchecks-config/run` appends a random `SECRET_KEY` to `local_settings.py` only
+  when `${SECRET_KEY}` is EMPTY *and* the file has no `^SECRET_KEY`. With the Secret rendering
+  it the first test fails, so the strip is a genuine one-shot. Removing the Secret's
+  `SECRET_KEY` line while the name stays in `OWNED` is the failure to avoid: the image would
+  rewrite the assignment on every boot and the strip would delete it again, reporting
+  `changed` and rolling the pod on every deploy, forever.
 - **Transport is implicit TLS on 465** — `EMAIL_PORT: 465`, `EMAIL_USE_SSL: True`,
   `EMAIL_USE_TLS: False` — matching Authelia, Uptime Kuma and monitor-bridge's
   `email_backstop`. **The `False` is load-bearing**: Django raises when both switches are
@@ -82,8 +95,8 @@ noticed instead of silently going quiet. See repo-root `CLAUDE.md` for shared co
 ## Editing
 - Manifests: `templates/deployment.yaml.j2`, `templates/ingressroute.yaml.j2`,
   `templates/secret.yaml.j2`, `templates/service.yaml.j2`.
-- Settings the PVC used to own: `files/strip_local_settings_email.py`, tested by
-  `tests/test_strip_local_settings_email.py`.
+- Settings the PVC used to own: `files/strip_local_settings_owned.py`, tested by
+  `tests/test_strip_local_settings_owned.py`.
 - Notification channel: `files/seed_discord_channel.py`, tested by
   `tests/test_seed_discord_channel.py` (`uv run pytest ansible/roles/k8s/healthchecks/tests`).
 - Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "healthchecks"`.
