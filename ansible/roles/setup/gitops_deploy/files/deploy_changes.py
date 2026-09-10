@@ -435,8 +435,8 @@ def services_from_changed_paths(paths: list[str]) -> ChangeSet:
 
     Routes each path to the plane it belongs to — Docker service config, the tasks/meta
     defer-and-alert channels, a k8s role, or one of the broad-change prefixes — in the order
-    each branch below requires (test paths first, then secrets, then broad-manual ahead of
-    broad-setup, then the active-role regexes).
+    each branch below requires (test paths first, then documentation, then secrets, then
+    broad-manual ahead of broad-setup, then the active-role regexes).
 
     Args:
         paths: repo-relative paths changed between local and origin.
@@ -455,6 +455,19 @@ def services_from_changed_paths(paths: list[str]) -> ChangeSet:
         # An empty ChangeSet is the right outcome, not a hole: gitops_deploy.py takes the
         # `if not cs.services` branch and fast-forwards, exactly as it does for a docs-only push.
         if _is_test_only_path(p):
+            continue
+        # Documentation reaches no host either, and it is tested here — ONCE, ahead of every
+        # plane branch — rather than on the arms that happen to notice it. The k8s arm and the
+        # container catch-all carried their own `and not p.endswith(".md")`; the setup and
+        # broad-deploy arms above them did not, so `roles/setup/<role>/CLAUDE.md` matched
+        # _BROAD_SETUP_PREFIXES and routed prose to an `initial_setup.yml --tags <role>` apply
+        # or a defer-and-alert, and `roles/containers/common/CLAUDE.md` matched
+        # _BROAD_DEPLOY_PREFIXES and routed prose to a full `ansible/deploy.yml` (issue #1714).
+        # A `.md` under a role is never role content a playbook applies: the three under a
+        # `files/` directory are shipped by no task, because both roles copy a NAMED list of
+        # files rather than the directory (issue #1715). _BROAD_MANUAL_PREFIXES is three exact
+        # `.yml` paths, so hoisting past it cannot change what parks the tick.
+        if p.endswith(".md"):
             continue
         if p == _SECRETS_FILE:
             cs.secrets = True
@@ -490,15 +503,15 @@ def services_from_changed_paths(paths: list[str]) -> ChangeSet:
             cs.meta.add(mt.group(1))
             continue
         k = _ACTIVE_K8S.match(p)
-        if k and not p.endswith(".md"):
+        if k:
             cs.k8s.add(k.group(1))
             continue
-        # Catch-all: any other non-doc file under an active container role (defaults/, vars/,
+        # Catch-all: any other file under an active container role (defaults/, vars/,
         # handlers/, …). Not auto-deployed but it changes what a deploy does — defer-and-alert
-        # via the tasks channel instead of a silent ff-merge. *.md (CLAUDE.md, README) are docs
-        # and keep the silent path.
+        # via the tasks channel instead of a silent ff-merge. A *.md never reaches here; the
+        # single docs test at the top of the loop keeps it on the silent path.
         r = _ACTIVE_ROLE.match(p)
-        if r and not p.endswith(".md"):
+        if r:
             cs.tasks.add(r.group(1))
     return cs
 
