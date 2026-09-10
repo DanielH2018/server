@@ -291,6 +291,19 @@ not land its PR, because only daniel-box runs deploys. The manifest under
 `remote_fanout_lines` (`.claude/hooks/hooklib/worktree_lines.py`) all read to find a fan-out's
 live worktrees on the other host.
 
+The dispatcher scores a host on memory headroom, and an agent is throttled by two cgroup caps
+rather than one: `user.slice`, the fleet, and `user-1000.slice`, the login plane it runs in as
+a transient user service. It reads both and takes the smaller headroom, so the tighter cap
+decides and a host the fleet number alone would allow can still be refused. Each placement
+spends one 2.5 GiB reservation (`RESERVATION_BYTES` in `scripts/dev/fanout_lib/placement.py`),
+and the host with the most left takes the next batch.
+
+`clean` records each removal in the manifest, because the act destroys its own evidence: the
+remote leg reads the worktree it deletes, so a later pass has nothing left to ask. A batch
+already removed is skipped without an ssh call, `status` reports it as `cleaned` rather than
+reading a host whose report file went with the worktree, and the manifest is deleted only once
+every batch is removed.
+
 A daniel-server PR also cannot merge until the operator registers daniel-server's SSH key as a
 GitHub signing key once (`gh ssh-key add ~/.ssh/id_ed25519.pub --type signing`); until then it
 sits `BLOCKED` with every check green, because the repo's ruleset requires a verified commit
@@ -312,11 +325,15 @@ signature and daniel-server signs with that key.
    worktree name, because a subagent's worktree name is auto-generated and unknown until it
    starts — and a claim naming a worktree that does not exist yet would read as stale
    immediately. The orchestrator's worktree is live for the whole fan-out, so the claim is too.
-3. **Spawn.** One Opus agent per batch, spawned with `isolation: "worktree"` and
-   `model: "opus"` on the `Agent` call. Both are load-bearing and neither is a default: an
-   `Agent` call without `isolation` runs in the orchestrator's own checkout, so every agent
-   shares one working tree and commits over the others — the race the claim protocol assumes
-   away. The worktree it gets is auto-named, per the measurement below. The brief carries the
+3. **Spawn.** `uv run python scripts/dev/fanout_place.py launch --batch … ` places one Opus
+   agent per batch across both hosts and writes each brief itself — see *Placement across
+   hosts* above. The Agent tool is the fallback, not the default: the skill's *When the
+   dispatcher is unavailable* section covers a session with no ssh reach to daniel-server,
+   and there `isolation: "worktree"` and `model: "opus"` are both load-bearing and neither is
+   a default. An `Agent` call without `isolation` runs in the orchestrator's own checkout, so
+   every agent shares one working tree and commits over the others — the race the claim
+   protocol assumes away. The worktree it gets is auto-named, per the measurement below. Either
+   way the brief carries the
    issue bodies, the claim the agent already holds, the repo's `land-after-merge` contract, the
    blocking wait on the `VERDICT:` line (a backgrounded `land.sh` with redirected output is not
    a harness-tracked child, so nothing wakes the agent when it finishes), the

@@ -109,7 +109,8 @@ The dispatcher writes the brief (issue bodies verbatim, the claim note, the firs
 the landing path or the stop-at-PR rule, and both hosts' session-health output — just the
 pinned host's when `--host` is given) and starts a headless Opus agent as a transient user
 service in a fresh worktree on whichever host has the
-most memory headroom under its fleet cap. Exit 3 means neither host has a reservation's worth
+most memory headroom under the tighter of its fleet and login-plane caps. Exit 3 means neither
+host has a reservation's worth
 of headroom, or a placement would put more than three batches on one remote host: narrow the
 fan-out, do not queue. `--host daniel-box` pins a batch that must land in the same run or that
 only daniel-box can verify.
@@ -122,7 +123,10 @@ batch reports `done <PR URL>` and stops there: land that PR from this session wi
 `<worktree>/.fanout/stderr.log`; read the full file there for more before deciding what to do.
 `launch` refuses to relaunch the same batch while that worktree or its branch still exists, so
 run `clean <run-id>` first — or remove the tree by hand if its branch is unmerged and you are
-abandoning it — before relaunching.
+abandoning it — before relaunching. It refuses on two counts, because placement is free to send
+a relaunch to the other host: the worktree and branch on the host it would place on, and the
+batch id itself if any run's manifest still lists it as not cleaned, whichever host that run
+put it on. So a failed batch is cleaned, never re-placed elsewhere.
 
 **A daniel-server PR needs its signing key registered once.** The repo ruleset requires a
 verified commit signature, and daniel-server's key is not registered as a GitHub signing key
@@ -133,8 +137,12 @@ fix this from inside a session.
 
 When every PR has merged: `uv run python scripts/dev/fanout_place.py clean <run-id>`. It
 removes each worktree once its branch is merged into `origin/master` and the tree is clean, and
-reports a kept tree with its reason; the manifest under `~/.claude/fanout/` is deleted only once
-every batch reports removed. `stop <run-id>` stops the units first, for a fan-out abandoned
+reports a kept tree with its reason. `clean` records each removal in the run's manifest, so a
+later pass skips a batch it already removed rather than reading a host for a worktree that is
+gone, and `status` shows such a batch as `cleaned`. `clean` deletes the manifest under
+`~/.claude/fanout/` only once every batch is removed, and exits 1 naming any batch whose remote
+leg failed outright — an unreachable host is not a tree to re-clean once merged.
+`stop <run-id>` stops the units first, for a fan-out abandoned
 before landing — run `clean` once the survivors' PRs merge.
 
 **Width is bounded by memory, measured, not by a number here.** Each batch costs one 2.5 GiB
