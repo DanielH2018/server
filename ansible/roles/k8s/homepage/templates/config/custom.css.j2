@@ -43,9 +43,24 @@
  * quicklaunch, which searches descriptions (`searchDescriptions: true` in settings.yaml.j2), so
  * the links stay keyboard-reachable by name and by domain while showing neither.
  *
- * Measured 2026-09-09 at 1920px: five 48px-tall tiles on one row, icons centred, no clipping.
+ * THE NAME ANCHOR IS STRETCHED OVER THE TILE, NOT HIDDEN — it is what makes the whole tile
+ * clickable. `display: none` on it (how this shipped first) leaves only the 48x32 icon anchor
+ * as a hit target inside a 165px tile, so most of the tile looks like a button and does
+ * nothing. Homepage renders the name inside its own `<a>` carrying the same href as the icon,
+ * so covering the card with that anchor and hiding only the TEXT gives a tile that is entirely
+ * a link. The card is already `position: relative`, so `inset: 0` resolves to it.
+ *
+ * Measured 2026-09-09 at 1920px: five 48px tiles on one row, icons centred, no clipping — and
+ * again after this change, with `document.elementFromPoint` at each tile's centre and its four
+ * edges returning the right href at every point on all ten tiles.
  */
 #my-calendar ~ li.service .service-title > a:has(> .service-name) {
+  display: flex;
+  position: absolute;
+  inset: 0;
+}
+
+#my-calendar ~ li.service .service-name {
   display: none;
 }
 
