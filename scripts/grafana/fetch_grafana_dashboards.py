@@ -50,6 +50,13 @@ SUBDIR = {"node-exporter-full": "Infrastructure", "cadvisor": "Infrastructure"}
 # link-speed / battery / fan sensors, and the systemd collector isn't enabled
 # (would need host D-Bus access from the container). Dropping them keeps the board
 # free of permanently-"No data" panels.
+#
+# The second group is the same rule applied to three collectors node_exporter ships
+# DISABLED by default, which the DaemonSet does not turn on. `count by (collector)
+# (node_scrape_collector_success)` is the census that names what IS registered — read
+# that before adding a panel back. `processes` feeds node_processes_*, `interrupts`
+# feeds node_interrupts_total, and `tcpstat` feeds node_tcp_connection_states; a panel
+# whose every target reads one of those is dead until the flag is added.
 DROP_PANELS = {
     "node-exporter-full": {
         "Network Saturation",
@@ -59,6 +66,14 @@ DROP_PANELS = {
         "Systemd Sockets Current",
         "Systemd Sockets Accepted",
         "Systemd Sockets Refused",
+        # processes / interrupts / tcpstat collectors, all off by default
+        "IRQ Detail",
+        "PIDs Number and Limit",
+        "Processes Detailed States",
+        "TCP Socket Queue",
+        "TCP Stat Persistent",
+        "TCP Stat Transient",
+        "Threads Number and Limit",
     },
 }
 

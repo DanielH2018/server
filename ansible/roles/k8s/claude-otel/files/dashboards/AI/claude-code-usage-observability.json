@@ -408,7 +408,7 @@
     {
       "datasource": {
         "type": "loki",
-        "uid": "bf4q19tuivta8e"
+        "uid": "loki"
       },
       "description": "Server-side round trip per api_request event, not whole-turn time.",
       "fieldConfig": {
@@ -455,7 +455,7 @@
     {
       "datasource": {
         "type": "loki",
-        "uid": "bf4q19tuivta8e"
+        "uid": "loki"
       },
       "fieldConfig": {
         "defaults": {
@@ -490,7 +490,7 @@
     {
       "datasource": {
         "type": "loki",
-        "uid": "bf4q19tuivta8e"
+        "uid": "loki"
       },
       "fieldConfig": {
         "defaults": {
@@ -523,7 +523,7 @@
     {
       "datasource": {
         "type": "loki",
-        "uid": "bf4q19tuivta8e"
+        "uid": "loki"
       },
       "description": "tool_result events with success=false. A denied permission counts as a failure here.",
       "fieldConfig": {
@@ -572,7 +572,7 @@
     {
       "datasource": {
         "type": "loki",
-        "uid": "bf4q19tuivta8e"
+        "uid": "loki"
       },
       "description": "The highest-volume event this stack collects, and previously the least visible.",
       "fieldConfig": {
@@ -608,7 +608,7 @@
     {
       "datasource": {
         "type": "loki",
-        "uid": "bf4q19tuivta8e"
+        "uid": "loki"
       },
       "description": "Hooks run inline and their latency is charged to the turn, so a slow hook reads as a slow Claude.",
       "fieldConfig": {
@@ -691,7 +691,7 @@
     {
       "datasource": {
         "type": "loki",
-        "uid": "bf4q19tuivta8e"
+        "uid": "loki"
       },
       "description": "A manual /compact preempts the background-precomputed summary and pays full price; precompute_reuse records whether the cheap path was taken. Check here before concluding compaction is expensive.",
       "fieldConfig": {
@@ -761,7 +761,7 @@
     {
       "datasource": {
         "type": "loki",
-        "uid": "bf4q19tuivta8e"
+        "uid": "loki"
       },
       "fieldConfig": {
         "defaults": {
@@ -796,7 +796,7 @@
     {
       "datasource": {
         "type": "loki",
-        "uid": "bf4q19tuivta8e"
+        "uid": "loki"
       },
       "fieldConfig": {
         "defaults": {
@@ -831,7 +831,7 @@
     {
       "datasource": {
         "type": "loki",
-        "uid": "bf4q19tuivta8e"
+        "uid": "loki"
       },
       "fieldConfig": {
         "defaults": {
@@ -879,7 +879,7 @@
     {
       "datasource": {
         "type": "loki",
-        "uid": "bf4q19tuivta8e"
+        "uid": "loki"
       },
       "description": "Verbatim conversation content. Populated only while the OTEL_LOG_* content vars are set; otherwise these fields read <REDACTED>.",
       "gridPos": {
@@ -909,7 +909,7 @@
     {
       "datasource": {
         "type": "loki",
-        "uid": "bf4q19tuivta8e"
+        "uid": "loki"
       },
       "gridPos": {
         "h": 10,

@@ -103,6 +103,39 @@ Every dashboard's datasource ref must resolve to a uid declared in this role's
 as the uid registry and fails on an unresolved reference, which is how a hand-imported
 board's stale uid gets caught before it renders "No data".
 
+### Three ways a panel reads "No data" behind a resolving datasource
+
+A 2026-09-10 audit ran every panel's query against the live backends: 98 of 597 targets
+returned nothing. All three causes below produce a healthy pod, a passing `-m ui` suite and a
+blank panel, and all three were repaired in that pass.
+
+- **A ported board's label names are not this cluster's.** The four CrowdSec boards filtered
+  on `machine`; this cluster's CrowdSec exports `node`. A `label_values(up, machine)` variable
+  returning nothing interpolates EMPTY into every panel, so the board cannot even build a
+  query — worse than one bad panel. `crowdsec-insight` and `lapi-metrics` were 100% dead.
+  Not every rename is mechanical: **the LAPI target (`job="crowdsec"`) carries no `node`
+  label at all**, so `lapi-metrics` keys on `instance` instead, and `cs_alerts` /
+  `cs_bucket_pour_seconds_bucket` come only from the engine — a per-node board cannot filter
+  them by node.
+- **`[1m]` against a 1-minute scrape returns nothing.** Every application job here sets
+  `scrape_interval: 1m` (`templates/prometheus.yaml.j2`), so a `rate()`/`increase()` over a
+  literal `[1m]` — or over `$__interval`, which is SHORTER than 1m on a typical range — sees
+  one sample and yields no result. Use `$__rate_interval`, which Grafana derives from the
+  datasource's `timeInterval`. This killed panels on `traefik-custom` and all three CrowdSec
+  boards.
+- **The right data in the wrong Loki.** Both Claude Code boards queried uid
+  `bf4q19tuivta8e` (`loki-homelab`), which has no `service_name="claude-code"` stream — the
+  collector exports to `http://loki:3100`, uid `loki`. The deploy annotation on those boards
+  reads `{job="syslog"}` and correctly stays on `loki-homelab`, so the two uids coexist in
+  one file on purpose.
+
+**A panel that is empty because nothing happened is not a defect.** CrowdSec emits
+`cs_buckets`, `cs_bucket_created_total` and `cs_bucket_overflowed_total` only once a bucket
+exists, so those panels stay blank until a scenario fires and come alive during the incident
+you want them for. Distinguish that from a dead selector by asking whether the metric is
+absent over a RANGE, not at an instant: `prowlarr_indexer_queries_total` returns nothing
+instantaneously and 14 series over `[1h]`.
+
 **A live datasource with a dead metric is the gap that hook cannot see, and it has already
 cost a board.** `Apps/backups-b2-usage.json` queried `kopia_b2_billable_bytes`, a gauge the
 kopia role's `b2-usage.sh` wrote into node-exporter's textfile directory. Kopia retired

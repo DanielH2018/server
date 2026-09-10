@@ -74,7 +74,7 @@
     {
       "datasource": {
         "type": "loki",
-        "uid": "bf4q19tuivta8e"
+        "uid": "loki"
       },
       "description": "os_version is the host proxy: 6.8.0-137-generic is daniel-box, 7.0.0-28-generic is daniel-server (this cluster's Loki has no other kernel). A host with a flat zero line here while its collector shows up=1 above means Claude Code itself is not exporting on that host, not that the pipeline is broken. Two causes, cheapest check first: the host cannot authenticate (daniel-server hit this on 2026-08-22 \u2014 `claude -p` exited 'OAuth session expired and could not be refreshed', so no session started and nothing was exported; re-auth restored both signals within minutes), or a session started before the telemetry config landed and is reading the old one (config is read once, at process start \u2014 restart it).",
       "fieldConfig": {
@@ -284,7 +284,7 @@
     {
       "datasource": {
         "type": "loki",
-        "uid": "bf4q19tuivta8e"
+        "uid": "loki"
       },
       "description": "claude_code.api_error events \u2014 verified present (e.g. status_code=400 tool_use errors, and OAuth refresh failures with no status_code). Not on the main board.",
       "fieldConfig": {
@@ -320,7 +320,7 @@
     {
       "datasource": {
         "type": "loki",
-        "uid": "bf4q19tuivta8e"
+        "uid": "loki"
       },
       "fieldConfig": {
         "defaults": {
@@ -355,7 +355,7 @@
     {
       "datasource": {
         "type": "loki",
-        "uid": "bf4q19tuivta8e"
+        "uid": "loki"
       },
       "description": "error, status_code, model, session_id fields \u2014 verbatim from the hook_execution_complete/api_error event.",
       "gridPos": {
@@ -385,7 +385,7 @@
     {
       "datasource": {
         "type": "loki",
-        "uid": "bf4q19tuivta8e"
+        "uid": "loki"
       },
       "description": "num_non_blocking_error summed from hook_execution_complete \u2014 a genuine hook failure. Distinct from num_blocking below, which is a deny rule doing its job, not an error.",
       "fieldConfig": {
@@ -421,7 +421,7 @@
     {
       "datasource": {
         "type": "loki",
-        "uid": "bf4q19tuivta8e"
+        "uid": "loki"
       },
       "description": "num_blocking summed from hook_execution_complete. A rising count here is a deny rule (e.g. block-protected-edits) working as intended \u2014 read alongside the panel above, not as an error rate on its own.",
       "fieldConfig": {

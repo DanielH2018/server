@@ -110,7 +110,7 @@
                 "type": "prometheus",
                 "uid": "EGdsQqhVk"
               },
-              "expr": "process_resident_memory_bytes{machine=\"$machine\"}",
+              "expr": "process_resident_memory_bytes{node=\"$node\"}",
               "interval": "",
               "intervalFactor": 1,
               "legendFormat": "",
@@ -172,7 +172,7 @@
                 "type": "prometheus",
                 "uid": "EGdsQqhVk"
               },
-              "expr": "rate(process_cpu_seconds_total{machine=\"$machine\"}[$__interval])*100",
+              "expr": "rate(process_cpu_seconds_total{node=\"$node\"}[$__rate_interval])*100",
               "interval": "",
               "intervalFactor": 2,
               "legendFormat": "",
@@ -250,7 +250,7 @@
                 "type": "prometheus",
                 "uid": "EGdsQqhVk"
               },
-              "expr": "(process_start_time_seconds{machine=\"$machine\"})*1000",
+              "expr": "(process_start_time_seconds{node=\"$node\"})*1000",
               "instant": false,
               "interval": "",
               "intervalFactor": 1,
@@ -434,7 +434,7 @@
                 "uid": "EGdsQqhVk"
               },
               "exemplar": true,
-              "expr": "cs_alerts{machine=\"$machine\"}",
+              "expr": "cs_alerts{node=\"$node\"}",
               "interval": "",
               "legendFormat": "{{reason}}",
               "refId": "A"
@@ -525,47 +525,11 @@
                 "uid": "EGdsQqhVk"
               },
               "exemplar": true,
-              "expr": "sum(increase(cs_filesource_hits_total{machine=\"$machine\"}[$__interval])) by (source)",
+              "expr": "sum(increase(cs_filesource_hits_total{node=\"$node\"}[$__rate_interval])) by (source)",
               "interval": "",
               "intervalFactor": 2,
               "legendFormat": "{{source}}",
               "refId": "A"
-            },
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "EGdsQqhVk"
-              },
-              "exemplar": true,
-              "expr": "sum(increase(cs_journalctlsource_hits_total{machine=\"$machine\"}[$__interval])) by (source)",
-              "hide": false,
-              "interval": "",
-              "legendFormat": "{{source}}",
-              "refId": "B"
-            },
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "EGdsQqhVk"
-              },
-              "exemplar": true,
-              "expr": "sum(increase(cs_cloudwatch_stream_hits_total{machine=\"$machine\"}[$__interval])) by (group, stream)",
-              "hide": false,
-              "interval": "",
-              "legendFormat": "{{group}} - {{stream}}",
-              "refId": "C"
-            },
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "EGdsQqhVk"
-              },
-              "exemplar": true,
-              "expr": "sum(increase(cs_syslogsource_hits_total{machine=\"$machine\"}[$__interval])) by (source)",
-              "hide": false,
-              "interval": "",
-              "legendFormat": "",
-              "refId": "D"
             }
           ],
           "title": "Acquisition",
@@ -626,7 +590,7 @@
                 "type": "prometheus",
                 "uid": "EGdsQqhVk"
               },
-              "expr": "sum(increase(cs_parser_hits_ok_total{machine=\"$machine\"}[$__interval])) by (source)",
+              "expr": "sum(increase(cs_parser_hits_ok_total{node=\"$node\"}[$__rate_interval])) by (source)",
               "interval": "",
               "intervalFactor": 2,
               "legendFormat": "{{source}}",
@@ -691,7 +655,7 @@
                 "type": "prometheus",
                 "uid": "EGdsQqhVk"
               },
-              "expr": "sum(increase(cs_parser_hits_ko_total{machine=\"$machine\"}[$__interval])) by (source)",
+              "expr": "sum(increase(cs_parser_hits_ko_total{node=\"$node\"}[$__rate_interval])) by (source)",
               "interval": "",
               "intervalFactor": 2,
               "legendFormat": "{{source}}",
@@ -757,7 +721,7 @@
                 "uid": "EGdsQqhVk"
               },
               "editorMode": "code",
-              "expr": "cs_parsing_time_seconds_bucket{machine=\"$machine\", type=\"$datasource_type\", source=\"$source\"}",
+              "expr": "cs_parsing_time_seconds_bucket{node=\"$node\", type=\"$datasource_type\", source=\"$source\"}",
               "format": "heatmap",
               "legendFormat": "{{le}}",
               "range": true,
@@ -848,7 +812,7 @@
                 "type": "prometheus",
                 "uid": "EGdsQqhVk"
               },
-              "expr": "sum(cs_buckets{machine=\"$machine\"}) by (name)",
+              "expr": "sum(cs_buckets{node=\"$node\"}) by (name)",
               "interval": "",
               "legendFormat": "{{name}}",
               "refId": "A"
@@ -912,7 +876,7 @@
                 "type": "prometheus",
                 "uid": "EGdsQqhVk"
               },
-              "expr": "sum(increase(cs_bucket_created_total{machine=\"$machine\"}[$__interval])) by (name)",
+              "expr": "sum(increase(cs_bucket_created_total{node=\"$node\"}[$__rate_interval])) by (name)",
               "interval": "",
               "intervalFactor": 2,
               "legendFormat": "{{name}}",
@@ -976,7 +940,7 @@
                 "type": "prometheus",
                 "uid": "EGdsQqhVk"
               },
-              "expr": "sum(increase(cs_bucket_overflowed_total{machine=\"$machine\"}[$__interval])) by (name)",
+              "expr": "sum(increase(cs_bucket_overflowed_total{node=\"$node\"}[$__rate_interval])) by (name)",
               "interval": "",
               "intervalFactor": 2,
               "legendFormat": "{{name}}",
@@ -1041,7 +1005,7 @@
                 "type": "prometheus",
                 "uid": "EGdsQqhVk"
               },
-              "expr": "sum(increase(cs_bucket_underflowed_total{machine=\"$machine\"}[$__interval])) by (name)",
+              "expr": "sum(increase(cs_bucket_underflowed_total{node=\"$node\"}[$__rate_interval])) by (name)",
               "interval": "",
               "intervalFactor": 2,
               "legendFormat": "{{name}}",
@@ -1107,7 +1071,7 @@
                 "uid": "EGdsQqhVk"
               },
               "editorMode": "code",
-              "expr": "cs_bucket_pour_seconds_bucket{machine=\"$machine\", type=\"$datasource_type\", source=\"$source\"}",
+              "expr": "cs_bucket_pour_seconds_bucket{node=\"$node\", type=\"$datasource_type\", source=\"$source\"}",
               "format": "heatmap",
               "legendFormat": "{{le}}",
               "range": true,
@@ -1146,16 +1110,16 @@
           "type": "prometheus",
           "uid": "EGdsQqhVk"
         },
-        "definition": "label_values(up, machine)",
+        "definition": "label_values(cs_info, node)",
         "hide": 0,
         "includeAll": false,
-        "label": "machine",
+        "label": "node",
         "multi": false,
-        "name": "machine",
+        "name": "node",
         "options": [],
         "query": {
-          "query": "label_values(up, machine)",
-          "refId": "Prometheus-machine-Variable-Query"
+          "query": "label_values(cs_info, node)",
+          "refId": "Prometheus-node-Variable-Query"
         },
         "refresh": 1,
         "regex": "",
@@ -1172,14 +1136,14 @@
           "type": "prometheus",
           "uid": "EGdsQqhVk"
         },
-        "definition": "label_values(cs_parsing_time_seconds_bucket{machine=\"$machine\"}, type)",
+        "definition": "label_values(cs_parsing_time_seconds_bucket{node=\"$node\"}, type)",
         "hide": 0,
         "includeAll": false,
         "multi": false,
         "name": "datasource_type",
         "options": [],
         "query": {
-          "query": "label_values(cs_parsing_time_seconds_bucket{machine=\"$machine\"}, type)",
+          "query": "label_values(cs_parsing_time_seconds_bucket{node=\"$node\"}, type)",
           "refId": "StandardVariableQuery"
         },
         "refresh": 1,
@@ -1194,14 +1158,14 @@
           "type": "prometheus",
           "uid": "EGdsQqhVk"
         },
-        "definition": "label_values(cs_parsing_time_seconds_bucket{machine=\"$machine\", type=\"$datasource_type\"}, source)",
+        "definition": "label_values(cs_parsing_time_seconds_bucket{node=\"$node\", type=\"$datasource_type\"}, source)",
         "hide": 0,
         "includeAll": false,
         "multi": false,
         "name": "source",
         "options": [],
         "query": {
-          "query": "label_values(cs_parsing_time_seconds_bucket{machine=\"$machine\", type=\"$datasource_type\"}, source)",
+          "query": "label_values(cs_parsing_time_seconds_bucket{node=\"$node\", type=\"$datasource_type\"}, source)",
           "refId": "StandardVariableQuery"
         },
         "refresh": 1,

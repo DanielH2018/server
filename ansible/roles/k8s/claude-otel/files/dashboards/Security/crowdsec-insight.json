@@ -125,9 +125,9 @@
                 "uid": "EGdsQqhVk"
               },
               "exemplar": true,
-              "expr": "(process_start_time_seconds{machine=\"$machine\"})*1000",
+              "expr": "(process_start_time_seconds{node=\"$node\"})*1000",
               "interval": "",
-              "legendFormat": "{{machine}}",
+              "legendFormat": "{{node}}",
               "refId": "A"
             }
           ],
@@ -183,11 +183,11 @@
                 "uid": "EGdsQqhVk"
               },
               "exemplar": true,
-              "expr": "process_resident_memory_bytes{machine=\"$machine\"}",
+              "expr": "process_resident_memory_bytes{node=\"$node\"}",
               "format": "time_series",
               "interval": "",
               "intervalFactor": 3,
-              "legendFormat": "{{machine}}",
+              "legendFormat": "{{node}}",
               "refId": "A"
             }
           ],
@@ -249,10 +249,10 @@
                 "uid": "EGdsQqhVk"
               },
               "exemplar": true,
-              "expr": "rate(process_cpu_seconds_total{machine=\"$machine\"}[$__interval])*100",
+              "expr": "rate(process_cpu_seconds_total{node=\"$node\"}[$__rate_interval])*100",
               "interval": "",
               "intervalFactor": 2,
-              "legendFormat": "{{machine}}",
+              "legendFormat": "{{node}}",
               "refId": "A"
             }
           ],
@@ -328,9 +328,9 @@
                 "uid": "EGdsQqhVk"
               },
               "exemplar": true,
-              "expr": "process_max_fds{machine=\"$machine\"}",
+              "expr": "process_max_fds{node=\"$node\"}",
               "interval": "",
-              "legendFormat": "{{machine}}",
+              "legendFormat": "{{node}}",
               "refId": "A"
             }
           ],
@@ -405,7 +405,7 @@
                 "uid": "EGdsQqhVk"
               },
               "exemplar": true,
-              "expr": "sum(increase(cs_filesource_hits_total{machine=\"$machine\"}[$__interval]) or up * 0) + sum(increase(cs_cloudwatch_stream_hits_total{machine=\"$machine\"}[$__interval]) or up * 0) + sum(increase(cs_journalctlsource_hits_total{machine=\"$machine\"}[$__interval]) or up * 0) + sum(increase(cs_syslogsource_hits_total{machine=\"$machine\"}[$__interval]) or up * 0)",
+              "expr": "sum(increase(cs_filesource_hits_total{node=\"$node\"}[$__rate_interval]) or up * 0) + sum(increase(cs_cloudwatch_stream_hits_total{node=\"$node\"}[$__rate_interval]) or up * 0) + sum(increase(cs_journalctlsource_hits_total{node=\"$node\"}[$__rate_interval]) or up * 0) + sum(increase(cs_syslogsource_hits_total{node=\"$node\"}[$__rate_interval]) or up * 0)",
               "interval": "",
               "intervalFactor": 2,
               "legendFormat": "",
@@ -483,7 +483,7 @@
                 "uid": "EGdsQqhVk"
               },
               "exemplar": true,
-              "expr": "sum(increase(cs_parser_hits_ok_total{machine=\"$machine\"}[$__interval]))",
+              "expr": "sum(increase(cs_parser_hits_ok_total{node=\"$node\"}[$__rate_interval]))",
               "interval": "",
               "intervalFactor": 2,
               "legendFormat": "",
@@ -561,7 +561,7 @@
                 "uid": "EGdsQqhVk"
               },
               "exemplar": true,
-              "expr": "sum(increase(cs_bucket_overflowed_total{machine=\"$machine\"}[$__interval]))",
+              "expr": "sum(increase(cs_bucket_overflowed_total{node=\"$node\"}[$__rate_interval]))",
               "interval": "",
               "intervalFactor": 2,
               "legendFormat": "",
@@ -639,9 +639,9 @@
                 "uid": "EGdsQqhVk"
               },
               "exemplar": true,
-              "expr": "process_open_fds{machine=\"$machine\"}",
+              "expr": "process_open_fds{node=\"$node\"}",
               "interval": "",
-              "legendFormat": "{{machine}}",
+              "legendFormat": "{{node}}",
               "refId": "A"
             }
           ],
@@ -715,7 +715,7 @@
                 "type": "prometheus",
                 "uid": "EGdsQqhVk"
               },
-              "expr": "sum(increase(cs_parser_hits_ko_total{machine=\"$machine\"}[$__interval]))",
+              "expr": "sum(increase(cs_parser_hits_ko_total{node=\"$node\"}[$__rate_interval]))",
               "interval": "",
               "intervalFactor": 2,
               "legendFormat": "",
@@ -773,7 +773,7 @@
                 "uid": "EGdsQqhVk"
               },
               "exemplar": true,
-              "expr": "sum(increase(cs_bucket_overflowed_total{machine=\"$machine\"}[$__interval])) by (name)",
+              "expr": "sum(increase(cs_bucket_overflowed_total{node=\"$node\"}[$__rate_interval])) by (name)",
               "format": "time_series",
               "instant": false,
               "interval": "",
@@ -787,7 +787,7 @@
           "type": "bargauge"
         }
       ],
-      "repeat": "machine",
+      "repeat": "node",
       "targets": [
         {
           "datasource": {
@@ -797,7 +797,7 @@
           "refId": "A"
         }
       ],
-      "title": "$machine",
+      "title": "$node",
       "type": "row"
     }
   ],
@@ -813,16 +813,16 @@
       {
         "current": {},
         "datasource": "EGdsQqhVk",
-        "definition": "label_values(up, machine)",
+        "definition": "label_values(cs_info, node)",
         "hide": 0,
         "includeAll": true,
-        "label": "machine",
+        "label": "node",
         "multi": true,
-        "name": "machine",
+        "name": "node",
         "options": [],
         "query": {
-          "query": "label_values(up, machine)",
-          "refId": "Prometheus-machine-Variable-Query"
+          "query": "label_values(cs_info, node)",
+          "refId": "Prometheus-node-Variable-Query"
         },
         "refresh": 1,
         "regex": "",
