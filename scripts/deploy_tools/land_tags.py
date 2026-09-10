@@ -152,6 +152,32 @@ def tag_for(path: str, declared: set[str] | None = None) -> str | None:
     return role if role in declared else None
 
 
+def owes_an_apply(path: str) -> bool:
+    """Whether a changed path under a role is work something still has to apply.
+
+    False for the role's own `tests/`, which is the same class as the `.md` rule in `role_for`
+    (#1701): pytest guards over the role's `files/*.py`, which `k8s/manifests` never stages —
+    `ansible/tests/repo/test_no_role_ships_a_test_file.py` holds that tree-wide — so nothing
+    there can reach the cluster and no deploy can apply it. `_is_real_change` in
+    `scripts/diagnostics/probe_lib/releases.py` drops a role's `tests/` for that reason.
+
+    `tasks/` is NOT dropped, which is what issue #1729 proposed and three facts refute. A role
+    with no `containers_list` entry and no caller has no path to being applied at all, and a
+    tasks-only PR adding one must still be reported
+    (`tests/test_land_classify.py:110`, issue #1544). A helper's tasks apply live state to each
+    caller separately — arr-notification's seed a Discord Connect notification into the *arr's
+    own database — so deploying one caller is not the change applied
+    (`tests/test_land_tags_caller_coverage.py:76`, issue #1397). And `_supplies_manifest_bytes`,
+    the predicate #1729 cites as its precedent, puts `volume-claim` in the reported set by name:
+    the role ships `templates/pvc.yaml.j2`.
+
+    Narrowed HERE rather than in `role_for`, which stays the plain "which role directory is this
+    path in" mapper `test_land_tags_shared_mapper_agreement.py` pins against the deployer's own
+    `services_from_changed_paths`.
+    """
+    return path.split("/")[4:5] != ["tests"]
+
+
 def shared_roles(files, declared: set[str] | None = None) -> list[str]:
     """The changed role directories that have no `containers_list` entry.
 
@@ -159,9 +185,12 @@ def shared_roles(files, declared: set[str] | None = None) -> list[str]:
     includes, `volume-claim` and `volume-revert` are storage paths several include. Naming one
     in `--tags` makes deploy.sh refuse the ENTIRE list (exit 2), so they must be split off the
     tags and reported as work a human still owes. PR #617 is the measured case.
+
+    A role reaches this list only through a path `owes_an_apply` keeps, so its own `tests/`
+    does not put it here at all.
     """
     declared = declared_tags() if declared is None else declared
-    roles = {r for p in files if (r := role_for(p))}
+    roles = {r for p in files if (r := role_for(p)) and owes_an_apply(p)}
     return sorted(roles - declared)
 
 
