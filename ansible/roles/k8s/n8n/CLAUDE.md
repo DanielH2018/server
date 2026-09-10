@@ -36,6 +36,37 @@ n8n with an external task-runner sidecar. See repo-root `CLAUDE.md`.
   credentials that are gone), and setting `N8N_ENCRYPTION_KEY` to anything but the on-disk key
   crashes n8n with a key-mismatch. Don't "harden" this by adding it to secrets.
 
+## Community node packages are PVC state this repo cannot describe
+
+`N8N_COMMUNITY_PACKAGES_ENABLED=true` in `deployment.yaml.j2` since 2026-09-10 (#1449). n8n's
+own default is disabled, and the variable was unset before that, so the instance ran on the
+default rather than on a decision.
+
+**Where a package lands.** n8n npm-installs each community package under
+`$N8N_USER_FOLDER/.n8n/nodes`. `N8N_USER_FOLDER` is unset across this repo, so the path is
+`/home/node/.n8n/nodes` — a child of the `n8n-data` PVC (`n8n_k8s_claim`), which the Deployment
+mounts at `/home/node/.n8n`. The `n8n-cache` emptyDir shadows `/home/node/.n8n/.cache` only, so
+it does not cover `nodes`. Installed packages therefore live on the volume, not in the image.
+
+**Two consequences an operator has to carry, because git cannot.**
+
+- A package survives a pod restart, an image rebuild and a `--tags n8n` redeploy, and **nothing
+  in this repo records which packages are installed**. Restoring `n8n-data` from its Longhorn
+  backup restores them with it; a fresh claim starts with none, and the workflows that used them
+  break at run time rather than at deploy time. Same class of state as the encryption key above.
+- A package is npm-installed against the **running image's** Node runtime. A base-image Node
+  major bump in `k8s/n8n-images` can break a package with native dependencies while every
+  manifest and template here reads unchanged.
+
+**How to list what is installed.** `kubectl exec` is not an option — plain `kubectl`
+authenticates as a read-only ServiceAccount, so `ls ~/.n8n/nodes/node_modules` and a query
+against the `installed_packages` table in `database.sqlite` are both unreachable from a Claude
+session. Use the editor instead: launch `scripts/diagnostics/ui_mcp.sh --two-factor` (n8n is
+`two_factor`) and open **Settings → Community nodes**, which lists each package and its version.
+That panel is also the install and uninstall path. To check the switch itself without an n8n
+login, GET `/rest/settings` through the Authelia session — the response carries
+`communityNodesEnabled`.
+
 ## Editing
 - Images: `templates/Dockerfile*.j2` + `templates/n8n-task-runners.json.j2` (built/copied by
   the `n8n-images` k8s role)
