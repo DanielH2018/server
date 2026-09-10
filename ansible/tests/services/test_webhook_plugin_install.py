@@ -177,7 +177,6 @@ def test_every_plugin_installer_is_still_present():
         "install-webhook",
         "install-merge-versions",
         "install-media-cleaner",
-        "install-trakt",
         "install-sso-auth",
     }, (
         f"jellyfin's plugin installers are {sorted(installers)}. Each one pins the image "

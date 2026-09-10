@@ -585,96 +585,50 @@ spec:
             - name: jellyfin-config
               mountPath: /config
 {{ container_resources(cpu_limit='500m', mem_limit='128Mi', cpu_request='10m', mem_request='32Mi') }}
-          # ── Trakt (watch-history sync to trakt.tv) ──────────────────────────────────────────
-          # A sixth copy of the five containers above rather than a loop over a plugin list, for
-          # the reason their comments record: each install is pinned by literal string assertions
-          # in its own test, and a textual guard stops seeing what it guards once the thing moves
-          # behind an indirection.
+          # ── Trakt (REMOVED 2026-09-10) ──────────────────────────────────────────────────────
+          # Installed under #1617 as the sixth plugin and removed the same day at the operator's
+          # request, before the trakt.tv OAuth device authorisation (#1664) was ever completed.
+          # Dropping the install container alone is NOT a removal: the install wrote
+          # /config/data/plugins/Trakt_30.0.0.0 onto the jellyfin-config PVC, Jellyfin scans that
+          # directory on every start, and the read-only ServiceAccount cannot exec into the pod
+          # to delete it. An init container is the only write path this repo has to the PVC, so
+          # the uninstall is one too. It sweeps every `Trakt_*` directory and the plugin's own
+          # configuration file, which held no token — the authorisation was never done.
           #
-          # Webhook's shape — the zip carries its own meta.json beside Trakt.dll, so nothing here
-          # writes one and no guid is needed as an input.
-          #
-          # THE PLUGIN LANDS INERT. It syncs nothing until a trakt.tv OAuth device
-          # authorisation is completed in the dashboard, and that token is per-account state on
-          # this PVC — the repo owns the install, the account link is an operator step (#1664).
-          # defaults/main.yml carries the short form of the write-back analysis and the role's
-          # CLAUDE.md the long one; read it before enabling the import direction, which is the
-          # only path that can clear Jellyfin's own watch state.
-        - name: install-trakt
+          # Idempotent and cheap: a start with nothing to sweep prints one line and exits 0. It
+          # also means a dashboard reinstall of Trakt does not survive a restart, which is the
+          # intended state — the repo owns which plugins load, and this one is off the list.
+          # test_trakt_removed.py pins the sweep, so it cannot silently stop matching.
+        - name: remove-trakt
           image: {{ jellyfin_k8s_plugin_init_image }}
           command:
             - python3
             - -c
             - |
-              import hashlib
               import shutil
-              import tempfile
-              import urllib.request
-              import zipfile
               from pathlib import Path
 
-              VERSION = "{{ jellyfin_k8s_trakt_version }}"
-              URL = "{{ jellyfin_k8s_trakt_url }}"
-              WANT_SHA256 = "{{ jellyfin_k8s_trakt_sha256 }}"
-              DLL = "Trakt.dll"
-              # /config/data/plugins, the only directory Jellyfin scans — the same trap all five
-              # sibling containers' comments record, and the same answer.
               PLUGINS = Path("/config/data/plugins")
-              # `<Name>_<Version>`, with the name the zip's own meta.json declares (`"name":
-              # "Trakt"`) rather than one invented here. That is also what Jellyfin's own
-              # dashboard installer would write, so a later dashboard install of the same version
-              # is the same directory rather than a second copy of one plugin.
-              PLUGIN_DIR = PLUGINS / ("Trakt_" + VERSION)
-
-              if (PLUGIN_DIR / DLL).exists():
-                  print("trakt " + VERSION + " already installed")
-                  raise SystemExit(0)
-
-              print("installing trakt " + VERSION + " from " + URL)
-              PLUGINS.mkdir(parents=True, exist_ok=True)
-
-              with tempfile.TemporaryDirectory(dir=PLUGINS) as tmp:
-                  archive = Path(tmp) / "plugin.zip"
-                  with urllib.request.urlopen(URL, timeout=60) as response:
-                      with archive.open("wb") as handle:
-                          shutil.copyfileobj(response, handle)
-
-                  # sha256, not the MD5 the official manifest publishes: upstream also ships this
-                  # zip as a GitHub release asset, so the stronger digest can be re-derived from
-                  # the release itself, and a `.sha256` sidecar attests to it independently.
-                  got = hashlib.sha256(archive.read_bytes()).hexdigest()
-                  if got != WANT_SHA256:
-                      raise SystemExit("sha256 mismatch: got " + got + ", want " + WANT_SHA256)
-
-                  staged = Path(tmp) / "staged"
-                  with zipfile.ZipFile(archive) as bundle:
-                      bundle.extractall(staged)
-
-                  if not (staged / DLL).exists():
-                      found = sorted(path.name for path in staged.iterdir())
-                      raise SystemExit("archive has no " + DLL + ": " + repr(found))
-
-                  if PLUGIN_DIR.is_dir():
-                      shutil.rmtree(PLUGIN_DIR)
-                  shutil.move(staged, PLUGIN_DIR)
-
-              # The name carries the version, so a bump leaves the old directory behind and
-              # Jellyfin loads two copies of one plugin — here, two scrobblers posting the same
-              # playback to one Trakt account. Swept after the rename, so a failure above leaves
-              # the working version untouched. The OAuth token lives in
-              # /config/data/plugins/configurations/, outside every directory this sweeps.
+              # The directory takes the name the zip's meta.json declared ("Trakt"), the same
+              # name the dashboard installer writes, so one glob covers both origins.
+              swept = 0
               for stale in sorted(PLUGINS.glob("Trakt_*")):
-                  if stale != PLUGIN_DIR:
-                      print("removing superseded " + stale.name)
-                      shutil.rmtree(stale)
-              print("installed trakt " + VERSION)
+                  print("removing " + stale.name)
+                  shutil.rmtree(stale)
+                  swept += 1
+              config = PLUGINS / "configurations" / "Trakt.xml"
+              if config.exists():
+                  print("removing " + str(config))
+                  config.unlink()
+                  swept += 1
+              print("trakt removed: " + str(swept) + " item(s) swept")
 {{ hardened_security_context(non_root=true, run_as_user=puid, run_as_group=pgid) }}
           volumeMounts:
             - name: jellyfin-config
               mountPath: /config
 {{ container_resources(cpu_limit='500m', mem_limit='128Mi', cpu_request='10m', mem_request='32Mi') }}
           # ── SSO-Auth (OIDC sign-in against Authelia) ────────────────────────────────────────
-          # The seventh and last, and the one that closes the "unmanaged state on the PVC" group
+          # The sixth and last, and the one that closes the "unmanaged state on the PVC" group
           # in this role's CLAUDE.md (#1648). Webhook's shape for the meta.json, Media Cleaner's
           # for the dependency check: the zip carries its own manifest, and it ships two Duende
           # DLLs the OIDC flow cannot complete without.
@@ -684,7 +638,7 @@ spec:
           # `jellyfin` OIDC client (two_factor) pointed at this plugin's redirect path. Dropping
           # it was the other option on #1648 and would have taken 2FA off that route.
           #
-          # THE DIRECTORY NAME NEEDED ESTABLISHING. This plugin is the only one of the seven
+          # THE DIRECTORY NAME NEEDED ESTABLISHING. This plugin is the only one of the six
           # whose manifest name ("SSO Authentication") differs from the name it loads under
           # ("SSO-Auth"), and the read-only ServiceAccount cannot exec into the pod
           # to read what the dashboard install wrote. It did not have to: the ani-sync and
