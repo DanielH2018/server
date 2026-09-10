@@ -241,54 +241,26 @@ jellyfin_k8s_mediacleaner_sha256: "473e9382d12ccada1a63c240588c7410ce68fa57c9020
 # already bound to, which is why a dashboard-installed copy and this one are the same plugin to
 # Jellyfin rather than two.
 
-# ── SSO-Auth (OIDC sign-in against Authelia) ────────────────────────────────────────────────
-# Sixth plugin installed by this role, and the LAST member of what this role's CLAUDE.md
-# called the "unmanaged state on the PVC" group — dashboard-installed, no pinned version, no
-# checksum, no recorded targetAbi and no test, so an image bump could drop it silently (#1648).
-# That group is now empty.
+# ── SSO-Auth: REMOVED 2026-09-10, not merely unpinned ───────────────────────────────────────
+# Installed under #1648, removed at the operator's request. There are no `jellyfin_k8s_sso_*`
+# variables any more; the deployment template carries a `remove-sso-auth` init container that
+# sweeps the plugin and its configuration off the PVC, the same shape Trakt's removal uses.
 #
-# WHAT DEPENDS ON IT, which is why the call was keep rather than drop. This role runs
-# `use_authelia: false` and jellyfin.<domain> is a PUBLIC route, so this plugin is the only
-# authentication layer in front of it beyond Jellyfin's own local accounts. Authelia carries a
-# live OIDC client for it — `jellyfin`, `two_factor`, redirect
-# `https://jellyfin.<domain>/sso/OID/redirect/authelia`, and the `client_secret_post` +
-# DisablePushedAuthorization asymmetry the authelia role's config-secret template records. So
-# dropping the plugin would have taken 2FA off a public route and left an orphaned OIDC client.
+# WHY: #1674 identified it as the blocker on any move to the Jellyfin 12 image line. Upstream
+# 9p4/jellyfin-plugin-sso publishes no 12 build — its newest release, 4.0.0.4, still declares
+# targetAbi 10.11.0.0 (read from the manifest-release branch, 2026-09-10).
 #
-# WHAT IS STILL NOT IN GIT: the OIDC provider settings themselves. They live in
-# /config/data/plugins/configurations/SSO-Auth.xml on the PVC — keyed by the plugin's CLASS name,
-# and OUTSIDE the plugin directory, so the init container's sweep cannot lose them. The repo owns
-# the install, never what it authenticates against, exactly as with Media Cleaner's rules.
+# WHAT IT COST, which no health check can show. This role runs `use_authelia: false` and
+# jellyfin.<domain> is a PUBLIC route, so this plugin was the only authentication layer in front
+# of it. The route now falls back to Jellyfin's own local accounts: no OIDC, no 2FA. The
+# operator made that call explicitly on 2026-09-10 with the alternative (`use_authelia: true`,
+# which protects the route but breaks native clients) on the table.
 #
-# 4.0.0.4 is what the pod already loaded before this pin existed (read from
-# `kubectl -n homelab logs <pod> -c jellyfin | grep 'Loaded plugin:'`, 2026-09-10), so pinning it
-# changes no running version. It is also a CRITICAL SAML security fix over 4.0.0.3 — a reason to
-# keep the pin current rather than let it age, which is what the Renovate manager is for.
-#
-# targetAbi 10.11.0.0 comes from the plugin's own published manifest
-# (9p4/jellyfin-plugin-sso, manifest-release branch); upstream is not in the official
-# repo.jellyfin.org manifest. The sha256 is attested three ways on one download: GitHub's asset
-# digest, upstream's `sso-authentication_4.0.0.4.sha256` sidecar, and hashing the zip
-# (2026-09-10). The manifest's MD5 1e790858… agrees on the same bytes.
-jellyfin_k8s_sso_version: "4.0.0.4"
-jellyfin_k8s_sso_target_abi: "10.11.0.0"
-jellyfin_k8s_sso_url: "https://github.com/9p4/jellyfin-plugin-sso/releases/download/v4.0.0.4/sso-authentication_4.0.0.4.zip"
-jellyfin_k8s_sso_sha256: "c09f16ba31059a434ddd7f811e4f9608d4b4c4514cc80a5bf1ca33bee61e1107"
-# The zip carries its own meta.json, so this is Webhook's shape — but it ships TWO dependency
-# DLLs beside SSO-Auth.dll (Duende.IdentityModel.dll and Duende.IdentityModel.OidcClient.dll)
-# and the plugin cannot complete an OIDC flow without them, so all three are checked after the
-# extract rather than only the one Jellyfin matches on. Media Cleaner's MediaCleaner.Core.dll is
-# the same case.
-#
-# THE DIRECTORY NAME NEEDED ESTABLISHING, because this plugin is the only one of the seven whose
-# manifest name ("SSO Authentication") differs from the name it loads under ("SSO-Auth"), and the
-# read-only ServiceAccount cannot exec into the pod to read what the dashboard install wrote. The
-# repo already knew: the ani-sync and intro-skipper init containers each cite
-# `SSO Authentication_<version>` as the neighbouring directory they copied their own layout from.
-# So the init container matches the MANIFEST name, and its sweep still globs `SSO*_*` — broader
-# on purpose, so a directory carrying the loaded name would be collected too.
+# The authelia role's `jellyfin` OIDC client was retired in the same change rather than left
+# pointing at a redirect path nothing serves.
 
-# The image ALL SEVEN plugin installers run on — python, not the alpine:3.24 the sibling init
+# The image every plugin container runs on — the five installers and the two removal sweeps
+# (Trakt, SSO-Auth) alike. Python, not the alpine:3.24 the sibling init
 # container uses. See the deployment template for why: the releases are .zips and /config is
 # owned by uid {{ puid }}, so an alpine container would need `apk add unzip` as root — and root
 # there holds no DAC_OVERRIDE and so could not write what it had unpacked. Named here rather

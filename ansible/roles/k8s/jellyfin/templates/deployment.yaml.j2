@@ -627,106 +627,55 @@ spec:
             - name: jellyfin-config
               mountPath: /config
 {{ container_resources(cpu_limit='500m', mem_limit='128Mi', cpu_request='10m', mem_request='32Mi') }}
-          # ── SSO-Auth (OIDC sign-in against Authelia) ────────────────────────────────────────
-          # The sixth and last, and the one that closes the "unmanaged state on the PVC" group
-          # in this role's CLAUDE.md (#1648). Webhook's shape for the meta.json, Media Cleaner's
-          # for the dependency check: the zip carries its own manifest, and it ships two Duende
-          # DLLs the OIDC flow cannot complete without.
+          # ── SSO-Auth removal (was OIDC sign-in against Authelia) ────────────────────────
+          # Installed under #1648 and removed at the operator's request on 2026-09-10, the same
+          # way Trakt was above. #1674 identified it as the blocker on any move to the Jellyfin
+          # 12 image line: upstream 9p4/jellyfin-plugin-sso publishes no 12 build, and its newest
+          # release (4.0.0.4) still declares targetAbi 10.11.0.0.
           #
-          # THIS IS THE ONLY AUTHENTICATION LAYER IN FRONT OF A PUBLIC ROUTE beyond Jellyfin's
-          # own local accounts — the role runs `use_authelia: false`, and authelia carries a live
-          # `jellyfin` OIDC client (two_factor) pointed at this plugin's redirect path. Dropping
-          # it was the other option on #1648 and would have taken 2FA off that route.
+          # WHAT THIS COSTS, recorded because the pod cannot show it. This role runs
+          # `use_authelia: false` and jellyfin.{{ domain }} is a PUBLIC route, so this plugin was
+          # the only authentication layer in front of it. With it gone the route falls back to
+          # Jellyfin's own local accounts: no OIDC, and no 2FA. That was the operator's explicit
+          # call on 2026-09-10 after the trade-off was put to them; the alternative on the table
+          # was `use_authelia: true`, which protects the route but breaks native clients that
+          # cannot complete Authelia's browser login.
           #
-          # THE DIRECTORY NAME NEEDED ESTABLISHING. This plugin is the only one of the six
-          # whose manifest name ("SSO Authentication") differs from the name it loads under
-          # ("SSO-Auth"), and the read-only ServiceAccount cannot exec into the pod
-          # to read what the dashboard install wrote. It did not have to: the ani-sync and
-          # intro-skipper containers above both cite `SSO Authentication_<version>` as the
-          # neighbouring directory they copied their own layout from, read off this volume when
-          # those installs were written. So the MANIFEST name is what the dashboard wrote, and
-          # PLUGIN_DIR uses it — which is also why the guard below no-ops on the copy already
-          # there rather than reinstalling on every pod start.
+          # The authelia role's `jellyfin` OIDC client goes with it — an orphaned client whose
+          # redirect_uri points at a plugin that is no longer installed.
           #
-          # The OIDC provider settings are NOT in git and cannot be: they live in
-          # /config/data/plugins/configurations/SSO-Auth.xml, keyed by the plugin's CLASS name
-          # and outside every plugin directory, so nothing here can lose them.
-        - name: install-sso-auth
+          # Dropping the install container alone would not remove it: the install wrote
+          # `SSO Authentication_<version>` onto the jellyfin-config PVC, Jellyfin scans that
+          # directory on every start, and the read-only ServiceAccount cannot exec into the pod.
+          # An init container is the repo's only write path to the PVC.
+        - name: remove-sso-auth
           image: {{ jellyfin_k8s_plugin_init_image }}
           command:
             - python3
             - -c
             - |
-              import hashlib
               import shutil
-              import tempfile
-              import urllib.request
-              import zipfile
               from pathlib import Path
 
-              VERSION = "{{ jellyfin_k8s_sso_version }}"
-              URL = "{{ jellyfin_k8s_sso_url }}"
-              WANT_SHA256 = "{{ jellyfin_k8s_sso_sha256 }}"
-              DLL = "SSO-Auth.dll"
-              # The release ships two Duende DLLs beside the plugin's own and the OIDC flow does
-              # not complete without them, so all three are checked rather than just the one
-              # Jellyfin matches on. Media Cleaner's MediaCleaner.Core.dll is the same case.
-              DEP_DLLS = ("Duende.IdentityModel.dll", "Duende.IdentityModel.OidcClient.dll")
-              # /config/data/plugins, the only directory Jellyfin scans — the same trap all six
-              # sibling containers' comments record, and the same answer.
               PLUGINS = Path("/config/data/plugins")
-              # `<Name>_<Version>` with the MANIFEST name, which is what Jellyfin's own
-              # installer writes and what the two sibling containers above record seeing on this
-              # volume — see the comment above for why that is not the name the plugin loads
-              # under.
-              PLUGIN_DIR = PLUGINS / ("SSO Authentication_" + VERSION)
-
-              if (PLUGIN_DIR / DLL).exists():
-                  print("sso-auth " + VERSION + " already installed")
-                  raise SystemExit(0)
-
-              print("installing sso-auth " + VERSION + " from " + URL)
-              PLUGINS.mkdir(parents=True, exist_ok=True)
-
-              with tempfile.TemporaryDirectory(dir=PLUGINS) as tmp:
-                  archive = Path(tmp) / "plugin.zip"
-                  with urllib.request.urlopen(URL, timeout=60) as response:
-                      with archive.open("wb") as handle:
-                          shutil.copyfileobj(response, handle)
-
-                  # sha256 — GitHub's own asset digest, which upstream's `.sha256` sidecar
-                  # attests to independently. The published manifest carries only an MD5.
-                  got = hashlib.sha256(archive.read_bytes()).hexdigest()
-                  if got != WANT_SHA256:
-                      raise SystemExit("sha256 mismatch: got " + got + ", want " + WANT_SHA256)
-
-                  staged = Path(tmp) / "staged"
-                  with zipfile.ZipFile(archive) as bundle:
-                      bundle.extractall(staged)
-
-                  for needed in (DLL,) + DEP_DLLS:
-                      if not (staged / needed).exists():
-                          found = sorted(path.name for path in staged.iterdir())
-                          raise SystemExit(
-                              "archive has no " + needed + ": " + repr(found)
-                          )
-
-                  if PLUGIN_DIR.is_dir():
-                      shutil.rmtree(PLUGIN_DIR)
-                  shutil.move(staged, PLUGIN_DIR)
-
-              # The name carries the version, so a bump leaves the old directory behind and
-              # Jellyfin loads two copies of one plugin — here, two authentication providers
-              # registered for one route. Swept after the rename, so a failure above leaves the
-              # working version untouched. The glob is `SSO*_*` rather than the exact name for
-              # the one case the exact name would miss: a dashboard install that wrote the
-              # LOADED name instead of the manifest one. SSO-Auth.xml lives outside every
-              # directory this can match, so no OIDC setting is lost either way.
+              # `SSO*_*` rather than the exact manifest name, for the same reason the install
+              # container's sweep used it: this plugin is the one whose manifest name ("SSO
+              # Authentication") differs from the name it loads under ("SSO-Auth"), and a
+              # dashboard install may have written either.
+              swept = 0
               for stale in sorted(PLUGINS.glob("SSO*_*")):
-                  if stale != PLUGIN_DIR:
-                      print("removing superseded " + stale.name)
-                      shutil.rmtree(stale)
-              print("installed sso-auth " + VERSION)
+                  print("removing " + stale.name)
+                  shutil.rmtree(stale)
+                  swept += 1
+              # Keyed by the plugin's CLASS name and outside every plugin directory, so the
+              # globs above cannot reach it. These are the OIDC provider settings that were
+              # never in git; with the plugin gone they configure nothing.
+              config = PLUGINS / "configurations" / "SSO-Auth.xml"
+              if config.exists():
+                  print("removing " + str(config))
+                  config.unlink()
+                  swept += 1
+              print("sso-auth removed: " + str(swept) + " item(s) swept")
 {{ hardened_security_context(non_root=true, run_as_user=puid, run_as_group=pgid) }}
           volumeMounts:
             - name: jellyfin-config

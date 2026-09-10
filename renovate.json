@@ -312,22 +312,6 @@
     },
     {
       "customType": "regex",
-      "description": "SSO-Auth plugin release pin in k8s/jellyfin/defaults/main.yml (#1648). Sixth and last of the jellyfin plugin managers, and it exists for the reason the five above record — the k8s-images manager keys on `_image:`, so a plugin pin, its URL and its checksum are invisible to every other manager and age with no signal. For THIS plugin an ageing pin is not merely untidy: 4.0.0.4 is a critical SAML security fix over 4.0.0.3, and the plugin is the only authentication layer in front of the public jellyfin route (the role runs use_authelia: false). THREE matchStrings, ani-sync's shape rather than Webhook's: the version occurs three times — the URL's release tag (`/download/v4.0.0.4/`), the URL's asset name (`sso-authentication_4.0.0.4.zip`) and the `jellyfin_k8s_sso_version` var the init container reads. Rewriting only the tag produces a 404 URL, the failure the ani-sync manager's description records. There is no release-LINE anchor to carry, unlike the intro-skipper, webhook and merge-versions managers: upstream maintains ONE line and 4.0.0.4 targets 10.11.0.0, so a hand-raised ceiling would be a ceiling against nothing — the operator reads the offered release's targetAbi instead, which the manual finish already requires. versioningTemplate spells the four-part version out because plain semver rejects it, and the fourth group is named `build` rather than `revision` for the reason the intro-skipper manager records — Renovate reads `revision` only when `build` is already present, so `revision` alone would leave every 4.0.0.x equal and this manager inert on a line whose releases differ ONLY in that segment. NEVER automerged (packageRule below): jellyfin_k8s_sso_sha256 is GitHub's asset digest and jellyfin_k8s_sso_target_abi comes from the plugin's own published manifest (9p4/jellyfin-plugin-sso, manifest-release branch) rather than from Jellyfin's — no datasource exposes either.",
-      "managerFilePatterns": [
-        "/(^|/)ansible/roles/k8s/jellyfin/defaults/main\\.yml$/"
-      ],
-      "matchStrings": [
-        "jellyfin-plugin-sso/releases/download/v(?<currentValue>\\d+\\.\\d+\\.\\d+\\.\\d+)/",
-        "sso-authentication_(?<currentValue>\\d+\\.\\d+\\.\\d+\\.\\d+)\\.zip",
-        "jellyfin_k8s_sso_version:\\s*\"(?<currentValue>\\d+\\.\\d+\\.\\d+\\.\\d+)\""
-      ],
-      "depNameTemplate": "9p4/jellyfin-plugin-sso",
-      "datasourceTemplate": "github-releases",
-      "extractVersionTemplate": "^v(?<version>.+)$",
-      "versioningTemplate": "regex:^(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)(?:\\.(?<build>\\d+))?$"
-    },
-    {
-      "customType": "regex",
       "description": "Container images in k8s role defaults (ansible/roles/k8s/*/defaults/main.yml) AND in inventory/group_vars/all.yml. The cluster has no compose template to read, so these vars ARE the source of truth for what every pod runs \u2014 and until this manager existed none of them was tracked, so the whole cluster fleet aged with no update signal. group_vars/all.yml was added 2026-08-14: crowdsec_k8s_image had been hoisted out of its role defaults into group_vars, which put it outside this manager's patterns AND outside the coverage test's glob (scripts/tests/test_renovate_managers.py globbed roles/k8s/*/defaults/main.yml only) \u2014 so the WAF core, the one image whose staleness is a security problem, was the single pin neither could see. ansible/roles/setup/*/defaults/main.yml was added 2026-08-27: the same one-directory-short escape, this time for k3s_longhorn_restore_drill_image (busybox:stable) \u2014 an `_image:` pin one directory over from the *_version: pins the control-plane manager below already tracks in this same file. It is a mutable tag, so what Renovate can offer here is a digest bump (as with n8n's `stable` channel tag elsewhere in this file), not a version bump \u2014 that is enough signal to notice an upstream busybox re-push; the drill's own timeout/health assertions are the check that a bump didn't break it.",
       "managerFilePatterns": [
         "/^ansible/roles/k8s/[^/]+/defaults/main\\.yml$/",
@@ -588,17 +572,6 @@
         "shemanaev/jellyfin-plugin-media-cleaner"
       ],
       "groupName": "jellyfin media-cleaner (manual — pick the per-ABI asset, finish the sha256 + targetAbi)",
-      "automerge": false
-    },
-    {
-      "description": "Jellyfin SSO-Auth plugin (#1648). NO automerge, and the position of this rule is load-bearing for the reason the five rules above record: the pin lives in ansible/roles/k8s/jellyfin/defaults/main.yml, so the `custom.regex` + minor/patch rule near the top of this array already sets automerge: true for it, later rules win, and without this entry a bump would merge itself into the `k8s image jellyfin` group. This plugin is the ONLY authentication layer in front of the public jellyfin route — the role runs use_authelia: false — so an unchecked bump swaps the thing that authenticates it. Two things Renovate cannot compute make the finish manual: jellyfin_k8s_sso_sha256 is GitHub's asset digest, re-verified against the download, and jellyfin_k8s_sso_target_abi comes from the plugin's own published manifest (9p4/jellyfin-plugin-sso, manifest-release branch) rather than from Jellyfin's. Unlike the webhook, merge-versions and intro-skipper rules there is no release-line anchor making that check for the operator, because upstream maintains one line — so reading the offered release's targetAbi is the whole of it.",
-      "matchDatasources": [
-        "github-releases"
-      ],
-      "matchPackageNames": [
-        "9p4/jellyfin-plugin-sso"
-      ],
-      "groupName": "jellyfin sso-auth (manual — finish the targetAbi + sha256, read the security notes)",
       "automerge": false
     }
 

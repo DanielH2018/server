@@ -6,17 +6,17 @@ shared `media-data` library and owns its own config volume.
 ## At a glance
 - **Image:** `lscr.io/linuxserver/jellyfin` (`jellyfin_k8s_image`), pinned in lockstep with the
   `targetAbi` of **every** installed plugin — `jellyfin-ani-sync`, Intro Skipper, Webhook,
-  Merge Versions, Media Cleaner and SSO-Auth. Raise a plugin and the image together,
+  Merge Versions and Media Cleaner. Raise a plugin and the image together,
   never one alone
   (`ansible/tests/services/test_anisync_pin_matches_server.py`,
   `ansible/tests/services/test_introskipper_install.py`,
   `ansible/tests/services/test_webhook_plugin_install.py`,
-  `ansible/tests/services/test_mergeversions_install.py`,
-  `ansible/tests/services/test_mediacleaner_install.py` and
-  `ansible/tests/services/test_sso_auth_install.py` enforce this). **Each addition
+  `ansible/tests/services/test_mergeversions_install.py` and
+  `ansible/tests/services/test_mediacleaner_install.py` enforce this). **Each addition
   TIGHTENS the pin**: the image cannot move to a new Jellyfin line until every installed plugin
-  has a release for that ABI, and #1648 took the set from five to six (Trakt, #1617, was
-  installed and removed the same day). The
+  has a release for that ABI. The set is five — #1648 took it to six, and SSO-Auth's removal
+  (#1674, 2026-09-10) took it back to five; Trakt (#1617) was installed and removed the same
+  day. The
   constraint is therefore `max` over the declared
   `targetAbi` values, and **the image tag must be at least that** — `10.11.11.0` today, held by
   ani-sync and Intro Skipper, which is why the image sits at `10.11.11`. Do not read the floor
@@ -24,11 +24,23 @@ shared `media-data` library and owns its own config volume.
   `defaults/main.yml` and covers a plugin added without its own guard. Every plugin the pod
   loads is now either installed by this role or bundled with the image — *Every plugin the pod
   actually loads* below has the census.
+- **What blocks the Jellyfin 12 image line, which is the question to ask BEFORE planning a bump.**
+  Four of the five installed plugins have a 12 build ready (read 2026-09-10): ani-sync `4.6.0.0`
+  in the `v4.6b` release, Intro Skipper `12.0/v12.0.3.0`, Webhook `22.0.0.0` declaring
+  `targetAbi 12.0.0.0` in the official manifest, Merge Versions `12.0.0`. **Media Cleaner is the
+  blocker.** Its newest release, `v3.2.0`, ships only `MediaCleaner-10.10.7.zip`,
+  `MediaCleaner-10.11.0.zip` and `MediaCleaner-10.11.9.zip` — no 12 asset at all. Until upstream
+  publishes one, a move to 12 either waits or drops Media Cleaner, and dropping it stops the
+  automated cleanup rules silently: Jellyfin's loader rejects an ABI-mismatched plugin **without
+  logging a failure**, so the pod stays healthy and the rollout stays green (the #1648 silence).
+  SSO-Auth was the other blocker and is gone — see below.
 - **Deploy tag:** `--tags "jellyfin"`. `use_authelia: false` — **no forward-auth middleware**,
-  public route. What authenticates it is Jellyfin's own accounts plus the **SSO-Auth plugin**,
-  which this role installs and which authelia carries a `jellyfin` OIDC client for. That is why
-  #1648's call was to pin the plugin rather than drop it: dropping it would have taken 2FA off a
-  public route.
+  public route. **Nothing but Jellyfin's own local accounts authenticates it.** The SSO-Auth
+  plugin used to, and was removed on 2026-09-10 (#1674) at the operator's request, taking OIDC
+  and 2FA off this route with it; authelia's `jellyfin` OIDC client was retired in the same
+  change. The alternative put to the operator was `use_authelia: true`, which protects the route
+  but breaks native clients that cannot complete Authelia's browser login. Re-raising that is a
+  decision, not a fix — `test_sso_auth_removed.py` pins the removal on both sides.
 - **Route:** `jellyfin.<domain>`.
 - **Persists:** `jellyfin-config` (`longhorn`, backed up, 8Gi) — the library database, artwork
   and trickplay data. `media-data` (from `k8s/media-volume`) is mounted read-only, twice.
@@ -95,21 +107,23 @@ shared `media-data` library and owns its own config volume.
   it off the PVC on every start, because dropping the installer alone leaves the directory
   Jellyfin loads. *Plugin analyses that outlive their decision* below has why, and where the
   write-back analysis went.
-- **SSO-Auth** is the sixth (#1648), and it is what authenticates the public route: the role
-  runs `use_authelia: false`, so beyond Jellyfin's own local accounts this plugin is the only
-  auth layer, and authelia carries a live `jellyfin` OIDC client (`two_factor`,
-  `client_secret_post`, the `DisablePushedAuthorization` asymmetry) pointed at its redirect path.
-  That coupling is why #1648's call was to pin it rather than drop it, and
-  `test_sso_auth_install.py` asserts the authelia side still exists so neither half can be
-  removed alone. It ran as unmanaged dashboard state on the PVC until this pin — the last member
-  of that group. Webhook's shape for the manifest; Media Cleaner's for dependencies, since it
-  ships two Duende DLLs the OIDC flow cannot complete without. It is also the only one of the
-  six whose **manifest name (`SSO Authentication`) differs from the name it loads under
-  (`SSO-Auth`)** — the directory takes the manifest name, and the init container's sweep globs
-  `SSO*_*` so a directory under either name is collected. **Which OIDC provider it authenticates
-  against stays dashboard state** in `configurations/SSO-Auth.xml`, outside every plugin
-  directory: the repo owns the install, never what it points at.
-- All six installers duplicate rather than share a loop, deliberately — each is pinned by
+- **SSO-Auth is REMOVED** (installed #1648, removed #1674 on 2026-09-10). It was the sixth
+  plugin and the only auth layer in front of the public route beyond Jellyfin's own local
+  accounts. #1674 identified it as a blocker on the Jellyfin 12 image line: upstream
+  9p4/jellyfin-plugin-sso publishes no 12 build, and its newest release (`4.0.0.4`) still
+  declares `targetAbi 10.11.0.0`. The operator's call was to remove it and accept local accounts
+  on the route, with `use_authelia: true` — which protects the route but breaks native clients —
+  declined explicitly.
+  Removing the installer alone would not have removed the plugin: the install wrote
+  `SSO Authentication_<version>` onto the `jellyfin-config` PVC, Jellyfin scans that directory
+  every start, and the read-only ServiceAccount cannot exec into the pod. So a `remove-sso-auth`
+  init container sweeps `SSO*_*` and `configurations/SSO-Auth.xml`, the same shape Trakt's
+  removal uses. The glob stays broad because this plugin's **manifest name
+  (`SSO Authentication`) differs from the name it loads under (`SSO-Auth`)**, so a dashboard
+  install may have written either. Authelia's `jellyfin` OIDC client went in the same change;
+  `authelia_client_password_hash` is left in SOPS, unreferenced by the k8s role, because the
+  archived Docker authelia role still names it. `test_sso_auth_removed.py` pins both sides.
+- The five installers duplicate rather than share a loop, deliberately — each is pinned by
   literal string assertions in its own test, and a textual guard stops seeing what it guards
   once the thing moves behind an indirection.
 
@@ -126,10 +140,9 @@ Read 2026-09-10 (#1569), grouped by who owns the version:
 
 - **Installed by this role**, version-pinned, checksum-pinned and each guarded by its own test
   file: `Ani-Sync 4.4.0.0`, `Intro Skipper 1.10.11.23`, `Webhook 21.0.0.0`, `Merge Versions
-  10.11.0.1` (#1616), `Media Cleaner 3.2.0.101109` (#1619) and
-  `SSO-Auth 4.0.0.4` (#1648). The last three were added after this census was first read, which
-  is why the list is six where the log of 2026-09-10 showed three in this group. Trakt (#1617)
-  was installed and removed the same day; `remove-trakt` keeps it off.
+  10.11.0.1` (#1616) and `Media Cleaner 3.2.0.101109` (#1619). Two were installed and removed
+  the same day or soon after — Trakt (#1617) and SSO-Auth (#1648, removed #1674); `remove-trakt`
+  and `remove-sso-auth` keep both off.
 - **Bundled with the image**, so they move with `jellyfin_k8s_image` and need no pin here:
   `AudioDB`, `MusicBrainz`, `OMDb`, `Studio Images`, `TMDb` — all `10.11.11.0`, the server
   version.
@@ -137,7 +150,8 @@ Read 2026-09-10 (#1569), grouped by who owns the version:
   #1648's outcome rather than an omission. `SSO-Auth 4.0.0.4` was its last member: installed
   through the dashboard, with no pinned version, no checksum and no recorded `targetAbi`, so an
   image bump could silently drop it (Jellyfin's loader rejects a plugin built for a newer server
-  without logging a failure). It is now installed by an init container like the five beside it.
+  without logging a failure). #1648 brought it under an init container; #1674 then removed the
+  plugin outright, and `remove-sso-auth` sweeps the PVC copy so the group cannot refill itself.
   Every plugin the pod loads is therefore described in git — but note that plugin
   CONFIGURATION is not, and cannot be: OIDC provider settings, Media Cleaner's deletion rules,
   and Webhook's destination all live under
