@@ -1,9 +1,10 @@
 """Power and throttling verdicts — the Pi's undervoltage alarm, and kernel CPU thermal throttling.
 
 Its own module rather than a section of `verdicts/host.py` for the reason
-`verdicts/host_cgroups.py` records: that file sits at 598 lines against the 600-line cap in
-`ansible/tests/repo/test_module_length_ratchet.py`. Same split idiom as `checks/host_edge.py`
-and `checks/host_thermal.py`.
+`verdicts/host_cgroups.py` records: host.py had grown against the 600-line cap in
+`ansible/tests/repo/test_module_length_ratchet.py`, and reached it exactly before #1708 split
+the UPS and SMART halves out. Same split idiom as `checks/host_edge.py` and
+`checks/host_thermal.py`.
 
 The first two verdicts are read by `check_host_temp`'s two newer arms (issue #1471). They share
 that monitor rather than having their own, so the naming stays "host temperature" on the Kuma

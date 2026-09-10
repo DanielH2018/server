@@ -215,7 +215,13 @@
   tags: [tooling]
   # `creates:` would be wrong here — it is satisfied by ANY vale on the path, so a version bump
   # would never install. Reading the version is what makes the bump take effect.
-  ansible.builtin.command: vale --version
+  #
+  # The ABSOLUTE path, not a bare `vale`: a bare one resolves against the remote PATH, which on
+  # a host carrying a hand-installed ~/.local/bin/vale (what PR #1702 left on daniel-server)
+  # reports that copy's version. The task would then skip, /usr/local/bin/vale would never be
+  # written, and the role would report success having installed nothing. Remove a hand-installed
+  # copy once this has run — it shadows /usr/local/bin on an interactive PATH.
+  ansible.builtin.command: /usr/local/bin/vale --version
   register: initial_setup_vale_installed
   changed_when: false
   failed_when: false
