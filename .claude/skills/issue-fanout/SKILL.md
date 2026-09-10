@@ -106,8 +106,9 @@ uv run python scripts/dev/fanout_place.py launch --batch 1345,1386 --batch 1288 
 ```
 
 The dispatcher writes the brief (issue bodies verbatim, the claim note, the first-act comment,
-the landing path or the stop-at-PR rule, both hosts' session-health output) and starts a
-headless Opus agent as a transient user service in a fresh worktree on whichever host has the
+the landing path or the stop-at-PR rule, and both hosts' session-health output — just the
+pinned host's when `--host` is given) and starts a headless Opus agent as a transient user
+service in a fresh worktree on whichever host has the
 most memory headroom under its fleet cap. Exit 3 means neither host has a reservation's worth
 of headroom, or a placement would put more than three batches on one remote host: narrow the
 fan-out, do not queue. `--host daniel-box` pins a batch that must land in the same run or that
@@ -117,7 +118,11 @@ Poll with `uv run python scripts/dev/fanout_place.py status <run-id>`. It prints
 batch, `<batch> on <host>: <state> …`, where state is `running`, `done <PR URL>`, or `failed`
 (`permission_denials=N` is appended when the agent hit classifier denials). A daniel-server
 batch reports `done <PR URL>` and stops there: land that PR from this session with `land.sh`. A
-`failed` batch keeps its worktree; read its stderr tail before deciding to relaunch.
+`failed` batch keeps its worktree — `status` already shows the last 300 bytes of
+`<worktree>/.fanout/stderr.log`; read the full file there for more before deciding what to do.
+`launch` refuses to relaunch the same batch while that worktree or its branch still exists, so
+run `clean <run-id>` first — or remove the tree by hand if its branch is unmerged and you are
+abandoning it — before relaunching.
 
 **A daniel-server PR needs its signing key registered once.** The repo ruleset requires a
 verified commit signature, and daniel-server's key is not registered as a GitHub signing key
@@ -133,10 +138,14 @@ every batch reports removed. `stop <run-id>` stops the units first, for a fan-ou
 before landing — run `clean` once the survivors' PRs merge.
 
 **Width is bounded by memory, measured, not by a number here.** Each batch costs one 2.5 GiB
-reservation (`RESERVATION_BYTES` in `scripts/dev/fanout_lib/placement.py`) against
-`user.slice`'s `MemoryHigh` on each host — 12G on daniel-box, 10G on daniel-server
-(`claude_code_fleet_memory_high`). `MemoryHigh` throttles rather than kills, so a batch the
-dispatcher refuses would have stalled in reclaim rather than failed loudly.
+reservation (`RESERVATION_BYTES` in `scripts/dev/fanout_lib/placement.py`). Every agent runs
+as a transient user service inside `user-1000.slice`, which carries its own `MemoryHigh`
+(`claude_code_rc_memory_high`, 8G on both hosts) nested under the fleet cap on `user.slice`
+(`claude_code_fleet_memory_high`: 12G on daniel-box, 10G on daniel-server). The dispatcher
+reads both cgroups and places against whichever has less headroom, so a batch the 12G or 10G
+fleet number alone would allow can still be refused by the tighter 8G login-plane cap.
+`MemoryHigh` throttles rather than kills, so a batch the dispatcher refuses would have stalled
+in reclaim rather than failed loudly.
 
 Done when: `launch` printed a host per batch and a run-id, and `status` shows every batch
 `running`.

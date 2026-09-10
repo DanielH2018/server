@@ -284,12 +284,12 @@ scope here.
 `scripts/dev/fanout_place.py` names each worktree `fanout-<batch>` because it creates the
 worktree itself rather than going through the Agent tool, which only ever produces the
 `agent-<hash>` name above. Claims stay under the orchestrator's own worktree because
-`findings.py` reads `git worktree list` on daniel-box only, so a claim naming a worktree that
-lives on daniel-server would be invisible to it. A daniel-server agent stops at `gh pr create`
-and does not land its PR, because deploys are pinned to daniel-box. The manifest under
+`findings.py` reads `git worktree list` on daniel-box only, so it cannot see a claim naming a
+worktree that lives on daniel-server. A daniel-server agent stops at `gh pr create` and does
+not land its PR, because only daniel-box runs deploys. The manifest under
 `~/.claude/fanout/<run-id>.json` is what `status`, `clean`, and the SessionStart banner's
-`remote_fanout_lines` (`.claude/hooks/session-health.py`) all read to find a fan-out's live
-worktrees on the other host.
+`remote_fanout_lines` (`.claude/hooks/hooklib/worktree_lines.py`) all read to find a fan-out's
+live worktrees on the other host.
 
 A daniel-server PR also cannot merge until the operator registers daniel-server's SSH key as a
 GitHub signing key once (`gh ssh-key add ~/.ssh/id_ed25519.pub --type signing`); until then it
@@ -328,31 +328,24 @@ signature and daniel-server signs with that key.
 5. **Report.** A table of issue → worktree → PR → verdict. Any issue still claimed when the
    fan-out ends is named explicitly, so nothing is held silently.
 
-### Width is unbounded
+### Width is bounded by measured headroom
 
-The skill takes no agent-count parameter. The bound is the host's cgroup configuration, which
-exists already and is the right place for it — a per-skill number would be a second bound that
-drifts from the first.
-
-Two facts a wide fan-out runs into, measured on daniel-box 2026-09-05:
-
-| Scope | MemoryHigh | MemorySwapMax | MemoryMax |
-|---|---|---|---|
-| `user-1000.slice` | 8G | 2G | infinity |
-| `claude-rc.service` | 8G | 2G | infinity |
-
-Host: 28 GB RAM, 16 cores, 7 GB swap.
-
-The two planes carry **independent** caps, so a fan-out split across both can draw 16G plus 4G
-of swap before either throttles. And `MemoryHigh` throttles rather than caps — the 2026-09-05
-reclaim stall happened with it in force, leaving remote control unreachable for ~30 minutes
-while the unit read `active (running)`. The failure mode of an over-wide fan-out is that stall,
-not an OOM kill.
-
-Filed as issue #1264; out of scope for this change.
+The dispatcher (`scripts/dev/fanout_place.py`) bounds a fan-out's width by reading live memory
+headroom rather than a fixed count — see *Placement across hosts* above for how it places a
+batch. The caps behind that read: `user.slice`'s fleet `MemoryHigh`
+is 12G on daniel-box with an 8G per-plane sub-bound, and 10G on daniel-server, where the 8G
+login-plane cap is the effective bound because `claude-rc.service` does not run on that host.
+`MemoryHigh` throttles rather than caps — the 2026-09-05 reclaim stall (issue #1264) happened
+with it in force, leaving remote control unreachable for ~30 minutes while the unit read
+`active (running)`. The failure mode of an over-wide fan-out is that stall, not an OOM kill.
 
 The deploy lock serialises the other half. Every agent's landing queues on it, so past some width
 the fan-out buys parallel *implementation* and no parallel *landing* at all.
+
+The Agent-tool fallback path (*When the dispatcher is unavailable* in the skill) takes no
+agent-count parameter of its own; its bound is still the host's cgroup configuration, which
+exists already and is the right place for it — a per-skill number would be a second bound that
+drifts from the first.
 
 ## Testing
 
