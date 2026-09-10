@@ -248,6 +248,26 @@ loki_route_witness_hosts:
 # this window would report the route down while Traefik was still starting.
 loki_route_witness_boot_grace_s: 600
 
+# Hosts that get the developer tooling `initial_setup --tags tooling` installs: uv, the uv-
+# managed CLI tools (ansible-core, ansible-lint, prek), the pinned host Python, the
+# /usr/local/bin/uv symlink systemd and cron read, and the pinned Vale binary the prek `vale`
+# hook runs. The same list gates `Install Git hooks`, because prek is what that task runs.
+#
+# The predicate is "somebody commits from this host", not "this host holds a checkout".
+# daniel-pi is deliberately absent: it holds a checkout, so the `has_repo_checkout` gate these
+# tasks used to carry admitted it, but it is driven remotely over ssh and nobody commits from
+# it — the gate was a proxy for a property the Pi does not have. Measured 2026-09-10 (issue
+# #1726): the Pi has neither uv nor vale and runs the distro's Python 3.12, so the tag has
+# never been applied there, and provisioning a pinned Python 3.14 on a 512 MB Zero 2 W was the
+# outcome the operator rejected. daniel-stage is deliberately absent too: `initial_setup.yml`
+# has never completed against the guest at all (docs/staging-cluster.md, *Sequencing*).
+#
+# An allowlist for the same reason as k3s_server_hosts above — a host nobody thought about is
+# refused rather than provisioned. ENFORCED by ansible/tests/setup/test_dev_tooling_hosts.py.
+dev_tooling_hosts:
+  - daniel-box
+  - daniel-server
+
 # Past this, the checkout the drift arms compare against is reported as its own fault. A host
 # without gitops-deploy does not refresh its tree — daniel-server was measured 39 commits behind
 # origin on 2026-08-17 — and a stale tree makes the render arm compare a stale render against

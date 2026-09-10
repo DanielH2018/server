@@ -534,7 +534,8 @@ imports. The hand audit below found two hits; a machine census
 grepping a task cannot tell which SIDE reads the path. `template.src` and `copy.src` are read on
 the controller and shipped as content, so they are not hits however they are written; `chdir`,
 `cron.job`, `command.argv` and `copy.dest` resolve on the target and are. Classifying by module
-argument is what separates them. Four are gated on `has_repo_checkout`; two were fixed instead,
+argument is what separates them. Three are gated on `has_repo_checkout`, one on the
+`dev_tooling_hosts` allowlist (see below); two were fixed instead,
 and the census lists them as `KNOWN_FIXED` so a regression fails by name. The release-commit
 read moved to the controller with `delegate_to: localhost` — the commit names the code being
 shipped, so the target's HEAD was never the right answer. The release pruner now ships inside
@@ -547,6 +548,15 @@ The two the hand audit found, and only the first stops the play:
 |---|---|---|
 | Install Git hooks | `system-tuning.yml:117-129` | `chdir: "{{ playbook_dir }}"` with no `when:` and no `delegate_to` — **fails the run**, as described above |
 | Clear ansible log file | `crons.yml:226-237` | installs a weekly cron running `truncate -s 0 /home/{{ sys_user }}/server/ansible.log`, a path that never exists without a checkout |
+
+**`Install Git hooks` moved off `has_repo_checkout` in issue #1726**, onto the
+`dev_tooling_hosts` allowlist — daniel-box and daniel-server. The task runs `prek install`, and
+prek arrives with `initial_setup --tags tooling`, which the same issue narrowed onto that list.
+So daniel-stage is excluded by the allowlist rather than by the checkout flag, and a future run
+against the guest installs no uv, no pinned Python and no Vale either. The paragraph above still
+reads `host-basics.yml` as installing that tooling *onto* the target rather than assuming it,
+which is why those tasks are not census hits — that is unchanged; what changed is which targets
+they run on.
 
 The second is the one the paragraph above missed, and it is the more instructive of the two: the
 **Ansible task succeeds** — `ansible.builtin.cron` only writes a `crontab` line — so a deploy reads
