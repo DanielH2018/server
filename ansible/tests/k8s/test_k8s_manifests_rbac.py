@@ -5,6 +5,7 @@ widened verb or a binding to a writing role is a silent privilege grant. Headlam
 homepage Kubernetes widget carry their own cluster identities and are held to the same rule.
 """
 
+import copy
 import re
 
 from lib import yaml_fast
@@ -200,6 +201,97 @@ def test_headlamp_keeps_its_serviceaccount_token_mounted():
     assert spec["automountServiceAccountToken"] is True
     args = spec["containers"][0]["args"]
     assert "-unsafe-use-service-account-token" in args
+
+
+# The three bindings the OIDC identity has to join. Named rather than counted: the whole
+# failure mode this guards is a binding that keeps the ServiceAccount and quietly loses the
+# Group, and a count moves for a dozen innocent reasons while a name only goes missing when
+# that happens.
+HEADLAMP_BINDINGS = frozenset(
+    {"headlamp-view", "headlamp-cluster-read", "headlamp-prometheus-proxy"}
+)
+
+
+def _bindings_missing_the_oidc_group(docs: list[dict], group: str) -> list[str]:
+    """Bindings that grant the ServiceAccount something the OIDC Group does not get.
+
+    Every name returned is a resource an OIDC login cannot see. Empty means the two identities
+    have the same view.
+    """
+    missing = []
+    for doc in docs:
+        if doc.get("kind") not in {"ClusterRoleBinding", "RoleBinding"}:
+            continue
+        subjects = doc.get("subjects", [])
+        has_sa = any(
+            s.get("kind") == "ServiceAccount" and s.get("name") == "headlamp"
+            for s in subjects
+        )
+        has_group = any(
+            s.get("kind") == "Group" and s.get("name") == group for s in subjects
+        )
+        if has_sa and not has_group:
+            missing.append(doc["metadata"]["name"])
+    return missing
+
+
+def test_headlamp_oidc_group_is_bound_wherever_the_serviceaccount_is():
+    """The OIDC identity must see exactly what the ServiceAccount sees.
+
+    Headlamp under OIDC forwards the browser's `id_token` and the API server authorises it, so
+    the login arrives as a `User` in a `Group` and carries none of the SA's RBAC. A binding the
+    Group is missing from is a resource list that comes back Forbidden — which the UI renders as
+    an empty cluster, with a successful login in front of it and nothing in any log.
+    """
+    docs = _headlamp_rbac_docs()
+    group = _role_defaults("headlamp")["headlamp_k8s_oidc_group"]
+    bound = {
+        doc["metadata"]["name"]
+        for doc in docs
+        if doc.get("kind") in {"ClusterRoleBinding", "RoleBinding"}
+    }
+    assert HEADLAMP_BINDINGS <= bound, (
+        f"bindings went missing: {HEADLAMP_BINDINGS - bound}"
+    )
+    assert _bindings_missing_the_oidc_group(docs, group) == []
+
+
+def test_the_oidc_group_check_rejects_a_binding_that_drops_the_group():
+    """The rejecting half. Without it the check above passes on a template with no Group at
+    all — every binding trivially satisfies "has the SA and the Group" once nothing has either.
+    """
+    docs = copy.deepcopy(_headlamp_rbac_docs())
+    group = _role_defaults("headlamp")["headlamp_k8s_oidc_group"]
+    victim = next(d for d in docs if d["metadata"]["name"] == "headlamp-view")
+    victim["subjects"] = [s for s in victim["subjects"] if s.get("kind") != "Group"]
+    assert _bindings_missing_the_oidc_group(docs, group) == ["headlamp-view"]
+
+
+def test_headlamp_oidc_group_subjects_name_the_rbac_api_group():
+    """A `kind: Group` subject without `apiGroup: rbac.authorization.k8s.io` is rejected by the
+    API server on apply, which fails the deploy rather than degrading — but it fails it in the
+    middle of a manifest sweep, so catch it in the render instead."""
+    subjects = [
+        s
+        for doc in _headlamp_rbac_docs()
+        if doc.get("kind") in {"ClusterRoleBinding", "RoleBinding"}
+        for s in doc.get("subjects", [])
+        if s.get("kind") == "Group"
+    ]
+    assert len(subjects) == len(HEADLAMP_BINDINGS)
+    for subject in subjects:
+        assert subject["apiGroup"] == "rbac.authorization.k8s.io"
+
+
+def test_headlamp_oidc_group_carries_the_apiserver_prefix():
+    """The group name is the Authelia group with the API server's `oidc-groups-prefix` on the
+    front, and the prefix is the whole reason an Authelia group can never be read as a built-in
+    `system:` group. A bare `admins` here means either the prefix was dropped from the API
+    server (a collision class reopened) or the two spellings drifted (an empty dashboard).
+    """
+    group = _role_defaults("headlamp")["headlamp_k8s_oidc_group"]
+    assert ":" in group, f"{group!r} carries no oidc-groups-prefix"
+    assert not group.startswith("system:"), f"{group!r} impersonates a built-in group"
 
 
 def test_homepage_kubernetes_widget_wiring_holds_together():

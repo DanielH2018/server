@@ -14,6 +14,27 @@ groups it doesn't cover. See repo-root `CLAUDE.md` for shared conventions.
   `k3s.cattle.io`) — nothing aggregates a CRD group into `view` automatically, so a group
   missing from that list degrades silently: the UI loads, that resource list is just empty.
 
+## Two identities, one grant
+Each binding in `templates/rbac.yaml.j2` names two subjects: the ServiceAccount, and the
+`headlamp_k8s_oidc_group` Group. They are deliberately the same grant twice.
+
+- **The SA is what the dashboard uses today.** `-unsafe-use-service-account-token` makes the
+  pod browse as its own account, and the Authelia forward-auth Middleware on the IngressRoute
+  is the perimeter in front of it.
+- **The Group is for OIDC, and it grants nobody anything yet.** Under OIDC, Headlamp does not
+  authorise: it forwards the browser's `id_token` and the **API server** decides. The login
+  therefore arrives as a `User` in a `Group` carrying none of the SA's RBAC. Nothing in this
+  cluster authenticates as a Group today, because the API server has no
+  `--kube-apiserver-arg=oidc-*` flags — that is part 1 of #1390, which lives in
+  `roles/setup/k3s` and is applied by hand through `k3s-bringup.yml`.
+- **A binding the Group is missing from is an empty resource list**, behind a login that
+  succeeded, with nothing logged. `test_headlamp_oidc_group_is_bound_wherever_the_serviceaccount_is`
+  in `ansible/tests/k8s/test_k8s_manifests_rbac.py` is the guard; adding a fourth binding for
+  the SA alone is what it exists to catch.
+- **`headlamp_k8s_oidc_group` is two things concatenated** — the API server's
+  `oidc-groups-prefix` plus the Authelia group — so it is not a free choice. The prefix is what
+  stops an Authelia group name from being read as a built-in `system:` group.
+
 ## Plugins
 - **The image bundles the Prometheus plugin.** `container/build-manifest.json` in
   `headlamp-k8s/headlamp` names `prometheus-0.9.1` for v0.45.0, and `GET /plugins` on the

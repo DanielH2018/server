@@ -54,3 +54,15 @@ headlamp_k8s_crd_api_groups:
 #   gh release download <name>-<ver> -R headlamp-k8s/plugins -p '<name>-<ver>.tar.gz' -D /tmp
 #   sha256sum /tmp/<name>-<ver>.tar.gz
 headlamp_k8s_plugins: []
+
+# The Kubernetes Group an OIDC login arrives as, bound in templates/rbac.yaml.j2 alongside the
+# ServiceAccount. TWO pieces concatenated, and both belong to roles/setup/k3s:
+# `k3s_oidc_groups_prefix` + the Authelia group. The prefix exists so an Authelia group can
+# never collide with a built-in `system:` group; the API server applies it to every value of
+# the `groups` claim before RBAC sees it.
+#
+# Cross-role by necessity — the API server is the thing that mints the group name, and it is
+# configured in a role the k8s deploy play never runs (k3s-bringup.yml, applied by hand). Part
+# 1 of #1390 adds those flags and the test that the two spellings agree; until then no request
+# ever arrives with a group claim and this value binds nobody.
+headlamp_k8s_oidc_group: "oidc:admins"
