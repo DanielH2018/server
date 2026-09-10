@@ -34,11 +34,26 @@ Group the results so that **no two agents touch the same Ansible role**. Read ea
 cited file to find its role; two agents editing one role concurrently is the hazard
 `CLAUDE.md`'s parallel-sessions section already warns about, with more agents.
 
+Two shapes collide across roles as well, so they are bounded per wave rather than per role.
+Both were measured on the 2026-09-10 fan-outs:
+
+- **At most one batch per wave rotates or adds a SOPS secret.** `ansible/vars/secrets.yml` is
+  ciphertext, so two branches that both touch it conflict at merge and the conflict is not
+  hand-resolvable; the second lander has to take master's file wholesale and re-mint its own
+  value on top. Two of eight wave-1 agents hit exactly that (PRs #1556 and #1567), and one
+  stalled six hours on it. Hold the second secret issue for the next wave.
+- **A batch that adds a `containers_list` entry, or otherwise touches a `_BROAD_*` path, runs
+  alone.** A broad change makes the tick apply the whole plane, so one crashlooping service
+  anywhere fails that apply and writes `hold_sha`, which reports `deploy-failed` to every other
+  batch's landing. Wave 2's new `gpu-exporter` role did this while another session's Authelia
+  change was mid-rollout (issue #1602), and the hold outlived the outage by twenty minutes.
+
 **Stop here for approval.** Present the grouping — which issues, which batch, why they're
 split this way — and wait. Spawning several Opus agents is not a routine action.
 
-Done when: `reap` has run, every issue `next` returned is in exactly one batch, no two batches
-share a role, and the operator has approved the grouping.
+Done when: `reap` has run, every issue `next` returned is in exactly one batch or named as
+held for the next wave, no two batches share a role, at most one batch touches SOPS, no batch
+that adds a role shares the wave, and the operator has approved the grouping.
 
 ## 2. Claim before spawning, under the orchestrator's own worktree name
 

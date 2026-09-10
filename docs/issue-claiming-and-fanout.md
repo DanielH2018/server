@@ -284,8 +284,12 @@ scope here.
 1. **Triage.** Read `findings.py next --json`. Group the candidates so that no two agents touch
    the same Ansible role — the repo's parallel-sessions guidance already warns about several
    sessions editing a shared role, and two agents in one role is the same hazard with more
-   agents. Present the grouping and **stop for approval**: spawning N Opus agents is not a
-   routine action.
+   agents. Two shapes collide across roles and are bounded per wave instead: at most one batch
+   touches `ansible/vars/secrets.yml` (ciphertext conflicts are not hand-resolvable), and a
+   batch that adds a `containers_list` entry runs alone (a broad apply that fails on any
+   service parks every other batch's landing). The skill's triage step has the measured cases.
+   Present the grouping and **stop for approval**: spawning N Opus agents is not a routine
+   action.
 2. **Claim, then spawn.** Claim every issue in every batch serially, before spawning anything.
    This is what removes the race from the fan-out. The claim goes under the **orchestrator's**
    worktree name, because a subagent's worktree name is auto-generated and unknown until it
