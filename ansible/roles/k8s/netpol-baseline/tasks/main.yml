@@ -132,6 +132,7 @@
       - networkpolicy-loki.yaml
       - networkpolicy-traefik.yaml
       - networkpolicy-authelia.yaml
+      - networkpolicy-authelia-redis.yaml
       - networkpolicy-crowdsec.yaml
       - networkpolicy-pihole.yaml
       - networkpolicy-mosquitto.yaml
