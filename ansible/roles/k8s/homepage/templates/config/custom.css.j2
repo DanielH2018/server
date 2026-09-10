@@ -168,6 +168,7 @@ li.service:not(#my-calendar) .service-container:has(> :first-child:last-child) >
  * with it, which is correct: the reservation is a floor, not a cap. Jellyfin is the one to
  * watch — its widget declares four blocks and currently renders none, because the tile is
  * erroring (#1457).
+ *
  */
 li.service:not(#my-calendar) .service-container {
   min-height: 3.25rem;
@@ -262,19 +263,30 @@ li.service:has(a[href*="peanut."]) .service-block:nth-child(2) > .font-bold::aft
   grid-column: 1 / -1;
 }
 
-/* THE LINK ROWS GET VERTICAL BREATHING ROOM.
+/* EVERY GROUP'S ROWS GET VERTICAL BREATHING ROOM, AND THE CARD STOPS PAYING FOR IT.
  *
- * Ten links at five columns is two rows, and homepage's own grid sets no row gap — the two rows
- * of icons met edge to edge and read as one block. `row-gap` on the grid is the whole fix: it
- * separates the two link rows from each other and the first of them from the calendar above,
- * and it costs the column only the gap itself because the tiles keep their height.
+ * homepage's grid sets no row gap and separates rows with an 8px BOTTOM MARGIN on each card
+ * instead. That margin is outside the card but inside the grid item, so the `<li>` measures 8px
+ * taller than its card — and `height: 100%` above then stretches the card back over that 8px,
+ * which the `flex: 1 1 auto` stat container absorbs. Measured on the deployed page 2026-09-10 at
+ * 1920px: a 120px card holding 8px of padding, a 52px title and a 52px stat row in a 60px
+ * container, with three grid rows at y=168, 288 and 408 — exactly 120px apart, so the rows
+ * touched.
  *
- * `:has(> #my-calendar)` scopes it to this one group's list. Every other group is a single row
- * of tiles, where a row gap would do nothing at 1920px and add height when a narrow viewport
- * wrapped them.
+ * Moving the separation to the grid's own `row-gap` fixes both at once. The card loses its
+ * margin and shrinks to the 112px it actually needs, the gap becomes a real 12px, and the two
+ * are no longer the same 8px doing both jobs badly.
+ *
+ * This applies to every group, where the previous version scoped it to the calendar's. A group
+ * that renders one row is unaffected at 1920px and separates properly when a narrow viewport
+ * wraps it.
  */
-ul.services-list:has(> #my-calendar) {
-  row-gap: 0.5rem;
+ul.services-list {
+  row-gap: 0.75rem;
+}
+
+li.service > div.service-card {
+  margin-bottom: 0;
 }
 
 #my-calendar .service-container > div {
