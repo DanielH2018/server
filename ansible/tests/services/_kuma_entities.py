@@ -61,10 +61,9 @@ STUBS = {
     "etcd_snapshot_push_token": "t" * 32,
     "remember_logs_push_token": "t" * 32,
     "release_staleness_push_token": "t" * 32,
-    # Gated behind `{% if <token> %}` like the four above, and stubbed for the same reason: the
-    # secret does not exist yet (#1627 ships the check inert), so without a stub here the tile
-    # renders away and every guard below stops covering it until the day it is armed — when the
-    # email-tier guard would fail on master rather than in the PR that added it.
+    # Armed 2026-09-10 (#1627), so unlike the four above this one is declared unguarded and the
+    # stub is what the render needs rather than what keeps the tile from disappearing. Dropping
+    # it now fails the render outright instead of silently un-covering the guards below.
     "monitor_bridge_snapshot_headroom_push_token": "t" * 32,
 }
 

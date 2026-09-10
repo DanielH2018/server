@@ -81,6 +81,35 @@ def test_worktree_and_unit_names_derive_from_the_batch():
     assert unit_name("1345-1386") == "fanout-1345-1386"
 
 
+def test_the_existence_check_is_the_first_step_of_the_launch_command():
+    """Before `fetch`, so a relaunch never reaches the `worktree add` whose cleanup deletes."""
+    cmd = launch_command("b")
+    assert cmd.index("fanout-step: exists") < cmd.index(
+        "git -C /home/ubuntu/server fetch origin"
+    )
+    assert cmd.startswith(f"test ! -e {worktree_path('b')} && ")
+    assert "! git -C /home/ubuntu/server show-ref --verify --quiet " in cmd
+    assert "refs/heads/worktree-fanout-b" in cmd
+
+
+def test_an_existing_worktree_or_branch_is_refused_without_removing_anything():
+    tools, run = fake_tools(
+        {
+            "daniel-server": subprocess.CompletedProcess(
+                [], 1, stdout="", stderr="fanout-step: exists\n"
+            )
+        }
+    )
+    with pytest.raises(LaunchError) as excinfo:
+        launch(tools, "daniel-server", "b", "BRIEF", issues=[1])
+    message = str(excinfo.value)
+    assert "worktree-fanout-b" in message and "clean <run-id>" in message
+    # The one call is the refused launch itself: no cleanup, so the earlier batch's tree
+    # and branch are still there to inspect or land.
+    assert len(run.calls) == 1
+    assert not any("worktree remove" in c[1] for c in run.calls)
+
+
 def test_the_worktree_command_fetches_before_adding_from_origin_master():
     cmd = create_worktree_command("b")
     assert cmd.index("git -C /home/ubuntu/server fetch origin") < cmd.index(

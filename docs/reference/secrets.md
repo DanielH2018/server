@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/secrets.py
-generated_at: 2026-09-10 06:17 UTC
-generated_sha: af3e4e492
+generated_at: 2026-09-10 18:17 UTC
+generated_sha: f95da3c99
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: af3e4e492
 
 # Secrets
 
-166 secret(s) in the rotation registry (`ansible/secret_rotation.yml`).
+168 secret(s) in the rotation registry (`ansible/secret_rotation.yml`).
 
 !!! note "Names and dates only"
     This page is generated from the plaintext rotation registry. No secret VALUE is read here, and the generator never opens the encrypted store or invokes the decryption tool — a test enforces that.
@@ -42,6 +42,7 @@ needs a human to mint the new value, then `secret_rotation.py rotate`.
 | `authelia_oidc_hmac_secret` | 2026-02-04 | 2027-01-31 | 143 |
 | `authelia_oidc_rsa_key_content` | 2026-05-15 | 2027-04-29 | 231 |
 | `authelia_password` | 2026-07-23 | 2027-07-05 | 298 |
+| `authelia_redis_password` | 2026-06-13 | 2027-06-03 | 266 |
 | `authelia_secret` | 2025-12-15 | 2026-12-08 | 89 |
 | `bazarr_api_key` | 2026-08-30 | 2027-08-24 | 348 |
 | `become_password` | 2026-08-30 | 2027-08-29 | 353 |
@@ -64,6 +65,7 @@ needs a human to mint the new value, then `secret_rotation.py rotate`.
 | `healthchecks_api_read_only_key` | 2025-11-12 | 2026-11-10 | 61 |
 | `healthchecks_password` | 2026-08-23 | 2027-07-27 | 320 |
 | `healthchecks_ping_key` | 2026-08-31 | 2027-08-20 | 344 |
+| `healthchecks_secret_key` | 2026-07-07 | 2027-06-10 | 273 |
 | `homelab_mcp_token` | 2025-09-01 | 2026-08-10 | -31 |
 | `homepage_ha_token` | 2025-09-14 | 2026-08-28 | -13 |
 | `jellyfin_api_key` | 2026-09-10 | 2027-08-15 | 339 |
@@ -182,6 +184,7 @@ rotated unattended by the weekly secret-rotate cron.
 | `monitor_bridge_renovate_alive_push_token` | 2026-08-28 | 2027-02-13 | 156 |
 | `monitor_bridge_restarts_push_token` | 2026-08-30 | 2027-02-21 | 164 |
 | `monitor_bridge_scrutiny_push_token` | 2026-08-30 | 2027-02-15 | 158 |
+| `monitor_bridge_snapshot_headroom_push_token` | 2026-05-31 | 2026-11-14 | 65 |
 | `monitor_bridge_speedtest_push_token` | 2026-04-20 | 2026-10-17 | 37 |
 | `monitor_bridge_staging_backfill_push_token` | 2026-04-11 | 2026-09-24 | 14 |
 | `monitor_bridge_targets_push_token` | 2026-08-30 | 2027-02-14 | 157 |
@@ -211,7 +214,6 @@ not rotated, and deliberately so.
 | `domain` | None | never (no interval for this tier) | n/a |
 | `email` | 2026-01-12 | never (no interval for this tier) | n/a |
 | `freshrss_username` | None | never (no interval for this tier) | n/a |
-| `healthchecks_smtp_user` | None | never (no interval for this tier) | n/a |
 | `mqtt_username` | None | never (no interval for this tier) | n/a |
 | `peanut_username` | None | never (no interval for this tier) | n/a |
 | `qbittorrent_username` | None | never (no interval for this tier) | n/a |

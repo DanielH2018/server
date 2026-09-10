@@ -137,3 +137,26 @@ def unverified_reason(
             "verified-signatures rule — register that key, or place the batch elsewhere"
         )
     return None
+
+
+def read_verdict(
+    host: str, key_text: str | None, registered: frozenset[str] | str
+) -> str:
+    """One word for `read`: whether GitHub verifies this host's commit signatures.
+
+    The cheap way to see what `launch` would decide before it spends an agent on the host.
+
+    Args:
+        host: the host the reading came from.
+        key_text: what `signing_key_read_command` printed there.
+        registered: the account's registered signing keys, or the one-line reason they could
+            not be read — in which case no host can be judged either way.
+
+    Returns:
+        `ok` when GitHub verifies the host's signatures, `unverified` when it would not, and
+        `unknown` when the registered-key read itself failed. `unknown` is not `ok`:
+        `launch` refuses outright rather than place on a host it could not judge.
+    """
+    if isinstance(registered, str):
+        return "unknown"
+    return "unverified" if unverified_reason(host, key_text, registered) else "ok"

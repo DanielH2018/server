@@ -16,7 +16,13 @@ from fanout_lib.transport import ISSUE_FIELDS, issue_from_view
 from fanout_place import main
 from _fanout_fakes import HOST_KEY, fake_tools, ok
 
-HEADROOM = f"1\n12884901888\n0\n{HOST_KEY}\n"
+# Fleet current, fleet cap, login-plane current, login-plane cap, live agents, signing key.
+# The plane side is as roomy as the fleet side on purpose: these tests measure call counts,
+# placement order and the ssh budget, so the plane must not become the binding cap and turn a
+# refusal meant to come from the budget into a NoHeadroom. The plane's own arithmetic is
+# test_fanout_placement.py's, and the key is one the fake registered set holds, so a test
+# that says nothing about signing passes the gate rather than being dropped by it.
+HEADROOM = f"1\n12884901888\n1\n12884901888\n0\n{HOST_KEY}\n"
 CLAIMED = [
     Issue(1, "one", "body one", ("claude",)),
     Issue(2, "two", "body two", ("claude",)),
@@ -59,6 +65,31 @@ def test_a_failed_second_worktree_add_still_records_the_batch_already_launched(
     assert [b["batch"] for b in written["batches"]] == ["1"]
 
 
+def test_a_batch_whose_worktree_exists_is_refused_and_the_run_id_is_named(
+    tmp_path, capsys
+):
+    """The refusal is per batch, so batch 1 is already running — say so, and say where."""
+    tools, run = fake_tools(answers={"daniel-box": ok(HEADROOM)}, issues=CLAIMED)
+    run.answers_by_call = [
+        ok(HEADROOM),  # headroom read
+        ok(""),  # health read
+        ok(""),  # batch 1: launch
+        subprocess.CompletedProcess(
+            [], 1, stdout="", stderr="fanout-step: exists\n"
+        ),  # batch 2: its worktree or branch is still there from an earlier run
+    ]
+    assert (
+        _launch(tools, tmp_path, "--batch", "1", "--batch", "2", "--host", "daniel-box")
+        == 1
+    )
+    # Four calls, not five: an `exists` refusal runs no cleanup.
+    assert len(run.calls) == 4
+    err = capsys.readouterr().err
+    run_id = next(iter(tmp_path.glob("*.json"))).stem
+    assert "clean <run-id>" in err
+    assert f"launched before this failure: 1 (run {run_id})" in err
+
+
 def test_pinning_daniel_server_sends_every_call_there_and_none_to_daniel_box(tmp_path):
     tools, run = fake_tools(
         answers={"daniel-box": ok(HEADROOM), "daniel-server": ok(HEADROOM)},
@@ -88,7 +119,9 @@ def test_an_unpinned_launch_reads_both_hosts_and_places_on_the_emptier_one(tmp_p
         answers={
             # ~4.5 GiB headroom on daniel-box, ~9.5 GiB on daniel-server — both are
             # candidates, daniel-server wins on room alone.
-            "daniel-box": ok(f"5368709120\n12884901888\n1\n{HOST_KEY}\n"),
+            "daniel-box": ok(
+                f"5368709120\n12884901888\n5368709120\n12884901888\n1\n{HOST_KEY}\n"
+            ),
             "daniel-server": ok(HEADROOM),
         },
         issues=[CLAIMED[0]],
@@ -143,7 +176,7 @@ def test_four_batches_pinned_to_one_host_is_refused_before_any_launch(tmp_path, 
     assert "split the fan-out" in capsys.readouterr().err
 
 
-def test_stop_stops_the_unit_and_prints_how_to_release_the_worktree(tmp_path, capsys):
+def test_stop_stops_the_unit_and_names_clean_as_the_next_step(tmp_path, capsys):
     batch = Batch(
         "1",
         "daniel-box",
@@ -161,8 +194,30 @@ def test_stop_stops_the_unit_and_prints_how_to_release_the_worktree(tmp_path, ca
     assert [c[1] for c in run.calls] == ["systemctl --user stop fanout-1"]
     out = capsys.readouterr().out
     assert "1 on daniel-box: stopped" in out
-    assert f"worktree unlock {launch_mod.worktree_path('1')}" in out
-    assert "prune_worktrees.py --prune" in out
+    assert f"clean {manifest.run_id}" in out
+    assert "once its PR merges" in out
+
+
+def test_stop_makes_no_call_for_a_batch_clean_already_took(tmp_path, capsys):
+    cleaned = Batch(
+        "1",
+        "daniel-server",
+        "/w1",
+        "worktree-fanout-1",
+        "fanout-1",
+        [1],
+        "t",
+        removed_at="2026-09-10T12:00:00+00:00",
+    )
+    live = Batch("2", "daniel-box", "/w2", "worktree-fanout-2", "fanout-2", [2], "t")
+    manifest = Manifest("20260101T000010Z", "o", [cleaned, live])
+    save(manifest, root=tmp_path)
+    tools, run = fake_tools(answers={"daniel-box": ok("")})
+    assert main(["stop", manifest.run_id, "--manifest-root", str(tmp_path)], tools) == 0
+    assert [c[0] for c in run.calls] == ["daniel-box"]
+    out = capsys.readouterr().out
+    assert "1 on daniel-server: cleaned (2026-09-10T12:00:00+00:00)" in out
+    assert "2 on daniel-box: stopped" in out
 
 
 def test_a_failed_issue_fetch_launches_nothing_and_writes_no_manifest(tmp_path, capsys):
@@ -240,7 +295,10 @@ def test_an_unpinned_launch_places_on_the_only_host_github_verifies(tmp_path):
     box_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
     tools, run = fake_tools(
         answers={
-            "daniel-box": ok(f"1\n99999999999\n0\n{box_key}\n"),
+            # Roomy on BOTH planes, so the only thing that can move this batch is the key.
+            # A five-line reading here would be dropped as unparseable instead, and the
+            # test would pass without the signing gate ever running.
+            "daniel-box": ok(f"1\n99999999999\n1\n99999999999\n0\n{box_key}\n"),
             "daniel-server": ok(HEADROOM),
         },
         issues=[CLAIMED[0]],
@@ -248,6 +306,31 @@ def test_an_unpinned_launch_places_on_the_only_host_github_verifies(tmp_path):
     assert _launch(tools, tmp_path, "--batch", "1") == 0
     launched = [c for c in run.calls if "worktree add" in c[1]]
     assert len(launched) == 1 and launched[0][0] == "daniel-server"
+
+
+def test_read_prints_both_caps_and_the_signing_verdict(capsys):
+    """One line carrying what placement scores on AND what the launch gate would rule."""
+    tools, _ = fake_tools(
+        answers={"daniel-box": ok(HEADROOM), "daniel-server": ok(HEADROOM)}
+    )
+    assert main(["read"], tools) == 0
+    out = capsys.readouterr().out
+    assert "fleet cap=12884901888 current=1" in out
+    assert "plane cap=12884901888 current=1" in out
+    assert "signing=ok" in out
+
+
+def test_read_calls_a_verdict_it_could_not_reach_unknown_rather_than_ok(capsys):
+    """`unknown` is the state `launch` refuses on, so `read` must not print it as `ok`."""
+    tools, _ = fake_tools(
+        answers={"daniel-box": ok(HEADROOM), "daniel-server": ok(HEADROOM)},
+        signing_error=subprocess.CalledProcessError(
+            1, ["gh"], stderr="gh: not logged in"
+        ),
+    )
+    assert main(["read"], tools) == 0
+    out = capsys.readouterr().out
+    assert "signing=unknown" in out and "signing=ok" not in out
 
 
 def test_the_issue_fetch_asks_for_labels_and_carries_them_onto_the_issue():
@@ -301,3 +384,66 @@ def test_the_briefs_worktree_path_matches_the_one_launch_creates():
     # the check that keeps the duplicate honest.
     for batch in ("1345-1386", "b"):
         assert brief_mod._worktree_path(batch) == launch_mod.worktree_path(batch)
+
+
+def test_a_batch_still_live_in_a_manifest_is_refused_before_any_host_is_read(
+    tmp_path, capsys
+):
+    """F4: the per-host existence check cannot see a relaunch placed on the OTHER host."""
+    live = Batch("1-2", "daniel-server", "/w", "b", "u", [1, 2], "t")
+    save(Manifest("20260101T000010Z", "o", [live]), root=tmp_path)
+    tools, run = fake_tools(answers={"daniel-box": ok(HEADROOM)}, issues=CLAIMED)
+    assert _launch(tools, tmp_path, "--batch", "1,2") == 1
+    assert not run.calls  # refused before the headroom read, so it costs no ssh
+    err = capsys.readouterr().err
+    assert "batch 1-2 shares #1, #2 with batch 1-2, live in run" in err
+    assert "20260101T000010Z on daniel-server" in err
+    assert "run clean 20260101T000010Z first" in err
+
+
+def test_a_reordered_or_narrowed_spec_cannot_slip_past_the_live_guard(tmp_path, capsys):
+    """The batch id is derived from the spec as typed, so it is not what must be unique."""
+    live = Batch("1345-1386", "daniel-server", "/w", "b", "u", [1345, 1386], "t")
+    save(Manifest("20260101T000010Z", "o", [live]), root=tmp_path)
+    for spec, shared in (("1386,1345", "#1345, #1386"), ("1345", "#1345")):
+        tools, run = fake_tools(answers={"daniel-box": ok(HEADROOM)}, issues=CLAIMED)
+        assert _launch(tools, tmp_path, "--batch", spec) == 1
+        assert not run.calls
+        err = capsys.readouterr().err
+        assert f"shares {shared} with batch 1345-1386" in err
+        assert "on daniel-server" in err
+
+
+def test_a_first_batch_refused_writes_no_manifest_at_all(tmp_path, capsys):
+    """F15: an empty manifest records no work, and `launch` now reads every manifest."""
+    tools, _run = fake_tools(answers={"daniel-box": ok(HEADROOM)}, issues=CLAIMED)
+    _run.answers_by_call = [
+        ok(HEADROOM),
+        ok(""),  # health read
+        subprocess.CompletedProcess([], 1, stdout="", stderr="fanout-step: exists\n"),
+    ]
+    assert _launch(tools, tmp_path, "--batch", "1", "--host", "daniel-box") == 1
+    assert not list(tmp_path.glob("*.json"))
+    assert "launched before this failure: none" in capsys.readouterr().err
+
+
+def test_an_unknown_run_id_is_one_line_rather_than_a_traceback(tmp_path, capsys):
+    tools, calls = fake_tools()
+    for command in ("status", "stop", "clean"):
+        assert (
+            main([command, "nosuchrun", "--manifest-root", str(tmp_path)], tools) == 1
+        )
+        assert not calls.calls  # refused before any host is touched
+        assert (
+            f"no manifest for run nosuchrun under {tmp_path}" in capsys.readouterr().err
+        )
+
+
+def test_a_batch_already_cleaned_in_an_old_run_launches_again(tmp_path):
+    cleaned = Batch(
+        "1-2", "daniel-server", "/w", "b", "u", [1, 2], "t", "2026-09-10T12:00:00+00:00"
+    )
+    save(Manifest("20260101T000010Z", "o", [cleaned]), root=tmp_path)
+    tools, run = fake_tools(answers={"daniel-box": ok(HEADROOM)}, issues=CLAIMED)
+    assert _launch(tools, tmp_path, "--batch", "1,2", "--host", "daniel-box") == 0
+    assert len(run.calls) == 3

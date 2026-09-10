@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/crons.py
-generated_at: 2026-09-09 22:50 UTC
-generated_sha: 02af13398
+generated_at: 2026-09-10 18:17 UTC
+generated_sha: f95da3c99
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 02af13398
 
 # Scheduled jobs
 
-45 cron entrie(s) installed across the roles.
+46 cron entrie(s) installed across the roles.
 
 !!! warning "The state column is a heuristic"
     It is judged from the command text, and nothing in a cron task declares its own blast radius. A job that runs a wrapper script reads as "read the script" rather than being guessed at. Treat it as a pointer, not an authority.
@@ -51,6 +51,7 @@ generated_sha: 02af13398
 | Weekly apt autoremove | `0 2 * * 0` | every host in the play | `root` | no (read-only by its command) | `ansible/roles/setup/initial_setup/tasks/accounting.yml` |
 | Weekly dpkg purge orphaned configs | `15 2 * * 0` | every host in the play | `root` | no (read-only by its command) | `ansible/roles/setup/initial_setup/tasks/accounting.yml` |
 | Weekly firmware update | `0 7 * * 0` | conditional (initial_setup_fwupdmgr.stat.exists) | `root` | yes (reboot) | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
+| Weekly git object-store repair | `20 4 * * 0` | daniel-box | `{{ sys_user }}` | yes (prune) | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
 | Weekly rkhunter malware scan | `0 2 * * 3` | every host in the play | `root` | no (read-only by its command) | `ansible/roles/setup/initial_setup/tasks/integrity.yml` |
 | Weekly secret rotation (auto tier) | `0 9 * * 0` | the gitops host | `{{ sys_user }}` | yes (rotate) | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
 | Weekly system restart | `30 7 * * 0` | every host in the play | `root` | no (read-only by its command) | `ansible/roles/setup/initial_setup/tasks/crons.yml` |

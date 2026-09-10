@@ -778,11 +778,12 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     Longhorn purges them — but can overstate usage for a cycle after a prune, so a breach rides
     `SNAPSHOT_CAP_CONSECUTIVE`. Deduped by (volume, snapshot) before summing, like PVC
     Fullness's `max by`: both longhorn-manager pods are scraped independently. A declared cap
-    whose volume has NO series is a breach, not green. **INERT until its push token exists** —
-    `monitor_bridge_snapshot_headroom_push_token` is not in SOPS, so `KUMA_PUSH_SNAPSHOT_HEADROOM`
-    renders empty, the verdict reaches the pod log alone, and the Kuma declaration is guarded on
-    the same variable. Adding the secret and redeploying uptime-kuma + monitor-bridge arms both
-    halves.)
+    whose volume has NO series is a breach, not green. **Armed 2026-09-10** (#1627) —
+    `monitor_bridge_snapshot_headroom_push_token` is in SOPS, and both halves read it unguarded:
+    `KUMA_PUSH_SNAPSHOT_HEADROOM` in this role's env-secret and the Kuma declaration in
+    k8s/uptime-kuma/templates/static-monitors.yaml.j2. It shipped inert on 2026-09-10 with the
+    token absent, which is the shape #1632 names: a gated monitor with an unset variable reads
+    green while watching nothing.)
   - **Kubelet CSI Mount Read-Only** (`node_filesystem_readonly{mountpoint=~"/var/lib/kubelet/
     plugins/.*"} == 1`, added 2026-09-05, #1243 — a reclaim stall dropped Longhorn's iSCSI
     sessions, `replacement_timeout` expiry then aborted several ext4 journals and remounted them

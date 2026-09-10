@@ -66,3 +66,34 @@ headlamp_k8s_plugins: []
 # 1 of #1390 adds those flags and the test that the two spellings agree; until then no request
 # ever arrives with a group claim and this value binds nobody.
 headlamp_k8s_oidc_group: "oidc:admins"
+
+# ── OIDC login (#1390 part 3) ───────────────────────────────────────────────────────────────
+# OFF, and it must stay off until part 1 of #1390 is applied by hand. Turning it on REPLACES
+# the ServiceAccount identity with the browser's: Headlamp forwards the `id_token` and the API
+# SERVER decides, so with no `--kube-apiserver-arg=oidc-*` flags on daniel-box the token is
+# rejected and the dashboard is unusable. Nothing here is a substitute for reading the k3s
+# role's `k3s_oidc_*` block first.
+#
+# The Authelia client and its credential are rendered EITHER WAY. An unused client authorises
+# nobody, and keeping them out of the switch means arming this is one variable rather than a
+# second round of secret work.
+headlamp_k8s_oidc_enabled: false
+# The client id, which is also the audience: Authelia's default
+# `id_token_audience_mode: specification` puts only the client id in `aud`, and the API server
+# matches it against its own `oidc-client-id`. One value, three places.
+headlamp_k8s_oidc_client_id: headlamp
+# Both URLs pin the LAN name, and that is not a preference. Authelia derives `iss` from the
+# host the authorization request arrived on — measured 2026-09-10, its discovery document
+# returns `auth.local.<domain>` on the LAN name and `auth.<domain>` publicly — while the API
+# server's `oidc-issuer-url` accepts exactly one value. A login through the public route would
+# present a token whose `iss` the API server rejects, so the callback is pinned too: Headlamp
+# otherwise BUILDS the callback from the request host (`getOidcCallbackURL`,
+# backend/cmd/headlamp.go), which would send a public-route login to an unregistered URI.
+headlamp_k8s_oidc_issuer_url: "https://auth.local.{{ domain }}"
+headlamp_k8s_oidc_callback_url: "https://headlamp.local.{{ domain }}/oidc-callback"
+# `openid` is NOT listed, and adding it would send it twice: Headlamp prepends it itself —
+# `Scopes: append([]string{oidc.ScopeOpenID}, oidcAuthConfig.Scopes...)` in
+# backend/cmd/headlamp.go at v0.45.0. The issue text asks for `openid,profile,email,groups`.
+# `groups` is the one that carries the RBAC subject; without it the login succeeds and every
+# list call is Forbidden.
+headlamp_k8s_oidc_scopes: "profile,email,groups"

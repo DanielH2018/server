@@ -26,6 +26,10 @@ spec:
       # The credential the -unsafe-use-service-account-token flag below reads. Nothing may
       # mount under /run/secrets or /var/run/secrets here — that shadows the projected token
       # and the container never starts (test_nothing_mounts_over_the_serviceaccount_token_path).
+      #
+      # STAYS TRUE under OIDC, where the token no longer authenticates anyone. `-in-cluster`
+      # calls rest.InClusterConfig(), which reads the API server address and the cluster CA
+      # from this same projected mount and ERRORS without it — the pod would not start at all.
       automountServiceAccountToken: true
       securityContext:
         runAsUser: {{ headlamp_k8s_uid }}
@@ -72,6 +76,23 @@ spec:
             - "-in-cluster-context-name=main"
             - "-plugins-dir=/headlamp/plugins"
             - "-session-ttl={{ headlamp_k8s_session_ttl }}"
+{% if headlamp_k8s_oidc_enabled %}
+            # OIDC login: Headlamp sends the browser to Authelia and forwards the resulting
+            # `id_token` to the API server on every request. The SA-token flag is GONE in this
+            # branch, on purpose — the two are alternatives, not layers, and leaving both set
+            # would keep the SA's identity in force for API calls while showing a sign-in
+            # button, which is a worse state than either.
+            #
+            # Every value here is a default in this role, and every one of them has to agree
+            # with something outside it: the client id with Authelia's client and the API
+            # server's `oidc-client-id`, the issuer with the API server's `oidc-issuer-url`,
+            # the callback with the client's `redirect_uris`.
+            - "-oidc-client-id={{ headlamp_k8s_oidc_client_id }}"
+            - "-oidc-idp-issuer-url={{ headlamp_k8s_oidc_issuer_url }}"
+            - "-oidc-scopes={{ headlamp_k8s_oidc_scopes }}"
+            - "-oidc-callback-url={{ headlamp_k8s_oidc_callback_url }}"
+            - "-oidc-use-pkce"
+{% else %}
             # Headlamp's default in-cluster flow makes the operator paste a ServiceAccount
             # token into the browser on every session. This flag makes it use its own mounted
             # token instead. Upstream names it "unsafe" because it removes Headlamp's only
@@ -80,6 +101,20 @@ spec:
             # read-only with no secrets and no exec (rbac.yaml.j2). Dropping the flag without
             # also narrowing that SA is what "unsafe" is warning about.
             - "-unsafe-use-service-account-token"
+{% endif %}
+{% if headlamp_k8s_oidc_enabled %}
+          # The client secret is an ENV var rather than a seventh `-oidc-*` arg, because args
+          # are part of the pod spec: the cluster's read-only ServiceAccount can read
+          # Deployments, so a secret passed as an argument is readable by anything that can
+          # `kubectl get deploy`. `HEADLAMP_CONFIG_` + the flag name upper-cased is Headlamp's
+          # own env convention (`loadConfigFromEnv`, backend/pkg/config/config.go).
+          env:
+            - name: HEADLAMP_CONFIG_OIDC_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: headlamp-oidc
+                  key: client_secret
+{% endif %}
           ports:
             - containerPort: {{ container_item.port }}
 {{ hardened_security_context(read_only=true) }}

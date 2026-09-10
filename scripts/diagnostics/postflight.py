@@ -139,8 +139,10 @@ def _forward_auth_intercepted(app, status):
     than the SKIP this replaces. Keyed on the response rather than on the inventory flag, so it
     still holds if a service's `use_authelia` is flipped later.
 
-    The *arr monitoring routes carry no forward-auth but pin ClientIP to daniel-server
-    (`k8s_bridge_client_ip`), so they 302 for this host too — widening that is filed separately.
+    The *arr monitoring routes carry no forward-auth and admit daniel-box as well as
+    daniel-server since #1642, so a 3xx from one of those three now means the request missed
+    that route's PathPrefix and fell through to the app's own Authelia'd route — check
+    `ARR_MONITORED_PATH` against the role's `ingressroute-monitoring.yaml.j2`.
     """
     return SKIP, (
         f"{app}'s route answered HTTP {status} — Authelia forward-auth intercepted it, so the "
@@ -255,19 +257,35 @@ def _unreachable(app, detail):
     return SKIP, f"{app} unreachable from this host (pod on another node?) — {detail}"
 
 
+# The path each *arr's `-monitoring` IngressRoute admits, which is the only path the route
+# half of `get_via_service` can reach. It read `/api/<ver>/system/status` until 2026-09-10 and
+# that path is on no route's PathPrefix, so the fallback 302'd into Authelia and the check was
+# structurally SKIP whenever the pod sat on the other node (#1642). A 200 here with the SOPS
+# key proves the credential just as well as system/status did: both are authenticated reads.
+#
+# Kept in step with the three `ingressroute-monitoring.yaml.j2` templates by
+# ansible/tests/k8s/test_arr_monitoring_routes_admit_postflight.py — a prefix edited on one
+# side alone puts this check back where #1642 found it.
+ARR_MONITORED_PATH = {
+    "sonarr": "/api/v3/queue",
+    "radarr": "/api/v3/queue",
+    "prowlarr": "/api/v1/indexer",
+}
+
+
 def check_arr_key(app):
     """§9.3 — verify ``app``'s SOPS-held API key authenticates against its own instance.
 
     Args:
         app: The *arr app name (``sonarr``, ``radarr`` or ``prowlarr``), used both as the
-            secret name prefix and to build the status-check URL.
+            secret name prefix and to select the path in ``ARR_MONITORED_PATH``.
     """
     key, err = secret(f"{app}_api_key")
     if not key:
         return FAIL, err
     status, body = get_via_service(
         app,
-        f"/api/{arr.ARR_API_VERSION[app]}/system/status",
+        ARR_MONITORED_PATH[app],
         arr.ARR_PORTS[app],
         arr.arr_curl_config(key),
     )

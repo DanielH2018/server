@@ -13,6 +13,30 @@ image bump here would match no play and deploy nothing while reporting success.
 workload for `rollout status` to gate, and a stray auto-deploy has an outsized blast
 radius as the shared path 16 roles depend on. Reason is in `defaults/main.yml`.
 
+## Where the claim is staged
+
+`/etc/rancher/k3s/manifests/<service>-claims/<claim-name>.yaml` — a sibling of the consuming
+role's own manifest directory, **not inside it**. That directory belongs to `k8s/manifests`,
+which prunes every file the caller does not name in
+`manifests_files`/`manifests_secret_files`. No caller names this claim, so staging it there
+had the prune delete it on every deploy: a permanently `changed` task on an idempotent run,
+and a claim never re-applied from the role's own directory (#1654, the benign sibling of
+#1550). The name follows `headlamp-netpol` / `prowlarr-netpol` / `media-volume-probe` — a
+directory under the manifest root that no role's `manifests_service` claims, so no
+`kubectl apply -f <dir>/` sweeps it.
+
+The filename is the **claim name**, not `pvc.yaml`. scrutiny, tdarr and uptime-kuma each
+include this role twice under one `volume_claim_service`, and a fixed filename had the second
+claim's render overwrite the first — only the last claim of a service was ever staged.
+
+Both invariants are ENFORCED by
+`ansible/tests/k8s/test_volume_claim_pvc_path_collision.py`.
+
+A role that later drops its `k8s/volume-claim` include (wg-easy and zigbee2mqtt both did)
+leaves its `<service>-claims/` file behind, where the consuming role's prune used to clear
+it. Nothing sweeps that directory, so the file is inert rather than resurrecting an object —
+but it is stale, and removing it is a manual step.
+
 ## Notable
 - Until 2026-09-01 this role also **seeded** claims from a Docker bind mount on
   daniel-server, under the name `seed-volume`. The source tree stopped existing when

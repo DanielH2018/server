@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """`jellyfin_k8s_image` must satisfy the targetAbi of EVERY plugin the role installs.
 
-The five per-plugin guards beside this one each check their own pin against the image. None of
+Each per-plugin guard beside this one checks their own pin against the image. None of
 them checks the SET, and the set is what the role's lockstep rule is about: the image cannot move
 to a new Jellyfin line until every installed plugin has a release for that ABI, so the binding
 constraint is `max` over the declared `targetAbi` values — the slowest plugin, not the newest.
@@ -13,7 +13,7 @@ Two gaps that leaves, and this file closes both:
   reads a new `_target_abi` var against the image. This test finds its subjects by GLOBBING the
   vars, so a new one is covered the moment it is written.
 - **The floor was wrong in prose.** The role's CLAUDE.md claimed Media Cleaner's `10.11.9.0` was
-  the tightest of the five; it is not — ani-sync and Intro Skipper both declare `10.11.11.0`,
+  the tightest declared; it is not — ani-sync and Intro Skipper both declare `10.11.11.0`,
   which is why the image sits at `10.11.11`. A sentence a reader consults before bumping the
   image should not be the thing that decides it, so the floor is derived here instead.
 
@@ -39,9 +39,9 @@ LEADING_VERSION = re.compile(r"^(\d+(?:\.\d+)*)")
 # The members the census MUST contain. A rename breaks this loudly rather than emptying the set.
 # ani-sync is absent on purpose: it declares no `_target_abi` var — its ABI leads the release
 # asset's filename, and `test_anisync_pin_matches_server.py` owns that shape. It is read here
-# from the URL so the `max` below is over all FIVE plugins rather than the four with a var.
+# from the URL so the `max` below is over EVERY plugin rather than only those with a var.
 REQUIRED_PLUGINS = frozenset(
-    {"introskipper", "webhook", "mergeversions", "mediacleaner"}
+    {"introskipper", "webhook", "mergeversions", "mediacleaner", "trakt", "sso"}
 )
 
 
@@ -99,10 +99,10 @@ def test_the_census_still_finds_every_plugin_it_is_meant_to():
     assert "anisync" in found, (
         "ani-sync's targetAbi could not be read from jellyfin_k8s_anisync_url. It has no "
         "_target_abi var — the ABI leads the asset filename — so a URL shape change drops it "
-        "from the max() below and the binding constraint would be computed over four plugins."
+        "from the max() below and the binding constraint would be computed over one plugin too few."
     )
-    assert len(found) >= 5, (
-        f"the targetAbi census found only {sorted(found)}. The role installs five plugins; a "
+    assert len(found) >= 7, (
+        f"the targetAbi census found only {sorted(found)}. The role installs seven plugins; a "
         f"smaller set means the max() below is not the real floor."
     )
 
@@ -174,7 +174,14 @@ def test_the_binding_floor_is_the_slowest_plugin():
 @pytest.mark.parametrize(
     ("what", "before", "after"),
     [
-        ("a plugin targeting a newer server", '"10.11.9.0"', '"10.12.0.0"'),
+        # NAMED with its var, not the bare ABI string: `"10.11.9.0"` alone matches both
+        # mediacleaner's and trakt's pin since #1617, and `.replace(..., 1)` would silently
+        # mutate whichever comes first.
+        (
+            "a plugin targeting a newer server",
+            'jellyfin_k8s_mediacleaner_target_abi: "10.11.9.0"',
+            'jellyfin_k8s_mediacleaner_target_abi: "10.12.0.0"',
+        ),
         (
             "an image behind a plugin's ABI",
             "jellyfin:10.11.11ubu2604",
