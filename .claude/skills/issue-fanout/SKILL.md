@@ -150,6 +150,14 @@ host). daniel-server's key stays `unverified` until the operator adds it
 scope, or GitHub → Settings → SSH and GPG keys → New signing key); until then every batch lands
 on daniel-box. Nothing in the repo can register the key from inside a session.
 
+The comparison is against the live account list, read with
+`gh api /users/<login>/ssh_signing_keys` — the public per-user endpoint, because
+`/user/ssh_signing_keys` needs the `admin:ssh_signing_key` scope this token does not carry.
+**`launch` exits 6 for two distinct reasons**: no candidate host's key is in that list, or
+the list itself could not be read. The second case is a `gh` failure rather than a host
+problem, and it is what `read` shows as `signing=unknown`, so run `read` first — its
+`signing=` field gives the gate's verdict per host before a launch spends an agent on it.
+
 When every PR has merged: `uv run python scripts/dev/fanout_place.py clean <run-id>`. It
 removes each worktree once its branch is merged into `origin/master` and the tree is clean, and
 reports a kept tree with its reason. `clean` records each removal in the run's manifest, so a

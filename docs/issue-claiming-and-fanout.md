@@ -310,6 +310,13 @@ requires a verified commit signature, and a PR signed with an unregistered key s
 with every check green (PR #1572 needed a hand re-sign), so the dispatcher checks the key
 before it spends an agent.
 
+That check compares each candidate host's `user.signingkey` against the account's live list,
+read with `gh api /users/<login>/ssh_signing_keys`. `launch` exits 6 when no candidate host
+passes, and also when the list could not be read at all — a `gh` outage refuses the launch
+rather than placing a batch whose PR might not merge. `read` prints the same verdict per host
+as `signing=ok|unverified|unknown`, where `unknown` is that unreadable list, so it answers
+what exit 6 would refuse without spending an agent.
+
 ## The `/issue-fanout` skill
 
 1. **Triage.** Read `findings.py next --json`. Group the candidates so that no two agents touch
