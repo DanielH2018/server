@@ -42,7 +42,7 @@ guard inside a `ui` fixture's own teardown.
 cluster. Shimming a binary the host lacks would make `which` find it, turn the skip into a
 run, and fail CI. So the shim set is intersected with what is actually installed.
 
-**An allowlisted test runs with the real PATH.** The five tests in `_LIVE_API_TESTS` exist to
+**An allowlisted test runs with the real PATH.** The tests in `_LIVE_API_TESTS` exist to
 run the role's own argv against a live API server; handing them a stub would leave them
 passing while proving nothing, which is the failure mode this whole guard is about.
 
@@ -110,6 +110,7 @@ _LIVE_API_TESTS = frozenset(
         "ansible/tests/longhorn/test_volume_revert.py::test_the_listing_jsonpath_parses",
         "ansible/tests/longhorn/test_volume_snapshot.py::test_the_listing_fields_exist_on_a_real_snapshot",
         "ansible/tests/longhorn/test_volume_snapshot.py::test_the_listing_jsonpath_parses",
+        "ansible/tests/longhorn/test_volume_snapshot_cap_headroom.py::test_the_gates_reads_parse_and_return_the_field_it_sums",
     }
 )
 
