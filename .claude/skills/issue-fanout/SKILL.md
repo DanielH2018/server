@@ -121,12 +121,19 @@ batch, `<batch> on <host>: <state> …`, where state is `running`, `done <PR URL
 batch reports `done <PR URL>` and stops there: land that PR from this session with `land.sh`. A
 `failed` batch keeps its worktree — `status` already shows the last 300 bytes of
 `<worktree>/.fanout/stderr.log`; read the full file there for more before deciding what to do.
-`launch` refuses to relaunch the same batch while that worktree or its branch still exists, so
-run `clean <run-id>` first — or remove the tree by hand if its branch is unmerged and you are
-abandoning it — before relaunching. It refuses on two counts, because placement is free to send
-a relaunch to the other host: the worktree and branch on the host it would place on, and the
-batch id itself if any run's manifest still lists it as not cleaned, whichever host that run
-put it on. So a failed batch is cleaned, never re-placed elsewhere.
+`launch` refuses to relaunch that work while it is still live, so run `clean <run-id>` first.
+It refuses on two counts, because placement is free to send a relaunch to the other host: the
+worktree and branch on the host it would place on, and any issue of the new batch that a run's
+manifest still lists as not cleaned, whichever host that run put it on. The second count
+compares issue numbers, not the `--batch` text, so reordering or narrowing the spec does not
+get past it. A failed batch is cleaned, never re-placed elsewhere.
+
+**Abandoning a batch whose branch never merged takes one more step.** `clean` keeps an
+unmerged tree by design and records no removal, so the refusal above stands until the branch
+is gone. On that batch's host: remove the worktree directory, then
+`git -C /home/ubuntu/server branch -D worktree-fanout-<batch>`, discarding whatever the agent
+committed. Then run `clean <run-id>` again — it finds neither tree nor branch, records the
+removal, and the relaunch is free to place.
 
 **A daniel-server PR needs its signing key registered once.** The repo ruleset requires a
 verified commit signature, and daniel-server's key is not registered as a GitHub signing key
