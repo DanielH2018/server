@@ -1,0 +1,46 @@
+---
+# The API server's JWT trust, read ONCE at startup from the path
+# `--kube-apiserver-arg=authentication-config=` names (k3s_authentication_config_path).
+# Managed by roles/setup/k3s — do not edit on the host, the next play overwrites it.
+#
+# This file exists because the flag path could not express it. `--oidc-issuer-url` takes
+# exactly one value, and Authelia derives `iss` from the host the authorization request
+# arrived on, so a single value meant Headlamp's login worked on exactly one of its two
+# hostnames. `jwt` below is a LIST: one entry per issuer, and both are trusted at once.
+#
+# Every entry's claim mappings are identical on purpose. The issuer is the only thing that
+# differs between a LAN login and a public one — same Authelia, same client, same claims — so
+# a difference here would be a bug rather than a feature.
+apiVersion: apiserver.config.k8s.io/v1
+kind: AuthenticationConfiguration
+jwt:
+{% for issuer_url in k3s_oidc_issuer_urls %}
+  - issuer:
+      # Compared EXACTLY against the token's `iss`, with no normalisation: a trailing slash
+      # here rejects every token from this issuer, and the failure is a login that completes
+      # at Authelia and is then refused by the API server.
+      url: "{{ issuer_url }}"
+      # The audience. Authelia's default `id_token_audience_mode: specification` puts only the
+      # client id in `aud`, so this is the Authelia client id — the same value Headlamp sends
+      # as `-oidc-client-id`. `audiences` is required and must be non-empty.
+      audiences:
+        - "{{ k3s_oidc_client_id }}"
+    claimMappings:
+      username:
+        claim: "{{ k3s_oidc_username_claim }}"
+        # EMPTY STRING, and this is where the structured config differs from the flag it
+        # replaces. `--oidc-username-prefix=-` was the sentinel meaning "no prefix", because
+        # the flag path prefixes the username with the issuer URL plus `#` for any claim other
+        # than `email`. Structured config has no such implicit prefixing and no `-` sentinel:
+        # `prefix` is REQUIRED whenever `claim` is set, and `""` is how prefixing is disabled
+        # ("prefix is required when claim is set. It can be set to an empty string to disable
+        # prefixing", apiserver/pkg/apis/apiserver/validation/validation.go). Writing `-` here
+        # would produce usernames literally prefixed `-`.
+        prefix: ""
+      groups:
+        claim: "{{ k3s_oidc_groups_claim }}"
+        # Groups DO carry a prefix, and it is what stops an Authelia group name from being
+        # read as a built-in `system:` group. `headlamp_k8s_oidc_group`
+        # (roles/k8s/headlamp/defaults) is this prefix plus the Authelia group.
+        prefix: "{{ k3s_oidc_groups_prefix }}"
+{% endfor %}
