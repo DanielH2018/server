@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/scripts.py
-generated_at: 2026-09-09 22:50 UTC
-generated_sha: 02af13398
+generated_at: 2026-09-10 06:17 UTC
+generated_sha: af3e4e492
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 02af13398
 
 # Scripts
 
-162 first-party script(s) in `scripts/`. Each summary is the script's own module docstring — change the docstring to change this page.
+172 first-party script(s) in `scripts/`. Each summary is the script's own module docstring — change the docstring to change this page.
 
 The sections below split them by **how each one is run**, which is derived from the tree rather than declared: a cron `job:`, a `prek.toml` entry, a workflow step, a Claude hook, an Ansible task, or an import edge. The *Reached by* column is the evidence, so a wrong answer is a wrong answer about a real file.
 
@@ -20,7 +20,7 @@ The sections below split them by **how each one is run**, which is derived from 
     Whether a script is safe to run. The summary is whatever its author wrote, and nothing here judges blast radius. For the ones that run unattended, and which of those change state, see [Scheduled jobs](crons.md).
 
 
-**1 of the 40 scripts that run unattended have no test; 5 of all 162 do not.** The first number is the one that matters. An untested script a person runs fails in front of that person; an untested one a cron or a commit gate runs fails unattended, or blocks everybody.
+**1 of the 41 scripts that run unattended have no test; 5 of all 172 do not.** The first number is the one that matters. An untested script a person runs fails in front of that person; an untested one a cron or a commit gate runs fails unattended, or blocks everybody.
 
 !!! note "Where the Tests column looks"
     First for a `scripts/test_<name>.py`. Failing that, for any test in `scripts/` or `ansible/tests/` that names the script — `gitops_tick.sh` has five, in `test_gitops_manual_trigger.py`, and the naming convention alone called it untested. Those show as *(indirect)*, which means a test exercises it, not that the test is about it.
@@ -56,7 +56,7 @@ The sections below split them by **how each one is run**, which is derived from 
 
 ## Run automatically, on a commit, CI run, deploy or session
 
-22 script(s) — every commit, CI run, deploy or Claude session runs it.
+23 script(s) — every commit, CI run, deploy or Claude session runs it.
 
 | Script | What it does | Reached by | Tests |
 |---|---|---|---|
@@ -75,6 +75,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/deploy_tools/prune_releases.py` | Remove old host-script release directories, never the one in use. | deploy: ansible/roles/setup/common/tasks/release_bin.yml | `test_prune_releases.py` |
 | `scripts/dev/prune_worktrees.py` | Report and remove Claude session worktrees under .claude/worktrees/ that are done with. | Claude hook: session-health.py | `test_prune_worktrees.py` |
 | `scripts/dev/pytest_shard.py` | Split the pytest suite into N fixed shards of whole test modules, for CI's matrix. | CI: ci.yml | `test_pytest_shards_partition_the_suite.py` *(indirect)* |
+| `scripts/validate/setup_templates.py` | Render every setup-plane Jinja template and fail on a variable nothing defines. | prek hook (every commit) | `test_validate_setup_templates.py` *(indirect)* |
 | `scripts/validate/shell_templates.py` | Render every Jinja-templated shell script under ansible/roles/ and lint the output. | prek hook (every commit) | `test_validate_shell_templates.py` *(indirect)* |
 | `scripts/dev/smoke_extract.py` | Extract newly-added container image references from a unified git diff. | CI: image-smoke.yml | `test_smoke_extract.py` |
 | `scripts/diagnostics/staging_egress_probe.py` | Acceptance gate for the staging guest's egress fence. | deploy: ansible/roles/setup/hypervisor/templates/staging-nwfilter.xml.j2 | `test_staging_egress_fence.py` *(indirect)* |
@@ -85,7 +86,7 @@ The sections below split them by **how each one is run**, which is derived from 
 
 ## Imported, never run on their own
 
-97 script(s) — imported by another script — not an entry point.
+98 script(s) — imported by another script — not an entry point.
 
 | Script | What it does | Reached by | Tests |
 |---|---|---|---|
@@ -115,6 +116,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/lib/cron_targets.py` | Resolve which shell templates under `ansible/roles/` are scheduled as cron `job:` targets. | imported by cron_checks.py, shell_templates.py | `test_shell_template_cron_rules.py` *(indirect)* |
 | `scripts/diagnostics/probe_lib/curl_pipeline.py` | The streaming half of probe.py: argv -> curl/openssl stages -> a piped run. | imported by probe.py | `test_probe_curl_pipeline.py` *(indirect)* |
 | `scripts/deploy_tools/land_lib/deploy.py` | Step 5: deploy what the tick deferred, one deploy.sh per host, riding out a stale tree. | imported by pipeline.py | `test_land_deploy.py` *(indirect)* |
+| `scripts/lib/deployer_park.py` | Whether the GitOps deployer is PARKED behind origin/master, read from its own marker. | imported by deploy_staleness.py | `test_deployer_park.py` |
 | `scripts/infra_map/diagram.py` | The architecture figure: how a request reaches a workload, and on what it runs. | imported by render.py | `test_infra_map_render.py` *(indirect)* |
 | `scripts/lib/doc_freshness.py` | How old a hand-written doc is, and whether the files it names have moved under it. | imported by _mkdocs_freshness.py, freshness.py | `test_doc_freshness.py` |
 | `scripts/lib/docs_provenance.py` | The provenance banner every generated documentation page opens with. | imported by backlog.py, catalog_render.py, crons.py, decisions.py, freshness.py, gen_doc_fragments.py, gen_infra_map.py, hosts.py, networking.py, scripts.py, secrets.py, service_catalog.py, state.py | `test_docs_provenance.py` |
@@ -123,7 +125,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/docs/fragment_renderers.py` | The renderers behind the doc fragments: pure functions from plain values to markdown. | imported by gen_doc_fragments.py | `test_gen_doc_fragments.py` *(indirect)* |
 | `scripts/lib/gh.py` | One way to run the GitHub CLI from a script, with no prompt and no notifier. | imported by boundaries.py, publish_pr.py, tools.py | `test_gh.py` |
 | `scripts/dev/findings_lib/gh_calls.py` | The gh reads and writes `findings.py` makes, and the one place a plan is executed. | imported by backlog.py, claim_cli.py, findings.py | `test_findings.py` *(indirect)* |
-| `scripts/lib/git.py` | One way to run git from a script, with the repository chosen by ``cwd`` alone. | imported by await_ci.py, backfill_staging_gate.py, decisions.py, deploy_staleness.py, deploy_tags.py, doc_freshness.py, docs_provenance.py, prune_worktrees.py, publish_pr.py, releases.py, rotation_tools.py, state.py, tools.py | `test_git.py` |
+| `scripts/lib/git.py` | One way to run git from a script, with the repository chosen by ``cwd`` alone. | imported by await_ci.py, backfill_staging_gate.py, decisions.py, deploy_staleness.py, deploy_tags.py, doc_freshness.py, docs_provenance.py, land_tags.py, prune_worktrees.py, publish_pr.py, releases.py, rotation_tools.py, state.py, tools.py | `test_git.py` |
 | `scripts/secrets_mgmt/git_dates.py` | When each secret's ciphertext last changed, read out of git. | imported by secret_rotation.py | `test_secret_git_dates.py` *(indirect)* |
 | `scripts/infra_map/groups.py` | The functional grouping behind the workload strip under the diagram. | imported by render.py | `test_infra_map_render.py` *(indirect)* |
 | `scripts/diagnostics/probe_lib/ha.py` | Home Assistant: live state, automations, and the read-only WebSocket trace client. | imported by ha_state_model.py, postflight.py, probe.py, subcommands.py | `test_probe_ha.py` *(indirect)* |
@@ -167,8 +169,8 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/lib/release_bin_groups.py` | Resolve which source files a `release_bin.yml` group deploys. | imported by cron_targets.py | `test_release_bin_groups_have_no_secrets.py` *(indirect)* |
 | `scripts/diagnostics/probe_lib/releases.py` | `probe.py releases` -- which commit produced the manifests each k8s service is running. | imported by health.py, probe.py, subcommands.py | `test_probe_releases.py` *(indirect)* |
 | `scripts/infra_map/render.py` | Rendering: turn the reconciled model into one self-contained HTML page. | imported by gen_infra_map.py | `test_infra_map_render.py` *(indirect)* |
-| `scripts/lib/render_guard.py` | Shared helpers for the render-guard scripts and other Ansible-inventory readers. | imported by catalog_backup.py, catalog_facts.py, cert_expiry.py, compose_templates.py, config_templates.py, deploy_tags.py, hosts.py, k8s_context.py, k8s_manifests.py, k8s_roles.py, k8s_yaml.py, networking.py, service_catalog.py, shell_lint.py, shell_templates.py, unit_templates.py | `test_render_guard.py` |
-| `scripts/lib/repo_paths.py` | The repo path anchors a script under ``scripts/`` reads the Ansible tree through. | imported by await_ci.py, build_docs.py, catalog_model.py, cert_expiry.py, constants.py, core.py, cron_checks.py, cron_targets.py, crons.py, decisions.py, deploy_detach_notify.py, deploy_tags.py, docs_provenance.py, fact_cache_guard.py, fragment_readers.py, freshness.py, gen_doc_fragments.py, gen_hosts_block.py, grafana_dashboards.py, ha.py, health.py, health_docker.py, hosts.py, invocation_sites.py, k8s_autodeploy_counts.py, k8s_context.py, k8s_pvc.py, k8s_roles.py, k8s_schema.py, land_reach.py, land_tags.py, memory_survey.py, monitors.py, networking.py, pi_plane.py, prune_worktrees.py, releases.py, render_guard.py, review_metrics.py, rotation_tools.py, route_facts.py, script_classify.py, scripts.py, secret_bearing_host_paths.py, secrets.py, shell_templates.py, staging_egress_probe.py, staging_gate.py, state.py, validate_ha_config.py | `test_doc_freshness.py` *(indirect)* |
+| `scripts/lib/render_guard.py` | Shared helpers for the render-guard scripts and other Ansible-inventory readers. | imported by catalog_backup.py, catalog_facts.py, cert_expiry.py, compose_templates.py, config_templates.py, deploy_tags.py, hosts.py, k8s_context.py, k8s_manifests.py, k8s_roles.py, k8s_yaml.py, land_tags.py, networking.py, service_catalog.py, setup_templates.py, shell_lint.py, shell_templates.py, unit_templates.py | `test_render_guard.py` |
+| `scripts/lib/repo_paths.py` | The repo path anchors a script under ``scripts/`` reads the Ansible tree through. | imported by await_ci.py, build_docs.py, catalog_model.py, cert_expiry.py, constants.py, core.py, cron_checks.py, cron_targets.py, crons.py, decisions.py, deploy_detach_notify.py, deploy_tags.py, docs_provenance.py, fact_cache_guard.py, fragment_readers.py, freshness.py, gen_doc_fragments.py, gen_hosts_block.py, grafana_dashboards.py, ha.py, health.py, health_docker.py, hosts.py, invocation_sites.py, k8s_autodeploy_counts.py, k8s_context.py, k8s_pvc.py, k8s_roles.py, k8s_schema.py, land_reach.py, land_tags.py, memory_survey.py, monitors.py, networking.py, pi_plane.py, prune_worktrees.py, releases.py, render_guard.py, review_metrics.py, rotation_tools.py, route_facts.py, script_classify.py, scripts.py, secret_bearing_host_paths.py, secrets.py, setup_templates.py, shell_templates.py, staging_egress_probe.py, staging_gate.py, state.py, validate_ha_config.py | `test_doc_freshness.py` *(indirect)* |
 | `scripts/secrets_mgmt/rotation_tools.py` | Every process boundary `secret_rotation.py` crosses, as one injectable object. | imported by _rotation_fakes.py, consumers.py, git_dates.py, secret_registry.py, secret_rotation.py, secrets.py | `test_rotation_tools.py` |
 | `scripts/docs/route_facts.py` | Shared route facts for the reference generators. | imported by catalog_facts.py, catalog_render.py, cert_expiry.py, networking.py | `test_route_facts.py` |
 | `scripts/lib/script_classify.py` | How every first-party script under ``scripts/`` is run, derived from the tree. | imported by script_coverage.py, scripts.py | `test_script_classify_surface.py` *(indirect)* |
@@ -185,29 +187,35 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/dev/findings_lib/verify.py` | Verify-by: the prose an issue stores about how to check it, and how `verify` reports it. | imported by findings.py | `test_findings_verify.py` *(indirect)* |
 | `scripts/diagnostics/probe_lib/vip_placement.py` | `probe.py vip-placement` — does every ETP=Local VIP have a Ready endpoint on an announcing node? | imported by probe.py, subcommands.py | `test_probe_vip_placement.py` *(indirect)* |
 | `scripts/lib/watcher.py` | Generic scaffold for an external-watcher: fetch -> check -> notify -> healthcheck ping. | imported by cert_expiry.py, common.py | `test_watcher.py` |
-| `scripts/lib/yaml_fast.py` | `yaml.safe_load` backed by libyaml, which parses the same schema an order faster. | imported by backfill_staging_gate.py, compose_templates.py, config_templates.py, cron_targets.py, crons.py, deploy_tags.py, fragment_readers.py, gen_hosts_block.py, git_dates.py, ha_state_checks.py, ha_state_model.py, inventory.py, invocation_sites.py, k8s_autodeploy_counts.py, k8s_pvc.py, k8s_roles.py, land_reach.py, release_bin_groups.py, render_guard.py, rotation_tools.py, route_facts.py, secret_bearing_host_paths.py, staging_egress_probe.py, staging_expectations.py, state.py, validate_ha_config.py | `test_yaml_fast.py` |
+| `scripts/lib/yaml_fast.py` | `yaml.safe_load` backed by libyaml, which parses the same schema an order faster. | imported by backfill_staging_gate.py, compose_templates.py, config_templates.py, cron_targets.py, crons.py, deploy_tags.py, fragment_readers.py, gen_hosts_block.py, git_dates.py, ha_state_checks.py, ha_state_model.py, inventory.py, invocation_sites.py, k8s_autodeploy_counts.py, k8s_pvc.py, k8s_roles.py, land_reach.py, land_tags.py, release_bin_groups.py, render_guard.py, rotation_tools.py, route_facts.py, secret_bearing_host_paths.py, setup_templates.py, staging_egress_probe.py, staging_expectations.py, state.py, validate_ha_config.py | `test_yaml_fast.py` |
 
 ## Run by hand
 
-25 script(s) — a person runs it.
+33 script(s) — a person runs it.
 
 | Script | What it does | Reached by | Tests |
 |---|---|---|---|
 | `scripts/backup/b2_drain.py` | Delete a stranded Longhorn backup prefix directly through the B2 API. | playbook: ansible/drain_backup_prefix.yml | `test_b2_drain.py` |
 | `scripts/deploy_tools/backfill_staging_gate.py` | Drive the staging gate over real master commits and report whether it is trustworthy. | no automated caller in the tree | `test_backfill_staging_gate.py` |
+| `scripts/dev/fanout_lib/brief.py` | The brief a headless fan-out agent reads on stdin — spec 2026-09-06 §3. | no automated caller in the tree | `test_fanout_cli.py` *(indirect)* |
 | `scripts/backup/etcd_restore_drill.sh` | prove an off-box etcd snapshot actually restores, without an outage. | no automated caller in the tree | `test_etcd_restore_drill_cron.py` *(indirect)* |
 | `scripts/grafana/export_grafana_dashboards.py` | Export the *customized* Grafana dashboards from the live DB into code. | no automated caller in the tree | `test_export_grafana_dashboards.py` |
+| `scripts/dev/fanout_place.py` | Place issue-fanout batches on the session host with the most memory headroom. | no automated caller in the tree | `test_fanout_cli.py` *(indirect)* |
 | `scripts/grafana/fetch_grafana_dashboards.py` | Fetch + adapt Grafana community dashboards for headless (provisioned) use. | no automated caller in the tree | — |
 | `scripts/dev/findings.py` | File, re-observe, escalate and close Claude's unfixed findings as GitHub Issues. | no automated caller in the tree | `test_findings.py` |
 | `scripts/dev/gen_hosts_block.py` | Emit an /etc/hosts block for every homelab `.local` name, with the right IP per service. | no automated caller in the tree | `test_gen_hosts_block.py` |
 | `scripts/deploy_tools/gitops_tick.sh` | trigger a GitOps deploy tick by hand and report what it did. | no automated caller in the tree | `test_gitops_manual_trigger.py` *(indirect)* |
 | `scripts/availability_bots/glenstone-bot.py` | Watch Glenstone's timed-entry calendar and alert when a target date opens up. | no automated caller in the tree | `test_availability_bots.py` *(indirect)* |
 | `scripts/diagnostics/grafana_panel_report.py` | Classify what a Grafana dashboard page actually rendered. | no automated caller in the tree | `test_grafana_panel_report.py` |
+| `scripts/dev/fanout_lib/launch.py` | Create the worktree, write the brief, start the transient service — spec §3. | no automated caller in the tree | `test_fanout_launch.py` *(indirect)* |
+| `scripts/dev/fanout_lib/manifest.py` | The run manifest: ~/.claude/fanout/<run-id>.json, outside every checkout — spec §4. | no automated caller in the tree | `test_fanout_cli.py` *(indirect)* |
 | `scripts/dev/measure_rollout_gap.py` | Measure real downtime across a rollout by polling a service while it restarts. | no automated caller in the tree | `test_measure_rollout_gap.py` |
 | `scripts/dev/memory_survey.py` | Survey the project's Claude memory store and report what it costs and what nothing reads. | no automated caller in the tree | `test_memory_survey.py` |
 | `scripts/availability_bots/osteria-francescana-bot.py` | Watch Osteria Francescana (via CoverManager) for a table on the target dates. | no automated caller in the tree | `test_availability_bots.py` *(indirect)* |
+| `scripts/dev/fanout_lib/placement.py` | Pure placement over (host, cap, current, live_agents) — spec 2026-09-06 §2. | no automated caller in the tree | `test_fanout_placement.py` *(indirect)* |
 | `scripts/diagnostics/postflight.py` | Verify the post-deploy setup that Ansible can't do (ansible/README.md §9). | playbook: ansible/bring-up.sh | `test_postflight.py` |
 | `scripts/validate/refresh_crd_schemas.py` | Re-download the vendored CRD JSON schemas that validate/k8s_manifests.py checks against. | no automated caller in the tree | `test_validate_k8s_manifests.py` *(indirect)* |
+| `scripts/validate/renovate_config.sh` | Validate renovate.json against a freshly-resolved Renovate, riding out npm's publish window. | no automated caller in the tree | `test_renovate_config_retry.py` *(indirect)* |
 | `scripts/dev/review_metrics.py` | Print the /homelab-review outcome trend: false-positive and fix-refusal rates. | no automated caller in the tree | `test_review_metrics.py` |
 | `scripts/validate/run_all.py` | Run every registered template/manifest validator in one process. | no automated caller in the tree | `test_validate_run_all.py` *(indirect)* |
 | `scripts/dev/run_as_cron.sh` | run a command in the environment cron actually gives it. | no automated caller in the tree | `test_run_as_cron.py` |
@@ -215,13 +223,15 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/dev/split_module.py` | Split a large Python module along its seams: show the references, then move names by spec. | no automated caller in the tree | `test_split_module.py` |
 | `scripts/deploy_tools/staging_expect_remote.sh` | The daniel-server half of the staging expectation check. Piped over ssh by | no automated caller in the tree | — |
 | `scripts/deploy_tools/staging_expectations.py` | Check that staging's services ANSWER the way they are supposed to, not just that they start. | no automated caller in the tree | `test_staging_expectations.py` |
+| `scripts/dev/fanout_lib/status.py` | Read every batch on one host in one call, and stop one — spec 2026-09-06 §4-5. | no automated caller in the tree | `test_fanout_status.py` *(indirect)* |
+| `scripts/dev/fanout_lib/transport.py` | The transport seam: every process boundary the dispatcher crosses, as one injectable object. | no automated caller in the tree | `test_fanout_cli.py` *(indirect)* |
 | `scripts/diagnostics/ui_login.py` | Mint a Playwright storage-state file holding a logged-in Authelia session. | ui_mcp.sh (a person runs it) | `test_ui_login.py` |
 | `scripts/diagnostics/ui_mcp.sh` | Launch @playwright/mcp against this homelab's LAN routes. | no automated caller in the tree | — |
 | `scripts/deploy_tools/verify_staging_gate_key.sh` | Prove the staging gate's restricted ssh key is confined to its dispatcher. Run on daniel-box. | no automated caller in the tree | — |
 
 ## Usage
 
-15 script(s) document how to invoke themselves. The rest take `--help`.
+16 script(s) document how to invoke themselves. The rest take `--help`.
 
 
 ### `scripts/docs/reference/backlog.py`
@@ -248,6 +258,15 @@ uv run python scripts/docs/reference/crons.py --out docs/reference/crons.md
 
 ```
 uv run python scripts/docs/reference/decisions.py --out docs/reference/decisions.md
+```
+
+### `scripts/dev/fanout_place.py`
+
+```
+fanout_place.py read
+fanout_place.py launch --batch 1345,1386 [--batch 1288] [--host daniel-box] --orchestrator-branch <b>
+fanout_place.py status <run-id>
+fanout_place.py stop <run-id> [batch]
 ```
 
 ### `scripts/dev/findings.py`

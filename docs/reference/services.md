@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/service_catalog.py
-generated_at: 2026-09-03 18:17 UTC
-generated_sha: 4ee11a94
+generated_at: 2026-09-10 06:17 UTC
+generated_sha: af3e4e492
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,12 +12,12 @@ generated_sha: 4ee11a94
 
 # Services
 
-67 service(s) declared across 3 host(s).
+69 service(s) declared across 3 host(s).
 
 
 ## daniel-box
 
-55 service(s).
+57 service(s).
 
 | Service | Platform | Route | Auth | Backup tier | Auto-deploy |
 |---|---|---|---|---|---|
@@ -56,9 +56,11 @@ generated_sha: 4ee11a94
 | netpol-baseline | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | eligible |
 | node-exporter | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | eligible |
 | nut | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | denylisted (NOT probe-less (has a readinessProbe) despite the denylist comment grouping — real reason: USB-passthrough + node-exclusive hostPort (Recreate strategy) on the UPS shutdown-chain pod, privileged:true) |
+| nut-exporter | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | eligible |
 | peanut | k8s | <span class="fqdn" data-host="peanut">peanut.&lt;domain&gt;</span> · <span class="fqdn" data-host="peanut.local">peanut.local.&lt;domain&gt;</span> | Authelia | no PVC (stateless) | eligible |
 | pi-peer-backup | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | weekly -> B2 (default target) | eligible |
 | pihole | k8s | <span class="fqdn" data-host="pihole">pihole.&lt;domain&gt;</span> · <span class="fqdn" data-host="pihole.local">pihole.local.&lt;domain&gt;</span> | Authelia | unknown (PVC present, claim name not statically resolvable: {{ inst.claim }}) | denylisted (platform — LAN DNS resolver; a failed deploy breaks name resolution fleet-wide, and host probes stay green through that kind of outage) |
+| pihole-exporter | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | eligible |
 | prowlarr | k8s | <span class="fqdn" data-host="prowlarr">prowlarr.&lt;domain&gt;</span> · <span class="fqdn" data-host="prowlarr.local">prowlarr.local.&lt;domain&gt;</span> | Authelia | weekly -> B2 (default target) | eligible |
 | qbittorrent | k8s | <span class="fqdn" data-host="qbittorrent">qbittorrent.&lt;domain&gt;</span> · <span class="fqdn" data-host="qbittorrent.local">qbittorrent.local.&lt;domain&gt;</span> | Authelia | weekly -> B2 (default target); daily -> B2 (default group) | denylisted (state coupled outside the volume — reverting qbittorrent-config to a snapshot rewinds in-flight torrent bookkeeping while the media-data volume it references does not move; the pre-apply snapshot and revert work fine and are not the blocker) |
 | radarr | k8s | <span class="fqdn" data-host="radarr">radarr.&lt;domain&gt;</span> · <span class="fqdn" data-host="radarr.local">radarr.local.&lt;domain&gt;</span> | Authelia | weekly -> B2 (default target); daily -> B2 (default group) | eligible |
@@ -105,4 +107,4 @@ generated_sha: 4ee11a94
 
 ## Underivable facts
 
-23 field(s) read `unknown`. A fact with no machine-readable source prints its reason rather than a guess — see the FIELD NOTES section of `scripts/docs/service_catalog.py` for which facts those are and why.
+25 field(s) read `unknown`. A fact with no machine-readable source prints its reason rather than a guess — see the FIELD NOTES section of `scripts/docs/service_catalog.py` for which facts those are and why.
