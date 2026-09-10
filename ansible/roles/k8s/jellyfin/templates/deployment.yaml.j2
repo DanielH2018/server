@@ -486,6 +486,105 @@ spec:
             - name: jellyfin-config
               mountPath: /config
 {{ container_resources(cpu_limit='500m', mem_limit='128Mi', cpu_request='10m', mem_request='32Mi') }}
+          # ── Media Cleaner (rule-based deletion of watched media) ────────────────────────────
+          # A fifth copy of the four containers above rather than a loop over a plugin list, for
+          # the reason the Intro Skipper, Webhook and Merge Versions comments record: each
+          # install is pinned by literal string assertions in its own test, and a textual guard
+          # stops seeing what it guards once the thing moves behind an indirection.
+          #
+          # Webhook's shape, not Intro Skipper's — the zip carries its own meta.json, so nothing
+          # here writes one. What is unusual is the PLUGIN VERSION: its fourth segment encodes
+          # the server ABI, because one upstream release tag ships three per-ABI assets and the
+          # published manifest publishes each as its own version. defaults/main.yml explains the
+          # encoding; the test re-derives it from the targetAbi.
+          #
+          # THIS PLUGIN DELETES MEDIA FILES. The install is all this container owns: which
+          # libraries it may delete from, and every rule that decides what goes, are plugin
+          # configuration under /config/data/plugins/configurations/ — a directory nothing here
+          # touches, exactly as the four siblings leave their own settings alone. That matters
+          # more here than for them. It also means the sweep below is safe against the
+          # dashboard-installed copy this pin replaces: the configuration lives outside the
+          # plugin directory, so removing a differently-named directory loses no rules.
+        - name: install-media-cleaner
+          image: {{ jellyfin_k8s_plugin_init_image }}
+          command:
+            - python3
+            - -c
+            - |
+              import hashlib
+              import shutil
+              import tempfile
+              import urllib.request
+              import zipfile
+              from pathlib import Path
+
+              VERSION = "{{ jellyfin_k8s_mediacleaner_version }}"
+              URL = "{{ jellyfin_k8s_mediacleaner_url }}"
+              WANT_SHA256 = "{{ jellyfin_k8s_mediacleaner_sha256 }}"
+              DLL = "MediaCleaner.dll"
+              # The release ships MediaCleaner.Core.dll beside the plugin's own, and the plugin
+              # does not load without it — so both are checked rather than just the one whose
+              # name Jellyfin matches.
+              DEP_DLL = "MediaCleaner.Core.dll"
+              # /config/data/plugins, the only directory Jellyfin scans — the same trap all four
+              # sibling containers' comments record, and the same answer.
+              PLUGINS = Path("/config/data/plugins")
+              # `<Name>_<Version>`, taken from the zip's own meta.json (`"name": "Media
+              # Cleaner"`), not invented here. This is also the name Jellyfin's own dashboard
+              # installer wrote, so on the volume that already carries a dashboard-installed
+              # copy at the pinned version the guard below matches and this container opens no
+              # socket at all.
+              PLUGIN_DIR = PLUGINS / ("Media Cleaner_" + VERSION)
+
+              if (PLUGIN_DIR / DLL).exists():
+                  print("media-cleaner " + VERSION + " already installed")
+                  raise SystemExit(0)
+
+              print("installing media-cleaner " + VERSION + " from " + URL)
+              PLUGINS.mkdir(parents=True, exist_ok=True)
+
+              with tempfile.TemporaryDirectory(dir=PLUGINS) as tmp:
+                  archive = Path(tmp) / "plugin.zip"
+                  with urllib.request.urlopen(URL, timeout=60) as response:
+                      with archive.open("wb") as handle:
+                          shutil.copyfileobj(response, handle)
+
+                  # sha256, the digest GitHub reports for the asset. Upstream's published
+                  # manifest carries an MD5; the stronger digest is the one that can be
+                  # re-derived from the release itself.
+                  got = hashlib.sha256(archive.read_bytes()).hexdigest()
+                  if got != WANT_SHA256:
+                      raise SystemExit("sha256 mismatch: got " + got + ", want " + WANT_SHA256)
+
+                  staged = Path(tmp) / "staged"
+                  with zipfile.ZipFile(archive) as bundle:
+                      bundle.extractall(staged)
+
+                  for needed in (DLL, DEP_DLL):
+                      if not (staged / needed).exists():
+                          found = sorted(path.name for path in staged.iterdir())
+                          raise SystemExit(
+                              "archive has no " + needed + ": " + repr(found)
+                          )
+
+                  if PLUGIN_DIR.is_dir():
+                      shutil.rmtree(PLUGIN_DIR)
+                  shutil.move(staged, PLUGIN_DIR)
+
+              # The name carries the version, so a bump leaves the old directory behind and
+              # Jellyfin loads two copies of one plugin — which for a plugin that deletes media
+              # would mean two rule engines acting on one library. Swept after the rename, so a
+              # failure above leaves the working version untouched.
+              for stale in sorted(PLUGINS.glob("Media Cleaner_*")):
+                  if stale != PLUGIN_DIR:
+                      print("removing superseded " + stale.name)
+                      shutil.rmtree(stale)
+              print("installed media-cleaner " + VERSION)
+{{ hardened_security_context(non_root=true, run_as_user=puid, run_as_group=pgid) }}
+          volumeMounts:
+            - name: jellyfin-config
+              mountPath: /config
+{{ container_resources(cpu_limit='500m', mem_limit='128Mi', cpu_request='10m', mem_request='32Mi') }}
       automountServiceAccountToken: false
       priorityClassName: homelab-standard
       containers:
