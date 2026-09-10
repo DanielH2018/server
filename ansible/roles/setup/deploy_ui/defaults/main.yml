@@ -1,0 +1,12 @@
+---
+deploy_ui_port: 8790
+deploy_ui_dir: /opt/deploy-ui
+# Who may dial the daemon. NOT lan_subnet: the daemon does no auth of its own, so the LAN
+# reaching it directly would put a deploy button in front of Authelia rather than behind it.
+# Both node IPs are load-bearing — flannel masquerades pod→LAN traffic to the sending node's
+# address, so Traefik on daniel-server arrives as 10.0.0.161, not as a 10.42.x pod IP.
+# ENFORCED: ansible/tests/setup/test_deploy_ui_firewall_sources.py.
+deploy_ui_allowed_sources:
+  - "{{ k3s_pod_cidr }}"
+  - "{{ server_ip }}"
+  - "{{ k3s_agent_node_ips | default([]) }}"

@@ -87,6 +87,14 @@ containers_list:
     hostname: "headlamp"
     port: 4466
     use_authelia: true
+  # Route-only: the backend is deploy-ui.service on this host (roles/setup/deploy_ui), reached
+  # through a selector-less Service. use_authelia is the whole access control and the Authelia
+  # policy is two_factor — the page starts deploys and clears the deployer's hold.
+  - name: deploy-ui
+    platform: k8s
+    hostname: "deploy"
+    port: 8790
+    use_authelia: true
   # Route-only entry: Longhorn's workloads come from the upstream manifest roles/setup/k3s
   # applies, and this role adds nothing but the IngressRoute plus the middleware copies it
   # needs inside longhorn-system. `port` is longhorn-frontend's Service port. use_authelia

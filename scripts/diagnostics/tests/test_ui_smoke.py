@@ -85,6 +85,7 @@ TWO_FACTOR_SERVICES = [
     ("longhorn", "Longhorn", "/#/dashboard"),
     ("code-server", "code-server login", "/login"),
     ("n8n", "n8n.io - Workflow Automation", "/"),
+    ("deploy", "Deploy queue", "/"),
 ]
 
 MINT_HINT = "mint one with `uv run python scripts/diagnostics/ui_login.py --two-factor`"

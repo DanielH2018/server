@@ -63,6 +63,7 @@ ansible/roles/k8s/monitor-bridge/tests/test_check_traefik_404.py 1
 ansible/roles/k8s/monitor-bridge/tests/test_check_ups.py 1
 ansible/roles/k8s/monitor-bridge/tests/test_host_temp.py 1
 ansible/roles/k8s/qbittorrent/tests/test_apply_prefs.py 1
+ansible/roles/setup/deploy_ui/tests/test_deploy_ui_app.py 6
 ansible/roles/setup/fake_remux/tests/test_fake_remux_replace_logic.py 2
 ansible/roles/setup/gitops_deploy/tests/conftest.py 6
 ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_alert_channels.py 5

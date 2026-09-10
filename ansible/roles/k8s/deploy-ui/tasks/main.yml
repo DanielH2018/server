@@ -1,0 +1,13 @@
+---
+# Route-only role, the longhorn-ui shape: no workload of ours runs in the cluster. The Service
+# has no selector and its EndpointSlice names daniel-box's LAN address, where
+# roles/setup/deploy_ui runs the daemon. `manifests_rollout: ''` — nothing to roll.
+- name: Deploy the deploy-ui route to the cluster
+  ansible.builtin.include_role:
+    name: k8s/manifests
+  vars:
+    manifests_service: deploy-ui
+    manifests_rollout: ''
+    manifests_files:
+      - service.yaml
+      - ingressroute.yaml

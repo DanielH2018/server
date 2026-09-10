@@ -323,6 +323,7 @@ cours
 [Bb]ackgrounded
 [Bb]ackoff
 SIGTERMed
+SIGTERMs
 pid
 [Pp]ytest
 

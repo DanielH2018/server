@@ -30,6 +30,8 @@
     # never overlap.
     - { role: hypervisor, tags: ["hypervisor"] }
     - { role: gitops_deploy, tags: ["gitops_deploy"] }
+    # After gitops_deploy: it reads /var/lib/gitops-deploy and dispatches on has_gitops.
+    - { role: deploy_ui, tags: ["deploy_ui"] }
     # Per-user, become: false throughout — they manage the connecting user's home, not
     # root's. Placed after docker_install so the OS is fully set up before the dotfiles
     # land on top of it.

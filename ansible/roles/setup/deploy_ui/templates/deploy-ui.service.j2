@@ -1,0 +1,26 @@
+[Unit]
+Description=Deploy queue UI (deploy.local) — reads the landing queue, runs land.sh/deploy.sh
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{ sys_user }}
+WorkingDirectory=/home/{{ sys_user }}/server
+Environment=PATH=/home/{{ sys_user }}/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=DEPLOY_UI_BIND={{ server_ip }}
+Environment=DEPLOY_UI_PORT={{ deploy_ui_port }}
+Environment=DEPLOY_UI_REPO=/home/{{ sys_user }}/server
+Environment=DEPLOY_UI_STATE=/var/lib/gitops-deploy
+Environment=DEPLOY_UI_LOGS=/home/{{ sys_user }}/.local/state/deploy-ui
+# Same interpreter pin as gitops-deploy.service. --no-python-downloads makes the pin
+# enforcement rather than a request: gitops-deploy is the ONLY unit exempt from it, because
+# only there does a hard failure remove the ability to ship the correction.
+# ENFORCED: ansible/tests/setup/test_host_python_invocations.py.
+ExecStart=/usr/local/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} {{ deploy_ui_dir }}/deploy_ui.py
+Restart=on-failure
+RestartSec=5
+SyslogLevel=notice
+
+[Install]
+WantedBy=multi-user.target

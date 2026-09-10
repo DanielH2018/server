@@ -440,8 +440,10 @@ k8s_pi_client_ip: 10.0.0.139
 # on: `server_ip` is a host_var, so a manifest that used it would render correctly under
 # Ansible and blow up in the manifest-render test harness, which has no host_vars either.
 #
-# One consumer: the `coredns-host` scrape job. A pod cannot reach the host forwarder at
-# 127.0.0.1 — that is the pod's own loopback — so the job needs the node's routable address.
+# Two consumers: the `coredns-host` scrape job and deploy-ui's EndpointSlice. A pod cannot
+# reach the host forwarder at 127.0.0.1 — that is the pod's own loopback — so the job needs
+# the node's routable address; deploy-ui needs it because its backend is a host process
+# (deploy-ui.service) rather than a pod.
 k8s_node_client_ip: 10.0.0.215
 # The port daniel-box's host CoreDNS publishes its Prometheus endpoint on. DUPLICATED FROM
 # `k3s_host_dns_metrics_port` in roles/setup/k3s/defaults/main.yml, deliberately: role
