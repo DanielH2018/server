@@ -14,11 +14,11 @@ from lib.cli_registry import Registry, package_entry_points
 from validate import run_all
 
 
-def test_registry_lists_all_five_validators_with_descriptions():
+def test_registry_lists_every_validator_with_descriptions():
     lines = run_all.REGISTRY.render_list()
-    assert len(lines) == 5
+    assert len(lines) == 7
     names = {line.split()[0] for line in lines}
-    assert names == {"compose", "config", "grafana", "k8s", "shell"}
+    assert names == {"compose", "config", "grafana", "k8s", "setup", "shell", "unit"}
 
 
 def test_only_and_skip_selection(monkeypatch):
@@ -59,19 +59,36 @@ def test_a_failing_validator_makes_main_exit_nonzero(monkeypatch):
 # --- completeness guard — red-proof pair ------------------------------------------------
 
 
-def test_expected_modules_matches_the_five_prek_validators():
-    # Non-vacuity: the literal five, not just "the registry is complete against itself".
+def test_expected_modules_matches_the_prek_validators():
+    # Non-vacuity: the literal seven, not just "the registry is complete against itself".
     assert run_all.EXPECTED_MODULES == {
         "compose_templates",
         "config_templates",
         "grafana_dashboards",
         "k8s_manifests",
+        "setup_templates",
         "shell_templates",
+        "unit_templates",
     }
     run_all.REGISTRY.assert_complete(run_all.EXPECTED_MODULES)  # must not raise
 
 
-def test_refresh_crd_schemas_is_a_real_sixth_main_deliberately_excluded():
+def test_every_module_in_the_package_bar_the_two_exclusions_is_registered():
+    """The guard the literal above cannot be: a census, minus two named non-validators.
+
+    `EXPECTED_MODULES` read five names for as long as `unit_templates` and `setup_templates`
+    sat unregistered (GitHub issue #1505) and the test facing it asserted the same five, so
+    the registry agreed with a literal that agreed with the registry and nothing disagreed
+    with the package. Subtracting the exclusions from the census is what makes a new
+    `scripts/validate/<name>.py` with a `main()` fail here until it is registered.
+    """
+    census = set(package_entry_points(validate))
+    # `refresh_crd_schemas` refreshes the vendored CRD schemas k8s_manifests.py checks
+    # against; `run_all` is the dispatcher itself. Neither has a prek hook.
+    assert census - {"refresh_crd_schemas", "run_all"} == set(run_all.EXPECTED_MODULES)
+
+
+def test_refresh_crd_schemas_is_a_real_main_deliberately_excluded():
     # package_entry_points sees it (it has a main()); EXPECTED_MODULES does not, because it
     # isn't a prek validator. This pins that the exclusion is a choice, not a stale census.
     census = package_entry_points(validate)

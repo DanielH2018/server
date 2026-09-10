@@ -39,17 +39,29 @@ fi
 
 export PATH="$NODE_BIN:$PATH"
 
-# Check the session, and mint one if it is missing or expired. --check exits non-zero in
-# both cases and is one API call, so it is cheap enough to do every launch.
-if ! uv --directory "$REPO_ROOT" run python scripts/diagnostics/ui_login.py --check "${TIER_ARGS[@]}" >/dev/null 2>&1; then
-  # Both tiers mint unattended. The two_factor one logs in as `claude-ui`, whose TOTP
-  # secret is a SOPS value, so `--two-factor` needs no typed code — see ui_login.py's
-  # module docstring. Its session still lasts about an hour, which is why this re-mints
-  # on every launch rather than expecting a jar to survive between them.
-  uv --directory "$REPO_ROOT" run python scripts/diagnostics/ui_login.py "${TIER_ARGS[@]}" >&2
-fi
+# `UI_MCP_STATE_PATH` points this launch at a caller-supplied storage-state file instead of
+# the tier's shared one, and skips the mint above — the caller owns that file's contents. It
+# exists for `test_ui_state_reload.py`, the regression guard on the `browser_close` reload
+# procedure in docs/claude-tooling.md: that test swaps a state file underneath a running
+# server, which must never happen to the jar other sessions and `-m ui` runs are reading.
+# The config gets its own name for the same reason the `--two-factor` tier does — a launch
+# here and an ordinary one otherwise overwrite each other's config file.
+if [[ -n "${UI_MCP_STATE_PATH:-}" ]]; then
+  STATE_PATH="$UI_MCP_STATE_PATH"
+  CONFIG_PATH="$RUNTIME_DIR/playwright-mcp-private-$(basename "$STATE_PATH").json"
+else
+  # Check the session, and mint one if it is missing or expired. --check exits non-zero in
+  # both cases and is one API call, so it is cheap enough to do every launch.
+  if ! uv --directory "$REPO_ROOT" run python scripts/diagnostics/ui_login.py --check "${TIER_ARGS[@]}" >/dev/null 2>&1; then
+    # Both tiers mint unattended. The two_factor one logs in as `claude-ui`, whose TOTP
+    # secret is a SOPS value, so `--two-factor` needs no typed code — see ui_login.py's
+    # module docstring. Its session still lasts about an hour, which is why this re-mints
+    # on every launch rather than expecting a jar to survive between them.
+    uv --directory "$REPO_ROOT" run python scripts/diagnostics/ui_login.py "${TIER_ARGS[@]}" >&2
+  fi
 
-STATE_PATH="$(uv --directory "$REPO_ROOT" run python scripts/diagnostics/ui_login.py --path "${TIER_ARGS[@]}")"
+  STATE_PATH="$(uv --directory "$REPO_ROOT" run python scripts/diagnostics/ui_login.py --path "${TIER_ARGS[@]}")"
+fi
 DOMAIN="$(sops -d --extract '["domain"]' "$REPO_ROOT/ansible/vars/secrets.yml")"
 VIP="$(awk -F': *' '/^k3s_metallb_ingress_vip:/ {print $2; exit}' \
   "$REPO_ROOT/ansible/inventory/group_vars/all.yml")"
