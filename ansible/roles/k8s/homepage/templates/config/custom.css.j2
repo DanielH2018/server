@@ -323,22 +323,28 @@ li.service > div.service-card {
  * block of definite height once the group is a flex column. The `- 0.75rem` is the list's own
  * `mt-3`.
  *
- * The calendar keeps a max-height so it cannot swallow the column when the Services side is tall;
- * its event list scrolls under the cap. 22.5rem is three widget rows plus their gaps at the
- * nominal 112px card — a starting size, not a constraint anything depends on.
+ * HOW THE HEIGHT IS SPLIT: the calendar spans THREE Services rows and the two link rows together
+ * span the FOURTH. The Services column is four rows of height r with three gaps of g, so the
+ * list is 4r + 3g tall. Cut that into eight equal tracks with the same gap g: 8t + 7g = 4r + 3g
+ * gives t = (r - g) / 2. Six tracks plus their five gaps are then 6t + 5g = 3r + 2g — exactly
+ * three Services rows — and one track is a link row, so the two link rows plus their gap make
+ * 2t + g = r, one Services row. Every size is derived from the list height, so it holds at any
+ * width and for any tile height; nothing here is a pixel constant. The previous version pinned
+ * the calendar at a 22.5rem cap and the link cards at 50px, which matched the Services rows
+ * only at 1920px with unwrapped titles.
  *
- * --link-row IS IMPOSED, unlike the cap: it is set on the link cards below, so 50px rather than
- * the 40px an icon-only card is naturally.
+ * `minmax(0, 1fr)` and not `1fr`: a bare `1fr` track has a min-content floor, so a long event
+ * list would grow the calendar's six tracks and push the link rows out of the group. With the
+ * floor at 0 the calendar card is clamped to its tracks and its event list scrolls.
+ *
+ * The four-row count of the Services group is what the 8 encodes. A Services group that renders
+ * three or five rows needs 6 or 10 tracks here and a matching `span` on the calendar.
  *
  * Verified on the deployed page 2026-09-10 at 900, 1024, 1280, 1920 and 2560px — both columns end
  * on the same y at every one, including 900px where the grid collapses to two columns and six
  * rows. `getBoundingClientRect().bottom` on the last tile of each column is the check, and it has
  * to run at more than one width.
  */
-:root {
-  --link-row: 3.125rem; /* 50px, imposed by the rule below */
-}
-
 div.services-group:has(#my-calendar) {
   display: flex;
   flex-direction: column;
@@ -351,21 +357,20 @@ div.services-group:has(#my-calendar) > div {
 
 div.services-group:has(#my-calendar) ul.services-list {
   height: calc(100% - 0.75rem);
-  align-content: space-between;
+  grid-template-rows: repeat(8, minmax(0, 1fr));
 }
 
-/* The calendar `<li>` takes its own content height rather than stretching to the row, so the
- * cap below is what decides the column's height. */
+/* Six of the eight tracks: three Services rows and the two gaps between them. */
 #my-calendar {
-  align-self: start;
+  grid-row: 1 / span 6;
+  min-height: 0;
 }
 
-/* The link cards are taller than their content so the two link rows span the same height as the
- * Services row beside them. At their natural 40px the pair spanned 92px against that row's
- * 112px, starting 20px lower than it. The icon stays 32px and centred — this adds padding, not
- * size. */
+/* The link cards fill their track, so each link row is half a Services row less half a gap and
+ * the pair plus their gap is exactly one Services row. The icon stays 32px and centred — this
+ * adds padding, not size. */
 #my-calendar ~ li.service > div.service-card {
-  height: var(--link-row);
+  height: 100%;
   /* `justify-content`, NOT `align-items`, because the card above is `flex-direction: column` —
    * so the main axis is vertical and `align-items` centres horizontally, which it already is.
    * Tried the other one first on the deployed page: the icon stayed 4px from the top with 14px
@@ -373,21 +378,21 @@ div.services-group:has(#my-calendar) ul.services-list {
   justify-content: center;
 }
 
-/* THE CAP GOES ON THE CARD, NOT ON THE `<li>`, and putting it on the `<li>` shipped a visible
- * break. `#my-calendar > div.service-card` carries `height: 100%`, which resolves against the
- * `<li>`'s COMPUTED height — `auto` — so the card takes its content height and the `max-height`
- * clamps only the `<li>` afterwards. Measured on the deployed page 2026-09-10 at 1280px: a 360px
- * `<li>` holding a 460px card, and since an `<li>` does not clip, 100px of calendar painted over
- * the first row of links. Capping the card instead makes both 360px, and the card's own
- * `overflow: clip` keeps its contents inside.
+/* THE CARD FILLS ITS `<li>`, AND THE `<li>` IS SIZED BY ITS TRACKS. A grid item stretched to its
+ * tracks has a definite height, so `height: 100%` on the card resolves against it — unlike the
+ * earlier `align-self: start` version, where the `<li>` computed to `auto`, the card took its
+ * content height and a `max-height` on the `<li>` clamped only the `<li>`. An `<li>` does not
+ * clip, so at 1280px a 360px `<li>` held a 460px card and 100px of calendar painted over the
+ * first row of links. The card's own `overflow: clip` keeps its contents inside now that the
+ * card and the `<li>` agree.
  *
- * `document.elementFromPoint` does NOT catch this: the links' stretched anchors sit later in the
- * DOM and win the hit test, so every tile stayed clickable while the calendar was drawn on top of
- * it. Compare `card.getBoundingClientRect().bottom` against the `<li>`'s.
+ * `document.elementFromPoint` does NOT catch a card overrunning its `<li>`: the links' stretched
+ * anchors sit later in the DOM and win the hit test, so every tile stays clickable while the
+ * calendar is drawn on top of it. Compare `card.getBoundingClientRect().bottom` against the
+ * `<li>`'s.
  */
 #my-calendar > div.service-card {
   height: 100%;
-  max-height: 22.5rem;
   display: flex;
   flex-direction: column;
 }
