@@ -13,16 +13,16 @@ Usage::
     fanout_place.py status <run-id>
     fanout_place.py stop <run-id> [batch]
 
-Exit codes: 0 ok · 1 usage or launch failure · 3 no headroom on any host · 4 no host
-readable · 5 a batch reports failed (`status` only).
+Exit codes: 0 ok · 1 usage or launch failure · 3 no headroom on any host, or a placement
+puts more than MAX_BATCHES_PER_REMOTE_HOST batches on one remote host · 4 no host readable
+· 5 a batch reports failed (`status` only).
 
-`--host` defaults to daniel-box for this slice. One batch on daniel-server costs five ssh
-calls — headroom read, health read, worktree add, brief write, systemd-run — and `ufw limit
-ssh` REJECTs the sixth within 30 s, so two batches there exceed the budget on a path nothing
-has exercised. Slice 4 folds add, lock, brief write and systemd-run into ONE ssh call per
-batch (the brief on stdin) and drops the default; until then the CLI always pins, so
-`place()`'s multi-reading path is reachable only from its own tests. `read` still reports
-both hosts.
+A launch costs two remote ssh connections per host it reads (headroom, health) plus one
+per batch placed there — worktree add+lock, brief write and systemd-run folded into one
+call. `--host` pins every batch to one host; leave it unset and placement reads both hosts
+and chooses per batch. Calls to the host this script itself runs on go over `bash -c`, not
+ssh, so they never count against `ufw limit ssh` — see MAX_BATCHES_PER_REMOTE_HOST below for
+the cap that keeps a placement on an actual remote host under it.
 
 Launch locks each worktree and nothing in this slice unlocks it. Until `clean` lands, release
 a stopped or failed batch's tree by hand::
@@ -50,6 +50,13 @@ from fanout_lib.placement import NoHeadroom, place
 from fanout_lib.transport import HOSTS, REPO, Tools, read_host
 
 BATCH_RE = re.compile(r"^\d+(,\d+)*$")
+# The host this script normally runs on; its launches go over `bash -c`, never ssh, so the
+# per-host ssh budget below doesn't apply to it.
+LOCAL_HOST = "daniel-box"
+# ufw limit ssh REJECTs a 6th connection to one host within 30s. Two of those five go to the
+# headroom and health reads, leaving room for at most this many batch launches — each its
+# own ssh connection — before the run risks the 6th.
+MAX_BATCHES_PER_REMOTE_HOST = 3
 # The SessionStart hook reads `payload["source"]` from stdin, so it needs a JSON payload
 # rather than `</dev/null`; --no-python-downloads/--python match the version session-health.sh
 # itself pins so this reading is taken by the same interpreter a real session would use.
@@ -102,6 +109,12 @@ def _parse_batches(specs: list[str]) -> dict[str, list[int]] | None:
             continue
         numbers = [int(n) for n in spec.split(",")]
         for n in numbers:
+            if n in seen and seen[n] == spec:
+                print(
+                    f"launch: issue {n} is listed twice in --batch {spec}",
+                    file=sys.stderr,
+                )
+                return None
             if n in seen:
                 print(
                     f"launch: issue {n} appears in more than one --batch "
@@ -155,6 +168,24 @@ def _fetch_issues(
     return None if unlabelled else fetched
 
 
+def _over_ssh_budget(placed: list[tuple[str, str]]) -> bool:
+    """Print and return True when the placement puts too many batches on one remote host."""
+    counts: dict[str, int] = {}
+    for _, host in placed:
+        counts[host] = counts.get(host, 0) + 1
+    over = False
+    for host, n in counts.items():
+        if host != LOCAL_HOST and n > MAX_BATCHES_PER_REMOTE_HOST:
+            print(
+                f"launch: {n} batches would land on {host}, more than "
+                f"{MAX_BATCHES_PER_REMOTE_HOST} fits the ssh budget there — split the "
+                "fan-out",
+                file=sys.stderr,
+            )
+            over = True
+    return over
+
+
 def cmd_launch(args, tools: Tools) -> int:
     batches = _parse_batches(args.batch)
     if batches is None:
@@ -162,7 +193,7 @@ def cmd_launch(args, tools: Tools) -> int:
     fetched = _fetch_issues(tools, batches)
     if fetched is None:
         return 1
-    hosts = [args.host]
+    hosts = [args.host] if args.host else list(HOSTS)
     good, bad = _readings(tools, hosts)
     for msg in bad:
         print(f"placing without {msg}", file=sys.stderr)
@@ -172,6 +203,8 @@ def cmd_launch(args, tools: Tools) -> int:
         placed = place(list(batches), good, pin=args.host)
     except NoHeadroom as exc:
         print(str(exc), file=sys.stderr)
+        return 3
+    if _over_ssh_budget(placed):
         return 3
     health = [ln for host in hosts for ln in _health_lines(tools, host)]
     run = manifest_mod.Manifest(
@@ -294,8 +327,7 @@ def main(argv=None, tools: Tools | None = None) -> int:
     launch_parser.add_argument(
         "--host",
         choices=HOSTS,
-        default="daniel-box",
-        help="host to place every batch on (default: daniel-box; see the module docstring)",
+        help="pin every batch to this host; omit it to let placement choose per batch",
     )
     launch_parser.add_argument(
         "--orchestrator-branch", required=True, help="the branch holding the claims"

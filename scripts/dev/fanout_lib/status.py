@@ -125,8 +125,8 @@ def parse_status(batches: Sequence[Batch], stdout: str) -> list[BatchStatus]:
     for b in batches:
         body = blocks.get(b.batch, "")
         # Anchor the props/sections boundary at the start of a line, like _section does: a
-        # unit that printed no properties at all puts "--- stderr" at offset 0, which an
-        # unanchored split would not find.
+        # property VALUE carrying "--- " mid-line (e.g. Description=fanout --- stderr sink)
+        # would otherwise truncate the props block at that "--- ", not at the real marker.
         props = dict(
             ln.split("=", 1)
             for ln in re.split(r"(?m)^--- ", body, maxsplit=1)[0].splitlines()

@@ -34,6 +34,23 @@ def _local_host() -> str:
     return socket.gethostname()
 
 
+def _argv(host: str, command: str, local_host: str) -> list[str]:
+    """The argv to run `command` on `host`: local `bash -c` when `host` is `local_host`, else ssh.
+
+    Args:
+        host: the target host.
+        command: the shell command to run.
+        local_host: the name `host` is compared against to decide local vs. remote.
+
+    Returns:
+        `["bash", "-c", command]` when `host == local_host`, else
+        `["ssh", *SSH_OPTS, host, command]`.
+    """
+    if host == local_host:
+        return ["bash", "-c", command]
+    return ["ssh", *SSH_OPTS, host, command]
+
+
 def run_command(
     host: str,
     command: str,
@@ -53,8 +70,7 @@ def run_command(
     Returns:
         The finished `subprocess.CompletedProcess` (never raises on a non-zero exit).
     """
-    me = local_host or _local_host()
-    argv = ["bash", "-c", command] if host == me else ["ssh", *SSH_OPTS, host, command]
+    argv = _argv(host, command, local_host or _local_host())
     return subprocess.run(
         argv, input=stdin, capture_output=True, text=True, timeout=timeout, check=False
     )
