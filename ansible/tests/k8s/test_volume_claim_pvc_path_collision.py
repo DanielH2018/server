@@ -1,21 +1,32 @@
 #!/usr/bin/env python3
-"""A role that calls k8s/volume-claim must not also stage its own `pvc.yaml`.
+"""Two invariants on where `k8s/volume-claim`'s claim is staged, and who else creates it.
 
-`k8s/volume-claim` renders the claim it owns to `/etc/rancher/k3s/manifests/<svc>/pvc.yaml`.
-`k8s/manifests` renders every entry of `manifests_files` into that same directory, so a role
-that lists `pvc.yaml` there writes a DIFFERENT claim over the file volume-claim just staged.
-The file flips content on every run, `manifests_render` reports `changed`, and the
-rollout-restart gate in `roles/k8s/manifests/tasks/main.yml` restarts the workload on every
-deploy with nothing changed. Valheim shipped that way until 2026-09-10 (#1550): two restarts
-in one evening with players connected, both whole-plane applies by other sessions, both with a
-byte-identical pod template.
+`k8s/volume-claim` renders the claim it owns under `/etc/rancher/k3s/manifests/`. Two things
+about that path have each cost a deploy:
 
-The invariant is checked per role, with the input it must accept and the one it must reject,
-plus a named census so a rename of `tasks/main.yml` or of the role path cannot empty the check.
+1. **The claim must not be staged in the consuming role's own manifest directory.** That
+   directory belongs to `k8s/manifests`, whose prune task deletes every file in it that the
+   caller does not name in `manifests_files`/`manifests_secret_files`. No caller names this
+   claim, so the prune deleted it on every deploy — a permanently `changed` task on an
+   otherwise idempotent run, and a staged claim never re-applied from the role's own
+   directory (#1654). The claim now lands in a sibling `<service>-claims/` directory that no
+   role's `manifests_service` claims, so no `kubectl apply -f <dir>/` sweeps it.
+
+2. **Exactly one path may create a given claim.** A role that includes `k8s/volume-claim`
+   unconditionally AND lists `pvc.yaml` in `manifests_files` has two independently-edited
+   manifests declaring one claim name. Valheim shipped that way until 2026-09-10 (#1550):
+   both writers targeted the same staged file, its content flipped every run, and the
+   rollout-restart gate restarted the server with a byte-identical pod template — two
+   restarts in one evening with players connected. The staged-path half of that mechanism is
+   gone with invariant 1; the two-creators half is not, so it stays guarded here.
+
+Each invariant is checked with the input it must accept and the one it must reject, plus a
+named census so a rename of `tasks/main.yml` or of the role path cannot empty the check.
 
 Run: uv run pytest ansible/tests/k8s/test_volume_claim_pvc_path_collision.py
 """
 
+import re
 from pathlib import Path
 
 import pytest
@@ -24,6 +35,10 @@ from _helpers import K8S_ROLES, load_tasks, walk_tasks
 VOLUME_CLAIM_ROLE = "k8s/volume-claim"
 MANIFESTS_ROLE = "k8s/manifests"
 OWNED_FILE = "pvc.yaml"
+
+MANIFEST_ROOT = "/etc/rancher/k3s/manifests"
+# The directory `k8s/manifests` renders into and prunes, as volume-claim's tasks would spell it.
+CONSUMED_DIR = f"{MANIFEST_ROOT}/{{{{ volume_claim_service }}}}"
 
 
 def _included_role(task: dict) -> str:
@@ -44,11 +59,35 @@ def _lists_owned_file(task: dict) -> bool:
     return OWNED_FILE in str(files)
 
 
+# A path segment is either a Jinja expression — which contains spaces, so `\S+` cannot be used
+# here — or ordinary path characters. Prose in the comments (`manifests/<service>/`) matches
+# neither and is skipped rather than read as a path.
+_PATH_RE = re.compile(
+    rf"{re.escape(MANIFEST_ROOT)}(?:/(?:\{{\{{[^}}]*\}}\}}|[A-Za-z0-9._*-])+)+"
+)
+
+
+def staged_paths(claim_tasks: Path) -> set[str]:
+    """Every path under the manifest root that volume-claim's tasks name.
+
+    Read from the raw text rather than the parsed tasks, so a `file: path:`, a
+    `template: dest:` and the path inside the `kubectl apply` command are all covered by one
+    pattern — the render and the apply have to move together, and a check that saw only the
+    render would pass while the apply still pointed at the pruned directory.
+    """
+    return set(_PATH_RE.findall(claim_tasks.read_text()))
+
+
+def paths_inside_consumed_dir(claim_tasks: Path) -> set[str]:
+    """The staged paths that land in the directory `k8s/manifests` prunes."""
+    return {p for p in staged_paths(claim_tasks) if p.startswith(f"{CONSUMED_DIR}/")}
+
+
 def colliding_roles(roles_dir: Path) -> dict[str, str]:
-    """Role name -> reason, for every role whose two PVC writers share a staged path.
+    """Role name -> reason, for every role with two creators for one claim.
 
     A conditional volume-claim include is exempt: freshrss guards its own `pvc.yaml` behind the
-    inverse of that same condition, so at most one writer runs per deploy.
+    inverse of that same condition, so at most one creator runs per deploy.
     """
     found: dict[str, str] = {}
     for tasks_file in sorted(roles_dir.glob("*/tasks/main.yml")):
@@ -61,7 +100,7 @@ def colliding_roles(roles_dir: Path) -> dict[str, str]:
         ):
             found[tasks_file.parent.parent.name] = (
                 f"includes {VOLUME_CLAIM_ROLE} unconditionally and lists {OWNED_FILE!r} in "
-                "manifests_files; both render to manifests/<svc>/pvc.yaml"
+                "manifests_files; both declare the same claim name"
             )
     return found
 
@@ -80,13 +119,86 @@ def volume_claim_callers(roles_dir: Path) -> set[str]:
 # wrong path, not a tree with no callers.
 KNOWN_CALLERS = frozenset({"valheim", "navidrome", "freshrss", "jellyfin", "sonarr"})
 
+REAL_CLAIM_TASKS = K8S_ROLES / "volume-claim" / "tasks" / "claim.yml"
 
-def _write_role(root: Path, name: str, tasks: str) -> Path:
-    tasks_file = root / name / "tasks" / "main.yml"
-    tasks_file.parent.mkdir(parents=True)
-    tasks_file.write_text(tasks)
-    return root
 
+# ── invariant 1: the claim is staged outside the pruned directory ────────────────────────────
+
+_OLD_CLAIM_TASKS = f"""---
+- name: Render the volume claim
+  ansible.builtin.template:
+    src: pvc.yaml.j2
+    dest: "{CONSUMED_DIR}/pvc.yaml"
+
+- name: Create the PVC
+  ansible.builtin.command:
+    cmd: "k3s kubectl apply -f {CONSUMED_DIR}/pvc.yaml"
+"""
+
+_MOVED_CLAIM_TASKS = _OLD_CLAIM_TASKS.replace(
+    CONSUMED_DIR, f"{CONSUMED_DIR}-claims"
+).replace('pvc.yaml"', '{{ volume_claim_name }}.yaml"')
+
+# The render moved and the apply did not — the shape a check reading only `dest:` would miss.
+_HALF_MOVED_CLAIM_TASKS = _OLD_CLAIM_TASKS.replace(
+    f'dest: "{CONSUMED_DIR}/pvc.yaml"', f'dest: "{CONSUMED_DIR}-claims/data.yaml"'
+)
+
+
+def _write_claim_tasks(root: Path, text: str) -> Path:
+    path = root / "claim.yml"
+    path.write_text(text)
+    return path
+
+
+def test_claim_staged_outside_the_pruned_directory_is_clean(tmp_path):
+    assert (
+        paths_inside_consumed_dir(_write_claim_tasks(tmp_path, _MOVED_CLAIM_TASKS))
+        == set()
+    )
+
+
+def test_claim_staged_in_the_pruned_directory_is_flagged(tmp_path):
+    assert paths_inside_consumed_dir(
+        _write_claim_tasks(tmp_path, _OLD_CLAIM_TASKS)
+    ) == {f"{CONSUMED_DIR}/pvc.yaml"}
+
+
+def test_apply_left_behind_in_the_pruned_directory_is_flagged(tmp_path):
+    assert paths_inside_consumed_dir(
+        _write_claim_tasks(tmp_path, _HALF_MOVED_CLAIM_TASKS)
+    ) == {f"{CONSUMED_DIR}/pvc.yaml"}
+
+
+# The staging directory and the claim file, as claim.yml spells them. Named rather than
+# counted: an empty or shrunken path set would make the invariant below pass on nothing, and a
+# count moving says less than which member went missing.
+EXPECTED_STAGED_PATHS = frozenset(
+    {
+        f"{CONSUMED_DIR}-claims",
+        f"{CONSUMED_DIR}-claims/{{{{ volume_claim_name }}}}.yaml",
+    }
+)
+
+
+def test_the_real_claim_tasks_name_the_expected_staged_paths():
+    """Non-vacuity: the path reader must find claim.yml's real directory and file."""
+    missing = EXPECTED_STAGED_PATHS - staged_paths(REAL_CLAIM_TASKS)
+    assert not missing, (
+        f"{REAL_CLAIM_TASKS} no longer names {sorted(missing)}; the path reader is looking at "
+        "the wrong thing, so the invariant below would pass on an empty set"
+    )
+
+
+def test_volume_claim_stages_outside_every_consuming_roles_directory():
+    found = paths_inside_consumed_dir(REAL_CLAIM_TASKS)
+    assert not found, (
+        f"{REAL_CLAIM_TASKS} stages {sorted(found)} inside the directory k8s/manifests "
+        "prunes, so the file is deleted on every deploy of the consuming role (#1654)"
+    )
+
+
+# ── invariant 2: exactly one creator per claim ───────────────────────────────────────────────
 
 _CLAIM_INCLUDE = """
 - name: Create the {svc} config volume claim
@@ -105,6 +217,13 @@ _MANIFESTS_INCLUDE = """
     manifests_files:
 {files}
 """
+
+
+def _write_role(root: Path, name: str, tasks: str) -> Path:
+    tasks_file = root / name / "tasks" / "main.yml"
+    tasks_file.parent.mkdir(parents=True)
+    tasks_file.write_text(tasks)
+    return root
 
 
 def _role_text(svc: str, files: list[str]) -> str:
