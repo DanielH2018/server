@@ -2,8 +2,9 @@
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
 ---
 # Authelia's session store. Nothing else talks to it — see
-# roles/k8s/netpol-baseline/templates/networkpolicy-authelia-redis.yaml.j2, which is what
-# actually fences it.
+# networkpolicy-redis.yaml.j2 beside this file, which is what actually fences it — and which
+# lives in this role rather than in netpol-baseline precisely so a `--tags authelia` deploy
+# ships the two together (#1609).
 #
 # NOT in `manifests_extra_rollouts`, and this is the one thing here not to change. That list
 # rolls a Deployment whenever the ROLE's manifests change, which for authelia is several times

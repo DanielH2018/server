@@ -161,3 +161,101 @@ def test_the_role_does_not_roll_redis_with_the_portal():
         f"rolls on every manifest change to this role, which would destroy the sessions redis "
         f"is here to keep"
     )
+
+
+# --- the policy ships with the workload it lets start (#1609) -------------------------
+#
+# A fourth invariant, added after the 2026-09-10 outage. The three above all hold while the
+# NetworkPolicy sits in a DIFFERENT role: `rendered_docs()` sweeps the whole tree, so the port
+# comparison finds the policy wherever it lives. That is exactly the state that took SSO down —
+# the policy shipped in netpol-baseline, `--tags authelia` staged a portal with no path to its
+# session store, and Authelia exits rather than degrades when the session provider fails its
+# startup check.
+#
+# `build_k8s_dep_map` cannot cover this: it derives a role's edges from templates inside that
+# role's own directory (ansible/filter_plugins/toposort.py), so a dependency expressed in a
+# sibling role produces no edge and no ordering constraint to violate. Co-location is what
+# closes it, and this is the guard that keeps it closed.
+
+REDIS_POLICY_FILE = "networkpolicy-redis.yaml"
+
+
+def the_policy_ships_with_the_workload(deployment_role, policy_role):
+    """True when one role renders both the redis Deployment and the policy admitting authelia.
+
+    Roles are compared rather than filenames: the defect is the SPLIT, and it is a split
+    whatever the two files are called.
+    """
+    return (
+        deployment_role is not None
+        and policy_role is not None
+        and deployment_role == policy_role
+    )
+
+
+def test_a_co_located_policy_is_clean():
+    assert the_policy_ships_with_the_workload("authelia", "authelia")
+
+
+def test_a_policy_in_a_sibling_role_is_flagged():
+    """The literal 2026-09-10 state: the Deployment in authelia, the policy in netpol-baseline."""
+    assert not the_policy_ships_with_the_workload("authelia", "netpol-baseline")
+
+
+def test_a_missing_policy_is_flagged():
+    """Retiring the policy without retiring redis is the same outage by a different route."""
+    assert not the_policy_ships_with_the_workload("authelia", None)
+
+
+@pytest.fixture(scope="module")
+def redis_doc_roles():
+    """Which role renders the redis Deployment, and which renders the policy selecting it."""
+    roles: dict[str, str] = {}
+    for role, _tpl, doc in rendered_docs():
+        meta = doc.get("metadata") or {}
+        if doc.get("kind") == "Deployment" and meta.get("name") == REDIS_SERVICE:
+            roles["deployment"] = role
+        elif doc.get("kind") == "NetworkPolicy":
+            selector = ((doc.get("spec") or {}).get("podSelector") or {}).get(
+                "matchLabels"
+            ) or {}
+            if selector.get("app") == REDIS_SERVICE:
+                roles["policy"] = role
+    assert "deployment" in roles, (
+        f"the render produced no {REDIS_SERVICE} Deployment, so the comparison below would "
+        f"pass over nothing"
+    )
+    return roles
+
+
+def test_the_redis_policy_ships_in_the_role_that_deploys_redis(redis_doc_roles):
+    assert the_policy_ships_with_the_workload(
+        redis_doc_roles["deployment"], redis_doc_roles.get("policy")
+    ), (
+        f"the NetworkPolicy admitting authelia to {REDIS_SERVICE} must be rendered by the same "
+        f"role as the {REDIS_SERVICE} Deployment; got deployment in "
+        f"{redis_doc_roles['deployment']!r} and policy in {redis_doc_roles.get('policy')!r}. "
+        f"Split across roles, `--tags authelia` deploys a portal that cannot start (#1609)"
+    )
+
+
+def test_the_redis_policy_is_staged_by_the_deploy_task():
+    """Rendering it is not shipping it — `manifests_files` is what reaches the cluster.
+
+    A template present in the role but absent from this list is staged by nothing, which is
+    the same outage with the file in the right place.
+    """
+    tasks = yaml_fast.safe_load(AUTHELIA_TASKS.read_text())
+    deploys = [
+        task
+        for task in tasks
+        if (task.get("vars") or {}).get("manifests_service") == "authelia"
+    ]
+    assert len(deploys) == 1, (
+        f"expected exactly one task deploying the authelia manifests, found {len(deploys)}"
+    )
+    files = str((deploys[0].get("vars") or {}).get("manifests_files"))
+    assert REDIS_POLICY_FILE in files, (
+        f"{REDIS_POLICY_FILE} must be named in the authelia role's manifests_files; got "
+        f"{files!r}. Only the names in that list are staged and applied"
+    )

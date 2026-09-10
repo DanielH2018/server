@@ -183,10 +183,23 @@
     # `authelia-redis` is deliberately NOT in manifests_extra_rollouts. That list rolls a
     # Deployment on every change to THIS role's manifests, which is several times a day, and
     # rolling the session store on that cadence would destroy the sessions it exists to keep.
+    #
+    # networkpolicy-redis.yaml rides the same lever as the pair above, and it is listed HERE
+    # rather than in netpol-baseline on purpose (#1609). Authelia cannot start without its
+    # session store, so the policy admitting it to redis is part of this workload rather than
+    # part of the fleet baseline — shipped one role away, `--tags authelia` staged a portal
+    # that CrashLoopBackOffs, which is how every forwardAuth route returned 500 for 25 minutes
+    # on 2026-09-10. Gated with the pair so the three cannot drift apart: with the lever off
+    # there is no redis pod for the policy to select.
+    #
+    # `kubectl apply -f <dir>` is alphabetical, so on a cluster with no redis yet
+    # deployment.yaml lands before networkpolicy-redis.yaml and the portal may crashloop once
+    # before the policy admits it. It self-heals within a backoff, which is the whole
+    # difference from the outage: the policy arrives in the same deploy rather than never.
     manifests_files: >-
       {{ ['pvc.yaml', 'deployment.yaml', 'service.yaml', 'ingressroute.yaml',
           'forwardauth-middleware.yaml']
-         + (['deployment-redis.yaml', 'service-redis.yaml']
+         + (['deployment-redis.yaml', 'service-redis.yaml', 'networkpolicy-redis.yaml']
             if authelia_k8s_redis_sessions | bool else []) }}
     # crowdsec-secret.yaml is concatenated rather than listed: it reads
     # crowdsec_k8s_agent_password, which a cluster not running the crowdsec role never
