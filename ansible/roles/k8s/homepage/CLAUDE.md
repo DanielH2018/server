@@ -54,6 +54,12 @@ Edit the `.j2` files, never the live config: homepage seeds any missing file int
   `Calendar` and `Media` hold the widgeted tiles; `Admin` and `Tools` hold link-only ones, four
   per row. There is no `Tracking` group: it held one tile (Crypto), which moved into the
   `Calendar` column on 2026-09-09 to fill the 144px that sat dead under the calendar.
+- **An icon-only tile must stretch its name anchor, not hide it.** Homepage renders a tile's
+  name inside its own `<a>` carrying the same href as the icon anchor. `display: none` on that
+  anchor leaves only the 48x32 icon as a hit target inside a 165px tile — most of the tile looks
+  like a button and does nothing. `custom.css.j2` instead covers the card with that anchor
+  (`position: absolute; inset: 0`, the card is already `relative`) and hides only the name TEXT.
+  Verify with `document.elementFromPoint` at a tile's centre and its four edges, not by eye.
 - **Stat blocks are laid out by COUNT: two or four per widget wrap two to a row, three span the
   full width.** Two and four divide evenly at a 50% basis; three does not, and five of the nine
   Services widgets carry exactly three stats, so `custom.css.j2` gives those a 33.3% basis via
