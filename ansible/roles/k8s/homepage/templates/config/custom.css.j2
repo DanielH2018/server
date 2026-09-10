@@ -142,6 +142,18 @@ li.service:not(#my-calendar) .service-container:has(> :nth-child(3):last-child) 
   flex-basis: calc(33.333% - 0.5rem);
 }
 
+/* A ONE-STAT WIDGET SPANS ITS SINGLE BOX ACROSS THE FULL WIDTH.
+ *
+ * Same reasoning as the three-stat rule above, at the other end: at a 50% basis a lone box sits
+ * in the left half of the card with dead space beside it, which reads as a stat that failed to
+ * load rather than as a tile with one number. FreshRSS is the only one — `fields: [unread]`.
+ *
+ * `:has(> :first-child:last-child)` is "exactly one child".
+ */
+li.service:not(#my-calendar) .service-container:has(> :first-child:last-child) > div {
+  flex-basis: 100%;
+}
+
 /* RESERVE ONE STAT ROW IN EVERY WIDGET, so a sparser widget does not shrink its whole grid row.
  *
  * `.services-list` sizes each grid row to its tallest member, and `height: 100%` above makes
@@ -168,6 +180,75 @@ li.service:not(#my-calendar) .service-container > div > div {
 li.service:not(#my-calendar) .service-container .font-bold.w-10 {
   width: auto;
   min-width: 3.25rem;
+}
+
+/* BLOCK LABELS ARE RENAMED IN CSS, BECAUSE HOMEPAGE OFFERS NO OTHER WAY.
+ *
+ * A block's heading comes from `t(label)` in src/components/services/widget/block.jsx — an i18n
+ * lookup against public/locales/<lang>/common.json, which is baked into the image. No config key
+ * overrides it: `fields:` selects WHICH blocks render, never what they are called. The two
+ * alternatives were both worse. Mounting a replacement common.json means shipping the whole
+ * upstream file and re-reconciling it on every image bump, for four words. Rewriting these tiles
+ * as `customapi` widgets, which do take a `label:`, means re-deriving each service's numbers from
+ * its raw API — and for uptimekuma that is a count the widget computes and the API does not
+ * expose.
+ *
+ * `font-size: 0` rather than `display: none` or `visibility: hidden`: the box must keep its
+ * place in the flex column, and it must be sized by the REPLACEMENT text. "Battery Charge" wraps
+ * to two lines in an 85px block at 1280px, which pushed its whole grid row to 136px against the
+ * 120px of every other row — measured on the deployed page 2026-09-10. `visibility: hidden`
+ * would have kept that wrap and the extra 16px with it.
+ *
+ * TILES ARE MATCHED BY HREF, NOT BY POSITION. A `:nth-child` on the list would silently mislabel
+ * a tile the next reorder — and the links above were reordered the same day. The block index
+ * within a tile is still positional, because homepage renders a widget's blocks in the order its
+ * component declares them; that order is the `fields:` list in services.yaml.j2, and the two are
+ * ENFORCED to agree by ansible/tests/services/test_homepage_block_label_overrides.py.
+ */
+li.service:has(a[href*="uptime-kuma."]) .service-block:nth-child(1) > .font-bold,
+li.service:has(a[href*="uptime-kuma."]) .service-block:nth-child(2) > .font-bold,
+li.service:has(a[href*="speedtest."]) .service-block:nth-child(1) > .font-bold,
+li.service:has(a[href*="karakeep."]) .service-block:nth-child(1) > .font-bold,
+li.service:has(a[href*="peanut."]) .service-block:nth-child(1) > .font-bold,
+li.service:has(a[href*="peanut."]) .service-block:nth-child(2) > .font-bold {
+  font-size: 0;
+}
+
+li.service:has(a[href*="uptime-kuma."]) .service-block:nth-child(1) > .font-bold::after,
+li.service:has(a[href*="uptime-kuma."]) .service-block:nth-child(2) > .font-bold::after,
+li.service:has(a[href*="speedtest."]) .service-block:nth-child(1) > .font-bold::after,
+li.service:has(a[href*="karakeep."]) .service-block:nth-child(1) > .font-bold::after,
+li.service:has(a[href*="peanut."]) .service-block:nth-child(1) > .font-bold::after,
+li.service:has(a[href*="peanut."]) .service-block:nth-child(2) > .font-bold::after {
+  /* text-xs, the class the label carries — the parent's 0 would otherwise be inherited. */
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+
+/* Sites Up -> Up, Sites Down -> Down */
+li.service:has(a[href*="uptime-kuma."]) .service-block:nth-child(1) > .font-bold::after {
+  content: "Up";
+}
+li.service:has(a[href*="uptime-kuma."]) .service-block:nth-child(2) > .font-bold::after {
+  content: "Down";
+}
+
+/* Download -> Down. Ping keeps its own label. */
+li.service:has(a[href*="speedtest."]) .service-block:nth-child(1) > .font-bold::after {
+  content: "Down";
+}
+
+/* Bookmarks -> Saved. Archived keeps its own label. */
+li.service:has(a[href*="karakeep."]) .service-block:nth-child(1) > .font-bold::after {
+  content: "Saved";
+}
+
+/* Battery Charge -> Charge, UPS Status -> Status */
+li.service:has(a[href*="peanut."]) .service-block:nth-child(1) > .font-bold::after {
+  content: "Charge";
+}
+li.service:has(a[href*="peanut."]) .service-block:nth-child(2) > .font-bold::after {
+  content: "Status";
 }
 
 /* THE CALENDAR SPANS ITS WHOLE GROUP.

@@ -69,9 +69,14 @@ layout:
   # SERVICE tiles in the `Calendar` group now, which is the only way to get them into that
   # column. See the note in `Top Row` above for the two bookmark-group arrangements that were
   # tried there and silently ignored.
+  # ONE column, because the group holds one tile. At two the Crypto tile took half the page and
+  # left the other half empty — measured 2026-09-10 at 1280px: a 600px tile beside 600px of
+  # nothing. The rule that `columns` is derived from the tile count, not chosen, applies here as
+  # much as it does to Services above; the count is simply one. Adding a second tracking tile
+  # means moving this back to 2.
   Tracking:
     style: row
-    columns: 2
+    columns: 1
 # Type-to-filter over every tile and bookmark on the page. This is what keeps the link-only
 # Admin and Tools groups usable as they grow — the keyboard reaches a service whether or not
 # its tile is in view. searchDescriptions widens the match to the `description:` line, so
