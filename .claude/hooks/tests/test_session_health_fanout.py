@@ -12,14 +12,45 @@ Run: uv run pytest .claude/hooks/tests/test_session_health_fanout.py
 import importlib.util
 import json
 import os
+import shutil
+import subprocess
 
-_HOOK = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "session-health.py"
-)
+_HOOKS = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_HOOK = os.path.join(_HOOKS, "session-health.py")
+_REPO = os.path.dirname(os.path.dirname(_HOOKS))
 _spec = importlib.util.spec_from_file_location("session_health", _HOOK)
 assert _spec and _spec.loader, "spec_from_file_location found no loader"
 _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
+
+
+def test_a_missing_hooklib_still_leaves_a_banner_naming_it(tmp_path):
+    """RED half, isolated to the hooklib import: `scripts/lib` resolves, `hooklib` does not.
+
+    Same shape as test_session_health_module_scope_import.py's park-module-missing case:
+    copy the hook with a real `scripts/lib/` beside it but no `hooklib/`, so the only
+    import that can fail is `hooklib.worktree_lines`'s, and the banner must name it.
+    """
+    home = tmp_path / "a" / "b"
+    home.mkdir(parents=True)
+    copy = home / "session-health.py"
+    shutil.copy(_HOOK, copy)
+    lib = tmp_path / "scripts" / "lib"
+    shutil.copytree(os.path.join(_REPO, "scripts", "lib"), lib)
+
+    result = subprocess.run(
+        ["uv", "run", "--no-project", "python", str(copy)],
+        input=json.dumps({"source": "startup"}),
+        cwd=str(tmp_path),
+        env=dict(os.environ, SESSION_HEALTH_VERBOSE="1"),
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "Traceback" not in result.stderr, result.stderr
+    assert "hooklib.worktree_lines is broken" in result.stdout, result.stdout
 
 
 def test_remote_fanout_lines_name_each_batch_on_another_host(tmp_path):
@@ -101,4 +132,26 @@ def test_remote_fanout_lines_skips_a_malformed_manifest_but_keeps_the_rest(tmp_p
         "🛰 fan-out worktrees on other hosts "
         "(uv run python scripts/dev/fanout_place.py status <run-id>):",
         "  • daniel-server b — #2 (run r2)",
+    ]
+
+
+def test_remote_fanout_lines_skips_a_malformed_batch_but_keeps_its_sibling(tmp_path):
+    # Same manifest, two batches: the first is missing "branch", the second is fine.
+    # A bad batch must not take its sibling in the SAME manifest down with it.
+    (tmp_path / "r.json").write_text(
+        json.dumps(
+            {
+                "run_id": "r3",
+                "batches": [
+                    {"host": "daniel-server", "issues": [1]},
+                    {"host": "daniel-server", "branch": "b", "issues": [2]},
+                ],
+            }
+        )
+    )
+    lines = _mod.remote_fanout_lines(manifest_dir=tmp_path, local_host="daniel-box")
+    assert lines == [
+        "🛰 fan-out worktrees on other hosts "
+        "(uv run python scripts/dev/fanout_place.py status <run-id>):",
+        "  • daniel-server b — #2 (run r3)",
     ]

@@ -39,14 +39,23 @@ import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# `remote_fanout_lines` lives in `.claude/hooks/hooklib/remote_fanout.py`, not inline here,
-# because this file sits at its own 600-line cap (ansible/tests/_ratchet.py) with no
-# headroom left. Named `hooklib`, not `lib`, so it never shares a package name with
-# `scripts/lib` (imported below for `deployer_park`) -- two same-named namespace-package
-# roots merge silently today, and would break just as silently the day either one gains an
-# `__init__.py` or an import-order change shadows the other.
+# The worktree section of the banner lives in `.claude/hooks/hooklib/worktree_lines.py`
+# (own docstring covers `hooklib`-not-`lib`); this file sits at its 600-line cap. Wrapped
+# like `lib.deployer_park` below (issue #1566), in its own try so a failure names the
+# module that broke rather than deployer_park's unrelated line.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from hooklib.remote_fanout import remote_fanout_lines  # noqa: E402
+try:
+    from hooklib.worktree_lines import _stale_worktree_lines, remote_fanout_lines
+
+    WORKTREE_LINES_IMPORT_ERROR = ""
+except ImportError as exc:
+    WORKTREE_LINES_IMPORT_ERROR = str(exc)
+
+    def remote_fanout_lines(*_args, **_kwargs):
+        return [f"  ⚠ hooklib.worktree_lines is broken: {WORKTREE_LINES_IMPORT_ERROR}"]
+
+    def _stale_worktree_lines(*_args, **_kwargs):
+        return []
 
 
 # The park decision itself lives in `scripts/lib/deployer_park.py`, because `deploy.sh` exit 4
@@ -504,28 +513,8 @@ WORKTREE_TIMEOUT_S = 30
 
 
 def stale_worktree_lines():
-    """Merged worktrees this repo can remove, as ready-to-print banner lines.
-
-    Claude Code's own worktree keeper reports these too, but each of its lines ends by asking
-    the reader to run `gh pr list --state merged --head <branch>` by hand to tell a
-    squash-merged branch from one that is merely behind. prune_worktrees.py already makes
-    that call, so this prints its verdict instead. Bounded and skipped on any failure, like
-    every other check here — it reaches GitHub, and a slow API must never stall session start.
-    """
-    try:
-        proc = _run(
-            [
-                "uv",
-                "run",
-                "python",
-                "scripts/dev/prune_worktrees.py",
-                "--brief",
-            ],
-            WORKTREE_TIMEOUT_S,
-        )
-    except Exception:
-        return []
-    return [line for line in proc.stdout.splitlines() if line.strip()]
+    """Shim: `hooklib.worktree_lines` can't import `_run` back from this module."""
+    return _stale_worktree_lines(_run, WORKTREE_TIMEOUT_S)
 
 
 def format_banner(problems):
