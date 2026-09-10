@@ -132,6 +132,23 @@ def test_a_full_login_plane_refuses_a_batch_the_fleet_cap_would_allow():
         place(["a"], readings)
 
 
+def test_the_refusal_names_which_cap_the_number_came_from():
+    """A min() over two caps is unreadable without it: the fleet here looks 9 GiB free."""
+    readings = [
+        _r("daniel-box", 12 * GIB, 2 * GIB, plane_cap=8 * GIB, plane_current=8 * GIB)
+    ]
+    with pytest.raises(NoHeadroom) as exc:
+        place(["a"], readings)
+    assert "under its login-plane cap" in str(exc.value)
+
+    fleet_bound = [
+        _r("daniel-box", 12 * GIB, 12 * GIB, plane_cap=8 * GIB, plane_current=1 * GIB)
+    ]
+    with pytest.raises(NoHeadroom) as exc:
+        place(["a"], fleet_bound)
+    assert "under its fleet cap" in str(exc.value)
+
+
 def test_a_full_fleet_refuses_a_batch_the_login_plane_would_allow():
     readings = [
         _r("daniel-box", 12 * GIB, 12 * GIB, plane_cap=8 * GIB, plane_current=1 * GIB),

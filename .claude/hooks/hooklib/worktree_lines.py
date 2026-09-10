@@ -18,8 +18,10 @@ def fanout_manifest_dir() -> Path:
     `HOME` and no passwd entry for the uid, and at module scope that fires during the
     hook's `from hooklib.worktree_lines import ...`, which `except ImportError` does not
     catch. The whole banner then dies on a traceback over a directory it may never read —
-    the #1566 failure class. Called instead, the raise lands inside the hook's own
-    per-section isolation.
+    the #1566 failure class. Resolved here instead, the raise happens at
+    session-health.py's LAST line of work, where its `__main__` guard's `except Exception:
+    sys.exit(0)` turns it into a clean exit with every earlier section already printed.
+    That guard is what catches it; the fan-out call itself has no try/except of its own.
     """
     return Path.home() / ".claude" / "fanout"
 

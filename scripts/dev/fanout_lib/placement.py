@@ -94,37 +94,54 @@ def parse_reading(host: str, stdout: str) -> HostReading:
     )
 
 
+def _headrooms(reading: HostReading, reservation: int) -> dict[str, int]:
+    """Bytes free after one reservation, per capped side, keyed by that side's name.
+
+    A side whose cap read `max` does not bound the host and is left out, so an entirely
+    uncapped host maps to nothing at all.
+    """
+    sides = (
+        ("fleet", reading.cap_bytes, reading.current_bytes),
+        ("login-plane", reading.plane_cap_bytes, reading.plane_current_bytes),
+    )
+    return {
+        name: cap - current - reservation
+        for name, cap, current in sides
+        if cap is not None
+    }
+
+
 def headroom(reading: HostReading, reservation: int = RESERVATION_BYTES) -> int | None:
     """Bytes free under the TIGHTER of the two caps after one reservation, or None.
 
     An agent is throttled by whichever of the fleet cap (user.slice) and the login-plane cap
     (user-1000.slice) it reaches first, so the smaller headroom is the host's real headroom.
-    A cap read as `max` does not bound that side and drops out of the comparison; when
-    neither side is capped the host is uncapped and returns None, which `place` reads as
-    "not a candidate" — nothing bounds an agent there.
+    One reservation, not two: the agent's memory counts against both cgroups at once, since
+    one is the other's parent. A cap read as `max` does not bound that side and drops out of
+    the comparison; when neither side is capped the host is uncapped and returns None, which
+    `place` reads as "not a candidate" — nothing bounds an agent there.
     """
-    rooms = [
-        cap - current - reservation
-        for cap, current in (
-            (reading.cap_bytes, reading.current_bytes),
-            (reading.plane_cap_bytes, reading.plane_current_bytes),
-        )
-        if cap is not None
-    ]
-    return min(rooms) if rooms else None
+    rooms = _headrooms(reading, reservation)
+    return min(rooms.values()) if rooms else None
 
 
 def _describe(
     readings: Sequence[HostReading], used: dict[str, int], reservation: int
 ) -> str:
+    # Names the side the number came from. It is a min() over two caps now, so a bare "0.7
+    # GiB free" against a fleet an operator knows has 5.3 GiB free reads as a broken tool —
+    # and this string is the whole of what an exit 3 tells them.
     parts = []
     for r in readings:
-        room = headroom(r, reservation)
-        shown = (
-            "uncapped"
-            if room is None
-            else "%.1f GiB free" % ((room - used[r.host]) / 1024**3)
-        )
+        rooms = _headrooms(r, reservation)
+        if rooms:
+            side = min(rooms, key=lambda name: rooms[name])
+            shown = "%.1f GiB free under its %s cap" % (
+                (rooms[side] - used[r.host]) / 1024**3,
+                side,
+            )
+        else:
+            shown = "uncapped"
         parts.append("%s: %s (%d live agents)" % (r.host, shown, r.live_agents))
     return "; ".join(parts)
 
