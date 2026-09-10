@@ -36,7 +36,7 @@
 #     what it derived before doing anything else. Refuses (exit 3, nothing touched) on a broad
 #     change — shared templates/inventory/setup-plane paths that don't map to one service.
 #   --detach backgrounds the ansible-playbook run (the ~83% of a deploy that is waiting on
-#     rollout/stabilisation) and returns immediately. Tag validation, the staleness check, and
+#     rollout/stabilisation) and returns immediately. The staleness check, tag validation, and
 #     the lock are still evaluated in THIS process before it returns, so exit 2/4 land exactly
 #     as they do today; lock contention (exit 75) is checked non-blocking instead of queued for
 #     LOCK_WAIT, since waiting 45 minutes before returning would defeat the point of detaching —
@@ -167,11 +167,10 @@ if [[ "$changed_requested" == 1 ]]; then
     set -- "$@" --tags "$derived_tags"
 fi
 
-# Ansible exits 0 on a tag that matches nothing, so a typo'd service name deploys
-# nothing and reports success -- see scripts/deploy_tools/deploy_tags.py for why the play behaves
-# that way. Catch it here, before the lock is taken and before --check, since a dry run
-# against a nonexistent tag is just as misleading. --skip-tag-check bypasses, and is
-# stripped so it never reaches ansible-playbook.
+# Parse the wrapper's own flags out of "$@". Everything this loop collects is consumed below:
+# `tags` by the tag validation (which runs after the staleness check, see there), and
+# `--skip-tag-check`/`--skip-staleness-check`/`--dry-run`/`--detach` by their own gates. The
+# wrapper flags are stripped from `args`, so they never reach ansible-playbook.
 args=()
 tags=()
 next_is_tags=0
@@ -220,26 +219,6 @@ for arg in "$@"; do
     esac
 done
 
-if [[ "$skip_tag_check" == 0 && ${#tags[@]} -gt 0 ]]; then
-    # Ansible accepts comma-separated tags in one argument (--tags "a,b"), so split
-    # each argument before checking. Done with an explicit IFS swap around the
-    # expansion rather than a prefix assignment on `read`, whose effect on a
-    # herestring expansion is not worth relying on.
-    split_tags=()
-    old_ifs=$IFS
-    for tag_arg in "${tags[@]}"; do
-        IFS=','
-        # shellcheck disable=SC2086  # unquoted on purpose: this IS the comma split
-        for tag in $tag_arg; do
-            split_tags+=("$tag")
-        done
-        IFS=$old_ifs
-    done
-    if ! uv run python scripts/deploy_tools/deploy_tags.py validate "${split_tags[@]}"; then
-        exit 2
-    fi
-fi
-
 set -- "${args[@]}"
 
 # --detach + --check/--dry-run is meaningless: both of those already return immediately without
@@ -280,6 +259,39 @@ uv run python scripts/deploy_tools/fact_cache_guard.py --clear || true
 if [[ "$skip_staleness_check" == 0 ]]; then
     if ! uv run python scripts/deploy_tools/deploy_staleness.py; then
         exit 4
+    fi
+fi
+
+# Tag validation runs AFTER the staleness check on purpose (issue #1566). Both refusals mean
+# nothing was deployed, but they name different causes, and a tag check against a stale tree
+# answers about the wrong tree: `deploy_tags.py validate` reads the checkout's own
+# containers_list, so the first landing of a NEW role reads as a tag miss (exit 2, "your change
+# broke something") whenever the tick has not yet fast-forwarded the merge commit. Exit 4 is the
+# honest answer there -- it names the stale tree, and `land.sh` already retries a stale tree
+# while it reports a tag miss as a failed deploy.
+#
+# Ansible exits 0 on a tag that matches nothing, so a typo'd service name deploys nothing and
+# reports success -- see scripts/deploy_tools/deploy_tags.py for why the play behaves that way.
+# This still runs before the lock and before --check/--dry-run, since a dry run against a
+# nonexistent tag is just as misleading. --skip-tag-check bypasses, and is stripped in the
+# parse above so it never reaches ansible-playbook.
+if [[ "$skip_tag_check" == 0 && ${#tags[@]} -gt 0 ]]; then
+    # Ansible accepts comma-separated tags in one argument (--tags "a,b"), so split
+    # each argument before checking. Done with an explicit IFS swap around the
+    # expansion rather than a prefix assignment on `read`, whose effect on a
+    # herestring expansion is not worth relying on.
+    split_tags=()
+    old_ifs=$IFS
+    for tag_arg in "${tags[@]}"; do
+        IFS=','
+        # shellcheck disable=SC2086  # unquoted on purpose: this IS the comma split
+        for tag in $tag_arg; do
+            split_tags+=("$tag")
+        done
+        IFS=$old_ifs
+    done
+    if ! uv run python scripts/deploy_tools/deploy_tags.py validate "${split_tags[@]}"; then
+        exit 2
     fi
 fi
 

@@ -120,9 +120,19 @@ def test_a_real_tag_miss_is_still_exit_2():
     Run without stubs: the tag validation happens before the lock and before any playbook, so
     this touches nothing. If exit 2 ever stopped meaning a tag miss, the fix above would have
     been a rename rather than a separation.
+
+    `--skip-staleness-check` because the staleness check now runs FIRST (issue #1566): a
+    checkout that happens to sit behind origin/master while this test runs would answer 4, and
+    that would be the wrapper reporting correctly rather than the tag miss regressing. The
+    ordering itself is pinned by test_deploy_staleness_precedes_tag_validation.py.
     """
     result = subprocess.run(
-        [str(_DEPLOY_SH), "--tags", "definitely-not-a-real-service"],
+        [
+            str(_DEPLOY_SH),
+            "--tags",
+            "definitely-not-a-real-service",
+            "--skip-staleness-check",
+        ],
         cwd=_REPO,
         capture_output=True,
         text=True,
