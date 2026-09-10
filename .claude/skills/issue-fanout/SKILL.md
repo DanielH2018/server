@@ -97,8 +97,54 @@ worktree, and every refusal is named out loud, not silently dropped.
 
 ## 3. Spawn
 
-One Opus agent per batch. Spawn each with `isolation: "worktree"` and `model: "opus"` on the
-`Agent` call:
+One batch per `--batch`, every batch in ONE call so the placement can spend a reservation per
+batch across both hosts:
+
+```bash
+git rev-parse --abbrev-ref HEAD
+uv run python scripts/dev/fanout_place.py launch --batch 1345,1386 --batch 1288 --orchestrator-branch <that branch>
+```
+
+The dispatcher writes the brief (issue bodies verbatim, the claim note, the first-act comment,
+the landing path or the stop-at-PR rule, both hosts' session-health output) and starts a
+headless Opus agent as a transient user service in a fresh worktree on whichever host has the
+most memory headroom under its fleet cap. Exit 3 means neither host has a reservation's worth
+of headroom, or a placement would put more than three batches on one remote host: narrow the
+fan-out, do not queue. `--host daniel-box` pins a batch that must land in the same run or that
+only daniel-box can verify.
+
+Poll with `uv run python scripts/dev/fanout_place.py status <run-id>`. It prints one line per
+batch, `<batch> on <host>: <state> …`, where state is `running`, `done <PR URL>`, or `failed`
+(`permission_denials=N` is appended when the agent hit classifier denials). A daniel-server
+batch reports `done <PR URL>` and stops there: land that PR from this session with `land.sh`. A
+`failed` batch keeps its worktree; read its stderr tail before deciding to relaunch.
+
+**A daniel-server PR needs its signing key registered once.** The repo ruleset requires a
+verified commit signature, and daniel-server's key is not registered as a GitHub signing key
+until the operator adds it (`gh ssh-key add ~/.ssh/id_ed25519.pub --type signing`, needing the
+`admin:ssh_signing_key` scope, or GitHub → Settings → SSH and GPG keys → New signing key).
+Until then a daniel-server PR sits `BLOCKED` with every check green — nothing in the repo can
+fix this from inside a session.
+
+When every PR has merged: `uv run python scripts/dev/fanout_place.py clean <run-id>`. It
+removes each worktree once its branch is merged into `origin/master` and the tree is clean, and
+reports a kept tree with its reason; the manifest under `~/.claude/fanout/` is deleted only once
+every batch reports removed. `stop <run-id>` stops the units first, for a fan-out abandoned
+before landing — run `clean` once the survivors' PRs merge.
+
+**Width is bounded by memory, measured, not by a number here.** Each batch costs one 2.5 GiB
+reservation (`RESERVATION_BYTES` in `scripts/dev/fanout_lib/placement.py`) against
+`user.slice`'s `MemoryHigh` on each host — 12G on daniel-box, 10G on daniel-server
+(`claude_code_fleet_memory_high`). `MemoryHigh` throttles rather than kills, so a batch the
+dispatcher refuses would have stalled in reclaim rather than failed loudly.
+
+Done when: `launch` printed a host per batch and a run-id, and `status` shows every batch
+`running`.
+
+### When the dispatcher is unavailable
+
+A session with no ssh reach to daniel-server can still fan out locally: one Opus agent per
+batch, spawned with `isolation: "worktree"` and `model: "opus"` on the `Agent` call.
 
 ```
 Agent(subagent_type: "general-purpose", model: "opus", isolation: "worktree", prompt: <the brief below>)
@@ -163,11 +209,12 @@ Each agent starts with none of this conversation's context, so its brief must ca
   holding that authority could bury a real finding invisibly.
 - That anything it does not fix gets filed with `findings.py open`, not left unmentioned.
 
-**Width is unbounded.** This skill takes no agent-count parameter — the bound is the host
-cgroup, not a number here, because a second number would drift from the first. `user-1000.slice`
-and `claude-rc.service` carry independent 8G `MemoryHigh` caps (issue #1264), and `MemoryHigh`
-throttles rather than kills, so an over-wide fan-out stalls in reclaim instead of failing loudly.
-Keep batches to what the triage step actually produced; don't split further just to add width.
+**Width is bounded by memory, not by a number here.** This fallback path takes no
+agent-count parameter — the bound is the host cgroup. `user.slice` carries a 12G `MemoryHigh`
+fleet cap on daniel-box with an 8G per-plane sub-bound (`claude_code_fleet_memory_high`,
+`claude_code_rc_memory_high`), and `MemoryHigh` throttles rather than kills, so an over-wide
+fan-out stalls in reclaim instead of failing loudly. Keep batches to what the triage step
+actually produced; don't split further just to add width.
 
 Done when: every batch has a spawned agent carrying both `isolation: "worktree"` and
 `model: "opus"`, and every brief names the claim already held, the comment it must post first,

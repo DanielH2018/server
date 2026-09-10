@@ -279,6 +279,23 @@ The banner improvement is recoverable later with a gitignored `.claim` marker fi
 the worktree root, which `session-health.py` could read with no network call. That is not in
 scope here.
 
+## Placement across hosts
+
+`scripts/dev/fanout_place.py` names each worktree `fanout-<batch>` because it creates the
+worktree itself rather than going through the Agent tool, which only ever produces the
+`agent-<hash>` name above. Claims stay under the orchestrator's own worktree because
+`findings.py` reads `git worktree list` on daniel-box only, so a claim naming a worktree that
+lives on daniel-server would be invisible to it. A daniel-server agent stops at `gh pr create`
+and does not land its PR, because deploys are pinned to daniel-box. The manifest under
+`~/.claude/fanout/<run-id>.json` is what `status`, `clean`, and the SessionStart banner's
+`remote_fanout_lines` (`.claude/hooks/session-health.py`) all read to find a fan-out's live
+worktrees on the other host.
+
+A daniel-server PR also cannot merge until the operator registers daniel-server's SSH key as a
+GitHub signing key once (`gh ssh-key add ~/.ssh/id_ed25519.pub --type signing`); until then it
+sits `BLOCKED` with every check green, because the repo's ruleset requires a verified commit
+signature and daniel-server signs with that key.
+
 ## The `/issue-fanout` skill
 
 1. **Triage.** Read `findings.py next --json`. Group the candidates so that no two agents touch
