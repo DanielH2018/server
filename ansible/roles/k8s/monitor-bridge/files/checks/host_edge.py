@@ -150,6 +150,18 @@ def check_speedtest(cfg: Config) -> tuple[bool, str]:
         return ok, msg
     bridge.streaks._down_streaks["speedtest"] = 0
     rows = payload.get("data") or []
+    # DECIDED: the check cannot tell a failing Ookla run from a stopped scheduler, and this
+    # repo accepts that (#1603). speedtest-tracker writes NO row for a failed run — that is the
+    # LinuxServer image's own behaviour, decided between the Ookla CLI exiting non-zero and the
+    # results table, and the role has no hook in between. Measured 2026-09-10 against the live
+    # app: 25 rows, ids 825-849, every one `status: completed`, so speedtest_verdict's
+    # `status != "completed"` branch is reachable by test and has never been taken by data.
+    # The two rejected alternatives are a LogQL check for the per-tick log line (Loki does not
+    # retain the pod's logs across the restart that is exactly when it is wanted) and replacing
+    # the internal scheduler with a k8s CronJob (rejected at the `# DECIDED:` on the
+    # SPEEDTEST_SCHEDULE line — it moves the transcript, not the reliability). What mitigates it
+    # is the staleness message naming both hypotheses and asserting neither, in
+    # verdicts/host.py's speedtest_verdict.
     return speedtest_verdict(
         rows[0] if rows else None,
         cfg.SPEEDTEST_DOWNLOAD_MIN_MBPS,
