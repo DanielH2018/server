@@ -198,13 +198,20 @@ def remote_clean_command(b: Batch) -> str:
     Ruling 23's contract: a gone branch is `removed:`, a merged one is deleted first and
     only then `removed:`, and an unmerged one is `kept:`.
 
-    The merged test is `gh pr list --state merged --head <branch>`, the same forge oracle
-    `prune_worktrees.is_merged` ends on, because this repo squash-merges: a squashed branch
-    is never an ancestor of `origin/master`, so `merge-base --is-ancestor` calls every landed
-    branch unmerged. Measured against two branches that really did land — the slice-1 work as
-    PR #1484 and slice-2 as #1495 — ancestry exits 1 for both (Ruling 36). The count is
-    forced to 0 unless it is all digits, so a `gh` that is missing, unauthenticated or
-    offline reads as not merged and the branch survives with a `kept:` line.
+    The merged test is `gh pr list --state merged --head <branch> --json headRefOid`, the
+    same forge oracle `prune_worktrees.is_merged` ends on, because this repo squash-merges: a
+    squashed branch is never an ancestor of `origin/master`, so `merge-base --is-ancestor`
+    calls every landed branch unmerged. Measured against two branches that really did land —
+    the slice-1 work as PR #1484 and slice-2 as #1495 — ancestry exits 1 for both (Ruling 36).
+
+    It matches on the head SHA, never on "a merged PR exists under this branch name" (Ruling
+    38). Branch names are reused here — one session landed three PRs from
+    `worktree-pi-detached-container-arm` on 2026-08-27, each with a different tip — and a
+    fan-out batch id is per-run, so a name match would delete a branch holding work that
+    never landed. `show-ref` has already found the local branch by the time this runs, so
+    `rev-parse` has a tip to compare. The count is forced to 0 unless it is all digits, so a
+    `gh` that is missing, unauthenticated or offline reads as not merged and the branch
+    survives with a `kept:` line.
 
     Whatever the branch outcome, the stale registration goes: `git worktree prune` drops only
     registrations whose directory is missing, and skips a locked one, so it cannot touch
@@ -219,8 +226,10 @@ def remote_clean_command(b: Batch) -> str:
         f"if [ ! -e {wt} ]; then "
         f"if ! git -C {REPO} show-ref --verify --quiet refs/heads/{branch}; then "
         f"{gone_branch}; "
-        f"else merged=$(cd {REPO} && gh pr list --state merged --head {branch} "
-        f"--json number --jq length 2>/dev/null); "
+        f"else tip=$(git -C {REPO} rev-parse refs/heads/{branch} 2>/dev/null); "
+        f"merged=$(cd {REPO} && gh pr list --state merged --head {branch} "
+        f"--json headRefOid --jq '.[].headRefOid' 2>/dev/null "
+        f'| grep -c -x "${{tip:-none}}"); '
         f"case \"${{merged}}\" in ''|*[!0-9]*) merged=0;; esac; "
         f'if [ "${{merged}}" -gt 0 ]; then '
         f"git -C {REPO} branch -D {branch} >/dev/null 2>&1 && {gone_branch} "

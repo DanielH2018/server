@@ -51,8 +51,17 @@ def test_the_merged_test_asks_the_forge_because_this_repo_squash_merges():
     assert "merge-base" not in cmd
     assert (
         "merged=$(cd /home/ubuntu/server && gh pr list --state merged "
-        "--head worktree-fanout-1 --json number --jq length 2>/dev/null)" in cmd
+        "--head worktree-fanout-1 --json headRefOid --jq '.[].headRefOid' 2>/dev/null"
+        in cmd
     )
+    # Ruling 38: the merged PR's head SHA must equal this branch's tip. Branch names are
+    # reused here, so a name-only match would delete unlanded work.
+    assert (
+        "tip=$(git -C /home/ubuntu/server rev-parse refs/heads/worktree-fanout-1 "
+        "2>/dev/null)" in cmd
+    )
+    assert '| grep -c -x "${tip:-none}")' in cmd
+    assert cmd.index("tip=$(git") < cmd.index("gh pr list")
     # A gh that is missing, unauthenticated or offline answers nothing, which must read as
     # zero rather than as an error that skips both echoes.
     assert "case \"${merged}\" in ''|*[!0-9]*) merged=0;; esac" in cmd
