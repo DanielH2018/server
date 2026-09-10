@@ -197,13 +197,23 @@ appears in neither. Nothing else reports it, so census it here.
 
 ```bash
 gh api repos/DanielH2018/server/branches --paginate -q '.[].name' | grep '^renovate/' | sort > /tmp/rb-all
-gh pr list --author app/renovate --state open --limit 100 --json headRefName -q '.[].headRefName' > /tmp/rb-live
-gh issue view 3 --json body -q .body | grep -oE '(unschedule|unpend|rebase)-branch=renovate/[^ ]+' | sed 's/.*branch=//' >> /tmp/rb-live
+gh pr list --state open --limit 100 --json headRefName -q '.[].headRefName' > /tmp/rb-live
+gh issue view 3 --json body -q .body | grep -oE '[a-z-]+-branch=renovate/[^ ]+' | sed 's/.*branch=//' >> /tmp/rb-live
 sort -u /tmp/rb-live -o /tmp/rb-live
 comm -23 /tmp/rb-all /tmp/rb-live
 ```
 
-Twelve branches answered that on 2026-09-10. Sort each one into a class before you say anything
+Both queries are deliberately wider than the markers and authors seen on any one day (#1629).
+The dashboard grep matches `[a-z-]+-branch=` rather than the three verbs issue #3 happened to
+carry, because Renovate emits other section markers with their own `<verb>-branch=` prefix and an
+unmatched one makes every branch in that section read as an orphan. The `gh pr list` carries no
+`--author` filter, because the question is whether ANY open PR speaks for the branch — §4's
+pattern of rebasing the bot's commit onto your own branch opens exactly such a PR. Both errors
+ran toward over-reporting, so neither ever hid an orphan.
+
+Twelve branches answered that on 2026-09-10, and nine branches with an empty orphan set answered
+it later the same day — the branches were pruned in between, so treat the count as a reading
+rather than a baseline. Sort each one into a class before you say anything
 about it. `git fetch -q origin` then
 `git diff origin/master...origin/<branch> | grep -E '^\+[^+]'` names the file and the value the
 branch writes — then read that key's value **on master**, because a three-dot diff renders the

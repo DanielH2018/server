@@ -1,0 +1,46 @@
+---
+# Scrutiny's time-series store. scrutiny-web is the only client: it reads
+# SCRUTINY_WEB_INFLUXDB_HOST / _PORT=8086 (web.yaml.j2). The collector DaemonSet does NOT write
+# here — it posts to scrutiny-web's API, which does the InfluxDB writes.
+#
+# THIS POLICY SHIPS WITH THE ROLE THAT NEEDS IT. It lived in roles/k8s/netpol-baseline/ until
+# 2026-09-10, one role away from the Deployment whose startup depends on it (#1620, the same
+# split as authelia's session store in #1609). scrutiny-web EXITS rather than degrades when
+# InfluxDB is unreachable: it calls `/api/v2/setup` during AppEngine.Setup and `panic(err)`s on
+# a connection error instead of retrying (upstream
+# webapp/backend/pkg/web/middleware/repository.go, read against upstream master 2026-09-06 —
+# see web.yaml.j2's `wait-for-influxdb` comment). That gate is bounded at 60 x 2s, so with this
+# policy absent the pod fails init after two minutes and backs off. `build_k8s_dep_map` cannot
+# see a split like it — it derives a role's edges from templates inside that role's own
+# directory (ansible/filter_plugins/toposort.py), so a dependency expressed in a sibling role
+# produces no edge and no ordering constraint to violate.
+# ansible/tests/services/test_scrutiny_influxdb_policy.py pins the co-location.
+#
+# 8086 is the containerPort AND the Service port — verified 2026-08-20, they match, and that
+# same test keeps them matching.
+#
+# NO `netpol_baseline_enforced` BRANCH, unlike netpol-baseline's own policies. That lever is a
+# role default of netpol-baseline, and Ansible role defaults are role-scoped: it does not
+# resolve here, and `| default(true)` would read as honouring the lever while ignoring it.
+# Dropping it is also the right behaviour rather than a concession — the lever exists to
+# restore reachability in a rollback, and the only path that reaches InfluxDB at all is the one
+# this file grants, so leaving it on cannot be what an operator is rolling back from.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: scrutiny-influxdb
+  namespace: {{ k8s_namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: scrutiny-influxdb
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: scrutiny-web
+      ports:
+        - port: 8086
+          protocol: TCP

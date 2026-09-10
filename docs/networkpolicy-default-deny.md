@@ -16,7 +16,10 @@ ones:
 ```bash
 kubectl -n homelab get pods -l netpol-baseline=enforced --no-headers | wc -l   # fenced pods
 kubectl -n homelab get pods -l netpol-baseline-exempt --no-headers             # the exempt set
-ls ansible/roles/k8s/netpol-baseline/templates/networkpolicy-*.yaml.j2 | wc -l # policies
+# policies — both trees: a policy gating its consumer's STARTUP ships in the consuming
+# role instead (authelia #1609, karakeep and scrutiny #1620), so the baseline's own
+# directory is no longer the whole set
+ls ansible/roles/k8s/*/templates/networkpolicy*.yaml.j2 | wc -l
 ```
 
 What each deploy settled, slice by slice, is in

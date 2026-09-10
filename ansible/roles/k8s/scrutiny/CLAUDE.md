@@ -21,6 +21,16 @@ SMART trend history. See repo-root `CLAUDE.md` for shared conventions.
   RWO PVC seeded through `k8s/volume-claim`. Reason is in `defaults/main.yml`.
 
 ## Notable
+- **`networkpolicy-influxdb.yaml.j2` ships in THIS role, not in netpol-baseline** (#1620).
+  scrutiny-web EXITS rather than degrades when InfluxDB is unreachable: it calls
+  `/api/v2/setup` during AppEngine.Setup and `panic(err)`s on a connection error instead of
+  retrying (upstream `webapp/backend/pkg/web/middleware/repository.go`, read against upstream
+  master 2026-09-06). `wait-for-influxdb` in `web.yaml.j2` bounds that at 60 x 2s, so with the
+  policy absent the pod fails init after two minutes. Same class as authelia's session store
+  (#1609). `ansible/tests/services/test_scrutiny_influxdb_policy.py` pins the co-location, the
+  port and the `manifests_files` entry. The policy carries no `netpol_baseline_enforced` branch:
+  that lever is a netpol-baseline role default and role defaults are role-scoped, so it does not
+  resolve here.
 - The images are pinned by digest on a **rolling tag**, matching the retired Docker
   copy's policy: Renovate can raise a digest PR for a new commit on the same tag, but
   cannot move the tag itself — that stays a deliberate, supervised redeploy.

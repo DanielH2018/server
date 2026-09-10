@@ -18,6 +18,17 @@ loop to auto-tag bookmarks.
   RWO. Any one alone would justify the denylist.
 
 ## Notable
+- **The two backend NetworkPolicies ship in THIS role, not in netpol-baseline** (#1620).
+  `deployment.yaml.j2`'s `wait-for-deps` initContainer retries `karakeep-chrome:9222` and
+  `karakeep-meilisearch:7700` in an unbounded loop, and the baseline admits neither path, so a
+  policy one role away meant `--tags karakeep` could stage a pod that sat in Init forever with
+  no restart count to read. karakeep itself only DEGRADES without meilisearch — it logs search
+  errors and serves — so the warrant is the init gate rather than the app, which is the one
+  difference from authelia's session store (#1609, where the app exits).
+  `ansible/tests/services/test_karakeep_backend_policies.py` pins the co-location, the ports and
+  the `manifests_files` entries. The policies carry no `netpol_baseline_enforced` branch: that
+  lever is a netpol-baseline role default and role defaults are role-scoped, so it does not
+  resolve here.
 - `manifests_extra_rollouts` rolls `karakeep-meilisearch` and `karakeep-time-tagger` on every
   manifest change, not just a Secret change — `MEILI_MASTER_KEY` and
   `KARAKEEP_PYTHON_API_KEY` are env vars, injected once at container start, so a key rotation
