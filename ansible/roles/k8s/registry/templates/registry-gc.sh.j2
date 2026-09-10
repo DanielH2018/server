@@ -39,7 +39,7 @@ NS="{{ k8s_namespace }}"
 KUBECTL="k3s kubectl -n ${NS}"
 DEPLOY=registry
 JOB=registry-gc
-JOB_MANIFEST=/etc/rancher/k3s/manifests/registry/gc-job.yaml
+JOB_MANIFEST=/etc/rancher/k3s/manifests/registry-jobs/gc-job.yaml
 STATE_DIR=/var/lib/registry-gc
 STATE_FILE="${STATE_DIR}/state.json"
 
