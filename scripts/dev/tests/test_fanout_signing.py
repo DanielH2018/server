@@ -88,6 +88,18 @@ def test_the_key_read_command_is_one_read_only_line_naming_the_repo():
         assert verb not in command
 
 
+@pytest.mark.parametrize(
+    "key",
+    [
+        "ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTY",
+        "sk-ssh-ed25519@openssh.com AAAAGnNrLXNzaC1lZDI1NTE5QG9wZW5zc2guY29t",
+    ],
+)
+def test_normalize_key_accepts_every_type_github_takes_as_a_signing_key(key):
+    """A rotation to ecdsa or a hardware key must not empty the registered set."""
+    assert normalize_key(f"{key} ubuntu@somewhere\n") == key
+
+
 @pytest.mark.parametrize("key", [SERVER_KEY, OTHER_KEY])
 def test_every_key_in_this_file_is_one_normalize_key_accepts(key):
     """Non-vacuity: a regex that stopped matching would otherwise pass the flagged cases."""
