@@ -95,7 +95,12 @@
   # outright, which is a much worse trade than skipping one idempotent patch.
   when:
     - not (k8s_no_mutate | bool)
-    - (jellyfin_k8s_snapshot_cap.stdout | default('') | trim) != jellyfin_k8s_snapshot_max_size
+    # `| string` on the right is load-bearing. jellyfin_k8s_snapshot_max_size is a whole-string
+    # template whose result LOOKS like an integer literal, and Ansible's templar converts that
+    # shape to an int — measured: `... | type_debug` reports `int`. `.stdout` is always a str,
+    # so without the cast the two never compare equal, the patch fires on every deploy and
+    # `changed_when: true` reports changed forever.
+    - (jellyfin_k8s_snapshot_cap.stdout | default('') | trim) != (jellyfin_k8s_snapshot_max_size | string)
 
 - name: Deploy jellyfin to the cluster
   ansible.builtin.include_role:
