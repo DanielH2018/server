@@ -20,6 +20,7 @@ B = Batch(
     [1],
     "t",
 )
+HEADROOM = "1\n12884901888\n0\n"
 
 RUNNING = "=== b\nActiveState=active\nResult=success\nExecMainStatus=0\n--- stderr\n--- report\n"
 DONE = (
@@ -37,6 +38,48 @@ DONE_WITH_STRAY_MARKER_IN_STDERR = (
     "--- stderr\n=== 12 boom\n--- report\n"
     '{"type":"result","result":"Opened https://github.com/o/r/pull/9"}\n'
 )
+# The same shape as DONE — the unit exited 0 and systemd calls it a success — but the
+# session itself reports failure, the way renovate_agent's agent_logic reads that stream.
+DONE_SHAPED_BUT_ERRORED = (
+    "=== b\nActiveState=inactive\nResult=success\nExecMainStatus=0\n--- stderr\n--- report\n"
+    '{"type":"result","result":"gave up part way","is_error":true,'
+    '"terminal_reason":"max turns reached",'
+    '"permission_denials":[{"tool_name":"Bash"},{"tool_name":"Write"}]}\n'
+)
+DONE_WITH_MULTILINE_RESULT = (
+    "=== b\nActiveState=inactive\nResult=success\nExecMainStatus=0\n--- stderr\n--- report\n"
+    '{"type":"result","result":"Opened https://github.com/o/r/pull/9.\\nThen filed #2."}\n'
+)
+# A property whose own value carries a section marker. The `=== ` and `--- ` siblings are
+# already anchored at start-of-line for this shape; the property split was not.
+DONE_WITH_MARKER_INSIDE_A_PROPERTY = (
+    "=== b\nActiveState=inactive\nResult=success\n"
+    "Description=fanout --- stderr sink\nExecMainStatus=0\n"
+    "--- stderr\n--- report\n"
+    '{"type":"result","result":"Opened https://github.com/o/r/pull/9"}\n'
+)
+
+
+def _launch(tools, tmp_path, *extra):
+    return main(
+        [
+            "launch",
+            "--batch",
+            "1",
+            "--orchestrator-branch",
+            "o",
+            "--manifest-root",
+            str(tmp_path),
+            *extra,
+        ],
+        tools,
+    )
+
+
+def _brief(run) -> str:
+    briefs = [c[2] for c in run.calls if c[1].startswith("mkdir -p")]
+    assert len(briefs) == 1
+    return briefs[0]
 
 
 def test_status_command_is_one_string_naming_every_unit():
@@ -78,98 +121,84 @@ def test_a_stray_marker_line_inside_stderr_does_not_split_the_block():
     assert "=== 12 boom" in done.stderr_tail
 
 
+def test_a_done_shaped_block_whose_result_reports_an_error_is_failed():
+    # The pair: the same unit properties read `done` without is_error, so this asserts the
+    # is_error arm fires rather than that everything now reads failed.
+    errored = parse_status([B], DONE_SHAPED_BUT_ERRORED)[0]
+    assert errored.state == "failed" and errored.is_error
+    assert errored.terminal_reason == "max turns reached"
+    assert errored.permission_denials == 2
+    clean = parse_status([B], DONE)[0]
+    assert clean.state == "done" and not clean.is_error
+    assert clean.permission_denials == 0 and clean.terminal_reason == ""
+
+
+def test_a_property_value_holding_the_section_marker_does_not_truncate_the_properties():
+    done = parse_status([B], DONE_WITH_MARKER_INSIDE_A_PROPERTY)[0]
+    assert done.state == "done" and done.exit_code == 0
+
+
 def test_stop_never_removes_the_worktree():
     assert stop_command("fanout-b") == "systemctl --user stop fanout-b"
 
 
 def test_cli_launch_places_and_starts_the_agent_with_one_systemd_run_call(tmp_path):
     tools, run = fake_tools(
-        answers={
-            "daniel-box": ok("1\n12884901888\n0\n"),
-            "daniel-server": ok("1\n12884901888\n0\n"),
-        },
-        issues=[Issue(1, "t", "b")],
+        answers={"daniel-box": ok(HEADROOM), "daniel-server": ok(HEADROOM)},
+        issues=[Issue(1, "t", "b", ("claude",))],
     )
-    code = main(
-        [
-            "launch",
-            "--batch",
-            "1",
-            "--orchestrator-branch",
-            "o",
-            "--manifest-root",
-            str(tmp_path),
-        ],
-        tools,
-    )
-    assert code == 0
+    assert _launch(tools, tmp_path) == 0
     systemd_calls = [c for c in run.calls if c[1].startswith("systemd-run")]
     assert len(systemd_calls) == 1
     assert [p.name for p in tmp_path.glob("*.json")]
 
 
-def test_cli_launch_reports_no_headroom_when_both_hosts_are_uncapped(tmp_path):
+def test_cli_launch_reports_no_headroom_when_the_host_is_uncapped(tmp_path):
     tools, run = fake_tools(
-        answers={
-            "daniel-box": ok("1\nmax\n0\n"),
-            "daniel-server": ok("1\nmax\n0\n"),
-        },
-        issues=[Issue(1, "t", "b")],
+        answers={"daniel-box": ok("1\nmax\n0\n")},
+        issues=[Issue(1, "t", "b", ("claude",))],
     )
-    code = main(
-        [
-            "launch",
-            "--batch",
-            "1",
-            "--orchestrator-branch",
-            "o",
-            "--manifest-root",
-            str(tmp_path),
-        ],
-        tools,
-    )
-    assert code == 3
+    assert _launch(tools, tmp_path) == 3
     assert not [c for c in run.calls if c[1].startswith("systemd-run")]
 
 
 def test_a_failed_and_a_successful_health_read_both_surface_in_the_brief(tmp_path):
+    # Only the placed host is read, so each half of this is its own run.
     tools, run = fake_tools(
-        answers={
-            "daniel-box": ok("1\n12884901888\n0\n"),
-            "daniel-server": ok("1\n12884901888\n0\n"),
-        },
-        issues=[Issue(1, "t", "b")],
+        answers={"daniel-box": ok(HEADROOM)},
+        issues=[Issue(1, "t", "b", ("claude",))],
     )
     run.answers_by_call = [
-        ok("1\n12884901888\n0\n"),  # headroom read, daniel-box
-        ok("1\n12884901888\n0\n"),  # headroom read, daniel-server
-        subprocess.CompletedProcess(
-            ["x"], 1, stdout="", stderr="not logged in"
-        ),  # daniel-box health
-        ok("line one\nline two\n"),  # health read, daniel-server
+        ok(HEADROOM),
+        subprocess.CompletedProcess(["x"], 1, stdout="", stderr="not logged in"),
     ]
-    code = main(
-        [
-            "launch",
-            "--batch",
-            "1",
-            "--orchestrator-branch",
-            "o",
-            "--manifest-root",
-            str(tmp_path),
-        ],
-        tools,
-    )
-    assert code == 0
-    brief_calls = [c for c in run.calls if c[1].startswith("mkdir -p")]
-    assert len(brief_calls) == 1
-    brief_stdin = brief_calls[0][2]
+    assert _launch(tools, tmp_path, "--host", "daniel-box") == 0
     assert (
         "[daniel-box] session-health read failed (exit 1) — banner state unknown"
-        in brief_stdin
+        in _brief(run)
     )
-    assert "[daniel-server] line one" in brief_stdin
-    assert "[daniel-server] line two" in brief_stdin
+
+    tools, run = fake_tools(
+        answers={"daniel-server": ok(HEADROOM)},
+        issues=[Issue(1, "t", "b", ("claude",))],
+    )
+    run.answers_by_call = [ok(HEADROOM), ok("line one\nline two\n")]
+    assert _launch(tools, tmp_path, "--host", "daniel-server") == 0
+    brief = _brief(run)
+    assert "[daniel-server] line one" in brief and "[daniel-server] line two" in brief
+
+
+def test_a_health_read_timeout_surfaces_in_the_brief(tmp_path):
+    tools, run = fake_tools(
+        answers={"daniel-box": ok(HEADROOM)},
+        issues=[Issue(1, "t", "b", ("claude",))],
+    )
+    run.answers_by_call = [
+        ok(HEADROOM),
+        subprocess.TimeoutExpired(cmd="ssh", timeout=40.0),
+    ]
+    assert _launch(tools, tmp_path) == 0
+    assert "session-health read failed (timed out)" in _brief(run)
 
 
 def test_cli_status_reports_a_read_timeout_as_exit_1_not_a_traceback(tmp_path, capsys):
@@ -183,42 +212,36 @@ def test_cli_status_reports_a_read_timeout_as_exit_1_not_a_traceback(tmp_path, c
     assert "1 on daniel-box: status read timed out" in capsys.readouterr().out
 
 
-def test_a_health_read_timeout_surfaces_in_the_brief(tmp_path):
-    tools, run = fake_tools(
-        answers={
-            "daniel-box": ok("1\n12884901888\n0\n"),
-            "daniel-server": ok("1\n12884901888\n0\n"),
-        },
-        issues=[Issue(1, "t", "b")],
-    )
-    run.answers_by_call = [
-        ok("1\n12884901888\n0\n"),  # headroom read, daniel-box
-        ok("1\n12884901888\n0\n"),  # headroom read, daniel-server
-        subprocess.TimeoutExpired(cmd="ssh", timeout=40.0),  # daniel-box health
-    ]
-    code = main(
-        [
-            "launch",
-            "--batch",
-            "1",
-            "--orchestrator-branch",
-            "o",
-            "--manifest-root",
-            str(tmp_path),
-        ],
-        tools,
-    )
-    assert code == 0
-    brief_calls = [c for c in run.calls if c[1].startswith("mkdir -p")]
-    assert len(brief_calls) == 1
-    assert "session-health read failed (timed out)" in brief_calls[0][2]
-
-
 def test_cli_status_prints_exit_unknown_for_a_vanished_unit(tmp_path, capsys):
-    batch = Batch("b", "daniel-box", "/w/b", "worktree-fanout-b", "fanout-b", [1], "t")
-    run = Manifest("20260101T000002Z", "o", [batch])
+    run = Manifest("20260101T000002Z", "o", [B])
     save(run, root=tmp_path)
     tools, _ = fake_tools(answers={"daniel-box": ok(VANISHED)})
     code = main(["status", run.run_id, "--manifest-root", str(tmp_path)], tools)
-    assert code == 1
+    assert code == 5
     assert "(exit unknown)" in capsys.readouterr().out
+
+
+def test_cli_status_prints_the_final_text_on_one_line_when_a_batch_is_done(
+    tmp_path, capsys
+):
+    run = Manifest("20260101T000003Z", "o", [B])
+    save(run, root=tmp_path)
+    tools, _ = fake_tools(answers={"daniel-box": ok(DONE_WITH_MULTILINE_RESULT)})
+    code = main(["status", run.run_id, "--manifest-root", str(tmp_path)], tools)
+    assert code == 0
+    out = capsys.readouterr().out.splitlines()
+    assert len(out) == 1
+    assert out[0].endswith("Opened https://github.com/o/r/pull/9. Then filed #2.")
+
+
+def test_cli_status_exits_5_and_names_the_terminal_reason_on_a_failed_batch(
+    tmp_path, capsys
+):
+    run = Manifest("20260101T000004Z", "o", [B])
+    save(run, root=tmp_path)
+    tools, _ = fake_tools(answers={"daniel-box": ok(DONE_SHAPED_BUT_ERRORED)})
+    code = main(["status", run.run_id, "--manifest-root", str(tmp_path)], tools)
+    assert code == 5
+    out = capsys.readouterr().out
+    assert "b on daniel-box: failed" in out
+    assert "permission_denials=2" in out and "max turns reached" in out

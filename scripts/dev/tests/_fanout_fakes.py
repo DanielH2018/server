@@ -46,10 +46,28 @@ class FakeRun:
         )
 
 
-def fake_tools(answers=None, issues=None) -> tuple[Tools, FakeRun]:
+def fake_tools(answers=None, issues=None, issue_errors=None) -> tuple[Tools, FakeRun]:
+    """Build a Tools whose boundaries answer from tables, plus the FakeRun behind it.
+
+    Args:
+        answers: per-host answer for `run`, as `FakeRun.answers`.
+        issues: the issues `gh_issue` returns, looked up by number.
+        issue_errors: exceptions `gh_issue` raises instead, keyed by issue number — a fetch
+            that fails part-way through a run is what the hoisted fetch has to survive.
+
+    Returns:
+        The Tools and the FakeRun it holds, so a test can script and read the calls.
+    """
     run = FakeRun(answers or {})
     table = {i.number: i for i in (issues or [])}
-    return Tools(run=run, gh_issue=lambda n: table[n]), run
+    errors = issue_errors or {}
+
+    def gh_issue(number: int):
+        if number in errors:
+            raise errors[number]
+        return table[number]
+
+    return Tools(run=run, gh_issue=gh_issue), run
 
 
 def ok(stdout: str) -> subprocess.CompletedProcess:
