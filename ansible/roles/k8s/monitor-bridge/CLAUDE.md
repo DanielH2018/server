@@ -486,9 +486,14 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     A clean arm returns **None and says nothing**, so an ordinary cycle's tile text is
     byte-identical to what this monitor reported before the arms existed. An arm HOLDING inside
     its own grace does append its note — a monitor that is up while a fault accumulates has to
-    say so. Both are unit-tested in `test_host_thermal_arms.py` as accept/reject pairs, plus
-    two tests that bind each arm into `check_host_temp` itself: testing an arm alone would pass
-    even if the check never called it.
+    say so. Both are unit-tested in `test_host_thermal_arms.py` as accept/reject pairs, plus one
+    structural test that reads `check_host_temp.__code__.co_names` to prove the check calls both
+    arms and calls the undervoltage one first: testing an arm alone would pass even if the check
+    never called it. That structural test proves the call sites exist and their order. It cannot
+    prove the check PROPAGATES an arm's verdict — drop a `return` and it still passes — and
+    `test_host_temp.py` drives only the clean path, so nothing yet asserts that an asserted
+    undervoltage alarm makes `check_host_temp` itself return not-ok. Issue #1547 carries the fix:
+    a pure composer in `verdicts/host_power.py` the check delegates to, testable without patching.
 
     Transport, measured before shipping because the arms read Prometheus: both queries answered
     in 0.48-0.58 ms, three runs each, against Prometheus's loopback on daniel-server (the node
