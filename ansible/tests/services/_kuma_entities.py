@@ -61,6 +61,11 @@ STUBS = {
     "etcd_snapshot_push_token": "t" * 32,
     "remember_logs_push_token": "t" * 32,
     "release_staleness_push_token": "t" * 32,
+    # Gated behind `{% if <token> %}` like the four above, and stubbed for the same reason: the
+    # secret does not exist yet (#1627 ships the check inert), so without a stub here the tile
+    # renders away and every guard below stops covering it until the day it is armed — when the
+    # email-tier guard would fail on master rather than in the PR that added it.
+    "monitor_bridge_snapshot_headroom_push_token": "t" * 32,
 }
 
 # The resend intervals come from the role's real defaults, not from a stub. Stubbing them would

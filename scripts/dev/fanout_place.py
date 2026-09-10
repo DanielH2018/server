@@ -18,7 +18,8 @@ Usage::
 
 Exit codes: 0 ok · 1 usage or launch failure · 3 no headroom on any host, or a placement
 puts more than MAX_BATCHES_PER_REMOTE_HOST batches on one remote host · 4 no host readable
-· 5 a batch reports failed (`status` only).
+· 5 a batch reports failed (`status` only) · 6 no candidate host signs commits GitHub
+verifies, or the account's registered signing keys could not be read.
 
 A launch costs two remote ssh connections per host it reads (headroom, health) plus one
 per batch placed there — worktree add+lock, brief write and systemd-run folded into one
@@ -47,10 +48,19 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from fanout_lib import launch as launch_mod
 from fanout_lib import manifest as manifest_mod
+from fanout_lib import signing as signing_mod
 from fanout_lib import status as status_mod
 from fanout_lib.brief import REQUIRED_LABEL, Issue, render_brief
 from fanout_lib.placement import NoHeadroom, place
-from fanout_lib.transport import HOSTS, REPO, Tools, read_host
+from fanout_lib.transport import (
+    HOSTS,
+    REPO,
+    Tools,
+    error_text,
+    read_host,
+    registered_keys,
+    verified_hosts,
+)
 
 BATCH_RE = re.compile(r"^\d+(,\d+)*$")
 # The host this script normally runs on; its launches go over `bash -c`, never ssh, so the
@@ -79,14 +89,20 @@ def _readings(tools: Tools, hosts):
 
 def cmd_read(args, tools: Tools) -> int:
     good, bad = _readings(tools, HOSTS)
+    # `signing=` makes the launch gate's verdict readable before a launch spends an agent on
+    # it. `unknown` means the registered-key read itself failed, which `launch` refuses on.
+    registered = registered_keys(tools)
     for r in good:
         # Both caps, because placement scores the tighter of the two: a fleet number with
         # room says nothing on its own about whether a batch fits.
         print(
             f"{r.host}: fleet cap={r.cap_bytes} current={r.current_bytes} "
             f"plane cap={r.plane_cap_bytes} current={r.plane_current_bytes} "
-            f"agents={r.live_agents}"
+            f"agents={r.live_agents} "
+            f"signing={signing_mod.read_verdict(r.host, r.signing_key, registered)}"
         )
+    if isinstance(registered, str):
+        print(registered, file=sys.stderr)
     for msg in bad:
         print(msg, file=sys.stderr)
     return 0 if good else 4
@@ -134,16 +150,6 @@ def _parse_batches(specs: list[str]) -> dict[str, list[int]] | None:
     return batches
 
 
-def _error_text(exc: BaseException) -> str:
-    # CalledProcessError.stderr is text under `text=True`; TimeoutExpired.stderr is bytes
-    # or None. Printing either straight would raise inside the handler that exists to make
-    # the failure clean.
-    err = getattr(exc, "stderr", None)
-    if isinstance(err, bytes):
-        err = err.decode("utf-8", "replace")
-    return (err or str(exc)).strip()
-
-
 def _fetch_issues(
     tools: Tools, batches: dict[str, list[int]]
 ) -> dict[int, Issue] | None:
@@ -159,7 +165,7 @@ def _fetch_issues(
             fetched[number] = tools.gh_issue(number)
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
             print(
-                f"launch: could not fetch issue {number}: {_error_text(exc)}",
+                f"launch: could not fetch issue {number}: {error_text(exc)}",
                 file=sys.stderr,
             )
             return None
@@ -237,12 +243,28 @@ def cmd_launch(args, tools: Tools) -> int:
     fetched = _fetch_issues(tools, batches)
     if fetched is None:
         return 1
+    # Read the registered keys before the first ssh: a gh outage then refuses having spent no
+    # connection against the per-host ssh limit.
+    registered = registered_keys(tools)
+    if isinstance(registered, str):
+        print(f"launch: {registered} — refusing to launch", file=sys.stderr)
+        return 6
     hosts = [args.host] if args.host else list(HOSTS)
     good, bad = _readings(tools, hosts)
     for msg in bad:
         print(f"placing without {msg}", file=sys.stderr)
     if not good:
         return 4
+    good, refusals = verified_hosts(good, registered)
+    for reason in refusals:
+        print(f"launch: not placing on {reason}", file=sys.stderr)
+    if not good:
+        print(
+            "launch: no candidate host signs commits GitHub verifies — a batch placed there "
+            "opens a PR that cannot merge",
+            file=sys.stderr,
+        )
+        return 6
     try:
         placed = place(list(batches), good, pin=args.host)
     except NoHeadroom as exc:

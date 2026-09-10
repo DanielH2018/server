@@ -42,9 +42,22 @@
     manifests_extra_rollouts:
       - name: karakeep-meilisearch
       - name: karakeep-time-tagger
+    # networkpolicy-chrome.yaml and networkpolicy-meilisearch.yaml are listed HERE rather than
+    # in netpol-baseline on purpose (#1620, the same defect #1609 closed for authelia). The
+    # `wait-for-deps` initContainer in deployment.yaml.j2 retries karakeep-chrome:9222 and
+    # karakeep-meilisearch:7700 in an unbounded loop, so with either policy absent a
+    # `--tags karakeep` deploy stages a pod that sits in Init forever. Co-located, the three
+    # ship together or not at all. Both files carry the reasoning.
+    #
+    # `kubectl apply -f <dir>` is alphabetical, so on a cluster with no policy yet
+    # deployment.yaml lands before both networkpolicy files and the pod may wait in Init for the
+    # seconds until they arrive. The wait is unbounded, so it resolves on its own — which is the
+    # whole difference from the split: the policy arrives in the same deploy rather than never.
     manifests_files:
       - configmap.yaml
       - middleware.yaml
+      - networkpolicy-chrome.yaml
+      - networkpolicy-meilisearch.yaml
       # The Meilisearch index gets a claim but no seed — see pvc-meili.yaml.j2.
       - pvc-meili.yaml
       - deployment.yaml

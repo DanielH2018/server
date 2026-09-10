@@ -37,8 +37,19 @@ def stub_host(monkeypatch):
     )
 
 
+# Collection-time aliases: @parametrize is evaluated at import, before a test body runs.
+OK_, FAIL_ = postflight.OK, postflight.FAIL
+
+
 def respond(monkeypatch, status, body=""):
-    monkeypatch.setattr(postflight, "get", lambda *a, **kw: (status, body))
+    """Stub `get()`. `status` may instead be a `get`-shaped callable for a per-URL reply.
+
+    One patch point for both shapes on purpose: a second `monkeypatch.setattr(postflight,
+    "get", ...)` elsewhere in this file is the same seam patched twice, and the repo ratchets
+    on that count.
+    """
+    reply = status if callable(status) else lambda *a, **kw: (status, body)
+    monkeypatch.setattr(postflight, "get", reply)
 
 
 def only_checks(monkeypatch, checks):
@@ -220,30 +231,121 @@ def test_kuma_drift_reads_its_constants_from_the_module_that_holds_them(monkeypa
     fix. This raised `AttributeError: module 'probe' has no attribute 'STATIC_MONITORS_PATH'`,
     which the runner reported as FAIL, so a check that never ran read as drift found.
     """
+    declared = {
+        "sonarr": {"type": "http", "interval": 60, "gated": False, "gate": None}
+    }
+    status, detail = _drift_over(monkeypatch, declared, {"sonarr"})
+    assert status == postflight.OK
+    assert isinstance(detail, str)
+
+
+def _drift_over(monkeypatch, declared, live):
+    """Drive check_kuma_drift with `declared` against a live set, returning (status, detail)."""
     body = json.dumps(
         {
             "data": {
-                "result": [{"metric": {"monitor_name": "sonarr"}, "value": [0, "1"]}]
+                "result": [
+                    {"metric": {"monitor_name": n}, "value": [0, "1"]} for n in live
+                ]
             }
         }
     )
     respond(monkeypatch, 200, body)
-    monkeypatch.setattr(postflight.monitors, "kuma_pod_age_seconds", lambda: 9999)
+    monkeypatch.setattr(postflight.monitors, "kuma_pod_age_seconds", lambda: 99999)
+    # STATIC_MONITORS_PATH is left alone: the real declaration file is tracked, and the parse
+    # is patched anyway, so the only thing it supplies here is bytes to read.
     monkeypatch.setattr(
-        postflight.monitors,
-        "parse_declared_monitors",
-        lambda text: {
-            "sonarr": {"type": "http", "interval": 60, "gated": False, "gate": None}
-        },
+        postflight.monitors, "parse_declared_monitors", lambda text: declared
     )
-    monkeypatch.setattr(
-        postflight.monitors,
-        "STATIC_MONITORS_PATH",
-        os.path.join(os.path.dirname(os.path.abspath(__file__)), "test_postflight.py"),
-    )
-    status, detail = postflight.check_kuma_drift()
+    return postflight.check_kuma_drift()
+
+
+GATED_AND_ABSENT = {
+    "Off-box etcd Snapshot": {
+        "type": "push",
+        "interval": 86400,
+        "gated": True,
+        "gate": "etcd_snapshot_push_token",
+    }
+}
+
+
+@pytest.mark.parametrize(
+    "gate_is_set, expected, expected_text",
+    [
+        (True, FAIL_, "Off-box etcd Snapshot: declared, not live"),
+        (False, OK_, "genuinely unset, skipped"),
+    ],
+    ids=["set-and-absent-is-drift", "unset-is-excused"],
+)
+def test_a_gated_monitors_absence_is_judged_against_its_secret(
+    monkeypatch, gate_is_set, expected, expected_text
+):
+    """#1632's red-proof pair, and the whole point of the section.
+
+    §9.1 passed no gate_states, so `format_kuma_drift` fell through to its excused arm for
+    every gated monitor whatever the secret said — seven of them on 2026-09-10, under an [OK].
+    A gated monitor is the one nothing else watches, so the drift half could not see the case
+    it exists for. Measured 2026-08-22: `etcd_snapshot_push_token` was set, its monitor was not
+    live, and the check called that correctly skipped.
+
+    The unset row is not padding: without it the fix is a louder check that cries wolf on
+    every gate, and a check that fires on everything is as useless as one that fires on
+    nothing.
+    """
+    monkeypatch.setattr(postflight.monitors, "gate_var_state", lambda var: gate_is_set)
+    status, detail = _drift_over(monkeypatch, GATED_AND_ABSENT, set())
+    assert status == expected
+    assert expected_text in detail
+
+
+def test_the_route_hostname_comes_from_inventory_not_the_service_name():
+    """Authelia's route is `auth`, and a pin aimed at `authelia.local.<domain>` reaches nothing.
+
+    Non-vacuity: this asserts the two named services whose hostname does and does not differ
+    from the service name, so the lookup silently returning its argument — an empty
+    containers_list, a renamed key — fails here rather than passing on the fallback.
+    """
+    assert postflight.route_host("authelia") == "auth"
+    assert postflight.route_host("jellyfin") == "jellyfin"
+
+
+def test_an_unanswered_clusterip_falls_back_to_the_traefik_route(monkeypatch):
+    """#1633: postflight runs on daniel-box only, so a pod on daniel-server had no asker.
+
+    The ClusterIP answers only a caller on the pod's own node — each workload's NetworkPolicy
+    admits pod selectors and no ipBlock for the node — which made §9.5 and §9.3 structurally
+    SKIP rather than ever reporting. The route reaches either node.
+    """
+    seen = []
+
+    def answer(url, header=None, timeout=postflight.TIMEOUT, resolve=None):
+        seen.append((url, resolve))
+        if url.startswith("http://10."):  # the ClusterIP attempt
+            return 0, "curl: (7) Failed to connect"
+        return 200, json.dumps({"status": "OK"})
+
+    respond(monkeypatch, answer)
+    status, detail = postflight.check_authelia()
     assert status == postflight.OK
-    assert isinstance(detail, str)
+    assert "healthy (OK)" in detail
+    # The fallback went to the route name with a --resolve pin, not to the ClusterIP again.
+    assert seen[-1] == ("https://auth.test/api/health", "auth.test:443:10.0.0.240")
+
+
+def test_a_forward_auth_redirect_skips_rather_than_blaming_the_key(monkeypatch):
+    """An Authelia 302 fires in the middleware, so the app never saw the request.
+
+    The *arr routes carry `use_authelia: true` and their monitoring routes pin ClientIP to
+    daniel-server, so both 302 for this host — measured 2026-09-10. Letting that reach the
+    tail arm read `HTTP 302 — prowlarr_api_key doesn't match`, sending someone to rotate a
+    working credential: strictly worse than the SKIP it replaced.
+    """
+    respond(monkeypatch, 302)
+    status, detail = postflight.check_arr_key("prowlarr")
+    assert status == postflight.SKIP
+    assert "forward-auth" in detail
+    assert "doesn't match" not in detail
 
 
 def test_a_workload_with_no_service_skips_not_fails(monkeypatch):

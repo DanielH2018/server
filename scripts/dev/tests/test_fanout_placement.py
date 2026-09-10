@@ -5,7 +5,7 @@ Run: uv run pytest scripts/dev/tests/test_fanout_placement.py
 
 import pytest
 
-from _fanout_fakes import fake_tools, ok
+from _fanout_fakes import HOST_KEY, fake_tools, ok
 from fanout_lib.placement import (
     READ_COMMAND,
     RESERVATION_BYTES,
@@ -15,7 +15,7 @@ from fanout_lib.placement import (
     parse_reading,
     place,
 )
-from fanout_lib.transport import read_host
+from fanout_lib.transport import HOST_READ_COMMAND, read_host
 
 GIB = 1024**3
 
@@ -29,31 +29,55 @@ def _r(host, cap, current, agents=0, plane_cap=None, plane_current=0):
     return HostReading(host, cap, current, plane_cap, plane_current, agents)
 
 
-def test_parse_reading_is_clean_on_the_five_line_shape():
-    r = parse_reading(
-        "daniel-box", "5754224640\n12884901888\n4952506368\n8589934592\n4\n"
-    )
+FLEET_ONLY = "5754224640\n12884901888\n4\n"
+BOTH_PLANES = "5754224640\n12884901888\n4952506368\n8589934592\n4\n"
+
+
+def test_parse_reading_is_clean_on_the_six_line_shape():
+    r = parse_reading("daniel-box", f"{BOTH_PLANES}{HOST_KEY}\n")
     assert r == HostReading(
-        "daniel-box", 12884901888, 5754224640, 8589934592, 4952506368, 4
+        "daniel-box", 12884901888, 5754224640, 8589934592, 4952506368, 4, HOST_KEY
     )
 
 
 def test_parse_reading_reads_max_as_no_cap_on_either_side():
-    r = parse_reading("daniel-server", "1200918528\nmax\n952242176\nmax\n1\n")
+    r = parse_reading(
+        "daniel-server", f"1200918528\nmax\n952242176\nmax\n1\n{HOST_KEY}\n"
+    )
     assert r.cap_bytes is None and r.plane_cap_bytes is None
 
 
-def test_parse_reading_is_flagged_on_a_short_or_non_numeric_read():
-    # The three-line shape the older read produced is a parse error now, not a reading with
-    # the plane half missing.
+def test_parse_reading_is_flagged_on_a_read_that_lost_its_signing_key_line():
+    """A host whose key read printed nothing must not parse: the gate fails closed."""
     with pytest.raises(ValueError):
-        parse_reading("daniel-box", "5754224640\n12884901888\n4\n")
+        parse_reading("daniel-box", BOTH_PLANES)
+
+
+def test_parse_reading_never_puts_the_read_output_in_its_message():
+    """user.signingkey can name a PRIVATE key file, so the output stays out of the error."""
+    secret = "-----BEGIN OPENSSH PRIVATE KEY-----"
+    with pytest.raises(ValueError) as err:
+        parse_reading("daniel-box", f"{BOTH_PLANES}{secret}\nmore\n")
+    assert secret not in str(err.value)
+
+
+def test_parse_reading_is_flagged_on_a_short_or_non_numeric_read():
+    # Both older shapes are parse errors now, not a reading with a half guessed at: the
+    # three-line fleet-only read, and the four-line read that carried the key but no plane.
+    with pytest.raises(ValueError):
+        parse_reading("daniel-box", FLEET_ONLY)
+    with pytest.raises(ValueError):
+        parse_reading("daniel-box", f"{FLEET_ONLY}{HOST_KEY}\n")
     with pytest.raises(ValueError):
         parse_reading("daniel-box", "5754224640\n")
     with pytest.raises(ValueError):
-        parse_reading("daniel-box", "lots\n12884901888\n4952506368\n8589934592\n4\n")
+        parse_reading(
+            "daniel-box", f"lots\n12884901888\n4952506368\n8589934592\n4\n{HOST_KEY}\n"
+        )
     with pytest.raises(ValueError):
-        parse_reading("daniel-box", "5754224640\n12884901888\n4952506368\nlots\n4\n")
+        parse_reading(
+            "daniel-box", f"5754224640\n12884901888\n4952506368\nlots\n4\n{HOST_KEY}\n"
+        )
 
 
 def test_an_uncapped_host_has_no_headroom():
@@ -175,9 +199,10 @@ def test_a_batch_is_placed_when_both_the_fleet_and_the_plane_have_room():
 
 
 def test_the_read_command_is_one_read_only_string():
-    assert "\n" not in READ_COMMAND
-    for verb in ("rm", "systemctl", ">", "sudo", "kill"):
-        assert verb not in READ_COMMAND
+    for command in (READ_COMMAND, HOST_READ_COMMAND):
+        assert "\n" not in command
+        for verb in ("rm", "systemctl", ">", "sudo", "kill"):
+            assert verb not in command
 
 
 def test_the_read_command_reads_both_cgroups_an_agent_lives_in():
@@ -188,11 +213,14 @@ def test_the_read_command_reads_both_cgroups_an_agent_lives_in():
 
 
 def test_read_host_goes_over_ssh_only_for_the_other_host():
-    tools, run = fake_tools({"daniel-server": ok("1\n10737418240\n2\n8589934592\n0\n")})
-    assert read_host(tools, "daniel-server") == HostReading(
-        "daniel-server", 10737418240, 1, 8589934592, 2, 0
+    tools, run = fake_tools(
+        {"daniel-server": ok(f"1\n10737418240\n2\n8589934592\n0\n{HOST_KEY}\n")}
     )
-    assert run.calls == [("daniel-server", READ_COMMAND, None)]
+    assert read_host(tools, "daniel-server") == HostReading(
+        "daniel-server", 10737418240, 1, 8589934592, 2, 0, HOST_KEY
+    )
+    # One call, not two: the signing-key read rides the headroom read's connection.
+    assert run.calls == [("daniel-server", HOST_READ_COMMAND, None)]
 
 
 def test_read_host_reports_an_unreachable_host_as_a_string():

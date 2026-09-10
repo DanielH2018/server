@@ -259,3 +259,127 @@ def test_the_redis_policy_is_staged_by_the_deploy_task():
         f"{REDIS_POLICY_FILE} must be named in the authelia role's manifests_files; got "
         f"{files!r}. Only the names in that list are staged and applied"
     )
+
+
+# --- the portal waits for its session store rather than crashlooping ------------------
+
+WAIT_INIT = "wait-for-redis"
+
+
+def the_portal_waits_for_its_session_store(pod_spec):
+    """True when an init container gates on the redis Service before the portal starts.
+
+    Authelia retries the session backend 19 times at 500ms and then EXITS, about 9.5s of
+    tolerance (`internal/session/provider.go`, `StartupCheck` at v4.39.21). Deploying #1599
+    outran it and SSO was down for ~7 minutes. The cause was not an image pull — redis came up
+    1/1 on its first try and the log named an `i/o timeout`, so the packets were dropped by
+    `networkpolicy-authelia-redis` not yet being programmed for the new pod. That recurs on any
+    recreation of the redis pod, so the wait is not first-deploy-only scaffolding (#1626).
+
+    Reads the container's own command for the Service name and the port, never its comment.
+    """
+    for container in pod_spec.get("initContainers") or []:
+        if container["name"] != WAIT_INIT:
+            continue
+        script = container["command"][-1]
+        return REDIS_SERVICE in script and str(REDIS_PORT) in script
+    return False
+
+
+GOOD_POD_SPEC: dict[str, object] = {
+    "initContainers": [
+        {
+            "name": WAIT_INIT,
+            "command": [
+                "/bin/sh",
+                "-c",
+                f"until redis-cli -h {REDIS_SERVICE} -p {REDIS_PORT} ping | grep -q PONG; "
+                "do sleep 2; done",
+            ],
+        }
+    ],
+    "containers": [{"name": "authelia"}],
+}
+
+
+def test_a_pod_that_waits_for_redis_is_clean():
+    assert the_portal_waits_for_its_session_store(GOOD_POD_SPEC)
+
+
+def test_a_pod_with_no_wait_is_flagged():
+    assert not the_portal_waits_for_its_session_store(
+        {"containers": GOOD_POD_SPEC["containers"]}
+    )
+
+
+def test_a_wait_on_some_other_service_is_flagged():
+    """A gate naming the wrong host applies, passes instantly and proves nothing."""
+    bad = {
+        "initContainers": [
+            {
+                "name": WAIT_INIT,
+                "command": [
+                    "/bin/sh",
+                    "-c",
+                    "until nc -z somewhere-else 6379; do :; done",
+                ],
+            }
+        ],
+        "containers": GOOD_POD_SPEC["containers"],
+    }
+    assert not the_portal_waits_for_its_session_store(bad)
+
+
+@pytest.fixture(scope="module")
+def authelia_pod_spec():
+    """The rendered authelia Deployment's pod spec."""
+    for _role, _tpl, doc in rendered_docs():
+        if doc.get("kind") != "Deployment":
+            continue
+        if (doc.get("metadata") or {}).get("name") != "authelia":
+            continue
+        return doc["spec"]["template"]["spec"]
+    pytest.fail(
+        "no rendered authelia Deployment, so the rules below would assert over nothing"
+    )
+
+
+def test_the_rendered_portal_waits_for_redis(authelia_pod_spec):
+    assert the_portal_waits_for_its_session_store(authelia_pod_spec), (
+        f"the authelia pod must gate on {REDIS_SERVICE}:{REDIS_PORT} in an init container. "
+        f"Without it a policy-programming lag outruns Authelia's 9.5s retry budget and the "
+        f"portal crashloops behind every forwardAuth route in the fleet (#1626). Got "
+        f"{[c['name'] for c in authelia_pod_spec.get('initContainers') or []]!r}"
+    )
+
+
+def test_the_wait_gates_on_pong_rather_than_the_exit_code(authelia_pod_spec):
+    """`redis-cli` exits 0 on a NOAUTH reply, so the exit code is not the signal.
+
+    The password reaches it through `REDISCLI_AUTH` rather than argv, the same way the redis
+    container's own probes read it.
+    """
+    wait = next(
+        c for c in authelia_pod_spec["initContainers"] if c["name"] == WAIT_INIT
+    )
+    assert "PONG" in wait["command"][-1], (
+        "the gate must read PONG out of redis-cli's output; its exit code is 0 on a NOAUTH "
+        "reply, so an exit-code gate passes while redis rejects the connection"
+    )
+    env = {e["name"]: e for e in wait.get("env") or []}
+    assert "REDISCLI_AUTH" in env, (
+        f"redis-cli needs the password from the environment, not argv; got {sorted(env)!r}"
+    )
+
+
+def test_the_wait_runs_last_among_the_init_containers(authelia_pod_spec):
+    """CrowdSec's seeding steps write a local emptyDir and need no network.
+
+    Running them first overlaps their work with the policy lag this gate waits out, and leaves
+    their documented hub -> config -> data ordering untouched.
+    """
+    names = [c["name"] for c in authelia_pod_spec["initContainers"]]
+    assert names[-1] == WAIT_INIT, (
+        f"{WAIT_INIT} must run last; got {names!r}. Ahead of CrowdSec's seeding it would hold "
+        f"the network wait and the local copies in the wrong order"
+    )

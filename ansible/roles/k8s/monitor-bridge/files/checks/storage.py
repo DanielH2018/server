@@ -12,7 +12,10 @@ import bridge.streaks
 from verdicts.storage import (
     longhorn_offenders,
     longhorn_redundancy_verdict,
+    parse_snapshot_caps,
     pvc_fullness_verdict,
+    snapshot_headroom_verdict,
+    snapshot_used_by_pvc,
 )
 
 
@@ -178,3 +181,53 @@ def check_pvc_fullness(cfg: Config) -> tuple[bool, str]:
     if graced is not None:
         return graced
     return True, summary
+
+
+def check_snapshot_headroom(cfg: Config) -> tuple[bool, str]:
+    """Snapshot space used against each capped Longhorn volume's spec.snapshotMaxSize.
+
+    The space axis check_longhorn_volumes (replica redundancy) and check_pvc_fullness (the
+    claim's own filesystem) both leave uncovered: snapshots live in the Longhorn BACKEND, not in
+    the PVC's filesystem, so a volume can fill its snapshot cap while its claim reads 12% full
+    and every replica reads healthy. Reaching the cap makes Longhorn refuse new snapshots rather
+    than prune to make room, and k8s/volume-snapshot snapshots before it prunes, so the first
+    deploy past the cap fails and every later one fails the same way (#1560, #1627).
+
+    Reads the HOST Prometheus (the `longhorn` job scrapes both longhorn-manager pods directly,
+    which is what sidesteps the node-local-manager problem the Longhorn HTTP API has), so it
+    joins PROM_DEPENDENT beside check_longhorn_volumes: its own empty-vector branch pages when
+    the longhorn scrape dies, and a Prometheus outage must suppress it or one root cause lights
+    two monitors.
+
+    The cap itself is declared in SNAPSHOT_CAPS rather than read live — see parse_snapshot_caps
+    for why nothing exports it and what keeps the declaration honest.
+    """
+    caps = parse_snapshot_caps(cfg.SNAPSHOT_CAPS)
+    if cfg.SNAPSHOT_CAPS.strip() and not caps:
+        return False, (
+            "SNAPSHOT_CAPS=%r parsed to no usable cap — snapshot headroom is UNMONITORED"
+            % cfg.SNAPSHOT_CAPS
+        )
+    # Both vectors, or neither: the claim name the verdict reports lives on the volume metric and
+    # the bytes on the snapshot one, so one query cannot answer this.
+    used = (
+        snapshot_used_by_pvc(
+            bridge.net.prom_vector(cfg, "longhorn_snapshot_actual_size_bytes"),
+            bridge.net.prom_vector(cfg, "longhorn_volume_capacity_bytes"),
+        )
+        if caps
+        else {}
+    )
+    ok, msg, grace = snapshot_headroom_verdict(used, caps, cfg.SNAPSHOT_CAP_WARN_RATIO)
+    if ok:
+        bridge.streaks._down_streaks["snapshot_headroom"] = 0
+        return ok, msg
+    bridge.streaks._down_streaks["snapshot_headroom"], ok, msg = (
+        bridge.streaks.down_streak(
+            bridge.streaks._down_streaks.get("snapshot_headroom", 0),
+            cfg.SNAPSHOT_CAP_CONSECUTIVE,
+            msg,
+            grace,
+        )
+    )
+    return ok, msg

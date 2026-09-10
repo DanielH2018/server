@@ -11,9 +11,11 @@
 #
 # THE SIGNAL. `roles/k8s/manifests/tasks/release_stamp.yml` records, per service, the commit that
 # produced its applied manifests. `probe.py releases --stale-only` reads those records and
-# compares each one's role paths (the service's own role, plus the shared roles every service's
-# manifests depend on -- manifests, rollout-drain, and the rest with no `containers_list` entry
-# of their own) against origin/master. A service whose role paths moved past its applied commit,
+# compares each one's role paths (the service's own role, plus the entry-less shared roles that
+# supply bytes to every service's manifests -- manifests, volume-claim, image-builder,
+# arr-notification, game-stats-lib; `manifest_affecting_shared_roles()` derives the set, and the
+# deploy-time roles beside them are deliberately out of it, #1636) against origin/master. A
+# service whose role paths moved past its applied commit,
 # or with no record at all, is stale. Unlike this role's other drift checks, this one needs no
 # `kubectl` at all -- it is pure git history plus the JSON records already on disk.
 #

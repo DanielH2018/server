@@ -31,6 +31,7 @@ from diagnostics.probe_lib import arr
 from diagnostics.probe_lib import health_docker
 from diagnostics.probe_lib import ha
 from diagnostics.probe_lib import monitors
+from lib import k8s_roles
 
 TIMEOUT = 10
 
@@ -94,6 +95,59 @@ def secret(name):
     return value, ""
 
 
+def route_host(service):
+    """`service`'s Traefik route hostname, read from containers_list.
+
+    NOT the service name. Authelia answers on `auth` — that name is the OIDC issuer Jellyfin's
+    SSO plugin points at, so it cannot be renamed to match the Service. Read from inventory
+    rather than listed here, because a literal map would keep pinning a hostname that moved and
+    the resulting `--resolve` would be silently wrong.
+    """
+    entry = k8s_roles.k8s_entries().get(service) or {}
+    return entry.get("hostname") or service
+
+
+def get_via_service(service, path, port, header=None):
+    """GET `path` on `service`, ClusterIP first and its Traefik route as the fallback.
+
+    The ClusterIP is one hop with no TLS and no edge, so it stays the fast path. It only answers
+    a caller on the node the pod is scheduled on, though: each workload's NetworkPolicy admits
+    specific pod selectors and no ipBlock for the node. postflight runs on daniel-box and
+    nowhere else, so until this fallback existed every check below was structurally SKIP
+    whenever its pod sat on daniel-server — a check that never runs rather than a false alarm
+    (#1633). The route reaches either node, pinned to the MetalLB ingress VIP because this
+    host's resolver does not answer `.local` names with the cluster edge.
+
+    Returns (status, body). status 0 means curl failed on BOTH paths — then the pod really is
+    unreachable from here. Raises Skip when there is no Service at all, which means the
+    workload is not deployed on this cluster.
+    """
+    ip = service_ip(service)
+    status, body = get(f"http://{ip}:{port}{path}", header)
+    if status:
+        return status, body
+    base, pin = core.k8s_endpoint(route_host(service))
+    return get(f"{base}{path}", header, resolve=pin)
+
+
+def _forward_auth_intercepted(app, status):
+    """A 3xx from the route is Authelia, not the app — so it says nothing about the credential.
+
+    `use_authelia: true` puts the forward-auth middleware ahead of the backend, and the
+    redirect fires there: the app never sees the request. Reporting it as `HTTP 302 — the key
+    doesn't match` would send someone to rotate a key that is fine, which is strictly worse
+    than the SKIP this replaces. Keyed on the response rather than on the inventory flag, so it
+    still holds if a service's `use_authelia` is flipped later.
+
+    The *arr monitoring routes carry no forward-auth but pin ClientIP to daniel-server
+    (`k8s_bridge_client_ip`), so they 302 for this host too — widening that is filed separately.
+    """
+    return SKIP, (
+        f"{app}'s route answered HTTP {status} — Authelia forward-auth intercepted it, so the "
+        f"app never saw the request; credential unverifiable from this host"
+    )
+
+
 # §9.1 + §9.2: Uptime-Kuma
 # Both are checked through Prometheus rather than Kuma itself: Kuma 2.x drives its
 # admin wizard and API-key minting over Socket.IO only, so there is no REST route to
@@ -147,8 +201,17 @@ def check_kuma_drift():
     # rather than as a check that never ran (#1562).
     with open(monitors.STATIC_MONITORS_PATH) as f:
         declared = monitors.parse_declared_monitors(f.read())
+    # gate_states is not optional here. Passing none excuses EVERY gated monitor whatever its
+    # secret says, which is what this section did until 2026-09-10: all seven gated monitors
+    # read "gated on <var>, which could not be read" while the line said [OK] (#1632). A gated
+    # monitor is the one nothing else watches, so the drift half could not see the case it
+    # exists for. resolve_gate_states is `probe.py kuma-drift`'s own constructor — shared, so a
+    # caller cannot omit it by forgetting it.
     text, code = monitors.format_kuma_drift(
-        declared, live, monitors.kuma_pod_age_seconds()
+        declared,
+        live,
+        monitors.kuma_pod_age_seconds(),
+        gate_states=monitors.resolve_gate_states(declared, live),
     )
     return (FAIL if code else OK), text.replace("\n", "; ").strip()
 
@@ -184,6 +247,10 @@ def _unreachable(app, detail):
     specific pod selectors and no ipBlock for the node, so a host-originated GET only
     reaches an app scheduled on THIS node — confirmed 2026-08-17 and again 2026-08-25,
     both times with prowlarr on daniel-server while sonarr and radarr answered.
+
+    Since #1633 this is the LAST resort rather than the first: `get_via_service` tries the
+    service's Traefik route before a caller gets here, so reaching this means neither the
+    ClusterIP nor the edge answered.
     """
     return SKIP, f"{app} unreachable from this host (pod on another node?) — {detail}"
 
@@ -195,31 +262,38 @@ def check_arr_key(app):
         app: The *arr app name (``sonarr``, ``radarr`` or ``prowlarr``), used both as the
             secret name prefix and to build the status-check URL.
     """
-    ip = service_ip(app)
     key, err = secret(f"{app}_api_key")
     if not key:
         return FAIL, err
-    status, body = get(arr.arr_url(ip, app, "system/status"), arr.arr_curl_config(key))
+    status, body = get_via_service(
+        app,
+        f"/api/{arr.ARR_API_VERSION[app]}/system/status",
+        arr.ARR_PORTS[app],
+        arr.arr_curl_config(key),
+    )
     if status == 200:
         return OK, f"{app}_api_key authenticates"
     if status == 0:
         return _unreachable(app, body or "curl failed")
+    if 300 <= status < 400:
+        return _forward_auth_intercepted(app, status)
     return FAIL, f"HTTP {status} — {app}_api_key doesn't match the app's own key"
 
 
 def check_jellyfin_key():
     """§9.3 — verify the SOPS-held ``jellyfin_api_key`` authenticates against Jellyfin."""
-    ip = service_ip("jellyfin")
     key, err = secret("jellyfin_api_key")
     if not key:
         return FAIL, err
-    status, body = get(
-        f"http://{ip}:8096/System/Info", f'header = "X-Emby-Token: {key}"\n'
+    status, body = get_via_service(
+        "jellyfin", "/System/Info", 8096, f'header = "X-Emby-Token: {key}"\n'
     )
     if status == 200:
         return OK, "jellyfin_api_key authenticates"
     if status == 0:
         return _unreachable("jellyfin", body or "curl failed")
+    if 300 <= status < 400:
+        return _forward_auth_intercepted("jellyfin", status)
     return FAIL, f"HTTP {status} — mint the key in Jellyfin and sops set it"
 
 
@@ -261,11 +335,16 @@ def check_ha_token(name):
 def check_authelia():
     """§9.5 — verify Authelia is serving and its OIDC secrets are present.
 
-    The OIDC material is read from SOPS first, so it is still checked on a node Authelia's
-    pod is not scheduled on: it needs no network, and the reachability arm below returns
-    early on such a node.
+    The OIDC material is read from SOPS first, so it is still checked even when the network
+    half cannot run: it needs no network at all.
 
-    A status of 0 means curl itself failed, which for a ClusterIP is the placement fact
+    The reachability half goes through `get_via_service`, so the portal is asked on either
+    node. Its own IngressRoute carries no forward-auth — gating the login page behind the
+    login page is a redirect loop — so `/api/health` on `auth.local.<domain>` reaches the
+    backend and returns Authelia's own `{"status":"OK"}`. Measured from daniel-box on
+    2026-09-10 with the pod on daniel-server: HTTP 200.
+
+    A status of 0 means curl itself failed on both paths, which is the placement fact
     `_unreachable` describes for the *arr checks — not an outage. Reporting it as
     "Authelia is not serving" was a false alarm on the fleet's most load-bearing service
     whenever the run was on the node Authelia is not on (#1564).
@@ -281,10 +360,11 @@ def check_authelia():
     ]
     if missing:
         return FAIL, "missing OIDC material: " + ", ".join(missing)
-    ip = service_ip("authelia")
-    status, body = get(f"http://{ip}:9091/api/health")
+    status, body = get_via_service("authelia", "/api/health", 9091)
     if status == 0:
         return _unreachable("authelia", body or "curl failed")
+    if 300 <= status < 400:
+        return _forward_auth_intercepted("authelia", status)
     if status != 200:
         return FAIL, f"HTTP {status} — Authelia is not serving"
     return OK, f"healthy ({json.loads(body).get('status', '?')}), OIDC material present"

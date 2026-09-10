@@ -37,6 +37,9 @@ class ClusterConfig:
     PVC_MAX_PCT: float
     PVC_MIN_CLAIMS: int
     PVC_CLAIMS_CONSECUTIVE: int
+    SNAPSHOT_CAPS: str
+    SNAPSHOT_CAP_WARN_RATIO: float
+    SNAPSHOT_CAP_CONSECUTIVE: int
     K8S_RESTART_WINDOW: str
     K8S_RESTART_MAX: int
     K8S_RESTART_RECENT_WINDOW: str
@@ -174,6 +177,21 @@ def cluster_config(
         # node's volume stats for a cycle or two, and that must not page; a fullness breach gets
         # no grace because it is monotonic rather than flappy.
         PVC_CLAIMS_CONSECUTIVE=_int("PVC_CLAIMS_CONSECUTIVE", "3"),
+        # Snapshot-space headroom on capped Longhorn volumes (check_snapshot_headroom). The caps
+        # themselves, `<pvc>=<bytes>` comma separated, because nothing exports
+        # `spec.snapshotMaxSize` as a metric — parse_snapshot_caps says why, and why `0` (the
+        # fleet-wide uncapped default) is dropped rather than read as a cap of zero. Empty means
+        # no capped volume is declared, which the check reports as such rather than as green.
+        SNAPSHOT_CAPS=_env("SNAPSHOT_CAPS", ""),
+        # Fraction of a cap that counts as a breach. 0.9 matches volume_snapshot_cap_warn_ratio,
+        # the deploy-time gate's warn threshold (roles/k8s/volume-snapshot), so the monitor and
+        # the deploy agree about when a cap is close rather than naming two different numbers.
+        SNAPSHOT_CAP_WARN_RATIO=_num("SNAPSHOT_CAP_WARN_RATIO", "0.9"),
+        # Hysteresis, for the markRemoved reason in snapshot_headroom_verdict: the metric counts
+        # snapshots the deploy gate's sum skips, so usage can read high for a cycle between a
+        # prune and Longhorn purging what it removed. Same shape and cadence as
+        # LONGHORN_CONSECUTIVE above.
+        SNAPSHOT_CAP_CONSECUTIVE=_int("SNAPSHOT_CAP_CONSECUTIVE", "3"),
         # Crash-loop arm of the workload check: pods whose restart counter climbed more than
         # K8S_RESTART_MAX inside K8S_RESTART_WINDOW page even while readiness flaps green
         # (CrashLoopBackOff passes probes briefly each backoff cycle — the 2026-08-13 homepage

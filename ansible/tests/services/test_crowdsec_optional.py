@@ -194,11 +194,16 @@ def test_the_agent_sidecar_ships_with_crowdsec_on_and_not_with_it_off(
 
 
 def test_authelia_drops_the_init_container_key_rather_than_emptying_it() -> None:
-    assert "crowdsec-config-install" in [
-        c["name"] for c in _pod_spec("authelia", True)["initContainers"]
-    ]
-    # CrowdSec's is the only one, so the key goes rather than being left with nothing under it.
-    assert "initContainers" not in _pod_spec("authelia", False)
+    """Two sources feed it: CrowdSec's seeding steps, and `wait-for-redis` (#1626). Gating on
+    CrowdSec alone emitted a bare `initContainers:` whenever CrowdSec was off and redis on; both
+    off is the only branch with no contributor, and there the key goes entirely."""
+    inits = _pod_spec("authelia", True)["initContainers"]
+    assert "crowdsec-config-install" in [c["name"] for c in inits]
+    without = _pod_spec("authelia", False, authelia_k8s_redis_sessions=True)
+    assert [c["name"] for c in without["initContainers"]] == ["wait-for-redis"]
+    assert "initContainers" not in _pod_spec(
+        "authelia", False, authelia_k8s_redis_sessions=False
+    )
 
 
 def test_traefik_prestages_the_agent_config_so_the_entrypoint_never_rsyncs() -> None:

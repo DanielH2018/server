@@ -98,11 +98,36 @@ kubectl -n homelab rollout restart deploy/authelia-redis
 back to memory sessions; the redis Deployment and Service stay applied but unused, because
 `kubectl apply` does not prune. Flipping it either way logs everyone out once.
 
-**A first deploy crashloops the portal briefly.** If redis is unreachable at boot Authelia
-retries the session backend 19 times at 500ms and then exits (`internal/session/provider.go`,
-`StartupCheck`). A deploy that creates redis and rolls authelia in the same apply loses that
-race for as long as the redis image takes to pull, then settles on its own. It bites on a first
-deploy and not on a restart, where the image is already on the node.
+**An unreachable redis at boot used to crashloop the portal, and the `wait-for-redis` init
+container is what stops it.** If redis is unreachable at boot Authelia retries the session
+backend 19 times at 500ms and then exits (`internal/session/provider.go`, `StartupCheck`) —
+about 9.5s of tolerance. Deploying #1599 outran it: the portal restarted 7 times, blew the 300s
+rollout wait twice, and SSO was down for about seven minutes.
+
+**The cause is kube-router's source-pod lookup lagging pod creation, not an image pull.** This
+paragraph and the comment beside the redis block in `templates/config-secret.yaml.j2` both said
+image pull until #1626, and drew the wrong conclusion from it — that the race bites a first
+deploy and never a restart, so it was an acceptable cost. The pod's log named an `i/o timeout`
+rather than `connection refused`, and redis came up 1/1 on its first try and has never
+restarted, so the packets were dropped by `networkpolicy-authelia-redis` not yet being
+programmed for the new pod. A policy-programming race recurs on any recreation of the redis pod
+— an eviction, a node reboot, a Renovate bump of `authelia_k8s_redis_image` — and under
+`Recreate` each occurrence takes SSO down for the fleet, including the tools to fix it.
+
+`wait-for-redis` converts that crashloop into a wait: 60 × 2s of `redis-cli -h authelia-redis
+ping`, gated on `PONG` in the output rather than on redis-cli's exit code, which is 0 on a
+NOAUTH reply. It runs **last**, after CrowdSec's three seeding steps — those write a local
+emptyDir and need no network, so running them first overlaps their work with the policy lag and
+leaves the hub → config → data ordering untouched. It uses `redis-cli` rather than the busybox
+`nc -z` the sibling gates in crowdsec and n8n use: that precedent rests on their own image
+being busybox-based, and under `Recreate` an init container failing on a missing applet is an
+SSO outage rather than a retry. `ansible/tests/services/test_authelia_redis_sessions.py` pins
+the gate.
+
+**Neither the deploy's gates nor the repo tests could see the original failure.** The manifests
+render and apply cleanly, `probe.py health authelia` reads green once it settles, and the
+rollout failure surfaces as a timeout naming `rollout status` rather than the policy. Verify
+this one by recreating the redis pod and reading the authelia pod's restart count.
 
 **Verify by surviving a restart, not by a health gate.** `probe.py health authelia` and an
 Authelia 302 both read green on the in-memory version — the redirect fires in the forward-auth
@@ -262,6 +287,24 @@ and the portal goes on accepting the old password:
 ```
 
 Rotating `authelia_claude_totp_secret` needs no flag — the seeding task re-seeds every deploy.
+
+**The hashing parameters are configured twice, and only one of them verifies anything.**
+`authentication_backend.file.password` in `templates/config-secret.yaml.j2` builds the hasher
+Authelia uses to MINT digests — a portal password reset, nothing else. Verification reads the
+algorithm off the stored `$argon2id$` PHC prefix instead (`crypt.Decode` in
+`internal/authentication/file_user_provider_database.go`, reached from `CheckUserPassword`), so
+changing that block cannot break an existing login. The digests in the Secret are minted by the
+`authelia crypto hash generate argon2` task with its own explicit flags, which is the other copy.
+
+**That block renders the canonical nested form, and the legacy flat form is a trap.** It said
+`algorithm: argon2id` with `iterations`/`memory`/… as siblings until #1621. `argon2id` is a
+recognised alias, but the same code path that aliases it carries the flat parameters across in
+legacy units — `config.Argon2.Memory = config.Memory * 1024` — so `memory: 65536` meant 64 GiB
+of effective argon2 memory, 1024× the CLI flag that mints the hashes. It passed validation
+silently (`MemoryMax` is `math.MaxUint32`) and no login could show it. `variant: argon2id`, not
+the short `id`: the parser takes either, the published v4.39 schema's enum takes only the long
+spelling, and that schema is what `ansible/tests/services/test_authelia_config_schema.py`
+validates the rendered block against.
 
 **Revoking Claude's two_factor reach** is deleting the `claude-ui` block from
 `templates/config-secret.yaml.j2` and redeploying. The access_control rules are domain-scoped

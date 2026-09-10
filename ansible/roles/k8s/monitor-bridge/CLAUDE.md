@@ -40,7 +40,7 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
   - **Prometheus Reachable** (a trivial `vector(1)` instant query — the root-cause GATE for the
     prom-dependent checks. Evaluated FIRST each cycle: when Prometheus is unreachable, every
     prom-dependent check (disk/cert/memory/restarts/oom/cpu/targets/traefik5xx/traefik_404/ups/
-    host_temp/shipper_dropped/longhorn_volumes/kubelet_plugin_readonly) is
+    host_temp/shipper_dropped/longhorn_volumes/snapshot_headroom/kubelet_plugin_readonly) is
     **suppressed** — pushed `up` with a "skipped — Prometheus unreachable" msg so their push-monitor
     heartbeats stay alive — and only THIS monitor pages. Without the gate one Prometheus outage
     fires all of them at once: one root cause, one page per dependent check. A single scrape
@@ -489,26 +489,37 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     say so. Both are unit-tested in `test_host_thermal_arms.py` as accept/reject pairs, plus one
     structural test that reads `check_host_temp.__code__.co_names` to prove the check calls both
     arms and calls the undervoltage one first: testing an arm alone would pass even if the check
-    never called it. That structural test proves the call sites exist and their order. It cannot
-    prove the check PROPAGATES an arm's verdict — drop a `return` and it still passes — and
-    `test_host_temp.py` drives only the clean path, so nothing yet asserts that an asserted
-    undervoltage alarm makes `check_host_temp` itself return not-ok. Issue #1547 carries the fix:
-    a pure composer in `verdicts/host_power.py` the check delegates to, testable without patching.
+    never called it. That structural test proves the call sites exist and their order, and it
+    cannot prove the check PROPAGATES an arm's verdict — drop a `return` and the name stays in
+    `co_names`. **`verdicts/host_power.thermal_monitor_verdict` is where the propagation lives**
+    (issue #1547): the check fetches and holds the streak state, the composer decides which of
+    the four arms reaches Kuma, and every ordering and propagation rule has a direct test in
+    `test_host_thermal_arms.py` with nothing patched. Deleting the undervoltage `return` turns
+    `test_an_asserted_undervoltage_alarm_reaches_the_monitor` red, which is the deletion the
+    structural test could not see.
 
     Transport, measured before shipping because the arms read Prometheus: both queries answered
     in 0.48-0.58 ms, three runs each, against Prometheus's loopback on daniel-server (the node
     its pod was on), 2026-09-10. Same shape as the five instant queries the temperature arm
     already makes.)
-  - **UPS Battery Health** (the APC UPS's charge % + estimated runtime + the replace-battery
-    self-test verdict, via HA's Prometheus-scraped sensors over `monitoring` — the UPS is on
-    NUT/peanut and HA's prometheus integration exports it). `down` on a low battery RUNWAY: charge <
+  - **UPS Battery Health** (mains loss + the APC UPS's charge % + estimated runtime + the
+    replace-battery self-test verdict, read from **nut-exporter** over `monitoring` with HA's
+    re-export of the same UPS as the FALLBACK — issue #1548 moved the direction, because HA is the
+    workload the UPS most obviously protects and with HA primary the alert path went down with it).
+    Each arm's fallback is `max(A) or max(B)` inside the query string, not a branch in the check:
+    both sides reduce to one unlabelled series, so `or` drops the right whenever the left has a
+    sample. `down` on sustained **mains loss** (`UPS_ON_BATTERY_QUERY`, NUT's
+    `ups.status{flag="OB"}` — one-hot over `flag`, so the exporter forces a 0 when the UPS is not
+    asserting it and the series is a real 0/1 alert input; judged FIRST and returning alone,
+    because charge and runtime read the RUNWAY and hold green through most of an outage; its own
+    streak key) or on a low battery RUNWAY: charge <
     `UPS_CHARGE_MIN_PCT` (50, a deep discharge while on battery) OR estimated runtime <
     `UPS_RUNTIME_MIN_S` (300 s — an aged battery whose full-charge runway has decayed, OR a discharge
     nearing shutdown) OR the UPS's own **replace-battery** verdict (`UPS_REPLACE_QUERY`, an HA
     template `binary_sensor.apc_ups_replace_battery` over the NUT `RB` flag — the earliest signal, it
     can trip while charge/runtime still read fine; before this the RB verdict reached NEITHER channel,
     2026-07-14 review). Two defer paths avoid double-paging a source outage another monitor owns:
-    ALL arms absent → HA's whole scrape is down (Scrape Targets' page); **both NUT numeric arms
+    ALL arms absent → BOTH source scrapes are down (Scrape Targets' page); **both NUT numeric arms
     (charge, runtime) absent while the replace arm is still present** → the NUT server/integration
     dropped (HA drops the unavailable numeric sensors, but the replace-battery template FLOORS to 0 so
     it stays present — it CANNOT reach the all-absent branch), which the `nut` container healthcheck
@@ -518,11 +529,12 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     pre-existing UPS alert is an HA automation → **mobile** push (a separate channel from this
     Kuma→Discord brain) and nothing trended the battery, so a slowly-degrading battery was invisible
     until an outage collapsed it — this is the health/runway signal + the Discord escalation path.
-    **Prom-dependent** (queries HA's scrape). `UPS_CONSECUTIVE` (2, like
-    `HA_CONSECUTIVE`) rides out a one-cycle dip from a transient load spike (or an HA-restart blip
-    that briefly drops one arm). Queries are env-driven
-    (`UPS_CHARGE_QUERY`/`UPS_RUNTIME_QUERY`/`UPS_REPLACE_QUERY`, all empty = disabled) so a UPS/entity
-    rename needs no code edit. Pure `ups_health()` is unit-tested.)
+    **Prom-dependent** (queries the `nut` and `home-assistant` scrapes). `UPS_CONSECUTIVE` (2, like
+    `HA_CONSECUTIVE`) rides out a one-cycle dip from a transient load spike, a restart blip that
+    briefly drops one arm, or a brownout shorter than the grace window. Queries are env-driven
+    (`UPS_CHARGE_QUERY`/`UPS_RUNTIME_QUERY`/`UPS_REPLACE_QUERY`/`UPS_ON_BATTERY_QUERY`, all empty =
+    disabled; `UPS_SOURCE_UP_QUERY` is the all-absent gate) so a series rename needs no code edit.
+    Pure `ups_health()` and `ups_on_battery_verdict()` are unit-tested.)
   - **Pi Pressure** (the Pi's glances API `/api/4/load` + `/api/4/mem` + `/api/4/fs` over
     the LAN: `down` when load5/core > `PI_LOAD_MAX`, mem `available` < `PI_MEM_MIN_MB`, or
     any filesystem device > `PI_DISK_MAX_PCT` — glances' fs list is its *container* view
@@ -741,6 +753,36 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     the partial outage the floor exists to catch, which is the `node`-only mistake that blinded
     Host Temperature on two hosts of three, not a fix for it. A fullness breach gets no grace —
     it is monotonic, not flappy — while the census arm rides `PVC_CLAIMS_CONSECUTIVE`.)
+  - **Longhorn Snapshot Headroom** (`longhorn_snapshot_actual_size_bytes` joined to
+    `longhorn_volume_capacity_bytes` for the claim name, added 2026-09-10, #1627 — the SNAPSHOT
+    axis, where PVC Fullness is the filesystem axis and Longhorn Volume Redundancy the replica
+    axis. Snapshots live in the Longhorn backend, so a volume can fill its
+    `spec.snapshotMaxSize` while its claim reads 12% full and every replica reads healthy. A cap
+    that is REACHED does not prune, it refuses: Longhorn stops accepting new snapshots, and
+    `k8s/volume-snapshot` snapshots before it prunes, so the first deploy past the cap fails and
+    every later one fails identically until snapshots are deleted by hand (#1560). That role's
+    own gate fires only during a deploy of the capped service; this arm is what watches a volume
+    filling BETWEEN deploys, which a recurring Longhorn backup job does with nobody deploying.
+    **The caps are DECLARED in `SNAPSHOT_CAPS`**, `<pvc>=<bytes>`, because nothing exports the
+    field: Longhorn's exporter publishes snapshot sizes and no cap, this pod runs with
+    `automountServiceAccountToken: false`, and the Longhorn HTTP API answers only from the
+    node-local manager. Ansible is the only writer of a cap — `roles/k8s/jellyfin/tasks/main.yml`
+    patches the only one (jellyfin-config, 16 GiB = 2 x the PVC size, the smallest Longhorn
+    accepts) — and `tests/test_check_snapshot_headroom.py` derives the capped set from the tree,
+    so a second capped volume missing from the declaration fails CI rather than going unwatched.
+    `"0"` is Longhorn's UNCAPPED value and the fleet default, so it is dropped rather than read
+    as a cap of zero; a check treating 0 as a cap would report every volume full. **Usage is a
+    SUPERSET of what the deploy gate sums**: the gate skips `status.markRemoved` snapshots and
+    the metric carries no such label (2026-09-10: 25 of 114 Snapshot CRs were markRemoved and
+    every one still had a series), which errs safely — those blocks are still held until
+    Longhorn purges them — but can overstate usage for a cycle after a prune, so a breach rides
+    `SNAPSHOT_CAP_CONSECUTIVE`. Deduped by (volume, snapshot) before summing, like PVC
+    Fullness's `max by`: both longhorn-manager pods are scraped independently. A declared cap
+    whose volume has NO series is a breach, not green. **INERT until its push token exists** —
+    `monitor_bridge_snapshot_headroom_push_token` is not in SOPS, so `KUMA_PUSH_SNAPSHOT_HEADROOM`
+    renders empty, the verdict reaches the pod log alone, and the Kuma declaration is guarded on
+    the same variable. Adding the secret and redeploying uptime-kuma + monitor-bridge arms both
+    halves.)
   - **Kubelet CSI Mount Read-Only** (`node_filesystem_readonly{mountpoint=~"/var/lib/kubelet/
     plugins/.*"} == 1`, added 2026-09-05, #1243 — a reclaim stall dropped Longhorn's iSCSI
     sessions, `replacement_timeout` expiry then aborted several ext4 journals and remounted them

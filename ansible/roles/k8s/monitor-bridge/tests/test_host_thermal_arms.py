@@ -21,7 +21,11 @@ import dataclasses
 
 import bridge.streaks
 import checks.host_thermal
-from verdicts.host_power import thermal_throttle_verdict, undervoltage_verdict
+from verdicts.host_power import (
+    thermal_monitor_verdict,
+    thermal_throttle_verdict,
+    undervoltage_verdict,
+)
 
 
 def _alarm(value, instance="daniel-pi", sensor="in0"):
@@ -241,9 +245,106 @@ def test_check_host_temp_calls_both_arms_and_undervoltage_first():
     names = list(checks.host_thermal.check_host_temp.__code__.co_names)
     assert "_undervoltage_arm" in names, "the undervoltage arm is never called"
     assert "_thermal_throttle_arm" in names, "the throttle arm is never called"
+    assert "thermal_monitor_verdict" in names, (
+        "the check no longer composes its arms through thermal_monitor_verdict, so the "
+        "propagation tests below judge a composer nothing calls"
+    )
     assert names.index("_undervoltage_arm") < names.index("hwmon_temp_verdict"), (
         "undervoltage must be judged before the temperature verdict"
     )
     assert names.index("hwmon_temp_verdict") < names.index("_thermal_throttle_arm"), (
         "the throttle arm belongs after a clean temperature verdict"
     )
+
+
+# ── the composer: ordering and propagation, with nothing patched ──────────────────────────────
+#
+# The gap issue #1547 named. The arms above have accept/reject pairs of their own, and the
+# structural test proves their call sites exist and are ordered — but neither can see a missing
+# `return`, because deleting one leaves the name in `co_names` and leaves the clean-path
+# integration tests in test_host_temp.py green (they drive only the path where every arm defers).
+# Composing in a pure function is what gives propagation a direct test.
+
+_CLEAN = "max 45.0C on daniel-box/k10temp; 19 sensor(s)"
+
+
+def test_an_asserted_undervoltage_alarm_reaches_the_monitor():
+    """Delete `if undervoltage is not None and not undervoltage[0]: return undervoltage` and
+    this goes red. That is the deletion the old structural test could not see."""
+    ok, msg = thermal_monitor_verdict(
+        (False, "undervoltage alarm asserted on daniel-pi/in0"),
+        None,
+        None,
+        None,
+        _CLEAN,
+    )
+    assert not ok
+    assert "undervoltage" in msg
+    assert _CLEAN not in msg, "an asserted alarm returns alone"
+
+
+def test_an_undervoltage_arm_still_inside_its_grace_does_not_page():
+    ok, msg = thermal_monitor_verdict(
+        (True, "undervoltage grace 1/2"), None, None, None, _CLEAN
+    )
+    assert ok
+    assert msg.startswith(_CLEAN), "the temperature verdict leads the up message"
+    assert "undervoltage grace 1/2" in msg, "a holding arm must say so"
+
+
+def test_a_red_temperature_verdict_reaches_the_monitor():
+    ok, msg = thermal_monitor_verdict(
+        None, (False, "daniel-box/k10temp 96.0C (> 95.0C)"), None, None, _CLEAN
+    )
+    assert not ok
+    assert "96.0C" in msg
+
+
+def test_a_temperature_verdict_inside_its_grace_suppresses_the_arms_after_it():
+    """The one composition that is not-ok-shaped while reporting ok. The caller has not fetched
+    the throttle arm on this path, and the coverage shortfall must not append itself to a
+    thermal-spike grace message — that is the pre-composer behaviour, preserved."""
+    ok, msg = thermal_monitor_verdict(
+        None,
+        (True, "daniel-box/k10temp 96.0C; thermal spike grace 3/12"),
+        None,
+        (False, "only 2 of 3 host(s) report a temperature"),
+        _CLEAN,
+    )
+    assert ok
+    assert msg == "daniel-box/k10temp 96.0C; thermal spike grace 3/12"
+
+
+def test_a_throttling_cpu_reaches_the_monitor():
+    ok, msg = thermal_monitor_verdict(
+        None, None, (False, "CPU thermally throttled on daniel-server"), None, _CLEAN
+    )
+    assert not ok
+    assert "throttled" in msg
+
+
+def test_a_live_fault_outranks_a_coverage_shortfall():
+    ok, msg = thermal_monitor_verdict(
+        None,
+        None,
+        (False, "CPU thermally throttled on daniel-server"),
+        (False, "only 2 of 3 host(s) report a temperature"),
+        _CLEAN,
+    )
+    assert not ok
+    assert "throttled" in msg
+    assert "only 2 of 3" not in msg
+
+
+def test_a_coverage_shortfall_reaches_the_monitor_when_every_arm_is_clean():
+    ok, msg = thermal_monitor_verdict(
+        None, None, None, (False, "only 2 of 3 host(s) report a temperature"), _CLEAN
+    )
+    assert not ok
+    assert "only 2 of 3" in msg
+
+
+def test_a_wholly_clean_cycle_reports_the_temperature_message_alone():
+    """The byte-identical claim in check_host_temp's docstring: a cycle where every arm defers
+    reads exactly as this monitor read before the arms existed."""
+    assert thermal_monitor_verdict(None, None, None, None, _CLEAN) == (True, _CLEAN)

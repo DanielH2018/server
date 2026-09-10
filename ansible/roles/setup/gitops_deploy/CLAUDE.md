@@ -354,15 +354,25 @@ stay).
     manifests. Renovate automerges digest bumps on the 20+ `k8s_autodeploy: false` roles
     (`renovate.json`), so this path runs unattended with the one Discord line as its entire
     signal until someone happens to reread it. The `# DECIDED:` at the `cs.k8s` branch of
-    `deploy_alerts.alert_deferred` points here. The durable signal is a daniel-box root cron
+    `deploy_alerts.alert_deferred` points here. The durable signal is a daniel-box cron owned by
+    `sys_user`, not root, unlike the two GitHub crons below and `manifest-prune-check` beside it
+    in the same task file: this check reads world-readable release records and runs `git`/`uv`
+    against the primary checkout, which `sys_user` already owns, and running it as root would
+    leave root-owned objects there for `deploy.sh` and other sessions to trip on
     (`roles/setup/k3s/templates/release-staleness-check.sh.j2`, tag `release-staleness`, every
     `k3s_release_staleness_cron_minute`) reading `uv run python scripts/diagnostics/probe.py
     releases --stale-only`: it compares each service's release record (the applied commit
     `roles/k8s/manifests/tasks/release_stamp.yml` stamps on every real apply) against
-    `origin/master` under that service's own role AND the shared roles every service's manifests
-    depend on (`manifests`, `rollout-drain`, and the rest with no `containers_list` entry —
-    `scripts/diagnostics/probe_lib/releases.py`'s `shared_k8s_roles()`), and pushes the "Release
-    Staleness Drift" Kuma monitor down when any service is stale or missing a record entirely.
+    `origin/master` under that service's own role AND the shared roles that supply bytes to
+    every service's manifests (`manifests`, `volume-claim`, `image-builder`, `arr-notification`,
+    `game-stats-lib` — `scripts/diagnostics/probe_lib/releases.py`'s
+    `manifest_affecting_shared_roles()`), and pushes the "Release Staleness Drift" Kuma monitor
+    down when any service is stale or missing a record entirely. The five entry-less roles that
+    hold only `tasks/` and `defaults/` (`rollout-drain`, `volume-snapshot`, `volume-revert`,
+    `cronjob-gate`, `longhorn-api`) are deliberately OUT of that set: they change how a deploy
+    runs, never what it applies, and their change is live for the next deploy the moment this
+    deployer fast-forwards the primary checkout, so no stamp goes stale. Sweeping them in marked
+    all 53 services stale for a `volume-snapshot` change that rendered no manifest (#1636).
     No clearing rule is needed: the next real apply of that service rewrites its record, so the
     flag is derived from state rather than a marker this deployer would have to remember to
     clear.
