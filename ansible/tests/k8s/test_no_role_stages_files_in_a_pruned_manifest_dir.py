@@ -8,17 +8,17 @@ deleted at the start of the next deploy and re-rendered a few tasks later — a 
 `changed` prune item on an otherwise idempotent run, and for a file something else reads later
 (`registry-gc.sh` reads `gc-job.yaml` at CRON time) a window in which the file is simply gone.
 
-That is one class with three instances so far, which is why it is guarded here rather than
-re-derived a fourth time: `k8s/volume-claim`'s claim (#1654), n8n's broker-isolation probe
-(#1668), and registry's four job manifests (#1669). The fix in each case was the same — move
-the file to a sibling directory under the manifest root that no role's `manifests_service`
-claims, the way `headlamp-netpol`, `prowlarr-netpol`, `media-volume-probe`,
-`netpol-baseline-probe*`, `build-*`, `n8n-netpol`, `registry-jobs` and `<service>-claims` do.
+That is one class with three instances so far, guarded here rather than re-derived a fourth
+time: `k8s/volume-claim`'s claim (#1654), n8n's broker-isolation probe (#1668), and registry's
+four job manifests (#1669). The fix each time was the same — move the file to a sibling
+directory under the manifest root that no role's `manifests_service` claims, the way
+`headlamp-netpol`, `media-volume-probe`, `build-*`, `registry-jobs` and `<service>-claims` do.
 
 Those sibling names are a reservation, and #1670 is that nothing enforced it: a future role
 with `manifests_service: n8n-netpol` would render into that directory, prune every file it did
-not list, and `kubectl apply -f <dir>/` the rest — #1654 reproduced exactly. So there are two
-invariants here:
+not list, and `kubectl apply -f <dir>/` the rest — #1654 reproduced exactly. Hence two
+invariants, each with the input it must accept, the input it must reject, and a named census
+so a rename cannot empty it and leave an assertion passing on nothing:
 
 1. **No task stages a file into a directory some role's `manifests_service` names**, unless
    that role lists the filename. `state: absent` tasks are exempt: claude-otel deliberately
@@ -26,9 +26,6 @@ invariants here:
 2. **No `manifests_service` claims a reserved sibling name** — a literal one already staged in
    the tree, or one matching the parametric shapes (`<x>-claims`, `<x>-netpol`, `<x>-probe`,
    `build-<x>`) that a role generates per service or per image.
-
-Each invariant carries the input it must accept and the input it must reject, plus a named
-census so a rename cannot empty the check and leave an `all(...)` over nothing passing.
 
 Run: uv run pytest ansible/tests/k8s/test_no_role_stages_files_in_a_pruned_manifest_dir.py
 """
@@ -120,7 +117,16 @@ def staged_files(tasks_file: Path) -> set[tuple[str, str]]:
 
 
 def _is_listed(filename: str, listed: tuple[str, ...]) -> bool:
-    return filename in listed or any(filename in entry for entry in listed)
+    """Whether a staged filename is one the caller names.
+
+    Exact membership for an ordinary list entry, substring only for the Jinja-string shape
+    (freshrss builds its `manifests_files` conditionally). Substring-matching every entry would
+    read a staged `policy.yaml` as listed because `networkpolicy.yaml` contains it — quietly,
+    in the false-negative direction.
+    """
+    return filename in listed or any(
+        "{{" in entry and filename in entry for entry in listed
+    )
 
 
 def files_in_pruned_dirs(roles_dir: Path) -> dict[str, list[str]]:
@@ -165,12 +171,10 @@ def staged_dirs_by_role(roles_dir: Path) -> dict[str, set[str]]:
 def reserved_name_claims(roles_dir: Path) -> dict[str, str]:
     """`manifests_service` -> reason, for every service claiming a reserved sibling name.
 
-    Two shapes of reservation. A LITERAL one is a sibling directory some OTHER role already
-    stages into — `headlamp-netpol`, `registry-jobs`, `media-volume-probe`. A PARAMETRIC one is
-    generated per service or per image and so cannot be enumerated from the tree at all:
-    `<service>-claims` (`k8s/volume-claim`), `build-<image>` (`k8s/image-builder`). The
-    parametric half is what invariant 1 structurally cannot cover, because the colliding
-    directory need not exist yet.
+    A LITERAL reservation is a sibling directory some OTHER role already stages into. A
+    PARAMETRIC one is generated per service or per image, so it cannot be enumerated from the
+    tree at all — `<service>-claims`, `build-<image>`. The parametric half is what invariant 1
+    structurally cannot cover, because the colliding directory need not exist yet.
     """
     owner = owning_roles(roles_dir)
     staged = staged_dirs_by_role(roles_dir)
@@ -428,6 +432,67 @@ def test_no_manifests_service_claims_a_reserved_sibling_name():
     found = reserved_name_claims(K8S_ROLES)
     assert not found, "\n".join(
         f"manifests_service {service!r} {why}" for service, why in sorted(found.items())
+    )
+
+
+# ── the half-move: a path baked into a script the guard above cannot read ────────────────────
+#
+# `staged_files` reads tasks files. `registry-gc.sh` is a script template, so a move that
+# retargets the gc render's `dest:` and leaves `JOB_MANIFEST` pointing at the old directory
+# passes every assertion above and breaks GC at CRON time — which is the whole reason #1669's
+# `gc-job.yaml` was more than cosmetic. One targeted pair rather than a wider glob: manifest
+# templates mention paths too, and reading them all would only add noise.
+
+GC_SCRIPT = K8S_ROLES / "registry" / "templates" / "registry-gc.sh.j2"
+REGISTRY_TASKS = K8S_ROLES / "registry" / "tasks" / "main.yml"
+
+_JOB_MANIFEST_RE = re.compile(r"^JOB_MANIFEST=(\S+)", re.MULTILINE)
+
+
+def gc_manifest_paths(tasks_text: str, script_text: str) -> tuple[str, str]:
+    """`(the path the render stages, the path the cron script reads)`, or '' for each miss."""
+    staged = [p for p in _PATH_RE.findall(tasks_text) if p.endswith("/gc-job.yaml")]
+    read = _JOB_MANIFEST_RE.findall(script_text)
+    return (staged[0] if staged else "", read[0] if read else "")
+
+
+_GC_RENDER = """---
+- name: Render the registry garbage-collection job
+  ansible.builtin.template:
+    src: gc-job.yaml.j2
+    dest: {path}
+"""
+_GC_SCRIPT = "JOB_MANIFEST={path}\n"
+
+
+def test_gc_render_and_cron_script_agreeing_is_clean():
+    staged, read = gc_manifest_paths(
+        _GC_RENDER.format(path=f"{MANIFEST_ROOT}/registry-jobs/gc-job.yaml"),
+        _GC_SCRIPT.format(path=f"{MANIFEST_ROOT}/registry-jobs/gc-job.yaml"),
+    )
+    assert staged == read != ""
+
+
+def test_gc_render_moved_without_the_cron_script_is_flagged():
+    staged, read = gc_manifest_paths(
+        _GC_RENDER.format(path=f"{MANIFEST_ROOT}/registry-jobs/gc-job.yaml"),
+        _GC_SCRIPT.format(path=f"{MANIFEST_ROOT}/registry/gc-job.yaml"),
+    )
+    assert staged != read
+
+
+def test_the_gc_reader_finds_both_real_paths():
+    """Non-vacuity: two empty strings would make the invariant below pass on nothing."""
+    staged, read = gc_manifest_paths(REGISTRY_TASKS.read_text(), GC_SCRIPT.read_text())
+    assert staged, f"no gc-job.yaml render found in {REGISTRY_TASKS}"
+    assert read, f"no JOB_MANIFEST assignment found in {GC_SCRIPT}"
+
+
+def test_registry_gc_reads_the_manifest_the_deploy_stages():
+    staged, read = gc_manifest_paths(REGISTRY_TASKS.read_text(), GC_SCRIPT.read_text())
+    assert staged == read, (
+        f"{REGISTRY_TASKS} stages the GC job at {staged} while {GC_SCRIPT} reads {read}; the "
+        "cron would apply a manifest the deploy never writes (#1669)"
     )
 
 
