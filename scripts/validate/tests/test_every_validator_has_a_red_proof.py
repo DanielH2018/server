@@ -16,7 +16,7 @@ NAMES and would have failed `test_validate_config_templates.py`, whose red proof
 there under the name `test_yaml_error_passes_valid_and_catches_invalid`. A guard that fires on
 a correct suite is worse than no guard, because it gets switched off.
 
-SCOPE IS DELIBERATELY NARROW. The five modules in `scripts/validate/`, derived by glob rather
+SCOPE IS DELIBERATELY NARROW. The validator modules in `scripts/validate/`, derived by glob rather
 than listed. 46 of 156 test files in this repo carry an explicit rejecting half, but most of the
 rest are direct config assertions that need no red proof — they ARE the check. Policing all of
 them would produce a guard nobody could land, which is the failure mode described above.
