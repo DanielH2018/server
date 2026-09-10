@@ -32,13 +32,15 @@ def run_tick(ln: Landing) -> None:
     # the ff-merge either done or retryable next tick.
     if rc in (TICK_OK, TICK_STILL_RUNNING):
         say(f"tick exit {rc}")
-        if rc == TICK_STILL_RUNNING:
-            # Booked because every later read of the deployer's markers now races the apply
-            # this landing gave up watching: `hold_sha` is legitimately empty while the apply
-            # is still running, which is indistinguishable from a settled deferral. Issue
-            # #1607 -- a landing reported `deferred` and "the next tick crosses it" during the
-            # very apply that failed and parked the deployer for the whole fleet.
-            ln.tick_watch_abandoned = True
+        # Booked because every later read of the deployer's markers then races the apply this
+        # landing gave up watching: `hold_sha` is legitimately empty while the apply is still
+        # running, which is indistinguishable from a settled deferral. Issue #1607 -- a landing
+        # reported `deferred` during the very apply that failed and parked the whole fleet.
+        #
+        # ASSIGNED, not raised: this is the second call site (the deploy phase's stale retry
+        # runs the tick again), and a retry that returns 0 watched a tick to completion. Left
+        # sticky, that landing would print the race note over markers that are now settled.
+        ln.tick_watch_abandoned = rc == TICK_STILL_RUNNING
         return
     if rc == TICK_LOCK_CONTENTION:
         ln.die(

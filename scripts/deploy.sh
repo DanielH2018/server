@@ -255,7 +255,8 @@ set -- "${args[@]}"
 # --detach + --check/--dry-run is meaningless: both of those already return immediately without
 # touching the lock, so there is nothing to background. Checked here, right after args are known
 # and before the (comparatively slow) staleness check, so a nonsensical combination fails fast
-# rather than doing something surprising.
+# rather than doing something surprising. `--changed` is the one path where the staleness check
+# already ran (see the hoist above), so there the stale tree is reported first, at exit 4.
 check_requested=0
 for arg in "$@"; do
     if [[ "$arg" == "--check" ]]; then

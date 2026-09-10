@@ -27,9 +27,7 @@ from deploy_tools.land_lib import deploy, health_verdict, tick
 from deploy_tools.land_lib.outcome import Outcome
 
 _BEHIND = {"behind_since": "93eda4d2 1789043217.0696108"}
-# The ordinary deferral's own sentence. The race note quotes the "next tick" phrase to
-# contradict it, so the sentence rather than the phrase is what distinguishes the two.
-_NEXT_TICK = "Usually a newer merge whose CI is still running"
+_NEXT_TICK = "the next tick crosses it"
 
 
 # ── the flag itself: only an abandoned watch sets it ────────────────────────────────────
@@ -45,6 +43,21 @@ def test_a_tick_still_running_marks_the_watch_abandoned(landing):
 def test_a_tick_that_finished_does_not_mark_it(landing):
     """The must-not-fire half: a flag set on every tick would rewrite every deferral."""
     ln, _ = landing(Fakes(tick=[0]))
+    tick.run_tick(ln)
+    assert ln.tick_watch_abandoned is False
+
+
+def test_a_later_tick_that_finished_clears_an_earlier_abandoned_watch(landing):
+    """`run_tick` runs twice -- step 4, then the deploy phase's stale retry.
+
+    A retry that returns 0 watched a tick to completion, so the markers it leaves are settled
+    and the race note no longer applies. Left sticky, the landing would send an operator back
+    for a second look at a state that is already final.
+    """
+    ln, _ = landing(Fakes(tick=[75]))
+    tick.run_tick(ln)
+    assert ln.tick_watch_abandoned is True
+    ln.tools.tick = lambda: 0
     tick.run_tick(ln)
     assert ln.tick_watch_abandoned is False
 

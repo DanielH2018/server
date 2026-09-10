@@ -129,6 +129,6 @@ def say(text: str) -> None:
 ABANDONED_WATCH_NOTE = (
     "  This run stopped watching a tick that was still applying, so the markers above were "
     "read mid-apply: an apply that fails writes hold_sha only when it returns.\n"
-    "  Do NOT read this as 'the next tick crosses it' — no later tick crosses a hold, and a "
-    "hold blocks every session's deploy. Re-run land.sh once the tick has settled."
+    "  This is NOT the ordinary deferral. A later tick does not clear a hold, and a hold "
+    "blocks every session's deploy. Re-run land.sh once the tick has settled."
 )
