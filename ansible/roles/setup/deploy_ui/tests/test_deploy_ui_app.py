@@ -41,7 +41,12 @@ TABLE = {
         '[{"number":1550,"title":"T","headRefName":"b","isDraft":false,"statusCheckRollup":[]}]',
         0,
     ),
-    ("./scripts/deploy.sh", "--list-services"): ("n8n\nhomepage\n", 0),
+    # Shaped like the real output: `--list-services` prints the block tags and `always`
+    # alongside the service names, which is the whole reason `_deployable_tags` subtracts.
+    ("./scripts/deploy.sh", "--list-services"): (
+        "always\nconfig\ncron\ndeploy\nhomepage\nn8n\n",
+        0,
+    ),
 }
 HDRS = {"X-Deploy-UI": "1", "Content-Type": "application/json"}
 
@@ -177,6 +182,20 @@ def test_land_duplicate_is_refused_is_flagged(app):
         "/api/land", HDRS, json.dumps({"pr": "1543", "since": "72c1a41"})
     )
     assert status == 409 and "1543" in text
+
+
+def test_deployable_tags_drops_the_listed_block_tags(app):
+    assert app._deployable_tags() == {"homepage", "n8n"}
+
+
+def test_deploy_block_tag_is_flagged(app):
+    """A tag `--list-services` prints must still not start a fleet-wide deploy (#1596).
+
+    `config` selects the config half of every container role, so this arriving as a 202 is
+    the defect: the page's only deploy button posts one service name from the stale panel.
+    """
+    status, text = app.post("/api/deploy", HDRS, json.dumps({"tag": "config"}))
+    assert status == 409 and "config" in text
 
 
 def test_deploy_unknown_tag_is_flagged(app):

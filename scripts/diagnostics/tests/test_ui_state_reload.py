@@ -26,6 +26,7 @@ today's behaviour in that direction would report it as a break.
 """
 
 import json
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -71,7 +72,14 @@ def domain() -> str:
 def good_state(tmp_path) -> Path:
     """A copy of a live one_factor session, minted if the shared jar is stale.
 
-    A copy, so nothing here can write the shared jar. Minting is a skip rather than a failure
+    The MCP server this test launches is pointed at a private state file, never at the shared
+    jar — that is what `UI_MCP_STATE_PATH` buys, and it is why swapping the file underneath a
+    running server is safe alongside a live session. The mint above is the one thing here that
+    touches the shared jar: `ui_login()` with no arguments writes
+    `~/.claude/playwright/authelia-state.json`. That write is a refresh, exactly what
+    `ui_mcp.sh` does on every launch, never a corruption.
+
+    Minting is a skip rather than a failure
     when it fails: with no live session there is no way to tell a `browser_close` regression
     from having nothing to log in with, and `test_ui_smoke`'s two_factor fixture records what
     reporting that as a failure costs — three failures where three skips were the truth.
@@ -101,7 +109,12 @@ def test_browser_close_makes_the_next_navigation_re_read_the_state_file(
     from launch would score green whatever `browser_close` did — the state file has to be
     observed DECIDING the outcome before the reload means anything.
     """
-    state = tmp_path / "session-state.json"
+    # The pid goes in the FILENAME, not in the directory: `ui_mcp.sh` derives its private
+    # launch config as `$RUNTIME_DIR/playwright-mcp-private-$(basename "$STATE_PATH").json`,
+    # which `tmp_path`'s uniqueness never reaches. Two concurrent `-m ui -k state_reload`
+    # runs shared that config path and one server came up pointed at the other run's state
+    # file (GitHub issue #1591).
+    state = tmp_path / f"session-state-{os.getpid()}.json"
     # Valid JSON, not an empty file: a malformed state fails the context build, which arrives
     # as a server error rather than as the portal, and the first assertion never runs.
     state.write_text(json.dumps(EMPTY_STATE))

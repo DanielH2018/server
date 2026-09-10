@@ -9,6 +9,7 @@ orphans the plane marker (gitops_deploy's CLAUDE.md records the incident).
 import os
 import signal
 import subprocess
+import tempfile
 import threading
 import time
 from collections.abc import Mapping
@@ -17,6 +18,25 @@ from pathlib import Path
 from deploy_ui_reads import Landing
 
 REQUIRED_HEADER = "X-Deploy-UI"
+
+# `deploy.sh --list-services` prints the block tags and Ansible's reserved `always` alongside
+# the service names, because all of them are valid `--tags` values from a terminal. None of
+# them is valid HERE: `--tags config` runs the config half of every container role, so
+# accepting one turns a single-service button into a fleet-wide deploy (GitHub issue #1596).
+# The page only ever posts a service name from the stale panel; this is what stops a
+# hand-made POST doing more.
+#
+# A literal, because the daemon runs under `uv run --no-project` outside the repo venv and
+# imports nothing from `scripts/`. It mirrors `BLOCK_TAGS | RESERVED_TAGS` in
+# `scripts/deploy_tools/deploy_tags.py`, and the tests — which pytest CAN import both from —
+# assert the two sets are equal, so a new block tag there fails here rather than silently
+# re-opening the hole.
+NON_SERVICE_TAGS = frozenset({"config", "deploy", "cron", "always"})
+
+
+def service_tags(listed: set[str]) -> set[str]:
+    """The deployable service tags among `deploy.sh --list-services` output."""
+    return set(listed) - NON_SERVICE_TAGS
 
 
 def write_allowed(headers: Mapping[str, str]) -> str | None:
@@ -40,10 +60,19 @@ def guard_land(pr: str, inflight: list[Landing], hold_sha: str) -> str | None:
     return _hold_refusal(hold_sha)
 
 
-def guard_deploy(tag: str, known_tags: set[str], hold_sha: str) -> str | None:
-    """Refuse a deploy tag `deploy.sh` doesn't know, or any deploy while a hold is set."""
-    if tag not in known_tags:
-        return f"{tag} is not a deploy tag (deploy.sh --list-services)"
+def guard_deploy(tag: str, deployable: set[str], hold_sha: str) -> str | None:
+    """Refuse a tag naming no single service, or any deploy while a hold is set.
+
+    `deployable` is `deploy.sh --list-services` with `NON_SERVICE_TAGS` removed, so a block
+    tag is refused here while that command still lists it. The message says so rather than
+    sending the operator at a command whose output contradicts the refusal.
+    """
+    if tag not in deployable:
+        return (
+            f"{tag} is not a deployable service tag. `deploy.sh --list-services` also lists "
+            f"the block tags ({', '.join(sorted(NON_SERVICE_TAGS))}); this UI deploys one "
+            f"service at a time and refuses those."
+        )
     return _hold_refusal(hold_sha)
 
 
@@ -78,12 +107,25 @@ def set_override(state_dir: Path, action: str) -> str | None:
 
 
 def spawn_logged(argv: list[str], cwd: Path, log_dir: Path, action: str) -> Path:
-    """Start argv detached with stdout+stderr in `<log_dir>/<action>-<ts>.log`.
+    """Start argv detached with stdout+stderr in `<log_dir>/<action>-<ts>-<rand>.log`.
 
     The pid sits beside it in `.pid` so a later request can address the process.
+
+    The name carries a random suffix because the timestamp alone is one-second granular:
+    two writes in the same second named the same file, and the second `open("wb")`
+    truncated a log the first process was still writing to and overwrote its `.pid`
+    (GitHub issue #1597). `mkstemp` opens O_EXCL, so uniqueness is decided by the
+    filesystem rather than by a counter this daemon would have to hold a lock over — and it
+    still holds across a daemon restart.
     """
     log_dir.mkdir(parents=True, exist_ok=True)
-    log = log_dir / f"{action}-{time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())}.log"
+    fd, name = tempfile.mkstemp(
+        prefix=f"{action}-{time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())}-",
+        suffix=".log",
+        dir=log_dir,
+    )
+    os.close(fd)
+    log = Path(name)
     with log.open("wb") as fh:
         proc = subprocess.Popen(
             argv,

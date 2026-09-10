@@ -37,6 +37,17 @@ Each write spawns the command detached, logs to `~/.local/state/deploy-ui/`, and
 logfmt line via `logger -t deploy-ui`. Land and deploy refuse under `hold_sha`; the hold
 clears only as the `hold_sha` + `hold_plane` pair against a SHA the operator typed.
 
+`/api/deploy` takes one SERVICE tag. `deploy.sh --list-services` also prints the block tags
+(`config`, `deploy`, `cron`) and Ansible's `always`, each of which selects every container
+role at once, so `writes.NON_SERVICE_TAGS` subtracts them from the allowlist and the guard
+refuses one with a 409. A test asserts that literal equals `BLOCK_TAGS | RESERVED_TAGS` in
+`scripts/deploy_tools/deploy_tags.py`, because the daemon runs outside the repo venv and
+cannot import it.
+
+Log names carry a `mkstemp` suffix as well as the second-granular timestamp. Two writes in
+one second used to name the same file, and the second open truncated a log the first process
+still held.
+
 ## Deploy
 
 `uv run ansible-playbook ansible/initial_setup.yml --tags deploy_ui` (a setup-plane role;

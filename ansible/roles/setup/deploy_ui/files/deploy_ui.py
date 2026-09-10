@@ -196,8 +196,15 @@ class App:
         return data.decode("utf-8", errors="replace")
 
     # ---- writes ----
-    def _known_tags(self) -> set[str]:
-        return set(self._out(["./scripts/deploy.sh", "--list-services"], 60).split())
+    def _deployable_tags(self) -> set[str]:
+        """The service tags `/api/deploy` accepts — the listed tags minus the block tags.
+
+        `--list-services` prints `config`, `deploy`, `cron` and `always` too; see
+        `writes.NON_SERVICE_TAGS` for why none of them may reach this API.
+        """
+        return writes.service_tags(
+            set(self._out(["./scripts/deploy.sh", "--list-services"], 60).split())
+        )
 
     def land(self, body: dict) -> tuple[int, str]:
         pr, since = str(body.get("pr", "")), str(body.get("since", ""))
@@ -223,7 +230,9 @@ class App:
 
     def deploy(self, body: dict) -> tuple[int, str]:
         tag = str(body.get("tag", ""))
-        refusal = writes.guard_deploy(tag, self._known_tags(), self.state()["hold_sha"])
+        refusal = writes.guard_deploy(
+            tag, self._deployable_tags(), self.state()["hold_sha"]
+        )
         if refusal:
             return 409, refusal
         log = writes.spawn_logged(

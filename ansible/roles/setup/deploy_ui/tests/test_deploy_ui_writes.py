@@ -46,6 +46,33 @@ def test_guard_deploy_unknown_tag_is_flagged():
     assert "homepage2" in w.guard_deploy("homepage2", {"homepage"}, "")
 
 
+def test_service_tags_keeps_a_service_name_is_clean():
+    assert w.service_tags({"homepage", "n8n", "config"}) == {"homepage", "n8n"}
+
+
+def test_service_tags_drops_every_block_tag_is_flagged():
+    """The rejecting half: a listing of block tags alone leaves nothing deployable."""
+    assert w.service_tags(set(w.NON_SERVICE_TAGS)) == set()
+
+
+def test_non_service_tags_matches_deploy_tags_own_block_set():
+    """The oracle for the literal in `deploy_ui_writes`.
+
+    The daemon runs outside the repo venv and cannot import `deploy_tags`, so the set is
+    copied. pytest CAN import both, which is what keeps the copy honest: a new block tag in
+    `deploy_tags` fails here rather than silently becoming acceptable to `/api/deploy`.
+    """
+    import deploy_tags
+
+    assert w.NON_SERVICE_TAGS == deploy_tags.BLOCK_TAGS | deploy_tags.RESERVED_TAGS
+
+
+def test_guard_deploy_block_tag_is_flagged():
+    """A block tag `deploy.sh --list-services` prints is still refused by this API (#1596)."""
+    refusal = w.guard_deploy("config", {"homepage"}, "")
+    assert "config" in refusal and "block tags" in refusal
+
+
 def test_guard_deploy_under_hold_is_flagged():
     assert "hold" in w.guard_deploy("homepage", {"homepage"}, "deadbeef")
 
@@ -92,6 +119,26 @@ def test_spawn_logged_writes_output_and_returns_log(tmp_path):
         time.sleep(0.05)
     assert log.read_text().strip() == "hi"
     assert log.name.startswith("land-")
+
+
+def test_spawn_logged_never_takes_a_name_already_on_disk(tmp_path):
+    """The collision case from #1597, staged rather than raced.
+
+    The victim file is the exact name the old second-granular scheme derived, written before
+    the spawn — so a `<action>-<ts>.log` name would open it `wb` and truncate a log another
+    process was still writing to, plus overwrite its `.pid`. Staging it is what makes this
+    deterministic: two live spawns need not land in the same second.
+    """
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    victim = logs / f"deploy-{time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())}.log"
+    victim.write_text("output of the first process\n")
+    log = w.spawn_logged(["sh", "-c", "sleep 5"], tmp_path, logs, "deploy")
+    try:
+        assert log != victim
+        assert victim.read_text() == "output of the first process\n"
+    finally:
+        w.terminate(int(log.with_suffix(".pid").read_text()))
 
 
 def test_terminate_kills_the_pid(tmp_path):
