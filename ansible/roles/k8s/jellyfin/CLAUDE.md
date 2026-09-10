@@ -13,8 +13,12 @@ shared `media-data` library and owns its own config volume.
   `ansible/tests/services/test_mergeversions_install.py` and
   `ansible/tests/services/test_mediacleaner_install.py` enforce this). **Each addition
   TIGHTENS the pin**: the image cannot move to a new Jellyfin line until every one of the five
-  has a release for that ABI, so the constraint is the slowest plugin, not the newest — and
-  Media Cleaner's `10.11.9.0` is the tightest of them today. One more plugin is loaded from the
+  has a release for that ABI. The constraint is therefore `max` over the five declared
+  `targetAbi` values, and **the image tag must be at least that** — `10.11.11.0` today, held by
+  ani-sync and Intro Skipper, which is why the image sits at `10.11.11`. Do not read the floor
+  off this sentence: `test_every_jellyfin_plugin_target_abi_fits_the_image.py` derives it from
+  `defaults/main.yml` and covers a sixth plugin added without its own guard. One more plugin is
+  loaded from the
   config PVC and is outside that lockstep — *Every plugin the pod actually loads* below has the
   census.
 - **Deploy tag:** `--tags "jellyfin"`. `use_authelia: false` — **no auth**, public route.
