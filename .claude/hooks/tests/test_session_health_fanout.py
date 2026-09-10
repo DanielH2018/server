@@ -63,3 +63,42 @@ def test_remote_fanout_lines_are_silent_with_no_manifest(tmp_path):
     assert (
         _mod.remote_fanout_lines(manifest_dir=tmp_path, local_host="daniel-box") == []
     )
+
+
+def test_remote_fanout_lines_are_silent_when_every_batch_is_local(tmp_path):
+    (tmp_path / "r.json").write_text(
+        json.dumps(
+            {
+                "run_id": "r",
+                "batches": [{"host": "daniel-box", "branch": "b", "issues": [1]}],
+            }
+        )
+    )
+    assert (
+        _mod.remote_fanout_lines(manifest_dir=tmp_path, local_host="daniel-box") == []
+    )
+
+
+def test_remote_fanout_lines_skips_a_malformed_manifest_but_keeps_the_rest(tmp_path):
+    # Not a dict at all -- data.get("batches", ...) would raise AttributeError.
+    (tmp_path / "a-bad-list.json").write_text("[]")
+    # A dict, but a batch missing the "branch" key the line-builder indexes -- KeyError.
+    (tmp_path / "b-bad-missing-branch.json").write_text(
+        json.dumps({"run_id": "bad", "batches": [{"host": "daniel-server"}]})
+    )
+    (tmp_path / "c-good.json").write_text(
+        json.dumps(
+            {
+                "run_id": "r2",
+                "batches": [
+                    {"host": "daniel-server", "branch": "b", "issues": [2]},
+                ],
+            }
+        )
+    )
+    lines = _mod.remote_fanout_lines(manifest_dir=tmp_path, local_host="daniel-box")
+    assert lines == [
+        "🛰 fan-out worktrees on other hosts "
+        "(uv run python scripts/dev/fanout_place.py status <run-id>):",
+        "  • daniel-server b — #2 (run r2)",
+    ]

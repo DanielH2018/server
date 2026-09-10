@@ -34,46 +34,17 @@ session context by Claude Code (same mechanism the remember plugin uses).
 
 import json
 import os
-import socket
 import subprocess
 import sys
-from pathlib import Path
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-FANOUT_MANIFEST_DIR = Path.home() / ".claude" / "fanout"
-
-
-def remote_fanout_lines(manifest_dir=FANOUT_MANIFEST_DIR, local_host=None):
-    """Fan-out worktrees on the OTHER host: git worktree list here cannot see them.
-
-    Reads scripts/dev/fanout_place.py's run manifests under ~/.claude/fanout/ instead of
-    git metadata. `manifest_dir` and `local_host` are parameters, not module reads, so a
-    test passes fixed values instead of depending on this machine's real state.
-
-    Returns:
-        Ready-to-print banner lines, or [] with no batches on another host.
-    """
-    me = local_host or socket.gethostname()
-    found = []
-    try:
-        for path in sorted(manifest_dir.glob("*.json")):
-            data = json.loads(path.read_text())
-            for b in data.get("batches", []):
-                if b.get("host") != me:
-                    issues = ", ".join(f"#{n}" for n in b.get("issues", []))
-                    found.append(
-                        f"  • {b['host']} {b['branch']} — {issues} (run {data['run_id']})"
-                    )
-    except OSError, ValueError, KeyError:
-        return []
-    if not found:
-        return []
-    return [
-        "\U0001f6f0 fan-out worktrees on other hosts "
-        "(uv run python scripts/dev/fanout_place.py status <run-id>):",
-        *found,
-    ]
+# `remote_fanout_lines` lives in `.claude/hooks/lib/remote_fanout.py`, not inline here,
+# because this file sits at its own 600-line cap (ansible/tests/_ratchet.py) with no
+# headroom left. Same shape as the `lib.deployer_park` import below: a sys.path insert of
+# this file's own directory, then a plain `from lib.<mod> import`.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from lib.remote_fanout import remote_fanout_lines  # noqa: E402
 
 
 # The park decision itself lives in `scripts/lib/deployer_park.py`, because `deploy.sh` exit 4
@@ -577,7 +548,8 @@ def main(
 
     Skips a mid-session compaction event. Combines container, Prometheus-target and
     stale-branch problems into one banner, then separately prints other live sessions in
-    this repo and any worktrees ready to remove — both regardless of health status.
+    this repo, worktrees ready to remove, and fan-out worktrees running on another host —
+    all three regardless of health status.
 
     Args:
         parked_deployer_problems: override for the parked-deployer probe. Defaults to the
