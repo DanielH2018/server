@@ -87,6 +87,11 @@ kuma_docker_monitors: false
 # comment for why that distinction matters). Same for every host so far; override per-host
 # if a new host sits on a different LAN.
 lan_subnet: "10.0.0.0/24"
+# The LAN's default gateway. It is also the LAN's DHCP server, so it is the only host that
+# knows the names of the devices it leased addresses to — Pi-hole's dnsmasq config forwards
+# the LAN reverse zone here so PTR lookups return those names instead of nothing. Verified
+# against the live router 2026-09-10: `dig -x 10.0.0.1 @10.0.0.1` answers `Docsis-Gateway`.
+lan_router_ip: "10.0.0.1"
 # The production cluster's pod and Service ranges — k3s's defaults, which this cluster has
 # never overridden. Global rather than k3s role defaults because the consumer is the
 # hypervisor role on daniel-server: the staging guest's egress fence has to name them, and a
