@@ -84,13 +84,22 @@ spec:
             # button, which is a worse state than either.
             #
             # Every value here is a default in this role, and every one of them has to agree
-            # with something outside it: the client id with Authelia's client and the API
-            # server's `oidc-client-id`, the issuer with the API server's `oidc-issuer-url`,
-            # the callback with the client's `redirect_uris`.
+            # with something outside it: the client id with Authelia's client and the
+            # `audiences` of each issuer in the API server's authentication config, and the
+            # issuer with one of that config's `jwt` issuers. The callback is the exception —
+            # it is derived per request rather than configured, and the Authelia client
+            # registers both hostnames it can produce.
             - "-oidc-client-id={{ headlamp_k8s_oidc_client_id }}"
             - "-oidc-idp-issuer-url={{ headlamp_k8s_oidc_issuer_url }}"
             - "-oidc-scopes={{ headlamp_k8s_oidc_scopes }}"
+{% if headlamp_k8s_oidc_callback_url %}
+            # Rendered only when pinned. Omitting the flag is NOT the same as passing it
+            # empty: Headlamp builds the callback from each incoming request when the config
+            # value is blank (`getOidcCallbackURL`), and that per-request behaviour is what
+            # lets one instance serve both hostnames. An empty `-oidc-callback-url=` would
+            # set the value to the empty string, which is a different thing than unset.
             - "-oidc-callback-url={{ headlamp_k8s_oidc_callback_url }}"
+{% endif %}
             - "-oidc-use-pkce"
 {% else %}
             # Headlamp's default in-cluster flow makes the operator paste a ServiceAccount
