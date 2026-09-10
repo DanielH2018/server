@@ -75,10 +75,11 @@ Edit the `.j2` files, never the live config: homepage seeds any missing file int
   widget carries two to four stats, so all of them occupy two stat rows.
 - **The groups split by WIDGET, not by topic.** A widgeted tile is several lines tall and a
   link-only tile is one line, so a group holding both leaves ragged holes. `Services` holds every
-  widgeted tile bar the calendar and Crypto; `Admin` and `Tools` hold the link-only ones, four
-  per row. There was a `Media` group until 2026-09-10 — its three surviving tiles moved into
-  `Services` to make that column four rows deep, and Jellyfin was dropped rather than moved (its
-  widget had been erroring since #1457).
+  widgeted tile bar the calendar and Crypto; `Admin & Tools` holds the link-only ones, four per
+  row. Two groups became four on 2026-09-10: the `Media` group's three surviving tiles moved into
+  `Services` to make that column four rows deep, and `Admin` and `Tools` merged into one group of
+  eight, which still divides by four. Jellyfin was dropped rather than moved (its widget had been
+  erroring since #1457).
 - **The calendar's height is DERIVED from the Services tile count, so the two Top Row columns end
   level.** They are separate grids and nothing aligns them on its own; they are also not siblings
   in one grid row, so `height: 100%` on the calendar's list does not match it to the Services
