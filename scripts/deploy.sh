@@ -35,6 +35,9 @@
 #     so the derived list still goes through the same lock and tag validation below, and prints
 #     what it derived before doing anything else. Refuses (exit 3, nothing touched) on a broad
 #     change — shared templates/inventory/setup-plane paths that don't map to one service.
+#     The staleness check runs BEFORE the derivation (issue #1593): on a tree that is only
+#     behind, the derived list is empty by construction and the wrapper would otherwise exit 0
+#     having deployed nothing.
 #   --detach backgrounds the ansible-playbook run (the ~83% of a deploy that is waiting on
 #     rollout/stabilisation) and returns immediately. The staleness check, tag validation, and
 #     the lock are still evaluated in THIS process before it returns, so exit 2/4 land exactly
@@ -139,6 +142,7 @@ i=0
 n=${#raw_args[@]}
 changed_requested=0
 changed_ref="origin/master"
+pre_skip_staleness=0
 while [[ "$i" -lt "$n" ]]; do
     a="${raw_args[$i]}"
     if [[ "$a" == "--changed" ]]; then
@@ -150,12 +154,39 @@ while [[ "$i" -lt "$n" ]]; do
         fi
         continue
     fi
+    if [[ "$a" == "--skip-staleness-check" ]]; then
+        pre_skip_staleness=1
+    fi
     filtered_args+=("$a")
     i=$((i + 1))
 done
 set -- "${filtered_args[@]}"
 
+# The staleness gate, hoisted into a function so the --changed pass below can ask it FIRST
+# (issue #1593). It runs once per invocation whichever call site gets there first:
+# staleness_checked makes the second call a no-op, so --changed pays no second fetch.
+staleness_checked=0
+staleness_gate() {
+    if [[ "$staleness_checked" == 1 ]]; then
+        return 0
+    fi
+    staleness_checked=1
+    if ! uv run python scripts/deploy_tools/deploy_staleness.py; then
+        exit 4
+    fi
+}
+
 if [[ "$changed_requested" == 1 ]]; then
+    # Asked BEFORE the derivation, for the reason issue #1566 put it before tag validation: a
+    # question asked of a stale tree answers about the wrong tree. Here the wrong answer is
+    # also the quietest one. On a checkout that is only BEHIND -- every commit of its own
+    # already merged -- the three-dot range the derivation uses is empty by construction, so
+    # it derives NO tags and the wrapper exits 0 having deployed nothing. Exit 0 is the one
+    # code no consumer treats as a resume point, so a stale tree answered "nothing to deploy"
+    # as a success. Exit 4 is the honest answer, and land.sh already retries it.
+    if [[ "$pre_skip_staleness" == 0 ]]; then
+        staleness_gate
+    fi
     derived_tags=$(uv run python scripts/deploy_tools/deploy_tags.py changed "$changed_ref")
     status=$?
     if [[ "$status" != 0 ]]; then
@@ -257,9 +288,7 @@ uv run python scripts/deploy_tools/fact_cache_guard.py --clear || true
 # with itself. Measured 2026-08-19; see scripts/deploy_tools/deploy_staleness.py. This runs before --check
 # and --dry-run too: a green dry run against a stale tree is the misleading signal itself.
 if [[ "$skip_staleness_check" == 0 ]]; then
-    if ! uv run python scripts/deploy_tools/deploy_staleness.py; then
-        exit 4
-    fi
+    staleness_gate
 fi
 
 # Tag validation runs AFTER the staleness check on purpose (issue #1566). Both refusals mean

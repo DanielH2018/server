@@ -23,7 +23,13 @@ from deploy_tools.exit_codes import (
 )
 from deploy_tools.land_lib import ci, tick
 from deploy_tools.land_lib.landing import BRANCH, Landing, TickState, retry_while_locked
-from deploy_tools.land_lib.outcome import Cause, Verdict, cause_for_deploy_exit, say
+from deploy_tools.land_lib.outcome import (
+    ABANDONED_WATCH_NOTE,
+    Cause,
+    Verdict,
+    cause_for_deploy_exit,
+    say,
+)
 
 
 def derive_from_diff(ln: Landing) -> None:
@@ -82,6 +88,14 @@ def no_tag_outcome(ln: Landing) -> NoReturn:
         print(
             f"  the tick did not fast-forward to origin (parked since: {ln.state('behind_since')})"
         )
+        if ln.tick_watch_abandoned:
+            print(ABANDONED_WATCH_NOTE)
+            ln.finish(
+                Verdict.DEFERRED,
+                75,
+                f"PR #{pr} — landed; this run stopped watching a tick still applying, "
+                "so whether the deployer is deferring or holding is not yet known",
+            )
         print(
             "  Usually a newer merge whose CI is still running; the next tick crosses it. Nothing is wrong with this PR."
         )

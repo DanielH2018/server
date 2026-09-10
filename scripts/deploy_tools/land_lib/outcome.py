@@ -119,3 +119,16 @@ class Outcome(Exception):
 def say(text: str) -> None:
     """A two-space-indented progress line, the shape the skill quotes."""
     print(f"  {text}")
+
+
+# What a `behind` read means when this landing stopped watching a tick that was still
+# applying (issue #1607). The ordinary `behind` prose says "the next tick crosses it", which
+# is FALSE of a deployer parked on a failed apply -- no later tick crosses a hold -- and that
+# is exactly the state the abandoned watch cannot rule out, because `hold_sha` is written
+# after the apply returns. One string, printed by both verdict sites, so the two cannot drift.
+ABANDONED_WATCH_NOTE = (
+    "  This run stopped watching a tick that was still applying, so the markers above were "
+    "read mid-apply: an apply that fails writes hold_sha only when it returns.\n"
+    "  Do NOT read this as 'the next tick crosses it' — no later tick crosses a hold, and a "
+    "hold blocks every session's deploy. Re-run land.sh once the tick has settled."
+)
