@@ -32,7 +32,13 @@ class Landing:
 
 
 def parse_ps(text: str) -> list[Landing]:
-    """`ps -eo pid=,etimes=,args=` lines to the land.py processes among them."""
+    """`ps -eo pid=,etimes=,args=` lines to the landings among them, one row per landing.
+
+    A landing started as `uv run … land.py` shows up twice: the wrapper and the python
+    child it spawns. Rows sharing a `--pr` are one landing, so the lowest pid (the wrapper,
+    which owns the child) is kept. A row with no `--pr` names no landing to fold into and
+    is always kept.
+    """
     out = []
     for line in text.splitlines():
         parts = line.split(None, 2)
@@ -43,7 +49,16 @@ def parse_ps(text: str) -> list[Landing]:
             continue
         m = _PR_RE.search(args)
         out.append(Landing(pid, etimes, m.group(1) if m else "", args))
-    return out
+    lowest: dict[str, Landing] = {}
+    unkeyed = []
+    for landing in out:
+        if not landing.pr:
+            unkeyed.append(landing)
+            continue
+        held = lowest.get(landing.pr)
+        if held is None or landing.pid < held.pid:
+            lowest[landing.pr] = landing
+    return sorted(unkeyed + list(lowest.values()), key=lambda l: l.pid)
 
 
 def log_path_of(pid: int) -> str:

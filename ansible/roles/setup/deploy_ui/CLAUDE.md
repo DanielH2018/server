@@ -17,8 +17,19 @@ visible decision:
   The `roles/k8s/deploy-ui` route role ships the guard that pins that.
 
 DECIDED: a pod inside the cluster reaches the daemon without Authelia. Accepted 2026-09-10 —
-a hostile pod already has kubectl-adjacent reach, and netpol-baseline fences pod egress.
+a hostile pod already has kubectl-adjacent reach. Nothing stops it at the network layer:
+netpol-baseline is INGRESS ONLY (`roles/k8s/netpol-baseline/templates/networkpolicy.yaml.j2`),
+so pod egress is unfenced on this cluster.
 Every POST also needs `X-Deploy-UI: 1` so a cross-site form cannot ride the Authelia cookie.
+
+## Turning it off
+
+- Stop and disable the daemon on daniel-box: `systemctl disable --now deploy-ui.service`.
+- Remove the `deploy-ui` entry from `containers_list` in `host_vars/daniel-box.yml` and
+  deploy, which drops the route (`roles/k8s/deploy-ui`) and `deploy.local`.
+- The ufw task only ADDS rules, one per `deploy_ui_allowed_sources` entry. A source removed
+  from that list keeps its rule until someone deletes it by hand:
+  `ufw delete allow proto tcp from <src> to any port 8790`.
 
 ## Writes
 

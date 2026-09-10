@@ -74,3 +74,24 @@ def test_parse_prs_rollup_is_clean():
 def test_parse_prs_pending_without_failure_is_flagged():
     raw = '[{"number": 1, "title": "", "headRefName": "", "isDraft": false, "statusCheckRollup": [{"status": "IN_PROGRESS"}]}]'
     assert reads.parse_prs(raw)[0]["ci"] == "pending"
+
+
+DUPLICATE_PS = """\
+ 4400    12 uv run python scripts/deploy_tools/land.py --pr 1550 --since 72c1a41
+ 4412    12 /home/ubuntu/server/.venv/bin/python3 scripts/deploy_tools/land.py --pr 1550 --since 72c1a41
+"""
+
+
+def test_parse_ps_folds_a_wrapper_and_its_child_is_clean():
+    got = reads.parse_ps(DUPLICATE_PS)
+    assert [(l.pid, l.pr) for l in got] == [(4400, "1550")]
+
+
+def test_parse_ps_keeps_landings_for_different_prs_is_flagged():
+    two = DUPLICATE_PS.replace(
+        "--pr 1550 --since 72c1a41\n", "--pr 1551 --since 72c1a41\n", 1
+    )
+    assert [(l.pid, l.pr) for l in reads.parse_ps(two)] == [
+        (4400, "1551"),
+        (4412, "1550"),
+    ]

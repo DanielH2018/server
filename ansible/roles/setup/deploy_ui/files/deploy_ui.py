@@ -14,6 +14,7 @@ pending" — the deadman trap this repo has paid for.
 
 import json
 import os
+import re
 import subprocess
 import threading
 import time
@@ -64,16 +65,22 @@ class App:
 
     def __init__(self, config: Config, run=subprocess.run) -> None:
         self.cfg, self.run = config, run
-        # Guards both caches so a concurrent miss on either collapses to one fetch,
-        # rather than two threads both seeing "stale" and both spawning the subprocess.
-        self._cache_lock = threading.Lock()
+        # One lock per cache, so a concurrent miss on one collapses to a single fetch
+        # without the 120s `probe.py releases` blocking a /api/prs request behind it.
+        self._stale_lock = threading.Lock()
+        self._prs_lock = threading.Lock()
         self._prs_cache: tuple[float, list] | None = None
         self._stale_cache: tuple[float, list] | None = None
 
     # ---- subprocess edge ----
-    def _out(self, argv: list[str], timeout: int, ok_rcs=(0,)) -> str:
+    def _capture(self, argv: list[str], timeout: int):
+        """Run argv in the repo and return the CompletedProcess, whatever its exit code.
+
+        Raises:
+            Unavailable: the command could not be run or timed out.
+        """
         try:
-            r = self.run(
+            return self.run(
                 argv,
                 cwd=self.cfg.repo,
                 capture_output=True,
@@ -83,6 +90,9 @@ class App:
             )
         except (OSError, subprocess.SubprocessError) as exc:
             raise Unavailable(f"{argv[0]}: {exc}") from exc
+
+    def _out(self, argv: list[str], timeout: int, ok_rcs=(0,)) -> str:
+        r = self._capture(argv, timeout)
         if r.returncode not in ok_rcs:
             raise Unavailable(
                 f"{argv[0]} exited {r.returncode}: {r.stderr.strip()[:200]}"
@@ -106,12 +116,12 @@ class App:
         return {"landings": landings, "lock_holder": holder}
 
     def stale(self) -> dict:
-        with self._cache_lock:
+        with self._stale_lock:
             if self._stale_cache is not None:
                 at, cached = self._stale_cache
                 if time.monotonic() - at < STALE_CACHE_S:
                     return {"stale": cached, "cached": True}
-            text = self._out(
+            r = self._capture(
                 [
                     "uv",
                     "run",
@@ -121,9 +131,15 @@ class App:
                     "--stale-only",
                 ],
                 120,
-                ok_rcs=(0, 1),
             )
-            rows = reads.parse_stale(text)
+            rows = reads.parse_stale(r.stdout)
+            # probe.py exits 1 both when it lists stale services and when it fails with
+            # nothing on stdout. Exit 0 is the only state that means "read it, none stale";
+            # rc 1 with no rows parsed is a failed read, and must not cache as an empty list.
+            if r.returncode != 0 and not rows:
+                raise Unavailable(
+                    f"probe.py releases exited {r.returncode}: {r.stderr.strip()[:200]}"
+                )
             self._stale_cache = (time.monotonic(), rows)
             return {"stale": rows, "cached": False}
 
@@ -134,7 +150,7 @@ class App:
             raise Unavailable(f"state: {exc}") from exc
 
     def prs(self) -> dict:
-        with self._cache_lock:
+        with self._prs_lock:
             if self._prs_cache is not None:
                 at, cached = self._prs_cache
                 if time.monotonic() - at < self.cfg.pr_cache_s:
@@ -154,9 +170,17 @@ class App:
             return {"prs": rows, "cached": False}
 
     def log_tail(self, path: str) -> str:
-        p = Path(path)
+        """Tail the last 20 KB of one log in `log_dir`, named by the 202 that created it.
+
+        Only the basename of the caller's path is used, so nothing the page sends can name
+        a file outside `log_dir`. The parent it did send is still compared, lexically, so a
+        path from somewhere else is refused rather than silently redirected into `log_dir`.
+        """
+        name = Path(path).name
+        if not name or Path(path).parent != self.cfg.log_dir:
+            return "refused: not a deploy-ui log"
         try:
-            resolved = p.resolve()
+            resolved = (self.cfg.log_dir / name).resolve()
         except OSError as exc:
             return f"unavailable: {exc}"
         if self.cfg.log_dir.resolve() not in resolved.parents:
@@ -177,8 +201,10 @@ class App:
 
     def land(self, body: dict) -> tuple[int, str]:
         pr, since = str(body.get("pr", "")), str(body.get("since", ""))
-        if not pr.isdigit() or not since:
-            return 400, "pr (digits) and since (sha) are required"
+        if not pr.isdigit():
+            return 400, "pr must be digits"
+        if not re.fullmatch(r"[0-9a-fA-F]{7,40}", since):
+            return 400, "since must be a 7-40 character hex sha"
         refusal = writes.guard_land(
             pr,
             reads.parse_ps(self._out(["ps", "-eo", "pid=,etimes=,args="], 10)),
@@ -268,6 +294,10 @@ class App:
             return 200, json.dumps(getattr(self, name)())
         except Unavailable as exc:
             return 200, json.dumps({"unavailable": str(exc)})
+        except Exception as exc:
+            # A parser meeting output it did not expect (a gh field gone, a JSON shape
+            # change) must reach the page as red text, not as a traceback and an empty panel.
+            return 200, json.dumps({"unavailable": f"{type(exc).__name__}: {exc}"})
 
     def post(self, path: str, headers, raw: str) -> tuple[int, str]:
         refusal = writes.write_allowed(dict(headers))
@@ -286,6 +316,22 @@ class App:
             return getattr(self, name)(body)
         except Unavailable as exc:
             return 503, str(exc)
+
+
+def content_length(headers) -> int | None:
+    """The request's Content-Length as a byte count, or None when it is not one.
+
+    A missing or empty header is 0 bytes. Anything else that is not a non-negative
+    integer is the caller's error, and answering 400 beats raising out of the handler.
+    """
+    raw = (headers.get("Content-Length") or "").strip()
+    if not raw:
+        return 0
+    try:
+        n = int(raw)
+    except ValueError:
+        return None
+    return n if n >= 0 else None
 
 
 def serve(config: Config) -> None:
@@ -315,7 +361,14 @@ def serve(config: Config) -> None:
             self._send(status, text, ctype)
 
         def do_POST(self) -> None:
-            n = int(self.headers.get("Content-Length") or 0)
+            n = content_length(self.headers)
+            if n is None:
+                self._send(
+                    400,
+                    "Content-Length must be a byte count",
+                    "text/plain; charset=utf-8",
+                )
+                return
             status, text = app.post(
                 self.path, self.headers, self.rfile.read(n).decode()
             )

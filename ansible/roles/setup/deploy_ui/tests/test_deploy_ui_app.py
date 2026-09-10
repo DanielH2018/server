@@ -25,7 +25,7 @@ class FakeRun:
         return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
 
 
-PS = " 4321   125 /x/python3 scripts/deploy_tools/land.py --pr 1543 --since abc\n"
+PS = " 4321   125 /x/python3 scripts/deploy_tools/land.py --pr 1543 --since 72c1a41\n"
 TABLE = {
     ("ps", "-eo", "pid=,etimes=,args="): (PS, 0),
     ("fuser", "/var/lock/server-git-tree.lock"): ("4321", 0),
@@ -107,7 +107,7 @@ def test_state_unreadable_marker_is_unavailable_and_land_refuses(app, state_dir)
     try:
         assert "unavailable" in body(app.get("/api/state"))
         status, _ = app.post(
-            "/api/land", HDRS, json.dumps({"pr": "9999", "since": "abc"})
+            "/api/land", HDRS, json.dumps({"pr": "9999", "since": "72c1a41"})
         )
         assert status == 503
     finally:
@@ -159,20 +159,22 @@ def test_land_spawns_land_sh_is_clean(app, monkeypatch, tmp_path):
         ),
     )
     monkeypatch.setattr(deploy_ui.writes, "audit", lambda line: None)
-    status, _ = app.post("/api/land", HDRS, json.dumps({"pr": "1550", "since": "abc"}))
+    status, _ = app.post(
+        "/api/land", HDRS, json.dumps({"pr": "1550", "since": "72c1a41"})
+    )
     assert status == 202
     assert spawned["argv"] == [
         "./scripts/deploy_tools/land.sh",
         "--pr",
         "1550",
         "--since",
-        "abc",
+        "72c1a41",
     ]
 
 
 def test_land_duplicate_is_refused_is_flagged(app):
     status, text = app.post(
-        "/api/land", HDRS, json.dumps({"pr": "1543", "since": "abc"})
+        "/api/land", HDRS, json.dumps({"pr": "1543", "since": "72c1a41"})
     )
     assert status == 409 and "1543" in text
 
@@ -213,7 +215,7 @@ def test_cancel_unlisted_pid_is_flagged(app):
 
 
 def test_cancel_non_numeric_pid_is_flagged(app):
-    status, _ = app.post("/api/cancel", HDRS, json.dumps({"pid": "abc"}))
+    status, _ = app.post("/api/cancel", HDRS, json.dumps({"pid": "72c1a41"}))
     assert status == 400
 
 
@@ -242,3 +244,55 @@ def test_log_tail_refuses_symlink_escaping_log_dir_is_flagged(app, tmp_path):
     link.symlink_to(outside)
     status, text = app.get("/api/log?path=" + urllib.parse.quote(str(link)))
     assert status == 200 and text == "refused: not a deploy-ui log"
+
+
+def test_land_non_hex_since_is_flagged(app):
+    status, text = app.post(
+        "/api/land", HDRS, json.dumps({"pr": "1550", "since": "HEAD~1"})
+    )
+    assert status == 400 and "hex" in text
+
+
+def test_stale_rc1_with_no_rows_is_unavailable_is_flagged(tmp_path, state_dir):
+    """probe.py exits 1 when it crashes too, and an empty panel reads as 'nothing pending'."""
+    t = dict(TABLE)
+    t[
+        (
+            "uv",
+            "run",
+            "python",
+            "scripts/diagnostics/probe.py",
+            "releases",
+            "--stale-only",
+        )
+    ] = ("", 1)
+    cfg = deploy_ui.Config(
+        repo=tmp_path, state_dir=state_dir, log_dir=tmp_path, bind="", port=0
+    )
+    b = body(deploy_ui.App(cfg, run=FakeRun(t)).get("/api/stale"))
+    assert "stale" not in b
+    assert b["unavailable"].startswith("probe.py releases exited 1")
+
+
+def test_read_raising_an_unexpected_error_is_unavailable_is_flagged(
+    tmp_path, state_dir
+):
+    """A gh payload missing a field must reach the page as red text, not a traceback."""
+    t = dict(TABLE)
+    t[("gh", "pr", "list")] = ('[{"title":"no number here"}]', 0)
+    cfg = deploy_ui.Config(
+        repo=tmp_path, state_dir=state_dir, log_dir=tmp_path, bind="", port=0
+    )
+    b = body(deploy_ui.App(cfg, run=FakeRun(t)).get("/api/prs"))
+    assert "prs" not in b
+    assert b["unavailable"].startswith("KeyError")
+
+
+def test_content_length_reads_a_byte_count_is_clean():
+    assert deploy_ui.content_length({"Content-Length": "17"}) == 17
+    assert deploy_ui.content_length({}) == 0
+
+
+def test_content_length_non_numeric_is_flagged():
+    assert deploy_ui.content_length({"Content-Length": "seventeen"}) is None
+    assert deploy_ui.content_length({"Content-Length": "-1"}) is None

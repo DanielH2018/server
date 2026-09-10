@@ -21,7 +21,7 @@ pre{background:var(--mantle);border:1px solid var(--surface1);padding:10px;max-h
 <h2>Log</h2><pre id="log" class="mute">no action yet</pre>
 <script>
 const H={'X-Deploy-UI':'1','Content-Type':'application/json'};
-const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let logPath=null;
 async function post(path,payload){const r=await fetch(path,{method:'POST',headers:H,body:JSON.stringify(payload)});const t=await r.text();
   document.getElementById('msg').textContent=r.status+' '+t;if(r.status===202){logPath=JSON.parse(t).log;}refresh();}
