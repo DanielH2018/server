@@ -75,8 +75,10 @@ GRAFANA_DASHBOARDS = [
     # against a shape argument, not because it is unenrolled. Issue #1387.
     # Re-measured live 2026-09-06 after `Download queue depth` (panel id 14) landed:
     # the board drew 13 headers when it was enrolled, and draws 14 now.
-    # `sonarr episode quality mix` (panel id 15, a flat `piechart`) added 2026-09-10: the
-    # board carries no `row`, so its header count is its panel count — 15.
+    # Re-measured live 2026-09-10 after `sonarr episode quality mix` (panel id 15, a flat
+    # `piechart`) landed: enrolled at 999 and read the observed count out of the failure —
+    # `the dashboard mounted but drew 15 panel header(s)`. That is how to re-measure this
+    # list; a derivation from the board's panel count only holds while it carries no `row`.
     ("exportarr-arr-stack", 15),
 ]
 
