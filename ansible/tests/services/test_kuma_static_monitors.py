@@ -198,9 +198,10 @@ def _bridge_push_tokens() -> set[str]:
     Pi monitors and Arr Auto-Block never were bridge checks). A hand-kept list here would put
     those on the bridge's heartbeat window and relax a tile whose feeder runs on another clock.
 
-    A token awaiting its secret renders as `{{ var | default('') }}` (snapshot_headroom, #1627),
-    so the filter is optional in the pattern. Without that the check's own tile read as a
-    non-bridge monitor wired to the bridge's window, which is the opposite of what it is.
+    A token awaiting its secret renders as `{{ var | default('') }}`, so the filter is optional in
+    the pattern. Without that such a tile reads as a non-bridge monitor wired to the bridge's
+    window, which is the opposite of what it is. snapshot_headroom (#1627) shipped that way and
+    was armed to the bare form on 2026-09-10; the optional group stays for the next one.
     """
     return set(
         re.findall(

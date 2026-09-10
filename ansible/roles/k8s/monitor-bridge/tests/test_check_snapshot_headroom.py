@@ -231,24 +231,33 @@ def test_every_volume_a_role_caps_is_declared_to_the_monitor():
     assert declared["jellyfin-config"] == int(size.group(1)) * 2 * 1024**3
 
 
-def test_the_pending_push_token_is_wired_to_a_monitor_declaration():
-    """The `| default('')` form dodges test_every_push_token_env_is_wired_to_a_monitor's regex.
+def test_the_push_token_is_armed_and_wired_to_a_monitor_declaration():
+    """Both halves must read the token BARE, which is what "armed" means here (#1627).
 
-    That guard matches `KUMA_PUSH_X: "{{ var }}"` exactly, so a token rendered with a default is
-    invisible to it — and an invisible token is how a check ends up pushing to a monitor nobody
-    declared. This is the replacement: the env var and the Kuma declaration must name the SAME
-    variable, and the declaration must be guarded on it so an absent secret declares no monitor.
+    The check shipped inert: `{{ var | default('') }}` in the env-secret and a matching `{% if %}`
+    around the Kuma declaration, so an absent secret pushed nowhere and declared no monitor. That
+    form also dodges `test_every_push_token_env_is_wired_to_a_monitor`, whose regex matches
+    `KUMA_PUSH_X: "{{ var }}"` exactly — an invisible token is how a check ends up pushing to a
+    monitor nobody declared. Reverting either half to the defaulted or guarded form silently
+    disarms the monitor while every other guard stays green, so this pins the armed shape by name
+    rather than relying on the general guard's set comparison to notice one missing member.
     """
+    env_text = ENV_SECRET.read_text()
     env_token = re.search(
-        r"KUMA_PUSH_SNAPSHOT_HEADROOM:\s*\"\{\{\s*([a-z0-9_]+)\s*\|\s*default\(''\)\s*\}\}\"",
-        ENV_SECRET.read_text(),
+        r"KUMA_PUSH_SNAPSHOT_HEADROOM:\s*\"\{\{\s*([a-z0-9_]+)\s*\}\}\"",
+        env_text,
     )
     assert env_token, (
-        "KUMA_PUSH_SNAPSHOT_HEADROOM is not rendered from a defaulted variable"
+        "KUMA_PUSH_SNAPSHOT_HEADROOM is not rendered from a bare variable — a `| default('')` "
+        "here renders empty and the verdict reaches the pod log alone"
     )
+    var = env_token.group(1)
+    assert var == "monitor_bridge_snapshot_headroom_push_token", var
     monitors = (
         ROLES / "k8s" / "uptime-kuma" / "templates" / "static-monitors.yaml.j2"
     ).read_text()
-    var = env_token.group(1)
-    assert "{%% if %s | default('') %%}" % var in monitors
     assert '"push_token": "{{ %s }}"' % var in monitors
+    assert "{%% if %s" % var not in monitors, (
+        "the Kuma declaration is guarded on %s again — a guarded declaration means no monitor "
+        "exists to receive the push" % var
+    )
