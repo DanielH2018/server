@@ -54,9 +54,13 @@ interactive. Rejected, and the reasons are worth keeping because the proposal re
   `Last connected: Never`, unresolved.
 - **Two of the three wanted capabilities already exist.** `cast.show_lovelace_view` drives the
   view from an automation today (`files/automations/display.yaml`, `bedroom_display_show`), and
-  `media_player.bedroom_display` is a valid target for the `tts.speak` / `tts.cloud_say`
-  services. Only a **popup overlay** genuinely needs Browser Mod, and that is the one thing the
-  cast receiver cannot render.
+  `media_player.bedroom_display` is a `media_player`, so it is a valid *target* for a TTS or a
+  `media_player.play_media` call. **No TTS provider is configured on this instance** — the
+  `tts.speak` / `tts.cloud_say` services are registered, but `probe.py ha get states` returned no
+  `tts.*` entity for `tts.speak` to speak through (checked 2026-09-10). Speech to the Hub needs a
+  provider added first; that is separate work from Browser Mod, which would not supply one. Only a
+  **popup overlay** genuinely needs Browser Mod, and that is the one thing the cast receiver
+  cannot render.
 - **`configuration.yaml` ships verbatim** from `files/configuration.yaml` — the ConfigMap
   (`roles/k8s/home-assistant`) carries it with `lookup('file')`, and an init container
   installs it into `/config` at pod start. It sets `use_x_forwarded_for: true` +
