@@ -600,7 +600,11 @@ reachable only from daniel-server**, so gating cannot be a step added to `main()
 
 - What counts as a staging pass. `probe.py health` per service is the obvious gate and now
   covers Deployments and DaemonSets, but the pass criteria for a whole-cluster deploy is a
-  different question.
+  different question. Whichever shape it takes, run it as `--cluster stage` and run it ON
+  daniel-stage: the gate builds a bare `k3s kubectl` argv, so from daniel-box it reads
+  production and returns a green verdict about a cluster the staging deploy never touched.
+  `--cluster` makes it refuse instead of answering about the wrong cluster (#1663), and there
+  is no host-side kubeconfig for staging to point it at from elsewhere.
 - How does a staging failure alert, and who overrides it when staging is wrong rather than the
   merge? A gate with no override becomes a gate that gets removed.
 - How much of the 10-minute GitOps window a staging pass costs. A full prod deploy of all 54

@@ -12,7 +12,7 @@
     container_item.hostname | default(container_item.name),
     container_item.port,
     '/loki/api/v1/',
-    extra_client_cidrs=k3s_cni0_gateways
+    extra_client_cidrs=k3s_cni0_gateways + k3s_flannel_node_ips
   )
 }}
 {# DECIDED 2026-08-24: was PathPrefix(`/`) with extra_client_cidrs=['10.42.0.0/16'].
@@ -42,10 +42,21 @@
        /loki/api/v1/labels and /loki/api/v1/query_range (scripts/diagnostics/probe_lib/core.py:107,118), hence
        the prefix.
 
-   The two /32s are the nodes' cni0 gateway addresses: host traffic to the VIP SNATs to them, so
-   this is "the two cluster nodes" and nothing else. Same pair as netpol_baseline_node_cidrs,
-   deliberately written out rather than referenced — that var is read by 16 workloads, and a
-   future widening of it must not silently widen this route too.
+   The four /32s are the nodes' cni0 gateway and flannel.1 addresses: host traffic to the VIP
+   SNATs to one of them, so this is "the two cluster nodes" and nothing else. Neither list is
+   netpol_baseline_node_cidrs, deliberately — that var is read by 16 workloads, and a future
+   widening of it must not silently widen this route too.
+
+   The flannel.1 half was missing until 2026-09-10 (#1693), and the route was DEAD from
+   daniel-server for as long as traefik sat on daniel-box. Which address a host process
+   arrives as depends on where the traefik POD is: same node, the packet leaves via cni0 and
+   carries that node's cni0 gateway; other node, it crosses the VXLAN overlay and carries the
+   SENDING node's flannel.1 address. Traefik is pinned to daniel-box, so daniel-server arrives
+   as 10.42.1.0, which the cni0 pair does not contain — measured that day, `probe.py
+   loki-labels` from a daniel-server shell returned `404 page not found` while `probe.py
+   metric` through prometheus's route (which admits 10.42.x.0/31) returned 200 from the same
+   shell. Both lists, because probe.py runs from either node and traefik's pin can move.
+   ansible/tests/k8s/test_loki_read_route_admits_probe_py.py is the guard.
 
    Residual, accepted: /loki/api/v1/ still contains push and delete, because PathPrefix cannot
    exclude. Those are now reachable only from the two nodes rather than from any pod. #}

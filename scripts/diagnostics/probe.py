@@ -30,6 +30,8 @@ Subcommands:
     cert <host[:port]>       Served TLS cert subj/dates [--sni NAME]
     health <service>         k8s rollout + recent-restart rollup (exit 0 = healthy)
                              [--docker inspects the Pi's container instead]
+                             [--cluster prod|stage — refuses when the local
+                              kubectl serves the other one]
     arr <app> <api-path>     Read-only *arr API GET [--json] (sonarr/radarr/prowlarr)
                              [--show-secrets prints the credential values it redacts]
     ha state <entity_id>     Live HA entity state + attrs    (home-assistant :8123)
@@ -93,6 +95,7 @@ from diagnostics.probe_lib.ha import run_ha, run_ha_state
 from diagnostics.probe_lib.health import (
     inspect_argv,
     k8s_deploy_argv,
+    k8s_nodes_argv,
     k8s_pods_argv,
     resolve_ip,
     run_health,
@@ -137,6 +140,11 @@ def main(argv=None):
                 print(" ".join(["ssh", PI_HOST] + inspect_argv(ns.container)))
             else:
                 ns_name = core.k8s_namespace()
+                # First, because it is what decides whether the rest runs at all.
+                print(
+                    " ".join(k8s_nodes_argv())
+                    + f"   # refuses unless this serves the {ns.cluster} cluster"
+                )
                 print(" ".join(k8s_deploy_argv(ns.container, ns_name)))
                 print(
                     " ".join(k8s_deploy_argv(ns.container, ns_name, kind="daemonset"))
@@ -144,7 +152,7 @@ def main(argv=None):
                 )
                 print(" ".join(k8s_pods_argv(ns.container, ns_name)))
             return 0
-        return run_health(ns.container, docker=ns.docker)
+        return run_health(ns.container, docker=ns.docker, cluster=ns.cluster)
     if ns.cmd == "targets" and ns.pi:
         return run_pi_targets(ns)
     if ns.cmd == "pi" and ns.subpath == "containers":

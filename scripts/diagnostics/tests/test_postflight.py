@@ -462,3 +462,26 @@ def test_credentials_never_reach_argv(monkeypatch):
     postflight.get("http://x", 'header = "X-Api-Key: hunter2"\n')
     assert "hunter2" not in " ".join(seen["argv"])
     assert "hunter2" in seen["input"]
+
+
+# ── `--help` must not run the sweep (#1685) ──────────────────────────────────────────
+# The rejecting half of the pair: before the parser existed, `--help` ran every check —
+# several SOPS decrypts and ~15 authenticated requests to production — and exited 0, which
+# reads as a passing `--help`. The accepting half is below it: the no-argument invocation is
+# still what the parser accepts, so it cannot have swallowed the interface.
+
+
+def test_help_exits_zero_without_running_a_single_check(capsys):
+    with pytest.raises(SystemExit) as exc:
+        postflight.main(["--help"])
+    assert exc.value.code == 0
+    out = capsys.readouterr().out
+    assert "usage: postflight.py" in out
+    # A check that ran would have printed its own `[OK  ] §9.x ...` report line first. The
+    # help text itself cites §9, so the status bracket is what distinguishes them.
+    assert not [status for status in ("[OK", "[FAIL", "[SKIP") if status in out]
+
+
+def test_no_arguments_is_still_the_whole_interface():
+    """The parse must not exit, or the no-argument sweep would stop working."""
+    assert vars(postflight.build_parser().parse_args([])) == {}

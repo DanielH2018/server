@@ -19,6 +19,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from diagnostics.probe_lib.arr import ARR_PORTS
+from diagnostics.probe_lib.health_kubectl import CLUSTER_NODES, DEFAULT_CLUSTER
 from diagnostics.probe_lib.longhorn import LONGHORN_PREFIX
 
 
@@ -272,6 +273,14 @@ def _build_parser():
         "--docker",
         action="store_true",
         help="inspect the Pi's Docker container instead of a k8s Deployment",
+    )
+    hl.add_argument(
+        "--cluster",
+        choices=sorted(CLUSTER_NODES),
+        default=DEFAULT_CLUSTER,
+        help="which cluster the verdict is about (default: prod). The gate refuses rather "
+        "than answering when the local kubectl serves a different one (#1663). Ignored "
+        "with --docker, which reaches the Pi over ssh.",
     )
     ar = sub.add_parser(
         "arr", help="read-only *arr API GET (key from SOPS, fed via stdin)"
