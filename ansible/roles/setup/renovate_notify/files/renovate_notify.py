@@ -31,18 +31,22 @@ from notify_logic import (
     find_dashboard_problems,
     fingerprint,
     parse_automerge,
-    parse_pending,
-    pending_section_unreadable,
-    pending_fingerprint,
     problems_fingerprint,
     render_digest,
-    render_pending,
     render_problems,
     should_notify,
-    stale_pending,
-    update_pending_seen,
     CLEARED_MSG,
     DASHBOARD_UNPARSEABLE_MSG,
+)
+from pending_logic import (
+    parse_pending,
+    pending_fingerprint,
+    pending_reset_fingerprint,
+    pending_section_unreadable,
+    render_pending,
+    render_pending_reset,
+    stale_pending,
+    update_pending_seen,
 )
 from host_lib import atomic_write, discord_post, parse_env_file
 
@@ -223,6 +227,30 @@ def read_pending_seen(path: str) -> dict[str, float]:
     return {k: float(v) for k, v in data.items() if isinstance(v, (int, float))}
 
 
+def pending_state_lost(seen_path: str, last_run_path: str) -> bool:
+    """True when the dwell state is unusable on a host that has already completed a run.
+
+    `stale_pending` treats an item with no first-seen entry as first seen now — deliberately,
+    so the first run after the feature ships does not page for the whole section at once. A
+    LOST state file hands it the same input, so every clock silently restarts at zero and the
+    check can find nothing for up to soak + grace. This is the one signal that tells the two
+    cases apart, and it needs a witness that the notifier has run here before: `last_run` is
+    written on every clean non-dry run, so its absence is a genuine bootstrap.
+
+    Reads the file itself rather than calling `read_pending_seen`, which degrades a corrupt
+    file to `{}` — the same value a legitimately empty section writes. `{}` with `last_run`
+    present is a healthy quiet day, never a loss.
+    """
+    if not os.path.exists(last_run_path):
+        return False
+    try:
+        with open(seen_path) as fh:
+            data = json.load(fh)
+    except OSError, ValueError:
+        return True
+    return not isinstance(data, dict)
+
+
 def write_pending_seen(path: str, seen: dict[str, float]) -> None:
     """Persist the first-seen map, unconditionally — NOT behind Discord delivery.
 
@@ -281,6 +309,11 @@ def main() -> int:
     pending = parse_pending(body or "")
     now = time.time()
     seen_file = os.path.join(state_dir, "pending_seen.json")
+    run_file = os.path.join(state_dir, "last_run")
+    # A lost dwell file restarts every clock at zero, which reads exactly like the intended
+    # first-run bootstrap and leaves the arm above able to find nothing for up to 14 days
+    # (issue #1526). Report the reset instead of completing healthy through that window.
+    pending_reset = pending_state_lost(seen_file, run_file)
     seen = update_pending_seen(read_pending_seen(seen_file), pending, now)
     stuck_pending = stale_pending(seen, pending, now)
     cur_fp = (
@@ -289,12 +322,17 @@ def main() -> int:
         + ("|dashboard-unparseable" if unparseable else "")
         + ("|problems:" + problems_fingerprint(problems) if problems else "")
         + ("|pending:" + pending_fingerprint(stuck_pending) if stuck_pending else "")
+        # Keyed on the date the clocks become usable, so the same loss pages once. The run
+        # after this one rewrites the file, the component drops, and the fingerprint moves
+        # again — so expect one follow-up digest (or CLEARED_MSG) the next day. That is the
+        # cost of folding this arm into the same dedupe as the other three, not a bug.
+        + ("|pending-reset:" + pending_reset_fingerprint(now) if pending_reset else "")
     )
     prev_fp = read_state(state_file)
     notify, kind = should_notify(prev_fp, cur_fp)
     log(
         "actionable=%d dashboard_stale=%s problems=%d pending=%d stuck_pending=%d "
-        "unparseable=%s fp=%r prev=%r -> %s"
+        "unparseable=%s pending_reset=%s fp=%r prev=%r -> %s"
         % (
             len(items),
             stale,
@@ -302,6 +340,7 @@ def main() -> int:
             len(pending),
             len(stuck_pending),
             unparseable,
+            pending_reset,
             cur_fp,
             prev_fp,
             kind,
@@ -309,12 +348,14 @@ def main() -> int:
     )
 
     if notify:
-        if stale or problems or stuck_pending or unparseable:
+        if stale or problems or stuck_pending or unparseable or pending_reset:
             parts = []
             if stale:
                 parts.append(DASHBOARD_STALE_MSG % repo)
             if unparseable:
                 parts.append(DASHBOARD_UNPARSEABLE_MSG % repo)
+            if pending_reset:
+                parts.append(render_pending_reset(now, repo))
             if problems:
                 parts.append(render_problems(problems))
             if stuck_pending:
