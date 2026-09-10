@@ -200,6 +200,7 @@ def _run_main(
     env=None,
     sessions=None,
     worktrees=None,
+    remote_fanout=None,
 ):
     """Wire up main()'s dependencies and return the call to make.
 
@@ -233,7 +234,11 @@ def _run_main(
     # fifth patched module attribute because the monkeypatch ratchet
     # (ansible/tests/_ratchet.py) caps this file's patches on a first-party module at its
     # current allowlist entry.
-    return functools.partial(_mod.main, parked_deployer_problems=lambda: parked or [])
+    return functools.partial(
+        _mod.main,
+        parked_deployer_problems=lambda: parked or [],
+        remote_fanout_lines=lambda: remote_fanout or [],
+    )
 
 
 def test_main_silent_on_compact(monkeypatch, capsys):

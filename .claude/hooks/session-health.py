@@ -34,10 +34,47 @@ session context by Claude Code (same mechanism the remember plugin uses).
 
 import json
 import os
+import socket
 import subprocess
 import sys
+from pathlib import Path
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+FANOUT_MANIFEST_DIR = Path.home() / ".claude" / "fanout"
+
+
+def remote_fanout_lines(manifest_dir=FANOUT_MANIFEST_DIR, local_host=None):
+    """Fan-out worktrees on the OTHER host: git worktree list here cannot see them.
+
+    Reads scripts/dev/fanout_place.py's run manifests under ~/.claude/fanout/ instead of
+    git metadata. `manifest_dir` and `local_host` are parameters, not module reads, so a
+    test passes fixed values instead of depending on this machine's real state.
+
+    Returns:
+        Ready-to-print banner lines, or [] with no batches on another host.
+    """
+    me = local_host or socket.gethostname()
+    found = []
+    try:
+        for path in sorted(manifest_dir.glob("*.json")):
+            data = json.loads(path.read_text())
+            for b in data.get("batches", []):
+                if b.get("host") != me:
+                    issues = ", ".join(f"#{n}" for n in b.get("issues", []))
+                    found.append(
+                        f"  • {b['host']} {b['branch']} — {issues} (run {data['run_id']})"
+                    )
+    except OSError, ValueError, KeyError:
+        return []
+    if not found:
+        return []
+    return [
+        "\U0001f6f0 fan-out worktrees on other hosts "
+        "(uv run python scripts/dev/fanout_place.py status <run-id>):",
+        *found,
+    ]
+
 
 # The park decision itself lives in `scripts/lib/deployer_park.py`, because `deploy.sh` exit 4
 # asks the same question of the same marker and a second derivation would drift (issue #1429).
@@ -531,7 +568,11 @@ def format_banner(problems):
     return "\n".join(out)
 
 
-def main(*, parked_deployer_problems=parked_deployer_problems):
+def main(
+    *,
+    parked_deployer_problems=parked_deployer_problems,
+    remote_fanout_lines=remote_fanout_lines,
+):
     """Print the SessionStart health banner for a genuine session open, then exit 0.
 
     Skips a mid-session compaction event. Combines container, Prometheus-target and
@@ -545,6 +586,7 @@ def main(*, parked_deployer_problems=parked_deployer_problems):
             (ansible/tests/_ratchet.py) caps this file's patches on a first-party module at
             its current allowlist entry — the same reason `parked_deployer_problems` itself
             takes its four reads as parameters rather than patched globals.
+        remote_fanout_lines: override for the same reason (live `.claude/fanout` state).
     """
     raw = sys.stdin.read()
     try:
@@ -582,6 +624,8 @@ def main(*, parked_deployer_problems=parked_deployer_problems):
             print(line)
 
     for line in stale_worktree_lines():
+        print(line)
+    for line in remote_fanout_lines():
         print(line)
     return 0
 
