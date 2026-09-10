@@ -55,6 +55,30 @@ jellyfin_k8s_storage_class: longhorn
 # regardless of which size Longhorn checks against.
 jellyfin_k8s_size: 8Gi
 
+# Cap on the AGGREGATE size of this volume's snapshots, in bytes — Longhorn's
+# `Volume.Spec.snapshotMaxSize`. `"0"`, the fleet-wide default, means uncapped, and this role
+# takes a pre-apply Longhorn snapshot on every deploy (k8s_autodeploy_snapshot_pvcs above), so
+# the backend could grow without bound behind a PVC that is itself capped at 8Gi.
+#
+# THE NUMBER IS NOT A JUDGEMENT CALL. Longhorn accepts "0" or a value no smaller than
+# `Volume.Spec.Size` x 2, "because Longhorn requires at least two snapshots to function
+# properly" (longhorn.io/docs/1.12.1, Snapshot Space Management). 2 x 8Gi = 16 GiB is therefore
+# the smallest legal cap, and it is also what Longhorn itself writes when a volume is expanded.
+# So this is derived from jellyfin_k8s_size rather than written out: a later raise of the PVC
+# size past half of a hardcoded cap would leave a value the admission webhook refuses, and the
+# refusal would land on every jellyfin deploy from then on.
+#
+# Written out in pure Jinja rather than with `human_to_bytes`, which is an Ansible filter the
+# k8s manifest render guard does not carry (it shims only `bool`); a defaults value using one
+# fails `scripts/validate/k8s_manifests.py` with "No filter named ...". The `Gi` suffix the
+# slice assumes is asserted by the test, so a unit change fails loudly rather than silently
+# producing a wrong number.
+# 16 GiB against ~1.9 GiB of live snapshots (2026-09-10) is roughly 8x headroom — deliberately
+# loose, because a cap that is REACHED does not prune, it refuses: Longhorn stops accepting new
+# snapshots until some are deleted, and k8s/volume-snapshot snapshots BEFORE it prunes. A tight
+# cap would latch, failing every jellyfin deploy and the weekly backup job with it.
+jellyfin_k8s_snapshot_max_size: "{{ (jellyfin_k8s_size[:-2] | int) * 2 * 1024 * 1024 * 1024 }}"
+
 # READ-ONLY, and mounted TWICE — see the deployment template. Not a tidy-up target.
 jellyfin_k8s_media_claim: media-data
 
@@ -125,7 +149,26 @@ jellyfin_k8s_introskipper_guid: "c83d86bb-a1e0-4c35-a113-e2101cf4ee6b"
 jellyfin_k8s_introskipper_url: "https://github.com/intro-skipper/intro-skipper/releases/download/10.11/v1.10.11.23/intro-skipper-v1.10.11.23.zip"
 jellyfin_k8s_introskipper_sha256: "e882339c4f32ad07cc2975b6aa2adefc5e273c48d04bd0504c4e4960ccadba0a"
 
-# The image BOTH plugin installers run on — python, not the alpine:3.24 the sibling init
+# ── Webhook (playback / library events out to HTTP endpoints) ───────────────────────────────
+# Jellyfin's own first-party plugin (owner `jellyfin` in the official manifest), added so
+# playback and library events can drive Home Assistant. Nothing consumes them yet — installing
+# the plugin is the half that has to live in the repo; the destination is configured in the
+# dashboard and stored on the config PVC, exactly as ani-sync's OAuth token is.
+#
+# 21.0.0.0, NOT the newest. Version 22.0.0.0 (2026-09-08) declares targetAbi 12.0.0.0, and
+# Jellyfin's loader rejects a plugin built for a NEWER server silently — the same trap the two
+# pins above record. 21.0.0.0 declares 10.11.8.0, which the 10.11.11 image satisfies.
+#
+# Distributed from repo.jellyfin.org rather than a GitHub release, so there is no `gh release`
+# asset digest to prefer: this pins the MD5 the official manifest.json publishes, verified
+# against the actual download (`curl -sSL ... | md5sum`), the same way the ani-sync MD5 was.
+# The zip DOES carry its own meta.json — so unlike Intro Skipper, nothing here writes one.
+jellyfin_k8s_webhook_version: "21.0.0.0"
+jellyfin_k8s_webhook_target_abi: "10.11.8.0"
+jellyfin_k8s_webhook_url: "https://repo.jellyfin.org/files/plugin/webhook/webhook_21.0.0.0.zip"
+jellyfin_k8s_webhook_md5: "fa75f479e66fba83827d4542dbff5f95"
+
+# The image ALL THREE plugin installers run on — python, not the alpine:3.24 the sibling init
 # container uses. See the deployment template for why: the releases are .zips and /config is
 # owned by uid {{ puid }}, so an alpine container would need `apk add unzip` as root — and root
 # there holds no DAC_OVERRIDE and so could not write what it had unpacked. Named here rather
