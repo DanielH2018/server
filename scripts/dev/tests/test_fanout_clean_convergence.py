@@ -45,6 +45,35 @@ def test_the_absent_tree_case_is_answered_before_the_interpreter_is_needed():
     )
 
 
+def test_the_merged_test_asks_the_forge_because_this_repo_squash_merges():
+    """Ruling 36: ancestry exits 1 for a squashed branch, so it cannot decide this."""
+    cmd = remote_clean_command(B1)
+    assert "merge-base" not in cmd
+    assert (
+        "merged=$(cd /home/ubuntu/server && gh pr list --state merged "
+        "--head worktree-fanout-1 --json number --jq length 2>/dev/null)" in cmd
+    )
+    # A gh that is missing, unauthenticated or offline answers nothing, which must read as
+    # zero rather than as an error that skips both echoes.
+    assert "case \"${merged}\" in ''|*[!0-9]*) merged=0;; esac" in cmd
+    assert cmd.index("merged=0;; esac") < cmd.index('if [ "${merged}" -gt 0 ]')
+
+
+def test_the_gone_tree_branch_prunes_its_own_stale_registration():
+    """Ruling 37: prune skips a locked tree, so the launch lock is released first."""
+    cmd = remote_clean_command(B1)
+    assert (
+        "git -C /home/ubuntu/server worktree unlock /w1 2>/dev/null; "
+        "git -C /home/ubuntu/server worktree prune;" in cmd
+    )
+    # Inside the gone-tree branch, after both branch outcomes — not on the path that still
+    # has a tree to hand to `clean-one`.
+    assert cmd.index("worktree prune") < cmd.index("else cd /home/ubuntu/server")
+    assert cmd.index(
+        'echo "kept: /w1 — branch worktree-fanout-1 unmerged, tree gone"'
+    ) < (cmd.index("worktree prune"))
+
+
 def test_a_second_pass_makes_no_remote_call_for_a_batch_already_removed(tmp_path):
     """The convergence F1 says is impossible: pass one removes 1, pass two removes 2."""
     manifest = _manifest(tmp_path, [B1, B2])

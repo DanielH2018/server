@@ -196,9 +196,20 @@ def remote_clean_command(b: Batch) -> str:
 
     The absent-tree branch never prints `removed:` while the branch survives, which is
     Ruling 23's contract: a gone branch is `removed:`, a merged one is deleted first and
-    only then `removed:`, and an unmerged one is `kept:`. The merge test is ancestry alone,
-    which a squash merge does not satisfy — that fails safe, as `kept:`, never as a false
-    `removed:`.
+    only then `removed:`, and an unmerged one is `kept:`.
+
+    The merged test is `gh pr list --state merged --head <branch>`, the same forge oracle
+    `prune_worktrees.is_merged` ends on, because this repo squash-merges: a squashed branch
+    is never an ancestor of `origin/master`, so `merge-base --is-ancestor` calls every landed
+    branch unmerged. Measured against two branches that really did land — the slice-1 work as
+    PR #1484 and slice-2 as #1495 — ancestry exits 1 for both (Ruling 36). The count is
+    forced to 0 unless it is all digits, so a `gh` that is missing, unauthenticated or
+    offline reads as not merged and the branch survives with a `kept:` line.
+
+    Whatever the branch outcome, the stale registration goes: `git worktree prune` drops only
+    registrations whose directory is missing, and skips a locked one, so it cannot touch
+    another session's live tree (Ruling 37). The `worktree unlock` before it releases this
+    batch's own launch lock, which would otherwise make prune skip this very tree.
     """
     wt, branch = b.worktree, b.branch
     gone_branch = f'echo "removed: {wt} (already gone)"'
@@ -208,12 +219,17 @@ def remote_clean_command(b: Batch) -> str:
         f"if [ ! -e {wt} ]; then "
         f"if ! git -C {REPO} show-ref --verify --quiet refs/heads/{branch}; then "
         f"{gone_branch}; "
-        f"elif git -C {REPO} merge-base --is-ancestor "
-        f"refs/heads/{branch} origin/master; then "
+        f"else merged=$(cd {REPO} && gh pr list --state merged --head {branch} "
+        f"--json number --jq length 2>/dev/null); "
+        f"case \"${{merged}}\" in ''|*[!0-9]*) merged=0;; esac; "
+        f'if [ "${{merged}}" -gt 0 ]; then '
         f"git -C {REPO} branch -D {branch} >/dev/null 2>&1 && {gone_branch} "
         f'|| echo "kept: {wt} — branch {branch} not deleted"; '
         f'else echo "kept: {wt} — branch {branch} unmerged, tree gone"; '
         f"fi; "
+        f"fi; "
+        f"git -C {REPO} worktree unlock {wt} 2>/dev/null; "
+        f"git -C {REPO} worktree prune; "
         f"else cd {REPO} && uv run --no-project --no-python-downloads --python 3.14.6 "
         f"python {wt}/scripts/dev/fanout_place.py clean-one {wt} {branch}; "
         f"fi"
