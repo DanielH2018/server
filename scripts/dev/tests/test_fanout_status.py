@@ -7,7 +7,12 @@ import subprocess
 
 from fanout_lib.brief import Issue
 from fanout_lib.manifest import Batch, Manifest, save
-from fanout_lib.status import parse_status, status_command, stop_command
+from fanout_lib.status import (
+    parse_status,
+    status_command,
+    status_line,
+    stop_command,
+)
 from fanout_place import main
 from _fanout_fakes import HOST_KEY, fake_tools, ok
 
@@ -32,6 +37,14 @@ DONE = (
 )
 FAILED = "=== b\nActiveState=failed\nResult=exit-code\nExecMainStatus=1\n--- stderr\nError: not logged in\n--- report\n"
 VANISHED = "=== b\nActiveState=inactive\nResult=success\nExecMainStatus=\n--- stderr\n--- report\n"
+# Batch E of run 20260910T190414Z: the agent removed its own worktree on exit, taking
+# .fanout/report.json with it, so the unit exited 0 and there is nothing left to read.
+# The blank line between the sections is `_one`'s bare `echo`, so an empty stderr log
+# reads as empty rather than swallowing the next marker.
+FINISHED_AND_TIDIED = (
+    "=== b\nActiveState=inactive\nResult=success\nExecMainStatus=0\n"
+    "--- stderr\n\n--- report\n"
+)
 DONE_WITH_EQUALS_IN_RESULT = (
     "=== b\nActiveState=inactive\nResult=success\nExecMainStatus=0\n--- stderr\n--- report\n"
     '{"type":"result","result":"Fixed the === marker parsing bug; opened https://github.com/o/r/pull/9"}\n'
@@ -110,8 +123,37 @@ def test_running_done_and_failed_are_told_apart():
     )
 
 
-def test_a_vanished_unit_with_no_report_is_failed_not_done():
-    assert parse_status([B], VANISHED)[0].state == "failed"
+def test_a_unit_that_exited_zero_with_no_report_is_not_failed():
+    # The accepting half. Nothing here says the batch failed: the exit code is 0 and the
+    # session never set is_error. Only the forge can settle it, so it gets its own state.
+    assert parse_status([B], FINISHED_AND_TIDIED)[0].state == "no-report"
+
+
+def test_a_vanished_unit_with_no_report_is_not_failed_either():
+    assert parse_status([B], VANISHED)[0].state == "no-report"
+
+
+def test_a_batch_with_no_block_in_the_reply_stays_failed():
+    # Not the tidied-worktree shape: no block at all means the read itself came back
+    # without this batch, which is a defect in the read rather than a finished agent.
+    assert parse_status([B], "=== other\nActiveState=inactive\n")[0].state == "failed"
+
+
+def test_status_line_names_the_branch_it_could_not_reconcile():
+    unresolved = parse_status([B], FINISHED_AND_TIDIED)[0]
+    line, tier = status_line(unresolved, "daniel-box", B.branch, lambda _: "", str)
+    assert tier == 1
+    assert line == f"b on daniel-box: no-report (exit 0)  no merged PR for {B.branch}"
+
+
+def test_a_nonzero_exit_stays_failed():
+    # The rejecting half of the pair above: a state split that swallowed this one would
+    # read `no-report` for every crashed batch too.
+    assert parse_status([B], FAILED)[0].state == "failed"
+
+
+def test_a_session_that_reported_is_error_stays_failed():
+    assert parse_status([B], DONE_SHAPED_BUT_ERRORED)[0].state == "failed"
 
 
 def test_a_result_containing_equals_marker_text_is_not_mis_split():
@@ -225,8 +267,52 @@ def test_cli_status_prints_exit_unknown_for_a_vanished_unit(tmp_path, capsys):
     save(run, root=tmp_path)
     tools, _ = fake_tools(answers={"daniel-box": ok(VANISHED)})
     code = main(["status", run.run_id, "--manifest-root", str(tmp_path)], tools)
-    assert code == 5
+    # Tier 1, not 5 — unresolved, not failed.
+    assert code == 1
     assert "(exit unknown)" in capsys.readouterr().out
+
+
+def test_cli_status_reads_a_tidied_up_batch_as_landed_when_its_pr_merged(
+    tmp_path, capsys
+):
+    run = Manifest("20260101T000009Z", "o", [B])
+    save(run, root=tmp_path)
+    tools, _ = fake_tools(
+        answers={"daniel-box": ok(FINISHED_AND_TIDIED)},
+        merged_prs={B.branch: "https://github.com/o/r/pull/1699"},
+    )
+    code = main(["status", run.run_id, "--manifest-root", str(tmp_path)], tools)
+    assert code == 0
+    assert "b on daniel-box: landed https://github.com/o/r/pull/1699" in (
+        capsys.readouterr().out
+    )
+
+
+def test_cli_status_keeps_a_tidied_up_batch_unresolved_when_no_pr_merged(
+    tmp_path, capsys
+):
+    run = Manifest("20260101T000010Z", "o", [B])
+    save(run, root=tmp_path)
+    tools, _ = fake_tools(answers={"daniel-box": ok(FINISHED_AND_TIDIED)})
+    code = main(["status", run.run_id, "--manifest-root", str(tmp_path)], tools)
+    assert code == 1
+    out = capsys.readouterr().out
+    assert "b on daniel-box: no-report" in out
+    assert f"no merged PR for {B.branch}" in out
+
+
+def test_cli_status_still_exits_5_for_a_batch_that_crashed(tmp_path, capsys):
+    # A merged PR for the branch does not launder a non-zero exit: the reconciliation is
+    # reached only from `no-report`, never from `failed`.
+    run = Manifest("20260101T000011Z", "o", [B])
+    save(run, root=tmp_path)
+    tools, _ = fake_tools(
+        answers={"daniel-box": ok(FAILED)},
+        merged_prs={B.branch: "https://github.com/o/r/pull/1699"},
+    )
+    code = main(["status", run.run_id, "--manifest-root", str(tmp_path)], tools)
+    assert code == 5
+    assert "b on daniel-box: failed (exit 1)" in capsys.readouterr().out
 
 
 def test_cli_status_prints_the_final_text_on_one_line_when_a_batch_is_done(

@@ -56,7 +56,12 @@ class FakeRun:
 
 
 def fake_tools(
-    answers=None, issues=None, issue_errors=None, signing_keys=None, signing_error=None
+    answers=None,
+    issues=None,
+    issue_errors=None,
+    signing_keys=None,
+    signing_error=None,
+    merged_prs=None,
 ) -> tuple[Tools, FakeRun]:
     """Build a Tools whose boundaries answer from tables, plus the FakeRun behind it.
 
@@ -68,6 +73,9 @@ def fake_tools(
         signing_keys: the normalized signing keys GitHub verifies for the account; defaults
             to the one HOST_KEY is, so a test that says nothing about signing passes the gate.
         signing_error: an exception `signing_keys` raises instead, for the refusal path.
+        merged_prs: branch -> merged PR url, the forge answer `merged_pr` gives. A branch
+            absent from it reads as "no merged PR", which is also what a failed `gh` call
+            reads as in the real thing.
 
     Returns:
         The Tools and the FakeRun it holds, so a test can script and read the calls.
@@ -86,7 +94,14 @@ def fake_tools(
             raise signing_error
         return frozenset(REGISTERED_KEYS if signing_keys is None else signing_keys)
 
-    return Tools(run=run, gh_issue=gh_issue, signing_keys=keys), run
+    prs = merged_prs or {}
+
+    def merged_pr(branch: str) -> str:
+        return prs.get(branch, "")
+
+    return Tools(
+        run=run, gh_issue=gh_issue, signing_keys=keys, merged_pr=merged_pr
+    ), run
 
 
 def ok(stdout: str) -> subprocess.CompletedProcess:
