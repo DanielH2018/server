@@ -181,6 +181,21 @@ li.service:not(#my-calendar) .service-container .font-bold.w-10 {
   grid-column: 1 / -1;
 }
 
+/* THE LINK ROWS GET VERTICAL BREATHING ROOM.
+ *
+ * Ten links at five columns is two rows, and homepage's own grid sets no row gap — the two rows
+ * of icons met edge to edge and read as one block. `row-gap` on the grid is the whole fix: it
+ * separates the two link rows from each other and the first of them from the calendar above,
+ * and it costs the column only the gap itself because the tiles keep their height.
+ *
+ * `:has(> #my-calendar)` scopes it to this one group's list. Every other group is a single row
+ * of tiles, where a row gap would do nothing at 1920px and add height when a narrow viewport
+ * wrapped them.
+ */
+ul.services-list:has(> #my-calendar) {
+  row-gap: 0.5rem;
+}
+
 #my-calendar .service-container > div {
   display: flex;
   flex-direction: column;
