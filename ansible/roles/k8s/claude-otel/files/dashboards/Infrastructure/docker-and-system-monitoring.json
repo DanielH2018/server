@@ -510,7 +510,7 @@
             "type": "prometheus",
             "uid": "EGdsQqhVk"
           },
-          "expr": "node_load1{job=~\"$server\"} / count by(job, instance)(count by(job, instance, cpu)(node_cpu_seconds_total{job=~\"$server\"}))",
+          "expr": "sum by(job, instance) (node_load1{job=~\"$server\"}) / count by(job, instance)(count by(job, instance, cpu)(node_cpu_seconds_total{job=~\"$server\"}))",
           "intervalFactor": 2,
           "refId": "A",
           "step": 1800
@@ -942,7 +942,7 @@
             "type": "prometheus",
             "uid": "EGdsQqhVk"
           },
-          "expr": "node_load1{job=~\"$server\"} / count by(job, instance)(count by(job, instance, cpu)(node_cpu_seconds_total{job=~\"$server\"}))",
+          "expr": "sum by(job, instance) (node_load1{job=~\"$server\"}) / count by(job, instance)(count by(job, instance, cpu)(node_cpu_seconds_total{job=~\"$server\"}))",
           "intervalFactor": 2,
           "refId": "A",
           "step": 600
