@@ -1,0 +1,166 @@
+"""What the launch CLI refuses, what a partial launch records, and stop — spec §3-5.
+
+Run: uv run pytest scripts/dev/tests/test_fanout_cli.py
+"""
+
+import json
+import subprocess
+
+import pytest
+
+from fanout_lib import brief as brief_mod
+from fanout_lib import launch as launch_mod
+from fanout_lib.brief import Issue
+from fanout_lib.manifest import Batch, Manifest, save
+from fanout_lib.transport import ISSUE_FIELDS, issue_from_view
+from fanout_place import main
+from _fanout_fakes import fake_tools, ok
+
+HEADROOM = "1\n12884901888\n0\n"
+CLAIMED = [
+    Issue(1, "one", "body one", ("claude",)),
+    Issue(2, "two", "body two", ("claude",)),
+]
+
+
+def _launch(tools, tmp_path, *args):
+    return main(
+        [
+            "launch",
+            *args,
+            "--orchestrator-branch",
+            "o",
+            "--manifest-root",
+            str(tmp_path),
+        ],
+        tools,
+    )
+
+
+def _systemd_calls(run):
+    return [c for c in run.calls if c[1].startswith("systemd-run")]
+
+
+def test_a_failed_second_worktree_add_still_records_the_batch_already_launched(
+    tmp_path,
+):
+    tools, run = fake_tools(answers={"daniel-box": ok(HEADROOM)}, issues=CLAIMED)
+    run.answers_by_call = [
+        ok(HEADROOM),  # headroom read
+        ok(""),  # health read
+        ok(""),  # batch 1: worktree add
+        ok(""),  # batch 1: brief write
+        ok(""),  # batch 1: systemd-run
+        subprocess.CompletedProcess(
+            [], 128, stdout="", stderr="fatal: branch exists"
+        ),  # batch 2: worktree add
+        ok(""),  # batch 2: cleanup
+    ]
+    assert _launch(tools, tmp_path, "--batch", "1", "--batch", "2") == 1
+    assert len(_systemd_calls(run)) == 1
+    written = json.loads(next(iter(tmp_path.glob("*.json"))).read_text())
+    assert [b["batch"] for b in written["batches"]] == ["1"]
+
+
+def test_pinning_daniel_server_sends_every_call_there_and_none_to_daniel_box(tmp_path):
+    tools, run = fake_tools(
+        answers={"daniel-box": ok(HEADROOM), "daniel-server": ok(HEADROOM)},
+        issues=CLAIMED,
+    )
+    assert _launch(tools, tmp_path, "--batch", "1", "--host", "daniel-server") == 0
+    assert {c[0] for c in run.calls} == {"daniel-server"}
+    assert len(_systemd_calls(run)) == 1
+
+
+def test_stop_stops_the_unit_and_prints_how_to_release_the_worktree(tmp_path, capsys):
+    batch = Batch(
+        "1",
+        "daniel-box",
+        launch_mod.worktree_path("1"),
+        "worktree-fanout-1",
+        "fanout-1",
+        [1],
+        "t",
+    )
+    manifest = Manifest("20260101T000010Z", "o", [batch])
+    save(manifest, root=tmp_path)
+    tools, run = fake_tools(answers={"daniel-box": ok("")})
+    code = main(["stop", manifest.run_id, "--manifest-root", str(tmp_path)], tools)
+    assert code == 0
+    assert [c[1] for c in run.calls] == ["systemctl --user stop fanout-1"]
+    out = capsys.readouterr().out
+    assert "1 on daniel-box: stopped" in out
+    assert f"worktree unlock {launch_mod.worktree_path('1')}" in out
+    assert "prune_worktrees.py --prune" in out
+
+
+def test_a_failed_issue_fetch_launches_nothing_and_writes_no_manifest(tmp_path, capsys):
+    for error in (
+        subprocess.CalledProcessError(1, ["gh"], stderr="gh: issue not found"),
+        subprocess.TimeoutExpired(cmd=["gh"], timeout=30.0),
+    ):
+        tools, run = fake_tools(
+            answers={"daniel-box": ok(HEADROOM)},
+            issues=[CLAIMED[0]],
+            issue_errors={2: error},
+        )
+        assert _launch(tools, tmp_path, "--batch", "1", "--batch", "2") == 1
+        assert not _systemd_calls(run)
+        assert not list(tmp_path.glob("*.json"))
+        assert "could not fetch issue 2" in capsys.readouterr().err
+
+
+def test_an_unlabelled_issue_is_refused_and_a_labelled_one_launches(tmp_path, capsys):
+    tools, run = fake_tools(
+        answers={"daniel-box": ok(HEADROOM)}, issues=[Issue(3, "t", "b", ("bug",))]
+    )
+    assert _launch(tools, tmp_path, "--batch", "3") == 1
+    assert not run.calls  # refused before the first ssh, so nothing was created
+    assert "issue 3 does not carry the `claude` label" in capsys.readouterr().err
+
+    tools, run = fake_tools(
+        answers={"daniel-box": ok(HEADROOM)},
+        issues=[Issue(3, "t", "b", ("claude", "bug"))],
+    )
+    assert _launch(tools, tmp_path, "--batch", "3") == 0
+    assert len(_systemd_calls(run)) == 1
+
+
+def test_the_issue_fetch_asks_for_labels_and_carries_them_onto_the_issue():
+    assert "labels" in ISSUE_FIELDS.split(",")
+    issue = issue_from_view(
+        {
+            "number": 7,
+            "title": "t",
+            "body": "b",
+            "labels": [{"name": "claude"}, {"name": "bug"}],
+        }
+    )
+    assert issue.labels == ("claude", "bug")
+    unlabelled = issue_from_view({"number": 7, "title": "t", "body": "b", "labels": []})
+    assert unlabelled.labels == ()
+    # A fetch that stopped asking for labels must fail loudly rather than read as
+    # unlabelled, which would refuse every issue.
+    with pytest.raises(KeyError):
+        issue_from_view({"number": 7, "title": "t", "body": "b"})
+
+
+def test_one_issue_in_two_batches_is_refused_and_a_repeated_batch_is_placed_once(
+    tmp_path, capsys
+):
+    tools, run = fake_tools(answers={"daniel-box": ok(HEADROOM)}, issues=CLAIMED)
+    assert _launch(tools, tmp_path, "--batch", "1,2", "--batch", "2") == 1
+    assert not run.calls
+    assert "issue 2 appears in more than one --batch" in capsys.readouterr().err
+
+    tools, run = fake_tools(answers={"daniel-box": ok(HEADROOM)}, issues=CLAIMED)
+    assert _launch(tools, tmp_path, "--batch", "1,2", "--batch", "1,2") == 0
+    assert len(_systemd_calls(run)) == 1
+    assert "--batch 1,2 given twice; placing it once" in capsys.readouterr().err
+
+
+def test_the_briefs_worktree_path_matches_the_one_launch_creates():
+    # brief duplicates the path rather than importing launch, which would cycle; this is
+    # the check that keeps the duplicate honest.
+    for batch in ("1345-1386", "b"):
+        assert brief_mod._worktree_path(batch) == launch_mod.worktree_path(batch)
