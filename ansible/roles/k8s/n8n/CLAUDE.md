@@ -7,32 +7,35 @@ n8n with an external task-runner sidecar. See repo-root `CLAUDE.md`.
 > sibling `k8s/n8n-images` role, from `roles/k8s/n8n-images/templates/Dockerfile.j2`,
 > `Dockerfile-runners.j2` and `templates/config/n8n-task-runners.json.j2` — edit those there.
 > The Docker role's compose template is gone (recover it from git history if ever needed);
-> `containers/n8n/data` is still on disk from the migration. **Parts of this file still
-> describe the pre-migration Docker deployment** — the notes on the broker, the webhook bypass
-> and the encryption key all still hold, but the network and host details do not.
+> `containers/n8n/data` is still on disk from the migration.
 
 ## At a glance
 - **Images:** built by `k8s/n8n-images` from its `templates/Dockerfile.j2` (`n8n`) +
   `Dockerfile-runners.j2` (`n8n-runners`)
 - **Host:** daniel-box (k8s) · **Port:** 5678 · **URL:** `n8n.<domain>` (Authelia: yes)
-- **Networks:** apps + `internal` (the runner connects to the broker over `internal`, but the
-  broker binds `0.0.0.0:5679` so it's ALSO reachable from `apps` siblings — the gate is
-  `n8n_runner_auth_token`, NOT network isolation; see the broker note below)
+- **Network:** the cluster pod network. The broker binds `0.0.0.0:5679` (n8n has no
+  per-interface bind option), so the `n8n-broker` NetworkPolicy in
+  `templates/networkpolicy.yaml.j2` is what fences 5679 to `app: n8n-runners`. The
+  `n8n-netpol-probe` Job (`templates/netpol-probe-job.yaml.j2`, applied by `tasks/main.yml`)
+  verifies that fence on every deploy. `n8n_runner_auth_token` is the second layer, not the
+  only one.
 - **Depends on:** traefik, authelia
-- **Config in:** `ansible/inventory/host_vars/daniel-box.yml` → `containers_list`
+- **Config in:** `defaults/main.yml` — images, sizing, claims and the auto-deploy stance. The
+  `containers_list` entry in `ansible/inventory/host_vars/daniel-box.yml` selects the role and
+  carries its deploy metadata only.
 
 ## Notable
 - **`n8n-runners` executes arbitrary workflow code** — the resource cap on it is the main
-  DoS guard. It reaches the main container's broker at `n8n:5679` over `internal` using
-  `n8n_runner_auth_token` (from secrets).
+  DoS guard. It reaches the main container's broker at `n8n:5679` over the pod network, using
+  `n8n_runner_auth_token` (from secrets) behind the `n8n-broker` NetworkPolicy.
 - **`/webhook/` bypasses Authelia** (public webhooks) via a dedicated higher-priority
   Traefik router. `/webhook-test/` is intentionally NOT exposed (dev-only endpoint).
 - Both images are built — update via redeploy, not Watchtower.
-- **DR / encryption key:** the credential-encryption key lives in `./data/config` and the
-  encrypted credentials in `./data/database.sqlite` — both inside the `./data` bind mount, so
-  they are backed up together on n8n's Longhorn PVC (Kopia, and its restore drill, retired
-  2026-08-13). Deliberately **NOT** also pinned in SOPS: it's redundant (key + credentials are
-  co-located, so losing `./data` loses both — a separate SOPS copy of the key can't decrypt
+- **DR / encryption key:** the credential-encryption key lives in `/home/node/.n8n/config` and
+  the encrypted credentials in `/home/node/.n8n/database.sqlite` — both on the `n8n-data` PVC
+  (`n8n_k8s_claim`), which the Deployment mounts at `/home/node/.n8n`, so Longhorn backs them
+  up together. Deliberately **NOT** also pinned in SOPS: it's redundant (key + credentials are
+  co-located, so losing the claim loses both — a separate SOPS copy of the key can't decrypt
   credentials that are gone), and setting `N8N_ENCRYPTION_KEY` to anything but the on-disk key
   crashes n8n with a key-mismatch. Don't "harden" this by adding it to secrets.
 
@@ -41,6 +44,12 @@ n8n with an external task-runner sidecar. See repo-root `CLAUDE.md`.
 `N8N_COMMUNITY_PACKAGES_ENABLED=true` in `deployment.yaml.j2` since 2026-09-10 (#1449). n8n's
 own default is disabled, and the variable was unset before that, so the instance ran on the
 default rather than on a decision.
+
+The two sibling scope flags are set explicitly beside it (#1588):
+`N8N_UNVERIFIED_PACKAGES_ENABLED=true` holds the behaviour 2.38.5 warns it will change in v3,
+and `N8N_REINSTALL_MISSING_PACKAGES=false` holds upstream's default. The template carries the
+reasoning for each, including why `N8N_COMMUNITY_PACKAGES_ALLOW_TOOL_USAGE` is not set — that
+variable does not exist at 2.38.5.
 
 **Where a package lands.** n8n npm-installs each community package under
 `$N8N_USER_FOLDER/.n8n/nodes`. `N8N_USER_FOLDER` is unset across this repo, so the path is

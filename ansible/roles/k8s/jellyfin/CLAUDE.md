@@ -9,7 +9,9 @@ shared `media-data` library and owns its own config volume.
   Webhook. Raise a plugin and the image together, never one alone
   (`ansible/tests/services/test_anisync_pin_matches_server.py`,
   `ansible/tests/services/test_introskipper_install.py` and
-  `ansible/tests/services/test_webhook_plugin_install.py` enforce this).
+  `ansible/tests/services/test_webhook_plugin_install.py` enforce this). Two more plugins are
+  loaded from the config PVC and are outside that lockstep — *Every plugin the pod actually
+  loads* below has the census.
 - **Deploy tag:** `--tags "jellyfin"`. `use_authelia: false` — **no auth**, public route.
 - **Route:** `jellyfin.<domain>`.
 - **Persists:** `jellyfin-config` (`longhorn`, backed up, 8Gi) — the library database, artwork
@@ -42,12 +44,41 @@ shared `media-data` library and owns its own config volume.
   has moved to Jellyfin 12 — 22.0.0.0 declares `targetAbi` 12.0.0.0 — so **the newest Webhook
   is the wrong one** while the image is a 10.11 build, the same shape of trap as Intro
   Skipper's parallel tags. Its zip carries its own `meta.json`, so unlike Intro Skipper nothing
-  writes one. It also has **no Renovate manager**: the two siblings each have a custom manager
-  in `renovate.json`, and Webhook ships from `repo.jellyfin.org` rather than a GitHub release,
-  so this pin ages with no update signal (filed as #1557).
+  writes one. Its Renovate manager (added for #1557) is the odd one of the three: Webhook ships
+  from `repo.jellyfin.org` rather than a GitHub release, so the manager tracks the
+  `jellyfin/jellyfin-plugin-webhook` tags (a bare major, `v21`) and carries the Jellyfin-line
+  ceiling in `extractVersionTemplate` — raise that anchor only when the image moves to
+  Jellyfin 12.
 - All three installers duplicate rather than share a loop, deliberately — each is pinned by
   literal string assertions in its own test, and a textual guard stops seeing what it guards
   once the thing moves behind an indirection.
+
+## Every plugin the pod actually loads
+
+The three installers above are not the whole set, so the lockstep rule at the top of this file
+covers only part of what runs. Read the live census from the pod's own log, which needs no API
+key:
+
+```
+kubectl -n homelab logs <pod> -c jellyfin | grep 'Loaded plugin:'
+```
+
+Read 2026-09-10 (#1569), grouped by who owns the version:
+
+- **Installed by this role**, version-pinned, checksum-pinned and each guarded by its own test
+  file: `Ani-Sync 4.4.0.0`, `Intro Skipper 1.10.11.23`, `Webhook 21.0.0.0`.
+- **Bundled with the image**, so they move with `jellyfin_k8s_image` and need no pin here:
+  `AudioDB`, `MusicBrainz`, `OMDb`, `Studio Images`, `TMDb` — all `10.11.11.0`, the server
+  version.
+- **Unmanaged state on the `jellyfin-config` PVC**, installed through the dashboard and
+  described nowhere else: `Media Cleaner 3.2.0.101109` and `SSO-Auth 4.0.0.4`. Neither has a
+  pinned version, a checksum or a recorded `targetAbi`, so an image bump can silently drop
+  either — Jellyfin's loader rejects a plugin built for a newer server without logging a
+  failure. **Media Cleaner deletes media files**, which puts it in a different risk class from
+  everything else in this list; which libraries it may delete from is itself dashboard state.
+  Installing it under the init-container pattern, or removing it, is an operator decision
+  (filed as a follow-up to #1569). Same shape as bazarr's provider list: state that lives in a
+  PVC and that git cannot describe.
 
 ## The snapshot-space cap on `jellyfin-config`
 `tasks/main.yml` patches `spec.snapshotMaxSize` on the volume backing `jellyfin-config`, to
