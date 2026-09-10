@@ -313,8 +313,22 @@ def test_a_batch_still_live_in_a_manifest_is_refused_before_any_host_is_read(
     assert _launch(tools, tmp_path, "--batch", "1,2") == 1
     assert not run.calls  # refused before the headroom read, so it costs no ssh
     err = capsys.readouterr().err
-    assert "batch 1,2 is live in run 20260101T000010Z on daniel-server" in err
+    assert "batch 1-2 shares #1, #2 with batch 1-2, live in run" in err
+    assert "20260101T000010Z on daniel-server" in err
     assert "run clean 20260101T000010Z first" in err
+
+
+def test_a_reordered_or_narrowed_spec_cannot_slip_past_the_live_guard(tmp_path, capsys):
+    """The batch id is derived from the spec as typed, so it is not what must be unique."""
+    live = Batch("1345-1386", "daniel-server", "/w", "b", "u", [1345, 1386], "t")
+    save(Manifest("20260101T000010Z", "o", [live]), root=tmp_path)
+    for spec, shared in (("1386,1345", "#1345, #1386"), ("1345", "#1345")):
+        tools, run = fake_tools(answers={"daniel-box": ok(HEADROOM)}, issues=CLAIMED)
+        assert _launch(tools, tmp_path, "--batch", spec) == 1
+        assert not run.calls
+        err = capsys.readouterr().err
+        assert f"shares {shared} with batch 1345-1386" in err
+        assert "on daniel-server" in err
 
 
 def test_a_first_batch_refused_writes_no_manifest_at_all(tmp_path, capsys):

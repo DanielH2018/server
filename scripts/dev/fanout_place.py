@@ -193,26 +193,38 @@ def _over_ssh_budget(placed: list[tuple[str, str]]) -> bool:
     return over
 
 
-def _live_elsewhere(specs: list[str], root: Path) -> bool:
-    """Print and return True when a `--batch` spec is still live in any run's manifest.
+def _live_elsewhere(batches: dict[str, list[int]], root: Path) -> bool:
+    """Print and return True when a new batch shares an issue with one still live.
 
     `exists_check_command` guards the host a batch is placed on, which is not the same
     question: placement is free to send a relaunch to the OTHER host, where no worktree of
     that name exists, and a second agent then starts on issues the first is still holding.
     The manifests are the only record that spans both hosts, and reading them costs no ssh.
+
+    The test is the issue set, not the batch id, because the id is derived from the spec as
+    typed: `--batch 1386,1345` and `--batch 1345` both miss a live `1345-1386` by name while
+    putting a second agent on issues it holds. What must not happen twice is an issue, so
+    that is what is compared.
+
+    Args:
+        batches: `_parse_batches`' mapping of batch id to the issue numbers it would take.
+        root: the manifest directory to read every run under.
     """
     live = manifest_mod.live_batches(root)
     refused = False
-    for spec in specs:
-        found = live.get(spec.replace(",", "-"))
-        if found:
-            run_id, batch = found
+    for spec, issues in batches.items():
+        for run_id, b in live.values():
+            overlap = sorted(set(issues) & set(b.issues))
+            if not overlap:
+                continue
+            shared = ", ".join(f"#{n}" for n in overlap)
             print(
-                f"launch: batch {spec} is live in run {run_id} on {batch.host}; "
-                f"run clean {run_id} first",
+                f"launch: batch {spec} shares {shared} with batch {b.batch}, live in "
+                f"run {run_id} on {b.host}; run clean {run_id} first",
                 file=sys.stderr,
             )
             refused = True
+            break
     return refused
 
 
@@ -220,7 +232,7 @@ def cmd_launch(args, tools: Tools) -> int:
     batches = _parse_batches(args.batch)
     if batches is None:
         return 1
-    if _live_elsewhere(args.batch, args.manifest_root):
+    if _live_elsewhere(batches, args.manifest_root):
         return 1
     fetched = _fetch_issues(tools, batches)
     if fetched is None:
