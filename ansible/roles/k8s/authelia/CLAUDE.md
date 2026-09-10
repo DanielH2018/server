@@ -26,6 +26,39 @@ Each client's secret is stored hashed. The digest is minted once with Authelia's
 so a client that needs both (Grafana does; Jellyfin's plaintext lives in its plugin config)
 takes two SOPS keys that rotate together.
 
+## Second factors
+
+TOTP and WebAuthn, both optional, neither required by any `access_control` rule — the policies
+are `bypass` / `one_factor` / `two_factor`, and a `two_factor` rule accepts either factor.
+
+**WebAuthn was never off.** Authelia's `webauthn.disable` defaults to false, so this portal has
+offered a security key or passkey since it was built; what #1502 actually changed is that the
+knobs are now pinned in `templates/config-secret.yaml.j2` instead of inherited. `display_name`
+names this portal in the browser prompt, `selection_criteria.attachment: ''` is the one
+non-default value (Authelia's default `cross-platform` asks for a dedicated key and excludes a
+phone, Touch ID or Windows Hello), and `enable_passkey_login` stays **false** — that is
+first-factor passwordless login, which would change what `one_factor` means for every rule
+rather than adding a second-factor choice.
+
+**A credential is bound to the origin it was registered at.** An rp id must be a registrable
+suffix of the origin, and `auth.local.<domain>` and `auth.<domain>` share none that covers
+both — so a key enrolled on the LAN portal does not work on the public one. A user who wants
+both enrols twice. This is a WebAuthn spec constraint, not a setting to fix.
+
+**Do not add a `webauthn` key from the docs site.** Authelia refuses to start on a key it does
+not recognise, this pod rolls under `Recreate` in front of most public routes, and
+`validate/k8s_manifests.py` only asks whether the YAML parses. The pinned version's own
+`config.template.yml` is the source —
+`https://raw.githubusercontent.com/authelia/authelia/v<tag>/config.template.yml` — and
+`ansible/tests/services/test_authelia_webauthn.py` holds the rendered block to the keys someone
+checked against that source — deliberately narrower than what 4.39.21 accepts, so adding a key
+means editing the frozenset as well, which is where the check belongs.
+
+Enrolment is a browser action at the portal's security settings and needs a physical
+authenticator, so it stays an operator task; the headless UI tier is unaffected, because
+`ui_login.py` posts to the first-factor API and drives TOTP as `claude-ui` rather than touching
+the portal's login page.
+
 ## Traps
 
 ### The one-time code arrives by email, and the startup check is off on purpose
@@ -47,6 +80,14 @@ boot.
 
 Codes still expire in ~5 min, the Authelia elevated-session default. Resend in the browser if
 one goes stale.
+
+**daniel-stage rehearses this branch on a credential that authenticates nothing.** It rendered
+the filesystem notifier until #1464, which left the SMTP branch with no boot check anywhere.
+The startup check being off is what makes the rehearsal possible: Authelia opens no SMTP
+connection at boot, so a literal stand-in in `host_vars/daniel-stage.yml` proves the half that
+bites — the config parses and the pod comes up on it. Staging sends nothing, and its `email` is
+a generated fake. `ansible/tests/staging/test_staging_rehearses_the_smtp_notifier.py` holds
+both facts.
 
 If mail is down and you need the break-glass path, the file notifier is one edit away in
 `templates/config-secret.yaml.j2`; reading it back needs `sudo k3s kubectl` on **daniel-box**
