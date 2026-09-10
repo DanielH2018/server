@@ -43,8 +43,9 @@ authelia_k8s_manage_oidc: true
 
 # Deliver identity-verification codes by email rather than to a file inside the pod. False
 # falls back to the filesystem notifier, which is what this role used before 2026-09-09 and
-# what daniel-stage still uses — the SMTP branch reads `smtp_notify_app_password`, and the
-# staging secrets file is encrypted to its own age recipient and cannot hold it.
+# what no host takes today — daniel-stage took it until #1464, and now rehearses the SMTP
+# branch on a fake credential instead (its host_vars carries the reasoning). Leave it true;
+# false is the break-glass path for a cluster with no usable `smtp_notify_app_password`.
 authelia_k8s_smtp_notifier: true
 
 # Session cookie name. MUST differ from the Docker instance's `authelia_session_local`.
