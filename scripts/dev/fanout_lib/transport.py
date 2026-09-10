@@ -24,6 +24,10 @@ HOSTS = ("daniel-box", "daniel-server")
 REPO = "/home/ubuntu/server"
 SSH_OPTS = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=8"]
 READ_TIMEOUT_S = 20.0
+GH_TIMEOUT_S = 30.0
+# `labels` is what the launch gate reads; dropping it from this list would refuse every
+# issue rather than fail loudly, which is why issue_from_view indexes it.
+ISSUE_FIELDS = "number,title,body,labels"
 
 
 def _local_host() -> str:
@@ -56,16 +60,45 @@ def run_command(
     )
 
 
+def issue_from_view(data: dict) -> Issue:
+    """Map one `gh issue view --json ISSUE_FIELDS` object onto an `Issue`.
+
+    Args:
+        data: the decoded JSON object for one issue.
+
+    Returns:
+        The issue, carrying its label names.
+
+    Raises:
+        KeyError: a field ISSUE_FIELDS asks for is missing. `labels` is read with `[]`
+            rather than `.get()` on purpose: gh returns an empty list for an unlabelled
+            issue, so an absent key means the fetch stopped asking for it — and the launch
+            gate would then refuse every issue instead of the unlabelled ones.
+    """
+    return Issue(
+        data["number"],
+        data["title"],
+        data["body"],
+        tuple(str(label["name"]) for label in data["labels"]),
+    )
+
+
 def gh_issue(number: int) -> Issue:
-    """Fetch one GitHub issue by number via `gh issue view`."""
+    """Fetch one GitHub issue by number via `gh issue view`.
+
+    Raises:
+        subprocess.CalledProcessError: `gh` exited non-zero.
+        subprocess.TimeoutExpired: `gh` did not answer within GH_TIMEOUT_S. Unbounded, one
+            hung fetch mid-loop would strand every batch already launched.
+    """
     out = subprocess.run(
-        ["gh", "issue", "view", str(number), "--json", "number,title,body"],
+        ["gh", "issue", "view", str(number), "--json", ISSUE_FIELDS],
         capture_output=True,
         text=True,
         check=True,
+        timeout=GH_TIMEOUT_S,
     ).stdout
-    data = json.loads(out)
-    return Issue(data["number"], data["title"], data["body"])
+    return issue_from_view(json.loads(out))
 
 
 @dataclass(frozen=True)
