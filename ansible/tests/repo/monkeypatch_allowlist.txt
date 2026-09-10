@@ -72,7 +72,6 @@ ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_subprocess.py 1
 ansible/roles/setup/k3s/tests/test_live_drift_check.py 3
 ansible/roles/setup/k3s/tests/test_longhorn_reap_delete_transport.py 5
 ansible/roles/setup/renovate_agent/tests/test_agent_logic.py 3
-ansible/roles/setup/renovate_agent/tests/test_prepare_worktree.py 3
 ansible/roles/setup/renovate_notify/tests/test_pending_soak_wiring.py 6
 scripts/availability_bots/tests/test_availability_bots.py 4
 scripts/deploy_tools/tests/conftest.py 1
