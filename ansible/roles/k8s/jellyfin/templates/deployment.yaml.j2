@@ -369,12 +369,26 @@ spec:
             # Losing this on a pod move is intended and costs a rebuild, nothing more.
             - name: jellyfin-cache
               mountPath: /config/cache
+          # Both probes set timeoutSeconds explicitly. Kubernetes defaults it to 1s, which
+          # counts any /health slower than one second as a failure — and the two probes fail
+          # into different symptoms, so both matter. Readiness owns the OUTAGE: it runs every
+          # 10s, and once it trips the Deployment has no ready endpoint, Traefik drops the
+          # `jellyfin` router entirely, and every request to the hostname returns 404 rather
+          # than 503 (that 404 was misfiled as #1457). Liveness owns the RESTART: three
+          # failures 30s apart kill the container with exit 137.
+          #
+          # /health answers in 1.5ms on an idle server (measured 2026-09-10), so 1s is not
+          # marginal at rest — but a library scan or a transcode can plausibly cross it, and
+          # 5s costs nothing when the endpoint is healthy. Under the other candidate cause for
+          # the 2026-09-09 restart loop — the process wedging rather than answering slowly —
+          # a longer timeout still recycles the container, just one probe period later.
           readinessProbe:
             httpGet:
               path: /health
               port: {{ container_item.port }}
             initialDelaySeconds: 15
             periodSeconds: 10
+            timeoutSeconds: 5
           # start-up on a slow or post-update boot runs a library scan and hardware-init before
           # /health answers; the compose healthcheck allows 60s for the same reason.
           livenessProbe:
@@ -383,6 +397,7 @@ spec:
               port: {{ container_item.port }}
             initialDelaySeconds: 90
             periodSeconds: 30
+            timeoutSeconds: 5
           # Extended resources must request exactly what they limit — Kubernetes rejects a
           # mismatch, and omitting the request entirely defaults it to the limit anyway.
 {{ container_resources(cpu_limit=jellyfin_k8s_cpu_limit, mem_limit=jellyfin_k8s_mem_limit, cpu_request=jellyfin_k8s_cpu_request, mem_request=jellyfin_k8s_mem_request, extra=jellyfin_k8s_dri_resource) }}
