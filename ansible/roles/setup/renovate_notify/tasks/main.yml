@@ -22,6 +22,7 @@
   loop:
     - renovate_notify.py
     - notify_logic.py
+    - pending_logic.py
   become: true
   notify: Run renovate-notify once
 
@@ -119,5 +120,7 @@
         src: ansible/roles/setup/renovate_notify/files/renovate_notify.py
       - live: /opt/renovate-notify/notify_logic.py
         src: ansible/roles/setup/renovate_notify/files/notify_logic.py
+      - live: /opt/renovate-notify/pending_logic.py
+        src: ansible/roles/setup/renovate_notify/files/pending_logic.py
       - live: /opt/renovate-notify/host_lib.py
         src: ansible/roles/setup/common/files/host_lib.py

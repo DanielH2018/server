@@ -135,3 +135,62 @@ def test_clamp_trims_a_message_past_discords_cap():
     clamped = rn.clamp_for_discord("x" * 5000)
     assert len(clamped) <= rn.DISCORD_LIMIT
     assert clamped.endswith("…(truncated)")
+
+
+# --- Dwell-state loss (issue #1526) ---------------------------------------------------------
+# `pending_state_lost` is the only thing telling a wiped clock apart from the intended first-run
+# bootstrap, and both halves are load-bearing: firing on a legitimately empty map pages every
+# quiet day, and not firing on a lost one leaves the arm inert for up to 14 days in silence.
+
+
+def test_a_lost_clock_is_flagged_on_a_host_that_has_run_before(tmp_path):
+    (tmp_path / "last_run").write_text("1000000.0")
+    seen = tmp_path / "pending_seen.json"
+    run = tmp_path / "last_run"
+    assert rn.pending_state_lost(str(seen), str(run)), "a missing file is a loss"
+    seen.write_text("{not json")
+    assert rn.pending_state_lost(str(seen), str(run)), "an unparseable file is a loss"
+    seen.write_text('["a", "list"]')
+    assert rn.pending_state_lost(str(seen), str(run)), "a non-map file is a loss"
+
+
+def test_an_empty_clock_is_clean(tmp_path):
+    """`{}` is what a run with nothing pending writes — a quiet day, never a loss."""
+    (tmp_path / "last_run").write_text("1000000.0")
+    (tmp_path / "pending_seen.json").write_text("{}")
+    assert not rn.pending_state_lost(
+        str(tmp_path / "pending_seen.json"), str(tmp_path / "last_run")
+    )
+    (tmp_path / "pending_seen.json").write_text('{"renovate/x": 1.0}')
+    assert not rn.pending_state_lost(
+        str(tmp_path / "pending_seen.json"), str(tmp_path / "last_run")
+    )
+
+
+def test_a_genuine_first_run_is_clean(tmp_path):
+    """No `last_run` means the notifier has never completed here: seeding is not a loss."""
+    assert not rn.pending_state_lost(
+        str(tmp_path / "pending_seen.json"), str(tmp_path / "last_run")
+    )
+
+
+def test_a_wiped_clock_reaches_discord_and_names_the_date(monkeypatch, tmp_path):
+    """The verify-by for #1526: the run reports the reset rather than completing healthy.
+
+    The item below is inside its allowance, so `stuck_pending` is empty — exactly the state
+    the reset creates, and the one that used to post nothing at all.
+    """
+    posts = []
+    now = 1_788_990_155.26  # 2026-09-09 21:42 UTC
+    (tmp_path / "last_run").write_text(str(now - DAY))
+    _wire(monkeypatch, tmp_path, posts, now)
+    assert rn.main() == 0
+    assert len(posts) == 1, "a lost dwell clock must post"
+    assert "2026-09-23" in posts[0], "the post must name when the check works again"
+
+
+def test_a_first_run_does_not_report_a_reset(monkeypatch, tmp_path):
+    posts = []
+    _wire(monkeypatch, tmp_path, posts, 1_788_990_155.26)
+    assert rn.main() == 0
+    assert posts == [], "seeding an empty state file is not a loss"
