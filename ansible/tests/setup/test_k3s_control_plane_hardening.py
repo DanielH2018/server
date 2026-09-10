@@ -71,6 +71,10 @@ def _rendered_server_args(**overrides) -> str:
     defaults = _defaults()
     context = {
         "server_ip": "10.0.0.215",
+        # A stand-in: `domain` is a SOPS value, so no test can read the real one. Only the
+        # OIDC issuer argument interpolates it, and every assertion here is about the flag's
+        # shape rather than its host.
+        "domain": "example.test",
         **{k: v for k, v in defaults.items() if k != "k3s_server_args"},
         **_all_vars(),
         **overrides,

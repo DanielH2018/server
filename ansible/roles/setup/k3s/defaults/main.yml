@@ -59,6 +59,12 @@ k3s_server_args: >-
   --kube-apiserver-arg=audit-log-maxbackup={{ k3s_audit_log_maxbackup }}
   --kube-apiserver-arg=audit-log-maxsize={{ k3s_audit_log_maxsize }}
   {% endif %}
+  --kube-apiserver-arg=oidc-issuer-url={{ k3s_oidc_issuer_url }}
+  --kube-apiserver-arg=oidc-client-id={{ k3s_oidc_client_id }}
+  --kube-apiserver-arg=oidc-username-claim={{ k3s_oidc_username_claim }}
+  --kube-apiserver-arg=oidc-username-prefix={{ k3s_oidc_username_prefix }}
+  --kube-apiserver-arg=oidc-groups-claim={{ k3s_oidc_groups_claim }}
+  --kube-apiserver-arg=oidc-groups-prefix={{ k3s_oidc_groups_prefix }}
 
 # ── why none of the arguments above is quoted ───────────────────────────────────────────
 # The install task's `when:` compares `k3s_server_args.split()` against the installed unit
@@ -87,6 +93,70 @@ k3s_server_args: >-
 # argument that was added, never one that was removed — the same caveat the allow-listed
 # sysctls carry above.
 k3s_secrets_encryption: true
+
+# ── the API server trusts Authelia as an OIDC provider (#1390) ──────────────────────────
+# Six flags, unconditional. They exist so Headlamp can log a person in instead of browsing
+# the cluster as its own ServiceAccount: Headlamp forwards the browser's `id_token` and the
+# API SERVER is what accepts or rejects it, so the trust has to be configured here rather
+# than in the workload's role.
+#
+# ADDING THESE RESTARTS THE CONTROL PLANE. The install task above re-runs get.k3s.io when
+# k3s_server_args gains an argument, and the installer rewrites the unit and restarts k3s.
+# That is a routine event on this host — the unit restarted 19 times between 2026-08-02 and
+# 2026-09-10, the last taking 10s from restart to notify-ready — but it is not a no-op, and
+# `k3s-bringup.yml` is in `_BROAD_MANUAL_PREFIXES` (deploy_changes.py) precisely so nothing
+# automated ever applies it.
+#
+# A WRONG VALUE HERE DOES NOT LOCK YOU OUT, and the failure mode is worth stating exactly
+# because it is easy to over-fear. The flag-path OIDC authenticator is initialised
+# ASYNCHRONOUSLY — `New returns an authenticator that is asynchronously initialized`,
+# staging/src/k8s.io/apiserver/plugin/pkg/authenticator/token/oidc/oidc.go — so an
+# unreachable or misspelled issuer leaves the API server up and serving, with OIDC logins
+# failing and nothing else affected. The root kubeconfig authenticates by CLIENT CERTIFICATE,
+# which this never touches; so do every ServiceAccount and every in-cluster controller.
+#
+# What DOES wedge the node is a malformed or unrecognised `--kube-apiserver-arg`: the API
+# server then refuses to start, and because the k3s unit is Type=notify with
+# TimeoutStartSec=0, `systemctl restart k3s` hangs indefinitely rather than failing — the
+# same hang the --node-ip comment above describes. Change these values one at a time and
+# read `journalctl -u k3s` before walking away.
+#
+# ROLLBACK IS BY HAND. The install task detects an argument that was ADDED, never one that
+# was REMOVED (see its own comment), so deleting these lines does not un-configure an
+# installed host: re-run /usr/local/bin/k3s-install.sh with the new INSTALL_K3S_EXEC.
+
+# The issuer, and the one value that must match EXACTLY. Authelia's `iss` is derived from the
+# host the authorization request arrived on, not from a configured constant — measured
+# 2026-09-10, `/.well-known/openid-configuration` returns `auth.local.<domain>` on the LAN
+# name and `auth.<domain>` on the public one. `oidc-issuer-url` accepts one value, so this
+# pins the LAN name and the Headlamp client's redirect_uris are LAN-only to match. A login
+# through the public route would present a token whose `iss` this API server rejects.
+k3s_oidc_issuer_url: "https://auth.local.{{ domain }}"
+# The audience. Authelia's default `id_token_audience_mode: specification` puts only the
+# client id in `aud`, so this is the Authelia client id, and one client cannot serve two
+# audiences here.
+k3s_oidc_client_id: headlamp
+# Authelia hydrates NEITHER of the two claims below into the ID token by default — the
+# provider docs call the `claims_policies.id_token` list "claims automatically copied to the
+# ID Token in addition to the standard ID Token claims". Headlamp forwards the ID token, so
+# the Authelia client MUST name a claims policy carrying both, or this API server sees a
+# token with no username claim and rejects it. That is the same trap #1374 hit with Grafana.
+k3s_oidc_username_claim: preferred_username
+k3s_oidc_groups_claim: groups
+# `-` means "no prefix". NOT cosmetic and NOT the default: kube-apiserver prefixes the
+# username with the ISSUER URL plus `#` whenever the claim is not `email`
+# (pkg/kubeapiserver/options/authentication.go — "username claims other than 'email' are
+# prefixed by the issuer URL to avoid clashes. To skip any prefixing, provide the value '-'").
+# Left at the default, a user is `https://auth.local.<domain>#daniel`, which reads as a bug
+# in every audit log and makes `kubectl auth can-i --as=<user>` silently test a subject that
+# does not exist.
+k3s_oidc_username_prefix: "-"
+# Groups DO carry a prefix, for the opposite reason: it is what keeps an Authelia group name
+# from ever being read as a built-in `system:` group. `headlamp_k8s_oidc_group`
+# (roles/k8s/headlamp/defaults) is this prefix plus the Authelia group and must agree with it;
+# ansible/tests/setup/test_k3s_oidc_trusts_authelia.py fails when the two drift, because the
+# symptom is a login that succeeds onto an empty dashboard with nothing logged.
+k3s_oidc_groups_prefix: "oidc:"
 
 # ── apiserver audit logging (G2/G3) ─────────────────────────────────────────────────────
 # k3s writes no audit log by default, so there is no record of API writes at all. This
