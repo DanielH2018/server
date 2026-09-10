@@ -17,8 +17,9 @@ Every task carries a block tag (placed right under `name:`), so e.g.
 `pi-swap` (Pi swapfile + watchdog-stop preamble) · `apt-upgrade` (the full dist-upgrade)
 · `packages` · `tooling` (uv + CLI tools) · `unattended-upgrades` · `sudo-timestamp` · `fail2ban` · `ssh`
 · `crons` (restart / prune / log-truncate / autoremove / dpkg-purge / infra-map; the prune cron
-also answers to `prune`, the daniel-box-only infrastructure-map refresh to `infra-map`, and the
-fwupd-gated weekly firmware update to `firmware`)
+also answers to `prune`, the daniel-box-only infrastructure-map refresh to `infra-map`, the
+fwupd-gated weekly firmware update to `firmware`, and the Loki read-route witness to
+`loki_route_witness`)
 · `journald` · `tuning` (server CPU governor + swappiness) · `debloat`
 (server LXD-snap removal + both-hosts networkd-dispatcher mask) · `git-hooks` · `sysctl` · `firewall` (UFW) · `audit` ·
 `file-perms` · `kernel-modules` (blacklist + wireguard) · `igpu` (i915 GuC for QuickSync,
@@ -157,6 +158,34 @@ while daniel-server renders the entire UPS shutdown chain ([[nut_host]]). Confir
 Guarded by `ansible/tests/deploy/test_setup_drift_check.py`, which EXECUTES the library against a
 fixture rather than grepping it, and by `ansible/tests/deploy/test_setup_render_manifest.py`, whose
 guards now point at the library plus one that both consumers still source it.
+
+## Loki read-route witness (`loki_route_witness` tag)
+`loki-read-route-health.sh` runs hourly on every host in `loki_route_witness_hosts`
+(`group_vars/all.yml` — both prod cluster nodes) and pushes that host's own "Loki Read Route
+(<host>)" Kuma tile.
+
+**Why it is a host cron and not a monitor-bridge check.** loki-homelab's read route is guarded by
+a ClientIP set of node-owned addresses, and its only caller is `probe.py loki-query` /
+`loki-labels` running as a host process. A pod prober arrives with a pod IP, so it either fails
+for a reason the operator never hits or has to be granted an address no real caller uses.
+
+**Why both nodes.** Which address a host process arrives as depends on where the traefik pod
+sits — same node gives that node's cni0 gateway, another node gives the sender's flannel.1
+address. #1693 left the route dead from daniel-server and healthy from daniel-box, so a single
+witness would have reported green throughout. Each host pushes its own token, for the reason
+[[nut_host]]'s secondary watchdog records: two hosts on one token let either host's `up` satisfy
+the deadline.
+
+**The verdict is the response body, never the exit code.** `probe.py` builds its curl argv
+without `-f`, so a route Traefik refuses returns `404 page not found` with exit **0**.
+`files/loki_route_health.py` decides — valid JSON, `status: success`, non-empty `data` — and
+`ansible/roles/setup/initial_setup/tests/test_loki_route_health.py` holds that 404 as a DOWN case.
+`ansible/tests/setup/test_loki_route_witness.py` guards the host list, the per-host tokens, the
+push deadline against the cron period, and the removal arm.
+
+Both tokens are in `CROSS_HOST_PUSH_TOKENS` (`scripts/secrets_mgmt/consumers.py`): the cron is
+here, in a role with no deploy tag, and the tile deploys from `k8s/uptime-kuma`, so no single
+`rotate --deploy` can move both halves.
 
 ## Autonomous-role contract — Homelab eval sweep (`evals` tag)
 Weekly (Sunday 02:00, daniel-box only): grades every case under `evals/cases/` against the

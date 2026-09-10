@@ -278,6 +278,26 @@ stringData:
   ups-secondary-daniel-server.json: |
     {"type": "push", "name": "UPS Secondary (daniel-server)", "interval": {{ nut_host_watchdog_interval_minutes | default(10) * 60 * 2 }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ ups_secondary_daniel_server_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
 {% endif %}
+{# The Loki read route's only witness (issue #1712). Its caller is a host process, and the route's
+   guard is a ClientIP set of node-owned addresses, so no pod can probe it — see
+   roles/setup/initial_setup/templates/loki-read-route-health.sh.j2.
+
+   ONE TILE PER NODE, for the same reason as the UPS pair above: each host arrives at the route as
+   a different source address, which is exactly what #1693 broke on one node and not the other, so
+   a shared token would let daniel-box's `up` cover a dead route from daniel-server.
+
+   7200s: the deadline must exceed the PRODUCER'S period, and the producer is an hourly cron.
+   3600 plus the run leaves 7200 with an hour of margin — move this and the cron minute together
+   or neither. No `email`: a dead read route costs an operator a confusing 404 during triage, not
+   a service outage, so Discord is proportionate. #}
+{% if loki_route_witness_push_token | default('') %}
+  loki-read-route-daniel-box.json: |
+    {"type": "push", "name": "Loki Read Route (daniel-box)", "interval": 7200, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ loki_route_witness_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+{% endif %}
+{% if loki_route_witness_daniel_server_push_token | default('') %}
+  loki-read-route-daniel-server.json: |
+    {"type": "push", "name": "Loki Read Route (daniel-server)", "interval": 7200, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ loki_route_witness_daniel_server_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+{% endif %}
   # DECIDED: 5400s, not the 1200 its host-cron siblings use — the deadline must exceed the
   # PRODUCER'S PERIOD, and this producer is an hourly cron (k3s_remember_logs_cron_minute), not a
   # */10 one. 3600s plus the run leaves 5400 with 30 min of margin. At 1200 it would fire DOWN
