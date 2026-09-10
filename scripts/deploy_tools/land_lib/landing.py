@@ -60,6 +60,11 @@ class Landing:
         self.remaining_setup = ""
         self.needs_diff = False
         self.deployed_hosts: set[str] = set()
+        # True once a tick attempt returned TICK_STILL_RUNNING: this landing stopped WATCHING
+        # a tick that was still applying. Every later read of the deployer's markers is then
+        # racing that apply, so `behind_since` set with `hold_sha` empty is the state of a run
+        # in flight rather than a settled deferral (issue #1607).
+        self.tick_watch_abandoned = False
 
     @property
     def tags_csv(self) -> str:
