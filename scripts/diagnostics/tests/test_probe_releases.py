@@ -1,5 +1,8 @@
 """Tests for `probe.py releases` -- the reader over the k8s release records.
 
+Staleness over real git history lives in `test_probe_releases_stale.py` beside this; shared
+fixtures in `_release_fixtures.py`.
+
 Every rule here is a `..._is_clean` / `..._is_flagged` pair. A check observed only from the
 passing side is indistinguishable from one that fires on nothing, and this repo has paid for
 that twice (volume-claim's short-circuit, image-smoke's bare-boot rule).
@@ -8,39 +11,14 @@ Run: uv run pytest scripts/diagnostics/tests/test_probe_releases.py
 """
 
 import json
-import os
 import re
-import subprocess
 from pathlib import Path
 
 from diagnostics.probe_lib import releases as pr
 
+from _release_fixtures import _record
+
 REPO = Path(__file__).resolve().parents[3]
-
-# git subprocesses in the fixtures below must see ONLY the tmp repo they're pointed at via
-# `cwd`. `GIT_DIR`/`GIT_WORK_TREE`/`GIT_INDEX_FILE` and friends override that from the
-# environment, and prek's own `pytest` hook runs THIS suite from inside a `git commit` --
-# with those exact vars set to ITS OWN in-progress commit. Without stripping them, `_run_git`
-# was committing into the outer repo's half-built index instead of the fixture, and prek's
-# commit failed on a nested "commit -q -m 'sonarr v1'" it never asked for.
-_GIT_CLEAN_ENV = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
-
-
-def _record(
-    service="sonarr", commit="a" * 40, dirty=False, applied="2026-08-29T20:00:00Z"
-):
-    return {
-        "service": service,
-        "commit": commit,
-        "commit_short": commit[:8],
-        "tree_dirty": dirty,
-        "applied_at": applied,
-        "render_dir": f"/etc/rancher/k3s/manifests/{service}",
-        "manifests": {"deployment.yaml": "sha256:1", "service.yaml": "sha256:2"},
-        "manifests_digest": "deadbeef",
-        "secret_manifests": [],
-    }
-
 
 # ── the reader agrees with the writer about where records live ───────────────────────────────
 
@@ -166,172 +144,6 @@ def test_load_records_reports_a_truncated_record(tmp_path):
 
 def test_missing_directory_is_empty_not_an_exception(tmp_path):
     assert pr.load_records(tmp_path / "absent") == []
-
-
-# ── stale: git fixture repos ────────────────────────────────────────────────────────────────
-#
-# Each fixture is a throwaway repo, never a real commit to this checkout -- signing and identity
-# are stubbed locally so the test needs no signing key. `refs/remotes/origin/master` is set with
-# `update-ref` rather than a real remote, which is all `compute_stale`'s `ref="origin/master"`
-# default reads.
-
-
-def _run_git(repo, *args):
-    subprocess.run(
-        ["git", *args],
-        cwd=repo,
-        env=_GIT_CLEAN_ENV,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-
-
-def _init_repo(repo):
-    repo.mkdir(parents=True, exist_ok=True)
-    _run_git(repo, "init", "-q", "-b", "master")
-    _run_git(repo, "config", "user.email", "test@example.com")
-    _run_git(repo, "config", "user.name", "Test")
-    _run_git(repo, "config", "commit.gpgsign", "false")
-
-
-def _commit(repo, files, message):
-    """Write `files` ({relative path: content}), commit, and return the new SHA."""
-    for rel, content in files.items():
-        path = repo / rel
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(content)
-    _run_git(repo, "add", "-A")
-    _run_git(repo, "commit", "-q", "-m", message)
-    result = subprocess.run(
-        ["git", "rev-parse", "HEAD"],
-        cwd=repo,
-        env=_GIT_CLEAN_ENV,
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    return result.stdout.strip()
-
-
-def _set_origin_master(repo, sha):
-    _run_git(repo, "update-ref", "refs/remotes/origin/master", sha)
-
-
-def test_named_role_is_stale_after_its_own_role_changes(tmp_path):
-    repo = tmp_path / "repo"
-    _init_repo(repo)
-    base = _commit(
-        repo,
-        {"ansible/roles/k8s/sonarr/templates/deployment.yaml.j2": "v1\n"},
-        "sonarr v1",
-    )
-    tip = _commit(
-        repo,
-        {"ansible/roles/k8s/sonarr/templates/deployment.yaml.j2": "v2\n"},
-        "sonarr v2",
-    )
-    _set_origin_master(repo, tip)
-
-    stale = pr.compute_stale(
-        [_record("sonarr", commit=base)], repo_root=repo, shared_roles=set()
-    )
-    assert "sonarr" in stale
-    assert "deployment.yaml.j2" in stale["sonarr"]
-
-
-def test_named_role_is_clean_when_its_record_is_the_tip(tmp_path):
-    repo = tmp_path / "repo"
-    _init_repo(repo)
-    _commit(
-        repo,
-        {"ansible/roles/k8s/sonarr/templates/deployment.yaml.j2": "v1\n"},
-        "sonarr v1",
-    )
-    tip = _commit(
-        repo,
-        {"ansible/roles/k8s/sonarr/templates/deployment.yaml.j2": "v2\n"},
-        "sonarr v2",
-    )
-    _set_origin_master(repo, tip)
-
-    stale = pr.compute_stale(
-        [_record("sonarr", commit=tip)], repo_root=repo, shared_roles=set()
-    )
-    assert stale == {}
-
-
-def test_shared_role_change_marks_the_consuming_service_stale(tmp_path):
-    """Without widening onto the shared role, a `manifests`-only change reads clean for every
-    service -- the exact false-GREEN issue #947 names."""
-    repo = tmp_path / "repo"
-    _init_repo(repo)
-    base = _commit(
-        repo,
-        {
-            "ansible/roles/k8s/sonarr/templates/deployment.yaml.j2": "v1\n",
-            "ansible/roles/k8s/manifests/tasks/main.yml": "v1\n",
-        },
-        "baseline",
-    )
-    tip = _commit(
-        repo,
-        {"ansible/roles/k8s/manifests/tasks/main.yml": "v2\n"},
-        "shared role changes, sonarr's own role does not",
-    )
-    _set_origin_master(repo, tip)
-    record = [_record("sonarr", commit=base)]
-
-    without_widening = pr.compute_stale(record, repo_root=repo, shared_roles=set())
-    assert without_widening == {}, (
-        "reproduces the false-GREEN this feature exists to close"
-    )
-
-    with_widening = pr.compute_stale(record, repo_root=repo, shared_roles={"manifests"})
-    assert "sonarr" in with_widening
-    assert "manifests/tasks/main.yml" in with_widening["sonarr"]
-
-
-def test_docs_and_test_only_changes_do_not_mark_a_service_stale(tmp_path):
-    repo = tmp_path / "repo"
-    _init_repo(repo)
-    base = _commit(
-        repo,
-        {"ansible/roles/k8s/sonarr/templates/deployment.yaml.j2": "v1\n"},
-        "sonarr v1",
-    )
-    tip = _commit(
-        repo,
-        {
-            "ansible/roles/k8s/sonarr/README.md": "docs\n",
-            "ansible/roles/k8s/sonarr/tests/test_something.py": "assert True\n",
-        },
-        "docs and a role-local test, neither deployed",
-    )
-    _set_origin_master(repo, tip)
-
-    stale = pr.compute_stale(
-        [_record("sonarr", commit=base)], repo_root=repo, shared_roles=set()
-    )
-    assert stale == {}
-
-
-def test_unresolvable_commit_is_stale_not_skipped(tmp_path):
-    """A commit this checkout has never seen (a pruned branch, a shallow clone) must read as
-    stale, not silently pass -- a record naming an unknown commit is not evidence of anything."""
-    repo = tmp_path / "repo"
-    _init_repo(repo)
-    tip = _commit(
-        repo,
-        {"ansible/roles/k8s/sonarr/templates/deployment.yaml.j2": "v1\n"},
-        "sonarr v1",
-    )
-    _set_origin_master(repo, tip)
-
-    stale = pr.compute_stale(
-        [_record("sonarr", commit="f" * 40)], repo_root=repo, shared_roles=set()
-    )
-    assert stale.get("sonarr") == "commit unknown to this checkout"
 
 
 # ── missing_services: no record at all ──────────────────────────────────────────────────────
