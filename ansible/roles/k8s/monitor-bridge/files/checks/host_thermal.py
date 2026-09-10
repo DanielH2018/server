@@ -346,6 +346,9 @@ def check_ups(cfg: Config) -> tuple[bool, str]:
 
     The mains-loss arm is judged first and returns alone when it is red, because charge and runtime
     read the RUNWAY and can hold green through most of an outage. It carries its own streak key.
+    It sits in the same `configured`/`missing` census as the other three (issue #1630), so a rename
+    or removal of `network_ups_tools_ups_status{flag="OB"}` alone pages as a partial absence rather
+    than silently switching mains-loss monitoring off while the runway arms stay green.
 
     Two defer paths keep this from double-paging a source outage another monitor already owns:
       - ALL arms absent while BOTH source scrapes are DOWN (or the up-gate is unqueryable) -> a
@@ -369,6 +372,7 @@ def check_ups(cfg: Config) -> tuple[bool, str]:
             ("charge", cfg.UPS_CHARGE_QUERY),
             ("runtime", cfg.UPS_RUNTIME_QUERY),
             ("replace-battery", cfg.UPS_REPLACE_QUERY),
+            ("on-battery", cfg.UPS_ON_BATTERY_QUERY),
         )
         if q
     ]
@@ -402,11 +406,7 @@ def check_ups(cfg: Config) -> tuple[bool, str]:
     # only as the runway collapses; this arm is the outage itself. Its own streak key, because a
     # brownout cycle and a low-runway cycle sharing one counter would page at half the intended
     # grace — the rule check_host_temp's arms record.
-    on_battery = ups_on_battery_verdict(
-        bridge.net.prom_scalar(cfg, cfg.UPS_ON_BATTERY_QUERY)
-        if cfg.UPS_ON_BATTERY_QUERY
-        else None
-    )
+    on_battery = ups_on_battery_verdict(values.get("on-battery"))
     if on_battery is not None:
         (
             bridge.streaks._down_streaks["ups_on_battery"],

@@ -118,10 +118,13 @@ def ups_on_battery_verdict(on_battery: float | None) -> tuple[bool, str] | None:
 
     None covers both quiet cases — the arm is unconfigured, or mains power is fine — for the
     same reason `_undervoltage_arm` returns None on a clean cycle: a clean arm must not append a
-    note to the up message, or an ordinary cycle stops reading like one. An absent series is
-    also None here rather than not-ok, because the flag is one-hot over `flag` and its absence
-    means the whole exporter went quiet — which the all-arms-absent branch in `check_ups` and
-    the nut pod's liveness probe already own between them.
+    note to the up message, or an ordinary cycle stops reading like one.
+
+    An absent series is None here too, and that is a deferral to the caller rather than a
+    verdict: `check_ups` carries this arm in the same `configured`/`missing` census as charge,
+    runtime and replace-battery (issue #1630), so it is the caller that tells a rename of this
+    one series (pages) from the whole exporter going quiet (defers to Scrape Targets and the nut
+    pod's liveness probe). Returning not-ok on None here would page for both.
 
     No grace of its own is applied here; the caller rides UPS_CONSECUTIVE, so a brownout shorter
     than the grace window never pages.
