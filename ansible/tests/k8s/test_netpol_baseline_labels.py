@@ -61,6 +61,13 @@ BORN_FENCED_ROLES = {
     # ND_ENABLEEXTERNALSERVICES=false in its deployment turns off the two things that would
     # otherwise make it dial out: the GitHub version check and the metadata agents.
     "navidrome",
+    # UPS metrics. The only entry here whose sole caller is PROMETHEUS rather than Traefik —
+    # it has no IngressRoute at all — but the baseline admits prometheus on every port, so the
+    # label alone fences it correctly and nothing bespoke is needed. Unlike its neighbours it
+    # does dial out, to upsd on the nut pod; that is egress, which kube-router does not enforce,
+    # and the inbound half is admitted by the app=nut-exporter podSelector in
+    # netpol-baseline/templates/networkpolicy-nut.yaml.j2.
+    "nut-exporter",
 }
 
 LABEL = ("netpol-baseline", "enforced")

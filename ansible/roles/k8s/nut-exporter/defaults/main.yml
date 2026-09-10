@@ -1,0 +1,49 @@
+---
+# Upstream's scratch-based image: the exporter is one static Go binary, no shell, no package
+# manager. Pinned by tag (Renovate k8s-defaults manager), matching nut's sibling roles.
+nut_exporter_k8s_image: ghcr.io/druggeri/nut_exporter:3.3.0
+
+# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Deliberately TRUE where the `nut` role it reads from is false. The two roles have opposite risk
+# profiles: nut is privileged, USB-pinned and the pod half of the emergency-shutdown chain, so an
+# unattended image bump there can take the UPS offline. This one is a read-only network client
+# with a readinessProbe, no volume, no node pin and no privilege — a bad image bump costs UPS
+# metrics, not power protection, and the health gate catches it.
+k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "read-only NUT network client with a readinessProbe — no privilege, no volume, no node pin; a bad image bump costs UPS metrics, not the shutdown chain, which lives in the separate denylisted `nut` role"  # noqa var-naming[no-role-prefix]
+
+# The UPS name upsd knows, matching the ups.conf section in nut/templates/config-secret.yaml.j2.
+# The exporter scrapes ONE UPS per request and fails the scrape if it finds several without being
+# told which, so Prometheus passes this as a `ups=` param rather than leaving it to discovery.
+nut_exporter_k8s_ups_name: "{{ nut_ups_name | default('apc-ups') }}"
+
+# The variables coaxed into Prometheus series. Upstream's default list omits battery.runtime,
+# which is the one an operator reads during an outage — how long have I got — so the list is
+# stated in full here rather than defaulted. Every name was confirmed present on this UPS
+# (`upsc apc-ups@127.0.0.1` on daniel-server, 2026-09-10); a name the UPS does not report is
+# absent from the exporter's output rather than an error.
+#
+# ups.status is the one that is not a number. The exporter renders it as
+# network_ups_tools_ups_status{flag="OL"} 1 and forces a 0 for every flag in its --nut.statuses
+# default the UPS is not currently asserting, so `OB` (on battery) is a real 0/1 series rather
+# than a series that only exists during an outage.
+nut_exporter_k8s_variables:
+  - battery.charge
+  - battery.charge.low
+  - battery.charge.warning
+  - battery.runtime
+  - battery.runtime.low
+  - battery.voltage
+  - battery.voltage.nominal
+  - input.voltage
+  - input.voltage.nominal
+  - ups.load
+  - ups.realpower.nominal
+  - ups.status
+
+nut_exporter_k8s_port: 9199
+
+nut_exporter_k8s_cpu_limit: "200m"
+nut_exporter_k8s_mem_limit: 64Mi
+nut_exporter_k8s_cpu_request: "10m"
+nut_exporter_k8s_mem_request: 16Mi

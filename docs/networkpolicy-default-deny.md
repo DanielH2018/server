@@ -249,6 +249,13 @@ and opens no connection of its own. **navidrome** (2026-09-02), the music server
 here that had to be *made* to fit: the image checks GitHub for a new release and runs metadata
 agents by default, so its deployment sets `ND_ENABLEEXTERNALSERVICES=false`. Turn that back on
 and navidrome stops being a leaf app, so it leaves this set at the same time.
+**nut-exporter** (2026-09-10), the UPS metrics exporter, stretches the shape in the other
+direction and is listed here anyway. Traefik is not its caller — it has no IngressRoute, and
+Prometheus is the only thing that reaches it — but the baseline admits Prometheus on every port,
+so the label alone fences it exactly as intended. It also dials out, to `upsd` on the nut pod,
+which the other four do not. That is egress, which kube-router does not enforce on this cluster;
+the inbound half of that call is admitted by an `app: nut-exporter` podSelector added to
+`networkpolicy-nut.yaml.j2`.
 
 **Why observability moved from first to third.** It is small in pod count but dense in
 exactly the paths that are hardest — `loki:3100`, `tempo:3200`, `prometheus:9090` and

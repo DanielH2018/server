@@ -195,6 +195,25 @@ data:
           credentials_file: /etc/prometheus-scrape-creds/ha_token
         static_configs:
           - targets: ['home-assistant.{{ k8s_namespace }}.svc:8123']
+      # upsd's own variables, read by nut-exporter (roles/k8s/nut-exporter) — battery charge and
+      # runtime, load, input voltage, and ups.status as a per-flag 0/1. Until this job existed,
+      # UPS state reached Grafana ONLY as `hass_*` series from the job above, which routes a
+      # power-loss signal through Home Assistant — a workload the UPS itself protects. These
+      # series are independent of HA being up.
+      #
+      # `/ups_metrics` rather than `/metrics`: the latter is the exporter's own process metrics
+      # and carries no UPS reading at all. The `ups` param is required in spirit even with one
+      # UPS attached — the exporter fails the scrape if it ever discovers several and has not
+      # been told which, so naming it now means adding a second UPS cannot silently blank this
+      # job. `nut_ups_name` is the same expression nut/templates/config-secret.yaml.j2 uses for
+      # the ups.conf section name, so the two cannot drift apart.
+      - job_name: nut
+        scrape_interval: 1m
+        metrics_path: /ups_metrics
+        params:
+          ups: ["{{ nut_ups_name | default('apc-ups') }}"]
+        static_configs:
+          - targets: ['nut-exporter.{{ k8s_namespace }}.svc:9199']
       # PG2: the cluster homelab Loki's own internals (loki_*) — nothing scraped it before
       # this job, despite slice-7-phase-d-loki.md assuming otherwise. Keeps the
       # Logs/loki-internals board alive past the Docker loki's retirement.

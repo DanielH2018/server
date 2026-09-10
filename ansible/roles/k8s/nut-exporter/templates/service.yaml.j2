@@ -1,0 +1,15 @@
+---
+# Scrape target only — no IngressRoute. The exporter's pages are unauthenticated and carry
+# nothing a human reads; the UPS board in Grafana is the operator surface.
+apiVersion: v1
+kind: Service
+metadata:
+  name: nut-exporter
+  namespace: {{ k8s_namespace }}
+spec:
+  selector:
+    app: nut-exporter
+  ports:
+    - name: metrics
+      port: {{ nut_exporter_k8s_port }}
+      targetPort: {{ nut_exporter_k8s_port }}
