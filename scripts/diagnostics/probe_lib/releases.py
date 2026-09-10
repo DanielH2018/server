@@ -14,8 +14,8 @@ THREE FLAGS. `dirty` means the tree had uncommitted tracked changes, so no commi
 those bytes. `unmerged` means the commit is not an ancestor of origin/master -- a service
 running code that never landed. `stale` means origin/master has moved past the applied commit
 under the service's own role, or one of the shared roles every service's manifests depend on
-(`shared_k8s_roles()` -- `manifests`, `rollout-drain`, and the rest of the roles with no
-`containers_list` entry of their own). `stale` is what makes a deferred k8s change visible: the
+(`manifest_affecting_shared_roles()` -- `manifests` and the other entry-less roles that supply
+bytes to what is applied). `stale` is what makes a deferred k8s change visible: the
 gitops deployer ff-merges a non-auto-deployable k8s role change and pages Discord once, and
 every other monitored marker then reads clean while the cluster still runs the old manifests
 (issue #947). All three flags are normal mid-slice and alarming a week later, which is why they
@@ -157,6 +157,52 @@ def shared_k8s_roles(k8s_roles_dir=None, host_vars=None):
     return frozenset(shared)
 
 
+# The role that renders every other role's templates into the applied bytes. It ships no
+# templates or files of its own, so the predicate below has to name it.
+MANIFEST_RENDERER = "manifests"
+
+
+def _supplies_manifest_bytes(role_dir):
+    """Whether `role_dir` contributes bytes to some service's APPLIED manifests.
+
+    A shared role does that in exactly two ways: it renders templates that are applied
+    alongside the consumer's own (`volume-claim/templates/pvc.yaml.j2`,
+    `image-builder/templates/build-job.yaml.j2`), or it ships `files/` a consumer's manifest
+    embeds with `lookup('file')` (`arr-notification`, `game-stats-lib`). A role with only
+    `tasks/` and `defaults/` changes how a deploy RUNS, never what it applies.
+
+    That distinction is the whole point (#1636). A deploy-time role's change is live for the
+    next deploy the moment the deployer fast-forwards the primary checkout -- `deploy.sh`
+    renders from the tree it is invoked in -- so it invalidates no release stamp and no drift
+    exists. Sweeping those roles in marked all 53 services stale for `volume-snapshot`'s
+    snapshot-space cap (b7b9bded6), which rendered no manifest at all.
+
+    `image-builder` stays in, deliberately: its `build-job.yaml.j2` decides the bytes of an
+    image nine services then run, which a stamp cannot otherwise see. It is still wider than it
+    needs to be -- those nine are named in their own tasks, while this predicate puts the role
+    in all 53 services' paths.
+    """
+    if role_dir.name == MANIFEST_RENDERER:
+        return True
+    return any((role_dir / sub).is_dir() for sub in ("templates", "files"))
+
+
+def manifest_affecting_shared_roles(k8s_roles_dir=None, host_vars=None):
+    """`shared_k8s_roles()` narrowed to the roles that can make a stamp stale.
+
+    Kept separate from `shared_k8s_roles()` rather than filtering in place: that census answers
+    "which derived names are not deploy tags", the question `split_shared_roles` exists for and
+    `test_denylist_parsers_agree.py` polices against `deploy_k8s.py`'s own list. Narrowing it
+    would change that comparison's meaning as a side effect of fixing this one.
+    """
+    k8s_roles_dir = k8s_roles_dir or (REPO_ROOT / "ansible/roles/k8s")
+    return frozenset(
+        r
+        for r in shared_k8s_roles(k8s_roles_dir, host_vars)
+        if _supplies_manifest_bytes(k8s_roles_dir / r)
+    )
+
+
 def role_paths_for(service, shared_roles):
     """The `ansible/roles/k8s/` paths whose history decides whether `service` is stale."""
     return [f"ansible/roles/k8s/{service}/"] + [
@@ -212,7 +258,9 @@ def compute_stale(records, repo_root=REPO_ROOT, ref="origin/master", shared_role
     sharing one commit, and grouping first keeps this from being 54 subprocess calls for what a
     single one already answers for the union of every service's role_paths.
     """
-    shared_roles = shared_roles if shared_roles is not None else shared_k8s_roles()
+    shared_roles = (
+        shared_roles if shared_roles is not None else manifest_affecting_shared_roles()
+    )
     by_commit = {}
     for rec in records:
         if "error" in rec:

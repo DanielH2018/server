@@ -359,10 +359,16 @@ stay).
     `k3s_release_staleness_cron_minute`) reading `uv run python scripts/diagnostics/probe.py
     releases --stale-only`: it compares each service's release record (the applied commit
     `roles/k8s/manifests/tasks/release_stamp.yml` stamps on every real apply) against
-    `origin/master` under that service's own role AND the shared roles every service's manifests
-    depend on (`manifests`, `rollout-drain`, and the rest with no `containers_list` entry —
-    `scripts/diagnostics/probe_lib/releases.py`'s `shared_k8s_roles()`), and pushes the "Release
-    Staleness Drift" Kuma monitor down when any service is stale or missing a record entirely.
+    `origin/master` under that service's own role AND the shared roles that supply bytes to
+    every service's manifests (`manifests`, `volume-claim`, `image-builder`, `arr-notification`,
+    `game-stats-lib` — `scripts/diagnostics/probe_lib/releases.py`'s
+    `manifest_affecting_shared_roles()`), and pushes the "Release Staleness Drift" Kuma monitor
+    down when any service is stale or missing a record entirely. The five entry-less roles that
+    hold only `tasks/` and `defaults/` (`rollout-drain`, `volume-snapshot`, `volume-revert`,
+    `cronjob-gate`, `longhorn-api`) are deliberately OUT of that set: they change how a deploy
+    runs, never what it applies, and their change is live for the next deploy the moment this
+    deployer fast-forwards the primary checkout, so no stamp goes stale. Sweeping them in marked
+    all 53 services stale for a `volume-snapshot` change that rendered no manifest (#1636).
     No clearing rule is needed: the next real apply of that service rewrites its record, so the
     flag is derived from state rather than a marker this deployer would have to remember to
     clear.
