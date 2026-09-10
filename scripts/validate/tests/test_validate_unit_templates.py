@@ -109,11 +109,12 @@ def test_discover_templates_finds_the_known_set():
     # is caught rather than "fewer templates checked" sliding by unnoticed.
     names = frozenset(p.name for p in v.discover_templates())
     assert {
+        "deploy-ui.service.j2",
         "gitops-deploy.service.j2",
         "gitops-deploy.timer.j2",
         "renovate-agent.timer.j2",
     } <= names
-    assert len(names) == 19
+    assert len(names) == 20
 
 
 def test_discover_templates_excludes_archive():
