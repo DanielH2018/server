@@ -360,21 +360,12 @@ def cmd_status(args, tools: Tools) -> int:
                 print(f"{b.batch} on {host}: status read timed out")
             worst = max(worst, 1)
             continue
-        for s in status_mod.parse_status(mine, proc.stdout):
-            line = f"{s.batch} on {host}: {s.state}"
-            if s.pr_url:
-                line += f" {s.pr_url}"
-            if s.permission_denials:
-                line += f" permission_denials={s.permission_denials}"
-            if s.state == "done":
-                line += f" {_one_line(s.final_text)}"
-            if s.state == "failed":
-                exit_text = "unknown" if s.exit_code is None else str(s.exit_code)
-                line += f" (exit {exit_text})"
-                if s.terminal_reason:
-                    line += f" {s.terminal_reason}"
-                line += f" {s.stderr_tail[-300:]}"
-                worst = max(worst, 5)
+        branches = {b.batch: b.branch for b in mine}
+        for st in status_mod.parse_status(mine, proc.stdout):
+            line, tier = status_mod.status_line(
+                st, host, branches[st.batch], tools.merged_pr, _one_line
+            )
+            worst = max(worst, tier)
             print(line)
     return worst
 

@@ -123,13 +123,63 @@ def gh_issue(number: int) -> Issue:
     return issue_from_view(json.loads(out))
 
 
+def merged_pr_url(branch: str) -> str:
+    """The URL of a merged PR opened from `branch`, or "" when GitHub knows of none.
+
+    The forge is the only oracle that can settle a batch whose worktree is gone. The tree,
+    its report and its unit all go with it, but the PR it opened does not. This runs
+    locally rather than over ssh: GitHub answers the same from any checkout, and the ssh
+    budget on the batch's host is already spent on the status read.
+
+    Returns "" on any failure — a `gh` that exits non-zero, times out, or prints something
+    unparseable. A reconciliation that could not be taken must read the same as "no merged
+    PR", so the caller keeps the batch unresolved rather than calling it landed.
+    """
+    try:
+        out = subprocess.run(
+            [
+                "gh",
+                "pr",
+                "list",
+                "--state",
+                "merged",
+                "--head",
+                branch,
+                "--json",
+                "url",
+                "--limit",
+                "1",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=GH_TIMEOUT_S,
+        )
+    except subprocess.TimeoutExpired:
+        return ""
+    if out.returncode != 0:
+        return ""
+    try:
+        data = json.loads(out.stdout)
+    except ValueError:
+        return ""
+    return str(data[0]["url"]) if data else ""
+
+
 @dataclass(frozen=True)
 class Tools:
-    """The dispatcher's boundaries: run a command, fetch an issue, read the signing keys."""
+    """Every process boundary the dispatcher crosses.
+
+    Attributes:
+        run: run a command on a host.
+        gh_issue: fetch one issue by number.
+        signing_keys: the signing keys GitHub verifies for the account.
+        merged_pr: the URL of a merged PR for a branch, or "".
+    """
 
     run: Callable[..., subprocess.CompletedProcess] = run_command
     gh_issue: Callable[[int], Issue] = gh_issue
     signing_keys: Callable[[], frozenset[str]] = signing.registered_signing_keys
+    merged_pr: Callable[[str], str] = merged_pr_url
 
 
 def read_host(tools: Tools, host: str) -> HostReading | str:

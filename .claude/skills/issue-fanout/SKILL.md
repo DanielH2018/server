@@ -116,11 +116,26 @@ fan-out, do not queue. `--host daniel-box` pins a batch that must land in the sa
 only daniel-box can verify.
 
 Poll with `uv run python scripts/dev/fanout_place.py status <run-id>`. It prints one line per
-batch, `<batch> on <host>: <state> …`, where state is `running`, `done <PR URL>`, or `failed`
-(`permission_denials=N` is appended when the agent hit classifier denials). A daniel-server
-batch reports `done <PR URL>` and stops there: land that PR from this session with `land.sh`. A
-`failed` batch keeps its worktree — `status` already shows the last 300 bytes of
-`<worktree>/.fanout/stderr.log`; read the full file there for more before deciding what to do.
+batch, `<batch> on <host>: <state> …`, where state is `running`, `done <PR URL>`, `landed
+<PR URL>`, `no-report`, or `failed` (`permission_denials=N` is appended when the agent hit
+classifier denials). A daniel-server batch reports `done <PR URL>` and stops there: land that
+PR from this session with `land.sh`. A `failed` batch keeps its worktree — `status` already
+shows the last 300 bytes of `<worktree>/.fanout/stderr.log`; read the full file there for more
+before deciding what to do.
+
+**`no-report` is not a failure, and neither is `landed`.** An agent that removes its own
+worktree on exit takes `.fanout/report.json` with it, so a FINISHED batch and a batch that died
+before writing anything both leave a unit that exited 0 and nothing to read. `status` splits
+those out of `failed` and asks the forge which one it is: a merged PR for
+`worktree-fanout-<batch>` reads `landed <PR URL>` and exits 0, no merged PR reads `no-report`
+and exits 1. Reconcile a `no-report` batch against GitHub before re-placing its issues — its
+work may already be on master. Exit 5 is reserved for a unit that exited non-zero or a session
+that set `is_error`, which are the only two states whose remedy is reading stderr.
+
+Run `clean <run-id>` once a batch reads `landed`. Nothing in the manifest records the
+reconciliation, so every later poll asks GitHub about that branch again; `clean` writes
+`removed_at`, after which `status` reports the batch from the manifest and stops reading its
+host at all.
 `launch` refuses to relaunch that work while it is still live, so run `clean <run-id>` first.
 It refuses on two counts, because placement is free to send a relaunch to the other host: the
 worktree and branch on the host it would place on, and any issue of the new batch that a run's
