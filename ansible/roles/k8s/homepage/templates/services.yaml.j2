@@ -361,13 +361,14 @@
 # `app: homepage` (ENFORCED by ansible/tests/services/test_homepage_widget_netpol_edges.py),
 # while a tile with only an `href:` reaches nothing from the pod at all.
 #
-# Adding a widget to one of these later is a per-service change, not a bulk one, and four of
-# them are already ruled on: traefik (#1383), grafana (#1384), crowdsec (#1385) and
-# healthchecks (#1386) each record a credential reason the widget was not simply plumbed in.
-# A link-only tile contradicts none of those — it adds a way in, not an API call.
+# Adding a widget to one of these later is a per-service change, not a bulk one, and three of
+# them are already ruled on: grafana (#1384), crowdsec (#1385) and healthchecks (#1386) each
+# record a credential reason the widget was not simply plumbed in. A link-only tile contradicts
+# none of those — it adds a way in, not an API call.
 #
-# Two roles carry a `hostname:` in containers_list and are NOT here, both on purpose:
-# navidrome is scaled to 0 replicas, and livesync has no IngressRoute at all.
+# Three roles carry a `hostname:` in containers_list and are NOT here, all on purpose:
+# navidrome is scaled to 0 replicas, livesync has no IngressRoute at all, and the traefik
+# dashboard's tile was replaced by the deploy queue at the operator's request on 2026-09-10.
 - Admin & Tools:
     - Grafana:
         icon: grafana.png
@@ -380,21 +381,22 @@
         # volumes and their B2 backup chain.
         href: https://longhorn.local.{{ domain }}/
         description: Cluster storage
-    - Traefik:
-        icon: traefik.png
-        # LAN-only, same as longhorn. The dashboard route exists; only the /api the homepage
-        # widget would need is served nowhere (#1383), which is why this is a link.
-        href: https://traefik.local.{{ domain }}/
-        description: Reverse proxy
+    - n8n:
+        icon: n8n.png
+        href: https://n8n.{{ domain }}/
+        description: Workflow automation
     - code-server:
         icon: code-server.png
         href: https://code-server.{{ domain }}/
         description: Browser IDE
 
-    - n8n:
-        icon: n8n.png
-        href: https://n8n.{{ domain }}/
-        description: Workflow automation
+    - Deploy:
+        icon: mdi-rocket-launch
+        # LAN-only, like longhorn and the traefik dashboard this tile replaced: the queue page
+        # runs land.sh and deploy.sh, so it is behind Authelia on a name with no public route
+        # (roles/setup/deploy_ui/).
+        href: https://deploy.local.{{ domain }}/
+        description: Deploy queue
     - TeXBrain:
         icon: mdi-math-integral
         href: https://texbrain.{{ domain }}/
