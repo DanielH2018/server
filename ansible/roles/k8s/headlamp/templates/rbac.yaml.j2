@@ -13,6 +13,25 @@
 #
 # No `secrets`, no `pods/exec`/`attach`/`portforward`: the UI is a window, and writes go
 # through Ansible (repo CLAUDE.md). ansible/tests/k8s/test_k8s_manifests.py enforces both.
+#
+# ── the second subject on each binding: the OIDC identity (#1390) ──────────────────────────
+# Every binding below names two subjects, the ServiceAccount and a Group, and they are the
+# same grant to two identities. Headlamp does not authorise anything itself under OIDC: it
+# forwards the browser's `id_token` and the API SERVER decides. So an OIDC login carries none
+# of the SA's RBAC, and a Headlamp that logs a user in without this subject renders an EMPTY
+# cluster — the login succeeds and every list call is Forbidden. Binding the Group to exactly
+# what the SA already holds is what makes the two identities see the same thing.
+#
+# `headlamp_k8s_oidc_group` (defaults/main.yml) is the Authelia group with the API server's
+# `oidc-groups-prefix` applied. The prefix is not cosmetic: it is what stops an Authelia group
+# name from ever colliding with a built-in `system:` group. The API server end of that pair —
+# `oidc-groups-claim` and `oidc-groups-prefix` — is part 1 of #1390 and lives in
+# roles/setup/k3s, whose PR carries the test that the two spellings agree. A mismatch is the
+# same empty dashboard with no error, so the value here is not a free choice.
+#
+# GRANTS NOBODY ANYTHING TODAY. Nothing in this cluster authenticates as a Group: the API
+# server has no `--kube-apiserver-arg=oidc-*` flags, so no request ever arrives with a group
+# claim. This subject starts mattering only once part 1 of #1390 is applied by hand.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -31,6 +50,11 @@ subjects:
   - kind: ServiceAccount
     name: headlamp
     namespace: {{ k8s_namespace }}
+  # The OIDC identity, bound ALONGSIDE the SA — see the header for why, and for why it grants
+  # nobody anything yet.
+  - kind: Group
+    name: {{ headlamp_k8s_oidc_group }}
+    apiGroup: rbac.authorization.k8s.io
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -85,6 +109,11 @@ subjects:
   - kind: ServiceAccount
     name: headlamp
     namespace: {{ k8s_namespace }}
+  # The OIDC identity, bound ALONGSIDE the SA — see the header for why, and for why it grants
+  # nobody anything yet.
+  - kind: Group
+    name: {{ headlamp_k8s_oidc_group }}
+    apiGroup: rbac.authorization.k8s.io
 ---
 # The Prometheus plugin (headlamp_k8s_plugins, defaults/main.yml) does not talk to Prometheus
 # itself: it asks the API server to proxy each query —
@@ -123,3 +152,8 @@ subjects:
   - kind: ServiceAccount
     name: headlamp
     namespace: {{ k8s_namespace }}
+  # The OIDC identity, bound ALONGSIDE the SA — see the header for why, and for why it grants
+  # nobody anything yet.
+  - kind: Group
+    name: {{ headlamp_k8s_oidc_group }}
+    apiGroup: rbac.authorization.k8s.io
