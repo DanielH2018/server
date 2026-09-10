@@ -41,6 +41,23 @@ def respond(monkeypatch, status, body=""):
     monkeypatch.setattr(postflight, "get", lambda *a, **kw: (status, body))
 
 
+def only_checks(monkeypatch, checks):
+    """Run `main()` over `checks` alone, so a test isn't at the mercy of the real registry."""
+    monkeypatch.setattr(postflight, "CHECKS", checks)
+
+
+def stub_curl(monkeypatch, run):
+    """Replace the subprocess `get()` shells out to."""
+    monkeypatch.setattr(postflight.subprocess, "run", run)
+
+
+def missing_secret(monkeypatch, name, err=""):
+    """Every secret decrypts except `name`, which is absent."""
+    monkeypatch.setattr(
+        postflight, "secret", lambda n: ("", err) if n == name else ("x", "")
+    )
+
+
 def targets_body(*targets):
     return json.dumps({"data": {"activeTargets": list(targets)}})
 
@@ -149,7 +166,7 @@ def test_ha_token_rejected_fails(monkeypatch):
 
 
 def test_ha_token_missing_from_sops_fails(monkeypatch):
-    monkeypatch.setattr(postflight, "secret", lambda name: ("", "not found"))
+    missing_secret(monkeypatch, "homepage_ha_token", "not found")
     respond(monkeypatch, 200)
     assert postflight.check_ha_token("homepage_ha_token") == (
         postflight.FAIL,
@@ -159,14 +176,74 @@ def test_ha_token_missing_from_sops_fails(monkeypatch):
 
 def test_authelia_missing_oidc_material_fails(monkeypatch):
     respond(monkeypatch, 200, json.dumps({"status": "OK"}))
-    monkeypatch.setattr(
-        postflight,
-        "secret",
-        lambda name: ("", "") if name == "authelia_oidc_hmac_secret" else ("x", ""),
-    )
+    missing_secret(monkeypatch, "authelia_oidc_hmac_secret")
     status, detail = postflight.check_authelia()
     assert status == postflight.FAIL
     assert "authelia_oidc_hmac_secret" in detail
+
+
+def test_an_unreachable_authelia_skips_rather_than_reporting_an_outage(monkeypatch):
+    """The accept half of #1564.
+
+    A ClusterIP that does not answer this node is a placement fact — Authelia's pod is on the
+    other node. Reporting it as "Authelia is not serving" was a false outage on the most
+    load-bearing service in the fleet.
+    """
+    respond(monkeypatch, 0, "curl: (7) Failed to connect to 10.43.0.9 port 9091")
+    status, detail = postflight.check_authelia()
+    assert status == postflight.SKIP
+    assert "unreachable from this host" in detail
+    assert "not serving" not in detail
+
+
+def test_authelia_serving_an_error_still_fails(monkeypatch):
+    """The reject half: a real non-200 is an outage and must not be softened to SKIP."""
+    respond(monkeypatch, 503)
+    status, detail = postflight.check_authelia()
+    assert status == postflight.FAIL
+    assert "not serving" in detail
+
+
+def test_authelia_oidc_material_is_checked_on_a_node_it_cannot_reach(monkeypatch):
+    """The SOPS read needs no network, so the unreachable arm must not skip past it."""
+    respond(monkeypatch, 0, "curl: (7) Failed to connect")
+    missing_secret(monkeypatch, "authelia_oidc_hmac_secret")
+    status, detail = postflight.check_authelia()
+    assert status == postflight.FAIL
+    assert "authelia_oidc_hmac_secret" in detail
+
+
+def test_kuma_drift_reads_its_constants_from_the_module_that_holds_them(monkeypatch):
+    """#1562: postflight read four names off `probe`, which holds none of them.
+
+    Exercising the check is the point — a `hasattr` census would pass before and after the
+    fix. This raised `AttributeError: module 'probe' has no attribute 'STATIC_MONITORS_PATH'`,
+    which the runner reported as FAIL, so a check that never ran read as drift found.
+    """
+    body = json.dumps(
+        {
+            "data": {
+                "result": [{"metric": {"monitor_name": "sonarr"}, "value": [0, "1"]}]
+            }
+        }
+    )
+    respond(monkeypatch, 200, body)
+    monkeypatch.setattr(postflight.monitors, "kuma_pod_age_seconds", lambda: 9999)
+    monkeypatch.setattr(
+        postflight.monitors,
+        "parse_declared_monitors",
+        lambda text: {
+            "sonarr": {"type": "http", "interval": 60, "gated": False, "gate": None}
+        },
+    )
+    monkeypatch.setattr(
+        postflight.monitors,
+        "STATIC_MONITORS_PATH",
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "test_postflight.py"),
+    )
+    status, detail = postflight.check_kuma_drift()
+    assert status == postflight.OK
+    assert isinstance(detail, str)
 
 
 def test_a_workload_with_no_service_skips_not_fails(monkeypatch):
@@ -174,18 +251,14 @@ def test_a_workload_with_no_service_skips_not_fails(monkeypatch):
         raise postflight.Skip(f"{name} has no ClusterIP (does the Service exist?)")
 
     monkeypatch.setattr(postflight, "service_ip", absent)
-    monkeypatch.setattr(
-        postflight,
-        "CHECKS",
-        [("9.3", "sonarr", lambda: postflight.check_arr_key("sonarr"))],
+    only_checks(
+        monkeypatch, [("9.3", "sonarr", lambda: postflight.check_arr_key("sonarr"))]
     )
     assert postflight.main() == 0
 
 
 def test_one_failure_exits_nonzero(monkeypatch):
-    monkeypatch.setattr(
-        postflight, "CHECKS", [("9.1", "x", lambda: (postflight.FAIL, "broken"))]
-    )
+    only_checks(monkeypatch, [("9.1", "x", lambda: (postflight.FAIL, "broken"))])
     assert postflight.main() == 1
 
 
@@ -195,10 +268,8 @@ def test_check_raising_does_not_abort_the_run(monkeypatch):
     def boom():
         raise ValueError("bad json")
 
-    monkeypatch.setattr(
-        postflight,
-        "CHECKS",
-        [("9.1", "x", boom), ("9.2", "y", lambda: (postflight.OK, "fine"))],
+    only_checks(
+        monkeypatch, [("9.1", "x", boom), ("9.2", "y", lambda: (postflight.OK, "fine"))]
     )
     assert postflight.main() == 1
 
@@ -209,7 +280,7 @@ def test_get_parses_status_and_body(monkeypatch):
         stdout = '{"a": 1}\n200'
         stderr = ""
 
-    monkeypatch.setattr(postflight.subprocess, "run", lambda *a, **kw: Result())
+    stub_curl(monkeypatch, lambda *a, **kw: Result())
     assert postflight.get("http://x") == (200, '{"a": 1}')
 
 
@@ -219,7 +290,7 @@ def test_get_reports_curl_failure_as_status_zero(monkeypatch):
         stdout = ""
         stderr = "connection refused"
 
-    monkeypatch.setattr(postflight.subprocess, "run", lambda *a, **kw: Result())
+    stub_curl(monkeypatch, lambda *a, **kw: Result())
     assert postflight.get("http://x") == (0, "connection refused")
 
 
@@ -237,7 +308,7 @@ def test_credentials_never_reach_argv(monkeypatch):
         seen["input"] = input
         return Result()
 
-    monkeypatch.setattr(postflight.subprocess, "run", fake_run)
+    stub_curl(monkeypatch, fake_run)
     postflight.get("http://x", 'header = "X-Api-Key: hunter2"\n')
     assert "hunter2" not in " ".join(seen["argv"])
     assert "hunter2" in seen["input"]
