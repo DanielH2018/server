@@ -253,9 +253,14 @@ def cmd_launch(args, tools: Tools) -> int:
             print(f"{batch} on {host}: {exc}", file=sys.stderr)
             # The refusal is per batch, after placement, so earlier batches are already
             # running. Name them and the run-id: the manifest is what `status` and `clean`
-            # read, and the `clean <run-id>` an `exists` refusal asks for needs the id.
+            # read, and the `clean <run-id>` an `exists` refusal asks for needs the id. A
+            # run that launched nothing gets no manifest — an empty one records no work,
+            # and `launch` now reads every manifest under the root before it places.
+            if not run.batches:
+                print("launched before this failure: none", file=sys.stderr)
+                return 1
             manifest_mod.save(run, root=args.manifest_root)
-            launched = ", ".join(b.batch for b in run.batches) or "none"
+            launched = ", ".join(b.batch for b in run.batches)
             print(
                 f"launched before this failure: {launched} (run {run.run_id})",
                 file=sys.stderr,
@@ -520,6 +525,18 @@ def main(argv=None, tools: Tools | None = None) -> int:
     clean_one_parser.add_argument("branch")
     clean_one_parser.set_defaults(fn=cmd_clean_one)
     args = p.parse_args(argv)
+    # The three manifest-reading subcommands, checked here rather than caught as a
+    # FileNotFoundError around the call: a mistyped run-id is a usage error and deserves a
+    # line, while an FileNotFoundError raised deeper inside one of them is a real fault and
+    # must keep its traceback. `launch` refuses with "run clean <run-id> first", so a
+    # mistyped id at that prompt is the likely way in.
+    if args.cmd in ("status", "stop", "clean"):
+        if not manifest_mod.path(args.run_id, args.manifest_root).exists():
+            print(
+                f"no manifest for run {args.run_id} under {args.manifest_root}",
+                file=sys.stderr,
+            )
+            return 1
     return args.fn(args, tools or Tools())
 
 

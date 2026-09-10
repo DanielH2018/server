@@ -295,6 +295,31 @@ def test_a_batch_still_live_in_a_manifest_is_refused_before_any_host_is_read(
     assert "run clean 20260101T000010Z first" in err
 
 
+def test_a_first_batch_refused_writes_no_manifest_at_all(tmp_path, capsys):
+    """F15: an empty manifest records no work, and `launch` now reads every manifest."""
+    tools, _run = fake_tools(answers={"daniel-box": ok(HEADROOM)}, issues=CLAIMED)
+    _run.answers_by_call = [
+        ok(HEADROOM),
+        ok(""),  # health read
+        subprocess.CompletedProcess([], 1, stdout="", stderr="fanout-step: exists\n"),
+    ]
+    assert _launch(tools, tmp_path, "--batch", "1", "--host", "daniel-box") == 1
+    assert not list(tmp_path.glob("*.json"))
+    assert "launched before this failure: none" in capsys.readouterr().err
+
+
+def test_an_unknown_run_id_is_one_line_rather_than_a_traceback(tmp_path, capsys):
+    tools, calls = fake_tools()
+    for command in ("status", "stop", "clean"):
+        assert (
+            main([command, "nosuchrun", "--manifest-root", str(tmp_path)], tools) == 1
+        )
+        assert not calls.calls  # refused before any host is touched
+        assert (
+            f"no manifest for run nosuchrun under {tmp_path}" in capsys.readouterr().err
+        )
+
+
 def test_a_batch_already_cleaned_in_an_old_run_launches_again(tmp_path):
     cleaned = Batch(
         "1-2", "daniel-server", "/w", "b", "u", [1, 2], "t", "2026-09-10T12:00:00+00:00"
