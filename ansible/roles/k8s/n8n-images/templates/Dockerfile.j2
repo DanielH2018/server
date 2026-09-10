@@ -28,6 +28,13 @@
 # repositories publish a `stable` tag and both resolved to 2.35.4 when this was written, and
 # renovate.json groups them into one PR. test_renovate_managers.py asserts the two carry the same
 # TAG — their digests differ by design, since they are different images.
+#
+# EVERY DIGEST BUMP APPENDS A ROW TO ../base-pin-history.tsv. The tag never moves, so a bump
+# changes only 64 hex characters and the diff cannot show which way the version went: PR #1440
+# proposed moving both files from the 2.37.10 digests to the 2.37.9 digests — a downgrade —
+# through nine green checks (issue #1493). That file's header has the registry commands for
+# resolving a digest to its version, and test_renovate_dockerfiles.py fails until the row is
+# appended.
 FROM n8nio/n8n:stable@sha256:307d6065be25619aa24cfc63a7c2f04ca56d084a08c05c8e9f189a89f353b1ec
 
 # Switch to the root user to install packages

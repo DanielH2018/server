@@ -7,8 +7,9 @@ allowed-tools: Bash, Read, Edit, Write, Grep, Glob
 Renovate opens PRs here that are **deliberately incomplete**. Ten package rules carry
 `automerge: false` and a group name ending in a parenthetical — `(manual — finish the targetAbi
 + MD5, raise jellyfin with it)`, `(manual — finish the per-arch sha256 from checksums.txt)`,
-`(lockstep: app + task runners)`. That parenthetical is a **work order**, not a label. Merging
-such a PR on green CI ships half a bump.
+`(manual — append each resolved version to base-pin-history.tsv; lockstep: app + task runners)`.
+That parenthetical is a **work order**, not a label. Merging such a PR on green CI ships half a
+bump.
 
 The rest is ordinary: triage by class, finish what needs finishing, then land each one through
 `land-after-merge`.
@@ -55,8 +56,13 @@ For each PR read the file list and the diff — `gh pr diff <n> --name-only`, th
 | `prek.toml`, `.github/workflows/*` | tooling | merge; CI is the only consumer |
 | anything else | read the rule | see below |
 
-**The title's parenthetical is the fastest tell.** A title reading `Update n8n (lockstep: app +
-task runners)` names its group, and the group name is the work order.
+**The title's parenthetical is the fastest tell.** A title reading `Update n8n (manual — append
+each resolved version to base-pin-history.tsv; lockstep: app + task runners)` names its group,
+and the group name is the work order — here, resolve each new digest to its
+`org.opencontainers.image.version` label and append a row to
+`ansible/roles/k8s/n8n-images/base-pin-history.tsv`, whose header carries the commands. A digest
+bump changes no version string, so the diff alone cannot tell an upgrade from a downgrade: PR
+#1440 proposed a lockstep downgrade through nine green checks (issue #1493).
 
 **A body naming a package the diff never touches is a triage signal, not a merge blocker.**
 #939 opened titled "Update dependency prek to v0.5.0" with prek's release notes attached, but
