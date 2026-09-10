@@ -1,0 +1,45 @@
+name: renovate-config-canary
+
+# Validates renovate.json against a freshly-resolved (unpinned) Renovate once a day, so a
+# config the hosted Mend app has stopped accepting is caught within a day rather than only
+# when renovate.json is next touched. The reasoning for validating unpinned is on the
+# `renovate-config` job in ci.yml, which runs the same script on a PR that touches the file.
+#
+# This ran on every push to master until 2026-09-10 (#1269). Per-merge bought nothing over
+# daily — Mend rolls its Renovate forward on its own cadence and deprecates config keys a
+# release ahead — and it cost a failure of its own: Renovate publishes to npm ~8 times a day,
+# and for a few minutes after each publish the tarball 404s. Three master pushes went red in
+# two hours that night, none of them a config problem. The script retries the install now,
+# and a daily run lands in one of those windows minutes-per-day rather than every merge.
+#
+# A red run here is on whatever SHA is master's head at 09:00 UTC; it is not that commit's
+# verdict. The deployer never reads this context (`gitops_deploy_ci_contexts` names only the
+# prek gate), and it is not a required merge context — the PR-scoped job in ci.yml is.
+#
+# It is its own workflow rather than a `schedule:` on ci.yml because a schedule trigger there
+# would run hooks, pytest and the gate as well, and would share the head SHA's concurrency
+# group with that commit's push run.
+on:
+  schedule:
+    - cron: "0 9 * * *" # 04:00 America/Chicago; nobody is landing, so a red run is not mistaken for a red merge
+  workflow_dispatch: # after touching renovate.json on master, or when a Renovate major lands
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: validate renovate.json against latest Renovate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20 # six install attempts at 60s, plus a wedged fetch
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false # nothing here pushes; the repo is public, so the fetch needs no token
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "24"
+
+      - name: Validate renovate.json
+        run: scripts/validate/renovate_config.sh renovate.json

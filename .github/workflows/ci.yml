@@ -381,8 +381,13 @@ jobs:
 
   renovate-config:
     name: renovate config validator
+    # Not on push: the merge-to-master run moved to a daily schedule in
+    # renovate-config-canary.yml on 2026-09-10 (#1269). This job is the required merge context,
+    # so it stays on every PR and self-scopes below; merge_group is treated like a PR whose
+    # scope step found nothing to diff, the same as every other job here.
+    if: github.event_name != 'push'
     runs-on: ubuntu-latest
-    timeout-minutes: 20  # cap a wedged `npx renovate-config-validator` network fetch
+    timeout-minutes: 20  # six install attempts at 60s, plus a wedged fetch
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -393,7 +398,7 @@ jobs:
         with:
           node-version: "24"
 
-      # `npx --yes --package renovate` re-downloads Renovate on every run — 33-39s, and with
+      # The script's `npm install renovate@latest` re-downloads Renovate on every run — 33-39s, and with
       # ansible-lint scoped to changed files this job is the longest in the workflow on a PR that
       # touches renovate.json. Skip it on PRs that do not touch the file it validates.
       # renovate.json moved in 26 of the last 1600 commits (~1.6%), so this is a fast green for
@@ -433,10 +438,11 @@ jobs:
       # the same hosted Mend app version that actually consumes the config, which is why it is
       # deliberately unpinned and why neither caching variant above was taken.
       #
-      # Runs unconditionally on push to master, so the config still meets a freshly-resolved
-      # Renovate on every merge. That is what preserves the canary this job provides beyond
-      # validating edits: a config that Renovate itself stops accepting is caught within one
-      # merge, rather than only whenever renovate.json is next touched.
+      # The canary beyond validating edits — a config that Renovate itself stops accepting —
+      # is renovate-config-canary.yml, daily. It ran here on every push to master until
+      # 2026-09-10; the per-merge unpinned fetch failed on its own for minutes after each of
+      # Renovate's ~8 daily npm publishes (#1269). The script retries that install; the
+      # validation itself runs once, so a real config error is still final.
       - name: Validate renovate.json
         if: github.event_name != 'pull_request' || steps.scope.outputs.changed == 'true'
-        run: npx --yes --package renovate renovate-config-validator --strict renovate.json
+        run: scripts/validate/renovate_config.sh renovate.json
