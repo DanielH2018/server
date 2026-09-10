@@ -31,3 +31,5 @@
 # version	image	digest	note
 2.37.10	n8nio/n8n	sha256:307d6065be25619aa24cfc63a7c2f04ca56d084a08c05c8e9f189a89f353b1ec	first entry; the pin in place when this ledger was added (2026-09-10)
 2.37.10	n8nio/runners	sha256:63bda67eac04e5a2a42683730e0d43deed7e463a92f5bfca2090d0189a909c42	first entry; the pin in place when this ledger was added (2026-09-10)
+2.38.5	n8nio/n8n	sha256:f98bb7c2e0818412e414d456ab31ef48be2dc5ce5d1e6fae7ae171fbb6923093	stable promoted 2.38.5 on 2026-09-09; resolved from the image version label (PR #1530)
+2.38.5	n8nio/runners	sha256:427170bc670beff179e3bf20ddf4c5210a6cbb623f01bb7bc17fbcd425d34067	stable promoted 2.38.5 on 2026-09-09; resolved from the image version label (PR #1530)
