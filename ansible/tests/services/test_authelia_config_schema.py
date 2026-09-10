@@ -17,16 +17,26 @@ container runtime. The schema is vendored under `scripts/validate/schemas/authel
 same reason the CRD schemas are: a hook that resolves DNS fails when DNS is down, and this repo
 IS the DNS. Refresh it with `uv run python scripts/validate/refresh_crd_schemas.py`.
 
-ONLY UNKNOWN KEYS ARE ASSERTED, not values, and that narrowing is deliberate rather than
-timidity. Measured against the real render on 2026-09-10, whole-document validation reports five
-errors and not one is a defect this guard should fail on: four are the `STUB` stand-ins the test
-render substitutes for SOPS secrets (an OIDC client secret and a JWKS key are checked against
-hash and PEM patterns), and the fifth is `notifier.smtp.sender`, which the schema's own `oneOf`
-matches under both branches. A sixth, `authentication_backend.file.password.algorithm:
-argon2id`, is a value the running 4.39.21 binary accepts and this schema's enum does not — the
-schema is stricter than the parser on values, which is exactly the direction that would make a
-value-level gate fail on a working config. Unknown keys have no such gap: the key set is what
-Authelia rejects on, and it is what this file reads.
+UNKNOWN KEYS ARE ASSERTED ACROSS THE WHOLE DOCUMENT, values only under
+`authentication_backend.file.password`, and that narrowing is deliberate rather than timidity.
+Measured against the real render on 2026-09-10, whole-document validation reports five errors
+and not one is a defect this guard should fail on: four are the `STUB` stand-ins the test render
+substitutes for SOPS secrets (an OIDC client secret and a JWKS key are checked against hash and
+PEM patterns), and the fifth is `notifier.smtp.sender`, which the schema's own `oneOf` matches
+under both branches. The schema is stricter than the parser on values, which is the direction
+that makes a blanket value-level gate fail on a working config.
+
+The password block is the one place that strictness is the point, so it gets a value check of
+its own (#1621). It rendered `algorithm: argon2id` with the parameters as flat siblings until
+that issue — a LEGACY spelling the 4.39.21 parser accepts and this schema's enum does not. The
+parser does not ignore it: `validateFileAuthenticationBackendPasswordConfigLegacy` in
+`internal/configuration/validator/authentication.go` maps the alias to `argon2` + the default
+variant and carries the flat parameters across IN LEGACY UNITS, multiplying `memory` by 1024. So
+`memory: 65536` became 64 GiB of effective argon2 memory, passing validation silently because
+`MemoryMax` is `math.MaxUint32`. Logins never noticed, because verification decodes the stored
+`$argon2id$` PHC string and reads the algorithm off that prefix (`crypt.Decode` at
+`internal/authentication/file_user_provider_database.go:517`) — the configured parameters only
+mint NEW digests. Exactly the class of defect a green deploy and a healthy pod cannot show.
 """
 
 import copy
@@ -132,6 +142,74 @@ def test_an_unknown_top_level_key_is_flagged(rendered_config, validator):
     bad = copy.deepcopy(rendered_config)
     bad["not_a_real_authelia_section"] = {}
     assert unknown_config_keys(bad, validator)
+
+
+# --- the password block, where values are asserted too ------------------------------
+
+PASSWORD_PATH = ("authentication_backend", "file", "password")
+
+
+def rejected_password_values(document, validator):
+    """The schema's complaints about values under `authentication_backend.file.password`.
+
+    Empty when the block is spelled the canonical 4.39 way. A legacy spelling the parser
+    silently reinterprets — `argon2id` with flat parameters, where `memory` is multiplied by
+    1024 — is reported here and nowhere else in a deploy (#1621).
+    """
+    found = []
+    for error in validator.iter_errors(document):
+        for sub in _walk(error):
+            path = tuple(str(p) for p in sub.absolute_path)
+            if path[: len(PASSWORD_PATH)] == PASSWORD_PATH:
+                found.append(("/".join(path), sub.message))
+    return found
+
+
+def test_the_canonical_password_block_is_clean(rendered_config, validator):
+    assert rejected_password_values(rendered_config, validator) == []
+
+
+def test_the_legacy_argon2id_spelling_is_flagged(rendered_config, validator):
+    """The literal value from #1621, which the parser aliases and reinterprets."""
+    bad = copy.deepcopy(rendered_config)
+    bad["authentication_backend"]["file"]["password"]["algorithm"] = "argon2id"
+    paths = [path for path, _msg in rejected_password_values(bad, validator)]
+    assert "authentication_backend/file/password/algorithm" in paths, (
+        f"the legacy argon2id spelling must be reported; got {paths!r}. Unreported, the flat "
+        f"sibling parameters are carried across in legacy units and nothing says so"
+    )
+
+
+def test_the_flat_legacy_parameters_are_flagged(rendered_config, validator):
+    """The other half of the legacy form: the parameters as siblings of `algorithm`.
+
+    The schema declares these as deprecated-but-known KEYS, so the unknown-key check above
+    cannot see them. What it does reject is their type — `null` here stands for any value the
+    canonical nesting would have carried — which is enough to keep the flat form out.
+    """
+    bad = copy.deepcopy(rendered_config)
+    bad["authentication_backend"]["file"]["password"]["memory"] = None
+    assert rejected_password_values(bad, validator), (
+        "a flat legacy parameter beside `algorithm` must be reported; unreported, `memory` is "
+        "read as mebibytes and multiplied by 1024"
+    )
+
+
+def test_the_schema_constrains_the_algorithm_to_an_enum(schema):
+    """Non-vacuity: without the enum, the two checks above validate against nothing.
+
+    Named members rather than a count, so a restructured `$defs` names what went missing.
+    """
+    password = schema["$defs"]["AuthenticationBackendFilePassword"]
+    enum = set(password["properties"]["algorithm"].get("enum") or ())
+    assert {"argon2", "bcrypt", "pbkdf2", "scrypt", "sha2crypt"} <= enum, (
+        f"the schema no longer constrains password.algorithm to the canonical set; got "
+        f"{sorted(enum)!r}. The legacy-spelling checks above would pass on any value"
+    )
+    assert "argon2id" not in enum, (
+        "the schema now accepts the legacy argon2id spelling, so the check that keeps it out "
+        "of the rendered config passes vacuously"
+    )
 
 
 # --- the schema is capable of saying no ---------------------------------------------
