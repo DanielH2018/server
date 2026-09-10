@@ -177,7 +177,6 @@ def test_every_plugin_installer_is_still_present():
         "install-webhook",
         "install-merge-versions",
         "install-media-cleaner",
-        "install-sso-auth",
     }, (
         f"jellyfin's plugin installers are {sorted(installers)}. Each one pins the image "
         f"through its targetAbi and each is guarded by its own test file — add or rename one "

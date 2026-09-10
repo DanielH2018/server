@@ -41,7 +41,7 @@ LEADING_VERSION = re.compile(r"^(\d+(?:\.\d+)*)")
 # asset's filename, and `test_anisync_pin_matches_server.py` owns that shape. It is read here
 # from the URL so the `max` below is over EVERY plugin rather than only those with a var.
 REQUIRED_PLUGINS = frozenset(
-    {"introskipper", "webhook", "mergeversions", "mediacleaner", "sso"}
+    {"introskipper", "webhook", "mergeversions", "mediacleaner"}
 )
 
 
@@ -101,9 +101,10 @@ def test_the_census_still_finds_every_plugin_it_is_meant_to():
         "_target_abi var — the ABI leads the asset filename — so a URL shape change drops it "
         "from the max() below and the binding constraint would be computed over one plugin too few."
     )
-    assert len(found) >= 6, (
-        f"the targetAbi census found only {sorted(found)}. The role installs six plugins; a "
-        f"smaller set means the max() below is not the real floor."
+    assert len(found) >= 5, (
+        f"the targetAbi census found only {sorted(found)}. The role installs five plugins "
+        f"since SSO-Auth was removed (#1674); a smaller set means the max() below is not "
+        f"the real floor."
     )
 
 
