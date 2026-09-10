@@ -64,6 +64,31 @@ def test_a_failed_second_worktree_add_still_records_the_batch_already_launched(
     assert [b["batch"] for b in written["batches"]] == ["1"]
 
 
+def test_a_batch_whose_worktree_exists_is_refused_and_the_run_id_is_named(
+    tmp_path, capsys
+):
+    """The refusal is per batch, so batch 1 is already running — say so, and say where."""
+    tools, run = fake_tools(answers={"daniel-box": ok(HEADROOM)}, issues=CLAIMED)
+    run.answers_by_call = [
+        ok(HEADROOM),  # headroom read
+        ok(""),  # health read
+        ok(""),  # batch 1: launch
+        subprocess.CompletedProcess(
+            [], 1, stdout="", stderr="fanout-step: exists\n"
+        ),  # batch 2: its worktree or branch is still there from an earlier run
+    ]
+    assert (
+        _launch(tools, tmp_path, "--batch", "1", "--batch", "2", "--host", "daniel-box")
+        == 1
+    )
+    # Four calls, not five: an `exists` refusal runs no cleanup.
+    assert len(run.calls) == 4
+    err = capsys.readouterr().err
+    run_id = next(iter(tmp_path.glob("*.json"))).stem
+    assert "clean <run-id>" in err
+    assert f"launched before this failure: 1 (run {run_id})" in err
+
+
 def test_pinning_daniel_server_sends_every_call_there_and_none_to_daniel_box(tmp_path):
     tools, run = fake_tools(
         answers={"daniel-box": ok(HEADROOM), "daniel-server": ok(HEADROOM)},

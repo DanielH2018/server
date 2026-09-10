@@ -225,7 +225,15 @@ def cmd_launch(args, tools: Tools) -> int:
             )
         except launch_mod.LaunchError as exc:
             print(f"{batch} on {host}: {exc}", file=sys.stderr)
+            # The refusal is per batch, after placement, so earlier batches are already
+            # running. Name them and the run-id: the manifest is what `status` and `clean`
+            # read, and the `clean <run-id>` an `exists` refusal asks for needs the id.
             manifest_mod.save(run, root=args.manifest_root)
+            launched = ", ".join(b.batch for b in run.batches) or "none"
+            print(
+                f"launched before this failure: {launched} (run {run.run_id})",
+                file=sys.stderr,
+            )
             return 1
         print(f"{batch} -> {host} ({launch_mod.unit_name(batch)})")
     path = manifest_mod.save(run, root=args.manifest_root)
