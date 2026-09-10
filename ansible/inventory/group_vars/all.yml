@@ -122,9 +122,11 @@ k3s_cni0_gateways:
 #
 # Separate from k3s_cni0_gateways rather than merged into it: netpol-baseline reads that
 # variable for 16 workloads' NetworkPolicies, and admitting the overlay addresses to a route
-# must not silently widen those. A route whose callers include host processes on BOTH nodes
-# needs both lists; one whose caller is only ever on the node running traefik needs neither
-# addition.
+# must not silently widen those. A route with ANY host-process caller reads both lists: the
+# cni0 pair alone matches only while traefik happens to sit on the caller's node, and nothing
+# ties the traefik nodeSelector to a route's grants (#1697). loki-homelab's read route and the
+# three *arr `-monitoring` routes are the readers, and each is guarded by a test in
+# ansible/tests/k8s/.
 #
 # Verified per node with `ip -4 -o addr show flannel.1` (daniel-box: 10.42.0.0,
 # daniel-server: 10.42.1.0).
