@@ -26,8 +26,8 @@ from diagnostics.probe_lib import health, health_kubectl
 # running, exactly the PR #685 failure. Verified against the rendered manifests 2026-09-01.
 _ROLES_WITH_NO_WORKLOAD = {
     "configarr": "a CronJob and its Secret; the sync runs to completion, nothing stays up",
-    "longhorn-ui": "an IngressRoute, Middleware and TLSOption onto longhorn-system's own UI",
     "deploy-ui": "a selector-less Service, its EndpointSlice and an IngressRoute onto deploy-ui.service on daniel-box",
+    "longhorn-ui": "an IngressRoute, Middleware and TLSOption onto longhorn-system's own UI",
     "media-volume": "a StorageClass, PV, PVC and a one-shot Job — storage, not a workload",
     "n8n-images": "only Dockerfiles — it delegates to image-builder and owns no manifest",
     "netpol-baseline": "NetworkPolicies plus the Job that probes them",
