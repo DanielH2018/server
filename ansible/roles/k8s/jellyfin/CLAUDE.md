@@ -5,13 +5,16 @@ shared `media-data` library and owns its own config volume.
 
 ## At a glance
 - **Image:** `lscr.io/linuxserver/jellyfin` (`jellyfin_k8s_image`), pinned in lockstep with the
-  `targetAbi` of **all three** installed plugins — `jellyfin-ani-sync`, Intro Skipper and
-  Webhook. Raise a plugin and the image together, never one alone
+  `targetAbi` of **all four** installed plugins — `jellyfin-ani-sync`, Intro Skipper, Webhook
+  and Merge Versions. Raise a plugin and the image together, never one alone
   (`ansible/tests/services/test_anisync_pin_matches_server.py`,
-  `ansible/tests/services/test_introskipper_install.py` and
-  `ansible/tests/services/test_webhook_plugin_install.py` enforce this). Two more plugins are
-  loaded from the config PVC and are outside that lockstep — *Every plugin the pod actually
-  loads* below has the census.
+  `ansible/tests/services/test_introskipper_install.py`,
+  `ansible/tests/services/test_webhook_plugin_install.py` and
+  `ansible/tests/services/test_mergeversions_install.py` enforce this). **Each addition
+  TIGHTENS the pin**: the image cannot move to a new Jellyfin line until every one of the four
+  has a release for that ABI, so the constraint is the slowest plugin, not the newest. Two more
+  plugins are loaded from the config PVC and are outside that lockstep — *Every plugin the pod
+  actually loads* below has the census.
 - **Deploy tag:** `--tags "jellyfin"`. `use_authelia: false` — **no auth**, public route.
 - **Route:** `jellyfin.<domain>`.
 - **Persists:** `jellyfin-config` (`longhorn`, backed up, 8Gi) — the library database, artwork
@@ -44,18 +47,28 @@ shared `media-data` library and owns its own config volume.
   has moved to Jellyfin 12 — 22.0.0.0 declares `targetAbi` 12.0.0.0 — so **the newest Webhook
   is the wrong one** while the image is a 10.11 build, the same shape of trap as Intro
   Skipper's parallel tags. Its zip carries its own `meta.json`, so unlike Intro Skipper nothing
-  writes one. Its Renovate manager (added for #1557) is the odd one of the three: Webhook ships
+  writes one. Its Renovate manager (added for #1557) is the odd one of the four: Webhook ships
   from `repo.jellyfin.org` rather than a GitHub release, so the manager tracks the
   `jellyfin/jellyfin-plugin-webhook` tags (a bare major, `v21`) and carries the Jellyfin-line
   ceiling in `extractVersionTemplate` — raise that anchor only when the image moves to
   Jellyfin 12.
-- All three installers duplicate rather than share a loop, deliberately — each is pinned by
+- **Merge Versions** is the fourth, and it collapses the several files one movie can have —
+  1080p beside 2160p, a remux beside a web-dl — into a single library entry whose versions the
+  client offers in a picker. Third-party (`danieladov/jellyfin-plugin-mergeversions`) and absent
+  from the official `repo.jellyfin.org` manifest, so its `targetAbi`, guid and digest come from
+  the plugin's own published manifest (`danieladov/JellyfinPluginManifest`) and release asset.
+  Upstream tags the release LINE by Jellyfin version — `10.11.0.1` and `12.0.0` are the two live
+  lines — so **the newest release is the wrong one** on a 10.11 image, the same trap Intro
+  Skipper's parallel tags and Webhook's major bump record. Its zip carries the DLL alone, so
+  this install is **Intro Skipper's shape, not Webhook's**: the init container writes `meta.json`
+  from the guid, name and targetAbi. Which libraries it merges is dashboard state on the PVC.
+- All four installers duplicate rather than share a loop, deliberately — each is pinned by
   literal string assertions in its own test, and a textual guard stops seeing what it guards
   once the thing moves behind an indirection.
 
 ## Every plugin the pod actually loads
 
-The three installers above are not the whole set, so the lockstep rule at the top of this file
+The four installers above are not the whole set, so the lockstep rule at the top of this file
 covers only part of what runs. Read the live census from the pod's own log, which needs no API
 key:
 

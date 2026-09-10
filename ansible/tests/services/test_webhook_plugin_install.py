@@ -157,12 +157,12 @@ def test_the_guard_rejects_a_template_missing_the_step(what, victim):
         _assert_install_step(mutated, _defaults()["jellyfin_k8s_webhook_version"])
 
 
-def test_all_three_plugin_installers_are_still_present():
+def test_all_four_plugin_installers_are_still_present():
     """Non-vacuity, and the lockstep rule stated where a rename breaks it.
 
     The role's CLAUDE.md pins `jellyfin_k8s_image` against the targetAbi of every installed
     plugin. That rule is only checkable if the census of installers is known, and each of the
-    three is guarded by its own file — so a fourth added without a guard, or one renamed out
+    four is guarded by its own file — so a fifth added without a guard, or one renamed out
     from under its guard, is exactly what this asserts against.
     """
     template = DEPLOYMENT.read_text()
@@ -172,6 +172,7 @@ def test_all_three_plugin_installers_are_still_present():
         "install-ani-sync",
         "install-intro-skipper",
         "install-webhook",
+        "install-merge-versions",
     }, (
         f"jellyfin's plugin installers are {sorted(installers)}. Each one pins the image "
         f"through its targetAbi and each is guarded by its own test file — add or rename one "
