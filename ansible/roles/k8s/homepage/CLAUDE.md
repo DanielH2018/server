@@ -80,13 +80,20 @@ Edit the `.j2` files, never the live config: homepage seeds any missing file int
   `Services` to make that column four rows deep, and `Admin` and `Tools` merged into one group of
   eight, which still divides by four. Jellyfin was dropped rather than moved (its widget had been
   erroring since #1457).
-- **The calendar's height is DERIVED from the Services tile count, so the two Top Row columns end
-  level.** They are separate grids and nothing aligns them on its own; they are also not siblings
-  in one grid row, so `height: 100%` on the calendar's list does not match it to the Services
-  list — tried on the deployed page, the calendar column grew to 676px against Services' 360px.
-  `custom.css.j2` therefore pins `#my-calendar` to a `calc()` of four widget rows minus the two
-  link rows. Change the Services tile count and that pin is wrong: check with
-  `getBoundingClientRect().bottom` on the last tile of each column.
+- **The calendar column auto-sizes to the Services column, and the wrapper between them is
+  `display: block !important`.** The two Top Row columns are separate grids, so nothing aligns
+  them on its own, and a `calc()` pin on the calendar broke every time a tile title wrapped at a
+  narrower width. The wrapper homepage puts between a group and its list carries Tailwind's
+  `block!`, so it can never be a flex container and the list can never be a flex item — that is
+  why ten attempts at a flex or grid chain all failed. `custom.css.j2` instead makes the group a
+  flex column, lets the wrapper grow as a block, then gives the list `height: calc(100% - 0.75rem)`
+  with `align-content: space-between`, which pushes the link rows to the bottom at any width.
+- **The calendar's height cap belongs on its CARD, not on its `<li>`.** The card carries
+  `height: 100%`, which resolves against the `<li>`'s computed height — `auto` — so a `max-height`
+  on the `<li>` clamps only the `<li>` and leaves the card at content height. An `<li>` does not
+  clip, so the overflow paints over the first row of links; measured at 1280px, a 360px `<li>`
+  holding a 460px card. `document.elementFromPoint` cannot see this — the links' stretched anchors
+  win the hit test — so compare `card.getBoundingClientRect().bottom` against the `<li>`'s.
 - **An icon-only tile must stretch its name anchor, not hide it.** Homepage renders a tile's
   name inside its own `<a>` carrying the same href as the icon anchor. `display: none` on that
   anchor leaves only the 48x32 icon as a hit target inside a 165px tile — most of the tile looks

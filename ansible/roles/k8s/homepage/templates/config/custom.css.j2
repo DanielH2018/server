@@ -354,8 +354,9 @@ div.services-group:has(#my-calendar) ul.services-list {
   align-content: space-between;
 }
 
+/* The calendar `<li>` takes its own content height rather than stretching to the row, so the
+ * cap below is what decides the column's height. */
 #my-calendar {
-  max-height: 22.5rem;
   align-self: start;
 }
 
@@ -372,8 +373,21 @@ div.services-group:has(#my-calendar) ul.services-list {
   justify-content: center;
 }
 
+/* THE CAP GOES ON THE CARD, NOT ON THE `<li>`, and putting it on the `<li>` shipped a visible
+ * break. `#my-calendar > div.service-card` carries `height: 100%`, which resolves against the
+ * `<li>`'s COMPUTED height — `auto` — so the card takes its content height and the `max-height`
+ * clamps only the `<li>` afterwards. Measured on the deployed page 2026-09-10 at 1280px: a 360px
+ * `<li>` holding a 460px card, and since an `<li>` does not clip, 100px of calendar painted over
+ * the first row of links. Capping the card instead makes both 360px, and the card's own
+ * `overflow: clip` keeps its contents inside.
+ *
+ * `document.elementFromPoint` does NOT catch this: the links' stretched anchors sit later in the
+ * DOM and win the hit test, so every tile stayed clickable while the calendar was drawn on top of
+ * it. Compare `card.getBoundingClientRect().bottom` against the `<li>`'s.
+ */
 #my-calendar > div.service-card {
   height: 100%;
+  max-height: 22.5rem;
   display: flex;
   flex-direction: column;
 }
