@@ -197,6 +197,12 @@ def test_every_subject_this_guard_reads_is_still_there():
     for role, _, policy_name in SIDECAR_PODS:
         assert role in sidecars, f"{role} renders no `{SIDECAR}` container"
         assert policy_name in policies, f"no `{policy_name}` NetworkPolicy rendered"
+    # And EQUALITY the other way: `_rendered()` collects a `crowdsec-agent` from any
+    # Deployment, so a third sidecar added later would render unscraped with every test
+    # above still green. This is the one assertion that notices it.
+    assert set(sidecars) == {r for r, _, _ in SIDECAR_PODS}, (
+        f"a pod runs {SIDECAR} and this guard does not cover it: {sorted(sidecars)}"
+    )
 
 
 @pytest.mark.parametrize(("role", "job_name", "policy_name"), SIDECAR_PODS)
