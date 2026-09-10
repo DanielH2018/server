@@ -91,3 +91,14 @@ So exercise the thing you actually changed as well.
   and deploying another session's half-finished landing is not yours to do.
 - **`--detach` returning is not a verified deploy.** It backgrounds the rollout wait, which is
   most of the deploy.
+
+## The deploy queue page
+
+`deploy.local.<domain>` (Authelia two-factor) shows the four things "the queue" means here:
+landings in flight and who holds the tree lock, services whose release is behind master,
+the deployer's markers, and open PRs. Each button runs the command you would type: land
+runs `land.sh --pr <n> --since <sha>`, deploy runs `deploy.sh --tags <svc>`, cancel
+SIGTERMs a listed landing, clear hold removes `hold_sha` and `hold_plane` together against a
+SHA you type, and the staging override sets or clears its marker. Output goes to
+`~/.local/state/deploy-ui/` on daniel-box and one audit line per action reaches Loki under
+`deploy-ui`. The daemon is `roles/setup/deploy_ui`; the route is `roles/k8s/deploy-ui`.
