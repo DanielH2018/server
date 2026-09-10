@@ -55,6 +55,10 @@ PROM_DEPENDENT = frozenset(
         # longhorn scrape job dies, so it must be suppressed when PROMETHEUS itself is the
         # cause — otherwise a Prometheus outage pages twice for one root cause.
         "longhorn_volumes",
+        # Reads longhorn_snapshot_actual_size_bytes and longhorn_volume_capacity_bytes, the same
+        # `longhorn` job as longhorn_volumes above, and pages on a declared cap whose volume has
+        # no series — so a Prometheus outage must suppress it for the same reason.
+        "snapshot_headroom",
         # Reads node_filesystem_readonly (#1243). prom_vector RAISES on an unreachable
         # Prometheus (unlike the empty-vector-is-healthy case this check's own docstring
         # covers), and _evaluate turns that into a `down` — so without this entry a Prometheus

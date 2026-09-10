@@ -237,6 +237,21 @@ stringData:
   # an operator expanding a volume.
   monitor-bridge-pvc-fullness.json: |
     {"type": "push", "name": "k3s PVC Fullness", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_pvc_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
+  # The snapshot-space axis of the same layer: how close a capped Longhorn volume is to its
+  # spec.snapshotMaxSize (#1627). Snapshots live in the backend rather than in the claim's
+  # filesystem, so PVC Fullness above cannot see one filling; a reached cap makes Longhorn refuse
+  # new snapshots rather than prune, which fails every later deploy of that service (#1560).
+  # Email for the same reason as its two neighbours — the fix is an operator deleting snapshots or
+  # raising the cap.
+  #
+  # Declared behind the token, like the direct-pusher monitors further down: the check ships
+  # before the secret exists, so until `monitor_bridge_snapshot_headroom_push_token` is added this
+  # renders nothing and the bridge's own KUMA_PUSH_SNAPSHOT_HEADROOM renders empty. Adding the
+  # secret and redeploying uptime-kuma + monitor-bridge arms both halves at once.
+{% if monitor_bridge_snapshot_headroom_push_token | default('') %}
+  monitor-bridge-snapshot-headroom.json: |
+    {"type": "push", "name": "Longhorn Snapshot Headroom", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_snapshot_headroom_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
+{% endif %}
   # #1243: the CSI global mounts under var/lib/kubelet/plugins/ ext4 remounted read-only after a
   # journal abort, with every existing monitor silent for 50 minutes (Volume CRs stayed
   # `attached healthy` throughout). email attached for the same reason as its two siblings above:
