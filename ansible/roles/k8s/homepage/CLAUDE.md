@@ -50,10 +50,18 @@ Edit the `.j2` files, never the live config: homepage seeds any missing file int
   `custom.css.j2` now wraps those blocks two per row, which also equalises tile height — every
   widget carries two to four stats, so all of them occupy two stat rows.
 - **The groups split by WIDGET, not by topic.** A widgeted tile is several lines tall and a
-  link-only tile is one line, so a group holding both leaves ragged holes. `Services`,
-  `Calendar` and `Media` hold the widgeted tiles; `Admin` and `Tools` hold link-only ones, four
-  per row. There is no `Tracking` group: it held one tile (Crypto), which moved into the
-  `Calendar` column on 2026-09-09 to fill the 144px that sat dead under the calendar.
+  link-only tile is one line, so a group holding both leaves ragged holes. `Services` holds every
+  widgeted tile bar the calendar and Crypto; `Admin` and `Tools` hold the link-only ones, four
+  per row. There was a `Media` group until 2026-09-10 — its three surviving tiles moved into
+  `Services` to make that column four rows deep, and Jellyfin was dropped rather than moved (its
+  widget had been erroring since #1457).
+- **The calendar's height is DERIVED from the Services tile count, so the two Top Row columns end
+  level.** They are separate grids and nothing aligns them on its own; they are also not siblings
+  in one grid row, so `height: 100%` on the calendar's list does not match it to the Services
+  list — tried on the deployed page, the calendar column grew to 676px against Services' 360px.
+  `custom.css.j2` therefore pins `#my-calendar` to a `calc()` of four widget rows minus the two
+  link rows. Change the Services tile count and that pin is wrong: check with
+  `getBoundingClientRect().bottom` on the last tile of each column.
 - **An icon-only tile must stretch its name anchor, not hide it.** Homepage renders a tile's
   name inside its own `<a>` carrying the same href as the icon anchor. `display: none` on that
   anchor leaves only the 48x32 icon as a hit target inside a 165px tile — most of the tile looks
