@@ -157,13 +157,16 @@ def test_the_guard_rejects_a_template_missing_the_step(what, victim):
         _assert_install_step(mutated, _defaults()["jellyfin_k8s_webhook_version"])
 
 
-def test_all_five_plugin_installers_are_still_present():
+def test_every_plugin_installer_is_still_present():
     """Non-vacuity, and the lockstep rule stated where a rename breaks it.
 
     The role's CLAUDE.md pins `jellyfin_k8s_image` against the targetAbi of every installed
-    plugin. That rule is only checkable if the census of installers is known, and each of the
-    five is guarded by its own file — so a sixth added without a guard, or one renamed out
+    plugin. That rule is only checkable if the census of installers is known, and each one is
+    guarded by its own file — so a new installer added without a guard, or one renamed out
     from under its guard, is exactly what this asserts against.
+
+    NOT NAMED FOR A COUNT. It was `test_all_five_...` until Trakt and SSO-Auth landed (#1617,
+    #1648), and a test whose name carries a number lies from the next addition on.
     """
     template = DEPLOYMENT.read_text()
     installers = set(re.findall(r"- name: (install-[a-z-]+)", template))
@@ -174,6 +177,8 @@ def test_all_five_plugin_installers_are_still_present():
         "install-webhook",
         "install-merge-versions",
         "install-media-cleaner",
+        "install-trakt",
+        "install-sso-auth",
     }, (
         f"jellyfin's plugin installers are {sorted(installers)}. Each one pins the image "
         f"through its targetAbi and each is guarded by its own test file — add or rename one "
