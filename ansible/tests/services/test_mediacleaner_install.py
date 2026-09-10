@@ -57,17 +57,12 @@ def _padded(left: tuple[int, ...], right: tuple[int, ...]) -> tuple[tuple, tuple
     return left + (0,) * (width - len(left)), right + (0,) * (width - len(right))
 
 
-def test_the_release_tag_in_the_url_carries_the_plugin_release():
-    """A bump that misses the URL installs the OLD build under the NEW marker.
+def _assert_release_tag(defaults: dict) -> None:
+    """The URL's release tag must name the version's first three segments.
 
-    The install marker is the directory name, which carries
-    `jellyfin_k8s_mediacleaner_version` — so the two drifting apart latches a build that was
-    never downloaded, and nothing reconciles it because the installer's own guard is satisfied.
-
-    Only the first three segments appear in the tag: the fourth is the ABI suffix, which upstream
-    never puts in a tag. The next test covers that half.
+    Factored out alongside `_assert_pin_agrees` so the mutation test runs this logic rather than
+    a second copy of it.
     """
-    defaults = _defaults()
     version = defaults["jellyfin_k8s_mediacleaner_version"]
     url = defaults["jellyfin_k8s_mediacleaner_url"]
     release = ".".join(version.split(".")[:3])
@@ -79,19 +74,26 @@ def test_the_release_tag_in_the_url_carries_the_plugin_release():
     )
 
 
-def test_the_version_suffix_decodes_to_the_target_abi():
-    """The guard this plugin exists to need, and the one no sibling pin has.
+def test_the_release_tag_in_the_url_carries_the_plugin_release():
+    """A bump that misses the URL installs the OLD build under the NEW marker.
 
-    One upstream release tag ships three per-ABI assets, published as three manifest versions
-    differing only in a fourth segment that encodes the targetAbi as
-    `<major><minor:02d><patch:02d>`. So three values have to agree — the version suffix, the
-    targetAbi var, and the ABI in the asset filename — and all three are hand-copied. A
-    disagreement is SILENT: the URL resolves, the install succeeds, and Jellyfin refuses to load
-    a plugin built for a server the image is not, without logging a failure.
+    The install marker is the directory name, which carries
+    `jellyfin_k8s_mediacleaner_version` — so the two drifting apart latches a build that was
+    never downloaded, and nothing reconciles it because the installer's own guard is satisfied.
 
-    Derived rather than compared against a literal, so the check survives the next release.
+    Only the first three segments appear in the tag: the fourth is the ABI suffix, which upstream
+    never puts in a tag. The next test covers that half.
     """
-    defaults = _defaults()
+    _assert_release_tag(_defaults())
+
+
+def _assert_pin_agrees(defaults: dict) -> None:
+    """The three ABI-bearing values must name one build.
+
+    Factored out so the MUTATION test below runs this exact logic rather than its own copy of the
+    formula. A mutation test carrying a second implementation passes while the real check is
+    broken — it proves the copy rejects the input, not the guard.
+    """
     version = defaults["jellyfin_k8s_mediacleaner_version"]
     target_abi = defaults["jellyfin_k8s_mediacleaner_target_abi"]
     url = defaults["jellyfin_k8s_mediacleaner_url"]
@@ -123,6 +125,21 @@ def test_the_version_suffix_decodes_to_the_target_abi():
         f"The three per-ABI assets on one release tag are indistinguishable once downloaded, so "
         f"the wrong one installs cleanly and never loads."
     )
+
+
+def test_the_version_suffix_decodes_to_the_target_abi():
+    """The guard this plugin exists to need, and the one no sibling pin has.
+
+    One upstream release tag ships three per-ABI assets, published as three manifest versions
+    differing only in a fourth segment that encodes the targetAbi as
+    `<major><minor:02d><patch:02d>`. So three values have to agree — the version suffix, the
+    targetAbi var, and the ABI in the asset filename — and all three are hand-copied. A
+    disagreement is SILENT: the URL resolves, the install succeeds, and Jellyfin refuses to load
+    a plugin built for a server the image is not, without logging a failure.
+
+    Derived rather than compared against a literal, so the check survives the next release.
+    """
+    _assert_pin_agrees(_defaults())
 
 
 def test_the_digest_is_the_right_shape():
@@ -248,14 +265,15 @@ def test_the_guard_rejects_a_template_missing_the_step(what, victim):
         ),
     ],
 )
-def test_the_pin_guards_reject_a_mismatched_defaults_file(
-    what, before, after, tmp_path
-):
+def test_the_pin_guards_reject_a_mismatched_defaults_file(what, before, after):
     """The red half for the three-way ABI agreement, which is this pin's whole hazard.
 
     Each mutation is a value a careless bump really produces, and each leaves a defaults file
-    that installs cleanly and loads nothing. Run against a COPY, so the guards are observed
-    failing rather than only passing.
+    that installs cleanly and loads nothing.
+
+    It calls the REAL helpers — `_assert_pin_agrees` and `_assert_release_tag` — rather than
+    re-deriving the encoding. A mutation test with its own copy of the formula passes while the
+    formula under test is broken, because what it proves is that the copy rejects the input.
     """
     text = DEFAULTS.read_text()
     assert text.count(before) >= 1, (
@@ -263,22 +281,9 @@ def test_the_pin_guards_reject_a_mismatched_defaults_file(
     )
     mutated = yaml_fast.safe_load(text.replace(before, after))
 
-    version = mutated["jellyfin_k8s_mediacleaner_version"]
-    target_abi = mutated["jellyfin_k8s_mediacleaner_target_abi"]
-    url = mutated["jellyfin_k8s_mediacleaner_url"]
-    parts = version.split(".")
-    abi = _version_tuple(target_abi, "targetAbi")
-    release = ".".join(parts[:3])
-
-    agreed = (
-        parts[3] == f"{abi[0]}{abi[1]:02d}{abi[2]:02d}"
-        and f"MediaCleaner-{abi[0]}.{abi[1]}.{abi[2]}.zip" in url
-        and f"/download/v{release}/" in url
-    )
-    assert not agreed, (
-        f"{what} left the three ABI-bearing values still agreeing, so the real guards would "
-        f"pass on it — the mutation does not exercise what it claims to"
-    )
+    with pytest.raises(AssertionError):
+        _assert_release_tag(mutated)
+        _assert_pin_agrees(mutated)
 
 
 # ── Renovate coverage (the finding #1557 exists for) ─────────────────────────────────────────
