@@ -1,9 +1,9 @@
 """Read scripts/dev/fanout_place.py's run manifests for the SessionStart banner.
 
 Split out of session-health.py, which sits at its own 600-line cap
-(ansible/tests/_ratchet.py) with no headroom left. Mirrors how that file already reaches
-scripts/lib/deployer_park.py: a sys.path insert of this file's own parent directory, then
-a plain `from lib.<module> import ...`.
+(ansible/tests/_ratchet.py) with no headroom left. Package name is `hooklib`, not `lib`,
+so it never shares a namespace-package name with `scripts/lib` (see session-health.py's
+own import comment).
 """
 
 import json

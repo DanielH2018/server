@@ -39,12 +39,14 @@ import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# `remote_fanout_lines` lives in `.claude/hooks/lib/remote_fanout.py`, not inline here,
+# `remote_fanout_lines` lives in `.claude/hooks/hooklib/remote_fanout.py`, not inline here,
 # because this file sits at its own 600-line cap (ansible/tests/_ratchet.py) with no
-# headroom left. Same shape as the `lib.deployer_park` import below: a sys.path insert of
-# this file's own directory, then a plain `from lib.<mod> import`.
+# headroom left. Named `hooklib`, not `lib`, so it never shares a package name with
+# `scripts/lib` (imported below for `deployer_park`) -- two same-named namespace-package
+# roots merge silently today, and would break just as silently the day either one gains an
+# `__init__.py` or an import-order change shadows the other.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from lib.remote_fanout import remote_fanout_lines  # noqa: E402
+from hooklib.remote_fanout import remote_fanout_lines  # noqa: E402
 
 
 # The park decision itself lives in `scripts/lib/deployer_park.py`, because `deploy.sh` exit 4
