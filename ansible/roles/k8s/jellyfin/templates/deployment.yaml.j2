@@ -122,7 +122,7 @@ spec:
               # /config/data/plugins/.
               PLUGINS = Path("/config/data/plugins")
               # `<Name>_<Version>`, the layout Jellyfin's own installer writes and the one the
-              # sibling plugins on this volume use (`SSO Authentication_4.0.0.4`). Name and
+              # sibling plugins on this volume use (`SSO Authentication_<version>`). Name and
               # version are meta.json's, not ours to choose.
               PLUGIN_DIR = PLUGINS / ("Ani-Sync_" + VERSION)
 
@@ -228,7 +228,7 @@ spec:
               # sibling container's comment records, and the same answer.
               PLUGINS = Path("/config/data/plugins")
               # `<Name>_<Version>`, with the space Jellyfin's own installer writes: the
-              # neighbouring `SSO Authentication_4.0.0.4` on this volume has one too. "Intro
+              # neighbouring `SSO Authentication_<version>` on this volume has one too. "Intro
               # Skipper" is the name the published manifest declares.
               PLUGIN_DIR = PLUGINS / ("Intro Skipper_" + VERSION)
 
@@ -580,6 +580,199 @@ spec:
                       print("removing superseded " + stale.name)
                       shutil.rmtree(stale)
               print("installed media-cleaner " + VERSION)
+{{ hardened_security_context(non_root=true, run_as_user=puid, run_as_group=pgid) }}
+          volumeMounts:
+            - name: jellyfin-config
+              mountPath: /config
+{{ container_resources(cpu_limit='500m', mem_limit='128Mi', cpu_request='10m', mem_request='32Mi') }}
+          # ── Trakt (watch-history sync to trakt.tv) ──────────────────────────────────────────
+          # A sixth copy of the five containers above rather than a loop over a plugin list, for
+          # the reason their comments record: each install is pinned by literal string assertions
+          # in its own test, and a textual guard stops seeing what it guards once the thing moves
+          # behind an indirection.
+          #
+          # Webhook's shape — the zip carries its own meta.json beside Trakt.dll, so nothing here
+          # writes one and no guid is needed as an input.
+          #
+          # THE PLUGIN LANDS INERT. It syncs nothing until a trakt.tv OAuth device
+          # authorisation is completed in the dashboard, and that token is per-account state on
+          # this PVC — the repo owns the install, the account link is an operator step (#1664).
+          # defaults/main.yml carries the short form of the write-back analysis and the role's
+          # CLAUDE.md the long one; read it before enabling the import direction, which is the
+          # only path that can clear Jellyfin's own watch state.
+        - name: install-trakt
+          image: {{ jellyfin_k8s_plugin_init_image }}
+          command:
+            - python3
+            - -c
+            - |
+              import hashlib
+              import shutil
+              import tempfile
+              import urllib.request
+              import zipfile
+              from pathlib import Path
+
+              VERSION = "{{ jellyfin_k8s_trakt_version }}"
+              URL = "{{ jellyfin_k8s_trakt_url }}"
+              WANT_SHA256 = "{{ jellyfin_k8s_trakt_sha256 }}"
+              DLL = "Trakt.dll"
+              # /config/data/plugins, the only directory Jellyfin scans — the same trap all five
+              # sibling containers' comments record, and the same answer.
+              PLUGINS = Path("/config/data/plugins")
+              # `<Name>_<Version>`, with the name the zip's own meta.json declares (`"name":
+              # "Trakt"`) rather than one invented here. That is also what Jellyfin's own
+              # dashboard installer would write, so a later dashboard install of the same version
+              # is the same directory rather than a second copy of one plugin.
+              PLUGIN_DIR = PLUGINS / ("Trakt_" + VERSION)
+
+              if (PLUGIN_DIR / DLL).exists():
+                  print("trakt " + VERSION + " already installed")
+                  raise SystemExit(0)
+
+              print("installing trakt " + VERSION + " from " + URL)
+              PLUGINS.mkdir(parents=True, exist_ok=True)
+
+              with tempfile.TemporaryDirectory(dir=PLUGINS) as tmp:
+                  archive = Path(tmp) / "plugin.zip"
+                  with urllib.request.urlopen(URL, timeout=60) as response:
+                      with archive.open("wb") as handle:
+                          shutil.copyfileobj(response, handle)
+
+                  # sha256, not the MD5 the official manifest publishes: upstream also ships this
+                  # zip as a GitHub release asset, so the stronger digest can be re-derived from
+                  # the release itself, and a `.sha256` sidecar attests to it independently.
+                  got = hashlib.sha256(archive.read_bytes()).hexdigest()
+                  if got != WANT_SHA256:
+                      raise SystemExit("sha256 mismatch: got " + got + ", want " + WANT_SHA256)
+
+                  staged = Path(tmp) / "staged"
+                  with zipfile.ZipFile(archive) as bundle:
+                      bundle.extractall(staged)
+
+                  if not (staged / DLL).exists():
+                      found = sorted(path.name for path in staged.iterdir())
+                      raise SystemExit("archive has no " + DLL + ": " + repr(found))
+
+                  if PLUGIN_DIR.is_dir():
+                      shutil.rmtree(PLUGIN_DIR)
+                  shutil.move(staged, PLUGIN_DIR)
+
+              # The name carries the version, so a bump leaves the old directory behind and
+              # Jellyfin loads two copies of one plugin — here, two scrobblers posting the same
+              # playback to one Trakt account. Swept after the rename, so a failure above leaves
+              # the working version untouched. The OAuth token lives in
+              # /config/data/plugins/configurations/, outside every directory this sweeps.
+              for stale in sorted(PLUGINS.glob("Trakt_*")):
+                  if stale != PLUGIN_DIR:
+                      print("removing superseded " + stale.name)
+                      shutil.rmtree(stale)
+              print("installed trakt " + VERSION)
+{{ hardened_security_context(non_root=true, run_as_user=puid, run_as_group=pgid) }}
+          volumeMounts:
+            - name: jellyfin-config
+              mountPath: /config
+{{ container_resources(cpu_limit='500m', mem_limit='128Mi', cpu_request='10m', mem_request='32Mi') }}
+          # ── SSO-Auth (OIDC sign-in against Authelia) ────────────────────────────────────────
+          # The seventh and last, and the one that closes the "unmanaged state on the PVC" group
+          # in this role's CLAUDE.md (#1648). Webhook's shape for the meta.json, Media Cleaner's
+          # for the dependency check: the zip carries its own manifest, and it ships two Duende
+          # DLLs the OIDC flow cannot complete without.
+          #
+          # THIS IS THE ONLY AUTHENTICATION LAYER IN FRONT OF A PUBLIC ROUTE beyond Jellyfin's
+          # own local accounts — the role runs `use_authelia: false`, and authelia carries a live
+          # `jellyfin` OIDC client (two_factor) pointed at this plugin's redirect path. Dropping
+          # it was the other option on #1648 and would have taken 2FA off that route.
+          #
+          # THE DIRECTORY NAME NEEDED ESTABLISHING. This plugin is the only one of the seven
+          # whose manifest name ("SSO Authentication") differs from the name it loads under
+          # ("SSO-Auth"), and the read-only ServiceAccount cannot exec into the pod
+          # to read what the dashboard install wrote. It did not have to: the ani-sync and
+          # intro-skipper containers above both cite `SSO Authentication_<version>` as the
+          # neighbouring directory they copied their own layout from, read off this volume when
+          # those installs were written. So the MANIFEST name is what the dashboard wrote, and
+          # PLUGIN_DIR uses it — which is also why the guard below no-ops on the copy already
+          # there rather than reinstalling on every pod start.
+          #
+          # The OIDC provider settings are NOT in git and cannot be: they live in
+          # /config/data/plugins/configurations/SSO-Auth.xml, keyed by the plugin's CLASS name
+          # and outside every plugin directory, so nothing here can lose them.
+        - name: install-sso-auth
+          image: {{ jellyfin_k8s_plugin_init_image }}
+          command:
+            - python3
+            - -c
+            - |
+              import hashlib
+              import shutil
+              import tempfile
+              import urllib.request
+              import zipfile
+              from pathlib import Path
+
+              VERSION = "{{ jellyfin_k8s_sso_version }}"
+              URL = "{{ jellyfin_k8s_sso_url }}"
+              WANT_SHA256 = "{{ jellyfin_k8s_sso_sha256 }}"
+              DLL = "SSO-Auth.dll"
+              # The release ships two Duende DLLs beside the plugin's own and the OIDC flow does
+              # not complete without them, so all three are checked rather than just the one
+              # Jellyfin matches on. Media Cleaner's MediaCleaner.Core.dll is the same case.
+              DEP_DLLS = ("Duende.IdentityModel.dll", "Duende.IdentityModel.OidcClient.dll")
+              # /config/data/plugins, the only directory Jellyfin scans — the same trap all six
+              # sibling containers' comments record, and the same answer.
+              PLUGINS = Path("/config/data/plugins")
+              # `<Name>_<Version>` with the MANIFEST name, which is what Jellyfin's own
+              # installer writes and what the two sibling containers above record seeing on this
+              # volume — see the comment above for why that is not the name the plugin loads
+              # under.
+              PLUGIN_DIR = PLUGINS / ("SSO Authentication_" + VERSION)
+
+              if (PLUGIN_DIR / DLL).exists():
+                  print("sso-auth " + VERSION + " already installed")
+                  raise SystemExit(0)
+
+              print("installing sso-auth " + VERSION + " from " + URL)
+              PLUGINS.mkdir(parents=True, exist_ok=True)
+
+              with tempfile.TemporaryDirectory(dir=PLUGINS) as tmp:
+                  archive = Path(tmp) / "plugin.zip"
+                  with urllib.request.urlopen(URL, timeout=60) as response:
+                      with archive.open("wb") as handle:
+                          shutil.copyfileobj(response, handle)
+
+                  # sha256 — GitHub's own asset digest, which upstream's `.sha256` sidecar
+                  # attests to independently. The published manifest carries only an MD5.
+                  got = hashlib.sha256(archive.read_bytes()).hexdigest()
+                  if got != WANT_SHA256:
+                      raise SystemExit("sha256 mismatch: got " + got + ", want " + WANT_SHA256)
+
+                  staged = Path(tmp) / "staged"
+                  with zipfile.ZipFile(archive) as bundle:
+                      bundle.extractall(staged)
+
+                  for needed in (DLL,) + DEP_DLLS:
+                      if not (staged / needed).exists():
+                          found = sorted(path.name for path in staged.iterdir())
+                          raise SystemExit(
+                              "archive has no " + needed + ": " + repr(found)
+                          )
+
+                  if PLUGIN_DIR.is_dir():
+                      shutil.rmtree(PLUGIN_DIR)
+                  shutil.move(staged, PLUGIN_DIR)
+
+              # The name carries the version, so a bump leaves the old directory behind and
+              # Jellyfin loads two copies of one plugin — here, two authentication providers
+              # registered for one route. Swept after the rename, so a failure above leaves the
+              # working version untouched. The glob is `SSO*_*` rather than the exact name for
+              # the one case the exact name would miss: a dashboard install that wrote the
+              # LOADED name instead of the manifest one. SSO-Auth.xml lives outside every
+              # directory this can match, so no OIDC setting is lost either way.
+              for stale in sorted(PLUGINS.glob("SSO*_*")):
+                  if stale != PLUGIN_DIR:
+                      print("removing superseded " + stale.name)
+                      shutil.rmtree(stale)
+              print("installed sso-auth " + VERSION)
 {{ hardened_security_context(non_root=true, run_as_user=puid, run_as_group=pgid) }}
           volumeMounts:
             - name: jellyfin-config
