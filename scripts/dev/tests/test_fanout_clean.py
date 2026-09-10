@@ -5,15 +5,18 @@ Run: uv run pytest scripts/dev/tests/test_fanout_clean.py
 
 import os
 import re
+import shutil
+import subprocess
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 from fanout_lib.clean import clean_one, remote_clean_command
-from fanout_lib.manifest import Batch, Manifest, save
+from fanout_lib.manifest import Batch, Manifest, path as manifest_path, save
 from fanout_lib.transport import Tools
 from fanout_place import cmd_clean_one, main
-from prune_worktrees import Worktree
+from prune_worktrees import Worktree, parse_worktree_list, remove
 from _fanout_fakes import fake_tools, ok
 
 B = Batch(
@@ -43,6 +46,44 @@ def _noop_unlocker(repo, path):
 
 def _noop_locker(repo, path, reason):
     pass
+
+
+def _git(repo: Path, *args: str, capture: bool = False) -> subprocess.CompletedProcess:
+    """Run git in `repo` with every inherited GIT_* variable removed.
+
+    Same identity-in-env approach as test_prune_worktrees.py's own `_git` helper: a bare
+    `git config user.email` resolves GIT_DIR before `-C`, which would write the test
+    identity into the real repository under a pre-commit hook rather than this scratch
+    one — `prek`'s own `pytest` hook runs with `GIT_DIR` set, and every read here needs the
+    same scrubbing as every write, or `git -C <repo>` silently reads the real checkout
+    instead (confirmed: `prek run --all-files` failed both missing-directory tests below on
+    exactly this before the reads were routed through here too).
+    """
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    env["GIT_AUTHOR_NAME"] = env["GIT_COMMITTER_NAME"] = "t"
+    env["GIT_AUTHOR_EMAIL"] = env["GIT_COMMITTER_EMAIL"] = "t@example.invalid"
+    return subprocess.run(
+        ["git", *args],
+        cwd=repo,
+        env=env,
+        check=True,
+        capture_output=capture,
+        text=capture,
+    )
+
+
+def _init_scratch_repo(path: Path) -> None:
+    path.mkdir(parents=True, exist_ok=True)
+    _git(path, "init", "-q", "--initial-branch=master")
+    _git(path, "commit", "-q", "-m", "init", "--allow-empty", "--no-gpg-sign")
+
+
+def _worktree_list(repo: Path) -> str:
+    return _git(repo, "worktree", "list", "--porcelain", capture=True).stdout
+
+
+def _branches(repo: Path) -> str:
+    return _git(repo, "branch", "--list", capture=True).stdout
 
 
 def test_a_merged_clean_tree_is_removed():
@@ -145,6 +186,61 @@ def test_the_lock_is_released_only_for_a_tree_about_to_be_removed():
     assert calls == [("unlock", tree.path), ("lock", tree.path, "fanout-b")]
 
 
+def _scrub_git_env(monkeypatch) -> None:
+    """Strip every inherited `GIT_*` var for the rest of this test's process.
+
+    `remove()` and `clean_one`'s own `git branch -D` call take no environment argument, so
+    this is the only way to keep their subprocess calls off the real repository: under
+    `prek`'s own `pytest` hook, `GIT_DIR` is set in the environment, and `-C <scratch repo>`
+    does not override an inherited `GIT_DIR`. Same approach as
+    test_prune_worktrees.py's own `test_remove_actually_deletes_a_locked_worktree_on_disk`.
+    """
+    for var in [name for name in os.environ if name.startswith("GIT_")]:
+        monkeypatch.delenv(var, raising=False)
+
+
+def test_a_missing_worktree_directory_is_deregistered_and_its_merged_branch_dropped(
+    tmp_path, monkeypatch
+):
+    """Re-review item 1: a worktree `rm -rf`'d by hand rather than through the normal
+    removal path stays registered (`prunable`, per git's own porcelain label). `clean_one`
+    must deregister it instead of crashing in the real `is_dirty` on a cwd that no longer
+    exists — this passes no `dirty` override, so the real default proves that.
+    """
+    _scrub_git_env(monkeypatch)
+    repo = tmp_path / "repo"
+    _init_scratch_repo(repo)
+    wt = tmp_path / "wt"
+    _git(repo, "worktree", "add", "-q", "-b", "gone-branch", str(wt))
+    shutil.rmtree(wt)
+    porcelain = _worktree_list(repo)
+    assert "prunable" in porcelain  # the scenario this test exists to cover
+    tree = next(t for t in parse_worktree_list(porcelain) if t.path == str(wt))
+
+    state, why = clean_one(str(repo), tree, ask=lambda *a, **k: True, remover=remove)
+
+    assert state == "removed" and "already gone" in why
+    assert str(wt) not in _worktree_list(repo)
+    assert "gone-branch" not in _branches(repo)
+
+
+def test_a_missing_worktree_directory_keeps_its_unmerged_branch(tmp_path, monkeypatch):
+    _scrub_git_env(monkeypatch)
+    repo = tmp_path / "repo"
+    _init_scratch_repo(repo)
+    wt = tmp_path / "wt"
+    _git(repo, "worktree", "add", "-q", "-b", "gone-branch", str(wt))
+    shutil.rmtree(wt)
+    tree = next(
+        t for t in parse_worktree_list(_worktree_list(repo)) if t.path == str(wt)
+    )
+
+    state, why = clean_one(str(repo), tree, ask=lambda *a, **k: False, remover=remove)
+
+    assert state == "removed" and "already gone" in why
+    assert "gone-branch" in _branches(repo)
+
+
 def test_the_remote_command_resets_fetches_then_runs_the_worktrees_own_copy_of_the_script():
     cmd = remote_clean_command(B)
     assert cmd.startswith(
@@ -159,9 +255,10 @@ def test_the_remote_command_resets_fetches_then_runs_the_worktrees_own_copy_of_t
     )
 
 
-def _porcelain(*paths: str) -> str:
+def _porcelain(*paths: str, locked_reason: str | None = None) -> str:
+    lock_line = f"locked {locked_reason}\n" if locked_reason else ""
     return "".join(
-        f"worktree {p}\nHEAD abc\nbranch refs/heads/worktree-fanout-b\n\n"
+        f"worktree {p}\nHEAD abc\nbranch refs/heads/worktree-fanout-b\n{lock_line}\n"
         for p in paths
     )
 
@@ -212,7 +309,31 @@ def test_cmd_clean_one_matches_a_symlinked_path_spelling(tmp_path, capsys):
     out = capsys.readouterr().out
     assert "already gone" not in out
     assert "kept:" in out
-    assert os.path.realpath(link) == os.path.realpath(real)
+    assert Path(link).resolve() == Path(real).resolve()
+
+
+def test_cmd_clean_one_forwards_unlocker_and_locker_seams(tmp_path):
+    """Re-review item 4's caveat: without its own `unlocker`/`locker` seams, a
+    REMOVABLE-with-lock case run through `cmd_clean_one` (rather than through `clean_one`
+    directly) would shell a real worktree unlock against the primary checkout. `wt` is a
+    real directory here so `clean_one` takes its normal path, not the missing-tree one.
+    """
+    wt = tmp_path / "wt"
+    wt.mkdir()
+    calls = []
+    args = SimpleNamespace(worktree=str(wt))
+    code = cmd_clean_one(
+        args,
+        Tools(),
+        list_worktrees=lambda: _porcelain(str(wt), locked_reason="fanout-b"),
+        ask=lambda *a, **k: True,
+        dirty=lambda p: False,
+        remover=lambda r, t: (True, ""),
+        unlocker=lambda r, p: calls.append(("unlock", p)),
+        locker=lambda r, p, reason: calls.append(("lock", p, reason)),
+    )
+    assert code == 0
+    assert calls == [("unlock", str(wt))]
 
 
 def _manifest(tmp_path, batches):
@@ -230,7 +351,7 @@ def test_clean_deletes_the_manifest_once_every_batch_is_removed(tmp_path):
     )
     code = main(["clean", manifest.run_id, "--manifest-root", str(tmp_path)], tools)
     assert code == 0
-    assert not (tmp_path / f"{manifest.run_id}.json").exists()
+    assert not manifest_path(manifest.run_id, tmp_path).exists()
 
 
 def test_clean_deletes_the_manifest_when_one_batch_is_already_gone(tmp_path):
@@ -250,7 +371,7 @@ def test_clean_deletes_the_manifest_when_one_batch_is_already_gone(tmp_path):
     )
     code = main(["clean", manifest.run_id, "--manifest-root", str(tmp_path)], tools)
     assert code == 0
-    assert not (tmp_path / f"{manifest.run_id}.json").exists()
+    assert not manifest_path(manifest.run_id, tmp_path).exists()
 
 
 def test_clean_keeps_the_manifest_when_one_batch_is_not_removed(tmp_path, capsys):

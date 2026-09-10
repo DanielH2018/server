@@ -32,7 +32,6 @@ leaves a batch that isn't ready to go both locked and in the manifest.
 """
 
 import argparse
-import os
 import re
 import subprocess
 import sys
@@ -309,18 +308,24 @@ def cmd_clean_one(
     ask=None,
     dirty=None,
     remover=None,
+    unlocker=None,
+    locker=None,
 ) -> int:
     """Hidden: runs ON the host holding the worktree. `clean` calls it over Tools.run.
 
-    `list_worktrees`, `ask`, `dirty` and `remover` are seams — parameters rather than
-    patched module attributes, so a test can drive this without pinning a first-party
-    module name. Every default reaches the real thing.
+    `list_worktrees`, `ask`, `dirty`, `remover`, `unlocker` and `locker` are seams —
+    parameters rather than patched module attributes, so a test can drive this without
+    pinning a first-party module name. Every default reaches the real thing, and all five
+    of `clean_one`'s own seams are forwarded so a REMOVABLE-with-lock case run through this
+    entry point stays hermetic too.
 
     An absent worktree (already removed by an earlier `clean` run, or by hand) is the goal
     state, not a failure: it reads `removed`, not `kept`, so a re-run of `clean` after a
     partial first pass still sees every batch as removed and deletes the manifest.
     """
     from fanout_lib.clean import clean_one
+    from fanout_lib.clean import lock as default_locker
+    from fanout_lib.clean import unlock as default_unlocker
     from prune_worktrees import is_dirty, is_merged, parse_worktree_list, remove
 
     if list_worktrees is None:
@@ -333,14 +338,14 @@ def cmd_clean_one(
                 check=True,
             ).stdout
 
-    # realpath, not exact string: a worktree launched through one spelling of REPO (a
-    # symlink, say) is still the tree `git worktree list` names by its target.
-    target = os.path.realpath(args.worktree)
+    # Resolved paths, not exact string equality: a worktree launched through one spelling
+    # of REPO (a symlink, say) is still the tree `git worktree list` names by its target.
+    target = Path(args.worktree).resolve()
     tree = next(
         (
             t
             for t in parse_worktree_list(list_worktrees())
-            if os.path.realpath(t.path) == target
+            if Path(t.path).resolve() == target
         ),
         None,
     )
@@ -353,6 +358,8 @@ def cmd_clean_one(
         ask=ask if ask is not None else is_merged,
         dirty=dirty if dirty is not None else is_dirty,
         remover=remover if remover is not None else remove,
+        unlocker=unlocker if unlocker is not None else default_unlocker,
+        locker=locker if locker is not None else default_locker,
     )
     print(f"{state}: {args.worktree} {why}".rstrip())
     return 0

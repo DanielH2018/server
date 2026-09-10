@@ -62,6 +62,12 @@ def clean_one(
     `remover` then fails. Every KEEP verdict leaves the lock exactly as it found it — a batch
     that is still running or still unmerged is never unlocked at all.
 
+    A directory `rm -rf`'d by hand rather than through the normal removal path stays
+    registered (`prunable`, per `git worktree list --porcelain`'s own label) with nothing
+    left to read — `dirty(tree.path)` raises `FileNotFoundError` trying to run git in a cwd
+    that no longer exists — so that specific failure hands the tree to
+    `_clean_missing_tree` instead of propagating.
+
     Args:
         repo: the checkout `tree` is registered under.
         tree: the worktree to evaluate, as read from `git worktree list --porcelain`.
@@ -76,7 +82,11 @@ def clean_one(
     """
     unlocked = dataclasses.replace(tree, locked=False, lock_reason="")
     merged = ask(repo, tree.head, tree.branch or "")
-    verdict, reason = classify(unlocked, merged=merged, dirty=dirty(tree.path))
+    try:
+        tree_is_dirty = dirty(tree.path)
+    except FileNotFoundError:
+        return _clean_missing_tree(repo, tree, merged, remover)
+    verdict, reason = classify(unlocked, merged=merged, dirty=tree_is_dirty)
     if verdict != REMOVABLE:
         return "kept", reason
     if tree.locked:
@@ -87,6 +97,29 @@ def clean_one(
     if tree.locked:
         locker(repo, tree.path, tree.lock_reason)
     return "kept", err
+
+
+def _clean_missing_tree(
+    repo: str, tree: Worktree, merged: bool, remover
+) -> tuple[str, str]:
+    """Deregister a worktree whose directory is already gone from disk.
+
+    There is nothing left there to protect — clean or dirty, locked or not — so this prunes
+    the stale registration unconditionally through the same `remover` seam (confirmed
+    empirically: `git worktree remove` accepts a path whose directory no longer exists,
+    without needing `--force`). The branch is a separate question: it may still hold commits
+    this worktree never landed, so it is dropped only when `merged` says it already landed.
+    """
+    ok, err = remover(repo, tree)
+    if not ok:
+        return "kept", err
+    if tree.branch and merged:
+        subprocess.run(
+            ["git", "-C", repo, "branch", "-D", tree.branch],
+            capture_output=True,
+            check=False,
+        )
+    return "removed", "(already gone)"
 
 
 def remote_clean_command(b: Batch) -> str:
