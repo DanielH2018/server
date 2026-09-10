@@ -92,7 +92,12 @@ Edit the `.j2` files, never the live config: homepage seeds any missing file int
   six tracks and five gaps are three Services rows (3r + 2g) and two tracks plus a gap are one
   (2t + g = r). Nothing is a pixel constant, so it holds for wrapped titles and every width. A
   Services group that renders a different row count needs 2x that many tracks and a matching
-  `span`.
+  `span`. `Top Row` is ITSELF a `div.services-group` wrapping the two column groups, so a
+  `:has(#my-calendar)` selector matches the outer group too and reaches the Services list —
+  which shipped Services eight 112px tracks and a 980px column on 2026-09-10. The selectors are
+  scoped with `:has(> div > ul > #my-calendar)` and `:has(> #my-calendar)` for that reason, and
+  `#my-calendar` carries `contain: size` so its natural height cannot outgrow the Services
+  column and set the row height.
 - **The calendar `<li>` must be sized by its grid tracks, never left at `auto`.** The card
   carries `height: 100%`, which resolves only against a definite `<li>` height. A stretched grid
   item is definite; an `align-self: start` one computes to `auto`, so the card took its content
