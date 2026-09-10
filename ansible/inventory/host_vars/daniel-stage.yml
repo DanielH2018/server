@@ -330,3 +330,17 @@ traefik_k8s_manage_livesync_gate: false
 # value onto the guest today, but loading secrets.yml would put every one of
 # them in the play's variable scope on a host meant to be broken.
 secrets_file: secrets-staging.yml
+
+# The redis session provider, rehearsed here on a credential that guards nothing of value.
+#
+# Staging cannot hold the real key: secrets-staging.yml is encrypted to daniel-stage's own age
+# recipient, so this host cannot mint one into it. The alternative was gating the branch off,
+# which would leave the provider block with no rehearsal anywhere — and it fails in the shape
+# staging exists to catch, because Authelia writes a startup probe to the session backend and
+# EXITS when it cannot, under Recreate, on the SSO gate.
+#
+# What a literal proves here is the half that bites: the block parses, `session.redis` nests
+# correctly, and the pod reaches Ready against a real redis. The value guards a redis that holds
+# staging's own sessions and is reachable only from inside that cluster's namespace, which is
+# why a plaintext literal is acceptable in the way the SMTP one above is.
+authelia_redis_password: "staging-fake-not-a-credential"

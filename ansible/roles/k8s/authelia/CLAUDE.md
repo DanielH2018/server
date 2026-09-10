@@ -59,6 +59,57 @@ authenticator, so it stays an operator task; the headless UI tier is unaffected,
 `ui_login.py` posts to the first-factor API and drives TOTP as `claude-ui` rather than touching
 the portal's login page.
 
+## Sessions live in redis
+
+`session.redis` in `templates/config-secret.yaml.j2` points at the `authelia-redis` Deployment
+this role also deploys. Without that block Authelia's provider is **in-memory** — 4.39.21's own
+`config.template.yml` says "Memory is the provider unless redis is defined" — so every roll of
+the portal destroyed every session, including remember-me ones. `remember_me: '1M'` sets the
+cookie's lifetime and overrides the inactivity timer; it does not change where the session is
+stored. Three rolls in one day on 2026-09-10 is what surfaced it.
+
+**A roll is cheap here, which is why this matters.** The central rollout-restart fires whenever
+this role's rendered manifests change, and with several worktrees editing this role at once
+that is several times a day. `authelia-redis` is deliberately **not** in
+`manifests_extra_rollouts`: putting it there would roll the session store on that same cadence
+and hand back the original bug. `ansible/tests/services/test_authelia_redis_sessions.py` pins
+that, the redis provider block, and the 6379 agreement between the containerPort, the Service
+and the NetworkPolicy.
+
+**`authelia_secret` is load-bearing now.** The pinned template says it "is only used with Redis
+/ Redis Sentinel", so until the redis block existed it encrypted nothing.
+
+**The store is an emptyDir and persists nothing.** Sessions are a cache with a one-month
+ceiling, and redis runs with `save ''` and `appendonly no`, so a node reboot, an eviction or a
+Renovate bump of `authelia_k8s_redis_image` still logs everyone out. A roll of this role no
+longer does, which is the whole point. A Longhorn volume here would be a backed-up disk holding
+live session credentials.
+
+**Rotating `authelia_redis_password` needs redis rolled by hand.** `templates/redis-secret.yaml.j2`
+is a secret manifest, so changing it fires the rollout-restart against the *authelia*
+Deployment. Redis keeps the old password in its running process and authentication then fails
+until it is rolled:
+
+```
+kubectl -n homelab rollout restart deploy/authelia-redis
+```
+
+**The rollback lever is `authelia_k8s_redis_sessions: false` plus a redeploy.** Authelia goes
+back to memory sessions; the redis Deployment and Service stay applied but unused, because
+`kubectl apply` does not prune. Flipping it either way logs everyone out once.
+
+**A first deploy crashloops the portal briefly.** If redis is unreachable at boot Authelia
+retries the session backend 19 times at 500ms and then exits (`internal/session/provider.go`,
+`StartupCheck`). A deploy that creates redis and rolls authelia in the same apply loses that
+race for as long as the redis image takes to pull, then settles on its own. It bites on a first
+deploy and not on a restart, where the image is already on the node.
+
+**Verify by surviving a restart, not by a health gate.** `probe.py health authelia` and an
+Authelia 302 both read green on the in-memory version — the redirect fires in the forward-auth
+middleware before the backend is reached. Log in with remember-me ticked, `kubectl -n homelab
+rollout restart deploy/authelia`, wait for Ready, then reload a protected route. Still
+authenticated is the pass.
+
 ## Traps
 
 ### The one-time code arrives by email, and the startup check is off on purpose
