@@ -232,6 +232,36 @@ data:
       # PG2: the cluster homelab Loki's own internals (loki_*) — nothing scraped it before
       # this job, despite slice-7-phase-d-loki.md assuming otherwise. Keeps the
       # Logs/loki-internals board alive past the Docker loki's retirement.
+      # GPU utilization on each node, through gpu-exporter (roles/k8s/gpu-exporter). The
+      # dri-device-plugin advertises the render node as `devic.es/dri` and jellyfin and tdarr
+      # both request it, but nothing turned the resulting load into a series — a slow transcode
+      # and a contended one were indistinguishable (#1446).
+      #
+      # Per-pod discovery, NOT a Service, and that is the point: this is a DaemonSet in front of
+      # two DIFFERENT GPUs (daniel-box AMD/amdgpu, daniel-server Intel/i915), so a ClusterIP
+      # would round-robin the scrape and produce one series flipping between two cards.
+      # `origin` carries the node name, matching the `node` job above.
+      #
+      # THE UTILIZATION SERIES DIFFERS BY DRIVER, because the drivers do. amdgpu gives a direct
+      # `homelab_gpu_busy_percent` gauge; i915 exposes no busy percentage without the perf PMU,
+      # so it gives `homelab_gpu_rc6_residency_seconds_total`, an idle counter whose complement
+      # is the busy fraction — a panel covering both nodes reads
+      # `homelab_gpu_busy_percent / 100` OR `1 - rate(homelab_gpu_rc6_residency_seconds_total[5m])`.
+      - job_name: gpu
+        scrape_interval: 1m
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            action: keep
+            regex: gpu-exporter
+          - source_labels: [__meta_kubernetes_pod_container_port_number]
+            action: keep
+            regex: "9101"
+          - source_labels: [__meta_kubernetes_pod_node_name]
+            target_label: origin
+          - source_labels: [__meta_kubernetes_pod_node_name]
+            target_label: instance
       - job_name: loki-homelab
         scrape_interval: 1m
         static_configs:

@@ -359,6 +359,12 @@ containers_list:
     port: 80
     depends_on: [pihole]
 
+  # GPU utilization per node, from DRM sysfs. A DaemonSet with no Service and no IngressRoute —
+  # Prometheus discovers its pods individually — so no ordering edge derives from its templates
+  # and none is needed: it reads the kernel, not another workload.
+  - name: gpu-exporter
+    platform: k8s
+
   - name: ical-proxy
     platform: k8s
     hostname: "ical-proxy"

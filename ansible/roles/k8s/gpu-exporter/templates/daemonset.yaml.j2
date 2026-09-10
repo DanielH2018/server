@@ -1,0 +1,100 @@
+{% from 'container-resources.yml.j2' import container_resources with context %}
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
+---
+# GPU utilization per node, from the kernel's DRM sysfs (#1446).
+#
+# A DaemonSet and NOT a Deployment, because a GPU is a node property and the two nodes carry
+# DIFFERENT GPUs: daniel-box an AMD Phoenix3 on amdgpu, daniel-server an Intel Iris Xe on i915.
+# One replica behind a ClusterIP would report whichever node the scrape happened to land on —
+# a single series flipping between two GPUs, which plots perfectly and means nothing. Hence
+# also no Service: the `gpu` job in claude-otel's prometheus.yaml.j2 discovers these pods
+# individually and labels each with its node.
+#
+# UNPRIVILEGED, unlike the dri-device-plugin DaemonSet beside it. Everything read here is a
+# world-readable sysfs file (`-r--r--r--`, checked on both nodes on 2026-09-10), so the pod
+# needs only a read-only /sys and runs as nobody. `intel_gpu_top`, which #1446 proposed, would
+# have needed CAP_PERFMON for the i915 perf PMU — and would have covered only the Intel node.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: gpu-exporter
+  namespace: {{ k8s_namespace }}
+spec:
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app: gpu-exporter
+  template:
+    metadata:
+      labels:
+        app: gpu-exporter
+        # What admits Prometheus. The shared baseline policy already names the scraper, so
+        # this role adds no NetworkPolicy of its own — see netpol-baseline/templates/networkpolicy.yaml.j2.
+        netpol-baseline: enforced
+    spec:
+      enableServiceLinks: false
+      automountServiceAccountToken: false
+      # NOT hostNetwork, unlike node-exporter. Nothing here reads a network namespace, and a
+      # pod IP keeps the 9101 listener off the nodes' LAN interfaces entirely — so no ufw
+      # allow is needed, which is the step node-exporter's 9100 was down for from day one for
+      # want of.
+      priorityClassName: homelab-best-effort
+      containers:
+        - name: gpu-exporter
+          image: {{ gpu_exporter_k8s_image }}
+          command:
+            - python
+            - /opt/gpu-exporter/gpu_exporter.py
+            - --port
+            - "{{ gpu_exporter_k8s_port }}"
+            - --sysfs-root
+            - /host/sys
+          env:
+            - name: TZ
+              value: "{{ tz }}"
+            # readOnlyRootFilesystem below leaves nowhere to write a .pyc, and the interpreter
+            # would retry the write on every import.
+            - name: PYTHONDONTWRITEBYTECODE
+              value: "1"
+          # 65534 (nobody), the uid node-exporter measures on both nodes. Every file the
+          # exporter opens is world-readable, so this is the whole access story — there is no
+          # group membership or capability behind it.
+{{ hardened_security_context(read_only=true, non_root=true, run_as_user=65534, run_as_group=65534) }}
+          ports:
+            - name: metrics
+              containerPort: {{ gpu_exporter_k8s_port }}
+          # tcpSocket, not httpGet on /metrics: a kubelet probe against a metrics route is the
+          # shape ansible/tests/k8s/test_probes_do_not_flood_metrics.py refuses below a 300s
+          # period, after node-exporter's probes produced 97% of this namespace's Loki ingest.
+          # Whether a GPU is present is `homelab_gpu_info`'s job to report, not a restart cause.
+          livenessProbe:
+            tcpSocket:
+              port: {{ gpu_exporter_k8s_port }}
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            failureThreshold: 3
+          readinessProbe:
+            tcpSocket:
+              port: {{ gpu_exporter_k8s_port }}
+            initialDelaySeconds: 3
+            periodSeconds: 10
+{{ container_resources(cpu_limit=gpu_exporter_k8s_cpu_limit, mem_limit=gpu_exporter_k8s_mem_limit, cpu_request=gpu_exporter_k8s_cpu_request, mem_request=gpu_exporter_k8s_mem_request) }}
+          volumeMounts:
+            - name: gpu-exporter-script
+              mountPath: /opt/gpu-exporter
+              readOnly: true
+            - name: gpu-exporter-host-sys
+              mountPath: /host/sys
+              readOnly: true
+      volumes:
+        - name: gpu-exporter-script
+          configMap:
+            name: gpu-exporter
+        # The whole of /sys rather than /sys/class/drm: the card directories are symlinks into
+        # /sys/devices, and the driver link this exporter branches on resolves further still,
+        # into /sys/bus/pci/drivers. A narrower mount leaves those links dangling, and a
+        # dangling driver link is exactly the case discover_cards() treats as "not a GPU".
+        - name: gpu-exporter-host-sys
+          hostPath:
+            path: /sys
+            type: Directory

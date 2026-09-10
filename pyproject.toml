@@ -48,6 +48,7 @@ testpaths = [                        # single source of truth for WHAT runs; exc
   "ansible/roles/k8s/terraria-stats/tests",       # player-stats aggregator logic (moved at the Phase F drain)
   "ansible/roles/k8s/valheim-stats/tests",        # the Valheim sibling: adds deaths + a steamid<->name map
   "ansible/roles/k8s/game-stats-lib/tests",       # shared Loki-tail/Prometheus skeleton both stats roles stage
+  "ansible/roles/k8s/gpu-exporter/tests",          # DRM sysfs read + the amdgpu/i915 driver split
   "ansible/roles/k8s/ical-proxy/tests",
   "ansible/roles/k8s/homelab-mcp/tests",
   "ansible/roles/k8s/artifacts/tests",             # artifact index/search server + path confinement
@@ -290,6 +291,7 @@ extra-paths = [
   "ansible/roles/setup/deploy_ui/files",
   "ansible/roles/k8s/monitor-bridge/files",
   "ansible/roles/k8s/game-stats-lib/files",
+  "ansible/roles/k8s/gpu-exporter/files",
   "ansible/roles/k8s/uptime-kuma/files",
   "scripts",
   "scripts/availability_bots",

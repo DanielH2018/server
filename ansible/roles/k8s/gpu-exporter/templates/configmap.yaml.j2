@@ -1,0 +1,17 @@
+---
+# The exporter's source, carried verbatim into the cluster.
+#
+# lookup('file'), not a template: gpu_exporter.py is Jinja-hostile — it renders Prometheus
+# label sets, so `{card="card1",driver="amdgpu"}` would be read as a Jinja expression.
+#
+# Rendering it here rather than staging it on the node (monitor-bridge's pattern) is what puts
+# it inside the manifests the shared rollout gate hashes, so an edit to the script rolls the
+# pods without this role needing its own `checksum/` pod annotation.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gpu-exporter
+  namespace: {{ k8s_namespace }}
+data:
+  gpu_exporter.py: |
+{{ lookup('file', playbook_dir + '/roles/k8s/gpu-exporter/files/gpu_exporter.py') | indent(4, true) }}

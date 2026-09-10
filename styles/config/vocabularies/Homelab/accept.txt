@@ -392,3 +392,7 @@ monkeypatch
 [Gg]itignored
 [Ss]ubcommand
 [Ss]ubcommands
+
+# GPU metrics from the kernel DRM interface (roles/k8s/gpu-exporter)
+sysfs
+amdgpu

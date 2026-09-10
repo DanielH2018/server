@@ -103,6 +103,32 @@ def test_speedtest_stale_run_pages_even_when_it_was_fast():
     assert "25.0h ago" in msg
 
 
+def test_speedtest_stale_message_names_both_causes_and_asserts_neither():
+    """The staleness arm must not diagnose, because it cannot.
+
+    It said "the 6-hourly schedule has stopped" until #1483. A failed Ookla run writes no row
+    at all — 25 consecutive rows read `completed` on 2026-09-10, ids 825-849 — so a stopped
+    scheduler and a failing run reach this function as the same absent row. Asserting either
+    one sends the operator down the wrong path half the time.
+
+    The discriminator is outside the API: the container logs one line per scheduled tick, so a
+    tick with no row is a failing run and a missing tick is a stopped scheduler. It does not
+    survive the pod — Loki held nothing from the pod running at the one real miss, 2026-09-09
+    17:00 UTC, while holding other pods' logs from that minute.
+    """
+    ok, msg = verdicts.host.speedtest_verdict(
+        _st_row(created_at="2026-08-23 11:00:00"), 100.0, 8.0, now=ST_NOW
+    )
+    assert not ok
+    assert "25.0h ago" in msg
+    # The claim it must no longer make.
+    assert "schedule has stopped" not in msg
+    # Both hypotheses, and where to go to settle it.
+    assert "scheduler" in msg
+    assert "failed" in msg
+    assert "pod log" in msg
+
+
 def test_speedtest_bare_timestamp_is_read_as_utc_not_local():
     # The regression this guards: /api/speedtest/latest serializes row 780 as
     # 2026-08-24T06:00:00-05:00 and /api/v1/results serializes it as "2026-08-24 11:00:00".
