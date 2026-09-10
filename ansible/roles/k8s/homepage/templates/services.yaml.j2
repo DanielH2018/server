@@ -397,10 +397,6 @@
         # (roles/setup/deploy_ui/).
         href: https://deploy.local.{{ domain }}/
         description: Deploy queue
-    - TeXBrain:
-        icon: mdi-math-integral
-        href: https://texbrain.{{ domain }}/
-        description: LaTeX workspace
     - Artifacts:
         icon: mdi-file-document-multiple
         href: https://artifacts.{{ domain }}/
@@ -409,17 +405,7 @@
         icon: mdi-book-open-variant
         href: https://docs.{{ domain }}/
         description: Homelab reference
-
-# Last group on the page, deliberately. This tile briefly sat in the Calendar column to fill
-# the space under the calendar; the bookmarks do that job now, and crypto prices read better at
-# the bottom than beside a calendar.
-- Tracking:
-    - Crypto:
-        icon: mdi-currency-btc
-        description: Market prices
-        widget:
-            type: coinmarketcap
-            currency: USD # Optional
-            symbols: [BTC, ETH, DOGE]
-            key: {{ coinmarket_api_key }}
-            defaultinterval: 24h # Optional
+    - TeXBrain:
+        icon: mdi-math-integral
+        href: https://texbrain.{{ domain }}/
+        description: LaTeX workspace

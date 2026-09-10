@@ -53,8 +53,8 @@ Edit the `.j2` files, never the live config: homepage seeds any missing file int
   in `templates/config/settings.yaml.j2` and the group headings in `services.yaml.j2` are two
   lists that must agree. A layout key naming no group does nothing (a `Monitoring:` entry sat
   there until 2026-09-09 for a group this dashboard has never declared); a group with no layout
-  key renders *below* every laid-out group at one column wide (`Tracking` sat that way). Neither
-  state errors, logs, or fails a render — check both files when a group appears in the wrong
+  key renders *below* every laid-out group at one column wide (the retired `Tracking` group sat
+  that way). Neither state errors, logs, or fails a render — check both files when a group appears in the wrong
   place or a column count has no effect.
 - **A group's `columns:` is derived from its tile count, not chosen.** A count the columns do
   not divide leaves an orphan on the last row and a hole beside it, and in `Top Row` it also
@@ -75,8 +75,7 @@ Edit the `.j2` files, never the live config: homepage seeds any missing file int
   widget carries two to four stats, so all of them occupy two stat rows.
 - **The groups split by WIDGET, not by topic.** A widgeted tile is several lines tall and a
   link-only tile is one line, so a group holding both leaves ragged holes. `Services` holds every
-  widgeted tile bar the calendar and Crypto; `Admin & Tools` holds the link-only ones, four per
-  row. Two groups became four on 2026-09-10: the `Media` group's three surviving tiles moved into
+  widgeted tile bar the calendar; `Admin & Tools` holds the link-only ones, four per row. Two groups became four on 2026-09-10: the `Media` group's three surviving tiles moved into
   `Services` to make that column four rows deep, and `Admin` and `Tools` merged into one group of
   eight, which still divides by four. Jellyfin was dropped rather than moved (its widget had been
   erroring since #1457).

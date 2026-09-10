@@ -6,9 +6,9 @@ headerStyle: clean
 showStats: false
 target: _blank
 # Group order here IS display order, and a group services.yaml declares but this block omits
-# renders below the laid-out ones at one column wide. `Tracking` sat in exactly that state
-# until 2026-09-09, and a `Monitoring:` entry sat here naming a group services.yaml has never
-# declared — dead either way, because layout entries match a group by name.
+# renders below the laid-out ones at one column wide. The retired `Tracking` group sat in exactly
+# that state until 2026-09-09, and a `Monitoring:` entry sat here naming a group services.yaml has
+# never declared — dead either way, because layout entries match a group by name.
 #
 # The split is by WIDGET, not by topic. A widgeted tile is several lines tall and a link-only
 # tile is one line, so mixing them in one group leaves ragged holes. Services, Calendar and
@@ -68,14 +68,6 @@ layout:
   # SERVICE tiles in the `Calendar` group now, which is the only way to get them into that
   # column. See the note in `Top Row` above for the two bookmark-group arrangements that were
   # tried there and silently ignored.
-  # ONE column, because the group holds one tile. At two the Crypto tile took half the page and
-  # left the other half empty — measured 2026-09-10 at 1280px: a 600px tile beside 600px of
-  # nothing. The rule that `columns` is derived from the tile count, not chosen, applies here as
-  # much as it does to Services above; the count is simply one. Adding a second tracking tile
-  # means moving this back to 2.
-  Tracking:
-    style: row
-    columns: 1
 # Type-to-filter over every tile and bookmark on the page. This is what keeps the link-only
 # Admin and Tools groups usable as they grow — the keyboard reaches a service whether or not
 # its tile is in view. searchDescriptions widens the match to the `description:` line, so
