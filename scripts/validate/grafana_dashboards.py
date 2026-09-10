@@ -108,6 +108,28 @@ def _display(path: Path) -> str:
         return path.name
 
 
+def dashboard_uids(dashboards_dir: Path = DASHBOARDS_DIR) -> dict[str, list[str]]:
+    """Every dashboard uid under `dashboards_dir`, mapped to the files claiming it.
+
+    Exposed rather than built inline in `validate` so a test can assert the census actually
+    found the boards it is supposed to check. Every rule here finds its subject by glob, so a
+    renamed or moved dashboards directory yields an empty census, no errors, and a guard that
+    passes over zero boards. The dashboards have moved before: five folders came into
+    claude-otel from the retired Docker grafana role on 2026-08-14.
+
+    An unparseable file is skipped here — `validate` reports the parse failure itself.
+    """
+    boards: dict[str, list[str]] = {}
+    for path in sorted(dashboards_dir.rglob("*.json")):
+        try:
+            uid = json.loads(path.read_text()).get("uid")
+        except json.JSONDecodeError:
+            continue
+        if isinstance(uid, str) and uid:
+            boards.setdefault(uid, []).append(_display(path))
+    return boards
+
+
 def duplicate_dashboard_uids(boards: dict[str, list[str]]) -> list[str]:
     """Error strings for every dashboard uid claimed by more than one file.
 
@@ -151,16 +173,12 @@ def validate(
     """
     valid = provisioned_datasource_ids(datasources_template) | BUILTIN_DATASOURCE_UIDS
     errors: list[str] = []
-    boards: dict[str, list[str]] = {}
     for path in sorted(dashboards_dir.rglob("*.json")):
         try:
             data = json.loads(path.read_text())
         except json.JSONDecodeError as exc:
             errors.append(f"{_display(path)}: invalid JSON: {exc}")
             continue
-        uid = data.get("uid")
-        if isinstance(uid, str) and uid:
-            boards.setdefault(uid, []).append(_display(path))
         seen: set[tuple[str, str | None]] = set()
         for uid_ref, title in datasource_refs_in(data):
             if uid_ref in valid or (uid_ref, title) in seen:
@@ -170,7 +188,7 @@ def validate(
             errors.append(
                 f"{_display(path)}: datasource uid {uid_ref!r} is not provisioned{where}"
             )
-    return errors + duplicate_dashboard_uids(boards)
+    return errors + duplicate_dashboard_uids(dashboard_uids(dashboards_dir))
 
 
 def main() -> int:

@@ -727,6 +727,74 @@
       ],
       "title": "Download queue depth",
       "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "EGdsQqhVk"
+      },
+      "description": "How sonarr's episode files are distributed across quality profiles. exportarr emits `sonarr_episode_quality_total` only under `--enable-additional-metrics`, which sonarr's sidecar sets.\n\n`sum by(quality)` drops the `weight` label: exportarr sends the profile's sort weight alongside the name, and two profiles can share a weight (WEBDL-1080p and WEBRip-1080p are both 12), so keying the slices on both labels splits one quality across several slices.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            }
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 45
+      },
+      "id": 15,
+      "options": {
+        "displayLabels": [
+          "percent"
+        ],
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true,
+          "values": [
+            "value"
+          ]
+        },
+        "pieType": "pie",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "EGdsQqhVk"
+          },
+          "expr": "sum by(quality) (sonarr_episode_quality_total)",
+          "legendFormat": "{{quality}}",
+          "refId": "A"
+        }
+      ],
+      "title": "sonarr episode quality mix",
+      "type": "piechart"
     }
   ],
   "refresh": "1m",
