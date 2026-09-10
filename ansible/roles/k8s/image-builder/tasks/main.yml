@@ -87,6 +87,40 @@
   # Reads only, and its counterpart below reads the same tag — see the header.
   check_mode: false
 
+# Did the LAST build of this image succeed? Nothing else here can tell.
+#
+# A build that FAILS leaves its rendered context on disk, so the next run's template task
+# reports `ok`, the registry still serves the previous tag, and every other clause of the gate
+# below reads "nothing to do" — while the workload keeps running the OLD image behind a
+# `failed=0` recap. Observed 2026-09-10 on code-server, where a transient 429 from lscr.io
+# failed the build and the next deploy skipped straight to "Confirm the registry now serves the
+# built tag" (#1534). A failed build is exactly the state where the inputs are unchanged and a
+# rebuild is nevertheless required.
+#
+# `--ignore-not-found`, so an ABSENT Job reads as empty output with rc 0 rather than an error.
+# Absent is not evidence of failure and must not force a build: `ttlSecondsAfterFinished: 86400`
+# in build-job.yaml.j2 garbage-collects a completed Job after a day, so building on absence
+# would rebuild every image on any deploy more than a day after the last one — the whole cost
+# the gate removes. Printing `.metadata.name` beside `.status.succeeded` is what keeps "no Job"
+# and "a Job that did not succeed" distinguishable in one read: absent gives `""`, a failed or
+# still-running Job gives `build-<name>=`, and a completed one gives `build-<name>=1`.
+#
+# No quoted jsonpath filter on `.status.conditions`, which would be the more direct read:
+# `ansible.builtin.command` splits its cmd with shlex, which strips the quotes
+# `[?(@.type=="Complete")]` needs and hands kubectl a jsonpath it cannot parse.
+- name: Read the previous build's outcome for {{ image_builder_name }}
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} get job build-{{ image_builder_name }}
+      --ignore-not-found -o jsonpath={.metadata.name}={.status.succeeded}
+  register: image_builder_previous
+  become: true
+  changed_when: false
+  failed_when: false
+  # A read, like the two digest reads around it — running it is what keeps check mode honest.
+  check_mode: false
+
 # The gate. Every image here rebuilt on every full deploy before this existed, costing ~106s
 # across the seven of them for a result that was byte-identical five times out of seven.
 #
@@ -100,7 +134,8 @@
 # Every clause resolves toward BUILDING when it cannot tell, because the two failure directions
 # are not symmetric: a needless build costs 15 seconds and is visible in the log, while a
 # wrongly skipped one ships a stale image indefinitely and reports success. So an absent or
-# skipped render register builds, and a registry that answers anything but 200 builds.
+# skipped render register builds, a registry that answers anything but 200 builds, and a
+# previous-build read that did not come back (rc missing or non-zero) builds.
 #
 # `.changed | default(true)` rather than the idiomatic `is changed`, which reads a missing key
 # as False and so treats a register carrying no comparison at all as "nothing changed" — the
@@ -113,7 +148,11 @@
          or image_builder_digest_before.status | default(0) != 200
          or image_builder_render is not defined
          or image_builder_render.skipped | default(false)
-         or image_builder_render.changed | default(true) }}
+         or image_builder_render.changed | default(true)
+         or image_builder_previous.rc | default(1) != 0
+         or (image_builder_previous.stdout | default('') | trim != ''
+             and image_builder_previous.stdout | trim
+                 != 'build-' ~ image_builder_name ~ '=1') }}
 
 - name: Apply the build context for {{ image_builder_name }}
   tags: [deploy]
@@ -154,24 +193,41 @@
   become: true
   changed_when: true
 
-# --for=condition=complete alone hangs until the deadline when a build FAILS, because a failed
-# Job never gets that condition. Waiting on either resolves immediately in both directions; the
-# assert below is what turns "finished" into "succeeded".
+# Polls BOTH terminal conditions, rather than waiting on one and falling back to the other.
+#
+# `kubectl wait` takes a single condition, and `--for=condition=complete` alone hangs until its
+# deadline when a build FAILS, because a failed Job never gets that condition. The previous
+# shape sequenced two waits with `||`, which is a fallback and not a race: the failed-wait could
+# not start until the complete-wait had already burned the whole timeout. Measured 2026-09-10 on
+# code-server, whose role sets `image_builder_timeout: 1800` — the Job reached BackoffLimitExceeded
+# 6s in and the task was still blocked on it ~17 minutes later (#1535). `backoffLimit: 0` in
+# build-job.yaml.j2 is what makes that gap so wide: a failed build settles in seconds.
+#
+# The poll is the same shape k8s/cronjob-gate uses for the same reason, down to the jsonpath —
+# an `until:` naming both condition types, retried until `image_builder_timeout` is spent, which
+# is what keeps the overall deadline the operator configured.
+#
+# `failed_when: false` covers a non-zero rc on the attempt that satisfied `until` — the Job
+# vanishing between two polls, say. It does NOT suppress retry exhaustion: a build that reaches
+# neither condition fails this task, which is the same thing the previous shape did when both
+# waits timed out.
 - name: Wait for the build to finish for {{ image_builder_name }}
   tags: [deploy]
   when:
     - not k8s_no_mutate
     - image_builder_building | bool
-  ansible.builtin.shell:
+  ansible.builtin.command:
     cmd: >-
-      set -o pipefail &&
-      k3s kubectl -n {{ k8s_namespace }} wait --for=condition=complete
-      job/build-{{ image_builder_name }} --timeout={{ image_builder_timeout }}s ||
-      k3s kubectl -n {{ k8s_namespace }} wait --for=condition=failed
-      job/build-{{ image_builder_name }} --timeout=10s
-    executable: /bin/bash
+      k3s kubectl -n {{ k8s_namespace }} get job build-{{ image_builder_name }}
+      -o jsonpath={.status.conditions[*].type}
   become: true
   changed_when: false
+  register: image_builder_wait
+  until: >-
+    'Complete' in image_builder_wait.stdout or 'Failed' in image_builder_wait.stdout
+  retries: "{{ (image_builder_timeout | int / 5) | round | int }}"
+  delay: 5
+  failed_when: false
 
 - name: Read the build result for {{ image_builder_name }}
   tags: [deploy]
