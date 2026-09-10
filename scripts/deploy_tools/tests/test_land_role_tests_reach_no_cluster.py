@@ -58,14 +58,14 @@ def test_the_paths_under_test_still_exist():
 def test_a_role_test_file_is_clean():
     """The accept half: a role's pytest guards are staged by nothing."""
     assert land_tags.role_for(_ROLE_TESTS) == "arr-notification"
-    assert land_tags.owes_an_apply(_ROLE_TESTS) is False
+    assert land_tags.is_role_test_path(_ROLE_TESTS) is True
     assert land_tags.shared_roles([_ROLE_TESTS]) == []
     assert land_tags.plane_note([_ROLE_TESTS]) == ""
 
 
 def test_a_role_task_file_is_flagged():
     """The reject half, and the half of #1729 that is refuted: tasks/ still owes a hand."""
-    assert land_tags.owes_an_apply(_ROLE_TASKS) is True
+    assert land_tags.is_role_test_path(_ROLE_TASKS) is False
     assert land_tags.shared_roles([_ROLE_TASKS]) == ["arr-notification"]
     assert "arr-notification" in land_tags.plane_note([_ROLE_TASKS])
 
