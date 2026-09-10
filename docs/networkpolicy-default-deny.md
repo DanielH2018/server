@@ -256,6 +256,11 @@ so the label alone fences it exactly as intended. It also dials out, to `upsd` o
 which the other four do not. That is egress, which kube-router does not enforce on this cluster;
 the inbound half of that call is admitted by an `app: nut-exporter` podSelector added to
 `networkpolicy-nut.yaml.j2`.
+**pihole-exporter** (2026-09-10) is the same shape again, one layer out: no IngressRoute,
+Prometheus its only caller, and an outbound poll of both Pi-holes' admin API on port 80 admitted
+by an `app: pihole-exporter` podSelector in `networkpolicy-pihole.yaml.j2`. Two of these
+metrics-only workloads landing on one day is what turned "Traefik is its only caller" from the
+definition of this set into one of two shapes it holds.
 
 **Why observability moved from first to third.** It is small in pod count but dense in
 exactly the paths that are hardest — `loki:3100`, `tempo:3200`, `prometheus:9090` and

@@ -68,6 +68,11 @@ BORN_FENCED_ROLES = {
     # and the inbound half is admitted by the app=nut-exporter podSelector in
     # netpol-baseline/templates/networkpolicy-nut.yaml.j2.
     "nut-exporter",
+    # Pi-hole's DNS statistics. Same shape as nut-exporter: Prometheus is its only caller, which
+    # the baseline already admits, and its own outbound poll of both Pi-holes' admin API is
+    # egress (unenforced here) plus an `app: pihole-exporter` podSelector in
+    # netpol-baseline/templates/networkpolicy-pihole.yaml.j2.
+    "pihole-exporter",
 }
 
 LABEL = ("netpol-baseline", "enforced")

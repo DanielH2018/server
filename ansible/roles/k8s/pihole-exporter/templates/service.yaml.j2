@@ -1,0 +1,15 @@
+---
+# Scrape target only — no IngressRoute. The exporter's page is unauthenticated and carries
+# nothing a human reads; the DNS board in Grafana is the operator surface.
+apiVersion: v1
+kind: Service
+metadata:
+  name: pihole-exporter
+  namespace: {{ k8s_namespace }}
+spec:
+  selector:
+    app: pihole-exporter
+  ports:
+    - name: metrics
+      port: {{ pihole_exporter_k8s_port }}
+      targetPort: {{ pihole_exporter_k8s_port }}

@@ -214,6 +214,21 @@ data:
           ups: ["{{ nut_ups_name | default('apc-ups') }}"]
         static_configs:
           - targets: ['nut-exporter.{{ k8s_namespace }}.svc:9199']
+      # Pi-hole, through pihole-exporter (roles/k8s/pihole-exporter) — query volume, block rate,
+      # cache and forward counts, upstream destinations and per-client totals. Nothing scraped
+      # the resolver every DNS lookup in the house goes through until this job existed.
+      #
+      # One exporter, BOTH FTL instances: it is configured with two hostnames and labels every
+      # series with `hostname`, so a panel must sum across them. Each instance keeps its own
+      # pihole-FTL.db, so reading one alone reports about half the real volume — a plausible
+      # graph that is quietly wrong, which is the failure this arrangement exists to avoid.
+      #
+      # 1m rather than the 15s global: these are cumulative daily counters off an admin API, and
+      # each scrape costs the exporter an authenticated round trip to each Pi-hole.
+      - job_name: pihole
+        scrape_interval: 1m
+        static_configs:
+          - targets: ['pihole-exporter.{{ k8s_namespace }}.svc:9617']
       # PG2: the cluster homelab Loki's own internals (loki_*) — nothing scraped it before
       # this job, despite slice-7-phase-d-loki.md assuming otherwise. Keeps the
       # Logs/loki-internals board alive past the Docker loki's retirement.

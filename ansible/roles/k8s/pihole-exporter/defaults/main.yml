@@ -1,0 +1,33 @@
+---
+# ekofr/pihole-exporter. v1.0.0 is the release that added Pi-hole v6 support; v1.2.0 is the
+# newest. Pinned by tag (Renovate k8s-defaults manager), like the pihole role's own images.
+#
+# An exporter is needed at all because Pi-hole v6 serves no Prometheus endpoint of its own.
+# Measured against the live pod on 2026-09-10: `GET /metrics` on the pihole Service returns 404,
+# and `GET /api/info/version` returns 401 — the v6 JSON API exists but is authenticated, and
+# nothing there speaks the exposition format. Re-check before replacing this with a native
+# scrape; an upstream that grew `/metrics` would make the whole role redundant.
+pihole_exporter_k8s_image: ekofr/pihole-exporter:v1.2.0
+
+# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# TRUE where the `pihole` role it reads from is denylisted. The two have opposite blast radii:
+# a failed pihole deploy breaks name resolution fleet-wide, while this pod holds no DNS path at
+# all — it polls the admin API and serves metrics. A bad image bump costs the DNS dashboards.
+k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "read-only poller of Pi-hole's admin API with a readinessProbe; holds no DNS path, so a bad image bump costs dashboards rather than name resolution (unlike the denylisted `pihole` role)"  # noqa var-naming[no-role-prefix]
+
+# BOTH instances, and that is the point of the role rather than a detail. DNS is load-balanced
+# across two independent FTLs, each with its own pihole-FTL.db, so a single-instance scrape
+# reports roughly HALF the house's query volume — see the comment on the `pihole` Service in
+# roles/k8s/pihole/templates/service.yaml.j2, which pins the admin UI to instance 1 for a
+# related reason. The exporter labels every series with `hostname`, so the dashboards sum.
+pihole_exporter_k8s_targets:
+  - "pihole.{{ k8s_namespace }}.svc.cluster.local"
+  - "pihole-2-web.{{ k8s_namespace }}.svc.cluster.local"
+
+pihole_exporter_k8s_port: 9617
+
+pihole_exporter_k8s_cpu_limit: "200m"
+pihole_exporter_k8s_mem_limit: 64Mi
+pihole_exporter_k8s_cpu_request: "10m"
+pihole_exporter_k8s_mem_request: 16Mi

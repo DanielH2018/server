@@ -340,6 +340,16 @@ containers_list:
     hostname: "pihole"
     port: 80
     use_authelia: true
+  # Pi-hole v6 serves no Prometheus endpoint, so this polls its admin API and exports
+  # `pihole_*` — for BOTH instances, since each FTL keeps its own query database and one alone
+  # reports half the house's volume. `port` is the port it DIALS on the Pi-holes, not one it
+  # serves; it renders no IngressRoute, so no route derives from it. `depends_on: [pihole]`
+  # because it reads its password out of the `pihole-env` Secret that role renders, rather than
+  # holding a second copy of the credential.
+  - name: pihole-exporter
+    platform: k8s
+    port: 80
+    depends_on: [pihole]
 
   - name: ical-proxy
     platform: k8s
