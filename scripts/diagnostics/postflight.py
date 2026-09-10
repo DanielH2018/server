@@ -26,11 +26,11 @@ from pathlib import Path as _Path
 # own insert first, which made the order of these four lines load-bearing and unremarked.
 sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
-import probe
 from diagnostics.probe_lib import core
 from diagnostics.probe_lib import arr
 from diagnostics.probe_lib import health_docker
 from diagnostics.probe_lib import ha
+from diagnostics.probe_lib import monitors
 
 TIMEOUT = 10
 
@@ -142,9 +142,14 @@ def check_kuma_drift():
         for s in json.loads(body).get("data", {}).get("result", [])
     }
     live.discard(None)
-    with open(probe.STATIC_MONITORS_PATH) as f:
-        declared = probe.parse_declared_monitors(f.read())
-    text, code = probe.format_kuma_drift(declared, live, probe.kuma_pod_age_seconds())
+    # These four names live in `probe_lib.monitors`, not in `probe.py` — reading them off
+    # `probe` raised AttributeError and the section reported FAIL, which reads as drift found
+    # rather than as a check that never ran (#1562).
+    with open(monitors.STATIC_MONITORS_PATH) as f:
+        declared = monitors.parse_declared_monitors(f.read())
+    text, code = monitors.format_kuma_drift(
+        declared, live, monitors.kuma_pod_age_seconds()
+    )
     return (FAIL if code else OK), text.replace("\n", "; ").strip()
 
 
@@ -254,11 +259,17 @@ def check_ha_token(name):
 
 
 def check_authelia():
-    """§9.5 — verify Authelia is serving and its OIDC secrets are present."""
-    ip = service_ip("authelia")
-    status, body = get(f"http://{ip}:9091/api/health")
-    if status != 200:
-        return FAIL, f"HTTP {status} — Authelia is not serving"
+    """§9.5 — verify Authelia is serving and its OIDC secrets are present.
+
+    The OIDC material is read from SOPS first, so it is still checked on a node Authelia's
+    pod is not scheduled on: it needs no network, and the reachability arm below returns
+    early on such a node.
+
+    A status of 0 means curl itself failed, which for a ClusterIP is the placement fact
+    `_unreachable` describes for the *arr checks — not an outage. Reporting it as
+    "Authelia is not serving" was a false alarm on the fleet's most load-bearing service
+    whenever the run was on the node Authelia is not on (#1564).
+    """
     missing = [
         name
         for name in (
@@ -270,6 +281,12 @@ def check_authelia():
     ]
     if missing:
         return FAIL, "missing OIDC material: " + ", ".join(missing)
+    ip = service_ip("authelia")
+    status, body = get(f"http://{ip}:9091/api/health")
+    if status == 0:
+        return _unreachable("authelia", body or "curl failed")
+    if status != 200:
+        return FAIL, f"HTTP {status} — Authelia is not serving"
     return OK, f"healthy ({json.loads(body).get('status', '?')}), OIDC material present"
 
 

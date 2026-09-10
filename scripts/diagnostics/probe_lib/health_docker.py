@@ -84,12 +84,23 @@ def k8s_service_ip_argv(service, namespace):
     ]
 
 
+# DECIDED: `starting` with FailingStreak 0 passes the gate rather than polling until it
+# settles. A deploy recreates the container, so the gate reads it before its healthcheck has
+# completed a single probe and Docker reports `starting` — which failed the gate on a correct
+# deploy (#1601). Polling instead is not available here: `deploy_detach_notify.PROBE_TIMEOUT_S`
+# caps one `probe.py health` run at 30s, and daniel-pi sets `container_healthcheck_interval:
+# 60s`, so no bounded poll inside that budget can reach the first probe result. What bounds the
+# pass is Docker's own state machine: `starting` ends at the first probe result, so the window
+# is about one interval, and a probe that has actually failed leaves a non-zero FailingStreak,
+# which still fails here. An `unhealthy` container and a `starting` one with a failing streak
+# are unaffected.
 def format_health(data, container, declared=False):
     """Summarize a container's state + healthcheck from `docker inspect` output.
 
     Pure: takes the parsed JSON list and returns (text, exit_code). exit_code is 0
-    only when the container is running and (has no healthcheck, or is healthy) — so
-    `probe.py health <svc>` is usable as a post-deploy gate.
+    only when the container is running and (has no healthcheck, is healthy, or is still
+    inside the startup window described above) — so `probe.py health <svc>` is usable as a
+    post-deploy gate.
 
     `declared` says whether daniel-pi's inventory lists a Docker service by this name;
     `run_health` resolves it. It splits the two situations an absent container can mean, which
@@ -115,14 +126,24 @@ def format_health(data, container, declared=False):
     health = state.get("Health")
     if health:
         hstatus = health.get("Status", "unknown")
+        streak = health.get("FailingStreak", 0)
         line = f"{container}: {status}, health={hstatus}, restarts={restarts}"
         if hstatus != "healthy":
-            line += f" — failing streak {health.get('FailingStreak', 0)}"
+            line += f" — failing streak {streak}"
             log = health.get("Log") or []
             last = (log[-1].get("Output") or "").strip().splitlines() if log else []
             if last:
                 line += f"; last check: {last[-1][:160]}"
-        return (line, 0 if status == "running" and hstatus == "healthy" else 1)
+        settling = hstatus == "starting" and not streak
+        if settling:
+            line += (
+                " — startup window, no probe has completed yet "
+                "(not a failure; re-run to see the settled verdict)"
+            )
+        return (
+            line,
+            0 if status == "running" and (hstatus == "healthy" or settling) else 1,
+        )
     return (
         f"{container}: {status} (no healthcheck), restarts={restarts}",
         0 if status == "running" else 1,

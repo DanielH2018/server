@@ -88,7 +88,7 @@ scripts/deploy_tools/tests/test_staging_gate.py 3
 scripts/deploy_tools/tests/test_tick_ledger_report.py 2
 scripts/dev/tests/test_memory_survey.py 3
 scripts/dev/tests/test_prune_worktrees.py 14
-scripts/diagnostics/tests/test_postflight.py 16
+scripts/diagnostics/tests/test_postflight.py 14
 scripts/diagnostics/tests/test_probe.py 7
 scripts/diagnostics/tests/test_probe_alerts.py 8
 scripts/diagnostics/tests/test_probe_b2_ledger.py 7
