@@ -71,11 +71,21 @@ Edit the `.j2` files, never the live config: homepage seeds any missing file int
   means deleting entries. The Headlamp tile is a third shape again: its blocks come from
   `mappings:` paired positionally to the PromQL operands in `defaults/main.yml`, so pruning it
   means editing both files together.
-- **Stat blocks are laid out by COUNT: two or four per widget wrap two to a row, three span the
-  full width.** Two and four divide evenly at a 50% basis; three does not, and five of the nine
-  Services widgets carry exactly three stats, so `custom.css.j2` gives those a 33.3% basis via
-  `:has(> :nth-child(3):last-child)` — "a third child that is also the last". A widget whose
-  stat count changes moves between these automatically; nothing needs updating by hand.
+- **A block's HEADING cannot be changed in config — it is renamed in CSS.** `block.jsx` renders
+  `t(label)`, an i18n lookup against `public/locales/<lang>/common.json` baked into the image, and
+  `fields:` selects which blocks render rather than what they are called. `custom.css.j2` collapses
+  the original text with `font-size: 0` and supplies the replacement as a `::after` `content`, for
+  Uptime-Kuma, Speedtest, Karakeep and UPS. `font-size: 0` and not `visibility: hidden`, because
+  the box must be sized by the NEW text: "Battery Charge" wrapped to two lines in an 85px block
+  and took its whole grid row from 120px to 136px. Tiles are matched by href so a reorder cannot
+  mislabel one; the block index within a tile is positional and must agree with that widget's
+  `fields:` order, ENFORCED by `ansible/tests/services/test_homepage_block_label_overrides.py`.
+- **Stat blocks are laid out by COUNT: one spans the full width, two or four wrap two to a row,
+  and three span the full width.** Two and four divide evenly at a 50% basis; one and three do
+  not, so `custom.css.j2` gives those their own basis via `:has(> :first-child:last-child)` and
+  `:has(> :nth-child(3):last-child)` — "an only child", and "a third child that is also the
+  last". A widget whose stat count changes moves between these automatically; nothing needs
+  updating by hand. Since the 2026-09-10 pruning only the one- and two-stat cases occur.
 - **Reserve a stat row or a whole grid row shrinks.** `.services-list` sizes each grid row to
   its tallest member, so a row whose tiles all hold fewer stat rows than the rows below it
   drops on its own — uniform across, visibly different down. `min-height` on
