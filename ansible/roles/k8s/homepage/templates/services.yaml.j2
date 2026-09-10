@@ -97,37 +97,6 @@
                 key: {{ pihole_password }}
                 # Dropped: blocked_percent, gravity.
                 fields: [queries, blocked]
-        - FreshRSS:
-            icon: freshrss.png
-            href: https://freshrss.{{ domain }}/
-            description: RSS Aggregator
-            # No server/container: freshrss runs in k3s now. Same as speedtest and karakeep —
-            # the -k8s monitoring route, because the native route's Authelia 401s the widget.
-            widget:
-                type: freshrss
-                url: https://freshrss.local.{{ domain }}
-                username: {{ freshrss_username }}
-                password: {{ freshrss_password }}
-                # Dropped: subscriptions. This is the only single-stat tile on the dashboard.
-                fields: [unread]
-        - Karakeep:
-            icon: karakeep.png
-            href: https://karakeep.{{ domain }}/
-            description: Karakeep
-            # No server/container: karakeep runs in k3s now. Same as speedtest and freshrss —
-            # the -k8s monitoring route, because the native route's Authelia 401s the widget.
-            widget:
-                type: karakeep
-                url: https://karakeep.local.{{ domain }}
-                key: {{ karakeep_homepage_api_key }}
-                # UNARCHIVED IS NOT AVAILABLE, so this shows the two numbers it subtracts
-                # from. karakeep's /api/v1/users/me/stats returns numBookmarks (the total)
-                # and numArchived, and homepage renders each `field` verbatim — no widget
-                # type on this dashboard can express arithmetic over two of them. A computed
-                # tile would mean a customapi widget, and customapi maps a JSON path to a
-                # label with no expression support either. Dropped: favorites, highlights,
-                # lists, tags.
-                fields: [bookmarks, archived]
         - Home Assistant:
             icon: home-assistant.png
             href: https://home-assistant.{{ domain }}/
@@ -147,6 +116,37 @@
                       label: CO₂
                     - state: sensor.bedroom_airgradient_one_voc_index
                       label: VOC
+        - Karakeep:
+            icon: karakeep.png
+            href: https://karakeep.{{ domain }}/
+            description: Karakeep
+            # No server/container: karakeep runs in k3s now. Same as speedtest and freshrss —
+            # the -k8s monitoring route, because the native route's Authelia 401s the widget.
+            widget:
+                type: karakeep
+                url: https://karakeep.local.{{ domain }}
+                key: {{ karakeep_homepage_api_key }}
+                # UNARCHIVED IS NOT AVAILABLE, so this shows the two numbers it subtracts
+                # from. karakeep's /api/v1/users/me/stats returns numBookmarks (the total)
+                # and numArchived, and homepage renders each `field` verbatim — no widget
+                # type on this dashboard can express arithmetic over two of them. A computed
+                # tile would mean a customapi widget, and customapi maps a JSON path to a
+                # label with no expression support either. Dropped: favorites, highlights,
+                # lists, tags.
+                fields: [bookmarks, archived]
+        - FreshRSS:
+            icon: freshrss.png
+            href: https://freshrss.{{ domain }}/
+            description: RSS Aggregator
+            # No server/container: freshrss runs in k3s now. Same as speedtest and karakeep —
+            # the -k8s monitoring route, because the native route's Authelia 401s the widget.
+            widget:
+                type: freshrss
+                url: https://freshrss.local.{{ domain }}
+                username: {{ freshrss_username }}
+                password: {{ freshrss_password }}
+                # Dropped: subscriptions. This is the only single-stat tile on the dashboard.
+                fields: [unread]
         - UPS:
             icon: apc.png
             href: https://peanut.{{ domain }}/
@@ -213,6 +213,27 @@
         # `app: homepage` on that port — see
         # roles/k8s/{sonarr,radarr,qbittorrent}/templates/networkpolicy.yaml.j2. Fenced out, the
         # widget fails as a widget-proxy error, not as an auth error.
+        - qBittorrent:
+            icon: qbittorrent.png
+            href: https://qBittorrent.{{ domain }}
+            description: Download
+            widget:
+                type: qbittorrent
+                url: http://qbittorrent.{{ k8s_namespace }}.svc.cluster.local:8080  # literal: qbittorrent_k8s_webui_port is that role's default, not in scope here
+                username: {{ qbittorrent_username }}
+                password: {{ qbittorrent_password }}
+                # Dropped: seed, upload.
+                fields: [leech, download]
+        - Radarr:
+            icon: radarr.png
+            href: https://radarr.{{ domain }}/
+            description: Movie
+            widget:
+                type: radarr
+                url: http://radarr.{{ k8s_namespace }}.svc.cluster.local:7878
+                key: {{ radarr_api_key }}
+                # Dropped: movies, missing.
+                fields: [wanted, queued]
         - Sonarr:
             icon: sonarr.png
             href: https://sonarr.{{ domain }}/
@@ -229,27 +250,6 @@
                 key: {{ sonarr_api_key }}
                 # Dropped: series.
                 fields: [wanted, queued]
-        - Radarr:
-            icon: radarr.png
-            href: https://radarr.{{ domain }}/
-            description: Movie
-            widget:
-                type: radarr
-                url: http://radarr.{{ k8s_namespace }}.svc.cluster.local:7878
-                key: {{ radarr_api_key }}
-                # Dropped: movies, missing.
-                fields: [wanted, queued]
-        - qBittorrent:
-            icon: qbittorrent.png
-            href: https://qBittorrent.{{ domain }}
-            description: Download
-            widget:
-                type: qbittorrent
-                url: http://qbittorrent.{{ k8s_namespace }}.svc.cluster.local:8080  # literal: qbittorrent_k8s_webui_port is that role's default, not in scope here
-                username: {{ qbittorrent_username }}
-                password: {{ qbittorrent_password }}
-                # Dropped: seed, upload.
-                fields: [leech, download]
     - Calendar:
         - Calendar:
             id: my-calendar
