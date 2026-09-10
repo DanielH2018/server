@@ -39,20 +39,29 @@ import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# The worktree section of the banner lives in `.claude/hooks/hooklib/worktree_lines.py`
-# (own docstring covers `hooklib`-not-`lib`); this file sits at its 600-line cap. Wrapped
-# like `lib.deployer_park` below (issue #1566), in its own try so a failure names the
-# module that broke rather than deployer_park's unrelated line.
+# Three sections of the banner live in `.claude/hooks/hooklib/` (its own docstrings cover
+# `hooklib`-not-`lib`): the worktree lines, and the docker and scrape-target lines. This file
+# sat at its 600-line cap with no headroom for either split. Wrapped like `lib.deployer_park`
+# below (issue #1566), in its own try so a failure names the package that broke rather than
+# deployer_park's unrelated line.
+#
+# `SyntaxError` is caught alongside `ImportError` because these modules use PEP 758 syntax
+# and this file is run by `session-health.sh`, which sends stderr to /dev/null and exits 0.
+# An uncaught SyntaxError at import would take the WHOLE banner out silently, which is the
+# #1566 failure class — nothing at module scope may be able to stop the banner. A SyntaxError
+# is not an ImportError, so the narrower catch left that hole open.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 try:
+    from hooklib import service_lines
     from hooklib.worktree_lines import _stale_worktree_lines, remote_fanout_lines
 
-    WORKTREE_LINES_IMPORT_ERROR = ""
-except ImportError as exc:
-    WORKTREE_LINES_IMPORT_ERROR = str(exc)
+    HOOKLIB_IMPORT_ERROR = ""
+except (ImportError, SyntaxError) as exc:
+    HOOKLIB_IMPORT_ERROR = f"{type(exc).__name__}: {exc}"
+    service_lines = None
 
     def remote_fanout_lines(*_args, **_kwargs):
-        return [f"  ⚠ hooklib.worktree_lines is broken: {WORKTREE_LINES_IMPORT_ERROR}"]
+        return [f"  ⚠ hooklib is broken: {HOOKLIB_IMPORT_ERROR}"]
 
     def _stale_worktree_lines(*_args, **_kwargs):
         return []
@@ -266,138 +275,21 @@ def _run(cmd, timeout):
 
 
 def docker_problems():
-    """One line per unhealthy or restarting container, as (lines, docker_ok).
+    """`hooklib.service_lines.docker_problems`, bound to this file's repo-rooted `_run`.
 
-    docker_ok is False, with a warning line, when dockerd is unreachable.
+    A broken hooklib reports no container problems rather than raising; the `⚠` line naming
+    the import failure is printed once, by `remote_fanout_lines`.
     """
-    try:
-        unhealthy = _run(
-            [
-                "docker",
-                "ps",
-                "--filter",
-                "health=unhealthy",
-                "--format",
-                "{{.Names}}\t{{.Status}}",
-            ],
-            5,
-        )
-        restarting = _run(
-            [
-                "docker",
-                "ps",
-                "-a",
-                "--filter",
-                "status=restarting",
-                "--format",
-                "{{.Names}}\t{{.Status}}",
-            ],
-            5,
-        )
-    # Two clauses, not `except (A, B, C)`: ruff (3.14 target) rewrites a parenthesized tuple into
-    # the unparenthesized `except A, B:` form. That is now harmless — session-health.sh runs this
-    # on the pinned 3.14 via uv — but the split is kept because this file is where that bug
-    # actually shipped: the wrapper sends stderr to /dev/null and exits 0, so the SyntaxError was
-    # invisible until someone noticed the banner had stopped appearing.
-    except subprocess.TimeoutExpired:
-        return ["  ✗ docker unreachable (dockerd wedged)"], False
-    except OSError:
-        # FileNotFoundError (docker binary absent) is an OSError subclass. No docker binary
-        # means this host is not a Docker host at all — daniel-box runs k3s and sets
-        # has_docker: false — not that a Docker host is broken. Staying silent is the whole
-        # point of the all-green contract; warning here would fire on every session open
-        # forever.
+    if service_lines is None:
         return [], False
-    lines = []
-    for label, res in (("unhealthy", unhealthy), ("restarting", restarting)):
-        for row in res.stdout.splitlines():
-            if not row.strip():
-                continue
-            name, _, status = row.partition("\t")
-            lines.append("  ✗ {} — {} ({})".format(name, label, status.strip()))
-    return lines, True
-
-
-def _k8s_namespace():
-    """Return k8s_namespace from the same plaintext inventory file probe.py reads it from.
-
-    Duplicated rather than imported — target_problems() shells out to probe.py rather than
-    importing it (see its own docstring), and this stays consistent with that.
-    """
-    path = os.path.join(REPO, "ansible", "inventory", "group_vars", "all.yml")
-    try:
-        with open(path) as f:
-            for line in f:
-                if line.startswith("k8s_namespace:"):
-                    return line.split(":", 1)[1].strip()
-    except OSError:
-        return None
-    return None
-
-
-def _is_scaled_to_zero(job, namespace):
-    """True only if `job`'s backing Deployment is confirmed to have `spec.replicas: 0`.
-
-    That is an on-demand game server (terraria-stats, valheim-stats) deliberately left idle, not
-    a failure. Any lookup failure (wrong kind, missing Deployment, kubectl error, timeout)
-    returns False: a down target we can't explain to be intentional stays reported rather than
-    silently swallowed.
-    """
-    if not namespace:
-        return False
-    try:
-        res = _run(
-            [
-                "k3s",
-                "kubectl",
-                "-n",
-                namespace,
-                "get",
-                "deployment",
-                job,
-                "-o",
-                "jsonpath={.spec.replicas}",
-            ],
-            5,
-        )
-    except subprocess.TimeoutExpired, OSError:
-        return False
-    if res.returncode != 0:
-        return False
-    try:
-        return int(res.stdout.strip()) == 0
-    except ValueError:
-        return False
+    return service_lines.docker_problems(_run)
 
 
 def target_problems():
-    """Return down Prometheus scrape targets, minus any deliberately scaled to 0 replicas.
-
-    Best-effort: returns [] on any failure, since monitoring being unreachable must not
-    block or spam session start.
-    """
-    try:
-        res = _run(
-            ["uv", "run", "python", "scripts/diagnostics/probe.py", "targets"], 6
-        )
-        active = json.loads(res.stdout)["data"]["activeTargets"]
-    except Exception:
+    """`hooklib.service_lines.target_problems`, bound to this file's `_run` and REPO."""
+    if service_lines is None:
         return []
-    namespace = _k8s_namespace()
-    bad = []
-    for t in active:
-        if t.get("health") == "up":
-            continue
-        labels = t.get("labels", {})
-        job = labels.get("job", "?")
-        if _is_scaled_to_zero(job, namespace):
-            continue
-        inst = labels.get("instance", "?")
-        err = (t.get("lastError") or "").strip()[:70]
-        bad.append(
-            "  ✗ target {} [{}] {}".format(job, inst, "— " + err if err else "down")
-        )
-    return bad
+    return service_lines.target_problems(_run, REPO)
 
 
 def master_moved_problems():
