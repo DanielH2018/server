@@ -155,6 +155,7 @@
     creates: "{{ initial_setup_user_home.stdout }}/.local/bin/uv"
     executable: /bin/bash
   become: false
+  when: inventory_hostname in dev_tooling_hosts
 
 - name: Install Python CLI tooling as uv tools
   tags: [tooling]
@@ -171,6 +172,7 @@
     - ansible-lint
     - prek
   become: false
+  when: inventory_hostname in dev_tooling_hosts
 
 - name: Install the pinned host Python
   tags: [tooling]
@@ -181,6 +183,7 @@
   register: initial_setup_host_python
   changed_when: "'Installed' in initial_setup_host_python.stdout"
   become: false
+  when: inventory_hostname in dev_tooling_hosts
 
 - name: Publish uv at a stable path for systemd and cron
   tags: [tooling]
@@ -196,6 +199,7 @@
     state: link
     force: true
   become: true
+  when: inventory_hostname in dev_tooling_hosts
 
 - name: Pin the Vale version this host installs
   tags: [tooling]
@@ -210,6 +214,7 @@
   # ansible/tests/repo/test_vale_matches_the_ci_pin.py.
   ansible.builtin.set_fact:
     initial_setup_vale_version: "3.20.0"
+  when: inventory_hostname in dev_tooling_hosts
 
 - name: Read the Vale version this host already has
   tags: [tooling]
@@ -226,12 +231,13 @@
   changed_when: false
   failed_when: false
   become: false
-  when: has_repo_checkout
+  when: inventory_hostname in dev_tooling_hosts
 
 - name: Install the pinned Vale binary
   tags: [tooling]
-  # Only where the repo is checked out: this exists for the prek hook, and a host Ansible drives
-  # over ssh with no checkout never runs one.
+  # Only on `dev_tooling_hosts`: this exists for the prek hook, and a host nobody commits from
+  # never runs one. That gate used to be `has_repo_checkout`, which admitted daniel-pi — it
+  # holds a checkout but is driven remotely over ssh (issue #1726).
   #
   # No checksum pin, unlike sops_setup's binary. That one is the root of the secret-decryption
   # trust chain; this is a prose linter for Markdown, and ci.yml fetches it unverified from the
@@ -251,5 +257,5 @@
     vale_asset_arch: "{{ '64-bit' if ansible_facts.architecture == 'x86_64' else 'arm64' }}"
   become: true
   when:
-    - has_repo_checkout
+    - inventory_hostname in dev_tooling_hosts
     - initial_setup_vale_version not in (initial_setup_vale_installed.stdout | default('')).split()

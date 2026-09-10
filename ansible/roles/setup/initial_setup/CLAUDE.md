@@ -40,6 +40,12 @@ invariant when adding tasks, or tag-scoped runs die on undefined variables.
   while CI reads green (#1703). Version-gated rather than `creates:`-gated, so a Renovate bump
   actually replaces the binary; the two pins agreeing is enforced by
   `ansible/tests/repo/test_vale_matches_the_ci_pin.py`.
+  **Every task under the `tooling` tag is gated on `dev_tooling_hosts`** (daniel-box and
+  daniel-server), and so is `git-hooks`, which runs the `prek` this tag installs. The gate was
+  `has_repo_checkout` — or nothing at all — until #1726, which admitted daniel-pi: the Pi holds
+  a checkout but is driven remotely over ssh and nobody commits from it, so the tag implied
+  installing uv and a pinned Python 3.14 on a 512 MB Zero 2 W that never wanted them.
+  Membership is enforced by `ansible/tests/setup/test_dev_tooling_hosts.py`.
 - **Unattended upgrades:** `20auto-upgrades` turns the periodic timers on;
   `52unattended-upgrades-local` sets no-automatic-reboot (the Sunday 07:30 restart cron owns
   reboots) plus obsolete-kernel cleanup, and **appends** `unattended_upgrades_origins_patterns`

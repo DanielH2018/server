@@ -204,7 +204,13 @@
   tags: [git-hooks]
   # `chdir` runs on the TARGET, so this needs the repo to be there. On a host Ansible drives
   # over ssh with no checkout it fails the run outright.
-  when: has_repo_checkout
+  #
+  # The gate is `dev_tooling_hosts` rather than `has_repo_checkout`, because the command is
+  # `prek install` and prek arrives with that same tooling. daniel-pi holds a checkout and no
+  # prek, so the old gate admitted a host where this task can only fail (issue #1726) — and
+  # installing hooks is meaningful only on a host somebody commits from anyway
+  # (docs/staging-cluster.md).
+  when: inventory_hostname in dev_tooling_hosts
   ansible.builtin.command: prek install
   args:
     chdir: "{{ playbook_dir }}"
