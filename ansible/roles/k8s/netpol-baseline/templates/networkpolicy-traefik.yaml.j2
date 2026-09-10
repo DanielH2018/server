@@ -65,6 +65,13 @@ spec:
       ports:
         - port: 8080
           protocol: TCP
+        # 6060 is the crowdsec-agent SIDECAR's metrics port, admitted to prometheus alone in
+        # the same from item (#1694). Without it the `crowdsec-traefik-agent` scrape job in
+        # claude-otel/templates/prometheus.yaml.j2 reads `up == 0` forever — the grant and
+        # that job only work as a pair. Nothing else may reach it: agent metrics enumerate
+        # every parser and scenario the edge runs, which is reconnaissance for an attacker.
+        - port: 6060
+          protocol: TCP
 {% else %}
     # OFF. One empty rule admits everything. `ingress: []` would be the exact opposite and deny
     # everything, which is the easiest thing in this file to get backwards.

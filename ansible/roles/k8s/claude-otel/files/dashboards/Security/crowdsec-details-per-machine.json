@@ -1071,14 +1071,14 @@
                 "uid": "EGdsQqhVk"
               },
               "editorMode": "code",
-              "expr": "cs_bucket_pour_seconds_bucket{job=\"crowdsec-node-agents\", node=\"$node\", type=\"$datasource_type\", source=\"$source\"}",
+              "expr": "cs_bucket_pour_seconds_bucket{job=\"crowdsec\"}",
               "format": "heatmap",
               "legendFormat": "{{le}}",
               "range": true,
               "refId": "A"
             }
           ],
-          "title": "Bucket pour time",
+          "title": "Bucket pour time (AppSec engine, fleet-wide)",
           "type": "bargauge"
         }
       ],
