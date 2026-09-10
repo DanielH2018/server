@@ -37,10 +37,6 @@ def _launch(tools, tmp_path, *args):
     )
 
 
-def _systemd_calls(run):
-    return [c for c in run.calls if c[1].startswith("systemd-run")]
-
-
 def test_a_failed_second_worktree_add_still_records_the_batch_already_launched(
     tmp_path,
 ):
@@ -48,16 +44,17 @@ def test_a_failed_second_worktree_add_still_records_the_batch_already_launched(
     run.answers_by_call = [
         ok(HEADROOM),  # headroom read
         ok(""),  # health read
-        ok(""),  # batch 1: worktree add
-        ok(""),  # batch 1: brief write
-        ok(""),  # batch 1: systemd-run
+        ok(""),  # batch 1: launch (worktree add+lock, brief write, systemd-run)
         subprocess.CompletedProcess(
             [], 128, stdout="", stderr="fatal: branch exists"
-        ),  # batch 2: worktree add
+        ),  # batch 2: launch fails at worktree add
         ok(""),  # batch 2: cleanup
     ]
-    assert _launch(tools, tmp_path, "--batch", "1", "--batch", "2") == 1
-    assert len(_systemd_calls(run)) == 1
+    assert (
+        _launch(tools, tmp_path, "--batch", "1", "--batch", "2", "--host", "daniel-box")
+        == 1
+    )
+    assert len(run.calls) == 5
     written = json.loads(next(iter(tmp_path.glob("*.json"))).read_text())
     assert [b["batch"] for b in written["batches"]] == ["1"]
 
@@ -69,7 +66,21 @@ def test_pinning_daniel_server_sends_every_call_there_and_none_to_daniel_box(tmp
     )
     assert _launch(tools, tmp_path, "--batch", "1", "--host", "daniel-server") == 0
     assert {c[0] for c in run.calls} == {"daniel-server"}
-    assert len(_systemd_calls(run)) == 1
+    # headroom read, health read, one launch call for the one batch.
+    assert len(run.calls) == 3
+
+
+def test_two_batches_pinned_to_one_host_cost_exactly_four_calls_there(tmp_path):
+    """Ruling 15's budget: read + health per host, plus one launch call per batch."""
+    tools, run = fake_tools(
+        answers={"daniel-server": ok(HEADROOM)},
+        issues=CLAIMED,
+    )
+    code = _launch(
+        tools, tmp_path, "--batch", "1", "--batch", "2", "--host", "daniel-server"
+    )
+    assert code == 0
+    assert [c[0] for c in run.calls] == ["daniel-server"] * 4
 
 
 def test_stop_stops_the_unit_and_prints_how_to_release_the_worktree(tmp_path, capsys):
@@ -105,7 +116,7 @@ def test_a_failed_issue_fetch_launches_nothing_and_writes_no_manifest(tmp_path, 
             issue_errors={2: error},
         )
         assert _launch(tools, tmp_path, "--batch", "1", "--batch", "2") == 1
-        assert not _systemd_calls(run)
+        assert not run.calls  # the fetch fails before any host is touched
         assert not list(tmp_path.glob("*.json"))
         assert "could not fetch issue 2" in capsys.readouterr().err
 
@@ -122,8 +133,9 @@ def test_an_unlabelled_issue_is_refused_and_a_labelled_one_launches(tmp_path, ca
         answers={"daniel-box": ok(HEADROOM)},
         issues=[Issue(3, "t", "b", ("claude", "bug"))],
     )
-    assert _launch(tools, tmp_path, "--batch", "3") == 0
-    assert len(_systemd_calls(run)) == 1
+    assert _launch(tools, tmp_path, "--batch", "3", "--host", "daniel-box") == 0
+    # headroom read, health read, one launch call for the one batch.
+    assert len(run.calls) == 3
 
 
 def test_the_issue_fetch_asks_for_labels_and_carries_them_onto_the_issue():
@@ -154,9 +166,22 @@ def test_one_issue_in_two_batches_is_refused_and_a_repeated_batch_is_placed_once
     assert "issue 2 appears in more than one --batch" in capsys.readouterr().err
 
     tools, run = fake_tools(answers={"daniel-box": ok(HEADROOM)}, issues=CLAIMED)
-    assert _launch(tools, tmp_path, "--batch", "1,2", "--batch", "1,2") == 0
-    assert len(_systemd_calls(run)) == 1
+    assert (
+        _launch(
+            tools, tmp_path, "--batch", "1,2", "--batch", "1,2", "--host", "daniel-box"
+        )
+        == 0
+    )
+    # headroom read, health read, one launch call for the one placed batch.
+    assert len(run.calls) == 3
     assert "--batch 1,2 given twice; placing it once" in capsys.readouterr().err
+
+
+def test_a_within_spec_duplicate_issue_gets_its_own_message(tmp_path, capsys):
+    tools, run = fake_tools(answers={"daniel-box": ok(HEADROOM)}, issues=CLAIMED)
+    assert _launch(tools, tmp_path, "--batch", "1,1") == 1
+    assert not run.calls  # refused before the first ssh
+    assert "issue 1 is listed twice in --batch 1,1" in capsys.readouterr().err
 
 
 def test_the_briefs_worktree_path_matches_the_one_launch_creates():

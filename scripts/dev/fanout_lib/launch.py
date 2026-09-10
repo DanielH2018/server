@@ -68,7 +68,7 @@ def write_brief_command(batch: str) -> str:
     return f"mkdir -p {wt}/.fanout && cat > {wt}/.fanout/brief.md"
 
 
-def launch_command(batch: str) -> str:
+def systemd_run_command(batch: str) -> str:
     wt = worktree_path(batch)
     return (
         f"systemd-run --user --unit {unit_name(batch)} "
@@ -81,6 +81,44 @@ def launch_command(batch: str) -> str:
     )
 
 
+def launch_command(batch: str) -> str:
+    """The one call a batch launch runs: worktree add+lock, brief write, systemd-run.
+
+    The brief text is this command's own stdin, consumed by the `cat` in the middle of
+    the chain. `&&` between every step means a failure anywhere stops the rest — a failed
+    worktree add never reaches `cat` or `systemd-run`, and a failed brief write never
+    reaches `systemd-run`.
+    """
+    return " && ".join(
+        [
+            create_worktree_command(batch),
+            write_brief_command(batch),
+            systemd_run_command(batch),
+        ]
+    )
+
+
+# git's own failures open with "fatal:"; a `cat` failure opens with "cat:"; systemd-run's
+# failure carries this phrase. These are the only steps in `launch_command`'s chain that can
+# fail, so a message matching none of them means the chain failed at a step none of the
+# three markers cover.
+_SYSTEMD_RUN_FAILURE_MARKER = "Failed to start transient service"
+
+
+def _attribute_failure(stderr: str) -> str | None:
+    """Name which step of `launch_command`'s chain produced this stderr, or None.
+
+    The chain runs as one call, so stderr is the only evidence of which step failed.
+    """
+    if "fatal:" in stderr:
+        return "worktree add"
+    if "cat:" in stderr:
+        return "brief write"
+    if _SYSTEMD_RUN_FAILURE_MARKER in stderr:
+        return "systemd-run"
+    return None
+
+
 def _run(
     tools: Tools, host: str, command: str, stdin: str | None, step: str
 ) -> subprocess.CompletedProcess:
@@ -89,11 +127,6 @@ def _run(
         return tools.run(host, command, LAUNCH_TIMEOUT_S, stdin)
     except subprocess.TimeoutExpired:
         raise LaunchError(f"{step} timed out after {LAUNCH_TIMEOUT_S}s") from None
-
-
-def _check(proc: subprocess.CompletedProcess, what: str) -> None:
-    if proc.returncode != 0:
-        raise LaunchError(f"{what} failed ({proc.returncode}): {proc.stderr.strip()}")
 
 
 def _cleanup_worktree(tools: Tools, host: str, batch: str) -> str | None:
@@ -116,7 +149,9 @@ def launch(
 
     The worktree is locked with reason `fanout-<batch>` (`unit_name(batch)`) so a
     merged-worktree prune cannot remove it while the unit is still running; Task 10's
-    `clean` is what unlocks it once the unit finishes.
+    `clean` is what unlocks it once the unit finishes. All three steps run as ONE call
+    (`launch_command`), the brief arriving on its stdin, to keep a batch's launch to a
+    single ssh connection.
 
     Args:
         tools: the injectable process boundary.
@@ -129,26 +164,24 @@ def launch(
         The launched batch's record, for the run manifest.
 
     Raises:
-        LaunchError: the worktree-add, brief-write or systemd-run step failed, or any of
-            the three timed out. A failed or timed-out worktree-add removes the
-            half-made tree and its branch before raising, and folds a cleanup failure
-            into the same message; the brief-write and systemd-run steps leave the
-            worktree in place for inspection.
+        LaunchError: the launch call failed or timed out. A worktree-add failure (or a
+            timeout, which is a hung `git fetch`/`worktree add` in practice — `systemd-run`
+            starts the unit and returns before the ssh connection could plausibly still be
+            open) removes the half-made tree and its branch before raising, folding a
+            cleanup failure into the same message. A brief-write or systemd-run failure
+            leaves the worktree in place for inspection instead.
     """
     try:
-        proc = _run(tools, host, create_worktree_command(batch), None, "worktree add")
+        proc = _run(tools, host, launch_command(batch), brief_text, "launch")
     except LaunchError as exc:
         message = str(exc) + (_cleanup_worktree(tools, host, batch) or "")
         raise LaunchError(message) from None
     if proc.returncode != 0:
-        message = f"worktree add failed ({proc.returncode}): {proc.stderr.strip()}"
-        message += _cleanup_worktree(tools, host, batch) or ""
+        step = _attribute_failure(proc.stderr)
+        message = f"{step or 'launch command'} failed ({proc.returncode}): {proc.stderr.strip()}"
+        if step == "worktree add":
+            message += _cleanup_worktree(tools, host, batch) or ""
         raise LaunchError(message)
-    _check(
-        _run(tools, host, write_brief_command(batch), brief_text, "brief write"),
-        "brief write",
-    )
-    _check(_run(tools, host, launch_command(batch), None, "systemd-run"), "systemd-run")
     return Batch(
         batch,
         host,

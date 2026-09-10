@@ -77,7 +77,9 @@ def _launch(tools, tmp_path, *extra):
 
 
 def _brief(run) -> str:
-    briefs = [c[2] for c in run.calls if c[1].startswith("mkdir -p")]
+    # The brief is the stdin of the one launch call, identified by the `cat > ` step in
+    # its combined worktree-add+lock, brief-write, systemd-run chain.
+    briefs = [c[2] for c in run.calls if "cat > " in c[1]]
     assert len(briefs) == 1
     return briefs[0]
 
@@ -142,14 +144,14 @@ def test_stop_never_removes_the_worktree():
     assert stop_command("fanout-b") == "systemctl --user stop fanout-b"
 
 
-def test_cli_launch_places_and_starts_the_agent_with_one_systemd_run_call(tmp_path):
+def test_cli_launch_places_and_starts_the_agent_with_one_launch_call(tmp_path):
     tools, run = fake_tools(
         answers={"daniel-box": ok(HEADROOM), "daniel-server": ok(HEADROOM)},
         issues=[Issue(1, "t", "b", ("claude",))],
     )
-    assert _launch(tools, tmp_path) == 0
-    systemd_calls = [c for c in run.calls if c[1].startswith("systemd-run")]
-    assert len(systemd_calls) == 1
+    assert _launch(tools, tmp_path, "--host", "daniel-box") == 0
+    # headroom read, health read, one combined launch call for the one batch.
+    assert len(run.calls) == 3
     assert [p.name for p in tmp_path.glob("*.json")]
 
 
@@ -159,7 +161,8 @@ def test_cli_launch_reports_no_headroom_when_the_host_is_uncapped(tmp_path):
         issues=[Issue(1, "t", "b", ("claude",))],
     )
     assert _launch(tools, tmp_path) == 3
-    assert not [c for c in run.calls if c[1].startswith("systemd-run")]
+    # NoHeadroom stops before any launch call.
+    assert not any("worktree add" in c[1] for c in run.calls)
 
 
 def test_a_failed_and_a_successful_health_read_both_surface_in_the_brief(tmp_path):
@@ -197,7 +200,7 @@ def test_a_health_read_timeout_surfaces_in_the_brief(tmp_path):
         ok(HEADROOM),
         subprocess.TimeoutExpired(cmd="ssh", timeout=40.0),
     ]
-    assert _launch(tools, tmp_path) == 0
+    assert _launch(tools, tmp_path, "--host", "daniel-box") == 0
     assert "session-health read failed (timed out)" in _brief(run)
 
 

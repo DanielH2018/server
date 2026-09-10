@@ -16,8 +16,10 @@ from fanout_lib.launch import (
     launch,
     launch_command,
     remove_worktree_command,
+    systemd_run_command,
     unit_name,
     worktree_path,
+    write_brief_command,
 )
 from fanout_lib.manifest import Batch, Manifest, load, new_run_id, save
 from _fanout_fakes import fake_tools, ok
@@ -26,6 +28,22 @@ ISSUES = [
     Issue(1345, "Traefik startupProbe has no red-proof", "body one\nline two"),
     Issue(1386, "Healthchecks key", "second body"),
 ]
+
+# Could never be dialled — used as both the target and the local-host name so a "local"
+# call that actually went over ssh would fail rather than silently pass.
+NOT_A_REAL_HOST = "this-is-not-a-real-host"
+
+
+def test_the_remote_leg_is_ssh_and_the_local_leg_is_bash():
+    from fanout_lib.transport import SSH_OPTS, run_command
+
+    proc = run_command(
+        NOT_A_REAL_HOST, "echo hi", 5.0, None, local_host=NOT_A_REAL_HOST
+    )
+    assert proc.stdout == "hi\n"
+    # leakguard stubs `ssh` under test (it opens a socket), so the remote leg's argv shape
+    # is pinned statically here rather than by dialling an unreachable host.
+    assert "BatchMode=yes" in SSH_OPTS
 
 
 def test_daniel_box_brief_lands_and_daniel_server_brief_stops_at_the_pr():
@@ -76,8 +94,8 @@ def test_the_worktree_command_fetches_before_adding_from_origin_master():
     assert cmd.rstrip().endswith(worktree_path("b"))
 
 
-def test_the_launch_command_is_a_transient_user_service_reading_the_brief():
-    cmd = launch_command("b")
+def test_the_systemd_run_command_is_a_transient_user_service_reading_the_brief():
+    cmd = systemd_run_command("b")
     assert cmd.startswith("systemd-run --user --unit fanout-b ")
     assert "--scope" not in cmd  # a scope would tie the agent to the launching ssh
     assert "-p WorkingDirectory=/home/ubuntu/server/.claude/worktrees/fanout-b" in cmd
@@ -92,14 +110,27 @@ def test_the_launch_command_is_a_transient_user_service_reading_the_brief():
     assert "claude -p --model opus --permission-mode auto --output-format json" in cmd
 
 
+def test_the_launch_command_folds_every_step_into_one_call_ending_in_systemd_run():
+    cmd = launch_command("b")
+    assert cmd == create_worktree_command("b") + " && " + write_brief_command(
+        "b"
+    ) + " && " + systemd_run_command("b")
+    assert (
+        cmd.index("worktree add")
+        < cmd.index("worktree lock")
+        < cmd.index("cat > ")
+        < cmd.index("systemd-run")
+    )
+
+
 def test_launch_writes_the_brief_over_stdin_then_starts_the_unit():
     tools, run = fake_tools({"daniel-server": ok("")})
     batch = launch(tools, "daniel-server", "b", "BRIEF", issues=[1])
-    hosts_cmds = [(h, c) for h, c, _ in run.calls]
-    assert [h for h, _ in hosts_cmds] == ["daniel-server"] * 3
-    assert "worktree add" in hosts_cmds[0][1]
-    assert run.calls[1][2] == "BRIEF" and "cat > " in hosts_cmds[1][1]
-    assert hosts_cmds[2][1].startswith("systemd-run")
+    # One ssh call per batch: add+lock, brief write and systemd-run folded into it.
+    assert len(run.calls) == 1
+    host, cmd, stdin = run.calls[0]
+    assert host == "daniel-server" and stdin == "BRIEF"
+    assert cmd.index("worktree add") < cmd.index("cat > ") < cmd.index("systemd-run")
     assert batch.unit == "fanout-b" and batch.host == "daniel-server"
 
 
@@ -113,11 +144,13 @@ def test_a_failed_worktree_add_removes_the_half_made_tree_and_launches_nothing()
     )
     with pytest.raises(LaunchError, match="branch exists"):
         launch(tools, "daniel-server", "b", "BRIEF", issues=[1])
+    # Two calls total: the failed launch attempt, then cleanup. `&&` between every step of
+    # `launch_command` means systemd-run structurally cannot have run — the fake has no way
+    # to observe that, since it answers the whole chain with one canned result.
     assert len(run.calls) == 2
     # The cleanup command chains removal and branch deletion with `&&`, not `;` — a bare
     # `;` would force-delete the branch even when the tree was never created.
     assert run.calls[1][1] == remove_worktree_command("b")
-    assert not any(c.startswith("systemd-run") for _, c, _ in run.calls)
 
 
 def test_a_failed_cleanup_is_folded_into_the_launch_error():
@@ -134,33 +167,33 @@ def test_a_failed_cleanup_is_folded_into_the_launch_error():
     assert "not a working tree" in str(excinfo.value)
 
 
-def test_a_worktree_add_timeout_still_cleans_up_and_raises():
+def test_a_launch_timeout_still_cleans_up_and_raises():
+    # A timeout carries no stderr to attribute to a step, but systemd-run starts the unit
+    # and returns immediately, so a 120s hang is a stuck `git fetch`/`worktree add` in
+    # practice — treated the same as a worktree-add failure, cleanup included.
     tools, run = fake_tools({"daniel-server": ok("")})
     run.answers_by_call = [subprocess.TimeoutExpired(cmd="git", timeout=120.0)]
     with pytest.raises(LaunchError, match="timed out"):
         launch(tools, "daniel-server", "b", "BRIEF", issues=[1])
     assert len(run.calls) == 2 and "worktree remove --force" in run.calls[1][1]
-    assert not any(c.startswith("systemd-run") for _, c, _ in run.calls)
 
 
 def test_a_failed_brief_write_raises_and_skips_systemd_run():
-    tools, run = fake_tools({"daniel-server": ok("")})
+    tools, run = fake_tools()
     run.answers_by_call = [
-        ok(""),
         subprocess.CompletedProcess([], 1, stdout="", stderr="cat: No such file"),
     ]
     with pytest.raises(LaunchError, match="brief write") as excinfo:
         launch(tools, "daniel-server", "b", "BRIEF", issues=[1])
     assert "No such file" in str(excinfo.value)
-    assert len(run.calls) == 2
-    assert not any(c.startswith("systemd-run") for _, c, _ in run.calls)
+    # One call: the worktree add+lock already succeeded (the chain reached `cat`), so it
+    # stays for inspection — no cleanup call.
+    assert len(run.calls) == 1
 
 
 def test_a_failed_systemd_run_raises_with_its_stderr():
     tools, run = fake_tools()
     run.answers_by_call = [
-        ok(""),
-        ok(""),
         subprocess.CompletedProcess(
             [],
             1,
@@ -174,9 +207,8 @@ def test_a_failed_systemd_run_raises_with_its_stderr():
     with pytest.raises(LaunchError, match="systemd-run") as excinfo:
         launch(tools, "daniel-server", "b", "BRIEF", issues=[1])
     assert "Unit fanout-b.service already exists." in str(excinfo.value)
-    assert len(run.calls) == 3
     # The worktree stays for inspection after a systemd-run failure — no cleanup command.
-    assert not any("worktree remove" in c for _, c, _ in run.calls)
+    assert len(run.calls) == 1
 
 
 def test_a_failed_add_and_a_timed_out_cleanup_are_both_reported():
@@ -189,7 +221,6 @@ def test_a_failed_add_and_a_timed_out_cleanup_are_both_reported():
         launch(tools, "daniel-server", "b", "BRIEF", issues=[1])
     assert "branch exists" in str(excinfo.value)
     assert "timed out" in str(excinfo.value)
-    assert not any(c.startswith("systemd-run") for _, c, _ in run.calls)
 
 
 def test_manifest_round_trips_outside_the_repo(tmp_path):

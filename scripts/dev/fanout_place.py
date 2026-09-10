@@ -16,13 +16,11 @@ Usage::
 Exit codes: 0 ok · 1 usage or launch failure · 3 no headroom on any host · 4 no host
 readable · 5 a batch reports failed (`status` only).
 
-`--host` defaults to daniel-box for this slice. One batch on daniel-server costs five ssh
-calls — headroom read, health read, worktree add, brief write, systemd-run — and `ufw limit
-ssh` REJECTs the sixth within 30 s, so two batches there exceed the budget on a path nothing
-has exercised. Slice 4 folds add, lock, brief write and systemd-run into ONE ssh call per
-batch (the brief on stdin) and drops the default; until then the CLI always pins, so
-`place()`'s multi-reading path is reachable only from its own tests. `read` still reports
-both hosts.
+A launch costs two remote ssh connections per host it reads (headroom, health) plus one
+per batch placed there — worktree add+lock, brief write and systemd-run folded into one
+call. `--host` pins every batch to one host; leave it unset and placement reads both hosts
+and chooses per batch. Calls to the host this script itself runs on go over `bash -c`, not
+ssh, so they never count against `ufw limit ssh`.
 
 Launch locks each worktree and nothing in this slice unlocks it. Until `clean` lands, release
 a stopped or failed batch's tree by hand::
@@ -102,6 +100,12 @@ def _parse_batches(specs: list[str]) -> dict[str, list[int]] | None:
             continue
         numbers = [int(n) for n in spec.split(",")]
         for n in numbers:
+            if n in seen and seen[n] == spec:
+                print(
+                    f"launch: issue {n} is listed twice in --batch {spec}",
+                    file=sys.stderr,
+                )
+                return None
             if n in seen:
                 print(
                     f"launch: issue {n} appears in more than one --batch "
@@ -162,7 +166,7 @@ def cmd_launch(args, tools: Tools) -> int:
     fetched = _fetch_issues(tools, batches)
     if fetched is None:
         return 1
-    hosts = [args.host]
+    hosts = [args.host] if args.host else list(HOSTS)
     good, bad = _readings(tools, hosts)
     for msg in bad:
         print(f"placing without {msg}", file=sys.stderr)
@@ -294,8 +298,7 @@ def main(argv=None, tools: Tools | None = None) -> int:
     launch_parser.add_argument(
         "--host",
         choices=HOSTS,
-        default="daniel-box",
-        help="host to place every batch on (default: daniel-box; see the module docstring)",
+        help="pin every batch to this host; omit it to let placement choose per batch",
     )
     launch_parser.add_argument(
         "--orchestrator-branch", required=True, help="the branch holding the claims"
