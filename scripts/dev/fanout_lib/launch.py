@@ -48,6 +48,22 @@ def _step(command: str, name: str) -> str:
     return f'{command} || {{ echo "fanout-step: {name}" >&2; exit 1; }}'
 
 
+def exists_check_command(batch: str) -> str:
+    """Refuse before `fetch` when this batch's worktree or branch is already there.
+
+    A relaunch of a failed batch used to reach `worktree add`, which fails precisely
+    because the tree and branch exist — and `worktree add` is a cleanup step, so the
+    cleanup then force-removed that tree and deleted its branch. The failed agent's work
+    went with it, with nothing in the output saying so. Checking first turns that into a
+    refusal: `exists` is deliberately NOT in `_CLEANUP_STEPS`, so nothing is touched.
+    """
+    return _step(
+        f"test ! -e {worktree_path(batch)} && "
+        f"! git -C {REPO} show-ref --verify --quiet refs/heads/{branch_name(batch)}",
+        "exists",
+    )
+
+
 def create_worktree_command(batch: str) -> str:
     # The lock keeps prune_worktrees.py off this tree: its `--reason` doesn't match the
     # `claude session ... (pid ... start ...)` shape prune_worktrees.session_is_alive
@@ -56,6 +72,7 @@ def create_worktree_command(batch: str) -> str:
     # tree is removable the moment the PR lands — even while the unit is still running.
     return " && ".join(
         [
+            exists_check_command(batch),
             _step(f"git -C {REPO} fetch origin", "fetch"),
             _step(
                 f"git -C {REPO} worktree add -b {branch_name(batch)} "
@@ -130,8 +147,11 @@ _STEP_SENTINEL_RE = re.compile(r"^fanout-step: (.+)$", re.MULTILINE)
 # left one half-made: `worktree add`/`worktree lock` do; a `fetch` failure precedes both and
 # created nothing (cleanup there would fail its own `worktree remove` with a confusing
 # "not a working tree"); `brief write`/`systemd-run` come after the tree already exists and
-# leave it in place for inspection instead.
+# leave it in place for inspection instead. `exists` is the one that must never be here: it
+# fails BECAUSE a tree is there, and that tree belongs to an earlier batch, not this launch.
 _CLEANUP_STEPS = frozenset({"worktree add", "worktree lock"})
+
+_EXISTS_STEP = "exists"
 
 
 def _attribute_failure(stderr: str) -> str | None:
@@ -191,12 +211,15 @@ def launch(
         The launched batch's record, for the run manifest.
 
     Raises:
-        LaunchError: the launch call failed or timed out. A `worktree add`/`worktree lock`
-            failure (or a timeout, which is a hung git step in practice — see the
-            `DECIDED:` note above the cleanup check) removes the half-made tree and its
-            branch before raising, folding a cleanup failure into the same message. A
-            `fetch`, `brief write` or `systemd-run` failure, or one this can't attribute,
-            leaves the worktree as it found it instead.
+        LaunchError: the launch call failed or timed out. An `exists` failure means this
+            batch's worktree or branch is already on the host — usually a relaunch of a
+            batch that failed — and the message says to `clean` it first; nothing is
+            removed. A `worktree add`/`worktree lock` failure (or a timeout, which is a
+            hung git step in practice — see the `DECIDED:` note above the cleanup check)
+            removes the half-made tree and its branch before raising, folding a cleanup
+            failure into the same message. A `fetch`, `brief write` or `systemd-run`
+            failure, or one this can't attribute, leaves the worktree as it found it
+            instead.
     """
     # DECIDED: no exit or timeout from this call can happen after the unit is live.
     # `systemd-run` (without --wait/--pty/--scope) starts the transient unit and returns
@@ -214,6 +237,13 @@ def launch(
         raise LaunchError(message) from None
     if proc.returncode != 0:
         step = _attribute_failure(proc.stderr)
+        if step == _EXISTS_STEP:
+            raise LaunchError(
+                f"batch {batch} already has {worktree_path(batch)} or branch "
+                f"{branch_name(batch)} on {host} — run `clean <run-id>` first, or remove "
+                "the tree by hand if you are abandoning its work; relaunching over it "
+                "would delete that branch"
+            )
         message = f"{step or 'launch command'} failed ({proc.returncode}): {proc.stderr.strip()}"
         if step in _CLEANUP_STEPS:
             message += _cleanup_worktree(tools, host, batch) or ""

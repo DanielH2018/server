@@ -39,6 +39,25 @@ import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# The worktree section of the banner lives in `.claude/hooks/hooklib/worktree_lines.py`
+# (own docstring covers `hooklib`-not-`lib`); this file sits at its 600-line cap. Wrapped
+# like `lib.deployer_park` below (issue #1566), in its own try so a failure names the
+# module that broke rather than deployer_park's unrelated line.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+try:
+    from hooklib.worktree_lines import _stale_worktree_lines, remote_fanout_lines
+
+    WORKTREE_LINES_IMPORT_ERROR = ""
+except ImportError as exc:
+    WORKTREE_LINES_IMPORT_ERROR = str(exc)
+
+    def remote_fanout_lines(*_args, **_kwargs):
+        return [f"  ⚠ hooklib.worktree_lines is broken: {WORKTREE_LINES_IMPORT_ERROR}"]
+
+    def _stale_worktree_lines(*_args, **_kwargs):
+        return []
+
+
 # The park decision itself lives in `scripts/lib/deployer_park.py`, because `deploy.sh` exit 4
 # asks the same question of the same marker and a second derivation would drift (issue #1429).
 # The marker directory and the threshold are re-exported under their original names: this
@@ -494,28 +513,8 @@ WORKTREE_TIMEOUT_S = 30
 
 
 def stale_worktree_lines():
-    """Merged worktrees this repo can remove, as ready-to-print banner lines.
-
-    Claude Code's own worktree keeper reports these too, but each of its lines ends by asking
-    the reader to run `gh pr list --state merged --head <branch>` by hand to tell a
-    squash-merged branch from one that is merely behind. prune_worktrees.py already makes
-    that call, so this prints its verdict instead. Bounded and skipped on any failure, like
-    every other check here — it reaches GitHub, and a slow API must never stall session start.
-    """
-    try:
-        proc = _run(
-            [
-                "uv",
-                "run",
-                "python",
-                "scripts/dev/prune_worktrees.py",
-                "--brief",
-            ],
-            WORKTREE_TIMEOUT_S,
-        )
-    except Exception:
-        return []
-    return [line for line in proc.stdout.splitlines() if line.strip()]
+    """Shim: `hooklib.worktree_lines` can't import `_run` back from this module."""
+    return _stale_worktree_lines(_run, WORKTREE_TIMEOUT_S)
 
 
 def format_banner(problems):
@@ -531,12 +530,17 @@ def format_banner(problems):
     return "\n".join(out)
 
 
-def main(*, parked_deployer_problems=parked_deployer_problems):
+def main(
+    *,
+    parked_deployer_problems=parked_deployer_problems,
+    remote_fanout_lines=remote_fanout_lines,
+):
     """Print the SessionStart health banner for a genuine session open, then exit 0.
 
     Skips a mid-session compaction event. Combines container, Prometheus-target and
     stale-branch problems into one banner, then separately prints other live sessions in
-    this repo and any worktrees ready to remove — both regardless of health status.
+    this repo, worktrees ready to remove, and fan-out worktrees running on another host —
+    all three regardless of health status.
 
     Args:
         parked_deployer_problems: override for the parked-deployer probe. Defaults to the
@@ -545,6 +549,7 @@ def main(*, parked_deployer_problems=parked_deployer_problems):
             (ansible/tests/_ratchet.py) caps this file's patches on a first-party module at
             its current allowlist entry — the same reason `parked_deployer_problems` itself
             takes its four reads as parameters rather than patched globals.
+        remote_fanout_lines: override for the same reason (live `.claude/fanout` state).
     """
     raw = sys.stdin.read()
     try:
@@ -582,6 +587,8 @@ def main(*, parked_deployer_problems=parked_deployer_problems):
             print(line)
 
     for line in stale_worktree_lines():
+        print(line)
+    for line in remote_fanout_lines():
         print(line)
     return 0
 

@@ -20,7 +20,10 @@ B = Batch(
     [1],
     "t",
 )
-HEADROOM = f"1\n12884901888\n0\n{HOST_KEY}\n"
+# Fleet current, fleet cap, plane current, plane cap, live agents, signing key — the shape
+# transport.HOST_READ_COMMAND prints. Roomy on both planes and holding a registered key, so
+# these tests measure status parsing rather than placement or the signing gate.
+HEADROOM = f"1\n12884901888\n1\n12884901888\n0\n{HOST_KEY}\n"
 
 RUNNING = "=== b\nActiveState=active\nResult=success\nExecMainStatus=0\n--- stderr\n--- report\n"
 DONE = (
@@ -157,7 +160,7 @@ def test_cli_launch_places_and_starts_the_agent_with_one_launch_call(tmp_path):
 
 def test_cli_launch_reports_no_headroom_when_the_host_is_uncapped(tmp_path):
     tools, run = fake_tools(
-        answers={"daniel-box": ok(f"1\nmax\n0\n{HOST_KEY}\n")},
+        answers={"daniel-box": ok(f"1\nmax\n1\nmax\n0\n{HOST_KEY}\n")},
         issues=[Issue(1, "t", "b", ("claude",))],
     )
     assert _launch(tools, tmp_path) == 3
@@ -166,7 +169,9 @@ def test_cli_launch_reports_no_headroom_when_the_host_is_uncapped(tmp_path):
 
 
 def test_a_failed_and_a_successful_health_read_both_surface_in_the_brief(tmp_path):
-    # Only the placed host is read, so each half of this is its own run.
+    # Only the placed host is read, so each half of this is its own run — and its own
+    # manifest root, since batch 1 is still live in the first half's manifest and `launch`
+    # refuses a batch id live in any run under the root it is given.
     tools, run = fake_tools(
         answers={"daniel-box": ok(HEADROOM)},
         issues=[Issue(1, "t", "b", ("claude",))],
@@ -186,7 +191,7 @@ def test_a_failed_and_a_successful_health_read_both_surface_in_the_brief(tmp_pat
         issues=[Issue(1, "t", "b", ("claude",))],
     )
     run.answers_by_call = [ok(HEADROOM), ok("line one\nline two\n")]
-    assert _launch(tools, tmp_path, "--host", "daniel-server") == 0
+    assert _launch(tools, tmp_path / "second-run", "--host", "daniel-server") == 0
     brief = _brief(run)
     assert "[daniel-server] line one" in brief and "[daniel-server] line two" in brief
 
@@ -248,3 +253,27 @@ def test_cli_status_exits_5_and_names_the_terminal_reason_on_a_failed_batch(
     out = capsys.readouterr().out
     assert "b on daniel-box: failed" in out
     assert "permission_denials=2" in out and "max turns reached" in out
+
+
+def test_cli_status_reports_a_cleaned_batch_without_reading_the_host(tmp_path, capsys):
+    """F6: `clean` resets the unit and deletes report.json, which parse_status reads as failed."""
+    cleaned = Batch(
+        "b",
+        "daniel-box",
+        "/w",
+        "worktree-fanout-b",
+        "fanout-b",
+        [1],
+        "t",
+        "2026-09-10T12:00:00+00:00",
+    )
+    run = Manifest("20260101T000005Z", "o", [cleaned])
+    save(run, root=tmp_path)
+    tools, calls = fake_tools()
+    code = main(["status", run.run_id, "--manifest-root", str(tmp_path)], tools)
+    assert code == 0
+    assert not calls.calls
+    assert (
+        "b on daniel-box: cleaned (2026-09-10T12:00:00+00:00)"
+        in capsys.readouterr().out
+    )

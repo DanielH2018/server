@@ -279,6 +279,37 @@ The banner improvement is recoverable later with a gitignored `.claim` marker fi
 the worktree root, which `session-health.py` could read with no network call. That is not in
 scope here.
 
+## Placement across hosts
+
+`scripts/dev/fanout_place.py` names each worktree `fanout-<batch>` because it creates the
+worktree itself rather than going through the Agent tool, which only ever produces the
+`agent-<hash>` name above. Claims stay under the orchestrator's own worktree because
+`findings.py` reads `git worktree list` on daniel-box only, so it cannot see a claim naming a
+worktree that lives on daniel-server. A daniel-server agent stops at `gh pr create` and does
+not land its PR, because only daniel-box runs deploys. The manifest under
+`~/.claude/fanout/<run-id>.json` is what `status`, `clean`, and the SessionStart banner's
+`remote_fanout_lines` (`.claude/hooks/hooklib/worktree_lines.py`) all read to find a fan-out's
+live worktrees on the other host.
+
+The dispatcher scores a host on memory headroom, and an agent is throttled by two cgroup caps
+rather than one: `user.slice`, the fleet, and `user-1000.slice`, the login plane it runs in as
+a transient user service. It reads both and takes the smaller headroom, so the tighter cap
+decides and a host the fleet number alone would allow can still be refused. Each placement
+spends one 2.5 GiB reservation (`RESERVATION_BYTES` in `scripts/dev/fanout_lib/placement.py`),
+and the host with the most left takes the next batch.
+
+`clean` records each removal in the manifest, because the act destroys its own evidence: the
+remote leg reads the worktree it deletes, so a later pass has nothing left to ask. A batch
+already removed is skipped without an ssh call, `status` reports it as `cleaned` rather than
+reading a host whose report file went with the worktree, and the manifest is deleted only once
+every batch is removed.
+
+`launch` refuses daniel-server as a host until the operator registers its SSH key as a GitHub
+signing key once (`gh ssh-key add ~/.ssh/id_ed25519.pub --type signing`): the repo's ruleset
+requires a verified commit signature, and a PR signed with an unregistered key sits `BLOCKED`
+with every check green (PR #1572 needed a hand re-sign), so the dispatcher checks the key
+before it spends an agent.
+
 ## The `/issue-fanout` skill
 
 1. **Triage.** Read `findings.py next --json`. Group the candidates so that no two agents touch
@@ -295,11 +326,15 @@ scope here.
    worktree name, because a subagent's worktree name is auto-generated and unknown until it
    starts — and a claim naming a worktree that does not exist yet would read as stale
    immediately. The orchestrator's worktree is live for the whole fan-out, so the claim is too.
-3. **Spawn.** One Opus agent per batch, spawned with `isolation: "worktree"` and
-   `model: "opus"` on the `Agent` call. Both are load-bearing and neither is a default: an
-   `Agent` call without `isolation` runs in the orchestrator's own checkout, so every agent
-   shares one working tree and commits over the others — the race the claim protocol assumes
-   away. The worktree it gets is auto-named, per the measurement below. The brief carries the
+3. **Spawn.** `uv run python scripts/dev/fanout_place.py launch --batch … ` places one Opus
+   agent per batch across both hosts and writes each brief itself — see *Placement across
+   hosts* above. The Agent tool is the fallback, not the default: the skill's *When the
+   dispatcher is unavailable* section covers a session with no ssh reach to daniel-server,
+   and there `isolation: "worktree"` and `model: "opus"` are both load-bearing and neither is
+   a default. An `Agent` call without `isolation` runs in the orchestrator's own checkout, so
+   every agent shares one working tree and commits over the others — the race the claim
+   protocol assumes away. The worktree it gets is auto-named, per the measurement below. Either
+   way the brief carries the
    issue bodies, the claim the agent already holds, the repo's `land-after-merge` contract, the
    blocking wait on the `VERDICT:` line (a backgrounded `land.sh` with redirected output is not
    a harness-tracked child, so nothing wakes the agent when it finishes), the
@@ -311,31 +346,24 @@ scope here.
 5. **Report.** A table of issue → worktree → PR → verdict. Any issue still claimed when the
    fan-out ends is named explicitly, so nothing is held silently.
 
-### Width is unbounded
+### Width is bounded by measured headroom
 
-The skill takes no agent-count parameter. The bound is the host's cgroup configuration, which
-exists already and is the right place for it — a per-skill number would be a second bound that
-drifts from the first.
-
-Two facts a wide fan-out runs into, measured on daniel-box 2026-09-05:
-
-| Scope | MemoryHigh | MemorySwapMax | MemoryMax |
-|---|---|---|---|
-| `user-1000.slice` | 8G | 2G | infinity |
-| `claude-rc.service` | 8G | 2G | infinity |
-
-Host: 28 GB RAM, 16 cores, 7 GB swap.
-
-The two planes carry **independent** caps, so a fan-out split across both can draw 16G plus 4G
-of swap before either throttles. And `MemoryHigh` throttles rather than caps — the 2026-09-05
-reclaim stall happened with it in force, leaving remote control unreachable for ~30 minutes
-while the unit read `active (running)`. The failure mode of an over-wide fan-out is that stall,
-not an OOM kill.
-
-Filed as issue #1264; out of scope for this change.
+The dispatcher (`scripts/dev/fanout_place.py`) bounds a fan-out's width by reading live memory
+headroom rather than a fixed count — see *Placement across hosts* above for how it places a
+batch. The caps behind that read: `user.slice`'s fleet `MemoryHigh`
+is 12G on daniel-box with an 8G per-plane sub-bound, and 10G on daniel-server, where the 8G
+login-plane cap is the effective bound because `claude-rc.service` does not run on that host.
+`MemoryHigh` throttles rather than caps — the 2026-09-05 reclaim stall (issue #1264) happened
+with it in force, leaving remote control unreachable for ~30 minutes while the unit read
+`active (running)`. The failure mode of an over-wide fan-out is that stall, not an OOM kill.
 
 The deploy lock serialises the other half. Every agent's landing queues on it, so past some width
 the fan-out buys parallel *implementation* and no parallel *landing* at all.
+
+The Agent-tool fallback path (*When the dispatcher is unavailable* in the skill) takes no
+agent-count parameter of its own; its bound is still the host's cgroup configuration, which
+exists already and is the right place for it — a per-skill number would be a second bound that
+drifts from the first.
 
 ## Testing
 

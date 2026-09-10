@@ -26,9 +26,10 @@ REPO = "/home/ubuntu/server"
 SSH_OPTS = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=8"]
 READ_TIMEOUT_S = 20.0
 GH_TIMEOUT_S = 30.0
-# The one read every host gets: READ_COMMAND's three memory lines plus the signing-key line
-# the launch gate needs, folded into the same connection because the ssh budget (2 reads plus
-# MAX_BATCHES_PER_REMOTE_HOST launches = the 5 `ufw limit ssh` allows per 30s) has none spare.
+# The one read every host gets: READ_COMMAND's four memory lines and live-agent count, plus
+# the signing-key line the launch gate needs, folded into the same connection because the ssh
+# budget (2 reads plus MAX_BATCHES_PER_REMOTE_HOST launches = the 5 `ufw limit ssh` allows
+# per 30s) has none spare. The key goes last; parse_reading documents the full line order.
 HOST_READ_COMMAND = f"{READ_COMMAND}; {signing.signing_key_read_command(REPO)}"
 # `labels` is what the launch gate reads; dropping it from this list would refuse every
 # issue rather than fail loudly, which is why issue_from_view indexes it.
@@ -141,7 +142,9 @@ def read_host(tools: Tools, host: str) -> HostReading | str:
         proc = tools.run(host, HOST_READ_COMMAND, READ_TIMEOUT_S, None)
     except subprocess.TimeoutExpired:
         return "%s: headroom read timed out" % host
-    if proc.returncode not in (0, 1):  # 1 is pgrep's zero-count exit
+    # The signing-key read runs last, so the exit status is its `cat`'s: 0 for a key file, 1
+    # for a missing one, which the parse refuses on the empty line rather than here.
+    if proc.returncode not in (0, 1):
         return "%s: headroom read failed (%d): %s" % (
             host,
             proc.returncode,
@@ -151,3 +154,56 @@ def read_host(tools: Tools, host: str) -> HostReading | str:
         return parse_reading(host, proc.stdout)
     except ValueError as exc:
         return str(exc)
+
+
+def error_text(exc: BaseException) -> str:
+    """The readable text of a subprocess failure, from either exception shape."""
+    # CalledProcessError.stderr is text under `text=True`; TimeoutExpired.stderr is bytes
+    # or None. Printing either straight would raise inside the handler that exists to make
+    # the failure clean.
+    err = getattr(exc, "stderr", None)
+    if isinstance(err, bytes):
+        err = err.decode("utf-8", "replace")
+    return (err or str(exc)).strip()
+
+
+def registered_keys(tools: Tools) -> frozenset[str] | str:
+    """The account's registered signing keys, or a one-line reason they could not be read."""
+    try:
+        return tools.signing_keys()
+    except (
+        subprocess.CalledProcessError,
+        subprocess.TimeoutExpired,
+        ValueError,
+    ) as exc:
+        return (
+            "could not read the GitHub account's registered signing keys "
+            f"({error_text(exc)})"
+        )
+
+
+def verified_hosts(
+    readings: list[HostReading], registered: frozenset[str]
+) -> tuple[list[HostReading], list[str]]:
+    """Split readings into the hosts GitHub verifies and the reasons the rest were dropped.
+
+    A dropped host is not a failure to retry: its commits would read `verified=false
+    reason=unknown_key`, and the PR the agent opens there cannot merge past the
+    verified-signatures rule until someone re-signs the branch by hand (#1615).
+
+    Args:
+        readings: the candidate hosts' readings.
+        registered: the account's registered signing keys.
+
+    Returns:
+        The readings to place on, and one reason per host dropped — never the key itself.
+    """
+    keep: list[HostReading] = []
+    reasons: list[str] = []
+    for r in readings:
+        reason = signing.unverified_reason(r.host, r.signing_key, registered)
+        if reason is None:
+            keep.append(r)
+        else:
+            reasons.append(reason)
+    return keep, reasons

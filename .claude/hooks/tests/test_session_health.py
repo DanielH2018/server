@@ -186,8 +186,8 @@ def test_target_problems_filters_scaled_to_zero_deployments(monkeypatch):
     assert not any("terraria-stats" in line for line in bad)
 
 
-# `master_moved_problems` and its behind-master warning are tested in the sibling
-# test_session_health_master_moved.py -- they went there when this file hit its line cap.
+# `master_moved_problems` is tested in the sibling test_session_health_master_moved.py --
+# it moved there when this file hit its line cap.
 def _run_main(
     monkeypatch,
     stdin,
@@ -200,12 +200,10 @@ def _run_main(
     env=None,
     sessions=None,
     worktrees=None,
+    remote_fanout=None,
 ):
-    """Wire up main()'s dependencies and return the call to make.
-
-    Returns a zero-arg callable rather than calling main() itself, so every caller does
-    `assert _run_main(...)() == 0` instead of a bare `_mod.main()`.
-    """
+    """Wire up main()'s dependencies; returns a zero-arg callable, `_run_main(...)()`,
+    rather than calling main() itself."""
     monkeypatch.setattr(_mod.sys, "stdin", io.StringIO(stdin))
     monkeypatch.setattr(_mod, "docker_problems", lambda: (dock or [], ok))
     monkeypatch.setattr(_mod, "target_problems", lambda: targets or [])
@@ -223,17 +221,16 @@ def _run_main(
     if env:
         for k, v in env.items():
             monkeypatch.setenv(k, v)
-    # Passed as a call argument, not monkeypatched like the four stubs above: main() reads the
-    # PRIMARY checkout's `git status --porcelain` here by default (PRIMARY_STATUS_ARGV), not
-    # this worktree's, and under the prek `pytest` hook that runs on the host driving the
-    # primary checkout, that tree is genuinely dirty every time docs-refresh has just staged
-    # its regenerated pages -- which turned "assert the banner stays silent" into a false
-    # failure on the reader's own uncommitted work and broke the cron's `git commit` for four
-    # days running. main() takes this as a keyword seam (see its own docstring) rather than a
-    # fifth patched module attribute because the monkeypatch ratchet
-    # (ansible/tests/_ratchet.py) caps this file's patches on a first-party module at its
-    # current allowlist entry.
-    return functools.partial(_mod.main, parked_deployer_problems=lambda: parked or [])
+    # Passed as call arguments, not monkeypatched: main() reads the PRIMARY checkout's
+    # `git status --porcelain` by default (genuinely dirty under prek's `pytest` hook right
+    # after docs-refresh stages its pages), and remote_fanout_lines reads real
+    # ~/.claude/fanout content. Both are keyword seams (main()'s docstring) -- the
+    # monkeypatch ratchet (ansible/tests/_ratchet.py) caps this file's allowlist entry.
+    return functools.partial(
+        _mod.main,
+        parked_deployer_problems=lambda: parked or [],
+        remote_fanout_lines=lambda: remote_fanout or [],
+    )
 
 
 def test_main_silent_on_compact(monkeypatch, capsys):
@@ -362,6 +359,16 @@ def test_main_prints_the_removable_worktree_lines(monkeypatch, capsys):
     )
     assert run_main() == 0
     assert "old-thing" in capsys.readouterr().out
+
+
+def test_main_prints_remote_fanout_lines(monkeypatch, capsys):
+    run_main = _run_main(
+        monkeypatch,
+        '{"source":"startup"}',
+        remote_fanout=["  • daniel-server worktree-fanout-1345 — #1345 (run r1)"],
+    )
+    assert run_main() == 0
+    assert "daniel-server" in capsys.readouterr().out
 
 
 def test_stale_worktree_lines_reports_removable(monkeypatch):

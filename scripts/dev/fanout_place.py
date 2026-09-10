@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Place issue-fanout batches on the session host with the most memory headroom.
 
-Reads user.slice memory.current against its MemoryHigh on daniel-box and daniel-server, picks
-the host with the most headroom per batch, creates a fresh worktree there, and starts a headless
+Reads memory.current against MemoryHigh for BOTH cgroups an agent lives in — user.slice (the
+fleet) and user-1000.slice (the login plane) — on daniel-box and daniel-server, scores each host
+on the tighter of the two, picks the host with the most headroom per batch, creates a fresh
+worktree there, and starts a headless
 Opus agent as a transient user service. daniel-box agents land their PR; daniel-server agents
 stop at `gh pr create`. Spec: docs/superpowers/specs/2026-09-06-claude-fanout-placement-design.md
 
@@ -12,6 +14,7 @@ Usage::
     fanout_place.py launch --batch 1345,1386 [--batch 1288] [--host daniel-box] --orchestrator-branch <b>
     fanout_place.py status <run-id>
     fanout_place.py stop <run-id> [batch]
+    fanout_place.py clean <run-id>
 
 Exit codes: 0 ok · 1 usage or launch failure · 3 no headroom on any host, or a placement
 puts more than MAX_BATCHES_PER_REMOTE_HOST batches on one remote host · 4 no host readable
@@ -25,14 +28,14 @@ and chooses per batch. Calls to the host this script itself runs on go over `bas
 ssh, so they never count against `ufw limit ssh` — see MAX_BATCHES_PER_REMOTE_HOST below for
 the cap that keeps a placement on an actual remote host under it.
 
-Launch locks each worktree and nothing in this slice unlocks it. Until `clean` lands, release
-a stopped or failed batch's tree by hand::
-
-    git -C /home/ubuntu/server worktree unlock <worktree>
-    uv run python scripts/dev/prune_worktrees.py --prune
+Launch locks each worktree with reason `fanout-<batch>` so a merged-worktree prune cannot
+remove it while the unit still runs; `clean <run-id>` is the escape — it removes a batch's
+worktree, unlocking it in the process, once the batch's PR merged and the tree is clean, and
+leaves a batch that isn't ready to go both locked and in the manifest.
 """
 
 import argparse
+import dataclasses
 import re
 import subprocess
 import sys
@@ -48,43 +51,16 @@ from fanout_lib import manifest as manifest_mod
 from fanout_lib import signing as signing_mod
 from fanout_lib import status as status_mod
 from fanout_lib.brief import REQUIRED_LABEL, Issue, render_brief
-from fanout_lib.placement import HostReading, NoHeadroom, place
-from fanout_lib.transport import HOSTS, REPO, Tools, read_host
-
-
-def _registered_keys(tools: Tools) -> frozenset[str] | str:
-    """The account's registered signing keys, or a one-line reason they could not be read."""
-    try:
-        return tools.signing_keys()
-    except (
-        subprocess.CalledProcessError,
-        subprocess.TimeoutExpired,
-        ValueError,
-    ) as exc:
-        return (
-            "could not read the GitHub account's registered signing keys "
-            f"({_error_text(exc)})"
-        )
-
-
-def _signing_verified(
-    readings: list[HostReading], registered: frozenset[str]
-) -> list[HostReading]:
-    """Drop every host GitHub would not verify, saying which and why.
-
-    A dropped host is not a failure to retry: its commits would read `verified=false
-    reason=unknown_key`, and the PR the agent opens there cannot merge past the
-    verified-signatures rule until someone re-signs the branch by hand (#1615).
-    """
-    keep = []
-    for r in readings:
-        reason = signing_mod.unverified_reason(r.host, r.signing_key, registered)
-        if reason is None:
-            keep.append(r)
-        else:
-            print(f"launch: not placing on {reason}", file=sys.stderr)
-    return keep
-
+from fanout_lib.placement import NoHeadroom, place
+from fanout_lib.transport import (
+    HOSTS,
+    REPO,
+    Tools,
+    error_text,
+    read_host,
+    registered_keys,
+    verified_hosts,
+)
 
 BATCH_RE = re.compile(r"^\d+(,\d+)*$")
 # The host this script normally runs on; its launches go over `bash -c`, never ssh, so the
@@ -115,19 +91,15 @@ def cmd_read(args, tools: Tools) -> int:
     good, bad = _readings(tools, HOSTS)
     # `signing=` makes the launch gate's verdict readable before a launch spends an agent on
     # it. `unknown` means the registered-key read itself failed, which `launch` refuses on.
-    registered = _registered_keys(tools)
+    registered = registered_keys(tools)
     for r in good:
-        if isinstance(registered, str):
-            verdict = "unknown"
-        else:
-            verdict = (
-                "unverified"
-                if signing_mod.unverified_reason(r.host, r.signing_key, registered)
-                else "ok"
-            )
+        # Both caps, because placement scores the tighter of the two: a fleet number with
+        # room says nothing on its own about whether a batch fits.
         print(
-            f"{r.host}: cap={r.cap_bytes} current={r.current_bytes} "
-            f"agents={r.live_agents} signing={verdict}"
+            f"{r.host}: fleet cap={r.cap_bytes} current={r.current_bytes} "
+            f"plane cap={r.plane_cap_bytes} current={r.plane_current_bytes} "
+            f"agents={r.live_agents} "
+            f"signing={signing_mod.read_verdict(r.host, r.signing_key, registered)}"
         )
     if isinstance(registered, str):
         print(registered, file=sys.stderr)
@@ -178,16 +150,6 @@ def _parse_batches(specs: list[str]) -> dict[str, list[int]] | None:
     return batches
 
 
-def _error_text(exc: BaseException) -> str:
-    # CalledProcessError.stderr is text under `text=True`; TimeoutExpired.stderr is bytes
-    # or None. Printing either straight would raise inside the handler that exists to make
-    # the failure clean.
-    err = getattr(exc, "stderr", None)
-    if isinstance(err, bytes):
-        err = err.decode("utf-8", "replace")
-    return (err or str(exc)).strip()
-
-
 def _fetch_issues(
     tools: Tools, batches: dict[str, list[int]]
 ) -> dict[int, Issue] | None:
@@ -203,7 +165,7 @@ def _fetch_issues(
             fetched[number] = tools.gh_issue(number)
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
             print(
-                f"launch: could not fetch issue {number}: {_error_text(exc)}",
+                f"launch: could not fetch issue {number}: {error_text(exc)}",
                 file=sys.stderr,
             )
             return None
@@ -237,16 +199,53 @@ def _over_ssh_budget(placed: list[tuple[str, str]]) -> bool:
     return over
 
 
+def _live_elsewhere(batches: dict[str, list[int]], root: Path) -> bool:
+    """Print and return True when a new batch shares an issue with one still live.
+
+    `exists_check_command` guards the host a batch is placed on, which is not the same
+    question: placement is free to send a relaunch to the OTHER host, where no worktree of
+    that name exists, and a second agent then starts on issues the first is still holding.
+    The manifests are the only record that spans both hosts, and reading them costs no ssh.
+
+    The test is the issue set, not the batch id, because the id is derived from the spec as
+    typed: `--batch 1386,1345` and `--batch 1345` both miss a live `1345-1386` by name while
+    putting a second agent on issues it holds. What must not happen twice is an issue, so
+    that is what is compared.
+
+    Args:
+        batches: `_parse_batches`' mapping of batch id to the issue numbers it would take.
+        root: the manifest directory to read every run under.
+    """
+    live = manifest_mod.live_batches(root)
+    refused = False
+    for spec, issues in batches.items():
+        for run_id, b in live.values():
+            overlap = sorted(set(issues) & set(b.issues))
+            if not overlap:
+                continue
+            shared = ", ".join(f"#{n}" for n in overlap)
+            print(
+                f"launch: batch {spec} shares {shared} with batch {b.batch}, live in "
+                f"run {run_id} on {b.host}; run clean {run_id} first",
+                file=sys.stderr,
+            )
+            refused = True
+            break
+    return refused
+
+
 def cmd_launch(args, tools: Tools) -> int:
     batches = _parse_batches(args.batch)
     if batches is None:
+        return 1
+    if _live_elsewhere(batches, args.manifest_root):
         return 1
     fetched = _fetch_issues(tools, batches)
     if fetched is None:
         return 1
     # Read the registered keys before the first ssh: a gh outage then refuses having spent no
     # connection against the per-host ssh limit.
-    registered = _registered_keys(tools)
+    registered = registered_keys(tools)
     if isinstance(registered, str):
         print(f"launch: {registered} — refusing to launch", file=sys.stderr)
         return 6
@@ -256,7 +255,9 @@ def cmd_launch(args, tools: Tools) -> int:
         print(f"placing without {msg}", file=sys.stderr)
     if not good:
         return 4
-    good = _signing_verified(good, registered)
+    good, refusals = verified_hosts(good, registered)
+    for reason in refusals:
+        print(f"launch: not placing on {reason}", file=sys.stderr)
     if not good:
         print(
             "launch: no candidate host signs commits GitHub verifies — a batch placed there "
@@ -284,7 +285,20 @@ def cmd_launch(args, tools: Tools) -> int:
             )
         except launch_mod.LaunchError as exc:
             print(f"{batch} on {host}: {exc}", file=sys.stderr)
+            # The refusal is per batch, after placement, so earlier batches are already
+            # running. Name them and the run-id: the manifest is what `status` and `clean`
+            # read, and the `clean <run-id>` an `exists` refusal asks for needs the id. A
+            # run that launched nothing gets no manifest — an empty one records no work,
+            # and `launch` now reads every manifest under the root before it places.
+            if not run.batches:
+                print("launched before this failure: none", file=sys.stderr)
+                return 1
             manifest_mod.save(run, root=args.manifest_root)
+            launched = ", ".join(b.batch for b in run.batches)
+            print(
+                f"launched before this failure: {launched} (run {run.run_id})",
+                file=sys.stderr,
+            )
             return 1
         print(f"{batch} -> {host} ({launch_mod.unit_name(batch)})")
     path = manifest_mod.save(run, root=args.manifest_root)
@@ -317,8 +331,16 @@ def _one_line(text: str, limit: int = 300) -> str:
 def cmd_status(args, tools: Tools) -> int:
     run = manifest_mod.load(args.run_id, root=args.manifest_root)
     worst = 0
-    for host in sorted({b.host for b in run.batches}):
-        mine = [b for b in run.batches if b.host == host]
+    # A cleaned batch is reported from the manifest and never read remotely. `clean` resets
+    # the failed unit and takes .fanout/report.json with the worktree, so status_command
+    # finds no active state, no result and no report — and `parse_status` reads exactly that
+    # as `failed`, which would exit 5 for a batch that landed its PR and was tidied up.
+    for b in run.batches:
+        if b.removed_at:
+            print(f"{b.batch} on {b.host}: cleaned ({b.removed_at})")
+    live = [b for b in run.batches if not b.removed_at]
+    for host in sorted({b.host for b in live}):
+        mine = [b for b in live if b.host == host]
         try:
             proc = tools.run(
                 host, status_mod.status_command(mine), status_mod.STATUS_TIMEOUT_S, None
@@ -352,6 +374,12 @@ def cmd_stop(args, tools: Tools) -> int:
     for b in run.batches:
         if args.batch and b.batch != args.batch:
             continue
+        # `clean` already reset this batch's unit and took its worktree. Stopping it again
+        # reads systemd's "Unit … not loaded" as the batch's status and then tells the
+        # operator to clean a tree that is gone.
+        if b.removed_at:
+            print(f"{b.batch} on {b.host}: cleaned ({b.removed_at})")
+            continue
         try:
             proc = tools.run(b.host, status_mod.stop_command(b.unit), 30.0, None)
         except subprocess.TimeoutExpired:
@@ -360,13 +388,122 @@ def cmd_stop(args, tools: Tools) -> int:
         print(
             f"{b.batch} on {b.host}: {'stopped' if proc.returncode == 0 else proc.stderr.strip()}"
         )
-        # Nothing in this slice unlocks the tree, so the operator has to. Printing the
-        # command beside the stop is the only place it meets someone who needs it.
-        print(
-            f"  release its worktree: git -C {REPO} worktree unlock {b.worktree} "
-            "&& uv run python scripts/dev/prune_worktrees.py --prune"
-        )
+        # The worktree stays locked until `clean` runs it through prune_worktrees' content
+        # check — stopping a batch says nothing about whether its PR merged.
+        print(f"  run `clean {args.run_id}` once its PR merges")
     return 0
+
+
+def cmd_clean_one(
+    args,
+    tools: Tools,
+    list_worktrees=None,
+    ask=None,
+    dirty=None,
+    remover=None,
+    unlocker=None,
+    locker=None,
+) -> int:
+    """Hidden: runs ON the host holding the worktree. `clean` calls it over Tools.run.
+
+    `list_worktrees`, `ask`, `dirty`, `remover`, `unlocker` and `locker` are seams —
+    parameters rather than patched module attributes, so a test can drive this without
+    pinning a first-party module name. Every default reaches the real thing, and all five
+    of `clean_one`'s own seams are forwarded so a REMOVABLE-with-lock case run through this
+    entry point stays hermetic too.
+
+    An absent worktree reads `removed`, not `kept` — it is the goal state, not a failure.
+    This is no longer how `clean` handles a gone tree: the copy of this script that a
+    remote leg runs lives inside the worktree, so `remote_clean_command`'s shell chain
+    answers the absent-tree case before this interpreter could start (Ruling 30). The path
+    below stays for a `clean-one` run by hand against a tree that is already gone.
+    """
+    from fanout_lib.clean import clean_one
+    from fanout_lib.clean import lock as default_locker
+    from fanout_lib.clean import unlock as default_unlocker
+    from prune_worktrees import is_dirty, is_merged, parse_worktree_list, remove
+
+    if list_worktrees is None:
+
+        def list_worktrees():
+            return subprocess.run(
+                ["git", "-C", REPO, "worktree", "list", "--porcelain"],
+                capture_output=True,
+                text=True,
+                check=True,
+            ).stdout
+
+    # Resolved paths, not exact string equality: a worktree launched through one spelling
+    # of REPO (a symlink, say) is still the tree `git worktree list` names by its target.
+    target = Path(args.worktree).resolve()
+    tree = next(
+        (
+            t
+            for t in parse_worktree_list(list_worktrees())
+            if Path(t.path).resolve() == target
+        ),
+        None,
+    )
+    if tree is None:
+        print(f"removed: {args.worktree} (already gone)")
+        return 0
+    state, why = clean_one(
+        REPO,
+        tree,
+        ask=ask if ask is not None else is_merged,
+        dirty=dirty if dirty is not None else is_dirty,
+        remover=remover if remover is not None else remove,
+        unlocker=unlocker if unlocker is not None else default_unlocker,
+        locker=locker if locker is not None else default_locker,
+    )
+    print(f"{state}: {args.worktree} {why}".rstrip())
+    return 0
+
+
+def cmd_clean(args, tools: Tools) -> int:
+    """Remove each batch's worktree, recording every removal in the manifest as it lands.
+
+    A removal is recorded rather than re-derived because the evidence is destroyed by the
+    act: the remote leg reads the worktree, and the worktree is what it deletes. So the
+    manifest is saved after each `removed:` verdict, a batch already carrying `removed_at`
+    is skipped without an ssh call, and the file is deleted only once no batch is left.
+
+    A leg that reached no verdict at all — ssh refused, the fetch failed, a timeout — is
+    reported as failed and exits 1, rather than joining the trees deliberately kept back.
+    Those two need opposite things from the operator.
+    """
+    from fanout_lib.clean import read_clean_result, remote_clean_command
+
+    run = manifest_mod.load(args.run_id, root=args.manifest_root)
+    kept, failed = [], []
+    for i, b in enumerate(run.batches):
+        if b.removed_at:
+            print(f"{b.batch} on {b.host}: removed earlier ({b.removed_at})")
+            continue
+        try:
+            proc = tools.run(b.host, remote_clean_command(b), 120.0, None)
+        except subprocess.TimeoutExpired:
+            print(f"{b.batch} on {b.host}: clean timed out")
+            failed.append(b.batch)
+            continue
+        verdict, line = read_clean_result(proc)
+        print(f"{b.batch} on {b.host}: {line}")
+        if verdict == "removed":
+            run.batches[i] = dataclasses.replace(
+                b, removed_at=datetime.now(UTC).isoformat()
+            )
+            manifest_mod.save(run, root=args.manifest_root)
+        elif verdict == "failed":
+            failed.append(b.batch)
+        else:
+            kept.append(b.batch)
+    if failed:
+        print(f"clean failed for {', '.join(failed)} — see above")
+    if kept:
+        print(f"run {run.run_id}: kept {', '.join(kept)} — re-run clean once merged")
+    if not kept and not failed:
+        manifest_mod.path(run.run_id, args.manifest_root).unlink(missing_ok=True)
+    return 1 if failed else 0
 
 
 def _add_manifest_root(parser: argparse.ArgumentParser) -> None:
@@ -408,7 +545,38 @@ def main(argv=None, tools: Tools | None = None) -> int:
     stop_parser.add_argument("batch", nargs="?")
     _add_manifest_root(stop_parser)
     stop_parser.set_defaults(fn=cmd_stop)
+    clean_parser = sub.add_parser("clean")
+    clean_parser.add_argument("run_id")
+    _add_manifest_root(clean_parser)
+    clean_parser.set_defaults(fn=cmd_clean)
+    # No `help=` here, matching every other subparser above: argparse only lists a
+    # subcommand under "positional arguments" when its own help text is set, so leaving it
+    # unset is what keeps `clean-one` out of `--help`'s body. `help=argparse.SUPPRESS`
+    # looks like the right tool but isn't: argparse's subparser formatting doesn't filter a
+    # SUPPRESS'd choice the way it does a SUPPRESS'd ordinary argument, so it would print a
+    # literal "clean-one  ==SUPPRESS==" line instead of hiding it. Either way it still
+    # appears in the `{...}` choices list on the usage line — no argparse option removes
+    # that without also removing every visible subcommand from it.
+    clean_one_parser = sub.add_parser("clean-one")
+    clean_one_parser.add_argument("worktree")
+    # `branch` is unused by cmd_clean_one itself (clean_one reads the branch straight off
+    # the worktree it re-parses); it's a positional here only so `ps` on the host names the
+    # batch, the same reason systemd-run's --unit does at launch.
+    clean_one_parser.add_argument("branch")
+    clean_one_parser.set_defaults(fn=cmd_clean_one)
     args = p.parse_args(argv)
+    # The three manifest-reading subcommands, checked here rather than caught as a
+    # FileNotFoundError around the call: a mistyped run-id is a usage error and deserves a
+    # line, while an FileNotFoundError raised deeper inside one of them is a real fault and
+    # must keep its traceback. `launch` refuses with "run clean <run-id> first", so a
+    # mistyped id at that prompt is the likely way in.
+    if args.cmd in ("status", "stop", "clean"):
+        if not manifest_mod.path(args.run_id, args.manifest_root).exists():
+            print(
+                f"no manifest for run {args.run_id} under {args.manifest_root}",
+                file=sys.stderr,
+            )
+            return 1
     return args.fn(args, tools or Tools())
 
 
