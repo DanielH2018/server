@@ -227,6 +227,25 @@ k3s_server_hosts:
 setup_drift_check_hosts:
   - daniel-server
 
+# Hosts that witness the Loki read route, one Kuma monitor each (issue #1712). That route's only
+# caller is `probe.py loki-labels` / `loki-query` running as a HOST process, and its guard is a
+# ClientIP set of node-owned addresses — so a pod cannot witness it, and a single host cannot
+# either: #1693 left the route dead from daniel-server and reachable from daniel-box, because
+# which address a host arrives as depends on where the traefik pod sits.
+#
+# Both prod cluster nodes and nothing else. daniel-pi is not in the ClientIP set at all, and
+# daniel-stage is a different cluster with no loki-homelab. An allowlist for the same reason as
+# k3s_server_hosts above. ENFORCED by ansible/tests/setup/test_loki_route_witness.py.
+loki_route_witness_hosts:
+  - daniel-box
+  - daniel-server
+
+# Seconds after boot in which the witness skips its run. Shorter than its hourly cron, so at most
+# one slot is ever skipped — the constraint kuma-push-lib.sh's boot_grace_active documents. The
+# 2026-08-30 restart had the last pod reach Ready 5m18s after boot, so a witness firing inside
+# this window would report the route down while Traefik was still starting.
+loki_route_witness_boot_grace_s: 600
+
 # Past this, the checkout the drift arms compare against is reported as its own fault. A host
 # without gitops-deploy does not refresh its tree — daniel-server was measured 39 commits behind
 # origin on 2026-08-17 — and a stale tree makes the render arm compare a stale render against

@@ -62,6 +62,7 @@ testpaths = [                        # single source of truth for WHAT runs; exc
   "ansible/roles/setup/renovate_notify/tests", # notifier decision tests
   "ansible/roles/setup/renovate_agent/tests",  # unattended-agent gate + digest tests
   "ansible/roles/setup/common/tests",          # shared host_lib helper tests
+  "ansible/roles/setup/initial_setup/tests",   # Loki read-route witness verdict logic
   "ansible/roles/k8s/home-assistant/tests", # HA Jinja macro logic tests
   "scripts/watchers/tests",                        # redundant with the "scripts" entry above
   # (scripts/lib/tests, scripts/docs/tests etc. rely on it too) -- listed anyway, on request
@@ -286,6 +287,7 @@ python-version = "3.14"
 extra-paths = [
   "ansible/tests",
   "ansible/filter_plugins",
+  "ansible/roles/setup/initial_setup/files",
   "ansible/roles/setup/common/files",
   "ansible/roles/setup/gitops_deploy/files",
   "ansible/roles/setup/deploy_ui/files",

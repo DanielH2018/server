@@ -29,8 +29,10 @@ ssh_config_path: /etc/ssh/sshd_config
 # role's own templates, so list position here is only the toposort's tiebreak.
 # `staging_expect` on an entry below is Phase C slice 2 (docs/staging-phase-c.md, Decision 2):
 # what this service must ANSWER, not merely that its pod came up. Every value was measured
-# against the live cluster on 2026-08-28, never inferred — an expectation nobody checked is a
-# second thing that can be wrong.
+# against the live cluster, never inferred — an expectation nobody checked is a second thing that
+# can be wrong. The original set was measured 2026-08-28; traefik's three were re-measured
+# 2026-09-10 with `scripts/deploy_tools/staging_expect_remote.sh`, from daniel-server, after
+# issue #1662 found the entry asking for a status its route cannot produce.
 #
 # It exists because "the play exited zero" cannot see a route. ical-proxy deployed with
 # `68 ok, 0 failed` and the stabilisation gate passing while every one of its routes returned
@@ -47,10 +49,29 @@ containers_list:
     platform: k8s
     port: 8080
     # The dashboard route, behind the authelia middleware — hence 302 rather than 200.
+    #
+    # The path is `/dashboard/`, NOT `/`. The route matches
+    # `Host(...) && PathPrefix(`/dashboard`)` (roles/k8s/traefik/templates/dashboard-ingressroute.yaml.j2),
+    # so `/` matches no route and Traefik answers 404 before any middleware runs. This entry
+    # asked for 302 on `/` from 2026-08-28 until issue #1662, which no route could ever produce.
+    #
+    # The other two entries assert what is deliberately NOT routed, and both would be a silent
+    # widening if they started answering:
+    #   - `/` must stay 404: the dashboard is reachable at its prefix and nowhere else.
+    #   - `/api/http/routers` must stay 404. See the `# DECIDED: /api is deliberately NOT routed`
+    #     marker in that same template — `api@internal` prints every router's rule verbatim, and
+    #     two of prod's embed credentials in `Header()` matchers. A 200 here means the SPA-fixing
+    #     change that marker forbids has been made.
     staging_expect:
       - hostname: traefik
-        path: /
+        path: /dashboard/
         status: 302
+      - hostname: traefik
+        path: /
+        status: 404
+      - hostname: traefik
+        path: /api/http/routers
+        status: 404
 
   # The forward-auth gate, and the mechanism no other manifest exercises: a Middleware that
   # other roles' IngressRoutes reference by name (docs/staging-cluster.md, Decision 6). Its
