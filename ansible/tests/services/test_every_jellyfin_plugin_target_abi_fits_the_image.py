@@ -41,7 +41,7 @@ LEADING_VERSION = re.compile(r"^(\d+(?:\.\d+)*)")
 # asset's filename, and `test_anisync_pin_matches_server.py` owns that shape. It is read here
 # from the URL so the `max` below is over EVERY plugin rather than only those with a var.
 REQUIRED_PLUGINS = frozenset(
-    {"introskipper", "webhook", "mergeversions", "mediacleaner", "trakt", "sso"}
+    {"introskipper", "webhook", "mergeversions", "mediacleaner", "sso"}
 )
 
 
@@ -101,8 +101,8 @@ def test_the_census_still_finds_every_plugin_it_is_meant_to():
         "_target_abi var — the ABI leads the asset filename — so a URL shape change drops it "
         "from the max() below and the binding constraint would be computed over one plugin too few."
     )
-    assert len(found) >= 7, (
-        f"the targetAbi census found only {sorted(found)}. The role installs seven plugins; a "
+    assert len(found) >= 6, (
+        f"the targetAbi census found only {sorted(found)}. The role installs six plugins; a "
         f"smaller set means the max() below is not the real floor."
     )
 
@@ -175,8 +175,8 @@ def test_the_binding_floor_is_the_slowest_plugin():
     ("what", "before", "after"),
     [
         # NAMED with its var, not the bare ABI string: `"10.11.9.0"` alone matches both
-        # mediacleaner's and trakt's pin since #1617, and `.replace(..., 1)` would silently
-        # mutate whichever comes first.
+        # mediacleaner's and trakt's pin while Trakt was installed (#1617), and `.replace(..., 1)`
+        # would silently mutate whichever came first. Kept named so a new sibling cannot reopen it.
         (
             "a plugin targeting a newer server",
             'jellyfin_k8s_mediacleaner_target_abi: "10.11.9.0"',
