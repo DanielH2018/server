@@ -337,6 +337,13 @@ li.service > div.service-card {
  * list would grow the calendar's six tracks and push the link rows out of the group. With the
  * floor at 0 the calendar card is clamped to its tracks and its event list scrolls.
  *
+ * EVERY SELECTOR HERE IS SCOPED TO THE INNER GROUP. homepage nests `Top Row` as a
+ * `div.services-group` around the two column groups, so `div.services-group:has(#my-calendar)`
+ * matches the OUTER group as well, and `... ul.services-list` under it matched the SERVICES
+ * list too. That gave Services eight 112px tracks, a 980px column, and dragged the calendar to
+ * match — measured on the deployed page 2026-09-10, every track exactly one card tall. The
+ * `:has(> div > ul > #my-calendar)` and `:has(> #my-calendar)` forms match one element each.
+ *
  * The four-row count of the Services group is what the 8 encodes. A Services group that renders
  * three or five rows needs 6 or 10 tracks here and a matching `span` on the calendar.
  *
@@ -345,17 +352,17 @@ li.service > div.service-card {
  * rows. `getBoundingClientRect().bottom` on the last tile of each column is the check, and it has
  * to run at more than one width.
  */
-div.services-group:has(#my-calendar) {
+div.services-group:has(> div > ul > #my-calendar) {
   display: flex;
   flex-direction: column;
 }
 
-div.services-group:has(#my-calendar) > div {
+div.services-group:has(> div > ul > #my-calendar) > div {
   flex: 1 1 auto;
   min-height: 0;
 }
 
-div.services-group:has(#my-calendar) ul.services-list {
+ul.services-list:has(> #my-calendar) {
   height: calc(100% - 0.75rem);
   grid-template-rows: repeat(8, minmax(0, 1fr));
 }
@@ -364,6 +371,12 @@ div.services-group:has(#my-calendar) ul.services-list {
 #my-calendar {
   grid-row: 1 / span 6;
   min-height: 0;
+  /* Zero intrinsic height, so the calendar's natural 412px cannot set the row height. Without
+   * this the calendar column's intrinsic size (412px of calendar plus two 40px link rows) beat
+   * the 484px Services column at 1280px and above, the Top Row row took the larger, and the
+   * link rows ended 69px below the Services block. The `<li>` is still stretched to its six
+   * tracks in the final layout, so the card's `height: 100%` resolves as before. */
+  contain: size;
 }
 
 /* The link cards fill their track, so each link row is half a Services row less half a gap and
