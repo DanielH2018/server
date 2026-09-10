@@ -11,7 +11,7 @@
         - Uptime-Kuma:
             icon: uptime-kuma.png
             href: https://uptime-kuma.{{ domain }}/
-            description: Container Monitoring
+            description: Monitoring
             # No server/container pair since the Phase D cutover (2026-08-10): Kuma runs in
             # k3s now. Widget re-targets the -k8s name (bridged names hairpin from here);
             # /api/status-page bypasses Authelia LAN-only on the k8s side.
@@ -53,7 +53,7 @@
         - FreshRSS:
             icon: freshrss.png
             href: https://freshrss.{{ domain }}/
-            description: RSS Link Aggregator
+            description: RSS Aggregator
             # No server/container: freshrss runs in k3s now. Same as speedtest above — the
             # -k8s monitoring route, because the native route's Authelia 401s the widget.
             widget:
@@ -161,7 +161,7 @@
         - Scrutiny:
             icon: scrutiny.png
             href: https://scrutiny.{{ domain }}/
-            description: Disk SMART health
+            description: Disk Health
             # ClusterIP, not a Traefik route: scrutiny's native route is Authelia-gated and would
             # 401 this session-less widget, and its monitoring route exposes no API path. Pod to
             # pod bypasses both. Same shape as the sonarr/radarr/qbittorrent widgets below, and
@@ -179,7 +179,7 @@
         - Home Assistant:
             icon: home-assistant.png
             href: https://home-assistant.{{ domain }}/
-            description: Bedroom air quality
+            description: Air Quality
             # No server/container pair and a bridge-URL widget since slice-5 B3: HA runs in
             # k3s, so the Docker-DNS name is gone. The .local name resolves from containers
             # (LAN DNS) and served the same HA before and after the cutover.
