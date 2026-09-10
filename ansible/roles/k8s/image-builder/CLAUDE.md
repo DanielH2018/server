@@ -23,6 +23,17 @@ while reporting success.
 - Skips the actual build when the rendered context is byte-identical to the last run's and
   the registry already serves the tag — saved ~106s across the seven original callers.
   `image_builder_force=true` overrides it, for a base-image CVE bump nothing here can see.
+- **A failed build forces the next one.** The gate otherwise reads every input as unchanged
+  after a failure — the rendered context is still on disk and the registry still serves the
+  previous tag — so the next deploy skipped the rebuild and the workload kept the old image
+  behind a `failed=0` recap (#1534). The extra clause reads the previous Job's
+  `.status.succeeded`. An ABSENT Job does not force a build: `ttlSecondsAfterFinished: 86400`
+  collects a completed one after a day.
+- **The build wait polls both terminal conditions.** `kubectl wait` takes one condition and a
+  failed Job never gets `condition=complete`, so the earlier `||` fallback blocked the deploy
+  for the whole `image_builder_timeout` after a build had already failed — ~30 minutes for
+  code-server (#1535). `ansible/tests/deploy/test_image_builder_wait_returns_promptly.py` runs the
+  wait against a stubbed `k3s` and times it.
 - Reads the registry's pre- and post-build digest around every build, even a skipped one, so
   a stale pod in front of an unchanged tag still surfaces to the post-deploy drift gate
   (`ansible/tests/deploy/test_built_image_drift_gate.py`).

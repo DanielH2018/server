@@ -101,13 +101,21 @@ def _render(**ctx) -> str:
 # A register that is present but carries no result, which is what a skipped task leaves behind.
 SKIPPED_REGISTER = {"changed": False, "skipped": True}
 
-# Steady state: the context rendered identically and the registry already serves the tag.
+# Steady state: the context rendered identically, the registry already serves the tag, and the
+# previous build's Job is still there reporting success.
 STEADY = dict(
     k8s_no_mutate=False,
     image_builder_force=False,
+    image_builder_name="demo",
     image_builder_digest_before={"status": 200},
     image_builder_render={"changed": False},
+    image_builder_previous={"rc": 0, "stdout": "build-demo=1"},
 )
+
+# What `kubectl get job --ignore-not-found -o jsonpath={.metadata.name}={.status.succeeded}`
+# prints in each of the three states the gate has to tell apart.
+PREVIOUS_ABSENT = {"rc": 0, "stdout": ""}
+PREVIOUS_UNSUCCESSFUL = {"rc": 0, "stdout": "build-demo="}
 
 
 def test_steady_state_skips_the_build():
@@ -226,6 +234,77 @@ def test_dereferencing_consumers_are_guarded_before_the_deref(prefix):
         f"{prefix!r} reads image_builder_result.stdout at clause {deref} with guards at "
         f"{guards}. Both guards must precede it, or a skipped build dereferences an absent "
         "key and fails the play with a message that names neither cause."
+    )
+
+
+def test_a_failed_previous_build_builds():
+    """The stale-image case (#1534): a failed build leaves every other clause reading 'ok'.
+
+    Its rendered context stays on disk, so the template task reports `ok` rather than
+    `changed`, and the registry still serves the PREVIOUS tag, so the digest clause reads 200.
+    Without a clause for the Job's own outcome the deploy skips the rebuild and the workload
+    keeps running the old image behind a `failed=0` recap.
+    """
+    assert (
+        _render(**{**STEADY, "image_builder_previous": PREVIOUS_UNSUCCESSFUL}) == "True"
+    ), (
+        "a previous build that did not succeed no longer forces a rebuild, so a failed build "
+        "ships the old image indefinitely and every deploy after it reports success."
+    )
+
+
+def test_an_absent_previous_job_does_not_build():
+    """Absent is not evidence of failure, and reading it as one destroys the whole saving.
+
+    `ttlSecondsAfterFinished: 86400` in build-job.yaml.j2 garbage-collects a completed Job
+    after a day. Building whenever the Job is missing therefore rebuilds every image on any
+    deploy more than a day after the last one — the ~106s this gate exists to remove.
+    """
+    assert (
+        _render(**{**STEADY, "image_builder_previous": PREVIOUS_ABSENT}) == "False"
+    ), (
+        "a missing build Job now forces a rebuild. Every image is rebuilt on any deploy more "
+        "than a day after its last build, because the Job's TTL has collected it by then."
+    )
+
+
+@pytest.mark.parametrize(
+    "previous",
+    [
+        pytest.param({"rc": 1, "stdout": ""}, id="non-zero-rc"),
+        pytest.param(SKIPPED_REGISTER, id="skipped"),
+        pytest.param({}, id="empty"),
+    ],
+)
+def test_an_undecidable_previous_build_read_builds(previous):
+    """The read failing is not the same as the read saying 'the last build succeeded'."""
+    assert _render(**{**STEADY, "image_builder_previous": previous}) == "True", (
+        "a previous-build read that did not come back resolved to 'nothing to do'. That is "
+        "the one direction this gate must never fail in."
+    )
+
+
+def test_the_previous_build_read_precedes_the_gate_and_is_not_gated_by_it():
+    """It feeds the gate, so it has to run before it — and on every run, build or not."""
+    names = [t.get("name", "") for t in _tasks()]
+    read = next(
+        i for i, n in enumerate(names) if n.startswith("Read the previous build")
+    )
+    gate = next(
+        i for i, n in enumerate(names) if n.startswith("Decide whether a build")
+    )
+    assert read < gate, (
+        "the previous-build read runs after the gate that consumes it, so the gate reads an "
+        "undefined register and falls back to building every image on every deploy."
+    )
+    task = _task("Read the previous build")
+    assert GATE not in str(task.get("when", "")), (
+        f"the previous-build read is gated on {GATE}, which it is an input to. Gated, it never "
+        "runs in the steady state and so can never flip the gate back on after a failed build."
+    )
+    assert task.get("check_mode") is False, (
+        "the previous-build read is skipped under --check, where a skipped register makes the "
+        "gate read as undecidable rather than as the state the cluster is actually in."
     )
 
 
