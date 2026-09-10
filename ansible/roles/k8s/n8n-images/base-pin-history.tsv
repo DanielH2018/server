@@ -1,0 +1,33 @@
+# Adopted base-image pins for the two n8n Dockerfiles, oldest first, APPEND-ONLY.
+#
+# WHY THIS FILE EXISTS. Both FROMs pin a channel tag with a digest beside it
+# (`n8nio/n8n:stable@sha256:...`). The tag text never moves, so the only thing a digest bump
+# changes in the diff is 64 hex characters — there is no version string for a reader or a test to
+# compare. Renovate PR #1440 (2026-09-09) proposed moving both files from the 2.37.10 digests to
+# the 2.37.9 digests, a DOWNGRADE of the running n8n, and passed all nine CI checks. It was caught
+# only because a human resolved each digest to its version by hand. Issue #1493.
+#
+# WHAT IT DOES NOT DO. It does not forbid a version going down. A channel pin follows what
+# upstream promotes, and if upstream withdraws a release then moving back with it is correct —
+# a guard that refused would pin this repo to a release upstream retracted. What it forbids is a
+# SILENT one: to land a decrease, put `DOWNGRADE-ACK: <reason>` in the note column, which makes
+# the decision visible in the diff and in `git log -p` on this file.
+#
+# HOW TO UPDATE IT, on every digest bump (the Renovate group name says so too):
+#
+#   1. Resolve each new digest to its version. Anonymous, no auth needed:
+#      TOKEN=$(curl -s "https://auth.docker.io/token?service=registry.docker.io&scope=repository:n8nio/n8n:pull" | jq -r .token)
+#      then GET the digest's manifest, follow the amd64/linux entry, GET that manifest's
+#      `.config.digest` blob with `curl -sL`, and read
+#      `.config.Labels["org.opencontainers.image.version"]`. The two Dockerfiles carry different
+#      images, so resolve each against its own repository (`n8nio/n8n`, `n8nio/runners`).
+#   2. APPEND one line per image. Never edit the last line in place — the check compares the
+#      final entry against the live FROM, so an in-place edit passes while hiding the move.
+#   3. If a version goes down, add `DOWNGRADE-ACK: <why>` as the note.
+#
+# ENFORCED: scripts/tests/test_renovate_dockerfiles.py — the live digests must equal the last
+# entry per image, and versions must not decrease without the acknowledgement.
+#
+# version	image	digest	note
+2.37.10	n8nio/n8n	sha256:307d6065be25619aa24cfc63a7c2f04ca56d084a08c05c8e9f189a89f353b1ec	first entry; the pin in place when this ledger was added (2026-09-10)
+2.37.10	n8nio/runners	sha256:63bda67eac04e5a2a42683730e0d43deed7e463a92f5bfca2090d0189a909c42	first entry; the pin in place when this ledger was added (2026-09-10)

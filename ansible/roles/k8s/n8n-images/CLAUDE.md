@@ -8,7 +8,8 @@ role has something to run. It renders no manifest of its own.
 - **Renders nothing** — two `include_role: k8s/image-builder` calls, ordered rather than
   parallel because n8n and its task runners are version-coupled.
 - **Images:** `templates/Dockerfile.j2` (`n8n`) and `templates/Dockerfile-runners.j2`
-  (`n8n-runners`), each `FROM` a `:latest` upstream tag.
+  (`n8n-runners`), each `FROM` the upstream `:stable` channel tag with a digest beside it.
+  Renovate bumps the digest; the tag holds the channel.
 - **Deploy tag:** `--tags "n8n-images"`. `k8s_autodeploy: true`, but nothing can trigger the
   promotion in practice — the role declares no `*_image:` var, so an upstream bump never
   produces an image-only diff under `defaults/main.yml`. A bump ships only via an
@@ -22,6 +23,20 @@ role has something to run. It renders no manifest of its own.
 - Since `k8s_autodeploy` is a no-op here, a bad upstream image can still land on `n8n`'s next
   unrelated deploy with nothing here catching it first — see `defaults/main.yml`'s
   `k8s_autodeploy_reason` for the full argument.
+
+## Every digest bump appends a row to `base-pin-history.tsv`
+
+The `FROM`s pin a channel tag with a digest beside it, so a bump changes 64 hex characters and
+no version string. The diff cannot show which way the version moved: Renovate PR #1440
+(2026-09-09) proposed moving both files from the 2.37.10 digests to the 2.37.9 digests — a
+downgrade of the running n8n — and passed all nine checks. A human resolving each digest to its
+version by hand is what caught it (issue #1493).
+
+`base-pin-history.tsv` records the version behind each adopted digest, append-only, and its own
+header carries the registry commands for resolving one. `scripts/tests/test_renovate_dockerfiles.py`
+fails until the row is appended, and fails again if a version decreases with no `DOWNGRADE-ACK:`
+note. An acknowledged decrease passes on purpose — a channel pin follows what upstream promotes,
+so a withdrawn release has to be followable; what the guard forbids is a silent decrease.
 
 ## Editing
 - Dockerfiles: `templates/Dockerfile.j2`, `templates/Dockerfile-runners.j2`

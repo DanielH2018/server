@@ -9,6 +9,7 @@ import json
 import re
 import subprocess
 from pathlib import Path
+from typing import NamedTuple
 
 
 _REPO = Path(__file__).resolve().parents[2]
@@ -122,3 +123,96 @@ def _manager_covering(path_fragment: str) -> dict:
 
 def _k8s_image_manager() -> dict:
     return _manager_covering("roles/k8s")
+
+
+# ── the n8n base-pin ledger ──────────────────────────────────────────────────────────────
+#
+# Both n8n FROMs pin a channel tag with a digest beside it, so a bump changes only the digest
+# and no version string appears in the diff for a reader or a test to compare. Renovate PR
+# #1440 proposed a lockstep DOWNGRADE that way and passed every check (issue #1493). The
+# ledger beside the Dockerfiles records the version each adopted digest carries; the helpers
+# here parse it, and the guards in test_renovate_dockerfiles.py assert against it.
+N8N_IMAGES_DIR = _REPO / "ansible/roles/k8s/n8n-images"
+N8N_PIN_HISTORY = N8N_IMAGES_DIR / "base-pin-history.tsv"
+
+# image -> the Dockerfile whose FROM must equal that image's last ledger entry. Named rather
+# than globbed: a census that discovers its own subjects returns an empty set the moment a file
+# is renamed, and an `all()` over nothing passes.
+N8N_PINS = {
+    "n8nio/n8n": "templates/Dockerfile.j2",
+    "n8nio/runners": "templates/Dockerfile-runners.j2",
+}
+
+# The note that makes a version decrease deliberate. A channel pin follows what upstream
+# promotes, so moving back with a withdrawn release is legitimate — what must not happen is
+# moving back silently.
+DOWNGRADE_ACK = "DOWNGRADE-ACK:"
+
+
+class PinEntry(NamedTuple):
+    version: str
+    image: str
+    digest: str
+    note: str
+
+
+def parse_pin_history(text: str) -> list[PinEntry]:
+    """The ledger's data rows, in file order. Comments and blank lines are dropped.
+
+    A malformed row raises rather than being skipped: a row this cannot read is a row the
+    guards cannot check, and skipping it would turn a typo into a silent pass.
+    """
+    entries = []
+    for lineno, raw in enumerate(text.splitlines(), start=1):
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        fields = raw.split("\t")
+        if len(fields) < 3:
+            raise ValueError(
+                f"base-pin-history.tsv:{lineno}: expected tab-separated "
+                f"version/image/digest[/note], got {raw!r}"
+            )
+        version, image, digest = (f.strip() for f in fields[:3])
+        note = fields[3].strip() if len(fields) > 3 else ""
+        if not re.fullmatch(r"\d+(\.\d+)*", version):
+            raise ValueError(
+                f"base-pin-history.tsv:{lineno}: {version!r} is not a dotted numeric version"
+            )
+        if not re.fullmatch(r"sha256:[0-9a-f]{64}", digest):
+            raise ValueError(
+                f"base-pin-history.tsv:{lineno}: {digest!r} is not a sha256 digest"
+            )
+        entries.append(PinEntry(version, image, digest, note))
+    return entries
+
+
+def version_key(version: str) -> tuple[int, ...]:
+    return tuple(int(p) for p in version.split("."))
+
+
+def unacknowledged_downgrades(entries: list[PinEntry]) -> list[str]:
+    """One message per row whose version sits below the row before it for the same image.
+
+    A row carrying DOWNGRADE_ACK in its note is a decision, not a defect, and is left alone.
+    """
+    flagged = []
+    previous: dict[str, PinEntry] = {}
+    for entry in entries:
+        prior = previous.get(entry.image)
+        if (
+            prior is not None
+            and version_key(entry.version) < version_key(prior.version)
+            and DOWNGRADE_ACK not in entry.note
+        ):
+            flagged.append(
+                f"{entry.image}: {prior.version} -> {entry.version} is a downgrade with no "
+                f"{DOWNGRADE_ACK} note. If upstream withdrew the newer release, say so in "
+                "the note column; otherwise this pin is a regression."
+            )
+        previous[entry.image] = entry
+    return flagged
+
+
+def last_pin_per_image(entries: list[PinEntry]) -> dict[str, PinEntry]:
+    return {entry.image: entry for entry in entries}

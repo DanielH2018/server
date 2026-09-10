@@ -13,9 +13,17 @@ Run: uv run pytest scripts/tests/test_renovate_dockerfiles.py
 
 import re
 
+import pytest
 
 from _renovate import (
+    N8N_IMAGES_DIR,
+    N8N_PIN_HISTORY,
+    N8N_PINS,
+    PinEntry,
     _REPO,
+    last_pin_per_image,
+    parse_pin_history,
+    unacknowledged_downgrades,
 )
 
 
@@ -144,8 +152,11 @@ def test_n8n_base_pins_in_lockstep() -> None:
     n8n they serve, and the runners Dockerfile pins pnpm to the base's own store version. A
     skew does not fail the build — it surfaces at RUNTIME as every Code-node workflow timing
     out while both pods stay Ready, which is precisely the 2026-08-06 `@n8n/di` failure that
-    file's header records. Renovate groups them into one PR (the "n8n (lockstep: app + task
-    runners)" packageRule); this asserts the coupling actually held.
+    file's header records. Renovate groups them into one PR (the "n8n (manual — … lockstep:
+    app + task runners)" packageRule); this asserts the coupling actually held.
+
+    It does NOT see which way the version moved — both tags are `stable`, so a lockstep
+    downgrade compares equal. That is the ledger guard's job, below.
 
     Compares the TAG and stops at the `@`. Both pins are `stable@sha256:...`, and their
     digests necessarily DIFFER — they are two different images. What has to match is the
@@ -173,6 +184,139 @@ def test_n8n_base_pins_in_lockstep() -> None:
         f"{runners.group(1)}. They are version-coupled — a skew surfaces as Code-node "
         "workflows failing at runtime, not as a build error. Move both together."
     )
+
+
+# ── the n8n base-pin ledger: a channel pin's version has to appear SOMEWHERE ─────────────
+#
+# The lockstep guard above compares the two TAGS, and both tags are `stable`, which never
+# moves. So it passes equally on a lockstep DOWNGRADE — which is what Renovate PR #1440
+# proposed on 2026-09-09, from the 2.37.10 digests to the 2.37.9 digests, through nine green
+# checks. Nothing in the repo read the version behind either digest; a human did, by hand.
+# Issue #1493.
+#
+# The ledger (ansible/roles/k8s/n8n-images/base-pin-history.tsv) is where the version lands,
+# appended once per bump. These guards tie it to the live FROMs and to each other. The check
+# is deliberately offline: `-p leakguard` in pyproject's addopts fails any test that reaches
+# the network, so resolving a digest against the registry is not available to the suite, and
+# a version recorded at bump time is the alternative that needs no transport.
+#
+# THE HOLE, named rather than engineered around: editing the ledger's last line in place,
+# instead of appending, passes both guards while hiding the move. That is a deliberate
+# rewrite, not the mechanical digest bump this is aimed at, and closing it would mean reading
+# the merge base out of git — which a shallow CI checkout may not have.
+
+
+def _live_digest(dockerfile: str, image: str) -> str:
+    text = (N8N_IMAGES_DIR / dockerfile).read_text()
+    m = re.search(rf"^FROM\s+{re.escape(image)}:[^@\s]+@(sha256:[0-9a-f]+)", text, re.M)
+    assert m, f"no digest-pinned `FROM {image}:<tag>@sha256:...` in {dockerfile}"
+    return m.group(1)
+
+
+def test_the_ledger_covers_both_n8n_dockerfiles() -> None:
+    """Non-vacuity. Every other guard here reads N8N_PINS, so an empty or narrowed mapping
+    would leave them all passing over nothing — the failure mode `KNOWN_CONSUMERS` in
+    test_probe_boundaries.py exists to catch. Named members, not a count, so the message says
+    which one went missing."""
+    assert set(N8N_PINS) == {"n8nio/n8n", "n8nio/runners"}
+    for image, dockerfile in N8N_PINS.items():
+        assert (N8N_IMAGES_DIR / dockerfile).exists(), (
+            f"{dockerfile} (the pin for {image}) is gone — move the ledger with it"
+        )
+    entries = parse_pin_history(N8N_PIN_HISTORY.read_text())
+    assert set(last_pin_per_image(entries)) == set(N8N_PINS), (
+        "the ledger records a different set of images than N8N_PINS names"
+    )
+
+
+def test_the_ledger_last_entry_is_the_live_pin() -> None:
+    """The append is what makes the version visible, so an un-appended bump must fail.
+
+    This is the assertion a Renovate digest-bump PR trips until whoever handles it resolves
+    the new digest to its version and appends a row — the manual half the group name names.
+    """
+    last = last_pin_per_image(parse_pin_history(N8N_PIN_HISTORY.read_text()))
+    for image, dockerfile in N8N_PINS.items():
+        assert _live_digest(dockerfile, image) == last[image].digest, (
+            f"{dockerfile} pins a digest the ledger does not end with. Resolve it to its "
+            f"`org.opencontainers.image.version` label and APPEND a row to "
+            f"{N8N_PIN_HISTORY.name} — the header there has the commands."
+        )
+
+
+def test_the_ledger_records_no_silent_downgrade() -> None:
+    """A version decrease needs the DOWNGRADE-ACK note. See the module comment for why this
+    permits an acknowledged decrease rather than forbidding all of them."""
+    flagged = unacknowledged_downgrades(parse_pin_history(N8N_PIN_HISTORY.read_text()))
+    assert not flagged, "\n".join(flagged)
+
+
+# The two rules above, each on an input it must accept and an input it must reject. A guard
+# that fires on everything and one that fires on nothing look identical from the passing side.
+_CLEAN = [
+    PinEntry("2.37.9", "n8nio/n8n", "sha256:" + "a" * 64, ""),
+    PinEntry("2.37.10", "n8nio/n8n", "sha256:" + "b" * 64, ""),
+    PinEntry("2.37.10", "n8nio/runners", "sha256:" + "c" * 64, ""),
+]
+
+
+def test_a_forward_move_is_clean() -> None:
+    assert unacknowledged_downgrades(_CLEAN) == []
+
+
+def test_a_downgrade_is_flagged() -> None:
+    flagged = unacknowledged_downgrades(
+        [*_CLEAN, PinEntry("2.37.9", "n8nio/n8n", "sha256:" + "d" * 64, "")]
+    )
+    assert len(flagged) == 1 and "2.37.10 -> 2.37.9" in flagged[0]
+
+
+def test_an_acknowledged_downgrade_is_clean() -> None:
+    """The escape hatch has to work, or the next withdrawn upstream release cannot be followed."""
+    assert (
+        unacknowledged_downgrades(
+            [
+                *_CLEAN,
+                PinEntry(
+                    "2.37.9",
+                    "n8nio/n8n",
+                    "sha256:" + "d" * 64,
+                    "DOWNGRADE-ACK: upstream unpromoted 2.37.10",
+                ),
+            ]
+        )
+        == []
+    )
+
+
+def test_a_downgrade_on_the_other_image_is_seen_too() -> None:
+    """Versions are compared per image. A single shared `previous` would let one image's
+    forward move mask the other's regression, which is the lockstep case this exists for."""
+    flagged = unacknowledged_downgrades(
+        [
+            *_CLEAN,
+            PinEntry("2.38.0", "n8nio/n8n", "sha256:" + "e" * 64, ""),
+            PinEntry("2.37.9", "n8nio/runners", "sha256:" + "f" * 64, ""),
+        ]
+    )
+    assert len(flagged) == 1 and flagged[0].startswith("n8nio/runners:")
+
+
+def test_a_malformed_ledger_row_raises_rather_than_being_skipped() -> None:
+    for bad in (
+        "2.37.10\tn8nio/n8n",
+        "stable\tn8nio/n8n\tsha256:" + "a" * 64,
+        "2.37.10\tn8nio/n8n\tsha256:short",
+    ):
+        with pytest.raises(ValueError):
+            parse_pin_history(bad)
+
+
+def test_a_wellformed_ledger_row_parses() -> None:
+    entries = parse_pin_history(
+        "# a comment\n\n2.37.10\tn8nio/n8n\tsha256:" + "a" * 64 + "\ta note\n"
+    )
+    assert entries == [PinEntry("2.37.10", "n8nio/n8n", "sha256:" + "a" * 64, "a note")]
 
 
 def test_shellcheck_py_pins_in_lockstep() -> None:
