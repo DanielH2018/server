@@ -142,7 +142,9 @@ def read_host(tools: Tools, host: str) -> HostReading | str:
         proc = tools.run(host, HOST_READ_COMMAND, READ_TIMEOUT_S, None)
     except subprocess.TimeoutExpired:
         return "%s: headroom read timed out" % host
-    if proc.returncode not in (0, 1):  # 1 is pgrep's zero-count exit
+    # The signing-key read runs last, so the exit status is its `cat`'s: 0 for a key file, 1
+    # for a missing one, which the parse refuses on the empty line rather than here.
+    if proc.returncode not in (0, 1):
         return "%s: headroom read failed (%d): %s" % (
             host,
             proc.returncode,

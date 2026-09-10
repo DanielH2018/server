@@ -304,10 +304,11 @@ already removed is skipped without an ssh call, `status` reports it as `cleaned`
 reading a host whose report file went with the worktree, and the manifest is deleted only once
 every batch is removed.
 
-A daniel-server PR also cannot merge until the operator registers daniel-server's SSH key as a
-GitHub signing key once (`gh ssh-key add ~/.ssh/id_ed25519.pub --type signing`); until then it
-sits `BLOCKED` with every check green, because the repo's ruleset requires a verified commit
-signature and daniel-server signs with that key.
+`launch` refuses daniel-server as a host until the operator registers its SSH key as a GitHub
+signing key once (`gh ssh-key add ~/.ssh/id_ed25519.pub --type signing`): the repo's ruleset
+requires a verified commit signature, and a PR signed with an unregistered key sits `BLOCKED`
+with every check green (PR #1572 needed a hand re-sign), so the dispatcher checks the key
+before it spends an agent.
 
 ## The `/issue-fanout` skill
 

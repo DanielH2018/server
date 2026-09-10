@@ -130,17 +130,25 @@ get past it. A failed batch is cleaned, never re-placed elsewhere.
 
 **Abandoning a batch whose branch never merged takes one more step.** `clean` keeps an
 unmerged tree by design and records no removal, so the refusal above stands until the branch
-is gone. On that batch's host: remove the worktree directory, then
-`git -C /home/ubuntu/server branch -D worktree-fanout-<batch>`, discarding whatever the agent
-committed. Then run `clean <run-id>` again — it finds neither tree nor branch, records the
-removal, and the relaunch is free to place.
+is gone. On that batch's host, from `/home/ubuntu/server`, in this order — git refuses
+`branch -D` while the worktree is still registered, and `launch` locked it:
 
-**A daniel-server PR needs its signing key registered once.** The repo ruleset requires a
-verified commit signature, and daniel-server's key is not registered as a GitHub signing key
-until the operator adds it (`gh ssh-key add ~/.ssh/id_ed25519.pub --type signing`, needing the
-`admin:ssh_signing_key` scope, or GitHub → Settings → SSH and GPG keys → New signing key).
-Until then a daniel-server PR sits `BLOCKED` with every check green — nothing in the repo can
-fix this from inside a session.
+```bash
+git worktree unlock .claude/worktrees/fanout-<batch>
+git worktree remove --force .claude/worktrees/fanout-<batch>
+git branch -D worktree-fanout-<batch>
+```
+
+That discards whatever the agent committed. Then run `clean <run-id>` again — it finds neither
+tree nor branch, records the removal, and the relaunch is free to place.
+
+**daniel-server is refused as a host until its signing key is registered.** The repo ruleset
+requires a verified commit signature, and `launch` drops a host whose `user.signingkey` is not
+among the account's registered signing keys (`read` prints `signing=ok|unverified|unknown` per
+host). daniel-server's key stays `unverified` until the operator adds it
+(`gh ssh-key add ~/.ssh/id_ed25519.pub --type signing`, needing the `admin:ssh_signing_key`
+scope, or GitHub → Settings → SSH and GPG keys → New signing key); until then every batch lands
+on daniel-box. Nothing in the repo can register the key from inside a session.
 
 When every PR has merged: `uv run python scripts/dev/fanout_place.py clean <run-id>`. It
 removes each worktree once its branch is merged into `origin/master` and the tree is clean, and
