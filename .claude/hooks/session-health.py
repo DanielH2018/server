@@ -39,15 +39,20 @@ import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# The deployer's marker directory on the host that runs the tick (daniel-box). Mode 0750 owned
-# by `ubuntu`, so a session running as that user reads it; on any other host it is absent and
-# `parked_deployer_problems` degrades to silence.
-GITOPS_STATE_DIR = "/var/lib/gitops-deploy"
+# The park decision itself lives in `scripts/lib/deployer_park.py`, because `deploy.sh` exit 4
+# asks the same question of the same marker and a second derivation would drift (issue #1429).
+# The marker directory and the threshold are re-exported under their original names: this
+# module's tests read `_mod.BEHIND_PARK_SECONDS`, and `GITOPS_STATE_DIR` is mode 0750 owned by
+# `ubuntu`, so a session running as that user reads it and any other host degrades to silence.
+sys.path.insert(0, os.path.join(REPO, "scripts"))
+from lib.deployer_park import (  # noqa: E402
+    BEHIND_PARK_SECONDS,
+    GITOPS_STATE_DIR,
+    park_age,
+    read_behind_marker,
+)
 
-# How long `behind_since` may stand before it reads as a park rather than a queue. The tick runs
-# every `gitops_deploy_tick_interval` (10 min), so 45 minutes is four ticks that all declined to
-# converge — a routine push clears in one.
-BEHIND_PARK_SECONDS = 45 * 60
+__all__ = ["BEHIND_PARK_SECONDS", "GITOPS_STATE_DIR"]
 
 # How many dirty paths the banner names before it summarises the rest. Enough to recognise whose
 # work it is; short enough to stay one line.
@@ -126,16 +131,12 @@ def behind_park_lines(marker, now):
     explain (a held SHA, an unapplied broad plane) as well as the one it does.
 
     Malformed or unparsable content reads as "no park": the marker is written atomically, and a
-    banner that guessed an age from a torn value would be worse than one that said nothing.
+    banner that guessed an age from a torn value would be worse than one that said nothing. The
+    decision is `lib.deployer_park.park_age`, shared with `deploy.sh` exit 4 (issue #1429); this
+    function owns only the banner line it becomes.
     """
-    if not marker:
-        return []
-    try:
-        first_seen = float(marker.split()[-1])
-    except ValueError, IndexError:
-        return []
-    age = now - first_seen
-    if age < BEHIND_PARK_SECONDS:
+    age = park_age(marker, now)
+    if age is None:
         return []
     return [
         f"  ✗ the GitOps deployer has been behind origin/master for {int(age // 60)} min "
@@ -180,8 +181,7 @@ def parked_deployer_problems(
     if read_marker is None:
 
         def read_marker():
-            with open(os.path.join(GITOPS_STATE_DIR, "behind_since")) as fh:
-                return fh.read().strip()
+            return read_behind_marker(GITOPS_STATE_DIR)
 
     # Deferred like the `lib.git` import above, and for the same reason the rest of this file
     # defers: nothing at module scope may be able to stop the banner.
@@ -193,8 +193,9 @@ def parked_deployer_problems(
         if primary:
             lines += dirty_primary_lines(status(primary), primary)
         # An absent marker is the healthy case — the deployer removes it on convergence — and
-        # arrives here as the FileNotFoundError this returns on, after the dirty lines are
-        # already collected. Whatever was gathered before the failure is still worth printing.
+        # `read_behind_marker` answers None for it, which reads as "no park". An INJECTED
+        # read_marker may still raise, and the dirty lines gathered before it are still worth
+        # printing.
         lines += behind_park_lines(read_marker(), time.time() if now is None else now)
     except Exception:
         return lines

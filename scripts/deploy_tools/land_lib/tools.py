@@ -139,6 +139,22 @@ def lock_holder() -> str:
     return ""
 
 
+def declared_tags_at(ref: str, primary: Path) -> set[str] | None:
+    """The service tags `containers_list` declares at `ref`, or None when unreadable.
+
+    Read at the MERGE COMMIT rather than from a checkout, because a PR that adds a role and
+    its `containers_list` entry together is the case a checkout answers wrongly: the entry is
+    absent from every tree until the tick fast-forwards, so the new role reads as one somebody
+    forgot to register (issue #1544). None restores exactly the previous answer — `land_tags`
+    then reads the tree it lives in — so a ref this checkout cannot resolve costs nothing more
+    than it used to.
+    """
+    try:
+        return land_tags.service_tags_at(ref, primary)
+    except subprocess.SubprocessError, OSError, ValueError:
+        return None
+
+
 def read_state(deployer_state: Path, name: str) -> str | None:
     """The deployer's `<name>` marker, stripped; '' when absent, None when unreadable.
 
@@ -160,15 +176,32 @@ def read_state(deployer_state: Path, name: str) -> str | None:
 # differently (`files` against `paths`), and a Protocol matches a keyword-capable parameter by
 # NAME -- so without the `/` a fake with an equally valid signature is rejected.
 class PlaneNote(Protocol):
-    """`land_tags.plane_note`: what a PR still needs a HUMAN to apply, or ""."""
+    """`land_tags.plane_note`: what a PR still needs a HUMAN to apply, or "".
 
-    def __call__(self, files: list[str], /, *, quiet: Iterable[str] = ()) -> str: ...
+    `declared` pins the set of tags that exist, the same way `Derive` does — production passes
+    the set read at the merge commit, and None falls back to the tree `land_tags` lives in.
+    """
+
+    def __call__(
+        self,
+        files: list[str],
+        /,
+        declared: set[str] | None = None,
+        *,
+        quiet: Iterable[str] = (),
+    ) -> str: ...
 
 
 class SelfApplied(Protocol):
     """`land_tags.self_applied`: whether the tick applies part of this PR itself."""
 
     def __call__(self, files: list[str], /, *, quiet: Iterable[str] = ()) -> bool: ...
+
+
+class SelfAppliedCommand(Protocol):
+    """`land_tags.self_applied_command`: what applies the tick's own half by hand, or ""."""
+
+    def __call__(self, files: list[str], /, *, quiet: Iterable[str] = ()) -> str: ...
 
 
 class RemainingSetupHosts(Protocol):
@@ -207,6 +240,7 @@ class Tools:
     gate: Callable[[list[str]], GateResult] = field(
         default=lambda tags: health_gate(tags, True)
     )
+    declared_at: Callable[[str, Path], set[str] | None] = declared_tags_at
     read_state: Callable[[Path, str], str | None] = read_state
     lock_holder: Callable[[], str] = lock_holder
     hostname: Callable[[], str] = socket.gethostname
@@ -226,6 +260,7 @@ class Classifier:
 
     plane_note: PlaneNote = land_tags.plane_note
     self_applied: SelfApplied = land_tags.self_applied
+    self_applied_command: SelfAppliedCommand = land_tags.self_applied_command
     remaining_setup_hosts: RemainingSetupHosts = land_reach.remaining_setup_hosts_note
     derive: Derive = land_tags.derive
     quiet_paths: Callable[[list[str], str], set[str]] = land_tags.quiet_paths

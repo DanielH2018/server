@@ -19,7 +19,7 @@ through every phase, so this table is the contract no signature states:
 | `merge.arm_merge` | `opts.subject` | -- |
 | `merge.await_merge` | `opts.merge_timeout`, `opts.merge_poll` | -- |
 | `classify.resolve` | `opts.pr` | `merge_sha`, `ledger.t_merged`, `ledger.merge_sha` |
-| `classify.classify` | `merge_sha`, `opts.since` | `resolved_tags`, `plane`, `self_applied`, `remaining_setup`, `needs_diff` |
+| `classify.classify` | `merge_sha`, `opts.since`, `opts.primary` | `resolved_tags`, `plane`, `self_applied`, `remaining_setup`, `needs_diff` |
 | `classify.shortcut_if_nothing` | `resolved_tags`, `plane`, `self_applied`, `needs_diff` | -- |
 | `ci.preflight` | `opts.primary` | -- |
 | `ci.wait_master_ci` | `merge_sha`, `opts.ci_timeout` | `ledger.t_ci` |

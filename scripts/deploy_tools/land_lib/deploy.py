@@ -88,6 +88,22 @@ def no_tag_outcome(ln: Landing) -> NoReturn:
         ln.finish(
             Verdict.DEFERRED, 75, f"PR #{pr} — landed, not yet applied by the tick"
         )
+    if not ln.broad_applied_covers(sha):
+        print(
+            "  the tick converged with origin but recorded no broad apply covering this PR "
+            f"(broad_applied: {ln.state('broad_applied') or 'absent'})"
+        )
+        print(
+            "  Something OTHER than the tick fast-forwarded the checkout, so the tick will "
+            "never see this range again."
+        )
+        if ln.self_applied_command:
+            print(f"  Apply it: {ln.self_applied_command}")
+        ln.finish(
+            Verdict.NEEDS_MANUAL_APPLY,
+            1,
+            f"PR #{pr}, {sha} — the tick converged without recording an apply of this PR",
+        )
     if ln.remaining_setup:
         local = ln.tools.hostname()
         print(f"  applied on {local} only; it also reaches: {ln.remaining_setup}")
