@@ -148,6 +148,37 @@ spec:
             # this repo records which packages are installed. See this role's CLAUDE.md.
             - name: N8N_COMMUNITY_PACKAGES_ENABLED
               value: "true"
+            # The two sibling flags that govern WHAT may be installed and what happens when
+            # the files are missing. Both were unset until 2026-09-10 (#1588), so n8n's
+            # defaults were live rather than chosen. Names and defaults read from
+            # packages/cli/src/modules/community-packages/community-packages.config.ts at tag
+            # `n8n@2.38.5` — the version the running pod reports.
+            #
+            # N8N_UNVERIFIED_PACKAGES_ENABLED gates INSTALLING a package outside n8n's
+            # verified list. Upstream's default is true today, and 2.38.5 logs a deprecation
+            # warning saying the default becomes false in v3 and to set it explicitly to keep
+            # the current behaviour. Held at "true" rather than tightened: no session can
+            # enumerate what is installed (this role's CLAUDE.md records why both routes are
+            # closed), so flipping it is a change whose blast radius cannot be measured from
+            # here. Flip it once the operator has read Settings → Community nodes.
+            - name: N8N_UNVERIFIED_PACKAGES_ENABLED
+              value: "true"
+            # N8N_REINSTALL_MISSING_PACKAGES makes n8n npm-install, at boot, any package the
+            # database records but /home/node/.n8n/nodes lacks. Held at upstream's default of
+            # false: on this deployment `nodes/` and `database.sqlite` are BOTH children of
+            # the n8n-data PVC, so a fresh or restored claim moves them together and the
+            # rows-without-files state this flag repairs does not arise. Enabling it would put
+            # an npm registry fetch on the startup path for no case that can occur here.
+            - name: N8N_REINSTALL_MISSING_PACKAGES
+              value: "false"
+            # N8N_COMMUNITY_PACKAGES_ALLOW_TOOL_USAGE — whether an AI Agent node may call a
+            # community node as a tool — is NOT set, because the variable does not exist at
+            # 2.38.5. It is absent from community-packages.config.ts, from the rest of
+            # n8n-io/n8n and from n8n-io/n8n-docs at that tag (searched 2026-09-10); n8n made
+            # community nodes usable as tools unconditionally and dropped the switch. Setting
+            # it would be an inert line that reads like a control. Nothing here narrows what
+            # an AI Agent may reach, which is a consequence of enabling community packages at
+            # all — reconsider that switch if it ever matters, not this one.
             - name: N8N_RUNNERS_ENABLED
               value: "true"
             - name: NODE_RUNNERS_ENABLED

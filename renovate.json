@@ -265,6 +265,21 @@
     },
     {
       "customType": "regex",
+      "description": "Webhook plugin release pin in k8s/jellyfin/defaults/main.yml (#1557). Third of the jellyfin plugin managers and it exists for the reason the two above record — the k8s-images manager keys on `_image:`, so a plugin pin, its URL and its checksum are invisible to every other manager and age with no signal. TWO matchStrings rather than three: the pin carries the version in the download URL and in the `jellyfin_k8s_webhook_version` var the init container reads, and there is no separate release-tag path because Webhook is distributed from repo.jellyfin.org, not from a GitHub release asset. The DATASOURCE is still github-releases (`jellyfin/jellyfin-plugin-webhook`), whose tags are a bare major — `v21`, `v22` — which the official manifest publishes as `21.0.0.0`, `22.0.0.0`; the matchStrings therefore capture only that major and Renovate rewrites both occurrences in step. extractVersionTemplate is the release-line ANCHOR, doing here what `^10\\.11/v` does for intro-skipper: Webhook 22.0.0.0 declares targetAbi 12.0.0.0, which the deployed 10.11 server's loader rejects silently behind a green rollout, so the anchor admits majors through 21 and drops anything newer. RAISE THAT ANCHOR when jellyfin_k8s_image moves to Jellyfin 12, or this manager tracks a line upstream has left and goes inert rather than wrong. versioningTemplate spells the version out with optional minor and patch groups because plain semver rejects a bare `21`. NEVER automerged (packageRule below): jellyfin_k8s_webhook_md5 comes from the official manifest.json and jellyfin_k8s_webhook_target_abi from the same place — neither is computable by a regex manager.",
+      "managerFilePatterns": [
+        "/(^|/)ansible/roles/k8s/jellyfin/defaults/main\\.yml$/"
+      ],
+      "matchStrings": [
+        "webhook/webhook_(?<currentValue>\\d+)\\.0\\.0\\.0\\.zip",
+        "jellyfin_k8s_webhook_version:\\s*\"(?<currentValue>\\d+)\\.0\\.0\\.0\""
+      ],
+      "depNameTemplate": "jellyfin/jellyfin-plugin-webhook",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v(?<version>1?\\d|2[01])$",
+      "versioningTemplate": "regex:^(?<major>\\d+)(?:\\.(?<minor>\\d+))?(?:\\.(?<patch>\\d+))?$"
+    },
+    {
+      "customType": "regex",
       "description": "Container images in k8s role defaults (ansible/roles/k8s/*/defaults/main.yml) AND in inventory/group_vars/all.yml. The cluster has no compose template to read, so these vars ARE the source of truth for what every pod runs \u2014 and until this manager existed none of them was tracked, so the whole cluster fleet aged with no update signal. group_vars/all.yml was added 2026-08-14: crowdsec_k8s_image had been hoisted out of its role defaults into group_vars, which put it outside this manager's patterns AND outside the coverage test's glob (scripts/tests/test_renovate_managers.py globbed roles/k8s/*/defaults/main.yml only) \u2014 so the WAF core, the one image whose staleness is a security problem, was the single pin neither could see. ansible/roles/setup/*/defaults/main.yml was added 2026-08-27: the same one-directory-short escape, this time for k3s_longhorn_restore_drill_image (busybox:stable) \u2014 an `_image:` pin one directory over from the *_version: pins the control-plane manager below already tracks in this same file. It is a mutable tag, so what Renovate can offer here is a digest bump (as with n8n's `stable` channel tag elsewhere in this file), not a version bump \u2014 that is enough signal to notice an upstream busybox re-push; the drill's own timeout/health assertions are the check that a bump didn't break it.",
       "managerFilePatterns": [
         "/^ansible/roles/k8s/[^/]+/defaults/main\\.yml$/",
@@ -491,6 +506,17 @@
         "intro-skipper/intro-skipper"
       ],
       "groupName": "intro-skipper (manual — finish the sha256 + targetAbi, check the Jellyfin line)",
+      "automerge": false
+    },
+    {
+      "description": "Jellyfin Webhook plugin (#1557). NO automerge, and the position of this rule is load-bearing for the same reason the two rules above record: the pin lives in ansible/roles/k8s/jellyfin/defaults/main.yml, so the `custom.regex` + minor/patch rule near the top of this array already sets automerge: true for it, later rules win, and without this entry a bump would merge itself into the `k8s image jellyfin` group. Two things Renovate cannot compute make it a manual finish — jellyfin_k8s_webhook_md5 and jellyfin_k8s_webhook_target_abi both come from the official manifest at repo.jellyfin.org, which no datasource exposes, and the MD5 is verified against the actual download. The operator also checks that the offered major still targets the Jellyfin line jellyfin_k8s_image runs; the manager's extractVersionTemplate anchors that, and the anchor is hand-raised.",
+      "matchDatasources": [
+        "github-releases"
+      ],
+      "matchPackageNames": [
+        "jellyfin/jellyfin-plugin-webhook"
+      ],
+      "groupName": "jellyfin webhook (manual — finish the targetAbi + MD5, check the Jellyfin line)",
       "automerge": false
     }
   ]

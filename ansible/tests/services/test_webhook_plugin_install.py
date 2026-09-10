@@ -16,15 +16,17 @@ directory name comes from the manifest's `"name": "Webhook"`.
 Run: uv run pytest ansible/tests/services/test_webhook_plugin_install.py
 """
 
+import json
 import re
 
 import pytest
 
 from lib import yaml_fast
-from _helpers import ANSIBLE
+from _helpers import ANSIBLE, REPO
 
 DEFAULTS = ANSIBLE / "roles" / "k8s" / "jellyfin" / "defaults" / "main.yml"
 DEPLOYMENT = ANSIBLE / "roles" / "k8s" / "jellyfin" / "templates" / "deployment.yaml.j2"
+RENOVATE = REPO / "renovate.json"
 
 LEADING_VERSION = re.compile(r"^(\d+(?:\.\d+)*)")
 
@@ -174,4 +176,112 @@ def test_all_three_plugin_installers_are_still_present():
         f"jellyfin's plugin installers are {sorted(installers)}. Each one pins the image "
         f"through its targetAbi and each is guarded by its own test file — add or rename one "
         f"and this census must move with it."
+    )
+
+
+# ── Renovate coverage (#1557) ───────────────────────────────────────────────────────────────
+# The pin had no update signal at all until this manager existed: renovate.json's k8s-images
+# manager keys on `_image:`, so a plugin version, its URL and its MD5 were invisible to every
+# manager and aged silently — which reads exactly like a plugin with no updates available.
+
+DEP = "jellyfin/jellyfin-plugin-webhook"
+
+
+def _renovate() -> dict:
+    return json.loads(RENOVATE.read_text())
+
+
+def _webhook_manager() -> dict:
+    manager = next(
+        (m for m in _renovate()["customManagers"] if m.get("depNameTemplate") == DEP),
+        None,
+    )
+    assert manager, (
+        f"renovate.json no longer carries a customManager for {DEP} — the Webhook pin ages "
+        f"with no update signal at all"
+    )
+    return manager
+
+
+def test_every_manager_pattern_still_matches_the_pinned_version():
+    """A manager whose matchStrings match nothing is inert, and inert looks like up-to-date.
+
+    Both patterns must capture the SAME major, because Renovate rewrites the URL and the
+    version var in step — a rewrite that reached only one would leave the marker naming a
+    build that was never downloaded.
+    """
+    text = DEFAULTS.read_text()
+    major = _defaults()["jellyfin_k8s_webhook_version"].split(".")[0]
+
+    for pattern in _webhook_manager()["matchStrings"]:
+        found = re.findall(pattern.replace("(?<", "(?P<"), text)
+        assert found, (
+            f"the Webhook Renovate manager's matchString {pattern!r} matches nothing in "
+            f"{DEFAULTS.name} — the manager is inert, which reads as 'no updates available'"
+        )
+        assert set(found) == {major}, (
+            f"the Webhook Renovate manager's matchString {pattern!r} captured {sorted(set(found))} "
+            f"in {DEFAULTS.name}, not the pinned major {major!r}"
+        )
+
+
+def test_the_manager_anchor_admits_the_pin_and_drops_the_jellyfin_12_line():
+    """The anchor is what keeps 'the newest Webhook' from being offered against a 10.11 server.
+
+    Webhook 22.0.0.0 declares targetAbi 12.0.0.0, which Jellyfin 10.11's loader rejects
+    silently — the directory sits on disk, `GET /Plugins` omits it, the rollout is green. The
+    upstream tags are a bare major (`v21`, `v22`), so unlike the sibling plugins the release
+    line is not written into the tag path: extractVersionTemplate carries the ceiling instead,
+    and it is hand-raised when jellyfin_k8s_image moves to Jellyfin 12.
+    """
+    anchor = re.compile(
+        _webhook_manager()["extractVersionTemplate"].replace("(?<", "(?P<")
+    )
+    major = _defaults()["jellyfin_k8s_webhook_version"].split(".")[0]
+
+    assert anchor.match(f"v{major}"), (
+        f"the Webhook Renovate manager's extractVersionTemplate "
+        f"{anchor.pattern!r} does not admit the pinned tag v{major} — the manager offers "
+        f"nothing, including the release it is pinned to"
+    )
+    assert not anchor.match("v22"), (
+        f"the Webhook Renovate manager's extractVersionTemplate {anchor.pattern!r} admits "
+        f"v22. Webhook 22.0.0.0 targets Jellyfin 12.0.0.0 and the deployed 10.11 server "
+        f"rejects it without logging anything. Raise this anchor only with jellyfin_k8s_image."
+    )
+
+
+def test_the_webhook_bump_is_never_automerged():
+    """The finish is manual: the MD5 and the targetAbi come from the official manifest.
+
+    The rule's POSITION is load-bearing, exactly as the two sibling rules' own descriptions
+    record — the `ansible/roles/k8s/**` rules earlier in the array set automerge for anything
+    under that path and later rules win, so a rule placed before them is silently defeated.
+    """
+    rules = _renovate()["packageRules"]
+    index = next(
+        (i for i, r in enumerate(rules) if DEP in r.get("matchPackageNames", [])),
+        None,
+    )
+    assert index is not None, (
+        f"renovate.json no longer carries a packageRule for {DEP} — a bump would join the "
+        f"automerging `k8s image jellyfin` group and ship a half-finished pin"
+    )
+    assert rules[index].get("automerge") is False, (
+        f"the {DEP} packageRule no longer sets automerge: false"
+    )
+
+    k8s_plane = [
+        i
+        for i, r in enumerate(rules)
+        if any(p.startswith("ansible/roles/k8s/") for p in r.get("matchFileNames", []))
+    ]
+    assert k8s_plane, (
+        "no packageRule scopes ansible/roles/k8s/** any more — this guard's premise moved, "
+        "re-derive which rule would otherwise automerge the plugin pins"
+    )
+    assert index > max(k8s_plane), (
+        f"the {DEP} packageRule sits at index {index}, before the k8s-plane rule at "
+        f"{max(k8s_plane)}. Later rules win, so this one's automerge: false is defeated from "
+        f"where it stands. Append it at the end of packageRules, beside its two siblings."
     )
