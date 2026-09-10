@@ -47,6 +47,16 @@ CORPUS = (
     # A shared template and shared inventory -- broad, mapping to no single service.
     "ansible/templates/traefik_labels.j2",
     "ansible/inventory/group_vars/all.yml",
+    # A role's own document. Both mappers must answer "no role": the deployer's has carried
+    # `and not p.endswith(".md")` since it learned about k8s roles, and `role_for` did not --
+    # so `shared_roles` named `manifests` for a CLAUDE.md edit and land.sh asked for a full
+    # `ansible/deploy.yml` to apply prose (issue #1701). The corpus had no `.md` under a role,
+    # which is why the agreement test passed throughout.
+    "ansible/roles/k8s/manifests/CLAUDE.md",
+    "ansible/roles/containers/wg-easy/CLAUDE.md",
+    # A `.md` a role SHIPS, under files/. The deployer treats it as a document like any other,
+    # so this mapper does too: one suffix rule, no location exception to keep in step.
+    "ansible/roles/k8s/configarr/files/baseline/README.md",
     # Docs-only, and a repo script: neither is a role at all.
     "docs/python-code-organization.md",
     "scripts/deploy_tools/land.py",
@@ -82,6 +92,21 @@ def test_the_corpus_still_covers_a_role_and_a_non_role():
     unnamed = {p for p in CORPUS if land_tags.role_for(p) is None}
     assert len(named) >= 4, f"only {sorted(named)} still map to a role"
     assert len(unnamed) >= 4, f"only {sorted(unnamed)} still map to no role"
+
+
+def test_the_corpus_still_carries_a_document_inside_a_role_directory():
+    """Non-vacuity for issue #1701: the disagreement lived on a shape the corpus lacked.
+
+    Named members rather than a count, so a trim that drops the `.md` paths fails here saying
+    which one went missing instead of re-opening the gap quietly.
+    """
+    required = {
+        "ansible/roles/k8s/manifests/CLAUDE.md",
+        "ansible/roles/containers/wg-easy/CLAUDE.md",
+    }
+    assert required <= set(CORPUS)
+    for path in required:
+        assert land_tags.role_for(path) is None, path
 
 
 def test_the_agreement_check_would_catch_a_disagreement():
