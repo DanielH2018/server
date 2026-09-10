@@ -23,6 +23,27 @@ spec:
       port: {{ container_item.port }}
       targetPort: {{ container_item.port }}
 ---
+# Instance 2's web port, and the ONLY caller is pihole-exporter. Added 2026-09-10 for issue
+# #1444: DNS is load-balanced across two independent FTLs, each keeping its own pihole-FTL.db,
+# so a metrics scrape that reached only the Service above would report roughly HALF the house's
+# query volume — silently, and with a plausible-looking graph. There is no IngressRoute for it
+# and there must not be one: the reason the admin UI is pinned to instance 1 (see above) is that
+# a session round-robined across two FTLs 401s at random, and a second route would reintroduce
+# exactly that.
+apiVersion: v1
+kind: Service
+metadata:
+  name: pihole-2-web
+  namespace: {{ k8s_namespace }}
+spec:
+  selector:
+    app: pihole
+    instance: pihole-2
+  ports:
+    - name: web
+      port: {{ container_item.port }}
+      targetPort: {{ container_item.port }}
+---
 # The LAN DNS seam (slice-6 D4): one pinned VIP the router's DHCP DNS option flips to at
 # cutover. Both Pi-holes serve simultaneously while leases renew — the free strangler.
 apiVersion: v1

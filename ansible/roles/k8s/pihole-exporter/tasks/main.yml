@@ -1,0 +1,15 @@
+---
+# pihole-exporter: ekofr/pihole-exporter against BOTH Pi-hole instances, turning the v6 admin
+# API into `pihole_*` series. Pi-hole serves no exposition endpoint of its own, so before this
+# role nothing scraped the service every DNS lookup in the house goes through. The scrape job
+# lives in claude-otel's prometheus.yaml.j2 (job_name: pihole).
+
+- name: Deploy pihole-exporter to the cluster
+  ansible.builtin.include_role:
+    name: k8s/manifests
+  vars:
+    manifests_service: pihole-exporter
+    manifests_rollout: pihole-exporter
+    manifests_files:
+      - deployment.yaml
+      - service.yaml

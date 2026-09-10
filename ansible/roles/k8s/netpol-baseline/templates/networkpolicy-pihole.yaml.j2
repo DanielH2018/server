@@ -34,7 +34,11 @@ spec:
           protocol: UDP
         - port: 53
           protocol: TCP
-    # The admin UI, fenced to Traefik and the homepage widget.
+    # The admin UI, fenced to Traefik, the homepage widget and the metrics exporter.
+    #
+    # pihole-exporter polls the v6 admin API on this same port — Pi-hole serves no separate
+    # metrics endpoint — and it polls BOTH instances, which is why this policy's `app: pihole`
+    # selector matters here rather than the Service's two-label one.
     - from:
         - podSelector:
             matchLabels:
@@ -42,6 +46,9 @@ spec:
         - podSelector:
             matchLabels:
               app: homepage
+        - podSelector:
+            matchLabels:
+              app: pihole-exporter
       ports:
         - port: 80
           protocol: TCP

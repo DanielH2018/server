@@ -1,0 +1,85 @@
+{% from 'container-resources.yml.j2' import container_resources with context %}
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
+{% from 'pod-affinity.yml.j2' import node_affinity_preference with context %}
+---
+# Turns Pi-hole's v6 admin API into Prometheus series. Pi-hole itself serves no exposition
+# endpoint — `/metrics` on the pihole Service is a 404 and `/api/*` is a 401 — so an exporter is
+# the only way query volume, block rate, upstream destinations and per-client counts become
+# series at all.
+#
+# It holds NO credential of its own. PIHOLE_PASSWORD is read straight out of the `pihole-env`
+# Secret the pihole role already renders, the same value FTL itself uses, so there is one copy
+# of that password in the cluster and one place to rotate it. That is also why this role's
+# containers_list entry declares `depends_on: [pihole]` — the Secret has to exist first.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pihole-exporter
+  namespace: {{ k8s_namespace }}
+spec:
+  revisionHistoryLimit: 3
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pihole-exporter
+  template:
+    metadata:
+      labels:
+        app: pihole-exporter
+        netpol-baseline: enforced
+    spec:
+      enableServiceLinks: false
+      securityContext:
+        runAsUser: {{ puid }}
+        runAsGroup: {{ pgid }}
+        runAsNonRoot: true
+      automountServiceAccountToken: false
+      # Dashboards, not resolution. DNS keeps working when this pod does not.
+      priorityClassName: homelab-best-effort
+      # Preference, never a pin. Both Pi-holes are pinned to the primary node, but this pod
+      # reaches them over ClusterIPs, so either node costs the same one hop.
+{{ node_affinity_preference('daniel-server') }}
+      containers:
+        - name: pihole-exporter
+          image: {{ pihole_exporter_k8s_image }}
+{{ hardened_security_context(read_only=true, non_root=true) }}
+          env:
+            - name: TZ
+              value: "{{ tz }}"
+            # Comma-separated, one entry per FTL instance. The exporter labels each series with
+            # `hostname`, so a board sums across both rather than reading one of them.
+            - name: PIHOLE_HOSTNAME
+              value: "{{ pihole_exporter_k8s_targets | join(',') }}"
+            # Given once rather than per host: both instances take the same admin password,
+            # because both read it from this same Secret key.
+            - name: PIHOLE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: pihole-env
+                  key: FTLCONF_webserver_api_password
+            - name: PIHOLE_PORT
+              value: "{{ container_item.port | default(80) }}"
+            - name: PIHOLE_PROTOCOL
+              value: http
+            - name: PORT
+              value: "{{ pihole_exporter_k8s_port }}"
+          ports:
+            - name: metrics
+              containerPort: {{ pihole_exporter_k8s_port }}
+          # tcpSocket rather than httpGet on /metrics: a kubelet probe against a metrics route is
+          # the shape ansible/tests/k8s/test_probes_do_not_flood_metrics.py refuses below a 300s
+          # period, after node-exporter's probes produced 97% of this namespace's Loki ingest.
+          # A TCP connect proves the listener is up and serialises nothing. Whether Pi-hole is
+          # reachable is Prometheus's `up` to report, not a reason to restart this pod.
+          livenessProbe:
+            tcpSocket:
+              port: {{ pihole_exporter_k8s_port }}
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            failureThreshold: 3
+          readinessProbe:
+            tcpSocket:
+              port: {{ pihole_exporter_k8s_port }}
+            initialDelaySeconds: 3
+            periodSeconds: 10
+{{ container_resources(cpu_limit=pihole_exporter_k8s_cpu_limit, mem_limit=pihole_exporter_k8s_mem_limit, cpu_request=pihole_exporter_k8s_cpu_request, mem_request=pihole_exporter_k8s_mem_request) }}
