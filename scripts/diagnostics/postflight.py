@@ -14,6 +14,7 @@ A check whose container isn't deployed here reports SKIP, not a failure — the 
 almost none of these.
 """
 
+import argparse
 import json
 import subprocess
 import sys
@@ -406,12 +407,33 @@ CHECKS = [
 ]
 
 
-def main():
+def build_parser():
+    """The parser that makes `--help` free.
+
+    No arguments beyond the implicit `-h/--help`: the no-argument invocation is the whole
+    interface and stays byte-identical. The parser exists because CLAUDE.md prescribes
+    `uv run python scripts/<dir>/<name>.py --help` as the way to verify a moved or new entry
+    point, and without it that check ran the LIVE sweep — several SOPS decrypts and ~15
+    authenticated requests to production services — while reading as a passing `--help`
+    (#1685).
+    """
+    return argparse.ArgumentParser(
+        prog="postflight.py",
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+
+
+def main(argv=None):
     """Run every §9 check, print a report line for each, and exit non-zero on any FAIL.
 
     A check that raises is caught and reported as FAIL rather than aborting the run, so
     one broken check never hides the checks after it.
+
+    The parse comes FIRST, before any check runs: `--help` must exit before the first SOPS
+    decrypt, which is the whole point of the parser.
     """
+    build_parser().parse_args(argv)
     failures = 0
     width = max(len(name) for _, name, _ in CHECKS)
     for item, name, check in CHECKS:

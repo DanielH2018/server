@@ -60,12 +60,17 @@ from diagnostics.probe_lib.health_docker import (
     resolve_ip,  # noqa: F401
 )
 from diagnostics.probe_lib.health_kubectl import (
+    DEFAULT_CLUSTER,
     WORKLOAD_KINDS,
+    cluster_of,
+    cluster_refusal,
     k8s_cronjob_argv,
     k8s_deploy_argv,
     k8s_job_pods_argv,
     k8s_jobs_argv,
+    k8s_nodes_argv,
     k8s_pods_argv,
+    node_names,
     pod_selector,
 )
 from diagnostics.probe_lib.health_rollout import format_k8s_health
@@ -317,7 +322,18 @@ def format_role_cronjob_health(role, checked, now):
     return "\n".join([head, *lines]), 0
 
 
-def run_health(container, docker=False):
+# `served=` sentinel: None is a meaningful value there (the node read failed), so it cannot
+# double as "not supplied". A caller that already knows which cluster it is talking to passes
+# it and skips the extra kubectl call; everyone else gets the read.
+_UNSET = object()
+
+
+def served_cluster():
+    """Which cluster the local `k3s kubectl` reaches, or None when the node read failed."""
+    return cluster_of(node_names(core.json_or_none(k8s_nodes_argv())))
+
+
+def run_health(container, docker=False, cluster=DEFAULT_CLUSTER, served=_UNSET):
     """k8s workload health by default, the Pi's Docker container with --docker.
 
     k8s first because that is where ~50 of the ~55 services live since the 2026-08-14 Docker
@@ -338,6 +354,15 @@ def run_health(container, docker=False):
         text, code = format_health(data, container, declared=declared_on_pi(container))
         print(text)
         return code
+
+    # Before anything else reads the cluster: the gate names one cluster, and this is the only
+    # thing that checks the kubectl it is about to run reaches that cluster. Without it,
+    # `probe.py health` run after a `-e target=daniel-stage` deploy gated production's workload
+    # and exited 0 — a green verdict about a cluster the deploy never touched (#1663).
+    refusal = cluster_refusal(cluster, served_cluster() if served is _UNSET else served)
+    if refusal:
+        print(f"{container}: {refusal}")
+        return 1
 
     ns = core.k8s_namespace()
     try:

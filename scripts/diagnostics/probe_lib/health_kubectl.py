@@ -25,6 +25,75 @@ WORKLOAD_KINDS = {
 }
 
 
+# ── which cluster this kubectl serves ───────────────────────────────────────────────────────
+#
+# Every argv below is a bare `k3s kubectl`, so the cluster it reaches is whatever the local
+# install serves and nothing in the call names a cluster to be wrong about. On daniel-box that
+# is always production, INCLUDING right after a `-e target=daniel-stage` deploy — so the
+# documented post-deploy gate used to return a healthy verdict about a cluster the deploy never
+# touched (#1663). `probe.py health --cluster` names the intended cluster and the gate refuses
+# when the reachable one is a different cluster: a refusal is a correct answer, a green verdict
+# about the wrong subject is not.
+#
+# Node names rather than an API-server address: the staging VM's k3s serves the same
+# `https://127.0.0.1:6443` its production counterpart does, so the address discriminates
+# nothing. Named rather than derived from the inventory at runtime — probe.py must answer
+# without parsing Ansible — and pinned to it by
+# scripts/diagnostics/tests/test_probe_health_cluster.py, which fails if a name here stops
+# appearing in ansible/inventory/hosts.ini.
+CLUSTER_NODES = {
+    "prod": frozenset({"daniel-box", "daniel-server"}),
+    "stage": frozenset({"daniel-stage"}),
+}
+DEFAULT_CLUSTER = "prod"
+
+
+def k8s_nodes_argv():
+    """kubectl argv for the cluster's nodes, as JSON — the cluster-identity read."""
+    return ["k3s", "kubectl", "get", "nodes", "-o", "json"]
+
+
+def node_names(nodes_doc):
+    """The node names in a `kubectl get nodes -o json` document."""
+    items = (nodes_doc or {}).get("items") or []
+    return [(item.get("metadata") or {}).get("name") for item in items]
+
+
+def cluster_of(names):
+    """Which cluster a node-name list belongs to, or None when no name is recognised.
+
+    Membership, not equality: a node added to either cluster must not turn the answer into
+    "unknown" and start refusing every gate. A name list spanning both clusters is impossible
+    — they are separate k3s installs — so the first match wins.
+    """
+    known = set(names or [])
+    for cluster, expected in CLUSTER_NODES.items():
+        if known & expected:
+            return cluster
+    return None
+
+
+def cluster_refusal(requested, served):
+    """A refusal message when `served` is not `requested`, else None.
+
+    `served` is what `cluster_of` made of the live node list, or None when that read failed.
+    Fails closed on None: a kubectl that cannot answer who its nodes are cannot support a
+    claim about which cluster it just checked either.
+    """
+    if served == requested:
+        return None
+    if served is None:
+        return (
+            f"cannot confirm this kubectl serves the {requested} cluster — `kubectl get nodes` "
+            "returned no recognised node. Refusing rather than gating an unknown cluster."
+        )
+    return (
+        f"this kubectl serves the {served} cluster, not {requested} — refusing. The gate reads "
+        "whatever the local `k3s kubectl` resolves to, so run it on a node of the cluster you "
+        f"deployed to. There is no host-side kubeconfig for {requested} from here (#1663)."
+    )
+
+
 def k8s_deploy_argv(service, namespace, kind="deploy"):
     """kubectl argv to fetch a Deployment/DaemonSet/StatefulSet as JSON.
 

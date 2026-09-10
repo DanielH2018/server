@@ -111,6 +111,26 @@ k3s_service_cidr: "10.43.0.0/16"
 k3s_cni0_gateways:
   - 10.42.0.1/32
   - 10.42.1.1/32
+# The two nodes' flannel.1 VXLAN addresses — the OTHER source a host process can arrive as.
+# Which of the two sets a host request carries depends on where the traefik pod sits: traffic
+# to a pod on the SAME node leaves via cni0 and arrives as that node's cni0 gateway above,
+# while traffic to a pod on the OTHER node crosses the overlay and arrives as the sending
+# node's flannel.1 address. Traefik is pinned to daniel-box, so daniel-box arrives as
+# 10.42.0.1 and daniel-server as 10.42.1.0 — measured 2026-09-10 (#1693): from a
+# daniel-server shell `ip route get` to a daniel-box pod reads `src 10.42.1.0`, and the same
+# day's #1683 measurement read `ClientHost: 10.42.1.0` off Traefik's access log.
+#
+# Separate from k3s_cni0_gateways rather than merged into it: netpol-baseline reads that
+# variable for 16 workloads' NetworkPolicies, and admitting the overlay addresses to a route
+# must not silently widen those. A route whose callers include host processes on BOTH nodes
+# needs both lists; one whose caller is only ever on the node running traefik needs neither
+# addition.
+#
+# Verified per node with `ip -4 -o addr show flannel.1` (daniel-box: 10.42.0.0,
+# daniel-server: 10.42.1.0).
+k3s_flannel_node_ips:
+  - 10.42.0.0/32
+  - 10.42.1.0/32
 # wg-easy v15 picks its own client pool internally (no WG_DEFAULT_ADDRESS env in this
 # deploy) rather than Ansible assigning it, so this isn't a Service/Deployment input —
 # it exists purely so the comments that describe wg-easy's client range (traefik's
