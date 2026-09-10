@@ -34,6 +34,7 @@ leaves a batch that isn't ready to go both locked and in the manifest.
 """
 
 import argparse
+import dataclasses
 import re
 import subprocess
 import sys
@@ -266,8 +267,16 @@ def _one_line(text: str, limit: int = 300) -> str:
 def cmd_status(args, tools: Tools) -> int:
     run = manifest_mod.load(args.run_id, root=args.manifest_root)
     worst = 0
-    for host in sorted({b.host for b in run.batches}):
-        mine = [b for b in run.batches if b.host == host]
+    # A cleaned batch is reported from the manifest and never read remotely. `clean` resets
+    # the failed unit and takes .fanout/report.json with the worktree, so status_command
+    # finds no active state, no result and no report — and `parse_status` reads exactly that
+    # as `failed`, which would exit 5 for a batch that landed its PR and was tidied up.
+    for b in run.batches:
+        if b.removed_at:
+            print(f"{b.batch} on {b.host}: cleaned ({b.removed_at})")
+    live = [b for b in run.batches if not b.removed_at]
+    for host in sorted({b.host for b in live}):
+        mine = [b for b in live if b.host == host]
         try:
             proc = tools.run(
                 host, status_mod.status_command(mine), status_mod.STATUS_TIMEOUT_S, None
@@ -333,9 +342,11 @@ def cmd_clean_one(
     of `clean_one`'s own seams are forwarded so a REMOVABLE-with-lock case run through this
     entry point stays hermetic too.
 
-    An absent worktree (already removed by an earlier `clean` run, or by hand) is the goal
-    state, not a failure: it reads `removed`, not `kept`, so a re-run of `clean` after a
-    partial first pass still sees every batch as removed and deletes the manifest.
+    An absent worktree reads `removed`, not `kept` — it is the goal state, not a failure.
+    This is no longer how `clean` handles a gone tree: the copy of this script that a
+    remote leg runs lives inside the worktree, so `remote_clean_command`'s shell chain
+    answers the absent-tree case before this interpreter could start (Ruling 30). The path
+    below stays for a `clean-one` run by hand against a tree that is already gone.
     """
     from fanout_lib.clean import clean_one
     from fanout_lib.clean import lock as default_locker
@@ -380,11 +391,21 @@ def cmd_clean_one(
 
 
 def cmd_clean(args, tools: Tools) -> int:
+    """Remove each batch's worktree, recording every removal in the manifest as it lands.
+
+    A removal is recorded rather than re-derived because the evidence is destroyed by the
+    act: the remote leg reads the worktree, and the worktree is what it deletes. So the
+    manifest is saved after each `removed:` verdict, a batch already carrying `removed_at`
+    is skipped without an ssh call, and the file is deleted only once no batch is left.
+    """
     from fanout_lib.clean import remote_clean_command
 
     run = manifest_mod.load(args.run_id, root=args.manifest_root)
     kept = []
-    for b in run.batches:
+    for i, b in enumerate(run.batches):
+        if b.removed_at:
+            print(f"{b.batch} on {b.host}: removed earlier ({b.removed_at})")
+            continue
         try:
             proc = tools.run(b.host, remote_clean_command(b), 120.0, None)
         except subprocess.TimeoutExpired:
@@ -393,7 +414,12 @@ def cmd_clean(args, tools: Tools) -> int:
             continue
         line = (proc.stdout or proc.stderr).strip()
         print(f"{b.batch} on {b.host}: {line}")
-        if not line.startswith("removed:"):
+        if line.startswith("removed:"):
+            run.batches[i] = dataclasses.replace(
+                b, removed_at=datetime.now(UTC).isoformat()
+            )
+            manifest_mod.save(run, root=args.manifest_root)
+        else:
             kept.append(b.batch)
     if kept:
         print(f"run {run.run_id}: kept {', '.join(kept)} — re-run clean once merged")

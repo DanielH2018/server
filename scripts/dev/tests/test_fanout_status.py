@@ -248,3 +248,27 @@ def test_cli_status_exits_5_and_names_the_terminal_reason_on_a_failed_batch(
     out = capsys.readouterr().out
     assert "b on daniel-box: failed" in out
     assert "permission_denials=2" in out and "max turns reached" in out
+
+
+def test_cli_status_reports_a_cleaned_batch_without_reading_the_host(tmp_path, capsys):
+    """F6: `clean` resets the unit and deletes report.json, which parse_status reads as failed."""
+    cleaned = Batch(
+        "b",
+        "daniel-box",
+        "/w",
+        "worktree-fanout-b",
+        "fanout-b",
+        [1],
+        "t",
+        "2026-09-10T12:00:00+00:00",
+    )
+    run = Manifest("20260101T000005Z", "o", [cleaned])
+    save(run, root=tmp_path)
+    tools, calls = fake_tools()
+    code = main(["status", run.run_id, "--manifest-root", str(tmp_path)], tools)
+    assert code == 0
+    assert not calls.calls
+    assert (
+        "b on daniel-box: cleaned (2026-09-10T12:00:00+00:00)"
+        in capsys.readouterr().out
+    )

@@ -161,10 +161,34 @@ def remote_clean_command(b: Batch) -> str:
     project-free interpreter as `HEALTH_CMD` (`--no-project --no-python-downloads --python
     3.14.6`) — every import in `clean-one`'s own chain is stdlib, so a stale primary whose
     lock file fails to sync with the worktree's `uv.lock` can't take the clean down with it.
+
+    That copy goes with the worktree the first pass deletes, so the absent-tree case is
+    answered in shell BEFORE the interpreter is needed (Ruling 30). Without this the second
+    pass ran a script path that no longer exists, python exited 2, the batch read `kept`,
+    and the run manifest was never deleted — the re-run-once-merged flow `clean` itself
+    prints could not converge.
+
+    The absent-tree branch never prints `removed:` while the branch survives, which is
+    Ruling 23's contract: a gone branch is `removed:`, a merged one is deleted first and
+    only then `removed:`, and an unmerged one is `kept:`. The merge test is ancestry alone,
+    which a squash merge does not satisfy — that fails safe, as `kept:`, never as a false
+    `removed:`.
     """
+    wt, branch = b.worktree, b.branch
+    gone_branch = f'echo "removed: {wt} (already gone)"'
     return (
         f"systemctl --user reset-failed {b.unit} 2>/dev/null; "
         f"git -C {REPO} fetch --quiet origin master && "
-        f"cd {REPO} && uv run --no-project --no-python-downloads --python 3.14.6 python "
-        f"{b.worktree}/scripts/dev/fanout_place.py clean-one {b.worktree} {b.branch}"
+        f"if [ ! -e {wt} ]; then "
+        f"if ! git -C {REPO} show-ref --verify --quiet refs/heads/{branch}; then "
+        f"{gone_branch}; "
+        f"elif git -C {REPO} merge-base --is-ancestor "
+        f"refs/heads/{branch} origin/master; then "
+        f"git -C {REPO} branch -D {branch} >/dev/null 2>&1 && {gone_branch} "
+        f'|| echo "kept: {wt} — branch {branch} not deleted"; '
+        f'else echo "kept: {wt} — branch {branch} unmerged, tree gone"; '
+        f"fi; "
+        f"else cd {REPO} && uv run --no-project --no-python-downloads --python 3.14.6 "
+        f"python {wt}/scripts/dev/fanout_place.py clean-one {wt} {branch}; "
+        f"fi"
     )

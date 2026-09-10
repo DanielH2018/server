@@ -279,9 +279,11 @@ def test_the_remote_command_resets_fetches_then_runs_the_worktrees_own_copy_of_t
     assert cmd.startswith(
         "systemctl --user reset-failed fanout-b 2>/dev/null; "
         "git -C /home/ubuntu/server fetch --quiet origin master && "
-        "cd /home/ubuntu/server && "
     )
+    # The interpreter leg is now the else of the tree-exists test (Ruling 30), and still
+    # runs from the primary checkout's cwd against the worktree's own copy of the script.
     assert (
+        "else cd /home/ubuntu/server && "
         "uv run --no-project --no-python-downloads --python 3.14.6 python "
         f"{B.worktree}/scripts/dev/fanout_place.py clean-one {B.worktree} {B.branch}"
         in cmd
@@ -381,26 +383,6 @@ def test_clean_deletes_the_manifest_once_every_batch_is_removed(tmp_path):
     manifest = _manifest(tmp_path, [b1, b2])
     tools, _run = fake_tools(
         answers={"daniel-box": ok("removed: /w1"), "daniel-server": ok("removed: /w2")}
-    )
-    code = main(["clean", manifest.run_id, "--manifest-root", str(tmp_path)], tools)
-    assert code == 0
-    assert not manifest_path(manifest.run_id, tmp_path).exists()
-
-
-def test_clean_deletes_the_manifest_when_one_batch_is_already_gone(tmp_path):
-    """Critical 1's own workflow: a first `clean` run removed batch 1's tree but timed out
-    before batch 2's; a re-run must see batch 1 as `removed` too, not stuck `kept` forever.
-    """
-    b1 = Batch("1", "daniel-box", "/w1", "worktree-fanout-1", "fanout-1", [1], "t")
-    b2 = Batch("2", "daniel-server", "/w2", "worktree-fanout-2", "fanout-2", [2], "t")
-    manifest = _manifest(tmp_path, [b1, b2])
-    tools, _run = fake_tools(
-        answers={
-            "daniel-box": ok("removed: /w1 (already gone)"),
-            "daniel-server": ok(
-                "removed: /w2 worktree-fanout-2 merged, clean, unlocked"
-            ),
-        }
     )
     code = main(["clean", manifest.run_id, "--manifest-root", str(tmp_path)], tools)
     assert code == 0
