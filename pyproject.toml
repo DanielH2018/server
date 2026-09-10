@@ -57,6 +57,7 @@ testpaths = [                        # single source of truth for WHAT runs; exc
   "scripts",                         # closes the smoke_extract CI gap
   "ansible/roles/setup/k3s/tests",             # live-object drift check comparison logic
   "ansible/roles/setup/gitops_deploy/tests",   # deploy_* decision tests + gitops_deploy.py guards
+  "ansible/roles/setup/deploy_ui/tests",      # deploy-ui parsers, guards and routing
   "ansible/roles/setup/renovate_notify/tests", # notifier decision tests
   "ansible/roles/setup/renovate_agent/tests",  # unattended-agent gate + digest tests
   "ansible/roles/setup/common/tests",          # shared host_lib helper tests
@@ -142,6 +143,7 @@ pythonpath = [
   "ansible/roles/setup/common/files",
   "ansible/roles/k8s/game-stats-lib/files",
   "ansible/roles/setup/gitops_deploy/files",
+  "ansible/roles/setup/deploy_ui/files",
   "ansible/roles/k8s/monitor-bridge/files",
   # `scripts` resolves the cross-directory `from lib.docs_provenance import ...` form (a PEP 420
   # namespace package — the subdirectories deliberately have no __init__.py, which would change
@@ -285,6 +287,7 @@ extra-paths = [
   "ansible/filter_plugins",
   "ansible/roles/setup/common/files",
   "ansible/roles/setup/gitops_deploy/files",
+  "ansible/roles/setup/deploy_ui/files",
   "ansible/roles/k8s/monitor-bridge/files",
   "ansible/roles/k8s/game-stats-lib/files",
   "ansible/roles/k8s/uptime-kuma/files",
