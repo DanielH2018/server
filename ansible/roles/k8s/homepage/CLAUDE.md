@@ -46,9 +46,9 @@ Edit the `.j2` files, never the live config: homepage seeds any missing file int
   `version: 2` in the widget block selects the `SessionsV2`/`CountV2` mappings instead: `Sessions`
   and `Items/Counts`, with the key sent as `Authorization: MediaBrowser Token=...` and nothing
   credential-shaped in the URL. Restoring the tile is more than a `services.yaml.j2` edit — the
-  `Services` group is pinned at twelve tiles over three columns, and `#my-calendar`'s height in
-  `custom.css.j2` is a `calc()` derived from that row count, so a thirteenth tile means
-  re-deriving both and re-measuring in the browser.
+  `Services` group is pinned at twelve tiles over three columns, and the calendar column's
+  `grid-template-rows: repeat(8, …)` in `custom.css.j2` encodes that FOUR-row count (two tracks
+  per Services row), so a thirteenth tile means re-deriving both and re-measuring in the browser.
 - **A layout entry matches a group by NAME, and an unmatched one is silently dead.** `layout:`
   in `templates/config/settings.yaml.j2` and the group headings in `services.yaml.j2` are two
   lists that must agree. A layout key naming no group does nothing (a `Monitoring:` entry sat
@@ -87,13 +87,20 @@ Edit the `.j2` files, never the live config: homepage seeds any missing file int
   `block!`, so it can never be a flex container and the list can never be a flex item — that is
   why ten attempts at a flex or grid chain all failed. `custom.css.j2` instead makes the group a
   flex column, lets the wrapper grow as a block, then gives the list `height: calc(100% - 0.75rem)`
-  with `align-content: space-between`, which pushes the link rows to the bottom at any width.
-- **The calendar's height cap belongs on its CARD, not on its `<li>`.** The card carries
-  `height: 100%`, which resolves against the `<li>`'s computed height — `auto` — so a `max-height`
-  on the `<li>` clamps only the `<li>` and leaves the card at content height. An `<li>` does not
-  clip, so the overflow paints over the first row of links; measured at 1280px, a 360px `<li>`
-  holding a 460px card. `document.elementFromPoint` cannot see this — the links' stretched anchors
-  win the hit test — so compare `card.getBoundingClientRect().bottom` against the `<li>`'s.
+  and splits it into eight equal `minmax(0, 1fr)` tracks with the same 0.75rem gap the Services
+  grid uses. The calendar spans six tracks and each link row takes one: with track t = (r - g) / 2,
+  six tracks and five gaps are three Services rows (3r + 2g) and two tracks plus a gap are one
+  (2t + g = r). Nothing is a pixel constant, so it holds for wrapped titles and every width. A
+  Services group that renders a different row count needs 2x that many tracks and a matching
+  `span`.
+- **The calendar `<li>` must be sized by its grid tracks, never left at `auto`.** The card
+  carries `height: 100%`, which resolves only against a definite `<li>` height. A stretched grid
+  item is definite; an `align-self: start` one computes to `auto`, so the card took its content
+  height and a `max-height` on the `<li>` clamped only the `<li>`. An `<li>` does not clip, so the
+  overflow painted over the first row of links; measured at 1280px, a 360px `<li>` holding a 460px
+  card. `minmax(0, 1fr)` tracks keep a long event list from growing the `<li>` the other way.
+  `document.elementFromPoint` cannot see this — the links' stretched anchors win the hit test —
+  so compare `card.getBoundingClientRect().bottom` against the `<li>`'s.
 - **An icon-only tile must stretch its name anchor, not hide it.** Homepage renders a tile's
   name inside its own `<a>` carrying the same href as the icon anchor. `display: none` on that
   anchor leaves only the 48x32 icon as a hit target inside a 165px tile — most of the tile looks
