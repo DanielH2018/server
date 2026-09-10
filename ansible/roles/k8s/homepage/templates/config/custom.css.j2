@@ -108,6 +108,42 @@ li.service:not(#my-calendar) .service-container > div {
   min-width: 0;
 }
 
+/* A THREE-STAT WIDGET SPANS ITS THREE BOXES ACROSS THE FULL WIDTH.
+ *
+ * At two per row an odd count leaves the last box alone on a half-empty row. Two and four
+ * divide evenly; three does not, and five of the nine Services widgets carry exactly three
+ * stats — Uptime-Kuma, Pi-hole, Speedtest, UPS and Scrutiny. Giving those a third each puts
+ * all three on one row and leaves no ragged half.
+ *
+ * `:has(> :nth-child(3):last-child)` is "exactly three children": a third child that is also
+ * the last. It matches nothing on a two- or four-stat widget, so those keep the 50% basis
+ * above.
+ *
+ * Measured 2026-09-09 at 1920px: three boxes of 83px on one row, against 128px for the 2- and
+ * 4-stat widgets. At 1280px they are 54px and the labels wrap rather than clip, which is what
+ * the `overflow-wrap` rule below is for.
+ */
+li.service:not(#my-calendar) .service-container:has(> :nth-child(3):last-child) > div {
+  flex-basis: calc(33.333% - 0.5rem);
+}
+
+/* RESERVE TWO STAT ROWS IN EVERY WIDGET, so a one-row widget does not shrink its whole grid row.
+ *
+ * `.services-list` sizes each grid row to its tallest member, and `height: 100%` above makes
+ * every card fill that. Both are per-ROW: when all three tiles in a row hold one stat row —
+ * which is what the rule above did to Uptime-Kuma, Pi-hole and Speedtest, all three of them in
+ * grid row one — that row shrinks to 120px while the rows below stay 172px. Uniform within a
+ * row, visibly different down the column.
+ *
+ * 6.5rem is two stat rows: a block is 44px and the pair with margins comes to 104px. Reserving
+ * it makes the tallest case the ONLY case, so every card is 172px whatever its stat count.
+ * Verified 2026-09-09 at 1920px and 1280px — nine Services cards and four Media cards, one
+ * distinct height between them.
+ */
+li.service:not(#my-calendar) .service-container {
+  min-height: 6.5rem;
+}
+
 li.service:not(#my-calendar) .service-container > div > div {
   overflow-wrap: anywhere;
 }
