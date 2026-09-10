@@ -2,6 +2,12 @@
 # The SteamCMD install only. The config claim is created by k8s/volume-claim, which must own
 # it — it renders and applies that PVC itself before the workload exists, so declaring it
 # here too would give two roles the same object.
+#
+# Named server-pvc.yaml, not pvc.yaml: volume-claim stages ITS claim as
+# manifests/valheim/pvc.yaml, and k8s/manifests renders every manifests_files entry into that
+# same directory. Under the shorter name the two writers overwrote each other on every deploy,
+# the render read as changed, and the rollout-restart gate took the server down each time
+# (#1550). ENFORCED by ansible/tests/k8s/test_volume_claim_pvc_path_collision.py.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:

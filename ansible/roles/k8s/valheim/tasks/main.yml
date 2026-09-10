@@ -40,7 +40,7 @@
     # ~1.8 G into the empty install PVC and the world has loaded.
     manifests_rollout_timeout: 900s
     manifests_files:
-      - pvc.yaml
+      - server-pvc.yaml
       - deployment.yaml
       - service.yaml
     manifests_secret_files:
