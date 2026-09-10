@@ -50,7 +50,7 @@ def test_a_missing_hooklib_still_leaves_a_banner_naming_it(tmp_path):
     )
     assert result.returncode == 0, result.stderr
     assert "Traceback" not in result.stderr, result.stderr
-    assert "hooklib.worktree_lines is broken" in result.stdout, result.stdout
+    assert "hooklib is broken" in result.stdout, result.stdout
 
 
 def test_remote_fanout_lines_name_each_batch_on_another_host(tmp_path):

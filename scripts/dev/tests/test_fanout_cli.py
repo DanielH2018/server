@@ -308,6 +308,42 @@ def test_an_unpinned_launch_places_on_the_only_host_github_verifies(tmp_path):
     assert len(launched) == 1 and launched[0][0] == "daniel-server"
 
 
+def _health_calls(run):
+    """Every session-health read the launch made, as the hosts it made them against."""
+    return [c[0] for c in run.calls if "session-health.py" in c[1]]
+
+
+def test_no_session_health_is_read_from_a_host_the_signing_gate_dropped(tmp_path):
+    """#1676: the health read follows placement, not the set of hosts placement looked at.
+
+    daniel-box is read for headroom and then dropped for its key, so it receives no batch.
+    A health read there would spend an ssh connection against that host's 5-per-30s `ufw
+    limit ssh` budget for nothing, and put its banner state into a brief no agent there reads.
+    """
+    box_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+    tools, run = fake_tools(
+        answers={
+            "daniel-box": ok(f"1\n99999999999\n1\n99999999999\n0\n{box_key}\n"),
+            "daniel-server": ok(HEADROOM),
+        },
+        issues=[CLAIMED[0]],
+    )
+    assert _launch(tools, tmp_path, "--batch", "1") == 0
+    assert _health_calls(run) == ["daniel-server"]
+
+
+def test_every_host_a_batch_landed_on_is_read_for_session_health(tmp_path):
+    """The accept half: two batches spread across both hosts, and both briefs carry a banner."""
+    tools, run = fake_tools(
+        answers={"daniel-box": ok(HEADROOM), "daniel-server": ok(HEADROOM)},
+        issues=CLAIMED,
+    )
+    assert _launch(tools, tmp_path, "--batch", "1", "--batch", "2") == 0
+    placed = {c[0] for c in run.calls if "worktree add" in c[1]}
+    assert placed == {"daniel-box", "daniel-server"}
+    assert sorted(_health_calls(run)) == ["daniel-box", "daniel-server"]
+
+
 def test_read_prints_both_caps_and_the_signing_verdict(capsys):
     """One line carrying what placement scores on AND what the launch gate would rule."""
     tools, _ = fake_tools(

@@ -164,7 +164,7 @@ def read_clean_result(proc: subprocess.CompletedProcess) -> tuple[str, str]:
     return "failed", f"clean failed (exit {proc.returncode}): {detail}"
 
 
-def remote_clean_command(b: Batch) -> str:
+def remote_clean_command(b: Batch, repo: str = REPO) -> str:
     """The command `clean` runs on `b.host` to clean up one batch.
 
     Resets `b.unit` first (Ruling 11): the unit runs without `--collect`, so a failed run
@@ -213,33 +213,54 @@ def remote_clean_command(b: Batch) -> str:
     `gh` that is missing, unauthenticated or offline reads as not merged and the branch
     survives with a `kept:` line.
 
-    Whatever the branch outcome, the stale registration goes: `git worktree prune` drops only
-    registrations whose directory is missing, and skips a locked one, so it cannot touch
-    another session's live tree (Ruling 37). The `worktree unlock` before it releases this
-    batch's own launch lock, which would otherwise make prune skip this very tree.
+    The stale registration goes FIRST, before anything looks at the branch. Git refuses
+    `branch -D` for a branch a registered worktree still holds, and a `rm -rf`'d directory
+    leaves that registration behind — so deleting the branch first could never work. It
+    printed `kept: … not deleted` for every merged gone-tree batch, and `cmd_clean` reads
+    `kept` as a tree to come back to once the PR merges, which it already had. Only an
+    executing test finds this: the chain's shape was asserted for months while this ordering
+    was wrong (issue #1677).
+
+    Deregistering is by path, naming this batch's own worktree, which replaces Ruling 37's
+    repo-global `git worktree prune` per the same issue. Ruling 37's safety claim held —
+    prune drops only registrations whose directory is missing and skips locked ones, so it
+    could not take another session's live tree. The complaint is breadth, not correctness: a
+    batch clean has no business deregistering trees no batch of this run created. `git
+    worktree remove` accepts a path whose directory is already gone (the same behaviour
+    `_clean_missing_tree` relies on), so it does the same job scoped to one path. Its
+    failure is swallowed: a second pass over the same batch finds nothing left to
+    deregister and must not stop the chain. The `worktree unlock` ahead of it releases this
+    batch's own launch lock, which `remove` otherwise refuses on.
+
+    Args:
+        b: the batch to clean, as recorded in the run manifest.
+        repo: the checkout the chain acts on. A seam, and a load-bearing one: it is what
+            lets a test EXECUTE this chain against a scratch repo instead of the shared
+            primary checkout, where `branch -D` and `worktree remove` would hit whatever
+            every other live session is doing.
     """
     wt, branch = b.worktree, b.branch
     gone_branch = f'echo "removed: {wt} (already gone)"'
     return (
         f"systemctl --user reset-failed {b.unit} 2>/dev/null; "
-        f"git -C {REPO} fetch --quiet origin master && "
+        f"git -C {repo} fetch --quiet origin master && "
         f"if [ ! -e {wt} ]; then "
-        f"if ! git -C {REPO} show-ref --verify --quiet refs/heads/{branch}; then "
+        f"git -C {repo} worktree unlock {wt} 2>/dev/null; "
+        f"git -C {repo} worktree remove --force {wt} 2>/dev/null || true; "
+        f"if ! git -C {repo} show-ref --verify --quiet refs/heads/{branch}; then "
         f"{gone_branch}; "
-        f"else tip=$(git -C {REPO} rev-parse refs/heads/{branch} 2>/dev/null); "
-        f"merged=$(cd {REPO} && gh pr list --state merged --head {branch} "
+        f"else tip=$(git -C {repo} rev-parse refs/heads/{branch} 2>/dev/null); "
+        f"merged=$(cd {repo} && gh pr list --state merged --head {branch} "
         f"--json headRefOid --jq '.[].headRefOid' 2>/dev/null "
         f'| grep -c -x "${{tip:-none}}"); '
         f"case \"${{merged}}\" in ''|*[!0-9]*) merged=0;; esac; "
         f'if [ "${{merged}}" -gt 0 ]; then '
-        f"git -C {REPO} branch -D {branch} >/dev/null 2>&1 && {gone_branch} "
+        f"git -C {repo} branch -D {branch} >/dev/null 2>&1 && {gone_branch} "
         f'|| echo "kept: {wt} — branch {branch} not deleted"; '
         f'else echo "kept: {wt} — branch {branch} unmerged, tree gone"; '
         f"fi; "
         f"fi; "
-        f"git -C {REPO} worktree unlock {wt} 2>/dev/null; "
-        f"git -C {REPO} worktree prune; "
-        f"else cd {REPO} && uv run --no-project --no-python-downloads --python 3.14.6 "
+        f"else cd {repo} && uv run --no-project --no-python-downloads --python 3.14.6 "
         f"python {wt}/scripts/dev/fanout_place.py clean-one {wt} {branch}; "
         f"fi"
     )
