@@ -113,7 +113,8 @@ rebased), `pr-ci-red` (the PR's own CI is red, so the armed auto-merge never fir
 against `ci-red`, which is master's CI after the merge), or one of the four give-ups:
 `merge-timeout` (the PR was
 still open after the 2700s merge budget), `ci-red`, `ci-timeout` (no CI verdict inside the
-900s budget) and `lock-busy` (the tree lock stayed busy through every retry).
+900s budget) and `lock-busy` (the tree lock stayed busy through every retry). A fifth,
+`tip-outran-retries`, is the stale-tree give-up below — a resume point rather than a failure.
 
 `nothing-to-deploy` is decided from the PR's file list right after the merge, before any CI
 wait: a PR that reaches no service tag, no plane a hand applies and nothing the tick applies
@@ -131,10 +132,21 @@ workload (issue #929).
 
 If another PR merges during that CI wait, or the periodic tick simply hasn't fast-forwarded
 onto your own merge commit yet, the first `deploy.sh` exits 4 (the tree is behind origin) and
-`land.sh` retries, up to three times: each pass sleeps `lock_backoff` (60s), re-runs the
-blockers check, waits for master CI on the CURRENT tip (the tick defers until the TIP is
-green, not just your commit) whether or not the tip actually moved, then ticks and deploys.
-The tip wait is booked under `wait_ci` on the Landings board. Before 2026-09-02 that retry
+`land.sh` retries, up to three times: each pass sleeps a backoff that DOUBLES (60s, then
+120s, then 240s), re-runs the blockers check, waits for master CI on the CURRENT tip (the tick
+defers until the TIP is green, not just your commit) whether or not the tip actually moved,
+then ticks and deploys. The tip wait is booked under `wait_ci` on the Landings board.
+
+**Exhausting those retries prints `tip-outran-retries` (exit 75), not `deploy-failed`.** Every
+attempt lost the same race: master merged faster than one tick-and-deploy cycle. Nothing was
+deployed and re-running the same `land.sh` command is safe — which is the opposite of what
+`deploy-failed` reads as, and a session that did not read the log took it for a fault in its own
+change. PR #1460 ended that way twice on 2026-09-09 with four other sessions holding worktrees;
+its checkout went from 7 to 9 commits behind DURING the landing. The doubling backoff is the
+other half: three attempts at a fixed 60s all fall inside ~4 minutes, against a measured merge
+rate of roughly one every 2 minutes, so they could not converge (issue #1466). A static
+`behind_since` SHA distinguishes a parked deployer from this; a SHA that advances under an
+unchanged timestamp is this. Before 2026-09-02 that retry
 skipped the wait entirely and ended `deploy-failed (exit 4)` with nothing deployed, three
 landings in one day. Before 2026-09-04 (issue #1084) the wait and the backoff both still ran
 only when the tip had moved, so an unchanged tip burned all three retries in ~25s with no

@@ -39,12 +39,12 @@ Exit codes:
       the PR was closed unmerged, conflicts with master, or its own CI is red
   2   bad arguments
   75  gave up waiting -- the merge budget or CI budget elapsed, the deploy lock stayed busy,
-      the tick was skipped for lock contention every time, or the tick has not yet crossed
-      origin
+      the tick was skipped for lock contention every time, master merged faster than one
+      tick-and-deploy cycle, or the tick has not yet crossed origin
 
 Verdicts printed on stdout: settled | unhealthy | deploy-failed | nothing-to-deploy |
 blocked | needs-manual-apply | deferred | merge-conflict | pr-ci-red | merge-timeout |
-ci-red | ci-timeout | lock-busy.
+ci-red | ci-timeout | lock-busy | tip-outran-retries.
 
 `blocked` is not a failure of this PR -- something else in the incoming range needs an
 operator, and nothing was deployed. `needs-manual-apply` means this PR reaches something
