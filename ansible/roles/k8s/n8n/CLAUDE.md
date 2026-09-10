@@ -58,14 +58,21 @@ it does not cover `nodes`. Installed packages therefore live on the volume, not 
   major bump in `k8s/n8n-images` can break a package with native dependencies while every
   manifest and template here reads unchanged.
 
-**How to list what is installed.** `kubectl exec` is not an option — plain `kubectl`
-authenticates as a read-only ServiceAccount, so `ls ~/.n8n/nodes/node_modules` and a query
-against the `installed_packages` table in `database.sqlite` are both unreachable from a Claude
-session. Use the editor instead: launch `scripts/diagnostics/ui_mcp.sh --two-factor` (n8n is
-`two_factor`) and open **Settings → Community nodes**, which lists each package and its version.
-That panel is also the install and uninstall path. To check the switch itself without an n8n
-login, GET `/rest/settings` through the Authelia session — the response carries
-`communityNodesEnabled`.
+**How to list what is installed — an operator does it, a Claude session cannot.** Both
+mechanical routes are closed: `kubectl exec` is refused to the read-only ServiceAccount, so
+neither `ls ~/.n8n/nodes/node_modules` nor a query against the `installed_packages` table in
+`database.sqlite` is reachable, and n8n carries **its own owner login on top of Authelia**, so
+`GET /rest/community-packages` answers `{"status":"error","message":"Unauthorized"}` even with a
+valid two_factor Authelia session (measured 2026-09-10). code-server and FreshRSS are the same
+shape — see the `TWO_FACTOR_SERVICES` comment in `scripts/diagnostics/tests/test_ui_smoke.py`.
+
+- **The operator**, signed in to n8n as the owner, opens **Settings → Community nodes**. That
+  panel lists each package with its version and is also the install and uninstall path.
+- **A session** can confirm the switch but not the contents: `GET /rest/settings` needs no n8n
+  login, only the Authelia cookie (`authelia_session_k8s`, minted by
+  `scripts/diagnostics/ui_login.py --two-factor`), and its response carries
+  `communityNodesEnabled`. Curl it with `--resolve <host>:443:<MetalLB ingress VIP>`, the same
+  DNS pin `probe_lib/core.py` uses.
 
 ## Editing
 - Images: `templates/Dockerfile*.j2` + `templates/n8n-task-runners.json.j2` (built/copied by
