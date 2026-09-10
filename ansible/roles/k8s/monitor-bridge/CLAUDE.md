@@ -502,16 +502,24 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     in 0.48-0.58 ms, three runs each, against Prometheus's loopback on daniel-server (the node
     its pod was on), 2026-09-10. Same shape as the five instant queries the temperature arm
     already makes.)
-  - **UPS Battery Health** (the APC UPS's charge % + estimated runtime + the replace-battery
-    self-test verdict, via HA's Prometheus-scraped sensors over `monitoring` — the UPS is on
-    NUT/peanut and HA's prometheus integration exports it). `down` on a low battery RUNWAY: charge <
+  - **UPS Battery Health** (mains loss + the APC UPS's charge % + estimated runtime + the
+    replace-battery self-test verdict, read from **nut-exporter** over `monitoring` with HA's
+    re-export of the same UPS as the FALLBACK — issue #1548 moved the direction, because HA is the
+    workload the UPS most obviously protects and with HA primary the alert path went down with it).
+    Each arm's fallback is `max(A) or max(B)` inside the query string, not a branch in the check:
+    both sides reduce to one unlabelled series, so `or` drops the right whenever the left has a
+    sample. `down` on sustained **mains loss** (`UPS_ON_BATTERY_QUERY`, NUT's
+    `ups.status{flag="OB"}` — one-hot over `flag`, so the exporter forces a 0 when the UPS is not
+    asserting it and the series is a real 0/1 alert input; judged FIRST and returning alone,
+    because charge and runtime read the RUNWAY and hold green through most of an outage; its own
+    streak key) or on a low battery RUNWAY: charge <
     `UPS_CHARGE_MIN_PCT` (50, a deep discharge while on battery) OR estimated runtime <
     `UPS_RUNTIME_MIN_S` (300 s — an aged battery whose full-charge runway has decayed, OR a discharge
     nearing shutdown) OR the UPS's own **replace-battery** verdict (`UPS_REPLACE_QUERY`, an HA
     template `binary_sensor.apc_ups_replace_battery` over the NUT `RB` flag — the earliest signal, it
     can trip while charge/runtime still read fine; before this the RB verdict reached NEITHER channel,
     2026-07-14 review). Two defer paths avoid double-paging a source outage another monitor owns:
-    ALL arms absent → HA's whole scrape is down (Scrape Targets' page); **both NUT numeric arms
+    ALL arms absent → BOTH source scrapes are down (Scrape Targets' page); **both NUT numeric arms
     (charge, runtime) absent while the replace arm is still present** → the NUT server/integration
     dropped (HA drops the unavailable numeric sensors, but the replace-battery template FLOORS to 0 so
     it stays present — it CANNOT reach the all-absent branch), which the `nut` container healthcheck
@@ -521,11 +529,12 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     pre-existing UPS alert is an HA automation → **mobile** push (a separate channel from this
     Kuma→Discord brain) and nothing trended the battery, so a slowly-degrading battery was invisible
     until an outage collapsed it — this is the health/runway signal + the Discord escalation path.
-    **Prom-dependent** (queries HA's scrape). `UPS_CONSECUTIVE` (2, like
-    `HA_CONSECUTIVE`) rides out a one-cycle dip from a transient load spike (or an HA-restart blip
-    that briefly drops one arm). Queries are env-driven
-    (`UPS_CHARGE_QUERY`/`UPS_RUNTIME_QUERY`/`UPS_REPLACE_QUERY`, all empty = disabled) so a UPS/entity
-    rename needs no code edit. Pure `ups_health()` is unit-tested.)
+    **Prom-dependent** (queries the `nut` and `home-assistant` scrapes). `UPS_CONSECUTIVE` (2, like
+    `HA_CONSECUTIVE`) rides out a one-cycle dip from a transient load spike, a restart blip that
+    briefly drops one arm, or a brownout shorter than the grace window. Queries are env-driven
+    (`UPS_CHARGE_QUERY`/`UPS_RUNTIME_QUERY`/`UPS_REPLACE_QUERY`/`UPS_ON_BATTERY_QUERY`, all empty =
+    disabled; `UPS_SOURCE_UP_QUERY` is the all-absent gate) so a series rename needs no code edit.
+    Pure `ups_health()` and `ups_on_battery_verdict()` are unit-tested.)
   - **Pi Pressure** (the Pi's glances API `/api/4/load` + `/api/4/mem` + `/api/4/fs` over
     the LAN: `down` when load5/core > `PI_LOAD_MAX`, mem `available` < `PI_MEM_MIN_MB`, or
     any filesystem device > `PI_DISK_MAX_PCT` — glances' fs list is its *container* view

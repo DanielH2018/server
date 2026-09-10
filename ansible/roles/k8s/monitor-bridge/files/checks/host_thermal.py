@@ -31,6 +31,7 @@ from verdicts.host_power import (
     thermal_monitor_verdict,
     thermal_throttle_verdict,
     undervoltage_verdict,
+    ups_on_battery_verdict,
 )
 
 
@@ -333,13 +334,22 @@ def check_host_temp(cfg: Config) -> tuple[bool, str]:
 
 
 def check_ups(cfg: Config) -> tuple[bool, str]:
-    """UPS battery health from HA's Prometheus-scraped sensors (the UPS_* env block in bridge/config_host.py).
+    """UPS battery health from nut-exporter, falling back to HA (the UPS_* env block in bridge/config_host.py).
 
-    Three arms: charge %, estimated runtime, and the replace-battery self-test verdict. All queries
-    empty -> disabled (stays up), like check_pi_pressure without a glances URL. Two defer paths keep
-    this from double-paging a source outage another monitor already owns:
-      - ALL arms absent while HA's scrape is DOWN (or the up-gate is unqueryable) -> HA's whole
-        Prometheus scrape is down (Scrape Targets' page). If instead HA is scraping fine (up-gate == 1)
+    Four arms: mains loss (NUT's `ups.status{flag="OB"}`), charge %, estimated runtime, and the
+    replace-battery self-test verdict. Each of the latter three reads nut-exporter first and falls
+    back to Home Assistant's re-export of the same UPS, expressed as `max(A) or max(B)` inside the
+    query itself rather than as a branch here (issue #1548). The direction moved because HA is the
+    workload the UPS most obviously protects: with HA primary, the alert path went down with the
+    thing it was protecting, and the direct NUT series that would have covered the outage sat
+    unread. All queries empty -> disabled (stays up), like check_pi_pressure without a glances URL.
+
+    The mains-loss arm is judged first and returns alone when it is red, because charge and runtime
+    read the RUNWAY and can hold green through most of an outage. It carries its own streak key.
+
+    Two defer paths keep this from double-paging a source outage another monitor already owns:
+      - ALL arms absent while BOTH source scrapes are DOWN (or the up-gate is unqueryable) -> a
+        source outage Scrape Targets pages for. If instead a source is scraping fine (up-gate == 1)
         and the replace arm is configured, all-absent means every UPS entity was renamed/removed at
         once — Scrape Targets can't see it, so page through the streak rather than silently unmonitor.
       - both NUT NUMERIC arms (charge, runtime) absent while the replace-battery arm is still present
@@ -366,25 +376,50 @@ def check_ups(cfg: Config) -> tuple[bool, str]:
         return True, "UPS monitoring disabled (no query)"
     values = {name: bridge.net.prom_scalar(cfg, q) for name, q in configured}
     if all(v is None for v in values.values()):
-        # All arms gone. Usually HA's whole Prometheus scrape is down (the numeric AND the template
-        # sensors vanish together) — Scrape Targets owns that, so defer. But if HA is scraping fine and
-        # every UPS entity was renamed/removed at once, Scrape Targets can't see it and the UPS would go
-        # silently unmonitored — so gate on HA's own up series and fall through to the partial-absence
-        # page below when HA is affirmatively up AND the replace arm is configured (its 0-floor in a NUT
-        # outage means a real NUT-server outage is never all-absent, so this can't misfire on one).
-        # An unqueryable/absent gate keeps the safe defer (never page over a source outage another
-        # monitor owns).
-        ha_up = (
-            bridge.net.prom_scalar(cfg, cfg.UPS_HA_UP_QUERY)
-            if cfg.UPS_HA_UP_QUERY
+        # All arms gone. Each arm falls back from nut-exporter to Home Assistant inside its own
+        # query, so all-absent means BOTH sources went quiet — Scrape Targets owns that, so defer.
+        # But if either source is scraping fine while every UPS series was renamed or removed at
+        # once, Scrape Targets can't see it and the UPS would go silently unmonitored — so gate on
+        # the sources' own up series and fall through to the partial-absence page below when one is
+        # affirmatively up AND the replace arm is configured. An unqueryable or absent gate keeps
+        # the safe defer (never page over a source outage another monitor owns).
+        source_up = (
+            bridge.net.prom_scalar(cfg, cfg.UPS_SOURCE_UP_QUERY)
+            if cfg.UPS_SOURCE_UP_QUERY
             else None
         )
-        if not (ha_up is not None and ha_up > 0.5 and "replace-battery" in values):
+        if not (
+            source_up is not None and source_up > 0.5 and "replace-battery" in values
+        ):
             bridge.streaks._down_streaks["ups"] = 0
             return (
                 True,
-                "no UPS data in Prometheus (HA scrape down? Scrape Targets owns source liveness)",
+                "no UPS data in Prometheus (nut and HA scrapes both down? "
+                "Scrape Targets owns source liveness)",
             )
+    # Mains loss outranks the runway arms and is judged before them. Charge and runtime read the
+    # battery's RUNWAY, which can sit at 100% and 20 minutes for most of an outage and go red
+    # only as the runway collapses; this arm is the outage itself. Its own streak key, because a
+    # brownout cycle and a low-runway cycle sharing one counter would page at half the intended
+    # grace — the rule check_host_temp's arms record.
+    on_battery = ups_on_battery_verdict(
+        bridge.net.prom_scalar(cfg, cfg.UPS_ON_BATTERY_QUERY)
+        if cfg.UPS_ON_BATTERY_QUERY
+        else None
+    )
+    if on_battery is not None:
+        (
+            bridge.streaks._down_streaks["ups_on_battery"],
+            ok,
+            msg,
+        ) = bridge.streaks.down_streak(
+            bridge.streaks._down_streaks.get("ups_on_battery", 0),
+            cfg.UPS_CONSECUTIVE,
+            on_battery[1],
+            "on-battery grace",
+        )
+        return ok, msg
+    bridge.streaks._down_streaks["ups_on_battery"] = 0
     missing = [name for name, v in values.items() if v is None]
     if (
         "charge" in values
@@ -393,13 +428,14 @@ def check_ups(cfg: Config) -> tuple[bool, str]:
         and values["runtime"] is None
         and values.get("replace-battery") is not None
     ):
-        # NUT server/integration down, NOT an entity rename: charge+runtime are direct NUT numeric
-        # sensors HA drops from Prometheus when the source goes unavailable, while the replace-battery
-        # arm is an HA template binary_sensor that FLOORS to 0 (stays present) in that same outage
-        # (templates.yaml) — so a NUT outage reads as both numeric arms absent + replace present, past
-        # the all-absent branch above. The nut pod liveness probe owns NUT-server death, so defer
-        # rather than double-paging it through the partial-absence path below with a misdirecting
-        # "entity renamed?" msg. A single numeric arm gone (charge XOR runtime) is still a real rename.
+        # NUT server down, NOT a series rename. It reaches this shape when both arms fall through
+        # to Home Assistant: HA drops the numeric charge and runtime sensors when the source goes
+        # unavailable, while the replace-battery arm is an HA template binary_sensor that FLOORS
+        # to 0 and stays present in that same outage (templates.yaml), so a NUT outage reads as
+        # both numeric arms absent + replace present and gets past the all-absent branch above.
+        # The nut pod liveness probe owns NUT-server death, so defer rather than double-paging it
+        # through the partial-absence path below with a misdirecting "renamed?" message. A single
+        # numeric arm gone (charge XOR runtime) is still a real rename.
         bridge.streaks._down_streaks["ups"] = 0
         return (
             True,

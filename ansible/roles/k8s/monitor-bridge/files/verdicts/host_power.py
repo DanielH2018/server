@@ -108,6 +108,29 @@ def thermal_throttle_verdict(
     return True, "not throttling; %s" % coverage
 
 
+def ups_on_battery_verdict(on_battery: float | None) -> tuple[bool, str] | None:
+    """Pure: (ok, msg) over NUT's `ups.status{flag="OB"}`, or None when there is nothing to say.
+
+    Mains power is gone and the UPS is carrying the load. Distinct from the charge and runtime
+    arms, which read the battery's RUNWAY: those can sit at 100% and 20 minutes through an
+    outage that is about to become a shutdown, and read green the whole way down until the
+    runway collapses. This arm is the outage itself.
+
+    None covers both quiet cases — the arm is unconfigured, or mains power is fine — for the
+    same reason `_undervoltage_arm` returns None on a clean cycle: a clean arm must not append a
+    note to the up message, or an ordinary cycle stops reading like one. An absent series is
+    also None here rather than not-ok, because the flag is one-hot over `flag` and its absence
+    means the whole exporter went quiet — which the all-arms-absent branch in `check_ups` and
+    the nut pod's liveness probe already own between them.
+
+    No grace of its own is applied here; the caller rides UPS_CONSECUTIVE, so a brownout shorter
+    than the grace window never pages.
+    """
+    if on_battery is None or on_battery <= 0.5:
+        return None
+    return False, "UPS on battery (NUT ups.status OB) — mains power is gone"
+
+
 def thermal_monitor_verdict(
     undervoltage: tuple[bool, str] | None,
     temperature: tuple[bool, str] | None,
