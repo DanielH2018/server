@@ -46,7 +46,7 @@ def test_a_failed_second_worktree_add_still_records_the_batch_already_launched(
         ok(""),  # health read
         ok(""),  # batch 1: launch (worktree add+lock, brief write, systemd-run)
         subprocess.CompletedProcess(
-            [], 128, stdout="", stderr="fatal: branch exists"
+            [], 1, stdout="", stderr="fatal: branch exists\nfanout-step: worktree add\n"
         ),  # batch 2: launch fails at worktree add
         ok(""),  # batch 2: cleanup
     ]
@@ -81,6 +81,66 @@ def test_two_batches_pinned_to_one_host_cost_exactly_four_calls_there(tmp_path):
     )
     assert code == 0
     assert [c[0] for c in run.calls] == ["daniel-server"] * 4
+
+
+def test_an_unpinned_launch_reads_both_hosts_and_places_on_the_emptier_one(tmp_path):
+    tools, run = fake_tools(
+        answers={
+            # ~4.5 GiB headroom on daniel-box, ~9.5 GiB on daniel-server — both are
+            # candidates, daniel-server wins on room alone.
+            "daniel-box": ok("5368709120\n12884901888\n1\n"),
+            "daniel-server": ok(HEADROOM),
+        },
+        issues=[CLAIMED[0]],
+    )
+    assert _launch(tools, tmp_path, "--batch", "1") == 0
+    assert {c[0] for c in run.calls} == {"daniel-box", "daniel-server"}
+    launched = [c for c in run.calls if "worktree add" in c[1]]
+    assert len(launched) == 1 and launched[0][0] == "daniel-server"
+
+
+def test_three_batches_pinned_to_one_host_cost_exactly_five_calls_there(tmp_path):
+    issues = CLAIMED + [Issue(3, "three", "body three", ("claude",))]
+    tools, run = fake_tools(answers={"daniel-server": ok(HEADROOM)}, issues=issues)
+    code = _launch(
+        tools,
+        tmp_path,
+        "--batch",
+        "1",
+        "--batch",
+        "2",
+        "--batch",
+        "3",
+        "--host",
+        "daniel-server",
+    )
+    assert code == 0
+    assert [c[0] for c in run.calls] == ["daniel-server"] * 5
+
+
+def test_four_batches_pinned_to_one_host_is_refused_before_any_launch(tmp_path, capsys):
+    issues = CLAIMED + [
+        Issue(3, "three", "body three", ("claude",)),
+        Issue(4, "four", "body four", ("claude",)),
+    ]
+    tools, run = fake_tools(answers={"daniel-server": ok(HEADROOM)}, issues=issues)
+    code = _launch(
+        tools,
+        tmp_path,
+        "--batch",
+        "1",
+        "--batch",
+        "2",
+        "--batch",
+        "3",
+        "--batch",
+        "4",
+        "--host",
+        "daniel-server",
+    )
+    assert code == 3
+    assert not any("worktree add" in c[1] for c in run.calls)
+    assert "split the fan-out" in capsys.readouterr().err
 
 
 def test_stop_stops_the_unit_and_prints_how_to_release_the_worktree(tmp_path, capsys):
