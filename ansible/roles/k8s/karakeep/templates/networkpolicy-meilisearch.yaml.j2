@@ -1,0 +1,44 @@
+---
+# karakeep's search index. karakeep dials it at MEILI_ADDR=http://karakeep-meilisearch:7700
+# (deployment.yaml.j2), and nothing else does.
+#
+# THIS POLICY SHIPS WITH THE ROLE THAT NEEDS IT. It lived in roles/k8s/netpol-baseline/ until
+# 2026-09-10, one role away from the Deployment whose pod cannot start without it (#1620, the
+# same split as authelia's session store in #1609). The warrant here is the POD SPEC rather
+# than the app: karakeep itself degrades when meilisearch is unreachable — it logs search
+# errors and serves — but deployment.yaml.j2's `wait-for-deps` initContainer retries
+# karakeep-meilisearch:7700 in an UNBOUNDED loop, so with this policy absent the pod sits in
+# Init forever, with no restart count to read and no CrashLoopBackOff to notice.
+# `build_k8s_dep_map` cannot see a split like it — it derives a role's edges from templates
+# inside that role's own directory (ansible/filter_plugins/toposort.py), so a dependency
+# expressed in a sibling role produces no edge and no ordering constraint to violate.
+# ansible/tests/services/test_karakeep_backend_policies.py pins the co-location.
+#
+# 7700 is the containerPort AND the Service port — verified 2026-08-20, they match, and that
+# same test keeps them matching.
+#
+# NO `netpol_baseline_enforced` BRANCH, unlike netpol-baseline's own policies. That lever is a
+# role default of netpol-baseline, and Ansible role defaults are role-scoped: it does not
+# resolve here, and `| default(true)` would read as honouring the lever while ignoring it.
+# Dropping it is also the right behaviour rather than a concession — the lever exists to
+# restore reachability in a rollback, and the only path that reaches meilisearch at all is the
+# one this file grants, so leaving it on cannot be what an operator is rolling back from.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: karakeep-meilisearch
+  namespace: {{ k8s_namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: karakeep-meilisearch
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: karakeep
+      ports:
+        - port: 7700
+          protocol: TCP

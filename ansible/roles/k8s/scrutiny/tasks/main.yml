@@ -45,8 +45,15 @@
   vars:
     manifests_service: scrutiny
     manifests_rollout: scrutiny-web
+    # networkpolicy-influxdb.yaml is listed HERE rather than in netpol-baseline on purpose
+    # (#1620, the same defect #1609 closed for authelia). scrutiny-web panics rather than
+    # retries when InfluxDB is unreachable, so the policy admitting it is part of this workload
+    # rather than part of the fleet baseline — shipped one role away, `--tags scrutiny` staged a
+    # web pod whose `wait-for-influxdb` gate could only time out. The file carries the
+    # reasoning.
     manifests_files:
       - influxdb.yaml
+      - networkpolicy-influxdb.yaml
       - web.yaml
       - collector-configmap.yaml
       - collector-daemonset.yaml
