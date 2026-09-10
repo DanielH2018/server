@@ -158,15 +158,58 @@ def _alive_tile() -> dict:
     return __import__("json").loads(re.sub(r"\{\{[^}]*\}\}", "0", m.group(1)))
 
 
+CONFIG_ENV = ROLE / "templates" / "config.env.j2"
+
+
 def test_the_unit_beats_kuma_only_after_a_clean_run(unit: str) -> None:
     posts = directive(unit, "ExecStartPost")
-    assert posts and any(f"/api/push/{{{{ {TOKEN} }}}}" in p for p in posts), (
-        "ExecStartPost must push the Kuma beat with renovate_agent_kuma_push_token: without "
-        "it a timer that stops firing is invisible until someone notices the backlog"
+    assert posts and any("$KUMA_PUSH_URL" in p for p in posts), (
+        "ExecStartPost must push the Kuma beat: without it a timer that stops firing is "
+        "invisible until someone notices the backlog"
+    )
+    assert any("/etc/renovate-agent/config.env" in p for p in posts), (
+        "the beat must read its URL from the 0600 config.env at run time"
     )
     assert f"{{% if {TOKEN} | default('') %}}" in unit, (
         "the beat must be gated on the token, or a checkout without the secret renders a "
         "URL with an empty token and curl -f fails every otherwise-clean run"
+    )
+
+
+def test_the_unit_holds_no_push_token(unit: str) -> None:
+    """A unit line is public. `systemctl show <unit> -p ExecStartPost` serves it over the
+    system bus to any local user, so a token interpolated into an Exec line is readable
+    without sudo — the same reasoning that keeps the alert webhook out of the unit above.
+    Until 2026-09-09 this unit inlined the whole push URL, and the harness guard that denies
+    `systemctl cat` named `systemctl show -p <Property>` as the safe alternative. Issue #1489.
+    """
+    # The `{% if %}` gate naming the token is fine and is asserted above — what must not
+    # appear is the interpolation that renders its VALUE into a line systemd publishes.
+    assert f"{{{{ {TOKEN} }}}}" not in unit, (
+        f"{TOKEN} is interpolated into the unit — move it to config.env and reference "
+        "$KUMA_PUSH_URL, as renovate-notify.service.j2 does"
+    )
+    assert "/api/push/" not in unit, "the push URL must not appear in a unit line"
+
+
+def test_config_env_carries_the_gated_push_url() -> None:
+    """The other half of the move: the URL has to land somewhere 0600, still gated on the
+    token so a checkout without the secret renders an empty value rather than a broken URL."""
+    text = CONFIG_ENV.read_text()
+    assert "KUMA_PUSH_URL=" in text, "config.env must carry the push URL the unit reads"
+    assert f"/api/push/{{{{ {TOKEN} }}}}" in text, (
+        "config.env must build the URL from renovate_agent_kuma_push_token"
+    )
+    assert f"{{% if {TOKEN} | default('') %}}" in text, (
+        "KUMA_PUSH_URL must be gated on the token, or an unset secret renders a URL ending "
+        "in an empty token and every push 404s"
+    )
+    tasks = TASKS.read_text()
+    assert re.search(
+        r"dest: /etc/renovate-agent/config\.env\n\s+owner:.*\n\s+group:.*\n\s+mode: \"0600\"",
+        tasks,
+    ), (
+        "config.env must stay 0600 — it is now the only place the push token lands on disk"
     )
 
 

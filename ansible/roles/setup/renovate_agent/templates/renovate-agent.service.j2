@@ -38,9 +38,14 @@ ExecStart=/usr/bin/flock -n /var/lock/renovate-agent.lock \
   /usr/local/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} \
   /opt/renovate-agent/renovate_agent.py
 {% if renovate_agent_kuma_push_token | default('') %}
-# The alive beat, sent only when ExecStart succeeded. The URL embeds the push token, so it
-# reaches curl on stdin as a config file (`-K -`) rather than as an argv element: /proc is
-# mounted without hidepid here, and `systemctl show -p ExecStartPost` publishes this line over
-# the system bus. `%%s`, not `%s` — systemd expands a bare `%s` to the service user's shell.
-ExecStartPost=/bin/sh -c 'printf "url = \"%%s\"\n" "https://uptime-kuma.local.{{ domain }}/api/push/{{ renovate_agent_kuma_push_token }}" | curl -fsS -m 15 -K - --get --data-urlencode "msg=agent ran" >/dev/null'
+# The alive beat, sent only when ExecStart succeeded. The URL embeds the push token, so it is
+# read from the 0600 /etc/renovate-agent/config.env at run time and reaches curl on stdin as a
+# config file (`-K -`). It appears in neither the unit line nor any argv: /proc is mounted
+# without hidepid here, and `systemctl show <unit> -p ExecStartPost` publishes this line over
+# the system bus to any local user. Interpolating the token straight into this line — which is
+# what it did until #1489 — put the whole push URL in both places, and the guard that denies
+# `systemctl cat` named `systemctl show -p <Property>` as the safe alternative.
+# `%%s`, not `%s` — systemd expands a bare `%s` to the service user's shell.
+# ENFORCED: ansible/tests/setup/test_renovate_agent_unit.py.
+ExecStartPost=/bin/sh -c '. /etc/renovate-agent/config.env && printf "url = \"%%s\"\n" "$KUMA_PUSH_URL" | curl -fsS -m 15 -K - --get --data-urlencode "msg=agent ran" >/dev/null'
 {% endif %}

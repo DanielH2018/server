@@ -115,6 +115,14 @@ unit's `ExecStartPost` beat, and the `Renovate Agent — Alive` push tile in
 `roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2`. The beat fires only when the
 wrapper exited 0, so the tile reports silence and the `OnFailure` alert reports failure.
 
+**The push URL lives in `/etc/renovate-agent/config.env` (0600), not in the unit.** A unit
+line is public: `systemctl show <unit> -p ExecStartPost` serves it over the system bus to any
+local user, and `/proc` here has no `hidepid`. The unit inlined the whole URL until
+2026-09-09, which put a rotation-tracked token in clear text behind a command the harness
+guard recommended as the SAFE alternative to `systemctl cat` (issue #1489). `ExecStartPost`
+now sources `config.env` and passes `$KUMA_PUSH_URL` to `curl` on stdin (`-K -`), the form
+`renovate-notify.service.j2` already used. ENFORCED: `ansible/tests/setup/test_renovate_agent_unit.py`.
+
 The tile's deadline is 28h, not the 25h the other daily tiles use, because the beat lands at
 the end of the run: a fast run followed by one that draws the full jitter and runs to the
 100-min unit timeout spaces two beats 25h50m apart. `test_renovate_agent_unit.py` pins the
