@@ -327,6 +327,91 @@ def test_a_board_that_broke_each_rule_would_be_reported(tmp_path):
     assert engine_metrics_pinned_to_the_node_agents(pour) == [pour_expr]
 
 
+# --- #1709: a stat panel whose green threshold the fleet can never reach ----------------
+#
+# A DIFFERENT failure from the ones above: the query returns data, so no dead-panel audit sees
+# it. `Running Crowdsec` plotted `sum(up{job=~"crowdsec.*"})` against a green step at 10, sized
+# by the upstream for a fleet of ten machines. This cluster runs four scraped CrowdSec targets,
+# so the tile read red on a fully healthy fleet and stayed red however many agents came up —
+# no signal in either direction, the inverse of the dead panels #1690 fixed.
+#
+# The rule that survives the next agent: a panel COUNTING `up` targets must express itself as a
+# ratio, so 1 means "every agent reports" whatever the fleet size, and no threshold may sit
+# above 1. A raw count with a fleet-size constant is the shape being banned.
+
+
+# Deliberately narrow: the panel's VALUE must be the target count. `Total raw lines` on the
+# insight board carries `... or up{...} * 0` purely to zero-fill an idle series, and its
+# thresholds colour a line RATE — a wider `up{` match flags it, and that is a false positive.
+UP_COUNT = re.compile(r"\b(?:sum|count)\s*\(\s*up\{")
+
+
+def up_count_panels_gated_on_a_fleet_size_constant(board: Path) -> list[str]:
+    """Titles of stat panels that count `up` targets and gate green on a constant > 1."""
+    flagged = []
+    for panel in _panels(json.loads(board.read_text())):
+        exprs = [t["expr"] for t in panel.get("targets", []) if "expr" in t]
+        if not any(UP_COUNT.search(e) for e in exprs):
+            continue
+        steps = (
+            panel.get("fieldConfig", {})
+            .get("defaults", {})
+            .get("thresholds", {})
+            .get("steps", [])
+        )
+        values = [s["value"] for s in steps if s.get("value") is not None]
+        if any(v > 1 for v in values):
+            flagged.append(panel.get("title"))
+    return flagged
+
+
+def test_no_board_gates_an_up_count_tile_on_a_fleet_size_constant():
+    for board in SECURITY.glob("*.json"):
+        assert not up_count_panels_gated_on_a_fleet_size_constant(board), board.name
+
+
+def test_a_tile_that_can_never_go_green_is_flagged(tmp_path):
+    """The pre-#1709 `Running Crowdsec` panel, and the ratio that replaced it."""
+
+    def board(expr, steps):
+        f = tmp_path / f"b{abs(hash((expr, str(steps))))}.json"
+        f.write_text(
+            json.dumps(
+                {
+                    "panels": [
+                        {
+                            "title": "Running Crowdsec",
+                            "type": "stat",
+                            "fieldConfig": {
+                                "defaults": {"thresholds": {"steps": steps}}
+                            },
+                            "targets": [{"expr": expr}],
+                        }
+                    ]
+                }
+            )
+        )
+        return f
+
+    upstream = board(
+        'sum(up{job=~"crowdsec.*"})',
+        [
+            {"color": "red"},
+            {"color": "red", "value": 10},
+            {"color": "green", "value": 10},
+        ],
+    )
+    assert up_count_panels_gated_on_a_fleet_size_constant(upstream) == [
+        "Running Crowdsec"
+    ]
+
+    ratio = board(
+        'sum(up{job=~"crowdsec.*"}) / count(up{job=~"crowdsec.*"})',
+        [{"color": "red"}, {"color": "green", "value": 1}],
+    )
+    assert up_count_panels_gated_on_a_fleet_size_constant(ratio) == []
+
+
 def test_the_boards_the_rules_read_are_all_still_there():
     """Non-vacuity. Every rule above walks a glob or a name set, and both can go empty."""
     assert {b.name for b in SECURITY.glob("*.json")} >= KNOWN_CROWDSEC_BOARDS
@@ -355,3 +440,11 @@ def test_the_boards_the_rules_read_are_all_still_there():
         if m + "{" in e
     }
     assert "cs_bucket_pour_seconds_bucket" in named, named
+    # And a board still carries an `up`-counting tile, so #1709's rule reads something.
+    up_tiles = {
+        panel.get("title")
+        for b in SECURITY.glob("*.json")
+        for panel in _panels(json.loads(b.read_text()))
+        if any(UP_COUNT.search(t.get("expr", "")) for t in panel.get("targets", []))
+    }
+    assert "CrowdSec agents up (ratio)" in up_tiles, up_tiles
