@@ -40,47 +40,45 @@ permissions:
   contents: read
 
 jobs:
-  # ONE job, deliberately — the name is the branch-protection required context, so it must stay
-  # exactly "prek (lint + validate + tests + secrets)".
+  # The hook sweep is split three ways — `ansible-lint`, `pytest`, and this job for everything
+  # else. None of the three carries the branch-protection required context; the `prek` gate job
+  # at the bottom does, under the name "prek (lint + validate + tests + secrets)".
   #
-  # This was briefly two matrix shards (ansible-lint | everything else) plus an aggregator job to
-  # re-report that context. That split existed because ansible-lint was a ~90s pole worth
-  # overlapping with the other ~37s of hooks. It stopped paying once BOTH halves became
-  # changed-files-scoped on a PR (see the run steps below): measured 2026-08-14 on the runner with
-  # warm caches, a PR's lint work is ~7s and the other 20 hooks ~2-4s, against ~11-13s of fixed
-  # per-job setup (checkout + uv + caches + prek install) that a second shard pays in full. The
-  # aggregator cost another ~7s of runner acquisition on every run for 4s of work.
+  # DECIDED: ansible-lint gets its own job, again. This repo split it out, reverted the split on
+  # 2026-08-14, and restored it on 2026-09-10 (#1332). The revert is not a precedent to re-apply,
+  # because the two facts it rested on have both gone:
   #
-  #   PR run, before: 46s wall (shards 26s + 36s, aggregator +7s)
-  #   PR run, after:  33s wall — one job, 30s (11s setup + 16s hooks), no aggregator
+  #   - The 2026-08 split needed an AGGREGATOR job purely to re-report the required context, at
+  #     ~7s of runner acquisition per run. That aggregator is now the `prek` gate, which exists
+  #     unconditionally to cover the `pytest` split of 2026-09-01. A third half costs it nothing:
+  #     the gate waits on the MAX of its dependencies, not their sum, and its own step is 4s.
+  #   - The revert's case was PR wall time, where both halves are changed-files-scoped and a
+  #     second job's ~15-20s of fixed setup dwarfs ~7s of scoped lint. The PR wall is now set by
+  #     `pytest`, which runs UNSCOPED by design (prek.toml says why) at ~61s across four shards.
+  #     Both scoped hook halves finish well inside that, so on a PR this split is free rather
+  #     than cheap.
   #
-  # Measured on THIS PR, which edits workflow files and so still trips pytest (they are in its
-  # `files` regex); ~16s of hooks is mostly that. A PR that trips neither pytest nor ansible-lint
-  # is setup-bound at roughly 20s — extrapolated from the step breakdown, not measured.
+  # The measurement that motivated it, master run 34029520131 (the merge of #1328): `hooks` 109s
+  # against pytest's slowest shard at 61s and a 120s run wall — every pytest leg done inside the
+  # first 61s, then 48s waiting on `hooks` alone. Its 109s is 20s setup + an 82s full sweep + 4s
+  # of mkdocs. Locally on daniel-server the sweep divides 106s of ansible-lint against 26s for
+  # all twenty other hooks, so the runner's 82s is roughly 66s / 16s — which puts the split's
+  # steady state at a ~40s `hooks` job beside an ~80s `ansible-lint` job, and the run wall at
+  # roughly 95s. Projected from those step times, not yet measured on master.
   #
-  # The trade is push-to-master, where both halves run --all-files and now serialise rather than
-  # overlap: 52s -> 77s steady state, above the ~73s projected from the two shards' step times.
-  # Deliberate and cheap: gitops-deploy is a pull-based 30-min timer and Renovate's automerge gates
-  # on the PR run, so nothing waits on master's CI.
+  # `mkdocs build --strict` was the other candidate and is NOT worth a job: 4s on that same run.
+  #
+  # Two things that make the split behave, both learned the hard way and both enforced below:
+  # ansible-lint must never be handed an empty --files list (it walks all 954 files and reports
+  # a cheerful "Passed"), and $RUNNER_TEMP is per-job, so the new job computes its own changed-
+  # file list rather than reading one this job wrote.
   #
   # NB the FIRST run on any given branch is slower, once — the merge of #166 took 108s, not 77s.
-  # The hook-env cache key lost its per-shard component, so a branch restores via restore-keys from
-  # an old single-shard entry and rebuilds the other half in-step (measured: a 44s hook step),
-  # saving the union key at the end. Caches are scoped per branch, so master paid this on its own
-  # first run and each open PR branch pays it once too. Don't read either as the steady state.
-  #
-  # If ansible-lint ever goes back to running unscoped on PRs, re-read that math before re-sharding.
+  # A branch restores its hook-env cache via restore-keys from an older entry and rebuilds the
+  # rest in-step (measured: a 44s hook step), saving the union key at the end. Caches are scoped
+  # per branch, so master paid this on its own first run and each open PR branch pays it once
+  # too. Don't read either as the steady state.
   hooks:
-    # Re-read 2026-09-01, and re-sharded on a different axis: tests | everything else. Two of
-    # the premises above have gone. "Nothing waits on master's CI" stopped being true on
-    # 2026-08-29, when land.sh started waiting on the merge commit's verdict and the deployer's
-    # CI gate started refusing to deploy without one — every landing now sits behind the master
-    # sweep. And that sweep is no longer 77s: 225s on the runner (`Run hooks (full sweep)`, run
-    # 33551106067), 102s on daniel-box, of which pytest alone is 63s and ansible-lint 28s. The
-    # pytest hook also runs UNSCOPED on every PR by design (prek.toml explains why its `files`
-    # regex was removed), so the scoped PR path is pytest-bound too. Splitting tests out lets
-    # the ~60s of fixed setup overlap something worth overlapping. The `prek` gate job below
-    # carries the required-context name so nothing outside this file changes.
     name: hooks (lint + validate + secrets + docs)
     runs-on: ubuntu-latest
     timeout-minutes: 20  # cap a wedged network hook (ansible-galaxy install) so it can't burn to the 6h default
@@ -176,23 +174,13 @@ jobs:
 
       # On a PR, run every hook against only the files the PR actually touches — the same thing
       # prek does locally at commit time, and what each hook's `files` regex in prek.toml is
-      # already written for. This is the largest single saving in the workflow: ansible-lint's
-      # cost is per-file (one task file 1.45s, the whole tree 18.4s locally, 36-90s on the
-      # runner), and of the other 20 hooks pytest alone is ~8-10s on-runner. Measured locally,
-      # the non-ansible sweep is 7.1s over --all-files and 0.10s over a one-file list.
+      # already written for. Measured locally, this sweep is 7.1s over --all-files and 0.10s
+      # over a one-file list.
       #
       # The file list is computed HERE rather than handed to prek's --from-ref/--to-ref, because
       # that mode does not skip a hook whose matching-file set is empty: it runs the hook with NO
-      # filenames, and `ansible-lint` with no arguments falls back to walking the whole tree.
-      # Measured — a PR changing no ansible YAML still spent 93s linting all 954 files while
-      # reporting a cheerful "Passed".
-      #
-      # NB that pathology is NOT specific to --from-ref, which is why the ansible file list below
-      # is kept separate and explicitly guarded. Re-measured 2026-08-14 with an explicit
-      # `--files docs/secret-rotation.md`: every other hook, local and remote, pass_filenames or
-      # not, correctly reports "(no files to check)Skipped" — but ansible-lint runs bare and walks
-      # the tree anyway (35s local, with and without require_serial; cause not identified). So the
-      # rule is: never hand ansible-lint a list that its own files/exclude pair can empty.
+      # filenames, and a hook that walks the tree when given none then does so. `ansible-lint` is
+      # that hook, and it runs in its own job now — see the warning on the identical step there.
       #
       # `A...B` (three dots) diffs against the merge base, so this is the PR's own changes and not
       # whatever else landed on master meanwhile.
@@ -211,12 +199,6 @@ jobs:
           # --diff-filter=d (lowercase) drops deletions: a removed file is still "changed", but
           # passing a path that no longer exists is a hook error, not a lint finding.
           git diff --name-only --no-renames --diff-filter=d "$base" > "$RUNNER_TEMP/changed.txt"
-          # Filtered with grep rather than a git pathspec glob (`ansible/**/*.yml` behaves
-          # differently under git's wildmatch than it reads). secrets.yml is dropped here as well
-          # as by the hook's own exclude: were it the ONLY changed ansible file, the hook would
-          # filter the list to empty and fall straight back into the walk described above.
-          grep -E '^ansible/.*\.ya?ml$' "$RUNNER_TEMP/changed.txt" \
-            | grep -v '^ansible/vars/secrets\.yml$' > "$RUNNER_TEMP/ansible.txt" || true
           # Fall back to the full sweep rather than a fast green when the scoped list cannot be
           # trusted to represent the change: a PR that only deletes files yields an EMPTY changed
           # list, and "skip everything" is the wrong answer there — dropping a template changes
@@ -237,26 +219,10 @@ jobs:
       - name: Run hooks (PR — scoped to changed files)
         if: steps.changed.outputs.mode == 'scoped'
         run: |
-          set -uo pipefail  # NOT -e: both invocations must run, see below
+          set -euo pipefail
           mapfile -t changed < "$RUNNER_TEMP/changed.txt"
-          mapfile -t ansible < "$RUNNER_TEMP/ansible.txt"
-          # Two invocations, and both always run: a lint failure must not hide a test failure
-          # (this is what `fail-fast: false` bought when these were separate matrix shards).
-          # Exit codes are collected and OR'd at the end.
-          rc=0
-          if [ "${#ansible[@]}" -gt 0 ]; then
-            echo "::group::ansible-lint (${#ansible[@]} file(s))"
-            # Hook id BEFORE --files: --files is variadic and would otherwise swallow it.
-            prek run ansible-lint --color always --files "${ansible[@]}" || rc=1
-            echo "::endgroup::"
-          else
-            echo "No ansible YAML changed in this PR — nothing for ansible-lint to do."
-          fi
-          echo "::group::all other hooks"
-          # --skip pytest: the suite runs in the `pytest` job beside this one.
-          prek run --skip ansible-lint --skip pytest --color always --files "${changed[@]}" || rc=1
-          echo "::endgroup::"
-          exit "$rc"
+          # --skip pytest and --skip ansible-lint: each runs in its own job beside this one.
+          prek run --skip ansible-lint --skip pytest --color always --files "${changed[@]}"
 
       # Every push to master, and any PR the scoping step declined to trust: the full sweep.
       #
@@ -267,8 +233,8 @@ jobs:
       # rather than never: a deliberate trade of post-merge detection for PR latency.
       - name: Run hooks (full sweep)
         if: github.event_name != 'pull_request' || steps.changed.outputs.mode == 'full'
-        # --skip pytest: the suite runs in the `pytest` job beside this one.
-        run: prek run --all-files --skip pytest --color always
+        # --skip pytest and --skip ansible-lint: each runs in its own job beside this one.
+        run: prek run --all-files --skip pytest --skip ansible-lint --color always
 
       # `mkdocs build --strict` ran nowhere except the twice-daily docs-refresh cron, so a
       # broken internal link reached master and the cron discovered it — build_site() bails
@@ -280,6 +246,116 @@ jobs:
       # which is the widening prek.toml:347 forbids in writing — it would wedge the cron.
       - name: Build the docs site (mkdocs --strict)
         run: uv run mkdocs build --strict --site-dir "$RUNNER_TEMP/docs-site"
+
+  # ansible-lint alone. It is the biggest single piece of the hook sweep — 106s against 26s for
+  # all twenty other hooks together, measured on daniel-server 2026-09-10 — so it gets the job
+  # and `hooks` gets the remainder. The reasoning, the numbers and the history of this split
+  # being made, reverted and remade are in the DECIDED block above `hooks`.
+  #
+  # This job deliberately does NOT install Vale, check systemd-analyze, or build the docs site:
+  # none of them is reachable from `prek run ansible-lint`. The Galaxy cache IS kept and shares
+  # its key with the other two jobs, because the hook's own entry runs `ansible-galaxy collection
+  # install` before linting — warm that is a 0.4s no-op, cold a ~40 MB download.
+  ansible_lint:
+    name: ansible-lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 20  # cap a wedged ansible-galaxy install so it can't burn to the 6h default
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0  # the merge-base diff below needs history
+          persist-credentials: false  # nothing here pushes; the repo is public, so the fetch needs no token
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.14"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d  # v10.0.1  # no floating major tag is published; pin the exact release
+        with:
+          enable-cache: true
+
+      # Its own key rather than the `hooks` job's. The two jobs build disjoint hook environments
+      # now, and one shared key would have them overwrite each other's entry every run. The
+      # second restore-key reaches the older single-job entry, so a branch that predates this
+      # split still gets a warm start once.
+      - name: Cache prek hook environments
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/prek/repos
+            ~/.cache/prek/hooks
+            ~/.cache/prek/tools
+          key: prek-lint-${{ runner.os }}-${{ hashFiles('prek.toml') }}
+          restore-keys: |
+            prek-lint-${{ runner.os }}-
+            prek-${{ runner.os }}-
+
+      - name: Cache Ansible collections
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ansible/collections
+          key: galaxy-${{ runner.os }}-${{ hashFiles('ansible/requirements.yml') }}
+
+      - name: Install prek
+        run: pip install prek==0.5.2  # pinned for a reproducible hook toolchain; Renovate (pypi) bumps it
+
+      # $RUNNER_TEMP is per-job, so this recomputes the list rather than reading what the `hooks`
+      # job wrote. Same merge-base diff and same deletions-force-a-full-sweep rule as there; the
+      # ansible filter is the part that is only here.
+      - name: Collect this PR's changed ansible files
+        id: changed
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}  # via env, never interpolated into the shell
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "$BASE_REF"
+          base="origin/$BASE_REF...HEAD"
+          # --no-renames so a rename is reported as its D + A halves rather than one R entry.
+          mapfile -t deleted < <(git diff --name-only --no-renames --diff-filter=D "$base")
+          # --diff-filter=d (lowercase) drops deletions: passing a path that no longer exists is
+          # a hook error, not a lint finding.
+          # Filtered with grep rather than a git pathspec glob (`ansible/**/*.yml` behaves
+          # differently under git's wildmatch than it reads). secrets.yml is dropped here as well
+          # as by the hook's own exclude: were it the ONLY changed ansible file, the hook would
+          # filter the list to empty and fall straight into the tree walk warned about below.
+          git diff --name-only --no-renames --diff-filter=d "$base" \
+            | grep -E '^ansible/.*\.ya?ml$' \
+            | grep -v '^ansible/vars/secrets\.yml$' > "$RUNNER_TEMP/ansible.txt" || true
+          if [ "${#deleted[@]}" -gt 0 ]; then
+            echo "mode=full" >> "$GITHUB_OUTPUT"
+            echo "PR deletes ${#deleted[@]} file(s) — linting the whole tree."
+          elif [ -s "$RUNNER_TEMP/ansible.txt" ]; then
+            echo "mode=scoped" >> "$GITHUB_OUTPUT"
+            echo "Linting $(wc -l < "$RUNNER_TEMP/ansible.txt") changed ansible file(s):"
+            sed 's/^/  /' "$RUNNER_TEMP/ansible.txt"
+          else
+            echo "mode=none" >> "$GITHUB_OUTPUT"
+            echo "No ansible YAML changed in this PR — nothing for ansible-lint to do."
+          fi
+
+      # NEVER let this run with an empty --files list. ansible-lint given no filenames does not
+      # skip: it walks all 954 files (35s local, 36-90s on the runner) and reports a cheerful
+      # "Passed", so an empty list reads as a fast green while costing the most time in the run.
+      # Re-measured 2026-08-14 with an explicit `--files docs/secret-rotation.md`: every other
+      # hook, local and remote, correctly reports "(no files to check)Skipped" — ansible-lint
+      # runs bare anyway, with and without require_serial, cause not identified. Hence the
+      # `mode=none` branch above, which skips the step outright rather than passing nothing.
+      - name: Lint the changed ansible files
+        if: steps.changed.outputs.mode == 'scoped'
+        run: |
+          set -euo pipefail
+          mapfile -t ansible < "$RUNNER_TEMP/ansible.txt"
+          # Hook id BEFORE --files: --files is variadic and would otherwise swallow it.
+          prek run ansible-lint --color always --files "${ansible[@]}"
+
+      # Every push to master, and any PR the scoping step declined to trust. ansible-lint does no
+      # cross-file variable analysis, so a change to file X does not re-lint an unchanged file Y
+      # that consumes it — that gap closes on the merge to master rather than never.
+      - name: Lint the whole tree
+        if: github.event_name != 'pull_request' || steps.changed.outputs.mode == 'full'
+        run: prek run ansible-lint --all-files --color always
 
   # The whole pytest suite, unscoped on PRs and pushes alike — the same suite the prek `pytest`
   # hook runs, invoked the same way (`uv run python -m pytest`, addopts from pyproject.toml), so
@@ -368,16 +444,20 @@ jobs:
   prek:
     name: prek (lint + validate + tests + secrets)
     runs-on: ubuntu-latest
-    needs: [hooks, pytest]
+    needs: [hooks, pytest, ansible_lint]
     if: always()
     steps:
-      - name: Require both halves to have succeeded
+      # Every dependency must be named in an expression here, not merely in `needs` above: a
+      # `needs` entry this step does not read is WAITED for and never CHECKED, so the required
+      # context would pass green with that job red. `test_every_ci_job_is_gated.py` enforces it.
+      - name: Require all three halves to have succeeded
         env:
           HOOKS: ${{ needs.hooks.result }}
           PYTEST: ${{ needs.pytest.result }}
+          ANSIBLE_LINT: ${{ needs.ansible_lint.result }}
         run: |
-          echo "hooks=$HOOKS pytest=$PYTEST"
-          [ "$HOOKS" = success ] && [ "$PYTEST" = success ]
+          echo "hooks=$HOOKS pytest=$PYTEST ansible-lint=$ANSIBLE_LINT"
+          [ "$HOOKS" = success ] && [ "$PYTEST" = success ] && [ "$ANSIBLE_LINT" = success ]
 
   renovate-config:
     name: renovate config validator

@@ -10,11 +10,11 @@ The gate is reachable two ways, so both count as gated:
 - A job whose display name is in `gitops_deploy_expected_ruleset_contexts` is required by the
   ruleset directly, as `renovate config validator` is.
 
-BEING IN `needs` IS NOT ENOUGH. The gate's step compares `needs.hooks.result` and
-`needs.pytest.result` against `success` by name. A third `needs` entry the step does not read is
-WAITED for and never CHECKED: the step exits 0 on the two names it does read, the required
-context passes, and the merge goes through with that job red. So a job counts as gated through
-`prek` only when the step's own expressions name it.
+BEING IN `needs` IS NOT ENOUGH. The gate's step compares each dependency's `needs.<id>.result`
+against `success` by name. A `needs` entry the step does not read is WAITED for and never
+CHECKED: the step exits 0 on the names it does read, the required context passes, and the merge
+goes through with that job red. So a job counts as gated through `prek` only when the step's own
+expressions name it.
 
 The context list is read from `roles/setup/gitops_deploy/defaults/main.yml`, the repo's committed
 copy of ruleset 20912512. `github-ruleset-drift.sh` compares that copy against the live ruleset
@@ -36,10 +36,13 @@ GATE_JOB = "prek"
 
 # Jobs ci.yml is known to declare. A parser that returned an empty mapping would make the subset
 # check below vacuously true, so a rename fails here rather than silently shrinking coverage.
-KNOWN_JOBS = frozenset({"hooks", "pytest", GATE_JOB, "renovate-config"})
+KNOWN_JOBS = frozenset({"hooks", "pytest", "ansible_lint", GATE_JOB, "renovate-config"})
 
 # The results the gate's step must go on comparing, for the same reason.
-GATE_READS = frozenset({"hooks", "pytest"})
+# `ansible_lint` rather than `ansible-lint`: a GitHub expression parses a hyphen as
+# subtraction, so `needs.ansible-lint.result` is a syntax error. The job id carries the
+# underscore and the display name carries the hyphen.
+GATE_READS = frozenset({"hooks", "pytest", "ansible_lint"})
 
 _RESULT_EXPR = re.compile(r"needs\.([A-Za-z0-9_-]+)\.result")
 
