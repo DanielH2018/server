@@ -44,11 +44,11 @@ RED_PROOF = re.compile(
 )
 
 
-# Not a validator: it re-downloads the vendored CRD schemas that k8s_manifests.py checks
-# against. One named exclusion, so the set stays derived rather than listed — the glob was
+# Not a validator: it re-downloads the vendored schemas this repo checks rendered config
+# against -- the traefik CRD schemas and Authelia's configuration schema. One named exclusion, so the set stays derived rather than listed — the glob was
 # `validate_*.py` until the modules dropped that prefix, at which point it matched nothing and
 # `test_the_scan_finds_the_validators` below is what said so.
-NOT_A_VALIDATOR = {"refresh_crd_schemas.py"}
+NOT_A_VALIDATOR = {"refresh_vendored_schemas.py"}
 
 
 def validators() -> list[Path]:

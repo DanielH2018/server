@@ -213,3 +213,31 @@ def test_run_kuma_drift_pi_end_to_end_reports_a_missing_pi_monitor(monkeypatch, 
     # Cluster-only monitors (declared, live, or both) must not leak into a --pi run.
     assert "k3s Grafana" not in out
     assert "Root Disk" not in out
+
+
+def test_resolve_gate_states_covers_only_the_gates_whose_monitor_is_absent():
+    """The narrowing is a deliberate sops-cost bound: one decrypt per gate, so it is not paid
+    for a monitor that is live and needs no explanation for why it might not be.
+
+    Extracted from `run_kuma_drift` for #1632 so `postflight.check_kuma_drift` shares one
+    constructor rather than carrying its own copy — a second caller is exactly how the
+    gate_states argument came to be omitted in the first place.
+
+    Asserted on the returned KEYS rather than on a recorded call list, so this needs no age
+    key and no patch: the narrowing IS which gates appear. `no_secrets` then pins the other
+    half — a deliberate non-read maps to None ("could not be read", rendered as unverified),
+    never to False, which would excuse the monitor. That conflation is the 2026-08-22 miss.
+    """
+    declared = {
+        "Live Gated": {"type": "push", "interval": 60, "gated": True, "gate": "tok_a"},
+        "Absent Gated": {
+            "type": "push",
+            "interval": 60,
+            "gated": True,
+            "gate": "tok_b",
+        },
+        "Ungated": {"type": "http", "interval": 60, "gated": False, "gate": None},
+    }
+    assert monitors.resolve_gate_states(declared, {"Live Gated"}, no_secrets=True) == {
+        "tok_b": None
+    }
