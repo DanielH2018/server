@@ -125,7 +125,17 @@ def role_for(path: str) -> str | None:
 
     Not the same question as `tag_for`: a role directory under roles/k8s/ need not have a
     `containers_list` entry, and eight of them do not.
+
+    A `.md` under a role belongs to no role HERE, which is the answer the deployer's own
+    mapper already gives: `_ACTIVE_K8S` and `_ACTIVE_ROLE` in `deploy_changes.py` both carry
+    `and not p.endswith(".md")`, because a document is not something a playbook applies. This
+    mapper did not, so a PR whose only change under `roles/k8s/manifests/` was that role's
+    CLAUDE.md came out of `shared_roles` as a tag-less role owed to a hand, and land.sh ended
+    `needs-manual-apply` asking for a full `ansible/deploy.yml` run for prose (issue #1701).
+    `test_land_tags_shared_mapper_agreement.py` pins the two answers together.
     """
+    if path.endswith(".md"):
+        return None
     for pattern in (_K8S, _DOCKER):
         m = pattern.match(path)
         if m and m.group(1) not in _NOT_SERVICES:
@@ -365,12 +375,29 @@ def derive(files, changed_files: int, declared: set[str] | None = None) -> Deriv
     return Derivation(sorted(derived_tags(files, declared)), DeriveSource.PR)
 
 
-def quiet_paths(paths: list[str], range_: str) -> set[str]:
-    """The broad paths in `paths` whose change over `<old>..<new>` is comments only.
+def doc_paths(paths) -> set[str]:
+    """The paths in `paths` that are documentation, which no playbook applies.
 
-    Empty when no range was given, or when the range is malformed, or when git cannot read
-    a side of it -- every one of those keeps the path broad, which is the direction a wrong
-    answer here must fall (issue #848).
+    A `.md` only. Not `docs/`, which matches no plane prefix anyway, and not a `.txt` or a
+    `README` without a suffix -- the narrow predicate is the one that cannot swallow a file
+    something renders. It is the same suffix test the deployer's own mapper makes.
+    """
+    return {p for p in paths if p.endswith(".md")}
+
+
+def quiet_paths(paths: list[str], range_: str) -> set[str]:
+    """The broad paths in `paths` a landing owes nothing for: docs, and comment-only edits.
+
+    Documentation is quiet on its own terms, before any range is read: a `.md` under
+    `roles/setup/k3s/` still takes the broad arm by prefix, so a docs-only PR there ended
+    `needs-manual-apply` naming `k3s-bringup.yml` with nothing to apply (issue #1701, the
+    setup-plane half of it). The comments-only test below cannot reach that case -- it reads
+    YAML content lines, and prose is not comments.
+
+    Empty of comment-only paths when no range was given, or when the range is malformed, or
+    when git cannot read a side of it -- every one of those keeps the path broad, which is the
+    direction a wrong answer here must fall (issue #848). The docs half survives all three,
+    because it asks nothing of the range.
 
     A RANGE NARROWER THAN THE FILE LIST is the same failure wearing a valid range, and it
     fails the unsafe way: a broad path substantively changed OUTSIDE the range reads as
@@ -380,16 +407,17 @@ def quiet_paths(paths: list[str], range_: str) -> set[str]:
     the same shape as `derive`'s count assertion, and for the same reason: wider than the
     truth is recoverable, narrower is not.
     """
+    docs = doc_paths(paths)
     old, sep, new = range_.partition("..")
     if not (sep and old and new):
-        return set()
+        return docs
     try:
         covered = set(deploy_tags.range_paths(old, new))
         if not set(paths) <= covered:
-            return set()
-        return deploy_tags.comment_only_paths(paths, old, new)
+            return docs
+        return docs | deploy_tags.comment_only_paths(paths, old, new)
     except subprocess.CalledProcessError, OSError:
-        return set()
+        return docs
 
 
 def main(argv: list[str] | None = None) -> int:

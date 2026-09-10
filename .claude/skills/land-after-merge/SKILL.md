@@ -232,6 +232,15 @@ scripts/secrets_mgmt/secret_rotation.py consumers <secret>` for who holds a stal
 repair command per plane. The other services in the same PR still deploy normally; the verdict
 is about the half that did not.
 
+**A document under a role is not one of these.** A `.md` — a role's `CLAUDE.md`, a `README.md`,
+one under `files/` — maps to no role and to no plane, because no playbook applies prose. Landing
+PR #1696 ended `needs-manual-apply` for `ansible/roles/k8s/manifests/`, whose only changed file
+was that role's CLAUDE.md, and asked for a full `ansible/deploy.yml` (issue #1701). The deployer's
+own mapper already answered "no role" for the same path; `land_tags.role_for` now agrees, and
+`land_tags.quiet_paths` drops a `.md` under the setup plane on its own terms, before any diff is
+read. A docs-only PR therefore ends `nothing-to-deploy`, which is the same rule CLAUDE.md's *When
+to wait* states for an operator.
+
 **A role the PR itself registers is not one of these.** Which tags exist is read at the MERGE
 COMMIT (`land_tags.service_tags_at`), not from a checkout — a `containers_list` entry added by
 the same PR is absent from every tree until the tick fast-forwards, and `land.sh` used to report
