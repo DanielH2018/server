@@ -175,6 +175,13 @@ stay).
     durable signal that an unapplied plane exists. A setup-plane change whose tag cannot be
     derived joins them, since the only automatic alternative is an unscoped `initial_setup.yml`
     (a whole-host reprovision).
+  - **A park names its reason in the journal on every tick** (`deploy_remediation.broad_park_reason`).
+    The Discord page is throttled once per SHA and until 2026-09-09 the journal was throttled with
+    it, so from the second tick behind a range this arm logged nothing at all. daniel-box then sat
+    nine commits behind origin for twenty minutes with `roles/setup/k3s/` in the range — k3s is
+    applied by `k3s-bringup.yml`, so no tag resolves — and the only per-tick line came from an
+    unrelated comment-only path, which read as the cause and was not (#1467). The journal is what
+    an operator reads when `land.sh` exits 4; a page delivered an hour ago is not there.
   - **This role applies itself.** It was in the manual set until 2026-09-01 on the claim that
     applying it "restarts the unit executing the tick". The handler is `Run gitops-deploy once`,
     `ansible.builtin.systemd: state: started`, and Ansible's module treats an `activating` unit

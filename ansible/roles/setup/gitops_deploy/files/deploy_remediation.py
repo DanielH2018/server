@@ -46,6 +46,28 @@ def broad_budget_ok(
     return flock_s + forward_s + rollback_s + BROAD_BUDGET_MARGIN_S <= timeout_s
 
 
+def broad_park_reason(cs: ChangeSet) -> str:
+    """Why a broad tick parked without fast-forwarding, in one journal-line clause.
+
+    The Discord alert beside it is throttled once per SHA, so it says nothing on the second and
+    every later tick behind the same range. That left the journal with no deferral reason at all
+    while daniel-box sat nine commits behind origin for twenty minutes on 2026-09-09 (#1467):
+    `roles/setup/k3s/` was in the range, k3s is applied by `k3s-bringup.yml` rather than
+    `initial_setup.yml`, so `setup_tags_for` resolved no tag and this arm parked. The only line
+    each tick came from an unrelated comment-only path, which read as the cause and was not.
+
+    The park is correct — see `handle_broad`. Its invisibility was the defect, so this text is
+    logged EVERY tick and the throttle governs only the page.
+    """
+    if cs.broad_manual:
+        return "a bring-up playbook changed, which runs by hand by construction"
+    roles = ", ".join(sorted(cs.setup_roles)) or "the setup plane"
+    return (
+        f"no initial_setup.yml tag can be derived for {roles} — applying it automatically "
+        "would mean an unscoped whole-host reprovision"
+    )
+
+
 def broad_remediation(
     broad_deploy: bool,
     broad_setup: bool,

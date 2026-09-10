@@ -36,7 +36,7 @@ from deploy_git import (
 )
 from deploy_health import gate_services
 from deploy_k8s import declares_snapshot_claims, rollback_volume_revert_note
-from deploy_remediation import broad_remediation
+from deploy_remediation import broad_park_reason, broad_remediation
 from deploy_staging import (
     STAGING_SKIPPED,
     staging_blocks,
@@ -135,6 +135,22 @@ def handle_broad(
     # only automatic option is an UNSCOPED initial_setup.yml, which is a whole-host reprovision
     # rather than the scoped apply this arm is funded for.
     if cs.broad_manual or (cs.broad_setup and not setup_tags):
+        remediation = broad_remediation(
+            cs.broad_deploy, cs.broad_setup, cs.setup_roles, config.branch
+        )
+        # Say so in the JOURNAL, every tick. `alert_once` below throttles the Discord page to one
+        # per SHA, and until 2026-09-09 that throttle also decided what the journal said: from the
+        # second tick behind a range this arm logged NOTHING. daniel-box then sat nine commits
+        # behind origin for twenty minutes with the only per-tick line coming from an unrelated
+        # comment-only path, which read as the cause and was not (#1467). The park is right —
+        # ff-merging here would clear `behind_since`, the only durable signal that an unapplied
+        # plane exists — so the fix is to make the park legible, not to take it away. An operator
+        # reads this journal when `land.sh` exits 4, and a page they already received an hour ago
+        # is not there.
+        log(
+            f"origin {origin[:8]}: parked, nothing merged — {broad_park_reason(cs)}. "
+            f"Apply by hand: {remediation}"
+        )
         # Broad-manual doesn't ff-merge, so it re-evals next tick — the per-SHA marker (inside
         # alert_once) stops a re-queue while the pending queue owns redelivery. Name the RIGHT
         # playbook per plane: deploy.yml applies only container roles, so a setup-plane change
@@ -146,12 +162,7 @@ def handle_broad(
             "broad_alerted",
             "broad",
             origin,
-            deploy_alerts.broad_deferred_alert(
-                origin,
-                broad_remediation(
-                    cs.broad_deploy, cs.broad_setup, cs.setup_roles, config.branch
-                ),
-            ),
+            deploy_alerts.broad_deferred_alert(origin, remediation),
         )
         return 0
 
