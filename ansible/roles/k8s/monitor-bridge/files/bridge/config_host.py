@@ -40,6 +40,13 @@ class HostConfig:
     HWMON_TEMP_CONSECUTIVE: int
     HWMON_TEMP_ORIGINS_MIN: int
     HWMON_TEMP_ORIGINS_CONSECUTIVE: int
+    UNDERVOLTAGE_QUERY: str
+    UNDERVOLTAGE_UP_QUERY: str
+    UNDERVOLTAGE_CONSECUTIVE: int
+    THERMAL_THROTTLE_QUERY: str
+    THERMAL_THROTTLE_UP_QUERY: str
+    THERMAL_THROTTLE_ORIGINS_MIN: int
+    THERMAL_THROTTLE_CONSECUTIVE: int
     UPS_CHARGE_QUERY: str
     UPS_RUNTIME_QUERY: str
     UPS_REPLACE_QUERY: str
@@ -262,6 +269,43 @@ def host_config(
         # have paged once in that week on a healthy estate. 5 cycles is 25 minutes: one cycle of
         # margin over the observed worst case.
         HWMON_TEMP_ORIGINS_CONSECUTIVE=_int("HWMON_TEMP_ORIGINS_CONSECUTIVE", "5"),
+        # The Raspberry Pi firmware's own low-critical voltage alarm, a clean 0/1 that needs no
+        # threshold: the firmware has already decided. Only daniel-pi reports it, which is why
+        # the arm gates an empty vector on that host's own scrape rather than treating absence as
+        # health — an empty vector means the Pi went quiet, and a Pi falling off the network is
+        # what sustained undervoltage causes.
+        UNDERVOLTAGE_QUERY=_env(
+            "UNDERVOLTAGE_QUERY", "node_hwmon_in_lcrit_alarm_volts"
+        ),
+        UNDERVOLTAGE_UP_QUERY=_env("UNDERVOLTAGE_UP_QUERY", 'up{job="node-pi"}'),
+        # 1 — no grace, unlike every other arm here. This is an alarm bit the firmware latched,
+        # not a measurement that can spike: a 1 means the supply already went out of spec, and
+        # the damage (a corrupted SD card) is not undone by the next cycle reading 0. Raise it
+        # only if a real inrush transient is observed setting the bit spuriously.
+        UNDERVOLTAGE_CONSECUTIVE=_int("UNDERVOLTAGE_CONSECUTIVE", "1"),
+        # Kernel CPU thermal throttling — a non-zero cur_state means the kernel is derating the
+        # CPU right now. `type="Processor"` narrows it to CPU throttling; the unfiltered metric
+        # also carries PCIe link-speed and intel_powerclamp devices, which throttle for reasons
+        # that are not heat.
+        THERMAL_THROTTLE_QUERY=_env(
+            "THERMAL_THROTTLE_QUERY", 'node_cooling_device_cur_state{type="Processor"}'
+        ),
+        # The empty-vector gate, `node` rather than `node-pi`: no Processor cooling device
+        # anywhere means both amd64 node-exporters stopped publishing, which
+        # check_cluster_targets and this check's EXPORTER_DEPENDENT entry already own. An empty
+        # vector while `node` IS scraping pages — a driver or kernel change took the sensors
+        # away, and nothing else would notice.
+        THERMAL_THROTTLE_UP_QUERY=_env("THERMAL_THROTTLE_UP_QUERY", 'up{job="node"}'),
+        # 2, not the temperature arm's 3: daniel-pi publishes no Processor cooling device at all,
+        # so the floor is the two amd64 nodes. Measured live 2026-09-10 — daniel-box 16 devices,
+        # daniel-server 8, daniel-pi 0. A floor of 3 would page forever; a floor of 1 would let
+        # one node go blind while the other reported "not throttling" for the estate.
+        THERMAL_THROTTLE_ORIGINS_MIN=_int("THERMAL_THROTTLE_ORIGINS_MIN", "2"),
+        # 3 cycles (15 min at INTERVAL=300). A single cycle of throttling during a compile or a
+        # transcode is ordinary; sustained throttling is the cooling fault worth paging on.
+        # Shorter than HWMON_TEMP_CONSECUTIVE=12 because throttling is the kernel's own verdict
+        # that the CPU is too hot, where a temperature above a chosen limit is ours.
+        THERMAL_THROTTLE_CONSECUTIVE=_int("THERMAL_THROTTLE_CONSECUTIVE", "3"),
         # UPS battery health via Home Assistant's Prometheus scrape (the APC UPS is on
         # NUT/peanut; HA's prometheus integration exposes its sensors as hass_sensor_*). The
         # only pre-existing UPS alert is an HA automation -> mobile push (a separate channel

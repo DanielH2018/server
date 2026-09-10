@@ -27,6 +27,119 @@ from verdicts.host import (
     scrutiny_wear_verdict,
     ups_health,
 )
+from verdicts.host_power import thermal_throttle_verdict, undervoltage_verdict
+
+
+def _source_is_up(cfg: Config, up_query: str) -> bool:
+    """Whether a scrape a thermal arm depends on is AFFIRMATIVELY up.
+
+    Read through prom_vector rather than prom_scalar, so an arm needs exactly one fetch function
+    and therefore one patch point in its tests — `up{job=...}` is a vector anyway, so nothing is
+    lost. An empty answer, an unconfigured query and a 0 all mean "not affirmatively up", which
+    is the safe direction: never page over a source outage another monitor already owns.
+    """
+    if not up_query:
+        return False
+    return any(value > 0.5 for _labels, value in bridge.net.prom_vector(cfg, up_query))
+
+
+def _undervoltage_arm(
+    cfg: Config, names, alarms: list[tuple[dict, float]], source_up: bool
+) -> tuple[bool, str] | None:
+    """The Pi's firmware undervoltage alarm. (ok, msg), or None when there is nothing to say.
+
+    Takes its fetched vector and its source-gate answer rather than fetching them, for the reason
+    `_thermal_throttle_arm` records.
+
+    Folded into check_host_temp's monitor rather than given its own, for the reason
+    check_scrutiny's wear arm records: a new Kuma monitor needs a new push token in SOPS, and
+    this answers the same question the thermal arm does — is the hardware being damaged right
+    now — from the power side instead of the heat side.
+
+    None means "nothing to say", which covers three cases:
+      - no query configured, so the arm is switched off;
+      - the vector is empty AND daniel-pi's own scrape is not affirmatively up. The sensor lives
+        on one host, so an empty vector is that host going quiet, and check_cluster_targets owns
+        a dead scrape. Deferring stops this arm double-paging a fault another monitor already
+        reports. An unqueryable gate defers too — never page over a source outage on a guess;
+      - no alarm asserted. A clean arm stays SILENT rather than appending a note to the up
+        message, so the monitor's tile on an ordinary cycle reads exactly as it did before this
+        arm existed. A grace that is COUNTING does return its note — a monitor that is up while
+        a fault accumulates has to say so, or it is indistinguishable from a clean cycle.
+    An empty vector while the Pi IS scraping fine is a real fault: the sensor was renamed or the
+    hwmon collector went blind, and undervoltage_verdict pages for it.
+
+    Its streak key is its own. The check's arms must not compound: a throttle blip and a
+    thermal blip sharing one counter would page together at half the intended threshold.
+    """
+    if not cfg.UNDERVOLTAGE_QUERY:
+        return None
+    if not alarms and not source_up:
+        bridge.streaks._down_streaks["host_undervoltage"] = 0
+        return None
+    ok, msg = undervoltage_verdict(alarms, names)
+    if ok:
+        bridge.streaks._down_streaks["host_undervoltage"] = 0
+        return None
+    (
+        bridge.streaks._down_streaks["host_undervoltage"],
+        ok,
+        msg,
+    ) = bridge.streaks.down_streak(
+        bridge.streaks._down_streaks.get("host_undervoltage", 0),
+        cfg.UNDERVOLTAGE_CONSECUTIVE,
+        msg,
+        "undervoltage grace",
+    )
+    return ok, msg
+
+
+def _thermal_throttle_arm(
+    cfg: Config, states: list[tuple[dict, float]], source_up: bool
+) -> tuple[bool, str] | None:
+    """Kernel CPU thermal throttling. (ok, msg), or None when there is nothing to say.
+
+    Takes its fetched vector and its source-gate answer rather than fetching them: the arm then
+    holds streak state and decisions only, so its tests hand it inputs directly instead of
+    patching `bridge.net`. `check_host_temp` does the two fetches.
+
+    Distinct from check_cpu_throttle, which reads CFS throttling — a cgroup quota being hit, not
+    heat. Distinct from the temperature arm too: the firmware can enforce a limit lower than the
+    one the driver declares, so a CPU can sit under its declared max and still be throttled.
+
+    None means no query configured, nothing throttling, or a fully empty vector while the amd64
+    node-exporters are not affirmatively up — the same three-case shape _undervoltage_arm has,
+    and for the same reasons. The empty-vector gate matters here too: no Processor cooling
+    device anywhere means both nodes stopped publishing, which check_cluster_targets and this
+    check's own EXPORTER_DEPENDENT entry already own. An empty vector while `node` IS scraping
+    is a real fault — a driver or kernel change took the sensors away — and pages. The PARTIAL
+    loss, one node gone, is what THERMAL_THROTTLE_ORIGINS_MIN catches, and that floor is what
+    stops this arm being inert.
+
+    Its own streak key and its own threshold, for the reason _undervoltage_arm's docstring gives.
+    A momentary throttle during a burst is ordinary, so this grace is longer than the
+    undervoltage one and shorter than the thermal-spike grace.
+    """
+    if not cfg.THERMAL_THROTTLE_QUERY:
+        return None
+    if not states and not source_up:
+        bridge.streaks._down_streaks["host_thermal_throttle"] = 0
+        return None
+    ok, msg = thermal_throttle_verdict(states, cfg.THERMAL_THROTTLE_ORIGINS_MIN)
+    if ok:
+        bridge.streaks._down_streaks["host_thermal_throttle"] = 0
+        return None
+    (
+        bridge.streaks._down_streaks["host_thermal_throttle"],
+        ok,
+        msg,
+    ) = bridge.streaks.down_streak(
+        bridge.streaks._down_streaks.get("host_thermal_throttle", 0),
+        cfg.THERMAL_THROTTLE_CONSECUTIVE,
+        msg,
+        "throttle grace",
+    )
+    return ok, msg
 
 
 def scrutiny_wear_devices(
@@ -83,7 +196,19 @@ def check_scrutiny(cfg: Config) -> tuple[bool, str]:
 
 
 def check_host_temp(cfg: Config) -> tuple[bool, str]:
-    """Board and CPU temperature across the three hosts, from node-exporter's hwmon collector.
+    """Board and CPU temperature across the three hosts, plus undervoltage and CPU throttling.
+
+    Three arms on one monitor, each with its OWN streak key so a blip in two of them cannot
+    compound into a page at half the intended threshold:
+
+      1. hwmon temperature, described in full below — the original arm.
+      2. the Pi's firmware undervoltage alarm (`_undervoltage_arm`), evaluated FIRST and
+         returning ahead of everything else when asserted.
+      3. kernel CPU thermal throttling (`_thermal_throttle_arm`), evaluated after a clean
+         temperature verdict.
+
+    Arms 2 and 3 landed for issue #1471. Both signals were already plotted on
+    Infrastructure/hardware-thermal.json and alerted on by nothing.
 
     Answers the one thermal question nothing else here asks: is a host cooking? A hot box
     throttles, then corrupts, then dies, and every existing monitor reads green throughout —
@@ -144,6 +269,26 @@ def check_host_temp(cfg: Config) -> tuple[bool, str]:
         min_origins=cfg.HWMON_TEMP_ORIGINS_MIN,
         consecutive=cfg.HWMON_TEMP_ORIGINS_CONSECUTIVE,
     )
+    # The undervoltage alarm is evaluated FIRST and returns ahead of everything else when it is
+    # asserted. It is the one signal here with no threshold to argue about — the firmware has
+    # already decided — and the damage it does (a corrupted SD card) is not recoverable by
+    # cooling down. A deferred or healthy arm falls through and changes nothing about the
+    # temperature path below.
+    alarms = (
+        bridge.net.prom_vector(cfg, cfg.UNDERVOLTAGE_QUERY)
+        if cfg.UNDERVOLTAGE_QUERY
+        else []
+    )
+    # `bool(alarms) or ...` short-circuits, so the gate query is spent only on the cycle where
+    # the reading came back empty — which is the only cycle the arm reads it on.
+    under = _undervoltage_arm(
+        cfg,
+        names,
+        alarms,
+        bool(alarms) or _source_is_up(cfg, cfg.UNDERVOLTAGE_UP_QUERY),
+    )
+    if under is not None and not under[0]:
+        return under
     ok, msg = hwmon_temp_verdict(limits)
     if not ok:
         bridge.streaks._down_streaks["host_temp"], ok, msg = bridge.streaks.down_streak(
@@ -154,9 +299,26 @@ def check_host_temp(cfg: Config) -> tuple[bool, str]:
         )
         return ok, msg
     bridge.streaks._down_streaks["host_temp"] = 0
+    states = (
+        bridge.net.prom_vector(cfg, cfg.THERMAL_THROTTLE_QUERY)
+        if cfg.THERMAL_THROTTLE_QUERY
+        else []
+    )
+    throttle = _thermal_throttle_arm(
+        cfg,
+        states,
+        bool(states) or _source_is_up(cfg, cfg.THERMAL_THROTTLE_UP_QUERY),
+    )
+    if throttle is not None and not throttle[0]:
+        return throttle
     if short is not None:
         return short
-    return True, msg
+    # Only an arm HOLDING inside its own grace speaks on the up path — a monitor that is up
+    # while a fault accumulates must say so, or the tile reads identical to a clean cycle. A
+    # clean arm returns None and adds nothing, so an ordinary cycle's message is byte-identical
+    # to what this monitor reported before the two arms existed.
+    notes = [msg] + [arm[1] for arm in (under, throttle) if arm is not None]
+    return True, "; ".join(notes)
 
 
 def check_ups(cfg: Config) -> tuple[bool, str]:

@@ -443,6 +443,57 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     leaves the Pi double-paging. Pure `hwmon_temp_limits()` / `hwmon_temp_verdict()` are unit-tested in
     `test_host_temp.py`, each rule as an accept/reject pair; the coverage test is the load-bearing
     one, since this check's failure mode is silence rather than a wrong threshold.)
+
+    **This monitor carries two more arms since 2026-09-10 (issue #1471), each with its own
+    streak key.** Both signals were already plotted on `Infrastructure/hardware-thermal.json`
+    (PR #1463) and alerted on by nothing. They are folded in here rather than given their own
+    monitors for the reason `check_scrutiny`'s wear arm records: a new Kuma monitor needs a new
+    push token in SOPS, and both answer the same question the temperature arm does — is the
+    hardware being damaged right now.
+
+    - **Undervoltage** (`_undervoltage_arm`, `UNDERVOLTAGE_QUERY` =
+      `node_hwmon_in_lcrit_alarm_volts`). The Raspberry Pi firmware's own low-critical voltage
+      alarm, a clean 0/1 with no threshold to choose. Evaluated FIRST and returning ahead of
+      every other arm when asserted, because undervoltage corrupts SD cards and cooling down
+      does not undo that. `UNDERVOLTAGE_CONSECUTIVE` is **1** — no grace, unlike every other
+      arm here: the firmware latched a bit, it did not report a measurement that can spike.
+      The load-bearing part is `UNDERVOLTAGE_UP_QUERY` (`up{job="node-pi"}`). The sensor is ONE
+      series from ONE host, so a `max() > 0` arm reads green the moment daniel-pi stops
+      answering — and a Pi falling off the network is what sustained undervoltage causes. So an
+      empty vector defers only while that gate is not affirmatively up (`check_cluster_targets`
+      owns a dead scrape, and an unqueryable gate defers too); an empty vector while the Pi IS
+      scraping pages, because the sensor was renamed or the collector went blind.
+    - **CPU thermal throttling** (`_thermal_throttle_arm`, `THERMAL_THROTTLE_QUERY` =
+      `node_cooling_device_cur_state{type="Processor"}`). A non-zero `cur_state` means the
+      kernel is derating the CPU now. A different fault from `check_cpu_throttle`, which reads
+      CFS throttling — a cgroup quota, not heat — and from the temperature arm, since the
+      firmware can enforce a limit below the one the driver declares. `type="Processor"` is
+      load-bearing: unfiltered, the metric also carries PCIe link-speed and `intel_powerclamp`
+      devices, which throttle for reasons that are not heat.
+      It carries its own source gate, `THERMAL_THROTTLE_UP_QUERY` = `up{job="node"}` — `node`
+      rather than `node-pi`, because the Pi publishes none of these series. A fully empty vector
+      therefore means both amd64 exporters went quiet, which `check_cluster_targets` owns; an
+      empty vector while `node` IS scraping pages, since a driver or kernel change taking the
+      sensors away would otherwise go unnoticed.
+      `THERMAL_THROTTLE_ORIGINS_MIN` is **2**, not the temperature arm's 3, because daniel-pi
+      publishes no Processor cooling device at all (measured live 2026-09-10: daniel-box 16
+      devices, daniel-server 8, daniel-pi 0). That floor is what stops the arm being inert —
+      without it, one node's collector going blind leaves the other answering "not throttling"
+      for the whole estate. `THERMAL_THROTTLE_CONSECUTIVE` is 3 (15 min at `INTERVAL=300`):
+      one cycle of throttling during a compile is ordinary, sustained throttling is a cooling
+      fault.
+
+    A clean arm returns **None and says nothing**, so an ordinary cycle's tile text is
+    byte-identical to what this monitor reported before the arms existed. An arm HOLDING inside
+    its own grace does append its note — a monitor that is up while a fault accumulates has to
+    say so. Both are unit-tested in `test_host_thermal_arms.py` as accept/reject pairs, plus
+    two tests that bind each arm into `check_host_temp` itself: testing an arm alone would pass
+    even if the check never called it.
+
+    Transport, measured before shipping because the arms read Prometheus: both queries answered
+    in 0.48-0.58 ms, three runs each, against Prometheus's loopback on daniel-server (the node
+    its pod was on), 2026-09-10. Same shape as the five instant queries the temperature arm
+    already makes.)
   - **UPS Battery Health** (the APC UPS's charge % + estimated runtime + the replace-battery
     self-test verdict, via HA's Prometheus-scraped sensors over `monitoring` — the UPS is on
     NUT/peanut and HA's prometheus integration exports it). `down` on a low battery RUNWAY: charge <
