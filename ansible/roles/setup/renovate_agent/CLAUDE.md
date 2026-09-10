@@ -115,6 +115,24 @@ unit's `ExecStartPost` beat, and the `Renovate Agent — Alive` push tile in
 `roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2`. The beat fires only when the
 wrapper exited 0, so the tile reports silence and the `OnFailure` alert reports failure.
 
+**A crash also pushes its own `down`, carrying the exception text** (`report_crash`, called
+from the `__main__` guard). Silence plus an `OnFailure` page was not enough: the tile went
+down 28 hours later by deadman expiry with no reason attached, which is what a host that is
+simply off looks like. For two days from 2026-09-08 that hid a one-line `prepare_worktree`
+failure — a directory at the run worktree's path that `git worktree list` had no record of
+(#1477). The deadman stays as the backstop for a host that is genuinely off; it must not be
+the only signal for a run that started and threw. The report is best effort and never
+re-raises, so a failed report cannot replace the traceback that says what broke.
+
+**An unregistered directory at the run worktree's path is reclaimed, not a crash.** That is
+what a killed session leaves behind. It matters twice over, because **git searches UPWARD for
+a repository**: `git -C <orphan dir> status` resolves to the PRIMARY CHECKOUT and answers
+about that tree, so `worktree_is_reusable` was reading the wrong repo — a dirty primary would
+have read as "this run tree has uncommitted changes". `is_registered_worktree` decides which
+case it is, and it fails CLOSED (an unreadable `worktree list` reads as "git's"), so nothing
+removes a tree that might be registered. Every case that holds real work is still refused by
+`worktree_is_reusable` before this runs.
+
 **The push URL lives in `/etc/renovate-agent/config.env` (0600), not in the unit.** A unit
 line is public: `systemctl show <unit> -p ExecStartPost` serves it over the system bus to any
 local user, and `/proc` here has no `hidepid`. The unit inlined the whole URL until
