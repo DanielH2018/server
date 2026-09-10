@@ -97,16 +97,15 @@
                 "color": "#E02F44"
               },
               {
-                "color": "#E02F44",
-                "value": 10
-              },
-              {
                 "color": "#299c46",
-                "value": 10
+                "value": 1
               }
             ]
           },
-          "unit": "none"
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "decimals": 2
         },
         "overrides": []
       },
@@ -141,15 +140,16 @@
             "uid": "EGdsQqhVk"
           },
           "exemplar": true,
-          "expr": "sum(up{job=~\"crowdsec.*\"})",
+          "expr": "sum(up{job=~\"crowdsec.*\"}) / count(up{job=~\"crowdsec.*\"})",
           "interval": "",
           "legendFormat": "",
           "refId": "A"
         }
       ],
-      "title": "Running Crowdsec",
+      "title": "CrowdSec agents up (ratio)",
       "transparent": true,
-      "type": "stat"
+      "type": "stat",
+      "description": "Fraction of scraped CrowdSec targets that are up: 1 means every agent reports, whatever the fleet size (#1709). The upstream board plotted a raw count against thresholds sized for ten machines, so this tile read red on a healthy fleet of three and could never go green. Known blind spot, the same one kuma-drift names: a job that DISAPPEARS from service discovery leaves the survivors at N/N, so this answers \"is an agent down\", not \"is an agent missing\"."
     },
     {
       "aliasColors": {},

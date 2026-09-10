@@ -371,6 +371,13 @@ spec:
           # the log file outright. The agent needs no privilege — it reads a file and posts
           # to the LAPI.
 {{ hardened_security_context(non_root=true) }}
+          # Declared so Prometheus can find it: pod-role SD emits a target per DECLARED
+          # containerPort, so the `crowdsec-authelia-agent` job's keep on port 6060
+          # (claude-otel/templates/prometheus.yaml.j2) matches nothing without this. The
+          # agent binds it either way — this changes discovery, not the listener (#1706).
+          ports:
+            - name: cs-metrics
+              containerPort: 6060
           volumeMounts:
             - name: crowdsec-etc
               mountPath: /etc/crowdsec

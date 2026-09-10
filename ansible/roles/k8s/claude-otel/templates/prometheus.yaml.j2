@@ -489,6 +489,33 @@ data:
           - source_labels: [__meta_kubernetes_pod_container_port_number]
             regex: "6060"
             action: keep
+      # Issue #1706: the fourth CrowdSec agent. The authelia pod runs a crowdsec-agent
+      # SIDECAR that parses the portal's own auth log into the in-cluster LAPI
+      # (authelia/templates/deployment.yaml.j2), and it was in none of the three jobs above.
+      # Failed-login parsing therefore had no series at all, so a sidecar that stops parsing
+      # (a bad parser, a rotated log it lost) reads as nothing rather than as a drop.
+      #
+      # Same shape as crowdsec-traefik-agent: no `node` target_label, because the portal is a
+      # single Deployment and the job name identifies it. The keep on the container port is
+      # what selects the sidecar rather than authelia itself — 6060 is declared only by the
+      # crowdsec-agent container, where authelia declares 9091.
+      #
+      # Its netpol grant is a from item of its OWN in
+      # netpol-baseline/templates/networkpolicy-authelia.yaml.j2, not a port appended to the
+      # traefik rule that file already had. Grant and job only work as a pair.
+      - job_name: crowdsec-authelia-agent
+        scrape_interval: 1m
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names: [{{ k8s_namespace }}]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            regex: authelia
+            action: keep
+          - source_labels: [__meta_kubernetes_pod_container_port_number]
+            regex: "6060"
+            action: keep
       # E7 (2026-08-13): the `traefik` job (Docker edge metrics on 9104) retired with the
       # edge. The bare `traefik` job name retires with it — the cluster edge stays
       # `traefik-k8s`, and monitor-bridge's traefik/cert checks are unpinned so they
