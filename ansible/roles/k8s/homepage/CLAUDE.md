@@ -181,13 +181,14 @@ Edit the `.j2` files, never the live config: homepage seeds any missing file int
   selected by no policy at all and proxies `/v1` through as `app: longhorn-ui`, which that policy
   does admit. The node-local-manager trap does not apply here: the caller is a pod and the target
   is the frontend Service.
-- **Four widgets are deliberately absent**, each blocked on a credential rather than on plumbing:
-  traefik (#1383 — `api.insecure: false` and the `DECIDED:` marker in
-  `roles/k8s/traefik/templates/dashboard-ingressroute.yaml.j2` mean `/api` is served nowhere the
-  widget can reach), grafana (#1384 — needs a service-account token; only the admin password
-  exists), crowdsec (#1385 — a LAPI machine credential is read/write on decisions) and
-  healthchecks (#1386 — needs a project API key created in the UI). Read the issue before adding
-  one; each records why it was not simply plumbed in.
+- **Three widgets are deliberately absent**, each blocked on a credential rather than on
+  plumbing: grafana (#1384 — needs a service-account token; only the admin password exists),
+  crowdsec (#1385 — a LAPI machine credential is read/write on decisions) and healthchecks
+  (#1386 — needs a project API key created in the UI). Read the issue before adding one; each
+  records why it was not simply plumbed in. Traefik was a fourth (#1383 — `api.insecure: false`
+  and the `DECIDED:` marker in `roles/k8s/traefik/templates/dashboard-ingressroute.yaml.j2` mean
+  `/api` is served nowhere the widget can reach); its tile was replaced by the deploy queue on
+  2026-09-10, so it has no tile to add a widget to.
 - The `docker.yaml` status dots have no k8s equivalent yet, so `docker.yaml.j2` renders empty
   and `services.yaml.j2` drops the matching `server:`/`container:` keys — tiles render
   dot-less rather than erroring on a `my-docker` host that does not exist here.
