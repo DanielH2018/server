@@ -12,13 +12,13 @@ Usage::
     fanout_place.py launch --batch 1345,1386 [--batch 1288] [--host daniel-box] --orchestrator-branch <b>
     fanout_place.py status <run-id>
     fanout_place.py stop <run-id> [batch]
-    fanout_place.py clean <run-id>
 
 Exit codes: 0 ok · 1 usage or launch failure · 3 no headroom on any host · 4 no host readable.
 """
 
 import argparse
 import re
+import subprocess
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -106,7 +106,18 @@ def cmd_launch(args, tools: Tools) -> int:
 
 
 def _health_lines(tools: Tools, host: str) -> list[str]:
-    proc = tools.run(host, HEALTH_CMD, 40.0, None)
+    # A failed or timed-out read must not read as "clean" in the launched brief: it's the
+    # signal the SessionStart banner exists to surface.
+    try:
+        proc = tools.run(host, HEALTH_CMD, 40.0, None)
+    except subprocess.TimeoutExpired:
+        return [
+            f"[{host}] session-health read failed (timed out) — banner state unknown"
+        ]
+    if proc.returncode != 0:
+        return [
+            f"[{host}] session-health read failed (exit {proc.returncode}) — banner state unknown"
+        ]
     return [f"[{host}] {ln}" for ln in proc.stdout.splitlines() if ln.strip()]
 
 
@@ -115,9 +126,15 @@ def cmd_status(args, tools: Tools) -> int:
     worst = 0
     for host in sorted({b.host for b in run.batches}):
         mine = [b for b in run.batches if b.host == host]
-        proc = tools.run(
-            host, status_mod.status_command(mine), status_mod.STATUS_TIMEOUT_S, None
-        )
+        try:
+            proc = tools.run(
+                host, status_mod.status_command(mine), status_mod.STATUS_TIMEOUT_S, None
+            )
+        except subprocess.TimeoutExpired:
+            for b in mine:
+                print(f"{b.batch} on {host}: status read timed out")
+            worst = 1
+            continue
         for s in status_mod.parse_status(mine, proc.stdout):
             line = f"{s.batch} on {host}: {s.state}"
             if s.pr_url:
@@ -134,7 +151,11 @@ def cmd_stop(args, tools: Tools) -> int:
     for b in run.batches:
         if args.batch and b.batch != args.batch:
             continue
-        proc = tools.run(b.host, status_mod.stop_command(b.batch), 30.0, None)
+        try:
+            proc = tools.run(b.host, status_mod.stop_command(b.batch), 30.0, None)
+        except subprocess.TimeoutExpired:
+            print(f"{b.batch} on {b.host}: stop timed out")
+            continue
         print(
             f"{b.batch} on {b.host}: {'stopped' if proc.returncode == 0 else proc.stderr.strip()}"
         )

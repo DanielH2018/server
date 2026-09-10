@@ -3,8 +3,10 @@
 Run: uv run pytest scripts/dev/tests/test_fanout_status.py
 """
 
+import subprocess
+
 from fanout_lib.brief import Issue
-from fanout_lib.manifest import Batch
+from fanout_lib.manifest import Batch, Manifest, save
 from fanout_lib.status import parse_status, status_command, stop_command
 from fanout_place import main
 from _fanout_fakes import fake_tools, ok
@@ -107,3 +109,51 @@ def test_cli_launch_reports_no_headroom_when_both_hosts_are_uncapped(tmp_path):
     )
     assert code == 3
     assert not [c for c in run.calls if c[1].startswith("systemd-run")]
+
+
+def test_a_failed_and_a_successful_health_read_both_surface_in_the_brief(tmp_path):
+    tools, run = fake_tools(
+        answers={"daniel-server": ok("1\n12884901888\n0\n")},
+        issues=[Issue(1, "t", "b")],
+    )
+    run.answers_by_call = [
+        ok("1\n12884901888\n0\n"),  # headroom read, daniel-box
+        ok("1\n12884901888\n0\n"),  # headroom read, daniel-server
+        subprocess.CompletedProcess(
+            ["x"], 1, stdout="", stderr="not logged in"
+        ),  # daniel-box health
+        ok("line one\nline two\n"),  # health read, daniel-server
+    ]
+    code = main(
+        [
+            "launch",
+            "--batch",
+            "1",
+            "--orchestrator-branch",
+            "o",
+            "--manifest-root",
+            str(tmp_path),
+        ],
+        tools,
+    )
+    assert code == 0
+    brief_calls = [c for c in run.calls if c[1].startswith("mkdir -p")]
+    assert len(brief_calls) == 1
+    brief_stdin = brief_calls[0][2]
+    assert (
+        "[daniel-box] session-health read failed (exit 1) — banner state unknown"
+        in brief_stdin
+    )
+    assert "[daniel-server] line one" in brief_stdin
+    assert "[daniel-server] line two" in brief_stdin
+
+
+def test_cli_status_reports_a_read_timeout_as_exit_1_not_a_traceback(tmp_path, capsys):
+    batch = Batch("1", "daniel-box", "/w/1", "worktree-fanout-1", "fanout-1", [1], "t")
+    run = Manifest("20260101T000000Z", "o", [batch])
+    save(run, root=tmp_path)
+    tools, fake_run = fake_tools()
+    fake_run.answers_by_call = [subprocess.TimeoutExpired(cmd="ssh", timeout=30.0)]
+    code = main(["status", run.run_id, "--manifest-root", str(tmp_path)], tools)
+    assert code == 1
+    assert "1 on daniel-box: status read timed out" in capsys.readouterr().out
