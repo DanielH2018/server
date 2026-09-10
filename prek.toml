@@ -245,6 +245,28 @@ pass_filenames = false
 # explicitly since it doesn't match the *.service.j2/*.timer.j2 half of this pattern.
 files = "^(ansible/roles/.*\\.(service|timer)\\.j2|ansible/roles/setup/gitops_deploy/templates/50-gitops-deploy\\.rules\\.j2|ansible/roles/setup/.*/defaults/main\\.yml|ansible/inventory/group_vars/all\\.yml|scripts/validate/unit_templates\\.py)$"
 
+# Render every setup-plane template and fail on a variable nothing defines. The guards above
+# stop at their own trees — containers, k8s, *.sh.j2, *.service.j2 — so a setup template with
+# an undefined variable, a Jinja syntax error, or a rename its consumer missed passed the whole
+# gate green (GitHub issue #1468). The setup plane is hand-applied by construction, so no
+# routine deploy catches it either: the first run of a bad template is a bring-up someone
+# reaches for during an incident. A name may be undefined only when it is Ansible-supplied, a
+# SOPS secret in the plaintext rotation registry, supplied at runtime by a setup-plane task, or
+# defined in the inventory — the last two derived from the tree, so a producer renamed without
+# its consumer is exactly what stops matching. The YAML templates are additionally parsed.
+[[repos.hooks]]
+id = "validate-setup-templates"
+name = "Render setup-plane templates and check every variable resolves"
+entry = "uv run python scripts/validate/setup_templates.py"
+language = "system"
+pass_filenames = false
+# The setup roles' tasks are in scope, not just their templates: the runtime-supplied names
+# come from the `set_fact` / `vars:` / `register:` keys those tasks carry, so a rename there
+# changes the verdict for a template the same commit may not touch. secret_rotation.yml is in
+# scope for the same reason — it is the plaintext census of SOPS names (never values), and a
+# secret renamed there without its template is the shape this guard exists to catch.
+files = "^(ansible/roles/setup/.*\\.(j2|yml)|ansible/inventory/(group_vars/all|host_vars/[^/]+)\\.yml|ansible/secret_rotation\\.yml|scripts/validate/setup_templates\\.py)$"
+
 # Lint the GitHub Actions workflows themselves. `check-yaml` above only proves they PARSE —
 # nothing until now checked that a job's `needs:` names a job that exists, that a `${{ }}`
 # expression references a real context, or that a matrix key is spelled the way the steps read
