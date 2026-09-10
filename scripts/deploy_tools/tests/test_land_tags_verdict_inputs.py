@@ -108,10 +108,23 @@ def test_an_empty_read_reaches_the_landing_as_none_not_as_an_empty_set(tmp_path)
 
 def test_this_repo_at_head_agrees_with_its_own_working_tree():
     """Non-vacuity. A reader that found no inventory file at all returns an empty set, which
-    satisfies every assertion above about a tag being absent."""
+    satisfies every assertion above about a tag being absent.
+
+    SUBSET, NOT EQUALITY, and the difference is what makes a new service committable. The prek
+    `pytest` hook runs before the commit exists, so `HEAD` is the commit BEFORE the one being
+    made: a commit that adds a role has that role in the working tree and never at HEAD.
+    Equality therefore failed every new-service commit — gpu-exporter (#1446) was the first to
+    hit it, two hours after this guard landed and so after the last new role.
+
+    The direction still catches what the assertion is for: a working tree that has LOST a tag
+    HEAD declares means the reader is dropping entries, and `traefik` plus the floor below
+    keep an empty or near-empty read from passing.
+    """
     at_head = land_tags.service_tags_at("HEAD", deploy_tags.REPO)
+    in_tree = deploy_tags.service_tags()
     assert "traefik" in at_head
-    assert at_head == deploy_tags.service_tags()
+    assert len(at_head) >= 50, sorted(at_head)
+    assert at_head <= in_tree, sorted(at_head - in_tree)
 
 
 # ── self_applied_command: the hand-apply the tick would otherwise have done (issue #1537) ──

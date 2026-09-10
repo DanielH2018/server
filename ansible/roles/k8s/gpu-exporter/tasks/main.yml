@@ -1,0 +1,19 @@
+---
+# gpu-exporter: DRM sysfs turned into `homelab_gpu_*` series, one pod per node (#1446). Until
+# this role existed the render node the dri-device-plugin advertises was unmeasured, so a slow
+# jellyfin or tdarr transcode could not be told from a contended one. The scrape job lives in
+# claude-otel's prometheus.yaml.j2 (job_name: gpu).
+
+- name: Deploy gpu-exporter to the cluster
+  ansible.builtin.include_role:
+    name: k8s/manifests
+  vars:
+    manifests_service: gpu-exporter
+    manifests_rollout: gpu-exporter
+    # `daemonset` literally: the assert in k8s/manifests refuses kubectl's `ds`/`DaemonSet`
+    # aliases, because the stabilise gate would then read a Deployment's jsonpath off this and
+    # pass on 0 == 0.
+    manifests_rollout_kind: daemonset
+    manifests_files:
+      - configmap.yaml
+      - daemonset.yaml

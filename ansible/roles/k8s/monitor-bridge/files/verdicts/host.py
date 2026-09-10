@@ -572,13 +572,14 @@ def speedtest_verdict(
         stamp = stamp.replace(tzinfo=timezone.utc)
     age_h = (now - stamp).total_seconds() / 3600
     if age_h > max_age_h:
-        return (
-            False,
-            "last run was %.1fh ago (> %gh) — the 6-hourly schedule has stopped"
-            % (
-                age_h,
-                max_age_h,
-            ),
+        # DECIDED: name both hypotheses, assert neither (#1483). A failed Ookla run writes no
+        # row and a stopped scheduler writes no row, so this arm cannot tell them apart —
+        # evidence in test_speedtest_stale_message_names_both_causes_and_asserts_neither.
+        return False, (
+            "last run was %.1fh ago (> %gh) — no row written since. Either the scheduler "
+            "stopped or the run failed: speedtest-tracker writes no row for a failed run, so "
+            "the API cannot tell them apart. The pod log's per-tick line is the discriminator."
+            % (age_h, max_age_h)
         )
 
     bits = row.get("download_bits")
