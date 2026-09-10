@@ -354,7 +354,11 @@ stay).
     manifests. Renovate automerges digest bumps on the 20+ `k8s_autodeploy: false` roles
     (`renovate.json`), so this path runs unattended with the one Discord line as its entire
     signal until someone happens to reread it. The `# DECIDED:` at the `cs.k8s` branch of
-    `deploy_alerts.alert_deferred` points here. The durable signal is a daniel-box root cron
+    `deploy_alerts.alert_deferred` points here. The durable signal is a daniel-box cron owned by
+    `sys_user`, not root, unlike the two GitHub crons below and `manifest-prune-check` beside it
+    in the same task file: this check reads world-readable release records and runs `git`/`uv`
+    against the primary checkout, which `sys_user` already owns, and running it as root would
+    leave root-owned objects there for `deploy.sh` and other sessions to trip on
     (`roles/setup/k3s/templates/release-staleness-check.sh.j2`, tag `release-staleness`, every
     `k3s_release_staleness_cron_minute`) reading `uv run python scripts/diagnostics/probe.py
     releases --stale-only`: it compares each service's release record (the applied commit
