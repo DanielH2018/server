@@ -206,11 +206,18 @@ def deploy_phase(ln: Landing) -> None:
     for attempt in range(1, o.stale_retries + 1):
         if rc != DEPLOY_STALE:
             break
+        # The backoff DOUBLES each attempt (60s, 120s, 240s). A fixed 60s spends three
+        # attempts inside ~4 minutes, and PR #1460's landing on 2026-09-09 met a merge rate of
+        # roughly one every 2 minutes: the checkout went from 7 to 9 commits behind DURING the
+        # landing and every retry lost the same race (#1466). Three attempts that cannot
+        # converge are worse than two that can, so each wait is longer than the gap that beat
+        # the last one.
+        backoff = o.lock_backoff * 2 ** (attempt - 1)
         say(
-            f"tree went stale mid-landing (exit 4); retrying in {o.lock_backoff}s "
+            f"tree went stale mid-landing (exit 4); retrying in {backoff}s "
             f"({attempt}/{o.stale_retries})"
         )
-        t.sleep(o.lock_backoff)
+        t.sleep(backoff)
         ln.fetch_branch()
         if ci.blockers(ln) == DEPLOY_BROAD:
             ln.finish(
@@ -231,7 +238,7 @@ def deploy_phase(ln: Landing) -> None:
         # wait_ci with no new field to learn. Includes the backoff sleep above (mirrors
         # `deploy_with_lock_retry`'s own `+ o.lock_backoff`), or that time falls into
         # t_deploy instead -- the exact mis-attribution this comment exists to prevent.
-        waited = t.clock() - started + o.lock_backoff
+        waited = t.clock() - started + backoff
         ln.ledger.t_ci = (ln.ledger.t_ci or 0.0) + waited
         ln.ledger.t_tick = (ln.ledger.t_tick or 0.0) + waited
         # DECIDED: a failing retick here ENDS the landing (deploy-failed, cause=tick-failed)
@@ -243,5 +250,19 @@ def deploy_phase(ln: Landing) -> None:
         # re-derived as a parity bug.
         tick.run_tick(ln)
         rc = deploy_by_host(ln)
+    if rc == DEPLOY_STALE:
+        # Every retry lost the tip race. `deploy-failed` is the wrong word for it: exit 4 means
+        # NOTHING was deployed and re-running is safe, while `deploy-failed` reads as "the
+        # deploy broke" and sends a session looking at its own change. PR #1460 ended that way
+        # twice on 2026-09-09 with four other sessions merging (#1466). Exit 75, the resume-point
+        # code, for the same reason `lock-busy` uses it.
+        ln.ledger.cause = Cause.DEPLOY_EXIT_STALE
+        ln.die(
+            f"master merged faster than one tick-and-deploy cycle; every one of "
+            f"{o.stale_retries} retries found the tree behind again — nothing was deployed, "
+            f"re-run the same land.sh command",
+            75,
+            Verdict.TIP_OUTRAN_RETRIES,
+        )
     deploy_outcome(ln, rc)
     ln.ledger.t_deploy = t.clock()

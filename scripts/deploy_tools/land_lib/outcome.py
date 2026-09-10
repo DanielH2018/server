@@ -32,6 +32,10 @@ class Verdict(StrEnum):
     CI_RED = "ci-red"
     CI_TIMEOUT = "ci-timeout"
     LOCK_BUSY = "lock-busy"
+    # Every stale retry lost the same race: master merged faster than one
+    # tick-and-deploy cycle. Nothing was deployed and re-running is safe, which is the
+    # opposite of what `deploy-failed` reads as. See `deploy.deploy_phase`.
+    TIP_OUTRAN_RETRIES = "tip-outran-retries"
 
 
 VERDICTS = frozenset(Verdict)

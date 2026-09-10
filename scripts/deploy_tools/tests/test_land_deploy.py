@@ -204,10 +204,32 @@ def test_the_tip_wait_is_booked_under_wait_ci_not_deploy(landing):
 def test_a_stale_retry_is_bounded(landing):
     ln, calls = _ready(landing, Fakes(deploy=[4]))
     ln.resolved_tags = ["sonarr"]
+    with pytest.raises(Outcome):
+        deploy.deploy_phase(ln)
+    assert [c[0] for c in calls].count("deploy") == 4  # first attempt + 3 stale retries
+
+
+def test_losing_every_tip_race_is_not_a_deploy_failure(landing):
+    """#1466: PR #1460 ended `deploy-failed (exit 4)` twice while four sessions merged.
+
+    Exit 4 means NOTHING was deployed and re-running is safe, which is the opposite of what
+    `deploy-failed` reads as. Exit 75 is the resume-point code `lock-busy` already uses.
+    """
+    ln, _ = _ready(landing, Fakes(deploy=[4]))
+    ln.resolved_tags = ["sonarr"]
     with pytest.raises(Outcome) as exc:
         deploy.deploy_phase(ln)
-    assert exc.value.verdict == "deploy-failed"
-    assert [c[0] for c in calls].count("deploy") == 4  # first attempt + 3 stale retries
+    assert exc.value.verdict == "tip-outran-retries" and exc.value.rc == 75
+    assert ln.ledger.cause == "deploy-exit-4"
+
+
+def test_a_deploy_that_actually_fails_is_still_a_deploy_failure(landing):
+    """The rejecting half: a non-stale deploy exit keeps `deploy-failed` and exit 1."""
+    ln, _ = _ready(landing, Fakes(deploy=[2]))
+    ln.resolved_tags = ["sonarr"]
+    with pytest.raises(Outcome) as exc:
+        deploy.deploy_phase(ln)
+    assert exc.value.verdict == "deploy-failed" and exc.value.rc == 1
 
 
 def test_a_stale_retry_backs_off_between_attempts(landing):
@@ -218,7 +240,10 @@ def test_a_stale_retry_backs_off_between_attempts(landing):
     ln.resolved_tags = ["sonarr"]
     deploy.deploy_phase(ln)
     sleeps = [c[1][0] for c in calls if c[0] == "sleep"]
-    assert sleeps == [ln.opts.lock_backoff] * 3
+    # And it DOUBLES: a fixed 60s spends every attempt inside ~4 minutes, which #1466 measured
+    # losing to a merge rate of one every 2 minutes.
+    b = ln.opts.lock_backoff
+    assert sleeps == [b, b * 2, b * 4]
 
 
 def test_a_stale_retry_waits_on_ci_even_when_the_tip_is_unchanged(landing):
