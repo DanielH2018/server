@@ -23,6 +23,14 @@ continuity. Coexisted with a Docker-era copy through the DNS cutover; that copy 
 - **Restarts are sequenced by hand, not the shared batch drain** — the two pods are restarted
   one at a time (`manifests_rollout: ''` plus explicit restart tasks) so a rollout never takes
   both Pi-holes down together, which is the whole reason a second instance exists.
+- **LAN reverse-DNS is forwarded to the router, with `server=` rather than `rev-server=`.**
+  `templates/config/pihole-dnsmasq.conf.j2` forwards the zone `lan_subnet` implies to
+  `lan_router_ip`, so PTR lookups for DHCP clients return the names the router leased them.
+  Pi-hole's own `rev-server=` is deliberately unused: it is a Pi-hole-only directive FTL's
+  parser could reject at startup — on both instances at once, leaving no resolver to fetch a
+  fix through — and it also forwards a whole TLD, which would hand the `.lan` names the
+  `host-record=` lines answer for to the router. ENFORCED by
+  `ansible/tests/services/test_pihole_lan_reverse_forwarding.py`.
 - **`pihole_k8s_dns_cluster_ip` is a pinned ClusterIP**, immutable once bound — cluster DNS
   forwards there rather than to the LAN VIP, since the VIP is subject to
   `externalTrafficPolicy: Local`. Recreating the Service needs a new address chosen deliberately.
