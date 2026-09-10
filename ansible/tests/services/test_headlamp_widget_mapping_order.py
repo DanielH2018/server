@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 """The Headlamp tile's widget mappings must stay in the query's operand order.
 
-homepage's `customapi` widget takes ONE url, so the Headlamp tile's four cluster counters
-arrive as a single PromQL query whose operands are joined with `or`. In `display: block` mode
-homepage pairs a value to its label by ARRAY POSITION — `data.result.0.value.1` is whatever
-operand Prometheus happened to return first — so the label list in services.yaml.j2 and the
-operand order in homepage_k8s_headlamp_cluster_query are one fact written in two places.
+homepage's `customapi` widget takes ONE url, so the Headlamp tile's cluster counters arrive as
+a single PromQL query whose operands are joined with `or`. In `display: block` mode homepage
+pairs a value to its label by ARRAY POSITION — `data.result.0.value.1` is whatever operand
+Prometheus happened to return first — so the label list in services.yaml.j2 and the operand
+order in homepage_k8s_headlamp_cluster_query are one fact written in two places.
 
-Edit either alone and the tile keeps rendering four plausible numbers under the wrong headings.
+Edit either alone and the tile keeps rendering plausible numbers under the wrong headings.
 Nothing else catches it: the YAML is valid, the manifest schema is satisfied, the URL still
-returns HTTP 200, and `probe.py health homepage` reports a healthy pod. Only a human reading
-"97" under NODES would notice, and only if they knew the cluster has two nodes.
+returns HTTP 200, and `probe.py health homepage` reports a healthy pod. Only a human reading a
+three-figure count under DOWN would notice, and only if they knew the cluster was healthy.
 
 This is the executable form of the `# DECIDED:` marker in services.yaml.j2, which accepts
 positional pairing so the tile matches every other widget on the dashboard.
@@ -54,8 +54,8 @@ def widget_mappings() -> list[tuple[int, str]]:
 def test_query_names_are_distinct():
     """`or` is set union over series signatures, so identical labels collapse the result.
 
-    Four bare `vector()` samples all carry the empty signature; without a distinguishing label
-    the union returns ONE series and the tile renders a single number. Measured 2026-08-23:
+    Bare `vector()` samples all carry the empty signature; without a distinguishing label the
+    union returns ONE series and the tile renders a single number. Measured 2026-08-23:
     dropping label_replace returned a `result` of length 1, not 4. Duplicate names would
     silently reintroduce exactly that collapse for the duplicated pair.
     """

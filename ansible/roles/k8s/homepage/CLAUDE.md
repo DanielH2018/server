@@ -60,16 +60,28 @@ Edit the `.j2` files, never the live config: homepage seeds any missing file int
   like a button and does nothing. `custom.css.j2` instead covers the card with that anchor
   (`position: absolute; inset: 0`, the card is already `relative`) and hides only the name TEXT.
   Verify with `document.elementFromPoint` at a tile's centre and its four edges, not by eye.
+- **`fields:` picks which blocks a widget renders, and an unknown name is dropped silently.**
+  Every widget on this dashboard was pruned to at most two stats on 2026-09-10 at the operator's
+  request. The valid names for a type are the `label="<type>.<name>"` list in
+  `src/widgets/<type>/component.jsx` upstream — not the labels the tile displays, which are
+  translations. Two of the requested stats do not exist: karakeep has no *unarchived* count
+  (`bookmarks` and `archived` are the two numbers it subtracts from, and no widget type here can
+  express arithmetic), and peanut names its two `battery_charge` and `ups_status`. The Home
+  Assistant widget has no `fields:` at all — its `custom:` entries ARE the blocks, so pruning it
+  means deleting entries. The Headlamp tile is a third shape again: its blocks come from
+  `mappings:` paired positionally to the PromQL operands in `defaults/main.yml`, so pruning it
+  means editing both files together.
 - **Stat blocks are laid out by COUNT: two or four per widget wrap two to a row, three span the
   full width.** Two and four divide evenly at a 50% basis; three does not, and five of the nine
   Services widgets carry exactly three stats, so `custom.css.j2` gives those a 33.3% basis via
   `:has(> :nth-child(3):last-child)` — "a third child that is also the last". A widget whose
   stat count changes moves between these automatically; nothing needs updating by hand.
-- **Reserve two stat rows or a whole grid row shrinks.** `.services-list` sizes each grid row to
-  its tallest member, so when every tile in one row holds a single stat row, that row alone
-  drops to 120px while the rows below stay 172px — uniform across, visibly different down.
-  `min-height: 6.5rem` on `.service-container` (two 44px blocks plus margins) makes the tallest
-  case the only case.
+- **Reserve a stat row or a whole grid row shrinks.** `.services-list` sizes each grid row to
+  its tallest member, so a row whose tiles all hold fewer stat rows than the rows below it
+  drops on its own — uniform across, visibly different down. `min-height` on
+  `.service-container` makes the tallest case the only case. It was two rows (6.5rem) while
+  widgets carried up to four stats; the 2026-09-10 pruning capped every widget at two, which fit
+  one row, so it is one row (3.25rem) now. Raise it again if a widget grows past two stats.
 - **Wrapped stat blocks must not grow.** `custom.css.j2` sets `flex: 0 0 calc(50% - 0.5rem)`,
   and the leading `0` is load-bearing. With `flex-grow: 1` an odd stat count stretches the last
   block across the full row, so a three-stat widget renders 128px, 128px, 264px against a
