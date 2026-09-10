@@ -43,6 +43,7 @@ def test_every_marker_resolves_to_the_constant_gitops_deploy_declares(gitops_dep
     for marker, constant in (
         ("hold", "HOLD_FILE"),
         ("hold_plane", "HOLD_PLANE_FILE"),
+        ("broad_applied", "BROAD_APPLIED_FILE"),
         ("last_run", "LAST_RUN"),
         ("diverged", "DIVERGED_FILE"),
         ("behind", "BEHIND_FILE"),
@@ -65,8 +66,8 @@ def test_every_marker_resolves_to_the_constant_gitops_deploy_declares(gitops_dep
 
 
 def test_the_marker_table_covers_every_constant_and_no_more():
-    """Non-vacuity for the loop above: it names nineteen markers, and so must the table."""
-    assert len(deploy_io.DeployerState.MARKERS) == 19
+    """Non-vacuity for the loop above: it names twenty markers, and so must the table."""
+    assert len(deploy_io.DeployerState.MARKERS) == 20
 
 
 def test_an_unknown_marker_is_a_typo_not_a_new_file(state):

@@ -10,11 +10,17 @@ from deploy_tools.land_lib import health_verdict
 from deploy_tools.land_lib.outcome import Outcome
 
 
+# The deployer's record of a broad apply that CONTAINS this PR. A self-applied landing needs
+# it before it may settle: `behind_since` empty proves only that local == origin (issue #1537).
+APPLIED = {"broad_applied": f"{MERGE_SHA} ansible/initial_setup.yml renovate_agent"}
+
+
 def _deployed(landing, fakes=None):
     ln, calls = landing(fakes)
     ln.merge_sha, ln.resolved_tags = MERGE_SHA, ["sonarr"]
     ln.plane = (fakes or Fakes()).plane
     ln.self_applied = (fakes or Fakes()).self_applied
+    ln.self_applied_command = (fakes or Fakes()).self_applied_command
     ln.remaining_setup = (fakes or Fakes()).remaining_setup
     return ln, calls
 
@@ -49,7 +55,7 @@ def test_needs_manual_apply_when_a_plane_remains(landing, capsys):
     [
         ({"hold_sha": "abc"}, "deploy-failed", 1, "tick-held"),
         ({"behind_since": "x"}, "deferred", 75, ""),
-        ({}, "settled", 0, ""),
+        (APPLIED, "settled", 0, ""),
     ],
 )
 def test_a_self_applied_half_reads_the_deployers_state(
@@ -73,7 +79,12 @@ def test_an_ordinary_service_pr_ignores_the_deployers_state(landing):
 def test_a_self_applied_role_that_reaches_other_hosts_is_not_settled(landing, capsys):
     """Issue #1009: the services are live, the tick converged, and two hosts are still owed."""
     ln, _ = _deployed(
-        landing, Fakes(self_applied=True, remaining_setup="daniel-server, daniel-pi")
+        landing,
+        Fakes(
+            self_applied=True,
+            remaining_setup="daniel-server, daniel-pi",
+            state=APPLIED,
+        ),
     )
     with pytest.raises(Outcome) as exc:
         health_verdict.health(ln)
@@ -84,7 +95,48 @@ def test_a_self_applied_role_that_reaches_other_hosts_is_not_settled(landing, ca
 
 def test_no_remaining_hosts_still_settles(landing):
     """The reject half: the #723 shape, where the tick's host is the only one reached."""
-    ln, _ = _deployed(landing, Fakes(self_applied=True, remaining_setup=""))
+    ln, _ = _deployed(
+        landing, Fakes(self_applied=True, remaining_setup="", state=APPLIED)
+    )
+    with pytest.raises(Outcome) as exc:
+        health_verdict.health(ln)
+    assert (exc.value.rc, exc.value.verdict) == (0, "settled")
+
+
+# ── converged is not applied (issue #1537) ────────────────────────────────────────────────
+
+
+def test_a_converged_tick_that_recorded_no_apply_is_not_settled(landing, capsys):
+    """PR #1529's shape: something else fast-forwarded the checkout, so the tick applied
+    nothing and will never see the range again — and every marker land.sh used to read is in
+    the settled state."""
+    ln, _ = _deployed(landing, Fakes(self_applied=True, state={}))
+    with pytest.raises(Outcome) as exc:
+        health_verdict.health(ln)
+    out = capsys.readouterr().out
+    assert (exc.value.rc, exc.value.verdict) == (1, "needs-manual-apply")
+    assert "recorded no broad apply covering this PR" in out
+    assert "`ansible-playbook ansible/initial_setup.yml --tags x`" in out
+
+
+def test_an_apply_recorded_at_a_commit_without_this_pr_is_not_settled(landing):
+    """The marker exists but names an EARLIER apply — coverage, not presence, decides."""
+    ln, _ = _deployed(
+        landing,
+        Fakes(
+            self_applied=True,
+            state={"broad_applied": "0000000 ansible/deploy.yml "},
+            is_ancestor_rc=1,
+        ),
+    )
+    with pytest.raises(Outcome) as exc:
+        health_verdict.health(ln)
+    assert (exc.value.rc, exc.value.verdict) == (1, "needs-manual-apply")
+
+
+def test_an_ordinary_service_pr_never_asks_about_a_broad_apply(landing):
+    """`broad_applied` speaks to a landing only when the tick applies part of THIS PR."""
+    ln, _ = _deployed(landing, Fakes(self_applied=False, state={}))
     with pytest.raises(Outcome) as exc:
         health_verdict.health(ln)
     assert (exc.value.rc, exc.value.verdict) == (0, "settled")

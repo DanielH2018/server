@@ -81,9 +81,35 @@ def classify(ln: Landing) -> None:
     view = ln.view("files,changedFiles")
     paths = [f["path"] for f in view.get("files", [])]
     quiet = c.quiet_paths(paths, pr_range(ln))
-    ln.plane = _classified(ln, "plane classification", c.plane_note, paths, quiet=quiet)
+    # WHICH TAGS EXIST is asked of the MERGE COMMIT, not of a checkout. A PR that adds a role
+    # and its `containers_list` entry together is absent from every tree until the tick
+    # fast-forwards, so a checkout answers "this role is unregistered" — the same thing it says
+    # about a role somebody forgot to register, and `needs-manual-apply` then prints the
+    # expensive remedy (a full `ansible/deploy.yml`) for a role one `--tags` run deploys.
+    # PR #1539 landed that way (issue #1544). None means the read failed, and every reader
+    # below falls back to its own tree exactly as it did before.
+    declared = _classified(
+        ln, "declared-tag read", t.declared_at, ln.merge_sha, ln.opts.primary
+    )
+    if declared is None:
+        say(
+            f"could not read containers_list at {ln.merge_sha[:8]} — "
+            "classifying against this checkout instead"
+        )
+    ln.plane = _classified(
+        ln, "plane classification", c.plane_note, paths, declared, quiet=quiet
+    )
     ln.self_applied = _classified(
         ln, "self-applied classification", c.self_applied, paths, quiet=quiet
+    )
+    # The command a hand runs if the tick turns out NOT to have applied its own half —
+    # derived over the same paths `self_applied` reads, so the two cannot name different work.
+    ln.self_applied_command = _classified(
+        ln,
+        "self-applied-command classification",
+        c.self_applied_command,
+        paths,
+        quiet=quiet,
     )
     # What a self-applied setup role still needs beyond the host the tick runs on.
     # initial_setup.yml applies to ONE target per run, so a role with no `when:` gate reaches
@@ -101,7 +127,7 @@ def classify(ln: Landing) -> None:
     # -1 rather than 0: `gh` omitting the field must not read as agreement with an empty
     # file list, which would silently license a zero-tag deploy.
     tags, source = _classified(
-        ln, "tag derivation", c.derive, paths, view.get("changedFiles", -1)
+        ln, "tag derivation", c.derive, paths, view.get("changedFiles", -1), declared
     )
     ln.resolved_tags = list(tags)
     if source == DeriveSource.FALLBACK:

@@ -9,6 +9,7 @@ import pytest
 import yaml
 
 from _land_fakes import MERGE_SHA, PRIMARY, Fakes
+from deploy_tools import land_tags
 from deploy_tools.land_lib import classify
 from deploy_tools.land_lib.outcome import Outcome
 
@@ -61,6 +62,69 @@ def test_classify_fills_tags_plane_and_self_applied(landing):
         True,
         False,
     )
+
+
+# ── a role this PR registers is not a role somebody forgot to register (issue #1544) ──
+
+_NEW_ROLE_PR = {
+    "files": [
+        {"path": "ansible/roles/k8s/pihole-exporter/tasks/main.yml"},
+        {"path": "ansible/inventory/host_vars/daniel-box.yml"},
+    ],
+    "changedFiles": 2,
+}
+
+
+def _real_derivation(ln):
+    """Swap in the REAL plane_note and derive, keeping every other classifier faked."""
+    ln.classifier = dataclasses.replace(
+        ln.classifier, plane_note=land_tags.plane_note, derive=land_tags.derive
+    )
+
+
+def test_a_role_this_pr_registers_is_deployed_rather_than_reported_unregistered(
+    landing,
+):
+    """PR #1539's shape: the entry is at the merge commit and in no checkout yet."""
+    ln, _ = landing(
+        Fakes(
+            gh_views={"files,changedFiles": _NEW_ROLE_PR},
+            declared_at={"pihole-exporter"},
+        )
+    )
+    _real_derivation(ln)
+    ln.merge_sha = MERGE_SHA
+    classify.classify(ln)
+    assert ln.plane == ""
+    assert ln.resolved_tags == ["pihole-exporter"]
+
+
+def test_a_role_the_merge_commit_does_not_declare_is_still_reported(landing):
+    """The must-fire half: a role nobody registered still owes a hand, and derives no tag."""
+    ln, _ = landing(
+        Fakes(gh_views={"files,changedFiles": _NEW_ROLE_PR}, declared_at=set())
+    )
+    _real_derivation(ln)
+    ln.merge_sha = MERGE_SHA
+    classify.classify(ln)
+    assert "pihole-exporter" in ln.plane
+    assert ln.resolved_tags == []
+
+
+def test_an_unreadable_merge_commit_says_so_and_falls_back_to_this_checkout(
+    landing, capsys
+):
+    """None restores the previous answer -- this checkout's -- rather than declaring nothing
+    exists, and the landing says which source it used."""
+    ln, _ = landing(
+        Fakes(gh_views={"files,changedFiles": _NEW_ROLE_PR}, declared_at=None)
+    )
+    _real_derivation(ln)
+    ln.merge_sha = MERGE_SHA
+    classify.classify(ln)
+    assert "classifying against this checkout instead" in capsys.readouterr().out
+    registered_here = "pihole-exporter" in land_tags.declared_tags()
+    assert (ln.resolved_tags == ["pihole-exporter"]) is registered_here
 
 
 def test_classify_asks_what_a_self_applied_role_still_owes_other_hosts(landing):

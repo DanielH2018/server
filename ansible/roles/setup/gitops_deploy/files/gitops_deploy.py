@@ -93,6 +93,14 @@ BEHIND_FILE = "/var/lib/gitops-deploy/behind_since"
 # is the wrong remediation here: the tree is already fast-forwarded and a playbook is what
 # broke, so reverting the PR undoes nothing. This names what to re-run instead.
 HOLD_PLANE_FILE = "/var/lib/gitops-deploy/hold_plane"
+# "<origin_sha> <playbook> <tags>" for the last broad plane this host APPLIED. The success
+# counterpart of HOLD_PLANE_FILE, and the only durable evidence that a tick applied a plane
+# rather than fast-forwarded past one: `behind_since` empty says local == origin, which any
+# session's `git merge --ff-only` also produces, and from then on next_action() returns noop
+# so the plane is stranded permanently. land.sh required `behind_since` empty and no hold
+# before it printed `settled`, and printed it for PR #1529's renovate_agent change, which was
+# four days stale on disk (issue #1537). It reads this instead.
+BROAD_APPLIED_FILE = "/var/lib/gitops-deploy/broad_applied"
 # The sorted stale-compose set last alerted on, so a lingering stale dir doesn't re-page
 # every tick — only a CHANGED set (new stale dir, or one cleaned up) re-alerts.
 STALE_COMPOSE_FILE = "/var/lib/gitops-deploy/stale_composes_alerted"

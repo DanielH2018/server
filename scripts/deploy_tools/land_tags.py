@@ -35,6 +35,9 @@ from typing import NamedTuple
 # identically -- two derivations that disagree is the defect this import exists to prevent.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from lib import yaml_fast
+from lib.git import git, git_stdout
+from lib.render_guard import containers_entries_in
 from lib.repo_paths import GITOPS_DEPLOY_FILES
 
 sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
@@ -87,6 +90,34 @@ _ROTATION_NOTE = (
 def declared_tags() -> set[str]:
     """Every name that selects a service, read from containers_list."""
     return deploy_tags.service_tags()
+
+
+def service_tags_at(ref: str, cwd: Path) -> set[str]:
+    """Every name that selects a service AT `ref`, read with git rather than from a worktree.
+
+    A PR that adds a role and its `containers_list` entry together is the case a checkout
+    answers wrongly: the entry is in no tree until the tick fast-forwards, so the role reads as
+    one nobody registered (issue #1544; `land_lib/classify.py` carries the argument). Names are
+    listed at `ref` too, so a host_vars file the same PR adds counts, and `_example.yml` is
+    excluded for the reason `deploy_tags.host_files` excludes it.
+
+    Reuses `entry_tags` and `containers_entries_in` rather than re-reading a containers_list
+    entry its own way: two derivations of "which tags exist" that disagree is exactly the
+    defect this answer is meant to fix. Raises `CalledProcessError` on an unreadable ref.
+    """
+    in_tree = deploy_tags.HOST_VARS_IN_TREE
+    tags: set[str] = set()
+    for name in git_stdout(
+        "ls-tree", "--name-only", f"{ref}:{in_tree}", cwd=cwd
+    ).splitlines():
+        if not name.endswith(".yml") or name.startswith("_"):
+            continue
+        loaded = yaml_fast.safe_load(
+            git("show", f"{ref}:{in_tree}/{name}", cwd=cwd).stdout
+        )
+        for entry in containers_entries_in(loaded if isinstance(loaded, dict) else {}):
+            tags.update(deploy_tags.entry_tags(entry))
+    return tags
 
 
 def role_for(path: str) -> str | None:
@@ -272,6 +303,32 @@ def self_applied(files, quiet=()) -> bool:
     return any(
         setup_role_playbook(r) == "ansible/initial_setup.yml" for r in cs.setup_roles
     )
+
+
+def self_applied_command(files, quiet=()) -> str:
+    """What applies BY HAND the half of this PR the TICK normally applies itself, or "".
+
+    Over exactly the paths `self_applied` answers True for, so the two cannot name different
+    work. `broad_remediation` is the deployer's own text, ff-merge first — Ansible renders from
+    the working tree, so a playbook run before the merge applies the PRE-merge files and reports
+    `changed=0`.
+
+    THE TICK CONVERGING IS NOT PROOF IT APPLIED ANYTHING. Any session's `git merge --ff-only`
+    also makes local == origin, and from then on `next_action()` returns `noop` for every later
+    tick — so the plane is stranded permanently and the one mechanism that would apply it never
+    sees the range again. PR #1529's `renovate_agent` change landed `settled` that way and was
+    four days stale on disk (issue #1537). This is the line `land.sh` prints when the deployer
+    recorded no apply covering the PR.
+    """
+    cs = services_from_changed_paths([p for p in files if p not in set(quiet)])
+    routable = {
+        r
+        for r in cs.setup_roles
+        if setup_role_playbook(r) == "ansible/initial_setup.yml"
+    }
+    if not (cs.broad_deploy or routable):
+        return ""
+    return broad_remediation(cs.broad_deploy, bool(routable), routable)
 
 
 class DeriveSource(StrEnum):

@@ -68,6 +68,22 @@ def health(ln: Landing) -> NoReturn:
                 75,
                 f"PR #{pr}, {sha}, tags: {tags} — services deployed, the tick's half not yet",
             )
+        # CONVERGED says local == origin, which any session's `git merge --ff-only` produces
+        # too — and after it holds the tick returns `noop` forever, so a plane it never applied
+        # is stranded while this reads `settled` (issue #1537).
+        if not ln.broad_applied_covers(sha):
+            print(
+                "  services deployed, but the tick recorded no broad apply covering this PR "
+                f"(broad_applied: {ln.state('broad_applied') or 'absent'}) — something other "
+                "than the tick fast-forwarded the checkout"
+            )
+            if ln.self_applied_command:
+                print(f"  Apply it: {ln.self_applied_command}")
+            ln.finish(
+                Verdict.NEEDS_MANUAL_APPLY,
+                1,
+                f"PR #{pr}, {sha}, tags: {tags} — the tick converged without applying this PR",
+            )
     if ln.remaining_setup:
         local = ln.tools.hostname()
         print(

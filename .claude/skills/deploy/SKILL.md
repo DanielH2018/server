@@ -175,6 +175,14 @@ repo-side check still reads green (`scripts/deploy_tools/deploy_staleness.py`). 
 of `--check` and `--dry-run` too, since a green dry run against a stale tree is itself the
 misleading signal. Being *ahead* of master is normal branch work and is never refused.
 
+**Read the second paragraph of an exit 4 before you rebase.** When the deployer's own
+`behind_since` marker is older than four ticks, the refusal appends a line saying so: the tree
+is behind because the PRIMARY checkout is parked, not because this worktree is stale, and
+rebasing here deploys nothing. The repair is the deployer's — `journalctl -t gitops-deploy`
+names the skip reason. The SessionStart banner carries the same decision
+(`scripts/lib/deployer_park.py` is the one copy of it), but only reaches a session as it opens;
+this reaches one that has been running for an hour (issue #1429).
+
 Exit 2 exists because Ansible itself exits 0 on an unmatched tag, so the wrapper checks tags
 against `containers_list` first (`scripts/deploy_tools/deploy_tags.py`).
 `--skip-tag-check` bypasses it.
