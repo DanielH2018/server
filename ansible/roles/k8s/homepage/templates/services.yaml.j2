@@ -217,7 +217,13 @@
         - Sonarr:
             icon: sonarr.png
             href: https://sonarr.{{ domain }}/
-            description: Series management
+            # ONE WORD, and qBittorrent's below is why. At 1280px a Services tile is 195px and
+            # "Download management" wrapped its title to three lines, taking that tile to 68px
+            # where every other is 52px — which took its whole grid row to 128px and overshot
+            # the pinned calendar beside it by 16px. All three are shortened together so the
+            # media row reads consistently. Measured 2026-09-10: with these, every card is 112px
+            # and both Top Row columns end at y=640.
+            description: Series
             widget:
                 type: sonarr
                 url: http://sonarr.{{ k8s_namespace }}.svc.cluster.local:8989
@@ -227,7 +233,7 @@
         - Radarr:
             icon: radarr.png
             href: https://radarr.{{ domain }}/
-            description: Movie management
+            description: Movie
             widget:
                 type: radarr
                 url: http://radarr.{{ k8s_namespace }}.svc.cluster.local:7878
@@ -237,7 +243,7 @@
         - qBittorrent:
             icon: qbittorrent.png
             href: https://qBittorrent.{{ domain }}
-            description: Download management
+            description: Download
             widget:
                 type: qbittorrent
                 url: http://qbittorrent.{{ k8s_namespace }}.svc.cluster.local:8080  # literal: qbittorrent_k8s_webui_port is that role's default, not in scope here
@@ -347,7 +353,9 @@
             href: https://www.metatft.com/
             description: metatft.com
 
-# ADMIN and TOOLS are LINK-ONLY GROUPS, and the absence of `widget:` blocks is the point.
+# `Admin & Tools` IS A LINK-ONLY GROUP, and the absence of `widget:` blocks is the point. It was
+# two groups of four until 2026-09-10 and is now one of eight, which still divides by four into
+# two full rows.
 # Before 2026-09-09 this dashboard carried 14 tiles against ~30 routed web UIs, so the way to
 # reach the other sixteen was to remember the hostname. A link-only tile closes that gap at
 # zero risk: a widget dialling a ClusterIP needs the target's NetworkPolicy to name
@@ -361,7 +369,7 @@
 #
 # Two roles carry a `hostname:` in containers_list and are NOT here, both on purpose:
 # navidrome is scaled to 0 replicas, and livesync has no IngressRoute at all.
-- Admin:
+- Admin & Tools:
     - Grafana:
         icon: grafana.png
         href: https://grafana.{{ domain }}/
@@ -384,7 +392,6 @@
         href: https://code-server.{{ domain }}/
         description: Browser IDE
 
-- Tools:
     - n8n:
         icon: n8n.png
         href: https://n8n.{{ domain }}/

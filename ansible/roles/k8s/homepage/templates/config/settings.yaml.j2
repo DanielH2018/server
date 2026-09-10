@@ -59,10 +59,9 @@ layout:
   # No `Media:` entry: that group is gone. Its three surviving tiles are in `Services` above and
   # Jellyfin was dropped. A layout key naming no group is silently dead, so leaving one here
   # would have cost nothing and taught the next reader nothing.
-  Admin:
-    style: row
-    columns: 4
-  Tools:
+  # ONE link-only group where there were two until 2026-09-10. Eight tiles at four columns is two
+  # full rows, so the count still divides; the merge only removed a heading.
+  Admin & Tools:
     style: row
     columns: 4
   # No `Bookmarks:` entry, and no bookmark group left to lay out — the five personal links are

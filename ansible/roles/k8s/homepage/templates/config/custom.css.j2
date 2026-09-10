@@ -216,7 +216,8 @@ li.service:has(a[href*="uptime-kuma."]) .service-block:nth-child(2) > .font-bold
 li.service:has(a[href*="speedtest."]) .service-block:nth-child(1) > .font-bold,
 li.service:has(a[href*="karakeep."]) .service-block:nth-child(1) > .font-bold,
 li.service:has(a[href*="peanut."]) .service-block:nth-child(1) > .font-bold,
-li.service:has(a[href*="peanut."]) .service-block:nth-child(2) > .font-bold {
+li.service:has(a[href*="peanut."]) .service-block:nth-child(2) > .font-bold,
+li.service:has(a[href*="qBittorrent."]) .service-block:nth-child(2) > .font-bold {
   font-size: 0;
 }
 
@@ -225,7 +226,8 @@ li.service:has(a[href*="uptime-kuma."]) .service-block:nth-child(2) > .font-bold
 li.service:has(a[href*="speedtest."]) .service-block:nth-child(1) > .font-bold::after,
 li.service:has(a[href*="karakeep."]) .service-block:nth-child(1) > .font-bold::after,
 li.service:has(a[href*="peanut."]) .service-block:nth-child(1) > .font-bold::after,
-li.service:has(a[href*="peanut."]) .service-block:nth-child(2) > .font-bold::after {
+li.service:has(a[href*="peanut."]) .service-block:nth-child(2) > .font-bold::after,
+li.service:has(a[href*="qBittorrent."]) .service-block:nth-child(2) > .font-bold::after {
   /* text-xs, the class the label carries — the parent's 0 would otherwise be inherited. */
   font-size: 0.75rem;
   line-height: 1rem;
@@ -255,6 +257,12 @@ li.service:has(a[href*="peanut."]) .service-block:nth-child(1) > .font-bold::aft
 }
 li.service:has(a[href*="peanut."]) .service-block:nth-child(2) > .font-bold::after {
   content: "Status";
+}
+
+/* Download -> Down, matching the Speedtest tile. The href here is `qBittorrent.<domain>` with
+ * that capital B, and an attribute substring match is case-sensitive. */
+li.service:has(a[href*="qBittorrent."]) .service-block:nth-child(2) > .font-bold::after {
+  content: "Down";
 }
 
 /* THE CALENDAR SPANS ITS WHOLE GROUP.
