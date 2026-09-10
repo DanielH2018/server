@@ -21,7 +21,8 @@ puts more than MAX_BATCHES_PER_REMOTE_HOST batches on one remote host · 4 no ho
 · 5 a batch reports failed (`status` only) · 6 no candidate host signs commits GitHub
 verifies, or the account's registered signing keys could not be read.
 
-A launch costs two remote ssh connections per host it reads (headroom, health) plus one
+A launch costs one remote ssh connection per host it reads for headroom, a second only for
+a host a batch is actually placed on (its session-health read), plus one
 per batch placed there — worktree add+lock, brief write and systemd-run folded into one
 call. `--host` pins every batch to one host; leave it unset and placement reads both hosts
 and chooses per batch. Calls to the host this script itself runs on go over `bash -c`, not
@@ -272,7 +273,16 @@ def cmd_launch(args, tools: Tools) -> int:
         return 3
     if _over_ssh_budget(placed):
         return 3
-    health = [ln for host in hosts for ln in _health_lines(tools, host)]
+    # Only the hosts a batch actually landed on. Reading every host placement looked at
+    # spends an ssh connection — against the 5-per-30s `ufw limit ssh` budget — on a host
+    # the signing gate or a failed headroom read already dropped, and puts that host's
+    # banner state into briefs for agents that never run there. Sorted, because set order
+    # is not stable across processes and these lines go into the brief verbatim.
+    health = [
+        ln
+        for host in sorted({host for _, host in placed})
+        for ln in _health_lines(tools, host)
+    ]
     run = manifest_mod.Manifest(
         manifest_mod.new_run_id(datetime.now(UTC)), args.orchestrator_branch, []
     )

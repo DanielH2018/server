@@ -106,8 +106,8 @@ uv run python scripts/dev/fanout_place.py launch --batch 1345,1386 --batch 1288 
 ```
 
 The dispatcher writes the brief (issue bodies verbatim, the claim note, the first-act comment,
-the landing path or the stop-at-PR rule, and both hosts' session-health output — just the
-pinned host's when `--host` is given) and starts a headless Opus agent as a transient user
+the landing path or the stop-at-PR rule, and the session-health output of every host a batch
+was actually placed on) and starts a headless Opus agent as a transient user
 service in a fresh worktree on whichever host has the
 most memory headroom under the tighter of its fleet and login-plane caps. Exit 3 means neither
 host has a reservation's worth
