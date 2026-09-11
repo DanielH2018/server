@@ -39,6 +39,10 @@ QUALIFIED = {"deploy_io", "deploy_alerts"}
 # module with no entry here would otherwise be governed by nothing.
 ALLOWED: dict[str, set[str] | None] = {
     "deploy_changes": set(),
+    # The narrowing subprocess and the plan it returns: `deploy_config` for `log`, and
+    # nothing else. It must NOT import `deploy_toolbox`, which imports IT for the
+    # `narrow_deploy_plane` default.
+    "deploy_narrow": {"deploy_config"},
     "deploy_config": set(),
     "deploy_failtext": set(),
     "deploy_git": set(),
@@ -61,7 +65,7 @@ ALLOWED: dict[str, set[str] | None] = {
     # `deploy_config` for the Config it binds. It holds `post`, the webhook itself, so that
     # `deploy_alerts` can import IT rather than the other way round. Never `gitops_deploy` —
     # that is rule 1.
-    "deploy_toolbox": {"deploy_config", "deploy_git", "deploy_io"},
+    "deploy_toolbox": {"deploy_config", "deploy_git", "deploy_io", "deploy_narrow"},
     "deploy_alerts": {
         "deploy_changes",
         "deploy_config",
@@ -91,6 +95,7 @@ ALLOWED: dict[str, set[str] | None] = {
     },
     "deploy_handlers": {
         "deploy_alerts",
+        "deploy_narrow",
         "deploy_changes",
         "deploy_config",
         "deploy_git",

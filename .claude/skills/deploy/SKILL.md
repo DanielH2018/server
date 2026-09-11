@@ -170,6 +170,12 @@ than a failure. The fifth, 20, is the inverse: the playbook ran and changes are 
 | 2 | a `--tags` value matched no service | `--list-services` prints every valid value |
 | 20 | the playbook ran and a task failed — **changes before it are live** | read the PLAY RECAP and the failing TASK; a re-run is not automatically safe |
 
+Exit 3 is `--changed`'s answer, and it is the operator path: `--changed` refuses a broad
+change rather than guessing. The TICK asks a second question first --
+`deploy_tags.py narrow <old> <new>`, which maps a deploy-plane range to the services it
+reaches and exits 3 only when it cannot. Running `narrow` by hand is read-only and prints its
+derivation; it does not change what `--changed` or `deploy.sh` do.
+
 Exit 4 exists because a stale tree renders stale templates and reverts live config while every
 repo-side check still reads green (`scripts/deploy_tools/deploy_staleness.py`). It runs ahead
 of `--check` and `--dry-run` too, since a green dry run against a stale tree is itself the

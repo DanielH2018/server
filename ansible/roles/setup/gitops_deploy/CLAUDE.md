@@ -160,8 +160,25 @@ stay).
   under `roles/setup/<name>/` (or `requirements.yml`) fast-forwards and applies as
   `initial_setup.yml --tags <name>`, with the tag derived by `setup_tags_for` rather than left as
   the `<role>` placeholder `broad_remediation` prints. A deploy-plane change (shared
-  `ansible/templates/*`, `inventory/`, `common/`, `deploy.yml`) fast-forwards and applies as a
-  full `deploy.yml`.
+  `ansible/templates/*`, `inventory/`, `common/`, `deploy.yml`) fast-forwards and applies as
+  `deploy.yml`, scoped by `deploy_narrow.plan` to the services the range actually reaches.
+  - **The deploy plane is narrowed before it is applied.** `deploy_narrow.plan` runs
+    `scripts/deploy_tools/deploy_tags.py narrow <local> <origin>` as a subprocess — the
+    derivation parses YAML and this unit runs under `uv run --no-project` — before the
+    ff-merge, so it reads the two refs the tick pinned. Tags come back and the apply is
+    `deploy.yml --tags <tags>`; an empty list means the range moves no rendered output, so
+    nothing is applied and `broad_applied` records `narrowed-to-nothing` in the tag slot;
+    any refusal (exit 3, a timeout, a crash) runs the full `deploy.yml` this arm always ran.
+    The journal says which branch it took on every tick. The rules and what each one refuses
+    are in `scripts/deploy_tools/narrow_broad.py`; the `# DECIDED:` at the fallback in
+    `deploy_narrow.py` carries why doubt runs the whole play. A failed narrowed apply writes
+    `hold_plane` naming those tags, so *Which apply clears a hold* now has a third shape: a
+    narrowed hold is cleared by a full run or by a narrowed run covering its tags, and not by
+    a narrowed run naming a different service.
+  - The narrowing reads the k8s role-caller graph from the WORKING TREE, which is still on
+    `local` at that point. A range that adds a caller of a shared role therefore reads one
+    caller short, and a shared role that then looks caller-less refuses — the safe direction,
+    since a refusal is the full run.
   - **`roles/setup/<name>/` is not the same thing as `initial_setup.yml --tags <name>`, and
     assuming it was made this arm apply nothing while reporting success.** Two ways it breaks:
     the playbook may not include the role (`k3s` is in `k3s-bringup.yml`; `common` is in no

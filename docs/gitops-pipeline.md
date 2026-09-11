@@ -97,6 +97,36 @@ other session's landing stopped behind it until an operator hand-ran the role an
 three times that day. The role now applies itself as `initial_setup.yml --tags gitops_deploy`;
 the `DECIDED:` marker above `_BROAD_MANUAL_PREFIXES` in `deploy_logic.py` carries the evidence.
 
+### A deploy-plane change is narrowed before it is applied
+
+The deploy arm ran `ansible/deploy.yml` unscoped, over all 54 roles, for any change under
+`ansible/templates/` or `ansible/inventory/`. That is about twenty minutes under the tree
+lock, it was 47% of all lock-busy time in the week from 2026-09-04, and twice it failed on a
+gate belonging to a service the change never touched and held the fleet.
+
+`deploy_handlers.handle_broad` now asks `scripts/deploy_tools/deploy_tags.py narrow <local>
+<origin>` which services the range actually reaches, before the fast-forward and at the two
+refs the tick pinned. A subprocess rather than an import: the derivation parses YAML and the
+unit runs under `uv run --no-project`.
+
+Three outcomes, and the journal names which one it took on every tick:
+
+- **tags** -- `ansible/deploy.yml --tags <tags>`, recorded in `broad_applied` with those tags.
+- **no tags** -- the range moves no rendered output (a comment-only inventory edit, a
+  variable nothing reads, a macro nothing imports). The fast-forward is the whole apply, and
+  `broad_applied` records `narrowed-to-nothing` in the tag slot.
+- **a refusal** -- the full `deploy.yml`, exactly as before. Anything the derivation cannot
+  map lands here: a variable the play itself reads, `hosts.ini`, a removed `containers_list`
+  entry, a tag list covering most of the fleet, or a crash in the derivation. A missed
+  consumer would be a service left silently stale; a full run is only slow.
+
+`narrow` is read-only and can be run by hand against any range. The rules it applies, and
+what each one refuses, are in `scripts/deploy_tools/narrow_broad.py`.
+
+A failed narrowed apply holds the plane it named, so `hold_plane` reads
+`ansible/deploy.yml <tags>` and only an apply covering those tags clears it -- an untagged
+full run does, and a narrowed run covering a different service does not.
+
 ### Both apply arms are forward-only
 
 A failed apply writes `hold_sha` and `hold_plane`, alerts, and leaves the tree

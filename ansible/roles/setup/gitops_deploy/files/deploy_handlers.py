@@ -26,6 +26,7 @@ import time
 
 import deploy_alerts
 import deploy_io
+import deploy_narrow
 from deploy_changes import setup_tags_for
 from deploy_config import CHICAGO, Config, log
 from deploy_git import (
@@ -166,18 +167,16 @@ def handle_broad(
         )
         return 0
 
-    # Everything else fast-forwards and applies itself.
+    # Everything else fast-forwards and applies what `deploy_narrow.plan` names. The
+    # narrowing runs BEFORE the merge, so it reads the two refs this tick pinned.
     #
     # The ff-merge happens FIRST, before the apply, so an unrelated commit sharing this tick lands
     # even if the apply below fails. Stranding a docs-only commit behind somebody else's setup
     # change — a tick that exits 0, logs nothing, and writes behind_since — was the original
     # complaint this arm exists to fix.
+    broad = deploy_narrow.plan(tools.narrow_deploy_plane, config, target, setup_tags)
     tools.run(["git", "merge", "--ff-only", origin], cwd=config.repo)
-
-    if setup_tags:
-        playbook, tags = "ansible/initial_setup.yml", sorted(setup_tags)
-    else:
-        playbook, tags = "ansible/deploy.yml", []
+    playbook, tags = broad.playbook, broad.tags
 
     # FORWARD-ONLY. deploy_logic.broad_budget_ok carries the argument and its 2026-08-29
     # re-derivation: at the 60min ceiling a full deploy.yml (1212s measured 2026-08-22) plus
@@ -190,9 +189,10 @@ def handle_broad(
     # where every check would read green against a tree that lies. hold_sha is what stops the
     # retry loop, and it does that whether or not the tree moved.
     try:
-        deploy_io.deploy_broad(
-            config.repo, playbook, tags, config.broad_deploy_timeout_s
-        )
+        if broad.apply:
+            deploy_io.deploy_broad(
+                config.repo, playbook, tags, config.broad_deploy_timeout_s
+            )
     except Exception as exc:
         log(f"broad apply failed ({playbook} {tags}): {exc}")
         state.write_hold(origin)

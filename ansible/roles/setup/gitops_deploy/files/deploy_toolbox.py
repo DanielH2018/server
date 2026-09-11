@@ -38,6 +38,7 @@ from datetime import datetime
 from functools import partial
 
 import deploy_io
+import deploy_narrow
 from deploy_config import Config, log
 from deploy_git import ci_verdict, github_auth_headers, github_token
 from host_lib import discord_post
@@ -130,6 +131,12 @@ class DeployTools:
     discord_post: Callable[[str, str], bool] = post
     service_healthy: Callable[..., bool] = deploy_io.service_healthy
     run_staging_scripts: Callable[..., tuple[int, int]] = deploy_io.run_staging_scripts
+    # The deploy-plane narrowing, which is a subprocess because the derivation parses YAML
+    # and this unit runs under `uv run --no-project`. A field rather than a qualified call,
+    # so the broad arm's tests script an exit code instead of a process.
+    narrow_deploy_plane: Callable[..., tuple[int, str]] = (
+        deploy_narrow.narrow_deploy_plane
+    )
     emit_deploy_annotation: Callable[[set[str], str], None] = (
         deploy_io.emit_deploy_annotation
     )
