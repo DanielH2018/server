@@ -160,6 +160,11 @@ def _defines_only(key: str, path: str, ctx: Context) -> bool:
     22 of its 87 top-level keys rather than 8. A TRAILING comment on a value line still
     counts, because telling a real `#` from one inside a quoted value needs a parse — doubt
     runs the whole play.
+
+    The one unsafe direction the whole-line rule leaves: a continuation line of a block
+    scalar (`key: |`) that begins with `#` is content Ansible does read, and this skips it,
+    so a key consumed only there would narrow rather than refuse. No block scalar in
+    `ansible/inventory/` has such a line; finding one is a reason to parse instead.
     """
     defines = re.compile(rf"^{re.escape(key)}\s*:")
     mentions = re.compile(rf"(?<!\w){re.escape(key)}(?!\w)")
@@ -304,7 +309,13 @@ def _key_tags(key: str, ctx: Context, path: str) -> set[str]:
     )
     roles = set(hits.roles)
     for name in sorted(hits.templates):
-        roles |= template_importers(name, ctx.ref, ctx.cwd, {name}, ctx.explain)
+        try:
+            roles |= template_importers(name, ctx.ref, ctx.cwd, {name}, ctx.explain)
+        except CannotNarrow as exc:
+            # A macro this key reaches refuses under its own name, and a macro that macro
+            # imports refuses under the NESTED name. Neither says which key reached it.
+            ctx.explain(f"narrow: {key} -> macro {name} via {path}")
+            raise CannotNarrow(f"the variable {key} cannot be narrowed: {exc}") from exc
     try:
         tags = _role_tags(roles, ctx)
     except CannotNarrow as exc:
@@ -357,8 +368,16 @@ def _broad_path_tags(path: str, old_ref: str, ctx: Context) -> set[str]:
         raise CannotNarrow(f"{path} was deleted, so nothing can be read from it")
     if path.startswith(SHARED_TEMPLATES):
         name = path[len(SHARED_TEMPLATES) :]
-        roles = template_importers(name, ctx.ref, ctx.cwd, {name}, ctx.explain)
-        tags = _role_tags(roles, ctx)
+        roles: set[str] = set()
+        try:
+            roles = template_importers(name, ctx.ref, ctx.cwd, {name}, ctx.explain)
+            tags = _role_tags(roles, ctx)
+        except CannotNarrow as exc:
+            # The same treatment `_key_tags` gives its own refusal, for the same reason:
+            # both inner raises name a role or a nested macro, so without this the journal
+            # never says which changed template reached it.
+            ctx.explain(f"narrow: {name} -> roles {','.join(sorted(roles))} via {path}")
+            raise CannotNarrow(f"the macro {name} cannot be narrowed: {exc}") from exc
         ctx.explain(
             f"narrow: {name} -> {','.join(sorted(tags)) or '(nothing)'} via {path}"
         )
@@ -410,7 +429,7 @@ def narrow(
         new_ref: the commit it is about to fast-forward to.
         cwd: the checkout to read both refs from.
         declared: the tags that exist; read at `new_ref` when omitted.
-        callers: the k8s role-caller graph; read from the working tree when omitted.
+        callers: the k8s role-caller graph; walked from `cwd`'s working tree when omitted.
         explain: called with one derivation line per key, for stderr.
 
     Returns:
@@ -423,7 +442,10 @@ def narrow(
     if callers is None:
         from lib.k8s_roles import role_callers
 
-        callers = role_callers()
+        # `cwd`, not the module-level REPO: `narrow`'s contract is "read these two refs
+        # from this checkout", and a graph walked from another tree answers for roles this
+        # checkout may not even have.
+        callers = role_callers(cwd)
     ctx = Context(cwd, new_ref, declared, callers, explain)
     broad_prefixes = _broad_deploy_prefixes()
     paths = [

@@ -45,16 +45,20 @@ __all__ = [
     "ANSIBLE",
     "BASE_CONTEXT",
     "HOST_VARS",
+    "HOST_VARS_IN_TREE",
     "INVENTORY",
     "REPO",
     "SHARED_TPL",
     "StubUndefined",
     "containers_entries",
+    "containers_entries_in",
     "dump_numbered",
+    "entry_tags",
     "host_files",
     "load_yaml",
     "make_env",
     "render_or_error",
+    "service_tags_at",
 ]
 
 # Non-secret fallbacks for host facts not in the plaintext inventory. Anything still missing

@@ -65,3 +65,21 @@ def test_the_helpers_are_still_undeclared():
     declared = set(k8s_entries())
     assert not (_HELPERS & declared), "a helper grew a containers_list entry"
     assert "sonarr" in declared, "the reject half: an empty lookup would pass"
+
+
+def test_a_named_repo_is_walked_instead_of_this_checkout(tmp_path, callers):
+    """`narrow_broad.narrow(cwd=X)` must read X's caller graph, not this file's checkout.
+
+    Both halves in one test, because the fixture tree is what makes the reject half
+    meaningful: the derived edge is the throwaway tree's, and none of the live tree's
+    helpers may appear in it.
+    """
+    tasks = tmp_path / "ansible" / "roles" / "k8s" / "caller" / "tasks"
+    tasks.mkdir(parents=True)
+    (tasks / "main.yml").write_text("- include_role:\n    name: k8s/helper\n")
+
+    derived = role_callers(tmp_path)
+
+    assert derived == {"helper": {"caller"}}, derived
+    assert callers, "the live graph is empty, so the reject half below proves nothing"
+    assert not (set(derived) & set(callers)), derived
