@@ -180,7 +180,7 @@ jellyfin_k8s_lan_ip: 10.0.0.241
 # Shared between roles/k8s/crowdsec (the engine that runs LAPI+AppSec) and roles/k8s/traefik
 # (the bouncer plugin middleware + the log-tailing agent sidecar). Cross-role, and role
 # defaults are invisible across roles.
-crowdsec_k8s_image: crowdsecurity/crowdsec:v1.8.0
+crowdsec_k8s_image: crowdsecurity/crowdsec:v1.8.1
 crowdsec_k8s_agent_username: k8s-traefik-agent
 crowdsec_k8s_server_agent_machine: daniel-server-agent
 # The authelia pod's agent sidecar. Here, not in the authelia role's defaults, because the
