@@ -205,8 +205,19 @@ jobs:
             echo "mode=full" >> "$GITHUB_OUTPUT"
             echo "PR deletes ${#deleted[@]} file(s) — running the full sweep."
           elif [ ! -s "$RUNNER_TEMP/changed.txt" ]; then
-            echo "mode=full" >> "$GITHUB_OUTPUT"
-            echo "No changed files resolved — running the full sweep."
+            # No deletions and no changed files means merging this PR would land NOTHING: the
+            # checkout is the merge ref, so a three-dot diff against the base is exactly what a
+            # merge adds. That is never a correct PR, whoever opened it, and it used to fall
+            # through to a green full sweep. #1741 and #1743 merged that way on 2026-09-11 —
+            # Renovate reused the previous bump's branch under the next version's title, master
+            # already held the content, and the squash commits carried an empty file list (#1755).
+            # Failing here fails the `prek` gate, so an automerge cannot fire on the run.
+            #
+            # `ansible_lint`'s scoping step has an empty branch that stays GREEN on purpose: its
+            # list is filtered to ansible YAML, so empty there means "no ansible files changed",
+            # which any docs-only PR produces.
+            echo "::error::This PR's merge would change no files against $BASE_REF. Its content already landed, or its branch is stale — close it rather than merge it (#1755)."
+            exit 1
           else
             echo "mode=scoped" >> "$GITHUB_OUTPUT"
             echo "Scoping hooks to $(wc -l < "$RUNNER_TEMP/changed.txt") changed file(s):"
