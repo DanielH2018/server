@@ -27,8 +27,15 @@ def tree_lock(tmp_path: Path) -> Path:
     A deploy or a gitops tick on this very host may hold the real one: a suite that took it
     would block that deploy, and one that ran while a tick held it would sit through the whole
     wait on every test. `main()` takes the path as an argument so no test has to patch it.
+
+    It lives in its own directory, NOT beside the markers. The real lock is in `/var/lock`
+    while the markers are in `/var/lib/gitops-deploy`, and a test that put them together
+    would make the unwritable-state-directory test fail at the lock instead of at the marker
+    write it is named for — passing on a path it does not exercise.
     """
-    return tmp_path / "tree.lock"
+    lock_dir = tmp_path / "lock"
+    lock_dir.mkdir()
+    return lock_dir / "tree.lock"
 
 
 @pytest.fixture
@@ -103,6 +110,31 @@ def test_a_held_tree_lock_refuses_and_changes_nothing(marker, tree_lock, run, ca
         assert run(marker.parent, "clear-manual-plane", "k3s") == 1
     assert marker.read_text().splitlines() == [K3S, COMMON], "nothing was rewritten"
     assert "is held" in capsys.readouterr().err
+
+
+def test_an_unopenable_lock_names_the_lock_and_not_the_state_directory(
+    marker, tree_lock, capsys
+):
+    """The two unwritable paths are different faults with different fixes.
+
+    `/var/lock` and `/var/lib/gitops-deploy` are different directories, so attributing an
+    EACCES on the lock to the state directory would send an operator to `sudo -u ubuntu` over
+    a lock that no user can open.
+    """
+    tree_lock.parent.chmod(0o500)
+    try:
+        rc = gitops_state.main(
+            ["--state-dir", str(marker.parent), "clear-manual-plane", "k3s"],
+            lock_path=str(tree_lock),
+            lock_wait_s=0.05,
+        )
+    finally:
+        tree_lock.parent.chmod(0o700)
+    assert rc == 1
+    err = capsys.readouterr().err
+    assert "cannot open the tree lock" in err
+    assert str(tree_lock) in err
+    assert marker.read_text().splitlines() == [K3S, COMMON], "nothing was rewritten"
 
 
 def test_the_lock_is_released_for_the_next_run(marker, run, capsys):

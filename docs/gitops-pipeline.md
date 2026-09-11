@@ -158,12 +158,14 @@ session's landing behind it exits 4 from `deploy.sh` until a hand pulls the prim
 Ten episodes over the seven days to then spanned 30 ticks, the longest about forty minutes.
 
 The tick fast-forwards instead, and writes the role to
-`/var/lib/gitops-deploy/manual_plane`, one line per role as `"<origin_sha> <playbook-or-none> <role> <unix_ts>"`. A role already listed
-is not re-added, so its first-seen stamp is the age everything else reads. Four consequences:
+`/var/lib/gitops-deploy/manual_plane`, one line per role as
+`"<origin_sha> <playbook-or-none> <role> <unix_ts>"`. A role already listed is not re-added,
+so its first-seen stamp is the age everything else reads. Four consequences:
 
 - the journal says `manual_plane pending: <roles> — apply by hand: <commands>` on **every**
-  tick, not only the one that recorded it — which says `manual_plane recorded: <roles>` for the
-  roles it added, so neither line is printed twice;
+  tick, not only the one that recorded it. The recording tick says
+  `manual_plane recorded: <roles>` instead, naming only the roles it added, so no tick prints
+  both lines;
 - Discord pages once per SHA, with the same commands and the marker's path;
 - **GitOps Deploy — Status** goes down once the oldest pending line is older than
   `GITOPS_BEHIND_MAX_S` (6 h), naming the roles and the clear command;

@@ -67,6 +67,17 @@ class LockBusy(Exception):
     """The tree lock stayed held for the whole wait, so nothing was read or written."""
 
 
+class LockUnavailable(Exception):
+    """The lock FILE could not be opened at all — a wrong mode, or a missing directory.
+
+    Separate from `LockBusy`, and separate from the state directory's own `PermissionError`:
+    all three exit 1, and an operator needs to know which of the two paths they cannot reach.
+
+    Attributes:
+        args: the lock path, then the `OSError` that explains it.
+    """
+
+
 @contextlib.contextmanager
 def tree_lock(path: str, wait_s: float | None = None):
     """Hold the tree lock across a read-modify-write of the marker, or raise `LockBusy`.
@@ -82,8 +93,14 @@ def tree_lock(path: str, wait_s: float | None = None):
 
     Raises:
       LockBusy: the lock was held for the whole wait.
+      LockUnavailable: the lock file could not be opened. Raised rather than left as a bare
+        OSError so the caller cannot attribute it to the state directory, which has its own
+        PermissionError and its own remediation.
     """
-    fd = os.open(path, os.O_RDONLY | os.O_CREAT, 0o666)
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_CREAT, 0o666)
+    except OSError as exc:
+        raise LockUnavailable(path, exc) from exc
     try:
         deadline = time.monotonic() + (LOCK_WAIT_S if wait_s is None else wait_s)
         while True:
@@ -127,6 +144,14 @@ def clear_manual_plane(
         print(
             f"{busy.args[0]} is held — a deploy or a gitops tick is running. Nothing was "
             "changed; re-run this when it finishes.",
+            file=sys.stderr,
+        )
+        return 1
+    except LockUnavailable as bad_lock:
+        path, exc = bad_lock.args
+        print(
+            f"cannot open the tree lock {path}: {exc}. Nothing was changed — this command "
+            "serialises against that lock and will not write the marker without it.",
             file=sys.stderr,
         )
         return 1
