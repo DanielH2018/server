@@ -16,6 +16,7 @@ Renders the templates the same way test_staging_vm.py does. Run:
 uv run pytest ansible/tests/staging/test_etcd_drill_vm.py
 """
 
+import re
 import xml.etree.ElementTree as ET
 
 from lib import yaml_fast
@@ -156,6 +157,21 @@ def test_the_orchestrator_never_defines_the_guest():
     assert " create " in script and '"${VIRSH[@]}" create' in script
     assert "virsh define" not in script and '"${VIRSH[@]}" define' not in script
     assert "autostart" not in script
+
+
+def test_the_orchestrator_hands_timeout_a_program_not_a_function():
+    """`timeout` execs its argument, so a shell function there is a guaranteed exit 127 — the
+    first hand run failed exactly that way ("failed to run command 'ssh_guest'")."""
+    script = (ROLE / "templates" / "etcd-restore-drill-vm.sh.j2").read_text()
+    functions = set(re.findall(r"^([A-Za-z_]\w*)\(\) \{", script, re.M))
+    assert "ssh_guest" in functions
+    joined = script.replace("\\\n", " ")
+    calls = re.findall(r"\btimeout\b((?:\s+\S+)+)", joined)
+    assert calls, "expected at least one timeout call"
+    for args in calls:
+        words = [w for w in args.split() if not w.startswith("-") and "=" not in w]
+        command = next(w for w in words[1:] if w != "\\")  # words[0] is the duration
+        assert command not in functions, f"timeout cannot run the function {command}"
 
 
 def test_the_orchestrator_pins_the_guest_host_key():

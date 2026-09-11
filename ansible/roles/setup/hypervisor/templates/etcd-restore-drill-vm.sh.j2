@@ -125,12 +125,21 @@ prune_old_evidence() {
     -exec rm -rf {} + 2>/dev/null || true
 }
 
-ssh_guest() {
-  ssh -i "$IDENTITY" -o IdentitiesOnly=yes \
+# One argv for every ssh to the guest, so the timed drill call below can hand it to `timeout`
+# — which execs a program and cannot run a shell function (the first run failed with
+# "timeout: failed to run command 'ssh_guest'"). KNOWN_HOSTS is set before the first use.
+ssh_argv() {
+  printf '%s\n' ssh -i "$IDENTITY" -o IdentitiesOnly=yes \
       -o UserKnownHostsFile="$KNOWN_HOSTS" -o StrictHostKeyChecking=yes \
       -o HostKeyAlgorithms=ssh-ed25519 \
       -o BatchMode=yes -o ConnectTimeout=10 -o LogLevel=ERROR \
-      "${GUEST_USER}@${GUEST_IP}" "$@"
+      "${GUEST_USER}@${GUEST_IP}"
+}
+
+ssh_guest() {
+  local -a argv
+  mapfile -t argv < <(ssh_argv)
+  "${argv[@]}" "$@"
 }
 
 main() {
@@ -213,8 +222,10 @@ main() {
 
   log "running the drill in the guest (log: $LOG_DIR/drill.out)"
   local rc=0
+  local -a ssh_cmd
+  mapfile -t ssh_cmd < <(ssh_argv)
   timeout --signal=TERM --kill-after=30 "$RUN_TIMEOUT" \
-    ssh_guest sudo /usr/local/bin/etcd-drill-guest-run >"$LOG_DIR/drill.out" 2>&1 || rc=$?
+    "${ssh_cmd[@]}" sudo /usr/local/bin/etcd-drill-guest-run >"$LOG_DIR/drill.out" 2>&1 || rc=$?
 
   # Evidence out BEFORE teardown, on every path: the diagnosis and the thing that explains it
   # must not be removed by the same exit path (the drill script's own rule, kept here).
