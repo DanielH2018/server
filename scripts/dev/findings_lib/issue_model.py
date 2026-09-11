@@ -13,7 +13,7 @@ answers into gh argv, `findings_lib/gh_calls.py` runs them, and `findings.py` is
 
 import hashlib
 import re
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 SEVERITIES = ("high", "medium", "low")
 KINDS = ("gap", "improvement", "addition")
@@ -63,6 +63,14 @@ LABELS: dict[str, tuple[str, str]] = {
         "A session is working this issue; see the newest Claim: comment",
     ),
 }
+# `not-before:<YYYY-MM-DD>` is NOT listed here: its name carries a date, so there is one label
+# per date and `plan_sync_labels` cannot know them ahead of time. `plan_ensure_label` creates
+# one on demand with this style, the moment `open --not-before` or `defer` first needs it.
+NOT_BEFORE_PREFIX = "not-before:"
+NOT_BEFORE_STYLE = (
+    "585b70",
+    "Withheld from `next` and `claim` until the date in the name; expires on its own",
+)
 for _d in DOMAINS:
     LABELS[f"domain/{_d}"] = ("b4befe", f"Reviewer domain: {_d}")
 
@@ -149,6 +157,44 @@ def parse_verify_by(body: str) -> str | None:
 
 def label_names(issue: dict) -> set[str]:
     return {lab["name"] for lab in issue.get("labels", [])}
+
+
+def not_before_label(day: date) -> str:
+    return f"{NOT_BEFORE_PREFIX}{day.isoformat()}"
+
+
+def not_before(issue: dict) -> date | None:
+    """The date before which ``issue`` is withheld from `next` and `claim`, or None.
+
+    Read from a `not-before:<YYYY-MM-DD>` LABEL, not a body trailer, and on purpose: this
+    repo is public, so a trailer needs the author check `current_claim` does, while only a
+    collaborator can apply a label. Being a label also means it expires on its own — the
+    callers compare it to today and nobody has to clear it, which is what `manual` lacks and
+    why #1288 was claimed and released six times (#1739).
+
+    A label whose date does not parse counts as no deferral: `issue_rows` feeds the docs
+    cron, which must not fall over on a hand-typed label. Several labels take the LATEST
+    date, so a stray earlier one cannot un-defer the issue.
+    """
+    days = []
+    for name in label_names(issue):
+        if name.startswith(NOT_BEFORE_PREFIX):
+            try:
+                days.append(date.fromisoformat(name[len(NOT_BEFORE_PREFIX) :]))
+            except ValueError:
+                continue
+    return max(days) if days else None
+
+
+def is_deferred(issue: dict, today: date) -> bool:
+    """Whether ``issue`` is withheld on ``today``. `not-before: D` means workable ON D."""
+    day = not_before(issue)
+    return day is not None and today < day
+
+
+def today_utc() -> date:
+    """The date `next`, `claim` and `list` compare a not-before label to; UTC like `now_iso`."""
+    return datetime.now(UTC).date()
 
 
 def find_by_fingerprint(issues: list[dict], fp: str) -> dict | None:
@@ -402,6 +448,7 @@ def issue_rows(issues: list[dict]) -> list[dict]:
     rows = []
     for issue in issues:
         names = label_names(issue)
+        day = not_before(issue)
         rows.append(
             {
                 "number": issue["number"],
@@ -416,6 +463,7 @@ def issue_rows(issues: list[dict]) -> list[dict]:
                 "no_vetted_remediation": "no-vetted-remediation" in names,
                 "verify_by": parse_verify_by(issue.get("body") or "") is not None,
                 "manual": "manual" in names,
+                "not_before": day.isoformat() if day else None,
                 "claimed": current_claim(issue),
                 "first_seen": (issue.get("createdAt") or "")[:10],
                 "reobservations": reobservations(issue),
@@ -426,7 +474,7 @@ def issue_rows(issues: list[dict]) -> list[dict]:
 
 
 def pickable(
-    issues: list[dict], *, live_claims: set[int], pr_refs: set[int]
+    issues: list[dict], *, live_claims: set[int], pr_refs: set[int], today: date
 ) -> list[dict]:
     """The issues a session may pick up, best first.
 
@@ -436,15 +484,36 @@ def pickable(
             every one of them at once.
         pr_refs: issue numbers an open PR already says it closes. Without this, a session
             picks up work another session has finished but not yet landed.
+        today: the date a `not-before:` label is compared to. Passed in, like `when` is to
+            `plan_claim`, so the boundary is testable: an issue is offered ON its date.
     """
     rows = [
         r
         for r in issue_rows(issues)
         if not r["manual"]
+        and not _deferred_row(r, today)
         and r["number"] not in live_claims
         and r["number"] not in pr_refs
     ]
     return sorted(rows, key=sort_key)
+
+
+def deferred(issues: list[dict], *, today: date) -> list[dict]:
+    """The rows `pickable` withholds for a not-before date alone, best first.
+
+    `next` prints these beside the free set: a silently withheld issue reads as a closed one
+    to the operator looking at the backlog, which is the failure `manual` has.
+    """
+    rows = [
+        r for r in issue_rows(issues) if not r["manual"] and _deferred_row(r, today)
+    ]
+    return sorted(rows, key=sort_key)
+
+
+def _deferred_row(row: dict, today: date) -> bool:
+    return row["not_before"] is not None and today < date.fromisoformat(
+        row["not_before"]
+    )
 
 
 def sort_key(row: dict) -> tuple:

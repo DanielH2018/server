@@ -32,8 +32,11 @@ Usage::
     uv run python scripts/dev/findings.py open --title "..." --body-file f.md \\
         --severity high --kind gap [--domain network] [--file path/to/file.py:12] \\
         [--source review-2026-09-02] [--no-vetted-remediation] \\
-        [--verify-by 'Run probe.py health <svc>; it should exit 0.'] [--dry-run]
+        [--verify-by 'Run probe.py health <svc>; it should exit 0.'] \\
+        [--not-before 2026-09-12] [--dry-run]
     uv run python scripts/dev/findings.py touch 688 [--source review-2026-09-02]
+    uv run python scripts/dev/findings.py defer 688 --until 2026-09-12
+    uv run python scripts/dev/findings.py defer 688 --clear
     uv run python scripts/dev/findings.py claim 688 701 --worktree worktree-foo \\
         [--session id] [--force]
     uv run python scripts/dev/findings.py release 688 --worktree worktree-foo [--reason "..."]
@@ -78,17 +81,27 @@ same failure, and `claim` leaves a stale claim standing rather than reaping on a
 the good claims in the same batch.
 
 PICKING UP WORK. `next` prints EVERY issue a session may claim, best severity first,
-withholding `manual` issues, issues a LIVE claim already holds, and issues an open PR already
-says it closes. An issue whose claim is stale IS offered, marked with who holds it — `claim`
-reaps that claim on the way past, and `reap` clears every one of them at once. `--limit N`
-bounds the list; there is no default bound, because one truncated the free set silently and
-the reader took ten rows for all of them.
+withholding `manual` issues, issues deferred to a later date, issues a LIVE claim already
+holds, and issues an open PR already says it closes. An issue whose claim is stale IS
+offered, marked with who holds it — `claim` reaps that claim on the way past, and `reap`
+clears every one of them at once. `--limit N` bounds the list; there is no default bound,
+because one truncated the free set silently and the reader took ten rows for all of them.
+
+DEFERRING AN ISSUE. `defer <n> --until <date>` (or `open --not-before <date>`) puts a
+`not-before:<YYYY-MM-DD>` label on the issue. `next` and `claim` withhold it while today is
+before that date and offer it ON the date, with nothing to clear: the label expires by
+comparison, which `manual` cannot. `next` still names a deferred issue — under a `deferred:`
+line, and on stderr under `--json` so the array stays the free set — because a silently
+withheld issue reads as a closed one to whoever looks at the backlog. `defer <n> --clear`
+lifts it early. This exists because #1288, workable only once seven days of a metric existed,
+was claimed, read and released unchanged six times in four days (#1739).
 
 Exit codes: 0 done; 1 gh failed, or `reap` refused a git read failure rather than call it
 "nothing is claimed"; 2 bad arguments, which includes a `--worktree` name the claim trailer
 could not carry; 3 nothing was written because the issue refuses it — closed, `manual`,
-outside the register, held by another worktree, not claimed, or lost a race to another
-claim — or because `claim`'s own `--worktree` would read stale at birth.
+deferred to a later date, outside the register, held by another worktree, not claimed, or
+lost a race to another claim — or because `claim`'s own `--worktree` would read stale at
+birth.
 """
 
 import argparse
@@ -121,16 +134,22 @@ from dev.findings_lib.gh_calls import (
 from dev.findings_lib.issue_model import (
     NO_REOPEN,
     current_claim,
+    deferred,
     now_iso,
     find_by_fingerprint,
     fingerprint,
     issue_rows,
     label_names,
+    not_before_label,
     pickable,
     sort_key,
+    today_utc,
 )
 from dev.findings_lib.plans import (
+    ClaimRefused,
     plan_close,
+    plan_defer,
+    plan_ensure_label,
     plan_open,
     plan_release,
     plan_sync_labels,
@@ -186,7 +205,15 @@ def cmd_open(args: argparse.Namespace, tools: FindingsTools) -> int:
         labels.append("no-vetted-remediation")
     # `gh issue create --label` fails on a label the repo does not have, so the first `open`
     # in a fresh repo has to create the label set before it can use it.
-    run(plan_sync_labels(_existing_labels(tools)), args.dry_run, tools)
+    have = _existing_labels(tools)
+    run(plan_sync_labels(have), args.dry_run, tools)
+    if args.not_before:
+        # Dated, so not in LABELS and not synced above; created the first time it is used.
+        run(
+            plan_ensure_label(not_before_label(args.not_before), have),
+            args.dry_run,
+            tools,
+        )
     existing = find_by_fingerprint(load_issues("all", tools), fp)
     outcome, code, plans = plan_open(
         existing,
@@ -196,6 +223,7 @@ def cmd_open(args: argparse.Namespace, tools: FindingsTools) -> int:
         fp=fp,
         source=args.source,
         verify_by=args.verify_by,
+        defer_until=args.not_before,
     )
     if outcome == "created":
         if args.dry_run:
@@ -248,6 +276,28 @@ def cmd_touch(args: argparse.Namespace, tools: FindingsTools) -> int:
     run(plans, args.dry_run, tools)
     escalated = any(p[:2] == ["issue", "edit"] for p in plans)
     print(f"#{args.number} touched{' and escalated' if escalated else ''}")
+    return 0
+
+
+def cmd_defer(args: argparse.Namespace, tools: FindingsTools) -> int:
+    """Handles the ``defer`` subcommand: sets, moves or clears an issue's not-before date.
+
+    Returns:
+        3 if the issue is closed, or ``--clear`` finds no deferral to clear; 0 otherwise.
+    """
+    issue = _load_issue(args.number, tools)
+    try:
+        plans = plan_defer(
+            issue, until=args.until, existing_labels=_existing_labels(tools)
+        )
+    except ClaimRefused as exc:
+        print(f"#{args.number} refused: {exc.reason}")
+        return 3
+    run(plans, args.dry_run, tools)
+    what = (
+        "deferral cleared" if args.clear else f"deferred until {args.until.isoformat()}"
+    )
+    print(f"#{args.number} {what}")
     return 0
 
 
@@ -324,6 +374,10 @@ def cmd_sync_labels(args: argparse.Namespace, tools: FindingsTools) -> int:
     return 0
 
 
+def _still_deferred(row: dict, today) -> bool:
+    return bool(row["not_before"]) and today.isoformat() < row["not_before"]
+
+
 def cmd_list(args: argparse.Namespace, tools: FindingsTools) -> int:
     """Handles the ``list`` subcommand: prints open findings as a table or JSON.
 
@@ -332,6 +386,7 @@ def cmd_list(args: argparse.Namespace, tools: FindingsTools) -> int:
         tools: the process boundaries the issue read goes through.
     """
     rows = sorted(issue_rows(load_issues(args.state, tools)), key=sort_key)
+    today = today_utc()
     if args.json:
         print(json.dumps(rows, indent=2))
         return 0
@@ -345,6 +400,8 @@ def cmd_list(args: argparse.Namespace, tools: FindingsTools) -> int:
                 ("no-vetted-remediation", r["no_vetted_remediation"]),
                 ("verify-by", r["verify_by"]),
                 ("manual", r["manual"]),
+                # Shown only while it still withholds: past its date the label is inert.
+                (f"deferred until {r['not_before']}", _still_deferred(r, today)),
                 (f"claimed:{r['claimed']}", bool(r["claimed"])),
             )
             if on
@@ -381,9 +438,20 @@ def cmd_next(args: argparse.Namespace, tools: FindingsTools) -> int:
             "warning: worktree read failed; withholding every currently claimed issue\n"
         )
         live = {i["number"] for i in issues if current_claim(i)}
-    rows = pickable(issues, live_claims=live, pr_refs=open_pr_refs(tools))[: args.limit]
+    today = today_utc()
+    rows = pickable(issues, live_claims=live, pr_refs=open_pr_refs(tools), today=today)
+    rows = rows[: args.limit]
+    # Named, not hidden: withheld silently, a deferred issue reads as a closed one. Under
+    # `--json` the note goes to stderr, because the array IS the free set an orchestrator
+    # claims (`issue-fanout`), and a deferred row inside it would be #1739 inverted.
+    held_back = [
+        f"deferred: #{r['number']} until {r['not_before']}  {r['title']}"
+        for r in deferred(issues, today=today)
+    ]
     if args.json:
         print(json.dumps(rows, indent=2))
+        for line in held_back:
+            sys.stderr.write(line + "\n")
         return 0
     for r in rows:
         # A stale claim does not withhold the issue, so say who holds it and what clears it.
@@ -402,6 +470,8 @@ def cmd_next(args: argparse.Namespace, tools: FindingsTools) -> int:
         )
     if not rows:
         print("nothing to pick up")
+    for line in held_back:
+        print(line)
     return 0
 
 
@@ -432,6 +502,7 @@ def main(argv: list[str] | None, tools: FindingsTools) -> int:
         "list": cmd_list,
         "open": cmd_open,
         "touch": cmd_touch,
+        "defer": cmd_defer,
         "claim": cmd_claim,
         "release": cmd_release,
         "claims": cmd_claims,

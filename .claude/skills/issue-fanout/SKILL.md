@@ -25,10 +25,19 @@ cron and no hook does, and without it a stale claim sits on the register indefin
 refuses outright rather than releasing anything if the git read fails, so a non-zero exit here
 is a stop, not a warning.
 
-`next` withholds `manual` issues, anything a LIVE claim holds, and anything an open PR already
-closes — everything it prints is free to take. An issue whose claim is stale is offered,
-marked `[stale claim by ...]`; `claim` reaps that claim itself on the way past, so a refusal
-from `claim` means the claim is live and another session is really working it.
+`next` withholds `manual` issues, issues deferred to a later date, anything a LIVE claim
+holds, and anything an open PR already closes — every row it prints is free to take. An issue
+whose claim is stale is offered, marked `[stale claim by ...]`; `claim` reaps that claim itself
+on the way past, so a refusal from `claim` means the claim is live and another session is
+really working it.
+
+A deferred issue is named under a `deferred: #<n> until <date>` line (on stderr with
+`--json`, so the array stays the free set) and is not in the batch. Do not dispatch an agent
+at it, and do not clear the date to get at it: the date is the issue's own precondition — a
+metric window, a cron that has not fired — and #1288 cost six dispatches reaching that
+conclusion before `next` could say it (#1739). When an agent finds an issue is date-gated,
+`findings.py defer <n> --until <date>` records it, and `next` offers the issue again on that
+date with nothing to clear.
 
 Group the results so that **no two agents touch the same Ansible role**. Read each issue's
 cited file to find its role; two agents editing one role concurrently is the hazard
@@ -88,8 +97,8 @@ worktree name before spawning it either. Claiming under a name that doesn't exis
 read as stale immediately. The orchestrator's own worktree is live for the whole fan-out, so a
 claim under it stays live for the whole fan-out.
 
-Exit 3 means at least one issue in that call was refused — closed, `manual`, held by another
-worktree, or lost a race. Drop the refused issue from its batch and say so; the rest of the
+Exit 3 means at least one issue in that call was refused — closed, `manual`, deferred to a
+later date, held by another worktree, or lost a race. Drop the refused issue from its batch and say so; the rest of the
 batch is still claimed.
 
 Done when: every issue that will be spawned has a live claim under the orchestrator's
