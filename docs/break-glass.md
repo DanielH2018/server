@@ -168,7 +168,7 @@ what each source records — not what "should" have happened.
 
 | Runbook | Drilled? | Evidence |
 |---|---|---|
-| k3s etcd restore (full, onto a replacement host) | **No.** The `--list-only` leg runs weekly by cron and has been verified since 2026-08-22 (credentials work, a snapshot downloads and decompresses); the full restore — reading the object graph back out — has never been performed. | `docs/k3s-etcd-restore.md`: "the restore is still NOT drilled" |
+| k3s etcd restore (full, onto a replacement host) | **Partly, and ongoing.** The `--list-only` leg runs weekly by cron and has been verified since 2026-08-22. The full restore first passed 2026-09-11 — `offbox-daniel-box-1789094702.zip` restored in a throwaway guest on daniel-server and served 8 namespaces, 72 Deployments, 45 PVCs, 48 CRDs and 51 Secrets — and runs monthly since. Still not drilled: the restore onto a REPLACEMENT HOST, the agent rejoin and the Longhorn reattach. | `docs/k3s-etcd-restore.md`, *Pass record* |
 | Longhorn volume restore | **Yes, and ongoing.** First attempt 2026-08-15 failed on a B2 cap (not the data); retry 2026-08-16 passed (`traefik-acme`, ~21s, verified real data). Scheduled nightly since 2026-08-19, rotating one volume per night over the full backup set since 2026-08-20. | `docs/longhorn-disaster-recovery.md`: "Assurance gap (known, narrowing)" |
 | Kopia disaster recovery | **N/A — tool retired 2026-08-14.** Doc kept as history only; do not follow it for a live recovery. | `docs/adr/0014-kopia-retired-longhorn-owns-the-b2-credentials.md` |
 | SOPS decrypt with the recovery age key alone (no host key) | **No record found.** No drill of this specific path is recorded anywhere in the repo. | absence of any citation — see *Annual drill* below |

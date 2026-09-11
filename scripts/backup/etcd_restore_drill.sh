@@ -28,10 +28,12 @@
 #
 # WHAT IT PROVES, AND WHAT IT CANNOT. It proves the snapshot is complete, readable by this k3s
 # version, and that the Kubernetes objects come back — namespaces, workloads, PVCs, the object
-# graph a rebuild depends on. It does NOT prove Secrets are usable: since 2026-08-20 those are
-# encrypted at rest, and this drill runs against a host whose own copy of the key is already in
-# place, so it never exercises the path a rebuilt host takes. The drill reports Secret COUNT
-# (presence) and deliberately never decodes one.
+# graph a rebuild depends on. Since the drill moved into a throwaway guest (#1175) it proves
+# one thing more, and the guest is what makes it evidence: that host has no encryption key of
+# its own, so the API server can only list Secrets by using the key the snapshot's own bootstrap
+# blob carried — which is the path a rebuilt host takes. The drill still reports Secret COUNT
+# (presence) and deliberately never decodes one. Run beside a live k3s it would prove less,
+# because the local key would be in place already.
 #
 # Corrected 2026-08-23: this comment used to say the key "is not in the snapshot". It is — the
 # contents of encryption-config.json ride inside the snapshot's /bootstrap blob (verified against
@@ -40,12 +42,15 @@
 # that reason (LIVE_TOKEN below, and the --cluster-reset note further down). An out-of-band copy
 # was taken 2026-08-23; docs/k3s-etcd-restore.md carries the evidence and the re-verify command.
 #
-# STATUS, 2026-08-22. `--list-only` WORKS and is the useful part today: it proved the off-box
-# leg end to end for the first time — credentials, bucket, folder, download and decompression
-# of offbox-daniel-box-1787366702.zip, the 02:45 snapshot. The FULL drill does NOT yet pass on
-# daniel-box, and the reason is structural rather than a bug in this script: `k3s server
-# --cluster-reset` assumes it is the only k3s on the host, and every workaround here found the
-# next thing it assumes. In order:
+# STATUS, 2026-09-11. The FULL drill passes, in a throwaway guest: offbox-daniel-box-1789094702.zip
+# restored and served 8 namespaces, 72 Deployments, 45 PVCs, 48 CRDs and 51 Secrets, 50 seconds
+# end to end. `--list-only` works too and remains the weekly cheap proof of the off-box leg on
+# daniel-box (first proven 2026-08-22 with offbox-daniel-box-1787366702.zip).
+#
+# It does NOT pass beside a live k3s, and that is structural rather than a bug here: `k3s server
+# --cluster-reset` assumes it is the only k3s on the host, and every workaround found the next
+# thing it assumes. Items 1-4 were fixed on 2026-08-22 and items 1, 4 and 5 corrected on
+# 2026-09-11 from the v1.36.4 source once the guest could reproduce them cleanly. In order:
 #
 #   1. it needs <data-dir>/server/token to EXIST; --token-file does not satisfy it — and the
 #      file is only a pre-check: the VALUE must arrive as --token or K3S_TOKEN, or k3s mints a
@@ -64,12 +69,10 @@
 #      2026-09-11: this one was never the live k3s. It reproduced in a guest with no k3s at all
 #      and is a port collision inside this script's own isolation flags — see the port block.
 #
-# Nothing in that list is fixable from out here, so DON'T keep patching this script against a
-# live k3s. Two paths actually finish the job, and both are in docs/k3s-etcd-restore.md: run
-# this on a host with no k3s of its own (a throwaway VM, where every item above evaporates),
-# or take the scheduled outage and do the real documented restore. Throughout all five
-# failures the live cluster stayed Ready and every write landed in /var/tmp — the isolation
-# held, which is the one thing worth trusting from this exercise.
+# Item 5 was the only one that could not be diagnosed from daniel-box, because a live k3s
+# explained it away; in the guest it turned out to be a collision among this script's OWN
+# listeners. Throughout every failure the live cluster stayed Ready and every write landed in
+# /var/tmp — the isolation held, which is what made all of this safe to iterate on.
 #
 # THE FULL DRILL RUNS IN A THROWAWAY GUEST since issue #1175 (path 1). roles/setup/hypervisor
 # installs `etcd-restore-drill-vm` on daniel-server: a monthly root cron that builds a transient

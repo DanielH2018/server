@@ -1,15 +1,18 @@
 # Restoring the k3s control plane from an off-box etcd snapshot
 
-**Status, 2026-08-22: the off-box leg is proven; the restore is still NOT drilled.** Written
-when the off-box snapshot cron landed (2026-08-16). Unlike `kopia-disaster-recovery.md`, no
-restore has been performed from these snapshots — treat every step below as needing
-verification the first time it is used, and update this file with what actually happened.
+**Status, 2026-09-11: the restore is drilled.** `offbox-daniel-box-1789094702.zip` restored in
+a throwaway guest on daniel-server and served its object graph — 8 namespaces, 72 Deployments,
+45 PVCs, 48 CRDs, 51 Secrets — in 50 seconds end to end (issue #1175). It runs monthly from
+then on. The steps below that the drill does not exercise are still unverified: the agent
+rejoin, the Longhorn reattach, and the restore onto a replacement host rather than into a
+scratch data-dir.
 
 **The `--list-only` leg is no longer a hand check.** `k3s_etcd_restore_drill_cron` runs it weekly
 on daniel-box (Mondays 10:20, armed by `k3s_etcd_restore_drill_armed`, PR #531), and
 `check_etcd_restore_drill()` in monitor-bridge reads its stamp fail-closed onto a Kuma tile
-(PR #535). The headline above still stands: what recurs is the *listing* leg, and the full
-restore has still never been performed. Do not read a green tile as a drilled restore.
+(PR #535). That tile still covers the listing leg alone — the full drill has its own,
+`etcd Restore Drill (full)`, pushed monthly from daniel-server. Neither tile says anything
+about the steps after the object graph comes back.
 
 What was first verified on 2026-08-22, with `scripts/backup/etcd_restore_drill.sh --list-only` and the runs
 that followed it:
@@ -19,8 +22,9 @@ that followed it:
 - `offbox-daniel-box-1787366702.zip` — the 02:45 snapshot that day — **downloaded and
   decompressed**. So the nightly cron is producing artefacts that are retrievable and intact
   enough for k3s to open.
-- Nothing beyond that. The object graph has never been read back out of one of these snapshots,
-  which is the claim a restore actually rests on.
+- Reading the object graph back out — the claim a restore actually rests on — was still open
+  at that point. It was closed on 2026-09-11 by the drill in the guest; the pass record below
+  carries the evidence.
 
 **A scratch restore alongside the running k3s does not work, and is not worth more attempts.**
 `k3s server --cluster-reset` assumes it is the only k3s on the host. Five obstacles were found
@@ -93,7 +97,7 @@ daniel-box and its monitor-bridge tile are unchanged.
 
 | Date | Snapshot | Where | Result |
 |---|---|---|---|
-| _(first run pending — fill in from the first passing hand run)_ | | `etcd-drill` guest on daniel-server | |
+| 2026-09-11 | `offbox-daniel-box-1789094702.zip` | `etcd-drill` guest on daniel-server | **Pass.** 8 namespaces, 72 Deployments, 45 PVCs, 48 CRDs, 51 Secrets; 50 s end to end. First full restore ever performed from these snapshots (#1175). |
 
 ## What these snapshots do and do not cover
 
