@@ -149,15 +149,18 @@ def test_the_pin_is_enforced_everywhere_except_the_deploy_pipeline():
     )
 
 
-def test_the_hooks_use_the_uv_that_exists_on_both_hosts():
+def test_the_hooks_use_the_uv_that_exists_without_the_tooling_tag():
     """There are exactly two correct absolute uv paths, and picking the wrong one fails silently.
 
-    `/usr/local/bin/uv` is a symlink created on daniel-box only. The Claude hooks are the one
-    group that also runs on daniel-server, where that path does not exist (verified 2026-08-16:
-    `ls -l /usr/local/bin/uv` -> "No such file or directory"), so they must use
-    `/home/<user>/.local/bin/uv`, which exists on both and is what their sibling hooks already
-    use. The hooks route stderr to /dev/null and exit 0 by design, so the wrong path there is
-    invisible — this test is the only thing that would notice.
+    `/usr/local/bin/uv` is a symlink the `tooling` tag of `initial_setup` creates, gated on
+    `dev_tooling_hosts` (daniel-box and daniel-server, `group_vars/all.yml`). It exists on both
+    prod nodes: measured on daniel-server 2026-09-11, `ls -l /usr/local/bin/uv` ->
+    `/home/ubuntu/.local/bin/uv`, created 2026-08-17. The Claude hooks avoid it anyway. They
+    must also work on a host that never ran the `tooling` tag, and `/home/<user>/.local/bin/uv`
+    exists wherever uv is installed without depending on a `become: true` symlink task having
+    run. It is what their sibling hooks already use. The hooks route stderr to /dev/null and
+    exit 0 by design, so the wrong path there is invisible — this test is the only thing that
+    would notice.
     """
     offenders = [
         f"{p.name}:{n}: {line.strip()[:100]}"
@@ -166,8 +169,9 @@ def test_the_hooks_use_the_uv_that_exists_on_both_hosts():
         if "/usr/local/bin/uv" in line and not line.strip().startswith("#")
     ]
     assert not offenders, (
-        "the Claude hooks run on daniel-server too, where /usr/local/bin/uv does not exist. Use "
-        "/home/<user>/.local/bin/uv:\n  " + "\n  ".join(offenders)
+        "the Claude hooks must work on a host that never ran the `tooling` tag, which is what "
+        "creates /usr/local/bin/uv. Use /home/<user>/.local/bin/uv:\n  "
+        + "\n  ".join(offenders)
     )
 
 

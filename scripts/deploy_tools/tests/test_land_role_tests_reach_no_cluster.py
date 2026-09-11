@@ -108,3 +108,47 @@ def test_a_role_test_change_ends_nothing_to_deploy(landing):
 def test_a_role_task_change_still_ends_needs_manual_apply(landing):
     outcome = _verdict(landing, [_ROLE_TASKS])
     assert (outcome.verdict, outcome.rc) == ("needs-manual-apply", 1)
+
+
+# The declared-role half (issue #1735). #1734 dropped a role's tests/ from `shared_roles`
+# only; a DECLARED role's tests/ still derived that role's deploy tag, so a pytest-only PR
+# to monitor-bridge deployed monitor-bridge.
+_DECLARED_TESTS = "ansible/roles/k8s/monitor-bridge/tests/test_b2_storage.py"
+_DECLARED_FILES = "ansible/roles/k8s/monitor-bridge/files/checks/service.py"
+
+
+def test_the_declared_paths_under_test_still_exist():
+    """Non-vacuity for the declared half: the role must keep its containers_list entry."""
+    missing = [
+        p for p in (_DECLARED_TESTS, _DECLARED_FILES) if not (REPO_ROOT / p).exists()
+    ]
+    assert not missing, f"paths moved, so these cases check nothing: {missing}"
+    assert "monitor-bridge" in land_tags.declared_tags(), (
+        "monitor-bridge lost its containers_list entry, so the declared-role cases below "
+        "test the shared-role path instead"
+    )
+
+
+def test_a_declared_role_test_file_derives_no_tag():
+    """The accept half of #1735: no tag, so no rollout, restart window or health gate."""
+    assert land_tags.tag_for(_DECLARED_TESTS) is None
+    assert land_tags.derive([_DECLARED_TESTS], 1) == land_tags.Derivation(
+        [], land_tags.DeriveSource.PR
+    )
+
+
+def test_a_declared_role_shipped_file_still_derives_its_tag():
+    """The reject half: one directory over from tests/, the tag is still owed."""
+    assert land_tags.tag_for(_DECLARED_FILES) == "monitor-bridge"
+    assert land_tags.derive([_DECLARED_FILES], 1).tags == ["monitor-bridge"]
+
+
+def test_a_declared_role_test_file_beside_a_real_change_does_not_excuse_it():
+    assert land_tags.derive([_DECLARED_TESTS, _DECLARED_FILES], 2).tags == [
+        "monitor-bridge"
+    ]
+
+
+def test_a_declared_role_test_change_ends_nothing_to_deploy(landing):
+    outcome = _verdict(landing, [_DECLARED_TESTS])
+    assert (outcome.verdict, outcome.rc) == ("nothing-to-deploy", 0)
