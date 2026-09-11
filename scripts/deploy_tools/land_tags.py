@@ -144,9 +144,20 @@ def role_for(path: str) -> str | None:
 
 
 def tag_for(path: str, declared: set[str] | None = None) -> str | None:
-    """The deploy tag a changed path maps to, or None."""
+    """The deploy tag a changed path maps to, or None.
+
+    A role's own `tests/` maps to no tag (issue #1735). PR #1734 dropped that path from
+    `shared_roles` only, to keep the change to what land.sh reports; dropping it here changes
+    what land.sh DEPLOYS. That is the intended half of the fix: a tests-only PR to a declared
+    role used to cost a rollout, a restart window and a health gate for pytest guards nothing
+    stages to the cluster. The deployer's own `_is_test_only_path` in `deploy_changes.py`
+    already drops every test path before it maps changes to services, so this is the two
+    mappers agreeing rather than a new rule.
+    """
     role = role_for(path)
-    if role is None:
+    # DECIDED: the tag is dropped, not only the shared-role note. The tick re-asserts a role's
+    # current manifests on its next image bump anyway, and a pytest guard reaches no cluster.
+    if role is None or is_role_test_path(path):
         return None
     declared = declared_tags() if declared is None else declared
     return role if role in declared else None
@@ -156,8 +167,8 @@ def is_role_test_path(path: str) -> bool:
     """Whether a changed path is a role's own `tests/` file.
 
     Answers about segment 4 of `ansible/roles/<plane>/<role>/<sub>/...` alone, so it is only
-    meaningful for a path `role_for` has already named a role for. `shared_roles` is the caller,
-    which drops such a path: a role's `tests/` is work no deploy applies, the same class as the
+    meaningful for a path `role_for` has already named a role for. `shared_roles` and `tag_for`
+    are the callers, and both drop such a path: a role's `tests/` is work no deploy applies, the same class as the
     `.md` rule in `role_for` (#1701). Pytest guards over the role's `files/*.py` are staged by
     nothing — `ansible/tests/repo/test_no_role_ships_a_test_file.py` holds that tree-wide — so
     they reach no cluster and no deploy can apply them. `_is_real_change` in
