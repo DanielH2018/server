@@ -149,6 +149,25 @@ def replica_offender_names(offenders: Sequence[tuple[dict, float]]) -> str:
     )
 
 
+def stalled_rollout_names(offenders: Sequence[tuple[dict, float]]) -> str:
+    """Name a stalled-rollout vector as `deployment(updated/desired)`, sorted by name.
+
+    The value carried alongside the labels is the UPDATED replica count; the desired count comes
+    from the `desired` label the check attaches, because a `<` comparison in PromQL returns the
+    left-hand series alone. A bare `authelia(0)` would read as "zero replicas", which is a
+    different fault from "zero of one replicas carry the new spec".
+    """
+    return ", ".join(
+        "%s(%d/%s)"
+        % (
+            labels.get("deployment", "?"),
+            int(value),
+            labels.get("desired", "?"),
+        )
+        for labels, value in sorted(offenders, key=lambda o: o[0].get("deployment", ""))
+    )
+
+
 def k8s_workloads_verdict(
     total: float | None,
     offenders: list[tuple[dict, float]],
@@ -157,6 +176,7 @@ def k8s_workloads_verdict(
     ds_total: float | None = None,
     ds_offenders: Sequence[tuple[dict, float]] = (),
     min_daemonsets: float | None = None,
+    stalled_offenders: Sequence[tuple[dict, float]] = (),
 ) -> tuple[bool, str]:
     """Pure: (ok, msg) from the deployment-series COUNT and the unavailable-replica offenders.
 
@@ -177,6 +197,19 @@ def k8s_workloads_verdict(
     shape as the deployment arm; min_daemonsets left None means the caller didn't supply
     DaemonSet data (existing callers/tests), so this arm is skipped rather than treated as zero
     DaemonSets.
+
+    stalled_offenders is the stalled-rollout arm (2026-09-11, #1783). Every arm above measures
+    whether the pods a Deployment HAS are healthy, and a rollout whose new ReplicaSet never gets
+    a pod satisfies all of them: the old pod stays Ready, so `unavailable` is 0, nothing
+    restarts, and the tile reads "N k8s workloads healthy" while the cluster runs the PREVIOUS
+    spec. `updated` is the only series that moves in that state.
+
+    It is the complement of the shape the 2026-09-10 Authelia stall took, not a second reading of
+    it: kube-state-metrics has authelia at updated=1, available=0, unavailable=1 from 12:52 to
+    13:03 that day, so that Deployment replaced its pod (Recreate) and failed to bring the new
+    one up. The unavailable-replica arm sees that shape; nothing saw this one. The caller gates
+    this arm on a streak, because mid-rollout `updated < desired` is the normal state of every
+    healthy Deployment.
     """
     if total is None:
         return False, (
@@ -204,6 +237,12 @@ def k8s_workloads_verdict(
     if offenders:
         return False, "k8s workloads with unavailable replicas: %s" % (
             replica_offender_names(offenders)
+        )
+    if stalled_offenders:
+        return False, (
+            "k8s rollout stalled (updated/desired replicas): %s — the Deployment's new "
+            "ReplicaSet is not coming up, so the running pods serve the PREVIOUS spec"
+            % stalled_rollout_names(stalled_offenders)
         )
     if ds_offenders:
         named = ", ".join(
