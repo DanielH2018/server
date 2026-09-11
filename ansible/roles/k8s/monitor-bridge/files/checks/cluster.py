@@ -16,6 +16,7 @@ from collections.abc import Callable
 from bridge.config import Config
 import bridge.net
 import bridge.streaks
+import checks.cluster_rollout
 import checks.logs
 from verdicts.cluster import (
     traefik_latency_verdict,
@@ -482,6 +483,9 @@ def check_k8s_workloads(cfg: Config, fetch=None, scalar=None) -> tuple[bool, str
         base=cfg.CLUSTER_PROM_URL,
         source="cluster prometheus",
     )
+    stalled_offenders, stall_note = checks.cluster_rollout.held_stalled_offenders(
+        cfg, checks.cluster_rollout.stalled_rollout_offenders(cfg, fetch)
+    )
     offenders, replica_note = _held_replica_offenders(cfg, offenders)
     ok, msg = k8s_workloads_verdict(
         total,
@@ -491,6 +495,7 @@ def check_k8s_workloads(cfg: Config, fetch=None, scalar=None) -> tuple[bool, str
         ds_total,
         ds_offenders,
         cfg.K8S_MIN_DAEMONSETS,
+        stalled_offenders,
     )
     # Folded into this monitor rather than given its own: a new Kuma monitor needs a new push
     # token in SOPS, and this arm answers the same question the DaemonSet arm does — is the
@@ -516,7 +521,8 @@ def check_k8s_workloads(cfg: Config, fetch=None, scalar=None) -> tuple[bool, str
             source="cluster prometheus",
         ),
     )
-    tail = ", %s" % replica_note if replica_note else ""
+    notes = [n for n in (replica_note, stall_note) if n]
+    tail = ", %s" % ", ".join(notes) if notes else ""
     if not res_ok:
         # The resource fault wins the message: an unschedulable-by-design cluster is more urgent
         # than whatever the workload arm has to say, and the workload arm's own text is preserved

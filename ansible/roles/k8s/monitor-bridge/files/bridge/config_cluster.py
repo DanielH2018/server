@@ -35,6 +35,7 @@ class ClusterConfig:
     K8S_MIN_WORKLOADS: int
     K8S_MIN_DAEMONSETS: int
     K8S_WORKLOADS_CONSECUTIVE: int
+    K8S_ROLLOUT_STALL_CONSECUTIVE: int
     LONGHORN_CONSECUTIVE: int
     PVC_MAX_PCT: float
     PVC_MIN_CLAIMS: int
@@ -169,6 +170,18 @@ def cluster_config(
         # than a workload that cannot come back. The crash-loop, DaemonSet, floor and log arms
         # get no grace and still page on cycle one.
         K8S_WORKLOADS_CONSECUTIVE=_int("K8S_WORKLOADS_CONSECUTIVE", "3"),
+        # Consecutive cycles a Deployment may sit with fewer UPDATED replicas than it wants
+        # before check_k8s_workloads' stalled-rollout arm pages (#1783). The arm above reads
+        # `unavailable`, which counts replicas the Deployment HAS; this one reads `updated`,
+        # which counts replicas carrying the current spec. A new ReplicaSet that never gets a
+        # pod while the old one keeps serving moves the second and not the first, so every
+        # other arm reads green while the cluster runs the previous spec.
+        # 3 cycles = 15 min at INTERVAL=300, chosen against the series rather than by feel:
+        # over the 16.9 days Prometheus retained on 2026-09-11, `updated < spec` occurred for
+        # 1-2 five-minute samples at a time (ordinary rollouts) and NEVER for three consecutive
+        # ones. It is also longer than the 300s the playbook's own `rollout status` waits, so a
+        # rollout the playbook is still waiting on cannot reach it.
+        K8S_ROLLOUT_STALL_CONSECUTIVE=_int("K8S_ROLLOUT_STALL_CONSECUTIVE", "3"),
         # Hysteresis for check_longhorn_volumes. A node drain and the Sunday 07:30 reboot both
         # degrade every volume on the departing node BY DESIGN, so a single breaching cycle must
         # not page — 3 cycles at the bridge cadence is longer than either takes to settle. Same

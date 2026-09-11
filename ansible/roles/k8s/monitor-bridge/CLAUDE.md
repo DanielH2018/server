@@ -739,6 +739,26 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     is blind, which delaying helps nobody. `test_check_k8s_workload_replicas.py` proves the
     selectivity by running a crash loop and a rolling replica in ONE cycle — a blanket streak
     would pass a naive accept/reject pair while silently delaying every crash-loop page.
+    **A stalled rollout is its own arm** (added 2026-09-11, #1783):
+    `kube_deployment_status_replicas_updated < on(namespace, deployment)
+    kube_deployment_spec_replicas`, gated by `K8S_ROLLOUT_STALL_CONSECUTIVE` (3). The arm above
+    reads `unavailable`, which counts the replicas a Deployment HAS; this one reads `updated`,
+    which counts the replicas carrying the CURRENT spec. A new ReplicaSet that never gets a pod
+    while the old one keeps serving moves the second and not the first, so every other arm here
+    reads `N k8s workloads healthy` while the cluster runs the previous spec.
+    **It is the complement of the 2026-09-10 Authelia stall, not a second reading of it.**
+    kube-state-metrics has authelia at `updated=1, available=0, unavailable=1` from 12:52 to
+    13:03 that day, so that Deployment terminated its pod and failed to bring the replacement
+    up — the unavailable-replica arm's shape, and the one the 300s `rollout status` wait failed
+    on. Nothing watched the other shape, which is what this closes.
+    The gate came from the series, not from feel: over the 16.9 days Prometheus retained on
+    2026-09-11, `updated < spec` occurred for 1-2 five-minute samples at a time and NEVER for
+    three consecutive ones, so at 3 cycles this arm had no false page in that window. It is also
+    longer than the 300s the playbook itself waits. The desired count comes from a SECOND query,
+    because a PromQL `<` returns the left-hand series alone — `authelia(0/1)` reads as "zero of
+    one replicas carry the new spec", where a bare `authelia(0)` would read as "zero replicas",
+    a different fault. The two helpers live in `checks/cluster_rollout.py` rather than
+    `checks/cluster.py`, which is at the 600-line module cap.
     **A second arm covers DaemonSets** (added 2026-08-13):
     `kube_daemonset_status_number_unavailable`, with its own `K8S_MIN_DAEMONSETS` floor (9) and
     the same fail-closed-on-absent-series logic — a Deployment-shaped census cannot see promtail,
