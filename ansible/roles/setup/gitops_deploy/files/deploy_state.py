@@ -1,8 +1,8 @@
 # ansible/roles/setup/gitops_deploy/files/deploy_state.py
 """The deployer's state directory: the marker files under /var/lib/gitops-deploy.
 
-`DeployerState` is the whole of it — one object with a typed accessor per marker, over the
-fifteen files that record what this host believes. `gitops_deploy.py` still declares the path
+`DeployerState` is the whole of it — one object with a typed accessor per marker, over every
+file that records what this host believes (`MARKERS` is the list). `gitops_deploy.py` still declares the path
 literals, because an Ansible default is pinned against one of them; this module holds the
 reading and the writing.
 
@@ -55,11 +55,11 @@ class ManualPlaneEntry(NamedTuple):
 class DeployerState:
     """The marker files under /var/lib/gitops-deploy, as one object with typed accessors.
 
-    Twenty files record what this host believes — the held SHA, the plane that failed, how
-    long it has been behind origin, one dedupe marker per alert channel, the undelivered-alert
-    queue, the staging tick ledger and the operator's staging override — through twenty
-    module constants and a pair of bare `_read_marker`/`_write_marker` helpers, so nothing
-    described the state as a whole. This is that description. The paths, the file contents and
+    The files record what this host believes — the held SHA, the plane that failed, how long
+    it has been behind origin, the setup roles no tick can apply, one dedupe marker per alert
+    channel, the undelivered-alert queue, the staging tick ledger and the operator's staging
+    override — and they were reached through one module constant each plus a pair of bare
+    `_read_marker`/`_write_marker` helpers, so nothing described the state as a whole. This is that description. The paths, the file contents and
     the empty-vs-missing semantics are unchanged; `gitops_deploy.py` still holds the literal
     constants because the tick ledger's Ansible default is pinned against one of them and the
     test suite repoints the rest, and `tests/test_deployer_state.py` asserts the two agree.
