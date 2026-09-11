@@ -44,6 +44,46 @@ gh pr list --author app/renovate --state open --limit 50 \
   --template '{{range .}}{{.number}} | {{.title}} | {{.headRefName}} | {{.mergeStateStatus}} | {{.createdAt}}{{"\n"}}{{end}}'
 ```
 
+**Compare each PR's merge base against `origin/master` before you read any diff.** Renovate
+regenerates a PR's body from current data but leaves the branch on the base it was cut from, so
+the body describes one bump while the branch writes another. `gh pr diff` renders against that
+same stale base, which is why the disagreement survives a careful read of the diff.
+
+```bash
+git fetch -q origin master && git rev-parse origin/master
+gh pr list --author app/renovate --state open --limit 50 \
+  --json number,baseRefOid,title -q '.[] | "\(.baseRefOid[0:8]) #\(.number) \(.title)"'
+```
+
+Any PR whose `baseRefOid` is not that SHA is triaged as stale: tick its rebase checkbox (§5)
+and read the diff only after Renovate has refreshed the branch. Two of six open Renovate PRs
+failed this on 2026-09-10, and both were raised within seven minutes of each other, so **the
+tell is the age of the merge base, not the age of the PR**:
+
+- #1513 — body table `0.5.0` → `0.5.2`, branch writes `prek==0.5.0` into
+  `.github/workflows/ci.yml`, which is what master already held. Merged as-is it lands nothing
+  behind a green CI. A tooling pin that silently no-ops has no repo-side guard.
+- #1507 — body table `307d606` → `f98bb7c` for `n8nio/n8n`, branch writes a digest resolving
+  to 2.37.9 against a live 2.37.10. That downgrade is caught by
+  `test_the_ledger_last_entry_is_the_live_pin`, but only after the ledger row is appended.
+
+**A PR whose merge would land nothing is failed by CI, not by this step.** #1741 and #1743
+automerged on 2026-09-11 ten seconds after opening, so no session triaged them (#1755). Renovate
+had reused the previous bump's branch under the next version's title, and master already held
+its content. The `hooks` job's scoping step now exits non-zero when the merge-ref diff against
+master is empty, which fails the `prek` gate; `test_ci_empty_pr_merge_fails.py` proves it.
+That shape defeats the `baseRefOid` tell above — GitHub reports where master stood when the
+PR opened, a few commits back, while the branch's real merge base is a day old. When a PR's
+title names a version its diff does not write, read the merge base directly:
+
+```bash
+git fetch -q origin master "<headRefName>" && git merge-base origin/master FETCH_HEAD
+```
+
+A PR the check fails is closed, not rebased: its content is already on master. Ticking the
+rebase box on #1742 and #1749 was consumed and moved neither branch. Why Renovate reuses the
+leftover branch is the undetermined half of #1755; §8 lists that branch for deletion.
+
 For each PR read the file list and the diff — `gh pr diff <n> --name-only`, then
 `gh pr diff <n> | grep -E '^[-+]' | grep -vE '^(\+\+\+|---)'`. The files decide the class:
 
@@ -121,11 +161,13 @@ A half-done bump is a normal code change: worktree, fix, test, PR. Two rules spe
   the same PR, because the repo guards the pair (`test_anisync_pin_matches_server.py`). Run
   the guard the rule points at; it is the completion criterion.
 
-## 5. Stale PRs need a rebase before landing
+## 5. A stale merge base needs a rebase before landing
 
-A digest PR opened days ago pins what was current then. Check the digest against the registry
-before landing it, and if it has moved, hand the refresh back to Renovate — tick the rebase
-checkbox in the PR body:
+A branch pins what was current when it was cut. Age of the PR is one way that happens and the
+smaller one — §1's `baseRefOid` check is the reliable tell, and it fires on a PR raised
+minutes ago. Check the digest against the registry before landing it, and where either the
+digest or the base has moved, hand the refresh back to Renovate — tick the rebase checkbox in
+the PR body:
 
 ```bash
 body=$(mktemp)
@@ -160,6 +202,59 @@ retries on each other. When several PRs touch nothing in common, one `land.sh` w
   pod resolved something else` — the drift gate in `ansible/post_tasks/k8s_image_drift_gate.yml`.
   `ansible/tests/k8s/test_built_images_pull_always.py` guards the usual cause.
 - **A plugin or extension:** confirm the host loaded it, not just that the file is on disk.
+
+## 8. Census the branches no PR and no dashboard entry speaks for
+
+A `renovate/*` branch outlives the PR that carried it. The repo sets
+`delete_branch_on_merge`, but that removes only the head branch of a PR GitHub merged, so a PR
+closed by hand and a branch Renovate cut but never raised both leave a branch behind. Such a
+branch reads `diverged` against master and is invisible to every arm of `renovate-notify` by
+construction: the notifier reads open PRs and the Dependency Dashboard, and an orphan branch
+appears in neither. Nothing else reports it, so census it here.
+
+```bash
+gh api repos/DanielH2018/server/branches --paginate -q '.[].name' | grep '^renovate/' | sort > /tmp/rb-all
+gh pr list --state open --limit 100 --json headRefName -q '.[].headRefName' > /tmp/rb-live
+gh issue view 3 --json body -q .body | grep -oE '[a-z-]+-branch=renovate/[^ ]+' | sed 's/.*branch=//' >> /tmp/rb-live
+sort -u /tmp/rb-live -o /tmp/rb-live
+comm -23 /tmp/rb-all /tmp/rb-live
+```
+
+Both queries are deliberately wider than the markers and authors seen on any one day (#1629).
+The dashboard grep matches `[a-z-]+-branch=` rather than the three verbs issue #3 happened to
+carry, because Renovate emits other section markers with their own `<verb>-branch=` prefix and an
+unmatched one makes every branch in that section read as an orphan. The `gh pr list` carries no
+`--author` filter, because the question is whether ANY open PR speaks for the branch — §4's
+pattern of rebasing the bot's commit onto your own branch opens exactly such a PR. Both errors
+ran toward over-reporting, so neither ever hid an orphan.
+
+Twelve branches answered that on 2026-09-10, and nine branches with an empty orphan set answered
+it later the same day — the branches were pruned in between, so treat the count as a reading
+rather than a baseline. Sort each one into a class before you say anything
+about it. `git fetch -q origin` then
+`git diff origin/master...origin/<branch> | grep -E '^\+[^+]'` names the file and the value the
+branch writes — then read that key's value **on master**, because a three-dot diff renders the
+`-` side from the merge base and inherits §1's trap:
+
+1. **Settled.** Master is at, or ahead of, the value the branch writes — merge residue, or a
+   bump a later one overtook. Nothing is pending and nothing is lost. Eight of the twelve were
+   residue and three more were overtaken, `renovate/prek` writing `prek==0.5.0` against a
+   master already on 0.5.2.
+2. **A bump for a dependency master no longer has.** `renovate/k8s-image-grafanapromtail` bumps
+   `grafana/promtail` in `ansible/roles/k8s/loki-homelab/defaults/main.yml`; that file pins
+   `grafana/alloy` now, and no k8s role pins promtail at all. The bump has nothing to land on.
+3. **A pending update that lost its dashboard entry.** The dependency still exists in the tree
+   and master's pin is behind what the branch writes. This is the only class that costs
+   anything, and it is §0's failure with the dashboard row gone too — file a finding naming the
+   dependency and the version master is stuck on.
+
+**Report the list; never delete a branch.** A branch with no PR is not proof the work on it is
+gone, and a sweep is the operator's call. When the operator asks for one,
+`git push origin --delete <branch>` per branch is the whole of it. Do not reach for a config
+fix instead: Renovate's own `pruneStaleBranches` defaults to true and should already remove an
+orphan branch it created, and why it has not here is undetermined — the Mend hosted run log is
+not readable from a session, the same limit §0 names. Name the orphan list in the run's
+closing summary so the count is visible over time.
 
 ## When to stop and say so
 

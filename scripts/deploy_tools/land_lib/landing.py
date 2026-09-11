@@ -56,9 +56,15 @@ class Landing:
         self.resolved_tags = [t for t in opts.tags.split(",") if t]
         self.plane = ""
         self.self_applied = False
+        self.self_applied_command = ""
         self.remaining_setup = ""
         self.needs_diff = False
         self.deployed_hosts: set[str] = set()
+        # True once a tick attempt returned TICK_STILL_RUNNING: this landing stopped WATCHING
+        # a tick that was still applying. Every later read of the deployer's markers is then
+        # racing that apply, so `behind_since` set with `hold_sha` empty is the state of a run
+        # in flight rather than a settled deferral (issue #1607).
+        self.tick_watch_abandoned = False
 
     @property
     def tags_csv(self) -> str:
@@ -146,6 +152,33 @@ class Landing:
         if behind:
             return TickState.BEHIND
         return TickState.CONVERGED
+
+    def broad_applied_covers(self, sha: str) -> bool:
+        """Did the deployer RECORD applying a broad plane that contains `sha`?
+
+        CONVERGED is not that answer. It says local == origin, which any session's `git merge
+        --ff-only` also produces — and once it holds, `next_action()` returns `noop` for every
+        later tick, so a setup plane the tick never applied is stranded permanently while this
+        landing reports `settled`. PR #1529 landed that way on 2026-09-10 and its
+        `renovate_agent` change was four days stale on disk (issue #1537).
+
+        `broad_applied` is written by `deploy_handlers.handle_broad` only after
+        `deploy_io.deploy_broad` returned, and holds the origin SHA that apply ran at. `sha`
+        being an ancestor of it means A BROAD APPLY RAN AT A COMMIT CONTAINING THIS PR — not
+        that it named this PR's own roles, since `handle_broad` scopes `--tags` to the roles in
+        the range it crossed. That is the right strength for the bug: the tick that crosses this
+        landing's range carries its paths, and the failure #1537 describes leaves the marker at
+        an OLDER commit, which fails the ancestry test.
+
+        False for an absent marker, an unreadable state directory, and a marker whose SHA this
+        checkout cannot resolve. Reporting work as unfinished when it was done costs one hand
+        check; the other direction is the bug.
+        """
+        marker = self.state("broad_applied")
+        if not marker:
+            return False
+        applied = marker.split()[0]
+        return self.git("merge-base", "--is-ancestor", sha, applied).returncode == 0
 
 
 def retry_while_locked(

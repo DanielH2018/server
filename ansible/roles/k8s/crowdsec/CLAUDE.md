@@ -61,3 +61,48 @@ against a DB holding 424 alerts younger than that. Use `cscli decisions list` an
 Upstream `crowdsecurity/grafana-dashboards` cannot fill the gap either: it is Prometheus-only,
 was last touched 2023-06-20 targeting CrowdSec v1.5.x, and its `dashboards_v5` panel set is
 already what this repo ships (identical titles, `instance` relabelled to `machine`).
+
+## Which Prometheus job covers which agent
+
+Four CrowdSec containers run in this cluster and a scrape job covers each, all defined in
+`roles/k8s/claude-otel/templates/prometheus.yaml.j2`:
+
+| Container | Job | Node dimension |
+|---|---|---|
+| the engine pod (LAPI + AppSec) | `crowdsec` | none — a singleton |
+| the `crowdsec-node-agent` DaemonSet | `crowdsec-node-agents` | `node`, from the pod's node name |
+| the traefik pod's `crowdsec-agent` sidecar | `crowdsec-traefik-agent` | none — a singleton |
+| the authelia pod's `crowdsec-agent` sidecar | `crowdsec-authelia-agent` | none — a singleton |
+
+Read the job before writing a CrowdSec query: `node` is not a CrowdSec label, and only the
+DaemonSet job attaches one. A per-node selector on an engine or sidecar metric matches nothing,
+which is how `Alerts per Scenario` and `Bucket pour time` sat dead on the per-machine board
+(#1690). `ansible/tests/services/test_dashboard_queries_match_this_clusters_labels.py` enforces
+that.
+
+**A sidecar job needs two edits, not one.** Pod-role SD emits a target per *declared*
+containerPort, so each sidecar declares 6060 (`roles/k8s/traefik/templates/deployment.yaml.j2`,
+`roles/k8s/authelia/templates/deployment.yaml.j2`), and that pod's baseline NetworkPolicy admits
+prometheus to that port (`roles/k8s/netpol-baseline/templates/networkpolicy-<pod>.yaml.j2`).
+Either one missing gives a job that discovers nothing or reads `up == 0` forever — both
+indistinguishable from the job nobody added.
+`ansible/tests/k8s/test_crowdsec_sidecars_are_scraped.py` holds all three together, for both
+sidecars.
+
+**The netpol grant is a `from` item of its own, not a port appended to an existing rule.** A
+NetworkPolicy rule ANDs its `from` with its `ports`, so adding 6060 to authelia's
+traefik-to-9091 rule would have admitted *traefik* to the agent's metrics and prometheus to
+nothing (#1706). It reads like a grant in a diff. traefik's own policy already had a prometheus
+`from` item for :8080, which is why #1694 there was a one-line port addition and #1706 here was
+not.
+
+The overview board's agent tile is a RATIO — `sum(up{job=~"crowdsec.*"}) / count(...)` — so 1
+means every agent reports whatever the fleet size. It plotted a raw count against a green step
+at 10, sized by the upstream for ten machines, and so read red on a healthy fleet of three and
+could never go green (#1709). The ratio has one blind spot, the same one `kuma-drift` names: a
+job that DISAPPEARS from service discovery leaves the survivors at N/N, so the tile answers "is
+an agent down", not "is an agent missing".
+
+`Bucket pour time` on the per-machine board reads `{job="crowdsec"}` — the engine's AppSec
+pours alone. The traefik sidecar's own pour series are excluded on purpose: the panel legends
+by `le` only, so two datasources would collide into one set of bars.

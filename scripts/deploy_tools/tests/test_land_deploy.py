@@ -10,6 +10,11 @@ from deploy_tools.land_lib import deploy
 from deploy_tools.land_lib.outcome import Outcome
 
 
+# The deployer's record of a broad apply CONTAINING this PR. Converging with origin is not
+# that: any session's `git merge --ff-only` produces it too (issue #1537).
+_APPLIED = {"broad_applied": f"{MERGE_SHA} ansible/initial_setup.yml renovate_agent"}
+
+
 def _ready(landing, fakes=None, **opts):
     ln, calls = landing(fakes, **opts)
     ln.merge_sha = MERGE_SHA
@@ -128,17 +133,25 @@ def test_a_clean_deploy_returns(landing):
         (Fakes(), "nothing-to-deploy", 0),
         (Fakes(self_applied=True, state={"hold_sha": "abc"}), "deploy-failed", 1),
         (Fakes(self_applied=True, state={"behind_since": "x"}), "deferred", 75),
-        (Fakes(self_applied=True), "settled", 0),
+        (Fakes(self_applied=True, state=_APPLIED), "settled", 0),
         (
-            Fakes(self_applied=True, remaining_setup="daniel-server, daniel-pi"),
+            Fakes(
+                self_applied=True,
+                remaining_setup="daniel-server, daniel-pi",
+                state=_APPLIED,
+            ),
             "needs-manual-apply",
             1,
         ),
+        # Converged is not applied: every marker land.sh used to read says settled, and the
+        # tick recorded no apply covering the PR (issue #1537).
+        (Fakes(self_applied=True, state={}), "needs-manual-apply", 1),
     ],
 )
 def test_no_tag_outcomes(landing, fakes, verdict, code):
     ln, _ = _ready(landing, fakes)
     ln.plane, ln.self_applied = fakes.plane, fakes.self_applied
+    ln.self_applied_command = fakes.self_applied_command
     ln.remaining_setup = fakes.remaining_setup
     with pytest.raises(Outcome) as exc:
         deploy.no_tag_outcome(ln)

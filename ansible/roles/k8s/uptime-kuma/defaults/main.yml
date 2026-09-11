@@ -194,10 +194,15 @@ kuma_status_page_groups:
       - "^homelab-edge-allclear$"
       - "^claude-otel-health$"
       - "^remember-logs-health$"
+      # One tile per cluster node, both watching the same route from different source addresses
+      # (issue #1712). An edge/observability signal rather than a per-app tile, like the
+      # all-clear probe above.
+      - "^loki-read-route-"
   - name: Backups & Storage
     match:
       - "^longhorn-backup$"
       - "^monitor-bridge-(longhorn-volumes|pvc-fullness|kubelet-readonly)$"
+      - "^monitor-bridge-snapshot-headroom$"
       - "^monitor-bridge-(b2-reachable|b2-storage|r2-usage)$"
       - "^etcd-"
   - name: Hosts & Power

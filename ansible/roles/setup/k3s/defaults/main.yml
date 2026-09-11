@@ -5,7 +5,7 @@
 # k3s is pinned because the install task re-runs the installer whenever k3s_server_args
 # changes, and get.k3s.io installs the latest stable unless told otherwise — an unpinned
 # reconfigure would silently upgrade the control plane as a side effect of editing a flag.
-k3s_version: v1.36.3+k3s1
+k3s_version: v1.36.4+k3s1
 k3s_metallb_version: v0.16.0
 k3s_longhorn_version: v1.12.1
 
@@ -59,6 +59,7 @@ k3s_server_args: >-
   --kube-apiserver-arg=audit-log-maxbackup={{ k3s_audit_log_maxbackup }}
   --kube-apiserver-arg=audit-log-maxsize={{ k3s_audit_log_maxsize }}
   {% endif %}
+  --kube-apiserver-arg=authentication-config={{ k3s_authentication_config_path }}
 
 # ── why none of the arguments above is quoted ───────────────────────────────────────────
 # The install task's `when:` compares `k3s_server_args.split()` against the installed unit
@@ -87,6 +88,102 @@ k3s_server_args: >-
 # argument that was added, never one that was removed — the same caveat the allow-listed
 # sysctls carry above.
 k3s_secrets_encryption: true
+
+# ── the API server trusts Authelia as an OIDC provider (#1390) ──────────────────────────
+# One flag pointing at a FILE, and the file is the point. They exist so Headlamp can log a
+# person in instead of browsing the cluster as its own ServiceAccount: Headlamp forwards the
+# browser's `id_token` and the API SERVER is what accepts or rejects it, so the trust has to
+# be configured here rather than in the workload's role.
+#
+# WHY A FILE RATHER THAN THE SIX `--oidc-*` FLAGS IT REPLACED. Authelia derives `iss` from
+# the host the authorization request arrived on, and `--oidc-issuer-url` takes exactly one
+# value — so the flag path could trust `auth.local.<domain>` or `auth.<domain>`, never both,
+# and Headlamp's login worked on exactly one of its two hostnames. A public-route login
+# reached Authelia, came back with `iss: https://auth.<domain>`, and the API server refused
+# it. `AuthenticationConfiguration.jwt` is a list of issuers, which is the only mechanism
+# kube-apiserver offers for more than one.
+#
+# THE TWO ARE MUTUALLY EXCLUSIVE, so this was not additive: "This flag is mutually exclusive
+# with the --oidc-* flags if the file configures the JWT Token authenticator"
+# (kube-apiserver flag reference). Passing both makes the API server refuse to start, which
+# on this Type=notify unit is the indefinite hang described above, not an error.
+#
+# ADDING THESE RESTARTS THE CONTROL PLANE. The install task above re-runs get.k3s.io when
+# k3s_server_args gains an argument, and the installer rewrites the unit and restarts k3s.
+# That is a routine event on this host — the unit restarted 19 times between 2026-08-02 and
+# 2026-09-10, the last taking 10s from restart to notify-ready — but it is not a no-op, and
+# `k3s-bringup.yml` is in `_BROAD_MANUAL_PREFIXES` (deploy_changes.py) precisely so nothing
+# automated ever applies it.
+#
+# A WRONG ISSUER VALUE DOES NOT LOCK YOU OUT, and the failure mode is worth stating exactly
+# because it is easy to over-fear. An unreachable or misspelled issuer leaves the API server
+# up and serving, with OIDC logins failing and nothing else affected. The root kubeconfig
+# authenticates by CLIENT CERTIFICATE, which this never touches; so do every ServiceAccount
+# and every in-cluster controller.
+#
+# A MALFORMED FILE IS A DIFFERENT MATTER, and this is the one way the config file is riskier
+# than the flags it replaced. The API server VALIDATES this file at startup and refuses to
+# start when it fails validation, so a schema error wedges the node: the k3s unit is
+# Type=notify with TimeoutStartSec=0, so `systemctl restart k3s` hangs indefinitely rather
+# than failing — the same hang the --node-ip comment above describes. The validation is
+# stricter than it looks; `prefix` alone has two rules the flag path did not have (see the
+# template). `ansible/tests/setup/test_k3s_oidc_trusts_authelia.py` renders and shape-checks
+# it for that reason. Read `journalctl -u k3s` before walking away.
+#
+# ARMING THIS NEEDED NO EXTRA STEP, and that is worth stating because the install task's own
+# comment reads as though it did. That guard detects an argument that was ADDED and never one
+# that was REMOVED, so a pure deletion does not un-configure an installed host. But this change
+# ADDED `--kube-apiserver-arg=authentication-config`, which makes the guard's
+# `new_args - installed_args` non-empty, and the installer then rewrites ExecStart wholesale
+# from INSTALL_K3S_EXEC. The six `--oidc-*` removals therefore rode along on the same
+# `k3s-bringup.yml --tags k3s` run, and the mutually-exclusive combination never existed on the
+# host. Do NOT hand-edit the unit to "help" this along.
+#
+# ROLLBACK IS STILL BY HAND, for the reason above: deleting the one flag below adds nothing, so
+# the guard reads false and the unit keeps it. Re-run /usr/local/bin/k3s-install.sh with the new
+# INSTALL_K3S_EXEC.
+
+# BOTH Authelia issuers, trusted at once, which is the whole reason this is a file. The `iss`
+# each name mints is measured, not assumed — 2026-09-10, `/.well-known/openid-configuration`
+# returns exactly these two strings on the two hostnames, and both answer 200 from daniel-box
+# (the API server fetches JWKS from each URL itself, so host reachability is a requirement and
+# not an incidental).
+#
+# Order does not matter; kube-apiserver selects the entry by the token's `iss`. Duplicates are
+# a validation error, so the two must stay distinct. NO TRAILING SLASH on either: the
+# comparison against `iss` is exact.
+k3s_oidc_issuer_urls:
+  - "https://auth.local.{{ domain }}"
+  - "https://auth.{{ domain }}"
+# Where the file above is written, read by the apiserver ONCE at startup. Under
+# /var/lib/rancher/k3s/server alongside the audit policy, which is root-only and on the same
+# disk as etcd.
+k3s_authentication_config_path: /var/lib/rancher/k3s/server/authentication-config.yaml
+# The audience. Authelia's default `id_token_audience_mode: specification` puts only the
+# client id in `aud`, so this is the Authelia client id, and one client cannot serve two
+# audiences here.
+k3s_oidc_client_id: headlamp
+# Authelia hydrates NEITHER of the two claims below into the ID token by default — the
+# provider docs call the `claims_policies.id_token` list "claims automatically copied to the
+# ID Token in addition to the standard ID Token claims". Headlamp forwards the ID token, so
+# the Authelia client MUST name a claims policy carrying both, or this API server sees a
+# token with no username claim and rejects it. That is the same trap #1374 hit with Grafana.
+k3s_oidc_username_claim: preferred_username
+k3s_oidc_groups_claim: groups
+# There is NO `k3s_oidc_username_prefix` here any more, and its absence is deliberate. The
+# flag path took `-` as a sentinel meaning "no prefix", because kube-apiserver otherwise
+# prefixed the username with the issuer URL plus `#` for any claim other than `email`. The
+# structured config does no implicit prefixing and honours no sentinel: `prefix` is required
+# whenever `claim` is set, and `""` disables it. The template writes that empty string
+# literally; a variable holding `-` would produce usernames prefixed with a hyphen, which is
+# the same class of bug the sentinel existed to avoid.
+#
+# Groups DO carry a prefix, for the opposite reason: it is what keeps an Authelia group name
+# from ever being read as a built-in `system:` group. `headlamp_k8s_oidc_group`
+# (roles/k8s/headlamp/defaults) is this prefix plus the Authelia group and must agree with it;
+# ansible/tests/setup/test_k3s_oidc_trusts_authelia.py fails when the two drift, because the
+# symptom is a login that succeeds onto an empty dashboard with nothing logged.
+k3s_oidc_groups_prefix: "oidc:"
 
 # ── apiserver audit logging (G2/G3) ─────────────────────────────────────────────────────
 # k3s writes no audit log by default, so there is no record of API writes at all. This
@@ -171,6 +268,20 @@ k3s_metallb_pool: 10.0.0.241-10.0.0.250
 # upstream's class with files/longhorn-storageclass.yaml, which deliberately omits
 # numberOfReplicas — so raising this at slice 7 stays a settings patch.
 k3s_longhorn_replica_count: 2
+
+# How hard Longhorn checks a snapshot disk file against its recorded checksum. Upstream's
+# default is `fast-check`, which re-hashes only when the file is unhashed or its mtime moved —
+# and upstream states plainly that "filesystem-unaware corruption cannot be detected" in that
+# mode (longhorn-manager v1.12.1, types/setting.go). Bit rot does not move mtime, so the exact
+# failure this setting exists to catch went uncovered until 2026-09-10 (#1364).
+#
+# `enabled` hashes every snapshot disk file on the snapshot-data-integrity-cronjob schedule
+# (`0 0 */7 * *` here — the 1st, 8th, 15th, 22nd and 29th). That is CPU and disk-read work on a
+# two-node cluster whose storage control plane was OOM-killed once under memory pressure
+# (#1243), so the cost is being MEASURED across the 2026-09-15 fire before this is kept. If the
+# cost is not acceptable, this returns to `fast-check` and the measurement is recorded in this
+# role's CLAUDE.md so the question is settled rather than re-opened.
+k3s_longhorn_snapshot_data_integrity: enabled
 
 # Whether joined agent nodes participate in Longhorn replica scheduling. false through
 # the join window (agent_verify patches allowScheduling:false and asserts zero replicas

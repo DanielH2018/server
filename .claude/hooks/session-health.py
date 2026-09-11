@@ -39,15 +39,73 @@ import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# The deployer's marker directory on the host that runs the tick (daniel-box). Mode 0750 owned
-# by `ubuntu`, so a session running as that user reads it; on any other host it is absent and
-# `parked_deployer_problems` degrades to silence.
-GITOPS_STATE_DIR = "/var/lib/gitops-deploy"
+# Three sections of the banner live in `.claude/hooks/hooklib/` (its own docstrings cover
+# `hooklib`-not-`lib`): the worktree lines, and the docker and scrape-target lines. This file
+# sat at its 600-line cap with no headroom for either split. Wrapped like `lib.deployer_park`
+# below (issue #1566), in its own try so a failure names the package that broke rather than
+# deployer_park's unrelated line.
+#
+# `SyntaxError` is caught alongside `ImportError` because these modules use PEP 758 syntax
+# and this file is run by `session-health.sh`, which sends stderr to /dev/null and exits 0.
+# An uncaught SyntaxError at import would take the WHOLE banner out silently, which is the
+# #1566 failure class — nothing at module scope may be able to stop the banner. A SyntaxError
+# is not an ImportError, so the narrower catch left that hole open.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+try:
+    from hooklib import service_lines
+    from hooklib.worktree_lines import _stale_worktree_lines, remote_fanout_lines
 
-# How long `behind_since` may stand before it reads as a park rather than a queue. The tick runs
-# every `gitops_deploy_tick_interval` (10 min), so 45 minutes is four ticks that all declined to
-# converge — a routine push clears in one.
-BEHIND_PARK_SECONDS = 45 * 60
+    HOOKLIB_IMPORT_ERROR = ""
+except (ImportError, SyntaxError) as exc:
+    HOOKLIB_IMPORT_ERROR = f"{type(exc).__name__}: {exc}"
+    service_lines = None
+
+    def remote_fanout_lines(*_args, **_kwargs):
+        return [f"  ⚠ hooklib is broken: {HOOKLIB_IMPORT_ERROR}"]
+
+    def _stale_worktree_lines(*_args, **_kwargs):
+        return []
+
+
+# The park decision itself lives in `scripts/lib/deployer_park.py`, because `deploy.sh` exit 4
+# asks the same question of the same marker and a second derivation would drift (issue #1429).
+# The marker directory and the threshold are re-exported under their original names: this
+# module's tests read `_mod.BEHIND_PARK_SECONDS`, and `GITOPS_STATE_DIR` is mode 0750 owned by
+# `ubuntu`, so a session running as that user reads it and any other host degrades to silence.
+#
+# Wrapped, because NOTHING at module scope may be able to stop the banner (issue #1566). This
+# file is run by `session-health.sh`, which sends stderr to /dev/null and exits 0, so an
+# ImportError here would take out the docker, scrape-target, live-session and stale-worktree
+# sections as well — silently, and for a reason no session could see. The failure is reported
+# in `parked_deployer_problems` instead, the same way its deferred `lib.git` import already is.
+sys.path.insert(0, os.path.join(REPO, "scripts"))
+try:
+    from lib.deployer_park import (
+        BEHIND_PARK_SECONDS,
+        GITOPS_STATE_DIR,
+        park_age,
+        read_behind_marker,
+    )
+
+    DEPLOYER_PARK_IMPORT_ERROR = ""
+except ImportError as exc:
+    DEPLOYER_PARK_IMPORT_ERROR = str(exc)
+
+    # Inert placeholders, never read: `parked_deployer_problems` returns its `⚠` line before it
+    # asks the park question. They exist so the names stay defined and singly-typed for the type
+    # checker. NOT a fallback copy of the real values — a second BEHIND_PARK_SECONDS here would
+    # be the second derivation issue #1429 removed, so these are deliberately not the real
+    # threshold or the real marker directory, and the raising stubs say so if one is ever called.
+    BEHIND_PARK_SECONDS = 0
+    GITOPS_STATE_DIR = ""
+
+    def _park_unavailable(*_args, **_kwargs):
+        raise ImportError(DEPLOYER_PARK_IMPORT_ERROR)
+
+    park_age = _park_unavailable
+    read_behind_marker = _park_unavailable
+
+__all__ = ["BEHIND_PARK_SECONDS", "GITOPS_STATE_DIR"]
 
 # How many dirty paths the banner names before it summarises the rest. Enough to recognise whose
 # work it is; short enough to stay one line.
@@ -126,16 +184,12 @@ def behind_park_lines(marker, now):
     explain (a held SHA, an unapplied broad plane) as well as the one it does.
 
     Malformed or unparsable content reads as "no park": the marker is written atomically, and a
-    banner that guessed an age from a torn value would be worse than one that said nothing.
+    banner that guessed an age from a torn value would be worse than one that said nothing. The
+    decision is `lib.deployer_park.park_age`, shared with `deploy.sh` exit 4 (issue #1429); this
+    function owns only the banner line it becomes.
     """
-    if not marker:
-        return []
-    try:
-        first_seen = float(marker.split()[-1])
-    except ValueError, IndexError:
-        return []
-    age = now - first_seen
-    if age < BEHIND_PARK_SECONDS:
+    age = park_age(marker, now)
+    if age is None:
         return []
     return [
         f"  ✗ the GitOps deployer has been behind origin/master for {int(age // 60)} min "
@@ -180,21 +234,33 @@ def parked_deployer_problems(
     if read_marker is None:
 
         def read_marker():
-            with open(os.path.join(GITOPS_STATE_DIR, "behind_since")) as fh:
-                return fh.read().strip()
+            return read_behind_marker(GITOPS_STATE_DIR)
 
     # Deferred like the `lib.git` import above, and for the same reason the rest of this file
-    # defers: nothing at module scope may be able to stop the banner.
+    # defers: nothing at module scope may be able to stop the banner. The one module-scope
+    # import this file does keep — `lib.deployer_park` — is wrapped up there and reported here.
     import time
 
     lines = []
+    if DEPLOYER_PARK_IMPORT_ERROR:
+        # Added BEFORE the reads below rather than after them, so a `list_worktrees` that raises
+        # cannot swallow it: an empty list is indistinguishable from "nothing to report", and
+        # that is what hid a whole banner section for a month.
+        lines.append(
+            f"  ⚠ parked-deployer detection is broken: {DEPLOYER_PARK_IMPORT_ERROR}"
+        )
     try:
         primary = primary_worktree_path(list_worktrees())
         if primary:
             lines += dirty_primary_lines(status(primary), primary)
+        if DEPLOYER_PARK_IMPORT_ERROR:
+            # The dirty-primary half still answered and is kept; only the park half is
+            # unanswerable, and `park_age` raises if it is asked.
+            return lines
         # An absent marker is the healthy case — the deployer removes it on convergence — and
-        # arrives here as the FileNotFoundError this returns on, after the dirty lines are
-        # already collected. Whatever was gathered before the failure is still worth printing.
+        # `read_behind_marker` answers None for it, which reads as "no park". An INJECTED
+        # read_marker may still raise, and the dirty lines gathered before it are still worth
+        # printing.
         lines += behind_park_lines(read_marker(), time.time() if now is None else now)
     except Exception:
         return lines
@@ -209,138 +275,21 @@ def _run(cmd, timeout):
 
 
 def docker_problems():
-    """One line per unhealthy or restarting container, as (lines, docker_ok).
+    """`hooklib.service_lines.docker_problems`, bound to this file's repo-rooted `_run`.
 
-    docker_ok is False, with a warning line, when dockerd is unreachable.
+    A broken hooklib reports no container problems rather than raising; the `⚠` line naming
+    the import failure is printed once, by `remote_fanout_lines`.
     """
-    try:
-        unhealthy = _run(
-            [
-                "docker",
-                "ps",
-                "--filter",
-                "health=unhealthy",
-                "--format",
-                "{{.Names}}\t{{.Status}}",
-            ],
-            5,
-        )
-        restarting = _run(
-            [
-                "docker",
-                "ps",
-                "-a",
-                "--filter",
-                "status=restarting",
-                "--format",
-                "{{.Names}}\t{{.Status}}",
-            ],
-            5,
-        )
-    # Two clauses, not `except (A, B, C)`: ruff (3.14 target) rewrites a parenthesized tuple into
-    # the unparenthesized `except A, B:` form. That is now harmless — session-health.sh runs this
-    # on the pinned 3.14 via uv — but the split is kept because this file is where that bug
-    # actually shipped: the wrapper sends stderr to /dev/null and exits 0, so the SyntaxError was
-    # invisible until someone noticed the banner had stopped appearing.
-    except subprocess.TimeoutExpired:
-        return ["  ✗ docker unreachable (dockerd wedged)"], False
-    except OSError:
-        # FileNotFoundError (docker binary absent) is an OSError subclass. No docker binary
-        # means this host is not a Docker host at all — daniel-box runs k3s and sets
-        # has_docker: false — not that a Docker host is broken. Staying silent is the whole
-        # point of the all-green contract; warning here would fire on every session open
-        # forever.
+    if service_lines is None:
         return [], False
-    lines = []
-    for label, res in (("unhealthy", unhealthy), ("restarting", restarting)):
-        for row in res.stdout.splitlines():
-            if not row.strip():
-                continue
-            name, _, status = row.partition("\t")
-            lines.append("  ✗ {} — {} ({})".format(name, label, status.strip()))
-    return lines, True
-
-
-def _k8s_namespace():
-    """Return k8s_namespace from the same plaintext inventory file probe.py reads it from.
-
-    Duplicated rather than imported — target_problems() shells out to probe.py rather than
-    importing it (see its own docstring), and this stays consistent with that.
-    """
-    path = os.path.join(REPO, "ansible", "inventory", "group_vars", "all.yml")
-    try:
-        with open(path) as f:
-            for line in f:
-                if line.startswith("k8s_namespace:"):
-                    return line.split(":", 1)[1].strip()
-    except OSError:
-        return None
-    return None
-
-
-def _is_scaled_to_zero(job, namespace):
-    """True only if `job`'s backing Deployment is confirmed to have `spec.replicas: 0`.
-
-    That is an on-demand game server (terraria-stats, valheim-stats) deliberately left idle, not
-    a failure. Any lookup failure (wrong kind, missing Deployment, kubectl error, timeout)
-    returns False: a down target we can't explain to be intentional stays reported rather than
-    silently swallowed.
-    """
-    if not namespace:
-        return False
-    try:
-        res = _run(
-            [
-                "k3s",
-                "kubectl",
-                "-n",
-                namespace,
-                "get",
-                "deployment",
-                job,
-                "-o",
-                "jsonpath={.spec.replicas}",
-            ],
-            5,
-        )
-    except subprocess.TimeoutExpired, OSError:
-        return False
-    if res.returncode != 0:
-        return False
-    try:
-        return int(res.stdout.strip()) == 0
-    except ValueError:
-        return False
+    return service_lines.docker_problems(_run)
 
 
 def target_problems():
-    """Return down Prometheus scrape targets, minus any deliberately scaled to 0 replicas.
-
-    Best-effort: returns [] on any failure, since monitoring being unreachable must not
-    block or spam session start.
-    """
-    try:
-        res = _run(
-            ["uv", "run", "python", "scripts/diagnostics/probe.py", "targets"], 6
-        )
-        active = json.loads(res.stdout)["data"]["activeTargets"]
-    except Exception:
+    """`hooklib.service_lines.target_problems`, bound to this file's `_run` and REPO."""
+    if service_lines is None:
         return []
-    namespace = _k8s_namespace()
-    bad = []
-    for t in active:
-        if t.get("health") == "up":
-            continue
-        labels = t.get("labels", {})
-        job = labels.get("job", "?")
-        if _is_scaled_to_zero(job, namespace):
-            continue
-        inst = labels.get("instance", "?")
-        err = (t.get("lastError") or "").strip()[:70]
-        bad.append(
-            "  ✗ target {} [{}] {}".format(job, inst, "— " + err if err else "down")
-        )
-    return bad
+    return service_lines.target_problems(_run, REPO)
 
 
 def master_moved_problems():
@@ -456,28 +405,8 @@ WORKTREE_TIMEOUT_S = 30
 
 
 def stale_worktree_lines():
-    """Merged worktrees this repo can remove, as ready-to-print banner lines.
-
-    Claude Code's own worktree keeper reports these too, but each of its lines ends by asking
-    the reader to run `gh pr list --state merged --head <branch>` by hand to tell a
-    squash-merged branch from one that is merely behind. prune_worktrees.py already makes
-    that call, so this prints its verdict instead. Bounded and skipped on any failure, like
-    every other check here — it reaches GitHub, and a slow API must never stall session start.
-    """
-    try:
-        proc = _run(
-            [
-                "uv",
-                "run",
-                "python",
-                "scripts/dev/prune_worktrees.py",
-                "--brief",
-            ],
-            WORKTREE_TIMEOUT_S,
-        )
-    except Exception:
-        return []
-    return [line for line in proc.stdout.splitlines() if line.strip()]
+    """Shim: `hooklib.worktree_lines` can't import `_run` back from this module."""
+    return _stale_worktree_lines(_run, WORKTREE_TIMEOUT_S)
 
 
 def format_banner(problems):
@@ -493,12 +422,17 @@ def format_banner(problems):
     return "\n".join(out)
 
 
-def main(*, parked_deployer_problems=parked_deployer_problems):
+def main(
+    *,
+    parked_deployer_problems=parked_deployer_problems,
+    remote_fanout_lines=remote_fanout_lines,
+):
     """Print the SessionStart health banner for a genuine session open, then exit 0.
 
     Skips a mid-session compaction event. Combines container, Prometheus-target and
     stale-branch problems into one banner, then separately prints other live sessions in
-    this repo and any worktrees ready to remove — both regardless of health status.
+    this repo, worktrees ready to remove, and fan-out worktrees running on another host —
+    all three regardless of health status.
 
     Args:
         parked_deployer_problems: override for the parked-deployer probe. Defaults to the
@@ -507,6 +441,7 @@ def main(*, parked_deployer_problems=parked_deployer_problems):
             (ansible/tests/_ratchet.py) caps this file's patches on a first-party module at
             its current allowlist entry — the same reason `parked_deployer_problems` itself
             takes its four reads as parameters rather than patched globals.
+        remote_fanout_lines: override for the same reason (live `.claude/fanout` state).
     """
     raw = sys.stdin.read()
     try:
@@ -544,6 +479,8 @@ def main(*, parked_deployer_problems=parked_deployer_problems):
             print(line)
 
     for line in stale_worktree_lines():
+        print(line)
+    for line in remote_fanout_lines():
         print(line)
     return 0
 

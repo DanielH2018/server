@@ -99,13 +99,15 @@
     },
     {
       "customType": "regex",
-      "description": "Pinned Vale binary in the CI workflow. TWO matchStrings on purpose: the download URL carries the version TWICE (the tag `v3.18.0` and the asset name `vale_3.18.0_Linux_64-bit.tar.gz`), and a manager that rewrites only the tag produces a 404 URL. That 404 used to surface two lines later as `tar xzf`'s \"not in gzip format\", because the curl carried no `-f`; the workflow now runs `curl -fsSL`, so a partial rewrite fails at the download naming the URL. The two matchStrings are still the fix — failing loudly is not the same as not breaking. Asset naming is stable across releases.",
+      "description": "Pinned Vale binary in the CI workflow. TWO matchStrings on purpose: the download URL carries the version TWICE (the tag `v3.18.0` and the asset name `vale_3.18.0_Linux_64-bit.tar.gz`), and a manager that rewrites only the tag produces a 404 URL. That 404 used to surface two lines later as `tar xzf`'s \"not in gzip format\", because the curl carried no `-f`; the workflow now runs `curl -fsSL`, so a partial rewrite fails at the download naming the URL. The two matchStrings are still the fix — failing loudly is not the same as not breaking. Asset naming is stable across releases. A THIRD copy lives on the host side: `initial_setup_vale_version` in roles/setup/initial_setup/tasks/host-basics.yml installs the binary the prek hook runs, and a bump that moved only ci.yml would leave every workstation on the old rules (#1703). The two files agreeing is ENFORCED by ansible/tests/repo/test_vale_matches_the_ci_pin.py.",
       "managerFilePatterns": [
-        "/(^|/)\\.github/workflows/ci\\.yml$/"
+        "/(^|/)\\.github/workflows/ci\\.yml$/",
+        "/(^|/)ansible/roles/setup/initial_setup/tasks/host-basics\\.yml$/"
       ],
       "matchStrings": [
         "vale-cli/vale/releases/download/v(?<currentValue>[\\d.]+)/",
-        "vale_(?<currentValue>[\\d.]+)_Linux"
+        "vale_(?<currentValue>[\\d.]+)_Linux",
+        "initial_setup_vale_version:\\s*\"(?<currentValue>[\\d.]+)\""
       ],
       "depNameTemplate": "vale-cli/vale",
       "datasourceTemplate": "github-releases"
@@ -265,6 +267,51 @@
     },
     {
       "customType": "regex",
+      "description": "Webhook plugin release pin in k8s/jellyfin/defaults/main.yml (#1557). Third of the jellyfin plugin managers and it exists for the reason the two above record — the k8s-images manager keys on `_image:`, so a plugin pin, its URL and its checksum are invisible to every other manager and age with no signal. TWO matchStrings rather than three: the pin carries the version in the download URL and in the `jellyfin_k8s_webhook_version` var the init container reads, and there is no separate release-tag path because Webhook is distributed from repo.jellyfin.org, not from a GitHub release asset. The DATASOURCE is still github-releases (`jellyfin/jellyfin-plugin-webhook`), whose tags are a bare major — `v21`, `v22` — which the official manifest publishes as `21.0.0.0`, `22.0.0.0`; the matchStrings therefore capture only that major and Renovate rewrites both occurrences in step. extractVersionTemplate is the release-line ANCHOR, doing here what `^10\\.11/v` does for intro-skipper: Webhook 22.0.0.0 declares targetAbi 12.0.0.0, which the deployed 10.11 server's loader rejects silently behind a green rollout, so the anchor admits majors through 21 and drops anything newer. RAISE THAT ANCHOR when jellyfin_k8s_image moves to Jellyfin 12, or this manager tracks a line upstream has left and goes inert rather than wrong. versioningTemplate spells the version out with optional minor and patch groups because plain semver rejects a bare `21`. NEVER automerged (packageRule below): jellyfin_k8s_webhook_md5 comes from the official manifest.json and jellyfin_k8s_webhook_target_abi from the same place — neither is computable by a regex manager.",
+      "managerFilePatterns": [
+        "/(^|/)ansible/roles/k8s/jellyfin/defaults/main\\.yml$/"
+      ],
+      "matchStrings": [
+        "webhook/webhook_(?<currentValue>\\d+)\\.0\\.0\\.0\\.zip",
+        "jellyfin_k8s_webhook_version:\\s*\"(?<currentValue>\\d+)\\.0\\.0\\.0\""
+      ],
+      "depNameTemplate": "jellyfin/jellyfin-plugin-webhook",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v(?<version>1?\\d|2[01])$",
+      "versioningTemplate": "regex:^(?<major>\\d+)(?:\\.(?<minor>\\d+))?(?:\\.(?<patch>\\d+))?$"
+    },
+    {
+      "customType": "regex",
+      "description": "Merge Versions plugin release pin in k8s/jellyfin/defaults/main.yml (#1616). Fourth of the jellyfin plugin managers, and it exists for the reason the three above record — the k8s-images manager keys on `_image:`, so a plugin pin, its URL and its checksum are invisible to every other manager and age with no signal, which reads exactly like a plugin with no updates available. TWO matchStrings: the pin carries the version in the release-tag path of the download URL and in the `jellyfin_k8s_mergeversions_version` var the init container reads. The asset FILENAME is identical on every release (`Jellyfin.Plugin.MergeVersions.zip`), so unlike ani-sync's and intro-skipper's pins there is no third occurrence to rewrite. extractVersionTemplate is the release-line ANCHOR, doing here what `^10\\.11/v` does for intro-skipper: upstream tags the line by JELLYFIN version — `10.11.0.1` and `12.0.0` are the two live lines — and 12.0.0 declares targetAbi 12.0, which the deployed 10.11 server's loader rejects silently behind a green rollout, so the anchor admits only the 10.11 line. RAISE THAT ANCHOR when jellyfin_k8s_image moves to a new Jellyfin minor, or this manager goes inert rather than wrong. versioningTemplate spells the four-part version out because plain semver rejects it, and the fourth group is named `build` rather than `revision` for the reason intro-skipper's manager records — Renovate reads `revision` only when `build` is already present, so `revision` alone would leave every 10.11.0.x equal and the manager inert. NEVER automerged (packageRule below): jellyfin_k8s_mergeversions_sha256 is GitHub's own asset digest and _target_abi and _guid come from the plugin's published manifest — no regex manager can compute any of the three.",
+      "managerFilePatterns": [
+        "/(^|/)ansible/roles/k8s/jellyfin/defaults/main\\.yml$/"
+      ],
+      "matchStrings": [
+        "jellyfin-plugin-mergeversions/releases/download/(?<currentValue>\\d+\\.\\d+\\.\\d+\\.\\d+)/",
+        "jellyfin_k8s_mergeversions_version:\\s*\"(?<currentValue>\\d+\\.\\d+\\.\\d+\\.\\d+)\""
+      ],
+      "depNameTemplate": "danieladov/jellyfin-plugin-mergeversions",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^(?<version>10\\.11\\.\\d+\\.\\d+)$",
+      "versioningTemplate": "regex:^(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)\\.(?<build>\\d+)$"
+    },
+    {
+      "customType": "regex",
+      "description": "Media Cleaner plugin release pin in k8s/jellyfin/defaults/main.yml (#1619). Fifth of the jellyfin plugin managers, and it exists for the reason the four above record — the k8s-images manager keys on `_image:`, so a plugin pin, its URL and its checksum are invisible to every other manager and age with no signal, which reads exactly like a plugin with no updates available. This plugin DELETES MEDIA FILES, which is why it is pinned at all rather than left as the dashboard-installed PVC state #1619 found. TWO matchStrings, and both capture only the THREE-part release: the pin carries it in the URL's release tag (`/download/v3.2.0/`) and as the first three segments of `jellyfin_k8s_mediacleaner_version`. The FOURTH segment of that var is deliberately outside the capture — it encodes the server ABI (`101109` for 10.11.9), upstream publishes one release tag as three per-ABI manifest versions, and no datasource can say which of them the deployed image wants. extractVersionTemplate only strips the tag's `v`: unlike the intro-skipper, webhook and merge-versions managers there is no release-LINE anchor to carry, because the plugin version here is ABI-independent and the ABI lives in the asset filename instead. versioningTemplate makes the fourth group optional because upstream's tags changed shape mid-history (`v3.1.0.0` then `v3.2.0`) and a template parsing only one leaves the other unorderable and silently skipped. NEVER automerged (packageRule below): a bump has to pick the right per-ABI asset out of several on one tag, re-verify jellyfin_k8s_mediacleaner_sha256 against the download, and carry jellyfin_k8s_mediacleaner_target_abi across — and an automerged bump would arm a different build of a media-deleting plugin with none of the three checked.",
+      "managerFilePatterns": [
+        "/(^|/)ansible/roles/k8s/jellyfin/defaults/main\\.yml$/"
+      ],
+      "matchStrings": [
+        "jellyfin-plugin-media-cleaner/releases/download/v(?<currentValue>\\d+\\.\\d+\\.\\d+)/",
+        "jellyfin_k8s_mediacleaner_version:\\s*\"(?<currentValue>\\d+\\.\\d+\\.\\d+)\\.\\d+\""
+      ],
+      "depNameTemplate": "shemanaev/jellyfin-plugin-media-cleaner",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v(?<version>.+)$",
+      "versioningTemplate": "regex:^(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)(?:\\.(?<build>\\d+))?$"
+    },
+    {
+      "customType": "regex",
       "description": "Container images in k8s role defaults (ansible/roles/k8s/*/defaults/main.yml) AND in inventory/group_vars/all.yml. The cluster has no compose template to read, so these vars ARE the source of truth for what every pod runs \u2014 and until this manager existed none of them was tracked, so the whole cluster fleet aged with no update signal. group_vars/all.yml was added 2026-08-14: crowdsec_k8s_image had been hoisted out of its role defaults into group_vars, which put it outside this manager's patterns AND outside the coverage test's glob (scripts/tests/test_renovate_managers.py globbed roles/k8s/*/defaults/main.yml only) \u2014 so the WAF core, the one image whose staleness is a security problem, was the single pin neither could see. ansible/roles/setup/*/defaults/main.yml was added 2026-08-27: the same one-directory-short escape, this time for k3s_longhorn_restore_drill_image (busybox:stable) \u2014 an `_image:` pin one directory over from the *_version: pins the control-plane manager below already tracks in this same file. It is a mutable tag, so what Renovate can offer here is a digest bump (as with n8n's `stable` channel tag elsewhere in this file), not a version bump \u2014 that is enough signal to notice an upstream busybox re-push; the drill's own timeout/health assertions are the check that a bump didn't break it.",
       "managerFilePatterns": [
         "/^ansible/roles/k8s/[^/]+/defaults/main\\.yml$/",
@@ -304,18 +351,19 @@
       "groupName": "k8s image {{depName}}"
     },
     {
-      "description": "CI toolchain + docs-lint pins under .github/workflows/** and .vale.ini are not container images, and the catch-all 'container images (non-major)' rule above has no matchFileNames scoping it away from them — it matches every custom.regex dep by default. That is how PR #939 opened titled \"Update dependency prek to v0.5.0\" on branch renovate/container-images-(non-major) while its diff carried only the Vale binary bump (2026-09 finding, issue #980): both prek (ci.yml) and vale-cli/vale (ci.yml) fell into this one shared group with no file scoping, so Renovate reused a single group branch across two unrelated deps and the surviving title no longer matched the surviving diff. Giving each dependency its own group by depName makes the branch and title self-name, so a stale one can never wear another's label. {{depName}} still groups python's ci.yml + image-smoke.yml pins together (same depName, two files) — only the shared catch-all name is removed, not that lockstep. automerge/platformAutomerge/minimumReleaseAge inherited from the catch-all rule above are unaffected; only groupName changes.",
+      "description": "CI toolchain + docs-lint pins under .github/workflows/** and .vale.ini are not container images, and the catch-all 'container images (non-major)' rule above has no matchFileNames scoping it away from them — it matches every custom.regex dep by default. That is how PR #939 opened titled \"Update dependency prek to v0.5.0\" on branch renovate/container-images-(non-major) while its diff carried only the Vale binary bump (2026-09 finding, issue #980): both prek (ci.yml) and vale-cli/vale (ci.yml) fell into this one shared group with no file scoping, so Renovate reused a single group branch across two unrelated deps and the surviving title no longer matched the surviving diff. Giving each dependency its own group by depName makes the branch and title self-name, so a stale one can never wear another's label. The Ansible task file that installs Vale on the hosts is named here too, for the same reason: it carries the same depName as ci.yml's pin, so both copies belong in one PR, and without the path it would fall into the k8s-image group above instead. {{depName}} still groups python's ci.yml + image-smoke.yml pins together (same depName, two files) — only the shared catch-all name is removed, not that lockstep. automerge/platformAutomerge/minimumReleaseAge inherited from the catch-all rule above are unaffected; only groupName changes.",
       "matchManagers": [
         "custom.regex"
       ],
       "matchFileNames": [
         ".github/workflows/**",
-        ".vale.ini"
+        ".vale.ini",
+        "ansible/roles/setup/initial_setup/tasks/host-basics.yml"
       ],
       "groupName": "{{depName}}"
     },
     {
-      "description": "Digest bumps on the k8s plane. 22 of 74 pins carry a @sha256 digest and 18 of those sit on a MUTABLE tag (latest, release, master-web/-collector, jvm-stable, vanilla-latest) where a VERSION bump can never be offered \u2014 only a digest one. That is ~28% of the fleet, and `matchUpdateTypes: [minor, patch]` above does not match updateType `digest`, so none of them auto-merged. Watchtower applied exactly this class automatically until it was retired 2026-08-09 with the note 'Renovate owns image updates' \u2014 leaving it manual was a regression against what it replaced, not a deliberate posture. minimumReleaseAge is 3 days rather than 7: there is no version to soak, only a re-push of the same tag, so the wait is purely to let a poisoned/yanked push be noticed. The auto-deploy denylist (roles/setup/gitops_deploy/defaults/main.yml) is the safety boundary \u2014 a denylisted service's digest PR still merges, it just never auto-deploys.",
+      "description": "Digest bumps on the k8s plane. 22 of 74 pins carry a @sha256 digest and 18 of those sit on a MUTABLE tag (latest, release, master-web/-collector, jvm-stable, vanilla-latest) where a VERSION bump can never be offered \u2014 only a digest one. That is ~28% of the fleet, and `matchUpdateTypes: [minor, patch]` above does not match updateType `digest`, so none of them auto-merged. Watchtower applied exactly this class automatically until it was retired 2026-08-09 with the note 'Renovate owns image updates' \u2014 leaving it manual was a regression against what it replaced, not a deliberate posture. minimumReleaseAge is 3 days rather than 7: there is no version to soak, only a re-push of the same tag, so the wait is purely to let a poisoned/yanked push be noticed. The auto-deploy denylist (roles/setup/gitops_deploy/defaults/main.yml) is the safety boundary \u2014 a denylisted service's digest PR still merges, it just never auto-deploys. A pin on a CHANNEL tag (`:latest@sha256:`) is the shape with no version anywhere in its diff, so a bump on one cannot be read for direction and a downgrade looks like an upgrade (issue #1524, the same shape as n8n's #1493). That class is accepted for the roles left eligible here and fenced by the denylist for the ones whose regression is expensive — the DECIDED marker recording why, and the guard holding the fence, are in ansible/tests/deploy/test_channel_tag_digest_pins_stay_off_autodeploy.py.",
       "matchManagers": [
         "custom.regex"
       ],
@@ -492,6 +540,41 @@
       ],
       "groupName": "intro-skipper (manual — finish the sha256 + targetAbi, check the Jellyfin line)",
       "automerge": false
+    },
+    {
+      "description": "Jellyfin Webhook plugin (#1557). NO automerge, and the position of this rule is load-bearing for the same reason the two rules above record: the pin lives in ansible/roles/k8s/jellyfin/defaults/main.yml, so the `custom.regex` + minor/patch rule near the top of this array already sets automerge: true for it, later rules win, and without this entry a bump would merge itself into the `k8s image jellyfin` group. Two things Renovate cannot compute make it a manual finish — jellyfin_k8s_webhook_md5 and jellyfin_k8s_webhook_target_abi both come from the official manifest at repo.jellyfin.org, which no datasource exposes, and the MD5 is verified against the actual download. The operator also checks that the offered major still targets the Jellyfin line jellyfin_k8s_image runs; the manager's extractVersionTemplate anchors that, and the anchor is hand-raised.",
+      "matchDatasources": [
+        "github-releases"
+      ],
+      "matchPackageNames": [
+        "jellyfin/jellyfin-plugin-webhook"
+      ],
+      "groupName": "jellyfin webhook (manual — finish the targetAbi + MD5, check the Jellyfin line)",
+      "automerge": false
+    },
+    {
+      "description": "Jellyfin Merge Versions plugin (#1616). NO automerge, and the position of this rule is load-bearing for the reason the three rules above record: the pin lives in ansible/roles/k8s/jellyfin/defaults/main.yml, so the `custom.regex` + minor/patch rule near the top of this array already sets automerge: true for it, later rules win, and without this entry a bump would merge itself into the `k8s image jellyfin` group. Three things Renovate cannot compute make it a manual finish — jellyfin_k8s_mergeversions_sha256 is GitHub's asset digest, which no datasource exposes, and _target_abi and _guid come from the plugin's own published manifest (danieladov/JellyfinPluginManifest) rather than from Jellyfin's official one. The operator also checks that the offered release is still on the Jellyfin line jellyfin_k8s_image runs; the manager's extractVersionTemplate anchors that, and the anchor is hand-raised.",
+      "matchDatasources": [
+        "github-releases"
+      ],
+      "matchPackageNames": [
+        "danieladov/jellyfin-plugin-mergeversions"
+      ],
+      "groupName": "jellyfin merge-versions (manual — finish the sha256 + targetAbi, check the Jellyfin line)",
+      "automerge": false
+    },
+    {
+      "description": "Jellyfin Media Cleaner plugin (#1619). NO automerge, and the position of this rule is load-bearing for the reason the four rules above record: the pin lives in ansible/roles/k8s/jellyfin/defaults/main.yml, so the `custom.regex` + minor/patch rule near the top of this array already sets automerge: true for it, later rules win, and without this entry a bump would merge itself into the `k8s image jellyfin` group. This is the plugin where that would cost most — it DELETES MEDIA FILES, and three things Renovate cannot compute make a bump a manual finish. One upstream release tag ships several per-ABI assets (MediaCleaner-10.10.7.zip, -10.11.0.zip, -10.11.9.zip) and the operator picks the newest the image satisfies; jellyfin_k8s_mediacleaner_sha256 is GitHub's asset digest, re-verified against the download; and jellyfin_k8s_mediacleaner_target_abi comes from the plugin's published manifest (shemanaev/jellyfin-plugin-repo), which also fixes the version's fourth segment. The role's CLAUDE.md additionally requires raising jellyfin_k8s_image only when every installed plugin has a release for the new ABI.",
+      "matchDatasources": [
+        "github-releases"
+      ],
+      "matchPackageNames": [
+        "shemanaev/jellyfin-plugin-media-cleaner"
+      ],
+      "groupName": "jellyfin media-cleaner (manual — pick the per-ABI asset, finish the sha256 + targetAbi)",
+      "automerge": false
     }
+
+
   ]
 }

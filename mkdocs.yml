@@ -207,6 +207,7 @@ nav:
       - B2 transaction cap gaps: b2-transaction-cap-monitoring-gaps.md
       - Email to RSS: email-to-rss.md
       - AniList integration: anilist-integration.md
+      - k3s control-plane upgrade: k3s-upgrade.md
       - Longhorn upgrade: longhorn-upgrade.md
       - Longhorn disaster recovery: longhorn-disaster-recovery.md
       - k3s etcd restore: k3s-etcd-restore.md

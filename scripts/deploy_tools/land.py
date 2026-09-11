@@ -51,7 +51,9 @@ operator, and nothing was deployed. `needs-manual-apply` means this PR reaches s
 neither a deploy tag nor the tick covers, or a self-applied setup role that reaches a host
 beyond the one the tick just ran on (issue #1009), so it is landed but not live everywhere.
 `deferred` means the tick applies this PR itself and has not crossed origin yet; the next
-tick does it.
+tick does it -- UNLESS the verdict says this run stopped watching a tick that was still
+applying, in which case the deployer's markers were read mid-apply and a hold cannot be
+ruled out (issue #1607). Re-run land.sh then; no later tick crosses a hold.
 `merge-conflict` and `pr-ci-red` are the merge wait ending early on the two states an armed
 auto-merge never recovers from. `pr-ci-red` is the PR's CI before the merge; `ci-red` is
 master's after it.

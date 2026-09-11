@@ -97,16 +97,15 @@
                 "color": "#E02F44"
               },
               {
-                "color": "#E02F44",
-                "value": 10
-              },
-              {
                 "color": "#299c46",
-                "value": 10
+                "value": 1
               }
             ]
           },
-          "unit": "none"
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "decimals": 2
         },
         "overrides": []
       },
@@ -141,15 +140,16 @@
             "uid": "EGdsQqhVk"
           },
           "exemplar": true,
-          "expr": "sum(up{job=~\"crowdsec.*\"})",
+          "expr": "sum(up{job=~\"crowdsec.*\"}) / count(up{job=~\"crowdsec.*\"})",
           "interval": "",
           "legendFormat": "",
           "refId": "A"
         }
       ],
-      "title": "Running Crowdsec",
+      "title": "CrowdSec agents up (ratio)",
       "transparent": true,
-      "type": "stat"
+      "type": "stat",
+      "description": "Fraction of scraped CrowdSec targets that are up: 1 means every agent reports, whatever the fleet size (#1709). The upstream board plotted a raw count against thresholds sized for ten machines, so this tile read red on a healthy fleet of three and could never go green. Known blind spot, the same one kuma-drift names: a job that DISAPPEARS from service discovery leaves the survivors at N/N, so this answers \"is an agent down\", not \"is an agent missing\"."
     },
     {
       "aliasColors": {},
@@ -213,47 +213,11 @@
             "uid": "EGdsQqhVk"
           },
           "exemplar": true,
-          "expr": "sum(increase(cs_filesource_hits_total[$__interval])) by (machine)",
+          "expr": "sum(increase(cs_filesource_hits_total[$__rate_interval])) by (node)",
           "interval": "",
           "intervalFactor": 2,
-          "legendFormat": "{{machine}}",
+          "legendFormat": "{{node}}",
           "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "EGdsQqhVk"
-          },
-          "exemplar": true,
-          "expr": "sum(increase(cs_journalctlsource_hits_total[$__interval])) by (machine)",
-          "hide": false,
-          "interval": "",
-          "legendFormat": "{{machine}}",
-          "refId": "B"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "EGdsQqhVk"
-          },
-          "exemplar": true,
-          "expr": "sum(increase(cs_cloudwatch_stream_hits_total[$__interval])) by (machine)",
-          "hide": false,
-          "interval": "",
-          "legendFormat": "{{machine}}",
-          "refId": "C"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "EGdsQqhVk"
-          },
-          "exemplar": true,
-          "expr": "sum(increase(cs_syslogsource_hits_total[$__interval])) by (machine)",
-          "hide": false,
-          "interval": "",
-          "legendFormat": "{{machine}}",
-          "refId": "D"
         }
       ],
       "thresholds": [],
@@ -348,10 +312,10 @@
             "type": "prometheus",
             "uid": "EGdsQqhVk"
           },
-          "expr": "sum(increase(cs_parser_hits_total[$__interval])) by (machine)",
+          "expr": "sum(increase(cs_parser_hits_total[$__rate_interval])) by (node)",
           "interval": "",
           "intervalFactor": 2,
-          "legendFormat": "{{machine}}",
+          "legendFormat": "{{node}}",
           "refId": "A"
         }
       ],
@@ -447,10 +411,10 @@
             "type": "prometheus",
             "uid": "EGdsQqhVk"
           },
-          "expr": "sum(increase(cs_bucket_overflowed_total[$__interval])) by (machine)",
+          "expr": "sum(increase(cs_bucket_overflowed_total[$__rate_interval])) by (node)",
           "interval": "",
           "intervalFactor": 2,
-          "legendFormat": "{{machine}}",
+          "legendFormat": "{{node}}",
           "refId": "A"
         }
       ],
@@ -886,7 +850,7 @@
                 "type": "prometheus",
                 "uid": "EGdsQqhVk"
               },
-              "expr": "sum(increase(cs_node_hits_ok_total[$__interval])) by (name)",
+              "expr": "sum(increase(cs_node_hits_ok_total[$__rate_interval])) by (name)",
               "format": "time_series",
               "instant": false,
               "interval": "",
@@ -953,7 +917,7 @@
                 "type": "prometheus",
                 "uid": "EGdsQqhVk"
               },
-              "expr": "sum(increase(cs_node_hits_ko_total[$__interval])) by (name)",
+              "expr": "sum(increase(cs_node_hits_ko_total[$__rate_interval])) by (name)",
               "interval": "",
               "intervalFactor": 2,
               "legendFormat": "{{name}}",
@@ -1045,7 +1009,7 @@
                 "type": "prometheus",
                 "uid": "EGdsQqhVk"
               },
-              "expr": "sum(increase(cs_bucket_created_total[$__interval])) by (name)",
+              "expr": "sum(increase(cs_bucket_created_total[$__rate_interval])) by (name)",
               "interval": "",
               "intervalFactor": 2,
               "legendFormat": "{{name}}",
@@ -1110,7 +1074,7 @@
                 "type": "prometheus",
                 "uid": "EGdsQqhVk"
               },
-              "expr": "sum(increase(cs_bucket_overflowed_total[$__interval])) by (name)",
+              "expr": "sum(increase(cs_bucket_overflowed_total[$__rate_interval])) by (name)",
               "interval": "",
               "intervalFactor": 2,
               "legendFormat": "{{name}}",

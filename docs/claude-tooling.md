@@ -223,6 +223,13 @@ than the portal.
 The `-m ui` suite is unaffected either way — it launches its own server per run, so it reads the
 state file as it stands.
 
+`scripts/diagnostics/tests/test_ui_state_reload.py` is the guard on this procedure, under the
+`ui` marker, so a `@playwright/mcp` bump that changed what `browser_close` disposes fails a test
+rather than leaving this section quietly wrong. It launches its own server against a private
+state file — `UI_MCP_STATE_PATH`, which `ui_mcp.sh` takes in place of the tier's shared jar — so
+it can swap the file underneath a running server without touching the session other sessions
+read.
+
 ### `--check` asks Authelia, never the clock
 
 The expiry stamped in the state file is a claim, and the two come apart in exactly the cases

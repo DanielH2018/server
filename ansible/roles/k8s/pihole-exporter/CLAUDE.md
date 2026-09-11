@@ -43,6 +43,13 @@ renders — the same value FTL itself uses. One copy of that password in the clu
 to rotate it. That cross-role read is why the `containers_list` entry declares
 `depends_on: [pihole]`: the Secret has to exist before this pod starts.
 
+**Rotating `pihole_password` needs this pod rolled by hand.** A Secret change alone does not
+roll a Deployment, and the pihole role's restart tasks sequence its own two FTL pods and
+nothing else — so after a rotation this exporter keeps presenting the old password. That is
+visible rather than silent, since `up{job="pihole"}` drops to 0 once the old value stops
+authenticating, but nothing rolls the pod for you. Redeploy the role:
+`./scripts/deploy.sh --tags "pihole-exporter"`.
+
 ## Two things that bite
 
 **The probes are `tcpSocket`, not `httpGet` on `/metrics`.** A kubelet probe against a metrics

@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/state.py
-generated_at: 2026-09-09 22:50 UTC
-generated_sha: 02af13398
+generated_at: 2026-09-10 18:17 UTC
+generated_sha: f95da3c99
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,17 +12,17 @@ generated_sha: 02af13398
 
 # State of the lab
 
-6 of 7 loops within cadence.
+7 of 7 loops within cadence.
 
 !!! warning "Status is a heuristic over the last recorded state"
     `late` means the loop's last recorded run is more than 2x its expected cadence old. `unreadable` means this generator could not reach the loop's state at all (wrong host, permission, or unparseable content) -- not that the loop is unhealthy. `never` means the state is reachable and simply has no run recorded yet.
 
 | Loop | Last run | Age | Cadence | Status | Last outcome |
 |---|---|---|---|---|---|
-| gitops-deploy | 2026-09-09T22:45:58+0000 | 4m | 10m | ok | ticked, no hold |
-| renovate-agent | 2026-09-05T11:35:25+0000 | 4d11h | 1d | late | session completed |
-| renovate-notify | 2026-09-09T21:42:35+0000 | 1h8m | 1d | ok | notified |
-| docs-refresh | 2026-09-09T18:17:00+0000 | 4h33m | 12h | ok | generators: skipped |
-| secret-rotate | 2026-09-09T22:14:19+0000 | 36m | 7d | ok | last touched by: Guard the git-derived rotation date against a whole-file SOPS re-encrypt |
-| longhorn-restore-drill | 2026-09-09T04:10:57+0000 | 18h39m | 1d | ok | PVC restore proven |
-| etcd-restore-drill | 2026-09-07T10:20:02+0000 | 2d12h | 7d | ok | list-only restore proven (snapshot offbox-daniel-box-1788749102.zip) |
+| gitops-deploy | 2026-09-10T18:17:37+0000 | 0m | 10m | ok | ticked, no hold |
+| renovate-agent | 2026-09-10T11:05:16+0000 | 7h12m | 1d | ok | session completed |
+| renovate-notify | 2026-09-10T13:02:28+0000 | 5h15m | 1d | ok | notified |
+| docs-refresh | 2026-09-10T06:17:00+0000 | 12h1m | 12h | ok | generators: ok |
+| secret-rotate | 2026-09-10T17:56:14+0000 | 21m | 7d | ok | last touched by: Arm the Longhorn snapshot-headroom monitor |
+| longhorn-restore-drill | 2026-09-10T04:10:48+0000 | 14h7m | 1d | ok | PVC restore proven |
+| etcd-restore-drill | 2026-09-07T10:20:02+0000 | 3d7h | 7d | ok | list-only restore proven (snapshot offbox-daniel-box-1788749102.zip) |

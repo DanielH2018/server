@@ -12,6 +12,7 @@ failure is worth retrying without ever looking at gh itself.
 # Reach the sibling package directories: a directly-invoked script gets only its own
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 import sys as _sys
+from datetime import date
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
@@ -19,11 +20,15 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 from dev.findings_lib.issue_model import (
     LABELS,
     NO_REOPEN,
+    NOT_BEFORE_PREFIX,
+    NOT_BEFORE_STYLE,
     PROJECT_TITLE,
     _REOBSERVED,
     claim_comment,
     current_claim,
     label_names,
+    not_before,
+    not_before_label,
     release_comment,
     reobservations,
     trailer,
@@ -44,6 +49,60 @@ def plan_sync_labels(existing: set[str]) -> list[list[str]]:
                 ["label", "create", name, "--color", colour, "--description", desc]
             )
     return plans
+
+
+def plan_ensure_label(name: str, existing: set[str]) -> list[list[str]]:
+    """The `label create` a dated `not-before:` label needs before anything can apply it.
+
+    `gh issue create --label` and `gh issue edit --add-label` both fail on a label the repo
+    lacks, and `plan_sync_labels` only knows the static `LABELS` set. Returns `[]` when the
+    label already exists, so a second deferral to the same date plans nothing extra.
+    """
+    if name in existing:
+        return []
+    colour, desc = NOT_BEFORE_STYLE
+    return [["label", "create", name, "--color", colour, "--description", desc]]
+
+
+def plan_defer(
+    issue: dict, *, until: date | None, existing_labels: set[str]
+) -> list[list[str]]:
+    """Plans the gh argv that sets, moves or clears ``issue``'s not-before date.
+
+    Args:
+        until: the first day the issue may be offered again, or None to clear the deferral.
+        existing_labels: the repo's label names, so the dated label is created only once.
+
+    Every `not-before:` label already on the issue is removed, whatever its date, so the
+    issue carries at most one and `not_before` never has to pick. The comment is what the
+    thread reads later — the six releases on #1288 each re-derived the date from the body.
+
+    Raises:
+        ClaimRefused: the issue is closed, or clearing an issue that carries no deferral.
+    """
+    if issue.get("state", "OPEN") != "OPEN":
+        raise ClaimRefused("closed — nothing to defer")
+    n = str(issue["number"])
+    stale = sorted(x for x in label_names(issue) if x.startswith(NOT_BEFORE_PREFIX))
+    if until is None:
+        if not stale:
+            raise ClaimRefused("not deferred — no `not-before:` label to clear")
+        plans = [["issue", "edit", n, *_flat("--remove-label", stale)]]
+        plans.append(["issue", "comment", n, "--body", "Deferral cleared."])
+        return plans
+    new = not_before_label(until)
+    plans = plan_ensure_label(new, existing_labels)
+    edit = ["issue", "edit", n, "--add-label", new]
+    edit += _flat("--remove-label", [x for x in stale if x != new])
+    plans.append(edit)
+    plans.append(
+        ["issue", "comment", n, "--body", f"Deferred until {until.isoformat()}."]
+    )
+    return plans
+
+
+def _flat(flag: str, values: list[str]) -> list[str]:
+    return [arg for v in values for arg in (flag, v)]
 
 
 def plan_touch(issue: dict, source: str) -> list[list[str]]:
@@ -77,7 +136,7 @@ class ClaimRefused(Exception):
 
 
 def plan_claim(
-    issue: dict, *, worktree: str, session: str | None, when: str
+    issue: dict, *, worktree: str, session: str | None, when: str, today: date
 ) -> list[list[str]]:
     """Plans the gh argv to claim ``issue`` for ``worktree``.
 
@@ -94,7 +153,8 @@ def plan_claim(
 
     Raises:
         ClaimRefused: the issue is closed, lacks the `claude` label, is labelled `manual`,
-            or another worktree already holds it.
+            carries a `not-before:` date after ``today``, or another worktree already holds
+            it.
     """
     if issue.get("state", "OPEN") != "OPEN":
         raise ClaimRefused("closed — nothing to work")
@@ -110,6 +170,13 @@ def plan_claim(
         )
     if "manual" in names:
         raise ClaimRefused("labelled `manual` — reserved for the operator")
+    day = not_before(issue)
+    if day is not None and today < day:
+        # The date is the issue's own precondition, so a claim before it is the wasted
+        # dispatch #1739 counted six of. The way out is named, unlike `manual`'s.
+        raise ClaimRefused(
+            f"deferred until {day.isoformat()} — `defer {issue['number']} --clear` lifts it"
+        )
     n = str(issue["number"])
     add_label = ["issue", "edit", n, "--add-label", "claimed"]
     held = current_claim(issue)
@@ -167,6 +234,7 @@ def plan_open(
     fp: str,
     source: str,
     verify_by: str | None = None,
+    defer_until: date | None = None,
 ) -> tuple[str, int, list[list[str]]]:
     """Plans the gh argv to file, touch or reopen a finding, given its matching issue.
 
@@ -180,6 +248,8 @@ def plan_open(
         source: the review or session that produced this finding.
         verify_by: prose describing how to check whether the finding is fixed, which
             `verify` prints back; stored only when creating a new issue.
+        defer_until: the first day `next` may offer the finding, as a `not-before:` label;
+            applied only when creating a new issue. The caller plans the label's creation.
 
     Returns:
         A ``(outcome, exit_code, plans)`` tuple: outcome is one of ``created``, ``touched``,
@@ -201,6 +271,8 @@ def plan_open(
         ]
         for lab in labels:
             argv += ["--label", lab]
+        if defer_until is not None:
+            argv += ["--label", not_before_label(defer_until)]
         argv += ["--project", PROJECT_TITLE]
         return "created", 0, [argv]
     n = str(existing["number"])

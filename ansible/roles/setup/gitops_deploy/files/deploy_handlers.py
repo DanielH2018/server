@@ -214,6 +214,11 @@ def handle_broad(
         # double-page; exit 1 only if the post failed, leaving OnFailure the backstop.
         return 0 if posted else 1
 
+    # Recorded BEFORE the hold is cleared, and unconditionally: `clear_broad_hold` may keep a
+    # hold naming a DIFFERENT plane, and this apply still happened. `land.sh` reads it to tell
+    # a plane the tick applied from one it merely fast-forwarded past — `behind_since` empty
+    # cannot (issue #1537).
+    state.record_broad_applied(origin, playbook, tags)
     state.clear_broad_hold(playbook, tags)
     deploy_alerts.alert_secrets_deferred(tools, state, config, origin, cs)
     deploy_alerts.alert_deferred(

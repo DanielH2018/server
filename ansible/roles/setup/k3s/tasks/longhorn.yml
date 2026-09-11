@@ -147,6 +147,26 @@
   become: true
   changed_when: "'no change' not in k3s_longhorn_replicas.stdout"
 
+- name: Set the Longhorn snapshot data-integrity mode
+  tags: [longhorn]
+  # `snapshot-data-integrity` is DataEngineSpecific, so its `value` is a JSON MAP SERIALISED AS
+  # A STRING (`{"v1":"enabled","v2":"enabled"}`), not the bare string every other setting patched
+  # in this file takes. A patch copying the shape of the five above stores the wrong thing and
+  # Longhorn ignores it. The double `to_json` builds that shape without hand-escaping: the first
+  # renders the map, the second quotes it as a JSON string. ENFORCED by
+  # ansible/tests/longhorn/test_snapshot_data_integrity_patch_is_a_json_map.py.
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n longhorn-system patch settings.longhorn.io snapshot-data-integrity
+      --type=merge -p {{ integrity_patch | quote }}
+  vars:
+    integrity_mode: "{{ k3s_longhorn_snapshot_data_integrity }}"
+    integrity_patch: >-
+      {"value":{{ {"v1": integrity_mode, "v2": integrity_mode} | to_json | to_json }}}
+  register: k3s_longhorn_integrity
+  become: true
+  changed_when: "'no change' not in k3s_longhorn_integrity.stdout"
+
 - name: Set the Longhorn backup-store poll interval
   tags: [longhorn, longhorn_backup]
   # Rate-limits the only recurring B2 caller in the cluster. See the variable's comment in

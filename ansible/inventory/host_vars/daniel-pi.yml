@@ -12,6 +12,17 @@ ssh_config_path: /etc/ssh/sshd_config.d/50-cloud-init.conf
 # separate daniel-pi.com zone.
 # LAN-only host: publish web UIs bound to the LAN IP instead of routing through Traefik.
 expose_mode: lan
+# Escalation-prompt budget for a 456 MB Zero 2 W. ansible-core's ssh plugin waits
+# `2 + timeout` seconds for sudo's prompt (plugins/connection/ssh.py, "Timeout (%ds) waiting
+# for privilege escalation prompt"), and `timeout` defaults to 10 — so a sudo that takes
+# longer than 12 s to prompt reads as UNREACHABLE, not as slow (#1747). Measured 2026-09-11
+# 01:10 UTC with every container in its limit (alloy 30 MiB of 96): 456 MB total, 308 used,
+# 148 available, 319 MB of swap in use on the SD card, load average 1.21 — the host daemons
+# (alloy, dockerd, containerd, node_exporter) hold the RAM, and sudo pages in behind them.
+# 30 s (32 s at the prompt) is four times the observed floor and still fails fast. This is the
+# per-host spelling of `[defaults] timeout`; there is no become-specific timeout var in the
+# pinned core. A retry loop is the wrong shape: the wait is the whole cost.
+ansible_ssh_timeout: 30
 # No GitOps auto-deploy path to the Pi (accepted, 2026-06-30) — memory-constrained and driven
 # manually over SSH. See gitops_deploy CLAUDE.md.
 has_gitops: false

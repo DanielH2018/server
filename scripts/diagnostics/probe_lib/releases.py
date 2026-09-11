@@ -14,8 +14,8 @@ THREE FLAGS. `dirty` means the tree had uncommitted tracked changes, so no commi
 those bytes. `unmerged` means the commit is not an ancestor of origin/master -- a service
 running code that never landed. `stale` means origin/master has moved past the applied commit
 under the service's own role, or one of the shared roles every service's manifests depend on
-(`shared_k8s_roles()` -- `manifests`, `rollout-drain`, and the rest of the roles with no
-`containers_list` entry of their own). `stale` is what makes a deferred k8s change visible: the
+(`manifest_affecting_shared_roles()` -- `manifests` and the other entry-less roles that supply
+bytes to what is applied). `stale` is what makes a deferred k8s change visible: the
 gitops deployer ff-merges a non-auto-deployable k8s role change and pages Discord once, and
 every other monitored marker then reads clean while the cluster still runs the old manifests
 (issue #947). All three flags are normal mid-slice and alarming a week later, which is why they
@@ -157,6 +157,55 @@ def shared_k8s_roles(k8s_roles_dir=None, host_vars=None):
     return frozenset(shared)
 
 
+# The role that renders every other role's templates into the applied bytes. It ships no
+# templates or files of its own, so the predicate below has to name it.
+MANIFEST_RENDERER = "manifests"
+
+
+def _supplies_manifest_bytes(role_dir):
+    """Whether `role_dir` contributes bytes to some service's APPLIED manifests.
+
+    A shared role does that in exactly two ways: it renders templates that are applied
+    alongside the consumer's own (`volume-claim/templates/pvc.yaml.j2`,
+    `image-builder/templates/build-job.yaml.j2`), or it ships `files/` a consumer's manifest
+    embeds with `lookup('file')` (`arr-notification`, `game-stats-lib`). A role with only
+    `tasks/` and `defaults/` changes how a deploy RUNS, never what it applies.
+
+    That distinction is the whole point (#1636). A deploy-time role's change is live for the
+    next deploy the moment the deployer fast-forwards the primary checkout -- `deploy.sh`
+    renders from the tree it is invoked in -- so it invalidates no release stamp and no drift
+    exists. Sweeping those roles in marked all 53 services stale for `volume-snapshot`'s
+    snapshot-space cap (b7b9bded6), which rendered no manifest at all.
+
+    The same reasoning has a file-granularity twin one level down -- a `tasks/` file inside a
+    role that IS in the census supplies no bytes either. `_is_real_change` applies it (#1672).
+
+    `image-builder` stays in, deliberately: its `build-job.yaml.j2` decides the bytes of an
+    image nine services then run, which a stamp cannot otherwise see. It is still wider than it
+    needs to be -- those nine are named in their own tasks, while this predicate puts the role
+    in all 53 services' paths.
+    """
+    if role_dir.name == MANIFEST_RENDERER:
+        return True
+    return any((role_dir / sub).is_dir() for sub in ("templates", "files"))
+
+
+def manifest_affecting_shared_roles(k8s_roles_dir=None, host_vars=None):
+    """`shared_k8s_roles()` narrowed to the roles that can make a stamp stale.
+
+    Kept separate from `shared_k8s_roles()` rather than filtering in place: that census answers
+    "which derived names are not deploy tags", the question `split_shared_roles` exists for and
+    `test_denylist_parsers_agree.py` polices against `deploy_k8s.py`'s own list. Narrowing it
+    would change that comparison's meaning as a side effect of fixing this one.
+    """
+    k8s_roles_dir = k8s_roles_dir or (REPO_ROOT / "ansible/roles/k8s")
+    return frozenset(
+        r
+        for r in shared_k8s_roles(k8s_roles_dir, host_vars)
+        if _supplies_manifest_bytes(k8s_roles_dir / r)
+    )
+
+
 def role_paths_for(service, shared_roles):
     """The `ansible/roles/k8s/` paths whose history decides whether `service` is stale."""
     return [f"ansible/roles/k8s/{service}/"] + [
@@ -164,22 +213,62 @@ def role_paths_for(service, shared_roles):
     ]
 
 
-def _is_real_change(path):
-    """False for a path that never reaches a deployed manifest: docs and a role's own tests.
+# Subdirectories of a shared role that decide how a deploy RUNS rather than what it applies.
+# `defaults/` is deliberately absent: `volume-claim/defaults/main.yml` holds `volume_claim_size`
+# and `volume_claim_storage_class`, both read by that role's `pvc.yaml.j2`, so a change there
+# does move the applied bytes.
+_DEPLOY_TIME_SUBDIRS = frozenset({"tasks", "handlers", "meta"})
 
-    A role's `tests/` directory holds pytest guards over its `files/*.py`, never something
-    `k8s/manifests` stages (`ansible/tests/repo/test_no_role_ships_a_test_file.py` enforces
-    that tree-wide) -- so a change there cannot make the applied manifests stale.
+K8S_ROLES_PREFIX = ("ansible", "roles", "k8s")
+
+
+def _deploy_time_shared_roles(shared_roles):
+    """The shared roles whose `tasks/` cannot move a service's applied manifest bytes.
+
+    `manifests` is excluded because it ships no templates of its own -- its `tasks/` IS the
+    render, prune and apply logic that produces every service's bytes, so a change there is
+    exactly the false-GREEN issue #947 exists to catch. Every other byte-supplying shared role
+    (`volume-claim`, `image-builder`, `arr-notification`, `game-stats-lib`) is in the census for
+    its `templates/` or `files/`, and its `tasks/` is deploy-time behaviour.
+    """
+    return frozenset(shared_roles) - {MANIFEST_RENDERER}
+
+
+def _is_real_change(path, deploy_time_roles=frozenset()):
+    """False for a path that never reaches a deployed manifest.
+
+    Three classes. Docs, because no playbook applies prose. A role's own `tests/`, which holds
+    pytest guards over its `files/*.py` and never something `k8s/manifests` stages
+    (`ansible/tests/repo/test_no_role_ships_a_test_file.py` enforces that tree-wide). And a
+    SHARED role's `tasks/`, which is #1636's role-granularity narrowing applied one level down.
+
+    That third class is the one this repo paid for twice. #1636 dropped the five shared roles
+    holding only `tasks/` and `defaults/` from the census, because a deploy-time change is live
+    the moment the deployer fast-forwards the primary checkout and invalidates no release stamp.
+    The same is true of a `tasks/` file inside a shared role that DOES supply bytes -- but that
+    role sits in every service's `role_paths`, so `volume-claim`'s staging-directory move
+    (0b86a7d7) marked all 53 services stale and parked `Release Staleness Drift` DOWN with no
+    deploy tag able to clear it (#1672). The narrowing is scoped to shared roles: a SERVICE's
+    own `tasks/main.yml` names its `manifests_files`, so a change there does move its bytes and
+    must still count.
     """
     if path.endswith(".md"):
         return False
-    if "tests" in path.split("/")[:-1]:
+    parts = path.split("/")
+    if "tests" in parts[:-1]:
+        return False
+    if (
+        len(parts) > 5
+        and tuple(parts[:3]) == K8S_ROLES_PREFIX
+        and parts[3] in deploy_time_roles
+        and parts[4] in _DEPLOY_TIME_SUBDIRS
+    ):
         return False
     return True
 
 
-def _changed_files(commit, paths, repo_root, ref):
-    """Real (non-doc, non-test) files under `paths` changed between `commit` and `ref`.
+def _changed_files(commit, paths, repo_root, ref, deploy_time_roles=frozenset()):
+    """Real (byte-moving) files under `paths` changed between `commit` and `ref`.
 
     None means the range could not be resolved -- `commit` is not a rev this checkout knows
     (a pruned worktree branch, a shallow clone) -- which the caller must treat as stale rather
@@ -202,7 +291,7 @@ def _changed_files(commit, paths, repo_root, ref):
     if result.returncode != 0:
         return None
     changed = {line.strip() for line in result.stdout.splitlines() if line.strip()}
-    return sorted(p for p in changed if _is_real_change(p))
+    return sorted(p for p in changed if _is_real_change(p, deploy_time_roles))
 
 
 def compute_stale(records, repo_root=REPO_ROOT, ref="origin/master", shared_roles=None):
@@ -212,7 +301,10 @@ def compute_stale(records, repo_root=REPO_ROOT, ref="origin/master", shared_role
     sharing one commit, and grouping first keeps this from being 54 subprocess calls for what a
     single one already answers for the union of every service's role_paths.
     """
-    shared_roles = shared_roles if shared_roles is not None else shared_k8s_roles()
+    shared_roles = (
+        shared_roles if shared_roles is not None else manifest_affecting_shared_roles()
+    )
+    deploy_time_roles = _deploy_time_shared_roles(shared_roles)
     by_commit = {}
     for rec in records:
         if "error" in rec:
@@ -227,7 +319,7 @@ def compute_stale(records, repo_root=REPO_ROOT, ref="origin/master", shared_role
         paths = sorted(
             {p for svc in services for p in role_paths_for(svc, shared_roles)}
         )
-        changed = _changed_files(commit, paths, repo_root, ref)
+        changed = _changed_files(commit, paths, repo_root, ref, deploy_time_roles)
         if changed is None:
             for svc in services:
                 stale[svc] = "commit unknown to this checkout"

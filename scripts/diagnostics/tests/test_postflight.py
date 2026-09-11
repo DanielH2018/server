@@ -37,8 +37,36 @@ def stub_host(monkeypatch):
     )
 
 
+# Collection-time aliases: @parametrize is evaluated at import, before a test body runs.
+OK_, FAIL_ = postflight.OK, postflight.FAIL
+
+
 def respond(monkeypatch, status, body=""):
-    monkeypatch.setattr(postflight, "get", lambda *a, **kw: (status, body))
+    """Stub `get()`. `status` may instead be a `get`-shaped callable for a per-URL reply.
+
+    One patch point for both shapes on purpose: a second `monkeypatch.setattr(postflight,
+    "get", ...)` elsewhere in this file is the same seam patched twice, and the repo ratchets
+    on that count.
+    """
+    reply = status if callable(status) else lambda *a, **kw: (status, body)
+    monkeypatch.setattr(postflight, "get", reply)
+
+
+def only_checks(monkeypatch, checks):
+    """Run `main()` over `checks` alone, so a test isn't at the mercy of the real registry."""
+    monkeypatch.setattr(postflight, "CHECKS", checks)
+
+
+def stub_curl(monkeypatch, run):
+    """Replace the subprocess `get()` shells out to."""
+    monkeypatch.setattr(postflight.subprocess, "run", run)
+
+
+def missing_secret(monkeypatch, name, err=""):
+    """Every secret decrypts except `name`, which is absent."""
+    monkeypatch.setattr(
+        postflight, "secret", lambda n: ("", err) if n == name else ("x", "")
+    )
 
 
 def targets_body(*targets):
@@ -92,6 +120,54 @@ def test_arr_key_mismatch_fails(monkeypatch):
 def test_arr_key_ok(monkeypatch):
     respond(monkeypatch, 200, "{}")
     assert postflight.check_arr_key("radarr")[0] == postflight.OK
+
+
+def test_the_arr_key_check_asks_for_the_path_its_route_admits_is_clean(monkeypatch):
+    """Each *arr is asked for the path its `-monitoring` IngressRoute admits.
+
+    `get_via_service` falls back to the Traefik route whenever the ClusterIP does not answer,
+    which is every run where the pod is on the other node. The check asked for
+    `/api/<ver>/system/status`, which is on no monitoring route's PathPrefix, so the fallback
+    fell through to the app's own Authelia'd route and 302'd — §9.3 was structurally SKIP
+    (#1642). The route side is guarded by
+    ansible/tests/k8s/test_arr_monitoring_routes_admit_postflight.py.
+    """
+    seen = []
+
+    def record(url, header=None, timeout=None, resolve=None):
+        seen.append(url)
+        return 200, "{}"
+
+    respond(monkeypatch, record)
+    for app in ("sonarr", "radarr", "prowlarr"):
+        assert postflight.check_arr_key(app)[0] == postflight.OK
+    # An exact list, not a subset check: a dropped app would leave a subset assertion passing.
+    assert seen == [
+        "http://10.0.0.1:8989/api/v3/queue",
+        "http://10.0.0.1:7878/api/v3/queue",
+        "http://10.0.0.1:9696/api/v1/indexer",
+    ]
+
+
+def test_asking_for_a_path_no_route_admits_is_flagged(monkeypatch):
+    """The rejecting half: a path outside the route's prefix reaches Authelia, not the app.
+
+    Rendered as the SKIP `_forward_auth_intercepted` produces, so the failure this guards
+    against is a check that reports nothing rather than a check that reports wrongly. The
+    assertion is on the response arm, because that is the only thing postflight can observe —
+    which is exactly why the path itself is pinned by the test above and by the route guard.
+    """
+
+    def only_the_monitored_path(url, header=None, timeout=None, resolve=None):
+        return (200, "{}") if url.endswith("/api/v1/indexer") else (302, "")
+
+    respond(monkeypatch, only_the_monitored_path)
+    monkeypatch.setitem(
+        postflight.ARR_MONITORED_PATH, "prowlarr", "/api/v1/system/status"
+    )
+    status, detail = postflight.check_arr_key("prowlarr")
+    assert status == postflight.SKIP
+    assert "forward-auth" in detail
 
 
 def test_an_unreachable_arr_skips_rather_than_blaming_the_key(monkeypatch):
@@ -149,7 +225,7 @@ def test_ha_token_rejected_fails(monkeypatch):
 
 
 def test_ha_token_missing_from_sops_fails(monkeypatch):
-    monkeypatch.setattr(postflight, "secret", lambda name: ("", "not found"))
+    missing_secret(monkeypatch, "homepage_ha_token", "not found")
     respond(monkeypatch, 200)
     assert postflight.check_ha_token("homepage_ha_token") == (
         postflight.FAIL,
@@ -159,14 +235,165 @@ def test_ha_token_missing_from_sops_fails(monkeypatch):
 
 def test_authelia_missing_oidc_material_fails(monkeypatch):
     respond(monkeypatch, 200, json.dumps({"status": "OK"}))
-    monkeypatch.setattr(
-        postflight,
-        "secret",
-        lambda name: ("", "") if name == "authelia_oidc_hmac_secret" else ("x", ""),
-    )
+    missing_secret(monkeypatch, "authelia_oidc_hmac_secret")
     status, detail = postflight.check_authelia()
     assert status == postflight.FAIL
     assert "authelia_oidc_hmac_secret" in detail
+
+
+def test_an_unreachable_authelia_skips_rather_than_reporting_an_outage(monkeypatch):
+    """The accept half of #1564.
+
+    A ClusterIP that does not answer this node is a placement fact — Authelia's pod is on the
+    other node. Reporting it as "Authelia is not serving" was a false outage on the most
+    load-bearing service in the fleet.
+    """
+    respond(monkeypatch, 0, "curl: (7) Failed to connect to 10.43.0.9 port 9091")
+    status, detail = postflight.check_authelia()
+    assert status == postflight.SKIP
+    assert "unreachable from this host" in detail
+    assert "not serving" not in detail
+
+
+def test_authelia_serving_an_error_still_fails(monkeypatch):
+    """The reject half: a real non-200 is an outage and must not be softened to SKIP."""
+    respond(monkeypatch, 503)
+    status, detail = postflight.check_authelia()
+    assert status == postflight.FAIL
+    assert "not serving" in detail
+
+
+def test_authelia_oidc_material_is_checked_on_a_node_it_cannot_reach(monkeypatch):
+    """The SOPS read needs no network, so the unreachable arm must not skip past it."""
+    respond(monkeypatch, 0, "curl: (7) Failed to connect")
+    missing_secret(monkeypatch, "authelia_oidc_hmac_secret")
+    status, detail = postflight.check_authelia()
+    assert status == postflight.FAIL
+    assert "authelia_oidc_hmac_secret" in detail
+
+
+def test_kuma_drift_reads_its_constants_from_the_module_that_holds_them(monkeypatch):
+    """#1562: postflight read four names off `probe`, which holds none of them.
+
+    Exercising the check is the point — a `hasattr` census would pass before and after the
+    fix. This raised `AttributeError: module 'probe' has no attribute 'STATIC_MONITORS_PATH'`,
+    which the runner reported as FAIL, so a check that never ran read as drift found.
+    """
+    declared = {
+        "sonarr": {"type": "http", "interval": 60, "gated": False, "gate": None}
+    }
+    status, detail = _drift_over(monkeypatch, declared, {"sonarr"})
+    assert status == postflight.OK
+    assert isinstance(detail, str)
+
+
+def _drift_over(monkeypatch, declared, live):
+    """Drive check_kuma_drift with `declared` against a live set, returning (status, detail)."""
+    body = json.dumps(
+        {
+            "data": {
+                "result": [
+                    {"metric": {"monitor_name": n}, "value": [0, "1"]} for n in live
+                ]
+            }
+        }
+    )
+    respond(monkeypatch, 200, body)
+    monkeypatch.setattr(postflight.monitors, "kuma_pod_age_seconds", lambda: 99999)
+    # STATIC_MONITORS_PATH is left alone: the real declaration file is tracked, and the parse
+    # is patched anyway, so the only thing it supplies here is bytes to read.
+    monkeypatch.setattr(
+        postflight.monitors, "parse_declared_monitors", lambda text: declared
+    )
+    return postflight.check_kuma_drift()
+
+
+GATED_AND_ABSENT = {
+    "Off-box etcd Snapshot": {
+        "type": "push",
+        "interval": 86400,
+        "gated": True,
+        "gate": "etcd_snapshot_push_token",
+    }
+}
+
+
+@pytest.mark.parametrize(
+    "gate_is_set, expected, expected_text",
+    [
+        (True, FAIL_, "Off-box etcd Snapshot: declared, not live"),
+        (False, OK_, "genuinely unset, skipped"),
+    ],
+    ids=["set-and-absent-is-drift", "unset-is-excused"],
+)
+def test_a_gated_monitors_absence_is_judged_against_its_secret(
+    monkeypatch, gate_is_set, expected, expected_text
+):
+    """#1632's red-proof pair, and the whole point of the section.
+
+    §9.1 passed no gate_states, so `format_kuma_drift` fell through to its excused arm for
+    every gated monitor whatever the secret said — seven of them on 2026-09-10, under an [OK].
+    A gated monitor is the one nothing else watches, so the drift half could not see the case
+    it exists for. Measured 2026-08-22: `etcd_snapshot_push_token` was set, its monitor was not
+    live, and the check called that correctly skipped.
+
+    The unset row is not padding: without it the fix is a louder check that cries wolf on
+    every gate, and a check that fires on everything is as useless as one that fires on
+    nothing.
+    """
+    monkeypatch.setattr(postflight.monitors, "gate_var_state", lambda var: gate_is_set)
+    status, detail = _drift_over(monkeypatch, GATED_AND_ABSENT, set())
+    assert status == expected
+    assert expected_text in detail
+
+
+def test_the_route_hostname_comes_from_inventory_not_the_service_name():
+    """Authelia's route is `auth`, and a pin aimed at `authelia.local.<domain>` reaches nothing.
+
+    Non-vacuity: this asserts the two named services whose hostname does and does not differ
+    from the service name, so the lookup silently returning its argument — an empty
+    containers_list, a renamed key — fails here rather than passing on the fallback.
+    """
+    assert postflight.route_host("authelia") == "auth"
+    assert postflight.route_host("jellyfin") == "jellyfin"
+
+
+def test_an_unanswered_clusterip_falls_back_to_the_traefik_route(monkeypatch):
+    """#1633: postflight runs on daniel-box only, so a pod on daniel-server had no asker.
+
+    The ClusterIP answers only a caller on the pod's own node — each workload's NetworkPolicy
+    admits pod selectors and no ipBlock for the node — which made §9.5 and §9.3 structurally
+    SKIP rather than ever reporting. The route reaches either node.
+    """
+    seen = []
+
+    def answer(url, header=None, timeout=postflight.TIMEOUT, resolve=None):
+        seen.append((url, resolve))
+        if url.startswith("http://10."):  # the ClusterIP attempt
+            return 0, "curl: (7) Failed to connect"
+        return 200, json.dumps({"status": "OK"})
+
+    respond(monkeypatch, answer)
+    status, detail = postflight.check_authelia()
+    assert status == postflight.OK
+    assert "healthy (OK)" in detail
+    # The fallback went to the route name with a --resolve pin, not to the ClusterIP again.
+    assert seen[-1] == ("https://auth.test/api/health", "auth.test:443:10.0.0.240")
+
+
+def test_a_forward_auth_redirect_skips_rather_than_blaming_the_key(monkeypatch):
+    """An Authelia 302 fires in the middleware, so the app never saw the request.
+
+    The *arr routes carry `use_authelia: true` and their monitoring routes pin ClientIP to
+    daniel-server, so both 302 for this host — measured 2026-09-10. Letting that reach the
+    tail arm read `HTTP 302 — prowlarr_api_key doesn't match`, sending someone to rotate a
+    working credential: strictly worse than the SKIP it replaced.
+    """
+    respond(monkeypatch, 302)
+    status, detail = postflight.check_arr_key("prowlarr")
+    assert status == postflight.SKIP
+    assert "forward-auth" in detail
+    assert "doesn't match" not in detail
 
 
 def test_a_workload_with_no_service_skips_not_fails(monkeypatch):
@@ -174,18 +401,14 @@ def test_a_workload_with_no_service_skips_not_fails(monkeypatch):
         raise postflight.Skip(f"{name} has no ClusterIP (does the Service exist?)")
 
     monkeypatch.setattr(postflight, "service_ip", absent)
-    monkeypatch.setattr(
-        postflight,
-        "CHECKS",
-        [("9.3", "sonarr", lambda: postflight.check_arr_key("sonarr"))],
+    only_checks(
+        monkeypatch, [("9.3", "sonarr", lambda: postflight.check_arr_key("sonarr"))]
     )
     assert postflight.main() == 0
 
 
 def test_one_failure_exits_nonzero(monkeypatch):
-    monkeypatch.setattr(
-        postflight, "CHECKS", [("9.1", "x", lambda: (postflight.FAIL, "broken"))]
-    )
+    only_checks(monkeypatch, [("9.1", "x", lambda: (postflight.FAIL, "broken"))])
     assert postflight.main() == 1
 
 
@@ -195,10 +418,8 @@ def test_check_raising_does_not_abort_the_run(monkeypatch):
     def boom():
         raise ValueError("bad json")
 
-    monkeypatch.setattr(
-        postflight,
-        "CHECKS",
-        [("9.1", "x", boom), ("9.2", "y", lambda: (postflight.OK, "fine"))],
+    only_checks(
+        monkeypatch, [("9.1", "x", boom), ("9.2", "y", lambda: (postflight.OK, "fine"))]
     )
     assert postflight.main() == 1
 
@@ -209,7 +430,7 @@ def test_get_parses_status_and_body(monkeypatch):
         stdout = '{"a": 1}\n200'
         stderr = ""
 
-    monkeypatch.setattr(postflight.subprocess, "run", lambda *a, **kw: Result())
+    stub_curl(monkeypatch, lambda *a, **kw: Result())
     assert postflight.get("http://x") == (200, '{"a": 1}')
 
 
@@ -219,7 +440,7 @@ def test_get_reports_curl_failure_as_status_zero(monkeypatch):
         stdout = ""
         stderr = "connection refused"
 
-    monkeypatch.setattr(postflight.subprocess, "run", lambda *a, **kw: Result())
+    stub_curl(monkeypatch, lambda *a, **kw: Result())
     assert postflight.get("http://x") == (0, "connection refused")
 
 
@@ -237,7 +458,37 @@ def test_credentials_never_reach_argv(monkeypatch):
         seen["input"] = input
         return Result()
 
-    monkeypatch.setattr(postflight.subprocess, "run", fake_run)
+    stub_curl(monkeypatch, fake_run)
     postflight.get("http://x", 'header = "X-Api-Key: hunter2"\n')
     assert "hunter2" not in " ".join(seen["argv"])
     assert "hunter2" in seen["input"]
+
+
+# ── `--help` must not run the sweep (#1685) ──────────────────────────────────────────
+# The rejecting half of the pair: before the parser existed, `--help` ran every check —
+# several SOPS decrypts and ~15 authenticated requests to production — and exited 0, which
+# reads as a passing `--help`. The accepting half is below it: the no-argument invocation is
+# still what the parser accepts, so it cannot have swallowed the interface.
+
+
+def test_help_exits_zero_without_running_a_single_check(capsys, monkeypatch):
+    # Pin the colour setting rather than inheriting it. Python 3.14's argparse colourises help
+    # when FORCE_COLOR is set, TTY or not, and it wraps `usage: ` and the program name in
+    # SEPARATE escape runs — so the phrase below survives in CI (which sets neither variable)
+    # and is split on any host whose shell exports FORCE_COLOR. Stating the dependency here is
+    # what stops this passing remotely and failing locally (#1727).
+    monkeypatch.delenv("FORCE_COLOR", raising=False)
+    monkeypatch.setenv("NO_COLOR", "1")
+    with pytest.raises(SystemExit) as exc:
+        postflight.main(["--help"])
+    assert exc.value.code == 0
+    out = capsys.readouterr().out
+    assert "usage: postflight.py" in out
+    # A check that ran would have printed its own `[OK  ] §9.x ...` report line first. The
+    # help text itself cites §9, so the status bracket is what distinguishes them.
+    assert not [status for status in ("[OK", "[FAIL", "[SKIP") if status in out]
+
+
+def test_no_arguments_is_still_the_whole_interface():
+    """The parse must not exit, or the no-argument sweep would stop working."""
+    assert vars(postflight.build_parser().parse_args([])) == {}

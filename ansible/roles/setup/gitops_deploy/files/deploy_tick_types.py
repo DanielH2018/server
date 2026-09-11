@@ -71,3 +71,14 @@ class TickPlan:
     cs: ChangeSet
     paths: list[str]
     k8s_services: set[str]
+
+
+class NotTheDeployerHost(Exception):
+    """This host's own host_vars say `has_gitops: false`, so the tick refuses to run.
+
+    Raised by `main()` before any state is touched. `entrypoint()` turns it into a one-line
+    refusal with exit 0, no Discord post and NO last_run write: the deployer is not supposed to
+    exist on this host, so a page from its webhook and a liveness stamp in its state directory
+    are both signals from something the inventory has already retired. The refusal is in the
+    journal; the reap itself is `initial_setup.yml --tags gitops_deploy` on the host.
+    """

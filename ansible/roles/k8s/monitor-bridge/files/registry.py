@@ -52,6 +52,7 @@ from checks.storage import (
     check_kubelet_plugin_readonly,
     check_longhorn_volumes,
     check_pvc_fullness,
+    check_snapshot_headroom,
 )
 from checks.logs import (
     check_loki_ingestion,
@@ -157,6 +158,16 @@ def build_checks(env: Mapping[str, str] | None = None) -> list[Check]:
             check_longhorn_volumes,
         ),
         Check("pvc_fullness", tok("KUMA_PUSH_PVC"), check_pvc_fullness),
+        # The third storage axis, beside replica redundancy and claim fullness: snapshot space
+        # against a capped volume's spec.snapshotMaxSize (#1627). Snapshots live in the Longhorn
+        # backend, so a volume can fill its cap while the claim reads nearly empty and every
+        # replica reads healthy — and a reached cap makes Longhorn refuse new snapshots rather
+        # than prune, failing every later deploy of that service (#1560).
+        Check(
+            "snapshot_headroom",
+            tok("KUMA_PUSH_SNAPSHOT_HEADROOM"),
+            check_snapshot_headroom,
+        ),
         Check(
             "kubelet_plugin_readonly",
             tok("KUMA_PUSH_KUBELET_READONLY"),

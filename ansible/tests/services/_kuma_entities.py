@@ -61,6 +61,10 @@ STUBS = {
     "etcd_snapshot_push_token": "t" * 32,
     "remember_logs_push_token": "t" * 32,
     "release_staleness_push_token": "t" * 32,
+    # Armed 2026-09-10 (#1627), so unlike the four above this one is declared unguarded and the
+    # stub is what the render needs rather than what keeps the tile from disappearing. Dropping
+    # it now fails the render outright instead of silently un-covering the guards below.
+    "monitor_bridge_snapshot_headroom_push_token": "t" * 32,
 }
 
 # The resend intervals come from the role's real defaults, not from a stub. Stubbing them would

@@ -6,9 +6,9 @@ headerStyle: clean
 showStats: false
 target: _blank
 # Group order here IS display order, and a group services.yaml declares but this block omits
-# renders below the laid-out ones at one column wide. `Tracking` sat in exactly that state
-# until 2026-09-09, and a `Monitoring:` entry sat here naming a group services.yaml has never
-# declared — dead either way, because layout entries match a group by name.
+# renders below the laid-out ones at one column wide. The retired `Tracking` group sat in exactly
+# that state until 2026-09-09, and a `Monitoring:` entry sat here naming a group services.yaml has
+# never declared — dead either way, because layout entries match a group by name.
 #
 # The split is by WIDGET, not by topic. A widgeted tile is several lines tall and a link-only
 # tile is one line, so mixing them in one group leaves ragged holes. Services, Calendar and
@@ -19,15 +19,15 @@ layout:
     columns: 2
     header: false
     # THREE columns, and the number is derived from the tile count rather than chosen. Services
-    # holds nine tiles. At two columns that is four full rows plus an orphan — Home Assistant
-    # alone on row five with a 424x120 hole beside it — and a 600px-tall column against a
-    # 372px Calendar, leaving 228px dead under the Calendar. Nine divides by three, so three
-    # columns gives three full rows, no orphan, and a 396px column that all but matches the
-    # Calendar. Measured in the browser 2026-09-09 at 1920px and 1280px: tiles land at 280px
-    # and 195px wide with no tile overflowing its box.
+    # holds twelve tiles, which divides by three exactly: four full rows, no orphan on the last
+    # one and no hole beside it. It held nine until 2026-09-10, when the three media widgets
+    # moved in from a `Media` group to make this column four rows deep — see the calendar height
+    # in custom.css.j2, which is derived from that row count so the two Top Row columns end
+    # level.
     #
-    # Keep this in step with the tile count. Adding a tenth widgeted tile here reintroduces the
-    # orphan; either add two, or move one out to Media.
+    # Keep this in step with the tile count, and remember a THIRD thing now depends on it: a
+    # thirteenth tile both reintroduces the orphan and leaves the calendar column short. Add
+    # three at a time, or re-derive the calendar height alongside.
     Services:
       style: row
       columns: 3
@@ -56,27 +56,18 @@ layout:
     #
     # So the calendar column cannot hold the bookmarks. To put something under the calendar, it
     # has to be a SERVICE tile in services.yaml.j2's `Calendar` group, not a bookmark.
-  Media:
-    style: row
-    columns: 4
-  Admin:
-    style: row
-    columns: 4
-  Tools:
+  # No `Media:` entry: that group is gone. Its three surviving tiles are in `Services` above and
+  # Jellyfin was dropped. A layout key naming no group is silently dead, so leaving one here
+  # would have cost nothing and taught the next reader nothing.
+  # ONE link-only group where there were two until 2026-09-10. Eight tiles at four columns is two
+  # full rows, so the count still divides; the merge only removed a heading.
+  Admin & Tools:
     style: row
     columns: 4
   # No `Bookmarks:` entry, and no bookmark group left to lay out — the five personal links are
   # SERVICE tiles in the `Calendar` group now, which is the only way to get them into that
   # column. See the note in `Top Row` above for the two bookmark-group arrangements that were
   # tried there and silently ignored.
-  # ONE column, because the group holds one tile. At two the Crypto tile took half the page and
-  # left the other half empty — measured 2026-09-10 at 1280px: a 600px tile beside 600px of
-  # nothing. The rule that `columns` is derived from the tile count, not chosen, applies here as
-  # much as it does to Services above; the count is simply one. Adding a second tracking tile
-  # means moving this back to 2.
-  Tracking:
-    style: row
-    columns: 1
 # Type-to-filter over every tile and bookmark on the page. This is what keeps the link-only
 # Admin and Tools groups usable as they grow — the keyboard reaches a service whether or not
 # its tile is in view. searchDescriptions widens the match to the `description:` line, so

@@ -1,13 +1,23 @@
 """Power and throttling verdicts — the Pi's undervoltage alarm, and kernel CPU thermal throttling.
 
 Its own module rather than a section of `verdicts/host.py` for the reason
-`verdicts/host_cgroups.py` records: that file sits at 598 lines against the 600-line cap in
-`ansible/tests/repo/test_module_length_ratchet.py`. Same split idiom as `checks/host_edge.py`
-and `checks/host_thermal.py`.
+`verdicts/host_cgroups.py` records: host.py had grown against the 600-line cap in
+`ansible/tests/repo/test_module_length_ratchet.py`, and reached it exactly before #1708 split
+the UPS and SMART halves out. Same split idiom as `checks/host_edge.py` and
+`checks/host_thermal.py`.
 
-Both verdicts are read by `check_host_temp`'s two newer arms (issue #1471). They share that
-monitor rather than having their own, so the naming stays "host temperature" on the Kuma side —
-see `checks/host_thermal.py` for why folding beat a new push token.
+The first two verdicts are read by `check_host_temp`'s two newer arms (issue #1471). They share
+that monitor rather than having their own, so the naming stays "host temperature" on the Kuma
+side — see `checks/host_thermal.py` for why folding beat a new push token.
+`thermal_monitor_verdict` is the composer that decides which of that monitor's four arms
+reaches Kuma, split out here so the propagation has a test (issue #1547).
+
+Both UPS verdicts live here, together: `ups_health` judges the three battery arms it is handed
+(charge, runtime, replace-battery) and `ups_on_battery_verdict` judges the outage itself. Neither
+judges ABSENCE — that is `check_ups`'s (checks/host_thermal.py), whose `configured`/`missing`
+census covers four arms since #1630: a missing arm can mean the whole scrape is down, the NUT
+server dropped, or one entity was renamed, and only the last should page. `ups_health` moved out
+of `verdicts/host.py` in #1708, which had reached the 600-line cap exactly.
 
 Decides; does not fetch. Takes its inputs as arguments and reads no module-level config — see
 `bridge/parsing.py`'s header for the rule and why breaking it fails silently rather than loudly.
@@ -104,3 +114,118 @@ def thermal_throttle_verdict(
             )
         )
     return True, "not throttling; %s" % coverage
+
+
+def ups_health(
+    charge_pct: float | None,
+    runtime_s: float | None,
+    replace_battery: float | None,
+    charge_min_pct: float,
+    runtime_min_s: float,
+) -> tuple[bool, str]:
+    """Pure: is the UPS battery healthy? Returns (ok, msg).
+
+    Judged on charge (%), estimated runtime (s) and the replace-battery verdict (0/1).
+
+    Any value may be None (that metric absent) — only present arms are judged, and the caller
+    handles the all-absent / partial-absence cases. A low charge means an active deep discharge on
+    battery; a low runtime means an aged battery whose full-charge runway has decayed OR a discharge
+    nearing shutdown; replace_battery>0 is the UPS's OWN self-test verdict (NUT RB flag), which can
+    trip while charge/runtime still read fine — the earliest replace-the-battery signal. Strict `<`,
+    so a value exactly at the floor is still ok.
+    """
+    problems = []
+    if charge_pct is not None and charge_pct < charge_min_pct:
+        problems.append("battery %.0f%% (< %.0f%%)" % (charge_pct, charge_min_pct))
+    if runtime_s is not None and runtime_s < runtime_min_s:
+        problems.append(
+            "runtime %.1fm (< %.1fm)" % (runtime_s / 60.0, runtime_min_s / 60.0)
+        )
+    if replace_battery is not None and replace_battery > 0.5:
+        problems.append("replace-battery (UPS self-test / RB flag)")
+    if problems:
+        return False, "; ".join(problems)
+    parts = []
+    if charge_pct is not None:
+        parts.append("battery %.0f%%" % charge_pct)
+    if runtime_s is not None:
+        parts.append("runtime %.1fm" % (runtime_s / 60.0))
+    if replace_battery is not None:
+        parts.append("self-test ok")
+    return True, ", ".join(parts)
+
+
+def ups_on_battery_verdict(on_battery: float | None) -> tuple[bool, str] | None:
+    """Pure: (ok, msg) over NUT's `ups.status{flag="OB"}`, or None when there is nothing to say.
+
+    Mains power is gone and the UPS is carrying the load. Distinct from the charge and runtime
+    arms, which read the battery's RUNWAY: those can sit at 100% and 20 minutes through an
+    outage that is about to become a shutdown, and read green the whole way down until the
+    runway collapses. This arm is the outage itself.
+
+    None covers both quiet cases — the arm is unconfigured, or mains power is fine — for the
+    same reason `_undervoltage_arm` returns None on a clean cycle: a clean arm must not append a
+    note to the up message, or an ordinary cycle stops reading like one.
+
+    An absent series is None here too, and that is a deferral to the caller rather than a
+    verdict: `check_ups` carries this arm in the same `configured`/`missing` census as charge,
+    runtime and replace-battery (issue #1630), so it is the caller that tells a rename of this
+    one series (pages) from the whole exporter going quiet (defers to Scrape Targets and the nut
+    pod's liveness probe). Returning not-ok on None here would page for both.
+
+    No grace of its own is applied here; the caller rides UPS_CONSECUTIVE, so a brownout shorter
+    than the grace window never pages.
+    """
+    if on_battery is None or on_battery <= 0.5:
+        return None
+    return False, "UPS on battery (NUT ups.status OB) — mains power is gone"
+
+
+def thermal_monitor_verdict(
+    undervoltage: tuple[bool, str] | None,
+    temperature: tuple[bool, str] | None,
+    throttle: tuple[bool, str] | None,
+    coverage: tuple[bool, str] | None,
+    temperature_msg: str,
+) -> tuple[bool, str]:
+    """Pure: compose `check_host_temp`'s four arms into the one verdict its monitor reports.
+
+    Each arm arrives already decided, as `(ok, msg)` or None for "nothing to say". The check
+    fetches and evaluates; this decides the ORDER the arms speak in and which of them reaches
+    the monitor. Splitting it out is what gives propagation a direct test (issue #1547): the
+    arms had accept/reject pairs of their own, but nothing could see a missing `return` at a
+    call site, because the structural test reads `co_names` and a deleted return leaves the
+    name in place.
+
+    `temperature` follows the same convention as the other arms and is None exactly when the
+    hwmon verdict was clean. It is NOT None when that verdict was red, whether the thermal-spike
+    grace is still holding (ok True) or has expired (ok False) — either way the temperature arm
+    is speaking and it short-circuits everything after it, which is why an `ok` arm can still
+    end the composition here. `temperature_msg` is the clean verdict's message; it leads the
+    up-path message and is unread on every other path.
+
+    The order, and what each step suppresses:
+
+      1. an asserted undervoltage alarm returns alone. The firmware has already decided, and the
+         damage it does is not undone by cooling down.
+      2. a red temperature verdict returns alone. The caller has not fetched the throttle arm on
+         this path, so `throttle` is None here by construction rather than by choice.
+      3. a red throttle arm returns alone.
+      4. a coverage shortfall returns last of the not-ok arms: a host that IS reporting and IS
+         too hot outranks a complaint about the absent one.
+      5. otherwise up, with the clean temperature message leading and only the arms still
+         HOLDING inside their own grace appending a note. A clean arm passes None and adds
+         nothing, so an ordinary cycle reads exactly as it did before any of these arms existed.
+    """
+    if undervoltage is not None and not undervoltage[0]:
+        return undervoltage
+    if temperature is not None:
+        return temperature
+    if throttle is not None and not throttle[0]:
+        return throttle
+    if coverage is not None:
+        return coverage
+    notes = [temperature_msg] + [
+        arm[1] for arm in (undervoltage, throttle) if arm is not None
+    ]
+    return True, "; ".join(notes)

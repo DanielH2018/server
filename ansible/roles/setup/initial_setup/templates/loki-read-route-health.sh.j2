@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+# Witness for the Loki read route — managed by Ansible (initial_setup role); edits overwritten.
+#
+# WHAT THIS WATCHES (issue #1712). loki-homelab's IngressRoute has exactly one caller —
+# `probe.py loki-query` / `loki-labels`, running as a host process — and nothing watched it. It
+# was dead from daniel-server for as long as traefik sat on daniel-box (#1693) and nothing
+# noticed; the operator saw `404 page not found`, which does not distinguish a broken route from
+# a broken query.
+#
+# WHY A POD CANNOT BE THE WITNESS. The route's guard is a ClientIP set of node-owned addresses
+# (roles/k8s/loki-homelab/templates/ingressroute.yaml.j2), so monitor-bridge's request would
+# arrive with a pod IP and fail for a reason unrelated to the operator's path. What broke was a
+# HOST-sourced grant, and only a host process can witness it.
+#
+# WHY THIS RUNS ON BOTH NODES. Which address a host process arrives as depends on where the
+# traefik pod is: same node, the packet carries that node's cni0 gateway; other node, it crosses
+# the VXLAN overlay and carries the sending node's flannel.1 address. #1693 was invisible from
+# daniel-box and fatal from daniel-server, so one witness would have reported green throughout.
+# Each host pushes its OWN monitor — two hosts on one token would let either host's `up` satisfy
+# Kuma's push deadline, the same trap the UPS secondary watchdog records (issue #952).
+#
+# THE VERDICT IS THE BODY, NOT THE EXIT CODE. probe.py's curl carries no `-f`, so `404 page not
+# found` comes back with exit 0. loki_route_health.py is what decides, and its tests hold that
+# 404 as a DOWN case.
+set -uo pipefail
+
+# shellcheck source=/dev/null
+source /usr/local/lib/kuma-push-lib.sh || {
+  logger -t loki-read-route-health "kuma-push-lib.sh missing — run initial_setup on this host"
+  exit 1
+}
+
+KUMA_HOST="uptime-kuma.local.{{ domain }}"
+# Pinned to the cluster ingress VIP like every sibling: Kuma serves from the k8s edge and the
+# push must not depend on DNS.
+KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
+
+# Sourced, never inlined: this script lands 0755, so an inlined token would be readable by every
+# local account. Its own env file rather than /etc/rancher/k3s/kuma-push.env, which is a
+# whole-content template owned by roles/setup/k3s and does not exist on an agent node at all.
+LOKI_ROUTE_WITNESS_PUSH_TOKEN=""
+# shellcheck source=/dev/null
+[[ -r /etc/homelab/loki-route-kuma-push.env ]] && . /etc/homelab/loki-route-kuma-push.env
+if [[ -z "$LOKI_ROUTE_WITNESS_PUSH_TOKEN" ]]; then
+  # Names the ENV VAR, not the registry secret: the release-group secrets guard whole-word
+  # matches registry names against raw template text and cannot tell a log line from a render.
+  logger -t loki-read-route-health "LOKI_ROUTE_WITNESS_PUSH_TOKEN not set — skipping push (see /add-secret)"
+  exit 0
+fi
+PUSH_URL="https://${KUMA_HOST}/api/push/${LOKI_ROUTE_WITNESS_PUSH_TOKEN}"
+
+# One cron slot, so the dead-man's own period covers a boot that lands on it. Without this a
+# reboot at the top of the hour reports the route down while k3s is still starting.
+if boot_grace_active {{ loki_route_witness_boot_grace_s }} loki-read-route-health; then
+  exit 0
+fi
+
+REPO_DIR=/home/{{ sys_user }}/server
+# UV absolute-pathed: cron's PATH lacks ~/.local/bin. --frozen: never rewrite uv.lock on this
+# host — a rewrite would dirty the tree and wedge the GitOps deployer's dirty-skip, the same
+# reason release-staleness-check.sh uses it.
+UV=/home/{{ sys_user }}/.local/bin/uv
+BODY="$(cd "$REPO_DIR" && "$UV" run --quiet --frozen python scripts/diagnostics/probe.py loki-labels 2>&1)"
+RC=$?
+
+# `--no-project`, so the reader runs on the pinned interpreter without resolving whatever project
+# the working directory sits in — a broken lockfile in the checkout above must not read as a broken
+# route. Same shape as the Longhorn backup-health reader in the k3s role.
+if MSG="$(printf '%s' "$BODY" | /usr/local/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} /opt/loki-route-health/loki_route_health.py "$RC")"; then
+  STATUS=up
+else
+  STATUS=down
+fi
+
+# Unconditional and before the push, for the same reason as setup-drift-check.sh: a successfully
+# pushed DOWN would otherwise leave no durable record and `probe.py alerts` could never
+# reconstruct this monitor. NOTICE rather than INFO — journald caps MaxLevelStore=notice here.
+logger -p daemon.notice -t loki-read-route-health "status=${STATUS} ${MSG}"
+
+kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" loki-read-route-health

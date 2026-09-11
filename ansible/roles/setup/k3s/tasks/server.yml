@@ -63,6 +63,28 @@
     - Restart k3s
     - Wait for the node to report Ready again
 
+- name: Write the apiserver authentication configuration
+  tags: [k3s_server]
+  # ORDER IS LOAD-BEARING, exactly as for the audit policy above. The apiserver reads this
+  # file at STARTUP and refuses to start when it is missing or fails validation, so it must
+  # exist before the installer below rewrites the unit and restarts k3s. A missing file wedges
+  # the node rather than failing the play: the unit is Type=notify with TimeoutStartSec=0.
+  #
+  # Notifies the restart because the read happens once, at startup — an edited file is
+  # otherwise inert until something else restarts k3s. On the arming run the installer
+  # restarts k3s too, so that run pays for two restarts; every later run pays for none,
+  # because the file does not change.
+  ansible.builtin.template:
+    src: authentication-config.yaml.j2
+    dest: "{{ k3s_authentication_config_path }}"
+    mode: "0600"
+    owner: root
+    group: root
+  become: true
+  notify:
+    - Restart k3s
+    - Wait for the node to report Ready again
+
 - name: Read the installed k3s systemd unit
   tags: [k3s_server]
   ansible.builtin.slurp:

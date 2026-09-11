@@ -1,0 +1,93 @@
+{% from 'container-resources.yml.j2' import container_resources with context %}
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
+---
+# Authelia's session store. Nothing else talks to it — see
+# networkpolicy-redis.yaml.j2 beside this file, which is what actually fences it — and which
+# lives in this role rather than in netpol-baseline precisely so a `--tags authelia` deploy
+# ships the two together (#1609).
+#
+# NOT in `manifests_extra_rollouts`, and this is the one thing here not to change. That list
+# rolls a Deployment whenever the ROLE's manifests change, which for authelia is several times
+# a day. Rolling redis on that cadence would destroy the sessions this workload exists to keep,
+# so redis rolls only when its own template changes and `kubectl apply` notices.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: authelia-redis
+  namespace: {{ k8s_namespace }}
+spec:
+  revisionHistoryLimit: 3
+  replicas: 1
+  # Recreate, not RollingUpdate. Two redis pods would each hold their own empty store and the
+  # Service would split traffic between them, so a rolling update logs out whichever users land
+  # on the new pod and then logs out the rest anyway when the old one goes.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: authelia-redis
+  template:
+    metadata:
+      labels:
+        app: authelia-redis
+        netpol-baseline: enforced
+    spec:
+      enableServiceLinks: false
+      automountServiceAccountToken: false
+      # The same class as authelia itself: an evicted redis logs the whole fleet out of SSO, so
+      # it is exactly as critical as the portal in front of it.
+      priorityClassName: homelab-critical
+      containers:
+        - name: redis
+          image: {{ authelia_k8s_redis_image }}
+          # The password reaches redis through the config FILE, never through argv — a
+          # `--requirepass` here would be readable in `ps` from inside the pod and in any
+          # `kubectl describe` of it. That file carries the memory bounds too; the role
+          # defaults say why they are set where they are.
+          command:
+            - redis-server
+            - /etc/redis/redis.conf
+          ports:
+            - containerPort: 6379
+          # 6379 is the containerPort, the Service port AND the NetworkPolicy port. All three
+          # must agree; ansible/tests/services/test_authelia_redis_sessions.py pins that.
+{{ hardened_security_context(read_only=true, non_root=true, run_as_user=999, run_as_group=1000) }}
+          env:
+            # redis-cli reads REDISCLI_AUTH from the environment, so the probes below
+            # authenticate without putting the password in argv either.
+            - name: REDISCLI_AUTH
+              valueFrom:
+                secretKeyRef:
+                  name: authelia-redis
+                  key: REDISCLI_AUTH
+          volumeMounts:
+            - name: redis-config
+              mountPath: /etc/redis
+              readOnly: true
+            - name: redis-data
+              mountPath: /data
+          readinessProbe:
+            exec:
+              command: ['redis-cli', 'ping']
+            initialDelaySeconds: 2
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command: ['redis-cli', 'ping']
+            initialDelaySeconds: 15
+            periodSeconds: 30
+{{ container_resources(cpu_limit=authelia_k8s_redis_cpu_limit, mem_limit=authelia_k8s_redis_mem_limit, cpu_request=authelia_k8s_redis_cpu_request, mem_request=authelia_k8s_redis_mem_request) }}
+      volumes:
+        - name: redis-config
+          secret:
+            secretName: authelia-redis
+            items:
+              - key: redis.conf
+                path: redis.conf
+        # Deliberately NOT a PVC. Sessions are a cache with a one-month ceiling, and the config
+        # disables both persistence mechanisms, so this holds nothing across a pod restart by
+        # design. A Longhorn volume here would be a backed-up disk full of live session
+        # credentials. The cost is stated in the role defaults: a node reboot, an eviction or an
+        # image bump still logs everyone out.
+        - name: redis-data
+          emptyDir: {}

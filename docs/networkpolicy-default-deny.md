@@ -16,7 +16,10 @@ ones:
 ```bash
 kubectl -n homelab get pods -l netpol-baseline=enforced --no-headers | wc -l   # fenced pods
 kubectl -n homelab get pods -l netpol-baseline-exempt --no-headers             # the exempt set
-ls ansible/roles/k8s/netpol-baseline/templates/networkpolicy-*.yaml.j2 | wc -l # policies
+# policies — both trees: a policy gating its consumer's STARTUP ships in the consuming
+# role instead (authelia #1609, karakeep and scrutiny #1620), so the baseline's own
+# directory is no longer the whole set
+ls ansible/roles/k8s/*/templates/networkpolicy*.yaml.j2 | wc -l
 ```
 
 What each deploy settled, slice by slice, is in
@@ -261,6 +264,10 @@ Prometheus its only caller, and an outbound poll of both Pi-holes' admin API on 
 by an `app: pihole-exporter` podSelector in `networkpolicy-pihole.yaml.j2`. Two of these
 metrics-only workloads landing on one day is what turned "Traefik is its only caller" from the
 definition of this set into one of two shapes it holds.
+**gpu-exporter** (2026-09-10) is the metrics-only shape at its simplest, and the only member
+that needs nothing bespoke anywhere. It has no IngressRoute, Prometheus is its only caller, and
+it opens no outbound connection at all — it reads DRM sysfs through a read-only `/host/sys`
+mount — so no sibling policy gains a podSelector for it.
 
 **Why observability moved from first to third.** It is small in pod count but dense in
 exactly the paths that are hardest — `loki:3100`, `tempo:3200`, `prometheus:9090` and

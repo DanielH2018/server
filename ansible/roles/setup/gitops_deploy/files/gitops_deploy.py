@@ -59,6 +59,8 @@ from deploy_toolbox import DeployTools, default_tools
 # below and `pytest.raises(gitops_deploy.RetryableFetchError)` in the suite both catch exactly
 # what `assess` raises.
 RetryableFetchError = deploy_tick_types.RetryableFetchError
+# Same arrangement for the refusal `deploy_phases.refuse_unless_deployer` raises (#1733).
+NotTheDeployerHost = deploy_tick_types.NotTheDeployerHost
 
 
 # The state directory's eighteen marker files, each kept as a module-level literal. Two things
@@ -93,6 +95,14 @@ BEHIND_FILE = "/var/lib/gitops-deploy/behind_since"
 # is the wrong remediation here: the tree is already fast-forwarded and a playbook is what
 # broke, so reverting the PR undoes nothing. This names what to re-run instead.
 HOLD_PLANE_FILE = "/var/lib/gitops-deploy/hold_plane"
+# "<origin_sha> <playbook> <tags>" for the last broad plane this host APPLIED. The success
+# counterpart of HOLD_PLANE_FILE, and the only durable evidence that a tick applied a plane
+# rather than fast-forwarded past one: `behind_since` empty says local == origin, which any
+# session's `git merge --ff-only` also produces, and from then on next_action() returns noop
+# so the plane is stranded permanently. land.sh required `behind_since` empty and no hold
+# before it printed `settled`, and printed it for PR #1529's renovate_agent change, which was
+# four days stale on disk (issue #1537). It reads this instead.
+BROAD_APPLIED_FILE = "/var/lib/gitops-deploy/broad_applied"
 # The sorted stale-compose set last alerted on, so a lingering stale dir doesn't re-page
 # every tick — only a CHANGED set (new stale dir, or one cleaned up) re-alerts.
 STALE_COMPOSE_FILE = "/var/lib/gitops-deploy/stale_composes_alerted"
@@ -382,6 +392,9 @@ def main(tools: DeployTools | None = None, config: Config | None = None) -> int:
         # No config, no repo to tick: page via the crash handler rather than run every git
         # command below against cwd="".
         raise RuntimeError(f"REPO_DIR is unset: no deployer config at {CONFIG_PATH}")
+    # Ahead of the drain and every state write: a host whose inventory says has_gitops: false
+    # is not this deployer, whatever payload is installed here (#1733).
+    deploy_phases.refuse_unless_deployer(config)
     # Resend any alert a prior tick failed to deliver, BEFORE any short-circuit below: the ff-merged
     # secrets/tasks/meta/combined paths never re-reach their alert code (local==origin -> noop), so a
     # transient webhook failure is only recoverable here, not by discord()'s per-tick re-eval.
@@ -450,6 +463,17 @@ def entrypoint(tools: DeployTools | None = None) -> int:
         # blip is invisibly retried next tick, while a persistent fetch break ages last_run and trips
         # GitOps-Alive. Must precede the generic handler below (Python matches except-clauses in order).
         log(f"git fetch failed (retryable) — skipping tick, will retry next run: {e}")
+        return 0
+    except deploy_tick_types.NotTheDeployerHost as e:
+        # DECIDED: exit 0, no Discord post, no last_run. The unit only reaches this branch on a
+        # host whose inventory has already retired the deployer, so a non-zero exit would page
+        # through OnFailure every ten minutes from a webhook that host should no longer hold,
+        # and a last_run write would stamp liveness onto state nothing reads. The journal line
+        # is the signal; the fix is the role's teardown, not a louder tick. A spurious refusal
+        # on the real deployer is not silent either: last_run stops advancing and GitOps-Alive
+        # goes stale inside GITOPS_MAX_AGE_MIN (90 minutes), which is the backstop this exit 0
+        # leans on.
+        log(f"gitops-deploy: {e}")
         return 0
     except ConfigError as e:
         # One clear line, not a traceback. This was an unhandled ValueError raised during IMPORT

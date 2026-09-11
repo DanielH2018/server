@@ -13,7 +13,12 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.land_lib.landing import Landing, TickState
-from deploy_tools.land_lib.outcome import Cause, Verdict, say
+from deploy_tools.land_lib.outcome import (
+    ABANDONED_WATCH_NOTE,
+    Cause,
+    Verdict,
+    say,
+)
 
 
 def health(ln: Landing) -> NoReturn:
@@ -63,10 +68,34 @@ def health(ln: Landing) -> NoReturn:
                 "  services deployed, but the tick has not fast-forwarded to origin "
                 f"(parked since: {ln.state('behind_since')})"
             )
+            if ln.tick_watch_abandoned:
+                print(ABANDONED_WATCH_NOTE)
+                ln.finish(
+                    Verdict.DEFERRED,
+                    75,
+                    f"PR #{pr}, {sha}, tags: {tags} — services deployed; this run stopped "
+                    "watching a tick still applying, so the tick's half is unsettled",
+                )
             ln.finish(
                 Verdict.DEFERRED,
                 75,
                 f"PR #{pr}, {sha}, tags: {tags} — services deployed, the tick's half not yet",
+            )
+        # CONVERGED says local == origin, which any session's `git merge --ff-only` produces
+        # too — and after it holds the tick returns `noop` forever, so a plane it never applied
+        # is stranded while this reads `settled` (issue #1537).
+        if not ln.broad_applied_covers(sha):
+            print(
+                "  services deployed, but the tick recorded no broad apply covering this PR "
+                f"(broad_applied: {ln.state('broad_applied') or 'absent'}) — something other "
+                "than the tick fast-forwarded the checkout"
+            )
+            if ln.self_applied_command:
+                print(f"  Apply it: {ln.self_applied_command}")
+            ln.finish(
+                Verdict.NEEDS_MANUAL_APPLY,
+                1,
+                f"PR #{pr}, {sha}, tags: {tags} — the tick converged without applying this PR",
             )
     if ln.remaining_setup:
         local = ln.tools.hostname()

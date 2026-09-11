@@ -41,10 +41,13 @@ spec:
         runAsUser: {{ puid }}
         runAsGroup: {{ pgid }}
         fsGroup: {{ pgid }}
-{# All three init containers below are CrowdSec's, so the key would be left with no list under
-   it. Gate the key so it is absent rather than empty. #}
-{% if authelia_k8s_manage_crowdsec %}
+{# Two independent sources of init containers — CrowdSec's three seeding steps and the
+   wait-for-redis gate — each with its own lever. Gate the KEY on either being on, so it is
+   absent rather than left with no list under it. #}
+{% if authelia_k8s_manage_crowdsec or authelia_k8s_redis_sessions | bool %}
       initContainers:
+{% endif %}
+{% if authelia_k8s_manage_crowdsec %}
         # FIRST, before crowdsec-config-install's rsync, and the order is the whole point.
         # The image's staged hub tree is root-only, so that rsync — which runs as the pod's
         # own uid — never copies it; that is part of the exit 23 it tolerates. It does copy
@@ -224,6 +227,63 @@ spec:
               mountPath: /var/lib/crowdsec/data
 {{ container_resources(cpu_limit='250m', mem_limit='128Mi', cpu_request='10m', mem_request='16Mi') }}
 {% endif %}
+{% if authelia_k8s_redis_sessions | bool %}
+        # LAST, after CrowdSec's three seeding steps. Those write a local emptyDir and need no
+        # network, so running them first overlaps their work with the policy lag this container
+        # waits out, and it leaves the documented hub → config → data ordering untouched.
+        #
+        # Authelia writes a startup probe to the session backend, retries it 19 times at 500ms
+        # and then EXITS (internal/session/provider.go, StartupCheck at v4.39.21) — about 9.5s
+        # of tolerance. Deploying #1599 outran it: the portal restarted 7 times, blew the 300s
+        # rollout wait twice and took SSO down for ~7 minutes (#1626).
+        #
+        # THE CAUSE IS NOT AN IMAGE PULL, which is what the comment beside the redis block in
+        # config-secret.yaml.j2 claimed until this container shipped. The pod's log named an
+        # `i/o timeout` rather than `connection refused`, and redis came up 1/1 on its first try
+        # and has never restarted — so the packets were DROPPED. That is kube-router's
+        # source-pod lookup lagging pod creation, already recorded in project memory, and it is
+        # not a first-deploy-only event: it recurs whenever the redis pod is recreated on a node
+        # (an eviction, a node reboot, a Renovate bump of authelia_k8s_redis_image). Each
+        # occurrence takes SSO down under Recreate, including the tools to fix it.
+        #
+        # `redis-cli`, not `nc -z`. The sibling gates in crowdsec and n8n use busybox's `nc` and
+        # justify it by their own image being busybox-based — that argument is about THEIR
+        # image, not redis:7.4-alpine, and under Recreate the old pod is already gone, so an
+        # init container that fails on a missing applet is an SSO outage rather than a retry.
+        # `redis-cli` is unambiguously in the redis image, and this role already wires
+        # REDISCLI_AUTH for the probes in deployment-redis.yaml.j2. Gate on PONG in the OUTPUT
+        # rather than on the exit code: redis-cli exits 0 on a NOAUTH reply.
+        #
+        # Bounded, not unbounded — 60 x 2s, the same shape as crowdsec's wait-for-lapi. If redis
+        # is still unreachable after two minutes this fails and the pod backs off exactly as it
+        # does today, so it can only improve on the current behaviour, never mask a dead redis.
+        - name: wait-for-redis
+          image: {{ authelia_k8s_redis_image }}
+          command:
+            - /bin/sh
+            - -c
+            - >-
+              i=0;
+              until redis-cli -h authelia-redis -p 6379 ping 2>/dev/null | grep -q PONG; do
+                i=$((i+1));
+                [ "$i" -ge 60 ] && echo "authelia-redis still unreachable after 120s" >&2 && exit 1;
+                sleep 2;
+              done;
+              echo "authelia-redis reachable after $((i*2))s"
+          env:
+            # The same Secret key the redis container's own probes read, for the same reason:
+            # redis-cli takes the password from the environment, so it never reaches argv.
+            - name: REDISCLI_AUTH
+              valueFrom:
+                secretKeyRef:
+                  name: authelia-redis
+                  key: REDISCLI_AUTH
+          # read_only: the whole program is the shell loop above and it writes nothing. non_root
+          # rather than leaning on the pod-level runAsUser, so the container carries its own
+          # assertion — ansible/tests/k8s/test_container_security_context.py requires one here.
+{{ hardened_security_context(read_only=true, non_root=true) }}
+{{ container_resources(cpu_limit='100m', mem_limit='32Mi', cpu_request='10m', mem_request='16Mi') }}
+{% endif %}
       automountServiceAccountToken: false
       containers:
         - name: authelia
@@ -311,6 +371,13 @@ spec:
           # the log file outright. The agent needs no privilege — it reads a file and posts
           # to the LAPI.
 {{ hardened_security_context(non_root=true) }}
+          # Declared so Prometheus can find it: pod-role SD emits a target per DECLARED
+          # containerPort, so the `crowdsec-authelia-agent` job's keep on port 6060
+          # (claude-otel/templates/prometheus.yaml.j2) matches nothing without this. The
+          # agent binds it either way — this changes discovery, not the listener (#1706).
+          ports:
+            - name: cs-metrics
+              containerPort: 6060
           volumeMounts:
             - name: crowdsec-etc
               mountPath: /etc/crowdsec

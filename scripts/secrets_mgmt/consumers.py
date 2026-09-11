@@ -58,6 +58,12 @@ CROSS_HOST_PUSH_TOKENS = frozenset(
         # alone would leave the cron pushing the old value, silencing the only monitor that can
         # report a stale render on the host that owns the UPS shutdown chain.
         "setup_drift_push_token",
+        # The Loki read-route witness, one token per cluster node: a setup/initial_setup cron on
+        # daniel-box and daniel-server respectively, against tiles deployed from daniel-box. Same
+        # shape as setup_drift_push_token above — no deploy tag on the pushing role, and for the
+        # daniel-server half two hosts as well.
+        "loki_route_witness_push_token",
+        "loki_route_witness_daniel_server_push_token",
         "secret_rotation_push_token",  # self-referential
         # Pushed by a setup role with no deploy tag, so there is nothing for --deploy to run.
         # Named `monitor_bridge_*` only for Kuma monitor-history continuity after the check

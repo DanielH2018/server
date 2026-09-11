@@ -1,0 +1,32 @@
+# Selector-less Service + a hand-written EndpointSlice: the backend is a host process, not a
+# pod. The repo's first Traefik→host route; its ufw counterpart is roles/setup/deploy_ui.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ container_item.name }}
+  namespace: {{ k8s_namespace }}
+spec:
+  ports:
+    - name: http
+      port: {{ container_item.port }}
+      targetPort: {{ container_item.port }}
+---
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
+metadata:
+  name: {{ container_item.name }}-host
+  namespace: {{ k8s_namespace }}
+  labels:
+    kubernetes.io/service-name: {{ container_item.name }}
+addressType: IPv4
+ports:
+  - name: http
+    port: {{ container_item.port }}
+    protocol: TCP
+endpoints:
+  # `k8s_node_client_ip`, not `server_ip`: a host_var renders as 10.0.0.1 under the
+  # manifest-render harness and as the Pi's address under `-e target=daniel-pi`.
+  - addresses:
+      - "{{ k8s_node_client_ip }}"
+    conditions:
+      ready: true

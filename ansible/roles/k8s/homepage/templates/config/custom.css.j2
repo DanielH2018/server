@@ -18,9 +18,6 @@
  * break opportunity of its own. It engages only when a label genuinely does not fit, so it
  * changes nothing at 1920px.
  *
- * The `w-10` rule is the coinmarketcap widget's percent-change column: a fixed 2.5rem against
- * "-0.46%", which needs 43px. Negative values with two decimals clipped by 3px.
- *
  * #my-calendar is excluded throughout — it is a single full-width child laid out as a column
  * by the rules below, and a 50% flex-basis has no business there.
  *
@@ -172,10 +169,8 @@ li.service:not(#my-calendar) .service-container:has(> :first-child:last-child) >
  * empty 44px band in every card. 3.25rem is one stat row — a block is 44px, plus its margins.
  *
  * A widget that later carries three or four stats wraps to a second row and takes its grid row
- * with it, which is correct: the reservation is a floor, not a cap. Jellyfin is the one to
- * watch — its widget declares four blocks and currently renders none, because the tile is
- * erroring (#1457).
- *
+ * with it, which is correct: the reservation is a floor, not a cap. It also takes the calendar
+ * beside it out of alignment, because that height is derived from this row height.
  */
 li.service:not(#my-calendar) .service-container {
   min-height: 3.25rem;
@@ -183,11 +178,6 @@ li.service:not(#my-calendar) .service-container {
 
 li.service:not(#my-calendar) .service-container > div > div {
   overflow-wrap: anywhere;
-}
-
-li.service:not(#my-calendar) .service-container .font-bold.w-10 {
-  width: auto;
-  min-width: 3.25rem;
 }
 
 /* BLOCK LABELS ARE RENAMED IN CSS, BECAUSE HOMEPAGE OFFERS NO OTHER WAY.
@@ -218,7 +208,8 @@ li.service:has(a[href*="uptime-kuma."]) .service-block:nth-child(2) > .font-bold
 li.service:has(a[href*="speedtest."]) .service-block:nth-child(1) > .font-bold,
 li.service:has(a[href*="karakeep."]) .service-block:nth-child(1) > .font-bold,
 li.service:has(a[href*="peanut."]) .service-block:nth-child(1) > .font-bold,
-li.service:has(a[href*="peanut."]) .service-block:nth-child(2) > .font-bold {
+li.service:has(a[href*="peanut."]) .service-block:nth-child(2) > .font-bold,
+li.service:has(a[href*="qBittorrent."]) .service-block:nth-child(2) > .font-bold {
   font-size: 0;
 }
 
@@ -227,7 +218,8 @@ li.service:has(a[href*="uptime-kuma."]) .service-block:nth-child(2) > .font-bold
 li.service:has(a[href*="speedtest."]) .service-block:nth-child(1) > .font-bold::after,
 li.service:has(a[href*="karakeep."]) .service-block:nth-child(1) > .font-bold::after,
 li.service:has(a[href*="peanut."]) .service-block:nth-child(1) > .font-bold::after,
-li.service:has(a[href*="peanut."]) .service-block:nth-child(2) > .font-bold::after {
+li.service:has(a[href*="peanut."]) .service-block:nth-child(2) > .font-bold::after,
+li.service:has(a[href*="qBittorrent."]) .service-block:nth-child(2) > .font-bold::after {
   /* text-xs, the class the label carries — the parent's 0 would otherwise be inherited. */
   font-size: 0.75rem;
   line-height: 1rem;
@@ -257,6 +249,12 @@ li.service:has(a[href*="peanut."]) .service-block:nth-child(1) > .font-bold::aft
 }
 li.service:has(a[href*="peanut."]) .service-block:nth-child(2) > .font-bold::after {
   content: "Status";
+}
+
+/* Download -> Down, matching the Speedtest tile. The href here is `qBittorrent.<domain>` with
+ * that capital B, and an attribute substring match is case-sensitive. */
+li.service:has(a[href*="qBittorrent."]) .service-block:nth-child(2) > .font-bold::after {
+  content: "Down";
 }
 
 /* THE CALENDAR SPANS ITS WHOLE GROUP.
@@ -296,10 +294,124 @@ li.service > div.service-card {
   margin-bottom: 0;
 }
 
+/* THE CALENDAR COLUMN ENDS LEVEL WITH THE SERVICES COLUMN AT ANY WIDTH.
+ *
+ * The two Top Row columns are separate grids, so nothing makes them end level on its own — the
+ * personal links hung 108px below the Services block. A fixed height on the calendar squares
+ * them at ONE width and nowhere else: a Services card is 112px only while its name and
+ * description fit on one line each, and at 1024px they wrap to 148/128/144/132 and the column
+ * runs 104px longer. That is what the first version of this rule got wrong.
+ *
+ * WHAT MAKES IT WORK: the group WRAPPER is already stretched to the taller of the two columns —
+ * measured at 1024px, the calendar's `.services-group` was 628px around a 484px list. The slack
+ * is there; the list just has to claim it. Then `align-content: space-between` puts the calendar
+ * at the top of the list and the link rows at the BOTTOM, so the bottom edges match whatever the
+ * Services column does.
+ *
+ * THE TRAP THAT COST NINE ATTEMPTS: the wrapper between the group and the list carries Tailwind's
+ * `block!` — `display: block !important` — for homepage's collapse animation. Every attempt to
+ * make it a flex container is silently dropped, so the list can never be a flex item and
+ * `flex: 1 1 auto` on it does nothing. `height: 100%` is the way in, because the wrapper IS a
+ * block of definite height once the group is a flex column. The `- 0.75rem` is the list's own
+ * `mt-3`.
+ *
+ * HOW THE HEIGHT IS SPLIT: the calendar spans THREE Services rows and the two link rows together
+ * span the FOURTH. The Services column is four rows of height r with three gaps of g, so the
+ * list is 4r + 3g tall. Cut that into eight equal tracks with the same gap g: 8t + 7g = 4r + 3g
+ * gives t = (r - g) / 2. Six tracks plus their five gaps are then 6t + 5g = 3r + 2g — exactly
+ * three Services rows — and one track is a link row, so the two link rows plus their gap make
+ * 2t + g = r, one Services row. Every size is derived from the list height, so it holds at any
+ * width and for any tile height; nothing here is a pixel constant. The previous version pinned
+ * the calendar at a 22.5rem cap and the link cards at 50px, which matched the Services rows
+ * only at 1920px with unwrapped titles.
+ *
+ * `minmax(0, 1fr)` and not `1fr`: a bare `1fr` track has a min-content floor, so a long event
+ * list would grow the calendar's six tracks and push the link rows out of the group. With the
+ * floor at 0 the calendar card is clamped to its tracks and its event list scrolls.
+ *
+ * EVERY SELECTOR HERE IS SCOPED TO THE INNER GROUP. homepage nests `Top Row` as a
+ * `div.services-group` around the two column groups, so `div.services-group:has(#my-calendar)`
+ * matches the OUTER group as well, and `... ul.services-list` under it matched the SERVICES
+ * list too. That gave Services eight 112px tracks, a 980px column, and dragged the calendar to
+ * match — measured on the deployed page 2026-09-10, every track exactly one card tall. The
+ * `:has(> div > ul > #my-calendar)` and `:has(> #my-calendar)` forms match one element each.
+ *
+ * The four-row count of the Services group is what the 8 encodes. A Services group that renders
+ * three or five rows needs 6 or 10 tracks here and a matching `span` on the calendar.
+ *
+ * Verified on the deployed page 2026-09-10 at 900, 1024, 1280, 1920 and 2560px — both columns end
+ * on the same y at every one, including 900px where the grid collapses to two columns and six
+ * rows. `getBoundingClientRect().bottom` on the last tile of each column is the check, and it has
+ * to run at more than one width.
+ */
+div.services-group:has(> div > ul > #my-calendar) {
+  display: flex;
+  flex-direction: column;
+}
+
+div.services-group:has(> div > ul > #my-calendar) > div {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+ul.services-list:has(> #my-calendar) {
+  height: calc(100% - 0.75rem);
+  grid-template-rows: repeat(8, minmax(0, 1fr));
+}
+
+/* Six of the eight tracks: three Services rows and the two gaps between them. */
+#my-calendar {
+  grid-row: 1 / span 6;
+  min-height: 0;
+  /* Zero intrinsic height, so the calendar's natural 412px cannot set the row height. Without
+   * this the calendar column's intrinsic size (412px of calendar plus two 40px link rows) beat
+   * the 484px Services column at 1280px and above, the Top Row row took the larger, and the
+   * link rows ended 69px below the Services block. The `<li>` is still stretched to its six
+   * tracks in the final layout, so the card's `height: 100%` resolves as before. */
+  contain: size;
+}
+
+/* The link cards fill their track, so each link row is half a Services row less half a gap and
+ * the pair plus their gap is exactly one Services row. The icon stays 32px and centred — this
+ * adds padding, not size. */
+#my-calendar ~ li.service > div.service-card {
+  height: 100%;
+  /* `justify-content`, NOT `align-items`, because the card above is `flex-direction: column` —
+   * so the main axis is vertical and `align-items` centres horizontally, which it already is.
+   * Tried the other one first on the deployed page: the icon stayed 4px from the top with 14px
+   * below it. Centred, the icon sits 9px from each edge. */
+  justify-content: center;
+}
+
+/* THE CARD FILLS ITS `<li>`, AND THE `<li>` IS SIZED BY ITS TRACKS. A grid item stretched to its
+ * tracks has a definite height, so `height: 100%` on the card resolves against it — unlike the
+ * earlier `align-self: start` version, where the `<li>` computed to `auto`, the card took its
+ * content height and a `max-height` on the `<li>` clamped only the `<li>`. An `<li>` does not
+ * clip, so at 1280px a 360px `<li>` held a 460px card and 100px of calendar painted over the
+ * first row of links. The card's own `overflow: clip` keeps its contents inside now that the
+ * card and the `<li>` agree.
+ *
+ * `document.elementFromPoint` does NOT catch a card overrunning its `<li>`: the links' stretched
+ * anchors sit later in the DOM and win the hit test, so every tile stays clickable while the
+ * calendar is drawn on top of it. Compare `card.getBoundingClientRect().bottom` against the
+ * `<li>`'s.
+ */
+#my-calendar > div.service-card {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+#my-calendar .service-container {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 #my-calendar .service-container > div {
   display: flex;
   flex-direction: column;
-  max-height: 427px;
+  height: 100%;
+  min-height: 0;
   overflow: hidden;
 }
 

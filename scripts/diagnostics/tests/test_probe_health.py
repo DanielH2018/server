@@ -58,6 +58,41 @@ def test_health_unhealthy_exits_one_and_shows_streak_and_last_log():
     assert "unhealthy" in text and "3" in text and "connection refused" in text
 
 
+def test_health_starting_with_no_failing_probe_exits_zero():
+    """The accept half of #1601.
+
+    A deploy recreates the container, so the post-deploy gate reads it before its healthcheck
+    has completed a probe. `starting` with FailingStreak 0 is no evidence of failure and used
+    to produce `VERDICT: unhealthy` on a correct deploy.
+    """
+    data = _inspect(
+        {
+            "Status": "running",
+            "Health": {"Status": "starting", "FailingStreak": 0, "Log": []},
+        }
+    )
+    text, code = health_docker.format_health(data, "autoheal")
+    assert code == 0
+    assert "startup window" in text
+
+
+def test_health_starting_with_a_failing_probe_exits_one():
+    """The reject half: a non-zero streak means a probe has actually failed."""
+    data = _inspect(
+        {
+            "Status": "running",
+            "Health": {
+                "Status": "starting",
+                "FailingStreak": 2,
+                "Log": [{"Output": "connection refused\n"}],
+            },
+        }
+    )
+    text, code = health_docker.format_health(data, "autoheal")
+    assert code == 1
+    assert "startup window" not in text
+
+
 def test_health_no_healthcheck_running_exits_zero():
     text, code = health_docker.format_health(_inspect({"Status": "running"}), "valheim")
     assert code == 0

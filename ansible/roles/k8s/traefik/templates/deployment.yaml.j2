@@ -320,11 +320,13 @@ spec:
           # restart-loop the edge. It also suppresses the readiness probe below until it
           # passes, which is what keeps a routerless Traefik out of the Service.
           #
-          # OPEN (#1345): a failing startupProbe restarts the CONTAINER, so /plugins-storage is
-          # the same emptyDir on every retry — where the #1322 repair was a rollout restart onto
-          # a fresh one. If a timed-out download leaves an archive Traefik then refuses to
-          # re-fetch, the loop cannot self-heal. The red path is reasoned, not measured; #1345
-          # carries the experiment that settles it.
+          # DECIDED: the shared emptyDir does not need clearing between container starts (#1345).
+          # A failing startupProbe restarts the CONTAINER, so /plugins-storage is the same
+          # emptyDir on every retry, where the #1322 repair was a rollout restart onto a fresh
+          # one. Measured 2026-09-10 on this exact image: each restart re-downloads. Traefik
+          # clears the sources tree at every process start and re-requests the archive on every
+          # install, so a stale or partial archive cannot short-circuit recovery. Full evidence
+          # in this role's CLAUDE.md; do not re-run that outage.
           #
           # 3 minutes of tolerance (36 x 5s). The download takes ~1s when plugins.traefik.io
           # answers, and the bouncer's own updateMaxFailure: 5 gives roughly 6 minutes before
@@ -387,6 +389,13 @@ spec:
             - name: COLLECTIONS
               value: "{{ traefik_k8s_agent_collections }}"
 {{ hardened_security_context(non_root=true) }}
+          # Declared so Prometheus can find it: pod-role SD emits a target per DECLARED
+          # containerPort, so the `crowdsec-traefik-agent` job's keep on port 6060
+          # (claude-otel/templates/prometheus.yaml.j2) matches nothing without this. The
+          # agent binds it either way — this changes discovery, not the listener (#1694).
+          ports:
+            - name: cs-metrics
+              containerPort: 6060
           volumeMounts:
             - name: crowdsec-etc
               mountPath: /etc/crowdsec

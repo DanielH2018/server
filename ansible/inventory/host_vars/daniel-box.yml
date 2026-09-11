@@ -87,6 +87,14 @@ containers_list:
     hostname: "headlamp"
     port: 4466
     use_authelia: true
+  # Route-only: the backend is deploy-ui.service on this host (roles/setup/deploy_ui), reached
+  # through a selector-less Service. use_authelia is the whole access control and the Authelia
+  # policy is two_factor — the page starts deploys and clears the deployer's hold.
+  - name: deploy-ui
+    platform: k8s
+    hostname: "deploy"
+    port: 8790
+    use_authelia: true
   # Route-only entry: Longhorn's workloads come from the upstream manifest roles/setup/k3s
   # applies, and this role adds nothing but the IngressRoute plus the middleware copies it
   # needs inside longhorn-system. `port` is longhorn-frontend's Service port. use_authelia
@@ -350,6 +358,12 @@ containers_list:
     platform: k8s
     port: 80
     depends_on: [pihole]
+
+  # GPU utilization per node, from DRM sysfs. A DaemonSet with no Service and no IngressRoute —
+  # Prometheus discovers its pods individually — so no ordering edge derives from its templates
+  # and none is needed: it reads the kernel, not another workload.
+  - name: gpu-exporter
+    platform: k8s
 
   - name: ical-proxy
     platform: k8s

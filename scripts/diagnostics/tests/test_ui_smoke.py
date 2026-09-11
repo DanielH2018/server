@@ -67,6 +67,14 @@ SERVICES = [
     ("homepage", "My Awesome Homepage", "/"),
     ("sonarr", "Sonarr", "/"),
     ("freshrss", "Login · FreshRSS", "/i/"),
+    # Its own Django login behind Authelia's `*.local` one_factor rule, so `/` redirects to
+    # `/accounts/login/`. Title and path both observed against the live route on 2026-09-10,
+    # not guessed: `Home Server healthchecks` is the role's own `SITE_NAME`
+    # (`roles/k8s/healthchecks/templates/deployment.yaml.j2:45`), so a page rendered without
+    # that setting carries the image's default and fails here — do not relax to a substring.
+    # It earns an entry because it is the dead-man's switch the fleet's crons ping, so its
+    # silent breakage is least likely to be caught by anything else (#1575).
+    ("healthchecks", "Log In - Home Server healthchecks", "/accounts/login/"),
     # Routed by the `claude-otel` role, whose containers_list entry names Grafana alone.
     # `Grafana` at `/login` is Grafana's OWN login page: it sits behind the one_factor
     # Authelia rule, so reaching it proves ingress → Authelia → backend. It does NOT prove a
@@ -85,7 +93,18 @@ TWO_FACTOR_SERVICES = [
     ("longhorn", "Longhorn", "/#/dashboard"),
     ("code-server", "code-server login", "/login"),
     ("n8n", "n8n.io - Workflow Automation", "/"),
+    ("deploy", "Deploy queue", "/"),
 ]
+
+# Exactly five: `state()` in `deploy_ui.html` renders one `<tr>` per marker in
+# `deploy_ui_reads.MARKERS`, and a failed read renders a `<span class="unavail">` with no
+# table at all — which is what makes an exact count a rejecting assertion (#1598).
+DEPLOYER_STATE_ROWS = 5
+
+# The panels fill from async `/api/*` fetches after load, so the first read lands on an empty
+# div. Same shape and the same reasoning as `settled_title`: absorb the fetch, not a failure.
+_PANEL_ATTEMPTS = 8
+_PANEL_INTERVAL = 0.75
 
 MINT_HINT = "mint one with `uv run python scripts/diagnostics/ui_login.py --two-factor`"
 
@@ -441,4 +460,39 @@ def test_two_factor_service_serves_its_own_ui(
         # A two_factor session lapses after about an hour, so this is the usual reason.
         remint="uv run python scripts/diagnostics/ui_login.py --two-factor",
         observed_title=two_factor_browser.settled_title(title),
+    )
+
+
+def settled_rows(browser, selector: str, interval: float = _PANEL_INTERVAL) -> int:
+    """Rows matching `selector` once the panel's fetch has landed, or 0 if it never does."""
+    js = f"() => JSON.stringify(document.querySelectorAll({selector!r}).length)"
+    rows = 0
+    for attempt in range(_PANEL_ATTEMPTS):
+        if attempt:
+            time.sleep(interval)
+        rows = browser.evaluate(js)
+        if rows:
+            return rows
+    return rows
+
+
+def test_deploy_ui_renders_a_panel_not_just_its_shell(two_factor_browser, domain):
+    """deploy.local drew a row its own API produced, not just its static headings.
+
+    The `deploy` entry in `TWO_FACTOR_SERVICES` checks the title, which `deploy_ui.html`
+    ships as literal markup — so does every panel heading. A daemon answering
+    `{"unavailable": ...}` on all four panels still passes it. This asserts the deployer-state
+    table, whose rows exist only if `/api/state` answered and the page rendered it.
+    """
+    report, is_error = two_factor_browser.navigate(f"https://deploy.local.{domain}/")
+    assert not is_error, f"deploy: navigation reported an error:\n{report}"
+    assert "auth.local." not in report, (
+        f"deploy: landed on the Authelia portal — re-mint the session with `{MINT_HINT}`."
+    )
+    rows = settled_rows(two_factor_browser, "#state table tr")
+    assert rows == DEPLOYER_STATE_ROWS, (
+        f"deploy: expected {DEPLOYER_STATE_ROWS} rows in the deployer-state panel, saw "
+        f"{rows}. Zero means the panel rendered `unavailable` — the daemon could not read "
+        f"/var/lib/gitops-deploy — while the page's title and headings still say `Deploy "
+        f"queue`. Check `curl -s http://10.0.0.215:8790/api/state` from daniel-box."
     )

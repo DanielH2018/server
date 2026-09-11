@@ -51,6 +51,20 @@ same resources.
   one hand `kubectl delete`, which the `manifest-prune-check.sh` host cron flags. Bit for real
   on 2026-08-13: a retired IngressRoute deleted live at 18:51 was re-created by the 18:53
   deploy from its stale staged file.
+- **The prune owns the whole directory, so nothing else may stage a file there.** A file
+  another role or another task writes into `/etc/rancher/k3s/manifests/<service>/` without the
+  caller naming it in `manifests_files`/`manifests_secret_files` is deleted on the next deploy
+  of that role — a permanently `changed` prune item on an otherwise idempotent run. Write it to
+  a sibling directory instead, the way `headlamp-netpol`, `prowlarr-netpol`,
+  `n8n-netpol` (#1668), `registry-jobs` (#1669), `media-volume-probe`,
+  `netpol-baseline-probe*`, `build-<image>` (`k8s/image-builder`) and `<service>-claims`
+  (`k8s/volume-claim`, #1654) do: a name no role's `manifests_service` claims, so no
+  `kubectl apply -f <dir>/` sweeps it either. Those names are a reservation, and
+  `ansible/tests/k8s/test_no_role_stages_files_in_a_pruned_manifest_dir.py` enforces it (#1670)
+  — one invariant refuses a file staged in a pruned directory, the other refuses a
+  `manifests_service` that claims a reserved sibling name. `claude-otel`
+  moved its dashboard ConfigMaps out for the same reason and carries an explicit `state:
+  absent` for the copies it left behind.
 - **`manifests_prune` (#1076) removes the live object too, opt-in per role.** Set
   `manifests_prune: true` and `manifests_prune_kinds: [<group/version/Kind>, ...]` on the
   `include_role` call and the apply gains `--prune -l homelab/role=<service>

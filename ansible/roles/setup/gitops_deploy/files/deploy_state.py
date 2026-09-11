@@ -31,9 +31,9 @@ STATE_DIR = "/var/lib/gitops-deploy"
 class DeployerState:
     """The marker files under /var/lib/gitops-deploy, as one object with typed accessors.
 
-    Nineteen files record what this host believes — the held SHA, the plane that failed, how
+    Twenty files record what this host believes — the held SHA, the plane that failed, how
     long it has been behind origin, one dedupe marker per alert channel, the undelivered-alert
-    queue, the staging tick ledger and the operator's staging override — through nineteen
+    queue, the staging tick ledger and the operator's staging override — through twenty
     module constants and a pair of bare `_read_marker`/`_write_marker` helpers, so nothing
     described the state as a whole. This is that description. The paths, the file contents and
     the empty-vs-missing semantics are unchanged; `gitops_deploy.py` still holds the literal
@@ -49,6 +49,12 @@ class DeployerState:
     MARKERS: ClassVar[dict[str, str]] = {
         "hold": "hold_sha",
         "hold_plane": "hold_plane",
+        # The last broad plane this host APPLIED, as `<origin_sha> <playbook> <tags>`. The
+        # only durable evidence that a tick applied a plane, as against fast-forwarding past
+        # it: `behind_since` empty says local == origin, which any session's `git merge
+        # --ff-only` also produces, and after that `next_action()` returns `noop` forever so
+        # the plane is stranded (issue #1537). Read by `land.sh` before it says `settled`.
+        "broad_applied": "broad_applied",
         "last_run": "last_run",
         "diverged": "diverged_sha",
         "behind": "behind_since",
@@ -128,6 +134,21 @@ class DeployerState:
     def hold_plane(self) -> str | None:
         """The playbook (and tags) whose broad apply failed, or None."""
         return self.read("hold_plane")
+
+    @property
+    def broad_applied(self) -> str | None:
+        """`"<origin_sha> <playbook> <tags>"` for the last broad plane applied, or None."""
+        return self.read("broad_applied")
+
+    def record_broad_applied(self, origin: str, playbook: str, tags: list[str]) -> None:
+        """Record that this host applied `playbook`/`tags` at `origin`.
+
+        Written only after `deploy_io.deploy_broad` returned, so the marker means "applied",
+        never "attempted" — the failure path writes `hold_sha`/`hold_plane` instead.
+        """
+        self.write(
+            "broad_applied", f"{origin} {hold_plane_marker(playbook, tags)}".strip()
+        )
 
     @property
     def diverged_sha(self) -> str | None:

@@ -23,7 +23,13 @@ from deploy_tools.exit_codes import (
 )
 from deploy_tools.land_lib import ci, tick
 from deploy_tools.land_lib.landing import BRANCH, Landing, TickState, retry_while_locked
-from deploy_tools.land_lib.outcome import Cause, Verdict, cause_for_deploy_exit, say
+from deploy_tools.land_lib.outcome import (
+    ABANDONED_WATCH_NOTE,
+    Cause,
+    Verdict,
+    cause_for_deploy_exit,
+    say,
+)
 
 
 def derive_from_diff(ln: Landing) -> None:
@@ -82,11 +88,35 @@ def no_tag_outcome(ln: Landing) -> NoReturn:
         print(
             f"  the tick did not fast-forward to origin (parked since: {ln.state('behind_since')})"
         )
+        if ln.tick_watch_abandoned:
+            print(ABANDONED_WATCH_NOTE)
+            ln.finish(
+                Verdict.DEFERRED,
+                75,
+                f"PR #{pr} — landed; this run stopped watching a tick still applying, "
+                "so whether the deployer is deferring or holding is not yet known",
+            )
         print(
             "  Usually a newer merge whose CI is still running; the next tick crosses it. Nothing is wrong with this PR."
         )
         ln.finish(
             Verdict.DEFERRED, 75, f"PR #{pr} — landed, not yet applied by the tick"
+        )
+    if not ln.broad_applied_covers(sha):
+        print(
+            "  the tick converged with origin but recorded no broad apply covering this PR "
+            f"(broad_applied: {ln.state('broad_applied') or 'absent'})"
+        )
+        print(
+            "  Something OTHER than the tick fast-forwarded the checkout, so the tick will "
+            "never see this range again."
+        )
+        if ln.self_applied_command:
+            print(f"  Apply it: {ln.self_applied_command}")
+        ln.finish(
+            Verdict.NEEDS_MANUAL_APPLY,
+            1,
+            f"PR #{pr}, {sha} — the tick converged without recording an apply of this PR",
         )
     if ln.remaining_setup:
         local = ln.tools.hostname()

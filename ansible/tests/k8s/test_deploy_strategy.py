@@ -49,7 +49,14 @@ _RECREATE = {
         "home-assistant",
         "home-assistant",
     ): "sqlite recorder plus singleton device connections",
-    ("authelia", "authelia"): "sqlite storage and an in-memory session provider",
+    (
+        "authelia",
+        "authelia",
+    ): "sqlite storage on an RWO Longhorn volume; sessions moved to redis, the PVC did not",
+    (
+        "authelia",
+        "authelia-redis",
+    ): "one in-memory session store; two would each hold their own and split the fleet's logins",
     ("crowdsec", "crowdsec"): "sqlite LAPI DB on an RWO volume",
     ("claude-otel", "grafana"): "sqlite DB on a ReadWriteOnce PVC",
     ("scrutiny", "scrutiny-web"): "local config store",

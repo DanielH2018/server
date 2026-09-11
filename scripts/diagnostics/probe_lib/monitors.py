@@ -29,6 +29,9 @@ from diagnostics.probe_lib.core import SECRETS_PATH, prom_endpoint, prom_query_u
 from diagnostics.probe_lib.health_kubectl import k8s_pods_argv
 from diagnostics.probe_lib.health_rollout import seconds_since
 
+import yaml
+
+from lib import yaml_fast
 from lib.repo_paths import REPO
 
 # Kuma's own numeric status codes, from the exporter that feeds monitor_status.
@@ -150,21 +153,99 @@ def parse_declared_monitors(text):
     return declared
 
 
+def declared_secret_names():
+    """The secrets file's top-level key names. No value is decrypted.
+
+    SOPS encrypts values, not keys, so the key list is plaintext in the committed file and a
+    plain YAML parse answers "is this key declared" without touching the age key. Same read as
+    `secrets_mgmt/rotation_tools.sops_names`, which the rotation registry has used since it
+    existed — duplicated rather than imported, because `probe_lib` reaching into
+    `secrets_mgmt` for one function would drag that module's git and registry helpers in with
+    it.
+
+    Returns None when the file cannot be read or parsed at all. That is not "no keys are
+    declared": a caller must not read an unreadable file as an absent key, which is the whole
+    distinction `gate_var_state` exists to keep.
+    """
+    try:
+        with open(SECRETS_PATH) as fh:
+            data = yaml_fast.safe_load(fh)
+    except OSError, yaml.YAMLError:
+        return None
+    if not isinstance(data, dict):
+        return None
+    return {name for name in data if name != "sops"}
+
+
+def judge_gate_read(var, extracted, declared):
+    """The three-way gate verdict, pure. `extracted` is the value or None if the read failed.
+
+    None means "could not be read" — no age key on this host, the secret tool missing, the
+    file unparseable — and is deliberately distinct from False. Reporting an unreadable gate
+    as unset is what made the old check silent; an unreadable input and an empty one must not
+    look alike.
+
+    A key that is not DECLARED in the store is the third case, and it is routine rather than a
+    failure: `homelab_eval_push_token` is deliberately absent (static-monitors.yaml.j2
+    explains why), so its monitor correctly renders away. The value read exits non-zero for
+    that and for a broken host alike, which left two permanently-unverified §9.1 lines and
+    trained the reader to skim the arm that catches a real failure to read a secret (#1644).
+    An undeclared key is therefore False — an unset gate, excused.
+
+    `declared` is consulted only when `extracted` is None, and never decides on its own.
+    Reading it first would turn a host with no age key into "every gate is unset", since the
+    plaintext key-list parse succeeds there — the exact regression the paragraph above forbids.
+    A `declared` of None is that parse having failed, which proves nothing either way.
+    """
+    if extracted is not None:
+        return bool(extracted.strip())
+    if declared is not None and var not in declared:
+        return False
+    return None
+
+
 def gate_var_state(var):
     """True / False / None for whether a gating secret has a non-empty value.
 
-    None means "could not be read" — no age key on this host, sops missing, key absent — and
-    is deliberately distinct from False. Reporting an unreadable gate as unset is what made
-    the old check silent; an unreadable input and an empty one must not look alike.
+    The reads; `judge_gate_read` holds the decision and its reasoning.
     """
     out = subprocess.run(
         ["sops", "-d", "--extract", f'["{var}"]', SECRETS_PATH],
         capture_output=True,
         text=True,
     )
-    if out.returncode != 0:
-        return None
-    return bool(out.stdout.strip())
+    extracted = out.stdout if out.returncode == 0 else None
+    return judge_gate_read(
+        var, extracted, None if extracted is not None else declared_secret_names()
+    )
+
+
+def resolve_gate_states(declared, live, no_secrets=False):
+    """{gate_var: True/False/None} for the gates format_kuma_drift has to judge.
+
+    Resolved only for gates whose monitor is actually absent — a sops call per gate is the
+    cost, and a monitor that is live needs no explanation for why it might not be.
+
+    Shared by `run_kuma_drift` and `postflight.check_kuma_drift`. postflight called
+    format_kuma_drift with no gate_states until 2026-09-10, which excused all seven gated
+    monitors unconditionally (#1632) — the same miss the one below records, reintroduced by a
+    second caller rather than by the default. One constructor is what stops a third caller
+    repeating it.
+
+    DECIDED: the decrypt stays ON by default, and `no_secrets` is the opt-out — not the
+    reverse. `probe.py kuma-drift` is allow-listed and so runs unprompted, which is a fair
+    reason to want no SOPS read on the path; but assuming a gate was unset is exactly the miss
+    16cf5721 fixed on 2026-08-22, and defaulting to no_secrets would reinstate it. The read is
+    narrow: `var` comes from _JINJA_IF_COND_RE, constrained to [a-zA-Z_][a-zA-Z0-9_]*, and is
+    passed as an argv element rather than through a shell, so no value and no injection point
+    escapes gate_var_state — only bool(stdout) does. Reach for no_secrets when the age key
+    should not be touched at all; accept "unverified" as the cost.
+    """
+    return {
+        spec["gate"]: None if no_secrets else gate_var_state(spec["gate"])
+        for name, spec in declared.items()
+        if spec["gate"] and name not in live
+    }
 
 
 def format_kuma_drift(declared, live, kuma_age_seconds, gate_states=None):
@@ -292,22 +373,7 @@ def run_kuma_drift(ns):
     live.discard(None)
     if ns.pi:
         live &= pi_names
-    # Resolved only for gates whose monitor is actually absent — a sops call per gate is the
-    # cost, and a monitor that is live needs no explanation for why it might not be.
-    #
-    # DECIDED: the decrypt stays ON by default, and `--no-secrets` is the opt-out — not the
-    # reverse. This subcommand is allow-listed and so runs unprompted, which is a fair reason to
-    # want no SOPS read on the path; but assuming a gate was unset is exactly the miss 16cf5721
-    # fixed on 2026-08-22, and defaulting to --no-secrets would reinstate it. The read is
-    # narrow: `var` comes from _JINJA_IF_COND_RE, constrained to [a-zA-Z_][a-zA-Z0-9_]*, and is
-    # passed as an argv element rather than through a shell, so no value and no injection point
-    # escapes gate_var_state — only bool(stdout) does. Reach for --no-secrets when the age key
-    # should not be touched at all; accept "unverified" as the cost.
-    gate_states = {
-        spec["gate"]: None if ns.no_secrets else gate_var_state(spec["gate"])
-        for name, spec in declared.items()
-        if spec["gate"] and name not in live
-    }
+    gate_states = resolve_gate_states(declared, live, no_secrets=ns.no_secrets)
     text, code = format_kuma_drift(
         declared, live, kuma_pod_age_seconds(), gate_states=gate_states
     )

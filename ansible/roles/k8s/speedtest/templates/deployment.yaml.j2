@@ -65,6 +65,14 @@ spec:
               value: "{{ tz }}"
             - name: OOKLA_EULA_GDPR
               value: "true"
+            # DECIDED: the schedule stays INTERNAL to the app rather than becoming a k8s
+            # CronJob. #1483 raised the CronJob because nothing outside the container can see
+            # a tick fire. Measured 2026-09-10, the internal scheduler is not the flaky part:
+            # rows 825-849 land on :00 at 05/11/17/23 UTC every day, with exactly ONE miss —
+            # 2026-09-09 17:00, on a day the pod was rescheduled by the 20:12 daniel-box
+            # reboot. A CronJob would move the transcript, not the reliability, and it cannot
+            # write into the app's own results table without reimplementing the Ookla run.
+            # Revisit if a miss ever occurs without a pod restart beside it.
             - name: SPEEDTEST_SCHEDULE
               value: "0 */6 * * *"
             # Pinned to 41671 (x99.cloud, Chicago) on 2026-08-24, restoring the pin that came

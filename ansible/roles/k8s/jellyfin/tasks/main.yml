@@ -16,6 +16,92 @@
     volume_claim_storage_class: "{{ jellyfin_k8s_storage_class }}"
     volume_claim_size: "{{ jellyfin_k8s_size }}"
 
+# ── the snapshot-space cap (#1478) ──────────────────────────────────────────────────────────
+# The PVC above caps the FILESYSTEM. It does not cap the Longhorn backend, because this role
+# takes a pre-apply snapshot on every deploy and Longhorn's default snapshotMaxSize is "0" —
+# uncapped. These two tasks set it, and they run HERE: after the claim exists (the `longhorn`
+# StorageClass binds Immediate, so the volume follows the PVC) and before k8s/manifests takes
+# this deploy's snapshot.
+#
+# Read-then-patch rather than an unconditional patch, because `kubectl patch` reports the
+# no-op case as `patched` too — an unconditional one would report `changed` on every deploy
+# forever.
+- name: Read the Longhorn volume backing the jellyfin config claim
+  tags: [deploy]
+  ansible.builtin.command:
+    argv:
+      - k3s
+      - kubectl
+      - -n
+      - "{{ k8s_namespace }}"
+      - get
+      - pvc
+      - "{{ jellyfin_k8s_claim }}"
+      - -o
+      - 'jsonpath={.spec.volumeName}'
+  become: true
+  changed_when: false
+  # Only reads, so let it run under --check as well: the patch below is skipped there anyway,
+  # and a task that reports "skipped" here would leave the assert reading an empty register.
+  check_mode: false
+  register: jellyfin_k8s_volume
+  # A Pending PVC returns rc 0 and an empty volumeName. Immediate binding makes that a
+  # transient state on a first-ever deploy, not a permanent one, so retry rather than fail.
+  retries: 10
+  delay: 3
+  until: jellyfin_k8s_volume.stdout | default('') | trim | length > 0
+
+- name: Read the current snapshot-space cap on the jellyfin volume
+  tags: [deploy]
+  ansible.builtin.command:
+    argv:
+      - k3s
+      - kubectl
+      - -n
+      - longhorn-system
+      - get
+      - volumes.longhorn.io
+      - "{{ jellyfin_k8s_volume.stdout | trim }}"
+      - -o
+      - 'jsonpath={.spec.snapshotMaxSize}'
+  become: true
+  changed_when: false
+  check_mode: false
+  register: jellyfin_k8s_snapshot_cap
+
+# Longhorn refuses a non-zero cap below `Volume.Spec.Size` x 2, and the refusal is an admission
+# error on the patch — loud, and on the deploy that introduced it rather than weeks later. The
+# value comes from jellyfin_k8s_size for exactly that reason; see defaults/main.yml.
+- name: Cap the snapshot space on the jellyfin volume
+  tags: [deploy]
+  ansible.builtin.command:
+    argv:
+      - k3s
+      - kubectl
+      - -n
+      - longhorn-system
+      - patch
+      - volumes.longhorn.io
+      - "{{ jellyfin_k8s_volume.stdout | trim }}"
+      - --type=merge
+      - -p
+      - '{"spec":{"snapshotMaxSize":"{{ jellyfin_k8s_snapshot_max_size }}"}}'
+  become: true
+  changed_when: true
+  # `k8s_no_mutate`, not `ansible_check_mode`: it covers `--check` AND `-e k8s_dry_run=true`,
+  # and it is the fact ansible/tests/deploy/test_k8s_dry_run.py looks for. A role that writes
+  # to the cluster from its own tasks either carries this guard or joins
+  # k8s_dry_run_unsupported — and joining that list would make a jellyfin dry run refuse
+  # outright, which is a much worse trade than skipping one idempotent patch.
+  when:
+    - not (k8s_no_mutate | bool)
+    # `| string` on the right is load-bearing. jellyfin_k8s_snapshot_max_size is a whole-string
+    # template whose result LOOKS like an integer literal, and Ansible's templar converts that
+    # shape to an int — measured: `... | type_debug` reports `int`. `.stdout` is always a str,
+    # so without the cast the two never compare equal, the patch fires on every deploy and
+    # `changed_when: true` reports changed forever.
+    - (jellyfin_k8s_snapshot_cap.stdout | default('') | trim) != (jellyfin_k8s_snapshot_max_size | string)
+
 - name: Deploy jellyfin to the cluster
   ansible.builtin.include_role:
     name: k8s/manifests

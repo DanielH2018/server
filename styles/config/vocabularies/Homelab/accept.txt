@@ -323,6 +323,7 @@ cours
 [Bb]ackgrounded
 [Bb]ackoff
 SIGTERMed
+SIGTERMs
 pid
 [Pp]ytest
 
@@ -391,3 +392,15 @@ monkeypatch
 [Gg]itignored
 [Ss]ubcommand
 [Ss]ubcommands
+
+# GPU metrics from the kernel DRM interface (roles/k8s/gpu-exporter)
+sysfs
+amdgpu
+
+# k3s control-plane upgrade (docs/k3s-upgrade.md)
+[Rr]einstalls
+[Aa]utomerge
+[Uu]nparks
+runc
+apiserver
+ORed

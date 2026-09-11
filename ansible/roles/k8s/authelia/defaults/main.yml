@@ -43,8 +43,9 @@ authelia_k8s_manage_oidc: true
 
 # Deliver identity-verification codes by email rather than to a file inside the pod. False
 # falls back to the filesystem notifier, which is what this role used before 2026-09-09 and
-# what daniel-stage still uses — the SMTP branch reads `smtp_notify_app_password`, and the
-# staging secrets file is encrypted to its own age recipient and cannot hold it.
+# what no host takes today — daniel-stage took it until #1464, and now rehearses the SMTP
+# branch on a fake credential instead (its host_vars carries the reasoning). Leave it true;
+# false is the break-glass path for a cluster with no usable `smtp_notify_app_password`.
 authelia_k8s_smtp_notifier: true
 
 # Session cookie name. MUST differ from the Docker instance's `authelia_session_local`.
@@ -56,6 +57,38 @@ authelia_k8s_smtp_notifier: true
 # the rotation registry tracks under that name — see this role's CLAUDE.md.
 authelia_k8s_cookie_name: authelia_session_k8s
 
+# --- Redis session store ----------------------------------------------------------------
+# Authelia's session provider is IN-MEMORY unless a `session.redis` block exists — v4.39.21's
+# own config.template.yml says "Memory is the provider unless redis is defined". So every roll
+# of this Deployment destroyed every session, remember-me ones included: `remember_me` only
+# overrides the cookie lifetime and disables the inactivity timer, it does not change where the
+# session lives. This pod rolls whenever its rendered manifests change, which with several
+# concurrent worktrees editing this role was several times a day. Redis moves the sessions out
+# of the process so a roll stops logging the fleet out.
+#
+# The rollback lever: set false and redeploy. Authelia goes back to memory sessions and the
+# redis Deployment and Service stay applied but unused. Flipping it either way logs everyone
+# out once, because the sessions live on the side being left.
+authelia_k8s_redis_sessions: true
+
+# repo:tag with no digest — the same shape as authelia_k8s_image above, so Renovate's docker
+# manager tracks it.
+authelia_k8s_redis_image: redis:8.10-alpine
+
+# Sessions are a CACHE with a one-month ceiling, not a record, so redis runs on an emptyDir and
+# persists nothing. A node reboot, an eviction or a Renovate bump of the image still logs
+# everyone out; a roll of THIS role no longer does, which is what the change is for. A Longhorn
+# PVC would buy back the remaining cases at the price of a backed-up volume holding live
+# session credentials.
+authelia_k8s_redis_cpu_limit: "0.5"
+authelia_k8s_redis_mem_limit: 128Mi
+authelia_k8s_redis_cpu_request: 10m
+authelia_k8s_redis_mem_request: 16Mi
+
+# `maxmemory` sits UNDER the container memory limit so redis evicts its oldest sessions instead
+# of being OOM-killed, which would drop all of them at once. allkeys-lru because every key here
+# is a session and Authelia simply re-authenticates a user whose key is gone.
+authelia_k8s_redis_maxmemory: 96mb
 # Its own SQLite database on its own volume. This is the slice-1 hazard named in
 # docs/archive/k3s-migration/design.md: two Authelias writing one SQLite file corrupts it for both.
 # The storage encryption key (authelia_storage) was shared with the Docker instance so the

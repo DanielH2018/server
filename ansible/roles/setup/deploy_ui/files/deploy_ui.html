@@ -1,0 +1,44 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Deploy queue</title>
+<style>
+:root{--base:#1e1e2e;--mantle:#181825;--surface0:#313244;--surface1:#45475a;--text:#cdd6f4;--sub:#a6adc8;--mute:#6c7086;--blue:#89b4fa;--green:#a6e3a1;--yellow:#f9e2af;--red:#f38ba8;--crust:#11111b}
+body{margin:0;background:var(--base);color:var(--text);font:15px/1.5 system-ui,sans-serif}
+main{max-width:1000px;margin:0 auto;padding:24px}
+h1{font-size:22px;margin:0 0 16px}h2{font-size:16px;margin:24px 0 8px;border-bottom:1px solid var(--surface1)}
+table{width:100%;border-collapse:collapse}td,th{padding:6px 8px;border-bottom:1px solid var(--surface1);text-align:left;vertical-align:top}
+th{color:var(--sub);font-size:12px;text-transform:uppercase}
+code{font-family:ui-monospace,monospace;background:var(--surface0);padding:1px 4px;border-radius:3px}
+button{background:var(--blue);color:var(--crust);border:0;padding:4px 10px;border-radius:3px;font-weight:600;cursor:pointer}
+button.danger{background:var(--red)}button.warn{background:var(--yellow)}
+.unavail{color:var(--red)}.clear{color:var(--green)}.mute{color:var(--mute)}
+pre{background:var(--mantle);border:1px solid var(--surface1);padding:10px;max-height:320px;overflow:auto;white-space:pre-wrap}
+#msg{min-height:1.4em;color:var(--yellow)}
+</style></head><body><main>
+<h1>Deploy queue</h1><div id="msg"></div>
+<h2>Lock and landings in flight</h2><div id="inflight"></div>
+<h2>Merged but undeployed</h2><div id="stale"></div>
+<h2>Deployer state</h2><div id="state"></div>
+<h2>Open pull requests</h2><div id="prs"></div>
+<h2>Log</h2><pre id="log" class="mute">no action yet</pre>
+<script>
+const H={'X-Deploy-UI':'1','Content-Type':'application/json'};
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let logPath=null;
+async function post(path,payload){const r=await fetch(path,{method:'POST',headers:H,body:JSON.stringify(payload)});const t=await r.text();
+  document.getElementById('msg').textContent=r.status+' '+t;if(r.status===202){logPath=JSON.parse(t).log;}refresh();}
+async function panel(id,path,render){const el=document.getElementById(id);try{const r=await fetch(path);const b=await r.json();
+  el.innerHTML=b.unavailable?`<span class="unavail">unavailable: ${esc(b.unavailable)}</span>`:render(b);}catch(e){el.innerHTML=`<span class="unavail">unavailable: ${esc(e)}</span>`;}}
+function inflight(b){const h=b.lock_holder;let s=`<p>Lock: ${h?`<code>${esc(h.args)}</code> pid ${h.pid}, ${h.elapsed_s}s`:'<span class="clear">free</span>'}</p>`;
+  if(!b.landings.length)return s+'<p class="mute">no landings in flight</p>';
+  return s+'<table><tr><th>PR</th><th>pid</th><th>elapsed</th><th>command</th><th></th></tr>'+b.landings.map(l=>`<tr><td>#${esc(l.pr)}</td><td>${l.pid}</td><td>${l.elapsed_s}s</td><td><code>${esc(l.args)}</code><br><span class="mute">${esc(l.log)}</span></td><td><button class="danger" onclick="post('/api/cancel',{pid:${l.pid}})">cancel</button></td></tr>`).join('')+'</table>';}
+function stale(b){if(!b.stale.length)return '<p class="clear">every release is current</p>';
+  return '<table><tr><th>service</th><th>why</th><th></th></tr>'+b.stale.map(r=>`<tr><td>${esc(r.service)}</td><td>${esc(r.reason)}</td><td><button onclick="post('/api/deploy',{tag:'${esc(r.service)}'})">deploy</button></td></tr>`).join('')+'</table>';}
+function state(b){const row=(k,v,extra='')=>`<tr><td>${k}</td><td>${v?`<code>${esc(v)}</code>`:'<span class="clear">clear</span>'}</td><td>${extra}</td></tr>`;
+  const hold=b.hold_sha?`<button class="warn" onclick="{const s=prompt('Type the held SHA to clear it');if(s)post('/api/hold/clear',{expected_sha:s})}">clear hold</button>`:'';
+  const ov=b.staging_gate_override?`<button onclick="post('/api/staging-override',{action:'clear'})">clear override</button>`:`<button class="warn" onclick="post('/api/staging-override',{action:'set'})">set override</button>`;
+  return '<table>'+row('hold_sha',b.hold_sha,hold)+row('hold_plane',b.hold_plane)+row('last_run',b.last_run)+row('behind_since',b.behind_since)+row('staging_gate_override',b.staging_gate_override,ov)+'</table>';}
+function prs(b){if(!b.prs.length)return '<p class="mute">no open PRs</p>';
+  return '<table><tr><th>#</th><th>title</th><th>CI</th><th></th></tr>'+b.prs.map(p=>`<tr><td>${p.number}</td><td>${esc(p.title)}${p.draft?' <span class="mute">draft</span>':''}<br><span class="mute">${esc(p.branch)}</span></td><td>${p.ci}</td><td><button onclick="{const s=prompt('--since SHA (master before the merge)');if(s)post('/api/land',{pr:'${p.number}',since:s})}">land</button></td></tr>`).join('')+'</table>';}
+async function tail(){if(!logPath)return;const r=await fetch('/api/log?path='+encodeURIComponent(logPath));document.getElementById('log').textContent=await r.text();}
+function refresh(){panel('inflight','/api/inflight',inflight);panel('stale','/api/stale',stale);panel('state','/api/state',state);panel('prs','/api/prs',prs);tail();}
+refresh();setInterval(refresh,10000);
+</script></main></body></html>

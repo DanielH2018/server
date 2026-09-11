@@ -1,0 +1,37 @@
+---
+# karakeep's headless Chrome. karakeep dials it at BROWSER_WEB_URL=http://karakeep-chrome:9222
+# (deployment.yaml.j2) to render pages it is archiving.
+#
+# It renders attacker-supplied pages, so it is worth fencing tightly: karakeep is the only
+# caller that has any business here. The baseline already admits traefik and prometheus on
+# every port; this rule adds the one real caller.
+#
+# THIS POLICY SHIPS WITH THE ROLE THAT NEEDS IT, for the same reason as
+# networkpolicy-meilisearch.yaml.j2 beside it (#1620) — read that file for the full rationale.
+# `wait-for-deps` waits on karakeep-chrome:9222 as well as meilisearch, so moving only one of
+# the two would still leave `--tags karakeep` able to stage a pod that never leaves Init.
+#
+# 9222 is the containerPort AND the Service port — verified 2026-08-20, they match, and
+# ansible/tests/services/test_karakeep_backend_policies.py keeps them matching.
+#
+# NO `netpol_baseline_enforced` BRANCH — same reason as the meilisearch policy: the lever is a
+# netpol-baseline role default and does not resolve in this role.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: karakeep-chrome
+  namespace: {{ k8s_namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: karakeep-chrome
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: karakeep
+      ports:
+        - port: 9222
+          protocol: TCP

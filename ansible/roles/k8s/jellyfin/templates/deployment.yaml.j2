@@ -122,7 +122,7 @@ spec:
               # /config/data/plugins/.
               PLUGINS = Path("/config/data/plugins")
               # `<Name>_<Version>`, the layout Jellyfin's own installer writes and the one the
-              # sibling plugins on this volume use (`SSO Authentication_4.0.0.4`). Name and
+              # sibling plugins on this volume use (`SSO Authentication_<version>`). Name and
               # version are meta.json's, not ours to choose.
               PLUGIN_DIR = PLUGINS / ("Ani-Sync_" + VERSION)
 
@@ -228,7 +228,7 @@ spec:
               # sibling container's comment records, and the same answer.
               PLUGINS = Path("/config/data/plugins")
               # `<Name>_<Version>`, with the space Jellyfin's own installer writes: the
-              # neighbouring `SSO Authentication_4.0.0.4` on this volume has one too. "Intro
+              # neighbouring `SSO Authentication_<version>` on this volume has one too. "Intro
               # Skipper" is the name the published manifest declares.
               PLUGIN_DIR = PLUGINS / ("Intro Skipper_" + VERSION)
 
@@ -291,6 +291,391 @@ spec:
                       print("removing superseded " + stale.name)
                       shutil.rmtree(stale)
               print("installed intro-skipper " + VERSION)
+{{ hardened_security_context(non_root=true, run_as_user=puid, run_as_group=pgid) }}
+          volumeMounts:
+            - name: jellyfin-config
+              mountPath: /config
+{{ container_resources(cpu_limit='500m', mem_limit='128Mi', cpu_request='10m', mem_request='32Mi') }}
+          # ── Webhook (playback and library events out to HTTP endpoints) ─────────────────────
+          # A third copy of the two containers above rather than a loop over a plugin list, for
+          # the reason the Intro Skipper comment records: each install is pinned by literal
+          # string assertions in its own test, and a textual guard stops seeing what it guards
+          # once the thing moves behind an indirection.
+          #
+          # Closest to ani-sync of the two: the release zip carries its own meta.json, so
+          # nothing here writes one. It differs in where it comes from — repo.jellyfin.org
+          # serves a redirect to a mirror, which urllib follows, and the digest is the MD5 the
+          # official manifest publishes rather than a GitHub asset sha256.
+          #
+          # The plugin's DESTINATIONS (the Home Assistant webhook URL, the event selection, the
+          # Handlebars templates) are deliberately unmanaged, exactly as the two siblings'
+          # settings are: they live in /config/data/plugins/configurations/ and nothing here
+          # touches that directory.
+        - name: install-webhook
+          image: {{ jellyfin_k8s_plugin_init_image }}
+          command:
+            - python3
+            - -c
+            - |
+              import hashlib
+              import shutil
+              import tempfile
+              import urllib.request
+              import zipfile
+              from pathlib import Path
+
+              VERSION = "{{ jellyfin_k8s_webhook_version }}"
+              URL = "{{ jellyfin_k8s_webhook_url }}"
+              WANT_MD5 = "{{ jellyfin_k8s_webhook_md5 }}"
+              DLL = "Jellyfin.Plugin.Webhook.dll"
+              # /config/data/plugins, the only directory Jellyfin scans — the same trap both
+              # sibling containers' comments record, and the same answer.
+              PLUGINS = Path("/config/data/plugins")
+              # `<Name>_<Version>`, taken from the zip's own meta.json (`"name": "Webhook"`),
+              # not invented here.
+              PLUGIN_DIR = PLUGINS / ("Webhook_" + VERSION)
+
+              if (PLUGIN_DIR / DLL).exists():
+                  print("webhook " + VERSION + " already installed")
+                  raise SystemExit(0)
+
+              print("installing webhook " + VERSION + " from " + URL)
+              PLUGINS.mkdir(parents=True, exist_ok=True)
+
+              with tempfile.TemporaryDirectory(dir=PLUGINS) as tmp:
+                  archive = Path(tmp) / "plugin.zip"
+                  with urllib.request.urlopen(URL, timeout=60) as response:
+                      with archive.open("wb") as handle:
+                          shutil.copyfileobj(response, handle)
+
+                  got = hashlib.md5(archive.read_bytes()).hexdigest()
+                  if got != WANT_MD5:
+                      raise SystemExit("md5 mismatch: got " + got + ", want " + WANT_MD5)
+
+                  staged = Path(tmp) / "staged"
+                  with zipfile.ZipFile(archive) as bundle:
+                      bundle.extractall(staged)
+
+                  # This release ships seven bundled dependency DLLs beside the plugin's own,
+                  # so "the archive extracted" says very little. The plugin DLL is the one that
+                  # decides whether Jellyfin loads anything.
+                  if not (staged / DLL).exists():
+                      found = sorted(path.name for path in staged.iterdir())
+                      raise SystemExit("archive has no " + DLL + ": " + repr(found))
+
+                  if PLUGIN_DIR.is_dir():
+                      shutil.rmtree(PLUGIN_DIR)
+                  shutil.move(staged, PLUGIN_DIR)
+
+              # The name carries the version, so a bump leaves the old directory behind and
+              # Jellyfin loads two copies of one plugin. Swept after the rename, so a failure
+              # above leaves the working version untouched.
+              for stale in sorted(PLUGINS.glob("Webhook_*")):
+                  if stale != PLUGIN_DIR:
+                      print("removing superseded " + stale.name)
+                      shutil.rmtree(stale)
+              print("installed webhook " + VERSION)
+{{ hardened_security_context(non_root=true, run_as_user=puid, run_as_group=pgid) }}
+          volumeMounts:
+            - name: jellyfin-config
+              mountPath: /config
+{{ container_resources(cpu_limit='500m', mem_limit='128Mi', cpu_request='10m', mem_request='32Mi') }}
+          # ── Merge Versions (duplicate quality versions collapsed into one entry) ────────────
+          # A fourth copy of the three containers above rather than a loop over a plugin list,
+          # for the reason the Intro Skipper and Webhook comments record: each install is pinned
+          # by literal string assertions in its own test, and a textual guard stops seeing what
+          # it guards once the thing moves behind an indirection.
+          #
+          # Intro Skipper's shape, not Webhook's. The release zip holds
+          # Jellyfin.Plugin.MergeVersions.dll and nothing else — no meta.json — so this
+          # container writes the manifest itself from the guid, name and targetAbi in
+          # defaults/main.yml. Jellyfin's LoadManifest otherwise invents one from the directory
+          # name, which sets the id to an MD5 of the folder rather than the plugin's real GUID
+          # and turns AutoUpdate off.
+          #
+          # The plugin's SETTINGS — which libraries it scans, and whether it merges on a
+          # schedule — are deliberately unmanaged, exactly as the three siblings' are: they live
+          # in /config/data/plugins/configurations/ and nothing here touches that directory.
+        - name: install-merge-versions
+          image: {{ jellyfin_k8s_plugin_init_image }}
+          command:
+            - python3
+            - -c
+            - |
+              import hashlib
+              import json
+              import shutil
+              import tempfile
+              import urllib.request
+              import zipfile
+              from pathlib import Path
+
+              VERSION = "{{ jellyfin_k8s_mergeversions_version }}"
+              URL = "{{ jellyfin_k8s_mergeversions_url }}"
+              WANT_SHA256 = "{{ jellyfin_k8s_mergeversions_sha256 }}"
+              TARGET_ABI = "{{ jellyfin_k8s_mergeversions_target_abi }}"
+              GUID = "{{ jellyfin_k8s_mergeversions_guid }}"
+              DLL = "Jellyfin.Plugin.MergeVersions.dll"
+              # /config/data/plugins, the only directory Jellyfin scans — the same trap all
+              # three sibling containers' comments record, and the same answer.
+              PLUGINS = Path("/config/data/plugins")
+              # `<Name>_<Version>`, with the space Jellyfin's own installer writes. "Merge
+              # Versions" is the name the published manifest declares, and it is the name the
+              # meta.json written below carries — the two must agree or the dashboard entry and
+              # the directory describe different plugins.
+              PLUGIN_DIR = PLUGINS / ("Merge Versions_" + VERSION)
+
+              if (PLUGIN_DIR / DLL).exists():
+                  print("merge-versions " + VERSION + " already installed")
+                  raise SystemExit(0)
+
+              print("installing merge-versions " + VERSION + " from " + URL)
+              PLUGINS.mkdir(parents=True, exist_ok=True)
+
+              with tempfile.TemporaryDirectory(dir=PLUGINS) as tmp:
+                  archive = Path(tmp) / "plugin.zip"
+                  with urllib.request.urlopen(URL, timeout=60) as response:
+                      with archive.open("wb") as handle:
+                          shutil.copyfileobj(response, handle)
+
+                  # sha256, as Intro Skipper's install checks. Upstream's published manifest
+                  # carries an MD5; GitHub reports a sha256 for the asset itself, so the
+                  # stronger digest is the one that can be re-derived from the release.
+                  got = hashlib.sha256(archive.read_bytes()).hexdigest()
+                  if got != WANT_SHA256:
+                      raise SystemExit("sha256 mismatch: got " + got + ", want " + WANT_SHA256)
+
+                  staged = Path(tmp) / "staged"
+                  with zipfile.ZipFile(archive) as bundle:
+                      bundle.extractall(staged)
+
+                  if not (staged / DLL).exists():
+                      found = sorted(path.name for path in staged.iterdir())
+                      raise SystemExit("archive has no " + DLL + ": " + repr(found))
+
+                  # THE DIFFERENCE FROM Webhook, and the reason this container imports json at
+                  # all: the release ships the DLL alone. Writing the real manifest keeps the
+                  # dashboard entry, the config page and the plugin's configuration directory
+                  # bound to the GUID the plugin compiles against.
+                  meta = {
+                      "category": "General",
+                      "description": "Merge all repeated movies and episodes in your library into one",
+                      "guid": GUID,
+                      "name": "Merge Versions",
+                      "overview": "Merge repeated versions of a movie or episode into one entry",
+                      "owner": "danieladov",
+                      "targetAbi": TARGET_ABI,
+                      "version": VERSION,
+                  }
+                  (staged / "meta.json").write_text(json.dumps(meta, indent=4))
+
+                  if PLUGIN_DIR.is_dir():
+                      shutil.rmtree(PLUGIN_DIR)
+                  shutil.move(staged, PLUGIN_DIR)
+
+              # The name carries the version, so a bump leaves the old directory behind and
+              # Jellyfin loads two copies of one plugin. Swept after the rename, so a failure
+              # above leaves the working version untouched.
+              for stale in sorted(PLUGINS.glob("Merge Versions_*")):
+                  if stale != PLUGIN_DIR:
+                      print("removing superseded " + stale.name)
+                      shutil.rmtree(stale)
+              print("installed merge-versions " + VERSION)
+{{ hardened_security_context(non_root=true, run_as_user=puid, run_as_group=pgid) }}
+          volumeMounts:
+            - name: jellyfin-config
+              mountPath: /config
+{{ container_resources(cpu_limit='500m', mem_limit='128Mi', cpu_request='10m', mem_request='32Mi') }}
+          # ── Media Cleaner (rule-based deletion of watched media) ────────────────────────────
+          # A fifth copy of the four containers above rather than a loop over a plugin list, for
+          # the reason the Intro Skipper, Webhook and Merge Versions comments record: each
+          # install is pinned by literal string assertions in its own test, and a textual guard
+          # stops seeing what it guards once the thing moves behind an indirection.
+          #
+          # Webhook's shape, not Intro Skipper's — the zip carries its own meta.json, so nothing
+          # here writes one. What is unusual is the PLUGIN VERSION: its fourth segment encodes
+          # the server ABI, because one upstream release tag ships three per-ABI assets and the
+          # published manifest publishes each as its own version. defaults/main.yml explains the
+          # encoding; the test re-derives it from the targetAbi.
+          #
+          # THIS PLUGIN DELETES MEDIA FILES. The install is all this container owns: which
+          # libraries it may delete from, and every rule that decides what goes, are plugin
+          # configuration under /config/data/plugins/configurations/ — a directory nothing here
+          # touches, exactly as the four siblings leave their own settings alone. That matters
+          # more here than for them. It also means the sweep below is safe against the
+          # dashboard-installed copy this pin replaces: the configuration lives outside the
+          # plugin directory, so removing a differently-named directory loses no rules.
+        - name: install-media-cleaner
+          image: {{ jellyfin_k8s_plugin_init_image }}
+          command:
+            - python3
+            - -c
+            - |
+              import hashlib
+              import shutil
+              import tempfile
+              import urllib.request
+              import zipfile
+              from pathlib import Path
+
+              VERSION = "{{ jellyfin_k8s_mediacleaner_version }}"
+              URL = "{{ jellyfin_k8s_mediacleaner_url }}"
+              WANT_SHA256 = "{{ jellyfin_k8s_mediacleaner_sha256 }}"
+              DLL = "MediaCleaner.dll"
+              # The release ships MediaCleaner.Core.dll beside the plugin's own, and the plugin
+              # does not load without it — so both are checked rather than just the one whose
+              # name Jellyfin matches.
+              DEP_DLL = "MediaCleaner.Core.dll"
+              # /config/data/plugins, the only directory Jellyfin scans — the same trap all four
+              # sibling containers' comments record, and the same answer.
+              PLUGINS = Path("/config/data/plugins")
+              # `<Name>_<Version>`, taken from the zip's own meta.json (`"name": "Media
+              # Cleaner"`), not invented here. This is also the name Jellyfin's own dashboard
+              # installer wrote, so on the volume that already carries a dashboard-installed
+              # copy at the pinned version the guard below matches and this container opens no
+              # socket at all.
+              PLUGIN_DIR = PLUGINS / ("Media Cleaner_" + VERSION)
+
+              if (PLUGIN_DIR / DLL).exists():
+                  print("media-cleaner " + VERSION + " already installed")
+                  raise SystemExit(0)
+
+              print("installing media-cleaner " + VERSION + " from " + URL)
+              PLUGINS.mkdir(parents=True, exist_ok=True)
+
+              with tempfile.TemporaryDirectory(dir=PLUGINS) as tmp:
+                  archive = Path(tmp) / "plugin.zip"
+                  with urllib.request.urlopen(URL, timeout=60) as response:
+                      with archive.open("wb") as handle:
+                          shutil.copyfileobj(response, handle)
+
+                  # sha256, the digest GitHub reports for the asset. Upstream's published
+                  # manifest carries an MD5; the stronger digest is the one that can be
+                  # re-derived from the release itself.
+                  got = hashlib.sha256(archive.read_bytes()).hexdigest()
+                  if got != WANT_SHA256:
+                      raise SystemExit("sha256 mismatch: got " + got + ", want " + WANT_SHA256)
+
+                  staged = Path(tmp) / "staged"
+                  with zipfile.ZipFile(archive) as bundle:
+                      bundle.extractall(staged)
+
+                  for needed in (DLL, DEP_DLL):
+                      if not (staged / needed).exists():
+                          found = sorted(path.name for path in staged.iterdir())
+                          raise SystemExit(
+                              "archive has no " + needed + ": " + repr(found)
+                          )
+
+                  if PLUGIN_DIR.is_dir():
+                      shutil.rmtree(PLUGIN_DIR)
+                  shutil.move(staged, PLUGIN_DIR)
+
+              # The name carries the version, so a bump leaves the old directory behind and
+              # Jellyfin loads two copies of one plugin — which for a plugin that deletes media
+              # would mean two rule engines acting on one library. Swept after the rename, so a
+              # failure above leaves the working version untouched.
+              for stale in sorted(PLUGINS.glob("Media Cleaner_*")):
+                  if stale != PLUGIN_DIR:
+                      print("removing superseded " + stale.name)
+                      shutil.rmtree(stale)
+              print("installed media-cleaner " + VERSION)
+{{ hardened_security_context(non_root=true, run_as_user=puid, run_as_group=pgid) }}
+          volumeMounts:
+            - name: jellyfin-config
+              mountPath: /config
+{{ container_resources(cpu_limit='500m', mem_limit='128Mi', cpu_request='10m', mem_request='32Mi') }}
+          # ── Trakt (REMOVED 2026-09-10) ──────────────────────────────────────────────────────
+          # Installed under #1617 as the sixth plugin and removed the same day at the operator's
+          # request, before the trakt.tv OAuth device authorisation (#1664) was ever completed.
+          # Dropping the install container alone is NOT a removal: the install wrote
+          # /config/data/plugins/Trakt_30.0.0.0 onto the jellyfin-config PVC, Jellyfin scans that
+          # directory on every start, and the read-only ServiceAccount cannot exec into the pod
+          # to delete it. An init container is the only write path this repo has to the PVC, so
+          # the uninstall is one too. It sweeps every `Trakt_*` directory and the plugin's own
+          # configuration file, which held no token — the authorisation was never done.
+          #
+          # Idempotent and cheap: a start with nothing to sweep prints one line and exits 0. It
+          # also means a dashboard reinstall of Trakt does not survive a restart, which is the
+          # intended state — the repo owns which plugins load, and this one is off the list.
+          # test_trakt_removed.py pins the sweep, so it cannot silently stop matching.
+        - name: remove-trakt
+          image: {{ jellyfin_k8s_plugin_init_image }}
+          command:
+            - python3
+            - -c
+            - |
+              import shutil
+              from pathlib import Path
+
+              PLUGINS = Path("/config/data/plugins")
+              # The directory takes the name the zip's meta.json declared ("Trakt"), the same
+              # name the dashboard installer writes, so one glob covers both origins.
+              swept = 0
+              for stale in sorted(PLUGINS.glob("Trakt_*")):
+                  print("removing " + stale.name)
+                  shutil.rmtree(stale)
+                  swept += 1
+              config = PLUGINS / "configurations" / "Trakt.xml"
+              if config.exists():
+                  print("removing " + str(config))
+                  config.unlink()
+                  swept += 1
+              print("trakt removed: " + str(swept) + " item(s) swept")
+{{ hardened_security_context(non_root=true, run_as_user=puid, run_as_group=pgid) }}
+          volumeMounts:
+            - name: jellyfin-config
+              mountPath: /config
+{{ container_resources(cpu_limit='500m', mem_limit='128Mi', cpu_request='10m', mem_request='32Mi') }}
+          # ── SSO-Auth removal (was OIDC sign-in against Authelia) ────────────────────────
+          # Installed under #1648 and removed at the operator's request on 2026-09-10, the same
+          # way Trakt was above. #1674 identified it as the blocker on any move to the Jellyfin
+          # 12 image line: upstream 9p4/jellyfin-plugin-sso publishes no 12 build, and its newest
+          # release (4.0.0.4) still declares targetAbi 10.11.0.0.
+          #
+          # WHAT THIS COSTS, recorded because the pod cannot show it. This role runs
+          # `use_authelia: false` and jellyfin.{{ domain }} is a PUBLIC route, so this plugin was
+          # the only authentication layer in front of it. With it gone the route falls back to
+          # Jellyfin's own local accounts: no OIDC, and no 2FA. That was the operator's explicit
+          # call on 2026-09-10 after the trade-off was put to them; the alternative on the table
+          # was `use_authelia: true`, which protects the route but breaks native clients that
+          # cannot complete Authelia's browser login.
+          #
+          # The authelia role's `jellyfin` OIDC client goes with it — an orphaned client whose
+          # redirect_uri points at a plugin that is no longer installed.
+          #
+          # Dropping the install container alone would not remove it: the install wrote
+          # `SSO Authentication_<version>` onto the jellyfin-config PVC, Jellyfin scans that
+          # directory on every start, and the read-only ServiceAccount cannot exec into the pod.
+          # An init container is the repo's only write path to the PVC.
+        - name: remove-sso-auth
+          image: {{ jellyfin_k8s_plugin_init_image }}
+          command:
+            - python3
+            - -c
+            - |
+              import shutil
+              from pathlib import Path
+
+              PLUGINS = Path("/config/data/plugins")
+              # `SSO*_*` rather than the exact manifest name, for the same reason the install
+              # container's sweep used it: this plugin is the one whose manifest name ("SSO
+              # Authentication") differs from the name it loads under ("SSO-Auth"), and a
+              # dashboard install may have written either.
+              swept = 0
+              for stale in sorted(PLUGINS.glob("SSO*_*")):
+                  print("removing " + stale.name)
+                  shutil.rmtree(stale)
+                  swept += 1
+              # Keyed by the plugin's CLASS name and outside every plugin directory, so the
+              # globs above cannot reach it. These are the OIDC provider settings that were
+              # never in git; with the plugin gone they configure nothing.
+              config = PLUGINS / "configurations" / "SSO-Auth.xml"
+              if config.exists():
+                  print("removing " + str(config))
+                  config.unlink()
+                  swept += 1
+              print("sso-auth removed: " + str(swept) + " item(s) swept")
 {{ hardened_security_context(non_root=true, run_as_user=puid, run_as_group=pgid) }}
           volumeMounts:
             - name: jellyfin-config

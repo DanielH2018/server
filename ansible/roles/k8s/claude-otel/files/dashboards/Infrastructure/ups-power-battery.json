@@ -78,7 +78,7 @@
             "type": "prometheus",
             "uid": "EGdsQqhVk"
           },
-          "expr": "hass_sensor_battery_percent{entity=\"sensor.apc_ups_battery_charge\"}",
+          "expr": "max(network_ups_tools_battery_charge) or max(hass_sensor_battery_percent{entity=\"sensor.apc_ups_battery_charge\"})",
           "legendFormat": "charge",
           "refId": "A"
         }
@@ -128,7 +128,7 @@
             "type": "prometheus",
             "uid": "EGdsQqhVk"
           },
-          "expr": "hass_sensor_duration_s{entity=\"sensor.apc_ups_battery_runtime\"}",
+          "expr": "max(network_ups_tools_battery_runtime) or max(hass_sensor_duration_s{entity=\"sensor.apc_ups_battery_runtime\"})",
           "legendFormat": "runtime",
           "refId": "A"
         }
@@ -177,8 +177,8 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 12,
-        "x": 12,
+        "w": 6,
+        "x": 18,
         "y": 1
       },
       "id": 8,
@@ -193,7 +193,7 @@
             "type": "prometheus",
             "uid": "EGdsQqhVk"
           },
-          "expr": "hass_binary_sensor_state{entity=\"binary_sensor.apc_ups_replace_battery\"}",
+          "expr": "max(network_ups_tools_ups_status{flag=\"RB\"}) or max(hass_binary_sensor_state{entity=\"binary_sensor.apc_ups_replace_battery\"})",
           "legendFormat": "replace-battery",
           "refId": "A"
         }
@@ -243,7 +243,7 @@
             "type": "prometheus",
             "uid": "EGdsQqhVk"
           },
-          "expr": "hass_sensor_duration_s{entity=\"sensor.apc_ups_battery_runtime\"}",
+          "expr": "max(network_ups_tools_battery_runtime) or max(hass_sensor_duration_s{entity=\"sensor.apc_ups_battery_runtime\"})",
           "legendFormat": "runtime",
           "refId": "A"
         }
@@ -292,7 +292,7 @@
             "type": "prometheus",
             "uid": "EGdsQqhVk"
           },
-          "expr": "hass_sensor_voltage_v{entity=\"sensor.apc_ups_input_voltage\"}",
+          "expr": "max(network_ups_tools_input_voltage) or max(hass_sensor_voltage_v{entity=\"sensor.apc_ups_input_voltage\"})",
           "legendFormat": "input voltage",
           "refId": "A"
         }
@@ -331,13 +331,78 @@
             "type": "prometheus",
             "uid": "EGdsQqhVk"
           },
-          "expr": "hass_sensor_unit_percent{entity=\"sensor.apc_ups_load\"}",
+          "expr": "max(network_ups_tools_ups_load) or max(hass_sensor_unit_percent{entity=\"sensor.apc_ups_load\"})",
           "legendFormat": "load",
           "refId": "A"
         }
       ],
       "title": "Load",
       "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "EGdsQqhVk"
+      },
+      "description": "NUT's OB flag: mains power is gone and the UPS is carrying the load. ups.status is one-hot over `flag`, so the exporter forces a 0 whenever the UPS is not asserting it \u2014 which is what makes this a 0/1 alert input rather than a series whose absence is ambiguous. monitor-bridge check_ups pages on it after UPS_CONSECUTIVE cycles, so a brownout shorter than the grace window does not.",
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "options": {
+                "0": {
+                  "color": "green",
+                  "text": "ON MAINS"
+                },
+                "1": {
+                  "color": "red",
+                  "text": "ON BATTERY"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 12,
+        "y": 1
+      },
+      "id": 9,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "EGdsQqhVk"
+          },
+          "expr": "max(network_ups_tools_ups_status{flag=\"OB\"})",
+          "legendFormat": "on battery",
+          "refId": "A"
+        }
+      ],
+      "title": "On battery (OB)",
+      "type": "stat"
     }
   ],
   "refresh": "1m",
@@ -354,5 +419,6 @@
   "timezone": "browser",
   "title": "UPS \u2014 Power & Battery",
   "uid": "ups-power-battery",
-  "version": 1
+  "version": 1,
+  "description": "The APC UPS. Every panel reads nut-exporter's direct scrape of upsd first and falls back to Home Assistant's re-export of the same UPS, matching what monitor-bridge's check_ups alerts on (issue #1548). The fallback is what keeps history readable across 2026-09-10, when the NUT series begin."
 }

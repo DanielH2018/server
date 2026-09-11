@@ -12,10 +12,11 @@ nut_exporter_k8s_image: ghcr.io/druggeri/nut_exporter:3.3.0
 k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
 k8s_autodeploy_reason: "read-only NUT network client with a readinessProbe — no privilege, no volume, no node pin; a bad image bump costs UPS metrics, not the shutdown chain, which lives in the separate denylisted `nut` role"  # noqa var-naming[no-role-prefix]
 
-# The UPS name upsd knows, matching the ups.conf section in nut/templates/config-secret.yaml.j2.
-# The exporter scrapes ONE UPS per request and fails the scrape if it finds several without being
-# told which, so Prometheus passes this as a `ups=` param rather than leaving it to discovery.
-nut_exporter_k8s_ups_name: "{{ nut_ups_name | default('apc-ups') }}"
+# The UPS name upsd knows is NOT a variable of this role. The exporter scrapes one UPS per
+# request and takes the name as a `ups=` query param, so the name is set where the request is
+# built — the `nut` scrape job in claude-otel/templates/prometheus.yaml.j2, from the same
+# `nut_ups_name` expression nut/templates/config-secret.yaml.j2 uses for the ups.conf section.
+# A copy here would be a second place to drift.
 
 # The variables coaxed into Prometheus series. Upstream's default list omits battery.runtime,
 # which is the one an operator reads during an outage — how long have I got — so the list is

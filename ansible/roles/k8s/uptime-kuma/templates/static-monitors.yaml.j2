@@ -237,6 +237,19 @@ stringData:
   # an operator expanding a volume.
   monitor-bridge-pvc-fullness.json: |
     {"type": "push", "name": "k3s PVC Fullness", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_pvc_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
+  # The snapshot-space axis of the same layer: how close a capped Longhorn volume is to its
+  # spec.snapshotMaxSize (#1627). Snapshots live in the backend rather than in the claim's
+  # filesystem, so PVC Fullness above cannot see one filling; a reached cap makes Longhorn refuse
+  # new snapshots rather than prune, which fails every later deploy of that service (#1560).
+  # Email for the same reason as its two neighbours — the fix is an operator deleting snapshots or
+  # raising the cap.
+  #
+  # Armed 2026-09-10: `monitor_bridge_snapshot_headroom_push_token` is in SOPS, so this is
+  # declared unguarded like its monitor-bridge neighbours above rather than behind a token
+  # conditional — a missing token now fails the render instead of silently removing the
+  # monitor (#1632).
+  monitor-bridge-snapshot-headroom.json: |
+    {"type": "push", "name": "Longhorn Snapshot Headroom", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_snapshot_headroom_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
   # #1243: the CSI global mounts under var/lib/kubelet/plugins/ ext4 remounted read-only after a
   # journal abort, with every existing monitor silent for 50 minutes (Volume CRs stayed
   # `attached healthy` throughout). email attached for the same reason as its two siblings above:
@@ -264,6 +277,26 @@ stringData:
 {% if ups_secondary_daniel_server_push_token | default('') %}
   ups-secondary-daniel-server.json: |
     {"type": "push", "name": "UPS Secondary (daniel-server)", "interval": {{ nut_host_watchdog_interval_minutes | default(10) * 60 * 2 }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ ups_secondary_daniel_server_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
+{% endif %}
+{# The Loki read route's only witness (issue #1712). Its caller is a host process, and the route's
+   guard is a ClientIP set of node-owned addresses, so no pod can probe it — see
+   roles/setup/initial_setup/templates/loki-read-route-health.sh.j2.
+
+   ONE TILE PER NODE, for the same reason as the UPS pair above: each host arrives at the route as
+   a different source address, which is exactly what #1693 broke on one node and not the other, so
+   a shared token would let daniel-box's `up` cover a dead route from daniel-server.
+
+   7200s: the deadline must exceed the PRODUCER'S period, and the producer is an hourly cron.
+   3600 plus the run leaves 7200 with an hour of margin — move this and the cron minute together
+   or neither. No `email`: a dead read route costs an operator a confusing 404 during triage, not
+   a service outage, so Discord is proportionate. #}
+{% if loki_route_witness_push_token | default('') %}
+  loki-read-route-daniel-box.json: |
+    {"type": "push", "name": "Loki Read Route (daniel-box)", "interval": 7200, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ loki_route_witness_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+{% endif %}
+{% if loki_route_witness_daniel_server_push_token | default('') %}
+  loki-read-route-daniel-server.json: |
+    {"type": "push", "name": "Loki Read Route (daniel-server)", "interval": 7200, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ loki_route_witness_daniel_server_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
 {% endif %}
   # DECIDED: 5400s, not the 1200 its host-cron siblings use — the deadline must exceed the
   # PRODUCER'S PERIOD, and this producer is an hourly cron (k3s_remember_logs_cron_minute), not a

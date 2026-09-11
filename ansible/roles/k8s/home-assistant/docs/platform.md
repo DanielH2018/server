@@ -30,6 +30,37 @@ automations do.
     Authentication → TOTP (and keep the recovery code from enrolment).
 - **HACS preinstalled** via `DOCKER_MODS=linuxserver/mods:homeassistant-hacs`
   (LSIO Docker mod that drops the Home Assistant Community Store into `/config`).
+  **The mod installs HACS itself and nothing else.** A HACS integration or card lands in
+  `/config/custom_components/` or `/config/www/`, which are PVC state — the repo has no init
+  pattern that declares one, so every HACS package here is a one-time dashboard action and
+  survives only because the Longhorn PVC does. Record any such install in this file.
+
+### Browser Mod does not extend the cast display (investigated 2026-09-10, issue #1454)
+
+`thomasloven/hass-browser_mod` was proposed to make the Nest Hub Max cast dashboard
+interactive. Rejected, and the reasons are worth keeping because the proposal reads plausible:
+
+- **There is no YAML surface to configure.** Browser Mod 2.0 removed the `browser_mod:` block;
+  it is config-flow only ([upstream README](https://github.com/thomasloven/hass-browser_mod)).
+  `validate_ha_config.py` does no HA schema validation, so writing that key into
+  `files/configuration.yaml` would pass prek, pass CI and deploy green while doing nothing.
+- **Browser Mod adds itself to the dashboard resources**, and a dashboard carrying a custom
+  resource is what breaks casting. `home-assistant/core#159553` (open, filed 2025-12-21) has
+  the cast receiver rendering "Configuration error" for dashboards with custom cards from core
+  2025.12.3 onward; this instance runs 2026.6.3. Installing it risks the working `nest_dark`
+  cast view for no gain.
+- **A cast receiver does not register as a Browser Mod browser.**
+  `thomasloven/hass-browser_mod#408` is the "Register CAST device" toggle leaving
+  `Last connected: Never`, unresolved.
+- **Two of the three wanted capabilities already exist.** `cast.show_lovelace_view` drives the
+  view from an automation today (`files/automations/display.yaml`, `bedroom_display_show`), and
+  `media_player.bedroom_display` is a `media_player`, so it is a valid *target* for a TTS or a
+  `media_player.play_media` call. **No TTS provider is configured on this instance** — the
+  `tts.speak` / `tts.cloud_say` services are registered, but `probe.py ha get states` returned no
+  `tts.*` entity for `tts.speak` to speak through (checked 2026-09-10). Speech to the Hub needs a
+  provider added first; that is separate work from Browser Mod, which would not supply one. Only a
+  **popup overlay** genuinely needs Browser Mod, and that is the one thing the cast receiver
+  cannot render.
 - **`configuration.yaml` ships verbatim** from `files/configuration.yaml` — the ConfigMap
   (`roles/k8s/home-assistant`) carries it with `lookup('file')`, and an init container
   installs it into `/config` at pod start. It sets `use_x_forwarded_for: true` +

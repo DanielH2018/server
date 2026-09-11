@@ -119,6 +119,28 @@ If your own working machine is what's gone, the lab itself needs nothing done to
 3. From there, operate normally — `./scripts/deploy.sh`, `probe.py`, etc., per the
    repo-root CLAUDE.md command tables.
 
+### Scenario: `systemctl restart k3s` never returns after an API-server flag change
+
+`k3s_server_args` (`ansible/roles/setup/k3s/defaults/main.yml`) reconfigures the API server
+through `--kube-apiserver-arg=...`, and the k3s install task re-runs the installer whenever
+that string gains an argument. An argument the API server does not recognise makes it refuse
+to start, and the k3s unit is `Type=notify` with `TimeoutStartSec=0` — so the restart **hangs
+indefinitely** instead of failing, which is the same symptom the `--node-ip` note in that file
+describes for a different cause.
+
+1. Read `journalctl -u k3s -n 200` on daniel-box. A rejected flag names itself.
+2. Fix `ExecStart` in `/etc/systemd/system/k3s.service` directly, `systemctl daemon-reload`,
+   and restart. The unit file is the live configuration; the repo is not.
+3. Then fix the repo, because the install task detects an argument that was **added**, never
+   one that was **removed**. Deleting a line from `k3s_server_args` does not un-configure an
+   installed host — re-run `/usr/local/bin/k3s-install.sh` by hand with the corrected
+   `INSTALL_K3S_EXEC`.
+
+A **wrong-but-valid** value is a different and much smaller problem. The `oidc-*` flags in
+particular initialise asynchronously, so a misspelled or unreachable issuer leaves the API
+server up and serving: OIDC logins fail and nothing else does. The root kubeconfig
+authenticates by client certificate, which no `oidc-*` flag touches.
+
 ### Scenario: the author is unavailable and something is red
 
 For a second person without deep familiarity with the repo:

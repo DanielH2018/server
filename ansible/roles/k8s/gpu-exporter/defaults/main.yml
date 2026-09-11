@@ -1,0 +1,24 @@
+---
+# The stdlib is the whole dependency — the exporter reads sysfs and serves http.server — so the
+# image is the same digest-pinned python:3.14-alpine monitor-bridge runs, rather than a second
+# base image to track. Renovate's k8s-defaults manager bumps it by digest.
+gpu_exporter_k8s_image: python:3.14-alpine@sha256:c6ead215bfd31f1e433d968853b7a769989117115b728874824e6c0a27cb96fc
+
+# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# TRUE, for pihole-exporter's reason: this pod is read-only, holds no path any workload
+# depends on, and drives dashboards alone. Losing it to a bad bump costs a GPU graph, and
+# transcoding — which is what it measures — keeps working regardless.
+k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "read-only sysfs poller with a tcpSocket readinessProbe; no workload reads it, so a bad image bump costs the GPU dashboards rather than transcoding itself"  # noqa var-naming[no-role-prefix]
+
+# 9101, one past node-exporter's 9100. They do not actually collide — this pod is NOT
+# hostNetwork, unlike node-exporter — but a distinct number keeps `ss -ltnp` on a node
+# unambiguous.
+gpu_exporter_k8s_port: 9101
+
+# Reading four small sysfs files per scrape. The floor here is the Python interpreter, not the
+# work.
+gpu_exporter_k8s_cpu_limit: "100m"
+gpu_exporter_k8s_mem_limit: 64Mi
+gpu_exporter_k8s_cpu_request: "10m"
+gpu_exporter_k8s_mem_request: 24Mi

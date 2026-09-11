@@ -26,7 +26,11 @@ from deploy_changes import (
 )
 from deploy_config import Config, log
 from deploy_git import is_diverged, next_action
-from deploy_inventory import declared_k8s_services, reroute_k8s_services
+from deploy_inventory import (
+    declared_k8s_services,
+    declares_no_gitops,
+    reroute_k8s_services,
+)
 from deploy_k8s import (
     declared_denylist,
     declares_snapshot_claims,
@@ -34,8 +38,29 @@ from deploy_k8s import (
     split_k8s_auto_deploy,
 )
 from deploy_state import DeployerState
-from deploy_tick_types import RetryableFetchError, TickPlan, TickTarget
+from deploy_tick_types import (
+    NotTheDeployerHost,
+    RetryableFetchError,
+    TickPlan,
+    TickTarget,
+)
 from deploy_toolbox import DeployTools
+
+
+def refuse_unless_deployer(config: Config) -> None:
+    """Raise NotTheDeployerHost when this host's own host_vars say `has_gitops: false`.
+
+    The first thing `main()` does, ahead of the alert drain and every state write: the
+    inventory is the same source the role's `when: has_gitops` gate reads, so a payload the
+    role has stopped maintaining refuses on its own rather than ticking from stale logic
+    (#1733). `declares_no_gitops` carries the fail-open rules; this is only the read.
+    """
+    if declares_no_gitops(deploy_io.host_vars_text(config.repo, config.hostname)):
+        raise NotTheDeployerHost(
+            f"{config.hostname} declares has_gitops: false in its host_vars — not a GitOps "
+            "deployer; refusing to tick. Reap this payload with "
+            "`initial_setup.yml --tags gitops_deploy`."
+        )
 
 
 def assess(tools: DeployTools, state: DeployerState, config: Config) -> TickTarget:

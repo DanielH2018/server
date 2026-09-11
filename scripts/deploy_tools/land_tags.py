@@ -35,6 +35,9 @@ from typing import NamedTuple
 # identically -- two derivations that disagree is the defect this import exists to prevent.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from lib import yaml_fast
+from lib.git import git, git_stdout
+from lib.render_guard import containers_entries_in
 from lib.repo_paths import GITOPS_DEPLOY_FILES
 
 sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
@@ -89,12 +92,50 @@ def declared_tags() -> set[str]:
     return deploy_tags.service_tags()
 
 
+def service_tags_at(ref: str, cwd: Path) -> set[str]:
+    """Every name that selects a service AT `ref`, read with git rather than from a worktree.
+
+    A PR that adds a role and its `containers_list` entry together is the case a checkout
+    answers wrongly: the entry is in no tree until the tick fast-forwards, so the role reads as
+    one nobody registered (issue #1544; `land_lib/classify.py` carries the argument). Names are
+    listed at `ref` too, so a host_vars file the same PR adds counts, and `_example.yml` is
+    excluded for the reason `deploy_tags.host_files` excludes it.
+
+    Reuses `entry_tags` and `containers_entries_in` rather than re-reading a containers_list
+    entry its own way: two derivations of "which tags exist" that disagree is exactly the
+    defect this answer is meant to fix. Raises `CalledProcessError` on an unreadable ref.
+    """
+    in_tree = deploy_tags.HOST_VARS_IN_TREE
+    tags: set[str] = set()
+    for name in git_stdout(
+        "ls-tree", "--name-only", f"{ref}:{in_tree}", cwd=cwd
+    ).splitlines():
+        if not name.endswith(".yml") or name.startswith("_"):
+            continue
+        loaded = yaml_fast.safe_load(
+            git("show", f"{ref}:{in_tree}/{name}", cwd=cwd).stdout
+        )
+        for entry in containers_entries_in(loaded if isinstance(loaded, dict) else {}):
+            tags.update(deploy_tags.entry_tags(entry))
+    return tags
+
+
 def role_for(path: str) -> str | None:
     """The role directory a changed path belongs to, or None.
 
     Not the same question as `tag_for`: a role directory under roles/k8s/ need not have a
     `containers_list` entry, and eight of them do not.
+
+    A `.md` under a role belongs to no role HERE, which is the answer the deployer's own
+    mapper already gives: `_ACTIVE_K8S` and `_ACTIVE_ROLE` in `deploy_changes.py` both carry
+    `and not p.endswith(".md")`, because a document is not something a playbook applies. This
+    mapper did not, so a PR whose only change under `roles/k8s/manifests/` was that role's
+    CLAUDE.md came out of `shared_roles` as a tag-less role owed to a hand, and land.sh ended
+    `needs-manual-apply` asking for a full `ansible/deploy.yml` run for prose (issue #1701).
+    `test_land_tags_shared_mapper_agreement.py` pins the two answers together.
     """
+    if path.endswith(".md"):
+        return None
     for pattern in (_K8S, _DOCKER):
         m = pattern.match(path)
         if m and m.group(1) not in _NOT_SERVICES:
@@ -103,12 +144,51 @@ def role_for(path: str) -> str | None:
 
 
 def tag_for(path: str, declared: set[str] | None = None) -> str | None:
-    """The deploy tag a changed path maps to, or None."""
+    """The deploy tag a changed path maps to, or None.
+
+    A role's own `tests/` maps to no tag (issue #1735). PR #1734 dropped that path from
+    `shared_roles` only, to keep the change to what land.sh reports; dropping it here changes
+    what land.sh DEPLOYS. That is the intended half of the fix: a tests-only PR to a declared
+    role used to cost a rollout, a restart window and a health gate for pytest guards nothing
+    stages to the cluster. The deployer's own `_is_test_only_path` in `deploy_changes.py`
+    already drops every test path before it maps changes to services, so this is the two
+    mappers agreeing rather than a new rule.
+    """
     role = role_for(path)
-    if role is None:
+    # DECIDED: the tag is dropped, not only the shared-role note. The tick re-asserts a role's
+    # current manifests on its next image bump anyway, and a pytest guard reaches no cluster.
+    if role is None or is_role_test_path(path):
         return None
     declared = declared_tags() if declared is None else declared
     return role if role in declared else None
+
+
+def is_role_test_path(path: str) -> bool:
+    """Whether a changed path is a role's own `tests/` file.
+
+    Answers about segment 4 of `ansible/roles/<plane>/<role>/<sub>/...` alone, so it is only
+    meaningful for a path `role_for` has already named a role for. `shared_roles` and `tag_for`
+    are the callers, and both drop such a path: a role's `tests/` is work no deploy applies, the same class as the
+    `.md` rule in `role_for` (#1701). Pytest guards over the role's `files/*.py` are staged by
+    nothing — `ansible/tests/repo/test_no_role_ships_a_test_file.py` holds that tree-wide — so
+    they reach no cluster and no deploy can apply them. `_is_real_change` in
+    `scripts/diagnostics/probe_lib/releases.py` drops a role's `tests/` for that reason.
+
+    `tasks/` is NOT dropped, which is what issue #1729 proposed and three facts refute. A role
+    with no `containers_list` entry and no caller has no path to being applied at all, and a
+    tasks-only PR adding one must still be reported
+    (`tests/test_land_classify.py:110`, issue #1544). A helper's tasks apply live state to each
+    caller separately — arr-notification's seed a Discord Connect notification into the *arr's
+    own database — so deploying one caller is not the change applied
+    (`tests/test_land_tags_caller_coverage.py:76`, issue #1397). And `_supplies_manifest_bytes`,
+    the predicate #1729 cites as its precedent, puts `volume-claim` in the reported set by name:
+    the role ships `templates/pvc.yaml.j2`.
+
+    Read HERE rather than folded into `role_for`, which stays the plain "which role directory is
+    this path in" mapper `test_land_tags_shared_mapper_agreement.py` pins against the deployer's
+    own `services_from_changed_paths`.
+    """
+    return path.split("/")[4:5] == ["tests"]
 
 
 def shared_roles(files, declared: set[str] | None = None) -> list[str]:
@@ -118,9 +198,11 @@ def shared_roles(files, declared: set[str] | None = None) -> list[str]:
     includes, `volume-claim` and `volume-revert` are storage paths several include. Naming one
     in `--tags` makes deploy.sh refuse the ENTIRE list (exit 2), so they must be split off the
     tags and reported as work a human still owes. PR #617 is the measured case.
+
+    A role's own `tests/` does not put it here at all — `is_role_test_path`.
     """
     declared = declared_tags() if declared is None else declared
-    roles = {r for p in files if (r := role_for(p))}
+    roles = {r for p in files if (r := role_for(p)) and not is_role_test_path(p)}
     return sorted(roles - declared)
 
 
@@ -274,6 +356,32 @@ def self_applied(files, quiet=()) -> bool:
     )
 
 
+def self_applied_command(files, quiet=()) -> str:
+    """What applies BY HAND the half of this PR the TICK normally applies itself, or "".
+
+    Over exactly the paths `self_applied` answers True for, so the two cannot name different
+    work. `broad_remediation` is the deployer's own text, ff-merge first — Ansible renders from
+    the working tree, so a playbook run before the merge applies the PRE-merge files and reports
+    `changed=0`.
+
+    THE TICK CONVERGING IS NOT PROOF IT APPLIED ANYTHING. Any session's `git merge --ff-only`
+    also makes local == origin, and from then on `next_action()` returns `noop` for every later
+    tick — so the plane is stranded permanently and the one mechanism that would apply it never
+    sees the range again. PR #1529's `renovate_agent` change landed `settled` that way and was
+    four days stale on disk (issue #1537). This is the line `land.sh` prints when the deployer
+    recorded no apply covering the PR.
+    """
+    cs = services_from_changed_paths([p for p in files if p not in set(quiet)])
+    routable = {
+        r
+        for r in cs.setup_roles
+        if setup_role_playbook(r) == "ansible/initial_setup.yml"
+    }
+    if not (cs.broad_deploy or routable):
+        return ""
+    return broad_remediation(cs.broad_deploy, bool(routable), routable)
+
+
 class DeriveSource(StrEnum):
     """Where a tag list came from, and therefore whether it can be trusted whole."""
 
@@ -308,12 +416,29 @@ def derive(files, changed_files: int, declared: set[str] | None = None) -> Deriv
     return Derivation(sorted(derived_tags(files, declared)), DeriveSource.PR)
 
 
-def quiet_paths(paths: list[str], range_: str) -> set[str]:
-    """The broad paths in `paths` whose change over `<old>..<new>` is comments only.
+def doc_paths(paths) -> set[str]:
+    """The paths in `paths` that are documentation, which no playbook applies.
 
-    Empty when no range was given, or when the range is malformed, or when git cannot read
-    a side of it -- every one of those keeps the path broad, which is the direction a wrong
-    answer here must fall (issue #848).
+    A `.md` only. Not `docs/`, which matches no plane prefix anyway, and not a `.txt` or a
+    `README` without a suffix -- the narrow predicate is the one that cannot swallow a file
+    something renders. It is the same suffix test the deployer's own mapper makes.
+    """
+    return {p for p in paths if p.endswith(".md")}
+
+
+def quiet_paths(paths: list[str], range_: str) -> set[str]:
+    """The broad paths in `paths` a landing owes nothing for: docs, and comment-only edits.
+
+    Documentation is quiet on its own terms, before any range is read: a `.md` under
+    `roles/setup/k3s/` still takes the broad arm by prefix, so a docs-only PR there ended
+    `needs-manual-apply` naming `k3s-bringup.yml` with nothing to apply (issue #1701, the
+    setup-plane half of it). The comments-only test below cannot reach that case -- it reads
+    YAML content lines, and prose is not comments.
+
+    Empty of comment-only paths when no range was given, or when the range is malformed, or
+    when git cannot read a side of it -- every one of those keeps the path broad, which is the
+    direction a wrong answer here must fall (issue #848). The docs half survives all three,
+    because it asks nothing of the range.
 
     A RANGE NARROWER THAN THE FILE LIST is the same failure wearing a valid range, and it
     fails the unsafe way: a broad path substantively changed OUTSIDE the range reads as
@@ -323,16 +448,17 @@ def quiet_paths(paths: list[str], range_: str) -> set[str]:
     the same shape as `derive`'s count assertion, and for the same reason: wider than the
     truth is recoverable, narrower is not.
     """
+    docs = doc_paths(paths)
     old, sep, new = range_.partition("..")
     if not (sep and old and new):
-        return set()
+        return docs
     try:
         covered = set(deploy_tags.range_paths(old, new))
         if not set(paths) <= covered:
-            return set()
-        return deploy_tags.comment_only_paths(paths, old, new)
+            return docs
+        return docs | deploy_tags.comment_only_paths(paths, old, new)
     except subprocess.CalledProcessError, OSError:
-        return set()
+        return docs
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -29,8 +29,10 @@ ssh_config_path: /etc/ssh/sshd_config
 # role's own templates, so list position here is only the toposort's tiebreak.
 # `staging_expect` on an entry below is Phase C slice 2 (docs/staging-phase-c.md, Decision 2):
 # what this service must ANSWER, not merely that its pod came up. Every value was measured
-# against the live cluster on 2026-08-28, never inferred — an expectation nobody checked is a
-# second thing that can be wrong.
+# against the live cluster, never inferred — an expectation nobody checked is a second thing that
+# can be wrong. The original set was measured 2026-08-28; traefik's three were re-measured
+# 2026-09-10 with `scripts/deploy_tools/staging_expect_remote.sh`, from daniel-server, after
+# issue #1662 found the entry asking for a status its route cannot produce.
 #
 # It exists because "the play exited zero" cannot see a route. ical-proxy deployed with
 # `68 ok, 0 failed` and the stabilisation gate passing while every one of its routes returned
@@ -47,10 +49,29 @@ containers_list:
     platform: k8s
     port: 8080
     # The dashboard route, behind the authelia middleware — hence 302 rather than 200.
+    #
+    # The path is `/dashboard/`, NOT `/`. The route matches
+    # `Host(...) && PathPrefix(`/dashboard`)` (roles/k8s/traefik/templates/dashboard-ingressroute.yaml.j2),
+    # so `/` matches no route and Traefik answers 404 before any middleware runs. This entry
+    # asked for 302 on `/` from 2026-08-28 until issue #1662, which no route could ever produce.
+    #
+    # The other two entries assert what is deliberately NOT routed, and both would be a silent
+    # widening if they started answering:
+    #   - `/` must stay 404: the dashboard is reachable at its prefix and nowhere else.
+    #   - `/api/http/routers` must stay 404. See the `# DECIDED: /api is deliberately NOT routed`
+    #     marker in that same template — `api@internal` prints every router's rule verbatim, and
+    #     two of prod's embed credentials in `Header()` matchers. A 200 here means the SPA-fixing
+    #     change that marker forbids has been made.
     staging_expect:
       - hostname: traefik
-        path: /
+        path: /dashboard/
         status: 302
+      - hostname: traefik
+        path: /
+        status: 404
+      - hostname: traefik
+        path: /api/http/routers
+        status: 404
 
   # The forward-auth gate, and the mechanism no other manifest exercises: a Middleware that
   # other roles' IngressRoutes reference by name (docs/staging-cluster.md, Decision 6). Its
@@ -274,13 +295,29 @@ authelia_k8s_manage_oidc: false
 # services, and staging holds neither of the credentials it needs.
 authelia_k8s_manage_claude_user: false
 
-# No SMTP notifier. It reads `smtp_notify_app_password`, which lives in the production SOPS
-# file only — secrets-staging.yml is encrypted to daniel-stage's own age recipient, so the key
-# cannot be added from a workstation that holds the prod key alone. Staging keeps the file
-# notifier it had before 2026-09-09, which is the right end state regardless: a staging portal
-# should not be able to send mail from the operator's real Gmail account. Nothing is lost —
-# what staging exercises is the forward-auth middleware chain, not password recovery.
-authelia_k8s_smtp_notifier: false
+# The SMTP notifier branch, rehearsed here on a credential that authenticates nothing (#1464).
+#
+# The branch used to be off, because it reads `smtp_notify_app_password` and staging cannot
+# hold that key: secrets-staging.yml is encrypted to daniel-stage's own age recipient, and a
+# staging portal must not be able to send mail from the operator's real Gmail account. That
+# left the branch with no boot rehearsal anywhere — and it fails in a way nothing repo-side
+# catches, because `disable_startup_check` belongs to `notifier` and one level deeper is valid
+# YAML that renders clean and then makes Authelia refuse to boot, under Recreate, on the SSO
+# gate in front of most public routes.
+#
+# **The startup check being off is what makes a fake credential sufficient.** Authelia does not
+# open an SMTP connection at boot, so what staging proves is exactly the half that bites: the
+# config parses, the notifier block nests correctly, and the pod reaches Ready on it. Nothing
+# here ever sends: staging runs no password reset, and `email` in secrets-staging.yml is a
+# generated fake (docs/staging-cluster.md, Decision 5), so a send would authenticate as nobody
+# against a password that is nobody's.
+#
+# The value below is a literal, in a plaintext inventory file, on purpose — a real credential
+# here would be the thing this override exists to prevent. It is scoped to this host, and no
+# other consumer of the name (healthchecks, monitor-bridge, uptime-kuma) is in the staging
+# subset, so it reaches Authelia alone.
+authelia_k8s_smtp_notifier: true
+smtp_notify_app_password: "staging-fake-not-a-credential"
 
 # No registry garbage collection. Its script pushes the GC result into prod's Kuma, same
 # reason as k3s_manage_health_crons above. Nothing here needs collecting either: this
@@ -314,3 +351,17 @@ traefik_k8s_manage_livesync_gate: false
 # value onto the guest today, but loading secrets.yml would put every one of
 # them in the play's variable scope on a host meant to be broken.
 secrets_file: secrets-staging.yml
+
+# The redis session provider, rehearsed here on a credential that guards nothing of value.
+#
+# Staging cannot hold the real key: secrets-staging.yml is encrypted to daniel-stage's own age
+# recipient, so this host cannot mint one into it. The alternative was gating the branch off,
+# which would leave the provider block with no rehearsal anywhere — and it fails in the shape
+# staging exists to catch, because Authelia writes a startup probe to the session backend and
+# EXITS when it cannot, under Recreate, on the SSO gate.
+#
+# What a literal proves here is the half that bites: the block parses, `session.redis` nests
+# correctly, and the pod reaches Ready against a real redis. The value guards a redis that holds
+# staging's own sessions and is reachable only from inside that cluster's namespace, which is
+# why a plaintext literal is acceptable in the way the SMTP one above is.
+authelia_redis_password: "staging-fake-not-a-credential"

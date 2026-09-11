@@ -1,0 +1,47 @@
+---
+# Authelia's session store. authelia dials it at session.redis.host=authelia-redis
+# (config-secret.yaml.j2), and nothing else does.
+#
+# THIS POLICY SHIPS WITH THE ROLE THAT NEEDS IT, and that is the whole point of the file's
+# location. It lived in roles/k8s/netpol-baseline/ until 2026-09-10, one role away from the
+# Deployment whose startup depends on it. `--tags authelia` therefore staged a portal that
+# could not reach its session store, and Authelia refuses to start without one: it exits on
+# `error initializing session backend: redis connection error: ... i/o timeout` and
+# CrashLoopBackOffs behind every forwardAuth route in the fleet. That is issue #1609, and
+# `build_k8s_dep_map` cannot see a split like it — it derives a role's edges from templates
+# inside that role's own directory, so a dependency expressed in a sibling role produces no
+# edge and no ordering constraint to violate.
+#
+# 6379 is the containerPort AND the Service port — verified 2026-09-10, they match, and
+# ansible/tests/services/test_authelia_redis_sessions.py keeps them matching. That test also
+# pins this file's co-location, so moving it back fails the suite rather than the pod.
+#
+# The crowdsec agent sidecar shares the authelia pod, so it arrives here carrying `app:
+# authelia` too. That is a property of pod-level identity, not a second rule to write — see
+# "A sidecar carries its host pod's network identity" in project memory.
+#
+# NO `netpol_baseline_enforced` BRANCH, unlike the baseline's own policies. That lever is a
+# role default of netpol-baseline, and Ansible role defaults are role-scoped: it does not
+# resolve here, and `| default(true)` would read as honouring the lever while ignoring it.
+# Dropping it is also the right behaviour rather than a concession. The lever exists to
+# restore reachability in a rollback, and the only path that reaches redis at all is the one
+# this file grants — so leaving it on cannot be what an operator is rolling back from.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: authelia-redis
+  namespace: {{ k8s_namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: authelia-redis
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: authelia
+      ports:
+        - port: 6379
+          protocol: TCP

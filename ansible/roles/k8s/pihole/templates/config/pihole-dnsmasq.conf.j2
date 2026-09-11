@@ -81,3 +81,25 @@ host-record=daniel-pi.lan,{{ hostvars['daniel-pi'].server_ip }}
 # untouched.
 host-record=daniel-box.lan,daniel-box,{{ hostvars['daniel-box'].server_ip }}
 host-record=daniel-server.lan,daniel-server,{{ hostvars['daniel-server'].server_ip }}
+
+# Conditional forwarding for LAN reverse-DNS. Without it Pi-hole answers PTR only for the
+# `host-record=` names above, so every other LAN device — phones, laptops, anything holding a
+# DHCP lease — appears in the query log and on the dashboard as a bare IP. The router already
+# knows those names from the leases it handed out; this forwards the LAN's reverse zone to it.
+#
+# `server=` rather than Pi-hole's own `rev-server=`, for two reasons. Plain dnsmasq syntax
+# cannot be a directive FTL's config parser rejects at startup, and this file is read by BOTH
+# Pi-hole instances — a rejected directive is a fleet-wide DNS outage with no working resolver
+# left to fetch the fix through. `rev-server=<cidr>,<server>,<domain>` also expands to a second
+# `server=/<domain>/<router>` forward, which would send the `.lan` names the host-records above
+# answer for to the router instead. The narrow form forwards reverse queries and nothing else.
+#
+# Local records still win: dnsmasq answers a PTR it knows from `host-record=` itself and
+# forwards only what it does not know, so the node names above keep their `.lan` answers.
+#
+# The zone is derived from `lan_subnet` rather than typed, so a subnet change moves both
+# together. Only whole octets are used — correct for the /24 this LAN is, and a prefix that is
+# not a multiple of 8 would need RFC 2317 delegation, which this router does not do.
+{% set _lan_octets = lan_subnet.split('/')[0].split('.') %}
+{% set _lan_prefix = lan_subnet.split('/')[1] | int %}
+server=/{{ _lan_octets[:(_lan_prefix // 8)] | reverse | join('.') }}.in-addr.arpa/{{ lan_router_ip }}

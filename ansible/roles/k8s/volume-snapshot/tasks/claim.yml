@@ -116,6 +116,143 @@
       service or claim name, or shorten volume_snapshot_run_token.
     quiet: true
 
+# the snapshot-space cap (#1560)
+#
+# Longhorn does not prune when a volume's `spec.snapshotMaxSize` is reached — it REFUSES new
+# snapshots until some are deleted (longhorn.io/docs/1.12.1, Snapshot Space Management). This
+# role snapshots first and prunes afterwards, deliberately, so a reached cap latches: the
+# pre-apply snapshot is refused, the wait below is not best-effort and fails the deploy, the
+# prune that would have freed headroom is never reached, and every later deploy of that service
+# fails the same way. The recovery is a manual snapshot delete in a namespace the read-only
+# ServiceAccount cannot write.
+#
+# These three tasks change no snapshot and no cap. They turn the failure the deploy was already
+# going to take — a 120s wait ending in a generic "did not report readyToUse" — into an
+# immediate one that names the cap, the space in use and the headroom.
+#
+# DECIDED: this gate FAILS OPEN, and that is not an oversight. `"0"` is Longhorn's UNCAPPED
+# value and the fleet default (only jellyfin-config carries a cap today), an absent field reads
+# empty, and a listing that matches nothing returns rc 0 with empty stdout — every one of those
+# renders a cap of 0 and the fail task below does not fire. A gate in front of all 13 opted-in
+# services, guarding a hazard nobody can reach today (16 GiB cap against ~1.9 GiB in use,
+# measured 2026-09-10), must never turn a bad read into a fleet-wide deploy stop. It fires only
+# where the numbers positively say the cap is full.
+#
+# Not guarded on `k8s_no_mutate`: the reads are reads, and a `--check` / `--dry-run` that says
+# "this service's snapshot cap is full" before you deploy is the earliest this can be known.
+- name: Read the snapshot-space cap on the volume backing {{ volume_snapshot_claim }}
+  tags: [deploy]
+  # Its own register, never shared with the reads below — a SKIPPED task still sets the
+  # variable it registers to, and `include_tasks: claim.yml` keeps facts across claims, so a
+  # shared name lets one claim's answer stand for another's. Same discipline as the
+  # detached-volume reads further down this file.
+  ansible.builtin.command:
+    argv:
+      - k3s
+      - kubectl
+      - -n
+      - longhorn-system
+      - get
+      - volumes.longhorn.io
+      - "{{ volume_snapshot_volume }}"
+      - -o
+      - 'jsonpath={.spec.snapshotMaxSize}'
+  become: true
+  changed_when: false
+  check_mode: false
+  failed_when: false
+  register: volume_snapshot_cap_read
+
+- name: Read the snapshot space already in use on the volume backing {{ volume_snapshot_claim }}
+  tags: [deploy]
+  # Same one-comparison jsonpath shape as the prune listing below, for the same reason:
+  # kubectl's jsonpath has no `&&`, so the volume is filtered here and everything else in Jinja.
+  # `volume-head` is the live writable head rather than a snapshot file and is excluded from
+  # Longhorn's own snapshot-space accounting; counting it would overstate usage, and an
+  # overstatement is the only way this gate can produce a false stop.
+  ansible.builtin.command:
+    argv:
+      - k3s
+      - kubectl
+      - -n
+      - longhorn-system
+      - get
+      - snapshots.longhorn.io
+      - -o
+      - 'jsonpath={range .items[?(@.spec.volume=="{{ volume_snapshot_volume }}")]}{.metadata.name}{"|"}{.status.markRemoved}{"|"}{.status.size}{"\n"}{end}'
+  become: true
+  changed_when: false
+  check_mode: false
+  failed_when: false
+  register: volume_snapshot_used_read
+
+- name: Measure the snapshot-space headroom for {{ volume_snapshot_claim }}
+  tags: [deploy]
+  # Computed unconditionally for every claim, never only on the branch where a cap exists: a
+  # task skipped on one claim leaves the PREVIOUS claim's numbers in scope for this one, which
+  # is the register-persistence trap this file already pays for twice.
+  #
+  # `select('search', ...)` keeps only lines carrying both separators, so a listing whose shape
+  # changed cannot raise on `attribute='2'` — it renders 0 bytes in use, which fails open. The
+  # separator is matched as the character class `[|]` rather than `\|`: a `>-` folded scalar
+  # passes the backslash through verbatim, and Jinja rejects `\|` inside a string literal as an
+  # invalid escape sequence — a template error at render time, not a regex that matches nothing.
+  # A cap that is not a plain integer string (empty, "0", anything Longhorn renames it to)
+  # renders 0, which the fail below reads as uncapped.
+  ansible.builtin.set_fact:
+    volume_snapshot_cap_bytes: >-
+      {{ (volume_snapshot_cap_read.stdout | default('') | trim | int)
+         if (volume_snapshot_cap_read.stdout | default('') | trim | regex_search('^[0-9]+$'))
+         else 0 }}
+    volume_snapshot_used_bytes: >-
+      {{ volume_snapshot_used_read.stdout_lines | default([])
+         | select('search', '[|].*[|]')
+         | map('split', '|')
+         | rejectattr('0', 'equalto', 'volume-head')
+         | rejectattr('1', 'equalto', 'true')
+         | map(attribute='2')
+         | map('trim')
+         | map('int')
+         | sum }}
+
+- name: Fail on a snapshot-space cap with no headroom for {{ volume_snapshot_claim }}
+  tags: [deploy]
+  when:
+    - (volume_snapshot_cap_bytes | int) > 0
+    - (volume_snapshot_used_bytes | int) >= (volume_snapshot_cap_bytes | int)
+  ansible.builtin.fail:
+    msg: >-
+      Longhorn volume {{ volume_snapshot_volume }} (claim {{ volume_snapshot_claim }}, service
+      {{ volume_snapshot_service }}) is at its snapshot-space cap:
+      {{ volume_snapshot_used_bytes }} bytes of snapshots against a spec.snapshotMaxSize of
+      {{ volume_snapshot_cap_bytes }} bytes, leaving no headroom. Longhorn does not prune to
+      make room — it refuses new snapshots until some are deleted — so the pre-deploy snapshot
+      would be refused, this deploy would fail on a snapshot timeout that says nothing about
+      the cap, and the prune that frees headroom would never be reached. Delete some of this
+      volume's snapshots (the Longhorn UI, or a Snapshot CR delete in longhorn-system) and
+      redeploy. Raising spec.snapshotMaxSize is the other way out and hides the growth this
+      cap was set to bound.
+
+- name: Warn on a snapshot-space cap that is nearly full for {{ volume_snapshot_claim }}
+  tags: [deploy]
+  # The only advance notice of the latch above. A cap is dangerous only as it is approached,
+  # and nothing else in the fleet watches headroom — a monitor is the better home for this and
+  # is filed as a follow-up, but a deploy that already reads both numbers can say so for free.
+  when:
+    - (volume_snapshot_cap_bytes | int) > 0
+    - (volume_snapshot_used_bytes | int) < (volume_snapshot_cap_bytes | int)
+    - (volume_snapshot_used_bytes | float)
+      >= (volume_snapshot_cap_bytes | float) * (volume_snapshot_cap_warn_ratio | float)
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: Longhorn volume {{ volume_snapshot_volume }} (claim {{ volume_snapshot_claim }})
+      holds {{ volume_snapshot_used_bytes }} bytes of snapshots against a spec.snapshotMaxSize
+      of {{ volume_snapshot_cap_bytes }} bytes —
+      {{ (volume_snapshot_cap_bytes | int) - (volume_snapshot_used_bytes | int) }} bytes of
+      headroom left. When the cap is reached Longhorn refuses new snapshots rather than pruning
+      to make room, and this role snapshots before it prunes, so the next deploy past the cap
+      fails and stays failing until snapshots are deleted by hand.
+
 # `apply`, not `create`: `create` would fail with AlreadyExists on the one case the run token
 # doesn't rule out — two runs of this role landing in the same wall-clock second, so
 # `now(utc=true, fmt='%Y%m%d%H%M%S')` gives them the identical name. Apply reports "unchanged"

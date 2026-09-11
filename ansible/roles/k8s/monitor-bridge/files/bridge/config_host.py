@@ -50,7 +50,8 @@ class HostConfig:
     UPS_CHARGE_QUERY: str
     UPS_RUNTIME_QUERY: str
     UPS_REPLACE_QUERY: str
-    UPS_HA_UP_QUERY: str
+    UPS_ON_BATTERY_QUERY: str
+    UPS_SOURCE_UP_QUERY: str
     UPS_CHARGE_MIN_PCT: float
     UPS_RUNTIME_MIN_S: float
     UPS_CONSECUTIVE: int
@@ -306,30 +307,41 @@ def host_config(
         # Shorter than HWMON_TEMP_CONSECUTIVE=12 because throttling is the kernel's own verdict
         # that the CPU is too hot, where a temperature above a chosen limit is ours.
         THERMAL_THROTTLE_CONSECUTIVE=_int("THERMAL_THROTTLE_CONSECUTIVE", "3"),
-        # UPS battery health via Home Assistant's Prometheus scrape (the APC UPS is on
-        # NUT/peanut; HA's prometheus integration exposes its sensors as hass_sensor_*). The
-        # only pre-existing UPS alert is an HA automation -> mobile push (a separate channel
-        # from this Kuma->Discord brain), and nothing trends the battery, so a slowly-degrading
-        # battery — full-charge runtime decaying over years — is invisible until an outage
-        # collapses it. We page on a low battery RUNWAY: charge below UPS_CHARGE_MIN_PCT (a deep
-        # discharge while on battery) OR estimated runtime below UPS_RUNTIME_MIN_S (an aged
-        # battery even at full charge, or a discharge nearing shutdown) — a dual-purpose health
-        # + imminent-cutoff floor — PLUS the UPS's own replace-battery self-test verdict
+        # UPS battery health, read from nut-exporter's own scrape of upsd and falling back to
+        # Home Assistant's re-export of the same UPS. Nothing else trends the battery, so a
+        # slowly-degrading one — full-charge runtime decaying over years — is invisible until an
+        # outage collapses it. We page on a low battery RUNWAY: charge below UPS_CHARGE_MIN_PCT
+        # (a deep discharge while on battery) OR estimated runtime below UPS_RUNTIME_MIN_S (an
+        # aged battery even at full charge, or a discharge nearing shutdown) — a dual-purpose
+        # health + imminent-cutoff floor — PLUS the UPS's own replace-battery self-test verdict
         # (UPS_REPLACE_QUERY), the earliest signal, which can trip while charge/runtime still
-        # read fine. Queries are env-driven (all empty = disabled, like PI_GLANCES_URL) so a
-        # UPS/entity rename or removal needs no code edit. Prom-dependent: an HA-scrape outage
-        # leaves ALL series absent -> up (Scrape Targets owns HA-source liveness; the nut pod
-        # liveness probe owns NUT-server death), so this never double-pages those; a PARTIAL
-        # drop (one arm gone) pages instead of silently monitoring the survivor. UPS_CONSECUTIVE
-        # rides out a one-cycle dip from a transient load spike (like HA_CONSECUTIVE), so only a
-        # sustained problem pages.
+        # read fine, PLUS sustained mains loss (UPS_ON_BATTERY_QUERY). Queries are env-driven
+        # (all empty = disabled, like PI_GLANCES_URL) so a series rename needs no code edit.
+        # Prom-dependent: both sources being down leaves ALL series absent -> up (Scrape Targets
+        # owns source liveness; the nut pod liveness probe owns NUT-server death), so this never
+        # double-pages those; a PARTIAL drop (one arm gone) pages instead of silently monitoring
+        # the survivor. UPS_CONSECUTIVE rides out a one-cycle dip from a transient load spike
+        # (like HA_CONSECUTIVE), so only a sustained problem pages.
+        # Each arm reads nut-exporter FIRST and falls back to Home Assistant, expressed in the
+        # query rather than in code (issue #1548). `max(A) or max(B)` is primary-with-fallback
+        # exactly: both sides reduce to one series with NO labels, so `or` drops the right side
+        # whenever the left has a sample and yields it when the left is absent. Verified live
+        # 2026-09-10, including the fallback half against a deliberately absent primary.
+        #
+        # Why the direction moved: HA's Prometheus integration re-exports the same UPS, so the
+        # alert path used to run through the workload the UPS most obviously protects. HA down
+        # meant the UPS unmonitored. nut-exporter reads upsd directly (#1445).
+        # Units carry over unchanged — battery.charge is a percent, battery.runtime is seconds —
+        # so UPS_CHARGE_MIN_PCT and UPS_RUNTIME_MIN_S keep their meaning and their values.
         UPS_CHARGE_QUERY=_env(
             "UPS_CHARGE_QUERY",
-            'hass_sensor_battery_percent{entity="sensor.apc_ups_battery_charge"}',
+            "max(network_ups_tools_battery_charge) or "
+            'max(hass_sensor_battery_percent{entity="sensor.apc_ups_battery_charge"})',
         ),
         UPS_RUNTIME_QUERY=_env(
             "UPS_RUNTIME_QUERY",
-            'hass_sensor_duration_s{entity="sensor.apc_ups_battery_runtime"}',
+            "max(network_ups_tools_battery_runtime) or "
+            'max(hass_sensor_duration_s{entity="sensor.apc_ups_battery_runtime"})',
         ),
         # The UPS's own "Replace Battery" self-test verdict (NUT `ups.status` RB flag).
         # Charge/runtime are a lagging runway proxy — a failed periodic self-test can trip RB
@@ -341,14 +353,27 @@ def host_config(
         # is down (all arms absent -> defer), not a silent single-arm drop. Empty = arm disabled.
         UPS_REPLACE_QUERY=_env(
             "UPS_REPLACE_QUERY",
-            'hass_binary_sensor_state{entity="binary_sensor.apc_ups_replace_battery"}',
+            'max(network_ups_tools_ups_status{flag="RB"}) or '
+            'max(hass_binary_sensor_state{entity="binary_sensor.apc_ups_replace_battery"})',
         ),
-        # HA's own scrape-up series, used only to discriminate the all-arms-absent case: HA's
-        # whole Prometheus scrape being down (all hass_sensor_* vanish → Scrape Targets owns it,
-        # defer) vs HA scraping fine while every UPS entity was renamed/removed at once (Scrape
-        # Targets can't see it → the UPS would go silently unmonitored). Empty disables the gate
-        # (always defer, the old behaviour).
-        UPS_HA_UP_QUERY=_env("UPS_HA_UP_QUERY", 'up{job="home-assistant"}'),
+        # Mains power gone, the UPS carrying the load. `ups.status` is a one-hot family over the
+        # `flag` label: the exporter forces a 0 for every flag in its --nut.statuses default the
+        # UPS is not asserting, so OB is a real 0/1 series rather than one that exists only
+        # during an outage — which is what makes it usable as an alert input rather than as a
+        # thing whose absence is ambiguous. No HA fallback, because HA exports no equivalent
+        # single series; its ups_power_event automation branches on the flag without publishing
+        # it. Empty = arm off. Its own streak key, so it cannot compound with the others.
+        UPS_ON_BATTERY_QUERY=_env(
+            "UPS_ON_BATTERY_QUERY", 'max(network_ups_tools_ups_status{flag="OB"})'
+        ),
+        # The source scrape-up gate, used only to discriminate the all-arms-absent case: BOTH
+        # sources down (Scrape Targets owns that, defer) vs a source scraping fine while every
+        # UPS series was renamed or removed at once (Scrape Targets cannot see it, so the UPS
+        # would go silently unmonitored). `max(...)` over both jobs, because an arm answered by
+        # either source is an arm that is not absent. Empty disables the gate (always defer).
+        UPS_SOURCE_UP_QUERY=_env(
+            "UPS_SOURCE_UP_QUERY", 'max(up{job=~"nut|home-assistant"})'
+        ),
         UPS_CHARGE_MIN_PCT=_num("UPS_CHARGE_MIN_PCT", "50"),
         UPS_RUNTIME_MIN_S=_num("UPS_RUNTIME_MIN_S", "300"),
         UPS_CONSECUTIVE=_int("UPS_CONSECUTIVE", "2"),
@@ -482,6 +507,22 @@ def host_config(
         # threshold needs to clear. Lowering it on this evidence would re-commit the one-sided
         # derivation #1288 exists to correct, so the read moves the earliest honest re-derivation
         # date and nothing else.
+        #
+        # Re-read 2026-09-10 19:00 UTC, and the value is UNCHANGED. The window is still short —
+        # `count_over_time(...[7d])` returned 6887 samples for claude-rc, which is 4.8 days
+        # against the seven the re-derivation needs — but the population is no longer quiet: the
+        # max moved from 0.017% to 0.148% (daniel-box `fleet` and `user-1000-slice`, 0.042% for
+        # claude-rc), a ~9x rise as real load entered the window. p99 is 0.014%. The floor held
+        # at ~68x under 10 through that, which is the first evidence here that is not purely
+        # quiet-population, but 4.8 days still cannot bound a pytest fan-out's peak. Re-derive on
+        # 2026-09-12 as above.
+        #
+        # The CLAUDE_CGROUP_CONSECUTIVE half of #1288 is answered: `resets(...[7d])` is 4 for
+        # claude-rc and 2 for daniel-box's `fleet` and `user-1000-slice` (0 for both daniel-server
+        # series), so 2 of claude-rc's 4 are host-wide on daniel-box and 2 are its own unit
+        # restarting. The unit's own ExecMainStartTimestamp read 2026-09-09 20:10 UTC — under a
+        # day before this read. The weekly claude-rc-restart.timer is therefore NOT the only reset
+        # source, and the grace is guarding a real event class rather than a once-a-week one.
         CLAUDE_CGROUP_STALL_MAX_PCT=_num("CLAUDE_CGROUP_STALL_MAX_PCT", "10"),
         # memory.events increase window. Wider than the stall window because these are rare
         # discrete events rather than a rate: 10m at a 1m scrape keeps an OOM kill visible across

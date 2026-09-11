@@ -27,6 +27,29 @@ Look" table's note that this role must render before anything referencing its CR
   stays on an entrypoint whose chain names the crowdsec Middleware, the probe path stays the
   route's own, and the route matches on a path rather than a Host (a kubelet probe sends no
   SNI, and Traefik answers a matched `Host()` router with 421 when SNI and Host disagree).
+- **That probe's red path is measured, and each container restart re-downloads the plugin
+  (#1345). Do not re-run the outage.** Measured 2026-09-10 on `traefik:v3.7.12`, with
+  `traefik_k8s_bouncer_plugin_version: v1.7.999` (nonexistent) and `failureThreshold: 6`
+  deployed for four minutes:
+  - The pod never became Ready and the container restarted every ~30s, reaching restart 4 in
+    2m10s. `deploy.sh --tags traefik` failed at the rollout wait rather than reporting green.
+  - `https://<podIP>:8443/.well-known/traefik-edge-selfcheck` returned 404 throughout, and every
+    app router on the https entrypoint logged `invalid middleware
+    "homelab-crowdsec@kubernetescrd" configuration: invalid middleware type or middleware does
+    not exist` — the routing table was gone, not merely unhealthy.
+  - Restarts 3 and 4 each logged `Loading plugins...` followed by `unable to download plugin
+    github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin: error: 500` one second later. Each
+    restart makes a fresh HTTP request, so the shared `/plugins-storage` emptyDir does **not**
+    short-circuit recovery and no per-container-start wipe is needed.
+  - Why, from Traefik v3.7.12's own `pkg/plugins`: `NewManager` calls `resetDirectory` on the
+    sources root at every process start; `RegistryDownloader.Download` always issues the GET,
+    using an existing archive only as an `X-Plugin-Hash` validator that a partial file fails;
+    and `SetupRemotePlugins` calls `ResetAll()` — which empties both the GoPath and the archives
+    directory — on any install failure.
+  - Recovery: reverting both values and redeploying restored a 1/1 pod with `restarts=0`,
+    `selfcheck=200`, and 302/200 on the LAN routes. Total edge outage 11:53Z–11:57Z.
+  - Expected boot noise, not a defect: the selfcheck route has no `Host()`, so Traefik logs
+    `No domain found in rule PathPrefix(...)` and falls back to the default TLSOption for it.
 - An initContainer runs `chmod 600 /data/acme.json` on every start: kubelet's `fsGroup`
   handling ORs group bits into every file on the volume at mount time, which flips
   Traefik's own `0600` back to `0660` and makes it refuse to load the ACME account.

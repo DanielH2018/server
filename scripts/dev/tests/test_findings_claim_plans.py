@@ -1,6 +1,7 @@
 """The gh argv a claim or a release plans, and the two cases each refuses."""
 
 import sys
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -13,6 +14,7 @@ from dev.findings_lib.issue_model import claim_comment
 from dev.findings_lib.plans import ClaimRefused, plan_claim, plan_release
 
 WT = "worktree-issue-1132"
+TODAY = date(2026, 9, 11)
 
 
 def _issue(number=1132, labels=(), comments=()):
@@ -26,7 +28,7 @@ def _issue(number=1132, labels=(), comments=()):
 
 
 def test_claiming_an_unclaimed_issue_comments_and_labels():
-    plans = plan_claim(_issue(), worktree=WT, session=None, when="t")
+    plans = plan_claim(_issue(), worktree=WT, session=None, when="t", today=TODAY)
     assert plans[0][:3] == ["issue", "comment", "1132"]
     assert f"Claim: `{WT}`" in plans[0][4]
     assert plans[1] == ["issue", "edit", "1132", "--add-label", "claimed"]
@@ -36,20 +38,46 @@ def test_claiming_a_closed_issue_is_refused():
     closed = _issue()
     closed["state"] = "CLOSED"
     with pytest.raises(ClaimRefused) as exc:
-        plan_claim(closed, worktree=WT, session=None, when="t")
+        plan_claim(closed, worktree=WT, session=None, when="t", today=TODAY)
     assert "closed" in exc.value.reason
+
+
+def test_claiming_an_issue_deferred_to_tomorrow_is_refused_and_names_the_way_out():
+    with pytest.raises(ClaimRefused) as exc:
+        plan_claim(
+            _issue(labels=["not-before:2026-09-12"]),
+            worktree=WT,
+            session=None,
+            when="t",
+            today=TODAY,
+        )
+    assert "deferred until 2026-09-12" in exc.value.reason
+    assert "defer 1132 --clear" in exc.value.reason
+
+
+def test_claiming_an_issue_on_its_not_before_date_is_allowed():
+    plans = plan_claim(
+        _issue(labels=["not-before:2026-09-11"]),
+        worktree=WT,
+        session=None,
+        when="t",
+        today=TODAY,
+    )
+    assert plans[0][:3] == ["issue", "comment", "1132"]
 
 
 def test_claiming_a_manual_issue_is_refused():
     with pytest.raises(ClaimRefused) as exc:
-        plan_claim(_issue(labels=["manual"]), worktree=WT, session=None, when="t")
+        plan_claim(
+            _issue(labels=["manual"]), worktree=WT, session=None, when="t", today=TODAY
+        )
     assert "manual" in exc.value.reason
 
 
 def test_claiming_an_issue_another_worktree_holds_is_refused():
     issue = _issue(comments=[claim_comment("worktree-issue-9999", None, "t")])
     with pytest.raises(ClaimRefused) as exc:
-        plan_claim(issue, worktree=WT, session=None, when="t")
+        plan_claim(issue, worktree=WT, session=None, when="t", today=TODAY)
     assert "worktree-issue-9999" in exc.value.reason
 
 
@@ -60,14 +88,14 @@ def test_claiming_an_issue_outside_the_register_is_refused():
     """
     outsider = {"number": 3, "state": "OPEN", "labels": [], "comments": []}
     with pytest.raises(ClaimRefused) as exc:
-        plan_claim(outsider, worktree=WT, session=None, when="t")
+        plan_claim(outsider, worktree=WT, session=None, when="t", today=TODAY)
     assert "claude" in exc.value.reason
 
 
 def test_reclaiming_an_issue_you_already_hold_is_a_no_op():
     """The accepting half of the label-repair pair: comment and label already agree."""
     issue = _issue(labels=["claimed"], comments=[claim_comment(WT, None, "t")])
-    assert plan_claim(issue, worktree=WT, session=None, when="t") == []
+    assert plan_claim(issue, worktree=WT, session=None, when="t", today=TODAY) == []
 
 
 def test_reclaiming_an_issue_whose_label_edit_failed_plans_the_label_alone():
@@ -76,7 +104,7 @@ def test_reclaiming_an_issue_whose_label_edit_failed_plans_the_label_alone():
     unrepairable — the retry short-circuited before the label plan ever ran (#1277).
     """
     issue = _issue(comments=[claim_comment(WT, None, "t")])
-    assert plan_claim(issue, worktree=WT, session=None, when="t") == [
+    assert plan_claim(issue, worktree=WT, session=None, when="t", today=TODAY) == [
         ["issue", "edit", "1132", "--add-label", "claimed"]
     ]
 

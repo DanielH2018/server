@@ -42,152 +42,12 @@ def test_banner_lists_problems_and_triage():
     assert "triage" in out  # always points the reader at the probe commands
 
 
-def test_docker_problems_parses_unhealthy_and_restarting(monkeypatch):
-    calls = iter(
-        [
-            _result("jellyfin\tUp 2 hours (unhealthy)\n"),  # health=unhealthy filter
-            _result(
-                "sonarr\tRestarting (1) 3 seconds ago\n"
-            ),  # status=restarting filter
-        ]
-    )
-    monkeypatch.setattr(_mod, "_run", lambda *a, **k: next(calls))
-    lines, ok = _mod.docker_problems()
-    assert ok is True
-    assert any("jellyfin" in l and "unhealthy" in l for l in lines)
-    assert any("sonarr" in l and "restarting" in l for l in lines)
+# The docker and scrape-target sections moved to hooklib/service_lines.py — their tests
+# are in the sibling test_hooklib_service_lines.py, driven through that module's seams.
 
 
-def test_docker_problems_all_green(monkeypatch):
-    monkeypatch.setattr(_mod, "_run", lambda *a, **k: _result(""))
-    lines, ok = _mod.docker_problems()
-    assert lines == []
-    assert ok is True
-
-
-def test_wedged_dockerd_is_reported_not_raised(monkeypatch):
-    """A docker that hangs is the signal the banner exists for."""
-
-    def boom(*a, **k):
-        raise subprocess.TimeoutExpired("docker", 5)
-
-    monkeypatch.setattr(_mod, "_run", boom)
-    lines, ok = _mod.docker_problems()
-    assert ok is False
-    assert any("docker unreachable" in l for l in lines)
-
-
-def test_missing_docker_binary_is_silent(monkeypatch):
-    """daniel-box runs k3s with has_docker: false — no binary is expected, not broken.
-
-    Warning here would put a false '✗ docker unreachable' on every session open on that
-    host, forever, which is exactly the context noise the all-green contract avoids.
-    """
-
-    def boom(*a, **k):
-        raise FileNotFoundError("docker")
-
-    monkeypatch.setattr(_mod, "_run", boom)
-    lines, ok = _mod.docker_problems()
-    assert lines == []
-    # Still False: this only gates the docker section of the banner now — the Prometheus
-    # check does not depend on docker and runs regardless (see test_main_runs_targets_
-    # even_when_docker_down).
-    assert ok is False
-
-
-_TARGETS_ONE_DOWN = (
-    '{"data":{"activeTargets":['
-    '{"health":"up","labels":{"job":"traefik","instance":"traefik:8080"}},'
-    '{"health":"down","labels":{"job":"loki","instance":"loki:3100"},'
-    '"lastError":"connection refused"}'
-    "]}}"
-)
-
-
-def test_target_problems_flags_down(monkeypatch):
-    monkeypatch.setattr(_mod, "_run", lambda *a, **k: _result(_TARGETS_ONE_DOWN))
-    bad = _mod.target_problems()
-    assert len(bad) == 1
-    assert "loki" in bad[0] and "connection refused" in bad[0]
-
-
-def test_target_problems_all_up(monkeypatch):
-    up = '{"data":{"activeTargets":[{"health":"up","labels":{"job":"x"}}]}}'
-    monkeypatch.setattr(_mod, "_run", lambda *a, **k: _result(up))
-    assert _mod.target_problems() == []
-
-
-def test_target_problems_swallows_bad_json(monkeypatch):
-    monkeypatch.setattr(_mod, "_run", lambda *a, **k: _result("not json"))
-    assert _mod.target_problems() == []  # monitoring hiccup must never blow up the hook
-
-
-def test_is_scaled_to_zero_true_when_replicas_zero(monkeypatch):
-    monkeypatch.setattr(_mod, "_run", lambda *a, **k: _result("0"))
-    assert _mod._is_scaled_to_zero("terraria-stats", "homelab") is True
-
-
-def test_is_scaled_to_zero_false_when_replicas_nonzero(monkeypatch):
-    monkeypatch.setattr(_mod, "_run", lambda *a, **k: _result("1"))
-    assert _mod._is_scaled_to_zero("loki", "homelab") is False
-
-
-def test_is_scaled_to_zero_false_on_kubectl_failure(monkeypatch):
-    # An unreadable answer must not be treated as "confirmed intentional" — a real problem
-    # we can't explain has to stay visible, same fail-open-to-visible rule probe.py's
-    # format_k8s_health uses for an unreadable restart time.
-    monkeypatch.setattr(
-        _mod,
-        "_run",
-        lambda *a, **k: types.SimpleNamespace(stdout="", stderr="x", returncode=1),
-    )
-    assert _mod._is_scaled_to_zero("sonarr", "homelab") is False
-
-
-def test_is_scaled_to_zero_false_on_timeout(monkeypatch):
-    def boom(*a, **k):
-        raise subprocess.TimeoutExpired("kubectl", 5)
-
-    monkeypatch.setattr(_mod, "_run", boom)
-    assert _mod._is_scaled_to_zero("sonarr", "homelab") is False
-
-
-def test_is_scaled_to_zero_false_without_a_namespace():
-    assert _mod._is_scaled_to_zero("sonarr", None) is False
-
-
-_TARGETS_ONE_SCALED_TO_ZERO = (
-    '{"data":{"activeTargets":['
-    '{"health":"down","labels":{"job":"terraria-stats","instance":"terraria-stats:9420"},'
-    '"lastError":"connection refused"},'
-    '{"health":"down","labels":{"job":"loki","instance":"loki:3100"},'
-    '"lastError":"connection refused"}'
-    "]}}"
-)
-
-
-def test_target_problems_filters_scaled_to_zero_deployments(monkeypatch):
-    # terraria-stats/valheim-stats are on-demand game servers deliberately scaled to 0 —
-    # reporting them every session open forever is exactly the noise the all-green
-    # contract exists to avoid, so only the genuinely-unexplained loki target survives.
-    monkeypatch.setattr(_mod, "_k8s_namespace", lambda: "homelab")
-    monkeypatch.setattr(
-        _mod,
-        "_is_scaled_to_zero",
-        lambda job, ns: job == "terraria-stats",
-    )
-    monkeypatch.setattr(
-        _mod, "_run", lambda *a, **k: _result(_TARGETS_ONE_SCALED_TO_ZERO)
-    )
-    bad = _mod.target_problems()
-    assert len(bad) == 1
-    assert "loki" in bad[0]
-    assert not any("terraria-stats" in line for line in bad)
-
-
-# `master_moved_problems` and its behind-master warning are tested in the sibling
-# test_session_health_master_moved.py -- they went there when this file hit its line cap.
+# `master_moved_problems` is tested in the sibling test_session_health_master_moved.py --
+# it moved there when this file hit its line cap.
 def _run_main(
     monkeypatch,
     stdin,
@@ -200,12 +60,10 @@ def _run_main(
     env=None,
     sessions=None,
     worktrees=None,
+    remote_fanout=None,
 ):
-    """Wire up main()'s dependencies and return the call to make.
-
-    Returns a zero-arg callable rather than calling main() itself, so every caller does
-    `assert _run_main(...)() == 0` instead of a bare `_mod.main()`.
-    """
+    """Wire up main()'s dependencies; returns a zero-arg callable, `_run_main(...)()`,
+    rather than calling main() itself."""
     monkeypatch.setattr(_mod.sys, "stdin", io.StringIO(stdin))
     monkeypatch.setattr(_mod, "docker_problems", lambda: (dock or [], ok))
     monkeypatch.setattr(_mod, "target_problems", lambda: targets or [])
@@ -223,17 +81,16 @@ def _run_main(
     if env:
         for k, v in env.items():
             monkeypatch.setenv(k, v)
-    # Passed as a call argument, not monkeypatched like the four stubs above: main() reads the
-    # PRIMARY checkout's `git status --porcelain` here by default (PRIMARY_STATUS_ARGV), not
-    # this worktree's, and under the prek `pytest` hook that runs on the host driving the
-    # primary checkout, that tree is genuinely dirty every time docs-refresh has just staged
-    # its regenerated pages -- which turned "assert the banner stays silent" into a false
-    # failure on the reader's own uncommitted work and broke the cron's `git commit` for four
-    # days running. main() takes this as a keyword seam (see its own docstring) rather than a
-    # fifth patched module attribute because the monkeypatch ratchet
-    # (ansible/tests/_ratchet.py) caps this file's patches on a first-party module at its
-    # current allowlist entry.
-    return functools.partial(_mod.main, parked_deployer_problems=lambda: parked or [])
+    # Passed as call arguments, not monkeypatched: main() reads the PRIMARY checkout's
+    # `git status --porcelain` by default (genuinely dirty under prek's `pytest` hook right
+    # after docs-refresh stages its pages), and remote_fanout_lines reads real
+    # ~/.claude/fanout content. Both are keyword seams (main()'s docstring) -- the
+    # monkeypatch ratchet (ansible/tests/_ratchet.py) caps this file's allowlist entry.
+    return functools.partial(
+        _mod.main,
+        parked_deployer_problems=lambda: parked or [],
+        remote_fanout_lines=lambda: remote_fanout or [],
+    )
 
 
 def test_main_silent_on_compact(monkeypatch, capsys):
@@ -364,6 +221,16 @@ def test_main_prints_the_removable_worktree_lines(monkeypatch, capsys):
     assert "old-thing" in capsys.readouterr().out
 
 
+def test_main_prints_remote_fanout_lines(monkeypatch, capsys):
+    run_main = _run_main(
+        monkeypatch,
+        '{"source":"startup"}',
+        remote_fanout=["  • daniel-server worktree-fanout-1345 — #1345 (run r1)"],
+    )
+    assert run_main() == 0
+    assert "daniel-server" in capsys.readouterr().out
+
+
 def test_stale_worktree_lines_reports_removable(monkeypatch):
     brief = (
         "\U0001f9f9 1 merged worktree(s) can be removed:\n"
@@ -490,3 +357,43 @@ def test_other_live_sessions_dirty_marker_follows_lib_git(monkeypatch):
 
     monkeypatch.setattr("lib.git.git_dirty", boom)
     assert "(+ uncommitted)" not in _mod.other_live_sessions("/repo")[0]
+
+
+def _hook_copy_with_a_broken_hooklib(tmp_path):
+    """A copy of the hook whose `hooklib.service_lines` will not compile.
+
+    Copied rather than patched because the guard runs at MODULE scope: it has already run
+    for `_mod`, so only a fresh interpreter loading a fresh file can exercise it.
+    """
+    hooks = tmp_path / "repo" / ".claude" / "hooks"
+    (hooks / "hooklib").mkdir(parents=True)
+    with open(_HOOK) as f:
+        (hooks / "session-health.py").write_text(f.read())
+    (hooks / "hooklib" / "worktree_lines.py").write_text("")
+    (hooks / "hooklib" / "service_lines.py").write_text("def broken(:\n")
+    return hooks / "session-health.py"
+
+
+def test_a_hooklib_that_will_not_compile_is_named_rather_than_killing_the_banner(
+    tmp_path,
+):
+    """#1678: a SyntaxError is not an ImportError, so the narrower catch let one through.
+
+    These modules use PEP 758 syntax, and `session-health.sh` sends stderr to /dev/null and
+    exits 0. An uncaught SyntaxError at import would take the whole banner out with nothing
+    a session could see — the #1566 contract says nothing at module scope may do that.
+    """
+    proc = subprocess.run(
+        [sys.executable, str(_hook_copy_with_a_broken_hooklib(tmp_path))],
+        input='{"source": "startup"}',
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    assert proc.returncode == 0
+    assert "hooklib is broken" in proc.stdout
+    assert "SyntaxError" in proc.stdout
+    # The rest of the banner still ran: this copy's REPO points at a tree with no
+    # scripts/, so the other-session section reports its own broken import.
+    assert "other-session detection is broken" in proc.stdout

@@ -25,12 +25,36 @@ Edit the `.j2` files, never the live config: homepage seeds any missing file int
 
 ## Notable
 - Pulls calendar data from the internal `ical-proxy`.
+- **`mode: cluster` switches Ingress discovery ON unless `kubernetes.yaml.j2` says otherwise.**
+  Upstream reads `traefik` and `gateway` as absent-is-off, but `ingress-list.js` destructures
+  `const { ingress = true }`, so an omitted key is a cluster-wide `ingresses.networking.k8s.io`
+  list on every page load. `rbac.yaml.j2` grants no such read, so the pod logged an RBAC denial
+  per load for its whole life (#1428, #1459) — no user-visible effect, but a 13-line log where
+  two lines were the denial buries the widget errors that matter. `ingress: false` removes the
+  call rather than permitting it; this cluster routes with `IngressRoute` CRDs and owns no
+  `Ingress` object, so the grant would list an empty set forever. The two halves are asserted
+  together by `ansible/tests/k8s/test_k8s_manifests_rbac.py`.
+- **A widget's credential goes in `key:`, never in `url:`.** Each widget's `proxy.js` logs the
+  full request URL on any non-2xx, so a credential in a query string is published to the pod log
+  and to Loki on the target's next outage. `jellyfin_api_key` leaked that way during the
+  2026-09-09 Jellyfin crash loop (#1499) and was rotated on 2026-09-10. ENFORCED by
+  `ansible/tests/services/test_homepage_widget_urls_carry_no_credentials.py`.
+- **A re-added Jellyfin tile needs `version: 2`.** The tile was dropped on 2026-09-10 (see the
+  group note below) and stays dropped; this is what to do if it comes back. The widget's default
+  v1 mappings are `emby/Sessions?api_key={key}` and `emby/Items/Counts?api_key={key}` — Emby's
+  path prefix, which this Jellyfin 404s, and which is what erred on every refresh in #1457.
+  `version: 2` in the widget block selects the `SessionsV2`/`CountV2` mappings instead: `Sessions`
+  and `Items/Counts`, with the key sent as `Authorization: MediaBrowser Token=...` and nothing
+  credential-shaped in the URL. Restoring the tile is more than a `services.yaml.j2` edit — the
+  `Services` group is pinned at twelve tiles over three columns, and the calendar column's
+  `grid-template-rows: repeat(8, …)` in `custom.css.j2` encodes that FOUR-row count (two tracks
+  per Services row), so a thirteenth tile means re-deriving both and re-measuring in the browser.
 - **A layout entry matches a group by NAME, and an unmatched one is silently dead.** `layout:`
   in `templates/config/settings.yaml.j2` and the group headings in `services.yaml.j2` are two
   lists that must agree. A layout key naming no group does nothing (a `Monitoring:` entry sat
   there until 2026-09-09 for a group this dashboard has never declared); a group with no layout
-  key renders *below* every laid-out group at one column wide (`Tracking` sat that way). Neither
-  state errors, logs, or fails a render — check both files when a group appears in the wrong
+  key renders *below* every laid-out group at one column wide (the retired `Tracking` group sat
+  that way). Neither state errors, logs, or fails a render — check both files when a group appears in the wrong
   place or a column count has no effect.
 - **A group's `columns:` is derived from its tile count, not chosen.** A count the columns do
   not divide leaves an orphan on the last row and a hole beside it, and in `Top Row` it also
@@ -50,10 +74,37 @@ Edit the `.j2` files, never the live config: homepage seeds any missing file int
   `custom.css.j2` now wraps those blocks two per row, which also equalises tile height — every
   widget carries two to four stats, so all of them occupy two stat rows.
 - **The groups split by WIDGET, not by topic.** A widgeted tile is several lines tall and a
-  link-only tile is one line, so a group holding both leaves ragged holes. `Services`,
-  `Calendar` and `Media` hold the widgeted tiles; `Admin` and `Tools` hold link-only ones, four
-  per row. There is no `Tracking` group: it held one tile (Crypto), which moved into the
-  `Calendar` column on 2026-09-09 to fill the 144px that sat dead under the calendar.
+  link-only tile is one line, so a group holding both leaves ragged holes. `Services` holds every
+  widgeted tile bar the calendar; `Admin & Tools` holds the link-only ones, four per row. Two groups became four on 2026-09-10: the `Media` group's three surviving tiles moved into
+  `Services` to make that column four rows deep, and `Admin` and `Tools` merged into one group of
+  eight, which still divides by four. Jellyfin was dropped rather than moved (its widget had been
+  erroring since #1457).
+- **The calendar column auto-sizes to the Services column, and the wrapper between them is
+  `display: block !important`.** The two Top Row columns are separate grids, so nothing aligns
+  them on its own, and a `calc()` pin on the calendar broke every time a tile title wrapped at a
+  narrower width. The wrapper homepage puts between a group and its list carries Tailwind's
+  `block!`, so it can never be a flex container and the list can never be a flex item — that is
+  why ten attempts at a flex or grid chain all failed. `custom.css.j2` instead makes the group a
+  flex column, lets the wrapper grow as a block, then gives the list `height: calc(100% - 0.75rem)`
+  and splits it into eight equal `minmax(0, 1fr)` tracks with the same 0.75rem gap the Services
+  grid uses. The calendar spans six tracks and each link row takes one: with track t = (r - g) / 2,
+  six tracks and five gaps are three Services rows (3r + 2g) and two tracks plus a gap are one
+  (2t + g = r). Nothing is a pixel constant, so it holds for wrapped titles and every width. A
+  Services group that renders a different row count needs 2x that many tracks and a matching
+  `span`. `Top Row` is ITSELF a `div.services-group` wrapping the two column groups, so a
+  `:has(#my-calendar)` selector matches the outer group too and reaches the Services list —
+  which shipped Services eight 112px tracks and a 980px column on 2026-09-10. The selectors are
+  scoped with `:has(> div > ul > #my-calendar)` and `:has(> #my-calendar)` for that reason, and
+  `#my-calendar` carries `contain: size` so its natural height cannot outgrow the Services
+  column and set the row height.
+- **The calendar `<li>` must be sized by its grid tracks, never left at `auto`.** The card
+  carries `height: 100%`, which resolves only against a definite `<li>` height. A stretched grid
+  item is definite; an `align-self: start` one computes to `auto`, so the card took its content
+  height and a `max-height` on the `<li>` clamped only the `<li>`. An `<li>` does not clip, so the
+  overflow painted over the first row of links; measured at 1280px, a 360px `<li>` holding a 460px
+  card. `minmax(0, 1fr)` tracks keep a long event list from growing the `<li>` the other way.
+  `document.elementFromPoint` cannot see this — the links' stretched anchors win the hit test —
+  so compare `card.getBoundingClientRect().bottom` against the `<li>`'s.
 - **An icon-only tile must stretch its name anchor, not hide it.** Homepage renders a tile's
   name inside its own `<a>` carrying the same href as the icon anchor. `display: none` on that
   anchor leaves only the 48x32 icon as a hit target inside a 165px tile — most of the tile looks
@@ -141,13 +192,14 @@ Edit the `.j2` files, never the live config: homepage seeds any missing file int
   selected by no policy at all and proxies `/v1` through as `app: longhorn-ui`, which that policy
   does admit. The node-local-manager trap does not apply here: the caller is a pod and the target
   is the frontend Service.
-- **Four widgets are deliberately absent**, each blocked on a credential rather than on plumbing:
-  traefik (#1383 — `api.insecure: false` and the `DECIDED:` marker in
-  `roles/k8s/traefik/templates/dashboard-ingressroute.yaml.j2` mean `/api` is served nowhere the
-  widget can reach), grafana (#1384 — needs a service-account token; only the admin password
-  exists), crowdsec (#1385 — a LAPI machine credential is read/write on decisions) and
-  healthchecks (#1386 — needs a project API key created in the UI). Read the issue before adding
-  one; each records why it was not simply plumbed in.
+- **Three widgets are deliberately absent**, each blocked on a credential rather than on
+  plumbing: grafana (#1384 — needs a service-account token; only the admin password exists),
+  crowdsec (#1385 — a LAPI machine credential is read/write on decisions) and healthchecks
+  (#1386 — needs a project API key created in the UI). Read the issue before adding one; each
+  records why it was not simply plumbed in. Traefik was a fourth (#1383 — `api.insecure: false`
+  and the `DECIDED:` marker in `roles/k8s/traefik/templates/dashboard-ingressroute.yaml.j2` mean
+  `/api` is served nowhere the widget can reach); its tile was replaced by the deploy queue on
+  2026-09-10, so it has no tile to add a widget to.
 - The `docker.yaml` status dots have no k8s equivalent yet, so `docker.yaml.j2` renders empty
   and `services.yaml.j2` drops the matching `server:`/`container:` keys — tiles render
   dot-less rather than erroring on a `my-docker` host that does not exist here.

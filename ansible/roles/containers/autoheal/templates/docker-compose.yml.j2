@@ -21,6 +21,23 @@ services:
       # the jq pass alone was visible in top under load (2026-06-11). 30s detection
       # latency for an unhealthy container is fine for this fleet.
       - AUTOHEAL_INTERVAL=30
+      # A restart used to leave no trace outside the Pi's own docker logs, so a container
+      # flapping was invisible until someone went looking. Reuses the general-purpose
+      # `monitor_discord_webhook_url` — the same channel Uptime Kuma and monitor-bridge post
+      # to — rather than minting a webhook nobody would remember to rotate.
+      - WEBHOOK_URL={{ monitor_discord_webhook_url }}
+      # The image POSTs `{"<WEBHOOK_JSON_KEY>": "<message>"}` and defaults the key to `text`
+      # (read out of /docker-entrypoint on the live container, 2026-09-10). Discord's webhook
+      # API reads `content` and rejects `text` with a 400, so the default would notify nobody
+      # while every other signal — container healthy, deploy green — read fine.
+      - WEBHOOK_JSON_KEY=content
+      # A startup sleep before the FIRST poll, not a per-container grace period: Docker
+      # already suppresses `unhealthy` during a container's own healthcheck start_period.
+      # What this covers is the Pi rebooting, when autoheal and everything it watches come up
+      # together and the slow starters would otherwise be restarted mid-boot. The cost is that
+      # a deploy that recreates autoheal also blinds it for this long, which is why it is 120s
+      # and not the several minutes a full boot takes.
+      - AUTOHEAL_START_PERIOD=120
       - DOCKER_SOCK=tcp://docker-proxy-lifecycle:2375
     healthcheck:
       # Interval-only override: `test` is deliberately omitted, so Docker inherits the

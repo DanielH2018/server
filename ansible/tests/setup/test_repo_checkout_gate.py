@@ -26,6 +26,10 @@ from _helpers import ALL_VARS, HOST_VARS, SETUP_ROLES
 
 GATE = "has_repo_checkout"
 
+# Host allowlists whose every member holds a checkout, so membership gates as strongly as GATE.
+# By name, and only where another test pins the membership — see `_gated`.
+PINNED_ALLOWLISTS = frozenset({"dev_tooling_hosts"})
+
 # A path that only resolves where this repo is checked out.
 NEEDLES = ("}}/server", "playbook_dir", "~/server")
 
@@ -137,13 +141,21 @@ def _gated(when: object) -> bool:
     """Whether this `when` keeps the task off a host with no checkout.
 
     A host pin counts too: `inventory_hostname == 'daniel-box'` says strictly more than the gate,
-    since daniel-box holds a checkout by construction.
+    since daniel-box holds a checkout by construction. So does membership of one NAMED host
+    allowlist: `dev_tooling_hosts` (issue #1726) is daniel-box and daniel-server, both of which
+    hold a checkout, and test_dev_tooling_hosts.py asserts that exact membership. A list is
+    accepted here by name rather than by shape, because `inventory_hostname in <anything>` says
+    nothing on its own — an allowlist nobody has pinned could hold a checkout-less host.
     """
     if when is None:
         return False
     clauses = when if isinstance(when, list) else [when]
     text = " ".join(str(clause) for clause in clauses)
-    return GATE in text or "inventory_hostname ==" in text
+    return (
+        GATE in text
+        or "inventory_hostname ==" in text
+        or any(f"inventory_hostname in {name}" in text for name in PINNED_ALLOWLISTS)
+    )
 
 
 def test_the_census_finds_the_tasks_it_is_meant_to_check():
@@ -232,6 +244,18 @@ def test_an_ungated_task_is_rejected():
 def test_the_gate_is_accepted_in_both_when_forms():
     assert _gated(GATE)
     assert _gated([GATE, "not something_else"])
+
+
+def test_a_pinned_host_allowlist_counts_as_a_gate():
+    """`Install Git hooks` moved onto `dev_tooling_hosts` in #1726. Both members hold a
+    checkout, so the task still cannot reach daniel-stage."""
+    assert _gated("inventory_hostname in dev_tooling_hosts")
+
+
+def test_an_unpinned_host_allowlist_does_not():
+    """The rejecting half: membership of a list nobody has pinned says nothing about a checkout,
+    so accepting the SHAPE would gate a task on any list at all."""
+    assert not _gated("inventory_hostname in some_other_hosts")
 
 
 def test_daniel_stage_is_the_host_that_declares_no_checkout():

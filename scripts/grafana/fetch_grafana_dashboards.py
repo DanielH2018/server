@@ -22,16 +22,25 @@ Re-run to regenerate (e.g. after a Grafana upgrade or to refresh defaults):
 
     python3 scripts/grafana/fetch_grafana_dashboards.py
 
-Requires a running ``grafana`` container — it's used to reach Prometheus on the monitoring
-network for the ``label_values`` lookups. Idempotent; overwrites the JSON in the role.
+Reaches Prometheus through its cluster IngressRoute for the ``label_values`` lookups, the
+same endpoint and DNS pin ``probe.py metric`` uses. Idempotent; overwrites the JSON in the
+role.
 """
 
 import json
 import re
-import subprocess
-import urllib.parse
 import urllib.request
 from pathlib import Path
+
+# Reach the sibling package: a directly-invoked script gets only its own directory on
+# sys.path, and pyproject's `pythonpath` is a pytest setting.
+import sys as _sys
+from pathlib import Path as _Path
+
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+
+from diagnostics.probe_lib import core
+from diagnostics.probe_lib.core import prom_endpoint, prom_query_url
 
 # Datasource uids we provision (adopted from the pre-existing hand-made datasources).
 UID_BY_PLUGIN = {
@@ -50,6 +59,13 @@ SUBDIR = {"node-exporter-full": "Infrastructure", "cadvisor": "Infrastructure"}
 # link-speed / battery / fan sensors, and the systemd collector isn't enabled
 # (would need host D-Bus access from the container). Dropping them keeps the board
 # free of permanently-"No data" panels.
+#
+# The second group is the same rule applied to three collectors node_exporter ships
+# DISABLED by default, which the DaemonSet does not turn on. `count by (collector)
+# (node_scrape_collector_success)` is the census that names what IS registered — read
+# that before adding a panel back. `processes` feeds node_processes_*, `interrupts`
+# feeds node_interrupts_total, and `tcpstat` feeds node_tcp_connection_states; a panel
+# whose every target reads one of those is dead until the flag is added.
 DROP_PANELS = {
     "node-exporter-full": {
         "Network Saturation",
@@ -59,6 +75,14 @@ DROP_PANELS = {
         "Systemd Sockets Current",
         "Systemd Sockets Accepted",
         "Systemd Sockets Refused",
+        # processes / interrupts / tcpstat collectors, all off by default
+        "IRQ Detail",
+        "PIDs Number and Limit",
+        "Processes Detailed States",
+        "TCP Socket Queue",
+        "TCP Stat Persistent",
+        "TCP Stat Transient",
+        "Threads Number and Limit",
     },
 }
 
@@ -69,11 +93,28 @@ def fetch(gnet_id):
         return json.load(r)
 
 
-def prom_label_values(query, resolved):
+def prom_series(promql, endpoint=prom_endpoint, fetch_json=core.fetch_json):
+    """Run `promql` against the cluster Prometheus and return its series list.
+
+    Args:
+        promql: the query to run.
+        endpoint: the (base url, DNS pin) seam, `probe.py metric`'s own endpoint.
+        fetch_json: the HTTP seam, returning (data, err).
+
+    Returns:
+        The `data.result` list, or [] when the query could not be answered.
+    """
+    base, pin = endpoint()
+    data, err = fetch_json(prom_query_url(base, promql), resolve=pin)
+    return [] if err else data["data"]["result"]
+
+
+def prom_label_values(query, resolved, series=prom_series):
     """Resolve a Grafana ``label_values(...)`` query to a sorted list of values.
 
     `resolved` maps already-resolved variable name -> chosen value, substituted into the
-    query so chained variables (e.g. nodename depends on $job) resolve correctly.
+    query so chained variables (e.g. nodename depends on $job) resolve correctly. `series`
+    is the Prometheus seam, taking the built PromQL and returning its series list.
     """
     for name, val in resolved.items():
         query = query.replace("${%s}" % name, val).replace("$" + name, val)
@@ -87,20 +128,10 @@ def prom_label_values(query, resolved):
             return []
         label = m.group(1)
         promql = 'group by (%s)({__name__!=""})' % label  # rarely used; broad fallback
-    out = subprocess.run(
-        [
-            "docker",
-            "exec",
-            "grafana",
-            "wget",
-            "-qO-",
-            "http://prometheus:9090/api/v1/query?query=" + urllib.parse.quote(promql),
-        ],
-        capture_output=True,
-        text=True,
-        timeout=30,
-    ).stdout
-    result = json.loads(out)["data"]["result"]
+    # An unreachable or unparseable Prometheus yields no default rather than raising: the
+    # caller's next step is "pick a default for this variable", and a dashboard that lands
+    # with one variable undefaulted beats a run that dies part-way through rewriting the set.
+    result = series(promql)
     return sorted({s["metric"].get(label) for s in result if s["metric"].get(label)})
 
 

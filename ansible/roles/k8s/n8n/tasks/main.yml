@@ -45,11 +45,28 @@
 # described as a control. The positive half is already covered: the runners' wait-for-broker
 # initContainer connects to n8n:5679, so a Running runners pod proves the allow rule works.
 # This is the negative half.
+# ITS OWN DIRECTORY, not `manifests/n8n/` (#1668). That directory belongs to `k8s/manifests`,
+# whose prune task deletes every file in it the caller does not name in `manifests_files` — and
+# no caller names this probe, because it is this role's own file rather than a manifest of the
+# workload. Staged there it was deleted at the start of every n8n deploy and re-rendered a few
+# tasks later: two permanently `changed` tasks on an idempotent run. `n8n-netpol` follows
+# `headlamp-netpol` and `prowlarr-netpol` — a sibling name no role's `manifests_service` claims,
+# so no `kubectl apply -f <dir>/` sweeps it either.
+- name: Create the n8n probe manifest directory
+  tags: [deploy]
+  ansible.builtin.file:
+    path: /etc/rancher/k3s/manifests/n8n-netpol
+    state: directory
+    mode: "0700"
+    owner: root
+    group: root
+  become: true
+
 - name: Render the broker-isolation probe
   tags: [deploy]
   ansible.builtin.template:
     src: netpol-probe-job.yaml.j2
-    dest: /etc/rancher/k3s/manifests/n8n/netpol-probe-job.yaml
+    dest: /etc/rancher/k3s/manifests/n8n-netpol/netpol-probe-job.yaml
     mode: "0644"
     owner: root
     group: root
@@ -88,7 +105,7 @@
 - name: Run the broker-isolation probe
   tags: [deploy]
   ansible.builtin.command:
-    cmd: "k3s kubectl apply -f /etc/rancher/k3s/manifests/n8n/netpol-probe-job.yaml"
+    cmd: "k3s kubectl apply -f /etc/rancher/k3s/manifests/n8n-netpol/netpol-probe-job.yaml"
   become: true
   changed_when: true
 

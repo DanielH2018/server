@@ -232,6 +232,36 @@ data:
       # PG2: the cluster homelab Loki's own internals (loki_*) — nothing scraped it before
       # this job, despite slice-7-phase-d-loki.md assuming otherwise. Keeps the
       # Logs/loki-internals board alive past the Docker loki's retirement.
+      # GPU utilization on each node, through gpu-exporter (roles/k8s/gpu-exporter). The
+      # dri-device-plugin advertises the render node as `devic.es/dri` and jellyfin and tdarr
+      # both request it, but nothing turned the resulting load into a series — a slow transcode
+      # and a contended one were indistinguishable (#1446).
+      #
+      # Per-pod discovery, NOT a Service, and that is the point: this is a DaemonSet in front of
+      # two DIFFERENT GPUs (daniel-box AMD/amdgpu, daniel-server Intel/i915), so a ClusterIP
+      # would round-robin the scrape and produce one series flipping between two cards.
+      # `origin` carries the node name, matching the `node` job above.
+      #
+      # THE UTILIZATION SERIES DIFFERS BY DRIVER, because the drivers do. amdgpu gives a direct
+      # `homelab_gpu_busy_percent` gauge; i915 exposes no busy percentage without the perf PMU,
+      # so it gives `homelab_gpu_rc6_residency_seconds_total`, an idle counter whose complement
+      # is the busy fraction — a panel covering both nodes reads
+      # `homelab_gpu_busy_percent / 100` OR `1 - rate(homelab_gpu_rc6_residency_seconds_total[5m])`.
+      - job_name: gpu
+        scrape_interval: 1m
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            action: keep
+            regex: gpu-exporter
+          - source_labels: [__meta_kubernetes_pod_container_port_number]
+            action: keep
+            regex: "9101"
+          - source_labels: [__meta_kubernetes_pod_node_name]
+            target_label: origin
+          - source_labels: [__meta_kubernetes_pod_node_name]
+            target_label: instance
       - job_name: loki-homelab
         scrape_interval: 1m
         static_configs:
@@ -424,6 +454,68 @@ data:
             action: keep
           - source_labels: [__meta_kubernetes_pod_node_name]
             target_label: node
+      # Issue #1694: the third CrowdSec agent. The traefik pod runs a crowdsec-agent SIDECAR
+      # that parses the edge access log — the busiest log source in the fleet — and it was in
+      # neither of the jobs above, so its acquisition and parsing counters existed nowhere.
+      # A sidecar that stops parsing (a bad parser, a log it lost) then reads as nothing at
+      # all rather than as a drop.
+      #
+      # No `node` target_label, unlike crowdsec-node-agents: the edge is a single Recreate
+      # Deployment, so the job name identifies it on its own — the same shape the LAPI job
+      # above uses. The per-node CrowdSec boards therefore do not show it, deliberately.
+      #
+      # The keep on the container port is what makes this job select the sidecar rather than
+      # traefik itself: pod-role SD emits one target per DECLARED containerPort, and 6060 is
+      # declared only by the crowdsec-agent container (traefik/templates/deployment.yaml.j2).
+      # The sidecar binds 0.0.0.0:6060 from the image's own staged config.yaml, which
+      # crowdsec-config-install rsyncs in (build/docker/config.yaml at v1.8.0 —
+      # `prometheus.listen_addr: 0.0.0.0`; the entrypoint rewrites only the PORT, and only
+      # when METRICS_PORT is set, which this pod does not set).
+      #
+      # Reaching it needs the matching netpol grant: traefik's baseline policy fences every
+      # port but the two front-door ones, so 6060 is admitted to prometheus alone
+      # (netpol-baseline/templates/networkpolicy-traefik.yaml.j2). That grant and this job
+      # only work as a pair.
+      - job_name: crowdsec-traefik-agent
+        scrape_interval: 1m
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names: [{{ k8s_namespace }}]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            regex: traefik
+            action: keep
+          - source_labels: [__meta_kubernetes_pod_container_port_number]
+            regex: "6060"
+            action: keep
+      # Issue #1706: the fourth CrowdSec agent. The authelia pod runs a crowdsec-agent
+      # SIDECAR that parses the portal's own auth log into the in-cluster LAPI
+      # (authelia/templates/deployment.yaml.j2), and it was in none of the three jobs above.
+      # Failed-login parsing therefore had no series at all, so a sidecar that stops parsing
+      # (a bad parser, a rotated log it lost) reads as nothing rather than as a drop.
+      #
+      # Same shape as crowdsec-traefik-agent: no `node` target_label, because the portal is a
+      # single Deployment and the job name identifies it. The keep on the container port is
+      # what selects the sidecar rather than authelia itself — 6060 is declared only by the
+      # crowdsec-agent container, where authelia declares 9091.
+      #
+      # Its netpol grant is a from item of its OWN in
+      # netpol-baseline/templates/networkpolicy-authelia.yaml.j2, not a port appended to the
+      # traefik rule that file already had. Grant and job only work as a pair.
+      - job_name: crowdsec-authelia-agent
+        scrape_interval: 1m
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names: [{{ k8s_namespace }}]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            regex: authelia
+            action: keep
+          - source_labels: [__meta_kubernetes_pod_container_port_number]
+            regex: "6060"
+            action: keep
       # E7 (2026-08-13): the `traefik` job (Docker edge metrics on 9104) retired with the
       # edge. The bare `traefik` job name retires with it — the cluster edge stays
       # `traefik-k8s`, and monitor-bridge's traefik/cert checks are unpinned so they

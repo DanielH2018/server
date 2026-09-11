@@ -54,3 +54,73 @@ headlamp_k8s_crd_api_groups:
 #   gh release download <name>-<ver> -R headlamp-k8s/plugins -p '<name>-<ver>.tar.gz' -D /tmp
 #   sha256sum /tmp/<name>-<ver>.tar.gz
 headlamp_k8s_plugins: []
+
+# The Kubernetes Group an OIDC login arrives as, bound in templates/rbac.yaml.j2 alongside the
+# ServiceAccount. TWO pieces concatenated, and both belong to roles/setup/k3s:
+# `k3s_oidc_groups_prefix` + the Authelia group. The prefix exists so an Authelia group can
+# never collide with a built-in `system:` group; the API server applies it to every value of
+# the `groups` claim before RBAC sees it.
+#
+# Cross-role by necessity — the API server is the thing that mints the group name, and it is
+# configured in a role the k8s deploy play never runs (k3s-bringup.yml, applied by hand). Part
+# 1 of #1390 adds those flags and the test that the two spellings agree; until then no request
+# ever arrives with a group claim and this value binds nobody.
+headlamp_k8s_oidc_group: "oidc:admins"
+
+# ── OIDC login (#1390 part 3) ───────────────────────────────────────────────────────────────
+# ON since 2026-09-10. Turning it on REPLACES the ServiceAccount identity with the browser's:
+# Headlamp forwards the `id_token` and the API SERVER decides, so this switch is only safe
+# while daniel-box's apiserver reads an `AuthenticationConfiguration` trusting Authelia. That
+# is `k3s_authentication_config_path` in `roles/setup/k3s`, applied by hand through
+# `k3s-bringup.yml` because `roles/setup/k3s` is in `_BROAD_MANUAL_PREFIXES` and no tick
+# applies it. (It was six `--kube-apiserver-arg=oidc-*` flags until the two-issuer change on
+# 2026-09-10; the flags and the file are mutually exclusive.)
+#
+# So this variable is NOT independently safe to flip: it depends on state in a role the k8s
+# deploy play never runs, and on a playbook a person runs. Read the k3s role's `k3s_oidc_*`
+# block before changing it, and if that trust is ever removed from the API server, turn this
+# off in the same change — a token the API server does not trust leaves a dashboard that logs
+# in and Forbids every call.
+#
+# The Authelia client and its credential are rendered EITHER WAY. An unused client authorises
+# nobody, and keeping them out of the switch means arming this is one variable rather than a
+# second round of secret work.
+headlamp_k8s_oidc_enabled: true
+# The client id, which is also the audience: Authelia's default
+# `id_token_audience_mode: specification` puts only the client id in `aud`, and the API server
+# matches it against the `audiences` of every issuer in its authentication config. One value,
+# three places.
+headlamp_k8s_oidc_client_id: headlamp
+# THE PUBLIC name, and pinning it is forced by Headlamp's code rather than chosen. Headlamp
+# reads `-oidc-idp-issuer-url` ONCE, at server start, and builds one `oidc.Provider` from it
+# for every request (`oidcAuthConfig.IdpIssuerURL` in backend/cmd/headlamp.go at v0.45.0) —
+# there is no per-request issuer and no way to serve two. So this one value decides where
+# EVERY login goes, on both hostnames, and the LAN name sent public-route logins to
+# `auth.local.<domain>`, which a browser off the LAN cannot resolve. That was the reported
+# symptom.
+#
+# The public name is the one that works from both sides: a LAN browser reaches
+# `auth.<domain>` through Cloudflare, where an off-LAN browser reaches `auth.local.<domain>`
+# not at all. THE COST IS REAL AND WORTH NAMING — a LAN Headlamp login now depends on
+# external DNS and the Cloudflare edge, so an edge outage takes it out even though both
+# endpoints are three metres apart. Grafana made the opposite trade (LAN-only OIDC, admin form
+# as break-glass); Headlamp has no break-glass form, which is why it goes the other way.
+#
+# The API server trusts BOTH issuers regardless (`k3s_oidc_issuer_urls`), so this choice is
+# no longer a lockout: it decides which name a login goes through, not which token is
+# accepted. That is what made moving it safe.
+headlamp_k8s_oidc_issuer_url: "https://auth.{{ domain }}"
+# EMPTY, and empty is the working value rather than an unset one. Headlamp builds the callback
+# from the incoming request when this is blank — `getOidcCallbackURL` reads the request host
+# and `X-Forwarded-Proto`, per request (backend/cmd/headlamp.go) — so one instance serves
+# `headlamp.local.<domain>` and `headlamp.<domain>` with the right `redirect_uri` for each.
+# Setting it pins every login to one hostname's callback, which is what broke the public
+# route's second half. Both URIs are registered on the Authelia client to match; a callback
+# Authelia does not know fails the exchange with `invalid_request`.
+headlamp_k8s_oidc_callback_url: ""
+# `openid` is NOT listed, and adding it would send it twice: Headlamp prepends it itself —
+# `Scopes: append([]string{oidc.ScopeOpenID}, oidcAuthConfig.Scopes...)` in
+# backend/cmd/headlamp.go at v0.45.0. The issue text asks for `openid,profile,email,groups`.
+# `groups` is the one that carries the RBAC subject; without it the login succeeds and every
+# list call is Forbidden.
+headlamp_k8s_oidc_scopes: "profile,email,groups"

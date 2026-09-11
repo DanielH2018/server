@@ -87,6 +87,11 @@ kuma_docker_monitors: false
 # comment for why that distinction matters). Same for every host so far; override per-host
 # if a new host sits on a different LAN.
 lan_subnet: "10.0.0.0/24"
+# The LAN's default gateway. It is also the LAN's DHCP server, so it is the only host that
+# knows the names of the devices it leased addresses to — Pi-hole's dnsmasq config forwards
+# the LAN reverse zone here so PTR lookups return those names instead of nothing. Verified
+# against the live router 2026-09-10: `dig -x 10.0.0.1 @10.0.0.1` answers `Docsis-Gateway`.
+lan_router_ip: "10.0.0.1"
 # The production cluster's pod and Service ranges — k3s's defaults, which this cluster has
 # never overridden. Global rather than k3s role defaults because the consumer is the
 # hypervisor role on daniel-server: the staging guest's egress fence has to name them, and a
@@ -106,6 +111,41 @@ k3s_service_cidr: "10.43.0.0/16"
 k3s_cni0_gateways:
   - 10.42.0.1/32
   - 10.42.1.1/32
+# DECIDED: cni0 alone, for netpol_baseline_node_cidrs. The censused host caller has a fallback.
+# `netpol_baseline_node_cidrs` reads the pair above and NOT the flannel pair below, deliberately.
+# A host process reaching a baseline-selected pod on the other node is denied — measured
+# 2026-09-10 (#1725) with the pod's node as the only variable: from daniel-box, sonarr's
+# ClusterIP (pod on daniel-box) answered 200 while prowlarr's (pod on daniel-server) timed out,
+# and from daniel-server the two verdicts swapped. The census found ONE host caller of that
+# shape, `get_via_service()` in scripts/diagnostics/postflight.py, and it already falls back to
+# the workload's Traefik route when the ClusterIP does not answer (#1633) — which is why the
+# *arr `-monitoring` routes had to admit the flannel pair in #1697. Traefik itself is immune: its
+# policy's first ingress rule carries ports 8000/8443 with no `from:`, so the three host crons
+# that dial it are unaffected by this list. Adding the flannel pair here would re-scope every pod
+# the namespace-scoped baseline selects, to buy a fast path that already has a working fallback.
+# Contradict this with a NAMED host caller that has no route fallback.
+# The two nodes' flannel.1 VXLAN addresses — the OTHER source a host process can arrive as.
+# Which of the two sets a host request carries depends on where the traefik pod sits: traffic
+# to a pod on the SAME node leaves via cni0 and arrives as that node's cni0 gateway above,
+# while traffic to a pod on the OTHER node crosses the overlay and arrives as the sending
+# node's flannel.1 address. Traefik is pinned to daniel-box, so daniel-box arrives as
+# 10.42.0.1 and daniel-server as 10.42.1.0 — measured 2026-09-10 (#1693): from a
+# daniel-server shell `ip route get` to a daniel-box pod reads `src 10.42.1.0`, and the same
+# day's #1683 measurement read `ClientHost: 10.42.1.0` off Traefik's access log.
+#
+# Separate from k3s_cni0_gateways rather than merged into it: netpol-baseline reads that
+# variable for 16 workloads' NetworkPolicies, and admitting the overlay addresses to a route
+# must not silently widen those. A route with ANY host-process caller reads both lists: the
+# cni0 pair alone matches only while traefik happens to sit on the caller's node, and nothing
+# ties the traefik nodeSelector to a route's grants (#1697). loki-homelab's read route and the
+# three *arr `-monitoring` routes are the readers, and each is guarded by a test in
+# ansible/tests/k8s/.
+#
+# Verified per node with `ip -4 -o addr show flannel.1` (daniel-box: 10.42.0.0,
+# daniel-server: 10.42.1.0).
+k3s_flannel_node_ips:
+  - 10.42.0.0/32
+  - 10.42.1.0/32
 # wg-easy v15 picks its own client pool internally (no WG_DEFAULT_ADDRESS env in this
 # deploy) rather than Ansible assigning it, so this isn't a Service/Deployment input —
 # it exists purely so the comments that describe wg-easy's client range (traefik's
@@ -140,7 +180,7 @@ jellyfin_k8s_lan_ip: 10.0.0.241
 # Shared between roles/k8s/crowdsec (the engine that runs LAPI+AppSec) and roles/k8s/traefik
 # (the bouncer plugin middleware + the log-tailing agent sidecar). Cross-role, and role
 # defaults are invisible across roles.
-crowdsec_k8s_image: crowdsecurity/crowdsec:v1.8.0
+crowdsec_k8s_image: crowdsecurity/crowdsec:v1.8.1
 crowdsec_k8s_agent_username: k8s-traefik-agent
 crowdsec_k8s_server_agent_machine: daniel-server-agent
 # The authelia pod's agent sidecar. Here, not in the authelia role's defaults, because the
@@ -200,6 +240,45 @@ k3s_server_hosts:
 # (optimize_pi) but stamps none, so a reader there would report only that it is unarmed.
 # ENFORCED by ansible/tests/deploy/test_setup_drift_check.py.
 setup_drift_check_hosts:
+  - daniel-server
+
+# Hosts that witness the Loki read route, one Kuma monitor each (issue #1712). That route's only
+# caller is `probe.py loki-labels` / `loki-query` running as a HOST process, and its guard is a
+# ClientIP set of node-owned addresses — so a pod cannot witness it, and a single host cannot
+# either: #1693 left the route dead from daniel-server and reachable from daniel-box, because
+# which address a host arrives as depends on where the traefik pod sits.
+#
+# Both prod cluster nodes and nothing else. daniel-pi is not in the ClientIP set at all, and
+# daniel-stage is a different cluster with no loki-homelab. An allowlist for the same reason as
+# k3s_server_hosts above. ENFORCED by ansible/tests/setup/test_loki_route_witness.py.
+loki_route_witness_hosts:
+  - daniel-box
+  - daniel-server
+
+# Seconds after boot in which the witness skips its run. Shorter than its hourly cron, so at most
+# one slot is ever skipped — the constraint kuma-push-lib.sh's boot_grace_active documents. The
+# 2026-08-30 restart had the last pod reach Ready 5m18s after boot, so a witness firing inside
+# this window would report the route down while Traefik was still starting.
+loki_route_witness_boot_grace_s: 600
+
+# Hosts that get the developer tooling `initial_setup --tags tooling` installs: uv, the uv-
+# managed CLI tools (ansible-core, ansible-lint, prek), the pinned host Python, the
+# /usr/local/bin/uv symlink systemd and cron read, and the pinned Vale binary the prek `vale`
+# hook runs. The same list gates `Install Git hooks`, because prek is what that task runs.
+#
+# The predicate is "somebody commits from this host", not "this host holds a checkout".
+# daniel-pi is deliberately absent: it holds a checkout, so the `has_repo_checkout` gate these
+# tasks used to carry admitted it, but it is driven remotely over ssh and nobody commits from
+# it — the gate was a proxy for a property the Pi does not have. Measured 2026-09-10 (issue
+# #1726): the Pi has neither uv nor vale and runs the distro's Python 3.12, so the tag has
+# never been applied there, and provisioning a pinned Python 3.14 on a 512 MB Zero 2 W was the
+# outcome the operator rejected. daniel-stage is deliberately absent too: `initial_setup.yml`
+# has never completed against the guest at all (docs/staging-cluster.md, *Sequencing*).
+#
+# An allowlist for the same reason as k3s_server_hosts above — a host nobody thought about is
+# refused rather than provisioned. ENFORCED by ansible/tests/setup/test_dev_tooling_hosts.py.
+dev_tooling_hosts:
+  - daniel-box
   - daniel-server
 
 # Past this, the checkout the drift arms compare against is reported as its own fault. A host
@@ -435,8 +514,10 @@ k8s_pi_client_ip: 10.0.0.139
 # on: `server_ip` is a host_var, so a manifest that used it would render correctly under
 # Ansible and blow up in the manifest-render test harness, which has no host_vars either.
 #
-# One consumer: the `coredns-host` scrape job. A pod cannot reach the host forwarder at
-# 127.0.0.1 — that is the pod's own loopback — so the job needs the node's routable address.
+# Two consumers: the `coredns-host` scrape job and deploy-ui's EndpointSlice. A pod cannot
+# reach the host forwarder at 127.0.0.1 — that is the pod's own loopback — so the job needs
+# the node's routable address; deploy-ui needs it because its backend is a host process
+# (deploy-ui.service) rather than a pod.
 k8s_node_client_ip: 10.0.0.215
 # The port daniel-box's host CoreDNS publishes its Prometheus endpoint on. DUPLICATED FROM
 # `k3s_host_dns_metrics_port` in roles/setup/k3s/defaults/main.yml, deliberately: role

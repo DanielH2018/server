@@ -25,6 +25,30 @@ spec:
       ports:
         - port: 9091
           protocol: TCP
+    # :6060 is the crowdsec-agent SIDECAR's metrics port, and it needs a from item of its OWN
+    # (#1706). Appending the port to the rule above would admit TRAEFIK to it and prometheus to
+    # nothing — a NetworkPolicy rule ANDs its `from` with its `ports`. Nothing but prometheus
+    # may reach it: agent metrics enumerate every parser and scenario the portal runs, which is
+    # reconnaissance for an attacker.
+    #
+    # prometheus lives in the observability namespace since slice 3, so this is cross-namespace:
+    # namespaceSelector and podSelector are siblings in ONE from item, which ANDs them. As
+    # separate items they would OR, admitting every pod in observability and every prometheus
+    # anywhere. Same shape as networkpolicy-traefik.yaml.j2's :8080/:6060 grant.
+    #
+    # This grant and the `crowdsec-authelia-agent` scrape job in
+    # claude-otel/templates/prometheus.yaml.j2 only work as a pair: without the grant the job
+    # reads `up == 0` forever.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: observability
+          podSelector:
+            matchLabels:
+              app: prometheus
+      ports:
+        - port: 6060
+          protocol: TCP
 {% else %}
     # OFF. One empty rule admits everything. `ingress: []` would be the exact opposite and deny
     # everything, which is the easiest thing in this file to get backwards.

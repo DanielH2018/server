@@ -16,7 +16,7 @@ NAMES and would have failed `test_validate_config_templates.py`, whose red proof
 there under the name `test_yaml_error_passes_valid_and_catches_invalid`. A guard that fires on
 a correct suite is worse than no guard, because it gets switched off.
 
-SCOPE IS DELIBERATELY NARROW. The five modules in `scripts/validate/`, derived by glob rather
+SCOPE IS DELIBERATELY NARROW. The validator modules in `scripts/validate/`, derived by glob rather
 than listed. 46 of 156 test files in this repo carry an explicit rejecting half, but most of the
 rest are direct config assertions that need no red proof — they ARE the check. Policing all of
 them would produce a guard nobody could land, which is the failure mode described above.
@@ -44,11 +44,11 @@ RED_PROOF = re.compile(
 )
 
 
-# Not a validator: it re-downloads the vendored CRD schemas that k8s_manifests.py checks
-# against. One named exclusion, so the set stays derived rather than listed — the glob was
+# Not a validator: it re-downloads the vendored schemas this repo checks rendered config
+# against -- the traefik CRD schemas and Authelia's configuration schema. One named exclusion, so the set stays derived rather than listed — the glob was
 # `validate_*.py` until the modules dropped that prefix, at which point it matched nothing and
 # `test_the_scan_finds_the_validators` below is what said so.
-NOT_A_VALIDATOR = {"refresh_crd_schemas.py"}
+NOT_A_VALIDATOR = {"refresh_vendored_schemas.py"}
 
 
 def validators() -> list[Path]:

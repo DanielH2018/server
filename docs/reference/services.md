@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/service_catalog.py
-generated_at: 2026-09-03 18:17 UTC
-generated_sha: 4ee11a94
+generated_at: 2026-09-10 18:17 UTC
+generated_sha: f95da3c99
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,12 +12,12 @@ generated_sha: 4ee11a94
 
 # Services
 
-67 service(s) declared across 3 host(s).
+71 service(s) declared across 3 host(s).
 
 
 ## daniel-box
 
-55 service(s).
+59 service(s).
 
 | Service | Platform | Route | Auth | Backup tier | Auto-deploy |
 |---|---|---|---|---|---|
@@ -31,9 +31,11 @@ generated_sha: 4ee11a94
 | code-server | k8s | <span class="fqdn" data-host="code-server">code-server.&lt;domain&gt;</span> · <span class="fqdn" data-host="code-server.local">code-server.local.&lt;domain&gt;</span> | Authelia | daily -> B2 (default group); weekly -> B2 (default target) | denylisted (immutable registry/…:latest image with no version scheme — Renovate can never generate an update PR for it, so there is no bump event to auto-deploy regardless of the migrating-state PVC shape below) |
 | configarr | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | eligible |
 | crowdsec | k8s | <span class="fqdn" data-host="crowdsec-lapi.local">crowdsec-lapi.local.&lt;domain&gt;</span> (LAN only) | none (public/no-auth) | daily -> B2 (default group) | denylisted (platform — LAPI/AppSec/decision engine every bouncer queries; a failed deploy can open or close traffic unpredictably fleet-wide. COUPLING NOTE for a future promotion: crowdsec-db also holds LAPI machine registrations; a revert past an agent registration leaves that agent's stored password valid but the machine unknown) |
+| deploy-ui | k8s | <span class="fqdn" data-host="deploy.local">deploy.local.&lt;domain&gt;</span> (LAN only) | Authelia | no PVC (stateless) | denylisted (renders no Deployment — route-only (Service + EndpointSlice + IngressRoute) in front of deploy-ui.service on daniel-box; a bad route change exposes a page that starts deploys and clears the deployer's hold) |
 | docs | k8s | <span class="fqdn" data-host="docs.local">docs.local.&lt;domain&gt;</span> (LAN only) | Authelia | no PVC (stateless) | eligible |
 | dri-device-plugin | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | denylisted (manifests_rollout: '' skips the shared rollout gate; even a /health readinessProbe would only prove the HTTP listener, not that the plugin registered its gRPC socket with the kubelet, and an unregistered plugin makes jellyfin and tdarr unschedulable) |
 | freshrss | k8s | <span class="fqdn" data-host="freshrss">freshrss.&lt;domain&gt;</span> · <span class="fqdn" data-host="freshrss.local">freshrss.local.&lt;domain&gt;</span> | Authelia | weekly -> B2 (default target) | eligible |
+| gpu-exporter | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | eligible |
 | headlamp | k8s | <span class="fqdn" data-host="headlamp">headlamp.&lt;domain&gt;</span> · <span class="fqdn" data-host="headlamp.local">headlamp.local.&lt;domain&gt;</span> | Authelia | no PVC (stateless) | eligible |
 | healthchecks | k8s | <span class="fqdn" data-host="healthchecks">healthchecks.&lt;domain&gt;</span> · <span class="fqdn" data-host="healthchecks.local">healthchecks.local.&lt;domain&gt;</span> | Authelia | weekly -> B2 (default target) | denylisted (observability — cron dead-man's-switch monitor. ALSO Recreate + RWO volume-claim PVC (migrating-state shape) — two independent reasons. COUPLING NOTE for a future promotion: check UUIDs here are baked into ping URLs in unrelated crons fleet-wide; a revert past a check's creation leaves those crons pinging a dead UUID, silently dropped) |
 | home-assistant | k8s | <span class="fqdn" data-host="home-assistant">home-assistant.&lt;domain&gt;</span> · <span class="fqdn" data-host="home-assistant.local">home-assistant.local.&lt;domain&gt;</span> | none (public/no-auth) | daily -> R2 | eligible |
@@ -56,9 +58,11 @@ generated_sha: 4ee11a94
 | netpol-baseline | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | eligible |
 | node-exporter | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | eligible |
 | nut | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | denylisted (NOT probe-less (has a readinessProbe) despite the denylist comment grouping — real reason: USB-passthrough + node-exclusive hostPort (Recreate strategy) on the UPS shutdown-chain pod, privileged:true) |
+| nut-exporter | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | eligible |
 | peanut | k8s | <span class="fqdn" data-host="peanut">peanut.&lt;domain&gt;</span> · <span class="fqdn" data-host="peanut.local">peanut.local.&lt;domain&gt;</span> | Authelia | no PVC (stateless) | eligible |
 | pi-peer-backup | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | weekly -> B2 (default target) | eligible |
 | pihole | k8s | <span class="fqdn" data-host="pihole">pihole.&lt;domain&gt;</span> · <span class="fqdn" data-host="pihole.local">pihole.local.&lt;domain&gt;</span> | Authelia | unknown (PVC present, claim name not statically resolvable: {{ inst.claim }}) | denylisted (platform — LAN DNS resolver; a failed deploy breaks name resolution fleet-wide, and host probes stay green through that kind of outage) |
+| pihole-exporter | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | eligible |
 | prowlarr | k8s | <span class="fqdn" data-host="prowlarr">prowlarr.&lt;domain&gt;</span> · <span class="fqdn" data-host="prowlarr.local">prowlarr.local.&lt;domain&gt;</span> | Authelia | weekly -> B2 (default target) | eligible |
 | qbittorrent | k8s | <span class="fqdn" data-host="qbittorrent">qbittorrent.&lt;domain&gt;</span> · <span class="fqdn" data-host="qbittorrent.local">qbittorrent.local.&lt;domain&gt;</span> | Authelia | weekly -> B2 (default target); daily -> B2 (default group) | denylisted (state coupled outside the volume — reverting qbittorrent-config to a snapshot rewinds in-flight torrent bookkeeping while the media-data volume it references does not move; the pre-apply snapshot and revert work fine and are not the blocker) |
 | radarr | k8s | <span class="fqdn" data-host="radarr">radarr.&lt;domain&gt;</span> · <span class="fqdn" data-host="radarr.local">radarr.local.&lt;domain&gt;</span> | Authelia | weekly -> B2 (default target); daily -> B2 (default group) | eligible |
@@ -105,4 +109,4 @@ generated_sha: 4ee11a94
 
 ## Underivable facts
 
-23 field(s) read `unknown`. A fact with no machine-readable source prints its reason rather than a guess — see the FIELD NOTES section of `scripts/docs/service_catalog.py` for which facts those are and why.
+26 field(s) read `unknown`. A fact with no machine-readable source prints its reason rather than a guess — see the FIELD NOTES section of `scripts/docs/service_catalog.py` for which facts those are and why.

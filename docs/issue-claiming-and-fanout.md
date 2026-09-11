@@ -45,6 +45,14 @@ Two labels join `LABELS` in `findings_lib/issue_model.py` and are created by the
 inside group names, so the bare word is mildly overloaded; the label namespace is separate
 enough that this has not been worth a longer name.
 
+A third label is dated and therefore not in `LABELS`: `not-before:<YYYY-MM-DD>`, one label per
+date, created on demand by `plan_ensure_label` the first time `defer` or `open --not-before`
+needs it. It means "workable on that date, not earlier" and it expires by comparison: `next`
+and `claim` read it against today's UTC date, so nobody clears it. That is the property
+`manual` lacks. #1288 could be re-derived only once seven days of a metric existed, said so in
+its body, and was claimed, read and released unchanged six times in four days because the only
+withholding label was permanent and meant the wrong thing (#1739).
+
 ## The claim record
 
 A claim is a **comment**, following the machine-readable trailer convention
@@ -200,8 +208,14 @@ regression note, so no comment body ever carries a `Claim:` and a `Released:` li
 ### `next [--limit N]`
 
 The picking command. Returns open issues that are: `claude`-labelled, not `manual`, not
-live-claimed, and not already referenced by an open PR, ordered by the existing
-`issue_model.sort_key`.
+deferred to a date after today, not live-claimed, and not already referenced by an open PR,
+ordered by the existing `issue_model.sort_key`.
+
+A deferred issue is still named, under a `deferred: #<n> until <date>  <title>` line after the
+free rows. Under `--json` that line goes to stderr, because the array is the free set an
+orchestrator claims and a deferred row inside it would re-create the dispatch the date exists
+to prevent. Silently withholding it is the failure `manual` has: the operator reading the
+backlog cannot tell a withheld issue from a closed one.
 
 **There is no default bound.** `--limit` defaulted to 10, and an orchestrator read
 `next --json`, took the ten rows for the whole free set, and never saw the twelve behind them.
@@ -213,10 +227,24 @@ what stops a session picking up work another session has already finished but no
 
 ### `list`
 
-`list` gains no flag. It **marks** a manual row `[manual]` and a claimed one
-`[claimed:<worktree>]`, and hides neither. Hiding a manual row is how an issue like #1132
+`list` gains no flag. It **marks** a manual row `[manual]`, a deferred one
+`[deferred until <date>]` while the date is still ahead, and a claimed one
+`[claimed:<worktree>]`, and hides none of them. Hiding a manual row is how an issue like #1132
 stops being visible to anyone, including the operator who reserved it — and a flag defaulting
 to "show" that nothing can turn off is a flag that documents the opposite of what it does.
+
+### `defer <n> --until <YYYY-MM-DD>` / `defer <n> --clear`
+
+Sets, moves or clears the not-before date. `--until` creates the dated label if the repo lacks
+it, adds it, removes any other `not-before:` label the issue carries so it holds one date at
+most, and posts a `Deferred until <date>.` comment for the thread to read. `--clear` removes
+every `not-before:` label and comments; on an issue that carries none it exits 3, the same
+"nothing was written because the issue refuses it" code `claim` uses. `claim` on a deferred
+issue exits 3 too, and its refusal names `defer <n> --clear` as the way out — the escape is in
+the line the operator reads, which `manual`'s refusal never offered.
+
+`open --not-before <date>` files a new finding already deferred, for the case where the agent
+filing it knows the precondition is a date.
 
 ## What a fan-out agent may not do
 
@@ -279,23 +307,69 @@ The banner improvement is recoverable later with a gitignored `.claim` marker fi
 the worktree root, which `session-health.py` could read with no network call. That is not in
 scope here.
 
+## Placement across hosts
+
+`scripts/dev/fanout_place.py` names each worktree `fanout-<batch>` because it creates the
+worktree itself rather than going through the Agent tool, which only ever produces the
+`agent-<hash>` name above. Claims stay under the orchestrator's own worktree because
+`findings.py` reads `git worktree list` on daniel-box only, so it cannot see a claim naming a
+worktree that lives on daniel-server. A daniel-server agent stops at `gh pr create` and does
+not land its PR, because only daniel-box runs deploys. The manifest under
+`~/.claude/fanout/<run-id>.json` is what `status`, `clean`, and the SessionStart banner's
+`remote_fanout_lines` (`.claude/hooks/hooklib/worktree_lines.py`) all read to find a fan-out's
+live worktrees on the other host.
+
+The dispatcher scores a host on memory headroom, and an agent is throttled by two cgroup caps
+rather than one: `user.slice`, the fleet, and `user-1000.slice`, the login plane it runs in as
+a transient user service. It reads both and takes the smaller headroom, so the tighter cap
+decides and a host the fleet number alone would allow can still be refused. Each placement
+spends one 2.5 GiB reservation (`RESERVATION_BYTES` in `scripts/dev/fanout_lib/placement.py`),
+and the host with the most left takes the next batch.
+
+`clean` records each removal in the manifest, because the act destroys its own evidence: the
+remote leg reads the worktree it deletes, so a later pass has nothing left to ask. A batch
+already removed is skipped without an ssh call, `status` reports it as `cleaned` rather than
+reading a host whose report file went with the worktree, and the manifest is deleted only once
+every batch is removed.
+
+`launch` refuses daniel-server as a host until the operator registers its SSH key as a GitHub
+signing key once (`gh ssh-key add ~/.ssh/id_ed25519.pub --type signing`): the repo's ruleset
+requires a verified commit signature, and a PR signed with an unregistered key sits `BLOCKED`
+with every check green (PR #1572 needed a hand re-sign), so the dispatcher checks the key
+before it spends an agent.
+
+That check compares each candidate host's `user.signingkey` against the account's live list,
+read with `gh api /users/<login>/ssh_signing_keys`. `launch` exits 6 when no candidate host
+passes, and also when the list could not be read at all — a `gh` outage refuses the launch
+rather than placing a batch whose PR might not merge. `read` prints the same verdict per host
+as `signing=ok|unverified|unknown`, where `unknown` is that unreadable list, so it answers
+what exit 6 would refuse without spending an agent.
+
 ## The `/issue-fanout` skill
 
 1. **Triage.** Read `findings.py next --json`. Group the candidates so that no two agents touch
    the same Ansible role — the repo's parallel-sessions guidance already warns about several
    sessions editing a shared role, and two agents in one role is the same hazard with more
-   agents. Present the grouping and **stop for approval**: spawning N Opus agents is not a
-   routine action.
+   agents. Two shapes collide across roles and are bounded per wave instead: at most one batch
+   touches `ansible/vars/secrets.yml` (ciphertext conflicts are not hand-resolvable), and a
+   batch that adds a `containers_list` entry runs alone (a broad apply that fails on any
+   service parks every other batch's landing). The skill's triage step has the measured cases.
+   Present the grouping and **stop for approval**: spawning N Opus agents is not a routine
+   action.
 2. **Claim, then spawn.** Claim every issue in every batch serially, before spawning anything.
    This is what removes the race from the fan-out. The claim goes under the **orchestrator's**
    worktree name, because a subagent's worktree name is auto-generated and unknown until it
    starts — and a claim naming a worktree that does not exist yet would read as stale
    immediately. The orchestrator's worktree is live for the whole fan-out, so the claim is too.
-3. **Spawn.** One Opus agent per batch, spawned with `isolation: "worktree"` and
-   `model: "opus"` on the `Agent` call. Both are load-bearing and neither is a default: an
-   `Agent` call without `isolation` runs in the orchestrator's own checkout, so every agent
-   shares one working tree and commits over the others — the race the claim protocol assumes
-   away. The worktree it gets is auto-named, per the measurement below. The brief carries the
+3. **Spawn.** `uv run python scripts/dev/fanout_place.py launch --batch … ` places one Opus
+   agent per batch across both hosts and writes each brief itself — see *Placement across
+   hosts* above. The Agent tool is the fallback, not the default: the skill's *When the
+   dispatcher is unavailable* section covers a session with no ssh reach to daniel-server,
+   and there `isolation: "worktree"` and `model: "opus"` are both load-bearing and neither is
+   a default. An `Agent` call without `isolation` runs in the orchestrator's own checkout, so
+   every agent shares one working tree and commits over the others — the race the claim
+   protocol assumes away. The worktree it gets is auto-named, per the measurement below. Either
+   way the brief carries the
    issue bodies, the claim the agent already holds, the repo's `land-after-merge` contract, the
    blocking wait on the `VERDICT:` line (a backgrounded `land.sh` with redirected output is not
    a harness-tracked child, so nothing wakes the agent when it finishes), the
@@ -307,31 +381,24 @@ scope here.
 5. **Report.** A table of issue → worktree → PR → verdict. Any issue still claimed when the
    fan-out ends is named explicitly, so nothing is held silently.
 
-### Width is unbounded
+### Width is bounded by measured headroom
 
-The skill takes no agent-count parameter. The bound is the host's cgroup configuration, which
-exists already and is the right place for it — a per-skill number would be a second bound that
-drifts from the first.
-
-Two facts a wide fan-out runs into, measured on daniel-box 2026-09-05:
-
-| Scope | MemoryHigh | MemorySwapMax | MemoryMax |
-|---|---|---|---|
-| `user-1000.slice` | 8G | 2G | infinity |
-| `claude-rc.service` | 8G | 2G | infinity |
-
-Host: 28 GB RAM, 16 cores, 7 GB swap.
-
-The two planes carry **independent** caps, so a fan-out split across both can draw 16G plus 4G
-of swap before either throttles. And `MemoryHigh` throttles rather than caps — the 2026-09-05
-reclaim stall happened with it in force, leaving remote control unreachable for ~30 minutes
-while the unit read `active (running)`. The failure mode of an over-wide fan-out is that stall,
-not an OOM kill.
-
-Filed as issue #1264; out of scope for this change.
+The dispatcher (`scripts/dev/fanout_place.py`) bounds a fan-out's width by reading live memory
+headroom rather than a fixed count — see *Placement across hosts* above for how it places a
+batch. The caps behind that read: `user.slice`'s fleet `MemoryHigh`
+is 12G on daniel-box with an 8G per-plane sub-bound, and 10G on daniel-server, where the 8G
+login-plane cap is the effective bound because `claude-rc.service` does not run on that host.
+`MemoryHigh` throttles rather than caps — the 2026-09-05 reclaim stall (issue #1264) happened
+with it in force, leaving remote control unreachable for ~30 minutes while the unit read
+`active (running)`. The failure mode of an over-wide fan-out is that stall, not an OOM kill.
 
 The deploy lock serialises the other half. Every agent's landing queues on it, so past some width
 the fan-out buys parallel *implementation* and no parallel *landing* at all.
+
+The Agent-tool fallback path (*When the dispatcher is unavailable* in the skill) takes no
+agent-count parameter of its own; its bound is still the host's cgroup configuration, which
+exists already and is the right place for it — a per-skill number would be a second bound that
+drifts from the first.
 
 ## Testing
 

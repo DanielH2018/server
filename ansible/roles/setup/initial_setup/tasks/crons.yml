@@ -256,6 +256,32 @@
   # a broken thing successfully is invisible to every check that watches the deploy.
   when: has_repo_checkout
 
+- name: Schedule the weekly git object-store repair (box only)
+  tags: [crons]
+  # Several Claude sessions branch, commit and retire worktrees in this checkout every day, and
+  # each removal leaves that branch's objects unreachable. `scripts/dev/prune_worktrees.py --gc`
+  # drops the ones older than a day and clears a stale gc.log — see repair_object_store for why
+  # the grace period is not `now`.
+  #
+  # A CRON RUNS IT BECAUSE THE SESSIONS THAT SEE THE SYMPTOM CANNOT FIX IT (#1435). A
+  # worktree-isolated session's git commands are refused against the primary checkout, so the
+  # warning `git fetch` prints reaches only the agents structurally unable to act on it. Arming
+  # it on the prune path alone would leave the repair waiting on someone typing `--prune`.
+  #
+  # daniel-box only: the primary checkout and every worktree under it live there.
+  when: inventory_hostname == 'daniel-box'
+  ansible.builtin.cron:
+    name: "Weekly git object-store repair"
+    minute: "20"
+    hour: "4"
+    weekday: "0" # 0 is Sunday
+    # PATH explicitly: cron inherits neither /usr/local/bin nor the user's ~/.local/bin, so a
+    # bare `uv` is not found and the job fails silently on stderr nothing reads.
+    job: "cd /home/{{ sys_user }}/server && PATH=/usr/local/bin:/usr/bin:/bin /home/{{ sys_user }}/.local/bin/uv run --quiet python scripts/dev/prune_worktrees.py --gc"
+    user: "{{ sys_user }}"
+    cron_file: git-object-store-repair
+  become: true
+
 - name: Schedule the infrastructure-map refresh (box only)
   tags: [crons, infra-map]
   # Regenerates the architecture diagram + declared-vs-live map (scripts/infra_map/gen_infra_map.py).
@@ -443,6 +469,131 @@
     stamp_render_templates:
       - ansible/roles/setup/initial_setup/templates/setup-drift-check.sh.j2
       - ansible/roles/setup/initial_setup/templates/setup-drift-kuma-push.env.j2
+
+# ── Loki read-route witness, one per cluster node ─────────────────────────────────────────────
+# The route's only caller is a host process and nothing watched it (issue #1712). See
+# templates/loki-read-route-health.sh.j2 for why a pod cannot be the witness and why one host is
+# not enough.
+- name: Create the Loki read-route witness credentials directory
+  tags: [crons, loki_route_witness]
+  when: inventory_hostname in loki_route_witness_hosts
+  ansible.builtin.file:
+    path: /etc/homelab
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: Deploy the Loki read-route witness push credentials
+  tags: [crons, loki_route_witness]
+  when: inventory_hostname in loki_route_witness_hosts
+  # 0640 root:{{ sys_user }}: the cron runs as {{ sys_user }} (it needs that user's uv and age
+  # key), and nothing else on the host may read a token that can suppress this heartbeat.
+  ansible.builtin.template:
+    src: loki-route-kuma-push.env.j2
+    dest: /etc/homelab/loki-route-kuma-push.env
+    owner: root
+    group: "{{ sys_user }}"
+    mode: "0640"
+  become: true
+  no_log: true  # renders a Kuma push token
+
+- name: Create the Loki read-route verdict reader directory
+  tags: [crons, loki_route_witness]
+  when: inventory_hostname in loki_route_witness_hosts
+  ansible.builtin.file:
+    path: /opt/loki-route-health
+    state: directory
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0755"
+  become: true
+
+- name: Install the Loki read-route verdict reader
+  tags: [crons, loki_route_witness]
+  when: inventory_hostname in loki_route_witness_hosts
+  # Before the script that calls it, not after: the cron invokes the reader by absolute path, so
+  # a window where the script exists and the reader does not is a spurious DOWN on a first install
+  # — the same hazard the Longhorn backup-health reader documents in the k3s role.
+  ansible.builtin.copy:
+    src: loki_route_health.py
+    dest: /opt/loki-route-health/loki_route_health.py
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0755"
+  become: true
+
+- name: Deploy the Loki read-route witness
+  tags: [crons, loki_route_witness]
+  when: inventory_hostname in loki_route_witness_hosts
+  ansible.builtin.template:
+    src: loki-read-route-health.sh.j2
+    dest: /usr/local/bin/loki-read-route-health.sh
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: Schedule the Loki read-route witness
+  tags: [crons, loki_route_witness]
+  when: inventory_hostname in loki_route_witness_hosts
+  # Hourly, and as {{ sys_user }} rather than root: probe.py resolves the domain through that
+  # user's age key and runs from that user's uv. Minute 23 keeps it off the :00 and :30 slots the
+  # */10 and */30 health crons already crowd.
+  #
+  # The route carries no production traffic, so an hourly answer is proportionate — what this
+  # catches is a route that has been unreachable since the last deploy, not a transient.
+  ansible.builtin.cron:
+    name: "Loki read-route witness"
+    minute: "23"
+    job: "/usr/local/bin/loki-read-route-health.sh"
+    user: "{{ sys_user }}"
+
+- name: Record the rendered Loki read-route witness
+  tags: [crons, loki_route_witness]
+  when: inventory_hostname in loki_route_witness_hosts
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_render.yml"
+  vars:
+    stamp_render_name: loki-route-witness
+    stamp_render_templates:
+      - ansible/roles/setup/initial_setup/templates/loki-read-route-health.sh.j2
+      - ansible/roles/setup/initial_setup/templates/loki-route-kuma-push.env.j2
+
+- name: Record the deployed Loki read-route verdict reader
+  tags: [crons, loki_route_witness]
+  when: inventory_hostname in loki_route_witness_hosts
+  # `copy:`-deployed, so the render arm cannot see it — this is what puts it under the
+  # deployed-code arm, which compares live bytes against the repo.
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_deployed.yml"
+  vars:
+    stamp_deployed_name: loki-route-health
+    stamp_deployed_pairs:
+      - live: /opt/loki-route-health/loki_route_health.py
+        src: ansible/roles/setup/initial_setup/files/loki_route_health.py
+
+- name: Remove the Loki read-route witness from any host that is not a witness
+  tags: [crons, loki_route_witness]
+  # The way out. A host dropped from loki_route_witness_hosts keeps running the cron otherwise,
+  # pushing a monitor the manifest no longer declares — which Kuma answers 404, and which
+  # kuma-push-lib retries three times every hour forever.
+  when: inventory_hostname not in loki_route_witness_hosts
+  block:
+    - name: Remove the Loki read-route witness cron
+      ansible.builtin.cron:
+        name: "Loki read-route witness"
+        state: absent
+        user: "{{ sys_user }}"
+
+    - name: Remove the Loki read-route witness files
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /usr/local/bin/loki-read-route-health.sh
+        - /etc/homelab/loki-route-kuma-push.env
+        - /opt/loki-route-health
+      become: true
 
 - name: Create the docs-refresh state directory (box only)
   tags: [crons, docs]

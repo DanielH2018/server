@@ -51,6 +51,33 @@ out of "Pending Status Checks" between two reads with nothing but the callout to
 schedule, so staleness stays quiet, and a dependency Renovate cannot look up raises no PR, so
 the digest stays quiet too.
 
+## The stuck-pending clock, and the two ways it goes inert
+
+A fourth arm reads the dashboard's `## Pending Status Checks` section and pages when an item
+outlives its `minimumReleaseAge` plus `PENDING_GRACE_DAYS` (issue #886 — promtail sat 111 days
+against a 7-day soak). It measures dwell, so it needs state: `/var/lib/renovate-notify/pending_seen.json`
+holds each pending branch's first-seen epoch, and `write_pending_seen` writes it on every run
+regardless of what was posted.
+
+That state is the arm's single point of failure, and it fails silently in two shapes:
+
+- **A renamed marker empties the parse.** Renovate renamed the item marker `approvePr-branch=`
+  to `unpend-branch=` in September 2026, and the old name alone read 26 live items as zero
+  (#1472). `pending_section_unreadable` and `dashboard_headers_unrecognized` are the runtime
+  non-vacuity checks for that.
+- **A lost `pending_seen.json` restarts every clock at zero.** `stale_pending` treats an item
+  with no entry as first seen now — deliberately, so a first run cannot page for the whole
+  section at once — which makes a wiped state file indistinguishable from a bootstrap. The arm
+  then finds nothing for soak + grace: 14 days for a version bump, 10 for a digest one, with
+  every run reporting healthy. `pending_state_lost` tells the two apart using `last_run` as the
+  witness that this host has completed a run before, and the digest names the date the clocks
+  become usable again (#1526).
+
+**A reset posts once, then posts again the next day.** The reset rides the same fingerprint as
+the other three arms; the following run rewrites the file, so the component drops and the
+fingerprint moves a second time. The follow-up digest (or `CLEARED_MSG`) is the cost of one
+dedupe for all four arms.
+
 ## Notification is fingerprint-gated, not state-gated
 
 `fingerprint()` is the whole dedupe: the digest posts when the fingerprint changes and stays
@@ -98,9 +125,14 @@ are load-bearing rather than incidental:
 
 ## Working on it
 
-Logic lives in `files/notify_logic.py` (pure, no I/O) and the fetch/persist/post shell in
-`files/renovate_notify.py`. `host_lib.py` is copied in from `roles/setup/common/files/` — edit
-it there, not here.
+Logic lives in two pure modules, no I/O in either: `files/notify_logic.py` for the PR digest
+and the dashboard-level arms, `files/pending_logic.py` for everything that parses, times or
+renders a Pending-Status-Checks item. `notify_logic` imports `PENDING_HEADER` from
+`pending_logic` and nothing goes the other way, so the pair cannot cycle. The
+fetch/persist/post shell is `files/renovate_notify.py`, which imports from both. A new module
+here needs BOTH ship-list sites in `tasks/main.yml`: the copy loop and the
+`stamp_deployed_pairs` drift list. `host_lib.py` is copied in from `roles/setup/common/files/`
+— edit it there, not here.
 
 ```bash
 uv run pytest ansible/roles/setup/renovate_notify -q -n0

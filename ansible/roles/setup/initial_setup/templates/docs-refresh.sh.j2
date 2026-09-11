@@ -199,6 +199,32 @@ EOF
   return "$rc"
 }
 
+# The kept log names the failure but not the file it happened to. `prek` diffs the tree around
+# every hook, so it knows which path a hook rewrote; this script keeps only the hook's stdout. The
+# 2026-09-06 18:18 failure reported `files were modified by this hook` with 9063 tests passing and
+# named no file, which left a recurrence undiagnosable from the script's own evidence (#1436).
+#
+# These two reads name it. `git diff --stat` carries the answer: the pages are staged before the
+# hooks run, so a file a hook rewrites afterwards shows up as worktree-against-index.
+#
+# IT MUST RUN BEFORE restore_generated_tree. The restore puts every staged path back and clears
+# the index, so afterwards there is nothing left to read.
+#
+# Appended to the kept log, never written to $LOG: say_failure greps $LOG and keeps the last 400
+# characters, so writing there would push the failing hook's name out of the Kuma alert.
+keep_tree_evidence() {
+  mkdir -p "$STAMP_DIR" 2>/dev/null || return 0
+  {
+    printf '\n--- tree at commit failure, before the restore ---\n'
+    printf '# git status --porcelain -uall\n'
+    # -uall, because a hook that CREATES a file rather than rewriting one is the case this has to
+    # name: plain porcelain collapses a wholly untracked directory to `?? docs/assets/`.
+    git status --porcelain -uall 2>&1 | head -c 8192
+    printf '# git diff --stat (unstaged: what a hook rewrote after git add)\n'
+    git diff --stat 2>&1 | head -c 8192
+  } >>"$COMMIT_FAILED_LOG" 2>/dev/null || return 0
+}
+
 mark_commit_failed() {
   mkdir -p "$STAMP_DIR" 2>/dev/null || return 0
   printf '%s\n' "$1" >"$COMMIT_FAILED_STAMP" 2>/dev/null || return 0
@@ -344,6 +370,7 @@ git commit -m "docs: refresh generated reference pages" >"$LOG" 2>&1
 COMMIT_RC=$?
 if [ "$COMMIT_RC" -ne 0 ]; then
   keep_failure_log "$LOG"
+  keep_tree_evidence
   if restore_generated_tree "$STAGED_STATUS"; then
     RESTORE_NOTE="tree restored"
   else
