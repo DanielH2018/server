@@ -60,7 +60,7 @@ anything.
 |---|---|
 | `last_run` | When a tick last completed. A stale value means the timer is not firing. |
 | `hold_sha` | Non-empty: a previous SHA failed its health gate and is being held. Diagnose that before deploying anything else. |
-| `behind_since` | Non-empty: the checkout is behind `origin` and naming the tip it has not reached. A tick that fast-forwarded to a green ancestor of a pending tip sets this too — it is behind by design, and the 6h watchdog still pages if the tail never goes green. |
+| `behind_since` | Non-empty: the checkout is behind `origin`, naming the tip it has not reached. Its timestamp is when the deployer last FAST-FORWARDED, not when it first fell behind: any tick that moved the tree renews it, so a tick that landed at a green ancestor reads healthy while a tail that never goes green still pages at 6h. |
 
 ## Why a tick does nothing
 

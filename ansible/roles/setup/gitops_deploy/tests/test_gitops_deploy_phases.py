@@ -96,14 +96,37 @@ def test_assess_fast_forwards_to_the_newest_green_ancestor_of_a_pending_tip(
 
 
 def test_assess_still_defers_when_no_ancestor_in_the_walk_is_green(
-    gitops_deploy, tick, settings
+    gitops_deploy, tick, settings, capsys
 ):
-    """The rejecting half: an all-red walk leaves the tip's own verdict deciding the tick."""
+    """The rejecting half: an all-red walk leaves the tip's own verdict deciding the tick.
+
+    It says how many commits it read, because a walk that found nothing and a tip with
+    nothing below it both defer, and only the line tells an operator which one happened.
+    """
     tick.ci = "pending"
     tick.rev_list = [ORIGIN, NEWER_GREEN]
     tick.ancestor_ci = {NEWER_GREEN: "fail"}
     target = deploy_phases.assess(tick.tools, gitops_deploy.STATE, settings)
     assert (target.origin, target.action) == (ORIGIN, "ci_pending")
+    assert "no green ancestor in the 1 commit(s)" in capsys.readouterr().out
+
+
+def test_an_unauthenticated_host_does_not_walk_at_all(
+    gitops_deploy, tick, settings, capsys
+):
+    """Anonymous, the whole host shares 60 GitHub requests an hour; a walk spends ten.
+
+    Exhausting it reads as "CI not finished" for every reader on the host, so the walk would
+    buy one tick's latency by deferring the next several. Nothing below the tip is scripted
+    here, so the fake raises if the walk spends a single request.
+    """
+    tick.ci = "pending"
+    tick.authenticated = False
+    tick.rev_list = [ORIGIN, NEWER_GREEN]
+    target = deploy_phases.assess(tick.tools, gitops_deploy.STATE, settings)
+    assert (target.origin, target.action) == (ORIGIN, "ci_pending")
+    assert not [argv for argv in tick.git if argv[1] == "rev-list"]
+    assert "no GitHub token" in capsys.readouterr().out
 
 
 def test_assess_skips_a_red_ancestor_and_takes_the_green_one_below_it(

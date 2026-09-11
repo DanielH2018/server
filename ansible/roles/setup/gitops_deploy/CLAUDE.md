@@ -95,7 +95,12 @@ stay).
     the candidates whether it arrives as the tip or below one. The walk runs ONLY on a tick
     that would otherwise defer, and is bounded by `CI_ANCESTOR_WALK_MAX`
     (`gitops_deploy_ci_ancestor_walk_max`, 10) counting the tip's own request — so a tick costs
-    at most ten GitHub reads, and a tick that was going to deploy anyway still costs one. The
+    at most ten GitHub reads against the authenticated 5000/hour, and a tick that was going to
+    deploy anyway still costs one. **An UNAUTHENTICATED host does not walk at all**, and says so
+    in the journal: anonymous the limit is 60/hour per source IP, shared with every landing's
+    `await_ci.py` poll, so a ten-request burst per tick would exhaust it and every reader's next
+    call would read `HTTP Error 403` — which this gate maps to `pending`. The walk would then
+    buy one tick's latency by deferring the next several. The
     rule is `deploy_git.ci_walk_candidates`, which carries the `DECIDED:` marker.
     Master takes about 124 merges a day (median gap 315s, p25 88s) against a ~103s master CI
     sweep, so the tip is `pending` on most ticks that would deploy and the whole range waited
@@ -120,9 +125,12 @@ stay).
     it.** The tick ends on a SHA below the tip, so the host IS still behind origin;
     `entrypoint()` re-resolves the REAL `origin/<branch>` after `main()` returns, so
     `behind_since` names the tip rather than the chosen SHA and a tail that never goes green
-    still pages at 6h. It also keeps `land.sh` reporting `deferred` (exit 75, a resume point)
-    rather than `settled` for such a tick — `Landing.tick_state` reads `behind_since` ahead of
-    `broad_applied`.
+    still pages at 6h. What keeps that from paging on a deployer that is WORKING is the stamp's
+    meaning: it records when the tick last fast-forwarded, not when the host first fell behind —
+    the watchdog bullet below carries the rule. `land.sh` reads the same marker and would have
+    reported `deferred` (exit 75) for every self-applied PR the tick landed at an ancestor, so
+    `Landing.tick_state` checks the PR's own merge commit against the primary checkout before it
+    believes `behind_since` (issue #1786).
   - **This gates the DEPLOY, and it is the only gate.** This line read "branch protection gates
     the MERGE" until 2026-08-29, when `gh api repos/DanielH2018/server/branches/master/protection`
     was found to return 404 — there is no branch protection on `master`. The gate's value is
@@ -290,10 +298,21 @@ stay).
   `"<origin_sha> <first_seen_ts>"` to `/var/lib/gitops-deploy/behind_since` when it ends behind
   origin, cleared on convergence, and `monitor-bridge`'s **GitOps Deploy — Status** pages once the
   age exceeds `GITOPS_BEHIND_MAX_MIN` (6 h). Written AFTER `main()` so it reflects the state the
-  tick finished in, not the one it started in. The stamp is **not** refreshed per-SHA — a trickle
-  of pushes to a stuck host would otherwise restart the clock forever. Age-gated because being
-  behind is normal in the small: a push is behind for one tick, and the dirty path is behind for a
-  whole edit session by design.
+  tick finished in, not the one it started in. Age-gated because being behind is normal in the
+  small: a push is behind for one tick, and the dirty path is behind for a whole edit session by
+  design.
+  - **The stamp measures TIME WITHOUT A FAST-FORWARD, not time behind the tip.** Any tick that
+    moved the tree renews it — `entrypoint()` compares HEAD before and after and passes
+    `fast_forwarded=` to `record_behind` — and a tick that moved nothing keeps what is there, so
+    a trickle of pushes to a stuck host still cannot restart the clock: a stuck host does not
+    fast-forward. A rollback resets HEAD to where it started, which counts as no progress,
+    which is what it is. The two readings were the same thing before the ancestor walk, because
+    a tick either crossed the whole range or parked. They are not the same now — a deployer
+    landing every merge at the newest green ancestor is behind the tip on nearly every tick, and
+    under the per-SHA rule that preceded this its stamp aged past six hours while it was working
+    normally. Every reader says so in its own prose: `scripts/lib/deployer_park.py` (shared by
+    `deploy.sh` exit 4 and the SessionStart banner) and
+    `monitor-bridge/files/checks/service.py`.
   - **The `manual_plane` marker is the second arm of that watchdog, for the deferral that no
     longer leaves the host behind.** A recorded role fast-forwards, so `behind_since` clears
     and every marker the watchdog reads goes quiet while the role stays unapplied.

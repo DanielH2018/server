@@ -90,6 +90,10 @@ class ScriptedTick:
         self.rev_list: list[str] = [self.origin]
         # The verdict for each SHA BELOW the tip; `ci` is the tip's own.
         self.ancestor_ci: dict[str, str] = {}
+        # Whether `gh auth token` answers on this host. True because the deployer's host is
+        # logged in; a test flips it to drive the anonymous disarm, where the walk must spend
+        # no GitHub request at all.
+        self.authenticated = True
         self.paths: list[str] = []
         self.files: dict[str, str] = {}
         self.tree_listing = ""
@@ -344,6 +348,7 @@ def build_tools(scripted: ScriptedTick) -> DeployTools:
         git_status=scripted.git_status,
         is_ancestor=scripted.is_ancestor,
         fetch_ci_verdict=scripted.fetch_ci_verdict,
+        github_authenticated=lambda: scripted.authenticated,
         discord_post=scripted.discord_post,
         service_healthy=scripted.service_healthy,
         run_staging_scripts=scripted.run_staging_scripts,

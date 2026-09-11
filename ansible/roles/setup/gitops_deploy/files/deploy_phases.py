@@ -169,7 +169,22 @@ def _newest_green_ancestor(
 
     Returns None on a git failure as well as on an all-red walk: the tip's own verdict then
     decides the tick exactly as it did before this existed, which is the fail-closed direction.
+
+    It also returns None on an UNAUTHENTICATED host, before spending anything. The walk costs
+    up to `CI_ANCESTOR_WALK_MAX` GitHub reads on one tick, which is nothing against an
+    authenticated 5000/hour and a sixth of the anonymous hourly budget the whole host shares
+    with every landing's `await_ci.py` poll. Exhausting that budget reads as "CI not finished"
+    everywhere, so the walk would buy one tick's latency by deferring the next several.
     """
+    walk_max = config.ci_ancestor_walk_max
+    if walk_max <= 0:
+        return None
+    if not tools.github_authenticated():
+        log(
+            f"origin {tip[:8]}: CI {tip_ci}; not walking for a green ancestor — this host has "
+            "no GitHub token, and the anonymous 60/hour limit is shared with every landing"
+        )
+        return None
     try:
         rev_list = tools.run(
             ["git", "rev-list", "--first-parent", f"{local}..{tip}"], cwd=config.repo
@@ -177,7 +192,8 @@ def _newest_green_ancestor(
     except Exception as exc:
         log(f"could not list the commits below {tip[:8]}: {type(exc).__name__}: {exc}")
         return None
-    for behind, sha in ci_walk_candidates(rev_list, hold, config.ci_ancestor_walk_max):
+    candidates = ci_walk_candidates(rev_list, hold, walk_max)
+    for behind, sha in candidates:
         if tools.fetch_ci_verdict(sha) != "pass":
             continue
         log(
@@ -185,6 +201,13 @@ def _newest_green_ancestor(
             f"{sha[:8]} ({behind} behind the tip)"
         )
         return sha
+    # Said on every deferring tick, because the cost is what an operator reading a repeated
+    # deferral needs: a walk that read nine ancestors and found no green one is a different
+    # state from a tip with nothing below it, and both defer silently otherwise.
+    log(
+        f"origin {tip[:8]}: CI {tip_ci}; no green ancestor in the {len(candidates)} "
+        f"commit(s) below it that this tick could read"
+    )
     return None
 
 

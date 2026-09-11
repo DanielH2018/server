@@ -193,3 +193,8 @@ def test_the_walk_offers_nothing_when_the_tip_is_the_only_incoming_commit():
 def test_the_walk_offers_nothing_when_the_knob_is_zero():
     """A rejecting half: 0 disarms the walk rather than reading as unbounded."""
     assert ci_walk_candidates([_TIP, _ONE], None, 0) == []
+
+
+def test_a_negative_knob_disarms_the_walk_rather_than_widening_it():
+    """`rev_list[:-1]` is every commit but the OLDEST, which is the opposite of a bound."""
+    assert ci_walk_candidates([_TIP, _ONE, _TWO], None, -1) == []

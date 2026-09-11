@@ -210,10 +210,13 @@ phase medians there rather than by memory. CLI: `uv run python
 scripts/diagnostics/probe.py loki-query '{job="syslog"} |= "event=landing" | logfmt'`.
 
 `deferred` (exit 75) means the tick applies this PR itself — a setup role `initial_setup.yml`
-includes, or the deploy plane — and has not crossed origin yet, almost always because a newer
-merge's CI is still running. The next tick does it; nothing is wrong with the PR. `land.sh`
-reads that from the deployer's own `behind_since` and `hold_sha` markers, since a PR with no
-service tag leaves no other evidence of being applied. A held `hold_sha` is `deploy-failed`.
+includes, or the deploy plane — and has not crossed this PR's own merge commit yet, almost
+always because a newer merge's CI is still running. The next tick does it; nothing is wrong
+with the PR. `land.sh` reads that from the deployer's own `behind_since` and `hold_sha`
+markers, since a PR with no service tag leaves no other evidence of being applied — and it
+checks the merge commit against the primary checkout before believing `behind_since`, because
+the tick lands at the newest green ancestor and so sits behind the TIP on most ticks while
+working normally (issue #1786). A held `hold_sha` is `deploy-failed`.
 
 **Converging is not applying, and `land.sh` no longer treats it as such.** `behind_since` empty
 says local == origin, which any session's `git merge --ff-only` produces too — and once it

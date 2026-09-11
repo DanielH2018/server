@@ -32,6 +32,14 @@ gitops_deploy_ci_contexts:
 # of ~103s several times over, and the walk is spent inside one tick's wall clock while the
 # tree lock is held. A range longer than ten commits behind a red tail is a state for the
 # behind-origin watchdog to page on, not one to keep spending requests on.
+#
+# Worst case, authenticated: ten GETs on one tick against 5000/hour per token. ANONYMOUS the
+# walk does not run at all — `deploy_phases._newest_green_ancestor` asks
+# `tools.github_authenticated()` first and logs one line saying it skipped. The anonymous limit
+# is 60/hour per source IP, shared with every landing's await_ci.py poll (45 per 900s wait), so
+# a ten-request burst per tick would exhaust it and every reader on the host would then read
+# `HTTP Error 403`, which this gate maps to `pending` — buying one tick's latency by deferring
+# the next several. 0 (or any value below it) disarms the walk on every host.
 gitops_deploy_ci_ancestor_walk_max: 10
 
 # One GET per tick that would otherwise deploy, authenticated through `gh auth token` when the

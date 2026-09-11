@@ -105,21 +105,23 @@ def ci_walk_candidates(
 ) -> list[tuple[int, str]]:
     """The ancestors below the tip the gate may spend a CI request on, newest first.
 
-    # DECIDED: the gate chooses the NEWEST GREEN ANCESTOR, the walk is bounded, and a red
-    # ancestor is never chosen. `rev_list` is `git rev-list --first-parent <local>..<origin>`,
-    # newest first, so every SHA in it is `--ff-only` reachable from `local` and the deployer
-    # can still only fast-forward. The tip is `rev_list[0]` and is NOT offered: its verdict is
-    # already in hand, and re-querying it would spend a second request on an answer the caller
-    # has. `max_walk` bounds GitHub requests per tick INCLUDING that one, so a walk of 10 is
-    # ten requests in the worst case and the gate's share of the 5000/hour token limit stays
-    # one bounded burst per tick. `hold_sha` is dropped: a SHA a previous deploy failed on is
-    # not a tree to converge on, whether it arrives as the tip or as an ancestor of one.
-    # The caller stops at the first `pass`, so a `fail` ancestor is skipped and never chosen.
+    DECIDED: the gate chooses the NEWEST GREEN ANCESTOR, the walk is bounded, and a red
+    ancestor is never chosen. `rev_list` is `git rev-list --first-parent <local>..<origin>`,
+    newest first, so every SHA in it is `--ff-only` reachable from `local` and the deployer
+    can still only fast-forward. The tip is `rev_list[0]` and is NOT offered: its verdict is
+    already in hand, and re-querying it would spend a second request on an answer the caller
+    has. `max_walk` bounds GitHub requests per tick INCLUDING that one, so a walk of 10 is
+    ten requests in the worst case and the gate's share of the 5000/hour token limit stays
+    one bounded burst per tick. `hold_sha` is dropped: a SHA a previous deploy failed on is
+    not a tree to converge on, whether it arrives as the tip or as an ancestor of one.
+    The caller stops at the first `pass`, so a `fail` ancestor is skipped and never chosen.
 
     Args:
         rev_list: the incoming commits, newest first, tip included.
         hold_sha: the SHA this host refuses to redeploy, or None.
-        max_walk: most CI verdicts one tick may fetch, the tip's included. 0 disarms the walk.
+        max_walk: most CI verdicts one tick may fetch, the tip's included. 0 disarms the
+            walk, and so does a negative value — clamped here rather than trusted, because
+            `rev_list[:-1]` is "everything but the oldest commit", the opposite of a bound.
 
     Returns:
         `(distance below the tip, sha)` pairs — the distance is what the journal line prints
@@ -128,7 +130,7 @@ def ci_walk_candidates(
     """
     return [
         (distance, sha)
-        for distance, sha in enumerate(rev_list[:max_walk])
+        for distance, sha in enumerate(rev_list[: max(0, max_walk)])
         if distance > 0 and sha != hold_sha
     ]
 
@@ -242,7 +244,12 @@ def is_diverged(
 
 
 def behind_marker(
-    behind: bool, origin_head: str, existing: str | None, now: float
+    behind: bool,
+    origin_head: str,
+    existing: str | None,
+    now: float,
+    *,
+    fast_forwarded: bool,
 ) -> str | None:
     """Next value of the `behind_since` marker.
 
@@ -251,17 +258,31 @@ def behind_marker(
     `behind` means origin is strictly ahead of local at the END of a tick — we saw new commits and
     did not converge on them. Unlike is_diverged this is not a broken state on its own: a routine
     push is behind for exactly one tick, and the dirty-tree path is behind for as long as the
-    operator is editing (deliberately healthy). What is NOT healthy is staying behind, which is why
-    the marker carries a first-seen timestamp and monitor-bridge pages on AGE, not on presence.
+    operator is editing (deliberately healthy). What is NOT healthy is the deployer making no
+    progress, which is why the marker carries a first-seen timestamp and monitor-bridge pages on
+    AGE, not on presence.
 
-    The timestamp survives across ticks and resets only when we converge — deliberately not per-SHA.
-    Re-stamping on each new origin SHA would let a steady trickle of pushes to a permanently-stuck
-    host restart the clock forever, which is the exact failure this is meant to catch. The SHA is
-    refreshed each tick so the alert names where origin actually is.
+    The stamp therefore measures TIME WITHOUT A FAST-FORWARD, not time behind the tip. A tick
+    that moved the tree re-stamps; a tick that moved nothing keeps what is there. Before the
+    ancestor walk those were the same thing — the tick either crossed the whole range or parked —
+    and the stamp reset only on convergence, so that a trickle of pushes to a permanently-stuck
+    host could not restart the clock. It still cannot: a stuck host does not fast-forward. But a
+    deployer landing every merge at the newest green ancestor is behind the tip on EVERY tick,
+    and under the old rule its stamp aged past six hours while it was working normally.
+
+    Args:
+        behind: whether origin is strictly ahead of local at the end of the tick.
+        origin_head: the REAL `origin/<branch>`, so the marker names where origin actually is
+            even on a tick that fast-forwarded to an ancestor of it.
+        existing: the marker as this tick found it, or None.
+        now: the current time, in `time.time()` terms.
+        fast_forwarded: whether this tick moved the tree at all. The caller compares HEAD
+            before and after, so a rollback — which resets back to where it started — counts
+            as no progress, which is what it is.
     """
     if not behind:
         return None
-    if existing:
+    if existing and not fast_forwarded:
         parts = existing.split()
         if len(parts) == 2:
             return f"{origin_head} {parts[1]}"

@@ -198,10 +198,11 @@ validates `--tags`, so a stale tree carrying a tag it does not recognise reports
 landing of a new role reads as a tag miss until the tick fast-forwards the merge commit, and
 `land.sh` retries a stale tree while it reports a tag miss as a failed deploy.
 
-**Read the second paragraph of an exit 4 before you rebase.** When the deployer's own
-`behind_since` marker is older than four ticks, the refusal appends a line saying so: the tree
-is behind because the PRIMARY checkout is parked, not because this worktree is stale, and
-rebasing here deploys nothing. The repair is the deployer's — `journalctl -t gitops-deploy`
+**Read the second paragraph of an exit 4 before you rebase.** When the deployer has not
+fast-forwarded for longer than four ticks — its own `behind_since` marker, whose stamp any
+tick that moved the tree renews — the refusal appends a line saying so: the tree is behind
+because the PRIMARY checkout is parked, not because this worktree is stale, and rebasing here
+deploys nothing. The repair is the deployer's — `journalctl -t gitops-deploy`
 names the skip reason. The SessionStart banner carries the same decision
 (`scripts/lib/deployer_park.py` is the one copy of it), but only reaches a session as it opens;
 this reaches one that has been running for an hour (issue #1429).

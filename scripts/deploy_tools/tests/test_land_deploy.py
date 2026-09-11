@@ -270,7 +270,7 @@ def test_a_stale_retry_waits_on_ci_even_when_the_tip_is_unchanged(landing):
     """Issue #1084: PR #1051's landing hit exit 4 while master CI on the merge commit was
     still 2m48s from green. The old code gated the CI wait behind `tip_sha != merge_sha`, so
     an unchanged tip (default Fakes tip == MERGE_SHA) got no wait and no backoff at all. The
-    wait reads the merge commit now, and it still runs on every attempt."""
+    wait reads the merge commit instead, and it runs on every attempt."""
     ln, calls = _ready(landing, Fakes(deploy=[4, 0]))
     ln.resolved_tags = ["sonarr"]
     deploy.deploy_phase(ln)

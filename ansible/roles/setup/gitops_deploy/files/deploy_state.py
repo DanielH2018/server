@@ -325,7 +325,9 @@ class DeployerState:
             return
         self.write_hold(None)
 
-    def record_behind(self, origin: str, behind: bool, now: float) -> None:
+    def record_behind(
+        self, origin: str, behind: bool, now: float, *, fast_forwarded: bool
+    ) -> None:
         """Record whether this host ended the tick behind origin (see `behind_marker`).
 
         Args:
@@ -333,10 +335,21 @@ class DeployerState:
             behind: whether `local` is a strict ancestor of `origin` — the caller does the
                 ancestry query, because that reaches git and this object reaches only files.
             now: the current time, in `time.time()` terms, for a first-seen stamp.
+            fast_forwarded: whether the tick moved the tree, which is what the stamp
+                measures the absence of. The caller compares HEAD before and after, because
+                that reaches git too.
 
         Called AFTER main() so it records the state the tick finished in, not the one it
         started in: a tick that deployed successfully converged and must clear the marker
-        rather than leave a stale one for the next 30 minutes. The first-seen stamp inside
-        `behind_marker` is preserved across ticks and reset only on convergence.
+        rather than leave a stale one for the next 30 minutes.
         """
-        self.write("behind", behind_marker(behind, origin, self.behind_since, now))
+        self.write(
+            "behind",
+            behind_marker(
+                behind,
+                origin,
+                self.behind_since,
+                now,
+                fast_forwarded=fast_forwarded,
+            ),
+        )

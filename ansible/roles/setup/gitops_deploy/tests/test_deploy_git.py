@@ -164,26 +164,53 @@ def test_a_blank_trailing_line_is_not_an_entry():
 
 
 def test_behind_marker_cleared_when_caught_up():
-    assert behind_marker(False, "originX", "originW 100.0", now=200.0) is None
+    assert (
+        behind_marker(
+            False, "originX", "originW 100.0", now=200.0, fast_forwarded=False
+        )
+        is None
+    )
 
 
 def test_behind_marker_stamps_now_on_first_tick_behind():
-    assert behind_marker(True, "originX", None, now=200.0) == "originX 200.0"
+    assert (
+        behind_marker(True, "originX", None, now=200.0, fast_forwarded=False)
+        == "originX 200.0"
+    )
 
 
 def test_behind_marker_keeps_first_seen_across_ticks():
     # Still behind 10 min later: the age must keep growing, not reset.
-    assert behind_marker(True, "originX", "originX 200.0", now=800.0) == "originX 200.0"
+    assert (
+        behind_marker(True, "originX", "originX 200.0", now=800.0, fast_forwarded=False)
+        == "originX 200.0"
+    )
 
 
-def test_behind_marker_keeps_first_seen_when_origin_advances():
+def test_behind_marker_keeps_first_seen_when_origin_advances_and_the_tick_moved_nothing():
     # A new push while still stuck refreshes the SHA but must NOT restart the clock — otherwise a
     # steady trickle of pushes to a permanently-stuck host never trips the age threshold.
-    assert behind_marker(True, "originZ", "originX 200.0", now=800.0) == "originZ 200.0"
+    assert (
+        behind_marker(True, "originZ", "originX 200.0", now=800.0, fast_forwarded=False)
+        == "originZ 200.0"
+    )
+
+
+def test_behind_marker_restamps_when_the_tick_fast_forwarded():
+    # The other half of the rule above: the stamp measures time WITHOUT a fast-forward. A tick
+    # that landed at the newest green ancestor ends behind the tip every time, so without this
+    # a deployer deploying normally would age past the 6h watchdog while doing its job.
+    assert (
+        behind_marker(True, "originZ", "originX 200.0", now=800.0, fast_forwarded=True)
+        == "originZ 800.0"
+    )
 
 
 def test_behind_marker_restamps_when_marker_unparseable():
-    assert behind_marker(True, "originX", "garbage", now=200.0) == "originX 200.0"
+    assert (
+        behind_marker(True, "originX", "garbage", now=200.0, fast_forwarded=False)
+        == "originX 200.0"
+    )
 
 
 # The dirty-tree alert fires on every 30-min tick by default, which spams the

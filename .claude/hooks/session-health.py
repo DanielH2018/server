@@ -175,12 +175,14 @@ def dirty_primary_lines(porcelain, path):
 
 
 def behind_park_lines(marker, now):
-    """One banner line when the deployer has been behind origin too long to be a queue, or [].
+    """One banner line when the deployer has gone too long without a fast-forward, or [].
 
     `behind_since` holds `"<origin_sha> <unix_ts_first_seen>"` while the host is behind
-    `origin/master`, and the stamp survives across ticks — it resets only on convergence. A
-    routine push clears in one tick; a stamp older than `BEHIND_PARK_SECONDS` means several ticks
-    in a row declined to converge, which is a park. This catches the parks a dirty tree does not
+    `origin/master`. Any tick that fast-forwarded renews the stamp, so its age is how long the
+    deployer has moved the tree nowhere rather than how long it has been behind the tip — which
+    is the number that means something now the tick lands at the newest green ancestor. A
+    routine push clears in one tick; a stamp older than `BEHIND_PARK_SECONDS` means several
+    ticks in a row moved nothing, which is a park. This catches the parks a dirty tree does not
     explain (a held SHA, an unapplied broad plane) as well as the one it does.
 
     Malformed or unparsable content reads as "no park": the marker is written atomically, and a
@@ -192,8 +194,9 @@ def behind_park_lines(marker, now):
     if age is None:
         return []
     return [
-        f"  ✗ the GitOps deployer has been behind origin/master for {int(age // 60)} min "
-        "— that is a park, not a queue; check `journalctl -t gitops-deploy` for the skip reason"
+        f"  ✗ the GitOps deployer has not fast-forwarded for {int(age // 60)} min and is behind "
+        "origin/master — that is a park, not a queue; check `journalctl -t gitops-deploy` for "
+        "the skip reason"
     ]
 
 
