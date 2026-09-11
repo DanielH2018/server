@@ -458,15 +458,23 @@ lock_holder_seen=$(read_lock_holder)
 exec {lockfd}>"$LOCK"
 lock_started=$SECONDS
 lock_taken=0
+flock_status=0
 if flock -n "$lockfd"; then
     lock_taken=1
     # Nobody was in the way, so whatever the sample caught had already released. Naming it
     # would credit the wait to a holder there was no wait for.
     lock_holder_seen=""
-# No `-E` here: that flag belongs to flock's command form. On a descriptor flock returns 1
-# when the wait elapses, and this maps that to LOCK_BUSY itself.
-elif flock -w "$LOCK_WAIT" "$lockfd"; then
-    lock_taken=1
+else
+    # `-E "$LOCK_BUSY"` applies to the descriptor form as it did to the command form, and it
+    # is what keeps CONTENTION distinct from any other flock failure: only a timeout returns
+    # 75, and a genuine error still returns flock's own code, exactly as before. Dropping it
+    # and treating every failure as busy would have reported "nothing was deployed, retry
+    # shortly" for a lock file this wrapper could not even open.
+    flock -w "$LOCK_WAIT" -E "$LOCK_BUSY" "$lockfd"
+    flock_status=$?
+    if [[ "$flock_status" == 0 ]]; then
+        lock_taken=1
+    fi
 fi
 lock_waited=$((SECONDS - lock_started))
 
@@ -480,7 +488,7 @@ if [[ "$lock_taken" == 1 ]]; then
     status=$?
     flock -u "$lockfd"
 else
-    status="$LOCK_BUSY"
+    status=$flock_status
 fi
 exec {lockfd}>&-
 

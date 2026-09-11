@@ -63,8 +63,13 @@ DEPLOY_TAGS_ARGV = ("uv", "run", "python", "scripts/deploy_tools/deploy_tags.py"
 _ACQUIRED = re.compile(
     r"deploy: lock acquired after (\d+)s(?: \(holder was: (.*)\))?\s*$"
 )
+# `[^;]*` rather than `\d+` for the in-flight seconds: that number is NOT booked, so requiring
+# it to parse would throw away the one that is. gitops_tick.sh derives it from /proc/uptime and
+# renders `already s in flight` if that read ever comes back empty, which under `\d+` stopped
+# the line matching at all and silently restored `lock=0` -- the exact failure this parser
+# exists to end. Bounded at the `;` so it cannot run into the seconds that ARE booked.
 _JOINED = re.compile(
-    r"gitops_tick: joined a tick already \d+s in flight; waited (\d+)s for it\s*$"
+    r"gitops_tick: joined a tick already [^;]*in flight; waited (\d+)s for it\s*$"
 )
 # `annotation_line` writes the holder as `holder="..."`, so an unstripped quote splits one
 # Loki row into fields the board reads as something else. `lock_holder` sanitises its own
@@ -88,9 +93,15 @@ def in_flock_wait(line: str) -> tuple[int, str] | None:
 
 
 def stream_stderr(
-    argv: list[str], cwd: Path, observe: Callable[[int, str], None] | None
+    argv: list[str], cwd: Path | None, observe: Callable[[int, str], None] | None
 ) -> int:
     """Run `argv`, echo its stderr through line by line, report waits; its exit code.
+
+    `cwd` is None to INHERIT this process's working directory, which is not the same as
+    passing any particular path: deploy.sh renders from its working directory and deploy_tags
+    reads ranges relative to it, so re-aiming either is a silent change of which checkout was
+    deployed (this module's own docstring). A caller that does not need a specific cwd must
+    pass None rather than a plausible-looking one.
 
     stdout stays this process's own handle and stderr becomes a pipe. Both are BLOCKING file
     handles, which is what Ansible requires; `land.py` clears O_NONBLOCK on the handle this
@@ -118,11 +129,15 @@ def run_tick(observe: Callable[[int, str], None] | None = None) -> int:
     `observe` is given the seconds and holder of a wait the wrapper reports on its own
     stderr. Without one the child simply inherits stdio: the pipe is the more fragile
     arrangement, so it is taken only when a caller is booking what it reads.
+
+    The SCRIPT comes from beside land.py (issue #851) but the working directory is inherited
+    either way. Pinning it to `HERE` would have aimed the tick at this checkout's
+    scripts/deploy_tools, which is the re-aiming this module's docstring warns about.
     """
     argv = [str(HERE / "gitops_tick.sh")]
     if observe is None:
         return subprocess.run(argv, check=False).returncode
-    return stream_stderr(argv, HERE, observe)
+    return stream_stderr(argv, None, observe)
 
 
 def run_deploy(

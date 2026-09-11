@@ -6,18 +6,43 @@ Run: uv run pytest scripts/deploy_tools/tests/test_land_tools.py
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 from deploy_tools.land_lib import tools
 
 
 def _capture(monkeypatch):
+    """Record the argv and kwargs of whichever subprocess call a boundary makes.
+
+    The whole `subprocess` MODULE is replaced rather than one function on it, so a boundary
+    that reaches for `Popen` is seen by the same seam as one that reaches for `run` -- both
+    spellings answer the same questions here, which checkout and which working directory.
+    One patch rather than two also keeps this file inside its entry in
+    ansible/tests/monkeypatch_allowlist.txt, which only ever falls.
+    """
     seen = {}
 
     def run(argv, **kw):
         seen.update(argv=list(argv), **kw)
         return subprocess.CompletedProcess(argv, 0, "", "")
 
-    monkeypatch.setattr(tools.subprocess, "run", run)
+    class Popen:
+        returncode = 0
+        stderr = ()
+
+        def __init__(self, argv, **kw):
+            seen.update(argv=list(argv), **kw)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+    fake = SimpleNamespace(**vars(subprocess))
+    fake.run = run
+    fake.Popen = Popen
+    monkeypatch.setattr(tools, "subprocess", fake)
     return seen
 
 
@@ -189,3 +214,28 @@ def test_a_watched_stderr_line_reaches_the_observer(tmp_path, capsys):
     )
     assert booked == [(5, "")]
     assert "TASK [x]" in capsys.readouterr().err
+
+
+def test_a_joined_line_books_its_wait_even_when_the_in_flight_seconds_are_missing():
+    """The in-flight seconds are NOT booked, so an unreadable one must not cost the one that is.
+
+    gitops_tick.sh derives that number from /proc/uptime and renders `already s in flight` if
+    the read comes back empty. A parser that required it to be a number stopped matching and
+    silently restored `lock=0`.
+    """
+    assert tools.in_flock_wait(
+        "gitops_tick: joined a tick already s in flight; waited 47s for it\n"
+    ) == (47, "")
+
+
+def test_the_watched_tick_inherits_the_working_directory(monkeypatch):
+    """`cwd=None`, not `HERE`.
+
+    The SCRIPT comes from beside land.py (issue #851), but pinning the working directory is
+    the re-aiming tools.py's own docstring warns about -- deploy.sh renders from its cwd and
+    deploy_tags reads ranges relative to it.
+    """
+    seen = _capture(monkeypatch)
+    tools.run_tick(observe=lambda *_: None)
+    assert seen["argv"] == [str(tools.HERE / "gitops_tick.sh")]
+    assert seen["cwd"] is None

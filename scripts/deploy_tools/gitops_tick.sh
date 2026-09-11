@@ -75,13 +75,17 @@ show() { systemctl show "$UNIT" -p "$1" --value; }
 # suspend they are the same clock. 0 when either read is unusable: the number only decorates
 # a log line, and losing it must not end the tick.
 in_flight_seconds() {
-  local mono_us="$1"
-  if [[ ! "$mono_us" =~ ^[0-9]+$ ]]; then
-    echo 0
-    return 0
+  local mono_us="$1" seconds=""
+  if [[ "$mono_us" =~ ^[0-9]+$ ]]; then
+    seconds=$(awk -v m="$mono_us" \
+      '{ d = $1 - m / 1000000; if (d < 0) d = 0; printf "%d\n", d }' \
+      /proc/uptime 2>/dev/null || true)
   fi
-  awk -v m="$mono_us" '{ d = $1 - m / 1000000; if (d < 0) d = 0; printf "%d\n", d }' \
-    /proc/uptime || echo 0
+  # `:-0` covers the awk that SUCCEEDS and prints nothing, which is what an empty /proc/uptime
+  # gives: its action block never runs. An empty answer renders the joined line as
+  # `already s in flight`, which land.py's parser used to stop matching -- the wait would then
+  # go unbooked and `lock` would read 0 again, the exact defect this line exists to end.
+  echo "${seconds:-0}"
 }
 
 if ! systemctl cat "$UNIT" >/dev/null 2>&1; then

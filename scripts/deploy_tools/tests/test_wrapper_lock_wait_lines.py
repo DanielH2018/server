@@ -8,9 +8,10 @@ every ledger row read `lock=0` while the tree lock was busy 17% of one day. Thes
 lines that close that gap, asserted together with the parser that reads them: a wording
 change on either side that the other does not follow is exactly the drift this file catches.
 
-No test here touches /var/lock/server-git-tree.lock or the real systemd units. `flock`,
-`fuser`, `ps`, `uv`, `systemctl` and `journalctl` are all stubbed on PATH, the way
-test_deploy_exit_codes.py stubs `flock` and `uv`.
+No test here touches /var/lock/server-git-tree.lock, the real systemd units, or the host's
+syslog. `flock`, `fuser`, `ps`, `uv`, `logger`, `systemctl` and `journalctl` are all stubbed
+on PATH, the way test_deploy_exit_codes.py stubs `flock` and `uv`. The only live reads are
+gitops_tick.sh's own `/var/lib/gitops-deploy` markers.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_wrapper_lock_wait_lines.py
 """
@@ -92,6 +93,15 @@ _JOURNALCTL = """#!/bin/bash
 exit 0
 """
 
+# `_UV` exits 0 for the playbook, so deploy.sh reaches `emit_deploy_annotation`, which writes
+# an `event=deploy` line through `logger`. conftest's autouse `_no_syslog` already intercepts
+# that directory-wide, and measurement confirms no test run reached /var/log/syslog. This stub
+# is here so the property does not depend on a fixture in another file: a test that writes to
+# the host's syslog lands on the real Deploys board beside real deploys.
+_LOGGER = """#!/bin/bash
+exit 0
+"""
+
 
 def _stub_path(tmp_path: Path, stubs: dict[str, str]) -> dict[str, str]:
     bin_dir = tmp_path / "bin"
@@ -103,7 +113,16 @@ def _stub_path(tmp_path: Path, stubs: dict[str, str]) -> dict[str, str]:
 
 
 def _run_deploy(tmp_path: Path, flock: str) -> subprocess.CompletedProcess:
-    env = _stub_path(tmp_path, {"flock": flock, "fuser": _FUSER, "ps": _PS, "uv": _UV})
+    env = _stub_path(
+        tmp_path,
+        {
+            "flock": flock,
+            "fuser": _FUSER,
+            "ps": _PS,
+            "uv": _UV,
+            "logger": _LOGGER,
+        },
+    )
     env["FUSER_STUB_SELF_FDS"] = str(tmp_path / "self-fds")
     return subprocess.run(
         [
@@ -172,3 +191,42 @@ def test_joining_a_tick_in_flight_reports_how_long_it_ran_and_how_long_we_waited
         f"land.py no longer parses gitops_tick.sh's line: {line!r}"
     )
     assert booked[0] >= 1
+
+
+# `-w` answering 75 is a real timeout (deploy.sh passes `-E "$LOCK_BUSY"`); `-w` answering 1
+# is any OTHER flock failure, which must not be reported as contention. Measured 2026-09-11
+# against real flock on a descriptor: a timeout with `-E 75` exits 75, without it exits 1, and
+# a bad descriptor exits 65 — so the flag is what keeps the two apart.
+_FLOCK_TIMES_OUT = """#!/bin/bash
+case "$1" in
+  -n) exit 1 ;;
+  -w) exit 75 ;;
+esac
+exit 0
+"""
+
+_FLOCK_ERRORS = """#!/bin/bash
+case "$1" in
+  -n) exit 1 ;;
+  -w) echo "flock: bad things" >&2; exit 1 ;;
+esac
+exit 0
+"""
+
+
+def test_a_lock_timeout_is_still_reported_as_contention(tmp_path):
+    """CLEAN half for exit 75: the wait really did elapse, so nothing was deployed."""
+    result = _run_deploy(tmp_path, _FLOCK_TIMES_OUT)
+    assert result.returncode == 75, result.stderr
+    assert "nothing was deployed" in result.stderr
+
+
+def test_any_other_flock_failure_is_not_reported_as_contention(tmp_path):
+    """FLAGGED half: dropping `-E` made every flock failure read as a busy lock.
+
+    That tells an operator "a deploy is already running, retry shortly" for a lock file the
+    wrapper could not open at all, which is a resume point that never resumes.
+    """
+    result = _run_deploy(tmp_path, _FLOCK_ERRORS)
+    assert result.returncode != 75, result.stderr
+    assert "A deploy is already running" not in result.stderr
