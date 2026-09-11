@@ -21,8 +21,10 @@ boundaries.
 """
 
 import contextlib
+import re
 import socket
 import subprocess
+import sys
 import time
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
@@ -52,24 +54,114 @@ LOCK = "/var/lock/server-git-tree.lock"
 DEPLOY_TAGS_ARGV = ("uv", "run", "python", "scripts/deploy_tools/deploy_tags.py")
 
 
-def run_tick() -> int:
-    """Run gitops_tick.sh from beside land.py, stdio inherited; its exit code."""
-    return subprocess.run([str(HERE / "gitops_tick.sh")], check=False).returncode
+# The two wrapper lines that report a wait ending in an ACQUIRE or a JOIN -- the waits
+# `retry_while_locked` structurally cannot see, because it books only an attempt that exits
+# 75 and both of these exit 0. deploy.sh waits inside `flock -w`; gitops_tick.sh watches a
+# tick another actor already started. `gitops_tick: waited <M>s` (the tick this landing
+# started itself) is deliberately absent: those seconds are the tick's own work, and the
+# path that makes them long ends at exit 3, which `retry_while_locked` already books.
+_ACQUIRED = re.compile(
+    r"deploy: lock acquired after (\d+)s(?: \(holder was: (.*)\))?\s*$"
+)
+# `[^;]*` rather than `\d+` for the in-flight seconds: that number is NOT booked, so requiring
+# it to parse would throw away the one that is. gitops_tick.sh derives it from /proc/uptime and
+# renders `already s in flight` if that read ever comes back empty, which under `\d+` stopped
+# the line matching at all and silently restored `lock=0` -- the exact failure this parser
+# exists to end. Bounded at the `;` so it cannot run into the seconds that ARE booked.
+_JOINED = re.compile(
+    r"gitops_tick: joined a tick already [^;]*in flight; waited (\d+)s for it\s*$"
+)
+# `annotation_line` writes the holder as `holder="..."`, so an unstripped quote splits one
+# Loki row into fields the board reads as something else. `lock_holder` sanitises its own
+# return the same way; this is the choke point for the wrapper-reported source.
+HOLDER_MAX = 200
 
 
-def run_deploy(primary: Path, tags: list[str], target: str | None) -> int:
-    """Run deploy.sh in the primary checkout, stdio inherited; its exit code.
+def in_flock_wait(line: str) -> tuple[int, str] | None:
+    """The seconds and holder a wrapper's own wait line reports, or None for any other line.
+
+    The joined-tick line carries two numbers and only the second is booked: the first is how
+    long the tick had run BEFORE this landing arrived, which is time that elapsed outside the
+    landing. Booking it would push `lock` above `tick`, and `lock` is a sub-part of `tick`
+    and `deploy` rather than a fifth phase.
+    """
+    if m := _ACQUIRED.search(line):
+        return int(m[1]), (m[2] or "").replace('"', "")[:HOLDER_MAX]
+    if m := _JOINED.search(line):
+        return int(m[1]), ""
+    return None
+
+
+def stream_stderr(
+    argv: list[str], cwd: Path | None, observe: Callable[[int, str], None] | None
+) -> int:
+    """Run `argv`, echo its stderr through line by line, report waits; its exit code.
+
+    `cwd` is None to INHERIT this process's working directory, which is not the same as
+    passing any particular path: deploy.sh renders from its working directory and deploy_tags
+    reads ranges relative to it, so re-aiming either is a silent change of which checkout was
+    deployed (this module's own docstring). A caller that does not need a specific cwd must
+    pass None rather than a plausible-looking one.
+
+    stdout stays this process's own handle and stderr becomes a pipe. Both are BLOCKING file
+    handles, which is what Ansible requires; `land.py` clears O_NONBLOCK on the handle this
+    echo writes to, and deploy.sh clears it again for the playbook.
+
+    Every line is written out exactly as it arrived, so the landing log reads as it did when
+    the child owned the handle. The pipe is read as BYTES and decoded here rather than through
+    `text=True`, which turns on universal-newline translation: ansible writes bare `\r`
+    progress output, and translating it would rewrite the log this echo exists to preserve.
+    """
+    proc = subprocess.Popen(argv, cwd=cwd, stderr=subprocess.PIPE)
+    with proc:
+        for chunk in proc.stderr or ():
+            line = chunk.decode("utf-8", "replace")
+            sys.stderr.write(line)
+            sys.stderr.flush()
+            if observe and (wait := in_flock_wait(line)):
+                observe(*wait)
+    return proc.returncode
+
+
+def run_tick(observe: Callable[[int, str], None] | None = None) -> int:
+    """Run gitops_tick.sh from beside land.py; its exit code.
+
+    `observe` is given the seconds and holder of a wait the wrapper reports on its own
+    stderr. Without one the child simply inherits stdio: the pipe is the more fragile
+    arrangement, so it is taken only when a caller is booking what it reads.
+
+    The SCRIPT comes from beside land.py (issue #851) but the working directory is inherited
+    either way. Pinning it to `HERE` would have aimed the tick at this checkout's
+    scripts/deploy_tools, which is the re-aiming this module's docstring warns about.
+    """
+    argv = [str(HERE / "gitops_tick.sh")]
+    if observe is None:
+        return subprocess.run(argv, check=False).returncode
+    return stream_stderr(argv, None, observe)
+
+
+def run_deploy(
+    primary: Path,
+    tags: list[str],
+    target: str | None,
+    observe: Callable[[int, str], None] | None = None,
+) -> int:
+    """Run deploy.sh in the primary checkout; its exit code.
 
     The tag list is joined HERE and nowhere earlier: `--tags` is an argv element, so this is
     the one place a landing needs a comma string rather than a list.
 
-    stdio is inherited on purpose: Ansible refuses a non-blocking handle, and deploy.sh
-    clears O_NONBLOCK on the handles it is given.
+    stdio is inherited unless `observe` is given, for the reason `run_tick` states: Ansible
+    refuses a non-blocking handle, and deploy.sh clears O_NONBLOCK on the handles it is
+    given. Both call sites pass `observe` BY KEYWORD, which keeps the positional tuple a
+    fake records three elements long.
     """
     argv = ["./scripts/deploy.sh", "--tags", ",".join(tags)]
     if target:
         argv += ["-e", f"target={target}"]
-    return subprocess.run(argv, cwd=primary, check=False).returncode
+    if observe is None:
+        return subprocess.run(argv, cwd=primary, check=False).returncode
+    return stream_stderr(argv, primary, observe)
 
 
 def run_deploy_tags(primary: Path, args: list[str]) -> subprocess.CompletedProcess[str]:
@@ -238,8 +330,10 @@ class Tools:
     gh: Callable[..., subprocess.CompletedProcess[str]] = gh
     git: Callable[..., subprocess.CompletedProcess[str]] = git
     await_ci: Callable[[str, int], CiVerdict] = await_ci_verdict
-    tick: Callable[[], int] = run_tick
-    deploy: Callable[[Path, list[str], str | None], int] = run_deploy
+    # `...` rather than the argument list: both take an optional `observe` callback, which a
+    # fake absorbs through **kwargs and a call site passes by keyword.
+    tick: Callable[..., int] = run_tick
+    deploy: Callable[..., int] = run_deploy
     deploy_tags: Callable[[Path, list[str]], subprocess.CompletedProcess[str]] = (
         run_deploy_tags
     )

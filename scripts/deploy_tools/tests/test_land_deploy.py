@@ -301,3 +301,16 @@ def test_an_unreadable_deployer_state_is_not_settled(landing, capsys):
         deploy.no_tag_outcome(ln)
     assert (exc.value.rc, exc.value.verdict) == (1, "needs-manual-apply")
     assert "could not be read" in capsys.readouterr().out
+
+
+def test_every_deploy_lets_the_landing_book_the_wait_inside_flock(landing):
+    """deploy.sh waits inside `flock -w` and exits 0, so no retry ever books those seconds."""
+    ln, calls = _ready(landing, Fakes(hosts="daniel-box\tsonarr\ndaniel-pi\talloy\n"))
+    ln.resolved_tags = ["sonarr", "alloy"]
+    deploy.deploy_by_host(ln)
+    observers = [c[2]["observe"] for c in calls if c[0] == "deploy"]
+    assert len(observers) == 2
+    for observe in observers:
+        observe(300, "pid 8: ansible-playbook")
+    assert ln.ledger.lock_waited == 600
+    assert ln.ledger.lock_holder == "pid 8: ansible-playbook"

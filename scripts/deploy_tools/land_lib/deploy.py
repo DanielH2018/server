@@ -149,7 +149,9 @@ def deploy_by_host(ln: Landing) -> int:
         )
     lines = [x for x in r.stdout.splitlines() if x.strip()]
     if not lines:
-        return t.deploy(o.primary, ln.resolved_tags, None)
+        return t.deploy(
+            o.primary, ln.resolved_tags, None, observe=ln.note_in_flock_wait
+        )
     local = t.hostname()
     for line in lines:
         host, _, host_tags = line.partition("\t")
@@ -160,7 +162,12 @@ def deploy_by_host(ln: Landing) -> int:
             say(
                 f"{host_tags}: declared on {host}, deploying there with -e target={host}"
             )
-        rc = t.deploy(o.primary, [x for x in host_tags.split(",") if x], target)
+        rc = t.deploy(
+            o.primary,
+            [x for x in host_tags.split(",") if x],
+            target,
+            observe=ln.note_in_flock_wait,
+        )
         if rc != DEPLOY_OK:
             return rc
         ln.deployed_hosts.add(host)

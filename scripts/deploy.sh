@@ -125,6 +125,30 @@ emit_deploy_annotation() {
         2>/dev/null || true
 }
 
+# The tree lock's holder, in the shape land_lib/tools.py:lock_holder returns, or "" when
+# nobody holds it. fuser prints the holding PIDs on stdout and the path on stderr; the lowest
+# PID is the flock parent, whose children inherited the descriptor. The two sources write the
+# same `holder="..."` field on the Landings board, so they format it the same way.
+read_lock_holder() {
+    local pid detail
+    pid=$(fuser "$LOCK" 2>/dev/null |
+        awk '{ for (i = 1; i <= NF; i++) if ($i ~ /^[0-9]+$/) print $i }' |
+        sort -n | head -1)
+    [[ -n "$pid" ]] || return 0
+    detail=$(ps -o etimes=,args= -p "$pid" 2>/dev/null |
+        tr -s '[:space:]' ' ' | sed 's/^ *//; s/ *$//')
+    printf 'pid %s (etimes, command): %s' "$pid" "$detail"
+}
+
+# One line naming what the tree lock cost this run: for an operator reading the log, and for
+# land.py, which parses it into the landing's `lock=` field (land_lib/tools.py:in_flock_wait).
+say_lock_acquired() {
+    local waited="$1" holder="$2" line
+    line="deploy: lock acquired after ${waited}s"
+    [[ -z "$holder" ]] || line="$line (holder was: $holder)"
+    echo "$line" >&2
+}
+
 # The checkout this session is working in, not the primary one — a session in a worktree
 # has always deployed its own tree, and running the wrapper must not change that.
 repo_root=$(git rev-parse --show-toplevel)
@@ -374,6 +398,10 @@ if [[ "$detach" == 1 ]]; then
         echo "  retry shortly, or drop --detach to queue normally." >&2
         exit "$LOCK_BUSY"
     fi
+    # Always 0s here by construction: `flock -n` either takes the lock at once or refuses, so
+    # this path never queues. Printed anyway, so the log shape does not depend on which path
+    # ran and land.py books the same field from both.
+    say_lock_acquired 0 ""
 
     (
         uv run ansible-playbook ansible/deploy.yml "$@" >"$log" 2>&1
@@ -408,8 +436,61 @@ if [[ "$detach" == 1 ]]; then
     exit 0
 fi
 
-flock -w "$LOCK_WAIT" -E "$LOCK_BUSY" "$LOCK" uv run ansible-playbook ansible/deploy.yml "$@"
-status=$?
+# The lock is taken on a DESCRIPTOR rather than through `flock <file> <command>`, so that the
+# wait can be timed separately from the run. Inside the command form a 20-minute queue and a
+# 20-minute playbook are the same number, and every landing booked the queue as deploy time:
+# `lock=0` on every ledger row for the 14 days to 2026-09-11, while the lock was busy 17% of
+# one of them. Behaviour is unchanged -- the same LOCK_WAIT budget, the same LOCK_BUSY exit.
+#
+# SAMPLED BEFORE THIS SHELL OPENS THE LOCK FILE, which is the only order that can name anyone
+# else. fuser scans every process's descriptors, so once this shell holds one it reports
+# ITSELF -- and closing the descriptor for the read does not help, because the process fuser
+# finds is the parent that still holds it. Sampling afterwards named the landing as its own
+# blocker whenever the real holder released during the wait. That costs a fuser and a ps on
+# every deploy, uncontended ones included, which is what land_lib's `retry_while_locked`
+# already pays per attempt for the same reason.
+lock_holder_seen=$(read_lock_holder)
+
+# Opened for WRITING, as the --detach branch above already opens it. flock(1) opens the same
+# file read-only, so this needs write permission where the command form did not: the file is
+# created by whichever of the deploy user and gitops-deploy.service takes it first, and both
+# run as sys_user.
+exec {lockfd}>"$LOCK"
+lock_started=$SECONDS
+lock_taken=0
+flock_status=0
+if flock -n "$lockfd"; then
+    lock_taken=1
+    # Nobody was in the way, so whatever the sample caught had already released. Naming it
+    # would credit the wait to a holder there was no wait for.
+    lock_holder_seen=""
+else
+    # `-E "$LOCK_BUSY"` applies to the descriptor form as it did to the command form, and it
+    # is what keeps CONTENTION distinct from any other flock failure: only a timeout returns
+    # 75, and a genuine error still returns flock's own code, exactly as before. Dropping it
+    # and treating every failure as busy would have reported "nothing was deployed, retry
+    # shortly" for a lock file this wrapper could not even open.
+    flock -w "$LOCK_WAIT" -E "$LOCK_BUSY" "$lockfd"
+    flock_status=$?
+    if [[ "$flock_status" == 0 ]]; then
+        lock_taken=1
+    fi
+fi
+lock_waited=$((SECONDS - lock_started))
+
+if [[ "$lock_taken" == 1 ]]; then
+    # Silent at 0s: an uncontended acquire is the ordinary case, and a line on every deploy
+    # would bury the ones that mean something.
+    if [[ "$lock_waited" -gt 0 ]]; then
+        say_lock_acquired "$lock_waited" "$lock_holder_seen"
+    fi
+    uv run ansible-playbook ansible/deploy.yml "$@"
+    status=$?
+    flock -u "$lockfd"
+else
+    status=$flock_status
+fi
+exec {lockfd}>&-
 
 # After the lock is released and only on success. `--check` and `--dry-run` never reach here —
 # both exec out well above — so a mode that changes nothing cannot annotate as though it had.

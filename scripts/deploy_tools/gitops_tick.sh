@@ -41,6 +41,13 @@ set -euo pipefail
 UNIT="gitops-deploy.service"
 WAIT_S=540
 
+# The monotonic clock systemd's start stamp is measured against. A variable rather than a
+# literal so a test can point it at a fixture holding a known uptime and assert an exact
+# number of seconds in flight: deriving the stamp from the REAL uptime cannot work on a
+# machine that has been up for less than the window under test, which is every fresh CI
+# runner. Nothing on a host ever sets it.
+UPTIME_SOURCE="${GITOPS_TICK_UPTIME_SOURCE:-/proc/uptime}"
+
 # Emitted by the unit's ExecStopPost when `flock -E 75` fired. Must stay identical to the
 # phrase in roles/setup/gitops_deploy/templates/gitops-deploy.service.j2 — the exit code is
 # unreadable after a oneshot unit goes inactive, so this string is the whole signal.
@@ -70,6 +77,24 @@ done
 
 show() { systemctl show "$UNIT" -p "$1" --value; }
 
+# How long the run in flight has been going, from systemd's monotonic start stamp (in
+# microseconds) against UPTIME_SOURCE. Both count from boot, so on a host that does not
+# suspend they are the same clock. 0 when either read is unusable: the number only decorates
+# a log line, and losing it must not end the tick.
+in_flight_seconds() {
+  local mono_us="$1" seconds=""
+  if [[ "$mono_us" =~ ^[0-9]+$ ]]; then
+    seconds=$(awk -v m="$mono_us" \
+      '{ d = $1 - m / 1000000; if (d < 0) d = 0; printf "%d\n", d }' \
+      "$UPTIME_SOURCE" 2>/dev/null || true)
+  fi
+  # `:-0` covers the awk that SUCCEEDS and prints nothing, which is what an empty /proc/uptime
+  # gives: its action block never runs. An empty answer renders the joined line as
+  # `already s in flight`, which land.py's parser used to stop matching -- the wait would then
+  # go unbooked and `lock` would read 0 again, the exact defect this line exists to end.
+  echo "${seconds:-0}"
+}
+
 if ! systemctl cat "$UNIT" >/dev/null 2>&1; then
   echo "gitops_tick.sh: $UNIT is not installed on $(hostname) — the GitOps deployer" >&2
   echo "runs only on hosts with has_gitops: true (daniel-box)." >&2
@@ -85,9 +110,14 @@ started_before="$(show ExecMainStartTimestampMonotonic)"
 # A run already in flight is JOINED, not duplicated: systemd coalesces a start request
 # for a unit that is already `activating` into the run in flight. Say so plainly, so an
 # empty-looking journal is not read as a tick that did nothing.
+joined=0
+joined_after=0
 if [[ "$(show ActiveState)" == "activating" ]]; then
   echo "A tick is already in flight (started $(show ExecMainStartTimestamp)); watching it"
   echo "instead of starting a second one — systemd coalesces the request either way."
+  # Read before `started_before` is overwritten below: it IS the joined run's stamp.
+  joined=1
+  joined_after="$(in_flight_seconds "$started_before")"
   since="$(show ExecMainStartTimestamp | cut -d' ' -f2-3)"
   # The stamp read above IS the joined run's, so the wait loop's "a new activation
   # happened" test could never pass for it and the loop ran to its deadline however early
@@ -112,6 +142,7 @@ if [[ "$WAIT_S" -eq 0 ]]; then
 fi
 
 echo "Waiting up to ${WAIT_S}s for it to finish..."
+wait_started=$SECONDS
 deadline=$((SECONDS + WAIT_S))
 while [[ $SECONDS -lt $deadline ]]; do
   state="$(show ActiveState)"
@@ -121,6 +152,19 @@ while [[ $SECONDS -lt $deadline ]]; do
   fi
   sleep 5
 done
+waited=$((SECONDS - wait_started))
+
+# Neither wait is visible anywhere else in a landing: a joined tick and a slow one both exit
+# 0, and land_lib/landing.py:retry_while_locked books a wait only when an attempt exits 75.
+# land.py parses the JOINED line into the landing's `lock=` field
+# (land_lib/tools.py:in_flock_wait). The self-started line is for an operator only: those
+# seconds are the tick's own work, and the path that makes them long ends at exit 3, which
+# the landing already books. 60s because a healthy tick takes about five.
+if [[ "$joined" == 1 ]]; then
+  echo "gitops_tick: joined a tick already ${joined_after}s in flight; waited ${waited}s for it" >&2
+elif [[ "$waited" -ge 60 ]]; then
+  echo "gitops_tick: waited ${waited}s" >&2
+fi
 
 echo
 echo "── journal ──────────────────────────────────────────────────────────────────"

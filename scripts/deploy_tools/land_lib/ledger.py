@@ -1,9 +1,16 @@
 """What the Landings board reads: one logfmt line per landing, from a Ledger of stamps.
 
 This is the only record of where a landing's time goes: how long the merge took to arrive,
-how long master CI took after it, the tick, the deploy. `lock` is seconds spent in tick or
-deploy attempts that ended in lock contention, backoff included -- part of `tick` and
-`deploy`, not a fifth phase.
+how long master CI took after it, the tick, the deploy. `lock` is seconds the landing spent
+waiting on the tree lock -- part of `tick` and `deploy`, not a fifth phase.
+
+`lock` has two sources. An attempt that LOST the lock and exited 75 is booked by
+`landing.retry_while_locked`, backoff included. A wait a wrapper rode out INSIDE its own
+flock and then reported on its stderr is booked by `landing.note_in_flock_wait`: deploy.sh
+queuing in `flock -w`, gitops_tick.sh watching a tick another actor started. Both of those
+exit 0, so until they reported it the seconds landed in `deploy` and `tick` instead and every
+row read `lock=0`. The two sources cannot double-count: a wrapper reports only a wait that
+ended in an acquire or a join, never one that ended in contention.
 
 `cause` is a one-token reason beside a `deploy-failed` verdict, and empty beside every other
 one. The verdict alone cannot tell "nothing was deployed" (a tag miss, a failed tick, a
@@ -61,7 +68,11 @@ def _phase(a: float | None, b: float | None) -> str:
 
 
 def annotation_line(ledger: Ledger, rc: int, total: float) -> str:
-    """The logfmt record; an unreached stamp leaves its field empty, as land.sh did."""
+    """The logfmt record; an unreached stamp leaves its field empty, as land.sh did.
+
+    `lock` counts the waits a wrapper rode out inside its own flock as well as the attempts
+    that lost it, so it is non-zero on a landing whose every attempt exited 0.
+    """
     return (
         f"event=landing pr={ledger.pr or 'unknown'} sha={ledger.merge_sha[:8]} "
         f"verdict={ledger.verdict or 'aborted'} cause={ledger.cause} exit={rc} "

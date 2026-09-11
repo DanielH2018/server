@@ -57,7 +57,7 @@ def test_a_later_tick_that_finished_clears_an_earlier_abandoned_watch(landing):
     ln, _ = landing(Fakes(tick=[75]))
     tick.run_tick(ln)
     assert ln.tick_watch_abandoned is True
-    ln.tools.tick = lambda: 0
+    ln.tools.tick = lambda **_: 0  # the phase passes `observe=`; this stub ignores it
     tick.run_tick(ln)
     assert ln.tick_watch_abandoned is False
 
