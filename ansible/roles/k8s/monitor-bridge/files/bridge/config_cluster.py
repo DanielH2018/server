@@ -29,6 +29,7 @@ class ClusterConfig:
     PROM_ORIGIN: str
     TARGETS_MIN: int
     CLUSTER_TARGETS_MIN: int
+    CLUSTER_TARGETS_CONSECUTIVE: int
     CADVISOR_PODS_MIN: int
     CADVISOR_CONSECUTIVE: int
     K8S_MIN_WORKLOADS: int
@@ -120,6 +121,15 @@ def cluster_config(
         # 3 still tolerates a deliberate removal without ever mistaking an empty vector for a
         # clean one.
         CLUSTER_TARGETS_MIN=_int("CLUSTER_TARGETS_MIN", "3"),
+        # Consecutive down cycles before check_cluster_targets pages, the same hysteresis its
+        # siblings LONGHORN_CONSECUTIVE / PVC_CLAIMS_CONSECUTIVE / SNAPSHOT_CAP_CONSECUTIVE
+        # already carry, and for the same reason. `up` goes to 0 for a single scrape every time
+        # a workload rolls, so an ungated check turns every ordinary rollout into a DOWN episode:
+        # 66 of them in the 30 days to 2026-09-11, the highest count in the estate, nearly all
+        # one cycle long and naming one target. 3 cycles = 15 min at INTERVAL=300, which is far
+        # longer than any rollout's scrape gap and far shorter than an exporter that has actually
+        # died. A target genuinely down still pages, one extra cycle later.
+        CLUSTER_TARGETS_CONSECUTIVE=_int("CLUSTER_TARGETS_CONSECUTIVE", "3"),
         # Coverage floor for the three cAdvisor checks (restarts/oom/cpu), which filter a
         # per-pod vector down to offenders and so cannot tell "quiet" from "gone". Reasoning and
         # the measurements behind the value: cadvisor_coverage_shortfall in verdicts/cluster.py.

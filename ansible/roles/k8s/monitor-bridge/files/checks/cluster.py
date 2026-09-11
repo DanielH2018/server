@@ -18,6 +18,7 @@ import bridge.net
 import bridge.streaks
 import checks.logs
 from verdicts.cluster import (
+    traefik_latency_verdict,
     cadvisor_coverage_shortfall,
     extended_resource_verdict,
     k8s_workloads_verdict,
@@ -298,6 +299,14 @@ def check_traefik_latency(cfg: Config) -> tuple[bool, str]:
     Both rates come from the histogram's own series (_count, not traefik_service_requests_total)
     so numerator and denominator are always the same scrape of the same metric family — mixing
     the two counters lets a ratio drift outside 0-100% between scrapes.
+
+    Two guards stop the ratio firing on things that are not slowness, added 2026-09-11 after 51
+    DOWN episodes in 30 days made this the flappiest monitor in the estate. TRAEFIK_STREAM_SERVICES
+    exempts services whose traffic is long-lived connections, which the histogram times until the
+    connection closes. TRAEFIK_SLOW_MIN_REQUESTS requires an absolute count of slow requests behind
+    the percentage, because at TRAEFIK_MIN_RPS a single request already exceeds TRAEFIK_SLOW_PCT.
+    Each knob carries its own evidence in bridge/config_service.py; they are independent faults and
+    neither fixes the other.
     """
     total = dict(
         (m.get("service", "?"), v)
@@ -314,52 +323,15 @@ def check_traefik_latency(cfg: Config) -> tuple[bool, str]:
             "by (service)" % cfg.TRAEFIK_SLOW_BUCKET,
         )
     )
-    offenders = []
-    unmeasurable = []
-    eligible = 0
-    worst = 0.0
-    for svc, rps in total.items():
-        if rps < cfg.TRAEFIK_MIN_RPS:
-            continue
-        # A cumulative histogram emits every bucket for any service that served a request, so a
-        # service missing from `under` means the le= selected nothing at all — Traefik's buckets
-        # were reconfigured out from under this check. Report that rather than reading the
-        # absent series as 0 requests under the boundary, which would page every service at once.
-        if svc not in under:
-            unmeasurable.append(svc)
-            continue
-        eligible += 1
-        pct = 100.0 * (1.0 - under[svc] / rps)
-        worst = max(worst, pct)
-        if pct > cfg.TRAEFIK_SLOW_PCT:
-            offenders.append((svc, pct, rps))
-    if unmeasurable:
-        return (
-            False,
-            "no %ss bucket for %d service(s) (%s) — check Traefik's histogram buckets"
-            % (
-                cfg.TRAEFIK_SLOW_BUCKET,
-                len(unmeasurable),
-                ", ".join(sorted(unmeasurable)[:5]),
-            ),
-        )
-    offenders.sort(key=lambda spr: -spr[1])
-    if offenders:
-        desc = ", ".join("%s (%.0f%% of %.2f rps)" % o for o in offenders[:5])
-        return (
-            False,
-            "%d service(s) with over %.0f%% of requests slower than %ss: %s"
-            % (
-                len(offenders),
-                cfg.TRAEFIK_SLOW_PCT,
-                cfg.TRAEFIK_SLOW_BUCKET,
-                desc,
-            ),
-        )
-    return True, "latency ok: %d service(s) above floor, worst %.1f%% over %ss" % (
-        eligible,
-        worst,
+    return traefik_latency_verdict(
+        total,
+        under,
+        cfg.TRAEFIK_MIN_RPS,
+        cfg.TRAEFIK_SLOW_PCT,
         cfg.TRAEFIK_SLOW_BUCKET,
+        cfg.TRAEFIK_SLOW_MIN_REQUESTS,
+        cfg.TRAEFIK_STREAM_SERVICES,
+        300.0,  # the [5m] both rates above are taken over
     )
 
 
@@ -510,7 +482,7 @@ def check_k8s_workloads(cfg: Config) -> tuple[bool, str]:
     return checks.logs.with_log_errors(cfg, ok, "%s, %s" % (msg, res_msg))
 
 
-def check_cluster_targets(cfg: Config) -> tuple[bool, str]:
+def check_cluster_targets(cfg: Config, fetch=None) -> tuple[bool, str]:
     """Scrape targets of the CLUSTER's own Prometheus (the other half of Scrape Targets).
 
     B5 pinned check_targets_down to origin="daniel-server" so it kept meaning exactly what it
@@ -529,15 +501,33 @@ def check_cluster_targets(cfg: Config) -> tuple[bool, str]:
     this Prometheus belongs to exactly one of the two checks. The same floor logic as its sibling,
     so an emptied `up` reads as UNKNOWN rather than as nothing being wrong.
     """
+    # Resolved here, not as the default: a default binds at import, which would capture
+    # bridge.net.prom_vector before a test patches that module and silently bypass the patch.
+    fetch = fetch or bridge.net.prom_vector
     if not cfg.CLUSTER_PROM_URL:
         return True, "cluster target check disabled (no CLUSTER_PROMETHEUS_URL)"
-    vec = bridge.net.prom_vector(
+    vec = fetch(
         cfg,
         'up{origin!="daniel-server"}',
         base=cfg.CLUSTER_PROM_URL,
         source="cluster prometheus",
     )
-    return targets_verdict(vec, cfg.CLUSTER_TARGETS_MIN)
+    ok, msg = targets_verdict(vec, cfg.CLUSTER_TARGETS_MIN)
+    # Hysteresis, because a rolling workload drops its own `up` series for a scrape or two and
+    # this check cannot tell that from an exporter that died. Same shape as check_longhorn_volumes
+    # and its siblings; CLUSTER_TARGETS_CONSECUTIVE carries the measurement that motivated it.
+    if ok:
+        bridge.streaks._down_streaks["cluster_targets"] = 0
+        return ok, msg
+    bridge.streaks._down_streaks["cluster_targets"], ok, msg = (
+        bridge.streaks.down_streak(
+            bridge.streaks._down_streaks.get("cluster_targets", 0),
+            cfg.CLUSTER_TARGETS_CONSECUTIVE,
+            msg,
+            "rollout scrape gap",
+        )
+    )
+    return ok, msg
 
 
 def check_cluster_prometheus(cfg: Config) -> tuple[bool, str]:

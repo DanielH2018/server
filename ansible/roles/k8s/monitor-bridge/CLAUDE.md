@@ -131,7 +131,28 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     over `TRAEFIK_SLOW_BUCKET` (5.0s)" IS "p95 over 5.0s" without interpolation. Keep
     `TRAEFIK_SLOW_BUCKET` on a boundary Traefik actually emits: an `le=` matching no series is
     reported as a config fault rather than read as 0 requests under the boundary, which would page
-    every service at once.)
+    every service at once.
+    **Two guards were added 2026-09-11 after this became the flappiest monitor in the estate** —
+    51 DOWN episodes over 30 days, more than any other, and a live DOWN that day naming headlamp.
+    They are independent faults and neither fixes the other.
+    `TRAEFIK_STREAM_SERVICES` (`homelab-headlamp-`, `homelab-home-assistant-`,
+    `homelab-uptime-kuma-`) exempts services whose traffic is LONG-LIVED CONNECTIONS. Traefik's
+    histogram times a request until the response completes, so a websocket, an SSE stream or a
+    Kubernetes watch sits past every bucket edge while perfectly healthy — and no
+    `TRAEFIK_SLOW_BUCKET` fixes that, because the buckets end at 5.0s and a stream outlives all of
+    them. Measured 2026-09-11: headlamp ran 94.2% of requests under 0.1s and 3.1% past 5.0s, with
+    a whole-service mean of 1.7s, which puts that tail's own mean near 53s. Matched as a PREFIX of
+    the service label, which is `homelab-<name>-<hash>@kubernetescrd` — the hash moves when an
+    IngressRoute is renamed, so never match the full label. The exempt count is named in the green
+    message, because an exempt service is not measured and a bare "ok" would overstate coverage.
+    **bazarr and prowlarr are deliberately NOT exempt** despite being the other two names in the
+    30-day offender history: an *arr indexer search genuinely takes 5-30s and a user genuinely
+    waits for it, which is exactly the user-visible slowness this check exists to catch.
+    `TRAEFIK_SLOW_MIN_REQUESTS` (3) requires an absolute count of slow requests behind the ratio.
+    `TRAEFIK_MIN_RPS` admits a service with 0.05 x 300 = 15 requests in the `[5m]` window, so ONE
+    request past the bucket is 6.7% — already over `TRAEFIK_SLOW_PCT`. The ratio alone therefore
+    pages on a single request for every low-traffic route. Derived from the window and the floor,
+    not fitted to an observed service.)
   - **Traefik 404 Flood** (404 share of **entrypoint** traffic over 5m, behind the same
     `TRAEFIK_MIN_RPS` floor — the gap BOTH checks above leave open, and the one #1322 fell
     through. They are per-SERVICE, and an edge that has lost its routers emits no
@@ -731,6 +752,20 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     `k8s_workloads_verdict()` and `extended_resource_verdict()` are unit-tested;
     `CLUSTER_DEPENDENT` is guarded against the live
     `CHECKS` and asserted disjoint from the other three skip sets.)
+  - **Cluster Scrape Targets** (`up{origin!="daniel-server"}` against the cluster Prometheus — the
+    complement of Scrape Targets' `origin="daniel-server"` pin, so every `up` series belongs to
+    exactly one of the two. Same fail-closed floor (`CLUSTER_TARGETS_MIN`, 3): an emptied `up`
+    reads as UNKNOWN rather than as nothing being wrong.
+    **`CLUSTER_TARGETS_CONSECUTIVE` (3) was added 2026-09-11** and is the only hysteresis here.
+    A rolling workload drops its own `up` series for a scrape or two, and this check cannot tell
+    that from an exporter that died — so every ordinary rollout opened a DOWN episode. 66 of them
+    in the 30 days to 2026-09-11, the highest count in the estate, nearly all one cycle long and
+    naming a single target that was rolling at the time. 3 cycles = 15 min at `INTERVAL=300`, the
+    same value `LONGHORN_CONSECUTIVE` / `PVC_CLAIMS_CONSECUTIVE` / `SNAPSHOT_CAP_CONSECUTIVE`
+    already carry: far longer than any rollout's scrape gap, far shorter than a dead exporter. The
+    gate delays, it does not suppress — a target genuinely down still pages, one cycle later.
+    The floor arm rides the same streak deliberately: an emptied `up` during a Prometheus roll is
+    the same transient.)
   - **k3s PVC Fullness** (`kubelet_volume_stats_available_bytes / _capacity_bytes` via the cluster
     Prometheus, added 2026-09-01 — the SPACE axis of the storage layer, where Longhorn Volume
     Redundancy is the replica axis. A Longhorn PVC is its own filesystem at a fixed capacity, so a
