@@ -87,6 +87,26 @@ def test_tick_state_reads_hold_before_behind(landing, state, expected):
     assert ln.tick_state() == expected
 
 
+def test_a_pr_the_tick_already_applied_is_not_behind(landing):
+    """The tick lands at the newest green ancestor, so it is behind the tip while working.
+
+    `behind_since` is set on a tick that applied this very PR — that is what keeps the 6h
+    watchdog armed for a tail that never goes green. Answering BEHIND off the marker alone
+    reported `deferred` (exit 75) for work already live, on most landings rather than a rare
+    one (issue #1786).
+    """
+    ln, _ = landing(Fakes(state={"behind_since": "x"}, merge_applied_rc=0))
+    ln.merge_sha = "abc123"
+    assert ln.tick_state() == TickState.CONVERGED
+
+
+def test_a_pr_the_tick_has_not_crossed_is_still_behind(landing):
+    """The other half: the marker plus a merge commit the checkout lacks is a real deferral."""
+    ln, _ = landing(Fakes(state={"behind_since": "x"}, merge_applied_rc=1))
+    ln.merge_sha = "abc123"
+    assert ln.tick_state() == TickState.BEHIND
+
+
 def test_a_readable_hold_wins_over_an_unreadable_behind_marker(landing):
     """`hold_sha` decides alone: a hold is a hold whatever `behind_since` does, so an
     unreadable second marker cannot downgrade `held` (and its `tick-held` bar) to unknown."""

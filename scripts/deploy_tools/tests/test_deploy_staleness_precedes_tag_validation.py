@@ -80,8 +80,9 @@ def _run(tmp_path, *, stale_exit, validate_exit, tag="definitely-not-a-real-serv
         PATH=f"{bin_dir}:{os.environ['PATH']}",
         DEPLOY_SH_CALLS=str(calls),
     )
+    argv = [str(_DEPLOY_SH)] + (["--tags", tag] if tag else [])
     result = subprocess.run(
-        [str(_DEPLOY_SH), "--tags", tag],
+        argv,
         cwd=_REPO,
         env=env,
         capture_output=True,
@@ -107,6 +108,22 @@ def test_an_unknown_tag_on_a_current_tree_is_still_a_tag_miss(tmp_path):
     assert result.returncode == _TAG_MISS_EXIT, result.stderr
     assert any("deploy_tags.py validate" in c for c in calls), calls
     assert not any("ansible-playbook" in c for c in calls), calls
+
+
+def test_the_staleness_gate_is_told_which_tags_are_being_deployed(tmp_path):
+    """The gate refuses only on a commit reaching what this run renders, so it needs the tags.
+
+    Both halves: a tagged run hands them over, and an untagged run (the wrapper's own
+    --changed path reaches the gate before deriving any) asks the unscoped question.
+    """
+    tagged_dir, untagged_dir = tmp_path / "tagged", tmp_path / "untagged"
+    tagged_dir.mkdir()
+    untagged_dir.mkdir()
+    _, tagged = _run(tagged_dir, stale_exit=0, validate_exit=0, tag="uptime-kuma")
+    gate = next(c for c in tagged if "deploy_staleness.py" in c)
+    assert "--tags uptime-kuma" in gate, tagged
+    _, untagged = _run(untagged_dir, stale_exit=0, validate_exit=0, tag=None)
+    assert "--tags" not in next(c for c in untagged if "deploy_staleness.py" in c)
 
 
 def test_the_staleness_question_is_asked_before_the_tag_question(tmp_path):

@@ -26,6 +26,7 @@ from deploy_staleness import (
     behind_ahead,
     format_refusal,
     main,
+    unscoped_reason,
 )
 from lib.deployer_park import BEHIND_PARK_SECONDS, BEHIND_SINCE
 
@@ -121,6 +122,116 @@ def test_refusal_names_the_count_and_the_fix(repos):
     assert "48" in msg
     assert "rebase" in msg
     assert "--skip-staleness-check" in msg
+
+
+# Literal paths naming roles that exist in this tree, so the reach assertions cannot go
+# vacuous: a renamed role makes these fail rather than quietly reach nothing.
+SONARR = "ansible/roles/k8s/sonarr/templates/deployment.yaml.j2"
+RADARR = "ansible/roles/k8s/radarr/templates/deployment.yaml.j2"
+INVENTORY = "ansible/inventory/host_vars/daniel-box.yml"
+SHARED_K8S = "ansible/roles/k8s/manifests/tasks/main.yml"
+SECRETS = "ansible/vars/secrets.yml"
+
+
+def _commit_path(repo: Path, path: str) -> None:
+    """Commit one file at `path`, directories and all, so the mapper sees a real repo path."""
+    target = repo / path
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(path)
+    _git(repo, "add", path)
+    _git(repo, "commit", "-m", path, "--no-gpg-sign")
+
+
+def _behind_on(repos, path: str) -> Path:
+    """The clone, one commit behind an origin whose new commit touches `path`."""
+    origin, clone = repos
+    _commit_path(origin, path)
+    _git(clone, "fetch", "-q", "origin")
+    return clone
+
+
+def test_a_tree_behind_on_an_unrelated_role_still_deploys(repos, capsys):
+    """The whole point of the slice: the tick fast-forwards to the newest green commit, so a
+    tail that touches nothing this deploy renders must not refuse it."""
+    clone = _behind_on(repos, RADARR)
+    rc = main(["--repo", str(clone), "--no-fetch", "--tags", "sonarr"])
+    assert rc == 0
+    assert "1 commit(s) behind" in capsys.readouterr().err
+
+
+def test_a_tree_behind_on_the_role_being_deployed_is_refused(repos, capsys):
+    """The rejecting half, and the incident shape: that commit renders the role's templates."""
+    clone = _behind_on(repos, SONARR)
+    rc = main(["--repo", str(clone), "--no-fetch", "--tags", "sonarr,radarr"])
+    err = capsys.readouterr().err
+    assert rc == STALE_EXIT
+    assert SONARR in err and "sonarr" in err
+
+
+def test_a_tree_behind_on_a_broad_path_is_refused_whatever_the_tags(repos, capsys):
+    """`ansible/inventory/` reaches every service's rendered output, so no tag list clears it."""
+    clone = _behind_on(repos, INVENTORY)
+    rc = main(["--repo", str(clone), "--no-fetch", "--tags", "sonarr"])
+    assert rc == STALE_EXIT
+    assert INVENTORY in capsys.readouterr().err
+
+
+def test_a_tree_behind_on_a_shared_k8s_role_is_refused(repos, capsys):
+    """`k8s/manifests` renders and applies for EVERY k8s service, so no tag list clears it.
+
+    It has no `containers_list` entry, so it is not a tag anyone can deploy and the
+    tag-reach rule never matches it. Being behind on it is being behind on whatever this
+    deploy renders, whichever service it names.
+    """
+    clone = _behind_on(repos, SHARED_K8S)
+    rc = main(["--repo", str(clone), "--no-fetch", "--tags", "sonarr"])
+    err = capsys.readouterr().err
+    assert rc == STALE_EXIT
+    assert SHARED_K8S in err and "shared k8s role manifests" in err
+
+
+def test_a_tree_behind_on_the_secrets_file_is_refused(repos, capsys):
+    """A rotation commit in the tail maps to no service, and every template can read it.
+
+    Deploying from a tree behind one renders the OLD credential and pushes it live — the
+    reversion this guard exists to refuse, through a field the narrowing does not consult
+    (issue #1785).
+    """
+    clone = _behind_on(repos, SECRETS)
+    rc = main(["--repo", str(clone), "--no-fetch", "--tags", "sonarr"])
+    err = capsys.readouterr().err
+    assert rc == STALE_EXIT
+    assert SECRETS in err and "SOPS value" in err
+
+
+def test_a_block_tag_falls_back_to_the_unscoped_rule(repos, capsys):
+    """`config` selects a BLOCK of tasks across every role, so no path list bounds the run.
+
+    The accept half is the unrelated-role test above: a real service tag still narrows.
+    """
+    clone = _behind_on(repos, RADARR)
+    rc = main(["--repo", str(clone), "--no-fetch", "--tags", "config"])
+    err = capsys.readouterr().err
+    assert rc == STALE_EXIT
+    assert "not narrowing" in err and "config names no single service" in err
+
+
+def test_unreadable_host_vars_refuses_to_narrow_at_all():
+    """A narrowing that cannot name the services is not a narrowing.
+
+    `service_tags_or_none` answers None when the host_vars parse fails or `deploy_tags`
+    moves, and that is the branch such a rename flips silently: the guard keeps running and
+    keeps reading green while classifying nothing. The `main()` plumbing behind it is the
+    block-tag test above — both reach the unscoped refusal through the same `blocked` path.
+    """
+    assert "could not be read" in unscoped_reason({"sonarr"}, None)
+    assert unscoped_reason({"sonarr"}, {"sonarr", "radarr"}) == ""
+
+
+def test_a_full_run_is_refused_for_any_commit_behind(repos):
+    """No tags means the deploy is unscoped, so today's rule stands: any tail refuses."""
+    clone = _behind_on(repos, RADARR)
+    assert main(["--repo", str(clone), "--no-fetch"]) == STALE_EXIT
 
 
 def _behind_marker(tmp_path: Path, age_s: float, now: float = 2_000_000_000.0) -> Path:

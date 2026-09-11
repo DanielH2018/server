@@ -9,8 +9,11 @@ reader's own worktree — the wrong repair when the primary checkout is what has
 disagree about the same marker on the same host.
 
 ``behind_since`` holds ``"<origin_sha> <unix_ts_first_seen>"`` while the host is behind
-origin/master, and the stamp survives across ticks — it resets only on convergence. So its
-age is how long the deployer has declined to converge, not how long ago the last tick ran.
+origin/master. The stamp survives a tick that moved nothing and is renewed by any tick that
+fast-forwarded, so its age is HOW LONG THE DEPLOYER HAS NOT FAST-FORWARDED — not how long the
+host has been behind the tip, and not how long ago the last tick ran. The distinction is load
+bearing since the tick started landing at the newest green ancestor: a deployer working
+normally is behind the tip on nearly every tick, and only one that stops moving ages this.
 
 Stdlib only, and no imports from this repo: the SessionStart hook imports it before anything
 else is on ``sys.path``.
@@ -28,12 +31,12 @@ BEHIND_SINCE = "behind_since"
 
 # How long `behind_since` may stand before it reads as a park rather than a queue. The tick
 # runs every `gitops_deploy_tick_interval` (10 min), so 45 minutes is four ticks that all
-# declined to converge — a routine push clears in one.
+# moved the tree nowhere — a routine push clears in one.
 BEHIND_PARK_SECONDS = 45 * 60
 
 
 def park_age(marker: str | None, now: float) -> float | None:
-    """Seconds the deployer has been parked, or None when this is not a park.
+    """Seconds since the deployer last fast-forwarded, or None when this is not a park.
 
     Malformed or unparsable content reads as "no park": the marker is written atomically, and
     a caller that guessed an age from a torn value would be worse than one that said nothing.
@@ -77,9 +80,9 @@ def park_note(marker: str | None, now: float | None = None) -> str:
     if age is None:
         return ""
     return (
-        f"  The GitOps deployer has ALSO been behind origin/master for {int(age // 60)} min "
-        "-- that is a park,\n"
-        "  not a queue, and it is the more likely reason this tree is behind. Rebasing here\n"
-        "  does not clear it: the primary checkout is what has to converge.\n"
+        f"  The GitOps deployer has ALSO not fast-forwarded for {int(age // 60)} min and is\n"
+        "  behind origin/master -- that is a park, not a queue, and it is the more likely\n"
+        "  reason this tree is behind. Rebasing here does not clear it: the primary checkout\n"
+        "  is what has to converge.\n"
         "  Read the skip reason: journalctl -t gitops-deploy | tail -20"
     )

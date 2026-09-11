@@ -23,13 +23,14 @@ from deploy_tools.exit_codes import (
     DEPLOY_TAG_MISS,
 )
 from deploy_tools.land_lib import ci, tick
-from deploy_tools.land_lib.landing import BRANCH, Landing, TickState, retry_while_locked
+from deploy_tools.land_lib.landing import Landing, TickState, retry_while_locked
 from deploy_tools.land_lib.outcome import (
     ABANDONED_WATCH_NOTE,
     Cause,
     Verdict,
     cause_for_deploy_exit,
     say,
+    unrecorded_apply_note,
 )
 
 
@@ -105,13 +106,10 @@ def no_tag_outcome(ln: Landing) -> NoReturn:
         )
     if not ln.broad_applied_covers(sha):
         print(
-            "  the tick converged with origin but recorded no broad apply covering this PR "
+            "  the tick crossed this PR but recorded no broad apply covering it "
             f"(broad_applied: {ln.state('broad_applied') or 'absent'})"
         )
-        print(
-            "  Something OTHER than the tick fast-forwarded the checkout, so the tick will "
-            "never see this range again."
-        )
+        print(unrecorded_apply_note(ln.state("behind_since")))
         if ln.self_applied_command:
             print(f"  Apply it: {ln.self_applied_command}")
         ln.finish(
@@ -244,15 +242,18 @@ def deploy_phase(ln: Landing) -> None:
     ln.ledger.tags_label = ln.tags_csv
     rc = deploy_with_lock_retry(ln)
     # 4 = the tree is behind origin/master: someone merged during the CI wait. The tick
-    # crosses a tip only once master CI is green ON IT, so wait on the CURRENT tip -- every
-    # attempt, not only when it moved -- after the blockers check, backed off by
-    # `lock_backoff` the way the lock-contention retry above already is. Issue #1084: PR
-    # #1051's landing retried this exit three times in ~25s with no backoff and, because the
-    # wait used to be gated behind `tip_sha != merge_sha`, no CI wait either, while master CI
-    # on the merge commit was still 2m48s from green (verdict=deploy-failed
-    # cause=deploy-exit-4 tags=configarr). A landing that can never cross must not wait 15
-    # minutes before saying so. Bounded: a third merge during the tip wait moves the tip
-    # again.
+    # fast-forwards to the newest GREEN commit in the incoming range, not only to a green tip,
+    # so what this landing needs green is its OWN merge commit -- wait on that, every attempt,
+    # after the blockers check and backed off by `lock_backoff` the way the lock-contention
+    # retry above already is. The wait normally returns at once, because step 3 already waited
+    # on the same SHA; it is kept because a retry can reach here without step 3 having run.
+    #
+    # It waited on the CURRENT TIP until the ancestor walk landed, and that is what the
+    # `tip-outran-retries` verdict measured: six landings in 14 days spent 400-614s chasing a
+    # tip that moved again while they waited, on merge commits whose own CI was already green.
+    # Issue #1084 is the older half: PR #1051's landing retried three times in ~25s with no
+    # backoff and, because the wait used to be gated behind `tip_sha != merge_sha`, no CI wait
+    # either, while master CI on the merge commit was still 2m48s from green.
     for attempt in range(1, o.stale_retries + 1):
         if rc != DEPLOY_STALE:
             break
@@ -275,15 +276,12 @@ def deploy_phase(ln: Landing) -> None:
                 1,
                 f"PR #{o.pr} — a change needing a hand landed during the wait; see above",
             )
-        tip = ln.git("rev-parse", f"origin/{BRANCH}")
-        if tip.returncode != 0:
-            ln.die(f"could not read origin/{BRANCH}", 1)
-        tip_sha = tip.stdout.strip()
         say(
-            f"waiting for master CI on the tip {tip_sha} (the tick defers until it is green)"
+            f"waiting for master CI on the merge commit {ln.merge_sha} "
+            "(the tick fast-forwards to the newest green commit it can reach)"
         )
         started = t.clock()
-        ci.wait_master_ci(ln, tip_sha, f"the tip {tip_sha}")
+        ci.wait_master_ci(ln, ln.merge_sha, f"the merge commit {ln.merge_sha}")
         # CI time, not deploy time: shift both later stamps so the board books it under
         # wait_ci with no new field to learn. Includes the backoff sleep above (mirrors
         # `deploy_with_lock_retry`'s own `+ o.lock_backoff`), or that time falls into

@@ -49,6 +49,32 @@ def test_values_are_read_off_the_environment():
     assert cfg.k8s_deploy_timeout_s == 1200
 
 
+def test_the_ancestor_walk_bound_is_read_off_the_environment():
+    """It bounds GitHub requests per tick, so a host must be able to lower it without a code
+    change — and a config.env that predates the key keeps the default rather than an unbounded
+    walk."""
+    assert (
+        deploy_io.load_config({"CI_ANCESTOR_WALK_MAX": "3"}).ci_ancestor_walk_max == 3
+    )
+    assert deploy_io.load_config({}).ci_ancestor_walk_max == 10
+
+
+def test_the_rendered_config_carries_the_ancestor_walk_bound():
+    """A key parsed here but absent from the template leaves every host on the default.
+
+    The rejecting half of the pair above: that one passes on a value nothing renders.
+    """
+    import pathlib
+
+    import yaml
+
+    role = pathlib.Path(__file__).resolve().parents[1]
+    template = (role / "templates" / "config.env.j2").read_text()
+    defaults = yaml.safe_load((role / "defaults" / "main.yml").read_text())
+    assert "CI_ANCESTOR_WALK_MAX={{ gitops_deploy_ci_ancestor_walk_max }}" in template
+    assert defaults["gitops_deploy_ci_ancestor_walk_max"] >= 1
+
+
 def test_a_boolean_is_true_only_for_the_literal_word():
     """`true` and nothing else, case-insensitively — the same test the module made inline."""
     assert deploy_io.load_config({"STAGING_GATE": "TRUE"}).staging_gate is True

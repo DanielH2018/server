@@ -26,16 +26,22 @@ A systemd timer runs `gitops-deploy.service` on `daniel-box`
 every 10 minutes (`gitops_deploy_tick_interval`). One tick, in order:
 
 1. Fetch `origin`.
-2. Read the check runs for the origin SHA and decide a CI verdict (`ci_verdict()` in
+2. Read the check runs for the tip of `origin/master` and decide a CI verdict (`ci_verdict()`
+   in `deploy_logic.py`).
+3. Walk back to the newest green ancestor, when that verdict is pending or red: the tick asks
+   GitHub about each earlier commit in the incoming range, newest first, and deploys the first
+   one whose own CI is green (`ci_walk_candidates()` in `deploy_logic.py`, bounded by
+   `CI_ANCESTOR_WALK_MAX`). A red commit is skipped, never chosen. Master takes about 124
+   merges a day against a ~103s CI sweep, so the tip is pending on most ticks that would
+   deploy; gating on it parked a green commit behind the CI sweep of every later merge.
+4. Choose an action from the verdict for the chosen SHA and the changed paths (`next_action()` in
    `deploy_logic.py`).
-3. Choose an action from the verdict and the changed paths (`next_action()` in
-   `deploy_logic.py`).
-4. Consult the staging cluster, on a k8s deploy where `gitops_deploy_staging_gate` is armed
+5. Consult the staging cluster, on a k8s deploy where `gitops_deploy_staging_gate` is armed
    and the services intersect `STAGING_SUBSET`. Advisory: it returns no verdict and cannot
    block the deploy — worth knowing when a tick looks stuck.
-5. Fast-forward the checkout, if the action allows it.
-6. Deploy whatever is eligible.
-7. Health-gate the result, and roll back on failure.
+6. Fast-forward the checkout to the chosen SHA, if the action allows it.
+7. Deploy whatever is eligible.
+8. Health-gate the result, and roll back on failure.
 
 <!-- Generated from STAGING_GATE_TIMEOUT_S and STAGING_EXPECT_TIMEOUT_S in gitops_deploy.py;
      edit those. -->
@@ -54,17 +60,18 @@ anything.
 |---|---|
 | `last_run` | When a tick last completed. A stale value means the timer is not firing. |
 | `hold_sha` | Non-empty: a previous SHA failed its health gate and is being held. Diagnose that before deploying anything else. |
-| `behind_since` | Non-empty: the checkout is parked behind `origin` and naming the SHA it stopped at. |
+| `behind_since` | Non-empty: the checkout is behind `origin`, naming the tip it has not reached. Its timestamp is when the deployer last FAST-FORWARDED, not when it first fell behind: any tick that moved the tree renews it, so a tick that landed at a green ancestor reads healthy while a tail that never goes green still pages at 6h. |
 
 ## Why a tick does nothing
 
 Four reasons, and they look identical from outside — the unit succeeds and exits 0 in every
 one of them.
 
-**CI is pending or red.** `next_action()` returns `ci_pending` *before* the fast-forward. A
-tick fired seconds after a merge therefore pulls nothing, because
+**CI is pending or red on every commit in range.** `next_action()` returns `ci_pending`
+*before* the fast-forward. A tick fired seconds after a merge therefore pulls nothing, because
 GitHub has not finished creating the run yet. An empty or incomplete check-run list is
-pending, never green.
+pending, never green. It takes the whole range: one green commit below a pending tip is enough
+for the tick to fast-forward to that commit and deploy it.
 
 **A held SHA.** `hold_sha` is set, so the deployer does not move forward until it is cleared.
 

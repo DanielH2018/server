@@ -25,9 +25,15 @@ those gate a deploy.
 ## The two problems are separable
 
 **Waiting on CI is session-side.** `next_action` returns `ci_pending` *before* the fast-forward
-by design (`deploy_logic.py:422`), so a tick fired seconds after a merge pulls nothing and every
-later step reads as stale. That ordering is correct and stays. What is removable is the session
-sitting in the foreground while it resolves.
+by design, so a tick fired seconds after a merge pulls nothing and every later step reads as
+stale. That ordering is correct and stays. What is removable is the session sitting in the
+foreground while it resolves.
+
+That deferral is scoped to the range rather than to the tip: when the tip is pending or
+red, `deploy_phases.assess` walks back to the newest commit whose own CI is green and
+fast-forwards to that one (`deploy_git.ci_walk_candidates`). An unfinished sweep on a later
+merge therefore does not defer an earlier green commit, and a landing waits only on its own
+merge commit.
 
 **Hand-merging is one arm of the deployer.** An ordinary k8s manifest change already
 fast-forwards on its own — `deploy_handlers.handle_no_services` merges whenever `cs.services` is

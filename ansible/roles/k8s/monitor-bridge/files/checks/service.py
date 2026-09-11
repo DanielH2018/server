@@ -120,9 +120,11 @@ def gitops_status(
     2026-08-02, all signals green, until un-deployed DNS records were noticed by hand.
 
     It is age-gated because being behind is normal in the small: a push is behind for one tick, and
-    the dirty-tree path is behind for a whole edit session by design. Only sustained behind-ness is
-    a fault. hold/diverged are still reported ahead of it — they name the actual cause, where
-    "behind" only names the symptom.
+    the dirty-tree path is behind for a whole edit session by design. What the age measures is
+    time WITHOUT A FAST-FORWARD, not time behind the tip — the deployer renews `behind_since`
+    on any tick that moved the tree, so a host landing every merge at the newest green ancestor
+    reads healthy here while a host that has stopped moving still pages. hold/diverged are still
+    reported ahead of it — they name the actual cause, where "behind" only names the symptom.
 
     Args:
       cfg: The configuration; `max_behind_s` defaults to its GITOPS_BEHIND_MAX_S.
@@ -155,9 +157,9 @@ def gitops_status(
         age_s = (time.time() if now is None else now) - since
         if age_s > max_behind_s:
             return False, (
-                "host %.0fh behind origin at %s (> %.0fh) — deploy deferred (broad change / "
-                "dirty tree); run the manual deploy on the host"
-                % (age_s / 3600, sha[:8], max_behind_s / 3600)
+                "host has not fast-forwarded for %.0fh and is behind origin at %s (> %.0fh) "
+                "— deploy deferred (broad change / dirty tree); run the manual deploy on the "
+                "host" % (age_s / 3600, sha[:8], max_behind_s / 3600)
             )
     pending = _parse_manual_plane(manual_plane)
     if pending:

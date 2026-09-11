@@ -450,6 +450,12 @@ def main(tools: DeployTools | None = None, config: Config | None = None) -> int:
         return 0
     if target.action == "ci_failed":
         return deploy_handlers.handle_ci_failed(tools, STATE, config, target)
+    if target.red_tip:
+        # This tick fast-forwarded to a green ancestor of a RED tip, so it deploys — and the
+        # tip's own failure still pages once for that SHA. Here rather than inside `assess`
+        # because a phase that reads and classifies must not alert, and after the two CI
+        # branches above because only a tick that got past them acts on a chosen ancestor.
+        deploy_handlers.alert_red_tip(tools, STATE, config, target)
 
     plan = deploy_phases.plan_tick(tools, STATE, config, target)
     if plan.cs.broad:
@@ -470,6 +476,14 @@ def entrypoint(tools: DeployTools | None = None) -> int:
     """
     tools = tools if tools is not None else default_tools(CONFIG)
     config = tick_config()
+    # HEAD as the tick found it, so the behind-origin stamp below can tell a tick that MOVED
+    # the tree from one that parked. None when it could not be read, which disarms the
+    # re-stamp rather than guessing: an unreadable HEAD is not evidence of progress.
+    try:
+        head_before = tools.run(["git", "rev-parse", "HEAD"], cwd=config.repo)
+    except Exception as e:
+        log(f"could not read HEAD before the tick: {e}")
+        head_before = None
     try:
         rc = main(tools, config)
     except RetryableFetchError as e:
@@ -507,9 +521,11 @@ def entrypoint(tools: DeployTools | None = None) -> int:
         raise
     # Whether this host ENDED the tick behind origin, read after everything the tick did rather
     # than before it: a tick that deployed successfully converged and must clear the marker
-    # rather than leave a stale one for the next 30 minutes. The two rev-parses and the
-    # ancestry query live here because they reach git; `DeployerState.record_behind` owns the
-    # marker itself.
+    # rather than leave a stale one for the next 30 minutes. The rev-parses and the ancestry
+    # query live here because they reach git; `DeployerState.record_behind` owns the marker
+    # itself. The comparison against `head_before` is what the stamp is FOR: it measures time
+    # without a fast-forward, so a tick that landed at a green ancestor re-stamps even though
+    # it ends behind the tip.
     #
     # Best-effort: a `git rev-parse` failure must not turn an otherwise-fine tick into a
     # "gitops-deploy crashed" page. The tick has already done its work by this point, and a
@@ -523,6 +539,7 @@ def entrypoint(tools: DeployTools | None = None) -> int:
             origin,
             origin != local and tools.is_ancestor(config.repo, local, origin),
             time.time(),
+            fast_forwarded=head_before is not None and local != head_before,
         )
     except Exception as e:
         log(f"could not record behind-origin state: {e}")

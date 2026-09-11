@@ -16,8 +16,12 @@ Not a bare `ansible-playbook`. The wrapper does three things the bare form does 
   timer, the secret-rotation cron, or another session ([ADR-0011](adr/0011-one-lock-serialises-every-deploy-path.md)).
 - Checks the tags against `containers_list` first, because Ansible itself exits 0 on a tag
   that matches nothing.
-- Refuses a tree that is behind `origin/master`, because a stale tree renders stale templates
-  and reverts live config while every repo-side check reads green.
+- Refuses a tree that is behind `origin/master` on something the deploy renders, because a
+  stale tree renders stale templates and reverts live config while every repo-side check reads
+  green. With `--tags` the question is narrowed to those tags: a commit behind that touches
+  only other roles prints a note and deploys, while one reaching a deployed tag or a broad path
+  (shared templates, `ansible/inventory/`, the setup plane) refuses and names the commits. An
+  unscoped run refuses on any commit behind.
 
 The bare forms still work and are what the wrapper runs. Use them only when you deliberately
 want none of the above.
@@ -29,7 +33,7 @@ Each of these means **nothing was deployed**. None is a playbook failure.
 | Code | Means | Do |
 |---|---|---|
 | 75 | The lock stayed busy | Retry |
-| 4 | The tree is behind `origin/master` | Pull, then retry. Never `--skip-staleness-check` |
+| 4 | The tree is behind `origin/master` on a path the deploy reaches | Pull, then retry. Never `--skip-staleness-check` |
 | 3 | The change is broad and maps to no single service | Run the playbook the change's plane needs |
 | 2 | The tag matched no service | `--list-services` prints the valid values |
 

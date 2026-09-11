@@ -136,3 +136,29 @@ ABANDONED_WATCH_NOTE = (
     "  This is NOT the ordinary deferral. A later tick does not clear a hold, and a hold "
     "blocks every session's deploy. Re-run land.sh once the tick has settled."
 )
+
+
+def unrecorded_apply_note(behind_since: str | None) -> str:
+    """What "no broad apply covers this PR" means, given whether the tick is still behind.
+
+    Two states reach that branch, and only one of them is stranded. With `behind_since`
+    empty the tick is level with origin and `next_action()` answers `noop` for every later
+    tick, so nothing will ever apply this range (issue #1537). With it set the tick
+    fast-forwarded only as far as a green ancestor of the tip — it crossed this PR's merge
+    commit, which is why the landing is not BEHIND — and it has a range left to cross, so a
+    later tick can still record the apply. One string, printed by both verdict sites, so the
+    two cannot drift.
+
+    Args:
+      behind_since: the deployer's `behind_since` marker, as `Landing.state` returns it.
+    """
+    if behind_since:
+        return (
+            "  The tick fast-forwarded only as far as a green ancestor of the tip and is "
+            "still behind origin, so a later tick may yet apply this range. Apply it by hand "
+            "if you would rather not wait."
+        )
+    return (
+        "  Something OTHER than the tick fast-forwarded the checkout, so the tick will "
+        "never see this range again."
+    )

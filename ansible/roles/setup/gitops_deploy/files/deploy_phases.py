@@ -25,7 +25,7 @@ from deploy_changes import (
     shared_module_consumers,
 )
 from deploy_config import Config, log
-from deploy_git import is_diverged, next_action
+from deploy_git import ci_walk_candidates, is_diverged, next_action
 from deploy_inventory import (
     declared_k8s_services,
     declares_no_gitops,
@@ -127,8 +127,16 @@ def assess(tools: DeployTools, state: DeployerState, config: Config) -> TickTarg
     # next_action's own short-circuits above it, so a noop/dirty/held tick costs no API request —
     # which keeps the gate's share of the GitHub rate limit at one request per 30 min.
     ci = "pass"
+    tip, tip_ci = origin, "pass"
     if not dirty and origin_ahead and origin != local and origin != hold:
-        ci = tools.fetch_ci_verdict(origin)
+        ci = tip_ci = tools.fetch_ci_verdict(origin)
+        # A HELD tip skips the walk with everything else, and stays `skip_hold`. The condition
+        # above is unchanged: ruling (d) asks only that a held SHA is never CHOSEN, which
+        # `ci_walk_candidates` does by dropping it from the candidates.
+        if ci in ("pending", "fail"):
+            green = _newest_green_ancestor(tools, config, local, origin, hold, ci)
+            if green is not None:
+                origin, ci = green, "pass"
     return TickTarget(
         local=local,
         origin=origin,
@@ -136,7 +144,71 @@ def assess(tools: DeployTools, state: DeployerState, config: Config) -> TickTarg
         dirty=dirty,
         status=status.stdout,
         action=next_action(local, origin, hold, dirty, origin_ahead, ci),
+        tip=tip,
+        tip_ci=tip_ci,
     )
+
+
+def _newest_green_ancestor(
+    tools: DeployTools,
+    config: Config,
+    local: str,
+    tip: str,
+    hold: str | None,
+    tip_ci: str,
+) -> str | None:
+    """The newest commit below `tip` whose own CI is green, or None if the walk finds none.
+
+    Master takes about 124 merges a day against a ~103s CI sweep, so the tip is pending on
+    most ticks that would otherwise deploy; gating on it deferred a green commit behind every
+    later merge's sweep. The chosen SHA becomes `target.origin` and everything downstream
+    reads it — the ff-merge, the changed-path diff, the declarations read, the narrowing —
+    so the walk chooses ONE SHA exactly as the pin above does. The REAL tip stays on
+    `TickTarget.tip`, and `entrypoint()` re-resolves it for `behind_since`, so a tail that
+    never goes green still pages through the 6h behind-origin watchdog.
+
+    Returns None on a git failure as well as on an all-red walk: the tip's own verdict then
+    decides the tick exactly as it did before this existed, which is the fail-closed direction.
+
+    It also returns None on an UNAUTHENTICATED host, before spending anything. The walk costs
+    up to `CI_ANCESTOR_WALK_MAX` GitHub reads on one tick, which is nothing against an
+    authenticated 5000/hour and a sixth of the anonymous hourly budget the whole host shares
+    with every landing's `await_ci.py` poll. Exhausting that budget reads as "CI not finished"
+    everywhere, so the walk would buy one tick's latency by deferring the next several.
+    """
+    walk_max = config.ci_ancestor_walk_max
+    if walk_max <= 0:
+        return None
+    if not tools.github_authenticated():
+        log(
+            f"origin {tip[:8]}: CI {tip_ci}; not walking for a green ancestor — this host has "
+            "no GitHub token, and the anonymous 60/hour limit is shared with every landing"
+        )
+        return None
+    try:
+        rev_list = tools.run(
+            ["git", "rev-list", "--first-parent", f"{local}..{tip}"], cwd=config.repo
+        ).split()
+    except Exception as exc:
+        log(f"could not list the commits below {tip[:8]}: {type(exc).__name__}: {exc}")
+        return None
+    candidates = ci_walk_candidates(rev_list, hold, walk_max)
+    for behind, sha in candidates:
+        if tools.fetch_ci_verdict(sha) != "pass":
+            continue
+        log(
+            f"origin {tip[:8]}: CI {tip_ci}; fast-forwarding to the newest green ancestor "
+            f"{sha[:8]} ({behind} behind the tip)"
+        )
+        return sha
+    # Said on every deferring tick, because the cost is what an operator reading a repeated
+    # deferral needs: a walk that read nine ancestors and found no green one is a different
+    # state from a tip with nothing below it, and both defer silently otherwise.
+    log(
+        f"origin {tip[:8]}: CI {tip_ci}; no green ancestor in the {len(candidates)} "
+        f"commit(s) below it that this tick could read"
+    )
+    return None
 
 
 def plan_tick(

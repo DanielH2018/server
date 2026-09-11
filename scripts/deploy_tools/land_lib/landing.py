@@ -153,6 +153,14 @@ class Landing:
         that ends a landing with `settled`. `hold_sha` is read first and decides on its
         own: a readable hold is `HELD` whatever `behind_since` does, so an unreadable
         second marker cannot downgrade a real hold to `UNKNOWN`.
+
+        **`behind_since` alone is no longer enough to answer BEHIND.** The tick fast-forwards
+        to the newest GREEN ancestor of the master tip rather than gating the whole range on
+        it, so a tick that applied this very PR still ends behind the tip and still writes the
+        marker — that is what keeps the 6h watchdog armed for a tail that never goes green.
+        Reading the marker alone therefore reported `deferred` (exit 75) for work already
+        live, on most landings rather than a rare one. `merge_applied` settles it: a tick that
+        crossed this PR's merge commit is not deferring it, whatever the tip is doing.
         """
         hold = self.state("hold_sha")
         if hold:
@@ -160,9 +168,24 @@ class Landing:
         behind = self.state("behind_since")
         if hold is None or behind is None:
             return TickState.UNKNOWN
-        if behind:
+        if behind and not self.merge_applied():
             return TickState.BEHIND
         return TickState.CONVERGED
+
+    def merge_applied(self) -> bool:
+        """Does the primary checkout already contain this PR's merge commit?
+
+        False when there is no merge SHA to look for and when the query itself fails — an
+        unresolvable SHA is not evidence the tick applied it, and the conservative answer
+        keeps the landing on the resume path rather than reporting work as done. Same stance
+        as `broad_applied_covers`, for the same reason.
+        """
+        if not self.merge_sha:
+            return False
+        return (
+            self.git("merge-base", "--is-ancestor", self.merge_sha, "HEAD").returncode
+            == 0
+        )
 
     def broad_applied_covers(self, sha: str) -> bool:
         """Did the deployer RECORD applying a broad plane that contains `sha`?

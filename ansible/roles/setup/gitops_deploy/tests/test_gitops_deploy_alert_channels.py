@@ -321,17 +321,23 @@ def test_an_unreadable_inventory_is_not_this_watchdogs_page(
 # The marker itself is the state object's; the two rev-parses and the ancestry query that feed
 # it are entrypoint()'s, which is why the git-failure case below drives entrypoint instead.
 def test_a_tick_that_ended_behind_stamps_first_seen_once(gitops_deploy, state_dir):
-    gitops_deploy.STATE.record_behind(ORIGIN, behind=True, now=1700000000.0)
+    gitops_deploy.STATE.record_behind(
+        ORIGIN, behind=True, now=1700000000.0, fast_forwarded=False
+    )
     sha, first_seen = _marker(state_dir, "behind_since").split()
     assert sha == ORIGIN
     # A later push to a still-stuck host refreshes the SHA and keeps the clock.
-    gitops_deploy.STATE.record_behind(LATER, behind=True, now=1700009999.0)
+    gitops_deploy.STATE.record_behind(
+        LATER, behind=True, now=1700009999.0, fast_forwarded=False
+    )
     assert _marker(state_dir, "behind_since") == f"{LATER} {first_seen}"
 
 
 def test_convergence_clears_the_marker(gitops_deploy, state_dir):
     (state_dir / "behind_since").write_text(f"{ORIGIN} 1700000000")
-    gitops_deploy.STATE.record_behind(ORIGIN, behind=False, now=1700009999.0)
+    gitops_deploy.STATE.record_behind(
+        ORIGIN, behind=False, now=1700009999.0, fast_forwarded=False
+    )
     assert _marker(state_dir, "behind_since") is None
 
 
@@ -387,3 +393,60 @@ def test_state_dir_repoints_every_state_path_in_the_module(
 @pytest.mark.parametrize("name", ["LAST_RUN", "PENDING_ALERTS_FILE", "HOLD_FILE"])
 def test_state_dir_keeps_each_markers_basename(gitops_deploy, state_dir, name):
     assert getattr(gitops_deploy, name).startswith(str(state_dir) + "/")
+
+
+def test_an_ancestor_fast_forward_leaves_behind_since_naming_the_real_tip(
+    gitops_deploy, tick, state_dir
+):
+    """The host IS still behind origin, so the 6h behind-origin watchdog must keep its SHA.
+
+    A tick whose tip is pending fast-forwards to the newest green ancestor instead of
+    deferring, and `entrypoint()` re-resolves the REAL origin afterwards — which is what keeps
+    a tail that never goes green paging rather than reading as converged.
+    """
+    origin, ancestor = "2" * 40, "3" * 40
+    tick.ci = "pending"
+    tick.rev_list = [origin, ancestor]
+    tick.ancestor_ci = {ancestor: "pass"}
+    tick.paths = ["docs/runbook.md"]
+    assert gitops_deploy.entrypoint(tick.tools) == 0
+    assert tick.merges == [ancestor]
+    assert (state_dir / "behind_since").read_text().split()[0] == origin
+
+
+def test_a_tick_that_fast_forwarded_restamps_behind_since(
+    gitops_deploy, tick, state_dir
+):
+    """The stamp measures time WITHOUT a fast-forward, so progress resets it.
+
+    A tick landing at the newest green ancestor ends behind the tip every time. Keeping the
+    old first-seen there would age a working deployer past the 6h watchdog and the 45-min
+    park detectors, which read the same marker.
+    """
+    origin, ancestor = "2" * 40, "3" * 40
+    (state_dir / "behind_since").write_text(f"{origin} 1000.0")
+    tick.ci = "pending"
+    tick.rev_list = [origin, ancestor]
+    tick.ancestor_ci = {ancestor: "pass"}
+    tick.paths = ["docs/runbook.md"]
+    assert gitops_deploy.entrypoint(tick.tools) == 0
+    assert tick.merges == [ancestor]
+    assert float((state_dir / "behind_since").read_text().split()[1]) > 1000.0
+
+
+def test_a_parked_tick_keeps_the_existing_behind_since_stamp(
+    gitops_deploy, tick, state_dir
+):
+    """The other half: a tick that moved nothing must not restart the clock.
+
+    This is the park the watchdog exists for — a tail whose every commit is pending — and a
+    trickle of pushes to a host in that state must not keep resetting its age.
+    """
+    origin = "2" * 40
+    (state_dir / "behind_since").write_text(f"{origin} 1000.0")
+    tick.ci = "pending"
+    tick.rev_list = [origin, "3" * 40]
+    tick.ancestor_ci = {"3" * 40: "pending"}
+    assert gitops_deploy.entrypoint(tick.tools) == 0
+    assert tick.merges == []
+    assert (state_dir / "behind_since").read_text() == f"{origin} 1000.0"

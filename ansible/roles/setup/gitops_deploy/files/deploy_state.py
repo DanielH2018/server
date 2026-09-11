@@ -222,9 +222,12 @@ class DeployerState:
         Returns:
             True when a line was appended, False when this role was already pending.
 
-        The stamp is NOT refreshed for a role already listed, for the same reason
-        `behind_marker` keeps its first-seen: a trickle of pushes touching the same role
-        would otherwise restart the clock every tick and monitor-bridge could never page.
+        The stamp is NOT refreshed for a role already listed. It measures how long the role
+        has waited for a hand-applied run, and a later commit touching the same role is not
+        that run — it is more of the same waiting. Refreshing on one would restart the clock
+        every tick a push landed, and monitor-bridge could never page. (This is the opposite
+        of `behind_marker`, which re-stamps on every fast-forward, because progress is
+        exactly what a tick that moves the tree HAS made.)
         """
         lines: list[str] = (self.manual_plane or "").splitlines()
         if any(self._line_role(line) == role for line in lines):
@@ -325,7 +328,9 @@ class DeployerState:
             return
         self.write_hold(None)
 
-    def record_behind(self, origin: str, behind: bool, now: float) -> None:
+    def record_behind(
+        self, origin: str, behind: bool, now: float, *, fast_forwarded: bool
+    ) -> None:
         """Record whether this host ended the tick behind origin (see `behind_marker`).
 
         Args:
@@ -333,10 +338,21 @@ class DeployerState:
             behind: whether `local` is a strict ancestor of `origin` — the caller does the
                 ancestry query, because that reaches git and this object reaches only files.
             now: the current time, in `time.time()` terms, for a first-seen stamp.
+            fast_forwarded: whether the tick moved the tree, which is what the stamp
+                measures the absence of. The caller compares HEAD before and after, because
+                that reaches git too.
 
         Called AFTER main() so it records the state the tick finished in, not the one it
         started in: a tick that deployed successfully converged and must clear the marker
-        rather than leave a stale one for the next 30 minutes. The first-seen stamp inside
-        `behind_marker` is preserved across ticks and reset only on convergence.
+        rather than leave a stale one for the next 30 minutes.
         """
-        self.write("behind", behind_marker(behind, origin, self.behind_since, now))
+        self.write(
+            "behind",
+            behind_marker(
+                behind,
+                origin,
+                self.behind_since,
+                now,
+                fast_forwarded=fast_forwarded,
+            ),
+        )

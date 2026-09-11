@@ -129,7 +129,12 @@ def test_a_retryable_fetch_failure_is_a_clean_skip(
         "a skipped tick must not refresh last_run — a persistent fetch break would then hide "
         "behind a green GitOps-Alive"
     )
-    assert seen["git"] == [], "a skipped tick must not record the behind-origin marker"
+    assert not (state_dir / "behind_since").exists(), (
+        "a skipped tick must not record the behind-origin marker"
+    )
+    assert [argv[1] for argv in seen["git"]] == ["rev-parse"], (
+        "the only git call is entrypoint() reading HEAD before main()"
+    )
 
 
 def test_an_unusable_config_is_one_line_and_exit_0_on_a_delivered_post(
@@ -162,7 +167,12 @@ def test_an_unusable_config_is_one_line_and_exit_0_on_a_delivered_post(
     assert "HEALTH_TIMEOUT_S" in out and "5m" in out
     assert len(seen["posts"]) == 1 and "HEALTH_TIMEOUT_S" in seen["posts"][0]
     assert not (state_dir / "last_run").exists()
-    assert seen["git"] == [], "a skipped tick must not record the behind-origin marker"
+    assert not (state_dir / "behind_since").exists(), (
+        "a skipped tick must not record the behind-origin marker"
+    )
+    assert [argv[1] for argv in seen["git"]] == ["rev-parse"], (
+        "the only git call is entrypoint() reading HEAD before main()"
+    )
 
 
 def test_an_unusable_config_exits_1_when_the_alert_itself_cant_be_delivered(
@@ -203,8 +213,8 @@ def test_a_completed_tick_writes_last_run_and_returns_mains_rc(
     tools, seen = _tick(gitops_deploy, monkeypatch, rc)
     assert gitops_deploy.entrypoint(tools) == rc
     assert seen["posts"] == []
-    assert [argv[1] for argv in seen["git"]] == ["rev-parse", "rev-parse"], (
-        "the behind-origin marker is recorded after main()"
+    assert [argv[1] for argv in seen["git"]] == ["rev-parse"] * 3, (
+        "HEAD is read before main(), then both refs after it, for the behind marker"
     )
     stamp = float((state_dir / "last_run").read_text())
     assert stamp > 0

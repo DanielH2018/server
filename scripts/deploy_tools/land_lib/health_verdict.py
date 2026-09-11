@@ -18,6 +18,7 @@ from deploy_tools.land_lib.outcome import (
     Cause,
     Verdict,
     say,
+    unrecorded_apply_note,
 )
 
 
@@ -81,15 +82,15 @@ def health(ln: Landing) -> NoReturn:
                 75,
                 f"PR #{pr}, {sha}, tags: {tags} — services deployed, the tick's half not yet",
             )
-        # CONVERGED says local == origin, which any session's `git merge --ff-only` produces
-        # too — and after it holds the tick returns `noop` forever, so a plane it never applied
-        # is stranded while this reads `settled` (issue #1537).
+        # CONVERGED says the tick is not deferring this PR, which any session's `git merge
+        # --ff-only` also produces — and once local == origin the tick returns `noop` forever,
+        # so a plane it never applied is stranded while this reads `settled` (issue #1537).
         if not ln.broad_applied_covers(sha):
             print(
                 "  services deployed, but the tick recorded no broad apply covering this PR "
-                f"(broad_applied: {ln.state('broad_applied') or 'absent'}) — something other "
-                "than the tick fast-forwarded the checkout"
+                f"(broad_applied: {ln.state('broad_applied') or 'absent'})"
             )
+            print(unrecorded_apply_note(ln.state("behind_since")))
             if ln.self_applied_command:
                 print(f"  Apply it: {ln.self_applied_command}")
             ln.finish(

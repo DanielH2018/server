@@ -103,18 +103,24 @@ def handle_dirty(
 def handle_ci_failed(
     tools: DeployTools, state: DeployerState, config: Config, target: TickTarget
 ) -> int:
-    """Master is red: stay on `local`, page once per SHA."""
-    deploy_alerts.alert_once(
-        tools,
-        state,
-        config,
-        "ci_alerted",
-        "ci",
-        target.origin,
-        deploy_alerts.ci_failed_alert(config.hostname, target.local, target.origin),
-    )
+    """Master is red and no ancestor of it is green: stay on `local`, page once per SHA."""
+    alert_red_tip(tools, state, config, target)
     log(f"origin {target.origin[:8]}: CI failed — not deploying")
     return 0
+
+
+def alert_red_tip(
+    tools: DeployTools, state: DeployerState, config: Config, target: TickTarget
+) -> None:
+    """Page once per SHA for a red master tip, whether or not this tick deployed past it.
+
+    Two call sites, one marker: `handle_ci_failed` on a tick that stayed on `local`, `main()`
+    on a tick that fast-forwarded to a green ancestor of the same red tip. Keyed on the TIP in
+    both (`target.tip` is empty only on a hand-built target, where origin IS the tip).
+    """
+    red = target.tip or target.origin
+    body = deploy_alerts.ci_failed_alert(config.hostname, target.local, red)
+    deploy_alerts.alert_once(tools, state, config, "ci_alerted", "ci", red, body)
 
 
 def handle_broad(
