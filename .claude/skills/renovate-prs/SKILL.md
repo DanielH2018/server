@@ -67,6 +67,23 @@ tell is the age of the merge base, not the age of the PR**:
   to 2.37.9 against a live 2.37.10. That downgrade is caught by
   `test_the_ledger_last_entry_is_the_live_pin`, but only after the ledger row is appended.
 
+**A PR whose merge would land nothing is failed by CI, not by this step.** #1741 and #1743
+automerged on 2026-09-11 ten seconds after opening, so no session triaged them (#1755). Renovate
+had reused the previous bump's branch under the next version's title, and master already held
+its content. The `hooks` job's scoping step now exits non-zero when the merge-ref diff against
+master is empty, which fails the `prek` gate; `test_ci_empty_pr_merge_fails.py` proves it.
+That shape defeats the `baseRefOid` tell above — GitHub reports where master stood when the
+PR opened, a few commits back, while the branch's real merge base is a day old. When a PR's
+title names a version its diff does not write, read the merge base directly:
+
+```bash
+git fetch -q origin master "<headRefName>" && git merge-base origin/master FETCH_HEAD
+```
+
+A PR the check fails is closed, not rebased: its content is already on master. Ticking the
+rebase box on #1742 and #1749 was consumed and moved neither branch. Why Renovate reuses the
+leftover branch is the undetermined half of #1755; §8 lists that branch for deletion.
+
 For each PR read the file list and the diff — `gh pr diff <n> --name-only`, then
 `gh pr diff <n> | grep -E '^[-+]' | grep -vE '^(\+\+\+|---)'`. The files decide the class:
 
