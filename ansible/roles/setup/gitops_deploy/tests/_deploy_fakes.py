@@ -92,6 +92,10 @@ class ScriptedTick:
         self.run_error: Exception | None = None
         self.healthy: dict[str, bool] = {}
         self.staging_verdict = "pass"
+        # What `deploy_tags.py narrow` answers: (exit code, stdout). The production
+        # default is a refusal, so a test that does not script it gets today's full
+        # `deploy.yml` — the behaviour every pre-narrowing test was written against.
+        self.narrow: tuple[int, str] = (3, "")
         self.discord_ok = True
         self.log: list[tuple] = []
         self.repo = repo
@@ -248,6 +252,21 @@ class ScriptedTick:
         )
         return self.healthy[service]
 
+    def narrow_deploy_plane(
+        self, _repo: str, old: str, new: str, _timeout: float
+    ) -> tuple[int, str]:
+        """The scripted narrowing, asserted to be asked about THIS tick's own range.
+
+        A fake that ignored its refs would answer the same for a derivation run after
+        the merge, which is the one thing the call site's ordering is about.
+        """
+        assert (old, new) == (self.local, self.origin), (
+            f"the narrowing asked about {old[:8]}..{new[:8]}, not this tick's "
+            f"{self.local[:8]}..{self.origin[:8]}"
+        )
+        self.log.append(("narrow", [old, new]))
+        return self.narrow
+
     def run_staging_scripts(
         self, _repo: str, _sha: str, tags: str, _gate_s: float, _expect_s: float
     ) -> tuple[int, int]:
@@ -302,6 +321,7 @@ def build_tools(scripted: ScriptedTick) -> DeployTools:
         discord_post=scripted.discord_post,
         service_healthy=scripted.service_healthy,
         run_staging_scripts=scripted.run_staging_scripts,
+        narrow_deploy_plane=scripted.narrow_deploy_plane,
         emit_deploy_annotation=scripted.emit_deploy_annotation,
         now=scripted.now,
     )

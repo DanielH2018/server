@@ -30,6 +30,7 @@ from jinja2 import ChainableUndefined, Environment, FileSystemLoader
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lib import yaml_fast
+from lib.git import git, git_stdout
 from lib.repo_paths import (
     ALL_VARS,
     ANSIBLE,
@@ -176,3 +177,47 @@ def containers_entries_in(data: dict) -> list[dict]:
 def containers_entries(path: Path) -> list[dict]:
     """The named ``containers_list`` entries in one host_vars file."""
     return containers_entries_in(load_yaml(path))
+
+
+# host_vars as git names it: ``git show`` and ``git ls-tree`` address a path in a tree, not on
+# disk.
+HOST_VARS_IN_TREE = HOST_VARS.relative_to(REPO).as_posix()
+
+
+def entry_tags(entry: dict) -> list[str]:
+    """The tags one ``containers_list`` entry selects under.
+
+    ``deploy.yml:116`` -- ``container_item.tags | default([container_item.name])``. Mirror that
+    precedence exactly, or an entry that overrides its tags is validated against a name that no
+    longer selects it. One definition, because ``deploy_tags.service_tags`` reads the working
+    tree, ``service_tags_at`` below reads a git ref, and ``narrow_broad`` reads an entry out of
+    a diff.
+    """
+    return list(entry.get("tags") or [entry["name"]])
+
+
+def service_tags_at(ref: str, cwd: Path) -> set[str]:
+    """Every name that selects a service AT ``ref``, read with git rather than from a worktree.
+
+    A PR that adds a role and its ``containers_list`` entry together is the case a checkout
+    answers wrongly: the entry is in no tree until the tick fast-forwards, so the role reads as
+    one nobody registered (issue #1544; ``land_lib/classify.py`` carries the argument). Names are
+    listed at ``ref`` too, so a host_vars file the same PR adds counts, and ``_example.yml`` is
+    excluded for the reason ``host_files`` excludes it.
+
+    Reuses ``entry_tags`` and ``containers_entries_in`` rather than re-reading a containers_list
+    entry its own way: two derivations of "which tags exist" that disagree is exactly the defect
+    this answer is meant to fix. Raises ``CalledProcessError`` on an unreadable ref.
+    """
+    tags: set[str] = set()
+    for name in git_stdout(
+        "ls-tree", "--name-only", f"{ref}:{HOST_VARS_IN_TREE}", cwd=cwd
+    ).splitlines():
+        if not name.endswith(".yml") or name.startswith("_"):
+            continue
+        loaded = yaml_fast.safe_load(
+            git("show", f"{ref}:{HOST_VARS_IN_TREE}/{name}", cwd=cwd).stdout
+        )
+        for entry in containers_entries_in(loaded if isinstance(loaded, dict) else {}):
+            tags.update(entry_tags(entry))
+    return tags

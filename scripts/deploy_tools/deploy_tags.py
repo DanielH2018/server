@@ -53,6 +53,7 @@ from lib.render_guard import (
     HOST_VARS,
     REPO,
     containers_entries,
+    entry_tags,
     host_files,
 )
 from deploy_tools.exit_codes import DEPLOY_BROAD
@@ -100,21 +101,6 @@ BLOCK_TAGS = frozenset({"config", "deploy", "cron"})
 
 # Ansible's own reserved tag. `--tags always` is degenerate but not a typo.
 RESERVED_TAGS = frozenset({"always"})
-
-
-# host_vars as git names it: `git show` and `git ls-tree` address a path in a tree, not on disk.
-HOST_VARS_IN_TREE = HOST_VARS.relative_to(REPO).as_posix()
-
-
-def entry_tags(entry: dict) -> list[str]:
-    """The tags one `containers_list` entry selects under.
-
-    deploy.yml:116 — `container_item.tags | default([container_item.name])`. Mirror that
-    precedence exactly, or an entry that overrides its tags is validated against a name that
-    no longer selects it. One definition, because `service_tags` reads the working tree and
-    `service_tags_at` reads a git ref.
-    """
-    return list(entry.get("tags") or [entry["name"]])
 
 
 def service_tags(host_vars: Path = HOST_VARS) -> set[str]:
@@ -387,6 +373,14 @@ def _cmd_blockers(args: argparse.Namespace) -> int:
     return DEPLOY_BROAD
 
 
+def _cmd_narrow(args: argparse.Namespace) -> int:
+    """Print the tags a deploy-plane range reaches. See narrow_broad.py for the rules."""
+    # Lazy for the reason `_load_deploy_logic` is: `validate` must not pay for a yaml parse.
+    from narrow_broad import narrow_cmd
+
+    return narrow_cmd(args.old, args.new)
+
+
 def _is_broad_manual(path: str) -> bool:
     from deploy_logic import _BROAD_MANUAL_PREFIXES
 
@@ -538,10 +532,7 @@ def _cmd_hosts(args: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Dispatch to the `validate`/`list`/`describe`/`changed`/`blockers`/`hosts` subcommand.
-
-    Returns that subcommand's own exit code.
-    """
+    """Dispatch to the subcommand named in `argv`; returns that subcommand's exit code."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -571,6 +562,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     bl.add_argument("ref", nargs="?", default="origin/master")
     bl.set_defaults(func=_cmd_blockers)
+
+    na = sub.add_parser("narrow", help="narrow a deploy-plane range, or exit 3")
+    na.add_argument("old")
+    na.add_argument("new")
+    na.set_defaults(func=_cmd_narrow)
 
     ho = sub.add_parser(
         "hosts",

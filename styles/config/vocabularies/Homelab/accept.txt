@@ -404,3 +404,6 @@ amdgpu
 runc
 apiserver
 ORed
+
+# Narrowing a deploy-plane change (docs/gitops-pipeline.md)
+[Uu]nscoped

@@ -35,9 +35,9 @@ from typing import NamedTuple
 # identically -- two derivations that disagree is the defect this import exists to prevent.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from lib import yaml_fast
-from lib.git import git, git_stdout
-from lib.render_guard import containers_entries_in
+# `service_tags_at` is re-exported rather than defined here: `narrow_broad` needs it too,
+# and importing this module for it would put a cycle through `deploy_tags`.
+from lib.render_guard import containers_entries_in, service_tags_at  # noqa: F401
 from lib.repo_paths import GITOPS_DEPLOY_FILES
 
 sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
@@ -90,34 +90,6 @@ _ROTATION_NOTE = (
 def declared_tags() -> set[str]:
     """Every name that selects a service, read from containers_list."""
     return deploy_tags.service_tags()
-
-
-def service_tags_at(ref: str, cwd: Path) -> set[str]:
-    """Every name that selects a service AT `ref`, read with git rather than from a worktree.
-
-    A PR that adds a role and its `containers_list` entry together is the case a checkout
-    answers wrongly: the entry is in no tree until the tick fast-forwards, so the role reads as
-    one nobody registered (issue #1544; `land_lib/classify.py` carries the argument). Names are
-    listed at `ref` too, so a host_vars file the same PR adds counts, and `_example.yml` is
-    excluded for the reason `deploy_tags.host_files` excludes it.
-
-    Reuses `entry_tags` and `containers_entries_in` rather than re-reading a containers_list
-    entry its own way: two derivations of "which tags exist" that disagree is exactly the
-    defect this answer is meant to fix. Raises `CalledProcessError` on an unreadable ref.
-    """
-    in_tree = deploy_tags.HOST_VARS_IN_TREE
-    tags: set[str] = set()
-    for name in git_stdout(
-        "ls-tree", "--name-only", f"{ref}:{in_tree}", cwd=cwd
-    ).splitlines():
-        if not name.endswith(".yml") or name.startswith("_"):
-            continue
-        loaded = yaml_fast.safe_load(
-            git("show", f"{ref}:{in_tree}/{name}", cwd=cwd).stdout
-        )
-        for entry in containers_entries_in(loaded if isinstance(loaded, dict) else {}):
-            tags.update(deploy_tags.entry_tags(entry))
-    return tags
 
 
 def role_for(path: str) -> str | None:
