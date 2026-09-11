@@ -168,8 +168,8 @@ def test_startup_grace_covers_every_ungated_reach_out_check():
     for deps in gates.EXPORTER_DEPENDENT.values():
         gated |= set(deps)
     # These ride out the reboot blip with their own down-streak hysteresis instead of the
-    # STARTUP_GRACE mechanism (HA_CONSECUTIVE / DISCORD_CONSECUTIVE).
-    self_hysteresis = {"ha_heartbeat", "discord"}
+    # STARTUP_GRACE mechanism (HA_CONSECUTIVE / DISCORD_CONSECUTIVE / ARR_FETCH_CONSECUTIVE).
+    self_hysteresis = {"ha_heartbeat", "discord", "arr_queue"}
     reach_out = {
         name
         for name, _, fn in ((c.name, c.token, c.fn) for c in registry.build_checks())

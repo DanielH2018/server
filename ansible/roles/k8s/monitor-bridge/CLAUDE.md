@@ -183,9 +183,18 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     extension: '.exe'"), but nothing paged, so the release sat seeding for a full day before a
     manual review caught it. `SONARR_API_KEY`/`RADARR_API_KEY` are independent — an empty one
     skips that app, both empty disables the whole check (stays up), like `N8N_API_KEY`. An
-    unreachable *arr API is NOT given grace/hysteresis — it surfaces as `down` immediately via
-    the same `_evaluate` path as `check_n8n`/`check_scrutiny` (no shared root cause here to
-    gate, unlike the Prometheus/exporter checks). Pure `queue_warnings()` is unit-tested.)
+    unreachable *arr API rides `ARR_FETCH_CONSECUTIVE` (3 cycles = 15 min) since 2026-09-11,
+    which is a DIVERGENCE from `check_n8n`/`check_scrutiny` — those still let the error bubble
+    to `_evaluate` and page at once. The *arrs differ in one way that matters: they are
+    Deployments this same bridge watches rolling, so their API refuses connections every time
+    k3s replaces the pod, and three of this monitor's DOWN episodes in the 30 days to
+    2026-09-11 were a fetch error co-timed with a `k8s_workloads ... radarr(1)` episode — one
+    rollout reported twice. The streak covers the FETCH only: a queue item needing review pages
+    on the cycle it is seen, because a poisoned release sitting in the queue is not a transient.
+    **This REPLACED arr_queue's `STARTUP_GRACE` membership** rather than stacking on it — that
+    grace covered the same transient at 2 cycles and covered the queue verdict too. Pure
+    `queue_warnings()` is unit-tested; the fetch streak has its own accept/reject pair in
+    `test_check_service.py`.)
   - **Bazarr Health** (bazarr's `/api/system/status` + `/api/system/health` over `media`:
     `down` when a peer version field is present-but-empty, or when bazarr self-reports a health
     issue. **Bazarr is the *arr with no exporter, and that is the whole point.** It holds its
@@ -217,7 +226,8 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     Prowlarr's ~5-15 min backoff. Age-based (not consecutive-cycle) so it survives a bridge
     redeploy mid-outage. Empty `PROWLARR_API_KEY` = disabled (stays up); a null/unparseable
     `initialFailure` is skipped, an unreachable Prowlarr surfaces as `down` via `_evaluate` (the
-    `check_arr_queue` convention — no grace). Pairs with Prowlarr set to
+    `check_n8n`/`check_bazarr` convention — no grace; `check_arr_queue` left that convention on
+    2026-09-11 and now rides `ARR_FETCH_CONSECUTIVE`). Pairs with Prowlarr set to
     `includeHealthWarnings=false` (keeps `onHealthIssue` = the instant all-down red backstop).
     `PROWLARR_INDEXER_IGNORE` (comma-separated names, case-insensitive) drops chronically-flaky
     public trackers from the offender list — set to `The Pirate Bay,1337x` — the first after its
@@ -717,6 +727,18 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     partially-loaded kube-state-metrics: its ClusterRole is deliberately scoped, so dropping `apps`
     would take every deployment series away while the pod stays up and Ready. That fault is
     invisible to the reachability gate above, which is why both exist.
+    **`K8S_WORKLOADS_CONSECUTIVE` (3) gates the unavailable-replica arm ALONE**, added
+    2026-09-11 (#1780). A Deployment rolling has one unavailable replica by definition, so that
+    arm reported every ordinary rollout: of the 48 DOWN episodes this monitor opened in the 30
+    days to 2026-09-11, the replica ones are all single-cycle and all name one workload
+    (`unavailable replicas: uptime-kuma(1)`, and the same for valheim, radarr, jellyfin,
+    speedtest, karakeep-chrome). A held cycle appends the sibling `down streak n/N (rollout)`
+    note to the tile rather than reading plain green — a monitor that is up while a fault
+    accumulates has to say so. **Every other arm keeps no grace**: a crash loop is already a
+    multi-cycle condition by the time `increase()` sees it, and a floor breach means the check
+    is blind, which delaying helps nobody. `test_check_k8s_workload_replicas.py` proves the
+    selectivity by running a crash loop and a rolling replica in ONE cycle — a blanket streak
+    would pass a naive accept/reject pair while silently delaying every crash-loop page.
     **A second arm covers DaemonSets** (added 2026-08-13):
     `kube_daemonset_status_number_unavailable`, with its own `K8S_MIN_DAEMONSETS` floor (9) and
     the same fail-closed-on-absent-series logic — a Deployment-shaped census cannot see promtail,
@@ -892,7 +914,10 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     1,027 in the same window, entirely on `job=alloy-pi` under the unrelated
     `reason="ingester_error"` — the client-side arm alone gave no visibility into the
     server-side total or its real reason. `down` when either arm's total exceeds
-    `SHIPPER_DROPPED_MAX` (1000) over the window; the message names which reason fired when the
+    `SHIPPER_DROPPED_MAX` (3000, raised from 1000 on 2026-09-11 — a 1020-entry hour held this
+    tile red for 51 minutes, and over the 14 days Prometheus retains the client counter is
+    non-zero in 26 of ~336 hours with NOTHING between 1020 and 6261; the derivation and the
+    rejected streak are at the `DECIDED:` marker in `bridge/config_io.py`) over the window; the message names which reason fired when the
     server-side arm is the one that dominates — `too_far_behind` is a clock/backfill problem,
     every other reason is throughput/limits, and the operator needs to know which. Where **Loki
     Log Ingestion** catches TOTAL silence, this surfaces PARTIAL loss either shipper- or
@@ -993,11 +1018,11 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
   window costs only detection latency, while a retry parks the push in PENDING and hands the
   Discord message back to the watchdog. `test_push_monitors_never_retry` in
   `ansible/tests/services/test_kuma_static_monitors.py` is the guard.
-- **Startup/redeploy grace for the reach-out checks (`STARTUP_GRACE`, 2026-07-12):** the six
+- **Startup/redeploy grace for the reach-out checks (`STARTUP_GRACE`, 2026-07-12):** the
   checks that poll a live app dependency with **no reachability gate and no per-check hysteresis**
-  — **n8n Prod Workflows** (n8n), **Arr Queue Warnings**, **Bazarr Health** (bazarr)
-  (sonarr/radarr), **Prowlarr Indexers** (prowlarr) and **SMART Data / Health** (scrutiny) (both
-  added 2026-07-14), **Pi Pressure** (the Pi glances) — get a consecutive-down grace applied in
+  — **n8n Prod Workflows** (n8n), **Bazarr Health** (bazarr), **Prowlarr Indexers** (prowlarr)
+  and **SMART Data / Health** (scrutiny) (both added 2026-07-14), **Pi Pressure** (the Pi
+  glances) — get a consecutive-down grace applied in
   `run_once` (peer mechanism to `PROM_DEPENDENT`/`LOKI_DEPENDENT`, but a *hysteresis* not a
   *suppression*). Cause: the bridge's first cycle after the **weekly Sunday 07:30 host reboot**
   runs before those heavy apps finish starting, so each un-graced `max_retries=0` monitor flipped

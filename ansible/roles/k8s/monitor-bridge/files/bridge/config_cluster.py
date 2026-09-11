@@ -34,6 +34,7 @@ class ClusterConfig:
     CADVISOR_CONSECUTIVE: int
     K8S_MIN_WORKLOADS: int
     K8S_MIN_DAEMONSETS: int
+    K8S_WORKLOADS_CONSECUTIVE: int
     LONGHORN_CONSECUTIVE: int
     PVC_MAX_PCT: float
     PVC_MIN_CLAIMS: int
@@ -157,6 +158,17 @@ def cluster_config(
         # the comment) when a DaemonSet is added or retired — same discipline as
         # K8S_MIN_WORKLOADS.
         K8S_MIN_DAEMONSETS=_int("K8S_MIN_DAEMONSETS", "9"),
+        # Consecutive down cycles before check_k8s_workloads' UNAVAILABLE-REPLICA arm pages —
+        # that arm alone, not the check. A Deployment rolling has one unavailable replica by
+        # definition, so an ungated arm turns every ordinary rollout into a DOWN episode: of the
+        # 48 this monitor opened in the 30 days to 2026-09-11, the ones the bridge's own log
+        # attributes to replicas are all single-cycle and all name one workload
+        # (uptime-kuma(1), valheim(1), radarr(1), jellyfin(1), speedtest(1), karakeep-chrome(1)).
+        # 3 cycles = 15 min at INTERVAL=300, the same value CLUSTER_TARGETS_CONSECUTIVE /
+        # LONGHORN_CONSECUTIVE / PVC_CLAIMS_CONSECUTIVE carry: longer than any rollout, shorter
+        # than a workload that cannot come back. The crash-loop, DaemonSet, floor and log arms
+        # get no grace and still page on cycle one.
+        K8S_WORKLOADS_CONSECUTIVE=_int("K8S_WORKLOADS_CONSECUTIVE", "3"),
         # Hysteresis for check_longhorn_volumes. A node drain and the Sunday 07:30 reboot both
         # degrade every volume on the departing node BY DESIGN, so a single breaching cycle must
         # not page — 3 cycles at the bridge cadence is longer than either takes to settle. Same

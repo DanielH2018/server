@@ -23,6 +23,7 @@ from verdicts.cluster import (
     extended_resource_verdict,
     k8s_workloads_verdict,
     ksm_resource_label,
+    replica_offender_names,
     targets_verdict,
 )
 
@@ -396,22 +397,62 @@ def check_traefik_404_flood(cfg: Config) -> tuple[bool, str]:
     )
 
 
-def check_k8s_workloads(cfg: Config) -> tuple[bool, str]:
+def _held_replica_offenders(
+    cfg: Config, offenders: list[tuple[dict, float]]
+) -> tuple[list[tuple[dict, float]], str]:
+    """Hold unavailable-replica offenders back until they persist K8S_WORKLOADS_CONSECUTIVE cycles.
+
+    Returns (offenders the verdict should judge, note). The note is empty unless the streak is
+    holding, in which case it carries the sibling "down streak n/N (rollout)" text naming the
+    workloads being held — a monitor that stays up while a fault accumulates has to say so, and
+    the green verdict text alone ("N k8s workloads healthy") would read identical to a cycle
+    with nothing rolling at all.
+
+    The gate is on THIS ARM ALONE. A Deployment rolling has one unavailable replica by
+    definition, which is what every single-cycle DOWN episode this closes named — uptime-kuma(1),
+    valheim(1), radarr(1), jellyfin(1), speedtest(1), karakeep-chrome(1) over the 30 days to
+    2026-09-11. The crash-loop, DaemonSet, floor and log arms keep no grace: a crash-loop is
+    already a multi-cycle condition by the time `increase()` sees it, and a floor breach means
+    the check is blind, which delaying helps nobody.
+    """
+    if not offenders:
+        bridge.streaks._down_streaks["k8s_workload_replicas"] = 0
+        return offenders, ""
+    count, held, note = bridge.streaks.down_streak(
+        bridge.streaks._down_streaks.get("k8s_workload_replicas", 0),
+        cfg.K8S_WORKLOADS_CONSECUTIVE,
+        "unavailable replicas: %s" % replica_offender_names(offenders),
+        "rollout",
+    )
+    bridge.streaks._down_streaks["k8s_workload_replicas"] = count
+    if held:
+        return [], note
+    return offenders, ""
+
+
+def check_k8s_workloads(cfg: Config, fetch=None, scalar=None) -> tuple[bool, str]:
     """Deployment readiness for every workload in the k3s cluster.
 
     Gated by check_cluster_prometheus rather than the ordinary Prometheus gate: this is the one
     check reading the CLUSTER Prometheus, so the `prom_ok` gate is not watching its source. See
     CLUSTER_DEPENDENT.
+
+    `fetch`/`scalar` are the injectable Prometheus boundaries, the seam check_cluster_targets and
+    checks/host_edge.py already use — six queries feed five arms here, and a test that wants one
+    arm states that arm's answer rather than patching a module. Resolved in the body, not as
+    defaults: a default binds at import, before a test could reach bridge.net.
     """
+    fetch = fetch or bridge.net.prom_vector
+    scalar = scalar or bridge.net.prom_scalar
     if not cfg.CLUSTER_PROM_URL:
         return True, "k8s workload check disabled (no CLUSTER_PROMETHEUS_URL)"
-    total = bridge.net.prom_scalar(
+    total = scalar(
         cfg,
         "count(kube_deployment_status_replicas_unavailable)",
         base=cfg.CLUSTER_PROM_URL,
         source="cluster prometheus",
     )
-    offenders = bridge.net.prom_vector(
+    offenders = fetch(
         cfg,
         "kube_deployment_status_replicas_unavailable > 0",
         base=cfg.CLUSTER_PROM_URL,
@@ -421,7 +462,7 @@ def check_k8s_workloads(cfg: Config) -> tuple[bool, str]:
     # pod from holding the tile red for the rest of the 1h evidence window. `and` is a vector
     # match on the full label set, so it filters the first clause's series rather than
     # replacing them — the offender labels reaching the verdict are unchanged.
-    restart_offenders = bridge.net.prom_vector(
+    restart_offenders = fetch(
         cfg,
         "increase(kube_pod_container_status_restarts_total[%s]) > %d"
         " and increase(kube_pod_container_status_restarts_total[%s]) > 0"
@@ -429,18 +470,19 @@ def check_k8s_workloads(cfg: Config) -> tuple[bool, str]:
         base=cfg.CLUSTER_PROM_URL,
         source="cluster prometheus",
     )
-    ds_total = bridge.net.prom_scalar(
+    ds_total = scalar(
         cfg,
         "count(kube_daemonset_status_number_unavailable)",
         base=cfg.CLUSTER_PROM_URL,
         source="cluster prometheus",
     )
-    ds_offenders = bridge.net.prom_vector(
+    ds_offenders = fetch(
         cfg,
         "kube_daemonset_status_number_unavailable > 0",
         base=cfg.CLUSTER_PROM_URL,
         source="cluster prometheus",
     )
+    offenders, replica_note = _held_replica_offenders(cfg, offenders)
     ok, msg = k8s_workloads_verdict(
         total,
         offenders,
@@ -456,7 +498,7 @@ def check_k8s_workloads(cfg: Config) -> tuple[bool, str]:
     advertised = {}
     for resource in cfg.K8S_EXTENDED_RESOURCES:
         advertised[resource] = len(
-            bridge.net.prom_vector(
+            fetch(
                 cfg,
                 'kube_node_status_allocatable{resource="%s"} > 0'
                 % ksm_resource_label(resource),
@@ -467,19 +509,22 @@ def check_k8s_workloads(cfg: Config) -> tuple[bool, str]:
     res_ok, res_msg = extended_resource_verdict(
         cfg.K8S_EXTENDED_RESOURCES,
         advertised,
-        bridge.net.prom_scalar(
+        scalar(
             cfg,
             "count(kube_node_status_allocatable)",
             base=cfg.CLUSTER_PROM_URL,
             source="cluster prometheus",
         ),
     )
+    tail = ", %s" % replica_note if replica_note else ""
     if not res_ok:
         # The resource fault wins the message: an unschedulable-by-design cluster is more urgent
         # than whatever the workload arm has to say, and the workload arm's own text is preserved
         # after it rather than dropped.
-        return checks.logs.with_log_errors(cfg, False, "%s | %s" % (res_msg, msg))
-    return checks.logs.with_log_errors(cfg, ok, "%s, %s" % (msg, res_msg))
+        return checks.logs.with_log_errors(
+            cfg, False, "%s | %s%s" % (res_msg, msg, tail)
+        )
+    return checks.logs.with_log_errors(cfg, ok, "%s, %s%s" % (msg, res_msg, tail))
 
 
 def check_cluster_targets(cfg: Config, fetch=None) -> tuple[bool, str]:
