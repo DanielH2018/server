@@ -1130,6 +1130,16 @@ Neither wait is silently wrong — both correctly report "the lock stayed busy" 
 seeing exit 75 during this window should check whether gitops-deploy is mid double-timeout before
 assuming the lock is stuck.
 
+**Since ADR-0017 the contention is one-directional.** `./scripts/deploy.sh` holds the tree lock
+only long enough to copy `HEAD` into a detached worktree, and runs its playbook from that
+snapshot under one `/var/lock/server-deploy-<tag>.lock` per service — so it no longer holds the
+tree lock for ~20 minutes and this unit no longer queues behind it for that long. This unit is
+unchanged: it still holds the tree lock across its whole run, so an operator deploy launched
+mid-tick still waits, for its snapshot alone. This unit takes the per-service locks too, inside
+that hold, which is what keeps a tick and an operator deploy off the same rollout. The lock
+order is `all` first, then each service in sorted order, and the `# DECIDED:` marker in
+`files/deploy_io.py` says why the two orders cannot deadlock.
+
 **Consequence for the operator: a pathological double-timeout run can overrun the 30-minute
 timer tick — verified live against the real unit, not inferred from the man page alone.**
 `systemctl show gitops-deploy.service -p ActiveEnterTimestamp` on daniel-box returns EMPTY: a

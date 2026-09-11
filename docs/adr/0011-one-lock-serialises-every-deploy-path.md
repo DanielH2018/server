@@ -4,7 +4,7 @@ title: One lock serialises every path that writes the git tree
 status: Accepted
 date: 2026-08-23
 governs:
-  - ansible/roles/setup/gitops_deploy/templates/gitops-deploy.service.j2:77
+  - ansible/roles/setup/gitops_deploy/templates/gitops-deploy.service.j2:82
 ---
 
 # ADR-0011: One lock serialises every path that writes the git tree
@@ -12,6 +12,12 @@ governs:
 ## Status
 
 Accepted. The exit-code half was settled on 2026-08-23.
+
+Amended by [ADR-0017](0017-the-tree-lock-guards-the-tree-not-the-cluster.md). The lock still
+guards the tree and nothing else; what changed is that `scripts/deploy.sh` holds it only for a
+snapshot of `HEAD` and takes per-service locks for the playbook itself. Read the two together:
+everything below about what the lock is for, and about contention being a resume point, is
+unchanged.
 
 ## Context
 
@@ -59,5 +65,5 @@ contention outlasting `GITOPS_MAX_AGE_S` still pages through the GitOps-Alive mo
 
 ## Governs
 
-`ansible/roles/setup/gitops_deploy/templates/gitops-deploy.service.j2:77` — the marker
+`ansible/roles/setup/gitops_deploy/templates/gitops-deploy.service.j2:82` — the marker
 recording that contention exits 75 and the unit succeeds.

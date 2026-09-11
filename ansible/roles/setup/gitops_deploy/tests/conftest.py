@@ -49,6 +49,26 @@ STAGING_SUBSET = frozenset({"sonarr"})
 os.environ["GITOPS_DEPLOY_CONFIG"] = str(pathlib.Path(__file__).with_name("config.env"))
 
 
+@pytest.fixture(autouse=True)
+def service_lock_dir(tmp_path, monkeypatch) -> pathlib.Path:
+    """Point the per-service locks at tmp_path, and hand back the directory to read them from.
+
+    Every deploy this suite drives now flocks one file per service (ADR-0017). Left at
+    /var/lock those would sit beside the real locks, so a test would flock what a live deploy
+    holds and block on it. Autouse and directory-wide, because the set of modules that reach a
+    deploy function is not closed.
+
+    `_deploy_fakes.locks_taken` reads this directory: a lock file exists only because a deploy
+    took it, so the directory IS the record of which locks a call took.
+    """
+    locks = tmp_path / "service-locks"
+    locks.mkdir()
+    # `setenv`, not `setattr`: `deploy_locks.lock_dir()` reads the variable per call, the same
+    # one `scripts/deploy.sh` honours, so the redirect needs no seam in the module.
+    monkeypatch.setenv("HOMELAB_DEPLOY_LOCK_DIR", str(locks))
+    return locks
+
+
 @pytest.fixture(scope="session")
 def gitops_deploy() -> ModuleType:
     """The deployer module, imported against the canned config."""

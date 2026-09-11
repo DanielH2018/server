@@ -53,6 +53,11 @@ Type=oneshot
 # OUTLASTS this hold and deploys. The weekly secret-rotate cron waits on the same lock, with the
 # same wait, derived from the same budgets. See
 # ansible/roles/setup/gitops_deploy/CLAUDE.md.
+#
+# What that operator deploy waits for is now SHORT by construction: since ADR-0017 it holds the
+# tree lock only to snapshot HEAD, and does its playbook under one lock per service. The
+# direction that still contends is this one — this unit holds the tree lock for its whole run,
+# so an operator deploy launched mid-tick still queues for the snapshot alone.
 TimeoutStartSec=60min
 User={{ sys_user }}
 WorkingDirectory=/home/{{ sys_user }}/server
@@ -76,7 +81,8 @@ SyslogLevel=notice
 #
 # DECIDED: contention exits 75 and the unit SUCCEEDS — do not "fix" this back to a failure, and
 # do not raise -w to compensate. Until 2026-08-23 a timeout exited 1, so every long operator
-# `./scripts/deploy.sh` (~20min, holding this same lock) paged via OnFailure: seven such silent
+# `./scripts/deploy.sh` (~20min, holding this same lock for its whole run back then; it now
+# holds it only for a snapshot of HEAD) paged via OnFailure: seven such silent
 # exit-1 ticks in the seven days to 2026-08-23, each logging nothing at all because flock died
 # before the deployer started. Raising -w cannot fix it — this unit's own worst case is
 # STAGING_GATE_TIMEOUT_S + STAGING_EXPECT_TIMEOUT_S + K8S_DEPLOY_TIMEOUT_S +

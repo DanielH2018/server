@@ -340,6 +340,22 @@ class ScriptedTick:
         raise AssertionError(f"no {kind} call containing {needle} in {self.log}")
 
 
+def locks_taken(lock_dir) -> list[str]:
+    """The per-service locks a deploy took, read off the redirected lock directory.
+
+    A `server-deploy-<name>.lock` file exists in there only because `deploy_io.service_locks`
+    opened it, so the directory is the record. Names, not paths, and sorted: the ORDER locks
+    are taken in is what makes the scheme deadlock-free, and it is sorted by construction.
+
+    Args:
+        lock_dir: the `service_lock_dir` fixture's directory.
+    """
+    return sorted(
+        path.name.removeprefix("server-deploy-").removesuffix(".lock")
+        for path in pathlib.Path(lock_dir).glob("server-deploy-*.lock")
+    )
+
+
 def build_tools(scripted: ScriptedTick) -> DeployTools:
     """The `DeployTools` that answers every boundary from `scripted`."""
     return DeployTools(

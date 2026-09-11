@@ -18,29 +18,16 @@ finds (the half a naive reorder could delete by refusing everything).
 Run: uv run pytest scripts/deploy_tools/tests/test_deploy_staleness_precedes_changed_derivation.py
 """
 
-import os
 import subprocess
 from pathlib import Path
+
+from _deploy_sh_fakes import FLOCK_STUB, deploy_sh_env, make_snapshot_repo
 
 _REPO = Path(__file__).resolve().parents[3]
 _DEPLOY_SH = _REPO / "scripts" / "deploy.sh"
 
 _STALE_EXIT = 4
 _BROAD_EXIT = 3
-
-_FLOCK_STUB = """#!/bin/bash
-# Drop flock's own flags and its lock-file argument, then run the rest: no real
-# /var/lock/server-git-tree.lock is taken, so this can never interleave with a live deploy.
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    -w|-E) shift 2 ;;
-    -n|-u) shift ;;
-    *) break ;;
-  esac
-done
-shift
-exec "$@"
-"""
 
 # One `uv` for every helper deploy.sh shells out to. Each call is appended to $DEPLOY_SH_CALLS
 # first, so the ORDER the wrapper asks its questions in is readable even when an early refusal
@@ -67,7 +54,7 @@ def _run(tmp_path, *, stale_exit, changed_exit=0, derived="", args=("--changed",
     """
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
-    (bin_dir / "flock").write_text(_FLOCK_STUB)
+    (bin_dir / "flock").write_text(FLOCK_STUB)
     (bin_dir / "uv").write_text(
         _UV_STUB.format(
             stale_exit=stale_exit, changed_exit=changed_exit, derived=derived
@@ -78,14 +65,13 @@ def _run(tmp_path, *, stale_exit, changed_exit=0, derived="", args=("--changed",
 
     calls = tmp_path / "calls.log"
     calls.write_text("")
-    env = dict(
-        os.environ,
-        PATH=f"{bin_dir}:{os.environ['PATH']}",
-        DEPLOY_SH_CALLS=str(calls),
-    )
+    # A throwaway repo, not this checkout: deploy.sh snapshots HEAD into a worktree before it
+    # runs anything, and the tests must not register worktrees in the real `.git`.
+    repo = make_snapshot_repo(tmp_path / "repo")
+    env = deploy_sh_env(tmp_path, bin_dir, DEPLOY_SH_CALLS=str(calls))
     result = subprocess.run(
         [str(_DEPLOY_SH), *args],
-        cwd=_REPO,
+        cwd=repo,
         env=env,
         capture_output=True,
         text=True,

@@ -52,6 +52,7 @@ from deploy_failtext import (  # noqa: F401 — re-exported for `deploy_io.<name
 from deploy_health import HealthSample, containers_to_gate, health_decision
 from deploy_inventory import declared_services, stale_rendered_services
 from deploy_k8s import k8s_role_paths
+from deploy_locks import service_locks
 from deploy_state import STATE_DIR, DeployerState  # noqa: F401 — re-exported
 
 
@@ -536,6 +537,11 @@ def record_staging_tick(
 
 # ── deploying ─────────────────────────────────────────────────────────────────────────────────
 
+# The argv prefix every deploy shares. `uv run` gives the deploy the repo's pinned env
+# (ansible-core plus the community.docker deps requests/docker) — the same toolchain the
+# operator uses; `--frozen` installs from the committed uv.lock rather than mutating it here.
+PLAYBOOK_ARGV = ("uv", "run", "--frozen", "ansible-playbook")
+
 
 def deploy(repo: str, services: set[str]) -> None:
     """Deploy Docker-platform `services` via `ansible/deploy.yml --tags <services>`.
@@ -545,21 +551,8 @@ def deploy(repo: str, services: set[str]) -> None:
         services: service tags to deploy, joined into one comma-separated `--tags` value.
     """
     tags = ",".join(sorted(services))
-    # Run via `uv run` so the deploy uses the repo's pinned env (ansible-core plus
-    # the community.docker deps requests/docker) — the same toolchain the operator
-    # uses. --frozen: install from the committed uv.lock, never mutate it on the host.
-    run(
-        [
-            "uv",
-            "run",
-            "--frozen",
-            "ansible-playbook",
-            "ansible/deploy.yml",
-            "--tags",
-            tags,
-        ],
-        cwd=repo,
-    )
+    with service_locks(services):
+        run([*PLAYBOOK_ARGV, "ansible/deploy.yml", "--tags", tags], cwd=repo)
 
 
 def deploy_k8s(
@@ -587,18 +580,11 @@ def deploy_k8s(
     """
     tags = ",".join(sorted(services))
     log(f"deploying k8s services: {tags} (timeout {timeout:.0f}s)")
-    argv = [
-        "uv",
-        "run",
-        "--frozen",
-        "ansible-playbook",
-        "ansible/deploy.yml",
-        "--tags",
-        tags,
-    ]
+    argv = [*PLAYBOOK_ARGV, "ansible/deploy.yml", "--tags", tags]
     if restore_sha is not None and restore_sha.strip():
         argv += ["-e", f"k8s_restore_snapshot_sha={restore_sha}"]
-    run(argv, cwd=repo, timeout=timeout)
+    with service_locks(services, timeout):
+        run(argv, cwd=repo, timeout=timeout)
 
 
 def deploy_broad(repo: str, playbook: str, tags: list[str], timeout: float) -> None:
@@ -612,10 +598,12 @@ def deploy_broad(repo: str, playbook: str, tags: list[str], timeout: float) -> N
     unscoped: setup_tags_for returning an empty set routes to the defer-and-alert arm
     instead, because an unscoped initial_setup.yml is a whole-host reprovision.
     """
-    cmd = ["uv", "run", "--frozen", "ansible-playbook", playbook]
+    cmd = [*PLAYBOOK_ARGV, playbook]
     if tags:
         cmd += ["--tags", ",".join(tags)]
-    run(cmd, cwd=repo, timeout=timeout)
+    # No tags takes `all` exclusively, so it excludes every scoped deploy; see deploy_locks.
+    with service_locks(tags, timeout):
+        run(cmd, cwd=repo, timeout=timeout)
 
 
 def emit_deploy_annotation(services: set[str], sha: str) -> None:

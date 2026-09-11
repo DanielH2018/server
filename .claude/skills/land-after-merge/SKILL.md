@@ -132,7 +132,8 @@ rebased), `pr-ci-red` (the PR's own CI is red, so the armed auto-merge never fir
 against `ci-red`, which is master's CI after the merge), or one of the four give-ups:
 `merge-timeout` (the PR was
 still open after the 2700s merge budget), `ci-red`, `ci-timeout` (no CI verdict inside the
-900s budget) and `lock-busy` (the tree lock stayed busy through every retry). A fifth,
+900s budget) and `lock-busy` (a deploy lock — the tree lock, or one of the run's own
+per-service locks — stayed busy through every retry). A fifth,
 `tip-outran-retries`, is the stale-tree give-up below — a resume point rather than a failure.
 
 `nothing-to-deploy` is decided from the PR's file list right after the merge, before any CI
@@ -199,12 +200,16 @@ deployed, and re-running is safe.
 Every run also writes one logfmt line to syslog on exit (`logger -t landing-annotation`):
 the PR, the merge SHA, the verdict, and seconds spent in each phase — `wait_merge`,
 `wait_ci`, `tick`, `deploy`, `total` — plus `lock`, the seconds the landing spent waiting on
-the tree lock (a sub-part of `tick` and `deploy`, not a fifth phase), and `holder`, the
+a deploy lock (a sub-part of `tick` and `deploy`, not a fifth phase), and `holder`, the
 command that held it. `lock` books two kinds of wait: an attempt that LOST the lock and
 exited 75, and a wait a wrapper rode out and then reported itself — `deploy.sh` queuing
-inside `flock -w`, `gitops_tick.sh` watching a tick another actor had already started. Both
-of those exit 0, so before they reported it the seconds landed in `deploy` and `tick` and
-every row read `lock=0`. Promtail ships it to Loki and the **Landings** Grafana
+inside `flock -w` for the tree lock or for one of its per-service locks, `gitops_tick.sh`
+watching a tick another actor had already started. Both of those exit 0, so before they
+reported it the seconds landed in `deploy` and `tick` and every row read `lock=0`. Since
+[ADR-0017](../../../docs/adr/0017-the-tree-lock-guards-the-tree-not-the-cluster.md) most of
+what a landing waits for is a per-service lock rather than the tree lock: `deploy.sh` holds
+the tree lock only for a snapshot of `HEAD`. A run that queued on several service locks
+prints one line each and `lock` is their sum. Promtail ships it to Loki and the **Landings** Grafana
 board (Infrastructure folder) plots it, so "sessions wait too long" is answered by the
 phase medians there rather than by memory. CLI: `uv run python
 scripts/diagnostics/probe.py loki-query '{job="syslog"} |= "event=landing" | logfmt'`.

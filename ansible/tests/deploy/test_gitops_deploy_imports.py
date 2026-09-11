@@ -49,6 +49,10 @@ ALLOWED: dict[str, set[str] | None] = {
     "deploy_health": set(),
     "deploy_inventory": {"deploy_changes"},
     "deploy_k8s": {"deploy_changes"},
+    # The per-service flocks. A leaf: `scripts/deploy.sh` takes the same locks by the same
+    # names, and keeping this module free of the deployer's config is what lets a test drive
+    # it directly.
+    "deploy_locks": set(),
     "deploy_remediation": {"deploy_changes"},
     # The broad arm's two deferral shapes — park, or record in `manual_plane`. It reaches the
     # alert transport, so it sits with `deploy_handlers` rather than among the pure modules.
@@ -69,6 +73,7 @@ ALLOWED: dict[str, set[str] | None] = {
         "deploy_health",
         "deploy_inventory",
         "deploy_k8s",
+        "deploy_locks",
         "deploy_state",
     },
     # The boundaries object: `deploy_io` for the transport, `deploy_git` for the CI verdict,

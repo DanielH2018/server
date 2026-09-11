@@ -51,6 +51,12 @@ MAX_RETRIES_PER_SESSION = 2
 # says so in its own words. The text is the wrapper's own contract, kept in the same words
 # CLAUDE.md uses so the two don't drift into two stories.
 _DEPLOY_EXITS = {
+    77: (
+        "deploy.sh exit 77: the snapshot worktree could not be created, so NOTHING was "
+        "deployed. The playbook renders from a detached worktree of HEAD under "
+        "/tmp/homelab-deploy-snapshots — check that directory is writable and that "
+        "`git worktree add --detach` works here; retrying alone changes nothing."
+    ),
     76: (
         "deploy.sh exit 76: flock failed on the lock file ITSELF, so NOTHING was deployed. "
         "This is not contention — no deploy holds the lock. Check that "
@@ -58,9 +64,10 @@ _DEPLOY_EXITS = {
         "changes nothing."
     ),
     75: (
-        "deploy.sh exit 75: the /var/lock/server-git-tree.lock stayed busy, so NOTHING was "
-        "deployed. The GitOps timer or another session holds it. This is a resume point, not a "
-        "playbook failure — re-run the same command shortly."
+        "deploy.sh exit 75: a deploy lock stayed busy, so NOTHING was deployed — either "
+        "/var/lock/server-git-tree.lock or one of this run's own "
+        "/var/lock/server-deploy-<tag>.lock files. The GitOps timer or another session holds "
+        "it. This is a resume point, not a playbook failure — re-run the same command shortly."
     ),
     4: (
         "deploy.sh exit 4: the tree is behind origin/master, so NOTHING was deployed. A stale "
