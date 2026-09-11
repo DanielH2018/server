@@ -14,6 +14,7 @@ Run: uv run pytest ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_no
 # ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_not_the_deployer.py
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -21,6 +22,7 @@ import deploy_alerts
 from deploy_inventory import declares_no_gitops
 
 ORIGIN = "2" * 40
+HOST_VARS = Path(__file__).resolve().parents[4] / "inventory" / "host_vars"
 
 
 # ── declares_no_gitops(): the paired proof ────────────────────────────────────────────────────
@@ -32,6 +34,19 @@ def test_a_top_level_has_gitops_false_is_flagged():
 
 def test_a_trailing_comment_is_still_flagged():
     assert declares_no_gitops("has_gitops: false  # reaped 2026-09-09\n")
+
+
+@pytest.mark.parametrize("value", ["no", "off", "False", "NO"])
+def test_every_yaml_false_literal_is_flagged(value):
+    assert declares_no_gitops(f"has_gitops: {value}\n")
+
+
+def test_the_live_inventory_is_read_the_way_the_role_reads_it():
+    """Named members, not invented strings: the regex must fire on daniel-server's file as it
+    sits on disk and stay quiet on daniel-box's, or it guards a spelling nobody uses."""
+    assert declares_no_gitops((HOST_VARS / "daniel-server.yml").read_text())
+    assert declares_no_gitops((HOST_VARS / "daniel-pi.yml").read_text())
+    assert not declares_no_gitops((HOST_VARS / "daniel-box.yml").read_text())
 
 
 @pytest.mark.parametrize(

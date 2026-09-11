@@ -80,6 +80,7 @@ from deploy_inventory import (  # noqa: F401
     _ENTRY_PLATFORM,
     declared_k8s_services,
     declared_services,
+    declares_no_gitops,
     reroute_k8s_services,
     stale_rendered_services,
 )

@@ -469,7 +469,10 @@ def entrypoint(tools: DeployTools | None = None) -> int:
         # host whose inventory has already retired the deployer, so a non-zero exit would page
         # through OnFailure every ten minutes from a webhook that host should no longer hold,
         # and a last_run write would stamp liveness onto state nothing reads. The journal line
-        # is the signal; the fix is the role's teardown, not a louder tick.
+        # is the signal; the fix is the role's teardown, not a louder tick. A spurious refusal
+        # on the real deployer is not silent either: last_run stops advancing and GitOps-Alive
+        # goes stale inside GITOPS_MAX_AGE_MIN (90 minutes), which is the backstop this exit 0
+        # leans on.
         log(f"gitops-deploy: {e}")
         return 0
     except ConfigError as e:

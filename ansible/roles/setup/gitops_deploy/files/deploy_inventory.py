@@ -92,8 +92,11 @@ def stale_rendered_services(rendered: list[str], declared: set[str]) -> list[str
 
 # A top-level `has_gitops: false` in this host's own host_vars. Anchored at column 0 so an
 # indented or commented-out occurrence does not match — see declares_no_gitops for why every
-# ambiguous shape must read as "proceed".
-_NO_GITOPS = re.compile(r"^has_gitops:\s*false\s*(?:#.*)?$", re.MULTILINE)
+# ambiguous shape must read as "proceed". The value alternation is every literal Ansible's YAML
+# reads as false, so `has_gitops: no` cannot slip past a check that only knew `false`.
+_NO_GITOPS = re.compile(
+    r"^has_gitops:\s*(?:false|no|off)\s*(?:#.*)?$", re.MULTILINE | re.IGNORECASE
+)
 
 
 def declares_no_gitops(hostvars_text: str | None) -> bool:
