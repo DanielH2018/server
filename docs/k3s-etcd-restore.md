@@ -27,10 +27,10 @@ that followed it:
 and the first four fixed — the token file must exist rather than be passed, isolation flags
 belong on both invocations, `--disable-agent` leaves the load-balancer on 6444
 (`--lb-server-port` moves it), and `--cluster-reset-restore-path` is read twice by k3s —
-checked for existence relative to the current directory, then joined onto `<data-dir>/server/db/snapshots`
-for the `.zip` decompress — so absolute paths double, `--etcd-s3` doubles them for you, and
-the value that satisfies both reads is the bare name run from the snapshots dir (corrected
-2026-09-11). The fifth is a wedge in "Waiting to retrieve agent
+checked for existence after k3s changes directory to `<data-dir>/server`, then joined onto
+`<data-dir>/server/db/snapshots` for the `.zip` decompress — so absolute paths double,
+`--etcd-s3` doubles them for you, and the only value that satisfies both reads is the bare
+name with the file hard-linked into both places (corrected 2026-09-11 from the k3s source). The fifth is a wedge in "Waiting to retrieve agent
 configuration" that ran 17 minutes on 6 seconds of CPU. The script's header records each one.
 The fifth turned out not to be the live k3s at all: it reproduced on 2026-09-11 in a guest with
 no other k3s, and it is a port collision inside the script's own isolation flags. k3s binds
