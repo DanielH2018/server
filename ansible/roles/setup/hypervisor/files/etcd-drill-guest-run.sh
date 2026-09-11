@@ -24,10 +24,24 @@ set -uo pipefail
 S3_ENV=/etc/rancher/k3s/etcd-s3.env
 DRILL=/usr/local/bin/etcd-restore-drill
 DOWNLOAD_DIR=/var/tmp/etcd-drill-download
+# Where a --detached run leaves its output and exit code for the orchestrator to poll.
+OUT=/var/tmp/etcd-drill.out
+RC=/var/tmp/etcd-drill.rc
 
 die() { echo "etcd-drill-guest-run: $*" >&2; exit 1; }
 
 [[ "$(id -u)" == "0" ]] || die "must run as root"
+
+# --detached: start the real run in the background, owning none of the caller's descriptors, and
+# return at once. The orchestrator polls $RC over fresh ssh sessions instead of holding one open
+# for the whole run — a held session hung for 20 minutes after the drill had died (run
+# 20260911T135526Z), and a hung session is exactly what the orchestrator cannot diagnose.
+if [[ "${1:-}" == "--detached" ]]; then
+  rm -f "$RC" "$OUT"
+  nohup sh -c "$0 >$OUT 2>&1; echo \$? >$RC" >/dev/null 2>&1 </dev/null &
+  echo "started (pid $!); output in $OUT, exit code in $RC when done"
+  exit 0
+fi
 [[ -x "$DRILL" ]] || die "$DRILL is missing — the orchestrator did not stage it"
 [[ -r "$S3_ENV" ]] || die "$S3_ENV is missing — the orchestrator did not stage it"
 

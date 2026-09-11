@@ -30,6 +30,12 @@ belong on both invocations, `--disable-agent` leaves the load-balancer on 6444
 `<data-dir>/server/db/snapshots` that k3s joins unconditionally, so absolute paths double and
 `--etcd-s3` doubles them for you. The fifth is a wedge in "Waiting to retrieve agent
 configuration" that ran 17 minutes on 6 seconds of CPU. The script's header records each one.
+The fifth turned out not to be the live k3s at all: it reproduced on 2026-09-11 in a guest with
+no other k3s, and it is a port collision inside the script's own isolation flags. k3s binds
+`--lb-server-port` and, when supervisor and API server are on different ports, also
+`lb-server-port − 1`; with 7443/7444/7445 that second listener landed on the supervisor's
+7444, so every `/cacerts` request reached the wrong listener. `LB_PORT` is 7446 now
+and a test pins the layout.
 
 Two paths finish the job, and neither is more patching:
 

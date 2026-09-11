@@ -159,19 +159,29 @@ def test_the_orchestrator_never_defines_the_guest():
     assert "autostart" not in script
 
 
-def test_the_orchestrator_hands_timeout_a_program_not_a_function():
-    """`timeout` execs its argument, so a shell function there is a guaranteed exit 127 — the
-    first hand run failed exactly that way ("failed to run command 'ssh_guest'")."""
+def test_the_orchestrator_detaches_the_drill_and_never_hands_timeout_a_function():
+    """Two shapes of the same run that the first hand runs took, both of which read green here
+    until they were executed: `timeout` execs its argument, so a shell function there is exit 127
+    ("failed to run command 'ssh_guest'"); and one ssh session held open for the whole drill hung
+    for 20 minutes after the drill had died. The orchestrator starts the guest script --detached
+    and polls its exit file over fresh sessions instead."""
     script = (ROLE / "templates" / "etcd-restore-drill-vm.sh.j2").read_text()
+    guest = (ROLE / "files" / "etcd-drill-guest-run.sh").read_text()
+    assert "etcd-drill-guest-run --detached" in script
+    assert '"${1:-}" == "--detached"' in guest and "nohup" in guest
+    assert (
+        "/var/tmp/etcd-drill.rc" in script
+        and "/var/tmp/etcd-drill.rc"
+        in guest.replace("RC=/var/tmp/etcd-drill.rc", "/var/tmp/etcd-drill.rc")
+    )
     functions = set(re.findall(r"^([A-Za-z_]\w*)\(\) \{", script, re.M))
     assert "ssh_guest" in functions
     joined = script.replace("\\\n", " ")
-    calls = re.findall(r"\btimeout\b((?:\s+\S+)+)", joined)
-    assert calls, "expected at least one timeout call"
-    for args in calls:
+    for args in re.findall(r"\btimeout\b((?:\s+\S+)+)", joined):
         words = [w for w in args.split() if not w.startswith("-") and "=" not in w]
-        command = next(w for w in words[1:] if w != "\\")  # words[0] is the duration
-        assert command not in functions, f"timeout cannot run the function {command}"
+        if len(words) < 2:
+            continue
+        assert words[1] not in functions, f"timeout cannot run the function {words[1]}"
 
 
 def test_the_orchestrator_pins_the_guest_host_key():

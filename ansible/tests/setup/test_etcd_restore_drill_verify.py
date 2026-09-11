@@ -63,6 +63,35 @@ def _run_verify(ns: int, deploys: int, pvcs: int) -> subprocess.CompletedProcess
     )
 
 
+def _ports() -> dict[str, int]:
+    out = subprocess.run(
+        [
+            "bash",
+            "-c",
+            f'source "{_SCRIPT}"; echo "$PORT $SUPERVISOR_PORT $LB_PORT"',
+            "_",
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.split()
+    return dict(zip(("api", "supervisor", "lb"), map(int, out), strict=True))
+
+
+def test_the_isolation_ports_do_not_collide_with_the_lb_pair():
+    """k3s binds --lb-server-port AND lb-server-port - 1 (the API-server client LB, used whenever
+    supervisor and API server are on different ports). 7443/7444/7445 put that hidden second
+    listener on the supervisor's port and wedged every restore in the agent-config loop."""
+    p = _ports()
+    assert p["api"] != p["supervisor"], "the drill relies on a separate supervisor port"
+    taken = {p["api"], p["supervisor"]}
+    assert p["lb"] not in taken
+    assert p["lb"] - 1 not in taken, (
+        f"lb-server-port {p['lb']} puts the API-server client LB on {p['lb'] - 1}, "
+        f"which is already the API server or the supervisor"
+    )
+
+
 def test_a_healthy_restore_passes():
     # ACCEPT: a plausible cluster's worth of objects clears all three thresholds.
     result = _run_verify(ns=5, deploys=12, pvcs=8)

@@ -55,7 +55,9 @@
 #      joined onto it — so an absolute path doubles, and --etcd-s3 doubles it for you by feeding
 #      its own download path back through the join
 #   5. after all four, the run wedges in "Waiting to retrieve agent configuration; server is not
-#      ready" — 17 minutes on 6 seconds of CPU, against ~60s when it resolves
+#      ready" — 17 minutes on 6 seconds of CPU, against ~60s when it resolves. CORRECTED
+#      2026-09-11: this one was never the live k3s. It reproduced in a guest with no k3s at all
+#      and is a port collision inside this script's own isolation flags — see LB_PORT below.
 #
 # Nothing in that list is fixable from out here, so DON'T keep patching this script against a
 # live k3s. Two paths actually finish the job, and both are in docs/k3s-etcd-restore.md: run
@@ -100,7 +102,14 @@ S3_ENV=/etc/rancher/k3s/etcd-s3.env
 SCRATCH="/var/tmp/etcd-restore-drill.$$"
 PORT=7443
 SUPERVISOR_PORT=7444
-LB_PORT=7445
+# NOT 7445. k3s binds the supervisor client load-balancer on --lb-server-port and, whenever the
+# supervisor and the API server are on different ports (they are here), the API-server client
+# load-balancer on lb-server-port MINUS ONE. With 7445 that second listener landed on 7444, the
+# supervisor's own port; every /cacerts request the reset's agent half sent through 7445 was
+# proxied into the wrong listener ("tls: unrecognized name", then EOF) and the run wedged in
+# "Waiting to retrieve agent configuration" for as long as it was allowed to — header item 5,
+# reproduced 2026-09-11 in a guest with no other k3s on it. 7446 puts the pair on 7445/7446.
+LB_PORT=7446
 KEEP=0
 CLEAN_ONLY=0
 # How long a kept scratch dir survives. Only failed runs and --keep runs leave one, so these are

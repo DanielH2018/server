@@ -228,15 +228,34 @@ main() {
   tar -C "$WORK/root" -cf - . | ssh_guest sudo tar -C / -xpf - || fail "staging into the guest failed"
   rm -rf "$WORK"; WORK=""
 
-  log "running the drill in the guest (log: $LOG_DIR/drill.out)"
-  local rc=0
-  local -a ssh_cmd
-  mapfile -t ssh_cmd < <(ssh_argv)
-  timeout --signal=TERM --kill-after=30 "$RUN_TIMEOUT" \
-    "${ssh_cmd[@]}" sudo /usr/local/bin/etcd-drill-guest-run >"$LOG_DIR/drill.out" 2>&1 || rc=$?
+  # The drill runs DETACHED in the guest and this side polls for its exit file. Holding one ssh
+  # session open for the whole run is what the first design did, and run 20260911T135526Z hung
+  # that session for 20 minutes after the drill's own k3s had already been killed — with the
+  # guest still answering a fresh ssh throughout. A detached run cannot take the orchestrator
+  # down with it, its exit code survives in a file, and drill.out is pulled whatever happened.
+  log "starting the drill in the guest (log: $LOG_DIR/drill.out)"
+  ssh_guest sudo /usr/local/bin/etcd-drill-guest-run --detached \
+    || fail "could not start the drill in the guest"
+
+  local rc="" deadline=$((SECONDS + RUN_TIMEOUT))
+  while :; do
+    rc="$(ssh_guest sudo cat /var/tmp/etcd-drill.rc 2>/dev/null || true)"
+    [[ -n "$rc" ]] && break
+    if (( SECONDS >= deadline )); then
+      rc=124
+      log "run exceeded ${RUN_TIMEOUT}s; guest process listing follows in $LOG_DIR/ps.out"
+      ssh_guest sudo ps -eo pid,ppid,etimes,stat,args >"$LOG_DIR/ps.out" 2>&1 || true
+      ssh_guest sudo pkill -TERM -f /usr/local/bin/etcd-drill-guest-run >/dev/null 2>&1 || true
+      break
+    fi
+    guest_running || { rc=125; log "guest exited during the drill"; break; }
+    sleep 15
+  done
+  [[ "$rc" =~ ^[0-9]+$ ]] || rc=1
 
   # Evidence out BEFORE teardown, on every path: the diagnosis and the thing that explains it
   # must not be removed by the same exit path (the drill script's own rule, kept here).
+  ssh_guest sudo cat /var/tmp/etcd-drill.out >"$LOG_DIR/drill.out" 2>/dev/null || true
   local f
   for f in restore.log server.log; do
     ssh_guest "sudo sh -c 'cat /var/tmp/etcd-restore-drill.*/$f'" >"$LOG_DIR/$f" 2>/dev/null || true
@@ -259,7 +278,8 @@ main() {
   fi
   local reason
   reason="$(grep -m1 -E 'etcd-restore-drill: |etcd-drill-guest-run: ' "$LOG_DIR/drill.out" | tail -c 200)"
-  [[ $rc -eq 124 || $rc -eq 137 ]] && reason="run exceeded ${RUN_TIMEOUT}s and was killed"
+  [[ $rc -eq 124 ]] && reason="run exceeded ${RUN_TIMEOUT}s and was killed"
+  [[ $rc -eq 125 ]] && reason="guest exited during the drill"
   fail "full restore drill FAILED (exit $rc): ${reason:-see $LOG_DIR/drill.out} snapshot=${snapshot:-unknown}"
 }
 
