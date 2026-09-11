@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/crons.py
-generated_at: 2026-09-11 06:17 UTC
-generated_sha: 37772d46c
+generated_at: 2026-09-11 18:17 UTC
+generated_sha: 153ffa919
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 37772d46c
 
 # Scheduled jobs
 
-47 cron entrie(s) installed across the roles.
+48 cron entrie(s) installed across the roles.
 
 !!! warning "The state column is a heuristic"
     It is judged from the command text, and nothing in a cron task declares its own blast radius. A job that runs a wrapper script reads as "read the script" rather than being guessed at. Treat it as a pointer, not an authority.
@@ -28,6 +28,7 @@ generated_sha: 37772d46c
 | CrowdSec AppSec verify | `*/15 * * * *` | every host in the play | `root` | read the script | `ansible/roles/k8s/crowdsec/tasks/main.yml` |
 | CrowdSec home allowlist | `*/5 * * * *` | every host in the play | `root` | read the script | `ansible/roles/k8s/crowdsec/tasks/main.yml` |
 | Daily secret rotation audit | `0 8 * * *` | the gitops host | `{{ sys_user }}` | read the script | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
+| Full etcd restore drill in a throwaway guest | `{{ etcd_drill_full_cron.split()[0] }} {{ etcd_drill_full_cron.split()[1] }} {{ etcd_drill_full_cron.split()[2] }} * *` | every host in the play | `root` | no (read-only by its command) | `ansible/roles/setup/hypervisor/tasks/etcd_drill.yml` |
 | GitHub interaction limit | `{{ gitops_deploy_interaction_limit_cron_minute }} {{ gitops_deploy_interaction_limit_cron_hour }} * * *` | every host in the play | `root` | read the script | `ansible/roles/setup/gitops_deploy/tasks/install.yml` |
 | GitHub ruleset drift | `{{ gitops_deploy_ruleset_drift_cron_minute }} {{ gitops_deploy_ruleset_drift_cron_hour }} * * *` | every host in the play | `root` | read the script | `ansible/roles/setup/gitops_deploy/tasks/install.yml` |
 | Homelab eval sweep | `0 2 * * 0` | daniel-box | `{{ sys_user }}` | read the script | `ansible/roles/setup/initial_setup/tasks/crons.yml` |

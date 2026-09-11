@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/state.py
-generated_at: 2026-09-11 06:17 UTC
-generated_sha: 37772d46c
+generated_at: 2026-09-11 18:17 UTC
+generated_sha: 153ffa919
 ---
 
 !!! warning "Generated file — do not edit"
@@ -19,10 +19,10 @@ generated_sha: 37772d46c
 
 | Loop | Last run | Age | Cadence | Status | Last outcome |
 |---|---|---|---|---|---|
-| gitops-deploy | 2026-09-11T06:09:20+0000 | 8m | 10m | ok | ticked, no hold |
-| renovate-agent | 2026-09-10T11:05:16+0000 | 19h12m | 1d | ok | session completed |
-| renovate-notify | 2026-09-10T13:02:28+0000 | 17h15m | 1d | ok | notified |
-| docs-refresh | 2026-09-10T18:18:00+0000 | 11h59m | 12h | ok | generators: ok |
-| secret-rotate | 2026-09-10T21:30:24+0000 | 8h47m | 7d | ok | last touched by: Witness the Loki read route, and fix staging's impossible traefik expectation |
-| longhorn-restore-drill | 2026-09-11T04:10:38+0000 | 2h6m | 1d | ok | PVC restore proven |
-| etcd-restore-drill | 2026-09-07T10:20:02+0000 | 3d19h | 7d | ok | list-only restore proven (snapshot offbox-daniel-box-1788749102.zip) |
+| gitops-deploy | 2026-09-11T18:15:17+0000 | 2m | 10m | ok | ticked, no hold |
+| renovate-agent | 2026-09-10T11:05:16+0000 | 1d7h | 1d | ok | session completed |
+| renovate-notify | 2026-09-11T13:03:38+0000 | 5h13m | 1d | ok | checked, nothing new to notify |
+| docs-refresh | 2026-09-11T06:17:00+0000 | 12h | 12h | ok | generators: ok |
+| secret-rotate | 2026-09-11T18:12:54+0000 | 4m | 7d | ok | last touched by: Drill the full etcd restore monthly in a throwaway guest on daniel-server |
+| longhorn-restore-drill | 2026-09-11T04:10:38+0000 | 14h6m | 1d | ok | PVC restore proven |
+| etcd-restore-drill | 2026-09-07T10:20:02+0000 | 4d7h | 7d | ok | list-only restore proven (snapshot offbox-daniel-box-1788749102.zip) |
