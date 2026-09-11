@@ -87,6 +87,43 @@ def test_the_teardown_reaps_both_crons_by_cron_file():
     assert removed == installed
 
 
+def _directories_install_creates() -> set[str]:
+    """Every path `install.yml`'s directory-creating file task loops over."""
+    dirs: set[str] = set()
+    for task in load_tasks(ROLE / "install.yml"):
+        module = task.get("ansible.builtin.file")
+        if not isinstance(module, dict) or module.get("state") != "directory":
+            continue
+        if module.get("path") == "{{ item }}":
+            dirs.update(task.get("loop", []))
+        else:
+            dirs.add(module["path"])
+    return dirs
+
+
+def test_the_directory_census_is_not_vacuous():
+    """A renamed create task, or one that stopped looping, must fail here rather than empty
+    the coverage assertion below into a comparison against nothing."""
+    dirs = _directories_install_creates()
+    assert {
+        "/opt/gitops-deploy",
+        "/var/lib/gitops-deploy",
+        "/etc/gitops-deploy",
+    } <= dirs
+
+
+def test_the_teardown_removes_every_directory_install_creates():
+    """#1732: the teardown reaped units and crons and left all three directories — the stale
+    payload, the 0600 config env file and the state — on daniel-server."""
+    removal = task_named(
+        load_tasks(ROLE / "teardown.yml"),
+        "Remove the deployer's payload, config and state directories",
+    )
+    assert removal["ansible.builtin.file"]["state"] == "absent"
+    assert removal.get("become") is True, "the directories are root-created"
+    assert _directories_install_creates() <= set(removal["loop"])
+
+
 def test_the_playbook_no_longer_gates_the_role():
     """The whole bug: a playbook-level `when: has_gitops` means the false branch never runs."""
     plays = load_yaml(ANSIBLE / "initial_setup.yml")

@@ -1,12 +1,14 @@
 ---
-# The false half. Only the units: /opt/gitops-deploy and /etc/gitops-deploy stay, because a
-# host flipped back to has_gitops: true re-renders them anyway and the config.env there holds
-# nothing the install half does not rewrite.
+# The false half. Every task is state: absent, so a host that never had has_gitops: true
+# no-ops through the whole file.
 #
-# Everything else install.yml writes outside those two directories is reaped here: all six
-# systemd units, the polkit rule that lets a non-root caller trigger a tick, and the two
-# GitHub crons plus the scripts they run. Every task is state: absent, so a host that never
-# had has_gitops: true no-ops through the whole file.
+# It reaps everything install.yml writes: all six systemd units, the polkit rule that lets a
+# non-root caller trigger a tick, the two GitHub crons plus the scripts they run, and the three
+# directories at the end. Until 2026-09-11 the directories stayed on the argument that a host
+# flipped back to has_gitops: true re-renders them anyway. That left a 0600 config.env with the
+# Discord webhook in it, a three-week-stale copy of the deployer, and a state directory on a
+# host the inventory had demoted (#1732) — and the stale copy is the one that ticked for three
+# weeks from a live timer (#1733). A host flipped back gets all three from install.yml.
 
 - name: Check whether the GitOps deploy timers were ever installed here
   ansible.builtin.stat:
@@ -72,4 +74,25 @@
   loop:
     - github-ruleset-drift.sh
     - github-interaction-limit.sh
+  become: true
+
+# The three directories install.yml creates. ENFORCED by
+# ansible/tests/setup/test_gitops_deploy_reaps_on_non_deployer.py: this list must cover
+# install.yml's create loop.
+#
+# DECIDED: /var/lib/gitops-deploy is reaped, not kept. It is the deployer's memory of THIS
+# host's checkout — hold_sha, behind_since, the per-SHA alert throttles, the undelivered alert
+# queue — and a host that is not the deployer has nothing that reads it: monitor-bridge
+# hostPath-mounts daniel-box's copy alone (bridge/config_service.py, GITOPS_STATE_DIR). Kept, it
+# would hand a re-enabled deployer a hold and a behind-origin clock from before it was retired;
+# reaped, the first tick writes a fresh, honest state. The forensic value it had for #1733 was
+# read and recorded on that issue before this task existed.
+- name: Remove the deployer's payload, config and state directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /opt/gitops-deploy
+    - /var/lib/gitops-deploy
+    - /etc/gitops-deploy
   become: true

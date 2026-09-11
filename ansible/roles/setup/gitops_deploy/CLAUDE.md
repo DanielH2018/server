@@ -10,6 +10,31 @@ health-gated redeploy too (closing the loop so live config matches master), not 
 `tasks/` and the role `CLAUDE.md` are deliberately NOT auto-deployed (structural/docs — deploy
 those manually).
 
+## A host with `has_gitops: false` is reaped, and the code refuses on its own
+
+`tasks/main.yml` dispatches on `has_gitops`: `install.yml` on the deployer, `teardown.yml`
+everywhere else. The role was gated at the playbook level until 2026-09-09, so a host flipped
+to false skipped the role and kept whatever an earlier true run installed — daniel-server ran
+a live timer that way for three weeks (#1733). `teardown.yml` removes the six units, the polkit
+rule, the two GitHub crons and their scripts, and the three directories `install.yml` creates
+(`/opt`, `/var/lib` and `/etc/gitops-deploy`); the `DECIDED:` at that task says why the state
+directory goes too. `ansible/tests/setup/test_gitops_deploy_reaps_on_non_deployer.py` derives
+both censuses from `install.yml` and fails when the teardown stops covering one.
+
+The code carries the same gate. `deploy_phases.refuse_unless_deployer` reads this host's own
+`host_vars/<hostname>.yml` at the top of `main()`, ahead of the alert drain and every state
+write, and raises `NotTheDeployerHost` on a top-level `has_gitops: false`. `entrypoint()`
+turns that into one journal line and exit 0 — no Discord post, no `last_run` — because the
+webhook and the liveness stamp both belong to a deployer the inventory has retired. It fails
+open on every other shape (no host_vars file, the key absent, `true`, an indented or
+commented-out occurrence): a false refusal on daniel-box parks every landing in the fleet.
+`tests/test_gitops_deploy_not_the_deployer.py` pins both halves.
+
+The teardown reaches a non-deployer host only by hand: `roles/setup/` is a broad setup path,
+so the tick applies it on daniel-box, and daniel-server and daniel-pi need
+`uv run ansible-playbook ansible/initial_setup.yml --tags gitops_deploy` (with `-e
+target=daniel-pi` for the Pi) run by an operator.
+
 ## Triggering a tick by hand
 
 The procedure, how to read a tick that logged nothing, and why the wrapper exists rather than
