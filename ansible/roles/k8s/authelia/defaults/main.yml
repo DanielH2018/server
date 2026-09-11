@@ -1,7 +1,7 @@
 ---
 # Same tag the Docker instance runs, so a behavioural difference between the two portals is
 # never the version.
-authelia_k8s_image: authelia/authelia:4.39.21
+authelia_k8s_image: authelia/authelia:4.39.22
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Platform: the SSO/OIDC gate every Authelia-fronted route depends on. A failed deploy locks
