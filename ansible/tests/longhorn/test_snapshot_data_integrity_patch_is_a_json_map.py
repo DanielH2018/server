@@ -17,6 +17,8 @@ Run: uv run pytest ansible/tests/longhorn/test_snapshot_data_integrity_patch_is_
 
 import json
 
+import pytest
+
 from _helpers import ANSIBLE
 from _helpers import load_yaml
 
@@ -24,14 +26,22 @@ from _helpers import load_yaml
 TASKS = ANSIBLE / "roles" / "setup" / "k3s" / "tasks" / "longhorn.yml"
 DEFAULTS = ANSIBLE / "roles" / "setup" / "k3s" / "defaults" / "main.yml"
 TASK_NAME = "Set the Longhorn snapshot data-integrity mode"
+CRON_TASK_NAME = "Set the Longhorn snapshot data-integrity cron schedule"
+
+# Both settings are DataEngineSpecific, so both patches must carry the map shape.
+# Task name -> (setting, patch var).
+MAP_PATCHES = {
+    TASK_NAME: ("snapshot-data-integrity", "integrity_patch"),
+    CRON_TASK_NAME: ("snapshot-data-integrity-cronjob", "integrity_cron_patch"),
+}
 
 
-def _task() -> dict:
+def _task(name: str = TASK_NAME) -> dict:
     for task in load_yaml(TASKS):
-        if task.get("name") == TASK_NAME:
+        if task.get("name") == name:
             return task
     raise AssertionError(
-        f"{TASK_NAME!r} is gone from {TASKS.name}; it is what arms bit-rot detection"
+        f"{name!r} is gone from {TASKS.name}; it is what arms bit-rot detection"
     )
 
 
@@ -44,17 +54,21 @@ def _rendered_patch(mode: str) -> str:
     return '{"value":%s}' % json.dumps(json.dumps({"v1": mode, "v2": mode}))
 
 
-def test_the_task_is_present_and_patches_the_right_setting() -> None:
-    cmd = _task()["ansible.builtin.command"]["cmd"]
-    assert "settings.longhorn.io snapshot-data-integrity" in cmd
+@pytest.mark.parametrize("name", MAP_PATCHES)
+def test_the_task_is_present_and_patches_the_right_setting(name: str) -> None:
+    setting, _ = MAP_PATCHES[name]
+    cmd = _task(name)["ansible.builtin.command"]["cmd"]
+    assert f"settings.longhorn.io {setting} " in cmd
     assert "--type=merge" in cmd
 
 
-def test_the_task_builds_its_value_with_a_double_to_json() -> None:
+@pytest.mark.parametrize("name", MAP_PATCHES)
+def test_the_task_builds_its_value_with_a_double_to_json(name: str) -> None:
     """The double `to_json` is the whole mechanism -- a single one stores a bare map, not a string."""
-    expr = _task()["vars"]["integrity_patch"]
+    _, patch_var = MAP_PATCHES[name]
+    expr = _task(name)["vars"][patch_var]
     assert expr.count("to_json") == 2, (
-        "integrity_patch must pipe through to_json twice: once to render the map, once to "
+        f"{patch_var} must pipe through to_json twice: once to render the map, once to "
         f"quote it as a JSON string. Got: {expr!r}"
     )
 
@@ -90,4 +104,14 @@ def test_the_mode_comes_from_a_default_rather_than_a_literal() -> None:
         "enabled",
         "fast-check",
         "disabled",
+    )
+
+
+def test_the_schedule_comes_from_a_default_and_is_a_five_field_cron() -> None:
+    """The schedule is a variable so `-e` can fire a check early without a code edit."""
+    expr = _task(CRON_TASK_NAME)["vars"]["integrity_cron"]
+    assert "k3s_longhorn_snapshot_data_integrity_cronjob" in expr
+    schedule = load_yaml(DEFAULTS)["k3s_longhorn_snapshot_data_integrity_cronjob"]
+    assert len(schedule.split()) == 5, (
+        f"Longhorn takes a five-field cron; got {schedule!r}"
     )

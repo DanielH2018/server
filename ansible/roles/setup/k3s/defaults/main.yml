@@ -283,6 +283,18 @@ k3s_longhorn_replica_count: 2
 # role's CLAUDE.md so the question is settled rather than re-opened.
 k3s_longhorn_snapshot_data_integrity: enabled
 
+# When the integrity check above runs. Upstream's default, restated here so the schedule is a
+# variable rather than a value only the cluster knows: `0 0 */7 * *` is a DAY-OF-MONTH step on
+# the manager's clock (UTC), so it fires at 00:00 on the 1st, 8th, 15th, 22nd and 29th, not
+# "every seven days". To fire a check early, override it at apply time with a one-shot daily
+# minute, then re-apply without the override to restore it:
+#   uv run ansible-playbook ansible/k3s-bringup.yml --tags longhorn \
+#     -e k3s_longhorn_snapshot_data_integrity_cronjob='55 12 * * *'
+# That is how the 2026-09-11 cost measurement ran (#1364). Never use a repeating `*/N` for it: a
+# full-hash schedule stranded by a dead session is the memory-pressure outcome #1243 warns about.
+# Same DataEngineSpecific JSON-map shape as the mode above.
+k3s_longhorn_snapshot_data_integrity_cronjob: "0 0 */7 * *"
+
 # Whether joined agent nodes participate in Longhorn replica scheduling. false through
 # the join window (agent_verify patches allowScheduling:false and asserts zero replicas
 # landed); flipped true at the §F replica raise (2026-08-14) so daniel-server holds the
