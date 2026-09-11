@@ -78,17 +78,22 @@ def _ports() -> dict[str, int]:
     return dict(zip(("api", "supervisor", "lb"), map(int, out), strict=True))
 
 
-def test_the_isolation_ports_do_not_collide_with_the_lb_pair():
-    """k3s binds --lb-server-port AND lb-server-port - 1 (the API-server client LB, used whenever
-    supervisor and API server are on different ports). 7443/7444/7445 put that hidden second
-    listener on the supervisor's port and wedged every restore in the agent-config loop."""
+def test_the_five_isolation_listeners_are_distinct():
+    """Three flags, five listeners: the API server's internal port is https-listen-port + 1 and
+    the API-server client LB is lb-server-port - 1 whenever supervisor and API server differ.
+    7443/7444/7445 hit both hidden ones in turn (the agent-config wedge, then "bind: address
+    already in use" when the scratch server started)."""
     p = _ports()
     assert p["api"] != p["supervisor"], "the drill relies on a separate supervisor port"
-    taken = {p["api"], p["supervisor"]}
-    assert p["lb"] not in taken
-    assert p["lb"] - 1 not in taken, (
-        f"lb-server-port {p['lb']} puts the API-server client LB on {p['lb'] - 1}, "
-        f"which is already the API server or the supervisor"
+    listeners = {
+        "api": p["api"],
+        "api-internal": p["api"] + 1,
+        "supervisor": p["supervisor"],
+        "supervisor-lb": p["lb"],
+        "apiserver-lb": p["lb"] - 1,
+    }
+    assert len(set(listeners.values())) == len(listeners), (
+        f"port collision: {listeners}"
     )
 
 

@@ -35,11 +35,13 @@ checked for existence after k3s changes directory to `<data-dir>/server`, then j
 name with the file hard-linked into both places (corrected 2026-09-11 from the k3s source). The fifth is a wedge in "Waiting to retrieve agent
 configuration" that ran 17 minutes on 6 seconds of CPU. The script's header records each one.
 The fifth turned out not to be the live k3s at all: it reproduced on 2026-09-11 in a guest with
-no other k3s, and it is a port collision inside the script's own isolation flags. k3s binds
-`--lb-server-port` and, when supervisor and API server are on different ports, also
-`lb-server-port − 1`; with 7443/7444/7445 that second listener landed on the supervisor's
-7444, so every `/cacerts` request reached the wrong listener. `LB_PORT` is 7446 now
-and a test pins the layout.
+no other k3s, and it is a port collision inside the script's own isolation flags. Three flags
+give k3s five listeners: the API server's internal port is `https-listen-port + 1`, and when
+supervisor and API server are on different ports the API-server client load-balancer is
+`lb-server-port − 1`. With 7443/7444/7445 both hidden listeners landed on the supervisor's
+7444 — the first wedged the reset's `/cacerts` requests, the second failed the scratch server
+with `bind: address already in use`. The ports are 7443/7445/7448 and a test pins all five
+apart.
 
 Two paths finish the job, and neither is more patching:
 

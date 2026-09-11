@@ -62,7 +62,7 @@
 #   5. after all four, the run wedges in "Waiting to retrieve agent configuration; server is not
 #      ready" — 17 minutes on 6 seconds of CPU, against ~60s when it resolves. CORRECTED
 #      2026-09-11: this one was never the live k3s. It reproduced in a guest with no k3s at all
-#      and is a port collision inside this script's own isolation flags — see LB_PORT below.
+#      and is a port collision inside this script's own isolation flags — see the port block.
 #
 # Nothing in that list is fixable from out here, so DON'T keep patching this script against a
 # live k3s. Two paths actually finish the job, and both are in docs/k3s-etcd-restore.md: run
@@ -106,16 +106,21 @@ LIVE_DATA_DIR=/var/lib/rancher/k3s
 LIVE_TOKEN=/var/lib/rancher/k3s/server/token
 S3_ENV=/etc/rancher/k3s/etcd-s3.env
 SCRATCH="/var/tmp/etcd-restore-drill.$$"
+# Five listeners from three flags, so the layout is not free (v1.36.4 source, 2026-09-11):
+#   PORT              the API server as clients see it (the kubeconfig k3s writes points here)
+#   PORT + 1          the API server's internal listener (control/server.go, APIServerPort)
+#   SUPERVISOR_PORT   the supervisor
+#   LB_PORT           the supervisor client load-balancer
+#   LB_PORT - 1       the API-server client load-balancer, only when the supervisor and the API
+#                     server are on different ports (they are here)
+# Two collisions were measured in the throwaway guest before this was written down: 7445 as
+# LB_PORT put the API-server LB on the supervisor's 7444 (header item 5, the agent-config
+# loop), and 7444 as SUPERVISOR_PORT collided with the API server's own 7444 the moment the
+# scratch server started ("listen tcp 127.0.0.1:7444: bind: address already in use"). The
+# test in ansible/tests/setup pins all five apart.
 PORT=7443
-SUPERVISOR_PORT=7444
-# NOT 7445. k3s binds the supervisor client load-balancer on --lb-server-port and, whenever the
-# supervisor and the API server are on different ports (they are here), the API-server client
-# load-balancer on lb-server-port MINUS ONE. With 7445 that second listener landed on 7444, the
-# supervisor's own port; every /cacerts request the reset's agent half sent through 7445 was
-# proxied into the wrong listener ("tls: unrecognized name", then EOF) and the run wedged in
-# "Waiting to retrieve agent configuration" for as long as it was allowed to — header item 5,
-# reproduced 2026-09-11 in a guest with no other k3s on it. 7446 puts the pair on 7445/7446.
-LB_PORT=7446
+SUPERVISOR_PORT=7445
+LB_PORT=7448
 KEEP=0
 CLEAN_ONLY=0
 # How long a kept scratch dir survives. Only failed runs and --keep runs leave one, so these are
