@@ -643,6 +643,24 @@ staging_vm_ip: 192.168.140.10
 # ansible/tests/test_staging_net_cidr_agrees.py asserts this prefix contains the role's
 # gateway and matches its netmask.
 staging_net_cidr: "192.168.140.0/24"
+# The full etcd restore drill, run monthly in a throwaway guest on the hypervisor host (issue
+# #1175; the mechanism is the hypervisor_etcd_drill_* block in roles/setup/hypervisor). Here
+# rather than in that role because two roles read them: the hypervisor role installs the cron,
+# and k8s/uptime-kuma sizes the push tile's deadline from the same cadence.
+#
+# Monthly, 1st, 11:20 UTC. The value of a restore drill is in the last time it PASSED, so it
+# runs as often as it is cheap — one ~8 MB snapshot download from R2 and ~5 minutes of a 2-vCPU
+# guest. Daytime, clear of every backup window (02:45 snapshot, 03:30/04:30 Longhorn, 04:10
+# Longhorn drill), and off the Monday 10:20 list-only slot on daniel-box so the two never read
+# as one event. Issue #1175 named a 1-year staleness budget as the floor; this exceeds it
+# twelvefold, and the deadline below is derived from THIS cadence rather than that floor — a
+# yearly alarm over a monthly cron would let eleven failures pass in silence.
+etcd_drill_full_cron: "20 11 1 * *"
+# DEADLINE IS DERIVED FROM THE CRONTAB: the longest gap between two 1st-of-month runs is 31
+# days (2678400 s), plus four days of slack for a late run or a host that was down that day.
+# ENFORCED by ansible/tests/staging/test_etcd_drill_vm.py, which pins it between the cron's
+# period and twice it.
+etcd_drill_full_kuma_interval_s: 3024000
 # Per-user developer environment: the chezmoi-managed dotfiles (DanielH2018/dotfiles) and
 # Claude Code. Both default OFF and are opted into per host — daniel-server already has both
 # installed by hand and shouldn't have them re-provisioned underneath it, and the Pi

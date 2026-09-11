@@ -28,10 +28,12 @@
 #
 # WHAT IT PROVES, AND WHAT IT CANNOT. It proves the snapshot is complete, readable by this k3s
 # version, and that the Kubernetes objects come back — namespaces, workloads, PVCs, the object
-# graph a rebuild depends on. It does NOT prove Secrets are usable: since 2026-08-20 those are
-# encrypted at rest, and this drill runs against a host whose own copy of the key is already in
-# place, so it never exercises the path a rebuilt host takes. The drill reports Secret COUNT
-# (presence) and deliberately never decodes one.
+# graph a rebuild depends on. Since the drill moved into a throwaway guest (#1175) it proves
+# one thing more, and the guest is what makes it evidence: that host has no encryption key of
+# its own, so the API server can only list Secrets by using the key the snapshot's own bootstrap
+# blob carried — which is the path a rebuilt host takes. The drill still reports Secret COUNT
+# (presence) and deliberately never decodes one. Run beside a live k3s it would prove less,
+# because the local key would be in place already.
 #
 # Corrected 2026-08-23: this comment used to say the key "is not in the snapshot". It is — the
 # contents of encryption-config.json ride inside the snapshot's /bootstrap blob (verified against
@@ -40,29 +42,46 @@
 # that reason (LIVE_TOKEN below, and the --cluster-reset note further down). An out-of-band copy
 # was taken 2026-08-23; docs/k3s-etcd-restore.md carries the evidence and the re-verify command.
 #
-# STATUS, 2026-08-22. `--list-only` WORKS and is the useful part today: it proved the off-box
-# leg end to end for the first time — credentials, bucket, folder, download and decompression
-# of offbox-daniel-box-1787366702.zip, the 02:45 snapshot. The FULL drill does NOT yet pass on
-# daniel-box, and the reason is structural rather than a bug in this script: `k3s server
-# --cluster-reset` assumes it is the only k3s on the host, and every workaround here found the
-# next thing it assumes. In order:
+# STATUS, 2026-09-11. The FULL drill passes, in a throwaway guest: offbox-daniel-box-1789094702.zip
+# restored and served 8 namespaces, 72 Deployments, 45 PVCs, 48 CRDs and 51 Secrets, 50 seconds
+# end to end. `--list-only` works too and remains the weekly cheap proof of the off-box leg on
+# daniel-box (first proven 2026-08-22 with offbox-daniel-box-1787366702.zip).
 #
-#   1. it needs <data-dir>/server/token to EXIST; --token-file does not satisfy it
+# It does NOT pass beside a live k3s, and that is structural rather than a bug here: `k3s server
+# --cluster-reset` assumes it is the only k3s on the host, and every workaround found the next
+# thing it assumes. Items 1-4 were fixed on 2026-08-22 and items 1, 4 and 5 corrected on
+# 2026-09-11 from the v1.36.4 source once the guest could reproduce them cleanly. In order:
+#
+#   1. it needs <data-dir>/server/token to EXIST; --token-file does not satisfy it — and the
+#      file is only a pre-check: the VALUE must arrive as --token or K3S_TOKEN, or k3s mints a
+#      random one and overwrites the file (corrected 2026-09-11, restore stage comment)
 #   2. the reset stage starts its own listeners, so isolation flags belong on BOTH invocations
 #   3. --disable-agent does not stop the supervisor client load-balancer on 127.0.0.1:6444;
 #      --lb-server-port is the flag
-#   4. --cluster-reset-restore-path is a NAME relative to <data-dir>/server/db/snapshots, always
-#      joined onto it — so an absolute path doubles, and --etcd-s3 doubles it for you by feeding
-#      its own download path back through the join
+#   4. --cluster-reset-restore-path is read twice: stat'd after k3s chdirs to <data-dir>/server,
+#      then joined onto <data-dir>/server/db/snapshots for the .zip decompress — so an absolute
+#      path doubles, a bare name alone "does not exist", and --etcd-s3 doubles it for you by
+#      feeding its own download path back through the join. The bare name works with the file
+#      hard-linked into both places (corrected 2026-09-11 from the k3s source; this item used
+#      to say "a name relative to the snapshots dir")
 #   5. after all four, the run wedges in "Waiting to retrieve agent configuration; server is not
-#      ready" — 17 minutes on 6 seconds of CPU, against ~60s when it resolves
+#      ready" — 17 minutes on 6 seconds of CPU, against ~60s when it resolves. CORRECTED
+#      2026-09-11: this one was never the live k3s. It reproduced in a guest with no k3s at all
+#      and is a port collision inside this script's own isolation flags — see the port block.
 #
-# Nothing in that list is fixable from out here, so DON'T keep patching this script against a
-# live k3s. Two paths actually finish the job, and both are in docs/k3s-etcd-restore.md: run
-# this on a host with no k3s of its own (a throwaway VM, where every item above evaporates),
-# or take the scheduled outage and do the real documented restore. Throughout all five
-# failures the live cluster stayed Ready and every write landed in /var/tmp — the isolation
-# held, which is the one thing worth trusting from this exercise.
+# Item 5 was the only one that could not be diagnosed from daniel-box, because a live k3s
+# explained it away; in the guest it turned out to be a collision among this script's OWN
+# listeners. Throughout every failure the live cluster stayed Ready and every write landed in
+# /var/tmp — the isolation held, which is what made all of this safe to iterate on.
+#
+# THE FULL DRILL RUNS IN A THROWAWAY GUEST since issue #1175 (path 1). roles/setup/hypervisor
+# installs `etcd-restore-drill-vm` on daniel-server: a monthly root cron that builds a transient
+# libvirt guest from the reviewed cloud image, copies in the k3s binary, the cluster token and the
+# R2 env file at the paths this script reads, runs THIS script there unmodified (through
+# files/etcd-drill-guest-run.sh, which fetches the snapshot and hands it to --local-snapshot),
+# pulls restore.log and server.log out as evidence, and destroys the guest. Its verdict lands on
+# the `etcd Restore Drill (full)` Kuma tile. The weekly --list-only cron on daniel-box is
+# unchanged and stays the cheap proof of the R2 leg on the host that owns the credentials.
 #
 # Usage:
 #   sudo ./scripts/backup/etcd_restore_drill.sh --list-only      # the part that works: prove the R2 leg
@@ -84,14 +103,30 @@ set -euo pipefail
 LIVE_DATA_DIR=/var/lib/rancher/k3s
 # Read-only, and the only thing this drill takes from the live installation. `--cluster-reset`
 # derives the restore's encryption material from the cluster token, and a scratch data-dir has
-# no `server/token` of its own — the first run failed with exactly that. The token is passed to
-# k3s as an argument-free file reference so it never lands in argv or in this script's output.
+# no `server/token` of its own — the first run failed with exactly that. The token reaches k3s
+# through the K3S_TOKEN environment variable (the restore stage below says why the file alone
+# is not enough), so it never lands in argv or in this script's output.
 LIVE_TOKEN=/var/lib/rancher/k3s/server/token
 S3_ENV=/etc/rancher/k3s/etcd-s3.env
 SCRATCH="/var/tmp/etcd-restore-drill.$$"
+# Four listeners from three flags, so the layout is not free (v1.36.4 source, 2026-09-11):
+#   PORT              the supervisor, which also proxies the API server — the kubeconfig k3s
+#                     writes points here, and this is the ONLY place the API server is served
+#                     to clients: with --supervisor-port set to a different value nothing binds
+#                     PORT at all ("connection refused", measured in the throwaway guest)
+#   PORT + 1          the API server's internal listener (control/server.go, APIServerPort)
+#   LB_PORT           the supervisor client load-balancer
+#   LB_PORT - 1       the API-server client load-balancer, bound only when the supervisor and
+#                     the API server are on different ports; kept free anyway
+# So the supervisor stays colocated with the API server, exactly as a stock k3s runs, and the
+# isolation from the live 6443/6444 comes from the values alone. Three collisions were measured
+# before this was written down: 7445 as LB_PORT put the API-server LB on the supervisor's 7444
+# (header item 5, the agent-config loop); 7444 as SUPERVISOR_PORT collided with the API server's
+# own 7444 when the scratch server started ("bind: address already in use"); and a split
+# 7443/7445 left 7443 unbound. The test in ansible/tests/setup pins the layout.
 PORT=7443
-SUPERVISOR_PORT=7444
-LB_PORT=7445
+SUPERVISOR_PORT=$PORT
+LB_PORT=7448
 KEEP=0
 CLEAN_ONLY=0
 # How long a kept scratch dir survives. Only failed runs and --keep runs leave one, so these are
@@ -183,9 +218,15 @@ verify_restored_objects() {
   pvcs=$("${KUBECTL[@]}" get pvc -A --no-headers 2>/dev/null | wc -l)
   secrets=$("${KUBECTL[@]}" get secrets -A --no-headers 2>/dev/null | wc -l)
   crds=$("${KUBECTL[@]}" get crd --no-headers 2>/dev/null | wc -l)
+  # The Node objects ride in the snapshot with the kubelet version that wrote it, which is the
+  # only record of the writer's k3s version a snapshot carries. Informational: a restore across
+  # versions is k3s's supported upgrade path, but the "same binary that wrote it" argument in the
+  # header only holds while this line and the binary agree, so the guest drill prints both.
+  nodes=$("${KUBECTL[@]}" get nodes -o jsonpath='{range .items[*]}{.metadata.name}={.status.nodeInfo.kubeletVersion}{" "}{end}' 2>/dev/null)
 
   echo
   echo "restored from : ${SNAPSHOT:-unknown}"
+  echo "nodes         : ${nodes:-unknown} (versions recorded in the snapshot)"
   echo "namespaces    : $ns"
   echo "deployments   : $deploys"
   echo "PVCs          : $pvcs"
@@ -269,7 +310,9 @@ esac
 # scheduled arm is `--list-only`, which returns above the `install -d "$SCRATCH"` below and so
 # creates no dir to keep — a weekly failing cron accumulates nothing. Accumulation is therefore
 # still operator-paced, as the five dirs above were: they came from hand runs, and were removed by
-# hand (2026-08-23b review M8). That bound holds only while the full drill stays unscheduled.
+# hand (2026-08-23b review M8). That bound holds only while the full drill stays unscheduled ON
+# THIS HOST: the scheduled full drill (header) runs in a guest whose whole disk is deleted after
+# every run, so its --keep dirs never reach any host's /var/tmp.
 #
 # Swept here rather than in cleanup(): a run that dies before its trap installs still gets the
 # previous mess cleared, and this way the sweep is exercised on every invocation instead of only
@@ -323,7 +366,20 @@ ISOLATION_ARGS=(--data-dir "$SCRATCH"
                 # `dynamiclistener 127.0.0.1:7444` and still died on 6444.
                 --lb-server-port "$LB_PORT"
                 --bind-address 127.0.0.1
-                --advertise-address 127.0.0.1)
+                --advertise-address 127.0.0.1
+                # The live server encrypts Secrets at rest (k3s_secrets_encryption), and the
+                # key rides inside the snapshot's bootstrap blob. Without this flag the restore
+                # stage's reconcile has no path to write it to ("Unable to lookup path to
+                # reconcile EncryptionConfig") and the scratch API server then cannot list a
+                # single Secret ("identity transformer tried to read encrypted data"), which
+                # holds its informer-sync readiness check open until the deadline — measured in
+                # the guest 2026-09-11. On BOTH invocations, because the restore writes the file
+                # the server reads.
+                --secrets-encryption
+                # The restored cluster's aggregated APIServices point at pod IPs that do not
+                # exist here; with the default egress selector the API server dials them through
+                # the agent tunnel and each call hangs to a timeout (dial tcp 10.42.x.x:10250).
+                --egress-selector-mode=disabled)
 
 cleanup() {
   local rc=$?
@@ -351,13 +407,17 @@ trap cleanup EXIT INT TERM
 RESTORE_S3_ARGS=("${S3_ARGS[@]}")
 if [[ -n "$LOCAL_SNAPSHOT" ]]; then
   [[ -r "$LOCAL_SNAPSHOT" ]] || die "cannot read $LOCAL_SNAPSHOT"
-  # `--cluster-reset-restore-path` is a NAME relative to <data-dir>/server/db/snapshots, not a
-  # path — k3s joins it onto that directory unconditionally. An absolute path therefore always
-  # produces the doubled form, measured twice on 2026-08-22:
+  # `--cluster-reset-restore-path` is read TWICE by k3s, and the two reads disagree (read in
+  # v1.36.4's pkg/etcd/etcd.go and pkg/server/server.go, 2026-09-11). k3s chdirs to
+  # <data-dir>/server first (setupDataDirAndChdir), then stats the value AS GIVEN — so a
+  # relative name resolves under <data-dir>/server, whatever the caller's cwd was. The .zip
+  # decompress then does filepath.Join(<data-dir>/server/db/snapshots, value), so an absolute
+  # path passes the stat and doubles at the join, measured twice on 2026-08-22:
   #   open <scratch-A>/server/db/snapshots/<scratch-B>/server/db/snapshots/<name>.zip
-  # So stage the file into this run's own snapshots dir and pass the bare filename. The same
-  # join is why --etcd-s3 fails here: k3s downloads to that directory, then feeds the absolute
-  # download path back through the join.
+  # No single path satisfies both reads. The bare name does, with the file present at BOTH
+  # places — the restore stage below stages it into the snapshots dir and hard-links it into
+  # <data-dir>/server. The same join is why --etcd-s3 fails here: k3s downloads to the
+  # snapshots dir, then feeds the absolute download path back through it.
   SNAPSHOT="$(basename "$LOCAL_SNAPSHOT")"
   RESTORE_S3_ARGS=()
   log "restoring from a local file, S3 not consulted"
@@ -386,14 +446,23 @@ fi
 # script, which nothing here would notice.
 install -d -m 700 "$SCRATCH"
 install -d -m 700 "$SCRATCH/server"
-# `--cluster-reset` reads the token from <data-dir>/server/token and checks for that FILE, not
-# for a --token/--token-file argument: passing --token-file left the same fatal
-# "server/token does not exist, please pass --token" (measured twice, 2026-08-22). Seeding the
-# path is what satisfies it, and it keeps the token out of argv, where `--token <value>` would
-# expose it to any `ps` on this host.
+# The token has to reach k3s TWO ways, and the file alone is a trap. `--cluster-reset` refuses
+# unless <data-dir>/server/token EXISTS ("server/token does not exist, please pass --token",
+# measured twice 2026-08-22) — but that is only a pre-check in pkg/cli/server; nothing reads
+# the file into the config. The server password comes from config.Token (the --token flag or
+# K3S_TOKEN) and is otherwise a fresh random one (deps.go getServerPass), which printTokens
+# then WRITES OVER the staged file. The restore succeeded and died one step later on
+# "bootstrap data already found and encrypted with different token" (guest run 2026-09-11,
+# read in the v1.36.4 source). So: seed the file for the pre-check, and export K3S_TOKEN for
+# the value. The environment keeps it out of argv, where `--token <value>` would expose it to
+# any `ps` on this host; /proc/<pid>/environ is root-only.
 install -m 600 "$LIVE_TOKEN" "$SCRATCH/server/token"
+K3S_TOKEN="$(<"$LIVE_TOKEN")"
+export K3S_TOKEN
 if [[ -n "$LOCAL_SNAPSHOT" ]]; then
   install -D -m 600 "$LOCAL_SNAPSHOT" "$SCRATCH/server/db/snapshots/$SNAPSHOT"
+  # The second place the bare name has to resolve — the comment at LOCAL_SNAPSHOT above.
+  ln "$SCRATCH/server/db/snapshots/$SNAPSHOT" "$SCRATCH/server/$SNAPSHOT"
   log "staged $SNAPSHOT into this run's snapshots dir"
 fi
 log "restoring into $SCRATCH (live cluster untouched)"
@@ -429,7 +498,14 @@ KUBECTL=(k3s kubectl --kubeconfig "$SCRATCH/drill.kubeconfig")
 deadline=$((SECONDS + READY_TIMEOUT))
 until "${KUBECTL[@]}" get --raw /readyz >/dev/null 2>&1; do
   kill -0 "$SERVER_PID" 2>/dev/null || { tail -20 "$SCRATCH/server.log" >&2; die "scratch server exited during startup"; }
-  (( SECONDS < deadline )) || { tail -20 "$SCRATCH/server.log" >&2; die "scratch server never became ready in ${READY_TIMEOUT}s"; }
+  if (( SECONDS >= deadline )); then
+    # The answer to "ready for what?" is in the check's own body, which a silent loop throws
+    # away; the listener table says whether kubectl reached the server at all.
+    { echo "== /readyz?verbose"; "${KUBECTL[@]}" get --raw '/readyz?verbose'
+      echo "== listeners"; ss -ltnp 2>/dev/null | grep -E ':(7[0-9]{3}|2379) '
+      echo "== server.log tail"; tail -20 "$SCRATCH/server.log"; } >&2 2>&1
+    die "scratch server never became ready in ${READY_TIMEOUT}s"
+  fi
   sleep 2
 done
 log "scratch API server is serving the restored objects"

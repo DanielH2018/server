@@ -381,6 +381,16 @@ stringData:
   etcd-snapshot-offbox.json: |
     {"type": "push", "name": "Off-box etcd Snapshot", "interval": 90000, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ etcd_snapshot_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
 {% endif %}
+{# The FULL restore drill, run monthly in a throwaway guest on daniel-server (roles/setup/hypervisor,
+   issue #1175). Distinct from monitor-bridge's `etcd Restore Drill` tile, which reads daniel-box's
+   weekly list-only stamp and by design never accepts a `full` one. DEADLINE IS DERIVED FROM THE
+   CRONTAB: etcd_drill_full_kuma_interval_s in group_vars is the cron's longest period plus slack;
+   the pin is in ansible/tests/staging/test_etcd_drill_vm.py. Email tier: a restore drill that has
+   stopped passing is the class of silence the off-box snapshot tile above already escalates. #}
+{% if etcd_drill_full_push_token | default('') %}
+  etcd-restore-drill-full.json: |
+    {"type": "push", "name": "etcd Restore Drill (full)", "interval": {{ etcd_drill_full_kuma_interval_s }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ etcd_drill_full_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
+{% endif %}
   # ── Transcribed 2026-08-10: the LIVE push fleet whose labels sit inert on the
   # monitor-bridge / autofix-bridge composes (the transcription ledger, pre-ON_DELETE flip).
   # Ids must keep matching the kuma() first arguments at those call sites.

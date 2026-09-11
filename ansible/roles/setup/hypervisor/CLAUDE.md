@@ -84,8 +84,17 @@ Two mechanics that decide whether a change lands:
   brings it back fenced. That task fires only while the live interface is unfenced.
 - **Editing a rule inside the filter needs no restart.** libvirt re-applies a redefined filter to
   every interface already referencing it. That works only because the template pins the filter's
-  UUID: `nwfilter-define` is not `net-define`, and with no `<uuid>` it mints one and then refuses
-  the name collision, so the role would deploy once and fail on every re-run.
+  UUID: with no `<uuid>` it mints one and then refuses the name collision, so the role would
+  deploy once and fail on every re-run.
+- **`net-define` collides the same way, and the network template pins its UUID too.** The
+  first change to `staging-network.xml.j2` since bring-up (the drill guest's reservation,
+  2026-09-11) failed with `network 'staging' already exists with uuid ...`. The network on
+  daniel-server predates the pin and carries a random UUID, and libvirt refuses a same-name
+  define under any other UUID even after `net-undefine`, so `network.yml` reads the live
+  UUID with `net-uuid` and pins that, falling back to `to_uuid` on a fresh host. A re-define
+  still only rewrites the persistent config: the running dnsmasq keeps the reservations it
+  started with, so the same tasks push a changed reservation in with `net-update --live`
+  rather than restart the network under daniel-stage.
 - **A referenced filter cannot be undefined.** `nwfilter-undefine` reports "Requested operation is
   not valid: nwfilter is in use" while the guest holds it, so clearing a stray one means
   `virsh destroy daniel-stage` first, then undefine, then re-run the role. The refusal is a
@@ -101,6 +110,39 @@ uv run python scripts/diagnostics/staging_egress_probe.py
 
 The internet control target must stay reachable. A fence that severed all egress would make every
 production target fail too, and that reads as a pass to anyone skimming.
+
+## The etcd restore drill's throwaway guest
+
+`etcd_drill.yml` prepares a second guest, `etcd-drill`, that exists only while the FULL etcd
+restore drill runs in it (issue #1175, path 1; the long form is `docs/k3s-etcd-restore.md`).
+`scripts/backup/etcd_restore_drill.sh` cannot pass beside a live k3s, so the guest is made to
+look like a k3s server node whose k3s is stopped, and the script runs there unmodified.
+
+- **Transient, never defined.** Ansible renders the domain XML, the seed and the pinned host key;
+  `etcd-restore-drill-vm` (the monthly root cron) `virsh create`s the guest from that XML on a
+  disk it just converted from the base image, and `virsh destroy`s it plus deletes the disk on
+  every exit. Nothing here `virsh define`s, so teardown's "no guest defined" refusal never sees
+  it, and no restored etcd database, token copy or R2 credential outlives a run. What persists is
+  `/var/log/etcd-restore-drill/<run-id>/` (drill stdout, `restore.log`, `server.log`), pruned at
+  `hypervisor_etcd_drill_log_retention_days`.
+- **The host key is pinned.** A fresh disk every run means a guest-minted host key every run, so
+  the orchestrator would have to accept any key — and `daniel-stage` sits on the same bridge. The
+  key is generated once by ansible, seeded through cloud-init's `ssh_keys`, and the orchestrator
+  connects with `StrictHostKeyChecking=yes` against that one public half.
+- **What it ships in, and where it comes from.** daniel-server's own `/usr/local/bin/k3s` (the
+  same version as the server that wrote the snapshot; the drill prints the snapshot's recorded
+  node versions beside it), `K3S_TOKEN` from the k3s-agent unit's env file (identical to the
+  server's `token` when no `--agent-token` is set — a wrong one fails the restore stage loudly),
+  and the R2 credentials rendered to `/etc/homelab/etcd-drill-s3.env`. That last one is a new
+  residency: the R2 write credentials now sit on this host as well as daniel-box.
+- **The cadence and the alarm are one number apart.** `etcd_drill_full_cron` and
+  `etcd_drill_full_kuma_interval_s` live in `group_vars/all.yml` because k8s/uptime-kuma reads
+  them too. The tile `etcd Restore Drill (full)` is the alarm; the stamp on this host is the
+  local record and nothing in the cluster reads it (monitor-bridge is pinned to daniel-box's
+  list-only stamp and by design never accepts a `full` one).
+
+ENFORCED by `ansible/tests/staging/test_etcd_drill_vm.py`: MAC ↔ reservation, the fence, the
+pinned host key, no `define`, and the deadline pinned between one cron period and two.
 
 ## The default network is stopped on purpose
 

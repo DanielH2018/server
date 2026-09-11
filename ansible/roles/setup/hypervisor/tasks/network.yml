@@ -52,6 +52,32 @@
   changed_when: true
   become: true
 
+- name: Read the staging network's live UUID, if it is already defined
+  tags: [hypervisor]
+  ansible.builtin.command:
+    cmd: virsh --connect qemu:///system net-uuid {{ hypervisor_staging_net_name }}
+  register: hypervisor_staging_net_live_uuid
+  changed_when: false
+  failed_when: false
+  become: true
+
+- name: Pin the staging network's UUID
+  tags: [hypervisor]
+  # DECIDED: the rendered XML pins a UUID, the live one where the network exists and a
+  # deterministic UUIDv5 over the name on a fresh host. `net-define` replaces an existing
+  # network only when the UUIDs match; handed XML with no <uuid> it mints a fresh one and
+  # refuses on the name collision ("network 'staging' already exists with uuid ..."), which is
+  # how the first template change since bring-up failed the apply on daniel-server on
+  # 2026-09-11 (#1175). The network on that host predates this pin and carries a random UUID,
+  # and libvirt refuses a same-name define under any other UUID even after net-undefine (the
+  # active transient network still collides), so the live UUID is the only value that keeps
+  # daniel-stage's bridge up through the change. The nwfilter template pins the same way.
+  ansible.builtin.set_fact:
+    hypervisor_staging_net_uuid: >-
+      {{ hypervisor_staging_net_live_uuid.stdout | trim
+         if hypervisor_staging_net_live_uuid.rc == 0
+         else hypervisor_staging_net_name | to_uuid }}
+
 - name: Render the staging network definition
   tags: [hypervisor]
   ansible.builtin.template:
@@ -75,12 +101,46 @@
 - name: Define the staging network
   tags: [hypervisor]
   # Runs when the rendered XML changed OR when the network is not defined at all. net-define
-  # replaces an existing definition, so this is safe to repeat; gating it on those two
-  # conditions is what keeps the task from reporting changed on every run.
+  # replaces an existing definition because the XML pins its UUID (the set_fact above), so
+  # this is safe to repeat; gating it on those two conditions is what keeps the task from
+  # reporting changed on every run.
   when: hypervisor_staging_net_xml is changed or hypervisor_staging_net_info.rc != 0
   ansible.builtin.command:
     cmd: virsh --connect qemu:///system net-define {{ hypervisor_net_source_dir }}/{{ hypervisor_staging_net_name }}.xml
   changed_when: true
+  become: true
+
+- name: Add any new DHCP reservation to the running network
+  tags: [hypervisor]
+  # net-define only rewrites the persistent config: a running network's dnsmasq keeps the
+  # reservations it started with until the network restarts, and restarting it tears the
+  # bridge out from under daniel-stage. net-update --live hands the entry to dnsmasq in place.
+  # A reservation dnsmasq already holds is reported as an existing entry, which is the
+  # steady state and not a failure.
+  when: hypervisor_staging_net_xml is changed and hypervisor_staging_net_info.rc == 0
+  ansible.builtin.command:
+    argv:
+      - virsh
+      - --connect
+      - qemu:///system
+      - net-update
+      - "{{ hypervisor_staging_net_name }}"
+      - add-last
+      - ip-dhcp-host
+      - "<host mac='{{ item.mac }}' name='{{ item.name }}' ip='{{ item.ip }}'/>"
+      - --live
+  loop:
+    - { mac: "{{ staging_vm_mac }}", name: "{{ staging_vm_hostname }}", ip: "{{ staging_vm_ip }}" }
+    - mac: "{{ hypervisor_etcd_drill_vm_mac }}"
+      name: "{{ hypervisor_etcd_drill_vm_hostname }}"
+      ip: "{{ hypervisor_etcd_drill_vm_ip }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: hypervisor_staging_net_dhcp_update
+  changed_when: hypervisor_staging_net_dhcp_update.rc == 0
+  failed_when: >-
+    hypervisor_staging_net_dhcp_update.rc != 0
+    and 'existing dhcp host entry' not in hypervisor_staging_net_dhcp_update.stderr
   become: true
 
 - name: Re-read the staging network's state

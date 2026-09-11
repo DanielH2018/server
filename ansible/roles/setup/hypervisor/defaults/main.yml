@@ -120,3 +120,89 @@ hypervisor_staging_gate_pubkey_file: staging-gate.pub
 # The verdict-bearing half, installed here rather than executed from the gate's checkout so the
 # gate that runs is not chosen by the commit it is judging.
 hypervisor_staging_gate_runner_path: /usr/local/bin/staging-gate-run
+
+# ── The etcd restore drill guest ─────────────────────────────────────────────────────────
+#
+# A THROWAWAY guest that exists only while a FULL etcd restore drill runs in it (issue #1175,
+# path 1). `scripts/backup/etcd_restore_drill.sh` restores the newest off-box snapshot into a
+# scratch data-dir and reads the object graph back — but `k3s server --cluster-reset` assumes it
+# is the only k3s on the host, and on daniel-box every workaround found the next thing it assumes
+# (five structural failures, listed in that script's header). A guest with no k3s of its own has
+# none of them, so the drill script runs there UNMODIFIED: the orchestrator below makes the guest
+# look like a k3s server node whose k3s is stopped — binary, token file, R2 env file at the paths
+# the script already reads — which is exactly the rebuilt-host shape a real restore would face.
+#
+# DECIDED: transient domain (`virsh create`), never `virsh define`. teardown.yml refuses while any
+# guest is DEFINED and nothing in this role undefines one, so a second persistent domain would
+# silently break hypervisor teardown. A transient domain vanishes when it is destroyed, and its
+# disk is recreated from the base image on every run and deleted on every exit, pass or fail. That
+# is the answer to the issue's cleanup constraint: no restored etcd database, token copy or R2
+# credential outlives the run anywhere. What persists is under hypervisor_etcd_drill_log_dir —
+# the drill's stdout plus k3s's restore.log and server.log, none of which carry a credential —
+# pruned at hypervisor_etcd_drill_log_retention_days.
+#
+# Sizing: the drill runs one API server against one restored etcd (~8 MB compressed snapshot) and
+# nothing else — no kubelet, no CNI, no pods. Measured on daniel-box 2026-08-22 at 6 s of CPU for
+# the restore stage. 2 GiB / 2 vCPU / 20 G is generous; the cloud image itself needs ~2.5 G.
+hypervisor_etcd_drill_armed: true
+# The cadence (`etcd_drill_full_cron`) and the Kuma deadline derived from it
+# (`etcd_drill_full_kuma_interval_s`) live in group_vars/all.yml: k8s/uptime-kuma sizes the push
+# tile from the same numbers this role schedules the cron with.
+
+# Guest identity. The MAC is a second reservation in the staging network's DHCP (the guest shares
+# that NAT network and its egress fence — it needs internet for R2 and nothing on the LAN), fixed
+# so the orchestrator can name the address it waits for. Outside the dynamic range, like the
+# staging guest's, and never in the inventory: nothing but the orchestrator ever reaches it.
+hypervisor_etcd_drill_vm_hostname: etcd-drill
+hypervisor_etcd_drill_vm_mac: "52:54:00:5a:11:e1"
+hypervisor_etcd_drill_vm_ip: 192.168.140.11
+hypervisor_etcd_drill_vm_memory_mib: 2048
+hypervisor_etcd_drill_vm_vcpus: 2
+hypervisor_etcd_drill_vm_disk_size: 20G
+# Same base image as the staging guest, same pin. The disk is the per-run copy; the orchestrator
+# creates and deletes it, ansible never touches it.
+hypervisor_etcd_drill_vm_disk: /var/lib/libvirt/images/{{ hypervisor_etcd_drill_vm_hostname }}.qcow2
+hypervisor_etcd_drill_vm_xml: "{{ hypervisor_net_source_dir }}/{{ hypervisor_etcd_drill_vm_hostname }}.xml"
+hypervisor_etcd_drill_vm_seed_dir: /var/lib/libvirt/seed/{{ hypervisor_etcd_drill_vm_hostname }}
+hypervisor_etcd_drill_vm_seed: /var/lib/libvirt/images/{{ hypervisor_etcd_drill_vm_hostname }}-seed.iso
+# The guest's ssh HOST key is generated once here and seeded through cloud-init, so the
+# orchestrator can pin it. Every run is a fresh disk, so a guest-generated host key would change
+# every run and the orchestrator would have to accept any key — and the staging guest sits on the
+# same bridge, so "any key" would let a compromised daniel-stage answer for this address and be
+# handed the cluster token and the R2 credentials. Pinning closes that.
+hypervisor_etcd_drill_vm_hostkey: "{{ hypervisor_etcd_drill_vm_seed_dir }}/ssh_host_ed25519_key"
+hypervisor_etcd_drill_vm_boot_timeout: 300
+
+# Where the orchestrator lives and what it writes.
+hypervisor_etcd_drill_runner_path: /usr/local/bin/etcd-restore-drill-vm
+# The guest-side half, a plain file copied into the guest beside the drill script; its header
+# says why the snapshot is fetched with curl and drilled as a local file.
+hypervisor_etcd_drill_guest_script_path: /usr/local/lib/etcd-drill-guest-run.sh
+# scripts/backup/etcd_restore_drill.sh, installed by the role from the checkout it runs from.
+# The orchestrator used to read it straight out of /home/<user>/server, so a cron depended on
+# whatever that checkout happened to hold — and a hand run from a worktree drilled the OLD
+# script while the new one sat beside it (2026-09-11). Installing it makes the apply the one
+# thing that changes what the drill runs, the same as every other file the role ships.
+hypervisor_etcd_drill_script_path: /usr/local/lib/etcd-restore-drill.sh
+# Read by the orchestrator, copied INTO the guest as /etc/rancher/k3s/etcd-s3.env for the drill's
+# run, and deleted with the guest. 0600 root: these are the R2 write credentials for the bucket
+# that also holds every Longhorn backup — the same residency daniel-box already carries in
+# /etc/rancher/k3s/etcd-s3.env, now on this host too because the drill has to fetch its snapshot
+# from somewhere and the guest cannot reach daniel-box through the fence. The token the guest also
+# needs is this host's own K3S_TOKEN from the k3s-agent unit's env file: k3s writes the same value
+# to server/token and server/node-token when no --agent-token is set, and the join copied
+# node-token here. A wrong token fails the restore stage loudly (the bootstrap blob cannot be
+# decrypted), so it cannot pass by accident.
+hypervisor_etcd_drill_s3_env: /etc/homelab/etcd-drill-s3.env
+hypervisor_etcd_drill_kuma_env: /etc/homelab/etcd-drill-kuma-push.env
+# Same path and stamp format as daniel-box's /var/lib/etcd-restore-drill, so `last-success-full`
+# reads the same way on either host. Nothing in the cluster reads this one (monitor-bridge is
+# pinned to daniel-box's copy); the Kuma push is the alarm, this is the local record.
+hypervisor_etcd_drill_stamp_dir: /var/lib/etcd-restore-drill
+hypervisor_etcd_drill_log_dir: /var/log/etcd-restore-drill
+# Longer than the issue's 1-year budget by a margin, so the evidence of the last pass is still
+# on disk for the whole window an operator might ask "when did this last work".
+hypervisor_etcd_drill_log_retention_days: 400
+# One run at a time. A second `virsh create` of the same transient name fails anyway, but failing
+# on the lock says why.
+hypervisor_etcd_drill_lock: /var/lock/etcd-restore-drill-vm.lock

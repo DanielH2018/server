@@ -1,0 +1,197 @@
+---
+# The etcd restore drill's throwaway guest and the cron that drives it (issue #1175, path 1).
+# Runs after network.yml (the domain's interface names the staging network and its DHCP carries
+# this guest's reservation) and after guest.yml (which downloaded the base image this guest is
+# built from). Ansible prepares what a run needs — the seed, the domain XML, the pinned host key,
+# the credentials, the two scripts — and never starts the guest itself: etcd-restore-drill-vm
+# creates it transiently on every run and destroys it on the way out, so nothing here defines a
+# domain and teardown.yml's "no guest defined" refusal is never in its way. See the
+# hypervisor_etcd_drill_* block in defaults/main.yml for the decisions.
+
+- name: Read the deploy user's public key for the drill guest
+  tags: [hypervisor]
+  # The same key the staging guest trusts (guest.yml), for the same reason: the thing that has to
+  # reach this guest is a root cron on this host, which reads sys_user's key.
+  ansible.builtin.slurp:
+    src: "/home/{{ sys_user }}/.ssh/id_ed25519.pub"
+  register: hypervisor_etcd_drill_vm_pubkey
+  become: true
+
+- name: Set the drill guest's authorised key
+  tags: [hypervisor]
+  ansible.builtin.set_fact:
+    hypervisor_etcd_drill_vm_ssh_key: "{{ hypervisor_etcd_drill_vm_pubkey.content | b64decode | trim }}"
+
+- name: Create the drill guest's seed directory
+  tags: [hypervisor]
+  ansible.builtin.file:
+    path: "{{ hypervisor_etcd_drill_vm_seed_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  become: true
+
+- name: Generate the drill guest's pinned ssh host key
+  tags: [hypervisor]
+  # Once. The guest boots from a fresh disk every run, so a guest-generated host key would be new
+  # every run and the orchestrator could pin nothing — and the staging guest sits on the same
+  # bridge. Seeded into the guest by cloud-init (etcd-drill-user-data.j2); the public half is what
+  # the orchestrator's known_hosts carries.
+  ansible.builtin.command:
+    cmd: ssh-keygen -q -t ed25519 -N "" -C "{{ hypervisor_etcd_drill_vm_hostname }} host key" -f {{ hypervisor_etcd_drill_vm_hostkey }}
+    creates: "{{ hypervisor_etcd_drill_vm_hostkey }}"
+  become: true
+
+- name: Read the drill guest's host key pair
+  tags: [hypervisor]
+  ansible.builtin.slurp:
+    src: "{{ item }}"
+  loop:
+    - "{{ hypervisor_etcd_drill_vm_hostkey }}"
+    - "{{ hypervisor_etcd_drill_vm_hostkey }}.pub"
+  register: hypervisor_etcd_drill_vm_hostkey_slurp
+  become: true
+  no_log: true  # the private half of the guest's host key
+
+- name: Set the drill guest's host key facts
+  tags: [hypervisor]
+  ansible.builtin.set_fact:
+    hypervisor_etcd_drill_vm_hostkey_private: "{{ hypervisor_etcd_drill_vm_hostkey_slurp.results[0].content | b64decode }}"
+    hypervisor_etcd_drill_vm_hostkey_public: "{{ hypervisor_etcd_drill_vm_hostkey_slurp.results[1].content | b64decode | trim }}"
+  no_log: true
+
+- name: Render the drill guest's cloud-init seed files
+  tags: [hypervisor]
+  ansible.builtin.template:
+    src: "etcd-drill-{{ item }}.j2"
+    dest: "{{ hypervisor_etcd_drill_vm_seed_dir }}/{{ item }}"
+    owner: root
+    group: root
+    mode: "0600"
+  loop:
+    - user-data
+    - meta-data
+  register: hypervisor_etcd_drill_vm_seed_files
+  become: true
+  no_log: true  # user-data carries the private host key
+
+- name: Build the drill guest's cloud-init seed ISO  # noqa: no-handler
+  tags: [hypervisor]
+  # Same construction as the staging guest's seed (guest.yml): xorriso, volume id `cidata`.
+  when: hypervisor_etcd_drill_vm_seed_files is changed
+  ansible.builtin.command:
+    cmd: >-
+      xorriso -as mkisofs -output {{ hypervisor_etcd_drill_vm_seed }}
+      -volid cidata -joliet -rock
+      {{ hypervisor_etcd_drill_vm_seed_dir }}/user-data
+      {{ hypervisor_etcd_drill_vm_seed_dir }}/meta-data
+  changed_when: true
+  become: true
+
+- name: Restrict the drill guest's seed ISO
+  tags: [hypervisor]
+  # The ISO carries the private host key, so unlike the staging seed it is not world-readable.
+  # root:kvm 0640 — libvirt relabels the file to its qemu user at domain start regardless, so
+  # the guest can still read it; this only closes it to other local accounts.
+  ansible.builtin.file:
+    path: "{{ hypervisor_etcd_drill_vm_seed }}"
+    owner: root
+    group: kvm
+    mode: "0640"
+  become: true
+
+- name: Render the drill guest's definition
+  tags: [hypervisor]
+  # Rendered only. The orchestrator `virsh create`s from this file per run; it is never defined.
+  ansible.builtin.template:
+    src: etcd-drill-vm.xml.j2
+    dest: "{{ hypervisor_etcd_drill_vm_xml }}"
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: Deploy the drill's R2 credentials
+  tags: [hypervisor]
+  # 0600 root: the R2 write credentials for the bucket that also holds every Longhorn backup, the
+  # same tier as daniel-box's copy. Read by the root orchestrator and copied into the guest for
+  # the run only.
+  ansible.builtin.template:
+    src: etcd-drill-s3.env.j2
+    dest: "{{ hypervisor_etcd_drill_s3_env }}"
+    owner: root
+    group: root
+    mode: "0600"
+  become: true
+  no_log: true  # renders the R2 access key and secret
+
+- name: Deploy the drill's Kuma push token
+  tags: [hypervisor]
+  ansible.builtin.template:
+    src: etcd-drill-kuma-push.env.j2
+    dest: "{{ hypervisor_etcd_drill_kuma_env }}"
+    owner: root
+    group: root
+    mode: "0600"
+  become: true
+  no_log: true  # renders the push token
+
+- name: Install the drill script the orchestrator ships into the guest
+  tags: [hypervisor]
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../scripts/backup/etcd_restore_drill.sh"
+    dest: "{{ hypervisor_etcd_drill_script_path }}"
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: Install the drill's guest-side script
+  tags: [hypervisor]
+  ansible.builtin.copy:
+    src: etcd-drill-guest-run.sh
+    dest: "{{ hypervisor_etcd_drill_guest_script_path }}"
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: Install the drill orchestrator
+  tags: [hypervisor]
+  ansible.builtin.template:
+    src: etcd-restore-drill-vm.sh.j2
+    dest: "{{ hypervisor_etcd_drill_runner_path }}"
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: Create the drill's stamp and evidence directories
+  tags: [hypervisor]
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - "{{ hypervisor_etcd_drill_stamp_dir }}"
+    - "{{ hypervisor_etcd_drill_log_dir }}"
+  become: true
+
+- name: Schedule the full etcd restore drill
+  tags: [hypervisor]
+  # Root: virsh against qemu:///system, the agent env file and the R2 env are all root-only. The
+  # script sets its own PATH. The drill's own output lands in the run's evidence dir; the
+  # orchestrator's progress lines go to cron.log beside it rather than to cron's mailer.
+  ansible.builtin.cron:
+    name: "Full etcd restore drill in a throwaway guest"
+    minute: "{{ etcd_drill_full_cron.split()[0] }}"
+    hour: "{{ etcd_drill_full_cron.split()[1] }}"
+    day: "{{ etcd_drill_full_cron.split()[2] }}"
+    user: root
+    job: "{{ hypervisor_etcd_drill_runner_path }} >>{{ hypervisor_etcd_drill_log_dir }}/cron.log 2>&1"
+    cron_file: etcd-restore-drill-vm
+    state: "{{ 'present' if hypervisor_etcd_drill_armed else 'absent' }}"
+  become: true

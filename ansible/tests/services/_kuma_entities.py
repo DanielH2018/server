@@ -29,6 +29,10 @@ STUBS = {
     # The cluster's primary node. The template indexes `hostvars` by this rather than by a
     # literal hostname, so without it every hostvars lookup here resolves against Undefined.
     "k8s_primary_node": "daniel-box",
+    # The full etcd restore drill's deadline, a group_vars value. The number itself is pinned
+    # against the cron in ansible/tests/staging/test_etcd_drill_vm.py, which reads group_vars
+    # directly; this stub only lets the tile render.
+    "etcd_drill_full_kuma_interval_s": 3024000,
     "hostvars": {
         "daniel-pi": {"server_ip": "10.0.0.2"},
         "daniel-box": {
@@ -59,6 +63,7 @@ STUBS = {
     # Added 2026-08-21, when the email-tier guard was the first assertion to notice.
     "manifest_prune_push_token": "t" * 32,
     "etcd_snapshot_push_token": "t" * 32,
+    "etcd_drill_full_push_token": "t" * 32,
     "remember_logs_push_token": "t" * 32,
     "release_staleness_push_token": "t" * 32,
     # Armed 2026-09-10 (#1627), so unlike the four above this one is declared unguarded and the

@@ -901,7 +901,10 @@ k3s_etcd_s3_cron_minute: "45"
 # restored etcd databases plus cluster-token copies in /var/tmp as a steady state. The scheduled
 # list-only arm has no such cost: it exits at the drill's `--list-only` branch, BEFORE the
 # `install -d "$SCRATCH"` that creates the directory at all, so however often it fails it writes
-# nothing to /var/tmp. That asymmetry is why one mode is scheduled and the other is not.
+# nothing to /var/tmp. That asymmetry is why one mode is scheduled and the other is not ON THIS
+# HOST. The full drill IS scheduled since #1175 — monthly, in a throwaway guest on daniel-server
+# (`etcd_drill_full_cron` in group_vars, mechanism in roles/setup/hypervisor), where the guest's
+# disk is deleted after every run and so nothing accumulates anywhere.
 #
 # Monday 10:20: clear of every backup window (02:45 snapshot, 03:30/04:30 Longhorn, 04:10 drill),
 # clear of the 05:15 manifest-prune and the 06:10 trim, and in an hour nothing else uses. Daytime

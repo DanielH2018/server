@@ -107,6 +107,7 @@ def test_discover_templates_finds_the_known_set():
         "pi-recovery-health.sh.j2",
         "pull-pi-peers.sh.j2",
         "staging-gate-dispatch.sh.j2",
+        "etcd-restore-drill-vm.sh.j2",
         "sync-artifacts.sh.j2",
         "portainer-agent-firewall.sh.j2",
         "nut-lan-firewall.sh.j2",

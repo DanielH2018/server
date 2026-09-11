@@ -1,15 +1,18 @@
 # Restoring the k3s control plane from an off-box etcd snapshot
 
-**Status, 2026-08-22: the off-box leg is proven; the restore is still NOT drilled.** Written
-when the off-box snapshot cron landed (2026-08-16). Unlike `kopia-disaster-recovery.md`, no
-restore has been performed from these snapshots — treat every step below as needing
-verification the first time it is used, and update this file with what actually happened.
+**Status, 2026-09-11: the restore is drilled.** `offbox-daniel-box-1789094702.zip` restored in
+a throwaway guest on daniel-server and served its object graph — 8 namespaces, 72 Deployments,
+45 PVCs, 48 CRDs, 51 Secrets — in 50 seconds end to end (issue #1175). It runs monthly from
+then on. The steps below that the drill does not exercise are still unverified: the agent
+rejoin, the Longhorn reattach, and the restore onto a replacement host rather than into a
+scratch data-dir.
 
 **The `--list-only` leg is no longer a hand check.** `k3s_etcd_restore_drill_cron` runs it weekly
 on daniel-box (Mondays 10:20, armed by `k3s_etcd_restore_drill_armed`, PR #531), and
 `check_etcd_restore_drill()` in monitor-bridge reads its stamp fail-closed onto a Kuma tile
-(PR #535). The headline above still stands: what recurs is the *listing* leg, and the full
-restore has still never been performed. Do not read a green tile as a drilled restore.
+(PR #535). That tile still covers the listing leg alone — the full drill has its own,
+`etcd Restore Drill (full)`, pushed monthly from daniel-server. Neither tile says anything
+about the steps after the object graph comes back.
 
 What was first verified on 2026-08-22, with `scripts/backup/etcd_restore_drill.sh --list-only` and the runs
 that followed it:
@@ -19,28 +22,82 @@ that followed it:
 - `offbox-daniel-box-1787366702.zip` — the 02:45 snapshot that day — **downloaded and
   decompressed**. So the nightly cron is producing artefacts that are retrievable and intact
   enough for k3s to open.
-- Nothing beyond that. The object graph has never been read back out of one of these snapshots,
-  which is the claim a restore actually rests on.
+- Reading the object graph back out — the claim a restore actually rests on — was still open
+  at that point. It was closed on 2026-09-11 by the drill in the guest; the pass record below
+  carries the evidence.
 
 **A scratch restore alongside the running k3s does not work, and is not worth more attempts.**
 `k3s server --cluster-reset` assumes it is the only k3s on the host. Five obstacles were found
-and the first four fixed — the token file must exist rather than be passed, isolation flags
+and the first four fixed — the token file must exist *and* the value must arrive as `K3S_TOKEN`
+(the file is only a pre-check; k3s otherwise mints a random token and overwrites the file,
+which is what "encrypted with different token" meant on 2026-09-11), isolation flags
 belong on both invocations, `--disable-agent` leaves the load-balancer on 6444
-(`--lb-server-port` moves it), and `--cluster-reset-restore-path` is a name relative to
-`<data-dir>/server/db/snapshots` that k3s joins unconditionally, so absolute paths double and
-`--etcd-s3` doubles them for you. The fifth is a wedge in "Waiting to retrieve agent
+(`--lb-server-port` moves it), and `--cluster-reset-restore-path` is read twice by k3s —
+checked for existence after k3s changes directory to `<data-dir>/server`, then joined onto
+`<data-dir>/server/db/snapshots` for the `.zip` decompress — so absolute paths double,
+`--etcd-s3` doubles them for you, and the only value that satisfies both reads is the bare
+name with the file hard-linked into both places (corrected 2026-09-11 from the k3s source). The fifth is a wedge in "Waiting to retrieve agent
 configuration" that ran 17 minutes on 6 seconds of CPU. The script's header records each one.
+The fifth turned out not to be the live k3s at all: it reproduced on 2026-09-11 in a guest with
+no other k3s, and it is a port collision inside the script's own isolation flags. Three flags
+give k3s four listeners: the API server's internal port is `https-listen-port + 1`, the
+API-server client load-balancer is `lb-server-port − 1`, and the supervisor has to share the
+API server's port — split, k3s serves the API server only on the internal port and the
+kubeconfig points at nothing. With 7443/7444/7445 the hidden listeners landed on 7444 twice
+over (the reset's `/cacerts` wedge, then `bind: address already in use` at the scratch
+server), and a split 7443/7445 answered `connection refused`. The supervisor shares
+7443 with the API server, the load-balancer is at 7448, and a test pins the layout.
 
 Two paths finish the job, and neither is more patching:
 
 1. **Run the drill on a host with no k3s of its own** — a throwaway VM. Every obstacle above
    comes from sharing the host, so they all evaporate. This is the cheap one and it stays
-   non-destructive.
+   non-destructive. **Taken, issue #1175** — see *The full drill runs monthly in a throwaway
+   guest* below.
 2. **Take a scheduled outage and do the real restore below.** It proves the most, including the
-   agent rejoin and the Longhorn reattach that no scratch drill can exercise.
+   agent rejoin and the Longhorn reattach that no scratch drill can exercise. Still never done.
 
 The isolation itself held: across all five failed runs the live cluster stayed Ready, both nodes
 included, and every write landed under `/var/tmp`.
+
+## The full drill runs monthly in a throwaway guest
+
+`roles/setup/hypervisor` installs `etcd-restore-drill-vm` on daniel-server (its `etcd_drill.yml`),
+a root cron on `etcd_drill_full_cron` (`inventory/group_vars/all.yml`: the first day of each month, 11:20 UTC). One run:
+
+1. builds a transient libvirt guest (`etcd-drill`, 2 GiB / 2 vCPU / 20 G) from the same pinned
+   cloud image as the staging guest, on the staging network and behind its egress fence — the
+   guest reaches R2 and nothing on the LAN;
+2. copies in daniel-server's own `k3s` binary, the cluster token (daniel-server's `K3S_TOKEN`,
+   which is the server token — k3s writes the same value to `token` and `node-token` when no
+   `--agent-token` is set) and the R2 env file, at the paths `etcd_restore_drill.sh` reads;
+3. lists the bucket with a SigV4 `ListObjectsV2` to name the newest `offbox-*` snapshot,
+   downloads that object with a SigV4 GET, and runs the drill against it with
+   `--local-snapshot`. The guest cannot use the drill's own S3 mode for either half:
+   `k3s etcd-snapshot list` lists through a running k3s server's supervisor API (since k3s
+   1.29) and there is no server in the guest, and the S3 path doubling (item 4 above) makes
+   the local-file form the working one for the restore;
+4. pulls the drill's stdout, `restore.log` and `server.log` out to
+   `/var/log/etcd-restore-drill/<run-id>/` on daniel-server (pruned after 400 days), then
+   destroys the guest and deletes its disk — pass or fail, so no restored etcd database, token
+   copy or credential outlives a run;
+5. stamps `/var/lib/etcd-restore-drill/last-success-full` on daniel-server and pushes the verdict
+   to the **etcd Restore Drill (full)** Kuma tile, whose deadline (`etcd_drill_full_kuma_interval_s`,
+   35 days) is derived from the cron's period.
+
+To run it by hand on daniel-server: `sudo /usr/local/bin/etcd-restore-drill-vm`. It takes a lock,
+so a run that overlaps the cron refuses rather than building a second guest.
+
+What this proves and does not: everything the script header says — the off-box snapshot is
+complete, readable by this k3s version, and its object graph comes back. It does not exercise the
+agent rejoin or the Longhorn reattach; only path 2 does. The weekly `--list-only` cron on
+daniel-box and its monitor-bridge tile are unchanged.
+
+**Pass record** (the stamp on daniel-server is the machine-readable copy):
+
+| Date | Snapshot | Where | Result |
+|---|---|---|---|
+| 2026-09-11 | `offbox-daniel-box-1789094702.zip` | `etcd-drill` guest on daniel-server | **Pass.** 8 namespaces, 72 Deployments, 45 PVCs, 48 CRDs, 51 Secrets; 50 s end to end. First full restore ever performed from these snapshots (#1175). |
 
 ## What these snapshots do and do not cover
 

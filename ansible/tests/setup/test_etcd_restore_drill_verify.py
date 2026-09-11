@@ -63,6 +63,56 @@ def _run_verify(ns: int, deploys: int, pvcs: int) -> subprocess.CompletedProcess
     )
 
 
+def _ports() -> dict[str, int]:
+    out = subprocess.run(
+        [
+            "bash",
+            "-c",
+            f'source "{_SCRIPT}"; echo "$PORT $SUPERVISOR_PORT $LB_PORT"',
+            "_",
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.split()
+    return dict(zip(("api", "supervisor", "lb"), map(int, out), strict=True))
+
+
+def test_the_isolation_listeners_are_colocated_and_distinct():
+    """Three flags, four listeners: the API server's internal port is https-listen-port + 1 and
+    the API-server client LB is lb-server-port - 1. The supervisor must share the API server's
+    port — split, k3s binds only the internal port and the kubeconfig points at nothing
+    ("connection refused"). 7443/7444/7445 and 7443/7445/7448 each failed one of these."""
+    p = _ports()
+    assert p["api"] == p["supervisor"], (
+        "split ports leave the kubeconfig's port unbound"
+    )
+    listeners = {
+        "api": p["api"],
+        "api-internal": p["api"] + 1,
+        "supervisor-lb": p["lb"],
+        "apiserver-lb": p["lb"] - 1,
+    }
+    assert len(set(listeners.values())) == len(listeners), (
+        f"port collision: {listeners}"
+    )
+    assert not {6443, 6444} & set(listeners.values()), "the live k3s ports"
+
+
+def test_the_restore_stage_hands_k3s_the_token_through_the_environment():
+    """<data-dir>/server/token existing is only a pre-check: k3s takes the value from --token or
+    K3S_TOKEN and otherwise mints a random one and overwrites the file, which restored the
+    snapshot and then failed on "encrypted with different token" (guest run 2026-09-11)."""
+    script = _SCRIPT.read_text()
+    export_at = script.index("export K3S_TOKEN")
+    reset_at = script.index("--cluster-reset \\")
+    assert export_at < reset_at, (
+        "K3S_TOKEN must be exported before the restore stage runs k3s"
+    )
+    code = [ln for ln in script.splitlines() if not ln.lstrip().startswith("#")]
+    assert not [ln for ln in code if "--token" in ln], "the token never goes in argv"
+
+
 def test_a_healthy_restore_passes():
     # ACCEPT: a plausible cluster's worth of objects clears all three thresholds.
     result = _run_verify(ns=5, deploys=12, pvcs=8)
