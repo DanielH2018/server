@@ -47,8 +47,20 @@ from diagnostics.probe_lib.core import (
 # while `monitor_status{monitor_name="Manifest Prune Drift"}` read 0 and `alerts --check
 # manifest` printed "no DOWN alerts". See SYSLOG_ALERT_LOGQL below for the second stream.
 ALERT_LOGQL = '{container="monitor-bridge"} |= "DOWN"'
-# "[2026-07-21T08:37:00] DOWN n8n - 1 active workflow(s) failed ... (2 cycles)"
-_DOWN_RE = re.compile(r"^\[[^\]]+\] DOWN (?P<name>\S+) - (?P<msg>.*)$")
+# "DOWN n8n - 1 active workflow(s) failed ... (2 cycles)", optionally behind the bracketed
+# stamp the bridge printed until 2026-09-04.
+#
+# THE STAMP IS OPTIONAL BECAUSE THE EMITTER DROPPED IT, and requiring it cost every episode.
+# `bridge.common.log` printed `[%Y-%m-%dT%H:%M:%S]` until bec8990a removed it — that stamp was
+# the container's local Chicago clock wearing an ISO face, and the runtime already stamps each
+# line. This regex still demanded it, so from 2026-09-04 the monitor-bridge stream parsed as
+# NOTHING: `alerts --days 2 --check traefik` printed "no DOWN alerts" while `--raw` over the
+# same window showed 21 traefik_latency DOWN lines (#1782). An episode view that reads as a
+# clean bill of health is the worst shape this failure could take, so the pairing is now
+# ENFORCED by ansible/tests/services/test_monitor_bridge_down_line_shape.py, which feeds
+# `bridge.common.log`'s real output through parse_down_line. The episode's time comes from
+# Loki's own nanosecond stamp either way, so nothing here needs the prefix.
+_DOWN_RE = re.compile(r"^(?:\[[^\]]+\] )?DOWN (?P<name>\S+) - (?P<msg>.*)$")
 _CYCLES_SUFFIX_RE = re.compile(r"\s*\(\d+ cycles?\)\s*$")
 
 
@@ -165,6 +177,29 @@ def is_pi_alert(logql, line, name):
         m = _SYSLOG_HOST_RE.match(line)
         return bool(m) and m["host"] == "daniel-pi"
     return name == PI_PRESSURE_CHECK_NAME
+
+
+def keep_alert_row(check, pi, logql, line, name):
+    """Whether `--check`/`--pi` admit one fetched line. Pure.
+
+    ONE predicate for both views. `--raw` used to print every fetched line while the episode
+    view filtered, so `--check traefik_latency --raw` also printed arr_queue, k8s_workloads and
+    etcd-restore-drill-vm lines (#1782) — the two paths filtered differently because they
+    filtered in two places.
+
+    `name` is None for a line neither parser read. Unfiltered that line still prints, which is
+    what makes `--raw` the way to see a shape the parsers have stopped matching. Under a filter
+    it cannot be attributed to a check or a host, so it is dropped.
+    """
+    if not check and not pi:
+        return True
+    if name is None:
+        return False
+    if check and check.lower() not in name.lower():
+        return False
+    if pi and not is_pi_alert(logql, line, name):
+        return False
+    return True
 
 
 # Splitting one incident into several is a CADENCE question, not a fixed-minutes one, and
@@ -297,8 +332,12 @@ def format_alert_episodes(episodes, days):
 def alert_source_urls(base, days, limit):
     """The Loki URLs `alerts` fetches, one per stream in ALERT_SOURCES.
 
-    `direction=forward` because episode reconstruction walks samples oldest-first; that is this
-    command's need, not loki-query's — see run_query.
+    `direction=backward` decides WHICH END a hit `--limit` throws away, and the answer has to be
+    the oldest. Loki applies the limit in the direction it walks, so `forward` returned the
+    OLDEST `--limit` lines of the window: a window wide enough to truncate lost its most recent
+    episodes, and a narrower window over the same log showed episodes the wider one did not.
+    Nothing needed forward — alert_episodes sorts each check's samples itself and run_alerts
+    sorts the raw rows before printing them.
     """
     end_s = datetime.now(UTC).timestamp()
     start_s = end_s - days * 86400
@@ -309,7 +348,7 @@ def alert_source_urls(base, days, limit):
             limit,
             start=int(start_s * 1e9),
             end=int(end_s * 1e9),
-            direction="forward",
+            direction="backward",
         )
         for logql, _ in ALERT_SOURCES
     ]
@@ -321,7 +360,8 @@ def run_alerts(ns):
     Both streams are queried and their rows merged before episodes are built, so one episode
     list covers monitor-bridge's checks and the host crons that push Kuma directly. `--check`
     filters both, because both name episodes with a machine name rather than a Kuma display
-    name. `--pi` filters both too, on is_pi_alert() rather than a name substring.
+    name. `--pi` filters both too, on is_pi_alert() rather than a name substring. Both flags
+    also govern `--raw`, through the same keep_alert_row predicate the episode view uses.
     """
     base, pin = loki_endpoint()
     urls = alert_source_urls(base, ns.days, ns.limit)
@@ -338,19 +378,25 @@ def run_alerts(ns):
         # the other, and reporting the union would cry truncation whenever the totals summed
         # past the limit.
         if len(fetched) >= ns.limit:
-            truncated.append(logql)
-        raw.extend(fetched)
+            truncated.append((logql, fetched[0][0]))
         for ns_ts, line in fetched:
             parsed = parser(line)
-            if parsed is None:
+            name = None if parsed is None else parsed[0]
+            if not keep_alert_row(ns.check, ns.pi, logql, line, name):
                 continue
-            name, msg = parsed
-            if ns.check and ns.check.lower() not in name.lower():
-                continue
-            if ns.pi and not is_pi_alert(logql, line, name):
-                continue
-            rows.append((ns_ts, name, msg))
+            raw.append((ns_ts, line))
+            if parsed is not None:
+                rows.append((ns_ts, name, parsed[1]))
     raw.sort()
+    # BEFORE the view, not after it. A truncated window that lists no episode prints "no DOWN
+    # alerts in the last Nd", and a warning underneath that line arrives too late to stop it
+    # being read as an all-clear.
+    for logql, oldest_ns in truncated:
+        print(
+            f"(warning: hit --limit {ns.limit} log lines on {logql} — this window is cut off "
+            f"at its OLDEST end, so only {_fmt_utc(oldest_ns)} UTC onwards is covered. "
+            "Raise --limit or narrow --days.)\n"
+        )
     if ns.raw:
         print("\n".join(line for _, line in raw) or "no logs")
     else:
@@ -360,9 +406,4 @@ def run_alerts(ns):
             print(json.dumps(episodes, indent=2))
         else:
             print(format_alert_episodes(episodes, ns.days))
-    for logql in truncated:
-        print(
-            f"\n(warning: hit --limit {ns.limit} log lines on {logql} — results may be "
-            "truncated; raise --limit or narrow --days)"
-        )
     return 0
