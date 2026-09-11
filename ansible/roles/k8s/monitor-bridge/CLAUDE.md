@@ -99,8 +99,9 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     whose ABSENCE is a fault, not the set that is judged — the queries filter by metric, so
     `user-1000-slice` is watched whenever it exists and its absence never pages, because its
     cgroup only exists once somebody has logged in since boot. **Empty disables the whole arm**,
-    which is the code default; the full threshold derivation, and the query to re-derive it from
-    seven days of history, are at `CLAUDE_CGROUP_STALL_MAX_PCT` in `bridge/config_host.py`.
+    which is the code default; the full threshold derivation, settled 2026-09-11 against 5.8 days of
+    history that included both cgroups hitting their MemoryHigh caps (#1288), is at
+    `CLAUDE_CGROUP_STALL_MAX_PCT` in `bridge/config_host.py`.
   - **Container Restarts** (`changes(container_start_time_seconds[15m]) > RESTART_MAX`)
   - **Container OOM** (`increase(container_oom_events_total[1h]) by (name)` — names the
     offender; supersedes the old host-aggregate OOM that lived in the Memory check)
