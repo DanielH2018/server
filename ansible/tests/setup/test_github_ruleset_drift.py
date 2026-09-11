@@ -62,8 +62,31 @@ def _ruleset_body(contexts, enforcement="active"):
     )
 
 
-def _run(tmp_path, curl_body=None, curl_rc=0):
-    """Render the script, stub curl + the push lib, run it. Returns (exit_code, status, message)."""
+BRANCH_RULESET_ID = 17358590
+RENOVATE_EXCLUDE = "refs/heads/renovate/**"
+
+
+def _branch_ruleset_body(exclude=(RENOVATE_EXCLUDE,), enforcement="active"):
+    """The branch-protection ruleset, in the shape the live endpoint returns."""
+    return json.dumps(
+        {
+            "id": BRANCH_RULESET_ID,
+            "name": "Default",
+            "enforcement": enforcement,
+            "conditions": {"ref_name": {"include": ["~ALL"], "exclude": list(exclude)}},
+            "rules": [{"type": "deletion"}, {"type": "non_fast_forward"}],
+        }
+    )
+
+
+def _run(tmp_path, curl_body=None, curl_rc=0, branch_body=None):
+    """Render the script, stub curl + the push lib, run it. Returns (exit_code, status, message).
+
+    `curl_body` answers the merge-gate ruleset fetch; `branch_body` answers the branch-protection
+    one, and defaults to a body carrying the Renovate exclusion so the merge-gate cases above
+    keep reading the verdict they are about."""
+    if branch_body is None:
+        branch_body = _branch_ruleset_body()
     body = (
         # trim_blocks matches Ansible's own template defaults. Without it the `{% for %}` around
         # the declared contexts leaves a blank line per iteration, which is NOT how the deployed
@@ -78,6 +101,8 @@ def _run(tmp_path, curl_body=None, curl_rc=0):
             gitops_deploy_github_repo="Example/repo",
             gitops_deploy_ruleset_id=20912512,
             gitops_deploy_expected_ruleset_contexts=DECLARED,
+            gitops_deploy_branch_ruleset_id=BRANCH_RULESET_ID,
+            gitops_deploy_branch_ruleset_renovate_exclude=RENOVATE_EXCLUDE,
         )
     )
 
@@ -108,12 +133,16 @@ def _run(tmp_path, curl_body=None, curl_rc=0):
     script.write_text(body)
     script.chmod(0o755)
 
-    # curl stub: exits curl_rc, prints curl_body. `-sf` means the real one exits non-zero on an
-    # HTTP error, so a transport failure and a 404 both arrive here as a non-zero rc.
+    # curl stub: exits curl_rc, prints the body for whichever ruleset the URL names. `-sf` means
+    # the real one exits non-zero on an HTTP error, so a transport failure and a 404 both arrive
+    # here as a non-zero rc. The URL is the last argument the script passes.
     curl = binstub / "curl"
     curl.write_text(
         "#!/usr/bin/env bash\n"
-        f"printf '%s' {json.dumps(curl_body or '')}\n"
+        f'case "${{@: -1}}" in\n'
+        f"  */rulesets/{BRANCH_RULESET_ID}) printf '%s' {json.dumps(branch_body)} ;;\n"
+        f"  *) printf '%s' {json.dumps(curl_body or '')} ;;\n"
+        "esac\n"
         f"exit {curl_rc}\n"
     )
     curl.chmod(0o755)
@@ -208,6 +237,59 @@ def test_inactive_enforcement_is_flagged(tmp_path, enforcement):
     assert rc == 1
     assert status == "down"
     assert enforcement in msg
+
+
+def test_a_missing_renovate_exclusion_is_flagged(tmp_path):
+    """The rejecting half of the branch-ruleset arm: merge gate clean, exclusion absent -> down.
+
+    This is the live state that let #1741 and #1743 automerge empty: with `renovate/**` under
+    the deletion and non_fast_forward rules, Renovate can neither delete a merged branch nor
+    rebase it, so the next PR reuses a SHA that already carries a green verdict."""
+    rc, status, msg = _run(
+        tmp_path,
+        curl_body=_ruleset_body(DECLARED),
+        branch_body=_branch_ruleset_body(exclude=()),
+    )
+    assert rc == 1
+    assert status == "down"
+    assert f"ruleset {BRANCH_RULESET_ID} does not exclude {RENOVATE_EXCLUDE}" in msg
+
+
+def test_a_narrower_exclusion_is_not_the_exclusion(tmp_path):
+    """`refs/heads/renovate/*` is one level; the app's branches nest. Literal match only."""
+    rc, status, msg = _run(
+        tmp_path,
+        curl_body=_ruleset_body(DECLARED),
+        branch_body=_branch_ruleset_body(exclude=("refs/heads/renovate/*",)),
+    )
+    assert rc == 1
+    assert status == "down"
+    assert "does not exclude" in msg
+
+
+def test_an_unreachable_branch_ruleset_reports_unverified_not_clean(tmp_path):
+    """Merge gate fetched and clean, branch ruleset fetch fails -> down UNVERIFIED, never up."""
+    rc, status, msg = _run(
+        tmp_path,
+        curl_body=_ruleset_body(DECLARED),
+        branch_body="",
+    )
+    # An empty body parses to no `.enforcement`, which is the bad-fetch branch.
+    assert rc == 1
+    assert status == "down"
+    assert f"ruleset {BRANCH_RULESET_ID}" in msg
+    assert "UNVERIFIED" in msg
+
+
+def test_the_branch_ruleset_fixture_matches_the_role_defaults(tmp_path):
+    """Same honesty check as below, for the second ruleset's id and pattern."""
+    import yaml
+
+    defaults = yaml.safe_load(
+        (ANSIBLE / "roles/setup/gitops_deploy/defaults/main.yml").read_text()
+    )
+    assert defaults["gitops_deploy_branch_ruleset_id"] == BRANCH_RULESET_ID
+    assert defaults["gitops_deploy_branch_ruleset_renovate_exclude"] == RENOVATE_EXCLUDE
 
 
 def test_the_declared_set_matches_the_role_defaults(tmp_path):

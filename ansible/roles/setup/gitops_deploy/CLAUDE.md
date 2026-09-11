@@ -510,8 +510,12 @@ Both are daily root crons on the deploy host, each pushing its own Kuma tile thr
 one way that matters: one alerts, the other reconciles.
 
 - **`github-ruleset-drift.sh`** compares the live master ruleset against
-  `gitops_deploy_expected_ruleset_contexts` and alerts on any difference. It never writes: a
-  ruleset changes because a human changed it, and reconciling would undo that with no signal.
+  `gitops_deploy_expected_ruleset_contexts`, and checks that the branch-protection ruleset
+  (`gitops_deploy_branch_ruleset_id`) excludes `refs/heads/renovate/**`, alerting on either.
+  Without that exclusion GitHub refuses Renovate's post-merge branch delete and its rebase
+  force-push, and a merged branch's stale green automerges the next PR empty (#1759). It never
+  writes: a ruleset changes because a human changed it, and reconciling would undo that with no
+  signal.
 - **`github-interaction-limit.sh`** re-applies `gitops_deploy_interaction_limit` every day.
   GitHub grants an interaction limit for six months at most and lets it lapse silently, so the
   only way it changes without a human is by expiring, and re-applying it restores the declared
