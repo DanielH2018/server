@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/crons.py
-generated_at: 2026-09-10 18:17 UTC
-generated_sha: f95da3c99
+generated_at: 2026-09-11 06:17 UTC
+generated_sha: 37772d46c
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: f95da3c99
 
 # Scheduled jobs
 
-46 cron entrie(s) installed across the roles.
+47 cron entrie(s) installed across the roles.
 
 !!! warning "The state column is a heuristic"
     It is judged from the command text, and nothing in a cron task declares its own blast radius. A job that runs a wrapper script reads as "read the script" rather than being guessed at. Treat it as a pointer, not an authority.
@@ -32,6 +32,7 @@ generated_sha: f95da3c99
 | GitHub ruleset drift | `{{ gitops_deploy_ruleset_drift_cron_minute }} {{ gitops_deploy_ruleset_drift_cron_hour }} * * *` | every host in the play | `root` | read the script | `ansible/roles/setup/gitops_deploy/tasks/install.yml` |
 | Homelab eval sweep | `0 2 * * 0` | daniel-box | `{{ sys_user }}` | read the script | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
 | Live object drift check | `{{ k3s_live_drift_cron_minute }} {{ k3s_live_drift_cron_hour }} * * *` | every host in the play | `{{ sys_user }}` | no (read-only by its command) | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
+| Loki read-route witness | `23 * * * *` | conditional (inventory_hostname in loki_route_witness_hosts) | `{{ sys_user }}` | read the script | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
 | Longhorn backup health | `{{ k3s_longhorn_backup_health_cron_minute }} * * * *` | every host in the play | `{{ sys_user }}` | yes (backup) | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
 | Longhorn filesystem trim | `{{ k3s_longhorn_trim_cron_minute }} {{ k3s_longhorn_trim_cron_hour }} * * *` | every host in the play | `{{ sys_user }}` | read the script | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
 | Longhorn restore drill | `{{ k3s_longhorn_restore_drill_cron.split()[0] }} {{ k3s_longhorn_restore_drill_cron.split()[1] }} {{ k3s_longhorn_restore_drill_cron.split()[2] }} * *` | every host in the play | `root` | read the script | `ansible/roles/setup/k3s/tasks/health-crons.yml` |

@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/backlog.py
-generated_at: 2026-09-10 18:17 UTC
-generated_sha: f95da3c99
+generated_at: 2026-09-11 06:17 UTC
+generated_sha: 37772d46c
 ---
 
 !!! warning "Generated file — do not edit"
@@ -17,17 +17,7 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | # | Severity | Kind | Domain | Finding | First seen | Re-observed | Claim | Verify-by |
 |---|---|---|---|---|---|---|---|---|
 | [#1175](https://github.com/DanielH2018/server/issues/1175) | medium | gap | backup-observability | The full etcd restore has never been executed; the weekly drill is list-only | 2026-09-05 | 0 | - | - |
-| [#1390](https://github.com/DanielH2018/server/issues/1390) | medium | improvement | security | Give Headlamp OIDC login through Authelia (needs a k3s API-server change) | 2026-09-06 | 0 | worktree-issue-fanout-0910c | ✓ |
-| [#1672](https://github.com/DanielH2018/server/issues/1672) | medium | gap | cicd | Every k8s service reads stale on volume-claim/claim.yml, and no deploy tag applies it | 2026-09-10 | 0 | - | - |
-| [#1288](https://github.com/DanielH2018/server/issues/1288) | low | improvement | backup-observability | Re-derive CLAUDE_CGROUP_STALL_MAX_PCT from seven days of history | 2026-09-06 | 1 | - | - |
-| [#1364](https://github.com/DanielH2018/server/issues/1364) | low | improvement | backup-observability | Longhorn fast-check cannot detect bit rot; measure the cost of snapshot-data-integrity=enabled | 2026-09-06 | 0 | worktree-issue-fanout-0910c | ✓ |
+| [#1759](https://github.com/DanielH2018/server/issues/1759) | medium | gap | cicd | Empty-merge CI check cannot block an automerge that fires at PR open from a stale green | 2026-09-11 | 0 | worktree-renovate-stale-green-race | ✓ |
+| [#1288](https://github.com/DanielH2018/server/issues/1288) | low | improvement | backup-observability | Re-derive CLAUDE_CGROUP_STALL_MAX_PCT from seven days of history | 2026-09-06 | 2 | - | - |
+| [#1364](https://github.com/DanielH2018/server/issues/1364) | low | improvement | backup-observability | Longhorn fast-check cannot detect bit rot; measure the cost of snapshot-data-integrity=enabled | 2026-09-06 | 0 | - | ✓ |
 | [#1469](https://github.com/DanielH2018/server/issues/1469) | low | gap | container | Restore Serverside_Simulations when it supports Valheim l-1.0.7 | 2026-09-09 | 0 | - | ✓ |
-| [#1630](https://github.com/DanielH2018/server/issues/1630) | low | gap | backup-observability | The UPS on-battery arm is outside the absence census, so losing that one series silently unmonitors mains loss | 2026-09-10 | 1 | - | ✓ |
-| [#1640](https://github.com/DanielH2018/server/issues/1640) | low | gap | backup-observability | A Kuma push can exhaust its retries and leave a health cron with no verdict for an hour — *no vetted remediation* | 2026-09-10 | 0 | - | ✓ |
-| [#1653](https://github.com/DanielH2018/server/issues/1653) | low | gap | docs | The fan-out signing gate and its exit code 6 are undocumented | 2026-09-10 | 0 | - | ✓ |
-| [#1662](https://github.com/DanielH2018/server/issues/1662) | low | gap | cicd | The staging traefik route expectation asks for a status its IngressRoute cannot answer — *no vetted remediation* | 2026-09-10 | 0 | - | ✓ |
-| [#1663](https://github.com/DanielH2018/server/issues/1663) | low | gap | backup-observability | probe.py health always gates the production cluster, so a staging deploy reads green about prod — *no vetted remediation* | 2026-09-10 | 0 | - | ✓ |
-| [#1664](https://github.com/DanielH2018/server/issues/1664) | low | gap | container | Jellyfin Trakt plugin is installed but inert until the dashboard OAuth device authorisation is done | 2026-09-10 | 0 | - | ✓ |
-| [#1668](https://github.com/DanielH2018/server/issues/1668) | low | gap | cicd | n8n's netpol-probe-job.yaml is pruned by k8s/manifests on every deploy | 2026-09-10 | 0 | - | ✓ |
-| [#1669](https://github.com/DanielH2018/server/issues/1669) | low | gap | cicd | registry stages four job manifests inside the directory k8s/manifests prunes | 2026-09-10 | 0 | - | ✓ |
-| [#1670](https://github.com/DanielH2018/server/issues/1670) | low | gap | cicd | Nothing stops a role claiming a reserved staging directory name like <service>-claims | 2026-09-10 | 0 | - | ✓ |
