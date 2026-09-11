@@ -152,13 +152,20 @@ def _defines_only(key: str, path: str, ctx: Context) -> bool:
 
     Every key hits the file that defines it, and that hit is not a consumer. Anything else
     in an inventory file is one, and one the key diff cannot see: the consuming key's own
-    parsed value is unchanged. A mention inside a comment counts as a reference rather than
-    being parsed out, and `\w` matches `git grep -w`'s own boundary — doubt runs the whole
-    play.
+    parsed value is unchanged. `\w` matches `git grep -w`'s own boundary, so this sees every
+    hit the grep saw.
+
+    A line that is wholly a comment is skipped: Ansible parses none of it, so it consumes
+    nothing, and `group_vars/all.yml` documents its own keys by name. Counting those refused
+    22 of its 87 top-level keys rather than 8. A TRAILING comment on a value line still
+    counts, because telling a real `#` from one inside a quoted value needs a parse — doubt
+    runs the whole play.
     """
     defines = re.compile(rf"^{re.escape(key)}\s*:")
     mentions = re.compile(rf"(?<!\w){re.escape(key)}(?!\w)")
     for line in (_show(ctx.ref, path, ctx.cwd) or "").splitlines():
+        if line.lstrip().startswith("#"):
+            continue
         if mentions.search(line) and not defines.match(line):
             return False
     return True
@@ -171,7 +178,9 @@ def _sort_hits(
 
     A `.md` is prose no playbook applies, and a role's own `tests/` reaches no host — both
     are dropped for the same reasons `land_tags.role_for` and `is_role_test_path` drop them.
-    An inventory hit that is not `key`'s own definition refuses: see `_defines_only`.
+    An inventory hit that is not `key`'s own definition refuses: see `_defines_only`. A
+    `_`-prefixed inventory file is exempt on both sides — `_inventory_tags` skips it as a
+    file no host loads, so its commented-out examples are not consumers either.
     """
     roles: set[str] = set()
     templates: set[str] = set()
@@ -179,7 +188,14 @@ def _sort_hits(
         if path.endswith(".md"):
             continue
         if path.startswith(INVENTORY):
-            if key is None or _defines_only(key, path, ctx):
+            if path.split("/")[-1].startswith("_"):
+                continue
+            if key is None:
+                raise CannotNarrow(
+                    f"{subject} was scanned across the inventory with no key, so the "
+                    f"mention in {path} cannot be told from a definition"
+                )
+            if _defines_only(key, path, ctx):
                 continue
             raise CannotNarrow(
                 f"{subject} is read by another value in {path}, whose own parsed value "

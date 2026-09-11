@@ -65,6 +65,10 @@ def narrow_deploy_plane(
     Raises:
         subprocess.TimeoutExpired: the child outlived `timeout`.
         OSError: the child could not be started.
+        Exception: anything else the subprocess layer raises reaches the caller unchanged.
+            `text=True` decodes strictly, so undecodable output is a UnicodeDecodeError,
+            which is a ValueError and neither of the two above. That is why `_deploy_plane`
+            catches `Exception` rather than a tuple.
 
     `uv run --frozen` for the same reason `deploy_io.deploy` uses it: the repo's pinned env,
     never mutating uv.lock on the host. Every stderr line is logged, so the journal carries

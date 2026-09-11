@@ -324,6 +324,59 @@ def test_a_key_read_through_another_inventory_value_is_flagged(tree: Tree):
         tree.narrow(*_refs(tree))
 
 
+def test_a_key_mentioned_only_in_an_example_inventory_file_narrows(tree: Tree):
+    """`_example.yml` is commented-out examples that no host loads.
+
+    `_inventory_tags` already skips a `_`-prefixed file on the defining side. Reading one as
+    a consumer refused eight live keys, `server_ip` and `has_igpu` among them.
+    """
+    tree.write(
+        "ansible/inventory/host_vars/_example.yml",
+        '# derived: "{{ lan_subnet }}"\n',
+    )
+    tree.commit("an example host_vars file")
+    tree.write(
+        "ansible/inventory/group_vars/all.yml",
+        GROUP_VARS.replace("10.0.0.0/24", "10.4.0.0/24"),
+    )
+    assert tree.narrow(*_refs(tree)) == {"radarr", "sonarr"}
+
+
+def test_a_key_named_only_in_a_comment_narrows(tree: Tree):
+    """The rejecting half is `test_a_key_read_through_another_inventory_value_is_flagged`.
+
+    `group_vars/all.yml` documents its own keys by name, so counting a comment line as a
+    consumer refused 22 of its 87 top-level keys instead of 8.
+    """
+    tree.write(
+        "ansible/inventory/group_vars/all.yml",
+        "# lan_subnet is the LAN, and nothing here reads it.\n" + GROUP_VARS,
+    )
+    tree.commit("a comment naming the key")
+    tree.write(
+        "ansible/inventory/group_vars/all.yml",
+        ("# lan_subnet is the LAN, and nothing here reads it.\n" + GROUP_VARS).replace(
+            "10.0.0.0/24", "10.5.0.0/24"
+        ),
+    )
+    assert tree.narrow(*_refs(tree)) == {"radarr", "sonarr"}
+
+
+def test_the_same_mention_in_a_loaded_inventory_file_still_refuses(tree: Tree):
+    """The rejecting half: the exemption is the `_` prefix, not the host_vars directory."""
+    tree.write(
+        "ansible/inventory/host_vars/daniel-box.yml",
+        HOST_VARS + 'derived: "{{ lan_subnet }}"\n',
+    )
+    tree.commit("a loaded consumer of the key")
+    tree.write(
+        "ansible/inventory/group_vars/all.yml",
+        GROUP_VARS.replace("10.0.0.0/24", "10.4.0.0/24"),
+    )
+    with pytest.raises(narrow_broad.CannotNarrow, match="another value"):
+        tree.narrow(*_refs(tree))
+
+
 def test_a_key_reaching_an_uncallable_role_names_the_key(tree: Tree):
     """The refusal comes from `_role_tags`, which knows the role and not the variable.
 
