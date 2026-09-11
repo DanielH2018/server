@@ -494,35 +494,34 @@ def host_config(
         # number describes the 2026-09-05 incident, which predates this metric, so it is a
         # different instrument and cannot bound this series.
         #
-        # RE-DERIVE once there are seven days of history, which is 2026-09-12:
-        #   probe.py metric 'max_over_time((rate(claude_cgroup_memory_pressure_stalled_usec_total{kind="full"}[5m])/10000)[7d:1m])'
-        # If the observed max under real load lands anywhere near 10, lower this to sit between
-        # the two populations the way SPEEDTEST_DOWNLOAD_MIN_MBPS does. Tracked as issue #1288.
+        # SETTLED 2026-09-11 12:36 UTC (#1288): the peak under load is 0.149%, 67x under 10, so
+        # the value stays. The issue asked for seven days of history and the operator lifted
+        # that gate a day early; the series began 2026-09-05 17:56 UTC, so the window is 5.8
+        # days at 95% scrape coverage (`count_over_time(...[7d])` = 7936 for claude-rc). What
+        # makes this read different from the two interim ones (2026-09-06, 0.017% over nine
+        # hours; 2026-09-10, 0.148% over 4.8 days — both in the #1288 thread) is that the window
+        # is provably NOT quiet, by an instrument other than the stall counter itself:
+        # `max_over_time(claude_cgroup_memory_current_bytes[5d14h])` read 11.99 GB for daniel-box
+        # `fleet` against its 12G MemoryHigh and 8.11 GB for claude-rc against its 8G, so both
+        # cgroups hit their throttle caps inside the window, which is exactly when MemoryHigh
+        # reclaim stalls happen. Under that load:
+        #   max_over_time((rate(...{kind="full"}[5m])/10000)[7d:1m])
+        #     daniel-box:    user-1000-slice 0.149%, fleet 0.148%, claude-rc 0.042%
+        #     daniel-server: user-1000-slice 0.0052%, fleet 0.0045%
+        #   quantile_over_time(0.99, ...)   0.0125% at most (daniel-box fleet)
+        # Only 12 one-minute points in the window put daniel-box `fleet` over 0.05%. The
+        # SPEEDTEST_DOWNLOAD_MIN_MBPS shape does not apply: there is no second population to sit
+        # between, because a legitimate peak of 0.15% and a threshold of 10% are separated by
+        # what `full` means (30 seconds of every task stalled), not by a measured breach.
+        # Lowering it toward 0.15% would page on the first afternoon busier than this window.
         #
-        # Re-read 2026-09-06 02:48 UTC, and the value is UNCHANGED because the precondition is
-        # still unmet. `count_over_time(...[7d])` returned 530 samples for claude-rc and
-        # user-1000-slice and 122 for fleet — under nine hours, not seven days. The queries above
-        # answered 0.017% max and 0.017% p99 (both `fleet`), which is still ~575x under 10, but
-        # that is a second read of the same quiet population rather than the peak under load the
-        # threshold needs to clear. Lowering it on this evidence would re-commit the one-sided
-        # derivation #1288 exists to correct, so the read moves the earliest honest re-derivation
-        # date and nothing else.
-        #
-        # Re-read 2026-09-10 19:00 UTC, and the value is UNCHANGED. The window is still short —
-        # `count_over_time(...[7d])` returned 6887 samples for claude-rc, which is 4.8 days
-        # against the seven the re-derivation needs — but the population is no longer quiet: the
-        # max moved from 0.017% to 0.148% (daniel-box `fleet` and `user-1000-slice`, 0.042% for
-        # claude-rc), a ~9x rise as real load entered the window. p99 is 0.014%. The floor held
-        # at ~68x under 10 through that, which is the first evidence here that is not purely
-        # quiet-population, but 4.8 days still cannot bound a pytest fan-out's peak. Re-derive on
-        # 2026-09-12 as above.
-        #
-        # The CLAUDE_CGROUP_CONSECUTIVE half of #1288 is answered: `resets(...[7d])` is 4 for
-        # claude-rc and 2 for daniel-box's `fleet` and `user-1000-slice` (0 for both daniel-server
-        # series), so 2 of claude-rc's 4 are host-wide on daniel-box and 2 are its own unit
-        # restarting. The unit's own ExecMainStartTimestamp read 2026-09-09 20:10 UTC — under a
-        # day before this read. The weekly claude-rc-restart.timer is therefore NOT the only reset
-        # source, and the grace is guarding a real event class rather than a once-a-week one.
+        # The CLAUDE_CGROUP_CONSECUTIVE half of #1288 is answered the same way: `resets(...[7d])`
+        # is 5 for claude-rc and 2 for daniel-box's `fleet` and `user-1000-slice` (0 for both
+        # daniel-server series), so 2 of claude-rc's 5 are host-wide on daniel-box and 3 are its
+        # own unit restarting — against ONE firing of the weekly claude-rc-restart.timer in the
+        # window (2026-09-07 00:06 UTC; ExecMainStartTimestamp read 2026-09-10 21:12 UTC). The
+        # timer is therefore NOT the only reset source, and the grace is guarding a real event
+        # class rather than a once-a-week one.
         CLAUDE_CGROUP_STALL_MAX_PCT=_num("CLAUDE_CGROUP_STALL_MAX_PCT", "10"),
         # memory.events increase window. Wider than the stall window because these are rare
         # discrete events rather than a rate: 10m at a 1m scrape keeps an OOM kill visible across
