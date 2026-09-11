@@ -278,10 +278,27 @@ k3s_longhorn_replica_count: 2
 # `enabled` hashes every snapshot disk file on the snapshot-data-integrity-cronjob schedule
 # (`0 0 */7 * *` here — the 1st, 8th, 15th, 22nd and 29th). That is CPU and disk-read work on a
 # two-node cluster whose storage control plane was OOM-killed once under memory pressure
-# (#1243), so the cost is being MEASURED across the 2026-09-15 fire before this is kept. If the
-# cost is not acceptable, this returns to `fast-check` and the measurement is recorded in this
-# role's CLAUDE.md so the question is settled rather than re-opened.
+# (#1243), so the cost was measured before this was kept. DECIDED: keep `enabled`. MEASURED
+# 2026-09-11 on a fire forced with the `-e` override below, 73 snapshots across 44 volumes
+# (50 GB of replica data per node): the run took 6m21s, read ~24 GB per node at 40-57 MB/s,
+# and raised node CPU by ~2.3 cores on daniel-box and ~0.5 on daniel-server for that window.
+# instance-manager's working set did not move (1.44 GB before, during and after), MemAvailable
+# never dropped below 17.5 GB, and no Longhorn pod restarted — the memory pressure #1243 warns
+# about did not appear. Six minutes every seventh day at 00:00 UTC is acceptable. The numbers
+# and the queries that produced them are on #1364.
 k3s_longhorn_snapshot_data_integrity: enabled
+
+# When the integrity check above runs. Upstream's default, restated here so the schedule is a
+# variable rather than a value only the cluster knows: `0 0 */7 * *` is a DAY-OF-MONTH step on
+# the manager's clock (UTC), so it fires at 00:00 on the 1st, 8th, 15th, 22nd and 29th, not
+# "every seven days". To fire a check early, override it at apply time with a one-shot daily
+# minute, then re-apply without the override to restore it:
+#   uv run ansible-playbook ansible/k3s-bringup.yml --tags longhorn \
+#     -e k3s_longhorn_snapshot_data_integrity_cronjob='55 12 * * *'
+# That is how the 2026-09-11 cost measurement ran (#1364). Never use a repeating `*/N` for it: a
+# full-hash schedule stranded by a dead session is the memory-pressure outcome #1243 warns about.
+# Same DataEngineSpecific JSON-map shape as the mode above.
+k3s_longhorn_snapshot_data_integrity_cronjob: "0 0 */7 * *"
 
 # Whether joined agent nodes participate in Longhorn replica scheduling. false through
 # the join window (agent_verify patches allowScheduling:false and asserts zero replicas

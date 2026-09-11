@@ -167,6 +167,23 @@
   become: true
   changed_when: "'no change' not in k3s_longhorn_integrity.stdout"
 
+- name: Set the Longhorn snapshot data-integrity cron schedule
+  tags: [longhorn]
+  # DataEngineSpecific like the mode above, so the same double-`to_json` map shape applies and
+  # the same guard test pins it. Overriding the variable at apply time is how a check is fired
+  # early (defaults/main.yml shows the form); Longhorn has no run-now for it.
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n longhorn-system patch settings.longhorn.io snapshot-data-integrity-cronjob
+      --type=merge -p {{ integrity_cron_patch | quote }}
+  vars:
+    integrity_cron: "{{ k3s_longhorn_snapshot_data_integrity_cronjob }}"
+    integrity_cron_patch: >-
+      {"value":{{ {"v1": integrity_cron, "v2": integrity_cron} | to_json | to_json }}}
+  register: k3s_longhorn_integrity_cron
+  become: true
+  changed_when: "'no change' not in k3s_longhorn_integrity_cron.stdout"
+
 - name: Set the Longhorn backup-store poll interval
   tags: [longhorn, longhorn_backup]
   # Rate-limits the only recurring B2 caller in the cluster. See the variable's comment in
