@@ -32,6 +32,16 @@ claim's render overwrite the first — only the last claim of a service was ever
 Both invariants are ENFORCED by
 `ansible/tests/k8s/test_volume_claim_pvc_path_collision.py`.
 
+**A change under `tasks/` here does not make any service's manifests stale.** This role sits
+in every k8s service's `role_paths` for the release-staleness check, because its
+`pvc.yaml.j2` supplies bytes to what they apply. Its `tasks/` does not — it decides how the
+deploy runs. Staging the claim in a sibling directory (0b86a7d7) touched only `tasks/claim.yml`
+and still marked all 53 services stale, parking the `Release Staleness Drift` monitor DOWN with
+no deploy tag able to clear it (#1672). `_is_real_change` in
+`scripts/diagnostics/probe_lib/releases.py` now drops a shared role's `tasks/`, `handlers/` and
+`meta/`. `defaults/main.yml` stays in: `volume_claim_size` and `volume_claim_storage_class` are
+read by `pvc.yaml.j2`, so a change there does move the applied PVC.
+
 A role that later drops its `k8s/volume-claim` include (wg-easy and zigbee2mqtt both did)
 leaves its `<service>-claims/` file behind, where the consuming role's prune used to clear
 it. Nothing sweeps that directory, so the file is inert rather than resurrecting an object —
