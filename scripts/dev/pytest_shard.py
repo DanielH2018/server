@@ -42,6 +42,8 @@ from pathlib import Path, PurePosixPath
 
 REPO = Path(__file__).resolve().parents[2]
 WEIGHTS_PATH = Path(__file__).resolve().with_name("pytest_shard_weights.json")
+# The coverage ratchet over this table. `record_weights` deselects it; see the reason there.
+RATCHET_TEST = "ansible/tests/repo/test_pytest_shards_partition_the_suite.py"
 
 # pytest's default `python_files`, both forms — the same pair
 # `ansible/tests/repo/test_testpaths_covers_every_test_file.py` derives its census from, and for
@@ -138,6 +140,12 @@ def record_weights(path: Path = WEIGHTS_PATH) -> dict[str, float]:
     `-n0` so the durations are not distorted by worker contention, and `-vv` so pytest prints
     every duration rather than hiding the ones under 5ms — a file whose tests are all fast
     still costs its import, and leaving it unrecorded would hand it the median instead.
+
+    The coverage ratchet is DESELECTED because it is the thing this run repairs. It fails
+    exactly when the weights have drifted far enough to need re-recording, and the refusal
+    below treats any failure as "not a baseline" — so the suite could never go green and
+    `--record` could never write. Measured 2026-09-11: 126 of 629 files unweighted, the
+    ratchet red, and two consecutive `--record` runs wrote nothing.
     """
     proc = subprocess.run(
         [
@@ -149,6 +157,8 @@ def record_weights(path: Path = WEIGHTS_PATH) -> dict[str, float]:
             "--durations=0",
             "-p",
             "no:cacheprovider",
+            "--deselect",
+            f"{RATCHET_TEST}::test_the_recorded_weights_still_cover_most_of_the_suite",
         ],
         cwd=REPO,
         capture_output=True,
