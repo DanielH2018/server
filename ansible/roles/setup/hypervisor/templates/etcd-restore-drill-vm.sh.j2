@@ -111,6 +111,12 @@ teardown() {
   [[ -e "$DISK" ]] && { rm -f "$DISK"; log "deleted $DISK"; }
   [[ -n "$WORK" && -d "$WORK" ]] && rm -rf "$WORK"
   [[ -n "$KNOWN_HOSTS" && -f "$KNOWN_HOSTS" ]] && rm -f "$KNOWN_HOSTS"
+  # Evidence stays readable by the deploy user however the run ended — the failing runs are the
+  # ones that get read. Runs here because teardown is what the EXIT trap calls.
+  if [[ -d "${LOG_DIR:-}" ]]; then
+    chgrp "{{ sys_user }}" "$LOG_DIR"/* 2>/dev/null || true
+    chmod 640 "$LOG_DIR"/* 2>/dev/null || true
+  fi
   return 0
 }
 
@@ -151,7 +157,9 @@ main() {
   exec 9>"$LOCK"
   flock -n 9 || fail "another run holds $LOCK"
 
-  install -d -m 750 "$LOG_DIR"
+  # Group-readable by the deploy user: the evidence carries no credential by construction (the
+  # token and the R2 env never leave the guest), and a run is diagnosed from a non-root shell.
+  install -d -m 750 -g "{{ sys_user }}" "$LOG_DIR"
   # From here on the orchestrator's own lines go into the run's evidence dir, so they are pruned
   # with it. cron.log (the cron's redirect) then holds only what escapes before this point.
   exec >>"$LOG_DIR/orchestrator.log" 2>&1
@@ -233,7 +241,6 @@ main() {
   for f in restore.log server.log; do
     ssh_guest "sudo sh -c 'cat /var/tmp/etcd-restore-drill.*/$f'" >"$LOG_DIR/$f" 2>/dev/null || true
   done
-  chmod 640 "$LOG_DIR"/* 2>/dev/null || true
 
   teardown
 
