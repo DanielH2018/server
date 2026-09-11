@@ -42,6 +42,20 @@ fixed 30 minutes matched the `*/30` health crons exactly — a second of cron ji
 episode, so one 13.5-hour outage on 2026-09-04 rendered as 16 rows, none of them carrying the
 onset. `--gap-min` still pins the gap by hand for every check. See #1104.
 
+**Three things made the episode view under-report, and all three are fixed (#1782).**
+monitor-bridge stopped printing its own `[timestamp]` prefix on 2026-09-04 and the reader still
+required it, so every bridge check parsed as nothing — `alerts --days 2 --check traefik` printed
+"no DOWN alerts" over a window holding 21 `traefik_latency` DOWN lines. `--check` and `--pi` did
+not filter `--raw` at all. And a hit `--limit` cut the window at its NEWEST end, so a wider
+window could list fewer recent episodes than a narrower one. The emitter/reader pairing is now
+enforced by `ansible/tests/services/test_monitor_bridge_down_line_shape.py`, and a truncated
+fetch prints its covered window *above* the episode list rather than a warning under an
+all-clear.
+
+**Episode counts are still a lower bound against Prometheus `monitor_status`**, and that part is
+by construction: a push monitor also goes DOWN when its heartbeat expires, which writes no log
+line anywhere. Cross-check a flap count against `monitor_status` rather than against this view.
+
 ### `arr <app> <api-path>` redacts the credentials it reads
 
 `notification`, `downloadclient`, `indexer` and `importlist` return objects whose

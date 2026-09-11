@@ -180,7 +180,8 @@ def run_query(ns):
         # `metric` shares this function and its subparser declares no --since, so read the
         # attribute defensively. No `direction`: Loki's default `backward` is what makes
         # --limit return the NEWEST N lines, which format_loki then sorts oldest-first.
-        # run_alerts' `direction=forward` is for episode reconstruction and does not belong here.
+        # run_alerts asks for the same end explicitly (`direction=backward`); it read `forward`
+        # until #1782, which spent a capped window's whole limit on its oldest lines.
         start, end = since_window_ns(getattr(ns, "since", None))
         url = loki_query_url(base, ns.logql, ns.limit, start=start, end=end)
         formatter = format_loki
