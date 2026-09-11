@@ -1,0 +1,4 @@
+# Managed by ansible (roles/setup/hypervisor). The etcd restore drill guest boots from a fresh
+# disk every run, so the instance-id never needs bumping — every boot is a first boot.
+instance-id: {{ hypervisor_etcd_drill_vm_hostname }}-01
+local-hostname: {{ hypervisor_etcd_drill_vm_hostname }}

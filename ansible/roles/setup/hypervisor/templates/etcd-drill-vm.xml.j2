@@ -1,0 +1,62 @@
+<!-- Managed by ansible (roles/setup/hypervisor). Edits here are overwritten. -->
+<!-- The etcd restore drill's throwaway guest. TRANSIENT: the orchestrator brings it up with
+     `virsh create` from this file and `virsh destroy`s it on the way out, so it is never a
+     defined domain and never in the way of teardown.yml. Shape follows staging-vm.xml.j2; the
+     differences are sizing and that the disk is recreated from the base image every run. -->
+<domain type='kvm'>
+  <name>{{ hypervisor_etcd_drill_vm_hostname }}</name>
+  <memory unit='MiB'>{{ hypervisor_etcd_drill_vm_memory_mib }}</memory>
+  <currentMemory unit='MiB'>{{ hypervisor_etcd_drill_vm_memory_mib }}</currentMemory>
+  <vcpu placement='static'>{{ hypervisor_etcd_drill_vm_vcpus }}</vcpu>
+  <os>
+    <type arch='x86_64' machine='q35'>hvm</type>
+    <boot dev='hd'/>
+  </os>
+  <features>
+    <acpi/>
+    <apic/>
+  </features>
+  <cpu mode='host-passthrough' check='none'/>
+  <clock offset='utc'>
+    <timer name='rtc' tickpolicy='catchup'/>
+    <timer name='pit' tickpolicy='delay'/>
+    <timer name='hpet' present='no'/>
+  </clock>
+  <on_poweroff>destroy</on_poweroff>
+  <on_reboot>restart</on_reboot>
+  <on_crash>destroy</on_crash>
+  <devices>
+    <emulator>/usr/bin/qemu-system-x86_64</emulator>
+    <disk type='file' device='disk'>
+      <driver name='qemu' type='qcow2' discard='unmap'/>
+      <source file='{{ hypervisor_etcd_drill_vm_disk }}'/>
+      <target dev='vda' bus='virtio'/>
+    </disk>
+    <disk type='file' device='cdrom'>
+      <driver name='qemu' type='raw'/>
+      <source file='{{ hypervisor_etcd_drill_vm_seed }}'/>
+      <target dev='sda' bus='sata'/>
+      <readonly/>
+    </disk>
+    <interface type='network'>
+      <source network='{{ hypervisor_staging_net_name }}'/>
+      <!-- Matched by the second DHCP reservation in staging-network.xml.j2. -->
+      <mac address='{{ hypervisor_etcd_drill_vm_mac }}'/>
+      <model type='virtio'/>
+      <!-- The same egress fence as the staging guest: this guest needs R2 (internet) and
+           nothing on the LAN. A transient domain's interface is created fresh every run, so
+           the filter applies every run. -->
+      <filterref filter='{{ hypervisor_staging_nwfilter_name }}'/>
+    </interface>
+    <serial type='pty'>
+      <target type='isa-serial' port='0'/>
+    </serial>
+    <console type='pty'>
+      <target type='serial' port='0'/>
+    </console>
+    <memballoon model='virtio'/>
+    <rng model='virtio'>
+      <backend model='random'>/dev/urandom</backend>
+    </rng>
+  </devices>
+</domain>

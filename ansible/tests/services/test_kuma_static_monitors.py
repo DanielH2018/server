@@ -161,6 +161,7 @@ EMAIL_TIER = {
     "daniel-box Disk",
     "Daniel Pi SD Health",
     "Off-box etcd Snapshot",
+    "etcd Restore Drill (full)",
     "Root Disk",
     "TLS Cert Expiry",
     "B2 Reachable",

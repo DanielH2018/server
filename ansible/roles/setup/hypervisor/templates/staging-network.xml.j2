@@ -16,6 +16,9 @@
            inventory entry that reaches it in a later slice names a fixed address. The
            reservation deliberately sits OUTSIDE the dynamic range above. -->
       <host mac='{{ staging_vm_mac }}' name='{{ staging_vm_hostname }}' ip='{{ staging_vm_ip }}'/>
+      <!-- The etcd restore drill's throwaway guest (etcd_drill.yml). Reserved for the same
+           reason: the orchestrator waits for ssh at a fixed address and pins its host key. -->
+      <host mac='{{ hypervisor_etcd_drill_vm_mac }}' name='{{ hypervisor_etcd_drill_vm_hostname }}' ip='{{ hypervisor_etcd_drill_vm_ip }}'/>
     </dhcp>
   </ip>
 </network>

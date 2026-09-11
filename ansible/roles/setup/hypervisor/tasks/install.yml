@@ -125,6 +125,12 @@
   # start a domain whose network is not defined.
   ansible.builtin.include_tasks: guest.yml
 
+- name: Prepare the etcd restore drill guest and its cron
+  tags: [hypervisor]
+  # After guest.yml: the drill guest is built from the base image that task downloaded, and its
+  # DHCP reservation lives in the network network.yml declared. Nothing here starts a guest.
+  ansible.builtin.include_tasks: etcd_drill.yml
+
 - name: Clone the checkout the staging gate deploys from
   tags: [hypervisor]
   # `update: no` is the whole point, not a performance choice. The gate fetches and

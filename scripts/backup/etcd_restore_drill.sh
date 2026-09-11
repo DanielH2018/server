@@ -64,6 +64,15 @@
 # failures the live cluster stayed Ready and every write landed in /var/tmp — the isolation
 # held, which is the one thing worth trusting from this exercise.
 #
+# THE FULL DRILL RUNS IN A THROWAWAY GUEST since issue #1175 (path 1). roles/setup/hypervisor
+# installs `etcd-restore-drill-vm` on daniel-server: a monthly root cron that builds a transient
+# libvirt guest from the reviewed cloud image, copies in the k3s binary, the cluster token and the
+# R2 env file at the paths this script reads, runs THIS script there unmodified (through
+# files/etcd-drill-guest-run.sh, which fetches the snapshot and hands it to --local-snapshot),
+# pulls restore.log and server.log out as evidence, and destroys the guest. Its verdict lands on
+# the `etcd Restore Drill (full)` Kuma tile. The weekly --list-only cron on daniel-box is
+# unchanged and stays the cheap proof of the R2 leg on the host that owns the credentials.
+#
 # Usage:
 #   sudo ./scripts/backup/etcd_restore_drill.sh --list-only      # the part that works: prove the R2 leg
 #   sudo ./scripts/backup/etcd_restore_drill.sh                 # newest off-box snapshot in R2
@@ -183,9 +192,15 @@ verify_restored_objects() {
   pvcs=$("${KUBECTL[@]}" get pvc -A --no-headers 2>/dev/null | wc -l)
   secrets=$("${KUBECTL[@]}" get secrets -A --no-headers 2>/dev/null | wc -l)
   crds=$("${KUBECTL[@]}" get crd --no-headers 2>/dev/null | wc -l)
+  # The Node objects ride in the snapshot with the kubelet version that wrote it, which is the
+  # only record of the writer's k3s version a snapshot carries. Informational: a restore across
+  # versions is k3s's supported upgrade path, but the "same binary that wrote it" argument in the
+  # header only holds while this line and the binary agree, so the guest drill prints both.
+  nodes=$("${KUBECTL[@]}" get nodes -o jsonpath='{range .items[*]}{.metadata.name}={.status.nodeInfo.kubeletVersion}{" "}{end}' 2>/dev/null)
 
   echo
   echo "restored from : ${SNAPSHOT:-unknown}"
+  echo "nodes         : ${nodes:-unknown} (versions recorded in the snapshot)"
   echo "namespaces    : $ns"
   echo "deployments   : $deploys"
   echo "PVCs          : $pvcs"
@@ -269,7 +284,9 @@ esac
 # scheduled arm is `--list-only`, which returns above the `install -d "$SCRATCH"` below and so
 # creates no dir to keep — a weekly failing cron accumulates nothing. Accumulation is therefore
 # still operator-paced, as the five dirs above were: they came from hand runs, and were removed by
-# hand (2026-08-23b review M8). That bound holds only while the full drill stays unscheduled.
+# hand (2026-08-23b review M8). That bound holds only while the full drill stays unscheduled ON
+# THIS HOST: the scheduled full drill (header) runs in a guest whose whole disk is deleted after
+# every run, so its --keep dirs never reach any host's /var/tmp.
 #
 # Swept here rather than in cleanup(): a run that dies before its trap installs still gets the
 # previous mess cleared, and this way the sweep is exercised on every invocation instead of only

@@ -1,0 +1,246 @@
+#!/usr/bin/env bash
+# etcd-restore-drill-vm — run the FULL etcd restore drill in a throwaway guest, unattended.
+# Rendered by roles/setup/hypervisor onto daniel-server; scheduled by the cron in etcd_drill.yml.
+#
+# The drill itself is scripts/backup/etcd_restore_drill.sh, which restores the newest off-box
+# snapshot into a scratch data-dir and reads the object graph back. It cannot pass beside a live
+# k3s (its header lists five structural reasons), so this script gives it a host with no k3s at
+# all: a transient libvirt guest built from the reviewed cloud image, made to look like a k3s
+# server node whose k3s is stopped — the binary, the cluster token and the R2 env file placed at
+# the paths the drill already reads. The drill runs there unmodified (issue #1175, path 1).
+#
+# LIFECYCLE, and why every step is where it is:
+#   1. lock, prune old evidence, preflight      — fail fast, and never two guests
+#   2. destroy any guest a previous run left    — an aborted run must not block the next
+#   3. fresh disk from the base image, `virsh create` (transient: never a defined domain)
+#   4. wait for ssh against the PINNED host key — the staging guest shares this bridge
+#   5. stage binary + token + env + scripts in one tar over ssh, then delete the staging dir
+#   6. run the guest-side script; pull restore.log / server.log out as evidence
+#   7. destroy the guest and delete its disk    — also from the EXIT trap, pass or fail
+#   8. stamp on success, push the verdict to Kuma, log it unconditionally
+# Evidence (the drill's stdout plus k3s's two logs) is the only thing that outlives a run, under
+# LOG_ROOT/<utc-run-id>/, and it is pruned at LOG_RETENTION_DAYS. The restored etcd database,
+# the token copy and the R2 credentials live on the guest's disk, which step 7 deletes.
+#
+# Exit 0 = the drill passed. Non-zero = it did not, or this script could not get as far as running
+# it; the Kuma message and the syslog line say which.
+set -uo pipefail
+
+# shellcheck source=/dev/null
+source /usr/local/lib/kuma-push-lib.sh || {
+  logger -t etcd-restore-drill-vm "kuma-push-lib.sh missing — run initial_setup on this host"
+  exit 1
+}
+
+# Cron's PATH omits /usr/local/bin, where k3s lives; the same trap as every other cron here.
+export PATH="/usr/local/bin:${PATH}"
+
+ARMED="{{ 1 if hypervisor_etcd_drill_armed else 0 }}"
+NAME="{{ hypervisor_etcd_drill_vm_hostname }}"
+XML="{{ hypervisor_etcd_drill_vm_xml }}"
+BASE_IMAGE="{{ hypervisor_staging_vm_base_image_path }}"
+DISK="{{ hypervisor_etcd_drill_vm_disk }}"
+DISK_SIZE="{{ hypervisor_etcd_drill_vm_disk_size }}"
+SEED="{{ hypervisor_etcd_drill_vm_seed }}"
+GUEST_IP="{{ hypervisor_etcd_drill_vm_ip }}"
+GUEST_USER="{{ sys_user }}"
+GUEST_HOSTKEY_PUB="{{ hypervisor_etcd_drill_vm_hostkey }}.pub"
+# The guest's only authorised key is this host's own (etcd-drill-user-data.j2), same as the
+# staging guest. Root reads it here; nothing else on the host uses it as root.
+IDENTITY="/home/{{ sys_user }}/.ssh/id_ed25519"
+BOOT_TIMEOUT="{{ hypervisor_etcd_drill_vm_boot_timeout }}"
+S3_ENV="{{ hypervisor_etcd_drill_s3_env }}"
+# K3S_TOKEN lives here since the agent join (roles/setup/k3s/tasks/agent.yml). k3s writes the same
+# value to server/token and server/node-token when no --agent-token is set, so this IS the token
+# a rebuilt server would need; a mismatch fails the restore stage loudly rather than passing.
+AGENT_ENV=/etc/systemd/system/k3s-agent.service.env
+DRILL_SCRIPT="/home/{{ sys_user }}/server/scripts/backup/etcd_restore_drill.sh"
+GUEST_RUN_SCRIPT="{{ hypervisor_etcd_drill_guest_script_path }}"
+STAMP_DIR="{{ hypervisor_etcd_drill_stamp_dir }}"
+LOG_ROOT="{{ hypervisor_etcd_drill_log_dir }}"
+LOG_RETENTION_DAYS="{{ hypervisor_etcd_drill_log_retention_days }}"
+LOCK="{{ hypervisor_etcd_drill_lock }}"
+# Whole-run ceiling. The drill's own stages are bounded (600 s restore, 180 s ready) and the
+# boot at BOOT_TIMEOUT; this catches a hung ssh or a download that never finishes.
+RUN_TIMEOUT=1800
+TAG=etcd-restore-drill-vm
+
+KUMA_HOST="uptime-kuma.local.{{ domain }}"
+KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
+ETCD_DRILL_FULL_PUSH_TOKEN=""
+# shellcheck source=/dev/null
+[[ -r "{{ hypervisor_etcd_drill_kuma_env }}" ]] && . "{{ hypervisor_etcd_drill_kuma_env }}"
+PUSH_TOKEN="$ETCD_DRILL_FULL_PUSH_TOKEN"
+
+VIRSH=(virsh --connect qemu:///system)
+RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
+LOG_DIR="$LOG_ROOT/$RUN_ID"
+WORK=""
+KNOWN_HOSTS=""
+
+log() { echo "[$(date -u +%H:%M:%S)] $*"; }
+
+push_kuma() {
+  local status="$1" msg="$2"
+  [[ -z "$PUSH_TOKEN" ]] && return 0
+  kuma_push "$status" "$msg" "https://${KUMA_HOST}/api/push/${PUSH_TOKEN}" \
+    "$KUMA_HOST" "$KUMA_RESOLVE_IP" "$TAG"
+}
+
+# Every exit path reports through here, and the syslog line is unconditional — a push that lands
+# leaves no local record otherwise, and `probe.py alerts` reconstructs history from Loki.
+report() {
+  local status="$1" msg="$2"
+  logger -t "$TAG" "status=${status} run=${RUN_ID} ${msg}"
+  log "status=${status} ${msg}"
+  push_kuma "$status" "$msg"
+}
+
+guest_running() {
+  "${VIRSH[@]}" domstate "$NAME" 2>/dev/null | grep -q running
+}
+
+# Idempotent, and called from the EXIT trap as well as inline: a guest that is already gone and a
+# disk that is already deleted are both fine. Ordering matters — destroy before deleting the
+# disk, or qemu keeps the deleted inode open until it exits and the space is not returned.
+teardown() {
+  if guest_running; then
+    log "destroying guest $NAME"
+    "${VIRSH[@]}" destroy "$NAME" >/dev/null 2>&1 || true
+  fi
+  [[ -e "$DISK" ]] && { rm -f "$DISK"; log "deleted $DISK"; }
+  [[ -n "$WORK" && -d "$WORK" ]] && rm -rf "$WORK"
+  [[ -n "$KNOWN_HOSTS" && -f "$KNOWN_HOSTS" ]] && rm -f "$KNOWN_HOSTS"
+  return 0
+}
+
+fail() {
+  report down "$*"
+  exit 1
+}
+
+prune_old_evidence() {
+  [[ -d "$LOG_ROOT" ]] || return 0
+  find "$LOG_ROOT" -mindepth 1 -maxdepth 1 -type d -mtime "+${LOG_RETENTION_DAYS}" \
+    -exec rm -rf {} + 2>/dev/null || true
+}
+
+ssh_guest() {
+  ssh -i "$IDENTITY" -o IdentitiesOnly=yes \
+      -o UserKnownHostsFile="$KNOWN_HOSTS" -o StrictHostKeyChecking=yes \
+      -o HostKeyAlgorithms=ssh-ed25519 \
+      -o BatchMode=yes -o ConnectTimeout=10 -o LogLevel=ERROR \
+      "${GUEST_USER}@${GUEST_IP}" "$@"
+}
+
+main() {
+  if [[ "$ARMED" != "1" ]]; then
+    logger -t "$TAG" "disarmed (hypervisor_etcd_drill_armed=false); nothing run"
+    exit 0
+  fi
+
+  exec 9>"$LOCK"
+  flock -n 9 || fail "another run holds $LOCK"
+
+  install -d -m 750 "$LOG_DIR"
+  prune_old_evidence
+
+  # Preflight: everything the guest will be handed must exist HERE first, so a missing piece
+  # fails before a guest is built rather than half-way through a run.
+  [[ -r "$XML" ]]              || fail "guest definition $XML missing — run initial_setup --tags hypervisor"
+  [[ -r "$BASE_IMAGE" ]]       || fail "base image $BASE_IMAGE missing"
+  [[ -r "$SEED" ]]             || fail "seed ISO $SEED missing"
+  [[ -r "$GUEST_HOSTKEY_PUB" ]] || fail "pinned guest host key $GUEST_HOSTKEY_PUB missing"
+  [[ -r "$IDENTITY" ]]         || fail "ssh identity $IDENTITY missing"
+  [[ -r "$S3_ENV" ]]           || fail "R2 env $S3_ENV missing"
+  [[ -r "$AGENT_ENV" ]]        || fail "$AGENT_ENV missing — is this host a k3s agent?"
+  [[ -x "$DRILL_SCRIPT" ]]     || fail "drill script $DRILL_SCRIPT missing — no checkout?"
+  [[ -x "$GUEST_RUN_SCRIPT" ]] || fail "guest-side script $GUEST_RUN_SCRIPT missing"
+  command -v k3s >/dev/null    || fail "k3s not on PATH"
+  command -v qemu-img >/dev/null || fail "qemu-img not on PATH"
+
+  local k3s_version
+  k3s_version="$(k3s --version | head -1)"
+  log "run $RUN_ID; shipping $k3s_version into the guest"
+
+  # A previous run that died between create and destroy leaves a running guest and its disk.
+  teardown
+
+  log "creating $DISK from $BASE_IMAGE"
+  qemu-img convert -O qcow2 "$BASE_IMAGE" "$DISK" || fail "qemu-img convert failed"
+  qemu-img resize "$DISK" "$DISK_SIZE" >/dev/null || fail "qemu-img resize failed"
+
+  log "starting transient guest $NAME"
+  "${VIRSH[@]}" create "$XML" >/dev/null || fail "virsh create $XML failed"
+
+  # The pinned host key: one line, this address, the public half ansible generated. Anything else
+  # answering at GUEST_IP is refused, which is the whole point of pinning.
+  KNOWN_HOSTS="$(mktemp)"
+  printf '%s %s\n' "$GUEST_IP" "$(cut -d' ' -f1,2 < "$GUEST_HOSTKEY_PUB")" > "$KNOWN_HOSTS"
+
+  log "waiting up to ${BOOT_TIMEOUT}s for ssh at $GUEST_IP"
+  local deadline=$((SECONDS + BOOT_TIMEOUT))
+  until ssh_guest true 2>/dev/null; do
+    guest_running || fail "guest exited during boot"
+    (( SECONDS < deadline )) || fail "guest never answered on ssh in ${BOOT_TIMEOUT}s"
+    sleep 5
+  done
+  log "guest is up"
+
+  # Stage everything the drill reads, at the paths it reads them, as one tar. Root-owned here
+  # so the modes and owners land as-is on the far side. The token is read from the agent env
+  # file and written to disk only inside this 0700 staging dir, which is deleted the moment the
+  # tar has been sent.
+  WORK="$(mktemp -d)"
+  chmod 700 "$WORK"
+  local K3S_TOKEN=""
+  # shellcheck source=/dev/null
+  . "$AGENT_ENV"
+  [[ -n "$K3S_TOKEN" ]] || fail "K3S_TOKEN is empty in $AGENT_ENV"
+  install -D -m 755 "$(command -v k3s)" "$WORK/root/usr/local/bin/k3s"
+  install -d -m 700 "$WORK/root/var/lib/rancher/k3s/server"
+  (umask 077; printf '%s\n' "$K3S_TOKEN" > "$WORK/root/var/lib/rancher/k3s/server/token")
+  install -D -m 600 "$S3_ENV" "$WORK/root/etc/rancher/k3s/etcd-s3.env"
+  install -D -m 755 "$DRILL_SCRIPT" "$WORK/root/usr/local/bin/etcd-restore-drill"
+  install -D -m 755 "$GUEST_RUN_SCRIPT" "$WORK/root/usr/local/bin/etcd-drill-guest-run"
+
+  log "staging k3s, token, R2 env and the drill into the guest"
+  tar -C "$WORK/root" -cf - . | ssh_guest sudo tar -C / -xpf - || fail "staging into the guest failed"
+  rm -rf "$WORK"; WORK=""
+
+  log "running the drill in the guest (log: $LOG_DIR/drill.out)"
+  local rc=0
+  timeout --signal=TERM --kill-after=30 "$RUN_TIMEOUT" \
+    ssh_guest sudo /usr/local/bin/etcd-drill-guest-run >"$LOG_DIR/drill.out" 2>&1 || rc=$?
+
+  # Evidence out BEFORE teardown, on every path: the diagnosis and the thing that explains it
+  # must not be removed by the same exit path (the drill script's own rule, kept here).
+  local f
+  for f in restore.log server.log; do
+    ssh_guest "sudo sh -c 'cat /var/tmp/etcd-restore-drill.*/$f'" >"$LOG_DIR/$f" 2>/dev/null || true
+  done
+  chmod 640 "$LOG_DIR"/* 2>/dev/null || true
+
+  teardown
+
+  local snapshot counts
+  snapshot="$(sed -n 's/.*drilling snapshot: //p' "$LOG_DIR/drill.out" | head -1)"
+  counts="$(grep -E '^(namespaces|deployments|PVCs|CRDs) ' "$LOG_DIR/drill.out" | tr -s ' ' | paste -sd, -)"
+
+  if [[ $rc -eq 0 ]]; then
+    install -d -m 755 "$STAMP_DIR"
+    printf 'mode=%s\nsnapshot=%s\nutc=%s\nepoch=%s\nhost=%s\n' \
+      full "${snapshot:-unknown}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(date -u +%s)" "$NAME" \
+      > "$STAMP_DIR/last-success-full"
+    chmod 0644 "$STAMP_DIR/last-success-full"
+    report up "full restore drill passed in guest $NAME: snapshot=${snapshot:-unknown} ${counts} k3s=${k3s_version}"
+    exit 0
+  fi
+  local reason
+  reason="$(grep -m1 -E 'etcd-restore-drill: |etcd-drill-guest-run: ' "$LOG_DIR/drill.out" | tail -c 200)"
+  [[ $rc -eq 124 || $rc -eq 137 ]] && reason="run exceeded ${RUN_TIMEOUT}s and was killed"
+  fail "full restore drill FAILED (exit $rc): ${reason:-see $LOG_DIR/drill.out} snapshot=${snapshot:-unknown}"
+}
+
+trap teardown EXIT
+main "$@"

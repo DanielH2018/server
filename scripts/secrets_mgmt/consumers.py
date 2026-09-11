@@ -64,6 +64,10 @@ CROSS_HOST_PUSH_TOKENS = frozenset(
         # daniel-server half two hosts as well.
         "loki_route_witness_push_token",
         "loki_route_witness_daniel_server_push_token",
+        # daniel-SERVER cron (setup/hypervisor, applied by `initial_setup.yml --tags hypervisor`
+        # on that host) + a k8s/uptime-kuma tile deployed from daniel-box: two hosts, no single
+        # redeploy moves both halves. The tile is the only alarm on the full etcd restore drill.
+        "etcd_drill_full_push_token",
         "secret_rotation_push_token",  # self-referential
         # Pushed by a setup role with no deploy tag, so there is nothing for --deploy to run.
         # Named `monitor_bridge_*` only for Kuma monitor-history continuity after the check

@@ -35,12 +35,49 @@ Two paths finish the job, and neither is more patching:
 
 1. **Run the drill on a host with no k3s of its own** — a throwaway VM. Every obstacle above
    comes from sharing the host, so they all evaporate. This is the cheap one and it stays
-   non-destructive.
+   non-destructive. **Taken, issue #1175** — see *The full drill runs monthly in a throwaway
+   guest* below.
 2. **Take a scheduled outage and do the real restore below.** It proves the most, including the
-   agent rejoin and the Longhorn reattach that no scratch drill can exercise.
+   agent rejoin and the Longhorn reattach that no scratch drill can exercise. Still never done.
 
 The isolation itself held: across all five failed runs the live cluster stayed Ready, both nodes
 included, and every write landed under `/var/tmp`.
+
+## The full drill runs monthly in a throwaway guest
+
+`roles/setup/hypervisor` installs `etcd-restore-drill-vm` on daniel-server (its `etcd_drill.yml`),
+a root cron on `etcd_drill_full_cron` (`inventory/group_vars/all.yml`: the first day of each month, 11:20 UTC). One run:
+
+1. builds a transient libvirt guest (`etcd-drill`, 2 GiB / 2 vCPU / 20 G) from the same pinned
+   cloud image as the staging guest, on the staging network and behind its egress fence — the
+   guest reaches R2 and nothing on the LAN;
+2. copies in daniel-server's own `k3s` binary, the cluster token (daniel-server's `K3S_TOKEN`,
+   which is the server token — k3s writes the same value to `token` and `node-token` when no
+   `--agent-token` is set) and the R2 env file, at the paths `etcd_restore_drill.sh` reads;
+3. runs `etcd_restore_drill.sh --list-only` there to name the newest snapshot, downloads that
+   object with a SigV4 GET, and runs the drill against it with `--local-snapshot` — the S3 path
+   doubling (item 4 above) makes the local-file form the working one;
+4. pulls the drill's stdout, `restore.log` and `server.log` out to
+   `/var/log/etcd-restore-drill/<run-id>/` on daniel-server (pruned after 400 days), then
+   destroys the guest and deletes its disk — pass or fail, so no restored etcd database, token
+   copy or credential outlives a run;
+5. stamps `/var/lib/etcd-restore-drill/last-success-full` on daniel-server and pushes the verdict
+   to the **etcd Restore Drill (full)** Kuma tile, whose deadline (`etcd_drill_full_kuma_interval_s`,
+   35 days) is derived from the cron's period.
+
+To run it by hand on daniel-server: `sudo /usr/local/bin/etcd-restore-drill-vm`. It takes a lock,
+so a run that overlaps the cron refuses rather than building a second guest.
+
+What this proves and does not: everything the script header says — the off-box snapshot is
+complete, readable by this k3s version, and its object graph comes back. It does not exercise the
+agent rejoin or the Longhorn reattach; only path 2 does. The weekly `--list-only` cron on
+daniel-box and its monitor-bridge tile are unchanged.
+
+**Pass record** (the stamp on daniel-server is the machine-readable copy):
+
+| Date | Snapshot | Where | Result |
+|---|---|---|---|
+| _(first run pending — fill in from the first passing hand run)_ | | `etcd-drill` guest on daniel-server | |
 
 ## What these snapshots do and do not cover
 
