@@ -101,7 +101,7 @@ jobs:
           python-version: "3.14"
 
       - name: Install uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d  # v10.0.1  # no floating major tag is published; pin the exact release
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4  # v10.1.0  # no floating major tag is published; pin the exact release
         with:
           # Most prek hooks shell out to `uv run`, which resolves the whole `dev` group
           # (ansible-core, pytest, docker, flask, ruff, ty, shellcheck-py) before the first one
@@ -268,7 +268,7 @@ jobs:
           python-version: "3.14"
 
       - name: Install uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d  # v10.0.1  # no floating major tag is published; pin the exact release
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4  # v10.1.0  # no floating major tag is published; pin the exact release
         with:
           enable-cache: true
 
@@ -396,7 +396,7 @@ jobs:
         with:
           python-version: "3.14"
       - name: Install uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d  # v10.0.1
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4  # v10.1.0
         with:
           enable-cache: true
       # The suite ran after the ansible-lint hook in the single-job layout, so it has always
