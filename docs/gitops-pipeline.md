@@ -176,6 +176,10 @@ so its first-seen stamp is the age everything else reads. Four consequences:
 - Discord pages once per SHA, with the same commands and the marker's path;
 - **GitOps Deploy — Status** goes down once the oldest pending line is older than
   `GITOPS_BEHIND_MAX_S` (6 h), naming the roles and the clear command;
+- the **SessionStart banner** names one line per pending role — the role, its playbook, how
+  long it has waited and the clear command — from the moment the tick records it. Not
+  age-gated, unlike the monitor: the monitor pages, where the banner is a passive notice, and
+  the session reading it is usually not the session that landed the change;
 - `broad_applied` is not written for that role — a role in the same range that DID apply
   still records its own, so a mixed push still proves the half it applied.
 

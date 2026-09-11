@@ -83,8 +83,11 @@ try:
     from lib.deployer_park import (
         BEHIND_PARK_SECONDS,
         GITOPS_STATE_DIR,
+        MANUAL_PLANE_CLEAR_CMD,
+        manual_plane_pending,
         park_age,
         read_behind_marker,
+        read_manual_plane_marker,
     )
 
     DEPLOYER_PARK_IMPORT_ERROR = ""
@@ -98,12 +101,15 @@ except ImportError as exc:
     # threshold or the real marker directory, and the raising stubs say so if one is ever called.
     BEHIND_PARK_SECONDS = 0
     GITOPS_STATE_DIR = ""
+    MANUAL_PLANE_CLEAR_CMD = ""
 
     def _park_unavailable(*_args, **_kwargs):
         raise ImportError(DEPLOYER_PARK_IMPORT_ERROR)
 
     park_age = _park_unavailable
     read_behind_marker = _park_unavailable
+    manual_plane_pending = _park_unavailable
+    read_manual_plane_marker = _park_unavailable
 
 __all__ = ["BEHIND_PARK_SECONDS", "GITOPS_STATE_DIR"]
 
@@ -200,8 +206,57 @@ def behind_park_lines(marker, now):
     ]
 
 
+def _age_phrase(seconds):
+    """`"45 min"` under two hours, `"7h"` above it.
+
+    Minutes match `behind_park_lines`, which never reports more than a few hours. A pending
+    setup role waits on work nobody has started and is routinely days old, where a count in
+    minutes is a number the reader has to divide.
+    """
+    # Clamped at zero: `park_age`'s threshold hid a stamp ahead of the clock, and this line
+    # has no threshold, so a backward NTP step on the deployer would otherwise print a
+    # negative age.
+    seconds = max(0.0, seconds)
+    if seconds < 2 * 3600:
+        return f"{int(seconds // 60)} min"
+    return f"{int(seconds // 3600)}h"
+
+
+def manual_plane_lines(marker, now):
+    """One banner line per setup role the deployer merged but cannot apply, or [].
+
+    The tick fast-forwards a range carrying `roles/setup/k3s/` or `roles/setup/common/` and
+    records the role in `manual_plane` rather than parking the whole range — parking held every
+    other session's landing behind one role only a hand can apply. So `behind_since` is empty
+    and the park line above says nothing, while a change sits merged and unapplied.
+
+    # DECIDED: not age-gated, unlike `behind_park_lines` and monitor-bridge's `gitops_status`.
+    Being behind origin IS routine in the small — one tick — so those need a threshold to tell
+    a queue from a park. A `manual_plane` entry is never routine: the tick writes it only for a
+    role no tick can apply, and nothing but an operator's hand clears it. monitor-bridge gates
+    because it PAGES; this is a passive notice on a banner the reader is already reading.
+
+    The line carries the way out, because the session that reads it is usually not the session
+    that landed the change: `land.sh` printed the apply command to whoever merged it, and the
+    banner is the only place the fact reaches anyone else.
+    """
+    lines = []
+    for role, playbook, at in sorted(manual_plane_pending(marker), key=lambda e: e[2]):
+        how = (
+            f"apply {playbook} by hand"
+            if playbook and playbook != "none"
+            else "apply the role by hand"
+        )
+        lines.append(
+            f"  ✗ the GitOps deployer merged a change to the `{role}` setup role "
+            f"{_age_phrase(now - at)} ago and cannot apply it itself — {how}, then "
+            f"`{MANUAL_PLANE_CLEAR_CMD.replace('<role>', role)}`"
+        )
+    return lines
+
+
 def parked_deployer_problems(
-    list_worktrees=None, status=None, read_marker=None, now=None
+    list_worktrees=None, status=None, read_marker=None, now=None, read_manual=None
 ):
     """The primary-checkout and deployer-park banner lines, as one list.
 
@@ -239,6 +294,11 @@ def parked_deployer_problems(
         def read_marker():
             return read_behind_marker(GITOPS_STATE_DIR)
 
+    if read_manual is None:
+
+        def read_manual():
+            return read_manual_plane_marker(GITOPS_STATE_DIR)
+
     # Deferred like the `lib.git` import above, and for the same reason the rest of this file
     # defers: nothing at module scope may be able to stop the banner. The one module-scope
     # import this file does keep — `lib.deployer_park` — is wrapped up there and reported here.
@@ -264,7 +324,12 @@ def parked_deployer_problems(
         # `read_behind_marker` answers None for it, which reads as "no park". An INJECTED
         # read_marker may still raise, and the dirty lines gathered before it are still worth
         # printing.
-        lines += behind_park_lines(read_marker(), time.time() if now is None else now)
+        clock = time.time() if now is None else now
+        lines += behind_park_lines(read_marker(), clock)
+        # After the park line and independent of it: the two are different deferrals of the
+        # same tick, and a host can be in both. A read that raises keeps the lines gathered
+        # before it, the same way the park read does.
+        lines += manual_plane_lines(read_manual(), clock)
     except Exception:
         return lines
     return lines

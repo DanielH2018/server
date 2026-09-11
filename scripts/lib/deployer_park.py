@@ -1,4 +1,4 @@
-"""Whether the GitOps deployer is PARKED behind origin/master, read from its own marker.
+"""What the GitOps deployer's own markers say it has deferred: a park, or a pending role.
 
 TWO READERS ASK THIS AND MUST ANSWER IT IDENTICALLY. The SessionStart banner
 (``.claude/hooks/session-health.py``) reaches a session at the moment it opens.
@@ -14,6 +14,13 @@ fast-forwarded, so its age is HOW LONG THE DEPLOYER HAS NOT FAST-FORWARDED — n
 host has been behind the tip, and not how long ago the last tick ran. The distinction is load
 bearing since the tick started landing at the newest green ancestor: a deployer working
 normally is behind the tip on nearly every tick, and only one that stops moving ages this.
+
+The second marker is ``manual_plane``, one line per setup role the tick fast-forwarded past and
+cannot apply itself. A recorded role leaves ``behind_since`` empty, so the park half above says
+nothing while the change sits merged and unapplied — only the banner names it. THREE READERS
+parse that one: the deployer writes it, monitor-bridge pages off it, and this module banners
+it, none of them able to import the others' tree.
+``ansible/tests/deploy/test_manual_plane_parsers_agree.py`` holds the three together.
 
 Stdlib only, and no imports from this repo: the SessionStart hook imports it before anything
 else is on ``sys.path``.
@@ -51,6 +58,15 @@ def park_age(marker: str | None, now: float) -> float | None:
     return age if age >= BEHIND_PARK_SECONDS else None
 
 
+def _read(state_dir: str, name: str) -> str | None:
+    """One marker's stripped text, or None when it cannot be read."""
+    try:
+        with open(os.path.join(state_dir, name)) as fh:
+            return fh.read().strip()
+    except OSError:
+        return None
+
+
 def read_behind_marker(state_dir: str = GITOPS_STATE_DIR) -> str | None:
     """The host's `behind_since` marker text, or None when it cannot be read.
 
@@ -58,11 +74,7 @@ def read_behind_marker(state_dir: str = GITOPS_STATE_DIR) -> str | None:
     `read_state`: every caller here only ever asks "is this a park?", and the answer to that
     for a marker nobody can read is no.
     """
-    try:
-        with open(os.path.join(state_dir, BEHIND_SINCE)) as fh:
-            return fh.read().strip()
-    except OSError:
-        return None
+    return _read(state_dir, BEHIND_SINCE)
 
 
 def park_note(marker: str | None, now: float | None = None) -> str:
@@ -86,3 +98,51 @@ def park_note(marker: str | None, now: float | None = None) -> str:
         "  is what has to converge.\n"
         "  Read the skip reason: journalctl -t gitops-deploy | tail -20"
     )
+
+
+# The deployer's `manual_plane` marker: one line per setup role it fast-forwarded past and
+# cannot apply itself, `"<origin_sha> <playbook-or-none> <role> <unix_ts>"`.
+MANUAL_PLANE = "manual_plane"
+
+# What an operator runs to clear one pending role once the role is applied by hand. The
+# deployer's own copy is `deploy_remediation.MANUAL_PLANE_CLEAR_CMD`; this module is stdlib
+# only and cannot import that tree, so
+# `scripts/lib/tests/test_manual_plane_parsers_agree.py` asserts the two agree.
+MANUAL_PLANE_CLEAR_CMD = (
+    "uv run python scripts/deploy_tools/gitops_state.py clear-manual-plane <role>"
+)
+
+
+def manual_plane_pending(marker: str | None) -> list[tuple[str, str, float]]:
+    """Every pending role in the marker as `(role, playbook, first_seen)`, oldest line first.
+
+    A line this cannot parse is SKIPPED rather than guessed at, the way `park_age` treats a
+    garbled `behind_since`: the banner names a role and a command to clear it, and neither can
+    be derived from a torn line. `DeployerState.manual_plane_pending` and monitor-bridge's
+    `checks.service._parse_manual_plane` skip the same lines for the same reason — that
+    agreement is a test, not a coincidence.
+
+    `playbook` is the literal marker field, which the deployer writes as `none` when no
+    playbook applies the role.
+    """
+    pending = []
+    for line in (marker or "").splitlines():
+        parts = line.split()
+        if len(parts) != 4:
+            continue
+        try:
+            at = float(parts[3])
+        except ValueError:
+            continue
+        pending.append((parts[2], parts[1], at))
+    return pending
+
+
+def read_manual_plane_marker(state_dir: str = GITOPS_STATE_DIR) -> str | None:
+    """The host's `manual_plane` marker text, or None when it cannot be read.
+
+    Absent and unreadable collapse to the same answer, for the reason `read_behind_marker`
+    gives: every caller here only asks "is a role pending?", and for a marker nobody can read
+    the answer is no.
+    """
+    return _read(state_dir, MANUAL_PLANE)
