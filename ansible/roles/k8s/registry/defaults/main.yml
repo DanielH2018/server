@@ -92,4 +92,11 @@ registry_k8s_netpol_cni_gateway: "{{ k3s_cni0_gateways[0] }}"
 # daniel-server's flannel.1 address — `ip -4 addr show flannel.1` there reads 10.42.1.0/32
 # (checked 2026-08-14). Its containerd's pulls of the ClusterIP mirror endpoint arrive
 # SNAT'd to this; admitted so built images can run on that node (first consumer: nut).
+#
+# This pair is the pinned node's own cni0 gateway plus the OTHER node's flannel.1 address, and it
+# is correct only while the pod stays pinned where `k8s_registry_node` puts it. Nothing but a test
+# tied the three together — the pin is a nodeSelector in deployment.yaml.j2, these are two role
+# defaults — so repointing the pin at daniel-server would leave daniel-box's own pulls arriving as
+# 10.42.0.0 and denied, with the selftest job the only caller that says so (#1725). ENFORCED by
+# ansible/tests/k8s/test_registry_netpol_grants_follow_the_pinned_node.py.
 registry_k8s_netpol_agent_flannel: 10.42.1.0/32
