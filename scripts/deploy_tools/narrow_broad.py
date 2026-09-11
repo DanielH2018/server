@@ -311,14 +311,20 @@ def _changed_half(paths: list[str], ctx: Context) -> set[str]:
 
     A setup-plane path refuses: `handle_broad` has a separate arm for it, and a tick that
     narrowed the deploy half while silently dropping the setup half would apply neither.
-    `cs.tasks`/`cs.meta` refuse for the opposite reason: `changed` reports them as work a
-    human deploys by hand, and the full run this replaces DOES apply them.
+    `cs.tasks`/`cs.meta`/`cs.secrets` refuse for the opposite reason: `changed` reports them
+    as work a human deploys by hand, and the full run this replaces DOES apply them. A
+    rotated secret reaches a service only when that service renders again, so narrowing a
+    range that carries one would leave every service outside the tag list on the old value.
     """
     from deploy_logic import expand_build_couplings, services_from_changed_paths
 
     cs = services_from_changed_paths(paths)
     if cs.broad_setup or cs.broad_manual:
         raise CannotNarrow("the range also changes the setup plane")
+    if cs.secrets:
+        raise CannotNarrow(
+            "the range rotates a secret, which reaches a service only on its next render"
+        )
     if cs.tasks or cs.meta:
         raise CannotNarrow(
             f"structural change in {sorted(cs.tasks | cs.meta)}, which no tag captures"
