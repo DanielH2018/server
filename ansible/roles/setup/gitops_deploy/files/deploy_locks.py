@@ -13,8 +13,8 @@ Stdlib only: the unit runs under `uv run --no-project` and the host is still on 
 
 Typical usage example:
 
-    with service_locks({"sonarr", "radarr"}, timeout=900):
-        run(argv, cwd=repo, timeout=900)
+    with locked_budget({"sonarr", "radarr"}, 900) as budget:
+        run(argv, cwd=repo, timeout=budget)
 """
 
 import contextlib
@@ -36,6 +36,16 @@ SERVICE_LOCK_ALL = "all"
 # How often a blocked acquire retries. `fcntl.flock` has no timeout of its own, and
 # `signal.alarm` would interrupt whatever else this process happens to be in the middle of.
 SERVICE_LOCK_POLL_S = 0.5
+# The wait a caller with no budget of its own gets. Only another deploy of the same service can
+# hold one of these locks, and a full `ansible/deploy.yml` measured 1212s on 2026-08-22 -- the
+# same ceiling `gitops_deploy_broad_timeout_s` gives one apply. Waiting forever is not an option:
+# this process holds the git-tree lock while it waits, so an unbounded wait parks every other
+# job on that lock behind a deploy that is doing nothing.
+SERVICE_LOCK_WAIT_S = 1800.0
+# What `locked_budget` yields when the wait consumed the whole budget. A zero or negative
+# `subprocess.run(timeout=)` kills the child immediately, which reads as a deploy failure rather
+# than as contention; one second fails the same way but leaves the argv in the log.
+MIN_RUN_BUDGET_S = 1.0
 
 
 def lock_dir() -> str:
@@ -47,13 +57,13 @@ def lock_dir() -> str:
     return os.environ.get("HOMELAB_DEPLOY_LOCK_DIR", "/var/lock")
 
 
-def _take(name: str, mode: int, deadline: float | None) -> tuple[str, int]:
+def _take(name: str, mode: int, deadline: float) -> tuple[str, int]:
     """Flock one service lock and return its name and open descriptor.
 
     Args:
         name: the service tag, or SERVICE_LOCK_ALL.
         mode: fcntl.LOCK_EX or fcntl.LOCK_SH.
-        deadline: a `time.monotonic()` value to give up at, or None to wait indefinitely.
+        deadline: the `time.monotonic()` value to give up at.
 
     Raises:
         RuntimeError: the lock stayed busy past `deadline`.
@@ -66,7 +76,7 @@ def _take(name: str, mode: int, deadline: float | None) -> tuple[str, int]:
             fcntl.flock(fd, mode | fcntl.LOCK_NB)
             return name, fd
         except OSError:
-            if deadline is not None and time.monotonic() >= deadline:
+            if time.monotonic() >= deadline:
                 os.close(fd)
                 raise RuntimeError(
                     f"service lock {name} ({path}) stayed busy; nothing was deployed"
@@ -75,14 +85,14 @@ def _take(name: str, mode: int, deadline: float | None) -> tuple[str, int]:
 
 
 @contextlib.contextmanager
-def service_locks(services: Iterable[str], timeout: float | None = None):
+def service_locks(services: Iterable[str], timeout: float = SERVICE_LOCK_WAIT_S):
     """Hold one lock per service for the body, in the order the DECIDED note above fixes.
 
     Args:
         services: the tags this deploy names. Empty means the whole playbook.
-        timeout: seconds to wait for the locks, or None to wait indefinitely — the same budget
-            the caller already bounds its own `run` with. The Docker deploy passes None because
-            its `run` is unbounded too, so the wait and the work share one budget.
+        timeout: seconds to wait for the locks. A caller whose phase carries a declared budget
+            calls `locked_budget` instead, so that the wait and the run SHARE that budget
+            rather than each being given one.
 
     Yields:
         The lock names taken, in the order they were taken.
@@ -91,7 +101,7 @@ def service_locks(services: Iterable[str], timeout: float | None = None):
         RuntimeError: a lock stayed busy past `timeout`. Nothing was deployed.
     """
     names = sorted(set(services))
-    deadline = None if timeout is None else time.monotonic() + timeout
+    deadline = time.monotonic() + timeout
     held: list[tuple[str, int]] = []
     try:
         held.append(
@@ -107,3 +117,29 @@ def service_locks(services: Iterable[str], timeout: float | None = None):
     finally:
         for _, fd in held:
             os.close(fd)
+
+
+@contextlib.contextmanager
+def locked_budget(services: Iterable[str], timeout: float):
+    """Take the service locks and yield what is LEFT of `timeout` for the caller's run.
+
+    One deadline covers the wait and the work, which is what keeps a phase's declared timeout a
+    true bound on how long this process holds the git-tree lock. A wait with a budget of its own
+    would double every k8s term in `_worst_lock_hold()`
+    (`tests/test_gitops_deploy_timeout_budgets.py`), and the four jobs that wait on the tree lock
+    derive their own waits from that sum — so a deploy queued behind an operator's would make
+    each of them give up and page for ordinary contention.
+
+    Args:
+        services: the tags this deploy names. Empty means the whole playbook.
+        timeout: the phase's whole budget, in seconds.
+
+    Yields:
+        The seconds left for the run, never below `MIN_RUN_BUDGET_S`.
+
+    Raises:
+        RuntimeError: a lock stayed busy past `timeout`. Nothing was deployed.
+    """
+    deadline = time.monotonic() + timeout
+    with service_locks(services, timeout):
+        yield max(MIN_RUN_BUDGET_S, deadline - time.monotonic())

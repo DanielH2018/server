@@ -15,6 +15,7 @@ Run: uv run pytest ansible/roles/setup/gitops_deploy/tests/test_deploy_service_l
 
 import fcntl
 import os
+import threading
 import time
 
 import deploy_locks
@@ -120,3 +121,27 @@ def test_the_locks_are_released_when_the_body_raises(service_lock_dir):
     # Takeable again means released: this would raise if the first hold had leaked.
     with deploy_locks.service_locks({"sonarr"}, timeout=1) as taken:
         assert taken == ["all", "sonarr"]
+
+
+def test_an_uncontended_phase_keeps_almost_all_of_its_budget(service_lock_dir):
+    """CLEAN half: nothing is waiting, so the run gets the budget the caller declared."""
+    with deploy_locks.locked_budget({"sonarr"}, 900) as budget:
+        assert 899 < budget <= 900
+
+
+def test_a_phase_that_queued_runs_on_what_is_LEFT_of_its_budget(service_lock_dir):
+    """FLAGGED half: the wait and the run must share one deadline, not get one each.
+
+    `gitops-deploy.service` holds the git-tree lock across this wait, and every budget derived
+    from `_worst_lock_hold()` assumes a phase's timeout bounds the whole phase. A wait with a
+    budget of its own doubles the k8s terms in that sum and every check stays green.
+    """
+    held = _hold(service_lock_dir, "sonarr")
+    releaser = threading.Timer(1.0, os.close, args=(held,))
+    releaser.start()
+    try:
+        with deploy_locks.locked_budget({"sonarr"}, 5) as budget:
+            assert budget <= 4, f"the wait bought a second budget: {budget}s left of 5"
+            assert budget > 0
+    finally:
+        releaser.cancel()

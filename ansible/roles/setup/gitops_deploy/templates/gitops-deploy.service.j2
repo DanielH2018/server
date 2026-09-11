@@ -58,6 +58,11 @@ Type=oneshot
 # tree lock only to snapshot HEAD, and does its playbook under one lock per service. The
 # direction that still contends is this one — this unit holds the tree lock for its whole run,
 # so an operator deploy launched mid-tick still queues for the snapshot alone.
+#
+# This unit takes those per-service locks too, inside the tree-lock hold above, and the wait for
+# them comes out of the SAME budget as the playbook it is waiting to run
+# (deploy_locks.locked_budget). That is what keeps the four terms below a true ceiling: give the
+# wait a budget of its own and each of them doubles, past this TimeoutStartSec.
 TimeoutStartSec=60min
 User={{ sys_user }}
 WorkingDirectory=/home/{{ sys_user }}/server
@@ -90,7 +95,7 @@ SyslogLevel=notice
 # still short of a routine 20-minute deploy; test_gitops_discord_contract.py::test_k8s_deploy_
 # timeout_budget_survives_max_flock_contention asserts that bound and goes red if you try. So
 # -E 75 + SuccessExitStatus=75
-# instead, the same "lock busy, nothing deployed" contract scripts/deploy.sh:281 already uses.
+# instead, the same "lock busy, nothing deployed" contract scripts/deploy.sh:819 already uses.
 # Contention is not silent starvation: the flock path never writes last_run, so contention
 # lasting past GITOPS_MAX_AGE_S (90min, check.py:148) still pages via GitOps-Alive. (ADR-0011)
 SuccessExitStatus=75

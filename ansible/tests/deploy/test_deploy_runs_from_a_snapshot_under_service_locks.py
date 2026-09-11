@@ -32,6 +32,11 @@ _SNAPSHOT_RUNNER = "run_playbook_in_snapshot"
 # The deployer's playbook call sites. Named rather than discovered so that a fourth one added
 # without a lock fails this file instead of joining a vacuously-true census.
 _LOCKED_DEPLOY_FUNCTIONS = frozenset({"deploy", "deploy_k8s", "deploy_broad"})
+# The helper that shares one deadline between the lock wait and the run, and the two call sites
+# that carry a phase budget to share. `deploy` is out because its run is unbounded.
+_BUDGET_HELPER = "locked_budget"
+_LOCK_HELPERS = frozenset({"service_locks", _BUDGET_HELPER})
+_BUDGETED_DEPLOY_FUNCTIONS = frozenset({"deploy_k8s", "deploy_broad"})
 
 
 def _code_lines(text: str) -> list[tuple[int, str]]:
@@ -117,6 +122,13 @@ def test_deploy_sh_takes_a_service_lock_before_it_runs_anything():
     )
 
 
+def _one_function(source: str) -> ast.FunctionDef:
+    """The single function a snippet defines, for the red proofs below."""
+    node = ast.parse(source).body[0]
+    assert isinstance(node, ast.FunctionDef)
+    return node
+
+
 def _functions(source: str) -> dict[str, ast.FunctionDef]:
     tree = ast.parse(source)
     return {
@@ -147,9 +159,47 @@ def _guarded_by_service_locks(node: ast.FunctionDef) -> bool:
             call = item.context_expr
             if (
                 isinstance(call, ast.Call)
-                and getattr(call.func, "id", "") == "service_locks"
+                and getattr(call.func, "id", "") in _LOCK_HELPERS
             ):
                 return True
+    return False
+
+
+def _shares_one_budget(node: ast.FunctionDef) -> bool:
+    """Does every `run` in this function take the budget `locked_budget` yielded?
+
+    `locked_budget(services, timeout) as budget` then `run(..., timeout=budget)`. Passing the
+    phase's own `timeout` to both is the shape this rejects: it gives the wait a second budget
+    the size of the first, and a phase that waits then runs holds the git-tree lock for twice
+    what `_worst_lock_hold()` says it can.
+    """
+    for inner in ast.walk(node):
+        if not isinstance(inner, ast.With):
+            continue
+        for item in inner.items:
+            call = item.context_expr
+            if not (
+                isinstance(call, ast.Call)
+                and getattr(call.func, "id", "") == _BUDGET_HELPER
+            ):
+                continue
+            if not isinstance(item.optional_vars, ast.Name):
+                return False
+            budget = item.optional_vars.id
+            runs = [
+                c
+                for c in ast.walk(inner)
+                if isinstance(c, ast.Call) and getattr(c.func, "id", "") == "run"
+            ]
+            return bool(runs) and all(
+                any(
+                    kw.arg == "timeout"
+                    and isinstance(kw.value, ast.Name)
+                    and kw.value.id == budget
+                    for kw in c.keywords
+                )
+                for c in runs
+            )
     return False
 
 
@@ -174,6 +224,49 @@ def test_every_deployer_playbook_call_site_holds_its_service_locks():
     assert not unguarded, (
         f"{unguarded} run ansible-playbook without `with service_locks(...)`"
     )
+
+
+def test_a_budgeted_deploy_shares_one_deadline_between_its_wait_and_its_run():
+    """CLEAN half: the tree-lock hold a phase's timeout is allowed to buy, held to once.
+
+    `gitops-deploy.service` holds `/var/lock/server-git-tree.lock` across its whole run, so a
+    phase that waits for a service lock is holding the tree lock while it waits.
+    `_worst_lock_hold()` in tests/test_gitops_deploy_timeout_budgets.py sums the phase timeouts
+    as that hold, and the four jobs waiting on the tree lock size their own waits from that sum.
+    A wait budgeted separately from the run breaks the sum with every check still green.
+    """
+    functions = _functions(_DEPLOY_IO.read_text())
+    unshared = [
+        name
+        for name in sorted(_BUDGETED_DEPLOY_FUNCTIONS)
+        if not _shares_one_budget(functions[name])
+    ]
+    assert not unshared, (
+        f"{unshared} do not pass the budget `{_BUDGET_HELPER}` yielded to their `run`, so the "
+        "lock wait and the playbook each get the phase's whole timeout"
+    )
+
+
+def test_a_separately_budgeted_wait_is_flagged():
+    """FLAGGED half for the guard above, which can only ever be observed passing.
+
+    This is the pre-fix shape: the same `timeout` handed to the lock helper and to `run`.
+    """
+    before = _one_function(
+        "def deploy_k8s(repo, services, timeout):\n"
+        "    with service_locks(services, timeout):\n"
+        "        run(argv, cwd=repo, timeout=timeout)\n"
+    )
+    after = _one_function(
+        "def deploy_k8s(repo, services, timeout):\n"
+        "    with locked_budget(services, timeout) as budget:\n"
+        "        run(argv, cwd=repo, timeout=budget)\n"
+    )
+    assert not _shares_one_budget(before), (
+        "the guard accepts a wait that is budgeted separately from the run; it is measuring "
+        "nothing"
+    )
+    assert _shares_one_budget(after)
 
 
 def test_the_service_lock_helper_takes_the_all_lock_before_any_service():

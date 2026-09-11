@@ -18,6 +18,7 @@ from collections.abc import Sequence
 import pytest
 
 import deploy_alerts
+from _deploy_fakes import fits_budget
 
 # The SHAs the `tick` fixture starts from; `from conftest import` is avoided because the
 # repo has several conftest.py files and the name resolves to whichever sys.path saw first.
@@ -249,9 +250,8 @@ def test_a_setup_plane_push_merges_then_applies_its_own_playbook(
             "gitops_deploy",
         ]
     ]
-    assert tick.log[tick.index("playbook", "ansible/initial_setup.yml")][2] == {
-        "timeout": gitops_deploy.BROAD_DEPLOY_TIMEOUT_S
-    }
+    applied = tick.log[tick.index("playbook", "ansible/initial_setup.yml")][2]
+    assert fits_budget(applied, gitops_deploy.BROAD_DEPLOY_TIMEOUT_S)
     assert _marker(state_dir, "hold_sha") is None
     assert _marker(state_dir, "hold_plane") is None
 
@@ -357,9 +357,8 @@ def test_an_image_bump_consults_staging_then_merges_then_deploys(
     assert tick.playbooks == [DEPLOY_SONARR]
     staging = tick.log.index(("staging", {"sonarr"}))
     assert staging < tick.index("git", "merge") < tick.index("playbook", "sonarr")
-    assert tick.log[tick.index("playbook", "sonarr")][2] == {
-        "timeout": gitops_deploy.K8S_DEPLOY_TIMEOUT_S
-    }
+    deployed = tick.log[tick.index("playbook", "sonarr")][2]
+    assert fits_budget(deployed, gitops_deploy.K8S_DEPLOY_TIMEOUT_S)
     assert ("annotation", {"sonarr"}) in tick.log
     assert _marker(state_dir, "hold_sha") is None
 
@@ -470,7 +469,7 @@ def test_a_failed_rollout_rolls_back_to_the_failed_shas_snapshot_under_its_own_b
         "-e",
         f"k8s_restore_snapshot_sha={ORIGIN[:8]}",
     ]
-    assert rollback[2] == {"timeout": gitops_deploy.K8S_ROLLBACK_TIMEOUT_S}
+    assert fits_budget(rollback[2], gitops_deploy.K8S_ROLLBACK_TIMEOUT_S)
     assert _marker(state_dir, "hold_sha") == ORIGIN
     assert tick.head == LOCAL
     (post,) = tick.posts

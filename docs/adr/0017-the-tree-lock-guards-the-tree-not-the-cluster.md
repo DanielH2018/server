@@ -90,6 +90,15 @@ playbook run pins `UV_PROJECT_ENVIRONMENT` to the calling checkout's, so the sna
 one environment instead of building one it then deletes — and the shared, host-keyed Ansible
 fact cache is not pinned to an interpreter path that disappears.
 
+**The deployer's service-lock wait comes out of the phase it is waiting for.** That unit holds
+the tree lock across its whole run, so it now waits for a service lock while holding it. Every
+job that waits on the tree lock sizes its own wait from the sum of the deployer's four phase
+timeouts, and a wait budgeted on its own would double the two k8s terms in that sum — so
+`deploy_locks.locked_budget` shares one deadline between the wait and the playbook. A phase
+queued behind an operator's deploy runs on what is left of its budget and holds the tree lock
+for no longer than a phase that never queued. The cost is that such a phase can be cut short and
+read as a failed deploy.
+
 **Exit 77 is new**: the snapshot could not be created, and nothing was deployed. It is separate
 from 76 because the two are fixed in different places — 76 is the lock file, 77 the snapshot
 root or the object store.

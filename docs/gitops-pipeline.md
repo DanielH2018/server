@@ -250,7 +250,7 @@ A tick that cannot take the lock exits **75**, and the systemd unit **succeeds**
 resume point, not an error: the lock was busy and nothing was deployed.
 
 This is deliberate and documented at the line that sets it
-(`gitops-deploy.service.j2:64`). Treating contention as failure paged seven times in seven
+(`gitops-deploy.service.j2:87`). Treating contention as failure paged seven times in seven
 days, because every long operator deploy held the same lock for its whole run. It no longer
 does — `scripts/deploy.sh` holds the tree lock for a snapshot of `HEAD` and nothing more
 ([ADR-0017](adr/0017-the-tree-lock-guards-the-tree-not-the-cluster.md)) — so tree-lock

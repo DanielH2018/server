@@ -52,7 +52,7 @@ from deploy_failtext import (  # noqa: F401 — re-exported for `deploy_io.<name
 from deploy_health import HealthSample, containers_to_gate, health_decision
 from deploy_inventory import declared_services, stale_rendered_services
 from deploy_k8s import k8s_role_paths
-from deploy_locks import service_locks
+from deploy_locks import locked_budget, service_locks
 from deploy_state import STATE_DIR, DeployerState  # noqa: F401 — re-exported
 
 
@@ -551,7 +551,7 @@ def deploy(repo: str, services: set[str]) -> None:
         services: service tags to deploy, joined into one comma-separated `--tags` value.
     """
     tags = ",".join(sorted(services))
-    with service_locks(services):
+    with service_locks(services):  # No budget to share; SERVICE_LOCK_WAIT_S bounds it.
         run([*PLAYBOOK_ARGV, "ansible/deploy.yml", "--tags", tags], cwd=repo)
 
 
@@ -583,8 +583,8 @@ def deploy_k8s(
     argv = [*PLAYBOOK_ARGV, "ansible/deploy.yml", "--tags", tags]
     if restore_sha is not None and restore_sha.strip():
         argv += ["-e", f"k8s_restore_snapshot_sha={restore_sha}"]
-    with service_locks(services, timeout):
-        run(argv, cwd=repo, timeout=timeout)
+    with locked_budget(services, timeout) as budget:
+        run(argv, cwd=repo, timeout=budget)
 
 
 def deploy_broad(repo: str, playbook: str, tags: list[str], timeout: float) -> None:
@@ -602,8 +602,8 @@ def deploy_broad(repo: str, playbook: str, tags: list[str], timeout: float) -> N
     if tags:
         cmd += ["--tags", ",".join(tags)]
     # No tags takes `all` exclusively, so it excludes every scoped deploy; see deploy_locks.
-    with service_locks(tags, timeout):
-        run(cmd, cwd=repo, timeout=timeout)
+    with locked_budget(tags, timeout) as budget:
+        run(cmd, cwd=repo, timeout=budget)
 
 
 def emit_deploy_annotation(services: set[str], sha: str) -> None:

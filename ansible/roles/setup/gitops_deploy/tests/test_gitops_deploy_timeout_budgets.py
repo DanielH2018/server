@@ -84,6 +84,15 @@ def _worst_lock_hold(defaults: dict) -> int:
     staging gate and then stalls both playbook budgets spends all four in sequence. The BROAD arm
     returns before that block and so cannot stack with any of them.
 
+    Each term bounds its phase WHOLE: since ADR-0017 a k8s phase also waits for one service lock
+    per tag, and it waits while this unit holds the git-tree lock. `deploy_locks.locked_budget`
+    is what keeps the term true — it shares one deadline between that wait and the playbook, so
+    a phase queued behind an operator's deploy still cannot hold the lock for longer than its
+    own timeout. Give the wait a budget of its own and every k8s term here doubles while this
+    file keeps reading green;
+    `ansible/tests/deploy/test_deploy_runs_from_a_snapshot_under_service_locks.py::test_a_budgeted_deploy_shares_one_deadline_between_its_wait_and_its_run`
+    is the guard that fails instead.
+
     The staging terms are counted even though gitops_deploy_staging_gate is false by default. The
     host that has the gate ON is the one whose budget has to fit, and a budget that only holds
     while a feature is off is not a budget — that reading is exactly how the 2026-08-29 review's

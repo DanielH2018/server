@@ -876,7 +876,7 @@ deployer, whose systemd ExecStart is
 smoke run wait its full 180s and deploy nothing.
 
 **Since 2026-08-23 that failure is silent.** `-E 75` plus `SuccessExitStatus=75`
-(`gitops-deploy.service.j2:75`) make systemd report the unit `Result=success`, so
+(`gitops-deploy.service.j2:101`) make systemd report the unit `Result=success`, so
 `handlers/main.yml:11-16`'s `ansible.builtin.systemd: state: started` returns rc 0 and the play
 recaps green. Nothing deployed, `last_run` untouched, no Discord message (the webhook belongs to
 the deployer, which never started), no `OnFailure`. The first alert of any kind is GitOps-Alive,
@@ -1103,7 +1103,7 @@ secret-rotate cron take. In the pathological case (a stalled forward deploy foll
 stalled rollback), this unit can hold that lock for up to 2940s (600 + 120 + 900 + 1320 with the
 staging gate armed, 2220s without it, excluding its own flock wait) — past the 30-minute (1800s)
 timer interval. A concurrent `./scripts/deploy.sh`
-during that window waits `LOCK_WAIT=3000` (`deploy.sh:57`, used at `:286`) — **not** the unit's
+during that window waits `LOCK_WAIT=3000` (`deploy.sh:107`, used at `:282` and `:752`) — **not** the unit's
 own `-w 180`, which governs only the deployer — so it **outlasts the 2940s hold and then
 deploys**, rather than returning exit 75. It returns exit 75 only if the lock stays busy past
 the full 3000s. The secret-rotate cron waits on the same lock rather than failing outright,
@@ -1138,7 +1138,19 @@ unchanged: it still holds the tree lock across its whole run, so an operator dep
 mid-tick still waits, for its snapshot alone. This unit takes the per-service locks too, inside
 that hold, which is what keeps a tick and an operator deploy off the same rollout. The lock
 order is `all` first, then each service in sorted order, and the `# DECIDED:` marker in
-`files/deploy_io.py` says why the two orders cannot deadlock.
+`files/deploy_locks.py` says why the two orders cannot deadlock.
+
+**Waiting for a service lock spends the phase's own budget, not a second one.** This unit waits
+while it holds the tree lock, so a wait budgeted separately would add itself to every term in
+`_worst_lock_hold()` — 900s of k8s deploy plus 900s of queueing for it, and the same again for
+the rollback — and the four jobs that size their own tree-lock waits from that sum would start
+giving up and paging for ordinary contention. `deploy_locks.locked_budget` therefore shares one
+deadline between the wait and the playbook: a k8s phase queued behind an operator's deploy runs
+on what is left of `K8S_DEPLOY_TIMEOUT_S`, and holds the tree lock for no longer than a phase
+that never queued. The cost is the other direction — a phase that queues for most of its budget can
+have its playbook SIGTERMed early, which reads as a failed deploy and rolls back. The Docker
+`deploy()` is the one call site with no budget to share, so its wait falls back to
+`deploy_locks.SERVICE_LOCK_WAIT_S` (1800s).
 
 **Consequence for the operator: a pathological double-timeout run can overrun the 30-minute
 timer tick — verified live against the real unit, not inferred from the man page alone.**

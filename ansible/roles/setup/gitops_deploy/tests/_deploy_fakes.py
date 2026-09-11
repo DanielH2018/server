@@ -343,7 +343,7 @@ class ScriptedTick:
 def locks_taken(lock_dir) -> list[str]:
     """The per-service locks a deploy took, read off the redirected lock directory.
 
-    A `server-deploy-<name>.lock` file exists in there only because `deploy_io.service_locks`
+    A `server-deploy-<name>.lock` file exists in there only because `deploy_locks.service_locks`
     opened it, so the directory is the record. Names, not paths, and sorted: the ORDER locks
     are taken in is what makes the scheme deadlock-free, and it is sorted by construction.
 
@@ -372,3 +372,18 @@ def build_tools(scripted: ScriptedTick) -> DeployTools:
         emit_deploy_annotation=scripted.emit_deploy_annotation,
         now=scripted.now,
     )
+
+
+def fits_budget(kwargs: dict, budget: float) -> bool:
+    """Did this playbook run get the phase's budget, less what the lock wait spent?
+
+    `deploy_locks.locked_budget` shares one deadline between the service-lock wait and the run,
+    so the timeout `run` receives is the declared budget minus a few microseconds of uncontended
+    acquire. A bound rather than an equality because what matters is that it never EXCEEDS the
+    declared budget — that is the half `_worst_lock_hold()` rests on.
+
+    Args:
+        kwargs: the keyword arguments the scripted checkout recorded for the run.
+        budget: the phase timeout the run was supposed to be bounded by.
+    """
+    return budget - 1 < kwargs["timeout"] <= budget
