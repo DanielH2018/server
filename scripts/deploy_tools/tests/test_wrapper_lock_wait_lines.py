@@ -21,6 +21,7 @@ import re
 import subprocess
 from pathlib import Path
 
+from deploy_tools import exit_codes as ec
 from deploy_tools.land_lib import tools
 
 _REPO = Path(__file__).resolve().parents[3]
@@ -244,4 +245,74 @@ def test_any_other_flock_failure_is_not_reported_as_contention(tmp_path):
     """
     result = _run_deploy(tmp_path, _FLOCK_ERRORS)
     assert result.returncode != 75, result.stderr
+    assert "A deploy is already running" not in result.stderr
+
+
+def test_a_flock_failure_that_is_not_contention_exits_its_own_code(tmp_path):
+    """FLAGGED half for issue #1775: it used to fall through to 20.
+
+    20 promises "a task failed AFTER applying; some changes are live", which land.py prints
+    verbatim — for a run that never started ansible. 76 says what happened instead.
+    """
+    result = _run_deploy(tmp_path, _FLOCK_ERRORS)
+    assert result.returncode == ec.DEPLOY_LOCK_UNAVAILABLE, result.stderr
+    assert "flock exit 1" in result.stderr
+    assert "the playbook ran and failed" not in result.stderr
+    assert ec.DEPLOY_LOCK_UNAVAILABLE in ec.DEPLOY_SH_NO_VERDICT
+
+
+# `--detach` takes the same lock through a second, non-blocking call, so it needs both halves
+# of the same pair. Its `flock -n` carries `-E "$LOCK_BUSY"`, so a held lock answers 75 here.
+_FLOCK_DETACH_BUSY = """#!/bin/bash
+case "$1" in
+  -n) exit 75 ;;
+esac
+exit 0
+"""
+
+_FLOCK_DETACH_ERRORS = """#!/bin/bash
+case "$1" in
+  -n) echo "flock: bad file descriptor" >&2; exit 65 ;;
+esac
+exit 0
+"""
+
+
+def _run_detach(tmp_path: Path, flock: str) -> subprocess.CompletedProcess:
+    env = _stub_path(
+        tmp_path,
+        {"flock": flock, "fuser": _FUSER, "ps": _PS, "uv": _UV, "logger": _LOGGER},
+    )
+    env["FUSER_STUB_SELF_FDS"] = str(tmp_path / "self-fds")
+    return subprocess.run(
+        [
+            str(_DEPLOY_SH),
+            "--detach",
+            "--tags",
+            "uptime-kuma",
+            "--skip-tag-check",
+            "--skip-staleness-check",
+        ],
+        cwd=_REPO,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+
+
+def test_detach_still_reports_a_held_lock_as_contention(tmp_path):
+    """CLEAN half: --detach fails fast on a real holder, and 75 says retry shortly."""
+    result = _run_detach(tmp_path, _FLOCK_DETACH_BUSY)
+    assert result.returncode == ec.DEPLOY_LOCK_BUSY, result.stderr
+    assert "A deploy is already running" in result.stderr
+
+
+def test_detach_tells_a_broken_lock_file_from_a_held_one(tmp_path):
+    """FLAGGED half: `flock -n` without `-E` answers 1 for both, and this arm read both
+    as contention."""
+    result = _run_detach(tmp_path, _FLOCK_DETACH_ERRORS)
+    assert result.returncode == ec.DEPLOY_LOCK_UNAVAILABLE, result.stderr
+    assert "flock exit 65" in result.stderr
     assert "A deploy is already running" not in result.stderr

@@ -21,19 +21,26 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools import exit_codes as ec
 
 
-def test_the_no_verdict_set_is_exactly_the_four_refusals_by_name():
+def test_the_no_verdict_set_is_exactly_the_five_refusals_by_name():
     """`==`, not `<=`: a member dropped or added must both fail."""
     assert ec.DEPLOY_SH_NO_VERDICT == {
         ec.DEPLOY_TAG_MISS,
         ec.DEPLOY_BROAD,
         ec.DEPLOY_STALE,
         ec.DEPLOY_LOCK_BUSY,
+        ec.DEPLOY_LOCK_UNAVAILABLE,
     }
 
 
 @pytest.mark.parametrize(
     "name",
-    ["DEPLOY_TAG_MISS", "DEPLOY_BROAD", "DEPLOY_STALE", "DEPLOY_LOCK_BUSY"],
+    [
+        "DEPLOY_TAG_MISS",
+        "DEPLOY_BROAD",
+        "DEPLOY_STALE",
+        "DEPLOY_LOCK_BUSY",
+        "DEPLOY_LOCK_UNAVAILABLE",
+    ],
 )
 def test_each_named_refusal_is_in_the_no_verdict_set(name):
     assert getattr(ec, name) in ec.DEPLOY_SH_NO_VERDICT
@@ -55,6 +62,7 @@ def test_the_deploy_sh_values_match_the_wrapper_itself():
     """Read off `scripts/deploy.sh`: the two constants it defines, and its `exit` literals."""
     text = (Path(__file__).resolve().parents[3] / "scripts" / "deploy.sh").read_text()
     assert f"LOCK_BUSY={ec.DEPLOY_LOCK_BUSY}" in text
+    assert f"LOCK_UNAVAILABLE={ec.DEPLOY_LOCK_UNAVAILABLE}" in text
     assert f"PLAYBOOK_FAILED={ec.DEPLOY_PLAYBOOK_FAILED}" in text
     for rc in (ec.DEPLOY_TAG_MISS, ec.DEPLOY_STALE, ec.DEPLOY_BAD_FLAGS):
         assert f"exit {rc}\n" in text, f"deploy.sh no longer exits {rc}"
@@ -83,6 +91,16 @@ def test_the_broad_refusal_is_returned_by_name_from_deploy_tags():
         ("GATE_PASS", "GATE_REJECTED", "GATE_NO_VERDICT", "GATE_NOT_RUN"),
         ("CI_GREEN", "CI_RED", "CI_DISARMED", "CI_PENDING"),
         ("LAND_SETTLED", "LAND_FAILED", "LAND_BAD_ARGS", "LAND_GAVE_UP"),
+        (
+            "DEPLOY_OK",
+            "DEPLOY_TAG_MISS",
+            "DEPLOY_BROAD",
+            "DEPLOY_STALE",
+            "DEPLOY_PLAYBOOK_FAILED",
+            "DEPLOY_BAD_FLAGS",
+            "DEPLOY_LOCK_BUSY",
+            "DEPLOY_LOCK_UNAVAILABLE",
+        ),
     ],
 )
 def test_no_contract_reuses_a_value_within_itself(group):

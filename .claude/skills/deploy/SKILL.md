@@ -159,11 +159,12 @@ automated pipeline or with another Claude session. The lock guards the local git
 deploy reads its templates from, which gitops-deploy rewrites with a `git pull` mid-run, so a
 `-e target=daniel-pi` deploy takes it too.
 
-Four of its non-zero exits mean **nothing was deployed**, and each is a resume point rather
-than a failure. The fifth, 20, is the inverse: the playbook ran and changes are live.
+Five of its non-zero exits mean **nothing was deployed**, and each is a resume point rather
+than a failure. The sixth, 20, is the inverse: the playbook ran and changes are live.
 
 | Exit | Meaning | What to do |
 |---|---|---|
+| 76 | flock failed on the lock file itself — not contention | `ls -l /var/lock/server-git-tree.lock`; retrying alone changes nothing |
 | 75 | the lock stayed busy (the timer, or another session) | retry |
 | 4 | the tree is behind `origin/master` | `git pull`, never `--skip-staleness-check` |
 | 3 | the change is broad and maps to no single service | deploy by hand, or see *When to wait* |

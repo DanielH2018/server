@@ -119,10 +119,10 @@ Before it takes the lock it clears an Ansible fact cache pinning another worktre
 pruned worktree used to fail EVERY deploy at Gathering Facts for the full 7200s TTL — with an
 error naming a module rather than the cache, after the ~9-minute wait on the lock.
 
-Its non-zero exits arrive as a bare `Exit code N`. Four of them mean **nothing was
+Its non-zero exits arrive as a bare `Exit code N`. Five of them mean **nothing was
 deployed** — a resume point rather than a playbook failure (retry a busy lock, `git pull` a
 stale tree — never `--skip-staleness-check` — deploy by hand on a broad change, check
-`--list-services` on a tag miss). The fifth, 20, is the inverse: the playbook ran, a task
+`--list-services` on a tag miss, fix the lock file itself on 76). The sixth, 20, is the inverse: the playbook ran, a task
 failed, and changes before it are live — not a safe re-run. The full table, why 20 collides
 with ansible's own exit codes, the Pi's `-e target=`, config-only runs, the GitOps tick, and
 initial setup are all in the **`deploy` skill**.
