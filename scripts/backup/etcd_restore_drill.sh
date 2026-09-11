@@ -360,7 +360,20 @@ ISOLATION_ARGS=(--data-dir "$SCRATCH"
                 # `dynamiclistener 127.0.0.1:7444` and still died on 6444.
                 --lb-server-port "$LB_PORT"
                 --bind-address 127.0.0.1
-                --advertise-address 127.0.0.1)
+                --advertise-address 127.0.0.1
+                # The live server encrypts Secrets at rest (k3s_secrets_encryption), and the
+                # key rides inside the snapshot's bootstrap blob. Without this flag the restore
+                # stage's reconcile has no path to write it to ("Unable to lookup path to
+                # reconcile EncryptionConfig") and the scratch API server then cannot list a
+                # single Secret ("identity transformer tried to read encrypted data"), which
+                # holds its informer-sync readiness check open until the deadline — measured in
+                # the guest 2026-09-11. On BOTH invocations, because the restore writes the file
+                # the server reads.
+                --secrets-encryption
+                # The restored cluster's aggregated APIServices point at pod IPs that do not
+                # exist here; with the default egress selector the API server dials them through
+                # the agent tunnel and each call hangs to a timeout (dial tcp 10.42.x.x:10250).
+                --egress-selector-mode=disabled)
 
 cleanup() {
   local rc=$?
