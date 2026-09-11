@@ -73,7 +73,7 @@ authelia_k8s_redis_sessions: true
 
 # repo:tag with no digest — the same shape as authelia_k8s_image above, so Renovate's docker
 # manager tracks it.
-authelia_k8s_redis_image: redis:7.4-alpine
+authelia_k8s_redis_image: redis:8.10-alpine
 
 # Sessions are a CACHE with a one-month ceiling, not a record, so redis runs on an emptyDir and
 # persists nothing. A node reboot, an eviction or a Renovate bump of the image still logs
