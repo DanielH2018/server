@@ -59,6 +59,8 @@ from deploy_toolbox import DeployTools, default_tools
 # below and `pytest.raises(gitops_deploy.RetryableFetchError)` in the suite both catch exactly
 # what `assess` raises.
 RetryableFetchError = deploy_tick_types.RetryableFetchError
+# Same arrangement for the refusal `deploy_phases.refuse_unless_deployer` raises (#1733).
+NotTheDeployerHost = deploy_tick_types.NotTheDeployerHost
 
 
 # The state directory's eighteen marker files, each kept as a module-level literal. Two things
@@ -390,6 +392,9 @@ def main(tools: DeployTools | None = None, config: Config | None = None) -> int:
         # No config, no repo to tick: page via the crash handler rather than run every git
         # command below against cwd="".
         raise RuntimeError(f"REPO_DIR is unset: no deployer config at {CONFIG_PATH}")
+    # Ahead of the drain and every state write: a host whose inventory says has_gitops: false
+    # is not this deployer, whatever payload is installed here (#1733).
+    deploy_phases.refuse_unless_deployer(config)
     # Resend any alert a prior tick failed to deliver, BEFORE any short-circuit below: the ff-merged
     # secrets/tasks/meta/combined paths never re-reach their alert code (local==origin -> noop), so a
     # transient webhook failure is only recoverable here, not by discord()'s per-tick re-eval.
@@ -458,6 +463,14 @@ def entrypoint(tools: DeployTools | None = None) -> int:
         # blip is invisibly retried next tick, while a persistent fetch break ages last_run and trips
         # GitOps-Alive. Must precede the generic handler below (Python matches except-clauses in order).
         log(f"git fetch failed (retryable) — skipping tick, will retry next run: {e}")
+        return 0
+    except deploy_tick_types.NotTheDeployerHost as e:
+        # DECIDED: exit 0, no Discord post, no last_run. The unit only reaches this branch on a
+        # host whose inventory has already retired the deployer, so a non-zero exit would page
+        # through OnFailure every ten minutes from a webhook that host should no longer hold,
+        # and a last_run write would stamp liveness onto state nothing reads. The journal line
+        # is the signal; the fix is the role's teardown, not a louder tick.
+        log(f"gitops-deploy: {e}")
         return 0
     except ConfigError as e:
         # One clear line, not a traceback. This was an unhandled ValueError raised during IMPORT
