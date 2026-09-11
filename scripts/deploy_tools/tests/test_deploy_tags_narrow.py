@@ -325,14 +325,16 @@ def test_a_key_read_through_another_inventory_value_is_flagged(tree: Tree):
 
 
 def test_a_key_mentioned_only_in_an_example_inventory_file_narrows(tree: Tree):
-    """`_example.yml` is commented-out examples that no host loads.
+    """A `_`-prefixed inventory file is loaded by no host, so it consumes nothing.
 
-    `_inventory_tags` already skips a `_`-prefixed file on the defining side. Reading one as
-    a consumer refused eight live keys, `server_ip` and `has_igpu` among them.
+    `_inventory_tags` already skips one on the defining side. Reading it as a consumer
+    refused eight live keys, `server_ip` and `has_igpu` among them. The reference here is
+    UNCOMMENTED on purpose: a commented one would be swallowed by `_defines_only`'s own
+    comment rule, and this test would pass with the `_` rule deleted.
     """
     tree.write(
         "ansible/inventory/host_vars/_example.yml",
-        '# derived: "{{ lan_subnet }}"\n',
+        'derived: "{{ lan_subnet }}"\n',
     )
     tree.commit("an example host_vars file")
     tree.write(
