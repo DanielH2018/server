@@ -178,6 +178,12 @@ hypervisor_etcd_drill_runner_path: /usr/local/bin/etcd-restore-drill-vm
 # The guest-side half, a plain file copied into the guest beside the drill script; its header
 # says why the snapshot is fetched with curl and drilled as a local file.
 hypervisor_etcd_drill_guest_script_path: /usr/local/lib/etcd-drill-guest-run.sh
+# scripts/backup/etcd_restore_drill.sh, installed by the role from the checkout it runs from.
+# The orchestrator used to read it straight out of /home/<user>/server, so a cron depended on
+# whatever that checkout happened to hold — and a hand run from a worktree drilled the OLD
+# script while the new one sat beside it (2026-09-11). Installing it makes the apply the one
+# thing that changes what the drill runs, the same as every other file the role ships.
+hypervisor_etcd_drill_script_path: /usr/local/lib/etcd-restore-drill.sh
 # Read by the orchestrator, copied INTO the guest as /etc/rancher/k3s/etcd-s3.env for the drill's
 # run, and deleted with the guest. 0600 root: these are the R2 write credentials for the bucket
 # that also holds every Longhorn backup — the same residency daniel-box already carries in

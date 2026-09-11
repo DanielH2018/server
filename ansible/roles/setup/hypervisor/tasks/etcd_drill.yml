@@ -137,6 +137,16 @@
   become: true
   no_log: true  # renders the push token
 
+- name: Install the drill script the orchestrator ships into the guest
+  tags: [hypervisor]
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../scripts/backup/etcd_restore_drill.sh"
+    dest: "{{ hypervisor_etcd_drill_script_path }}"
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
 - name: Install the drill's guest-side script
   tags: [hypervisor]
   ansible.builtin.copy:

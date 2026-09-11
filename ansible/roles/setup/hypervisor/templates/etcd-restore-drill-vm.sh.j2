@@ -54,7 +54,7 @@ S3_ENV="{{ hypervisor_etcd_drill_s3_env }}"
 # value to server/token and server/node-token when no --agent-token is set, so this IS the token
 # a rebuilt server would need; a mismatch fails the restore stage loudly rather than passing.
 AGENT_ENV=/etc/systemd/system/k3s-agent.service.env
-DRILL_SCRIPT="/home/{{ sys_user }}/server/scripts/backup/etcd_restore_drill.sh"
+DRILL_SCRIPT="{{ hypervisor_etcd_drill_script_path }}"
 GUEST_RUN_SCRIPT="{{ hypervisor_etcd_drill_guest_script_path }}"
 STAMP_DIR="{{ hypervisor_etcd_drill_stamp_dir }}"
 LOG_ROOT="{{ hypervisor_etcd_drill_log_dir }}"
@@ -174,7 +174,7 @@ main() {
   [[ -r "$IDENTITY" ]]         || fail "ssh identity $IDENTITY missing"
   [[ -r "$S3_ENV" ]]           || fail "R2 env $S3_ENV missing"
   [[ -r "$AGENT_ENV" ]]        || fail "$AGENT_ENV missing — is this host a k3s agent?"
-  [[ -x "$DRILL_SCRIPT" ]]     || fail "drill script $DRILL_SCRIPT missing — no checkout?"
+  [[ -x "$DRILL_SCRIPT" ]]     || fail "drill script $DRILL_SCRIPT missing — run initial_setup --tags hypervisor"
   [[ -x "$GUEST_RUN_SCRIPT" ]] || fail "guest-side script $GUEST_RUN_SCRIPT missing"
   command -v k3s >/dev/null    || fail "k3s not on PATH"
   command -v qemu-img >/dev/null || fail "qemu-img not on PATH"

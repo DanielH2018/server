@@ -317,7 +317,7 @@ def test_the_live_tree_classifies_the_names_we_already_know():
         # inherits the caller's kind. A person still runs it by hand too; the gate is simply no
         # longer the caller nobody could see.
         "deploy.sh": "gate",
-        "etcd_restore_drill.sh": "adhoc",
+        "etcd_restore_drill.sh": "gate",  # a role copies it (#1175); its crons hide behind wrappers
     }
     assert {name: verdicts[name][0] for name in expected} == expected
 
