@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/scripts.py
-generated_at: 2026-09-10 18:17 UTC
-generated_sha: f95da3c99
+generated_at: 2026-09-11 06:17 UTC
+generated_sha: 37772d46c
 ---
 
 !!! warning "Generated file — do not edit"
@@ -20,7 +20,7 @@ The sections below split them by **how each one is run**, which is derived from 
     Whether a script is safe to run. The summary is whatever its author wrote, and nothing here judges blast radius. For the ones that run unattended, and which of those change state, see [Scheduled jobs](crons.md).
 
 
-**1 of the 41 scripts that run unattended have no test; 5 of all 174 do not.** The first number is the one that matters. An untested script a person runs fails in front of that person; an untested one a cron or a commit gate runs fails unattended, or blocks everybody.
+**1 of the 41 scripts that run unattended have no test; 4 of all 174 do not.** The first number is the one that matters. An untested script a person runs fails in front of that person; an untested one a cron or a commit gate runs fails unattended, or blocks everybody.
 
 !!! note "Where the Tests column looks"
     First for a `scripts/test_<name>.py`. Failing that, for any test in `scripts/` or `ansible/tests/` that names the script — `gitops_tick.sh` has five, in `test_gitops_manual_trigger.py`, and the naming convention alone called it untested. Those show as *(indirect)*, which means a test exercises it, not that the test is about it.
@@ -46,7 +46,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/docs/reference/hosts.py` | Generate docs/reference/hosts.md — the three hosts and what each one is. | build_docs.py (a cron runs it unattended) | `test_gen_reference_hosts.py` *(indirect)* |
 | `scripts/dev/k8s_autodeploy_counts.py` | Print the k8s auto-deploy eligible and denylist counts, measured off the tree. | gen_doc_fragments.py (a cron runs it unattended) | `test_script_bootstraps_present.py` *(indirect)* |
 | `scripts/docs/reference/networking.py` | Generate docs/reference/networking.md — what is routed, and what fronts it. | build_docs.py (a cron runs it unattended) | `test_gen_reference_networking.py` *(indirect)* |
-| `scripts/diagnostics/probe.py` | Read-only homelab diagnostics. | cron: B2 deletion accounting | `test_probe.py` |
+| `scripts/diagnostics/probe.py` | Read-only homelab diagnostics. | cron: Loki read-route witness (via loki-read-route-health.sh) | `test_probe.py` |
 | `scripts/dev/prune_worktrees.py` | Report and remove Claude session worktrees under .claude/worktrees/ that are done with. | cron: Weekly git object-store repair | `test_prune_worktrees.py` |
 | `scripts/deploy_tools/publish_pr.py` | Publish a cron's local commit as an auto-merging pull request. | cron: Weekly secret rotation (auto tier) (via secret-rotate.sh) | `test_publish_pr.py` |
 | `scripts/docs/reference/scripts.py` | Generate docs/reference/scripts.md — every first-party script and what it is for. | build_docs.py (a cron runs it unattended) | `test_gen_reference_scripts.py` *(indirect)* |
@@ -111,7 +111,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/availability_bots/common.py` | Thin re-export of the shared watcher helpers for the availability-watcher bots. | imported by glenstone-bot.py, osteria-francescana-bot.py | `test_availability_bots.py` *(indirect)* |
 | `scripts/infra_map/constants.py` | Constants shared by the infra-map inventory, live, model and render stages. | imported by gen_infra_map.py, inventory.py, live.py, model.py, render.py | `test_gen_infra_map.py` *(indirect)* |
 | `scripts/secrets_mgmt/consumers.py` | Who holds a copy of a secret, by two deliberately different mechanisms. | imported by secret_rotation.py | `test_secret_consumers.py` *(indirect)* |
-| `scripts/diagnostics/probe_lib/core.py` | Shared plumbing for probe's subcommands: endpoints, secrets, HTTP, durations. | imported by alerts.py, arr.py, b2_api.py, b2_ledger.py, cert_expiry.py, curl_pipeline.py, ha.py, ha_state_model.py, health.py, health_docker.py, longhorn.py, metrics.py, monitors.py, pi_plane.py, postflight.py, probe.py, readonly_rbac.py, ui_login.py, vip_placement.py | `test_probe.py` *(indirect)* |
+| `scripts/diagnostics/probe_lib/core.py` | Shared plumbing for probe's subcommands: endpoints, secrets, HTTP, durations. | imported by alerts.py, arr.py, b2_api.py, b2_ledger.py, cert_expiry.py, curl_pipeline.py, fetch_grafana_dashboards.py, ha.py, ha_state_model.py, health.py, health_docker.py, longhorn.py, metrics.py, monitors.py, pi_plane.py, postflight.py, probe.py, readonly_rbac.py, ui_login.py, vip_placement.py | `test_probe.py` *(indirect)* |
 | `scripts/lib/cron_checks.py` | The two cron-environment rules a rendered shell template must satisfy. | imported by shell_templates.py | `test_shell_template_cron_rules.py` *(indirect)* |
 | `scripts/lib/cron_targets.py` | Resolve which shell templates under `ansible/roles/` are scheduled as cron `job:` targets. | imported by cron_checks.py, shell_templates.py | `test_shell_template_cron_rules.py` *(indirect)* |
 | `scripts/diagnostics/probe_lib/curl_pipeline.py` | The streaming half of probe.py: argv -> curl/openssl stages -> a piped run. | imported by probe.py | `test_probe_curl_pipeline.py` *(indirect)* |
@@ -134,7 +134,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/diagnostics/probe_lib/health.py` | `probe.py health <svc>` — the post-deploy gate, from a deploy tag to a per-workload verdict. | imported by probe.py, subcommands.py | `test_probe_health.py` *(indirect)* |
 | `scripts/diagnostics/probe_lib/health_cronjob.py` | The CronJob half of `probe.py health` — a role with a CronJob and no rollout to gate on. | imported by health.py | `test_probe_health_cronjobs.py` *(indirect)* |
 | `scripts/diagnostics/probe_lib/health_docker.py` | `probe.py health --docker <svc>`, and the direct-address lookups the arr probes need. | imported by arr.py, health.py, postflight.py | `test_deploy_detach_notify.py` *(indirect)* |
-| `scripts/diagnostics/probe_lib/health_kubectl.py` | The kubectl argv builders and the pod selector `probe.py health` runs its queries through. | imported by health.py, monitors.py | `test_probe_health.py` *(indirect)* |
+| `scripts/diagnostics/probe_lib/health_kubectl.py` | The kubectl argv builders and the pod selector `probe.py health` runs its queries through. | imported by cli_parser.py, health.py, monitors.py | `test_probe_health.py` *(indirect)* |
 | `scripts/diagnostics/probe_lib/health_rollout.py` | The rollout half of `probe.py health` — a Deployment or DaemonSet's verdict. | imported by health.py, health_cronjob.py, monitors.py | `test_deploy_detach_notify.py` *(indirect)* |
 | `scripts/deploy_tools/land_lib/health_verdict.py` | Step 6: the health verdict, and the two halves a healthy deploy can still leave open. | imported by pipeline.py | `test_land_health_verdict.py` *(indirect)* |
 | `scripts/infra_map/html_views.py` | The HTML host panels: one row per service, one panel per host. | imported by render.py | `test_infra_map_render.py` *(indirect)* |
@@ -202,7 +202,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/backup/etcd_restore_drill.sh` | prove an off-box etcd snapshot actually restores, without an outage. | no automated caller in the tree | `test_etcd_restore_drill_cron.py` *(indirect)* |
 | `scripts/grafana/export_grafana_dashboards.py` | Export the *customized* Grafana dashboards from the live DB into code. | no automated caller in the tree | `test_export_grafana_dashboards.py` |
 | `scripts/dev/fanout_place.py` | Place issue-fanout batches on the session host with the most memory headroom. | clean.py (a person runs it) | `test_fanout_clean.py` *(indirect)* |
-| `scripts/grafana/fetch_grafana_dashboards.py` | Fetch + adapt Grafana community dashboards for headless (provisioned) use. | no automated caller in the tree | — |
+| `scripts/grafana/fetch_grafana_dashboards.py` | Fetch + adapt Grafana community dashboards for headless (provisioned) use. | no automated caller in the tree | `test_fetch_grafana_dashboards.py` |
 | `scripts/dev/findings.py` | File, re-observe, escalate and close Claude's unfixed findings as GitHub Issues. | no automated caller in the tree | `test_findings.py` |
 | `scripts/dev/gen_hosts_block.py` | Emit an /etc/hosts block for every homelab `.local` name, with the right IP per service. | no automated caller in the tree | `test_gen_hosts_block.py` |
 | `scripts/deploy_tools/gitops_tick.sh` | trigger a GitOps deploy tick by hand and report what it did. | no automated caller in the tree | `test_gitops_manual_trigger.py` *(indirect)* |
@@ -279,8 +279,11 @@ uv run python scripts/dev/findings.py sync-labels
 uv run python scripts/dev/findings.py open --title "..." --body-file f.md \
 --severity high --kind gap [--domain network] [--file path/to/file.py:12] \
 [--source review-2026-09-02] [--no-vetted-remediation] \
-[--verify-by 'Run probe.py health <svc>; it should exit 0.'] [--dry-run]
+[--verify-by 'Run probe.py health <svc>; it should exit 0.'] \
+[--not-before 2026-09-12] [--dry-run]
 uv run python scripts/dev/findings.py touch 688 [--source review-2026-09-02]
+uv run python scripts/dev/findings.py defer 688 --until 2026-09-12
+uv run python scripts/dev/findings.py defer 688 --clear
 uv run python scripts/dev/findings.py claim 688 701 --worktree worktree-foo \
 [--session id] [--force]
 uv run python scripts/dev/findings.py release 688 --worktree worktree-foo [--reason "..."]
