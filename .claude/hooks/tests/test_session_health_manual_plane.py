@@ -76,6 +76,12 @@ def test_a_freshly_recorded_role_is_still_flagged():
     assert _problems(manual=_K3S, now=1000.0)
 
 
+def test_a_stamp_ahead_of_the_clock_reads_as_zero():
+    """A backward NTP step on the deployer must not print a negative age."""
+    (line,) = _problems(manual=_K3S, now=500.0)
+    assert "0 min" in line
+
+
 def test_an_empty_marker_is_clean():
     assert _problems(manual=None) == []
     assert _problems(manual="") == []

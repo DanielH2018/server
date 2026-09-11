@@ -1,4 +1,4 @@
-"""Whether the GitOps deployer is PARKED behind origin/master, read from its own marker.
+"""What the GitOps deployer's own markers say it has deferred: a park, or a pending role.
 
 TWO READERS ASK THIS AND MUST ANSWER IT IDENTICALLY. The SessionStart banner
 (``.claude/hooks/session-health.py``) reaches a session at the moment it opens.
@@ -14,6 +14,13 @@ fast-forwarded, so its age is HOW LONG THE DEPLOYER HAS NOT FAST-FORWARDED — n
 host has been behind the tip, and not how long ago the last tick ran. The distinction is load
 bearing since the tick started landing at the newest green ancestor: a deployer working
 normally is behind the tip on nearly every tick, and only one that stops moving ages this.
+
+The second marker is ``manual_plane``, one line per setup role the tick fast-forwarded past and
+cannot apply itself. A recorded role leaves ``behind_since`` empty, so the park half above says
+nothing while the change sits merged and unapplied — only the banner names it. THREE READERS
+parse that one: the deployer writes it, monitor-bridge pages off it, and this module banners
+it, none of them able to import the others' tree.
+``ansible/tests/deploy/test_manual_plane_parsers_agree.py`` holds the three together.
 
 Stdlib only, and no imports from this repo: the SessionStart hook imports it before anything
 else is on ``sys.path``.
