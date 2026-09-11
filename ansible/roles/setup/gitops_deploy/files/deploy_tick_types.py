@@ -47,6 +47,11 @@ class TickTarget:
         dirty: whether `git status --porcelain` reported anything, untracked files included.
         status: that command's raw stdout, so the dirty branch can name the paths.
         action: `next_action`'s word — noop, dirty, skip_hold, ci_pending, ci_failed, deploy.
+        tip: `origin/<branch>`'s real tip. Equal to `origin` on an ordinary tick, and AHEAD
+            of it when the gate fast-forwarded to the newest green ancestor of a tip that
+            was pending or red (`deploy_git.ci_walk_candidates`). Empty on a hand-built
+            target, which reads as "origin IS the tip".
+        tip_ci: that tip's own CI verdict — "pass", "pending" or "fail".
     """
 
     local: str
@@ -55,6 +60,20 @@ class TickTarget:
     dirty: bool
     status: str
     action: str
+    tip: str = ""
+    tip_ci: str = "pass"
+
+    @property
+    def red_tip(self) -> str | None:
+        """The tip's SHA when this tick fast-forwarded PAST a red one, else None.
+
+        One place holds the rule, because two branches act on it: `main()` pages for the red
+        tip on a tick that deploys an ancestor, and `deploy_handlers.handle_ci_failed` pages
+        for a red tip it did not fast-forward past. Both alert once per SHA, keyed on the tip.
+        """
+        if self.tip and self.tip != self.origin and self.tip_ci == "fail":
+            return self.tip
+        return None
 
 
 @dataclass(frozen=True)

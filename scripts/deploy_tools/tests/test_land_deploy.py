@@ -188,9 +188,16 @@ def test_a_broad_diff_fallback_is_handed_to_a_hand(landing):
     assert exc.value.rc == 1 and "deploy it by hand" in exc.value.error
 
 
-def test_a_stale_tree_waits_on_the_tip_before_reticking(landing):
+def test_a_stale_tree_waits_on_its_own_merge_commit_before_reticking(landing):
     """Exit 4 is a resume point. Three landings on 2026-09-02 re-ticked immediately, deferred
-    again and exited 4 again; the fix re-checks blockers, waits on the NEW tip, then ticks."""
+    again and exited 4 again; the fix re-checks blockers, waits on CI, then ticks.
+
+    What it waits on is this landing's OWN merge commit, not the tip. The tick fast-forwards
+    to the newest green commit in the incoming range, so a tip that is still pending no longer
+    holds this PR — waiting on it is what the `tip-outran-retries` verdict measured, six
+    landings in 14 days at 400-614s each. The tip here is deliberately a different SHA, so a
+    wait that still read the tip would fail this.
+    """
     tip = "feedfacefeedfacefeedfacefeedfacefeedface"
     ln, calls = _ready(landing, Fakes(deploy=[4, 0], tip=tip))
     ln.resolved_tags = ["sonarr"]
@@ -203,10 +210,10 @@ def test_a_stale_tree_waits_on_the_tip_before_reticking(landing):
         < tail.index("tick")
         < tail.index("deploy")
     )
-    assert next(c for c in calls[first:] if c[0] == "await_ci")[1][0] == tip
+    assert next(c for c in calls[first:] if c[0] == "await_ci")[1][0] == MERGE_SHA
 
 
-def test_the_tip_wait_is_booked_under_wait_ci_not_deploy(landing):
+def test_the_stale_retrys_ci_wait_is_booked_under_wait_ci_not_deploy(landing):
     ln, _ = _ready(landing, Fakes(deploy=[4, 0], tip="f" * 40))
     ln.resolved_tags = ["sonarr"]
     t_ci, t_tick = ln.ledger.t_ci, ln.ledger.t_tick
@@ -262,7 +269,8 @@ def test_a_stale_retry_backs_off_between_attempts(landing):
 def test_a_stale_retry_waits_on_ci_even_when_the_tip_is_unchanged(landing):
     """Issue #1084: PR #1051's landing hit exit 4 while master CI on the merge commit was
     still 2m48s from green. The old code gated the CI wait behind `tip_sha != merge_sha`, so
-    an unchanged tip (default Fakes tip == MERGE_SHA) got no wait and no backoff at all."""
+    an unchanged tip (default Fakes tip == MERGE_SHA) got no wait and no backoff at all. The
+    wait reads the merge commit now, and it still runs on every attempt."""
     ln, calls = _ready(landing, Fakes(deploy=[4, 0]))
     ln.resolved_tags = ["sonarr"]
     deploy.deploy_phase(ln)

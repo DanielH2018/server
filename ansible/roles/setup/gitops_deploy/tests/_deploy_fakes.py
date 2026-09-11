@@ -84,6 +84,12 @@ class ScriptedTick:
         self.local_ahead = False
         self.dirty = False
         self.ci = "pass"
+        # What `rev-list --first-parent local..origin` lists, newest first. The tip alone by
+        # default, so an existing test's ancestor walk finds no candidate and the tip's own
+        # verdict decides the tick exactly as it did before the walk existed.
+        self.rev_list: list[str] = [self.origin]
+        # The verdict for each SHA BELOW the tip; `ci` is the tip's own.
+        self.ancestor_ci: dict[str, str] = {}
         self.paths: list[str] = []
         self.files: dict[str, str] = {}
         self.tree_listing = ""
@@ -180,6 +186,8 @@ class ScriptedTick:
                     f"git show {argv[2]} -> 128 / fatal: path not scripted"
                 )
             return self.files[argv[2]]
+        if sub == "rev-list":
+            return "\n".join(self.rev_list)
         if sub == "ls-tree":
             return self.tree_listing
         if sub in ("merge", "reset"):
@@ -208,18 +216,32 @@ class ScriptedTick:
             return self.origin_ahead
         if (ancestor, descendant) == (self.origin, self.local):
             return self.local_ahead
+        # A SHA on `rev_list` sits below the tip on the first-parent chain, so it is an
+        # ancestor of the tip and the tip is not an ancestor of it. Asked after a tick
+        # fast-forwarded to a green ancestor: `entrypoint` re-resolves the REAL origin for
+        # `behind_since`, and the next tick's own `origin_ahead` starts from the chosen SHA.
+        if descendant == self.origin and ancestor in self.rev_list:
+            return True
+        if ancestor == self.origin and descendant in self.rev_list:
+            return False
         raise AssertionError(f"unscripted ancestry query: {ancestor} {descendant}")
 
     def fetch_ci_verdict(self, sha: str) -> str:
-        """The scripted verdict, and only for the SHA the gate is supposed to ask about.
+        """The scripted verdict for the tip, or for one scripted ancestor of it.
 
-        The gate reads origin's verdict; asking about `local` would be the bug, and a fake
-        that ignored its argument would answer the same either way.
+        No `.get(sha, ...)` default, for the reason the `diffs` read above carries none: a SHA
+        no test scripted is a scripting mistake, and answering it would turn that into a test
+        that passes while asserting nothing. Asking about `local` is the original bug this
+        raised on, and it still raises.
         """
-        assert sha == self.origin, (
-            f"the CI gate asked about {sha[:8]}, not origin {self.origin[:8]}"
+        if sha == self.origin:
+            return self.ci
+        assert sha in self.ancestor_ci, (
+            f"the CI gate asked about {sha[:8]}, which is neither origin "
+            f"{self.origin[:8]} nor a scripted ancestor "
+            f"(scripted: {sorted(s[:8] for s in self.ancestor_ci)})"
         )
-        return self.ci
+        return self.ancestor_ci[sha]
 
     def service_healthy(
         self, repo: str, service: str, _timeout: float, deadline: float | None = None

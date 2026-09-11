@@ -22,6 +22,9 @@ from deploy_changes import ChangeSet
 
 LOCAL = "1" * 40
 ORIGIN = "2" * 40
+# Two commits between LOCAL and the tip, newest first — what the ancestor walk chooses from.
+NEWER_GREEN = "3" * 40
+OLDER_GREEN = "4" * 40
 
 
 def _plan(gitops_deploy, cs: ChangeSet, paths=None, k8s_services=None):
@@ -70,6 +73,78 @@ def test_assess_reports_a_dirty_tree_without_fetching_a_ci_verdict(
         deploy_phases.assess(tick.tools, gitops_deploy.STATE, settings).action
         == "dirty"
     )
+
+
+def test_assess_fast_forwards_to_the_newest_green_ancestor_of_a_pending_tip(
+    gitops_deploy, tick, settings, capsys
+):
+    """The tip is pending on most ticks that would deploy (124 merges/day, ~103s sweep).
+
+    The chosen SHA becomes `target.origin`, and the REAL tip stays on `target.tip` so the
+    behind-origin watchdog still has a tip to name.
+    """
+    tick.ci = "pending"
+    tick.rev_list = [ORIGIN, NEWER_GREEN, OLDER_GREEN]
+    tick.ancestor_ci = {NEWER_GREEN: "pass", OLDER_GREEN: "pass"}
+    target = deploy_phases.assess(tick.tools, gitops_deploy.STATE, settings)
+    assert (target.origin, target.action) == (NEWER_GREEN, "deploy")
+    assert (target.tip, target.tip_ci) == (ORIGIN, "pending")
+    assert (
+        f"origin {ORIGIN[:8]}: CI pending; fast-forwarding to the newest green ancestor "
+        f"{NEWER_GREEN[:8]} (1 behind the tip)" in capsys.readouterr().out
+    )
+
+
+def test_assess_still_defers_when_no_ancestor_in_the_walk_is_green(
+    gitops_deploy, tick, settings
+):
+    """The rejecting half: an all-red walk leaves the tip's own verdict deciding the tick."""
+    tick.ci = "pending"
+    tick.rev_list = [ORIGIN, NEWER_GREEN]
+    tick.ancestor_ci = {NEWER_GREEN: "fail"}
+    target = deploy_phases.assess(tick.tools, gitops_deploy.STATE, settings)
+    assert (target.origin, target.action) == (ORIGIN, "ci_pending")
+
+
+def test_assess_skips_a_red_ancestor_and_takes_the_green_one_below_it(
+    gitops_deploy, tick, settings
+):
+    """A red ancestor is skipped, never chosen — the walk stops at the first PASS."""
+    tick.ci = "fail"
+    tick.rev_list = [ORIGIN, NEWER_GREEN, OLDER_GREEN]
+    tick.ancestor_ci = {NEWER_GREEN: "fail", OLDER_GREEN: "pass"}
+    target = deploy_phases.assess(tick.tools, gitops_deploy.STATE, settings)
+    assert (target.origin, target.action) == (OLDER_GREEN, "deploy")
+    assert target.red_tip == ORIGIN
+
+
+def test_the_walk_stops_at_the_configured_maximum(gitops_deploy, tick, settings):
+    """The bound is on GitHub requests per tick, and the tip's own verdict is one of them."""
+    tick.ci = "pending"
+    tick.rev_list = [ORIGIN, NEWER_GREEN, OLDER_GREEN]
+    tick.ancestor_ci = {NEWER_GREEN: "fail", OLDER_GREEN: "pass"}
+    capped = dataclasses.replace(settings, ci_ancestor_walk_max=2)
+    target = deploy_phases.assess(tick.tools, gitops_deploy.STATE, capped)
+    assert (target.origin, target.action) == (ORIGIN, "ci_pending")
+
+
+def test_assess_never_chooses_the_held_sha_as_an_ancestor(
+    gitops_deploy, tick, state_dir, settings
+):
+    """A SHA a previous deploy failed on is not a tree to converge on, tip or ancestor."""
+    (state_dir / "hold_sha").write_text(NEWER_GREEN)
+    tick.ci = "pending"
+    tick.rev_list = [ORIGIN, NEWER_GREEN, OLDER_GREEN]
+    tick.ancestor_ci = {NEWER_GREEN: "pass", OLDER_GREEN: "pass"}
+    target = deploy_phases.assess(tick.tools, gitops_deploy.STATE, settings)
+    assert (target.origin, target.action) == (OLDER_GREEN, "deploy")
+
+
+def test_a_green_tip_never_lists_the_commits_below_it(gitops_deploy, tick, settings):
+    """The walk runs only on a tick that would otherwise defer — no extra git, no extra API."""
+    tick.paths = ["docs/runbook.md"]
+    deploy_phases.assess(tick.tools, gitops_deploy.STATE, settings)
+    assert not [argv for argv in tick.git if argv[1] == "rev-list"]
 
 
 def test_assess_records_a_divergence_and_clears_it_on_the_next_tick(

@@ -53,6 +53,7 @@ from deploy_git import (  # noqa: F401
     behind_marker,
     broad_hold_cleared_by,
     ci_verdict,
+    ci_walk_candidates,
     dirty_alert_slot,
     dirty_summary,
     github_auth_headers,

@@ -152,9 +152,15 @@ workload (issue #929).
 If another PR merges during that CI wait, or the periodic tick simply hasn't fast-forwarded
 onto your own merge commit yet, the first `deploy.sh` exits 4 (the tree is behind origin) and
 `land.sh` retries, up to three times: each pass sleeps a backoff that DOUBLES (60s, then
-120s, then 240s), re-runs the blockers check, waits for master CI on the CURRENT tip (the tick
-defers until the TIP is green, not just your commit) whether or not the tip actually moved,
-then ticks and deploys. The tip wait is booked under `wait_ci` on the Landings board.
+120s, then 240s), re-runs the blockers check, waits for master CI on YOUR OWN merge commit,
+then ticks and deploys. That wait is booked under `wait_ci` on the Landings board and normally
+returns at once, because step 3 already waited on the same SHA.
+
+**It waits on your merge commit rather than on the tip**, because the tick fast-forwards to
+the newest GREEN commit in its range rather than only to a green tip. A later merge whose CI
+is still running no longer holds your PR. Waiting on the tip is what the `tip-outran-retries`
+verdict measured: six landings in the 14 days to 2026-09-11 spent 400-614s each chasing a tip
+that moved again while they waited, on merge commits that were already green.
 
 **Exhausting those retries prints `tip-outran-retries` (exit 75), not `deploy-failed`.** Every
 attempt lost the same race: master merged faster than one tick-and-deploy cycle. Nothing was
@@ -169,7 +175,9 @@ unchanged timestamp is this. Before 2026-09-02 that retry
 skipped the wait entirely and ended `deploy-failed (exit 4)` with nothing deployed, three
 landings in one day. Before 2026-09-04 (issue #1084) the wait and the backoff both still ran
 only when the tip had moved, so an unchanged tip burned all three retries in ~25s with no
-pacing at all.
+pacing at all. The verdict keeps its name, and what it means is that the tree went stale three
+times over on paths this landing's own tags reach — a tail touching nothing they render does
+not refuse the deploy at all.
 
 **One `deploy-failed` variant means the opposite of the rest.** `a playbook task failed AFTER
 applying; some changes are live` is `deploy.sh` exit 20: the play reached its tasks and one of

@@ -100,6 +100,39 @@ def ci_verdict(check_runs: list[dict], required: frozenset[str] | set[str]) -> s
     return "pass"
 
 
+def ci_walk_candidates(
+    rev_list: list[str], hold_sha: str | None, max_walk: int
+) -> list[tuple[int, str]]:
+    """The ancestors below the tip the gate may spend a CI request on, newest first.
+
+    # DECIDED: the gate chooses the NEWEST GREEN ANCESTOR, the walk is bounded, and a red
+    # ancestor is never chosen. `rev_list` is `git rev-list --first-parent <local>..<origin>`,
+    # newest first, so every SHA in it is `--ff-only` reachable from `local` and the deployer
+    # can still only fast-forward. The tip is `rev_list[0]` and is NOT offered: its verdict is
+    # already in hand, and re-querying it would spend a second request on an answer the caller
+    # has. `max_walk` bounds GitHub requests per tick INCLUDING that one, so a walk of 10 is
+    # ten requests in the worst case and the gate's share of the 5000/hour token limit stays
+    # one bounded burst per tick. `hold_sha` is dropped: a SHA a previous deploy failed on is
+    # not a tree to converge on, whether it arrives as the tip or as an ancestor of one.
+    # The caller stops at the first `pass`, so a `fail` ancestor is skipped and never chosen.
+
+    Args:
+        rev_list: the incoming commits, newest first, tip included.
+        hold_sha: the SHA this host refuses to redeploy, or None.
+        max_walk: most CI verdicts one tick may fetch, the tip's included. 0 disarms the walk.
+
+    Returns:
+        `(distance below the tip, sha)` pairs — the distance is what the journal line prints
+        as `<n> behind the tip`, and it counts positions in `rev_list` rather than positions
+        in this list, so dropping the held SHA does not renumber the rest.
+    """
+    return [
+        (distance, sha)
+        for distance, sha in enumerate(rev_list[:max_walk])
+        if distance > 0 and sha != hold_sha
+    ]
+
+
 def next_action(
     local_head: str,
     origin_head: str,
@@ -138,12 +171,19 @@ def next_action(
     # mis-fire a redeploy + false rollback, so treat it as a no-op.
     if not origin_ahead:
         return "noop"
-    # CI gate. `origin` is the tip we would `--ff-only` onto, and the tip is the SHA whose
-    # check-runs decide the tick. A tick can span local..origin — several commits — and the
-    # intermediate ones are NOT individually gated; that is intentional, because the tip is the
-    # tree the host actually ends up running. Both outcomes return WITHOUT ff-merging, so the host
-    # stays parked on `local` and `behind_marker` records it — a persistently red master therefore
-    # pages through the existing behind-origin watchdog rather than needing its own escalation.
+    # CI gate. `origin_head` is the SHA this tick would `--ff-only` onto, and `ci` is that
+    # SHA's own check-run verdict — not necessarily `origin/master`'s tip. When the tip is
+    # pending or red, `deploy_phases.assess` walks back to the newest green ancestor and
+    # passes THAT SHA here (see `ci_walk_candidates`), so the property this gate holds is:
+    # the tree the host ends up running always has its own green CI verdict. A tick can span
+    # local..origin_head — several commits — and the intermediate ones are NOT individually
+    # gated; that is intentional, because the last of them is the tree the host runs.
+    # Commits ABOVE origin_head are not deployed at all this tick.
+    # Both outcomes below return WITHOUT ff-merging, so the host stays parked on `local` and
+    # `behind_marker` records it — a persistently red master therefore pages through the
+    # existing behind-origin watchdog rather than needing its own escalation. That watchdog
+    # still fires after an ancestor fast-forward too: `gitops_deploy.entrypoint` re-resolves
+    # the REAL origin after the tick, so `behind_since` keeps naming the tip.
     if ci == "fail":
         return "ci_failed"
     if ci == "pending":

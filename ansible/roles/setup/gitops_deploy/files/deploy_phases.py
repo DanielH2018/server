@@ -25,7 +25,7 @@ from deploy_changes import (
     shared_module_consumers,
 )
 from deploy_config import Config, log
-from deploy_git import is_diverged, next_action
+from deploy_git import ci_walk_candidates, is_diverged, next_action
 from deploy_inventory import (
     declared_k8s_services,
     declares_no_gitops,
@@ -127,8 +127,16 @@ def assess(tools: DeployTools, state: DeployerState, config: Config) -> TickTarg
     # next_action's own short-circuits above it, so a noop/dirty/held tick costs no API request —
     # which keeps the gate's share of the GitHub rate limit at one request per 30 min.
     ci = "pass"
+    tip, tip_ci = origin, "pass"
     if not dirty and origin_ahead and origin != local and origin != hold:
-        ci = tools.fetch_ci_verdict(origin)
+        ci = tip_ci = tools.fetch_ci_verdict(origin)
+        # A HELD tip skips the walk with everything else, and stays `skip_hold`. The condition
+        # above is unchanged: ruling (d) asks only that a held SHA is never CHOSEN, which
+        # `ci_walk_candidates` does by dropping it from the candidates.
+        if ci in ("pending", "fail"):
+            green = _newest_green_ancestor(tools, config, local, origin, hold, ci)
+            if green is not None:
+                origin, ci = green, "pass"
     return TickTarget(
         local=local,
         origin=origin,
@@ -136,7 +144,48 @@ def assess(tools: DeployTools, state: DeployerState, config: Config) -> TickTarg
         dirty=dirty,
         status=status.stdout,
         action=next_action(local, origin, hold, dirty, origin_ahead, ci),
+        tip=tip,
+        tip_ci=tip_ci,
     )
+
+
+def _newest_green_ancestor(
+    tools: DeployTools,
+    config: Config,
+    local: str,
+    tip: str,
+    hold: str | None,
+    tip_ci: str,
+) -> str | None:
+    """The newest commit below `tip` whose own CI is green, or None if the walk finds none.
+
+    Master takes about 124 merges a day against a ~103s CI sweep, so the tip is pending on
+    most ticks that would otherwise deploy; gating on it deferred a green commit behind every
+    later merge's sweep. The chosen SHA becomes `target.origin` and everything downstream
+    reads it — the ff-merge, the changed-path diff, the declarations read, the narrowing —
+    so the walk chooses ONE SHA exactly as the pin above does. The REAL tip stays on
+    `TickTarget.tip`, and `entrypoint()` re-resolves it for `behind_since`, so a tail that
+    never goes green still pages through the 6h behind-origin watchdog.
+
+    Returns None on a git failure as well as on an all-red walk: the tip's own verdict then
+    decides the tick exactly as it did before this existed, which is the fail-closed direction.
+    """
+    try:
+        rev_list = tools.run(
+            ["git", "rev-list", "--first-parent", f"{local}..{tip}"], cwd=config.repo
+        ).split()
+    except Exception as exc:
+        log(f"could not list the commits below {tip[:8]}: {type(exc).__name__}: {exc}")
+        return None
+    for behind, sha in ci_walk_candidates(rev_list, hold, config.ci_ancestor_walk_max):
+        if tools.fetch_ci_verdict(sha) != "pass":
+            continue
+        log(
+            f"origin {tip[:8]}: CI {tip_ci}; fast-forwarding to the newest green ancestor "
+            f"{sha[:8]} ({behind} behind the tip)"
+        )
+        return sha
+    return None
 
 
 def plan_tick(

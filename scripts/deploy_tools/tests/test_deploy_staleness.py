@@ -123,6 +123,62 @@ def test_refusal_names_the_count_and_the_fix(repos):
     assert "--skip-staleness-check" in msg
 
 
+# Literal paths naming roles that exist in this tree, so the reach assertions cannot go
+# vacuous: a renamed role makes these fail rather than quietly reach nothing.
+SONARR = "ansible/roles/k8s/sonarr/templates/deployment.yaml.j2"
+RADARR = "ansible/roles/k8s/radarr/templates/deployment.yaml.j2"
+INVENTORY = "ansible/inventory/host_vars/daniel-box.yml"
+
+
+def _commit_path(repo: Path, path: str) -> None:
+    """Commit one file at `path`, directories and all, so the mapper sees a real repo path."""
+    target = repo / path
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(path)
+    _git(repo, "add", path)
+    _git(repo, "commit", "-m", path, "--no-gpg-sign")
+
+
+def _behind_on(repos, path: str) -> Path:
+    """The clone, one commit behind an origin whose new commit touches `path`."""
+    origin, clone = repos
+    _commit_path(origin, path)
+    _git(clone, "fetch", "-q", "origin")
+    return clone
+
+
+def test_a_tree_behind_on_an_unrelated_role_still_deploys(repos, capsys):
+    """The whole point of the slice: the tick fast-forwards to the newest green commit, so a
+    tail that touches nothing this deploy renders must not refuse it."""
+    clone = _behind_on(repos, RADARR)
+    rc = main(["--repo", str(clone), "--no-fetch", "--tags", "sonarr"])
+    assert rc == 0
+    assert "1 commit(s) behind" in capsys.readouterr().err
+
+
+def test_a_tree_behind_on_the_role_being_deployed_is_refused(repos, capsys):
+    """The rejecting half, and the incident shape: that commit renders the role's templates."""
+    clone = _behind_on(repos, SONARR)
+    rc = main(["--repo", str(clone), "--no-fetch", "--tags", "sonarr,radarr"])
+    err = capsys.readouterr().err
+    assert rc == STALE_EXIT
+    assert SONARR in err and "sonarr" in err
+
+
+def test_a_tree_behind_on_a_broad_path_is_refused_whatever_the_tags(repos, capsys):
+    """`ansible/inventory/` reaches every service's rendered output, so no tag list clears it."""
+    clone = _behind_on(repos, INVENTORY)
+    rc = main(["--repo", str(clone), "--no-fetch", "--tags", "sonarr"])
+    assert rc == STALE_EXIT
+    assert INVENTORY in capsys.readouterr().err
+
+
+def test_a_full_run_is_refused_for_any_commit_behind(repos):
+    """No tags means the deploy is unscoped, so today's rule stands: any tail refuses."""
+    clone = _behind_on(repos, RADARR)
+    assert main(["--repo", str(clone), "--no-fetch"]) == STALE_EXIT
+
+
 def _behind_marker(tmp_path: Path, age_s: float, now: float = 2_000_000_000.0) -> Path:
     """A deployer state directory whose `behind_since` is `age_s` seconds old."""
     state = tmp_path / "gitops-state"

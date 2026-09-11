@@ -23,6 +23,9 @@ import deploy_alerts
 # repo has several conftest.py files and the name resolves to whichever sys.path saw first.
 LOCAL = "1" * 40
 ORIGIN = "2" * 40
+# One commit between LOCAL and the tip, for the ticks that fast-forward past a tip that is
+# pending or red.
+GREEN_ANCESTOR = "3" * 40
 DOCKER_TEMPLATE = "ansible/roles/containers/wg-easy/templates/docker-compose.yml.j2"
 K8S_DEFAULTS = "ansible/roles/k8s/sonarr/defaults/main.yml"
 DECLARES_WG_EASY = "containers_list:\n  - name: wg-easy\n    platform: docker\n"
@@ -92,6 +95,26 @@ def test_red_ci_parks_and_pages_once_per_sha(gitops_deploy, tick, state_dir):
     assert gitops_deploy.main(tick.tools) == 0
     assert gitops_deploy.main(tick.tools) == 0
     assert tick.merges == []
+    assert len(tick.posts) == 1 and "CI is RED" in tick.posts[0]
+    assert _marker(state_dir, "ci_alerted_sha") == ORIGIN
+
+
+def test_a_red_tip_over_a_green_ancestor_deploys_the_ancestor_and_still_pages(
+    gitops_deploy, tick, state_dir
+):
+    """The tick deploys what it can and the red tip is still reported, once for that SHA.
+
+    Without the page a red master would go unreported the moment any earlier commit was
+    green, which is the signal the CI gate exists to raise.
+    """
+    tick.ci = "fail"
+    tick.rev_list = [ORIGIN, GREEN_ANCESTOR]
+    tick.ancestor_ci = {GREEN_ANCESTOR: "pass"}
+    tick.paths = ["docs/runbook.md"]
+    assert gitops_deploy.main(tick.tools) == 0
+    # The second tick converges on the same ancestor, so it is a noop and pages nothing new.
+    assert gitops_deploy.main(tick.tools) == 0
+    assert tick.merges == [GREEN_ANCESTOR]
     assert len(tick.posts) == 1 and "CI is RED" in tick.posts[0]
     assert _marker(state_dir, "ci_alerted_sha") == ORIGIN
 

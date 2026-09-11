@@ -387,3 +387,22 @@ def test_state_dir_repoints_every_state_path_in_the_module(
 @pytest.mark.parametrize("name", ["LAST_RUN", "PENDING_ALERTS_FILE", "HOLD_FILE"])
 def test_state_dir_keeps_each_markers_basename(gitops_deploy, state_dir, name):
     assert getattr(gitops_deploy, name).startswith(str(state_dir) + "/")
+
+
+def test_an_ancestor_fast_forward_leaves_behind_since_naming_the_real_tip(
+    gitops_deploy, tick, state_dir
+):
+    """The host IS still behind origin, so the 6h behind-origin watchdog must keep its SHA.
+
+    A tick whose tip is pending fast-forwards to the newest green ancestor instead of
+    deferring, and `entrypoint()` re-resolves the REAL origin afterwards — which is what keeps
+    a tail that never goes green paging rather than reading as converged.
+    """
+    origin, ancestor = "2" * 40, "3" * 40
+    tick.ci = "pending"
+    tick.rev_list = [origin, ancestor]
+    tick.ancestor_ci = {ancestor: "pass"}
+    tick.paths = ["docs/runbook.md"]
+    assert gitops_deploy.entrypoint(tick.tools) == 0
+    assert tick.merges == [ancestor]
+    assert (state_dir / "behind_since").read_text().split()[0] == origin

@@ -450,6 +450,12 @@ def main(tools: DeployTools | None = None, config: Config | None = None) -> int:
         return 0
     if target.action == "ci_failed":
         return deploy_handlers.handle_ci_failed(tools, STATE, config, target)
+    if target.red_tip:
+        # This tick fast-forwarded to a green ancestor of a RED tip, so it deploys — and the
+        # tip's own failure still pages once for that SHA. Here rather than inside `assess`
+        # because a phase that reads and classifies must not alert, and after the two CI
+        # branches above because only a tick that got past them acts on a chosen ancestor.
+        deploy_handlers.alert_red_tip(tools, STATE, config, target)
 
     plan = deploy_phases.plan_tick(tools, STATE, config, target)
     if plan.cs.broad:

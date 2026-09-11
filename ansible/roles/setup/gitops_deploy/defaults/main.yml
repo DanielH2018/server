@@ -21,6 +21,19 @@ gitops_deploy_require_ci: true
 gitops_deploy_ci_contexts:
   - prek (lint + validate + tests + secrets)
 
+# How many commits back from the tip the gate may ask GitHub about when the tip is not green.
+# The tip's own request counts, so 10 is at most ten requests on a tick that would otherwise
+# defer, and zero on every other tick. It bounds `deploy_phases.assess`'s walk to the newest
+# green ancestor: master takes about 124 merges a day (median gap 315s) against a ~103s CI
+# sweep, so the tip is pending on most ticks that would deploy, and gating on it parked a green
+# commit behind every later merge's sweep.
+#
+# 10 rather than a larger number: it covers the measured p25 merge gap of 88s against a sweep
+# of ~103s several times over, and the walk is spent inside one tick's wall clock while the
+# tree lock is held. A range longer than ten commits behind a red tail is a state for the
+# behind-origin watchdog to page on, not one to keep spending requests on.
+gitops_deploy_ci_ancestor_walk_max: 10
+
 # One GET per tick that would otherwise deploy, authenticated through `gh auth token` when the
 # CLI is logged in (deploy_logic.github_token) — anonymous is 60/hour per source IP, shared with
 # every landing's await_ci.py poll.

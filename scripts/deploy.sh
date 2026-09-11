@@ -190,13 +190,24 @@ set -- "${filtered_args[@]}"
 # (issue #1593). It runs once per invocation whichever call site gets there first:
 # staleness_checked makes the second call a no-op, so --changed pays no second fetch.
 staleness_checked=0
+# The comma-joined --tags this run deploys, filled by the tag split below. The gate asks a
+# narrower question when it is set: a commit in HEAD..origin/master reaching none of these tags
+# and no broad path cannot revert what this deploy renders, and the GitOps deployer now
+# fast-forwards to the newest GREEN commit rather than the tip, so the primary checkout is
+# legitimately behind a pending tip while every landing deploys from it.
+split_tags_csv=""
 staleness_gate() {
     if [[ "$staleness_checked" == 1 ]]; then
         return 0
     fi
     staleness_checked=1
-    if ! uv run python scripts/deploy_tools/deploy_staleness.py; then
-        exit 4
+    # The --changed call site reaches this before any tag has been derived, so it asks the
+    # unscoped question. That is the right answer there: the derivation reads the same stale
+    # tree, so there is no tag list to narrow by yet.
+    if [[ -n "$split_tags_csv" ]]; then
+        uv run python scripts/deploy_tools/deploy_staleness.py --tags "$split_tags_csv" || exit 4
+    else
+        uv run python scripts/deploy_tools/deploy_staleness.py || exit 4
     fi
 }
 
@@ -276,6 +287,24 @@ done
 
 set -- "${args[@]}"
 
+# Ansible accepts comma-separated tags in one argument (--tags "a,b"), so split each argument
+# into the single tags both the staleness gate and the tag validation below ask about. Done
+# here, once, because the gate runs before the validation and both need the split list.
+# An explicit IFS swap around the expansion rather than a prefix assignment on `read`, whose
+# effect on a herestring expansion is not worth relying on.
+split_tags=()
+old_ifs=$IFS
+for tag_arg in "${tags[@]-}"; do
+    [[ -n "$tag_arg" ]] || continue
+    IFS=','
+    # shellcheck disable=SC2086  # unquoted on purpose: this IS the comma split
+    for tag in $tag_arg; do
+        split_tags+=("$tag")
+        split_tags_csv="${split_tags_csv:+$split_tags_csv,}$tag"
+    done
+    IFS=$old_ifs
+done
+
 # --detach + --check/--dry-run is meaningless: both of those already return immediately without
 # touching the lock, so there is nothing to background. Checked here, right after args are known
 # and before the (comparatively slow) staleness check, so a nonsensical combination fails fast
@@ -329,21 +358,7 @@ fi
 # This still runs before the lock and before --check/--dry-run, since a dry run against a
 # nonexistent tag is just as misleading. --skip-tag-check bypasses, and is stripped in the
 # parse above so it never reaches ansible-playbook.
-if [[ "$skip_tag_check" == 0 && ${#tags[@]} -gt 0 ]]; then
-    # Ansible accepts comma-separated tags in one argument (--tags "a,b"), so split
-    # each argument before checking. Done with an explicit IFS swap around the
-    # expansion rather than a prefix assignment on `read`, whose effect on a
-    # herestring expansion is not worth relying on.
-    split_tags=()
-    old_ifs=$IFS
-    for tag_arg in "${tags[@]}"; do
-        IFS=','
-        # shellcheck disable=SC2086  # unquoted on purpose: this IS the comma split
-        for tag in $tag_arg; do
-            split_tags+=("$tag")
-        done
-        IFS=$old_ifs
-    done
+if [[ "$skip_tag_check" == 0 && ${#split_tags[@]} -gt 0 ]]; then
     if ! uv run python scripts/deploy_tools/deploy_tags.py validate "${split_tags[@]}"; then
         exit 2
     fi

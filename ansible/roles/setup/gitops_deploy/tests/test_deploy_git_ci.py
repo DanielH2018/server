@@ -12,7 +12,7 @@ import pathlib
 
 import yaml
 
-from deploy_git import ci_verdict, next_action
+from deploy_git import ci_verdict, ci_walk_candidates, next_action
 
 _REPO_ROOT = pathlib.Path(__file__).resolve().parents[5]
 
@@ -157,3 +157,39 @@ def test_ci_never_overrides_the_earlier_short_circuits():
     assert next_action("aaa", "aaa", None, ci="fail") == "noop"
     assert next_action("aaa", "bad", "bad", ci="fail") == "skip_hold"
     assert next_action("aaa", "bbb", None, origin_ahead=False, ci="fail") == "noop"
+
+
+# ── the ancestor walk ─────────────────────────────────────────────────────────────────────────
+_TIP = "t" * 40
+_ONE = "1" * 40
+_TWO = "2" * 40
+_THREE = "3" * 40
+
+
+def test_the_walk_offers_the_ancestors_below_the_tip_newest_first():
+    """The tip's own verdict is already in hand, so it is never re-queried."""
+    assert ci_walk_candidates([_TIP, _ONE, _TWO], None, 10) == [(1, _ONE), (2, _TWO)]
+
+
+def test_the_walk_counts_a_candidates_distance_from_the_tip():
+    """The distance is what the journal line prints as `<n> behind the tip`."""
+    assert ci_walk_candidates([_TIP, _ONE, _TWO, _THREE], None, 10)[-1] == (3, _THREE)
+
+
+def test_the_walk_is_bounded_by_the_knob_counting_the_tip():
+    """The bound is on GitHub requests, and the tip already cost one of them."""
+    assert ci_walk_candidates([_TIP, _ONE, _TWO, _THREE], None, 2) == [(1, _ONE)]
+
+
+def test_the_walk_never_offers_the_held_sha():
+    """A SHA a previous deploy failed on must not be re-chosen as an ancestor either."""
+    assert ci_walk_candidates([_TIP, _ONE, _TWO], _ONE, 10) == [(2, _TWO)]
+
+
+def test_the_walk_offers_nothing_when_the_tip_is_the_only_incoming_commit():
+    assert ci_walk_candidates([_TIP], None, 10) == []
+
+
+def test_the_walk_offers_nothing_when_the_knob_is_zero():
+    """A rejecting half: 0 disarms the walk rather than reading as unbounded."""
+    assert ci_walk_candidates([_TIP, _ONE], None, 0) == []

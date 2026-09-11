@@ -19,6 +19,14 @@ runs from a worktree carrying unmerged commits, which is the whole point of the 
 Only the behind direction can revert live config, so only it refuses. The 2026-08-19 tree
 was both (48 behind, 15 ahead), so being ahead must never mask being behind.
 
+WHICH BEHIND-NESS REFUSES. A tree behind on a role this deploy does not render cannot
+revert that role's live config: the refusal is about what the tags render, not about the
+commit count. `--tags` therefore narrows the question to the paths in HEAD..<ref> that reach
+one of those tags or a broad plane; with no tags the deploy is unscoped and any tail refuses,
+which is the rule this guard has always had. The narrowing matters because the GitOps
+deployer fast-forwards to the newest GREEN commit in its range rather than to the tip, so the
+primary checkout is legitimately behind a pending tip while every landing deploys from it.
+
 NOT THE AUTOMATED PIPELINE. gitops_deploy.py invokes ansible-playbook directly
 (roles/setup/gitops_deploy/files/gitops_deploy.py:572), not this wrapper, and it pulls
 before deploying. This guard covers the interactive and agent path, where the failure was.
@@ -41,6 +49,13 @@ from lib.deployer_park import (
     read_behind_marker,
 )
 from lib.git import git
+from lib.repo_paths import GITOPS_DEPLOY_FILES
+
+# The deployer's own path→service mapper, reached the way deploy_tags.py reaches it: the role's
+# files/ is on no path by default, and a copy of the mapping here would drift from the one the
+# tick decides with. The path entry is constant and free; the IMPORT is lazy, so `--help` and
+# every un-tagged run pay nothing for it.
+sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
 # Distinct from deploy.sh's other refusals: 2 = tag matched nothing, 3 = broad --changed,
 # 75 = lock busy.
@@ -86,6 +101,78 @@ def format_refusal(behind: int, ahead: int, ref: str) -> str:
     )
 
 
+def incoming(repo: str, ref: str, *args: str) -> list[str]:
+    """One `git log`/`git diff` read over HEAD..<ref>, as lines; empty when it fails.
+
+    Two dots and this direction: the question is what this tree has yet to receive, not what
+    it has changed. A failed read returns nothing, which the caller reads as "no evidence the
+    tail is unrelated" and refuses on — the fail-closed direction for a guard.
+    """
+    proc = _git(repo, *args, f"HEAD..{ref}")
+    if proc.returncode != 0:
+        return []
+    return [line for line in proc.stdout.splitlines() if line.strip()]
+
+
+def refusing_paths(paths: list[str], tags: set[str], repo: str) -> list[str]:
+    """The incoming paths that reach one of `tags` or a broad plane, in the order given.
+
+    Each path is classified on its own so the refusal can name the ones responsible; the
+    verdict is the same as classifying them together, because the ChangeSet fields this reads
+    are unions over the path list. `cs.broad` covers the manual planes too (a bring-up
+    playbook sets both), so no separate check is needed for those.
+
+    Build couplings widen the reach on purpose: a build role in the tail renders the image its
+    coupled workload runs, so deploying that workload from a tree missing the build role's
+    commit is exactly the reversion this guard exists to refuse.
+    """
+    from deploy_logic import (
+        expand_build_couplings,
+        services_from_changed_paths,
+        shared_module_consumers,
+    )
+
+    flagged = []
+    for path in paths:
+        cs = services_from_changed_paths([path])
+        if cs.broad:
+            flagged.append(path)
+            continue
+        reached = expand_build_couplings(
+            cs.services
+            | cs.k8s
+            | cs.k8s_deploy
+            | cs.tasks
+            | cs.meta
+            | shared_module_consumers([path], repo)
+        )
+        if reached & tags:
+            flagged.append(path)
+    return flagged
+
+
+def format_tag_refusal(
+    behind: int, ref: str, tags: list[str], paths: list[str], commits: list[str]
+) -> str:
+    """The stderr message for a tree behind on something the requested tags DO render."""
+    listed = "\n".join(f"    {p}" for p in paths[:10])
+    if len(paths) > 10:
+        listed += f"\n    +{len(paths) - 10} more"
+    log = "\n".join(f"    {c}" for c in commits[:10])
+    if len(commits) > 10:
+        log += f"\n    +{len(commits) - 10} more"
+    return (
+        f"deploy: this tree is {behind} commit(s) behind {ref}, and {len(paths)} of the "
+        f"path(s) in that range reach {', '.join(tags)} -- nothing was deployed.\n"
+        f"  Deploying now would render stale templates and revert live config for those\n"
+        f"  roles, while every repo-side check still reads green.\n"
+        f"  Commits:\n{log}\n"
+        f"  Paths:\n{listed}\n"
+        f"  Fix: git fetch origin && git rebase {ref}\n"
+        f"  Deliberately deploying an older tree? Re-run with --skip-staleness-check."
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     """Fetch origin, compare HEAD to `--ref`, and exit STALE_EXIT (4) when behind, else 0."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
@@ -101,7 +188,18 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="skip refreshing the remote ref (tests, and offline runs)",
     )
+    parser.add_argument(
+        "--tags",
+        action="append",
+        default=[],
+        help=(
+            "the service tags this deploy targets, comma-separated and repeatable. Given "
+            "them, only a commit reaching one of those tags (or a broad path) refuses; with "
+            "none the deploy is unscoped and any commit behind refuses."
+        ),
+    )
     args = parser.parse_args(argv)
+    tags = {t.strip() for arg in args.tags for t in arg.split(",") if t.strip()}
 
     if not args.no_fetch:
         # Best-effort. Offline is not a reason to block a deploy, but comparing against a
@@ -126,6 +224,33 @@ def main(argv: list[str] | None = None) -> int:
         # No such ref: a fresh init, a detached CI checkout, a fork with another remote.
         # This is a staleness check, not a git-topology check — do not block the deploy.
         return 0
+
+    if behind and tags:
+        paths = incoming(args.repo, args.ref, "diff", "--name-only")
+        flagged = refusing_paths(paths, tags, args.repo)
+        if not flagged:
+            # Not silent: the tree IS behind, and an operator reading a deploy log has to be
+            # able to tell this from a tree that was current.
+            print(
+                f"deploy: this tree is {behind} commit(s) behind {args.ref}, but none of "
+                f"those commits reach {', '.join(sorted(tags))} -- deploying anyway.",
+                file=sys.stderr,
+            )
+            return 0
+        print(
+            format_tag_refusal(
+                behind,
+                args.ref,
+                sorted(tags),
+                flagged,
+                incoming(args.repo, args.ref, "log", "--oneline", "--no-decorate"),
+            ),
+            file=sys.stderr,
+        )
+        note = park_note(read_behind_marker(args.state_dir))
+        if note:
+            print(note, file=sys.stderr)
+        return STALE_EXIT
 
     if behind:
         print(format_refusal(behind, ahead, args.ref), file=sys.stderr)

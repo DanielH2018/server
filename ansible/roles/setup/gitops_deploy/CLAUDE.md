@@ -86,16 +86,43 @@ stay).
   `await_ci.py` poll on the same host (45 requests per 900s wait) — two landings exhausted it on
   2026-09-01 and three ticks deferred on `HTTP Error 403: rate limit exceeded`, which reads as
   "CI not finished". Authenticated it is 5000/hour per token.
-  - `fail` → `next_action` returns **`ci_failed`**: no ff-merge, no deploy, and a Discord alert
-    throttled once per SHA (`ci_alerted_sha`).
-  - `pending` → **`ci_pending`**: silent deferral. Unfinished CI is the normal state for the first
-    tick after a push, so it logs and retries; only *sustained* behind-ness is a problem.
+  - **A tip that is not green sends the gate walking, and the tick deploys the newest GREEN
+    ancestor instead of deferring the range.** `deploy_phases.assess` reads `git rev-list
+    --first-parent <local>..<origin>` newest first, asks GitHub about each commit below the tip
+    in turn, and stops at the first `pass`; that SHA becomes `target.origin` and everything
+    downstream reads it — the ff-merge, the changed-path diff, the declarations read, the
+    narrowing. A `fail` ancestor is skipped and never chosen, and a held SHA is dropped from
+    the candidates whether it arrives as the tip or below one. The walk runs ONLY on a tick
+    that would otherwise defer, and is bounded by `CI_ANCESTOR_WALK_MAX`
+    (`gitops_deploy_ci_ancestor_walk_max`, 10) counting the tip's own request — so a tick costs
+    at most ten GitHub reads, and a tick that was going to deploy anyway still costs one. The
+    rule is `deploy_git.ci_walk_candidates`, which carries the `DECIDED:` marker.
+    Master takes about 124 merges a day (median gap 315s, p25 88s) against a ~103s master CI
+    sweep, so the tip is `pending` on most ticks that would deploy and the whole range waited
+    on it. The property the gate still holds: **the tree the host ends up running always has
+    its own green CI verdict.** One line names the choice: `origin <tip8>: CI
+    <pending|fail>; fast-forwarding to the newest green ancestor <sha8> (<n> behind the tip)`.
+  - `fail` on the tip with no green ancestor → `next_action` returns **`ci_failed`**: no
+    ff-merge, no deploy, and a Discord alert throttled once per SHA (`ci_alerted_sha`).
+    A red tip the tick fast-forwarded PAST still pages, once for that same SHA — `main()` calls
+    `deploy_handlers.alert_red_tip` on the deploying path, keyed on `target.tip`. Without it a
+    red master would go unreported the moment any earlier commit was green.
+  - `pending` on the tip with no green ancestor → **`ci_pending`**: silent deferral. Unfinished
+    CI is the normal state for the first tick after a push, so it logs and retries; only
+    *sustained* behind-ness is a problem.
   - **An unreachable or malformed API reads as `pending`, never `pass`** — the gate fails closed or
     it is not a gate. The tick still completes and writes `last_run`, so a GitHub outage does NOT
     trip GitOps-Alive the way `RetryableFetchError` would.
   - Both outcomes leave the host parked on `local`, which `behind_marker` records — so a
     persistently red master pages through the existing **6h behind-origin watchdog** rather than
     needing an escalation path of its own. That reuse is deliberate; don't add a second timer.
+    **An ancestor fast-forward keeps that watchdog armed too, and the whole design rests on
+    it.** The tick ends on a SHA below the tip, so the host IS still behind origin;
+    `entrypoint()` re-resolves the REAL `origin/<branch>` after `main()` returns, so
+    `behind_since` names the tip rather than the chosen SHA and a tail that never goes green
+    still pages at 6h. It also keeps `land.sh` reporting `deferred` (exit 75, a resume point)
+    rather than `settled` for such a tick — `Landing.tick_state` reads `behind_since` ahead of
+    `broad_applied`.
   - **This gates the DEPLOY, and it is the only gate.** This line read "branch protection gates
     the MERGE" until 2026-08-29, when `gh api repos/DanielH2018/server/branches/master/protection`
     was found to return 404 — there is no branch protection on `master`. The gate's value is

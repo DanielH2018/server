@@ -181,6 +181,17 @@ repo-side check still reads green (`scripts/deploy_tools/deploy_staleness.py`). 
 of `--check` and `--dry-run` too, since a green dry run against a stale tree is itself the
 misleading signal. Being *ahead* of master is normal branch work and is never refused.
 
+**With `--tags`, only a commit reaching those tags refuses.** `deploy.sh` hands the tag list to
+the gate, which classifies every path in `HEAD..origin/master` with the deployer's own mapper:
+a path reaching one of the tags, or any broad path (shared templates, `ansible/inventory/`, the
+setup plane), refuses and the message names the commits and paths responsible. A tail that
+touches only other roles prints one line saying how many commits behind the tree is and that
+none of them reach the tags, and the deploy proceeds. Without `--tags` the deploy is unscoped,
+so any commit behind refuses — the rule this guard has always had. The narrowing matters
+because the GitOps deployer fast-forwards to the newest GREEN commit in its range rather than
+to the tip, so the primary checkout is legitimately behind a pending tip while every landing
+deploys from it.
+
 **Exit 4 is decided before exit 2.** `deploy.sh` asks whether the tree is stale before it
 validates `--tags`, so a stale tree carrying a tag it does not recognise reports 4, not 2
 (issue #1566). A tag check against a stale tree answers about the wrong tree: the first
