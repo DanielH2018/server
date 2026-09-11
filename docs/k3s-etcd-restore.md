@@ -24,7 +24,9 @@ that followed it:
 
 **A scratch restore alongside the running k3s does not work, and is not worth more attempts.**
 `k3s server --cluster-reset` assumes it is the only k3s on the host. Five obstacles were found
-and the first four fixed — the token file must exist rather than be passed, isolation flags
+and the first four fixed — the token file must exist *and* the value must arrive as `K3S_TOKEN`
+(the file is only a pre-check; k3s otherwise mints a random token and overwrites the file,
+which is what "encrypted with different token" meant on 2026-09-11), isolation flags
 belong on both invocations, `--disable-agent` leaves the load-balancer on 6444
 (`--lb-server-port` moves it), and `--cluster-reset-restore-path` is read twice by k3s —
 checked for existence after k3s changes directory to `<data-dir>/server`, then joined onto

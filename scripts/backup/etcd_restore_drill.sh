@@ -47,7 +47,9 @@
 # --cluster-reset` assumes it is the only k3s on the host, and every workaround here found the
 # next thing it assumes. In order:
 #
-#   1. it needs <data-dir>/server/token to EXIST; --token-file does not satisfy it
+#   1. it needs <data-dir>/server/token to EXIST; --token-file does not satisfy it — and the
+#      file is only a pre-check: the VALUE must arrive as --token or K3S_TOKEN, or k3s mints a
+#      random one and overwrites the file (corrected 2026-09-11, restore stage comment)
 #   2. the reset stage starts its own listeners, so isolation flags belong on BOTH invocations
 #   3. --disable-agent does not stop the supervisor client load-balancer on 127.0.0.1:6444;
 #      --lb-server-port is the flag
@@ -98,8 +100,9 @@ set -euo pipefail
 LIVE_DATA_DIR=/var/lib/rancher/k3s
 # Read-only, and the only thing this drill takes from the live installation. `--cluster-reset`
 # derives the restore's encryption material from the cluster token, and a scratch data-dir has
-# no `server/token` of its own — the first run failed with exactly that. The token is passed to
-# k3s as an argument-free file reference so it never lands in argv or in this script's output.
+# no `server/token` of its own — the first run failed with exactly that. The token reaches k3s
+# through the K3S_TOKEN environment variable (the restore stage below says why the file alone
+# is not enough), so it never lands in argv or in this script's output.
 LIVE_TOKEN=/var/lib/rancher/k3s/server/token
 S3_ENV=/etc/rancher/k3s/etcd-s3.env
 SCRATCH="/var/tmp/etcd-restore-drill.$$"
@@ -419,12 +422,19 @@ fi
 # script, which nothing here would notice.
 install -d -m 700 "$SCRATCH"
 install -d -m 700 "$SCRATCH/server"
-# `--cluster-reset` reads the token from <data-dir>/server/token and checks for that FILE, not
-# for a --token/--token-file argument: passing --token-file left the same fatal
-# "server/token does not exist, please pass --token" (measured twice, 2026-08-22). Seeding the
-# path is what satisfies it, and it keeps the token out of argv, where `--token <value>` would
-# expose it to any `ps` on this host.
+# The token has to reach k3s TWO ways, and the file alone is a trap. `--cluster-reset` refuses
+# unless <data-dir>/server/token EXISTS ("server/token does not exist, please pass --token",
+# measured twice 2026-08-22) — but that is only a pre-check in pkg/cli/server; nothing reads
+# the file into the config. The server password comes from config.Token (the --token flag or
+# K3S_TOKEN) and is otherwise a fresh random one (deps.go getServerPass), which printTokens
+# then WRITES OVER the staged file. The restore succeeded and died one step later on
+# "bootstrap data already found and encrypted with different token" (guest run 2026-09-11,
+# read in the v1.36.4 source). So: seed the file for the pre-check, and export K3S_TOKEN for
+# the value. The environment keeps it out of argv, where `--token <value>` would expose it to
+# any `ps` on this host; /proc/<pid>/environ is root-only.
 install -m 600 "$LIVE_TOKEN" "$SCRATCH/server/token"
+K3S_TOKEN="$(<"$LIVE_TOKEN")"
+export K3S_TOKEN
 if [[ -n "$LOCAL_SNAPSHOT" ]]; then
   install -D -m 600 "$LOCAL_SNAPSHOT" "$SCRATCH/server/db/snapshots/$SNAPSHOT"
   # The second place the bare name has to resolve — the comment at LOCAL_SNAPSHOT above.

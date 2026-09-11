@@ -92,6 +92,20 @@ def test_the_isolation_ports_do_not_collide_with_the_lb_pair():
     )
 
 
+def test_the_restore_stage_hands_k3s_the_token_through_the_environment():
+    """<data-dir>/server/token existing is only a pre-check: k3s takes the value from --token or
+    K3S_TOKEN and otherwise mints a random one and overwrites the file, which restored the
+    snapshot and then failed on "encrypted with different token" (guest run 2026-09-11)."""
+    script = _SCRIPT.read_text()
+    export_at = script.index("export K3S_TOKEN")
+    reset_at = script.index("--cluster-reset \\")
+    assert export_at < reset_at, (
+        "K3S_TOKEN must be exported before the restore stage runs k3s"
+    )
+    code = [ln for ln in script.splitlines() if not ln.lstrip().startswith("#")]
+    assert not [ln for ln in code if "--token" in ln], "the token never goes in argv"
+
+
 def test_a_healthy_restore_passes():
     # ACCEPT: a plausible cluster's worth of objects clears all three thresholds.
     result = _run_verify(ns=5, deploys=12, pvcs=8)
