@@ -377,7 +377,9 @@ def run_alerts(ns):
         # Per stream, not on the merged list: one stream hitting the cap says nothing about
         # the other, and reporting the union would cry truncation whenever the totals summed
         # past the limit.
-        if len(fetched) >= ns.limit:
+        # `fetched and` guards `--limit 0`, which argparse accepts: an empty result satisfies
+        # `0 >= 0` and the index would raise on a stream that returned nothing.
+        if fetched and len(fetched) >= ns.limit:
             truncated.append((logql, fetched[0][0]))
         for ns_ts, line in fetched:
             parsed = parser(line)
@@ -390,12 +392,13 @@ def run_alerts(ns):
     raw.sort()
     # BEFORE the view, not after it. A truncated window that lists no episode prints "no DOWN
     # alerts in the last Nd", and a warning underneath that line arrives too late to stop it
-    # being read as an all-clear.
+    # being read as an all-clear. On stderr under `--json`, so stdout stays parseable.
     for logql, oldest_ns in truncated:
         print(
             f"(warning: hit --limit {ns.limit} log lines on {logql} — this window is cut off "
             f"at its OLDEST end, so only {_fmt_utc(oldest_ns)} UTC onwards is covered. "
-            "Raise --limit or narrow --days.)\n"
+            "Raise --limit or narrow --days.)\n",
+            file=_sys.stderr if ns.json else _sys.stdout,
         )
     if ns.raw:
         print("\n".join(line for _, line in raw) or "no logs")

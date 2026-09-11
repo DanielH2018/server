@@ -6,6 +6,7 @@ host crons emit, which push Kuma directly and so leave no other durable record. 
 first left the whole backup/drift plane with no episode history anywhere.
 """
 
+import json
 from datetime import UTC, datetime
 
 from diagnostics.probe_lib import alerts
@@ -435,3 +436,28 @@ def test_a_truncated_window_says_so_before_it_reports_an_all_clear(monkeypatch, 
     assert "hit --limit 10 log lines" in out
     assert "OLDEST end" in out
     assert out.index("hit --limit") < out.index("no DOWN alerts")
+
+
+def test_a_truncation_notice_stays_off_stdout_under_json(monkeypatch, capsys):
+    # `--json` exists to be piped, so the notice goes to stderr there rather than ahead of the
+    # document. It still has to be SAID: a silent cap under --json is the same all-clear.
+    _route_alert_fetch(
+        monkeypatch, {alerts.ALERT_LOGQL: _two_day_log()}, respect_limit=True
+    )
+    ns = cli_parser._build_parser().parse_args(
+        ["alerts", "--days", "2", "--limit", "10", "--json"]
+    )
+    assert alerts.run_alerts(ns) == 0
+    captured = capsys.readouterr()
+    assert json.loads(captured.out)
+    assert "hit --limit 10" in captured.err
+
+
+def test_a_zero_limit_reports_no_episodes_rather_than_crashing(monkeypatch, capsys):
+    # argparse accepts `--limit 0`, and an empty stream satisfies `0 >= 0`.
+    _route_alert_fetch(monkeypatch, {}, respect_limit=True)
+    ns = cli_parser._build_parser().parse_args(
+        ["alerts", "--days", "2", "--limit", "0"]
+    )
+    assert alerts.run_alerts(ns) == 0
+    assert "no DOWN alerts" in capsys.readouterr().out
