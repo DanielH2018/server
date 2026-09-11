@@ -210,16 +210,30 @@ def check_n8n(cfg: Config) -> tuple[bool, str]:
     )
 
 
-def check_arr_queue(cfg: Config) -> tuple[bool, str]:
+def check_arr_queue(cfg: Config, fetch=None) -> tuple[bool, str]:
     """Sonarr/Radarr queue warning/blocked-import watchdog (see queue_warnings).
 
     Empty SONARR_API_KEY/RADARR_API_KEY independently skip that app (like the multi-webhook
-    Discord check); both empty -> disabled (stays up), like check_n8n. An unreachable *arr
-    API is NOT caught here — it bubbles up and _evaluate renders it `down` with the error,
-    the same convention as check_n8n/check_scrutiny (a dead dependency pages; there's no
-    shared root cause here the way Prometheus/exporter outages have, so nothing to gate).
+    Discord check); both empty -> disabled (stays up), like check_n8n.
+
+    **An unreachable *arr API is caught HERE, and that diverges from check_n8n/check_scrutiny
+    on purpose.** Those let the error bubble to `_evaluate`, which renders it `down` with no
+    grace. The *arrs are different in one respect that matters: they are Deployments this same
+    bridge watches rolling, so their API refuses connections every time k3s replaces the pod —
+    three of this monitor's DOWN episodes over the 30 days to 2026-09-11 were a fetch error
+    co-timed with a `k8s_workloads ... radarr(1)` episode, which is a rollout being reported
+    twice. `ARR_FETCH_CONSECUTIVE` holds `up` through that and pages on a *arr that stays
+    unreachable. Do not restore the bubbling convention here without also removing that knob.
+
+    The QUEUE verdict below is deliberately ungraced: a poisoned release sitting in the queue
+    is not a transient, and delaying it is the 2026-07-01 incident this check exists for.
     pageSize=250 mirrors n8n's page cap — ample for a homelab queue.
+
+    `fetch` is the injectable *arr boundary, the seam check_cluster_targets and
+    checks/host_edge.py already use. Resolved in the body, not as a default: a default binds at
+    import, before a test could reach bridge.net.
     """
+    fetch = fetch or bridge.net._get_json
     apps = [
         (
             "Sonarr",
@@ -241,8 +255,20 @@ def check_arr_queue(cfg: Config) -> tuple[bool, str]:
         return True, "arr queue monitoring disabled (no API keys)"
     offenders = []
     for app_name, url, api_key in configured:
-        data = bridge.net._get_json(url, headers={"X-Api-Key": api_key})
+        try:
+            data = fetch(url, headers={"X-Api-Key": api_key})
+        except Exception as e:
+            # The FETCH rides a streak; the queue verdict below does not. See the docstring.
+            count, held, note = bridge.streaks.down_streak(
+                bridge.streaks._down_streaks.get("arr_queue_fetch", 0),
+                cfg.ARR_FETCH_CONSECUTIVE,
+                "%s unreachable: %s" % (app_name, e),
+                "rollout",
+            )
+            bridge.streaks._down_streaks["arr_queue_fetch"] = count
+            return held, note
         offenders.extend(queue_warnings(data, app_name))
+    bridge.streaks._down_streaks["arr_queue_fetch"] = 0
     if offenders:
         desc = "; ".join(
             "[%s] %s — %s" % (app, sanitize(title), sanitize(reason))
@@ -302,7 +328,8 @@ def check_bazarr(cfg: Config) -> tuple[bool, str]:
 
     Empty BAZARR_API_KEY -> disabled (stays up), like check_n8n. An unreachable Bazarr is NOT
     caught here — it bubbles up and _evaluate renders it `down` with the error, the
-    check_arr_queue/check_prowlarr_indexers convention. That covers the 401 a wrong key
+    check_prowlarr_indexers/check_n8n convention (check_arr_queue LEFT that convention on
+    2026-09-11 — see its docstring). That covers the 401 a wrong key
     returns, which is itself the signal that Bazarr's API key in SOPS has gone stale.
     """
     if not cfg.BAZARR_API_KEY:
@@ -332,8 +359,9 @@ def check_prowlarr_indexers(cfg: Config) -> tuple[bool, str]:
 
     Empty PROWLARR_API_KEY -> disabled (stays up), like check_n8n. An unreachable Prowlarr is NOT
     caught here — it bubbles up and _evaluate renders it `down` with the error (the
-    check_arr_queue/check_n8n convention; the sustained-failure grace is about indexer flaps, not
-    the bridge's own reach). The all-indexers-down red error stays with Prowlarr's own in-app
+    check_n8n/check_bazarr convention; the sustained-failure grace is about indexer flaps, not
+    the bridge's own reach). check_arr_queue no longer shares it — its *arrs are Deployments
+    this bridge watches rolling, where a Prowlarr rollout is not a recurring source of pages. The all-indexers-down red error stays with Prowlarr's own in-app
     onHealthIssue notification — this owns the per-indexer sustained signal Prowlarr can't express.
     """
     if not cfg.PROWLARR_API_KEY:

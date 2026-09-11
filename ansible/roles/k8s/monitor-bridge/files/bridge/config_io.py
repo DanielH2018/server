@@ -300,7 +300,17 @@ def io_config(
             "loki_discarded_samples_total",
         ),
         SHIPPER_DROPPED_WINDOW=_env("SHIPPER_DROPPED_WINDOW", "1h"),
-        SHIPPER_DROPPED_MAX=_num("SHIPPER_DROPPED_MAX", "1000"),
+        # DECIDED: 3000, from the gap between churn and bursts rather than from the streak the
+        # issue proposed. Measured 2026-09-11 over the 14 days Prometheus retains, at 1h
+        # resolution: the client-side counter is non-zero in 26 of ~336 hours, 13 of those clear
+        # 1000, and the ONLY samples between 1000 and 6261 are the two that held this monitor red
+        # for 51 minutes on 2026-09-03 at 1020. Every other real loss starts at 6261 and runs to
+        # 90,724 client-side and 216,545 server-side. So churn tops out at ~1020 and the smallest
+        # genuine burst is 6261 — 3000 sits 2.9x above the first and 2.1x below the second, which
+        # is a derived midpoint rather than a number fitted to the episode. A 2-3 cycle streak
+        # was rejected on its own evidence: that episode ran 11 cycles, so a streak would have
+        # removed 3 of them and left the tile red for 40 minutes.
+        SHIPPER_DROPPED_MAX=_num("SHIPPER_DROPPED_MAX", "3000"),
         # Discord delivery: Kuma fires every alert by POSTing to its Discord webhook
         # (monitor_discord_webhook_url). A rotated/revoked/deleted webhook leaves every monitor
         # green-in-UI while Discord goes silent — the one link in the alert chain no other

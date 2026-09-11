@@ -47,8 +47,20 @@ from diagnostics.probe_lib.core import (
 # while `monitor_status{monitor_name="Manifest Prune Drift"}` read 0 and `alerts --check
 # manifest` printed "no DOWN alerts". See SYSLOG_ALERT_LOGQL below for the second stream.
 ALERT_LOGQL = '{container="monitor-bridge"} |= "DOWN"'
-# "[2026-07-21T08:37:00] DOWN n8n - 1 active workflow(s) failed ... (2 cycles)"
-_DOWN_RE = re.compile(r"^\[[^\]]+\] DOWN (?P<name>\S+) - (?P<msg>.*)$")
+# "DOWN n8n - 1 active workflow(s) failed ... (2 cycles)", and the same line with a leading
+# "[2026-07-21T08:37:00]" for anything logged before 2026-09-04.
+#
+# THE BRACKET IS OPTIONAL, and requiring it blinded this command for a week. `bridge.common.log`
+# stopped printing its own stamp in commit bec8990a (2026-09-04) — the runtime already stamps
+# every container line, and the one it printed was America/Chicago wall clock rendered as an ISO
+# instant. This regex kept requiring it, so from that commit `probe.py alerts` reported ZERO
+# monitor-bridge episodes and showed only the host crons' syslog stream. Measured 2026-09-11:
+# `alerts --days 5` printed 44 episodes and none of them was the 42-hour `DOWN discord - Arr
+# webhook: Discord webhook returned HTTP 404` outage sitting in Loki as 511 lines over the same
+# window. A revoked webhook in the alert chain's own delivery check read as "no DOWN alerts".
+# The episode timestamps come from Loki's own `values` entries, never from this prefix, so
+# nothing downstream needs it.
+_DOWN_RE = re.compile(r"^(?:\[[^\]]+\] )?DOWN (?P<name>\S+) - (?P<msg>.*)$")
 _CYCLES_SUFFIX_RE = re.compile(r"\s*\(\d+ cycles?\)\s*$")
 
 

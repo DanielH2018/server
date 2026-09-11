@@ -59,11 +59,16 @@ done
 if [ -z "$DOWN" ]; then
   STATUS=up;   MSG="autoheal + docker-proxy running"
 else
-  # STATUS stays `down` even when the restart worked, deliberately. Pushing `up` after a
+  # DECIDED: STATUS stays `down` even when the restart worked. Pushing `up` after a
   # successful recovery would make an auto-restart loop invisible: a container crashing every
   # 5 minutes would read green forever, which is the failure mode that makes self-healing
   # worse than no healing. One DOWN beat per cycle that needed intervention keeps the episode
   # in Kuma and in the alert history, and the next clean cycle clears it.
+  # Re-proposed by #1784 as "an UP with a warning would read more honestly", after two
+  # single-cycle `not running: autoheal; restarted: autoheal` episodes on 2026-09-02/03, and
+  # declined 2026-09-11: those two episodes ARE the loop this rule exists to keep visible, and
+  # no evidence was offered against the original reasoning. The recurring fault worth fixing is
+  # that autoheal stops at all, filed separately.
   STATUS=down; MSG="not running: ${DOWN}"
   [ -n "$RECOVERED" ] && MSG="${MSG}; restarted: ${RECOVERED}"
   [ -n "$FAILED" ] && MSG="${MSG}; restart FAILED: ${FAILED}"

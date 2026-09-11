@@ -169,7 +169,9 @@ CLUSTER_DEPENDENT = frozenset({"k8s_workloads", "cluster_targets", "pvc_fullness
 STARTUP_GRACE = frozenset(
     {
         "n8n",
-        "arr_queue",
+        # arr_queue left this set on 2026-09-11: its fetch carries its own
+        # ARR_FETCH_CONSECUTIVE streak, which covers the same reboot transient for longer
+        # and leaves the queue verdict ungraced. Compounding both would only delay a page.
         "bazarr",
         "pi_pressure",
         "prowlarr_indexers",

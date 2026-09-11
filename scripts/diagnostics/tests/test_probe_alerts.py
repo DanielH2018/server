@@ -45,9 +45,24 @@ def test_parse_down_line_extracts_name_and_strips_cycle_counter():
     assert alerts.parse_down_line(line) == ("n8n", "1 active workflow(s) failed")
 
 
+def test_parse_down_line_reads_an_unstamped_line():
+    # The shape monitor-bridge has logged since commit bec8990a (2026-09-04) dropped its own
+    # stamp. Requiring the bracket made this command report ZERO bridge episodes: measured
+    # 2026-09-11, `alerts --days 5` printed 44 episodes and none was the 42-hour revoked-Arr-
+    # webhook outage sitting in Loki as 511 `DOWN discord - ...` lines over the same window.
+    line = "DOWN discord - Arr webhook: Discord webhook returned HTTP 404 (262 cycles)"
+    assert alerts.parse_down_line(line) == (
+        "discord",
+        "Arr webhook: Discord webhook returned HTTP 404",
+    )
+
+
 def test_parse_down_line_ignores_ok_and_malformed_lines():
     assert alerts.parse_down_line("[2026-07-21T08:37:00] OK   n8n - fine") is None
+    assert alerts.parse_down_line("OK   n8n - fine") is None
     assert alerts.parse_down_line("not a monitor-bridge line") is None
+    # The optional bracket must not make DOWN itself optional, nor match it mid-line.
+    assert alerts.parse_down_line("n8n went DOWN n8n - later") is None
 
 
 def test_alert_episodes_splits_on_a_silence_gap():

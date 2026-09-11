@@ -136,6 +136,19 @@ def extended_resource_verdict(
     )
 
 
+def replica_offender_names(offenders: Sequence[tuple[dict, float]]) -> str:
+    """Name an unavailable-replica vector as `deployment(n), deployment(n)`, sorted by name.
+
+    Shared with checks/cluster.py's replica streak, which names the same offenders in the note
+    it holds `up` with. Two formatters would drift, and the held note and the page that follows
+    it three cycles later have to name the same workloads for the sequence to read as one event.
+    """
+    return ", ".join(
+        "%s(%d)" % (labels.get("deployment", "?"), int(value))
+        for labels, value in sorted(offenders, key=lambda o: o[0].get("deployment", ""))
+    )
+
+
 def k8s_workloads_verdict(
     total: float | None,
     offenders: list[tuple[dict, float]],
@@ -189,13 +202,9 @@ def k8s_workloads_verdict(
                 % (int(ds_total), min_daemonsets)
             )
     if offenders:
-        named = ", ".join(
-            "%s(%d)" % (labels.get("deployment", "?"), int(value))
-            for labels, value in sorted(
-                offenders, key=lambda o: o[0].get("deployment", "")
-            )
+        return False, "k8s workloads with unavailable replicas: %s" % (
+            replica_offender_names(offenders)
         )
-        return False, "k8s workloads with unavailable replicas: %s" % named
     if ds_offenders:
         named = ", ".join(
             "%s(%d)" % (labels.get("daemonset", "?"), int(value))
