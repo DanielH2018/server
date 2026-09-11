@@ -19,6 +19,7 @@ _FILES = pathlib.Path(__file__).resolve().parents[1] / "files"
 # keep passing if the call sites all moved to a module the glob stopped matching.
 _SOURCES = (
     "deploy_alerts.py",
+    "deploy_defer.py",
     "deploy_handlers.py",
     "deploy_phases.py",
 )

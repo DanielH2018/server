@@ -33,6 +33,11 @@ FILTER_PLUGINS = ANSIBLE / "filter_plugins"
 # deploy_logic.py lives in the role that deploys it, so a script that has to agree with the
 # deployer imports it from here rather than carrying a second derivation.
 GITOPS_DEPLOY_FILES = ROLES / "setup" / "gitops_deploy" / "files"
+# `host_lib.py` and the other helpers the common role installs beside a host script. Needed
+# only by a tool that imports one of the deployer's IMPURE modules (`deploy_state`,
+# `deploy_config`): the ones that import `deploy_logic` must NOT add this, and
+# `ansible/tests/deploy/test_gitops_deploy_imports.py` holds them to it.
+HOST_LIB_FILES = ROLES / "setup" / "common" / "files"
 SHARED_TPL = (
     ANSIBLE / "templates"
 )  # shared macros (and the labels-macro traefik.yml.j2)

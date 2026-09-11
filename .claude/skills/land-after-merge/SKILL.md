@@ -236,6 +236,15 @@ scripts/secrets_mgmt/secret_rotation.py consumers <secret>` for who holds a stal
 repair command per plane. The other services in the same PR still deploy normally; the verdict
 is about the half that did not.
 
+**A setup role the deployer cannot apply also needs its marker cleared.** For `k3s` and
+`common` the tick fast-forwards the range and records the role in
+`/var/lib/gitops-deploy/manual_plane`, which pages **GitOps Deploy — Status** six hours later.
+So the printed remediation ends with `uv run python scripts/deploy_tools/gitops_state.py
+clear-manual-plane <role>`, and running the playbook without it leaves a page over work that
+is already live. A bring-up playbook gets no such line: the tick parks on those and writes no
+marker. Nothing is queued behind either — a landing behind a recorded role reads `settled`,
+because the tree converged.
+
 **A document under a role is not one of these.** A `.md` — a role's `CLAUDE.md`, a `README.md`,
 one under `files/` — maps to no role and to no plane, because no playbook applies prose. Landing
 PR #1696 ended `needs-manual-apply` for `ansible/roles/k8s/manifests/`, whose only changed file

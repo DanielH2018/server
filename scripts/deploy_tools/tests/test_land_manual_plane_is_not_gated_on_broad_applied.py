@@ -77,3 +77,24 @@ def test_the_plane_the_deployer_applies_itself_is_gated_on_the_marker(landing):
     assert "broad_applied" in read
     assert outcome.verdict == "needs-manual-apply"
     assert "the tick converged without recording an apply" in outcome.detail
+
+
+def test_an_unroutable_setup_role_is_told_to_clear_the_deployers_marker():
+    """The tick merged this PR and recorded the role, so applying it is only half the job.
+
+    A role applied by hand with its `manual_plane` line left behind pages **GitOps Deploy —
+    Status** six hours later over work that is already live.
+    """
+    note = land_tags.plane_note(["ansible/roles/setup/k3s/defaults/main.yml"])
+    assert "ansible/k3s-bringup.yml --tags k3s" in note
+    assert "clear-manual-plane" in note
+
+
+def test_a_bringup_playbook_is_not_told_to_clear_a_marker():
+    """The rejecting half: the tick parks on these, so no marker was ever written.
+
+    Printing a clear command here would send an operator after a file that does not exist.
+    """
+    note = land_tags.plane_note(["ansible/bootstrap.yml"])
+    assert note != ""
+    assert "clear-manual-plane" not in note

@@ -214,9 +214,25 @@ stay).
   - **`_BROAD_MANUAL_PREFIXES` keeps the old defer-and-alert with no ff-merge**:
     `bootstrap.yml`, `k3s-bringup.yml`, `initial_setup.yml` — the bring-up playbooks, which run
     by hand by construction. Staying parked is what keeps `behind_since` set, which is the only
-    durable signal that an unapplied plane exists. A setup-plane change whose tag cannot be
-    derived joins them, since the only automatic alternative is an unscoped `initial_setup.yml`
-    (a whole-host reprovision).
+    durable signal those have. A setup-plane path that resolves to no ROLE joins them — a file
+    directly under `roles/setup/`, which `_note_setup_role` cannot name — because there is no
+    hand command to print and no role to record.
+  - **A setup ROLE whose tag cannot be derived no longer parks: it fast-forwards and is
+    recorded in `manual_plane`.** `k3s` (applied by `k3s-bringup.yml`) and `common` (applied by
+    no playbook at all) are the two, and `deploy_defer.py`'s module docstring carries the
+    `DECIDED:` marker and the measurement. The tick writes one line per role to
+    `/var/lib/gitops-deploy/manual_plane` — `"<origin_sha> <playbook-or-none> <role>
+    <unix_ts>"`, deduplicated by role so a role already listed keeps its first-seen stamp —
+    logs `manual_plane pending: <roles> — apply by hand: <commands>` on EVERY later tick, and
+    pages once per SHA. `broad_applied` is NOT written for the unapplied role; a role in the
+    same range that DID apply still records its own. Three things clear a line: applying the
+    role's real playbook and tag through the tick (`DeployerState.clear_manual_plane_applied`,
+    which no role reaches today because the tick runs neither playbook), an operator running
+    `uv run python scripts/deploy_tools/gitops_state.py clear-manual-plane <role>`, and nothing
+    else. Parking was the signal only because nothing else was, and it charged every other
+    session: ten park episodes over the seven days to 2026-09-11 spanned 30 ticks, the longest
+    about forty minutes, and every landing behind one exits 4 from `deploy.sh` until a hand
+    pulls the primary checkout.
   - **A park names its reason in the journal on every tick** (`deploy_remediation.broad_park_reason`).
     The Discord page is throttled once per SHA and until 2026-09-09 the journal was throttled with
     it, so from the second tick behind a range this arm logged nothing at all. daniel-box then sat
@@ -235,7 +251,7 @@ stay).
     `deploy_logic.py` is the long form.
   - `BROAD_DEPLOY_TIMEOUT_S` (1800, `gitops_deploy_broad_timeout_s`) bounds one apply. Without it
     a wedged run is SIGTERMed at `TimeoutStartSec` with no hold written and no alert sent.
-- **Behind-origin watchdog** (`deploy_logic.behind_marker`): every deferral above leaves the host
+- **Behind-origin watchdog** (`deploy_logic.behind_marker`): every PARK above leaves the host
   parked on an old tree, and until 2026-08-02 nothing but a Discord message said so — `last_run`
   keeps ticking (Alive green) and `is_diverged` is false (origin is a strict *descendant*, so
   Status green too). daniel-server ran a 12-commit-old tree for hours that way, and the miss only
@@ -247,6 +263,16 @@ stay).
   of pushes to a stuck host would otherwise restart the clock forever. Age-gated because being
   behind is normal in the small: a push is behind for one tick, and the dirty path is behind for a
   whole edit session by design.
+  - **The `manual_plane` marker is the second arm of that watchdog, for the deferral that no
+    longer leaves the host behind.** A recorded role fast-forwards, so `behind_since` clears
+    and every marker the watchdog reads goes quiet while the role stays unapplied.
+    `checks.service.gitops_status` therefore reads `manual_plane` too and pages once the
+    OLDEST pending line is older than the same `GITOPS_BEHIND_MAX_S` (6 h), naming the roles
+    and the clear command. Ordered after the hold and the divergence and before the behind
+    arm: those two name a broken deployer, this names work nobody has started. The pod reads
+    it off the same `:ro` state mount as `behind_since`, and parses it itself — it cannot
+    import this tree, so `tests/test_check_gitops.py` asserts its clear-command literal
+    matches `deploy_remediation.MANUAL_PLANE_CLEAR_CMD`.
 - **Secrets-only pushes** (`ansible/vars/secrets.yml` changed with no service template — a
   rotation pushed from another machine) are fast-forwarded but **not** redeployed: the new
   value only reaches a container on its next deploy, so the deployer alerts (once per SHA,
@@ -560,7 +586,7 @@ Three layers, and which one a function belongs in is decided by what it touches.
 | transport | `deploy_io`, `deploy_alerts` | subprocess, docker, every message body, and the alert queue's own I/O |
 | transport leaves | `deploy_config`, `deploy_state`, `deploy_failtext` | the config file, the state directory, and the text a failed run's alert quotes |
 | the seam | `deploy_toolbox` | `DeployTools`, one frozen object holding every boundary the tick crosses, and `default_tools(CONFIG)` which binds the CI gate to the parsed config |
-| the phases | `deploy_phases`, `deploy_handlers` | `assess` and `plan_tick`; one `handle_*` per terminal branch, plus the staging gate's I/O shell (`consult_staging`, `record_staging_tick`, `consume_staging_override`) |
+| the phases | `deploy_phases`, `deploy_handlers`, `deploy_defer` | `assess` and `plan_tick`; one `handle_*` per terminal branch, plus the staging gate's I/O shell (`consult_staging`, `record_staging_tick`, `consume_staging_override`); `deploy_defer` owns what the broad arm does with the half it will not apply — park it, or record it in `manual_plane` |
 | the tick | `gitops_deploy` | the config constants, `STATE`, `tick_config()`, `main()` sequencing the phases, and `entrypoint()` |
 
 **A transport leaf imports nothing from `deploy_io`.** `deploy_config` (the config file,
@@ -625,7 +651,7 @@ that file by name: `STAGING_SUBSET` is read there for real, while the
 reads and nothing else does; both timeouts are parsed and validated in `load_config`, and a
 test pins the literals to `Config`'s defaults.
 
-**State is one object.** `deploy_state.DeployerState` wraps the eighteen marker files — the
+**State is one object.** `deploy_state.DeployerState` wraps the marker files — the
 fifteen dedupe and status markers plus the pending-alert queue, the staging tick ledger and
 the staging override — and holds the hold-marker writes (`write_hold`, `clear_broad_hold`,
 `clear_service_hold`) and `record_behind`. A caller names a marker (`state.path("hold")`)

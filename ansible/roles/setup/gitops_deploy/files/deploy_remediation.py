@@ -17,6 +17,16 @@ from deploy_changes import ChangeSet, setup_role_playbook, setup_role_tag
 BRANCH_DEFAULT = "master"
 
 
+# What an operator runs to clear one role's `manual_plane` line after applying it by hand.
+# Here rather than beside the marker in `deploy_state.py` for the same reason every other
+# remediation string is here: `deploy_logic` re-exports this module, so `land.sh` prints the
+# same command the deployer's alert does, and `deploy_state` reaches `host_lib` — which the
+# scripts/ callers do not put on their path.
+MANUAL_PLANE_CLEAR_CMD = (
+    "uv run python scripts/deploy_tools/gitops_state.py clear-manual-plane <role>"
+)
+
+
 # A rollback re-run must fit inside the unit's TimeoutStartSec alongside the forward run and
 # the worst-case flock wait. Below that margin systemd SIGTERMs mid-rollback, which strands
 # the tree at the failed commit with live state half-applied — exactly what every
@@ -102,6 +112,24 @@ def broad_remediation(
     if broad_setup:
         cmds.extend(_setup_commands(setup_roles))
     return f"`git merge --ff-only origin/{branch}` FIRST, then " + " and ".join(cmds)
+
+
+def manual_plane_remediation(setup_roles: set[str]) -> str:
+    """The commands that clear a `manual_plane` marker: apply each role, then clear its line.
+
+    No `git merge --ff-only` preamble, which is the one way this differs from
+    `broad_remediation`. The tick recording this marker has already fast-forwarded — that is
+    the whole change the marker exists to make safe — so prescribing the merge again would
+    describe a tree the operator is not in.
+
+    The clear command is the reverse of the write, and it is part of the remediation rather
+    than a note beside it: a role applied by hand with its line left behind pages GitOps
+    Deploy — Status six hours later over work that is already live.
+    """
+    return (
+        " and ".join(_setup_commands(setup_roles))
+        + f", then `{MANUAL_PLANE_CLEAR_CMD}`"
+    )
 
 
 def _setup_commands(setup_roles: set[str] | None) -> list[str]:

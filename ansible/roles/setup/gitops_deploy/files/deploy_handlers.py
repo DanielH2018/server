@@ -25,6 +25,7 @@ Reach `deploy_io` and `deploy_alerts` qualified, never by from-import.
 import time
 
 import deploy_alerts
+import deploy_defer
 import deploy_io
 import deploy_narrow
 from deploy_changes import setup_tags_for
@@ -37,7 +38,6 @@ from deploy_git import (
 )
 from deploy_health import gate_services
 from deploy_k8s import declares_snapshot_claims, rollback_volume_revert_note
-from deploy_remediation import broad_park_reason, broad_remediation
 from deploy_staging import (
     STAGING_SKIPPED,
     staging_blocks,
@@ -127,44 +127,13 @@ def handle_broad(
     """A change to a whole plane: defer it, or ff-merge and apply the playbook it names."""
     cs, origin = plan.cs, target.origin
     setup_tags = setup_tags_for(plan.paths)
-    # The MANUAL subset keeps the old behaviour exactly: defer, alert, and do NOT ff-merge.
-    # Staying parked is what keeps `behind_since` set, and that marker is the only durable signal
-    # that an unapplied plane exists — ff-merging here would clear it and leave the host green
-    # while running a plane it never applied.
-    #
-    # A setup-plane change whose tag cannot be derived joins them: an unresolvable tag means the
-    # only automatic option is an UNSCOPED initial_setup.yml, which is a whole-host reprovision
-    # rather than the scoped apply this arm is funded for.
-    if cs.broad_manual or (cs.broad_setup and not setup_tags):
-        remediation = broad_remediation(
-            cs.broad_deploy, cs.broad_setup, cs.setup_roles, config.branch
-        )
-        # Say so in the JOURNAL, every tick. `alert_once` below throttles the Discord page to one
-        # per SHA, and until 2026-09-09 that throttle also decided what the journal said: from the
-        # second tick behind a range this arm logged NOTHING. daniel-box then sat nine commits
-        # behind origin for twenty minutes with the only per-tick line coming from an unrelated
-        # comment-only path, which read as the cause and was not (#1467). The park is right —
-        # ff-merging here would clear `behind_since`, the only durable signal that an unapplied
-        # plane exists — so the fix is to make the park legible, not to take it away. An operator
-        # reads this journal when `land.sh` exits 4, and a page they already received an hour ago
-        # is not there.
-        log(
-            f"origin {origin[:8]}: parked, nothing merged — {broad_park_reason(cs)}. "
-            f"Apply by hand: {remediation}"
-        )
-        # Broad-manual doesn't ff-merge, so it re-evals next tick — the per-SHA marker (inside
-        # alert_once) stops a re-queue while the pending queue owns redelivery. Name the RIGHT
-        # playbook per plane: deploy.yml applies only container roles, so a setup-plane change
-        # needs initial_setup.yml (2026-07-16 review M1).
-        deploy_alerts.alert_once(
-            tools,
-            state,
-            config,
-            "broad_alerted",
-            "broad",
-            origin,
-            deploy_alerts.broad_deferred_alert(origin, remediation),
-        )
+    pending = deploy_defer.unapplyable_setup_roles(cs)
+    # DECIDED: a bring-up playbook (and a setup path naming no role) still parks; a setup ROLE
+    # this deployer cannot apply no longer does — it fast-forwards and leaves the durable
+    # `manual_plane` marker instead. Parking held every other session's landing behind work
+    # only a hand could do. `deploy_defer`'s module docstring carries the measurement.
+    if deploy_defer.parks_the_tick(cs, setup_tags, pending):
+        deploy_defer.park(tools, state, config, origin, cs)
         return 0
 
     # Everything else fast-forwards and applies what `deploy_narrow.plan` names. The
@@ -174,7 +143,17 @@ def handle_broad(
     # even if the apply below fails. Stranding a docs-only commit behind somebody else's setup
     # change — a tick that exits 0, logs nothing, and writes behind_since — was the original
     # complaint this arm exists to fix.
-    broad = deploy_narrow.plan(tools.narrow_deploy_plane, config, target, setup_tags)
+    #
+    # `applies` gates the narrowing: with no setup tag and no deploy-plane path there is
+    # nothing for `deploy_narrow.plan` to plan, and asking it anyway would route a
+    # `roles/setup/k3s/` range into `_deploy_plane` — whose refusal branch runs a full
+    # `ansible/deploy.yml` for a change that reaches no container at all.
+    applies = bool(setup_tags) or cs.broad_deploy
+    broad = (
+        deploy_narrow.plan(tools.narrow_deploy_plane, config, target, setup_tags)
+        if applies
+        else deploy_narrow.BroadPlan("", [], False)
+    )
     tools.run(["git", "merge", "--ff-only", origin], cwd=config.repo)
     playbook, tags = broad.playbook, broad.tags
 
@@ -214,12 +193,18 @@ def handle_broad(
         # double-page; exit 1 only if the post failed, leaving OnFailure the backstop.
         return 0 if posted else 1
 
-    # Recorded BEFORE the hold is cleared, and unconditionally: `clear_broad_hold` may keep a
-    # hold naming a DIFFERENT plane, and this apply still happened. `land.sh` reads it to tell
-    # a plane the tick applied from one it merely fast-forwarded past — `behind_since` empty
-    # cannot (issue #1537).
-    state.record_broad_applied(origin, playbook, tags)
-    state.clear_broad_hold(playbook, tags)
+    # Recorded BEFORE the hold is cleared: `clear_broad_hold` may keep a hold naming a
+    # DIFFERENT plane, and this apply still happened. `land.sh` reads it to tell a plane the
+    # tick applied from one it merely fast-forwarded past — `behind_since` empty cannot
+    # (issue #1537). Gated on `applies` and on nothing else: a range whose whole broad half is
+    # a role this deployer cannot apply applied nothing, so the marker saying one happened
+    # would tell `land.sh` that plane is live — #1537's failure, in reverse.
+    if applies:
+        state.record_broad_applied(origin, playbook, tags)
+        state.clear_broad_hold(playbook, tags)
+        deploy_defer.clear_applied(state, playbook, tags)
+    if pending:
+        deploy_defer.record(tools, state, config, origin, pending)
     deploy_alerts.alert_secrets_deferred(tools, state, config, origin, cs)
     deploy_alerts.alert_deferred(
         tools, state, config, origin, set(), cs, plan.k8s_services

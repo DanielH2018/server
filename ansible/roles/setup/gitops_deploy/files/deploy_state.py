@@ -18,7 +18,7 @@ Stdlib only: the unit runs under `uv run --no-project` and the host is still on 
 
 import os
 import pathlib
-from typing import ClassVar
+from typing import ClassVar, NamedTuple
 
 from deploy_config import log
 from deploy_git import behind_marker, broad_hold_cleared_by, hold_plane_marker
@@ -26,6 +26,30 @@ from host_lib import atomic_write
 
 
 STATE_DIR = "/var/lib/gitops-deploy"
+
+# What the playbook field holds for a role no playbook applies (`common`).
+NO_PLAYBOOK = "none"
+
+
+class ManualPlaneEntry(NamedTuple):
+    """One pending line of the `manual_plane` marker.
+
+    Attributes:
+        origin: the origin SHA whose range first carried this role.
+        playbook: the playbook that applies the role, or `NO_PLAYBOOK`.
+        role: the role, under the `--tags` value that selects it. The two are the same word
+            for every role that can reach this marker, which
+            `test_deployer_state.py::test_the_marker_key_is_the_role_name_for_every_pending_role`
+            pins — so an operator clears by the role name they read in the alert.
+        at: when the deployer first recorded it, in `time.time()` terms. The age this stamp
+            gives is what monitor-bridge pages on, so it is NEVER refreshed for a role
+            already listed.
+    """
+
+    origin: str
+    playbook: str
+    role: str
+    at: float
 
 
 class DeployerState:
@@ -55,6 +79,9 @@ class DeployerState:
         # --ff-only` also produces, and after that `next_action()` returns `noop` forever so
         # the plane is stranded (issue #1537). Read by `land.sh` before it says `settled`.
         "broad_applied": "broad_applied",
+        # One line per setup role this host fast-forwarded past and cannot apply itself,
+        # `"<origin_sha> <playbook-or-none> <role> <unix_ts>"`. See `record_manual_plane`.
+        "manual_plane": "manual_plane",
         "last_run": "last_run",
         "diverged": "diverged_sha",
         "behind": "behind_since",
@@ -149,6 +176,103 @@ class DeployerState:
         self.write(
             "broad_applied", f"{origin} {hold_plane_marker(playbook, tags)}".strip()
         )
+
+    # ── the setup roles this deployer cannot apply itself ─────────────────────────────────
+
+    @property
+    def manual_plane(self) -> str | None:
+        """The raw `manual_plane` marker, or None when no role is pending."""
+        return self.read("manual_plane")
+
+    def manual_plane_pending(self) -> list[ManualPlaneEntry]:
+        """Every pending role, oldest line first.
+
+        A line this cannot parse is SKIPPED rather than guessed at, the way
+        `checks/service.py::_parse_behind` treats a garbled `behind_since`: the age it would
+        carry decides whether monitor-bridge pages, and a page nobody can silence on garbage
+        teaches an operator to ignore the tile. `record_manual_plane` and
+        `clear_manual_plane` still carry such a line through, so it is skipped, never lost.
+        """
+        entries = []
+        for line in (self.manual_plane or "").splitlines():
+            parts = line.split()
+            if len(parts) != 4:
+                continue
+            try:
+                at = float(parts[3])
+            except ValueError:
+                continue
+            entries.append(ManualPlaneEntry(parts[0], parts[1], parts[2], at))
+        return entries
+
+    def record_manual_plane(
+        self, origin: str, playbook: str, role: str, now: float
+    ) -> bool:
+        """Record that `role` changed in `origin`'s range and no tick can apply it.
+
+        Args:
+            origin: the origin SHA the tick fast-forwarded to.
+            playbook: the playbook that applies the role, or `NO_PLAYBOOK` for one no
+                playbook includes.
+            role: the role, under the `--tags` value that selects it.
+            now: a first-seen stamp, in `time.time()` terms.
+
+        Returns:
+            True when a line was appended, False when this role was already pending.
+
+        The stamp is NOT refreshed for a role already listed, for the same reason
+        `behind_marker` keeps its first-seen: a trickle of pushes touching the same role
+        would otherwise restart the clock every tick and monitor-bridge could never page.
+        """
+        lines: list[str] = (self.manual_plane or "").splitlines()
+        if any(self._line_role(line) == role for line in lines):
+            return False
+        lines.append(f"{origin} {playbook} {role} {now}")
+        self.write("manual_plane", "\n".join(lines))
+        return True
+
+    def clear_manual_plane(self, role: str) -> bool:
+        """Drop `role`'s line, removing the marker when it was the last one.
+
+        Returns:
+            True when a line went, False when that role was not pending — which is what an
+            operator clearing twice, or naming a role nobody recorded, must get.
+        """
+        lines = (self.manual_plane or "").splitlines()
+        kept = [line for line in lines if self._line_role(line) != role]
+        if len(kept) == len(lines):
+            return False
+        self.write("manual_plane", "\n".join(kept) or None)
+        return True
+
+    def clear_manual_plane_applied(self, playbook: str, tags: list[str]) -> list[str]:
+        """Drop the pending roles this apply covered, and return them.
+
+        Keyed on the playbook AND the tag, never the tag alone: `initial_setup.yml --tags
+        k3s` is precisely the run that exits 0 having matched no task, so treating it as an
+        apply of k3s would clear the marker over a change nothing applied — the failure
+        `setup_tags_for` returns an empty set to avoid.
+
+        No role reaches this today, because every role the marker can hold is applied by a
+        playbook this deployer never runs. It is the clearing half of a marker whose writer
+        would otherwise have no reverse, and it is what a role promoted into
+        `initial_setup.yml` needs on the day it is.
+        """
+        wanted = set(tags)
+        cleared = [
+            e.role
+            for e in self.manual_plane_pending()
+            if e.playbook == playbook and e.role in wanted
+        ]
+        for role in cleared:
+            self.clear_manual_plane(role)
+        return cleared
+
+    @staticmethod
+    def _line_role(line: str) -> str | None:
+        """The role field of one marker line, or None when the line has no third field."""
+        parts = line.split()
+        return parts[2] if len(parts) > 2 else None
 
     @property
     def diverged_sha(self) -> str | None:

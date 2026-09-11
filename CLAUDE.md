@@ -192,6 +192,10 @@ Say which of these applies, then stop:
   own role, `roles/setup/gitops_deploy/`, was in this list until 2026-09-01 and parked three
   landings that day; it now applies itself — the `DECIDED:` marker above the list in
   `deploy_logic.py` has the evidence.)
+- The host's `manual_plane` marker names a setup role the deployer cannot apply (`k3s`,
+  `common`). The range IS merged, so nothing is queued behind it — but the role is unapplied
+  until a hand runs its playbook and then `uv run python scripts/deploy_tools/gitops_state.py
+  clear-manual-plane <role>`. If it is another session's, name it and stop.
 - `deploy.sh` exits 3: the change is broad (shared templates, inventory, the setup plane) and
   maps to no single service.
 - The change is docs- or `tasks/`-only — the deployer skips those deliberately, and so do you.

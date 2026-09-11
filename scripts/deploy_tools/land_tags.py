@@ -44,6 +44,7 @@ sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
 from deploy_logic import (
     _BROAD_MANUAL_PREFIXES,
+    MANUAL_PLANE_CLEAR_CMD,
     broad_remediation,
     expand_build_couplings,
     k8s_remediation,
@@ -281,6 +282,12 @@ def plane_note(files, declared: set[str] | None = None, quiet=()) -> str:
     }
     if manual or unroutable:
         notes.append(broad_remediation(False, True, unroutable))
+    if unroutable:
+        # The tick MERGED this PR and recorded the role in `manual_plane`, so applying it by
+        # hand is only half the job: a role left in the marker pages GitOps Deploy — Status
+        # six hours later over work that is already live. A bring-up playbook gets no such
+        # line — the tick parks on those, and no marker is ever written.
+        notes.append(f"Then clear the deployer's marker: `{MANUAL_PLANE_CLEAR_CMD}`.")
     if cs.secrets:
         # DECIDED: fire on ANY change to secrets.yml, and never try to name which keys moved.
         # Naming them means decrypting both revisions, and no plaintext may reach a terminal, a

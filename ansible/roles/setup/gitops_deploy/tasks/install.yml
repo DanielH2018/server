@@ -30,6 +30,7 @@
     - deploy_failtext.py
     - deploy_alerts.py
     - deploy_changes.py
+    - deploy_defer.py
     - deploy_remediation.py
     - deploy_git.py
     - deploy_health.py
@@ -240,6 +241,8 @@
         src: ansible/roles/setup/gitops_deploy/files/deploy_phases.py
       - live: /opt/gitops-deploy/deploy_handlers.py
         src: ansible/roles/setup/gitops_deploy/files/deploy_handlers.py
+      - live: /opt/gitops-deploy/deploy_defer.py
+        src: ansible/roles/setup/gitops_deploy/files/deploy_defer.py
       - live: /opt/gitops-deploy/deploy_narrow.py
         src: ansible/roles/setup/gitops_deploy/files/deploy_narrow.py
       - live: /opt/gitops-deploy/host_lib.py
