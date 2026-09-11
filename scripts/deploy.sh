@@ -442,25 +442,31 @@ fi
 # `lock=0` on every ledger row for the 14 days to 2026-09-11, while the lock was busy 17% of
 # one of them. Behaviour is unchanged -- the same LOCK_WAIT budget, the same LOCK_BUSY exit.
 #
+# SAMPLED BEFORE THIS SHELL OPENS THE LOCK FILE, which is the only order that can name anyone
+# else. fuser scans every process's descriptors, so once this shell holds one it reports
+# ITSELF -- and closing the descriptor for the read does not help, because the process fuser
+# finds is the parent that still holds it. Sampling afterwards named the landing as its own
+# blocker whenever the real holder released during the wait. That costs a fuser and a ps on
+# every deploy, uncontended ones included, which is what land_lib's `retry_while_locked`
+# already pays per attempt for the same reason.
+lock_holder_seen=$(read_lock_holder)
+
 # Opened for WRITING, as the --detach branch above already opens it. flock(1) opens the same
 # file read-only, so this needs write permission where the command form did not: the file is
 # created by whichever of the deploy user and gitops-deploy.service takes it first, and both
 # run as sys_user.
 exec {lockfd}>"$LOCK"
-lock_holder_seen=""
 lock_started=$SECONDS
 lock_taken=0
 if flock -n "$lockfd"; then
     lock_taken=1
-else
-    # Sampled only once an attempt has actually lost the lock. On the uncontended path there
-    # is no holder to name, and this would run fuser and ps on every deploy for nothing.
-    lock_holder_seen=$(read_lock_holder)
-    # No `-E` here: that flag belongs to flock's command form. On a descriptor flock returns 1
-    # when the wait elapses, and this maps that to LOCK_BUSY itself.
-    if flock -w "$LOCK_WAIT" "$lockfd"; then
-        lock_taken=1
-    fi
+    # Nobody was in the way, so whatever the sample caught had already released. Naming it
+    # would credit the wait to a holder there was no wait for.
+    lock_holder_seen=""
+# No `-E` here: that flag belongs to flock's command form. On a descriptor flock returns 1
+# when the wait elapses, and this maps that to LOCK_BUSY itself.
+elif flock -w "$LOCK_WAIT" "$lockfd"; then
+    lock_taken=1
 fi
 lock_waited=$((SECONDS - lock_started))
 

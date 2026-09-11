@@ -40,7 +40,13 @@ _FLOCK_FREE = """#!/bin/bash
 exit 0
 """
 
+# Records how many descriptors the CALLER already has on the lock file, which is the thing
+# real `fuser` would have reported as a holder. Measured on 2026-09-11: `fuser` scans every
+# process's descriptors, so a deploy.sh that opens the lock before sampling reports itself --
+# and `fuser "$LOCK" {fd}>&-` does not help, because the parent shell still holds it.
 _FUSER = """#!/bin/bash
+ls -l "/proc/$PPID/fd" 2>/dev/null |
+  awk '/server-git-tree.lock/ { n++ } END { print n + 0 }' >"$FUSER_STUB_SELF_FDS"
 echo "  4242"
 """
 
@@ -98,6 +104,7 @@ def _stub_path(tmp_path: Path, stubs: dict[str, str]) -> dict[str, str]:
 
 def _run_deploy(tmp_path: Path, flock: str) -> subprocess.CompletedProcess:
     env = _stub_path(tmp_path, {"flock": flock, "fuser": _FUSER, "ps": _PS, "uv": _UV})
+    env["FUSER_STUB_SELF_FDS"] = str(tmp_path / "self-fds")
     return subprocess.run(
         [
             str(_DEPLOY_SH),
@@ -126,6 +133,10 @@ def test_a_contended_acquire_is_reported_with_its_seconds_and_its_holder(tmp_pat
     booked = tools.in_flock_wait(line)
     assert booked is not None, f"land.py no longer parses deploy.sh's line: {line!r}"
     assert booked[0] >= 1
+    assert (tmp_path / "self-fds").read_text().strip() == "0", (
+        "deploy.sh held the lock file when it sampled the holder, so real `fuser` would "
+        "have reported deploy.sh itself and the landing would name itself as its blocker"
+    )
 
 
 def test_an_uncontended_acquire_says_nothing(tmp_path):
