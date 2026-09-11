@@ -38,6 +38,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import deploy_alerts
+import deploy_defer
 import deploy_handlers
 import deploy_phases
 import deploy_state
@@ -103,6 +104,14 @@ HOLD_PLANE_FILE = "/var/lib/gitops-deploy/hold_plane"
 # before it printed `settled`, and printed it for PR #1529's renovate_agent change, which was
 # four days stale on disk (issue #1537). It reads this instead.
 BROAD_APPLIED_FILE = "/var/lib/gitops-deploy/broad_applied"
+# One line per setup role a tick fast-forwarded past and cannot apply itself, as
+# "<origin_sha> <playbook-or-none> <role> <unix_ts>". The durable half of the signal that
+# used to be a park: the tick no longer holds every other session's landing hostage for a
+# role only a hand can apply, so this file and the page monitor-bridge raises off its age
+# are what say the apply is still owed. Cleared by applying the role
+# (DeployerState.clear_manual_plane_applied) or by an operator running
+# `scripts/deploy_tools/gitops_state.py clear-manual-plane <role>`.
+MANUAL_PLANE_FILE = "/var/lib/gitops-deploy/manual_plane"
 # The sorted stale-compose set last alerted on, so a lingering stale dir doesn't re-page
 # every tick — only a CHANGED set (new stale dir, or one cleaned up) re-alerts.
 STALE_COMPOSE_FILE = "/var/lib/gitops-deploy/stale_composes_alerted"
@@ -403,6 +412,12 @@ def main(tools: DeployTools | None = None, config: Config | None = None) -> int:
     # tick: page (once per distinct set) when a rendered compose has no containers_list entry —
     # the stale-compose trap, twice now the cause of a phantom health gate + false rollback + hold.
     deploy_alerts.check_stale_composes(tools, STATE, config)
+    # Disk-only too, and likewise ahead of every branch that can return. A role in the
+    # `manual_plane` marker is owed to a hand on EVERY later tick, and the tick that recorded
+    # it fast-forwarded — so from the next tick on this deployer is converged and re-enters
+    # the broad arm never again. Without a line here the journal would say nothing at all
+    # about a role nobody has applied yet.
+    deploy_defer.log_pending(STATE)
 
     target = deploy_phases.assess(tools, STATE, config)
     if target.action == "dirty":

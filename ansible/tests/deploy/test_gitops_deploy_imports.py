@@ -50,6 +50,16 @@ ALLOWED: dict[str, set[str] | None] = {
     "deploy_inventory": {"deploy_changes"},
     "deploy_k8s": {"deploy_changes"},
     "deploy_remediation": {"deploy_changes"},
+    # The broad arm's two deferral shapes — park, or record in `manual_plane`. It reaches the
+    # alert transport, so it sits with `deploy_handlers` rather than among the pure modules.
+    "deploy_defer": {
+        "deploy_alerts",
+        "deploy_changes",
+        "deploy_config",
+        "deploy_remediation",
+        "deploy_state",
+        "deploy_toolbox",
+    },
     "deploy_tick_types": {"deploy_changes"},
     # The marker files, plus the two pure hold-marker decisions `clear_broad_hold` makes.
     "deploy_state": {"deploy_config", "deploy_git"},
@@ -95,6 +105,7 @@ ALLOWED: dict[str, set[str] | None] = {
     },
     "deploy_handlers": {
         "deploy_alerts",
+        "deploy_defer",
         "deploy_narrow",
         "deploy_changes",
         "deploy_config",
@@ -102,7 +113,6 @@ ALLOWED: dict[str, set[str] | None] = {
         "deploy_health",
         "deploy_io",
         "deploy_k8s",
-        "deploy_remediation",
         "deploy_staging",
         "deploy_state",
         "deploy_tick_types",

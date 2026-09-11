@@ -88,6 +88,11 @@ The setup/deploy split exists because `deploy.yml` is a `containers_list` loop a
 nothing for the setup plane, so pointing an operator at it for a `roles/setup/` change is a
 no-op that leaves the change unapplied.
 
+A setup role the deployer cannot apply is a fourth case that behaved like the third until
+2026-09-11: `k3s` lives in `k3s-bringup.yml` and `common` in no playbook, so `setup_tags_for`
+derives nothing for either. Such a range fast-forwards and records the role instead of
+parking — see *A role only a hand can apply is recorded, not parked* below.
+
 The third class is the bring-up playbooks, which run by hand by construction. The deployer's
 own role, `roles/setup/gitops_deploy/`, sat there until 2026-09-01 on the claim that applying
 it restarts the unit executing the tick. It does not: the role's handler is `state: started`,
@@ -144,12 +149,49 @@ It deliberately does not reset the tree either. Resetting without redeploying wo
 tree claiming the old commit while live state is half-new — a tree that lies, over which every
 repo-side check reads green.
 
+### A role only a hand can apply is recorded, not parked
+
+A range carrying `roles/setup/k3s/` or `roles/setup/common/` parked the whole tick until
+2026-09-11. The wait bought nothing: the role needs `ansible-playbook
+ansible/k3s-bringup.yml --tags k3s` whether or not the range is merged, while every other
+session's landing behind it exits 4 from `deploy.sh` until a hand pulls the primary checkout.
+Ten episodes over the seven days to then spanned 30 ticks, the longest about forty minutes.
+
+The tick fast-forwards instead, and writes the role to
+`/var/lib/gitops-deploy/manual_plane`, one line per role as
+`"<origin_sha> <playbook-or-none> <role> <unix_ts>"`. A role already listed is not re-added,
+so its first-seen stamp is the age everything else reads. Four consequences:
+
+- the journal says `manual_plane pending: <roles> — apply by hand: <commands>` on **every**
+  tick, not only the one that recorded it. The recording tick says
+  `manual_plane recorded: <roles>` instead, naming only the roles it added, so no tick prints
+  both lines;
+- Discord pages once per SHA, with the same commands and the marker's path;
+- **GitOps Deploy — Status** goes down once the oldest pending line is older than
+  `GITOPS_BEHIND_MAX_S` (6 h), naming the roles and the clear command;
+- `broad_applied` is not written for that role — a role in the same range that DID apply
+  still records its own, so a mixed push still proves the half it applied.
+
+Applying the role by hand is half the job. The line stays until something clears it, and a
+role left in the marker pages six hours later over work that is already live:
+
+```bash
+ansible-playbook ansible/k3s-bringup.yml --tags k3s
+uv run python scripts/deploy_tools/gitops_state.py clear-manual-plane k3s
+```
+
+The deployer clears a line itself when a tick applies that role's own playbook and tag
+(`DeployerState.clear_manual_plane_applied`). No role reaches that today, since the tick runs
+neither `k3s-bringup.yml` nor a playbook for `common`; it is what a role promoted into
+`initial_setup.yml` needs on the day it is.
+
 ### When a tick parks
 
-Only the third class parks now, and the symptom is unchanged: **a tick that exits 0, logs
-nothing, and writes `behind_since`.** The deferral is evaluated over the whole `local..origin`
-range, so one such change anywhere in that range holds back everything behind it. Diagnose it
-by diffing the range:
+Two shapes park: a bring-up playbook, and a setup path naming no role at all. The symptom
+is unchanged — **a tick that exits 0, logs a park line, and writes `behind_since`** — and the
+journal line says which of the two it was. The deferral is evaluated over the whole
+`local..origin` range, so one such change anywhere in that range holds back everything behind
+it. Diagnose it by diffing the range:
 
 ```bash
 git diff --name-only <local-HEAD>..origin/master

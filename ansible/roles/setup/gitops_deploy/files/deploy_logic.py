@@ -102,11 +102,13 @@ from deploy_k8s import (  # noqa: F401
 from deploy_remediation import (  # noqa: F401
     BRANCH_DEFAULT,
     BROAD_BUDGET_MARGIN_S,
+    MANUAL_PLANE_CLEAR_CMD,
     _setup_commands,
     broad_budget_ok,
     broad_remediation,
     deferred_service_alerts,
     k8s_remediation,
+    manual_plane_remediation,
 )
 from deploy_staging import (  # noqa: F401
     STAGING_NO_VERDICT,

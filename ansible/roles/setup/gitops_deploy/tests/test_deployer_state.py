@@ -34,7 +34,7 @@ def state(tmp_path: pathlib.Path) -> deploy_io.DeployerState:
 
 # ── the paths did not move ────────────────────────────────────────────────────────────────
 def test_every_marker_resolves_to_the_constant_gitops_deploy_declares(gitops_deploy):
-    """The two representations of the same fifteen paths, asserted equal by name.
+    """The two representations of the same twenty-one paths, asserted equal by name.
 
     A named mapping rather than a count: a marker that lost its constant has to fail with its
     own name in the message, and a count would also pass if two were swapped.
@@ -44,6 +44,7 @@ def test_every_marker_resolves_to_the_constant_gitops_deploy_declares(gitops_dep
         ("hold", "HOLD_FILE"),
         ("hold_plane", "HOLD_PLANE_FILE"),
         ("broad_applied", "BROAD_APPLIED_FILE"),
+        ("manual_plane", "MANUAL_PLANE_FILE"),
         ("last_run", "LAST_RUN"),
         ("diverged", "DIVERGED_FILE"),
         ("behind", "BEHIND_FILE"),
@@ -66,8 +67,8 @@ def test_every_marker_resolves_to_the_constant_gitops_deploy_declares(gitops_dep
 
 
 def test_the_marker_table_covers_every_constant_and_no_more():
-    """Non-vacuity for the loop above: it names twenty markers, and so must the table."""
-    assert len(deploy_io.DeployerState.MARKERS) == 20
+    """Non-vacuity for the loop above: it names twenty-one markers, and so must the table."""
+    assert len(deploy_io.DeployerState.MARKERS) == 21
 
 
 def test_an_unknown_marker_is_a_typo_not_a_new_file(state):
@@ -137,3 +138,106 @@ def test_each_named_property_reads_its_own_marker(state, prop, marker):
     a property wired to the wrong file would be a monitor reporting on the wrong fact."""
     state.write(marker, SHA)
     assert getattr(state, prop) == SHA
+
+
+# ── the manual_plane marker ───────────────────────────────────────────────────────────────
+# The two setup roles `initial_setup.yml` cannot apply, as the marker records them: k3s is
+# applied by k3s-bringup.yml, common by no playbook at all.
+K3S_LINE = ("ansible/k3s-bringup.yml", "k3s")
+COMMON_LINE = ("none", "common")
+
+
+def test_a_pending_role_is_recorded_as_one_parsable_line(state):
+    assert state.record_manual_plane(SHA, *K3S_LINE, 1000.0) is True
+    assert pathlib.Path(state.path("manual_plane")).read_text().splitlines() == [
+        f"{SHA} ansible/k3s-bringup.yml k3s 1000.0"
+    ]
+    (entry,) = state.manual_plane_pending()
+    assert entry.origin == SHA
+    assert entry.playbook == "ansible/k3s-bringup.yml"
+    assert entry.role == "k3s"
+    assert entry.at == 1000.0
+
+
+def test_a_second_role_appends_and_the_same_role_does_not(state):
+    """Dedupe is by role, so a role pending since an older SHA keeps its first-seen stamp.
+
+    Re-adding it would restart the age clock every tick and the monitor could never page.
+    """
+    state.record_manual_plane(SHA, *K3S_LINE, 1000.0)
+    assert state.record_manual_plane("beef" * 10, *COMMON_LINE, 2000.0) is True
+    assert state.record_manual_plane("cafe" * 10, *K3S_LINE, 3000.0) is False
+    assert [(e.role, e.at) for e in state.manual_plane_pending()] == [
+        ("k3s", 1000.0),
+        ("common", 2000.0),
+    ]
+
+
+def test_clearing_one_role_leaves_the_other(state):
+    state.record_manual_plane(SHA, *K3S_LINE, 1000.0)
+    state.record_manual_plane(SHA, *COMMON_LINE, 2000.0)
+    assert state.clear_manual_plane("k3s") is True
+    assert [e.role for e in state.manual_plane_pending()] == ["common"]
+
+
+def test_clearing_a_role_that_is_not_pending_changes_nothing(state):
+    """The rejecting half: an operator clearing twice, or naming a role nobody recorded."""
+    state.record_manual_plane(SHA, *COMMON_LINE, 2000.0)
+    assert state.clear_manual_plane("k3s") is False
+    assert [e.role for e in state.manual_plane_pending()] == ["common"]
+
+
+def test_clearing_the_last_role_removes_the_marker_entirely(state):
+    """An empty file reads as None everywhere else, so leave none behind."""
+    state.record_manual_plane(SHA, *K3S_LINE, 1000.0)
+    state.clear_manual_plane("k3s")
+    assert state.manual_plane is None
+    assert not os.path.exists(state.path("manual_plane"))
+
+
+def test_an_apply_of_the_roles_own_playbook_and_tag_clears_its_line(state):
+    """The deployer's own clear path: a role that becomes applyable is cleared by applying it."""
+    state.record_manual_plane(SHA, *K3S_LINE, 1000.0)
+    assert state.clear_manual_plane_applied("ansible/k3s-bringup.yml", ["k3s"]) == [
+        "k3s"
+    ]
+    assert state.manual_plane_pending() == []
+
+
+def test_an_apply_of_a_different_playbook_leaves_the_line(state):
+    """The rejecting half, and the reason this is not keyed on the tag alone.
+
+    `initial_setup.yml --tags k3s` is exactly the run that exits 0 having matched no task —
+    the failure `setup_tags_for` returns nothing to avoid. It must not clear the marker.
+    """
+    state.record_manual_plane(SHA, *K3S_LINE, 1000.0)
+    assert state.clear_manual_plane_applied("ansible/initial_setup.yml", ["k3s"]) == []
+    assert [e.role for e in state.manual_plane_pending()] == ["k3s"]
+
+
+def test_a_garbled_line_is_neither_pending_nor_lost(state):
+    """Fails open like `behind_since`: garbage must not page, and must not be silently dropped."""
+    pathlib.Path(state.path("manual_plane")).write_text(
+        f"{SHA} ansible/k3s-bringup.yml k3s not-a-number\ngarbage\n"
+    )
+    assert state.manual_plane_pending() == []
+    state.record_manual_plane(SHA, *COMMON_LINE, 2000.0)
+    assert "garbage" in pathlib.Path(state.path("manual_plane")).read_text()
+    assert [e.role for e in state.manual_plane_pending()] == ["common"]
+
+
+def test_the_marker_key_is_the_role_name_for_every_pending_role():
+    """An operator clears by the role name the alert prints, so the two must be one word.
+
+    The marker's third field is `setup_role_tag(role)`, and only a role
+    `initial_setup.yml` does not apply can ever be written there. Both of those roles are
+    tagged by their own name today. A future one that is not (the `chezmoi_setup` /
+    `chezmoi` shape) would make `clear-manual-plane <role>` miss its line, so it fails here
+    rather than on a host.
+    """
+    import deploy_changes
+
+    roles = set(deploy_changes._SETUP_ROLES_OUTSIDE_INITIAL_SETUP)
+    assert roles >= {"k3s", "common"}, roles
+    for role in roles:
+        assert deploy_changes.setup_role_tag(role) == role, role

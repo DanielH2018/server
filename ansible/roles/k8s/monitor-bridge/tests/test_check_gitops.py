@@ -193,3 +193,108 @@ def test_a_plane_marker_without_a_hold_does_not_page(cfg):
     """
     ok, _ = checks.service.gitops_status(cfg, None, hold_plane="ansible/deploy.yml")
     assert ok
+
+
+# ── the manual_plane marker: a setup role the deployer fast-forwarded past ──────────────
+# One line per pending role, "<origin_sha> <playbook> <role> <unix_ts>", written by
+# DeployerState.record_manual_plane.
+_K3S_PENDING = "abc123def4567890 ansible/k3s-bringup.yml k3s 1000.0"
+
+
+def test_a_freshly_pending_role_is_ok(cfg):
+    """A few hours pending is the normal state after the tick merges such a range.
+
+    Paging on it immediately would page on every one of those merges.
+    """
+    ok, msg = checks.service.gitops_status(
+        cfg, None, None, None, now=1000.0 + 600, manual_plane=_K3S_PENDING
+    )
+    assert ok
+    assert msg == "no held deploy"
+
+
+def test_a_role_pending_too_long_pages_and_names_it(cfg):
+    ok, msg = checks.service.gitops_status(
+        cfg, None, None, None, now=1000.0 + 7 * 3600, manual_plane=_K3S_PENDING
+    )
+    assert not ok
+    assert "k3s" in msg
+    assert "clear-manual-plane" in msg
+
+
+def test_the_oldest_pending_role_decides(cfg):
+    """The threshold is read against the OLDEST line.
+
+    A role recorded this minute must not reset the clock on one that has waited all day.
+    """
+    marker = _K3S_PENDING + "\ndef456abc7890123 none common 25000.0"
+    ok, msg = checks.service.gitops_status(
+        cfg, None, None, None, now=1000.0 + 7 * 3600, manual_plane=marker
+    )
+    assert not ok
+    assert "common" in msg and "k3s" in msg
+
+
+def test_an_unparseable_manual_plane_marker_is_ok(cfg):
+    """Same rule as `behind_since`: garbage must not page forever with nothing to clear."""
+    for marker in ("garbage", "a b c notanumber", "", "a b c"):
+        ok, _ = checks.service.gitops_status(
+            cfg, None, None, None, now=1e9, manual_plane=marker
+        )
+        assert ok, marker
+
+
+def test_a_hold_wins_over_a_pending_role(cfg):
+    """A hold names a broken apply; a pending role names work nobody has started yet."""
+    ok, msg = checks.service.gitops_status(
+        cfg, "held123abc456789", None, None, now=1e9, manual_plane=_K3S_PENDING
+    )
+    assert not ok
+    assert "held" in msg
+    assert "clear-manual-plane" not in msg
+
+
+def test_a_stale_behind_marker_wins_over_a_pending_role(cfg):
+    """Both are stale at once when a bring-up playbook parks behind an already-recorded role.
+
+    They are independent faults, so specificity cannot order them and urgency does: behind
+    means the deployer has stopped and every other session's landing exits 4 from deploy.sh
+    until a hand pulls the primary checkout. A pending role blocks nobody.
+    """
+    ok, msg = checks.service.gitops_status(
+        cfg,
+        None,
+        None,
+        "abc123def4567890 1000.0",
+        now=1000.0 + 7 * 3600,
+        manual_plane=_K3S_PENDING,
+    )
+    assert not ok
+    assert "behind origin" in msg
+    assert "clear-manual-plane" not in msg
+
+
+def test_check_gitops_status_reads_the_manual_plane_file(tmp_path, cfg):
+    """The marker is read off the same :ro state mount as `behind_since`."""
+    cfg = replace(cfg, GITOPS_STATE_DIR=str(tmp_path))
+    _gw(tmp_path, "manual_plane", "abc123def4567890 ansible/k3s-bringup.yml k3s 1.0")
+    ok, msg = checks.service.check_gitops_status(cfg)
+    assert not ok
+    assert "k3s" in msg
+
+
+def test_the_clear_command_matches_the_one_the_deployer_prescribes():
+    """Three surfaces print this command, and they live in three trees that cannot import
+    one another.
+
+    A monitor prescribing a stale one is worse than no monitor: an operator follows it, the
+    marker stays, and the tile pages again six hours later.
+    """
+    import sys
+
+    sys.path.insert(0, str(_REPO / "ansible/roles/setup/gitops_deploy/files"))
+    import deploy_remediation
+
+    assert (
+        checks.service.MANUAL_PLANE_CLEAR in deploy_remediation.MANUAL_PLANE_CLEAR_CMD
+    )

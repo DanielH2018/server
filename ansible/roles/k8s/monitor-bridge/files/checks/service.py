@@ -56,6 +56,33 @@ def _parse_behind(marker: str | None) -> tuple[str, float | None]:
         return "", None
 
 
+# What an operator runs to clear one pending role, with `<role>` filled in. The deployer's
+# own copy is `deploy_remediation.MANUAL_PLANE_CLEAR_CMD`; this pod cannot import that tree,
+# so `tests/test_check_gitops.py` asserts the two agree.
+MANUAL_PLANE_CLEAR = (
+    "uv run python scripts/deploy_tools/gitops_state.py clear-manual-plane"
+)
+
+
+def _parse_manual_plane(marker: str | None) -> list[tuple[str, float]]:
+    """Split the deployer's `manual_plane` marker into (role, first_seen) pairs.
+
+    One line per pending role, `"<origin_sha> <playbook> <role> <unix_ts>"`. A line this
+    cannot parse is skipped, for the same reason `_parse_behind` treats a garbled marker as
+    "not behind": a page raised off garbage names no role and cannot be cleared.
+    """
+    pending = []
+    for line in (marker or "").splitlines():
+        parts = line.split()
+        if len(parts) != 4:
+            continue
+        try:
+            pending.append((parts[2], float(parts[3])))
+        except ValueError:
+            continue
+    return pending
+
+
 def gitops_status(
     cfg: Config,
     hold_sha: str | None,
@@ -64,13 +91,27 @@ def gitops_status(
     now: float | None = None,
     max_behind_s: float | None = None,
     hold_plane: str | None = None,
+    manual_plane: str | None = None,
 ) -> tuple[bool, str]:
     """Pure: is the deploy pipeline in a state needing operator action? Returns (ok, msg).
 
-    Three down states share this monitor, most-specific first: a rolled-back commit HELD pending a
-    revert, a local↔origin DIVERGENCE where the deployer can't fast-forward and silently noops
-    forever while origin's new commits never deploy (2026-07-15 review L3), and the host simply
-    sitting BEHIND origin for too long.
+    Four down states share this monitor: a rolled-back commit HELD pending a revert, a
+    local↔origin DIVERGENCE where the deployer can't fast-forward and silently noops forever
+    while origin's new commits never deploy (2026-07-15 review L3), the host simply sitting
+    BEHIND origin for too long, and a setup role the deployer fast-forwarded past and cannot
+    apply itself.
+
+    The last is the signal a park used to carry. The deployer no longer holds a whole range
+    back for a role only a hand can apply — that parked every other session's landing too — so
+    it merges, records the role in `manual_plane`, and this pages once the OLDEST pending role
+    is older than the same threshold. Age-gated for the same reason the behind arm is: a role
+    recorded ten minutes ago is an ordinary merge, not a fault.
+
+    It is reported LAST, behind rather than ahead of the behind arm, and the two are
+    independent faults rather than a cause and its symptom — so specificity does not order
+    them. Urgency does: a host sustained-behind is a deployer that has stopped, and every
+    other session's landing exits 4 from deploy.sh until a hand pulls the primary checkout,
+    where a pending role blocks nobody and only waits on work nobody has started.
 
     Behind-ness is the general case the other two are specific instances of, and it is the one that
     caught nothing before: a deferred BROAD change never fast-forwards, so the host parks on an old
@@ -117,6 +158,23 @@ def gitops_status(
                 "host %.0fh behind origin at %s (> %.0fh) — deploy deferred (broad change / "
                 "dirty tree); run the manual deploy on the host"
                 % (age_s / 3600, sha[:8], max_behind_s / 3600)
+            )
+    pending = _parse_manual_plane(manual_plane)
+    if pending:
+        oldest = min(at for _, at in pending)
+        age_s = (time.time() if now is None else now) - oldest
+        if age_s > max_behind_s:
+            roles = ", ".join(sorted({role for role, _ in pending}))
+            return False, (
+                "%s unapplied for %.0fh (> %.0fh) — the tick cannot apply %s; apply by hand, "
+                "then `%s <role>`"
+                % (
+                    roles,
+                    age_s / 3600,
+                    max_behind_s / 3600,
+                    "it" if len(pending) == 1 else "them",
+                    MANUAL_PLANE_CLEAR,
+                )
             )
     return True, "no held deploy"
 
@@ -339,6 +397,7 @@ def check_gitops_status(cfg: Config) -> tuple[bool, str]:
         _read_gitops_marker(cfg, "diverged_sha"),
         _read_gitops_marker(cfg, "behind_since"),
         hold_plane=_read_gitops_marker(cfg, "hold_plane"),
+        manual_plane=_read_gitops_marker(cfg, "manual_plane"),
     )
 
 
