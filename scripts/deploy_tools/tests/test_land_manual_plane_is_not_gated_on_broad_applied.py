@@ -94,7 +94,15 @@ def test_a_bringup_playbook_is_not_told_to_clear_a_marker():
     """The rejecting half: the tick parks on these, so no marker was ever written.
 
     Printing a clear command here would send an operator after a file that does not exist.
+    The range carries an unapplyable ROLE as well, which is the case that decides the rule:
+    `deploy_defer.parks_the_tick` gives `cs.broad_manual` priority, so the whole range parks
+    and `deploy_defer.record` never runs. A bring-up playbook ALONE names no role and would
+    pass this assertion whatever the condition said.
     """
-    note = land_tags.plane_note(["ansible/bootstrap.yml"])
-    assert note != ""
+    note = land_tags.plane_note(
+        ["ansible/k3s-bringup.yml", "ansible/roles/setup/k3s/defaults/main.yml"]
+    )
+    assert "ansible/k3s-bringup.yml --tags k3s" in note, (
+        "the hand command is still printed"
+    )
     assert "clear-manual-plane" not in note

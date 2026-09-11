@@ -21,40 +21,63 @@ COMMON = "def456abc7890123 none common 2000.0"
 
 
 @pytest.fixture
+def tree_lock(tmp_path: Path) -> Path:
+    """The lock `run` injects, in place of `/var/lock/server-git-tree.lock`.
+
+    A deploy or a gitops tick on this very host may hold the real one: a suite that took it
+    would block that deploy, and one that ran while a tick held it would sit through the whole
+    wait on every test. `main()` takes the path as an argument so no test has to patch it.
+    """
+    return tmp_path / "tree.lock"
+
+
+@pytest.fixture
+def run(tree_lock: Path):
+    """`run(state_dir, *argv)` -> the command's exit code, against the injected lock."""
+
+    def _run(state_dir: Path, *args: str) -> int:
+        return gitops_state.main(
+            ["--state-dir", str(state_dir), *args],
+            lock_path=str(tree_lock),
+            lock_wait_s=0.05,
+        )
+
+    return _run
+
+
+@pytest.fixture
 def marker(tmp_path: Path) -> Path:
     (tmp_path / "manual_plane").write_text(f"{K3S}\n{COMMON}\n")
     return tmp_path / "manual_plane"
 
 
-def _run(state_dir: Path, *args: str) -> int:
-    return gitops_state.main(["--state-dir", str(state_dir), *args])
-
-
-def test_clearing_one_role_leaves_the_other(marker, capsys):
-    assert _run(marker.parent, "clear-manual-plane", "k3s") == 0
+def test_clearing_one_role_leaves_the_other(marker, run, capsys):
+    assert run(marker.parent, "clear-manual-plane", "k3s") == 0
     assert marker.read_text().splitlines() == [COMMON]
     assert "k3s" in capsys.readouterr().out
 
 
-def test_clearing_a_role_that_is_not_pending_exits_zero_and_says_so(marker, capsys):
+def test_clearing_a_role_that_is_not_pending_exits_zero_and_says_so(
+    marker, run, capsys
+):
     """An operator clearing twice, or naming a role nobody recorded, has nothing to fix."""
-    assert _run(marker.parent, "clear-manual-plane", "renovate_agent") == 0
+    assert run(marker.parent, "clear-manual-plane", "renovate_agent") == 0
     assert marker.read_text().splitlines() == [K3S, COMMON]
     assert "not pending" in capsys.readouterr().out
 
 
-def test_clearing_the_last_role_removes_the_marker(tmp_path, capsys):
+def test_clearing_the_last_role_removes_the_marker(tmp_path, run, capsys):
     (tmp_path / "manual_plane").write_text(f"{K3S}\n")
-    assert _run(tmp_path, "clear-manual-plane", "k3s") == 0
+    assert run(tmp_path, "clear-manual-plane", "k3s") == 0
     assert not (tmp_path / "manual_plane").exists()
 
 
-def test_an_absent_marker_is_not_an_error(tmp_path, capsys):
-    assert _run(tmp_path, "clear-manual-plane", "k3s") == 0
+def test_an_absent_marker_is_not_an_error(tmp_path, run, capsys):
+    assert run(tmp_path, "clear-manual-plane", "k3s") == 0
     assert "not pending" in capsys.readouterr().out
 
 
-def test_a_state_directory_this_user_cannot_write_says_who_owns_it(marker, capsys):
+def test_a_state_directory_this_user_cannot_write_says_who_owns_it(marker, run, capsys):
     """The state directory is 0750 and owned by the deployer's user, so the wrong shell gets
     a PermissionError.
 
@@ -62,11 +85,31 @@ def test_a_state_directory_this_user_cannot_write_says_who_owns_it(marker, capsy
     """
     marker.parent.chmod(0o500)
     try:
-        assert _run(marker.parent, "clear-manual-plane", "k3s") == 1
+        assert run(marker.parent, "clear-manual-plane", "k3s") == 1
         err = capsys.readouterr().err
         assert "cannot write" in err
     finally:
         marker.parent.chmod(0o700)
+
+
+def test_a_held_tree_lock_refuses_and_changes_nothing(marker, tree_lock, run, capsys):
+    """The accepting half is every other test here, which runs against a free lock.
+
+    A tick's `record_manual_plane` and this command are both read-modify-write over the whole
+    file, so an interleaved pair drops one of their two changes. The tick runs under this lock
+    already; refusing is what keeps the operator's half out of the gap.
+    """
+    with gitops_state.tree_lock(str(tree_lock)):
+        assert run(marker.parent, "clear-manual-plane", "k3s") == 1
+    assert marker.read_text().splitlines() == [K3S, COMMON], "nothing was rewritten"
+    assert "is held" in capsys.readouterr().err
+
+
+def test_the_lock_is_released_for_the_next_run(marker, run, capsys):
+    """A refusal must not leave the lock held, and neither must a successful clear."""
+    assert run(marker.parent, "clear-manual-plane", "k3s") == 0
+    assert run(marker.parent, "clear-manual-plane", "common") == 0
+    assert not marker.exists()
 
 
 def test_the_role_is_resolved_through_the_deployers_own_tag_map(marker):

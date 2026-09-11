@@ -115,13 +115,24 @@ def record(
     A role already in the marker keeps its first-seen stamp, which is the age monitor-bridge
     pages on. The page goes out on the `broad` channel — the same one `park` uses, which a
     range can never take as well as this one.
+
+    The journal line here names only what this tick ADDED. `main()` already logs the whole
+    pending set on every tick, including this one, so logging the set again here printed it
+    twice whenever a role was already listed.
     """
     now = time.time()
-    for role in roles:
-        state.record_manual_plane(
+    recorded = [
+        role
+        for role in roles
+        if state.record_manual_plane(
             origin, setup_role_playbook(role) or NO_PLAYBOOK, setup_role_tag(role), now
         )
-    log_pending(state)
+    ]
+    if recorded:
+        log(
+            f"manual_plane recorded: {', '.join(recorded)} — merged, not applied; "
+            + manual_plane_remediation(set(recorded))
+        )
     deploy_alerts.alert_once(
         tools,
         state,
@@ -151,12 +162,13 @@ def clear_applied(state: DeployerState, playbook: str, tags: list[str]) -> None:
 def log_pending(state: DeployerState) -> None:
     """Name every role the `manual_plane` marker still holds, in the journal.
 
-    Called on EVERY tick from `main()`, before any branch can return, and again by the tick
-    that writes the marker. The writing tick fast-forwards, so from the next tick on the
-    deployer is converged and re-enters the broad arm never again — a line written only where
-    the marker is written would appear once, and an operator reading the journal an hour later
-    would see an idle deployer with an unapplied role. That invisibility is what #1467 cost,
-    one plane over.
+    Called from `main()` and from nowhere else, before any branch can return. The tick that
+    writes the marker fast-forwards, so from the next tick on the deployer is converged and
+    re-enters the broad arm never again — a line written only where the marker is written
+    would appear once, and an operator reading the journal an hour later would see an idle
+    deployer with an unapplied role. That invisibility is what #1467 cost, one plane over.
+    The writing tick says its own piece through `record`, which names what it ADDED: this
+    call runs ahead of it, against a marker that does not hold the new role yet.
     """
     roles = sorted({e.role for e in state.manual_plane_pending()})
     if not roles:

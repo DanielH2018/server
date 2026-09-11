@@ -34,7 +34,7 @@ def state(tmp_path: pathlib.Path) -> deploy_io.DeployerState:
 
 # ── the paths did not move ────────────────────────────────────────────────────────────────
 def test_every_marker_resolves_to_the_constant_gitops_deploy_declares(gitops_deploy):
-    """The two representations of the same fifteen paths, asserted equal by name.
+    """The two representations of the same twenty-one paths, asserted equal by name.
 
     A named mapping rather than a count: a marker that lost its constant has to fail with its
     own name in the message, and a count would also pass if two were swapped.

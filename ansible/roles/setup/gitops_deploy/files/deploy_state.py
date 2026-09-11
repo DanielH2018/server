@@ -2,9 +2,9 @@
 """The deployer's state directory: the marker files under /var/lib/gitops-deploy.
 
 `DeployerState` is the whole of it — one object with a typed accessor per marker, over every
-file that records what this host believes (`MARKERS` is the list). `gitops_deploy.py` still declares the path
-literals, because an Ansible default is pinned against one of them; this module holds the
-reading and the writing.
+file that records what this host believes (`MARKERS` is the list). `gitops_deploy.py` still
+declares the path literals, because an Ansible default is pinned against one of them; this
+module holds the reading and the writing.
 
 This is a leaf: `deploy_config` for `log`, `deploy_git` for the two pure hold-marker decisions
 `clear_broad_hold` makes, `host_lib` and the standard library. Nothing else from this role,
@@ -39,8 +39,9 @@ class ManualPlaneEntry(NamedTuple):
         playbook: the playbook that applies the role, or `NO_PLAYBOOK`.
         role: the role, under the `--tags` value that selects it. The two are the same word
             for every role that can reach this marker, which
-            `test_deployer_state.py::test_the_marker_key_is_the_role_name_for_every_pending_role`
-            pins — so an operator clears by the role name they read in the alert.
+            `test_the_marker_key_is_the_role_name_for_every_pending_role` (in
+            `test_deployer_state.py`) pins — so an operator clears by the role name the alert
+            gives them.
         at: when the deployer first recorded it, in `time.time()` terms. The age this stamp
             gives is what monitor-bridge pages on, so it is NEVER refreshed for a role
             already listed.
@@ -59,8 +60,9 @@ class DeployerState:
     it has been behind origin, the setup roles no tick can apply, one dedupe marker per alert
     channel, the undelivered-alert queue, the staging tick ledger and the operator's staging
     override — and they were reached through one module constant each plus a pair of bare
-    `_read_marker`/`_write_marker` helpers, so nothing described the state as a whole. This is that description. The paths, the file contents and
-    the empty-vs-missing semantics are unchanged; `gitops_deploy.py` still holds the literal
+    `_read_marker`/`_write_marker` helpers, so nothing described the state as a whole. This
+    is that description. The paths, the file contents and the empty-vs-missing semantics are
+    unchanged; `gitops_deploy.py` still holds the literal
     constants because the tick ledger's Ansible default is pinned against one of them and the
     test suite repoints the rest, and `tests/test_deployer_state.py` asserts the two agree.
 

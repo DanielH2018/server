@@ -16,6 +16,8 @@ Run: uv run pytest ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_br
 
 # ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_broad_park.py
 
+import deploy_defer
+
 # The SHA the `tick` fixture fast-forwards to; see test_gitops_deploy_main_branches.py for why
 # `from conftest import` is avoided.
 ORIGIN = "2" * 40
@@ -58,7 +60,9 @@ def test_a_setup_path_belonging_to_no_role_still_parks(gitops_deploy, tick, caps
     """
     tick.paths = ["ansible/roles/setup/README.yml"]
     assert gitops_deploy.main(tick.tools) == 0
-    assert "parked, nothing merged" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "parked, nothing merged" in out
+    assert "names no role" in out, "and the journal says which of the two parks this is"
     assert tick.merges == [] and tick.playbooks == []
     assert gitops_deploy.STATE.manual_plane is None
 
@@ -80,7 +84,7 @@ def test_an_unapplyable_setup_role_fast_forwards_and_records_the_marker(
         "ansible/k3s-bringup.yml",
         "k3s",
     )
-    assert "manual_plane pending: k3s" in out
+    assert "manual_plane recorded: k3s" in out, "the tick that adds a role says so"
     assert "ansible/k3s-bringup.yml --tags k3s" in out
     assert len(tick.posts) == 1, "one page per SHA, naming the hand command"
     assert "k3s-bringup.yml" in tick.posts[0]
@@ -103,6 +107,20 @@ def test_a_pending_role_is_named_on_every_later_tick(gitops_deploy, tick, capsys
     out = capsys.readouterr().out
     assert "manual_plane pending: k3s" in out
     assert "ansible/k3s-bringup.yml --tags k3s" in out
+
+
+def test_a_role_already_recorded_is_not_announced_again(gitops_deploy, tick, capsys):
+    """A second range naming the same role adds no line: `main()` already named the set.
+
+    Both call sites logged the whole pending set, so a role already listed was printed twice
+    on the tick that re-recorded it — once as pending, once again right after.
+    """
+    config = gitops_deploy.tick_config()
+    deploy_defer.record(tick.tools, gitops_deploy.STATE, config, ORIGIN, ["k3s"])
+    capsys.readouterr()
+    deploy_defer.record(tick.tools, gitops_deploy.STATE, config, ORIGIN, ["k3s"])
+    assert "manual_plane recorded" not in capsys.readouterr().out
+    assert len(gitops_deploy.STATE.manual_plane_pending()) == 1, "and no second line"
 
 
 def test_an_idle_tick_with_no_pending_role_says_nothing(gitops_deploy, tick, capsys):

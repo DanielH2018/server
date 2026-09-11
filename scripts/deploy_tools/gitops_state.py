@@ -19,11 +19,19 @@ WHERE IT RUNS. `/var/lib/gitops-deploy` is 0750 and owned by `sys_user` (`ubuntu
 daniel-box), so the deploy user's own shell writes it directly and any other user needs
 `sudo -u ubuntu`. A directory this uid cannot write is reported as that, not as a traceback.
 
+The rewrite takes `/var/lock/server-git-tree.lock`, the lock a tick already holds, so the two
+cannot interleave over the same file. It waits seconds rather than minutes and then refuses:
+re-run it once the deploy or tick finishes.
+
 Run: uv run pytest scripts/deploy_tools/tests/test_gitops_state.py
 """
 
 import argparse
+import contextlib
+import fcntl
+import os
 import sys
+import time
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
@@ -43,17 +51,85 @@ _sys.path.insert(0, str(HOST_LIB_FILES))
 from deploy_changes import setup_role_tag
 from deploy_state import STATE_DIR, DeployerState
 
+# The tree lock every writer of this host's checkout takes: `deploy.sh`'s own `LOCK=`, and the
+# deployer unit's `flock` ExecStart.
+TREE_LOCK = "/var/lock/server-git-tree.lock"
+
+# Seconds to wait for it. Every other waiter on this lock waits 3000 (the census in the
+# deployer's test_gitops_deploy_timeout_budgets.py), because those are unattended jobs that
+# must not skip their run. This is an operator at a prompt, and a tick can hold the lock for
+# most of an hour, so waiting it out would read as a hang. Refusing is the better answer: the
+# clear changes one line, is idempotent, and costs nothing to re-run.
+LOCK_WAIT_S = 5.0
+
+
+class LockBusy(Exception):
+    """The tree lock stayed held for the whole wait, so nothing was read or written."""
+
+
+@contextlib.contextmanager
+def tree_lock(path: str, wait_s: float | None = None):
+    """Hold the tree lock across a read-modify-write of the marker, or raise `LockBusy`.
+
+    `DeployerState.record_manual_plane` reads every line, appends one and writes the file
+    back; so does `clear_manual_plane`. Interleaved, the loser's write drops the winner's
+    line — a role recorded and then silently lost, or a cleared role reappearing. The tick
+    already runs under this lock, so taking it here is what makes the pair safe.
+
+    Args:
+      wait_s: how long to wait for the lock. None reads `LOCK_WAIT_S` at call time, which is
+        what lets a test shorten the wait rather than sleep through it.
+
+    Raises:
+      LockBusy: the lock was held for the whole wait.
+    """
+    fd = os.open(path, os.O_RDONLY | os.O_CREAT, 0o666)
+    try:
+        deadline = time.monotonic() + (LOCK_WAIT_S if wait_s is None else wait_s)
+        while True:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError as exc:
+                if time.monotonic() >= deadline:
+                    raise LockBusy(path) from exc
+                time.sleep(0.1)
+        try:
+            yield
+        finally:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+    finally:
+        os.close(fd)
+
 
 def marker_key(role: str) -> str:
     """The `manual_plane` line key for a role, which is the `--tags` value that selects it."""
     return setup_role_tag(role)
 
 
-def clear_manual_plane(state: DeployerState, role: str) -> int:
-    """Drop `role`'s pending line. Exit 0 whether or not there was one to drop."""
+def clear_manual_plane(
+    state: DeployerState,
+    role: str,
+    lock_path: str | None = None,
+    lock_wait_s: float | None = None,
+) -> int:
+    """Drop `role`'s pending line. Exit 0 whether or not there was one to drop.
+
+    Args:
+      lock_path: the tree lock to serialise the rewrite against. None reads `TREE_LOCK`.
+      lock_wait_s: how long to wait for it. None reads `LOCK_WAIT_S`.
+    """
     key = marker_key(role)
     try:
-        cleared = state.clear_manual_plane(key)
+        with tree_lock(TREE_LOCK if lock_path is None else lock_path, lock_wait_s):
+            cleared = state.clear_manual_plane(key)
+    except LockBusy as busy:
+        print(
+            f"{busy.args[0]} is held — a deploy or a gitops tick is running. Nothing was "
+            "changed; re-run this when it finishes.",
+            file=sys.stderr,
+        )
+        return 1
     except PermissionError:
         print(
             f"cannot write {state.path('manual_plane')} as this user — the state directory "
@@ -70,9 +146,20 @@ def clear_manual_plane(state: DeployerState, role: str) -> int:
     return 0
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(
+    argv: list[str] | None = None,
+    lock_path: str | None = None,
+    lock_wait_s: float | None = None,
+) -> int:
+    """Parse `argv` and run the subcommand it names.
+
+    Args:
+      lock_path: the tree lock the rewrite serialises against. None reads `TREE_LOCK`; a test
+        passes its own, because taking the host's real lock would block a running deploy.
+      lock_wait_s: how long to wait for it. None reads `LOCK_WAIT_S`.
+    """
     parser = argparse.ArgumentParser(
-        description=__doc__.splitlines()[0],
+        description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
@@ -88,7 +175,11 @@ def main(argv: list[str] | None = None) -> int:
     clear.add_argument("role", help="the setup role, e.g. k3s or common")
     args = parser.parse_args(argv)
     state = DeployerState(args.state_dir)
-    return clear_manual_plane(state, args.role)
+    if args.command != "clear-manual-plane":
+        # argparse refuses any other value, so this catches a subcommand added to the parser
+        # and not to this dispatch — which would otherwise run the clear with its arguments.
+        parser.error(f"no handler for {args.command}")
+    return clear_manual_plane(state, args.role, lock_path, lock_wait_s)
 
 
 if __name__ == "__main__":

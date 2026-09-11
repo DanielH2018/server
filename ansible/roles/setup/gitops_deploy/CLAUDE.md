@@ -233,6 +233,10 @@ stay).
     session: ten park episodes over the seven days to 2026-09-11 spanned 30 ticks, the longest
     about forty minutes, and every landing behind one exits 4 from `deploy.sh` until a hand
     pulls the primary checkout.
+    A range carrying BOTH a bring-up playbook and an unapplyable role parks and writes no
+    marker at all — `deploy_defer.parks_the_tick` gives `cs.broad_manual` priority, nothing is
+    merged, and `behind_since` is the signal there exactly as it was before. `land.sh` prints
+    no clear command for such a PR for the same reason.
   - **A park names its reason in the journal on every tick** (`deploy_remediation.broad_park_reason`).
     The Discord page is throttled once per SHA and until 2026-09-09 the journal was throttled with
     it, so from the second tick behind a range this arm logged nothing at all. daniel-box then sat

@@ -282,11 +282,15 @@ def plane_note(files, declared: set[str] | None = None, quiet=()) -> str:
     }
     if manual or unroutable:
         notes.append(broad_remediation(False, True, unroutable))
-    if unroutable:
+    if unroutable and not manual:
         # The tick MERGED this PR and recorded the role in `manual_plane`, so applying it by
         # hand is only half the job: a role left in the marker pages GitOps Deploy — Status
-        # six hours later over work that is already live. A bring-up playbook gets no such
-        # line — the tick parks on those, and no marker is ever written.
+        # six hours later over work that is already live.
+        #
+        # `not manual` because `deploy_defer.parks_the_tick` gives `cs.broad_manual` priority:
+        # a range carrying BOTH a bring-up playbook and an unapplyable role parks outright and
+        # writes no marker, so printing the clear command there sends an operator after a file
+        # that does not exist.
         notes.append(f"Then clear the deployer's marker: `{MANUAL_PLANE_CLEAR_CMD}`.")
     if cs.secrets:
         # DECIDED: fire on ANY change to secrets.yml, and never try to name which keys moved.
