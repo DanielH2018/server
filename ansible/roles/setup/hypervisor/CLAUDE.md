@@ -84,8 +84,17 @@ Two mechanics that decide whether a change lands:
   brings it back fenced. That task fires only while the live interface is unfenced.
 - **Editing a rule inside the filter needs no restart.** libvirt re-applies a redefined filter to
   every interface already referencing it. That works only because the template pins the filter's
-  UUID: `nwfilter-define` is not `net-define`, and with no `<uuid>` it mints one and then refuses
-  the name collision, so the role would deploy once and fail on every re-run.
+  UUID: with no `<uuid>` it mints one and then refuses the name collision, so the role would
+  deploy once and fail on every re-run.
+- **`net-define` collides the same way, and the network template pins its UUID too.** The
+  first change to `staging-network.xml.j2` since bring-up (the drill guest's reservation,
+  2026-09-11) failed with `network 'staging' already exists with uuid ...`. The network on
+  daniel-server predates the pin and carries a random UUID, and libvirt refuses a same-name
+  define under any other UUID even after `net-undefine`, so `network.yml` reads the live
+  UUID with `net-uuid` and pins that, falling back to `to_uuid` on a fresh host. A re-define
+  still only rewrites the persistent config: the running dnsmasq keeps the reservations it
+  started with, so the same tasks push a changed reservation in with `net-update --live`
+  rather than restart the network under daniel-stage.
 - **A referenced filter cannot be undefined.** `nwfilter-undefine` reports "Requested operation is
   not valid: nwfilter is in use" while the guest holds it, so clearing a stray one means
   `virsh destroy daniel-stage` first, then undefine, then re-run the role. The refusal is a

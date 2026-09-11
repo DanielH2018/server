@@ -42,6 +42,7 @@ def _vars() -> dict:
     for key in ("staging_vm_hostname", "staging_vm_mac", "staging_vm_ip", "sys_user"):
         merged[key] = all_vars[key]
     merged["hypervisor_etcd_drill_vm_ssh_key"] = STUB_SSH_KEY
+    merged["hypervisor_staging_net_uuid"] = "00000000-0000-5000-8000-000000000000"
     merged["hypervisor_etcd_drill_vm_hostkey_private"] = (
         "-----BEGIN OPENSSH PRIVATE KEY-----\nstub\n-----END OPENSSH PRIVATE KEY-----"
     )
@@ -102,6 +103,26 @@ def test_the_drill_guest_mac_matches_its_dhcp_reservation_and_is_not_the_staging
     )
     assert domain_mac != v["staging_vm_mac"]
     assert v["hypervisor_etcd_drill_vm_ip"] != v["staging_vm_ip"]
+
+
+def test_the_staging_network_pins_its_uuid_and_pushes_reservations_live():
+    """The drill's reservation was the first change to the network XML since bring-up, and it
+    failed the apply twice over: net-define minted a fresh UUID and refused on the name, and
+    a running network's dnsmasq ignores the persistent config until the network restarts."""
+    net = ET.fromstring(_render("staging-network.xml.j2"))
+    assert net.findtext("uuid") == _vars()["hypervisor_staging_net_uuid"]
+    tasks = load_yaml(ROLE / "tasks" / "network.yml")
+    pin = next(t for t in tasks if t["name"] == "Pin the staging network's UUID")
+    assert "to_uuid" in pin["ansible.builtin.set_fact"]["hypervisor_staging_net_uuid"]
+    live = next(t for t in tasks if "DHCP reservation" in t["name"])
+    argv = live["ansible.builtin.command"]["argv"]
+    assert "net-update" in argv and "--live" in argv and "ip-dhcp-host" in argv
+    assert "existing dhcp host entry" in live["failed_when"]
+    reserved = {h["name"] for h in live["loop"]}
+    assert reserved == {
+        "{{ staging_vm_hostname }}",
+        "{{ hypervisor_etcd_drill_vm_hostname }}",
+    }
 
 
 def test_the_drill_guest_is_fenced_like_the_staging_guest():

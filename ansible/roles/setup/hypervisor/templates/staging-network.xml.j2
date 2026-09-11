@@ -1,6 +1,10 @@
 <!-- Managed by ansible (roles/setup/hypervisor). Edits here are overwritten. -->
 <network>
   <name>{{ hypervisor_staging_net_name }}</name>
+  <!-- Pinned so a re-define replaces this network instead of colliding on its name; the
+       task that sets the value carries the reasoning (network.yml, "Pin the staging
+       network's UUID"). -->
+  <uuid>{{ hypervisor_staging_net_uuid }}</uuid>
   <forward mode='nat'>
     <!-- Bounded explicitly rather than left to libvirt's default, so the masquerade port
          range is a declared property of this network and not a version-dependent one. -->

@@ -35,6 +35,7 @@ def _vars():
     for key in ("staging_vm_hostname", "staging_vm_mac", "staging_vm_ip", "sys_user"):
         assert key in all_vars, f"{key} is not defined in group_vars/all.yml"
         merged[key] = all_vars[key]
+    merged["hypervisor_staging_net_uuid"] = "00000000-0000-5000-8000-000000000000"
     merged["hypervisor_staging_vm_ssh_key"] = STUB_SSH_KEY
     # Role defaults reference each other; Jinja in a default value is not resolved by
     # yaml.safe_load, so render the two that matter into plain strings.
