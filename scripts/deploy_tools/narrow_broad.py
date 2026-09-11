@@ -54,10 +54,9 @@ from lib.repo_paths import GITOPS_DEPLOY_FILES, REPO
 # IMPORTS stay inside the functions, because only the path entry is free.
 _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
-# Paths whose content every play reads, so no `--tags` value scopes a change to them. The
-# first four are the task files `ansible/deploy.yml` imports, `filter_plugins/` is the
-# toposort that orders the whole run, `containers/common/` is the shared Docker deploy path,
-# and `ansible.cfg` configures every ansible-playbook invocation.
+# Paths whose content every play reads, so no `--tags` value scopes a change to them: the
+# play itself and the three task directories it imports, the toposort that orders the whole
+# run, the shared Docker deploy path, and the config every ansible-playbook run reads.
 PLAY_PREFIXES = (
     "ansible/deploy.yml",
     "ansible/tasks/",
@@ -85,7 +84,11 @@ class CannotNarrow(Exception):
 
 
 class Importers(NamedTuple):
-    """What names a shared template: the roles, and the other shared templates."""
+    """What a grep hit list holds: the role directories, and the shared templates.
+
+    The two are answered together because a hit under `ansible/templates/` is not an answer
+    yet — it is a second question, asked of that template's own importers.
+    """
 
     roles: set[str]
     templates: set[str]
@@ -158,20 +161,21 @@ def _sort_hits(hits: list[str], subject: str) -> Importers:
 
 def template_importers(
     name: str, ref: str, cwd: Path, seen: set[str], explain=lambda _m: None
-) -> Importers:
-    """Every role that imports or includes the shared template `name`, transitively.
+) -> set[str]:
+    """Every role directory that imports or includes the shared template `name`.
 
     A macro imported by another macro reaches the second one's importers too, so the scan
     follows that edge rather than stopping at the first file. `seen` breaks a cycle and is
-    also what keeps a self-reference from recursing.
+    also what keeps a self-reference from recursing. A play-level importer raises, in
+    `_sort_hits`.
     """
     ctx = Context(cwd, ref, set(), {}, explain)
     seen.add(name)
     hits = _sort_hits(_grep(ctx, name, word=False), f"the macro {name}")
     roles = set(hits.roles)
     for other in sorted(hits.templates - seen):
-        roles |= template_importers(other, ref, cwd, seen, explain).roles
-    return Importers(roles, hits.templates)
+        roles |= template_importers(other, ref, cwd, seen, explain)
+    return roles
 
 
 def _role_tags(roles: set[str], ctx: Context) -> set[str]:
@@ -244,7 +248,7 @@ def _key_tags(key: str, ctx: Context, path: str) -> set[str]:
     hits = _sort_hits(_grep(ctx, key, word=True), f"the variable {key}")
     roles = set(hits.roles)
     for name in sorted(hits.templates):
-        roles |= template_importers(name, ctx.ref, ctx.cwd, {name}, ctx.explain).roles
+        roles |= template_importers(name, ctx.ref, ctx.cwd, {name}, ctx.explain)
     tags = _role_tags(roles, ctx)
     ctx.explain(f"narrow: {key} -> {','.join(sorted(tags)) or '(nothing)'} via {path}")
     return tags
@@ -291,7 +295,7 @@ def _broad_path_tags(path: str, old_ref: str, ctx: Context) -> set[str]:
         raise CannotNarrow(f"{path} was deleted, so nothing can be read from it")
     if path.startswith(SHARED_TEMPLATES):
         name = path[len(SHARED_TEMPLATES) :]
-        roles = template_importers(name, ctx.ref, ctx.cwd, {name}, ctx.explain).roles
+        roles = template_importers(name, ctx.ref, ctx.cwd, {name}, ctx.explain)
         tags = _role_tags(roles, ctx)
         ctx.explain(
             f"narrow: {name} -> {','.join(sorted(tags)) or '(nothing)'} via {path}"

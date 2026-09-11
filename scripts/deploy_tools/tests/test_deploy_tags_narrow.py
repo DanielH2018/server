@@ -244,7 +244,7 @@ def test_the_real_tree_still_has_macro_importers():
     found = narrow_broad.template_importers(
         "container-resources.yml.j2", "HEAD", REPO, set()
     )
-    assert len(found.roles) >= 20, found
+    assert len(found) >= 20, found
 
 
 # ── the paths no rule can scope ─────────────────────────────────────────────────────────
