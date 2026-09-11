@@ -96,6 +96,8 @@ class ScriptedTick:
         # default is a refusal, so a test that does not script it gets today's full
         # `deploy.yml` — the behaviour every pre-narrowing test was written against.
         self.narrow: tuple[int, str] = (3, "")
+        # Raised INSTEAD of answering, for the fallback's own red-proof half.
+        self.narrow_error: Exception | None = None
         self.discord_ok = True
         self.log: list[tuple] = []
         self.repo = repo
@@ -265,6 +267,8 @@ class ScriptedTick:
             f"{self.local[:8]}..{self.origin[:8]}"
         )
         self.log.append(("narrow", [old, new]))
+        if self.narrow_error is not None:
+            raise self.narrow_error
         return self.narrow
 
     def run_staging_scripts(

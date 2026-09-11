@@ -11,8 +11,6 @@ default is a refusal, so every test written before this slice keeps asserting th
 Run: uv run pytest ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_broad_narrow.py
 """
 
-# ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_broad_narrow.py
-
 ORIGIN = "2" * 40
 # A deploy-plane path: inventory is in `_BROAD_DEPLOY_PREFIXES`, and the tick used to run
 # `ansible/deploy.yml` unscoped for it.
@@ -97,3 +95,18 @@ def test_the_setup_plane_never_consults_the_narrowing(gitops_deploy, tick):
         "--tags",
         "gitops_deploy",
     ]
+
+
+def test_a_crashing_narrowing_still_runs_the_whole_play(gitops_deploy, tick, capsys):
+    """The `# DECIDED:` marker says a crash here lands on the fallback, so prove it can.
+
+    `narrow_deploy_plane` decodes a subprocess's output, so it can raise a plain ValueError
+    (`UnicodeDecodeError`) as well as a `SubprocessError`. `plan` runs before the ff-merge,
+    so an escaping exception reaches the entrypoint handler and parks every later landing.
+    """
+    tick.paths = [GROUP_VARS]
+    tick.narrow_error = ValueError("invalid start byte")
+    assert gitops_deploy.main(tick.tools) == 0
+    assert _playbook_argv(tick)[-1:] == ["ansible/deploy.yml"]
+    assert tick.merges == [ORIGIN]
+    assert "cannot narrow (ValueError: invalid start byte)" in capsys.readouterr().out

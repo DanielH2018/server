@@ -305,6 +305,51 @@ def test_a_secret_rotation_beside_an_inventory_change_is_flagged(tree: Tree):
         tree.narrow(*_refs(tree))
 
 
+def test_a_key_read_through_another_inventory_value_is_flagged(tree: Tree):
+    """The clean half is `test_a_group_vars_key_two_roles_read_narrows_to_both`.
+
+    `derived: "{{ unused_key }}"` makes `derived` a consumer of `unused_key`, and the key
+    diff cannot see it: `derived`'s own parsed value is unchanged when `unused_key` moves.
+    Without the inventory arm this narrowed to nothing, which the tick records as
+    `narrowed-to-nothing` and `land.sh` reads as settled.
+    """
+    with_derived = GROUP_VARS + 'derived: "{{ unused_key }}"\n'
+    tree.write("ansible/inventory/group_vars/all.yml", with_derived)
+    tree.commit("a key consumed by another key")
+    tree.write(
+        "ansible/inventory/group_vars/all.yml",
+        with_derived.replace("nobody-reads-this", "read-through-derived"),
+    )
+    with pytest.raises(narrow_broad.CannotNarrow, match="another value"):
+        tree.narrow(*_refs(tree))
+
+
+def test_a_key_reaching_an_uncallable_role_names_the_key(tree: Tree):
+    """The refusal comes from `_role_tags`, which knows the role and not the variable.
+
+    Both halves of the pair are here: the message has to carry the key, and the derivation
+    line has to reach the journal, or the tick's log says a role refused and nothing says
+    which inventory change reached it.
+    """
+    tree.write("ansible/roles/k8s/shared/templates/x.yaml.j2", "s: {{ shared_key }}\n")
+    tree.write("ansible/inventory/group_vars/all.yml", GROUP_VARS + "shared_key: 1\n")
+    tree.commit("a shared role nothing calls")
+    tree.write("ansible/inventory/group_vars/all.yml", GROUP_VARS + "shared_key: 2\n")
+    old, new = _refs(tree)
+    lines: list[str] = []
+    with pytest.raises(narrow_broad.CannotNarrow, match="shared_key") as exc:
+        narrow_broad.narrow(
+            old,
+            new,
+            cwd=tree.root,
+            declared=DECLARED,
+            callers={},
+            explain=lines.append,
+        )
+    assert "no caller" in str(exc.value)
+    assert "narrow: shared_key -> roles shared" in lines[-1]
+
+
 # ── the command wrapper ─────────────────────────────────────────────────────────────────
 
 
@@ -340,3 +385,14 @@ def test_the_command_exits_three_when_it_cannot_narrow(tree: Tree, capsys):
     rc = narrow_broad.narrow_cmd(old, new, cwd=tree.root, declared=DECLARED, callers={})
     assert rc == DEPLOY_BROAD
     assert "hosts.ini" in capsys.readouterr().err
+
+
+def test_the_command_exits_three_when_a_ref_cannot_be_read(tree: Tree, capsys):
+    """A ref git cannot resolve is a refusal, not a traceback the deployer logs as a crash.
+
+    `declared` is left unset on purpose: that is what sends `service_tags_at` at the ref.
+    """
+    old = _repo_git(tree.root, "rev-parse", "HEAD")
+    rc = narrow_broad.narrow_cmd(old, "0" * 40, cwd=tree.root, callers={})
+    assert rc == DEPLOY_BROAD
+    assert "could not read the range" in capsys.readouterr().err

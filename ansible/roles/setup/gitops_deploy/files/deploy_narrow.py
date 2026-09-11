@@ -110,11 +110,14 @@ def _deploy_plane(narrow, config, target) -> BroadPlan:
     playbook = "ansible/deploy.yml"
     try:
         rc, out = narrow(config.repo, target.local, target.origin, NARROW_TIMEOUT_S)
-    except (subprocess.SubprocessError, OSError) as exc:
-        return _full_run(playbook, str(exc))
+    except Exception as exc:
+        return _full_run(playbook, f"{type(exc).__name__}: {exc}")
     # DECIDED: a full run on any doubt. Every way the derivation can be unsure — a variable
     # the play itself reads, a removed containers_list entry, a tag list covering most of
     # the fleet, a crash here — lands on this branch and runs what the tick ran before.
+    # `except Exception` is deliberate and the narrowest correct width: the call decodes a
+    # subprocess's output, so it can raise UnicodeDecodeError as well as SubprocessError,
+    # and an escape parks every landing behind this tick — `plan` runs BEFORE the ff-merge.
     # A missed consumer is a service left silently stale until something unrelated
     # redeploys it, and nothing reports that; a full run is only slow. The rules and what
     # each one refuses are in scripts/deploy_tools/narrow_broad.py.

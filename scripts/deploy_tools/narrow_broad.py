@@ -36,6 +36,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 import re
+import subprocess
 import sys
 from pathlib import Path
 from typing import Callable, NamedTuple
@@ -116,8 +117,16 @@ def _show(ref: str, path: str, cwd: Path) -> str | None:
     return r.stdout if r.returncode == 0 else None
 
 
-def _grep(ctx: Context, pattern: str, *, word: bool) -> list[str]:
-    """Every tracked path at `ctx.ref` whose content contains `pattern`, as a fixed string."""
+def _grep(
+    ctx: Context, pattern: str, *, word: bool, inventory: bool = False
+) -> list[str]:
+    """Every tracked path at `ctx.ref` whose content contains `pattern`, as a fixed string.
+
+    `inventory` adds the inventory tree, which a variable scan needs and a macro scan does
+    not. A variable can be consumed by another variable — `foo: "{{ bar }}"` — and the key
+    diff cannot see that, because `foo`'s own parsed value did not change when `bar` did.
+    Every key also hits its own definition line, so `_sort_hits` tells the two apart.
+    """
     args = ["grep", "-l", "-F"]
     if word:
         args.append("-w")
@@ -129,6 +138,7 @@ def _grep(ctx: Context, pattern: str, *, word: bool) -> list[str]:
         *ROLE_TREES,
         SHARED_TEMPLATES,
         *PLAY_PREFIXES,
+        *((INVENTORY,) if inventory else ()),
     ]
     r = git(*args, cwd=ctx.cwd, check=False)
     if r.returncode > 1:
@@ -137,17 +147,44 @@ def _grep(ctx: Context, pattern: str, *, word: bool) -> list[str]:
     return [line[len(prefix) :] for line in r.stdout.splitlines() if line]
 
 
-def _sort_hits(hits: list[str], subject: str) -> Importers:
+def _defines_only(key: str, path: str, ctx: Context) -> bool:
+    r"""True when `path` mentions `key` only on its own top-level definition line.
+
+    Every key hits the file that defines it, and that hit is not a consumer. Anything else
+    in an inventory file is one, and one the key diff cannot see: the consuming key's own
+    parsed value is unchanged. A mention inside a comment counts as a reference rather than
+    being parsed out, and `\w` matches `git grep -w`'s own boundary — doubt runs the whole
+    play.
+    """
+    defines = re.compile(rf"^{re.escape(key)}\s*:")
+    mentions = re.compile(rf"(?<!\w){re.escape(key)}(?!\w)")
+    for line in (_show(ctx.ref, path, ctx.cwd) or "").splitlines():
+        if mentions.search(line) and not defines.match(line):
+            return False
+    return True
+
+
+def _sort_hits(
+    hits: list[str], subject: str, ctx: Context, key: str | None = None
+) -> Importers:
     """Split grep hits into roles and shared templates; a play-level hit refuses.
 
     A `.md` is prose no playbook applies, and a role's own `tests/` reaches no host — both
     are dropped for the same reasons `land_tags.role_for` and `is_role_test_path` drop them.
+    An inventory hit that is not `key`'s own definition refuses: see `_defines_only`.
     """
     roles: set[str] = set()
     templates: set[str] = set()
     for path in hits:
         if path.endswith(".md"):
             continue
+        if path.startswith(INVENTORY):
+            if key is None or _defines_only(key, path, ctx):
+                continue
+            raise CannotNarrow(
+                f"{subject} is read by another value in {path}, whose own parsed value "
+                "did not change"
+            )
         if any(path.startswith(p) for p in PLAY_PREFIXES):
             raise CannotNarrow(f"{subject} is read by {path}, which every deploy runs")
         if path.startswith(SHARED_TEMPLATES):
@@ -171,7 +208,7 @@ def template_importers(
     """
     ctx = Context(cwd, ref, set(), {}, explain)
     seen.add(name)
-    hits = _sort_hits(_grep(ctx, name, word=False), f"the macro {name}")
+    hits = _sort_hits(_grep(ctx, name, word=False), f"the macro {name}", ctx)
     roles = set(hits.roles)
     for other in sorted(hits.templates - seen):
         roles |= template_importers(other, ref, cwd, seen, explain)
@@ -243,13 +280,22 @@ def _key_tags(key: str, ctx: Context, path: str) -> set[str]:
     """The tags of every role that reads the inventory variable `key`.
 
     A key nothing reads maps to nothing: an unused variable renders into no file. A key the
-    play itself reads refuses, inside `_sort_hits`.
+    play itself reads, and a key another inventory value reads, both refuse inside
+    `_sort_hits`.
     """
-    hits = _sort_hits(_grep(ctx, key, word=True), f"the variable {key}")
+    hits = _sort_hits(
+        _grep(ctx, key, word=True, inventory=True), f"the variable {key}", ctx, key
+    )
     roles = set(hits.roles)
     for name in sorted(hits.templates):
         roles |= template_importers(name, ctx.ref, ctx.cwd, {name}, ctx.explain)
-    tags = _role_tags(roles, ctx)
+    try:
+        tags = _role_tags(roles, ctx)
+    except CannotNarrow as exc:
+        # The journal needs the derivation line even on the refusal: without it the reason
+        # names a role and nothing says which key reached it.
+        ctx.explain(f"narrow: {key} -> roles {','.join(sorted(roles))} via {path}")
+        raise CannotNarrow(f"the variable {key} reaches a role where {exc}") from exc
     ctx.explain(f"narrow: {key} -> {','.join(sorted(tags)) or '(nothing)'} via {path}")
     return tags
 
@@ -422,6 +468,15 @@ def narrow_cmd(
         )
     except CannotNarrow as exc:
         print(f"narrow: cannot narrow ({exc}) — full deploy.yml", file=sys.stderr)
+        return DEPLOY_BROAD
+    except subprocess.CalledProcessError as exc:
+        # `service_tags_at` and the diff read refs the caller handed us; an unreadable one
+        # is a refusal like any other, not a traceback the deployer logs as a crash.
+        print(
+            f"narrow: cannot narrow (git could not read the range: {exc}) — full "
+            "deploy.yml",
+            file=sys.stderr,
+        )
         return DEPLOY_BROAD
     if tags:
         print(",".join(sorted(tags)))
