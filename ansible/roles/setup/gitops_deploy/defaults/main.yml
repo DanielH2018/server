@@ -54,6 +54,14 @@ gitops_deploy_expected_ruleset_contexts:
   - pull + boot changed images
   - renovate config validator
 
+# The branch-protection ruleset ("Default": `deletion` + `non_fast_forward` on every ref, admin
+# bypass only) must exclude Renovate's branches, or GitHub refuses the app's post-merge delete
+# and its rebase force-push. A merged branch then survives at its green SHA and the next
+# version's PR automerges empty off that stale verdict (#1741/#1743, issue #1759). The drift
+# check alerts when the exclusion is missing; it never writes the ruleset.
+gitops_deploy_branch_ruleset_id: 17358590
+gitops_deploy_branch_ruleset_renovate_exclude: refs/heads/renovate/**
+
 # Daily, offset from the other daniel-box health crons. Rulesets change on a human cadence, and
 # the endpoint is rate-limited per source IP (60/hr unauthenticated, shared with renovate_notify),
 # so this is a safety net rather than a control loop.

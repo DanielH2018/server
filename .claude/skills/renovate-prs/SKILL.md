@@ -205,12 +205,19 @@ retries on each other. When several PRs touch nothing in common, one `land.sh` w
 
 ## 8. Census the branches no PR and no dashboard entry speaks for
 
-A `renovate/*` branch outlives the PR that carried it. The repo sets
-`delete_branch_on_merge`, but that removes only the head branch of a PR GitHub merged, so a PR
-closed by hand and a branch Renovate cut but never raised both leave a branch behind. Such a
-branch reads `diverged` against master and is invisible to every arm of `renovate-notify` by
-construction: the notifier reads open PRs and the Dependency Dashboard, and an orphan branch
-appears in neither. Nothing else reports it, so census it here.
+A `renovate/*` branch outlives the PR that carried it, and the cause is a ruleset, not
+neglect. The "Default" branch ruleset (17358590) applies `deletion` and `non_fast_forward` to
+every ref with an admin-only bypass, so GitHub refuses the app's own delete after a merge and
+its force-push on a rebase: the rule-suites API (`gh api
+repos/DanielH2018/server/rulesets/rule-suites?time_period=week`) logged 26 `renovate[bot]`
+refusals in the month to 2026-09-11, retried on every Renovate run. `delete_branch_on_merge`
+runs as the merging actor, so a branch the operator merged is deleted and a branch Renovate
+merged is not. That survivor is the stale-green automerge of §1 (#1759). The fix is the
+`refs/heads/renovate/**` exclusion on that ruleset, which `github-ruleset-drift.sh` alerts on
+when missing; once it is in place Renovate deletes these itself and this census should come
+back empty. Such a branch reads `diverged` against master and is invisible to every arm of
+`renovate-notify` by construction: the notifier reads open PRs and the Dependency Dashboard,
+and an orphan branch appears in neither. Nothing else reports it, so census it here.
 
 ```bash
 gh api repos/DanielH2018/server/branches --paginate -q '.[].name' | grep '^renovate/' | sort > /tmp/rb-all

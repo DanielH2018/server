@@ -1,5 +1,6 @@
 #!/bin/bash
-# Daily drift check: does the LIVE GitHub ruleset still require the contexts this repo declares?
+# Daily drift check: does the LIVE GitHub ruleset still require the contexts this repo declares,
+# and does the branch-protection ruleset still exclude Renovate's branches? Two arms, one push.
 #
 # The ruleset is what stops an un-CI'd commit reaching master, and the deployer trusts that: a
 # tick reads the check runs for the origin SHA and deploys on a green verdict. Nothing in the
@@ -124,15 +125,44 @@ if [ "$ENFORCEMENT" != "active" ]; then
   exit 1
 fi
 
-if [ "$LIVE" = "$EXPECTED" ]; then
-  push up "ruleset {{ gitops_deploy_ruleset_id }} active, ${LIVE_COUNT} required contexts, matches the declared set"
-  exit 0
+if [ "$LIVE" != "$EXPECTED" ]; then
+  # Drift: name the direction. "removed" = we expect it and GitHub no longer requires it, the
+  # dangerous way round — that check stops gating merges. "added" = required upstream but not
+  # declared here, which usually means someone added a check and this list needs updating.
+  REMOVED=$(comm -13 <(printf '%s\n' "$LIVE") <(printf '%s\n' "$EXPECTED") | tr '\n' ' ')
+  ADDED=$(comm -23 <(printf '%s\n' "$LIVE") <(printf '%s\n' "$EXPECTED") | tr '\n' ' ')
+  push down "ruleset {{ gitops_deploy_ruleset_id }} DRIFTED — no-longer-required:[${REMOVED}] newly-required:[${ADDED}] — reconcile gitops_deploy_expected_ruleset_contexts in roles/setup/gitops_deploy/defaults/main.yml"
+  exit 1
 fi
 
-# Drift: name the direction. "removed" = we expect it and GitHub no longer requires it, the
-# dangerous way round — that check stops gating merges. "added" = required upstream but not
-# declared here, which usually means someone added a check and this list needs updating.
-REMOVED=$(comm -13 <(printf '%s\n' "$LIVE") <(printf '%s\n' "$EXPECTED") | tr '\n' ' ')
-ADDED=$(comm -23 <(printf '%s\n' "$LIVE") <(printf '%s\n' "$EXPECTED") | tr '\n' ' ')
-push down "ruleset {{ gitops_deploy_ruleset_id }} DRIFTED — no-longer-required:[${REMOVED}] newly-required:[${ADDED}] — reconcile gitops_deploy_expected_ruleset_contexts in roles/setup/gitops_deploy/defaults/main.yml"
-exit 1
+# --- Second ruleset: the branch-protection one must leave Renovate's branches alone ---
+#
+# "Default" applies `deletion` and `non_fast_forward` to every ref with an admin-only bypass.
+# Renovate is not an admin, so with no exclusion GitHub refuses the app's post-merge branch
+# delete and its rebase force-push — 26 `Default/deletion` and `Default/non_fast_forward`
+# refusals for renovate[bot] in the month to 2026-09-11 (rule-suites API). A merged branch then
+# survives at its green SHA, Renovate opens the next version's PR onto it, and the stale verdict
+# automerges an empty squash before CI can run (#1741, #1743; issues #1755, #1759, #1565).
+# The exclusion below is what lets the app delete and rebase under `renovate/`; this arm alerts
+# when it is missing. Same rule as above: reconcile the ruleset, never this default.
+BRANCH_RULESET_URL="https://api.github.com/repos/{{ gitops_deploy_github_repo }}/rulesets/{{ gitops_deploy_branch_ruleset_id }}"
+if ! BRANCH_BODY=$(curl -sf --max-time 20 -K <(printf '%s\n' "$AUTH_CONFIG") \
+  -H "Accept: application/vnd.github+json" "$BRANCH_RULESET_URL"); then
+  push down "failed to fetch ruleset {{ gitops_deploy_branch_ruleset_id }} — renovate branch exclusion UNVERIFIED"
+  exit 1
+fi
+
+if [ -z "$(printf '%s' "$BRANCH_BODY" | jq -r '.enforcement // empty')" ]; then
+  push down "ruleset {{ gitops_deploy_branch_ruleset_id }} response had no .enforcement — bad fetch, UNVERIFIED"
+  exit 1
+fi
+
+# -x -F: the whole line, literally. `**` is a glob in the pattern, not in the comparison.
+if ! printf '%s' "$BRANCH_BODY" | jq -r '.conditions.ref_name.exclude[]? // empty' \
+  | grep -qxF '{{ gitops_deploy_branch_ruleset_renovate_exclude }}'; then
+  push down "ruleset {{ gitops_deploy_branch_ruleset_id }} does not exclude {{ gitops_deploy_branch_ruleset_renovate_exclude }} — Renovate cannot delete or rebase its branches, and a merged branch's stale green automerges the next PR empty (#1759)"
+  exit 1
+fi
+
+push up "ruleset {{ gitops_deploy_ruleset_id }} active, ${LIVE_COUNT} required contexts, matches the declared set; ruleset {{ gitops_deploy_branch_ruleset_id }} excludes {{ gitops_deploy_branch_ruleset_renovate_exclude }}"
+exit 0
