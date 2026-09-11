@@ -492,7 +492,14 @@ KUBECTL=(k3s kubectl --kubeconfig "$SCRATCH/drill.kubeconfig")
 deadline=$((SECONDS + READY_TIMEOUT))
 until "${KUBECTL[@]}" get --raw /readyz >/dev/null 2>&1; do
   kill -0 "$SERVER_PID" 2>/dev/null || { tail -20 "$SCRATCH/server.log" >&2; die "scratch server exited during startup"; }
-  (( SECONDS < deadline )) || { tail -20 "$SCRATCH/server.log" >&2; die "scratch server never became ready in ${READY_TIMEOUT}s"; }
+  if (( SECONDS >= deadline )); then
+    # The answer to "ready for what?" is in the check's own body, which a silent loop throws
+    # away; the listener table says whether kubectl reached the server at all.
+    { echo "== /readyz?verbose"; "${KUBECTL[@]}" get --raw '/readyz?verbose'
+      echo "== listeners"; ss -ltnp 2>/dev/null | grep -E ':(7[0-9]{3}|2379) '
+      echo "== server.log tail"; tail -20 "$SCRATCH/server.log"; } >&2 2>&1
+    die "scratch server never became ready in ${READY_TIMEOUT}s"
+  fi
   sleep 2
 done
 log "scratch API server is serving the restored objects"
