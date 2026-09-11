@@ -280,8 +280,9 @@ k3s_longhorn_replica_count: 2
 # two-node cluster whose storage control plane was OOM-killed once under memory pressure
 # (#1243), so the cost was measured before this was kept. DECIDED: keep `enabled`. MEASURED
 # 2026-09-11 on a fire forced with the `-e` override below, 73 snapshots across 44 volumes
-# (50 GB of replica data per node): the run took 6m21s, read ~24 GB per node at 40-57 MB/s,
-# and raised node CPU by ~2.3 cores on daniel-box and ~0.5 on daniel-server for that window.
+# (50 GB of replica data per node): the run took 6m21s and read ~24 GB per node at 40-57 MB/s.
+# The hashing CPU is instance-manager's own, 0.21 → 0.37-0.50 cores over the window; node-level
+# CPU is not attributable, because daniel-box swings 1.6-2.4 cores across any 7-minute window.
 # instance-manager's working set did not move (1.44 GB before, during and after), MemAvailable
 # never dropped below 17.5 GB, and no Longhorn pod restarted — the memory pressure #1243 warns
 # about did not appear. Six minutes every seventh day at 00:00 UTC is acceptable. The numbers
