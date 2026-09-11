@@ -54,9 +54,12 @@ a root cron on `etcd_drill_full_cron` (`inventory/group_vars/all.yml`: the first
 2. copies in daniel-server's own `k3s` binary, the cluster token (daniel-server's `K3S_TOKEN`,
    which is the server token — k3s writes the same value to `token` and `node-token` when no
    `--agent-token` is set) and the R2 env file, at the paths `etcd_restore_drill.sh` reads;
-3. runs `etcd_restore_drill.sh --list-only` there to name the newest snapshot, downloads that
-   object with a SigV4 GET, and runs the drill against it with `--local-snapshot` — the S3 path
-   doubling (item 4 above) makes the local-file form the working one;
+3. lists the bucket with a SigV4 `ListObjectsV2` to name the newest `offbox-*` snapshot,
+   downloads that object with a SigV4 GET, and runs the drill against it with
+   `--local-snapshot`. The guest cannot use the drill's own S3 mode for either half:
+   `k3s etcd-snapshot list` lists through a running k3s server's supervisor API (since k3s
+   1.29) and there is no server in the guest, and the S3 path doubling (item 4 above) makes
+   the local-file form the working one for the restore;
 4. pulls the drill's stdout, `restore.log` and `server.log` out to
    `/var/log/etcd-restore-drill/<run-id>/` on daniel-server (pruned after 400 days), then
    destroys the guest and deletes its disk — pass or fail, so no restored etcd database, token

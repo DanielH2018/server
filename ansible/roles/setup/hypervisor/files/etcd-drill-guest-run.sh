@@ -4,14 +4,19 @@
 # binary, the cluster token and the R2 env file, at the paths scripts/backup/etcd_restore_drill.sh
 # already reads — so that script runs here unmodified, as /usr/local/bin/etcd-restore-drill.
 #
-# WHY THE SNAPSHOT IS FETCHED WITH CURL AND DRILLED AS A LOCAL FILE. The drill's own S3 mode
-# hands `--etcd-s3` to `k3s server --cluster-reset`, and k3s then downloads the snapshot into
-# <data-dir>/server/db/snapshots and joins that absolute path onto the same directory a second
-# time (measured 2026-08-22, the drill script's header item 4). The script's `--local-snapshot`
-# is the documented way around it: fetch once, drill the file. The listing leg still runs first
-# through k3s itself (`--list-only`), so the credentials, bucket and folder are exercised by the
-# same binary that will restore; the download is a plain SigV4 GET of the object the listing
-# named. The off-box leg is therefore proven twice over, by two independent clients.
+# WHY THE GUEST LISTS AND FETCHES WITH CURL, AND DRILLS A LOCAL FILE. Two k3s behaviours rule
+# out the drill script's own S3 mode here:
+#   - `k3s etcd-snapshot list` does not talk to S3 itself. Since k3s 1.29 the etcd-snapshot
+#     subcommands authenticate to a RUNNING k3s server's supervisor API and list through it.
+#     A server-less host fails at `open .../server/token`, and this guest — token staged, no
+#     server — fails at the connection (measured 2026-09-11, the first run in the guest).
+#   - `--etcd-s3` handed to `k3s server --cluster-reset` downloads the snapshot into
+#     <data-dir>/server/db/snapshots and joins that absolute path onto the same directory a
+#     second time (measured 2026-08-22, the drill script's header item 4).
+# So the guest lists the bucket with a SigV4 ListObjectsV2, downloads the newest offbox-*
+# object with a SigV4 GET, and hands the file to the drill's `--local-snapshot`, which is the
+# script's documented way around the second point. The credentials, bucket and folder are
+# still exercised before anything is restored; the restore itself is the k3s leg.
 #
 # Exit code is the drill's own: 0 only when the snapshot restored and served its objects.
 set -uo pipefail
@@ -28,27 +33,29 @@ die() { echo "etcd-drill-guest-run: $*" >&2; exit 1; }
 
 echo "== k3s binary: $(k3s --version 2>/dev/null | head -1)"
 
-echo "== listing off-box snapshots through k3s"
-listing="$("$DRILL" --list-only 2>&1)" || { printf '%s\n' "$listing"; die "the listing leg failed"; }
-printf '%s\n' "$listing"
-snapshot="$(printf '%s\n' "$listing" | sed -n 's/.*drilling snapshot: //p' | head -1)"
-[[ -n "$snapshot" ]] || die "could not read the snapshot name out of the listing"
-
 # shellcheck source=/dev/null
 . "$S3_ENV"
 : "${AWS_ACCESS_KEY_ID:?}" "${AWS_SECRET_ACCESS_KEY:?}" "${ETCD_S3_BUCKET:?}" "${ETCD_S3_ENDPOINT:?}"
 
-echo "== downloading $snapshot"
-install -d -m 700 "$DOWNLOAD_DIR"
 # Credentials go in through a config file on stdin, never argv — the same shape kuma-push-lib.sh
 # uses for its push token. Region `auto` is what R2 signs against.
-if ! printf 'user = "%s:%s"\n' "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY" |
-     curl -fsS --max-time 300 -K - \
-       --aws-sigv4 "aws:amz:auto:s3" \
-       -o "$DOWNLOAD_DIR/$snapshot" \
-       "https://${ETCD_S3_ENDPOINT}/${ETCD_S3_BUCKET}/etcd-snapshots/${snapshot}"; then
-  die "download of $snapshot failed"
-fi
+r2_get() {
+  printf 'user = "%s:%s"\n' "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY" |
+    curl -fsS --max-time 300 -K - --aws-sigv4 "aws:amz:auto:s3" "$@"
+}
+
+echo "== listing off-box snapshots in s3://${ETCD_S3_BUCKET}/etcd-snapshots"
+listing="$(r2_get "https://${ETCD_S3_ENDPOINT}/${ETCD_S3_BUCKET}/?list-type=2&prefix=etcd-snapshots/offbox-")" \
+  || die "the listing leg failed (ListObjectsV2 against ${ETCD_S3_ENDPOINT})"
+snapshot="$(printf '%s\n' "$listing" | grep -o '<Key>etcd-snapshots/offbox-[^<]*</Key>' \
+            | sed 's|<Key>etcd-snapshots/||; s|</Key>||' | sort | tail -1)"
+[[ -n "$snapshot" ]] || die "no offbox-* object under etcd-snapshots/ (listing: ${listing:0:300})"
+echo "== newest off-box snapshot: $snapshot"
+
+echo "== downloading $snapshot"
+install -d -m 700 "$DOWNLOAD_DIR"
+r2_get -o "$DOWNLOAD_DIR/$snapshot" "https://${ETCD_S3_ENDPOINT}/${ETCD_S3_BUCKET}/etcd-snapshots/${snapshot}" \
+  || die "download of $snapshot failed"
 echo "== downloaded $(stat -c %s "$DOWNLOAD_DIR/$snapshot") bytes"
 
 echo "== full drill against the downloaded file"
