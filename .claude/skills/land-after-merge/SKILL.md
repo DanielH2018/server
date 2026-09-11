@@ -190,9 +190,13 @@ deployed, and re-running is safe.
 
 Every run also writes one logfmt line to syslog on exit (`logger -t landing-annotation`):
 the PR, the merge SHA, the verdict, and seconds spent in each phase — `wait_merge`,
-`wait_ci`, `tick`, `deploy`, `total` — plus `lock`, the seconds spent in tick or deploy
-attempts that lost the tree lock (a sub-part of `tick` and `deploy`, not a fifth phase),
-and `holder`, the command that held it when the first attempt lost. Promtail ships it to Loki and the **Landings** Grafana
+`wait_ci`, `tick`, `deploy`, `total` — plus `lock`, the seconds the landing spent waiting on
+the tree lock (a sub-part of `tick` and `deploy`, not a fifth phase), and `holder`, the
+command that held it. `lock` books two kinds of wait: an attempt that LOST the lock and
+exited 75, and a wait a wrapper rode out and then reported itself — `deploy.sh` queuing
+inside `flock -w`, `gitops_tick.sh` watching a tick another actor had already started. Both
+of those exit 0, so before they reported it the seconds landed in `deploy` and `tick` and
+every row read `lock=0`. Promtail ships it to Loki and the **Landings** Grafana
 board (Infrastructure folder) plots it, so "sessions wait too long" is answered by the
 phase medians there rather than by memory. CLI: `uv run python
 scripts/diagnostics/probe.py loki-query '{job="syslog"} |= "event=landing" | logfmt'`.

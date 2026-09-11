@@ -147,3 +147,24 @@ def test_fakes_defaults_are_fresh_per_instance():
     """A list inside a tuple default is invisible to dataclasses and RUF012 alike."""
     assert Fakes().gate[1] is not Fakes().gate[1]
     assert Fakes().derived[0] is not Fakes().derived[0]
+
+
+def test_an_in_flock_wait_is_booked_without_the_contention_backoff(landing):
+    """A wrapper that WAITED and then acquired adds only the seconds it reported.
+
+    `note_lock_contention` adds `lock_backoff` on top, because there the attempt failed and
+    the landing is about to sleep. Here it did not: the deploy ran.
+    """
+    ln, calls = landing()
+    ln.note_in_flock_wait(412, "pid 8: ansible-playbook")
+    assert ln.ledger.lock_waited == 412
+    assert ln.ledger.lock_holder == "pid 8: ansible-playbook"
+    assert "lock_holder" not in [c[0] for c in calls]
+
+
+def test_an_in_flock_wait_never_overwrites_a_holder_already_named(landing):
+    ln, _ = landing()
+    ln.note_lock_contention(60)
+    ln.note_in_flock_wait(9, "somebody else")
+    assert ln.ledger.lock_waited == 69
+    assert ln.ledger.lock_holder == "42 flock deploy"

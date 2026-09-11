@@ -58,3 +58,17 @@ def test_the_lock_holder_is_sampled_before_the_attempt(landing):
     names = [c[0] for c in calls]
     assert names.index("lock_holder") < names.index("tick")
     assert ln.ledger.lock_holder == "42 flock deploy"
+
+
+def test_the_tick_lets_the_landing_book_a_wait_it_reports_itself(landing):
+    """Joining a tick already in flight exits 0, so `retry_while_locked` books nothing.
+
+    The wrapper reports that wait on its own stderr instead, and the phase must hand the
+    boundary somewhere to put it.
+    """
+    ln, calls = landing()
+    tick.run_tick(ln)
+    observe = next(c[2]["observe"] for c in calls if c[0] == "tick")
+    observe(47, "pid 8: gitops-deploy")
+    assert ln.ledger.lock_waited == 47
+    assert ln.ledger.lock_holder == "pid 8: gitops-deploy"

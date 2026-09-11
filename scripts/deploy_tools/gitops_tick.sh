@@ -70,6 +70,20 @@ done
 
 show() { systemctl show "$UNIT" -p "$1" --value; }
 
+# How long the run in flight has been going, from systemd's monotonic start stamp (in
+# microseconds) against /proc/uptime. Both count from boot, so on a host that does not
+# suspend they are the same clock. 0 when either read is unusable: the number only decorates
+# a log line, and losing it must not end the tick.
+in_flight_seconds() {
+  local mono_us="$1"
+  if [[ ! "$mono_us" =~ ^[0-9]+$ ]]; then
+    echo 0
+    return 0
+  fi
+  awk -v m="$mono_us" '{ d = $1 - m / 1000000; if (d < 0) d = 0; printf "%d\n", d }' \
+    /proc/uptime || echo 0
+}
+
 if ! systemctl cat "$UNIT" >/dev/null 2>&1; then
   echo "gitops_tick.sh: $UNIT is not installed on $(hostname) — the GitOps deployer" >&2
   echo "runs only on hosts with has_gitops: true (daniel-box)." >&2
@@ -85,9 +99,14 @@ started_before="$(show ExecMainStartTimestampMonotonic)"
 # A run already in flight is JOINED, not duplicated: systemd coalesces a start request
 # for a unit that is already `activating` into the run in flight. Say so plainly, so an
 # empty-looking journal is not read as a tick that did nothing.
+joined=0
+joined_after=0
 if [[ "$(show ActiveState)" == "activating" ]]; then
   echo "A tick is already in flight (started $(show ExecMainStartTimestamp)); watching it"
   echo "instead of starting a second one — systemd coalesces the request either way."
+  # Read before `started_before` is overwritten below: it IS the joined run's stamp.
+  joined=1
+  joined_after="$(in_flight_seconds "$started_before")"
   since="$(show ExecMainStartTimestamp | cut -d' ' -f2-3)"
   # The stamp read above IS the joined run's, so the wait loop's "a new activation
   # happened" test could never pass for it and the loop ran to its deadline however early
@@ -112,6 +131,7 @@ if [[ "$WAIT_S" -eq 0 ]]; then
 fi
 
 echo "Waiting up to ${WAIT_S}s for it to finish..."
+wait_started=$SECONDS
 deadline=$((SECONDS + WAIT_S))
 while [[ $SECONDS -lt $deadline ]]; do
   state="$(show ActiveState)"
@@ -121,6 +141,19 @@ while [[ $SECONDS -lt $deadline ]]; do
   fi
   sleep 5
 done
+waited=$((SECONDS - wait_started))
+
+# Neither wait is visible anywhere else in a landing: a joined tick and a slow one both exit
+# 0, and land_lib/landing.py:retry_while_locked books a wait only when an attempt exits 75.
+# land.py parses the JOINED line into the landing's `lock=` field
+# (land_lib/tools.py:in_flock_wait). The self-started line is for an operator only: those
+# seconds are the tick's own work, and the path that makes them long ends at exit 3, which
+# the landing already books. 60s because a healthy tick takes about five.
+if [[ "$joined" == 1 ]]; then
+  echo "gitops_tick: joined a tick already ${joined_after}s in flight; waited ${waited}s for it" >&2
+elif [[ "$waited" -ge 60 ]]; then
+  echo "gitops_tick: waited ${waited}s" >&2
+fi
 
 echo
 echo "── journal ──────────────────────────────────────────────────────────────────"

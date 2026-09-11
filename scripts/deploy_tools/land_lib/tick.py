@@ -23,7 +23,7 @@ def run_tick(ln: Landing) -> None:
     rc = retry_while_locked(
         ln,
         TICK_LOCK_CONTENTION,
-        t.tick,
+        lambda: t.tick(observe=ln.note_in_flock_wait),
         lambda n: (
             f"tick skipped for lock contention (attempt {n}/{o.lock_retries}); retrying in {o.lock_backoff}s"
         ),
