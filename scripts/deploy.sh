@@ -192,8 +192,8 @@ set -- "${filtered_args[@]}"
 staleness_checked=0
 # The comma-joined --tags this run deploys, filled by the tag split below. The gate asks a
 # narrower question when it is set: a commit in HEAD..origin/master reaching none of these tags
-# and no broad path cannot revert what this deploy renders, and the GitOps deployer now
-# fast-forwards to the newest GREEN commit rather than the tip, so the primary checkout is
+# and no broad path cannot revert what this deploy renders, and the GitOps deployer
+# fast-forwards to the newest GREEN commit rather than to the tip, so the primary checkout is
 # legitimately behind a pending tip while every landing deploys from it.
 split_tags_csv=""
 staleness_gate() {

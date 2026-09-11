@@ -101,16 +101,16 @@ def format_refusal(behind: int, ahead: int, ref: str) -> str:
     )
 
 
-def incoming(repo: str, ref: str, *args: str) -> list[str]:
-    """One `git log`/`git diff` read over HEAD..<ref>, as lines; empty when it fails.
+def incoming(repo: str, ref: str, *args: str) -> list[str] | None:
+    """One `git log`/`git diff` read over HEAD..<ref> as lines, or None when it failed.
 
     Two dots and this direction: the question is what this tree has yet to receive, not what
-    it has changed. A failed read returns nothing, which the caller reads as "no evidence the
-    tail is unrelated" and refuses on — the fail-closed direction for a guard.
+    it has changed. None is distinct from an empty list on purpose — a range that could not be
+    read is not a range shown to be unrelated, and the caller refuses on it.
     """
     proc = _git(repo, *args, f"HEAD..{ref}")
     if proc.returncode != 0:
-        return []
+        return None
     return [line for line in proc.stdout.splitlines() if line.strip()]
 
 
@@ -225,8 +225,15 @@ def main(argv: list[str] | None = None) -> int:
         # This is a staleness check, not a git-topology check — do not block the deploy.
         return 0
 
-    if behind and tags:
-        paths = incoming(args.repo, args.ref, "diff", "--name-only")
+    paths = (
+        incoming(args.repo, args.ref, "diff", "--name-only")
+        if behind and tags
+        else None
+    )
+    # `paths is None` means the range could not be read, so it falls through to the unscoped
+    # refusal below rather than to the narrow one — a range nothing could classify is not a
+    # range shown to touch nothing this deploy renders.
+    if paths is not None:
         flagged = refusing_paths(paths, tags, args.repo)
         if not flagged:
             # Not silent: the tree IS behind, and an operator reading a deploy log has to be
@@ -243,7 +250,10 @@ def main(argv: list[str] | None = None) -> int:
                 args.ref,
                 sorted(tags),
                 flagged,
-                incoming(args.repo, args.ref, "log", "--oneline", "--no-decorate"),
+                # `or []` because the refusal stands either way: an unreadable log costs the
+                # message its commit list, never the verdict.
+                incoming(args.repo, args.ref, "log", "--oneline", "--no-decorate")
+                or [],
             ),
             file=sys.stderr,
         )
