@@ -7,6 +7,7 @@ backlog.py` reaches `findings.py` with only `scripts/` on `sys.path`.
 """
 
 import argparse
+from datetime import date
 from pathlib import Path
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
@@ -68,6 +69,30 @@ def _parser(description: str) -> argparse.ArgumentParser:
         help="prose describing how to check whether this finding is fixed; `verify` prints "
         "it back and runs nothing",
     )
+    o.add_argument(
+        "--not-before",
+        type=date.fromisoformat,
+        metavar="YYYY-MM-DD",
+        help="withhold from `next` and `claim` until this date; for a finding whose own "
+        "precondition (a metric window, a cron firing) is not met before it",
+    )
+
+    df = sub.add_parser(
+        "defer",
+        help="withhold an issue from `next` and `claim` until a date, or clear that",
+    )
+    _add_dry_run(df, suppress=True)
+    df.add_argument("number", type=int)
+    when = df.add_mutually_exclusive_group(required=True)
+    when.add_argument(
+        "--until",
+        type=date.fromisoformat,
+        metavar="YYYY-MM-DD",
+        help="the first day the issue may be offered again; replaces any earlier date",
+    )
+    when.add_argument(
+        "--clear", action="store_true", help="remove the not-before date now"
+    )
 
     t = sub.add_parser(
         "touch", help="record a re-observation; the third adds escalated"
@@ -123,8 +148,8 @@ def _parser(description: str) -> argparse.ArgumentParser:
 
     ls = sub.add_parser(
         "list",
-        help="rows for the review skill and the docs generator; marks manual and "
-        "claimed issues rather than hiding either",
+        help="rows for the review skill and the docs generator; marks manual, deferred "
+        "and claimed issues rather than hiding any",
     )
     _add_dry_run(ls, suppress=True)
     ls.add_argument("--state", default="open", choices=("open", "closed", "all"))

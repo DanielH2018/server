@@ -45,6 +45,14 @@ Two labels join `LABELS` in `findings_lib/issue_model.py` and are created by the
 inside group names, so the bare word is mildly overloaded; the label namespace is separate
 enough that this has not been worth a longer name.
 
+A third label is dated and therefore not in `LABELS`: `not-before:<YYYY-MM-DD>`, one label per
+date, created on demand by `plan_ensure_label` the first time `defer` or `open --not-before`
+needs it. It means "workable on that date, not earlier" and it expires by comparison: `next`
+and `claim` read it against today's UTC date, so nobody clears it. That is the property
+`manual` lacks. #1288 could be re-derived only once seven days of a metric existed, said so in
+its body, and was claimed, read and released unchanged six times in four days because the only
+withholding label was permanent and meant the wrong thing (#1739).
+
 ## The claim record
 
 A claim is a **comment**, following the machine-readable trailer convention
@@ -200,8 +208,14 @@ regression note, so no comment body ever carries a `Claim:` and a `Released:` li
 ### `next [--limit N]`
 
 The picking command. Returns open issues that are: `claude`-labelled, not `manual`, not
-live-claimed, and not already referenced by an open PR, ordered by the existing
-`issue_model.sort_key`.
+deferred to a date after today, not live-claimed, and not already referenced by an open PR,
+ordered by the existing `issue_model.sort_key`.
+
+A deferred issue is still named, under a `deferred: #<n> until <date>  <title>` line after the
+free rows. Under `--json` that line goes to stderr, because the array is the free set an
+orchestrator claims and a deferred row inside it would re-create the dispatch the date exists
+to prevent. Silently withholding it is the failure `manual` has: the operator reading the
+backlog cannot tell a withheld issue from a closed one.
 
 **There is no default bound.** `--limit` defaulted to 10, and an orchestrator read
 `next --json`, took the ten rows for the whole free set, and never saw the twelve behind them.
@@ -213,10 +227,24 @@ what stops a session picking up work another session has already finished but no
 
 ### `list`
 
-`list` gains no flag. It **marks** a manual row `[manual]` and a claimed one
-`[claimed:<worktree>]`, and hides neither. Hiding a manual row is how an issue like #1132
+`list` gains no flag. It **marks** a manual row `[manual]`, a deferred one
+`[deferred until <date>]` while the date is still ahead, and a claimed one
+`[claimed:<worktree>]`, and hides none of them. Hiding a manual row is how an issue like #1132
 stops being visible to anyone, including the operator who reserved it — and a flag defaulting
 to "show" that nothing can turn off is a flag that documents the opposite of what it does.
+
+### `defer <n> --until <YYYY-MM-DD>` / `defer <n> --clear`
+
+Sets, moves or clears the not-before date. `--until` creates the dated label if the repo lacks
+it, adds it, removes any other `not-before:` label the issue carries so it holds one date at
+most, and posts a `Deferred until <date>.` comment for the thread to read. `--clear` removes
+every `not-before:` label and comments; on an issue that carries none it exits 3, the same
+"nothing was written because the issue refuses it" code `claim` uses. `claim` on a deferred
+issue exits 3 too, and its refusal names `defer <n> --clear` as the way out — the escape is in
+the line the operator reads, which `manual`'s refusal never offered.
+
+`open --not-before <date>` files a new finding already deferred, for the case where the agent
+filing it knows the precondition is a date.
 
 ## What a fan-out agent may not do
 

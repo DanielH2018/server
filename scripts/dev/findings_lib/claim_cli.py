@@ -34,7 +34,12 @@ from dev.findings_lib.claim import (
     stale_holder,
 )
 from dev.findings_lib.gh_calls import _existing_labels, _load_issue, load_issues, run
-from dev.findings_lib.issue_model import current_claim, now_iso, validate_worktree_name
+from dev.findings_lib.issue_model import (
+    current_claim,
+    now_iso,
+    today_utc,
+    validate_worktree_name,
+)
 from dev.findings_lib.plans import (
     ClaimRefused,
     plan_claim,
@@ -140,7 +145,11 @@ def cmd_claim(args: argparse.Namespace, tools: FindingsTools) -> int:
                 issue = _load_issue(number, tools)
         try:
             plans = plan_claim(
-                issue, worktree=args.worktree, session=args.session, when=now_iso()
+                issue,
+                worktree=args.worktree,
+                session=args.session,
+                when=now_iso(),
+                today=today_utc(),
             )
         except ClaimRefused as exc:
             print(f"#{number} refused: {exc.reason}")

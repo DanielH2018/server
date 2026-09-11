@@ -2,6 +2,7 @@
 
 import json
 import sys
+from datetime import date
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -9,9 +10,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from _findings_fakes import Fakes, build_tools, facts, make_issue, operator_comment
 
 from dev.findings import main
-from dev.findings_lib.issue_model import claim_comment, pickable, pr_refs
+from dev.findings_lib.issue_model import (
+    claim_comment,
+    deferred,
+    not_before,
+    pickable,
+    pr_refs,
+)
 
 WT = "worktree-issue-1132"
+TODAY = date(2026, 9, 11)
 
 
 def _issue(number, labels=(), comments=()):
@@ -29,36 +37,82 @@ def _issue(number, labels=(), comments=()):
 
 def test_an_ordinary_open_issue_is_pickable():
     assert [
-        r["number"] for r in pickable([_issue(1)], live_claims=set(), pr_refs=set())
+        r["number"]
+        for r in pickable([_issue(1)], live_claims=set(), pr_refs=set(), today=TODAY)
     ] == [1]
 
 
 def test_a_manual_issue_is_not_pickable():
     assert (
-        pickable([_issue(1, labels=["manual"])], live_claims=set(), pr_refs=set()) == []
+        pickable(
+            [_issue(1, labels=["manual"])],
+            live_claims=set(),
+            pr_refs=set(),
+            today=TODAY,
+        )
+        == []
     )
+
+
+def test_an_issue_deferred_to_tomorrow_is_not_pickable():
+    issue = _issue(1, labels=["not-before:2026-09-12"])
+    assert pickable([issue], live_claims=set(), pr_refs=set(), today=TODAY) == []
+    assert [r["number"] for r in deferred([issue], today=TODAY)] == [1]
+
+
+def test_an_issue_deferred_to_today_is_pickable():
+    """`not-before: D` means workable ON D — the boundary a later reader gets wrong."""
+    issue = _issue(1, labels=["not-before:2026-09-11"])
+    rows = pickable([issue], live_claims=set(), pr_refs=set(), today=TODAY)
+    assert [r["number"] for r in rows] == [1]
+    assert deferred([issue], today=TODAY) == []
+
+
+def test_an_issue_deferred_to_yesterday_is_pickable():
+    issue = _issue(1, labels=["not-before:2026-09-10"])
+    rows = pickable([issue], live_claims=set(), pr_refs=set(), today=TODAY)
+    assert [r["number"] for r in rows] == [1]
+
+
+def test_a_not_before_label_that_does_not_parse_is_no_deferral():
+    """`issue_rows` feeds the docs cron, so a hand-typed label must not raise."""
+    issue = _issue(1, labels=["not-before:whenever"])
+    assert not_before(issue) is None
+    rows = pickable([issue], live_claims=set(), pr_refs=set(), today=TODAY)
+    assert [r["number"] for r in rows] == [1]
+
+
+def test_several_not_before_labels_take_the_latest_date():
+    issue = _issue(1, labels=["not-before:2026-09-10", "not-before:2026-09-20"])
+    assert not_before(issue) == date(2026, 9, 20)
+
+
+def test_a_manual_issue_is_not_listed_as_deferred_either():
+    issue = _issue(1, labels=["manual", "not-before:2026-09-20"])
+    assert deferred([issue], today=TODAY) == []
 
 
 def test_a_live_claimed_issue_is_not_pickable():
     issue = _issue(1, comments=[claim_comment(WT, None, "t")])
-    assert pickable([issue], live_claims={1}, pr_refs=set()) == []
+    assert pickable([issue], live_claims={1}, pr_refs=set(), today=TODAY) == []
 
 
 def test_a_stale_claimed_issue_is_pickable():
     issue = _issue(1, comments=[claim_comment(WT, None, "t")])
     assert [
-        r["number"] for r in pickable([issue], live_claims=set(), pr_refs=set())
+        r["number"]
+        for r in pickable([issue], live_claims=set(), pr_refs=set(), today=TODAY)
     ] == [1]
 
 
 def test_an_issue_with_an_open_pr_is_not_pickable():
-    assert pickable([_issue(1)], live_claims=set(), pr_refs={1}) == []
+    assert pickable([_issue(1)], live_claims=set(), pr_refs={1}, today=TODAY) == []
 
 
 def test_pickable_orders_high_severity_first():
     low = _issue(1, labels=["severity/low"])
     high = _issue(2, labels=["severity/high"])
-    rows = pickable([low, high], live_claims=set(), pr_refs=set())
+    rows = pickable([low, high], live_claims=set(), pr_refs=set(), today=TODAY)
     assert [r["number"] for r in rows] == [2, 1]
 
 
