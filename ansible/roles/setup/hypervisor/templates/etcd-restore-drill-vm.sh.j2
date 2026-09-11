@@ -225,7 +225,7 @@ main() {
   install -D -m 755 "$GUEST_RUN_SCRIPT" "$WORK/root/usr/local/bin/etcd-drill-guest-run"
 
   log "staging k3s, token, R2 env and the drill into the guest"
-  tar -C "$WORK/root" -cf - . | ssh_guest sudo tar -C / -xpf - || fail "staging into the guest failed"
+  tar -C "$WORK/root" -cf - . | ssh_guest sudo tar -C / --warning=no-timestamp -xpf - || fail "staging into the guest failed"
   rm -rf "$WORK"; WORK=""
 
   # The drill runs DETACHED in the guest and this side polls for its exit file. Holding one ssh

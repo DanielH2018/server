@@ -51,9 +51,11 @@
 #   2. the reset stage starts its own listeners, so isolation flags belong on BOTH invocations
 #   3. --disable-agent does not stop the supervisor client load-balancer on 127.0.0.1:6444;
 #      --lb-server-port is the flag
-#   4. --cluster-reset-restore-path is a NAME relative to <data-dir>/server/db/snapshots, always
-#      joined onto it — so an absolute path doubles, and --etcd-s3 doubles it for you by feeding
-#      its own download path back through the join
+#   4. --cluster-reset-restore-path is read twice: stat'd relative to the cwd, then joined onto
+#      <data-dir>/server/db/snapshots for the .zip decompress — so an absolute path doubles, a
+#      bare name from elsewhere "does not exist", and --etcd-s3 doubles it for you by feeding
+#      its own download path back through the join. The bare name FROM the snapshots dir works
+#      (corrected 2026-09-11; this item used to say "a name relative to the snapshots dir")
 #   5. after all four, the run wedges in "Waiting to retrieve agent configuration; server is not
 #      ready" — 17 minutes on 6 seconds of CPU, against ~60s when it resolves. CORRECTED
 #      2026-09-11: this one was never the live k3s. It reproduced in a guest with no k3s at all
@@ -377,13 +379,15 @@ trap cleanup EXIT INT TERM
 RESTORE_S3_ARGS=("${S3_ARGS[@]}")
 if [[ -n "$LOCAL_SNAPSHOT" ]]; then
   [[ -r "$LOCAL_SNAPSHOT" ]] || die "cannot read $LOCAL_SNAPSHOT"
-  # `--cluster-reset-restore-path` is a NAME relative to <data-dir>/server/db/snapshots, not a
-  # path — k3s joins it onto that directory unconditionally. An absolute path therefore always
-  # produces the doubled form, measured twice on 2026-08-22:
+  # `--cluster-reset-restore-path` is read TWICE by k3s, and the two reads disagree. The
+  # restore stats the value as given, relative to the CURRENT DIRECTORY ("snapshot path does
+  # not exist: <name>", measured 2026-09-11 with the bare name from an unrelated cwd). The
+  # .zip decompress step then joins the same value onto <data-dir>/server/db/snapshots, so an
+  # absolute path passes the stat and doubles at the join, measured twice on 2026-08-22:
   #   open <scratch-A>/server/db/snapshots/<scratch-B>/server/db/snapshots/<name>.zip
-  # So stage the file into this run's own snapshots dir and pass the bare filename. The same
-  # join is why --etcd-s3 fails here: k3s downloads to that directory, then feeds the absolute
-  # download path back through the join.
+  # The value that satisfies both is the bare filename, run FROM the snapshots dir — which is
+  # what the restore stage below does. The same join is why --etcd-s3 fails here: k3s
+  # downloads to that directory, then feeds the absolute download path back through it.
   SNAPSHOT="$(basename "$LOCAL_SNAPSHOT")"
   RESTORE_S3_ARGS=()
   log "restoring from a local file, S3 not consulted"
@@ -423,13 +427,15 @@ if [[ -n "$LOCAL_SNAPSHOT" ]]; then
   log "staged $SNAPSHOT into this run's snapshots dir"
 fi
 log "restoring into $SCRATCH (live cluster untouched)"
-# --cluster-reset restores and exits; it does not stay running.
-if ! timeout --signal=TERM --kill-after=30 "$RESTORE_TIMEOUT" \
+# --cluster-reset restores and exits; it does not stay running. Run from the snapshots dir so
+# the bare name resolves for both of k3s's reads of it (the comment at LOCAL_SNAPSHOT above).
+install -d -m 700 "$SCRATCH/server/db/snapshots"
+if ! (cd "$SCRATCH/server/db/snapshots" && timeout --signal=TERM --kill-after=30 "$RESTORE_TIMEOUT" \
      k3s server \
       --cluster-reset \
       --cluster-reset-restore-path="$SNAPSHOT" \
       "${ISOLATION_ARGS[@]}" \
-      ${RESTORE_S3_ARGS[@]+"${RESTORE_S3_ARGS[@]}"} >"$SCRATCH/restore.log" 2>&1; then
+      ${RESTORE_S3_ARGS[@]+"${RESTORE_S3_ARGS[@]}"}) >"$SCRATCH/restore.log" 2>&1; then
   rc=$?
   tail -20 "$SCRATCH/restore.log" >&2
   if [[ $rc -eq 124 || $rc -eq 137 ]]; then
