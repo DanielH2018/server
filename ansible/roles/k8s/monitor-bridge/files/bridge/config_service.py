@@ -21,6 +21,8 @@ class ServiceConfig:
     TRAEFIK_MIN_RPS: float
     TRAEFIK_SLOW_BUCKET: str
     TRAEFIK_SLOW_PCT: float
+    TRAEFIK_SLOW_MIN_REQUESTS: float
+    TRAEFIK_STREAM_SERVICES: tuple[str, ...]
     N8N_URL: str
     N8N_API_KEY: str = field(repr=False)
     N8N_FAIL_WINDOW: str
@@ -85,6 +87,41 @@ def service_config(
         # the unmeasurable branch in the verdict).
         TRAEFIK_SLOW_BUCKET=_env("TRAEFIK_SLOW_BUCKET", "5.0"),
         TRAEFIK_SLOW_PCT=_num("TRAEFIK_SLOW_PCT", "5"),
+        # The absolute number of slow requests an alert must rest on, alongside the ratio.
+        # TRAEFIK_MIN_RPS admits a service with MIN_RPS x 300 = 15 requests in the check's [5m]
+        # window, so ONE request past the bucket is 1/15 = 6.7% — already over TRAEFIK_SLOW_PCT.
+        # The ratio alone therefore pages on a single request for every low-traffic route, which
+        # is the small-sample artifact, not a latency signal. Derived, not fitted: the count is
+        # what makes the percentage mean something, so state it as a count.
+        TRAEFIK_SLOW_MIN_REQUESTS=_num("TRAEFIK_SLOW_MIN_REQUESTS", "3"),
+        # Services whose traffic is dominated by LONG-LIVED CONNECTIONS, exempt from the latency
+        # ratio. Matched as a prefix of the Traefik service label, which is
+        # `homelab-<name>-<hash>@kubernetescrd` — the hash moves when an IngressRoute is renamed,
+        # so match `homelab-<name>-` and never the full label.
+        #
+        # Traefik's histogram times a request until the RESPONSE COMPLETES. For a websocket, an
+        # SSE stream or a Kubernetes watch that is the lifetime of the connection, so a healthy
+        # stream lands past every bucket edge by design. No TRAEFIK_SLOW_BUCKET fixes this: the
+        # buckets are 0.1/0.3/1.2/5.0/+Inf and a stream outlives all of them.
+        #
+        # Measured on 2026-09-11, this is what tripped the check live. headlamp: 94.2% of
+        # requests under 0.1s, 3.1% past 5.0s, and a mean of 1.7s over the whole service — which
+        # puts the mean of that 3.1% tail near 53s. That is not a slow response, it is headlamp's
+        # Kubernetes watch streams. home-assistant and uptime-kuma are the other two offenders in
+        # the 30-day history (5 and 4 episodes) and are websocket UIs of the same shape.
+        #
+        # DELIBERATELY NOT HERE: bazarr and prowlarr, the other two names in that history. An
+        # *arr indexer search genuinely takes 5-30s and the user genuinely waits for it, so it is
+        # exactly the user-visible slowness this check's docstring exists to catch. Excluding
+        # them would hide the signal rather than the artifact.
+        TRAEFIK_STREAM_SERVICES=tuple(
+            s.strip()
+            for s in _env(
+                "TRAEFIK_STREAM_SERVICES",
+                "homelab-headlamp-,homelab-home-assistant-,homelab-uptime-kuma-",
+            ).split(",")
+            if s.strip()
+        ),
         N8N_URL=_env("N8N_URL", "http://n8n:5678").rstrip("/"),
         N8N_API_KEY=_env("N8N_API_KEY", ""),
         # n8n hides successful executions (EXECUTIONS_DATA_SAVE_ON_SUCCESS=none, kept that way

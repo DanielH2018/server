@@ -249,3 +249,78 @@ def log_error_verdict(
     offenders.sort(key=lambda nc: -nc[1])
     named = ", ".join("%s (%d)" % (name, count) for name, count in offenders[:5])
     return False, "fatal log lines in %s: %s" % (window, named)
+
+
+def traefik_latency_verdict(
+    total: Mapping[str, float],
+    under: Mapping[str, float],
+    min_rps: float,
+    slow_pct: float,
+    slow_bucket: str,
+    min_slow_requests: float,
+    stream_prefixes: Collection[str],
+    window_s: float,
+) -> tuple[bool, str]:
+    """Pure: (ok, msg) from a service's request rate and its rate under the slow bucket.
+
+    Three ways a service leaves the offender list, and they are not interchangeable. Below
+    `min_rps` it is too quiet to judge. Matching `stream_prefixes` it is not measurable at all,
+    because Traefik times a request until the response completes and a long-lived connection
+    therefore sits past every bucket edge while healthy. Missing from `under` its `le=` selected
+    nothing, which is a broken bucket configuration rather than a fast service — reading that as
+    "0 requests under the boundary" would page every service at once.
+
+    An offender must clear BOTH the ratio and `min_slow_requests`. `min_rps` admits a service
+    with `min_rps * window_s` requests, so at the deployed values one slow request already
+    exceeds `slow_pct`; the count is what makes the percentage mean something.
+
+    Args:
+      total: per-service request rate, from the histogram's own `_count` series.
+      under: per-service rate under `slow_bucket`, from the same metric family so numerator and
+        denominator are always the same scrape.
+      window_s: the range the two rates were taken over, used to turn a rate into a count.
+
+    Returns:
+      (ok, msg). The green message names how many services were exempt, because an exempt
+      service is not measured and a bare "ok" would overstate the coverage.
+    """
+    offenders = []
+    unmeasurable = []
+    eligible = 0
+    exempt = 0
+    worst = 0.0
+    for svc, rps in total.items():
+        if rps < min_rps:
+            continue
+        if any(svc.startswith(p) for p in stream_prefixes):
+            exempt += 1
+            continue
+        if svc not in under:
+            unmeasurable.append(svc)
+            continue
+        eligible += 1
+        pct = 100.0 * (1.0 - under[svc] / rps)
+        worst = max(worst, pct)
+        if pct > slow_pct and (rps - under[svc]) * window_s >= min_slow_requests:
+            offenders.append((svc, pct, rps))
+    if unmeasurable:
+        return False, (
+            "no %ss bucket for %d service(s) (%s) — check Traefik's histogram buckets"
+            % (slow_bucket, len(unmeasurable), ", ".join(sorted(unmeasurable)[:5]))
+        )
+    offenders.sort(key=lambda spr: -spr[1])
+    if offenders:
+        desc = ", ".join("%s (%.0f%% of %.2f rps)" % o for o in offenders[:5])
+        return False, (
+            "%d service(s) with over %.0f%% of requests slower than %ss: %s"
+            % (len(offenders), slow_pct, slow_bucket, desc)
+        )
+    return True, (
+        "latency ok: %d service(s) above floor, worst %.1f%% over %ss%s"
+        % (
+            eligible,
+            worst,
+            slow_bucket,
+            ", %d stream service(s) exempt" % exempt if exempt else "",
+        )
+    )
