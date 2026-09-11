@@ -143,6 +143,9 @@ main() {
   flock -n 9 || fail "another run holds $LOCK"
 
   install -d -m 750 "$LOG_DIR"
+  # From here on the orchestrator's own lines go into the run's evidence dir, so they are pruned
+  # with it. cron.log (the cron's redirect) then holds only what escapes before this point.
+  exec >>"$LOG_DIR/orchestrator.log" 2>&1
   prune_old_evidence
 
   # Preflight: everything the guest will be handed must exist HERE first, so a missing piece
