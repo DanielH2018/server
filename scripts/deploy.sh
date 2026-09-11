@@ -409,7 +409,9 @@ if [[ "$detach" == 1 ]]; then
     exec {lockfd}>"$LOCK"
     # `-E "$LOCK_BUSY"` for the same reason the queued path passes it: without it `flock -n`
     # answers 1 for a held lock AND for a lock file it could not open, and this arm would
-    # report a deploy in progress for a broken descriptor.
+    # report a deploy in progress for a broken descriptor. Measured 2026-09-11 against real
+    # flock, two descriptors on one file in one shell: `flock -n -E 75` on the second exits
+    # 75, so `-E` does apply to `-n` and contention still routes to LOCK_BUSY below.
     flock -n -E "$LOCK_BUSY" "$lockfd"
     detach_lock_status=$?
     if [[ "$detach_lock_status" != 0 && "$detach_lock_status" != "$LOCK_BUSY" ]]; then
