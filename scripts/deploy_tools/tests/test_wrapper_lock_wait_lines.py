@@ -59,12 +59,22 @@ _UV = """#!/bin/bash
 exit 0
 """
 
+# A fixed boot clock, handed to gitops_tick.sh through GITOPS_TICK_UPTIME_SOURCE, so the
+# arithmetic under test has no dependence on how long THIS machine has been up. Deriving the
+# stamp from the real /proc/uptime cannot work: on a runner whose uptime is under
+# `_IN_FLIGHT_S`, `uptime - 300` is negative, the script's `^[0-9]+$` guard rejects it, and
+# the test silently lands in the `${seconds:-0}` fallback instead of the arithmetic it exists
+# to check. That is how PR #1769 read `already 0s in flight` on CI and 300s here.
+# Whole seconds so the subtraction is exact in floating point.
+_UPTIME_S = 123456
+_IN_FLIGHT_S = 300
+_UPTIME_FIXTURE = f"{_UPTIME_S}.00 98765.43\n"
+_MONOTONIC_US = (_UPTIME_S - _IN_FLIGHT_S) * 1_000_000
+
 # `show <property>` expands to `systemctl show <unit> -p <property> --value`, so the property
-# is $4 here. The monotonic stamp is derived from /proc/uptime, so the run reads as having
-# started a known 300s ago whenever the test happens to run. ActiveState answers `activating`
-# once and then takes two seconds to answer `inactive`, which is a tick that finished while
-# this script was watching it.
-_SYSTEMCTL = """#!/bin/bash
+# is $4 here. ActiveState answers `activating` once and then takes two seconds to answer
+# `inactive`, which is a tick that finished while this script was watching it.
+_SYSTEMCTL = f"""#!/bin/bash
 case "$1" in
   cat) exit 0 ;;
   show)
@@ -78,8 +88,7 @@ case "$1" in
           echo activating
         fi
         ;;
-      ExecMainStartTimestampMonotonic)
-        awk '{ printf "%d\\n", ($1 - 300) * 1000000 }' /proc/uptime ;;
+      ExecMainStartTimestampMonotonic) echo {_MONOTONIC_US} ;;
       ExecMainStartTimestamp) echo "Thu 2026-09-11 10:00:00 CDT" ;;
       Result) echo success ;;
       ExecMainStatus) echo 0 ;;
@@ -171,6 +180,9 @@ def test_joining_a_tick_in_flight_reports_how_long_it_ran_and_how_long_we_waited
     """FLAGGED half: the join exits 0, so nothing else in the landing can see the wait."""
     env = _stub_path(tmp_path, {"systemctl": _SYSTEMCTL, "journalctl": _JOURNALCTL})
     env["TICK_STUB_STATE"] = str(tmp_path / "seen-activating")
+    uptime = tmp_path / "uptime"
+    uptime.write_text(_UPTIME_FIXTURE)
+    env["GITOPS_TICK_UPTIME_SOURCE"] = str(uptime)
     result = subprocess.run(
         [str(_TICK_SH)],
         cwd=_REPO,
@@ -185,7 +197,10 @@ def test_joining_a_tick_in_flight_reports_how_long_it_ran_and_how_long_we_waited
     )
     assert line, f"stdout={result.stdout!r} stderr={result.stderr!r}"
     in_flight = re.search(r"already (\d+)s in flight", line)
-    assert in_flight and 290 <= int(in_flight[1]) <= 320, line
+    # Exact, not a window: both operands are fixed, so any drift is a real arithmetic change.
+    # `!= 0` is the load-bearing part -- 0 is what the `${seconds:-0}` fallback produces, and a
+    # test that accepted it would pass while checking none of the conversion.
+    assert in_flight and int(in_flight[1]) == _IN_FLIGHT_S, line
     booked = tools.in_flock_wait(line)
     assert booked is not None, (
         f"land.py no longer parses gitops_tick.sh's line: {line!r}"

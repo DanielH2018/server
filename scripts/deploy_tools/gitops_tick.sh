@@ -41,6 +41,13 @@ set -euo pipefail
 UNIT="gitops-deploy.service"
 WAIT_S=540
 
+# The monotonic clock systemd's start stamp is measured against. A variable rather than a
+# literal so a test can point it at a fixture holding a known uptime and assert an exact
+# number of seconds in flight: deriving the stamp from the REAL uptime cannot work on a
+# machine that has been up for less than the window under test, which is every fresh CI
+# runner. Nothing on a host ever sets it.
+UPTIME_SOURCE="${GITOPS_TICK_UPTIME_SOURCE:-/proc/uptime}"
+
 # Emitted by the unit's ExecStopPost when `flock -E 75` fired. Must stay identical to the
 # phrase in roles/setup/gitops_deploy/templates/gitops-deploy.service.j2 — the exit code is
 # unreadable after a oneshot unit goes inactive, so this string is the whole signal.
@@ -71,7 +78,7 @@ done
 show() { systemctl show "$UNIT" -p "$1" --value; }
 
 # How long the run in flight has been going, from systemd's monotonic start stamp (in
-# microseconds) against /proc/uptime. Both count from boot, so on a host that does not
+# microseconds) against UPTIME_SOURCE. Both count from boot, so on a host that does not
 # suspend they are the same clock. 0 when either read is unusable: the number only decorates
 # a log line, and losing it must not end the tick.
 in_flight_seconds() {
@@ -79,7 +86,7 @@ in_flight_seconds() {
   if [[ "$mono_us" =~ ^[0-9]+$ ]]; then
     seconds=$(awk -v m="$mono_us" \
       '{ d = $1 - m / 1000000; if (d < 0) d = 0; printf "%d\n", d }' \
-      /proc/uptime 2>/dev/null || true)
+      "$UPTIME_SOURCE" 2>/dev/null || true)
   fi
   # `:-0` covers the awk that SUCCEEDS and prints nothing, which is what an empty /proc/uptime
   # gives: its action block never runs. An empty answer renders the joined line as
