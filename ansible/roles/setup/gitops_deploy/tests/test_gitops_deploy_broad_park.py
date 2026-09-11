@@ -139,3 +139,20 @@ def test_a_setup_role_the_deployer_can_apply_logs_no_park(gitops_deploy, tick, c
     assert "manual_plane pending" not in out
     assert tick.merges == [ORIGIN] and tick.playbooks
     assert gitops_deploy.STATE.manual_plane is None
+
+
+def test_a_failed_apply_still_records_the_role(gitops_deploy, tick):
+    """The range is MERGED before the apply, so the role is owed a hand either way.
+
+    Recorded after the apply, the failure path's early return skipped it: the tick held the
+    SHA, the k3s change sat fast-forwarded on disk with no marker, and once the operator
+    fixed forward and origin advanced past the hold, `local..origin` no longer carried that
+    commit — the broad arm would never see the role again.
+    """
+    tick.paths = [GROUP_VARS, K3S_SETUP]
+    tick.narrow = (0, "sonarr")
+    tick.playbook_outcomes = [RuntimeError("boom")]
+    gitops_deploy.main(tick.tools)
+    assert [e.role for e in gitops_deploy.STATE.manual_plane_pending()] == ["k3s"]
+    assert gitops_deploy.STATE.broad_applied is None
+    assert gitops_deploy.STATE.hold_sha == ORIGIN, "the failed apply is still held"

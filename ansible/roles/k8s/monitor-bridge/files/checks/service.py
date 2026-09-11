@@ -95,17 +95,23 @@ def gitops_status(
 ) -> tuple[bool, str]:
     """Pure: is the deploy pipeline in a state needing operator action? Returns (ok, msg).
 
-    Four down states share this monitor, most-specific first: a rolled-back commit HELD pending a
-    revert, a local↔origin DIVERGENCE where the deployer can't fast-forward and silently noops
-    forever while origin's new commits never deploy (2026-07-15 review L3), a setup role the
-    deployer fast-forwarded past and cannot apply itself, and the host simply sitting BEHIND
-    origin for too long.
+    Four down states share this monitor: a rolled-back commit HELD pending a revert, a
+    local↔origin DIVERGENCE where the deployer can't fast-forward and silently noops forever
+    while origin's new commits never deploy (2026-07-15 review L3), the host simply sitting
+    BEHIND origin for too long, and a setup role the deployer fast-forwarded past and cannot
+    apply itself.
 
-    The third is the signal a park used to carry. The deployer no longer holds a whole range
+    The last is the signal a park used to carry. The deployer no longer holds a whole range
     back for a role only a hand can apply — that parked every other session's landing too — so
     it merges, records the role in `manual_plane`, and this pages once the OLDEST pending role
     is older than the same threshold. Age-gated for the same reason the behind arm is: a role
     recorded ten minutes ago is an ordinary merge, not a fault.
+
+    It is reported LAST, behind rather than ahead of the behind arm, and the two are
+    independent faults rather than a cause and its symptom — so specificity does not order
+    them. Urgency does: a host sustained-behind is a deployer that has stopped, and every
+    other session's landing exits 4 from deploy.sh until a hand pulls the primary checkout,
+    where a pending role blocks nobody and only waits on work nobody has started.
 
     Behind-ness is the general case the other two are specific instances of, and it is the one that
     caught nothing before: a deferred BROAD change never fast-forwards, so the host parks on an old
@@ -144,6 +150,15 @@ def gitops_status(
             "local diverged from origin at %s — deployer can't fast-forward, new commits "
             "aren't deploying; reconcile the host tree" % diverged_sha[:8]
         )
+    sha, since = _parse_behind(behind_since)
+    if since is not None:
+        age_s = (time.time() if now is None else now) - since
+        if age_s > max_behind_s:
+            return False, (
+                "host %.0fh behind origin at %s (> %.0fh) — deploy deferred (broad change / "
+                "dirty tree); run the manual deploy on the host"
+                % (age_s / 3600, sha[:8], max_behind_s / 3600)
+            )
     pending = _parse_manual_plane(manual_plane)
     if pending:
         oldest = min(at for _, at in pending)
@@ -160,15 +175,6 @@ def gitops_status(
                     "it" if len(pending) == 1 else "them",
                     MANUAL_PLANE_CLEAR,
                 )
-            )
-    sha, since = _parse_behind(behind_since)
-    if since is not None:
-        age_s = (time.time() if now is None else now) - since
-        if age_s > max_behind_s:
-            return False, (
-                "host %.0fh behind origin at %s (> %.0fh) — deploy deferred (broad change / "
-                "dirty tree); run the manual deploy on the host"
-                % (age_s / 3600, sha[:8], max_behind_s / 3600)
             )
     return True, "no held deploy"
 

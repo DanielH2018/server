@@ -156,6 +156,13 @@ def handle_broad(
     )
     tools.run(["git", "merge", "--ff-only", origin], cwd=config.repo)
     playbook, tags = broad.playbook, broad.tags
+    # Recorded at the ff-merge, which is the moment the role becomes merged-and-unapplied —
+    # not after the apply below. A mixed range whose apply FAILS returns from the except arm,
+    # and a record placed after it never ran: the role sat fast-forwarded on disk with no
+    # marker, and once the operator fixed forward past the held SHA, `local..origin` no longer
+    # carried that commit and this arm never saw the role again.
+    if pending:
+        deploy_defer.record(tools, state, config, origin, pending)
 
     # FORWARD-ONLY. deploy_logic.broad_budget_ok carries the argument and its 2026-08-29
     # re-derivation: at the 60min ceiling a full deploy.yml (1212s measured 2026-08-22) plus
@@ -203,8 +210,6 @@ def handle_broad(
         state.record_broad_applied(origin, playbook, tags)
         state.clear_broad_hold(playbook, tags)
         deploy_defer.clear_applied(state, playbook, tags)
-    if pending:
-        deploy_defer.record(tools, state, config, origin, pending)
     deploy_alerts.alert_secrets_deferred(tools, state, config, origin, cs)
     deploy_alerts.alert_deferred(
         tools, state, config, origin, set(), cs, plan.k8s_services

@@ -268,8 +268,11 @@ stay).
     and every marker the watchdog reads goes quiet while the role stays unapplied.
     `checks.service.gitops_status` therefore reads `manual_plane` too and pages once the
     OLDEST pending line is older than the same `GITOPS_BEHIND_MAX_S` (6 h), naming the roles
-    and the clear command. Ordered after the hold and the divergence and before the behind
-    arm: those two name a broken deployer, this names work nobody has started. The pod reads
+    and the clear command. Reported LAST of the four, behind rather than ahead of the behind
+    arm: the other three name a deployer that has stopped — a host sustained-behind exits every
+    other session's landing 4 from `deploy.sh` until a hand pulls the primary checkout — where
+    a pending role blocks nobody. They are independent faults, so specificity does not order
+    them and urgency does. The pod reads
     it off the same `:ro` state mount as `behind_since`, and parses it itself — it cannot
     import this tree, so `tests/test_check_gitops.py` asserts its clear-command literal
     matches `deploy_remediation.MANUAL_PLANE_CLEAR_CMD`.

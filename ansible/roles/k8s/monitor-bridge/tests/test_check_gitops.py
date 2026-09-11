@@ -254,6 +254,26 @@ def test_a_hold_wins_over_a_pending_role(cfg):
     assert "clear-manual-plane" not in msg
 
 
+def test_a_stale_behind_marker_wins_over_a_pending_role(cfg):
+    """Both are stale at once when a bring-up playbook parks behind an already-recorded role.
+
+    They are independent faults, so specificity cannot order them and urgency does: behind
+    means the deployer has stopped and every other session's landing exits 4 from deploy.sh
+    until a hand pulls the primary checkout. A pending role blocks nobody.
+    """
+    ok, msg = checks.service.gitops_status(
+        cfg,
+        None,
+        None,
+        "abc123def4567890 1000.0",
+        now=1000.0 + 7 * 3600,
+        manual_plane=_K3S_PENDING,
+    )
+    assert not ok
+    assert "behind origin" in msg
+    assert "clear-manual-plane" not in msg
+
+
 def test_check_gitops_status_reads_the_manual_plane_file(tmp_path, cfg):
     """The marker is read off the same :ro state mount as `behind_since`."""
     cfg = replace(cfg, GITOPS_STATE_DIR=str(tmp_path))
