@@ -234,6 +234,50 @@ def test_a_macro_nothing_imports_narrows_to_nothing(tree: Tree):
     assert tree.narrow(*_refs(tree)) == set()
 
 
+def test_a_macro_reaching_an_uncallable_role_names_the_macro(tree: Tree):
+    """FLAGGED half: the refusal comes from `_role_tags`, which knows only the role.
+
+    Paired with `test_a_macro_change_narrows_to_its_importers` above. Without the macro name
+    and the derivation line, the tick's journal says a role refused and nothing says which
+    changed template reached it.
+    """
+    tree.write(
+        "ansible/roles/k8s/shared/templates/x.yaml.j2",
+        "{% from 'orphan.yml.j2' import orphan %}\n",
+    )
+    tree.commit("a shared role nothing calls imports the macro")
+    tree.write("ansible/templates/orphan.yml.j2", "{% macro orphan(x) %}\n")
+    old, new = _refs(tree)
+    lines: list[str] = []
+    with pytest.raises(narrow_broad.CannotNarrow, match="orphan.yml.j2") as exc:
+        narrow_broad.narrow(
+            old, new, cwd=tree.root, declared=DECLARED, callers={}, explain=lines.append
+        )
+    assert "no caller" in str(exc.value)
+    assert "narrow: orphan.yml.j2 -> roles shared" in lines[-1]
+
+
+def test_a_key_read_only_through_a_play_level_macro_names_the_key(tree: Tree):
+    """FLAGGED half: the refusal comes from inside `template_importers`, which knows the
+    macro and not the key that reached it."""
+    tree.write("ansible/templates/played.yml.j2", "p: {{ played_key }}\n")
+    tree.write(
+        "ansible/deploy.yml",
+        "- hosts: all\n  vars:\n    p: \"{% include 'played.yml.j2' %}\"\n",
+    )
+    tree.write("ansible/inventory/group_vars/all.yml", GROUP_VARS + "played_key: 1\n")
+    tree.commit("a key only a play-level macro reads")
+    tree.write("ansible/inventory/group_vars/all.yml", GROUP_VARS + "played_key: 2\n")
+    old, new = _refs(tree)
+    lines: list[str] = []
+    with pytest.raises(narrow_broad.CannotNarrow, match="played_key") as exc:
+        narrow_broad.narrow(
+            old, new, cwd=tree.root, declared=DECLARED, callers={}, explain=lines.append
+        )
+    assert "every deploy runs" in str(exc.value)
+    assert "narrow: played_key -> macro played.yml.j2" in lines[-1]
+
+
 def test_the_real_tree_still_has_macro_importers():
     """Non-vacuity: the importer scan must still find the macro 82 role templates import.
 

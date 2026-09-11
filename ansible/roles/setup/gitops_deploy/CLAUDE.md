@@ -179,6 +179,10 @@ stay).
     `local` at that point. A range that adds a caller of a shared role therefore reads one
     caller short, and a shared role that then looks caller-less refuses — the safe direction,
     since a refusal is the full run.
+  - The inventory scan skips a whole-line comment, so a key consumed only on a `#` line
+    inside a block scalar (`key: |`) would narrow rather than refuse — the unsafe direction.
+    No inventory block scalar carries such a line; one appearing is the reason to parse
+    instead of matching lines (`_defines_only` in `narrow_broad.py`).
   - **`roles/setup/<name>/` is not the same thing as `initial_setup.yml --tags <name>`, and
     assuming it was made this arm apply nothing while reporting success.** Two ways it breaks:
     the playbook may not include the role (`k3s` is in `k3s-bringup.yml`; `common` is in no

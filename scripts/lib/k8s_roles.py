@@ -23,7 +23,7 @@ import yaml
 
 from lib import yaml_fast
 from lib.render_guard import HOST_VARS as HOST_VARS_DIR, load_yaml
-from lib.repo_paths import K8S_ROLES
+from lib.repo_paths import K8S_ROLES, REPO
 
 __all__ = [
     "CALLER_RENDERED_ROLES",
@@ -153,7 +153,7 @@ def _callees(node) -> set[str]:
     return found
 
 
-def role_callers() -> dict[str, set[str]]:
+def role_callers(repo: Path | str | None = None) -> dict[str, set[str]]:
     """For each k8s role reached from another role's tasks, the roles that reach it.
 
     The deploy-coverage question a helper role poses: it has no `containers_list` entry and so
@@ -164,9 +164,14 @@ def role_callers() -> dict[str, set[str]]:
 
     Only ``roles/k8s`` is walked. The Pi's Compose roles include `containers/common`, not a k8s
     role, and no k8s role is reachable from them.
+
+    ``repo`` names the checkout to walk, for a caller that reads a tree other than the one
+    this module was imported from (``narrow_broad.narrow(cwd=...)``). Omitted, it walks
+    ``lib.repo_paths.K8S_ROLES``, which is this file's own checkout.
     """
+    roles_dir = K8S_ROLES if repo is None else Path(repo) / K8S_ROLES.relative_to(REPO)
     callers: dict[str, set[str]] = {}
-    for tasks_dir in sorted(K8S_ROLES.glob("*/tasks")):
+    for tasks_dir in sorted(roles_dir.glob("*/tasks")):
         caller = tasks_dir.parent.name
         for task_file in sorted(tasks_dir.glob("*.yml")):
             try:

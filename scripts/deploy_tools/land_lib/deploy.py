@@ -16,6 +16,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.exit_codes import (
     DEPLOY_BROAD,
     DEPLOY_LOCK_BUSY,
+    DEPLOY_LOCK_UNAVAILABLE,
     DEPLOY_OK,
     DEPLOY_PLAYBOOK_FAILED,
     DEPLOY_STALE,
@@ -207,6 +208,18 @@ def deploy_outcome(ln: Landing, rc: int) -> None:
             f"deploy lock stayed busy after {o.lock_retries} attempts — nothing deployed",
             75,
             Verdict.LOCK_BUSY,
+        )
+    if rc == DEPLOY_LOCK_UNAVAILABLE:
+        # Not contention, so `retry_while_locked` above did not retry it and retrying here
+        # would not help either: flock failed on the lock FILE. Nothing was deployed, which
+        # is what this message has to say — the wrapper used to fall through to 20 (issue
+        # #1775), whose text promises the opposite.
+        ln.ledger.cause = Cause.DEPLOY_EXIT_LOCK_UNAVAILABLE
+        ln.finish(
+            Verdict.DEPLOY_FAILED,
+            1,
+            f"PR #{pr} — the tree lock could not be taken at all, so nothing deployed; "
+            f"tags: {tags}",
         )
     if rc == DEPLOY_PLAYBOOK_FAILED:
         # The playbook RAN and a task failed: everything before it is live (issue #840).

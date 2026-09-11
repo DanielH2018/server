@@ -49,8 +49,8 @@
 #     Meaningless combined with --check or --dry-run (both already return immediately without
 #     touching the lock) — refused with a nonzero exit rather than silently ignored.
 #
-# Exit codes. 0 is a finished deploy; 75, 4, 3 and 2 each mean NOTHING was deployed and each is
-# a resume point (see the table in the repo CLAUDE.md); 20 means the playbook RAN and a task
+# Exit codes. 0 is a finished deploy; 76, 75, 4, 3 and 2 each mean NOTHING was deployed and
+# each is a resume point (see the table in the repo CLAUDE.md); 20 means the playbook RAN and a task
 # failed, so whatever applied before it is live. Nothing else is returned — ansible-playbook's
 # own status collides with 2/3/4 and is collapsed onto 20, see PLAYBOOK_FAILED below.
 
@@ -78,6 +78,13 @@ LOCK=/var/lock/server-git-tree.lock
 # the four fails that test rather than silently shortening this wait again.
 LOCK_WAIT=3000
 LOCK_BUSY=75
+# flock failed for a reason that is NOT contention -- a bad descriptor (65), a lock file this
+# user cannot open (1), anything else it returns. Nothing was deployed, exactly as 75 promises,
+# but the remedy differs: retrying changes nothing until the file itself is fixed. It has its
+# own code because both are refusals and only one clears on its own. Until 2026-09-11 every
+# such failure fell through to PLAYBOOK_FAILED below, so land.sh read "a task failed AFTER
+# applying; some changes are live" for a run that never started ansible at all (issue #1775).
+LOCK_UNAVAILABLE=76
 # The playbook ran and a task failed. Distinct from every code above because those all mean
 # NOTHING was deployed, while this one means the opposite: a play that reaches PLAY RECAP with
 # failed=1 has already applied whatever ran before the failing task.
@@ -123,6 +130,17 @@ emit_deploy_annotation() {
     logger -t deploy-annotation \
         "event=deploy services=${label} sha=$(git rev-parse --short HEAD 2>/dev/null || echo unknown) result=ok" \
         2>/dev/null || true
+}
+
+# What flock said when it failed for a reason other than contention. Both lock paths print
+# this, because both can hit it and an operator reading one log must not have to know which
+# arm ran. It names flock's own number: 65 is a bad descriptor and 1 is a lock file this user
+# cannot open, and those want different fixes.
+say_lock_unavailable() {
+    echo "deploy: could not take $LOCK (flock exit $1) -- nothing was deployed." >&2
+    echo "  This is NOT contention: no deploy is holding the lock, flock itself failed." >&2
+    echo "  Check $LOCK exists and is writable by this user (ls -l $LOCK). Retrying" >&2
+    echo "  changes nothing until it is; nothing ran, so a re-run is safe once fixed." >&2
 }
 
 # The tree lock's holder, in the shape land_lib/tools.py:lock_holder returns, or "" when
@@ -389,7 +407,16 @@ if [[ "$detach" == 1 ]]; then
     log="$log_dir/deploy-${tag_label//[^A-Za-z0-9_.,-]/_}-$(date +%Y%m%d-%H%M%S)-$$.log"
 
     exec {lockfd}>"$LOCK"
-    if ! flock -n "$lockfd"; then
+    # `-E "$LOCK_BUSY"` for the same reason the queued path passes it: without it `flock -n`
+    # answers 1 for a held lock AND for a lock file it could not open, and this arm would
+    # report a deploy in progress for a broken descriptor.
+    flock -n -E "$LOCK_BUSY" "$lockfd"
+    detach_lock_status=$?
+    if [[ "$detach_lock_status" != 0 && "$detach_lock_status" != "$LOCK_BUSY" ]]; then
+        say_lock_unavailable "$detach_lock_status"
+        exit "$LOCK_UNAVAILABLE"
+    fi
+    if [[ "$detach_lock_status" != 0 ]]; then
         echo "deploy --detach: could not take $LOCK right now -- nothing was deployed." >&2
         echo "  A deploy is already running. Likely holders: gitops-deploy.service" >&2
         echo "  (systemctl status gitops-deploy.service), the weekly secret-rotate cron," >&2
@@ -495,6 +522,11 @@ exec {lockfd}>&-
 # After the lock is released and only on success. `--check` and `--dry-run` never reach here —
 # both exec out well above — so a mode that changes nothing cannot annotate as though it had.
 emit_deploy_annotation "$status"
+
+if [[ "$lock_taken" != 1 && "$flock_status" != "$LOCK_BUSY" ]]; then
+    say_lock_unavailable "$flock_status"
+    exit "$LOCK_UNAVAILABLE"
+fi
 
 if [[ "$status" == "$LOCK_BUSY" ]]; then
     echo "deploy: could not take $LOCK after ${LOCK_WAIT}s -- nothing was deployed." >&2

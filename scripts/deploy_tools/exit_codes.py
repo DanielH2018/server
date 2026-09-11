@@ -22,7 +22,7 @@ Typical usage example:
 
 # -- scripts/deploy.sh ------------------------------------------------------------------
 # The wrapper's own contract, read off `scripts/deploy.sh` (its header comment and the
-# `exit` sites). 2, 3, 4 and 75 each mean NOTHING was deployed and each is a resume point;
+# `exit` sites). 2, 3, 4, 75 and 76 each mean NOTHING was deployed and each is a resume point;
 # 20 is the inverse -- the playbook RAN and a task failed, so whatever applied before it is
 # live. ansible-playbook's own 2/3/4 are collapsed onto 20 by the wrapper for exactly that
 # reason; `tests/test_deploy_exit_codes.py` pins the disjointness.
@@ -33,11 +33,21 @@ DEPLOY_STALE = 4
 DEPLOY_PLAYBOOK_FAILED = 20
 DEPLOY_BAD_FLAGS = 64
 DEPLOY_LOCK_BUSY = 75
+# flock failed for a reason that is not contention: a bad descriptor, a lock file the deploy
+# user cannot open. Nothing was deployed either way, so it is a refusal — but retrying clears
+# 75 and never clears this one, which is why it is its own code (issue #1775).
+DEPLOY_LOCK_UNAVAILABLE = 76
 
 # The subset that means staging (or a landing) never formed an opinion, because deploy.sh
 # refused before it applied anything.
 DEPLOY_SH_NO_VERDICT = frozenset(
-    {DEPLOY_TAG_MISS, DEPLOY_BROAD, DEPLOY_STALE, DEPLOY_LOCK_BUSY}
+    {
+        DEPLOY_TAG_MISS,
+        DEPLOY_BROAD,
+        DEPLOY_STALE,
+        DEPLOY_LOCK_BUSY,
+        DEPLOY_LOCK_UNAVAILABLE,
+    }
 )
 
 # -- scripts/deploy_tools/gitops_tick.sh ------------------------------------------------

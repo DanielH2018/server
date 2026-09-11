@@ -53,3 +53,29 @@ def test_render_guard_re_exports_the_same_anchor_objects():
 
     assert REPO == PATHS_REPO
     assert isinstance(REPO, Path)
+
+
+def test_every_public_name_is_listed_in_all():
+    """`__all__` drifted behind three helpers this module gained (issue #1776).
+
+    Derived from the module rather than compared to a copied list: a hand-written expected
+    list is the same drift one indirection away. Sorted, because the list is maintained in
+    that order and an append at the end reads as correct until someone bisects it.
+    """
+    import types
+
+    import render_guard
+
+    public = {
+        name
+        for name, value in vars(render_guard).items()
+        if not name.startswith("_")
+        and not isinstance(value, types.ModuleType)
+        and getattr(value, "__module__", "render_guard") == "render_guard"
+    }
+    assert public - set(render_guard.__all__) == set(), sorted(
+        public - set(render_guard.__all__)
+    )
+    assert render_guard.__all__ == sorted(render_guard.__all__)
+    for name in render_guard.__all__:
+        assert hasattr(render_guard, name), name
