@@ -46,6 +46,10 @@ def _problems(worktrees=_WORKTREES, porcelain="", marker=None, now=0.0):
         status=lambda path: porcelain,
         read_marker=lambda: marker,
         now=now,
+        # Pinned rather than defaulted: the default reaches the host's real `manual_plane`
+        # marker, so on daniel-box a pending setup role would add a line to every assertion
+        # here (issue #1774). `test_session_health_manual_plane.py` owns that line.
+        read_manual=lambda: None,
     )
 
 

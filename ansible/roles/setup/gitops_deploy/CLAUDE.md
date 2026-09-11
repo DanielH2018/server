@@ -330,6 +330,12 @@ stay).
     it off the same `:ro` state mount as `behind_since`, and parses it itself — it cannot
     import this tree, so `tests/test_check_gitops.py` asserts its clear-command literal
     matches `deploy_remediation.MANUAL_PLANE_CLEAR_CMD`.
+    The SessionStart banner reads the marker too, through `lib.deployer_park`, and names a
+    pending role from the moment it is recorded rather than after six hours (issue #1774): the
+    monitor pages, where the banner only tells the sessions that did not land the change.
+    That makes three parsers of one marker, and
+    `ansible/tests/deploy/test_manual_plane_parsers_agree.py` is the price — it feeds all
+    three the same marker, garbled lines included.
 - **Secrets-only pushes** (`ansible/vars/secrets.yml` changed with no service template — a
   rotation pushed from another machine) are fast-forwarded but **not** redeployed: the new
   value only reaches a container on its next deploy, so the deployer alerts (once per SHA,

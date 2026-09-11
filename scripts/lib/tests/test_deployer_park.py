@@ -15,9 +15,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from lib.deployer_park import (
     BEHIND_PARK_SECONDS,
     BEHIND_SINCE,
+    MANUAL_PLANE,
+    manual_plane_pending,
     park_age,
     park_note,
     read_behind_marker,
+    read_manual_plane_marker,
 )
 
 # The shape the deployer writes: the origin SHA it is behind, then when it first saw it.
@@ -66,3 +69,39 @@ def test_the_marker_is_read_from_the_state_directory(tmp_path):
 def test_a_missing_state_directory_reads_as_no_marker(tmp_path):
     """Every host but daniel-box has none, and that must not be an error."""
     assert read_behind_marker(str(tmp_path / "nope")) is None
+
+
+# ── the manual_plane marker (issue #1774) ─────────────────────────────────────────────────
+# The shape the deployer writes: origin SHA, the playbook that applies the role (or `none`),
+# the role, and when it was first recorded.
+_PENDING = (
+    "abc1230000000000000000000000000000000000 ansible/k3s-bringup.yml k3s 1000\n"
+    "beef1230000000000000000000000000000000000 none common 2000"
+)
+
+
+def test_every_pending_role_is_parsed():
+    assert manual_plane_pending(_PENDING) == [
+        ("k3s", "ansible/k3s-bringup.yml", 1000.0),
+        ("common", "none", 2000.0),
+    ]
+
+
+def test_an_empty_or_absent_marker_has_nothing_pending():
+    assert manual_plane_pending(None) == []
+    assert manual_plane_pending("") == []
+
+
+def test_a_garbled_line_is_skipped_and_its_neighbours_survive():
+    """The must-not-fire half: a torn line names no role and no command to clear it."""
+    marker = "three fields only\n" + _PENDING.splitlines()[0] + "\nsha book role later"
+    assert manual_plane_pending(marker) == [("k3s", "ansible/k3s-bringup.yml", 1000.0)]
+
+
+def test_the_manual_plane_marker_is_read_from_the_state_dir(tmp_path):
+    (tmp_path / MANUAL_PLANE).write_text(_PENDING + "\n")
+    assert read_manual_plane_marker(str(tmp_path)) == _PENDING
+
+
+def test_an_absent_manual_plane_marker_reads_as_nothing_pending(tmp_path):
+    assert read_manual_plane_marker(str(tmp_path / "nope")) is None
