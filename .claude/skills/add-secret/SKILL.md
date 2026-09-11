@@ -32,7 +32,15 @@ themselves (via the `! ` prefix) rather than putting the value in a command you 
    encrypted on disk):
    - **Preferred (value stays private):** tell the user to run it themselves —
      `! sops ansible/vars/secrets.yml` — add the `name: value` line in the editor, save, exit.
-   - **Generated value (auto tier):** generate and set without echoing the value:
+   - **A Kuma push token is 32 hex characters, not base64.** AutoKuma validates the format and
+     refuses the monitor outright — `Invalid push_token, push token should be 32 characters and
+     contain only letters and numbers` in the autokuma sidecar's log — so the tile is never
+     created, every push to it is lost, and the only visible symptom is `kuma-drift` reporting
+     it "declared, not live" plus a failing `kuma-status-page-sync` job. A base64 value has
+     `+`, `/` and `=` in it and is 44 characters. `secret_rotation.py rotate` already mints
+     `token_hex(16)` for exactly this reason; match it on the first write:
+     `openssl rand -hex 16 | { read v; sops set ansible/vars/secrets.yml "[\"<name>\"]" "\"$v\""; }`
+   - **Any other generated value (auto tier):** generate and set without echoing the value:
      `openssl rand -base64 32 | { read v; sops set ansible/vars/secrets.yml "[\"<name>\"]" "\"$v\""; }`
      (the value is never printed). `Bash(openssl rand *)` and `Bash(sops set *)` are allow-listed.
    - **User-provided value via sops set:** only if the user explicitly accepts that the value
