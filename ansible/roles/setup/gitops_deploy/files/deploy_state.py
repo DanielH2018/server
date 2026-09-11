@@ -222,9 +222,12 @@ class DeployerState:
         Returns:
             True when a line was appended, False when this role was already pending.
 
-        The stamp is NOT refreshed for a role already listed, for the same reason
-        `behind_marker` keeps its first-seen: a trickle of pushes touching the same role
-        would otherwise restart the clock every tick and monitor-bridge could never page.
+        The stamp is NOT refreshed for a role already listed. It measures how long the role
+        has waited for a hand-applied run, and a later commit touching the same role is not
+        that run — it is more of the same waiting. Refreshing on one would restart the clock
+        every tick a push landed, and monitor-bridge could never page. (This is the opposite
+        of `behind_marker`, which re-stamps on every fast-forward, because progress is
+        exactly what a tick that moves the tree HAS made.)
         """
         lines: list[str] = (self.manual_plane or "").splitlines()
         if any(self._line_role(line) == role for line in lines):

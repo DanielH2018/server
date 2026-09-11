@@ -116,7 +116,29 @@ def test_a_converged_tick_that_recorded_no_apply_is_not_settled(landing, capsys)
     out = capsys.readouterr().out
     assert (exc.value.rc, exc.value.verdict) == (1, "needs-manual-apply")
     assert "recorded no broad apply covering this PR" in out
+    assert "never see this range again" in out
     assert "`ansible-playbook ansible/initial_setup.yml --tags x`" in out
+
+
+def test_a_tick_still_behind_origin_is_not_told_it_will_never_return(landing, capsys):
+    """A tick that landed at a green ancestor has a range left to cross, so say so.
+
+    It crossed this PR's merge commit — which is why the landing is not BEHIND — but it is
+    still behind the tip, and a later tick can still record the apply. The stranded wording
+    of the test above is false here.
+    """
+    ln, _ = _deployed(
+        landing,
+        Fakes(
+            self_applied=True, state={"behind_since": "abc123 1.0"}, merge_applied_rc=0
+        ),
+    )
+    with pytest.raises(Outcome) as exc:
+        health_verdict.health(ln)
+    out = capsys.readouterr().out
+    assert (exc.value.rc, exc.value.verdict) == (1, "needs-manual-apply")
+    assert "a later tick may yet apply this range" in out
+    assert "never see this range again" not in out
 
 
 def test_an_apply_recorded_at_a_commit_without_this_pr_is_not_settled(landing):

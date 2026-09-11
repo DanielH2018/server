@@ -29,6 +29,7 @@ from deploy_tools.land_lib.outcome import (
     Verdict,
     cause_for_deploy_exit,
     say,
+    unrecorded_apply_note,
 )
 
 
@@ -104,13 +105,10 @@ def no_tag_outcome(ln: Landing) -> NoReturn:
         )
     if not ln.broad_applied_covers(sha):
         print(
-            "  the tick converged with origin but recorded no broad apply covering this PR "
+            "  the tick crossed this PR but recorded no broad apply covering it "
             f"(broad_applied: {ln.state('broad_applied') or 'absent'})"
         )
-        print(
-            "  Something OTHER than the tick fast-forwarded the checkout, so the tick will "
-            "never see this range again."
-        )
+        print(unrecorded_apply_note(ln.state("behind_since")))
         if ln.self_applied_command:
             print(f"  Apply it: {ln.self_applied_command}")
         ln.finish(

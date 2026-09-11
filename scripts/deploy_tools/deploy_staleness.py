@@ -167,9 +167,10 @@ def refusing_paths(
       any service from a tree behind a rotation commit renders the old credential and pushes
       it live — the reversion this guard exists to refuse, arriving through a field the
       narrowing does not consult (issue #1785).
-    - A k8s role with no `containers_list` entry is a SHARED role (`manifests`,
-      `volume-claim`, `image-builder` and five more), included by literal name from other
-      roles. Every k8s deploy runs `k8s/manifests`, so being behind on one is being behind on
+    - An `ansible/roles/k8s/<role>` with no `containers_list` entry is a SHARED role,
+      included by literal name from other roles rather than selected by a tag — which is the
+      derivation this rule uses, rather than a list that would go stale as roles are added.
+      Every k8s deploy runs `k8s/manifests`, so being behind on one is being behind on
       whatever this deploy renders, whichever service it names.
 
     Build couplings widen the fourth on purpose: a build role in the tail renders the image
