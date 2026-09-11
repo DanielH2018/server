@@ -14,6 +14,7 @@ test is what keeps it pinned.
 Run: uv run pytest ansible/tests/deploy/test_the_two_lock_orderings_agree.py
 """
 
+import os
 import subprocess
 import sys
 
@@ -67,10 +68,35 @@ def test_the_census_contains_the_pair_the_two_sorts_disagree_on():
     )
 
 
-def test_both_deploy_paths_lock_the_real_tag_list_in_the_same_order():
-    """The invariant: the wrapper's order and the deployer's are the same list."""
+def _deployer_order(tags: list[str], lock_dir) -> list[str]:
+    """The order `deploy_locks.service_locks` really takes them in, `all` dropped.
+
+    The context manager yields the names as it takes them, so this is the deployer's ordering
+    itself rather than a restatement of it — a reordering inside `service_locks` fails the
+    comparison below, which a literal `sorted()` here would not notice.
+    """
+    import deploy_locks
+
+    os.environ["HOMELAB_DEPLOY_LOCK_DIR"] = str(lock_dir)
+    try:
+        with deploy_locks.service_locks(tags, timeout=30) as taken:
+            assert taken[0] == deploy_locks.SERVICE_LOCK_ALL, (
+                f"service_locks took {taken[0]} before `all`, so a full run and a scoped run "
+                "can deadlock"
+            )
+            return taken[1:]
+    finally:
+        os.environ.pop("HOMELAB_DEPLOY_LOCK_DIR", None)
+
+
+def test_both_deploy_paths_lock_the_real_tag_list_in_the_same_order(tmp_path):
+    """The invariant: the wrapper's order and the deployer's are the same list.
+
+    Both sides are driven rather than described — the shell pipeline `deploy.sh` runs, and the
+    context manager the deployer holds — against every tag this repo declares.
+    """
     tags = _declared_tags()
-    assert _shell_sorted(tags) == sorted(set(tags)), (
+    assert _shell_sorted(tags) == _deployer_order(tags, tmp_path), (
         "deploy.sh and deploy_locks.py order the service locks differently, so two deploys "
         "sharing two services can each hold the lock the other is waiting for"
     )

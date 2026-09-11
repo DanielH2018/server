@@ -214,13 +214,21 @@ remove_snapshot() {
     snapshot=""
 }
 
-# Remove snapshots no deploy is using any more.
+# Remove snapshots no deploy is using any more. CALL ONLY WHILE HOLDING THE TREE LOCK.
 #
 # A run killed outside its trap -- SIGKILL, a reboot, an OOM -- leaves both the directory and
 # git's registration of it. A live one is told apart by its owner lock: the process running the
 # playbook holds `<snapshot>/.deploy-owner.lock`, so `flock -n` on it fails while that deploy is
 # alive and succeeds the moment it is not, however it died. The pid in the directory name is for
 # a human reading `ls`; it decides nothing.
+#
+# The tree lock is what closes the window between `git worktree add` creating the directory and
+# `make_snapshot` flocking the owner lock inside it. For those few seconds the directory looks
+# ownerless, and an unlocked reaper -- a concurrent `--check`, which needs no lock of its own --
+# deleted the worktree a deploy was about to render from, then told the operator "retrying alone
+# will not fix either". Both snapshot-taking arms reap under the same lock they snapshot under;
+# `--check` and `--dry-run` take no tree lock and so reap nothing, which costs only the next
+# locked invocation's sweep.
 #
 # Fails open, like the fact-cache preflight above it: a snapshot this run cannot reap costs
 # disk, and refusing every deploy over that would be the worse failure.
@@ -649,12 +657,6 @@ fi
 # deploy on a bug in a cache-cleaner would be a worse failure than the one it prevents.
 uv run python scripts/deploy_tools/fact_cache_guard.py --clear || true
 
-# The snapshot equivalent of that preflight, and it fails open for the same reason. A run
-# killed outside its trap leaves a registered worktree behind; left uncollected they accumulate
-# in the object store and in `git worktree list`. Runs before --check and --dry-run too: those
-# make no snapshot, but they are as good a moment as any to collect someone else's.
-reap_dead_snapshots
-
 # A tree behind origin/master renders stale templates and reverts live config for the roles
 # it targets, while every repo-side check still reads green -- the stale tree is consistent
 # with itself. Measured 2026-08-19; see scripts/deploy_tools/deploy_staleness.py. This runs before --check
@@ -732,6 +734,7 @@ if [[ "$detach" == 1 ]]; then
     say_lock_acquired 0 ""
 
     # Under the tree lock, and the only thing this arm needs it for.
+    reap_dead_snapshots
     if ! make_snapshot; then
         flock -u "$lockfd"
         exec {lockfd}>&-
@@ -867,6 +870,7 @@ if [[ "$lock_taken" == 1 ]]; then
     # so the tick, the rotate cron and every other session are free while this run deploys.
     snapshot_ok=0
     tags_ok=1
+    reap_dead_snapshots
     if make_snapshot; then
         snapshot_ok=1
         # Still under the tree lock, for the reason enumerate_full_run_tags gives.

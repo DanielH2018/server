@@ -158,6 +158,85 @@ def test_a_snapshot_whose_owner_lock_is_held_survives_another_runs_reap(tmp_path
     assert not live.exists(), "a snapshot with no live owner was left behind"
 
 
+def test_an_unlocked_invocation_reaps_nothing_while_the_tree_lock_is_held(tmp_path):
+    """The window between `git worktree add` and the owner-lock flock, closed by the tree lock.
+
+    For those seconds the directory exists with no owner, and a `--check` run — which takes no
+    lock at all — would have reaped a worktree another process was in the middle of creating.
+    Reaping moved inside the tree lock, so `--check` no longer reaps; this plants exactly that
+    ownerless directory, holds the tree lock the way the creating process would, and asserts a
+    concurrent `--check` leaves it alone.
+    """
+    repo, env = _harness(tmp_path)
+    env["DEPLOY_TEST_SLEEP"] = "0"
+    being_made = tmp_path / "snapshots" / "alpha-20260911-000000-424242"
+    being_made.mkdir(parents=True)
+
+    tree_lock = os.open(
+        env["HOMELAB_DEPLOY_TREE_LOCK"], os.O_WRONLY | os.O_CREAT, 0o666
+    )
+    try:
+        fcntl.flock(tree_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        _deploy(repo, env, "--check", "--tags", "alpha")
+        assert being_made.is_dir(), (
+            "--check reaped a snapshot directory whose owner had not flocked it yet"
+        )
+    finally:
+        os.close(tree_lock)
+
+    # CLEAN half for the reaper itself: once the tree lock is free, a locked run collects it.
+    _deploy(repo, env, "--tags", "alpha")
+    assert not being_made.exists(), "the ownerless directory was never collected"
+
+
+def test_a_live_detached_snapshot_survives_a_concurrent_check_and_deploy(tmp_path):
+    """The end-to-end shape of C-1, with nothing simulated: two real runs against a live one.
+
+    `--check` takes no tree lock and so reaps nothing; a scoped deploy of another service reaps
+    under the tree lock and must leave this snapshot alone, because its owner still holds the
+    lock inside it. Under the pid-based reaper either one deleted the worktree the detached
+    playbook was rendering from, and the operator was told "retrying alone will not fix either".
+    """
+    repo, env = _harness(tmp_path, uv_stub=_UV_DETACH_STUB)
+    pwd_file = tmp_path / "playbook-pwd"
+    env["DEPLOY_TEST_PWD_FILE"] = str(pwd_file)
+    env["DEPLOY_TEST_SLEEP"] = "10"
+    output = tmp_path / "detach-output"
+    with output.open("w") as sink:
+        detached = subprocess.run(
+            [
+                str(_DEPLOY_SH),
+                "--detach",
+                "--tags",
+                "alpha",
+                "--skip-tag-check",
+                "--skip-staleness-check",
+            ],
+            cwd=repo,
+            env=env,
+            stdout=sink,
+            stderr=subprocess.STDOUT,
+            timeout=120,
+            check=False,
+        ).returncode
+    assert detached == 0, output.read_text()
+    assert _wait_for(pwd_file.exists, 30), "the backgrounded playbook never ran"
+    snapshot = Path(pwd_file.read_text().strip())
+
+    # Both concurrent runs finish immediately: only the detached playbook sleeps.
+    quick = dict(env, DEPLOY_TEST_SLEEP="0")
+    _deploy(repo, quick, "--check", "--tags", "beta")
+    _deploy(repo, quick, "--tags", "beta")
+    assert snapshot.is_dir(), (
+        f"{snapshot} was reaped while the detached playbook was still rendering from it"
+    )
+
+    # And it is the OWNER that cleans up, once the playbook it is running finishes.
+    assert _wait_for(lambda: not snapshot.exists(), 60), (
+        "the detached run left its snapshot behind"
+    )
+
+
 def _service_lock_free(path: Path) -> bool:
     """Is nothing holding this service lock? Takes and releases it non-blocking."""
     fd = os.open(path, os.O_WRONLY | os.O_CREAT, 0o666)

@@ -135,7 +135,7 @@ def record(
     config: Config,
     origin: str,
     roles: list[str],
-) -> None:
+) -> list[str]:
     """Record each role this tick merged past and cannot apply, then page once per SHA.
 
     A role already in the marker keeps its first-seen stamp, which is the age monitor-bridge
@@ -145,6 +145,10 @@ def record(
     The journal line here names only what this tick ADDED. `main()` already logs the whole
     pending set on every tick, including this one, so logging the set again here printed it
     twice whenever a role was already listed.
+
+    Returns:
+        The roles this tick added, which is what `unrecord` takes back when the ff-merge that
+        made them pending is rolled back. A role a previous tick recorded is not in it.
     """
     now = time.time()
     recorded = [
@@ -170,6 +174,26 @@ def record(
             origin, manual_plane_remediation(set(roles)), state.path("manual_plane")
         ),
     )
+    return recorded
+
+
+def unrecord(state: DeployerState, origin: str, roles: list[str]) -> None:
+    """Take back the lines `record` wrote, for a tick whose ff-merge was undone.
+
+    A pending role means merged-and-unapplied. When the tick resets to `local` — which
+    `for_contention` does, because nothing was applied — the merge half stops being true, so
+    the marker would page for six hours about work no tree carries. The dedupe page is cleared
+    with them, but only when it names THIS origin: a page for an earlier SHA is somebody else's.
+
+    Args:
+        state: the marker files.
+        origin: the SHA this tick recorded under.
+        roles: what `record` returned, so a role an earlier tick recorded is left alone.
+    """
+    for role in roles:
+        state.clear_manual_plane(setup_role_tag(role))
+    if roles and state.read("broad_alerted") == origin:
+        state.write("broad_alerted", None)
 
 
 def clear_applied(state: DeployerState, playbook: str, tags: list[str]) -> None:

@@ -512,7 +512,7 @@ def record_staging_tick(
         verdict: one of `staging_verdict`'s words, or STAGING_SKIPPED.
         outcome: `deploy_staging.staging_tick_outcome`'s word for that verdict.
 
-    The caller decides whether there is anything to record: `deploy_handlers.record_staging_tick`
+    The caller decides whether there is anything to record: `deploy_staging_io.record_staging_tick`
     drops a verdict that measured nothing — `staging_tick_outcome` returns None for SKIPPED —
     and only then calls this. Taking the word as an argument rather than deriving it here also
     keeps this module from importing `deploy_staging`.

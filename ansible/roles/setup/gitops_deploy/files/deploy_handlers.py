@@ -160,8 +160,11 @@ def handle_broad(
     # and a record placed after it never ran: the role sat fast-forwarded on disk with no
     # marker, and once the operator fixed forward past the held SHA, `local..origin` no longer
     # carried that commit and this arm never saw the role again.
-    if pending:
-        deploy_defer.record(tools, state, config, origin, pending)
+    # Kept: what this tick ADDED, so the contention arm can take exactly that back. A role a
+    # previous tick already recorded keeps its first-seen stamp and is not in this list.
+    recorded = (
+        deploy_defer.record(tools, state, config, origin, pending) if pending else []
+    )
 
     # FORWARD-ONLY. deploy_logic.broad_budget_ok carries the argument and its 2026-08-29
     # re-derivation: at the 60min ceiling a full deploy.yml (1212s measured 2026-08-22) plus
@@ -179,7 +182,10 @@ def handle_broad(
                 config.repo, playbook, tags, config.broad_deploy_timeout_s
             )
     except deploy_locks.ServiceLockBusy as exc:
-        # Before the generic arm: nothing was applied, so this plane must not be held.
+        # Before the generic arm: nothing was applied, so this plane must not be held — and the
+        # reset undoes the ff-merge, so the manual_plane lines this tick just wrote describe a
+        # range that is no longer merged. Take them back with their page.
+        deploy_defer.unrecord(state, origin, recorded)
         return deploy_defer.for_contention(tools, config, target, exc)
     except Exception as exc:
         log(f"broad apply failed ({playbook} {tags}): {exc}")

@@ -4,7 +4,7 @@
 Pure by construction — `staging_scope`, `staging_verdict`, `staging_verdict_summary`,
 `staging_blocks`, `staging_tick_outcome` decide, and nothing here touches a disk, a clock or a
 subprocess. The I/O shell that asks staging and records the answer (`consult_staging`,
-`record_staging_tick`, `consume_staging_override`) lives in `deploy_handlers.py`.
+`record_staging_tick`, `consume_staging_override`) lives in `deploy_staging_io.py`.
 
 KEEP THIS MODULE IMPORT-PURE. `deploy_logic.py` re-exports these names, and three tools in the
 repo's `scripts/deploy_tools/` tree import that index with only this role's `files/` on
