@@ -601,8 +601,8 @@ def deploy_broad(repo: str, playbook: str, tags: list[str], timeout: float) -> N
     cmd = [*PLAYBOOK_ARGV, playbook]
     if tags:
         cmd += ["--tags", ",".join(tags)]
-    # No tags takes `all` exclusively, so it excludes every scoped deploy; see deploy_locks.
-    with locked_budget(tags, timeout) as budget:
+    # `all` EXCLUSIVE whatever the tags: this reconfigures the host, not one service.
+    with locked_budget(tags, timeout, exclusive_all=True) as budget:
         run(cmd, cwd=repo, timeout=budget)
 
 

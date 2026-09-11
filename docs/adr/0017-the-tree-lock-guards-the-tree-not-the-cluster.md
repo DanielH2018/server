@@ -4,8 +4,9 @@ title: The tree lock guards the tree, and per-service locks guard the cluster
 status: Accepted
 date: 2026-09-11
 governs:
-  - scripts/deploy.sh:267
-  - ansible/roles/setup/gitops_deploy/files/deploy_locks.py:26
+  - "scripts/deploy.sh#the lock order is"
+  - "scripts/deploy.sh#ownership is this lock"
+  - "ansible/roles/setup/gitops_deploy/files/deploy_locks.py#the lock order is"
 ---
 
 # ADR-0017: The tree lock guards the tree, and per-service locks guard the cluster
@@ -80,15 +81,31 @@ snapshots, releases it and only then takes service locks, and never re-takes the
 deployer takes the tree lock and holds it across its service locks. Neither order can close a
 cycle, because the wrapper never waits on the tree lock while holding a service lock.
 
-**A crashed run leaves a registered worktree.** `deploy.sh` reaps snapshot directories whose
-pid is dead on its next run and prunes, the way it already clears a stale Ansible fact cache.
-`scripts/dev/prune_worktrees.py` keeps any detached worktree rather than removing it, so a live
-snapshot is never collected out from under a deploy.
+**A crashed run leaves a registered worktree, and what says a snapshot is still in use is an
+advisory lock rather than a pid.** The process running the playbook holds
+`<snapshot>/.deploy-owner.lock`; `deploy.sh` reaps a snapshot directory on its next run only
+once `flock -n` on that file succeeds, the way it already clears a stale Ansible fact cache.
+The pid in the directory name is for a human reading `ls` and decides nothing: `--detach` runs
+its playbook in a background shell whose `$$` is still the parent's, and the parent exits
+at once — so a pid-based reaper found a dead pid for the whole life of every detached deploy
+and deleted the worktree out from under it. `scripts/dev/prune_worktrees.py` is the other
+collector, and it keeps any detached worktree rather than classifying it.
 
 **`uv` resolves its project from the working directory**, and a snapshot has no `.venv`. The
 playbook run pins `UV_PROJECT_ENVIRONMENT` to the calling checkout's, so the snapshot reuses
 one environment instead of building one it then deletes — and the shared, host-keyed Ansible
 fact cache is not pinned to an interpreter path that disappears.
+
+**A busy service lock defers the deployer's tick; it does not fail it.** Contention means
+nothing ran, so the tick undoes its fast-forward (`git reset --hard <local>`) and lets the next
+one re-evaluate the range — no `hold_sha`, no rollback, no page.
+`deploy_locks.ServiceLockBusy` is its own exception type so each handler can tell it from a
+playbook that failed, and `deploy_defer.for_contention` is the one place that acts on it.
+
+**A broad apply takes `all` exclusively whatever its tags say.** `initial_setup.yml --tags
+<role>` names a tag, but what it reconfigures is the host every workload runs on, so sharing
+`all` with a scoped deploy the way a service deploy does would let a host-plane apply overlap a
+rollout.
 
 **The deployer's service-lock wait comes out of the phase it is waiting for.** That unit holds
 the tree lock across its whole run, so it now waits for a service lock while holding it. Every
@@ -105,6 +122,8 @@ root or the object store.
 
 ## Governs
 
-`scripts/deploy.sh:267` and
-`ansible/roles/setup/gitops_deploy/files/deploy_locks.py:26` — the `# DECIDED:` markers
-recording the lock order at each of the two deploy paths.
+The `# DECIDED:` markers recording the lock order at each of the two deploy paths
+(`scripts/deploy.sh`, `ansible/roles/setup/gitops_deploy/files/deploy_locks.py`), and the one
+in `scripts/deploy.sh` recording that a snapshot's owner is an advisory lock rather than the
+pid in its name. The anchors are the markers' own text: a line number is wrong the moment
+anything above it moves, and these three moved twice while this record was being written.

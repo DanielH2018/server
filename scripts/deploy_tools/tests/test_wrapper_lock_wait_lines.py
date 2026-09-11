@@ -42,9 +42,14 @@ def _deploy_repo_env(tmp_path: Path, bin_dir: Path) -> tuple[Path, dict[str, str
     return make_snapshot_repo(tmp_path / "repo"), deploy_sh_env(tmp_path, bin_dir)
 
 
-# `-n` is deploy.sh's uncontended probe and `-w` its timed acquire. Refusing the first and
-# sleeping in the second is a held lock as far as the script can tell, with nothing held.
+# deploy.sh's three flock shapes, and only two of them are the tree lock: `-n <fd>` is its
+# uncontended probe, `-w` its timed acquire, and `-n -x <fd>` the snapshot's own owner lock,
+# which nothing here contends. Refusing the probe and sleeping in the acquire is a held tree
+# lock as far as the script can tell, with nothing actually held.
 _FLOCK_CONTENDED = """#!/bin/bash
+case "$1 $2" in
+  "-n -x") exit 0 ;;
+esac
 case "$1" in
   -n) exit 1 ;;
   -w) sleep 1; exit 0 ;;
@@ -331,15 +336,15 @@ def test_a_flock_failure_that_is_not_contention_exits_its_own_code(tmp_path):
 # `--detach` takes the same lock through a second, non-blocking call, so it needs both halves
 # of the same pair. Its `flock -n` carries `-E "$LOCK_BUSY"`, so a held lock answers 75 here.
 _FLOCK_DETACH_BUSY = """#!/bin/bash
-case "$1" in
-  -n) exit 75 ;;
+case "$1 $2" in
+  "-n -E") exit 75 ;;
 esac
 exit 0
 """
 
 _FLOCK_DETACH_ERRORS = """#!/bin/bash
-case "$1" in
-  -n) echo "flock: bad file descriptor" >&2; exit 65 ;;
+case "$1 $2" in
+  "-n -E") echo "flock: bad file descriptor" >&2; exit 65 ;;
 esac
 exit 0
 """

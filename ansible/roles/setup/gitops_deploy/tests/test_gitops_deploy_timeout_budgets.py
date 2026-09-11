@@ -76,8 +76,15 @@ _DEFAULTS = pathlib.Path(__file__).parents[1] / "defaults" / "main.yml"
 
 
 def _worst_lock_hold(defaults: dict) -> int:
-    """Longest one gitops-deploy activation can hold the git-tree lock, EXCLUDING its own flock
-    wait (which is spent before the lock is held).
+    """The four k8s-path terms of the git-tree lock hold, EXCLUDING this unit's own flock wait
+    (which is spent before the lock is held).
+
+    NOT the longest hold on every path, and the difference is named rather than papered over:
+    the DOCKER `deploy_io.deploy()` runs `ansible-playbook` with no timeout at all, and waits
+    up to `deploy_locks.SERVICE_LOCK_WAIT_S` for its service locks, both inside this same hold.
+    Nothing bounds that path, so nothing here can sum it. It is unreachable on the only host
+    that runs this unit — daniel-box declares every containers_list entry `platform: k8s` — and
+    the day a Docker service lands there, this function is what has to grow a fifth term.
 
     All four terms are on the SAME path and are additive, not alternative: consult_staging runs
     inside `if cs.k8s_deploy:` in main(), ahead of deploy_k8s, so an activation that stalls the

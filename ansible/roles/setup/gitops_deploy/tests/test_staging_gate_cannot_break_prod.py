@@ -53,7 +53,7 @@ def sys_executable_launches(fn: ast.FunctionDef) -> list[str]:
     return launched
 
 
-def test_consult_staging_returns_a_verdict_on_every_path(handlers_fn) -> None:
+def test_consult_staging_returns_a_verdict_on_every_path(staging_io_fn) -> None:
     """Every exit from the gate hands back a word, including the broad `except`.
 
     A bare `return` there would give main() None, which `staging_blocks` reads as "does not
@@ -61,7 +61,7 @@ def test_consult_staging_returns_a_verdict_on_every_path(handlers_fn) -> None:
     reach the alert. It returned bare until slice 4, which was harmless only while nothing
     branched on the answer.
     """
-    fn = handlers_fn("consult_staging")
+    fn = staging_io_fn("consult_staging")
     bare = [
         node
         for node in ast.walk(fn)

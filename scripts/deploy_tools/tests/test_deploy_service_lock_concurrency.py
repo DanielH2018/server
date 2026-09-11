@@ -2,9 +2,10 @@
 """Two `deploy.sh` runs overlap when they name different services, and not when they don't.
 
 This is the property ADR-0017 exists for, and the only one that cannot be read off the script:
-it is about two processes, so a single-process test would pass whatever the locks did. The tree
-lock is still taken for real here -- for the snapshot, which is milliseconds -- and the
-per-service locks are redirected to a tmp_path so nothing writes under /var/lock.
+it is about two processes, so a single-process test would pass whatever the locks did. Every
+lock is real, and all three paths -- the tree lock, the service locks and the snapshot root --
+are redirected into a tmp_path, so these runs neither queue behind a live gitops tick nor make
+one queue behind them.
 
 `ansible-playbook` is a stub that sleeps. Elapsed wall clock is therefore the whole signal:
 two runs that overlap finish in about one sleep, two that serialize take two.
@@ -18,13 +19,10 @@ import subprocess
 import time
 from pathlib import Path
 
-import pytest
-
-from _deploy_sh_fakes import git_free_env, make_snapshot_repo
+from _deploy_sh_fakes import deploy_sh_env, make_snapshot_repo
 
 _REPO = Path(__file__).resolve().parents[3]
 _DEPLOY_SH = _REPO / "scripts" / "deploy.sh"
-_TREE_LOCK = "/var/lock/server-git-tree.lock"
 
 # Long enough that the fixed costs (two git worktree adds, two bash startups) stay well under
 # it, short enough that three cases cost under half a minute.
@@ -33,6 +31,7 @@ _SLEEP_S = 4
 _UV_STUB = """#!/bin/bash
 case "$*" in
   *ansible-playbook*) sleep "$DEPLOY_TEST_SLEEP"; exit 0 ;;
+  *deploy_tags.py*) printf 'alpha\\nbeta\\n'; exit 0 ;;
   *) exit 0 ;;
 esac
 """
@@ -43,28 +42,10 @@ esac
 _UV_DETACH_STUB = """#!/bin/bash
 case "$*" in
   *ansible-playbook*) pwd >"$DEPLOY_TEST_PWD_FILE"; sleep "$DEPLOY_TEST_SLEEP"; exit 0 ;;
+  *deploy_tags.py*) printf 'alpha\\nbeta\\n'; exit 0 ;;
   *) exit 0 ;;
 esac
 """
-
-
-@pytest.fixture(autouse=True)
-def _tree_lock_is_free():
-    """Skip rather than queue when something real holds the tree lock.
-
-    Every run here takes the real tree lock for its snapshot. A gitops tick holding it would
-    make these runs wait on deploy.sh's own LOCK_WAIT budget, which is 50 minutes.
-    """
-    try:
-        fd = os.open(_TREE_LOCK, os.O_WRONLY | os.O_CREAT, 0o666)
-    except OSError as exc:
-        pytest.skip(f"cannot open {_TREE_LOCK}: {exc}")
-    try:
-        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except OSError:
-        pytest.skip(f"{_TREE_LOCK} is held by a real deploy")
-    finally:
-        os.close(fd)
 
 
 def _harness(tmp_path: Path, uv_stub: str = _UV_STUB) -> tuple[Path, dict[str, str]]:
@@ -72,16 +53,8 @@ def _harness(tmp_path: Path, uv_stub: str = _UV_STUB) -> tuple[Path, dict[str, s
     bin_dir.mkdir()
     (bin_dir / "uv").write_text(uv_stub)
     (bin_dir / "uv").chmod(0o755)
-    locks = tmp_path / "locks"
-    locks.mkdir()
     repo = make_snapshot_repo(tmp_path / "repo")
-    env = git_free_env(
-        PATH=f"{bin_dir}:{os.environ['PATH']}",
-        HOMELAB_DEPLOY_SNAPSHOT_ROOT=str(tmp_path / "snapshots"),
-        HOMELAB_DEPLOY_LOCK_DIR=str(locks),
-        DEPLOY_TEST_SLEEP=str(_SLEEP_S),
-    )
-    return repo, env
+    return repo, deploy_sh_env(tmp_path, bin_dir, DEPLOY_TEST_SLEEP=str(_SLEEP_S))
 
 
 def _run_both(tmp_path: Path, first: list[str], second: list[str]) -> float:
@@ -142,6 +115,47 @@ def test_a_full_run_and_a_scoped_run_serialize(tmp_path):
         f"a full run and a scoped run took {elapsed:.1f}s, under two {_SLEEP_S}s playbooks "
         "-- they overlapped"
     )
+
+
+def _deploy(repo: Path, env: dict[str, str], *args: str) -> None:
+    """One `deploy.sh` run that must succeed."""
+    result = subprocess.run(
+        [str(_DEPLOY_SH), "--skip-tag-check", "--skip-staleness-check", *args],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    assert result.returncode == 0, f"{result.stdout}\n{result.stderr}"
+
+
+def test_a_snapshot_whose_owner_lock_is_held_survives_another_runs_reap(tmp_path):
+    """CLEAN half: a live snapshot is not collected, however dead its name's pid looks.
+
+    `--detach` runs its playbook in a subshell whose `$$` is the parent's pid, and the parent
+    exits immediately — so under the pid-based reaper this directory was deleted out from under
+    a running deploy by the next invocation of anything, `--check` included.
+    """
+    repo, env = _harness(tmp_path)
+    env["DEPLOY_TEST_SLEEP"] = "0"
+    live = tmp_path / "snapshots" / "beta-20260911-000000-999999"
+    live.mkdir(parents=True)
+    fd = os.open(live / ".deploy-owner.lock", os.O_WRONLY | os.O_CREAT, 0o666)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        _deploy(repo, env, "--tags", "alpha")
+        assert live.is_dir(), (
+            "a deploy reaped a snapshot whose owner still holds its lock"
+        )
+    finally:
+        os.close(fd)
+
+    # FLAGGED half: with the owner gone the same directory MUST go, or a crashed run leaks a
+    # worktree forever and the reaper is decoration.
+    _deploy(repo, env, "--tags", "alpha")
+    assert not live.exists(), "a snapshot with no live owner was left behind"
 
 
 def _service_lock_free(path: Path) -> bool:

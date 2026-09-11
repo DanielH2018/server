@@ -48,6 +48,15 @@ SERVICE_LOCK_WAIT_S = 1800.0
 MIN_RUN_BUDGET_S = 1.0
 
 
+class ServiceLockBusy(RuntimeError):
+    """Another deploy of one of these services held its lock for the whole budget.
+
+    Contention, not failure: nothing was applied, so the caller undoes its range and lets the
+    next tick re-evaluate rather than holding the SHA and rolling back. The message is the
+    journal line's subject — `service lock <tag> busy for <N>s`.
+    """
+
+
 def lock_dir() -> str:
     """Where the locks live. `HOMELAB_DEPLOY_LOCK_DIR` redirects them, as it does for deploy.sh.
 
@@ -66,11 +75,12 @@ def _take(name: str, mode: int, deadline: float) -> tuple[str, int]:
         deadline: the `time.monotonic()` value to give up at.
 
     Raises:
-        RuntimeError: the lock stayed busy past `deadline`.
+        ServiceLockBusy: the lock stayed busy past `deadline`.
         OSError: the lock file could not be opened.
     """
     path = os.path.join(lock_dir(), f"server-deploy-{name}.lock")
     fd = os.open(path, os.O_WRONLY | os.O_CREAT, 0o666)
+    started = time.monotonic()
     while True:
         try:
             fcntl.flock(fd, mode | fcntl.LOCK_NB)
@@ -78,14 +88,19 @@ def _take(name: str, mode: int, deadline: float) -> tuple[str, int]:
         except OSError:
             if time.monotonic() >= deadline:
                 os.close(fd)
-                raise RuntimeError(
-                    f"service lock {name} ({path}) stayed busy; nothing was deployed"
+                waited = round(time.monotonic() - started)
+                raise ServiceLockBusy(
+                    f"service lock {name} busy for {waited}s"
                 ) from None
             time.sleep(SERVICE_LOCK_POLL_S)
 
 
 @contextlib.contextmanager
-def service_locks(services: Iterable[str], timeout: float = SERVICE_LOCK_WAIT_S):
+def service_locks(
+    services: Iterable[str],
+    timeout: float = SERVICE_LOCK_WAIT_S,
+    exclusive_all: bool = False,
+):
     """Hold one lock per service for the body, in the order the DECIDED note above fixes.
 
     Args:
@@ -93,12 +108,16 @@ def service_locks(services: Iterable[str], timeout: float = SERVICE_LOCK_WAIT_S)
         timeout: seconds to wait for the locks. A caller whose phase carries a declared budget
             calls `locked_budget` instead, so that the wait and the run SHARE that budget
             rather than each being given one.
+        exclusive_all: take `all` exclusively even when `services` names tags. A scoped SERVICE
+            deploy shares it, because two of those do not conflict. A broad-plane apply is not
+            a service deploy — `initial_setup.yml --tags <role>` reconfigures the host every
+            workload runs on — so it excludes every other deploy whatever its tags say.
 
     Yields:
         The lock names taken, in the order they were taken.
 
     Raises:
-        RuntimeError: a lock stayed busy past `timeout`. Nothing was deployed.
+        ServiceLockBusy: a lock stayed busy past `timeout`. Nothing was deployed.
     """
     names = sorted(set(services))
     deadline = time.monotonic() + timeout
@@ -107,7 +126,7 @@ def service_locks(services: Iterable[str], timeout: float = SERVICE_LOCK_WAIT_S)
         held.append(
             _take(
                 SERVICE_LOCK_ALL,
-                fcntl.LOCK_SH if names else fcntl.LOCK_EX,
+                fcntl.LOCK_SH if names and not exclusive_all else fcntl.LOCK_EX,
                 deadline,
             )
         )
@@ -120,7 +139,7 @@ def service_locks(services: Iterable[str], timeout: float = SERVICE_LOCK_WAIT_S)
 
 
 @contextlib.contextmanager
-def locked_budget(services: Iterable[str], timeout: float):
+def locked_budget(services: Iterable[str], timeout: float, exclusive_all: bool = False):
     """Take the service locks and yield what is LEFT of `timeout` for the caller's run.
 
     One deadline covers the wait and the work, which is what keeps a phase's declared timeout a
@@ -133,13 +152,14 @@ def locked_budget(services: Iterable[str], timeout: float):
     Args:
         services: the tags this deploy names. Empty means the whole playbook.
         timeout: the phase's whole budget, in seconds.
+        exclusive_all: as `service_locks`.
 
     Yields:
         The seconds left for the run, never below `MIN_RUN_BUDGET_S`.
 
     Raises:
-        RuntimeError: a lock stayed busy past `timeout`. Nothing was deployed.
+        ServiceLockBusy: a lock stayed busy past `timeout`. Nothing was deployed.
     """
     deadline = time.monotonic() + timeout
-    with service_locks(services, timeout):
+    with service_locks(services, timeout, exclusive_all):
         yield max(MIN_RUN_BUDGET_S, deadline - time.monotonic())

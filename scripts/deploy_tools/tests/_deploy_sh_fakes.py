@@ -23,13 +23,14 @@ from pathlib import Path
 
 # The shared `flock` stub: drop flock's own options and its lock-file argument, then run
 # whatever is left. No real lock is taken, so no test can interleave with a live deploy.
-# `-s` is in the single-shift arm because a scoped deploy takes `server-deploy-all.lock`
-# shared; without it the stub tries to exec `-w`.
+# `-s` and `-x` are in the single-shift arm because a scoped deploy takes
+# `server-deploy-all.lock` shared and the snapshot owner lock is taken `-n -x`; without them
+# the stub tries to exec `-w`.
 FLOCK_STUB = """#!/bin/bash
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -w|-E) shift 2 ;;
-    -n|-u|-s) shift ;;
+    -n|-u|-s|-x) shift ;;
     *) break ;;
   esac
 done
@@ -53,6 +54,10 @@ def git_free_env(**overrides: str) -> dict[str, str]:
 def deploy_sh_env(tmp_path: Path, bin_dir: Path, **overrides: str) -> dict[str, str]:
     """The environment a `deploy.sh` run needs to stay inside `tmp_path`.
 
+    The TREE lock is redirected too. `deploy.sh` takes it for real, for the snapshot, and the
+    production path is the one a live gitops tick and the weekly secret-rotate cron hold — so a
+    test taking it would queue behind real work and hold real work up behind itself.
+
     Args:
         tmp_path: the test's own directory; the snapshot root and lock directory go under it.
         bin_dir: the stub directory to put first on PATH.
@@ -64,6 +69,7 @@ def deploy_sh_env(tmp_path: Path, bin_dir: Path, **overrides: str) -> dict[str, 
         PATH=f"{bin_dir}:{os.environ['PATH']}",
         HOMELAB_DEPLOY_SNAPSHOT_ROOT=str(tmp_path / "snapshots"),
         HOMELAB_DEPLOY_LOCK_DIR=str(locks),
+        HOMELAB_DEPLOY_TREE_LOCK=str(locks / "server-git-tree.lock"),
         **overrides,
     )
 

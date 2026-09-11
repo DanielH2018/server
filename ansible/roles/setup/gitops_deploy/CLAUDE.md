@@ -649,7 +649,7 @@ Three layers, and which one a function belongs in is decided by what it touches.
 | transport | `deploy_io`, `deploy_alerts` | subprocess, docker, every message body, and the alert queue's own I/O |
 | transport leaves | `deploy_config`, `deploy_state`, `deploy_failtext` | the config file, the state directory, and the text a failed run's alert quotes |
 | the seam | `deploy_toolbox` | `DeployTools`, one frozen object holding every boundary the tick crosses, and `default_tools(CONFIG)` which binds the CI gate to the parsed config |
-| the phases | `deploy_phases`, `deploy_handlers`, `deploy_defer` | `assess` and `plan_tick`; one `handle_*` per terminal branch, plus the staging gate's I/O shell (`consult_staging`, `record_staging_tick`, `consume_staging_override`); `deploy_defer` owns what the broad arm does with the half it will not apply — park it, or record it in `manual_plane` |
+| the phases | `deploy_phases`, `deploy_handlers`, `deploy_defer`, `deploy_staging_io` | `assess` and `plan_tick`; one `handle_*` per terminal branch; `deploy_staging_io` holds the staging gate's I/O shell (`consult_staging`, `record_staging_tick`, `consume_staging_override`), which `handle_k8s` alone calls; `deploy_defer` owns what the broad arm does with the half it will not apply — park it, or record it in `manual_plane` |
 | the tick | `gitops_deploy` | the config constants, `STATE`, `tick_config()`, `main()` sequencing the phases, and `entrypoint()` |
 
 **A transport leaf imports nothing from `deploy_io`.** `deploy_config` (the config file,
@@ -751,7 +751,7 @@ the other tree.
 
 **`deploy_staging` stays import-pure, and that is a constraint rather than a habit.** Its I/O
 shell — `consult_staging`, `record_staging_tick`, `consume_staging_override` — lives in
-`deploy_handlers.py`, one module up. `deploy_logic.py` re-exports `deploy_staging`, and
+`deploy_staging_io.py` (it was at the bottom of `deploy_handlers.py` until 2026-09-11). `deploy_logic.py` re-exports `deploy_staging`, and
 `scripts/deploy_tools/await_ci.py`, `land_tags.py` and `backfill_staging_gate.py` import that
 index with only this role's `files/` on `sys.path`. They never add `roles/setup/common/files`,
 so a module-level `import deploy_io` here reaches `deploy_config`'s `from host_lib import
@@ -1139,6 +1139,20 @@ mid-tick still waits, for its snapshot alone. This unit takes the per-service lo
 that hold, which is what keeps a tick and an operator deploy off the same rollout. The lock
 order is `all` first, then each service in sorted order, and the `# DECIDED:` marker in
 `files/deploy_locks.py` says why the two orders cannot deadlock.
+
+**A busy service lock is contention, not a failed deploy.** `deploy_locks` raises its own
+`ServiceLockBusy`, each of the three deploy handlers catches it AHEAD of its failure arm, and
+`deploy_defer.for_contention` logs `service lock <tag> busy for <N>s — deferring to the next
+tick`, resets to `local` and returns 0. No `hold_sha`, no `hold_plane`, no rollback and no
+page: nothing was applied, so holding the SHA would park every later tick behind a lock that
+has since been released, and the rollback would redeploy a version that is already live. The
+reset undoes the ff-merge, which is what keeps `local..origin` carrying the range for the next
+tick. `tests/test_gitops_deploy_lock_contention.py` drives all three handlers.
+
+**A broad apply takes `all` EXCLUSIVELY, whatever its tags.** `deploy_io.deploy_broad` passes
+`exclusive_all=True`: `initial_setup.yml --tags <role>` names a tag, but what it reconfigures
+is the host every workload runs on, so sharing `all` the way a scoped service deploy does would
+let a host-plane apply overlap a rollout.
 
 **Waiting for a service lock spends the phase's own budget, not a second one.** This unit waits
 while it holds the tree lock, so a wait budgeted separately would add itself to every term in

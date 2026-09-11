@@ -38,6 +38,7 @@ FILES = pathlib.Path(__file__).resolve().parents[1] / "files"
 GITOPS_SRC = FILES / "gitops_deploy.py"
 IO_SRC = FILES / "deploy_io.py"
 HANDLERS_SRC = FILES / "deploy_handlers.py"
+STAGING_IO_SRC = FILES / "deploy_staging_io.py"
 STATE_PREFIX = "/var/lib/gitops-deploy/"
 # What the `tick` fixture arms the staging gate over. The production literal stays in
 # gitops_deploy.py, where scripts/docs/gen_doc_fragments.py reads it; this is only what puts the
@@ -164,6 +165,12 @@ def handlers_fn(
 ) -> Callable[[str, ast.AST | None], ast.FunctionDef]:
     """`handlers_fn("handle_k8s")` is that FunctionDef; a missing name fails."""
     return _fn_finder(handlers_tree, "deploy_handlers.py")
+
+
+@pytest.fixture(scope="session")
+def staging_io_fn() -> Callable[[str, ast.AST | None], ast.FunctionDef]:
+    """`staging_io_fn("consult_staging")` is that FunctionDef in deploy_staging_io.py."""
+    return _fn_finder(ast.parse(STAGING_IO_SRC.read_text()), "deploy_staging_io.py")
 
 
 @pytest.fixture(scope="session")

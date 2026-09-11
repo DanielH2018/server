@@ -62,9 +62,19 @@ ALLOWED: dict[str, set[str] | None] = {
         "deploy_config",
         "deploy_remediation",
         "deploy_state",
+        "deploy_tick_types",
         "deploy_toolbox",
     },
     "deploy_tick_types": {"deploy_changes"},
+    # The staging gate's I/O shell: it runs the scripts deploy_staging only decides about.
+    "deploy_staging_io": {
+        "deploy_alerts",
+        "deploy_config",
+        "deploy_io",
+        "deploy_staging",
+        "deploy_state",
+        "deploy_toolbox",
+    },
     # The marker files, plus the two pure hold-marker decisions `clear_broad_hold` makes.
     "deploy_state": {"deploy_config", "deploy_git"},
     "deploy_io": {
@@ -118,7 +128,9 @@ ALLOWED: dict[str, set[str] | None] = {
         "deploy_health",
         "deploy_io",
         "deploy_k8s",
+        "deploy_locks",
         "deploy_staging",
+        "deploy_staging_io",
         "deploy_state",
         "deploy_tick_types",
         "deploy_toolbox",

@@ -38,6 +38,7 @@
     - deploy_k8s.py
     - deploy_locks.py
     - deploy_staging.py
+    - deploy_staging_io.py
     - deploy_toolbox.py
     - deploy_tick_types.py
     - deploy_phases.py
@@ -246,6 +247,8 @@
         src: ansible/roles/setup/gitops_deploy/files/deploy_handlers.py
       - live: /opt/gitops-deploy/deploy_defer.py
         src: ansible/roles/setup/gitops_deploy/files/deploy_defer.py
+      - live: /opt/gitops-deploy/deploy_staging_io.py
+        src: ansible/roles/setup/gitops_deploy/files/deploy_staging_io.py
       - live: /opt/gitops-deploy/deploy_narrow.py
         src: ansible/roles/setup/gitops_deploy/files/deploy_narrow.py
       - live: /opt/gitops-deploy/host_lib.py

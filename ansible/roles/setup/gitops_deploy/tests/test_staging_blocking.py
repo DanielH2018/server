@@ -8,8 +8,8 @@ passing side alone.
 import dataclasses
 import itertools
 
+import deploy_staging_io
 import pytest
-import deploy_handlers
 from deploy_staging import (
     STAGING_NO_VERDICT,
     STAGING_PASS,
@@ -79,15 +79,15 @@ def test_the_override_is_spent_when_it_is_armed(gitops_deploy, state_dir) -> Non
     """Armed, it returns True once and removes itself — so it cannot become permanent."""
     marker = state_dir / "staging_gate_override"
     marker.touch()
-    assert deploy_handlers.consume_staging_override(gitops_deploy.STATE)
+    assert deploy_staging_io.consume_staging_override(gitops_deploy.STATE)
     assert not marker.exists()
-    assert not deploy_handlers.consume_staging_override(gitops_deploy.STATE)
+    assert not deploy_staging_io.consume_staging_override(gitops_deploy.STATE)
 
 
 def test_the_override_is_absent_by_default(gitops_deploy, state_dir) -> None:
     """The rejecting half: with nothing armed, nothing is spent and nothing is let through."""
     assert not (state_dir / "staging_gate_override").exists()
-    assert not deploy_handlers.consume_staging_override(gitops_deploy.STATE)
+    assert not deploy_staging_io.consume_staging_override(gitops_deploy.STATE)
 
 
 _ARMED_BUT_EMPTY = "gate is ARMED but STAGING_SUBSET is empty"
@@ -100,7 +100,7 @@ def test_an_armed_gate_with_an_empty_subset_says_so(
     built anywhere but `tick_config()` gates nothing while looking armed. The verdict it returns
     is the same SKIPPED an ordinary tick gets, which is why the journal has to tell them apart."""
     config = dataclasses.replace(settings, staging_subset=frozenset())
-    verdict = deploy_handlers.consult_staging(
+    verdict = deploy_staging_io.consult_staging(
         tick.tools, gitops_deploy.STATE, config, {"sonarr"}, "c0ffee" * 6 + "abcd"
     )
     assert verdict == STAGING_SKIPPED
@@ -112,7 +112,7 @@ def test_an_armed_gate_with_a_real_subset_stays_quiet(
 ) -> None:
     """The rejecting half. A tick that simply touched no staging service is the ordinary case
     and must not print the misconfiguration line — otherwise the line means nothing."""
-    verdict = deploy_handlers.consult_staging(
+    verdict = deploy_staging_io.consult_staging(
         tick.tools, gitops_deploy.STATE, settings, {"grafana"}, "c0ffee" * 6 + "abcd"
     )
     out = capsys.readouterr().out

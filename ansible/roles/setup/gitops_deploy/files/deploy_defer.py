@@ -39,9 +39,35 @@ from deploy_remediation import (
     manual_plane_remediation,
 )
 from deploy_state import NO_PLAYBOOK, DeployerState
+from deploy_tick_types import TickTarget
 from deploy_toolbox import DeployTools
 
 INITIAL_SETUP = "ansible/initial_setup.yml"
+
+
+def for_contention(
+    tools: DeployTools, config: Config, target: TickTarget, exc: BaseException
+) -> int:
+    """A service lock stayed busy: undo the range and let the next tick re-evaluate.
+
+    The third deferral shape, and the only one that is not about a playbook nobody here can
+    run. Contention is not a failed deploy: nothing was applied, so holding the SHA would park
+    every later tick behind a lock that has since been released, and rolling back would
+    redeploy a version that is already live. The ff-merge IS undone, because `local..origin`
+    carrying the range is what makes the next tick look at it again.
+
+    Args:
+        tools: the tick's boundaries; its `run` performs the reset.
+        config: the tick's config, for the repo path.
+        target: the tick's refs; `local` is where the reset lands.
+        exc: the `deploy_locks.ServiceLockBusy` raised, naming the tag and the seconds.
+
+    Returns:
+        0. The tick completed, so `last_run` is written and the deployer reads alive.
+    """
+    log(f"{exc} — deferring to the next tick")
+    tools.run(["git", "reset", "--hard", target.local], cwd=config.repo)
+    return 0
 
 
 def unapplyable_setup_roles(cs) -> list[str]:

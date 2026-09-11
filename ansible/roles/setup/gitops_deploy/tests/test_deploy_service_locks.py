@@ -123,6 +123,36 @@ def test_the_locks_are_released_when_the_body_raises(service_lock_dir):
         assert taken == ["all", "sonarr"]
 
 
+def test_a_broad_apply_excludes_a_scoped_deploy_even_though_it_names_tags(
+    service_lock_dir,
+):
+    """FLAGGED half: a broad apply shares `all` with every scoped deploy without this.
+
+    `initial_setup.yml --tags gitops_deploy` names a tag, but what it reconfigures is the host
+    every workload runs on — so `exclusive_all` makes it exclude a scoped deploy the way an
+    untagged run does. Shared against shared is what let a host-plane apply overlap a rollout.
+    """
+    held = _hold(service_lock_dir, "all", fcntl.LOCK_SH)
+    try:
+        with pytest.raises(deploy_locks.ServiceLockBusy, match="service lock all"):
+            with deploy_locks.service_locks(
+                {"gitops_deploy"}, timeout=1, exclusive_all=True
+            ):
+                pass
+    finally:
+        os.close(held)
+
+
+def test_a_scoped_service_deploy_still_shares_the_all_lock(service_lock_dir):
+    """CLEAN half for the same switch: the default must not have moved with it."""
+    held = _hold(service_lock_dir, "all", fcntl.LOCK_SH)
+    try:
+        with deploy_locks.service_locks({"radarr"}, timeout=1) as taken:
+            assert taken == ["all", "radarr"]
+    finally:
+        os.close(held)
+
+
 def test_an_uncontended_phase_keeps_almost_all_of_its_budget(service_lock_dir):
     """CLEAN half: nothing is waiting, so the run gets the budget the caller declared."""
     with deploy_locks.locked_budget({"sonarr"}, 900) as budget:
