@@ -186,6 +186,22 @@ jobs:
         if: github.event_name == 'pull_request'
         env:
           BASE_REF: ${{ github.base_ref }}  # via env, never interpolated into the shell
+          # A change to one of these is a change to what a hook CHECKS, not to a file it checks,
+          # and the scoped run cannot see that: the hook's `files` regex matches the code, so a
+          # PR editing only the config ran that hook against nothing and master's full sweep
+          # failed after the merge. Vale's terms did this on 2026-08-27 (`.vale.ini`), ruff's
+          # rules on 2026-09-02 (pyproject.toml). Every hook that takes NO filenames now names
+          # its config in `files` instead (ruff, ruff-format, ty, mkdocs-strict); the ones here
+          # are the hooks that DO take filenames, which cannot — prek would hand them the
+          # config file to lint. prek.toml is here because a rev bump changes every hook's
+          # behaviour and matches no hook's `files` but check-toml's. The `ansible_lint` job
+          # keeps its own list. ENFORCED by test_hook_config_changes_run_the_hook.py, which
+          # reads this list, so an entry cannot be dropped without a test naming it.
+          FULL_SWEEP_PATHS: |
+            prek.toml
+            .vale.ini
+            .shellcheckrc
+            .gitleaks.toml
         run: |
           set -euo pipefail
           git fetch --no-tags origin "$BASE_REF"
@@ -196,6 +212,10 @@ jobs:
           # --diff-filter=d (lowercase) drops deletions: a removed file is still "changed", but
           # passing a path that no longer exists is a hook error, not a lint finding.
           git diff --name-only --no-renames --diff-filter=d "$base" > "$RUNNER_TEMP/changed.txt"
+          # `-x` so `prek.toml` cannot match `docs/prek.toml.md`; the blank-line filter so the
+          # block scalar's trailing newline cannot become an empty pattern that matches everything.
+          printf '%s\n' "$FULL_SWEEP_PATHS" | grep -v '^$' > "$RUNNER_TEMP/triggers.txt"
+          mapfile -t triggered < <(grep -Fx -f "$RUNNER_TEMP/triggers.txt" "$RUNNER_TEMP/changed.txt" || true)
           # Fall back to the full sweep rather than a fast green when the scoped list cannot be
           # trusted to represent the change: a PR that only deletes files yields an EMPTY changed
           # list, and "skip everything" is the wrong answer there — dropping a template changes
@@ -204,6 +224,9 @@ jobs:
           if [ "${#deleted[@]}" -gt 0 ]; then
             echo "mode=full" >> "$GITHUB_OUTPUT"
             echo "PR deletes ${#deleted[@]} file(s) — running the full sweep."
+          elif [ "${#triggered[@]}" -gt 0 ]; then
+            echo "mode=full" >> "$GITHUB_OUTPUT"
+            echo "PR changes hook configuration (${triggered[*]}) — running the full sweep."
           elif [ ! -s "$RUNNER_TEMP/changed.txt" ]; then
             # No deletions and no changed files means merging this PR would land NOTHING: the
             # checkout is the merge ref, so a three-dot diff against the base is exactly what a
@@ -316,6 +339,17 @@ jobs:
         if: github.event_name == 'pull_request'
         env:
           BASE_REF: ${{ github.base_ref }}  # via env, never interpolated into the shell
+          # What changes ansible-lint's verdict on files this PR did not touch: its own config,
+          # the hook rev in prek.toml, and the collections it resolves modules against. None of
+          # them can go in the hook's `files` — an explicitly passed path is linted whatever it
+          # is (see the hook's comment in prek.toml) — and the ansible filter below would either
+          # drop them (`mode=none`, so a `.ansible-lint` edit was linted by master alone) or
+          # scope-lint requirements.yml as if it were a task file. Same contract as the `hooks`
+          # job's list; ENFORCED by the same test.
+          FULL_SWEEP_PATHS: |
+            prek.toml
+            .ansible-lint
+            ansible/requirements.yml
         run: |
           set -euo pipefail
           git fetch --no-tags origin "$BASE_REF"
@@ -325,6 +359,8 @@ jobs:
           # --diff-filter=d (lowercase) drops deletions: passing a path that no longer exists is
           # a hook error, not a lint finding.
           git diff --name-only --no-renames --diff-filter=d "$base" > "$RUNNER_TEMP/changed.txt"
+          printf '%s\n' "$FULL_SWEEP_PATHS" | grep -v '^$' > "$RUNNER_TEMP/triggers.txt"
+          mapfile -t triggered < <(grep -Fx -f "$RUNNER_TEMP/triggers.txt" "$RUNNER_TEMP/changed.txt" || true)
           # Filtered with grep rather than a git pathspec glob (`ansible/**/*.yml` behaves
           # differently under git's wildmatch than it reads). secrets.yml is dropped here as well
           # as by the hook's own exclude: were it the ONLY changed ansible file, the hook would
@@ -339,6 +375,9 @@ jobs:
           if [ "${#deleted[@]}" -gt 0 ]; then
             echo "mode=full" >> "$GITHUB_OUTPUT"
             echo "PR deletes ${#deleted[@]} file(s) — linting the whole tree."
+          elif [ "${#triggered[@]}" -gt 0 ]; then
+            echo "mode=full" >> "$GITHUB_OUTPUT"
+            echo "PR changes ansible-lint's inputs (${triggered[*]}) — linting the whole tree."
           elif [ -s "$RUNNER_TEMP/ansible.txt" ]; then
             echo "mode=scoped" >> "$GITHUB_OUTPUT"
             echo "Linting $(wc -l < "$RUNNER_TEMP/ansible.txt") changed ansible file(s):"

@@ -377,24 +377,33 @@ always_run = true
 # syntax errors, bare-except, ==None/==True (ruleset in pyproject [tool.ruff.lint]; vendored
 # collections excluded there). ruff is pinned in uv.lock (dev group) so the gate is
 # reproducible and lockFileMaintenance refreshes it weekly. Runs once when any .py is staged.
+#
+# `files` names pyproject.toml as well as the code, the way the `ty` hook below does: a commit
+# that only enables a rule in [tool.ruff.lint] changes what every .py must satisfy, and with
+# `\.py$` alone the PR ran no ruff at all — master's --all-files sweep found the 3 errors after
+# the merge, twice, on 2026-09-02 (runs 33632377189 and 33632621818). ENFORCED by
+# ansible/tests/repo/test_hook_config_changes_run_the_hook.py, which also covers the hooks
+# that take filenames and so cannot widen `files` this way (see the `FULL_SWEEP_PATHS` lists
+# in ci.yml).
 [[repos.hooks]]
 id = "ruff"
 name = "Lint first-party Python (ruff)"
 entry = "uv run ruff check"
 language = "system"
 pass_filenames = false
-files = "\\.py$"
+files = "(\\.py$|^pyproject\\.toml$)"
 
 # Enforce `ruff format` on first-party Python (config in pyproject.toml [tool.ruff], same
 # extend-exclude as the linter so vendored collections are untouched). --check fails the commit
 # on an unformatted file instead of rewriting it, so a stray editor save can't sneak past CI.
+# `files` covers pyproject.toml for the reason given on `ruff` above.
 [[repos.hooks]]
 id = "ruff-format"
 name = "Format first-party Python (ruff format)"
 entry = "uv run ruff format --check"
 language = "system"
 pass_filenames = false
-files = "\\.py$"
+files = "(\\.py$|^pyproject\\.toml$)"
 
 # Type-check first-party Python, for the bugs ruff cannot see: it reads one file at a time, so a
 # value that crosses a function boundary as the wrong type is invisible to it.
