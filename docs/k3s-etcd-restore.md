@@ -36,12 +36,13 @@ name with the file hard-linked into both places (corrected 2026-09-11 from the k
 configuration" that ran 17 minutes on 6 seconds of CPU. The script's header records each one.
 The fifth turned out not to be the live k3s at all: it reproduced on 2026-09-11 in a guest with
 no other k3s, and it is a port collision inside the script's own isolation flags. Three flags
-give k3s five listeners: the API server's internal port is `https-listen-port + 1`, and when
-supervisor and API server are on different ports the API-server client load-balancer is
-`lb-server-port − 1`. With 7443/7444/7445 both hidden listeners landed on the supervisor's
-7444 — the first wedged the reset's `/cacerts` requests, the second failed the scratch server
-with `bind: address already in use`. The ports are 7443/7445/7448 and a test pins all five
-apart.
+give k3s four listeners: the API server's internal port is `https-listen-port + 1`, the
+API-server client load-balancer is `lb-server-port − 1`, and the supervisor has to share the
+API server's port — split, k3s serves the API server only on the internal port and the
+kubeconfig points at nothing. With 7443/7444/7445 the hidden listeners landed on 7444 twice
+over (the reset's `/cacerts` wedge, then `bind: address already in use` at the scratch
+server), and a split 7443/7445 answered `connection refused`. The supervisor shares
+7443 with the API server, the load-balancer is at 7448, and a test pins the layout.
 
 Two paths finish the job, and neither is more patching:
 

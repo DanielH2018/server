@@ -106,20 +106,23 @@ LIVE_DATA_DIR=/var/lib/rancher/k3s
 LIVE_TOKEN=/var/lib/rancher/k3s/server/token
 S3_ENV=/etc/rancher/k3s/etcd-s3.env
 SCRATCH="/var/tmp/etcd-restore-drill.$$"
-# Five listeners from three flags, so the layout is not free (v1.36.4 source, 2026-09-11):
-#   PORT              the API server as clients see it (the kubeconfig k3s writes points here)
+# Four listeners from three flags, so the layout is not free (v1.36.4 source, 2026-09-11):
+#   PORT              the supervisor, which also proxies the API server — the kubeconfig k3s
+#                     writes points here, and this is the ONLY place the API server is served
+#                     to clients: with --supervisor-port set to a different value nothing binds
+#                     PORT at all ("connection refused", measured in the throwaway guest)
 #   PORT + 1          the API server's internal listener (control/server.go, APIServerPort)
-#   SUPERVISOR_PORT   the supervisor
 #   LB_PORT           the supervisor client load-balancer
-#   LB_PORT - 1       the API-server client load-balancer, only when the supervisor and the API
-#                     server are on different ports (they are here)
-# Two collisions were measured in the throwaway guest before this was written down: 7445 as
-# LB_PORT put the API-server LB on the supervisor's 7444 (header item 5, the agent-config
-# loop), and 7444 as SUPERVISOR_PORT collided with the API server's own 7444 the moment the
-# scratch server started ("listen tcp 127.0.0.1:7444: bind: address already in use"). The
-# test in ansible/tests/setup pins all five apart.
+#   LB_PORT - 1       the API-server client load-balancer, bound only when the supervisor and
+#                     the API server are on different ports; kept free anyway
+# So the supervisor stays colocated with the API server, exactly as a stock k3s runs, and the
+# isolation from the live 6443/6444 comes from the values alone. Three collisions were measured
+# before this was written down: 7445 as LB_PORT put the API-server LB on the supervisor's 7444
+# (header item 5, the agent-config loop); 7444 as SUPERVISOR_PORT collided with the API server's
+# own 7444 when the scratch server started ("bind: address already in use"); and a split
+# 7443/7445 left 7443 unbound. The test in ansible/tests/setup pins the layout.
 PORT=7443
-SUPERVISOR_PORT=7445
+SUPERVISOR_PORT=$PORT
 LB_PORT=7448
 KEEP=0
 CLEAN_ONLY=0

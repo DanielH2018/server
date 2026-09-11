@@ -78,23 +78,25 @@ def _ports() -> dict[str, int]:
     return dict(zip(("api", "supervisor", "lb"), map(int, out), strict=True))
 
 
-def test_the_five_isolation_listeners_are_distinct():
-    """Three flags, five listeners: the API server's internal port is https-listen-port + 1 and
-    the API-server client LB is lb-server-port - 1 whenever supervisor and API server differ.
-    7443/7444/7445 hit both hidden ones in turn (the agent-config wedge, then "bind: address
-    already in use" when the scratch server started)."""
+def test_the_isolation_listeners_are_colocated_and_distinct():
+    """Three flags, four listeners: the API server's internal port is https-listen-port + 1 and
+    the API-server client LB is lb-server-port - 1. The supervisor must share the API server's
+    port — split, k3s binds only the internal port and the kubeconfig points at nothing
+    ("connection refused"). 7443/7444/7445 and 7443/7445/7448 each failed one of these."""
     p = _ports()
-    assert p["api"] != p["supervisor"], "the drill relies on a separate supervisor port"
+    assert p["api"] == p["supervisor"], (
+        "split ports leave the kubeconfig's port unbound"
+    )
     listeners = {
         "api": p["api"],
         "api-internal": p["api"] + 1,
-        "supervisor": p["supervisor"],
         "supervisor-lb": p["lb"],
         "apiserver-lb": p["lb"] - 1,
     }
     assert len(set(listeners.values())) == len(listeners), (
         f"port collision: {listeners}"
     )
+    assert not {6443, 6444} & set(listeners.values()), "the live k3s ports"
 
 
 def test_the_restore_stage_hands_k3s_the_token_through_the_environment():
