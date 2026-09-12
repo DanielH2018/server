@@ -253,7 +253,7 @@ def notify(content: str) -> None:
             sys.path.remove(lib_dir)
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None, tools: NotifyTools | None = None) -> int:
     """Gate the deploy's health, post the verdict to Discord, and exit 0 if settled else 1."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
@@ -264,6 +264,15 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--tags", default="", help="comma-separated service tags that were deployed"
+    )
+    parser.add_argument(
+        "--cwd",
+        default="",
+        help=(
+            "the checkout to render the deployed role's manifests from; deploy.sh passes "
+            "its snapshot, so the gate enumerates the workloads of the commit that was "
+            "deployed rather than of whatever this working tree holds"
+        ),
     )
     parser.add_argument(
         "--no-post",
@@ -277,7 +286,11 @@ def main(argv: list[str] | None = None) -> int:
     ns = parser.parse_args(argv)
 
     tags = [t for t in ns.tags.split(",") if t]
-    settled, lines = gate(tags, ns.status == 0)
+    # `tools` is the same seam `gate` and `check_one` take, carried one level up so a test can
+    # watch where the probe is actually run rather than patching this module.
+    settled, lines = gate(
+        tags, ns.status == 0, tools=tools, cwd=Path(ns.cwd) if ns.cwd else None
+    )
 
     headline = "settled" if settled else "FAILED"
     content = "\n".join(

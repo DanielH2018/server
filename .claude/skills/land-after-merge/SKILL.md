@@ -125,23 +125,34 @@ four fanned-out agents ended their turn at step 0/6 or 3/6 believing otherwise o
 three of them saying in as many words that a watcher was armed (issue #1291). Run the wait
 above instead.
 
-**A tagged PR deploys its own merge commit; the tick is kicked, not awaited.** `deploy.sh
---at <sha>` renders a snapshot of that commit, so nothing in the landing needs the primary
-checkout to have been fast-forwarded onto it first. `land.sh` starts the tick with
-`--no-wait` — the checkout still converges, on the deployer's own 10-minute timer — and goes
-straight to the deploy. `tick=0` on the Landings board therefore means NO TICK WAS AWAITED,
-not a tick that finished instantly. Eleven landings in the 14 days to 2026-09-11 spent the
-full 540s watching a deployer busy with somebody else's apply.
+**A tagged PR deploys its own merge commit; the tick is kicked afterwards, not awaited.**
+`deploy.sh --at <sha>` renders a snapshot of that commit, so nothing in the landing needs the
+primary checkout to have been fast-forwarded onto it first. Step 4 waits for nothing, the
+deploy runs, and only then does `land.sh` start the tick with `--no-wait` — the checkout
+converges while the health gate runs, and the deployer's own 10-minute timer covers a kick
+that failed. Kicking it BEFORE the deploy would not save the time: `gitops-deploy.service`
+holds the git-tree lock for its whole unit run, so `deploy.sh` would queue behind it inside
+its own `flock` and the seconds would move from `tick=` to `lock=`. `tick=0` on the Landings
+board means step 4 awaited no tick — a `lock=` wait beside it is a tick the deployer's TIMER
+started, not the one this landing kicked. Eleven landings in the 14 days to 2026-09-11 spent
+the full 540s in step 4 watching a deployer busy with somebody else's apply.
+
+`tick=0` is about step 4 only. When the deploy exits 4 the landing falls back to the tick and
+the primary checkout, and that tick is awaited — its seconds are booked under `tick=` too, so
+a fallback landing reads non-zero there.
 
 A PR with **no** service tag keeps waiting for the tick: there the tick IS the apply, and the
 verdict reads the deployer's own markers straight afterwards.
 
-The health gate renders from the same snapshot. `probe.py health <tag>` enumerates the
-workloads to check by rendering the role's manifests from the checkout it runs in, so gating a
-brand-new role from a primary that has not pulled it yet enumerates nothing and reads
-`skipped` — green, on the landing that most needs a gate.
+The health gate renders from a detached worktree of the same commit. `probe.py health <tag>`
+enumerates the workloads to check by rendering the role's manifests from the checkout it runs
+in, so gating a brand-new role from a primary that has not pulled it yet enumerates nothing
+and reads `skipped` — green, on the landing that most needs a gate. That worktree takes no
+lock. If it cannot be made at all, the landing reports `unhealthy` rather than gating the
+primary — the one exception being a primary that already contains the commit, which can
+answer the same question.
 
-The `VERDICT:` line is the last line of the logfile. `land.sh` waits for master CI on the merge commit, kicks the tick, deploys the merge commit, and prints a
+The `VERDICT:` line is the last line of the logfile. `land.sh` waits for master CI on the merge commit, deploys that commit, kicks the tick, and prints a
 `VERDICT:` line — `settled`, `unhealthy`, `deploy-failed`, `nothing-to-deploy`, `blocked`,
 `needs-manual-apply`, `deferred`, `merge-conflict` (the PR cannot merge until it is
 rebased), `pr-ci-red` (the PR's own CI is red, so the armed auto-merge never fires — as
@@ -331,8 +342,10 @@ SHA's check-suites (a `completed cancelled` suite with zero runs) to tell that f
 push. Before PR #775 that case waited out the whole budget and exited 75. If you ever check
 by hand, check that way.
 
-`land.sh` runs from the primary checkout wherever you invoke it, because `deploy.sh` renders
-from its working directory and a worktree is behind master after a squash merge. `land.sh` is
+`land.sh` runs from the primary checkout wherever you invoke it. The deploy itself no longer
+depends on that — `--at <sha>` renders the merge commit from anywhere — but three reads still
+ask about the primary and only make sense there: `deploy_tags.py hosts`, the diff-derived tag
+list a truncated file list falls back to, and the deploy the exit-4 fallback runs. `land.sh` is
 an `exec` shim over `land.py` and the `land_lib/` package beside it; `--help` prints the full
 contract.
 

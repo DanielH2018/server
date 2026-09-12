@@ -50,7 +50,7 @@ def test_the_gate_renders_from_the_checkout_it_is_pointed_at(tmp_path):
 
 
 def test_without_a_cwd_the_gate_renders_this_checkout(tmp_path):
-    """CLEAN half: deploy.sh's --detach path keeps rendering the checkout it ran from."""
+    """CLEAN half: a caller that names no checkout gets the one this file lives in."""
     seen = []
 
     def run(argv, **kwargs):
@@ -59,3 +59,23 @@ def test_without_a_cwd_the_gate_renders_this_checkout(tmp_path):
 
     notify_mod.gate(["sonarr"], ansible_ok=True, tools=_k8s_tools(run))
     assert seen == [notify_mod.REPO]
+
+
+def test_the_cwd_flag_reaches_the_probe(tmp_path):
+    """deploy.sh's --detach path is the second caller, and it arrives through argv.
+
+    `gate` grew a `cwd` for land.py while this entry point kept defaulting to REPO, so
+    `deploy.sh --detach --at <sha>` deployed one commit and gated another tree. Asserted
+    through the REAL gate, down to the directory the probe is run in -- patching `gate` itself
+    would pass for a main that read the flag and dropped it.
+    """
+    seen = []
+
+    def run(argv, **kwargs):
+        seen.append(kwargs.get("cwd"))
+        return _result(0, "sonarr: 1/1 ready, 1 updated, restarts=0")
+
+    base = ["--status", "0", "--log", "/tmp/x", "--tags", "sonarr", "--no-post"]
+    for extra in ([], ["--cwd", str(tmp_path)]):
+        notify_mod.main(base + extra, tools=_k8s_tools(run))
+    assert seen == [notify_mod.REPO, tmp_path]

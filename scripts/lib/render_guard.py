@@ -26,6 +26,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import yaml
 from jinja2 import ChainableUndefined, Environment, FileSystemLoader
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -237,8 +238,14 @@ def service_tags_at_or_none(ref: str, cwd: Path) -> set[str] | None:
     roles it marks every changed role unregistered (issue #1331). A ref this checkout cannot
     resolve raises inside ``git``, and an empty answer is indistinguishable from that here, so
     both become None and the caller falls back to the tree it can read.
+
+    ``yaml.YAMLError`` is in the set because the read parses YAML fetched from ``ref``: a
+    host_vars file that does not parse at that commit is a damaged read like any other, and
+    letting it escape turns ``deploy_tags.py validate --at <sha>`` into a traceback that
+    ``deploy.sh`` maps to its tag-miss exit -- "a --tags value matched no service", for a file
+    that is merely unparseable.
     """
     try:
         return service_tags_at(ref, cwd) or None
-    except subprocess.SubprocessError, OSError, ValueError:
+    except subprocess.SubprocessError, OSError, ValueError, yaml.YAMLError:
         return None

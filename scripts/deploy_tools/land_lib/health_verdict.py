@@ -30,19 +30,29 @@ def gate_from_the_deployed_tree(ln: Landing) -> tuple[bool, list[str]]:
     merge commit (`deployed_at`) has not moved the primary checkout, so gating from there
     enumerates nothing for a role that commit ADDS and the whole gate reads `skipped`.
 
-    A snapshot that could not be taken (the tree lock was busy, the worktree failed) degrades
-    to exactly the gate this ran before: the primary checkout, named in the log so a reader
-    can tell the two apart.
+    A snapshot that could not be taken FAILS THE GATE, unless the primary already contains the
+    deployed commit. Falling back to the primary unconditionally is what the first cut did, and
+    it answers from the one tree that cannot see a role this commit adds: `check_one` returns
+    `skipped` and the landing reads `settled` having gated nothing. An equivalent-or-newer
+    primary is the single case where the fallback still answers the right question.
     """
     if not ln.deployed_at:
         return ln.tools.gate(ln.resolved_tags)
     with ln.tools.snapshot(ln.opts.primary, ln.deployed_at) as snap:
-        if snap is None:
+        if snap is not None:
+            return ln.tools.gate(ln.resolved_tags, cwd=snap)
+        if ln.merge_applied():
             say(
-                f"could not snapshot {ln.deployed_at[:12]} for the health gate; rendering "
-                "the primary checkout instead"
+                f"could not snapshot {ln.deployed_at[:12]} for the health gate; the primary "
+                "checkout already carries it, so rendering there instead"
             )
-        return ln.tools.gate(ln.resolved_tags, cwd=snap)
+            return ln.tools.gate(ln.resolved_tags)
+        return False, [
+            f"could not snapshot {ln.deployed_at[:12]} for the health gate, and the primary "
+            "checkout does not carry it yet -- nothing here can enumerate what was deployed, "
+            "so this landing is NOT reported healthy. Re-run it once the tick has "
+            "fast-forwarded, or check the workloads by hand."
+        ]
 
 
 def health(ln: Landing) -> NoReturn:

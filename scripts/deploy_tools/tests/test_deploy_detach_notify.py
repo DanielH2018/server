@@ -374,10 +374,13 @@ def test_notify_leaves_sys_path_as_it_found_it_when_the_post_succeeds(
     assert notify_mod.sys.path == before
 
 
+def _gate(settled, lines):
+    """A `gate` stub for tests about main's OUTPUT; `test_gate_render_source.py` has the rest."""
+    return lambda *_a, **_k: (settled, lines)
+
+
 def test_main_returns_nonzero_on_unsettled_deploy(monkeypatch, capsys):
-    monkeypatch.setattr(
-        notify_mod, "gate", lambda tags, ok: (False, ["sonarr: unhealthy"])
-    )
+    monkeypatch.setattr(notify_mod, "gate", _gate(False, ["sonarr: unhealthy"]))
     monkeypatch.setattr(notify_mod, "notify", lambda content: None)
     code = notify_mod.main(["--status", "0", "--log", "/tmp/x.log", "--tags", "sonarr"])
     assert code == 1
@@ -385,13 +388,9 @@ def test_main_returns_nonzero_on_unsettled_deploy(monkeypatch, capsys):
 
 
 def test_main_returns_zero_on_settled_deploy(monkeypatch, capsys):
-    monkeypatch.setattr(
-        notify_mod, "gate", lambda tags, ok: (True, ["jellyfin: 1/1 ready"])
-    )
+    monkeypatch.setattr(notify_mod, "gate", _gate(True, ["jellyfin: 1/1 ready"]))
     monkeypatch.setattr(notify_mod, "notify", lambda content: None)
-    code = notify_mod.main(
-        ["--status", "0", "--log", "/tmp/x.log", "--tags", "jellyfin"]
-    )
+    code = notify_mod.main(["--status", "0", "--log", "/tmp/x", "--tags", "jellyfin"])
     assert code == 0
     assert "settled" in capsys.readouterr().out
 
@@ -399,7 +398,7 @@ def test_main_returns_zero_on_settled_deploy(monkeypatch, capsys):
 def test_main_parses_empty_tags_to_empty_list(monkeypatch):
     captured = {}
 
-    def fake_gate(tags, ok):
+    def fake_gate(tags, _ok, **_k):
         captured["tags"] = tags
         return True, []
 
@@ -416,7 +415,7 @@ def test_no_post_prints_the_verdict_without_notifying(monkeypatch, capsys, tmp_p
     """
     posted = []
     monkeypatch.setattr(notify_mod, "notify", lambda c: posted.append(c))
-    monkeypatch.setattr(notify_mod, "gate", lambda tags, ok: (True, ["sonarr: ok"]))
+    monkeypatch.setattr(notify_mod, "gate", _gate(True, ["sonarr: ok"]))
     log = tmp_path / "deploy.log"
     log.write_text("")
     rc = notify_mod.main(
@@ -435,7 +434,7 @@ def test_without_no_post_the_verdict_is_notified(monkeypatch, capsys, tmp_path):
     """
     posted = []
     monkeypatch.setattr(notify_mod, "notify", lambda c: posted.append(c))
-    monkeypatch.setattr(notify_mod, "gate", lambda tags, ok: (True, ["sonarr: ok"]))
+    monkeypatch.setattr(notify_mod, "gate", _gate(True, ["sonarr: ok"]))
     log = tmp_path / "deploy.log"
     log.write_text("")
     notify_mod.main(["--status", "0", "--log", str(log), "--tags", "sonarr"])
@@ -445,7 +444,7 @@ def test_without_no_post_the_verdict_is_notified(monkeypatch, capsys, tmp_path):
 def test_no_post_still_reports_an_unhealthy_verdict(monkeypatch, tmp_path):
     """The flag changes the destination, never the verdict."""
     monkeypatch.setattr(notify_mod, "notify", lambda c: None)
-    monkeypatch.setattr(notify_mod, "gate", lambda tags, ok: (False, ["sonarr: down"]))
+    monkeypatch.setattr(notify_mod, "gate", _gate(False, ["sonarr: down"]))
     log = tmp_path / "deploy.log"
     log.write_text("")
     rc = notify_mod.main(

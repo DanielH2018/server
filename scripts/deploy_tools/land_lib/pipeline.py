@@ -38,7 +38,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.land_lib import ci, classify, deploy, health_verdict, merge, tick
 from deploy_tools.land_lib.landing import Landing
-from deploy_tools.land_lib.outcome import Outcome, Verdict
+from deploy_tools.land_lib.outcome import Outcome, Verdict, say
 
 
 def _step_resolve(ln: Landing) -> None:
@@ -55,19 +55,23 @@ def _step_ci(ln: Landing) -> None:
 
 
 def _step_tick(ln: Landing) -> None:
-    """Run the GitOps tick, and stamp when it finished — or kick it and stamp nothing.
+    """Run the GitOps tick and stamp when it finished — or skip it here and stamp nothing.
 
     A PR with service tags deploys its own merge commit in step 5 (`deploy.sh --at`), so it
-    needs the tick only to converge the primary checkout eventually. It is kicked and the
-    landing carries straight on; `tick=0` on the board means NO TICK WAS AWAITED. Eleven
-    landings in the 14 days to 2026-09-11 spent the full 540s here watching a deployer busy
-    with somebody else's apply.
+    needs the tick only to converge the primary checkout eventually. Step 5 kicks it once the
+    deploy has returned, because the tick holds the tree lock for its whole unit run and
+    deploy.sh would otherwise queue behind it. Nothing is awaited here and `tick=0` on the
+    board says so. Eleven landings in the 14 days to 2026-09-11 spent the full 540s in this
+    step watching a deployer busy with somebody else's apply.
 
     A PR with no service tag keeps waiting: there the tick IS the apply, and `no_tag_outcome`
     reads the deployer's own markers straight afterwards.
     """
     if ln.resolved_tags:
-        tick.kick_tick(ln)
+        say(
+            "this landing deploys its own merge commit, so the tick is not awaited; step 5 "
+            "kicks it after the deploy to converge the primary checkout"
+        )
         ln.ledger.t_tick = ln.ledger.t_ci
         return
     tick.run_tick(ln)

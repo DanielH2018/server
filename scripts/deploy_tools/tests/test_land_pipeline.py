@@ -98,10 +98,13 @@ def test_settled_end_to_end(land_run):
     assert rc == 0 and out.rstrip().endswith(
         f"VERDICT: settled (PR #999, {MERGE_SHA}, tags: sonarr)"
     )
+    # The tick sits BETWEEN the deploy and the gate, not before the deploy: the deployer's
+    # unit holds the tree lock for its whole run, so a tick kicked first is one deploy.sh
+    # waits out inside its own flock.
     assert [c[0] for c in calls if c[0] in ("await_ci", "tick", "deploy", "gate")] == [
         "await_ci",
-        "tick",
         "deploy",
+        "tick",
         "gate",
     ]
     assert "verdict=settled cause= exit=0" in logline and "tags=sonarr" in logline

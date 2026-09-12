@@ -231,7 +231,9 @@ It runs the identical code path the timer runs. **There is no dry-run mode** —
 `--no-wait` starts the tick and returns at once, without watching it or printing its journal.
 That is what a landing uses: `land.sh` deploys the merge commit of its own pull request
 (`deploy.sh --at <sha>`), so it needs the tick only to converge the primary checkout, which
-the timer does within ten minutes whether the request landed or not.
+the timer does within ten minutes whether the request landed or not. It kicks it after the
+deploy, not before — this unit holds the git-tree lock for its whole run, so a tick started
+first is one `deploy.sh` then waits out to cut its snapshot.
 
 ## Gating on CI correctly
 

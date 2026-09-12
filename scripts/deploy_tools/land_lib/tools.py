@@ -21,10 +21,10 @@ boundaries.
 """
 
 import contextlib
-import fcntl
 import os
 import re
 import shutil
+import signal
 import socket
 import subprocess
 import sys
@@ -209,37 +209,33 @@ def run_deploy_tags(primary: Path, args: list[str]) -> subprocess.CompletedProce
 
 
 @contextlib.contextmanager
-def _tree_lock_held(path: str = LOCK) -> Iterator[bool]:
-    """Hold the git-tree lock for the block, NON-BLOCKING; False when it could not be taken.
+def _dies_on_a_signal() -> Iterator[None]:
+    """SIGTERM and SIGINT raise inside the block, so an enclosing `finally` still runs.
 
-    `path` is the lock file, a parameter for the reason deploy.sh makes its own overridable:
-    a test that took the production lock would queue behind a live gitops tick and hold one
-    up behind itself.
-
-    DECIDED: non-blocking, and a refusal degrades the caller rather than queueing. deploy.sh
-    waits up to LOCK_WAIT (3000s) for this lock because it is about to deploy; the health
-    gate's snapshot is worth a few seconds at most, and blocking here would put back at the
-    LAST step of a landing exactly the wait this path removes from the middle of it.
+    Default SIGTERM disposition terminates the interpreter outright, skipping every `finally`
+    -- which for `gate_snapshot` leaves a worktree registered in the primary that nothing
+    collects. `KeyboardInterrupt` rather than a new exception type: `land.py` catches neither
+    (its own `finally` suppresses `Exception` only, so this propagates through it after the
+    ledger row is written), and reusing it keeps a SIGTERM'd landing and a Ctrl-C'd one on one
+    path. The previous handlers are restored on the way out, because the test suite runs this
+    in pytest's main thread.
     """
+
+    def raise_it(signum, _frame):
+        raise KeyboardInterrupt(f"signal {signum}")
+
+    previous = {s: signal.getsignal(s) for s in (signal.SIGTERM, signal.SIGINT)}
+    for sig in previous:
+        signal.signal(sig, raise_it)
     try:
-        fd = os.open(path, os.O_WRONLY | os.O_CREAT, 0o666)
-    except OSError:
-        yield False
-        return
-    try:
-        try:
-            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except OSError:
-            yield False
-            return
-        yield True
-        fcntl.flock(fd, fcntl.LOCK_UN)
+        yield
     finally:
-        os.close(fd)
+        for sig, handler in previous.items():
+            signal.signal(sig, handler)
 
 
 @contextlib.contextmanager
-def gate_snapshot(primary: Path, sha: str, lock: str = LOCK) -> Iterator[Path | None]:
+def gate_snapshot(primary: Path, sha: str) -> Iterator[Path | None]:
     """A detached worktree of `sha` for the health gate to render from; None when there is none.
 
     WHY. `probe.py health <tag>` renders the role's manifests to enumerate the workloads it
@@ -253,20 +249,37 @@ def gate_snapshot(primary: Path, sha: str, lock: str = LOCK) -> Iterator[Path | 
     project from the working directory, and a snapshot carries no `.venv`, so the probe would
     otherwise build a fresh environment inside a directory removed seconds later.
 
-    Not created under HOMELAB_DEPLOY_SNAPSHOT_ROOT: deploy.sh's reaper collects a directory
-    there whose owner lock nobody holds, and this snapshot holds none -- a concurrent deploy
-    would delete it mid-gate.
+    DECIDED: NO tree lock is taken. `git worktree add --detach <tmp> <pinned sha>` reads and
+    writes nothing in the primary's working tree -- it writes the new directory and one file
+    under `.git/worktrees/` -- so there is nothing here for the lock that guards that tree to
+    serialise. Taking it non-blocking and degrading on a refusal is what the first cut did,
+    and it reopened the gap this whole path closes: `gitops-deploy.service` holds that lock
+    for its entire unit run, so the tick most landings race is exactly when the gate would
+    have fallen back to the primary and read `skipped` on a role the primary has not pulled.
 
-    Yields None, never raises, when the tree lock is busy or the worktree could not be
-    created. The caller then gates from the primary, which is what it did before this existed.
+    DECIDED: under `tempfile.mkdtemp`, NOT under HOMELAB_DEPLOY_SNAPSHOT_ROOT. deploy.sh's
+    reaper collects any directory there whose `.deploy-owner.lock` nobody holds -- and it
+    creates that lock file itself to ask, so an unowned live gate snapshot would be reaped
+    mid-gate by a concurrent deploy. Outside the root the reaper never looks, and the prune at
+    `deploy.sh:256` only deregisters worktrees whose directory is already gone.
+
+    Yields None, never raises, when the worktree could not be created. The caller decides what
+    that means -- it must NOT assume the primary can answer instead (see
+    `health_verdict.gate_from_the_deployed_tree`).
+
+    A SIGKILL or a host reboot still leaks the registration: the directory survives under
+    /tmp, so nothing prunes it. Recover by hand with `rm -rf /tmp/land-gate-*` then
+    `git -C <primary> worktree prune`.
     """
-    tmp = Path(tempfile.mkdtemp(prefix="land-gate-"))
-    snap = tmp / "tree"
-    made = False
-    previous = os.environ.get(UV_PROJECT_ENVIRONMENT)
-    try:
-        with _tree_lock_held(lock) as locked:
-            made = locked and (
+    # The signal handlers wrap the try, not the reverse: they are restored only after the
+    # worktree is gone, so a second signal arriving during the removal cannot skip it.
+    with _dies_on_a_signal():
+        tmp = Path(tempfile.mkdtemp(prefix="land-gate-"))
+        snap = tmp / "tree"
+        made = False
+        previous = os.environ.get(UV_PROJECT_ENVIRONMENT)
+        try:
+            made = (
                 git(
                     "worktree",
                     "add",
@@ -278,24 +291,24 @@ def gate_snapshot(primary: Path, sha: str, lock: str = LOCK) -> Iterator[Path | 
                 ).returncode
                 == 0
             )
-        if made:
-            os.environ[UV_PROJECT_ENVIRONMENT] = str(primary / ".venv")
-        yield snap if made else None
-    finally:
-        if made:
-            git(
-                "worktree",
-                "remove",
-                "--force",
-                str(snap),
-                cwd=primary,
-                check=False,
-            )
-        if previous is None:
-            os.environ.pop(UV_PROJECT_ENVIRONMENT, None)
-        else:
-            os.environ[UV_PROJECT_ENVIRONMENT] = previous
-        shutil.rmtree(tmp, ignore_errors=True)
+            if made:
+                os.environ[UV_PROJECT_ENVIRONMENT] = str(primary / ".venv")
+            yield snap if made else None
+        finally:
+            if made:
+                git(
+                    "worktree",
+                    "remove",
+                    "--force",
+                    str(snap),
+                    cwd=primary,
+                    check=False,
+                )
+            if previous is None:
+                os.environ.pop(UV_PROJECT_ENVIRONMENT, None)
+            else:
+                os.environ[UV_PROJECT_ENVIRONMENT] = previous
+            shutil.rmtree(tmp, ignore_errors=True)
 
 
 class CiVerdict(NamedTuple):

@@ -179,7 +179,7 @@ than a failure. The seventh, 20, is the inverse: the playbook ran and changes ar
 | 77 | the snapshot worktree could not be created | check `/tmp/homelab-deploy-snapshots/` is writable and `git worktree add --detach` works |
 | 76 | flock failed on the lock file itself — not contention | `ls -l /var/lock/server-git-tree.lock`; retrying alone changes nothing |
 | 75 | a lock stayed busy — the tree lock, or one of this run's services' | retry |
-| 64 | the flags contradict each other, or `--at` named no commit | fix the command line; nothing ran |
+| 64 | the flags contradict each other, or `--at` named no commit (or none at all) | fix the command line; nothing ran |
 | 4 | the tree is behind `origin/master` | `git pull`, never `--skip-staleness-check` |
 | 3 | the change is broad and maps to no single service | deploy by hand, or see *When to wait* |
 | 2 | a `--tags` value matched no service | `--list-services` prints every valid value |
@@ -212,7 +212,14 @@ a snapshot of `<sha>`, so the gate asks what `<sha>..origin/master` carries and 
 reads `containers_list` at `<sha>`. A checkout behind master therefore deploys a current
 commit without refusing, while a `<sha>` that is itself behind on the requested tags still
 exits 4. A committish this checkout cannot resolve is exit 64, not 2: it is a bad argument,
-and 2 means a tag matched no service.
+and 2 means a tag matched no service. So is `--at` with no value at all — a run that asked
+for another commit must not fall back to deploying HEAD in silence, which is what an `--at
+"$sha"` whose variable came back empty would otherwise do.
+
+With `--detach`, the completion notifier's health gate renders that same snapshot: it is kept
+until the notifier has run. The gate enumerates the workloads to check from the manifests of
+the commit that was deployed, never from the working tree, which under `--at` is a different
+commit and even without it can carry uncommitted edits.
 
 **Exit 4 is decided before exit 2.** `deploy.sh` asks whether the tree is stale before it
 validates `--tags`, so a stale tree carrying a tag it does not recognise reports 4, not 2

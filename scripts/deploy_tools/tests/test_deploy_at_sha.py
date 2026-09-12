@@ -16,6 +16,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_deploy_at_sha.py
 """
 
 import subprocess
+import time
 from pathlib import Path
 
 from _deploy_sh_fakes import (
@@ -38,6 +39,15 @@ echo "$*" >> "$DEPLOY_SH_CALLS"
 case "$*" in
   *ansible-playbook*) git rev-parse HEAD > "$DEPLOY_TEST_SHA_FILE"; exit 0 ;;
   *deploy_tags.py\\ list*) printf 'alpha\\nbeta\\n'; exit 0 ;;
+  *deploy_detach_notify.py*)
+    while [[ $# -gt 0 ]]; do
+      if [[ "$1" == "--cwd" ]]; then
+        git -C "$2" rev-parse HEAD > "$DEPLOY_TEST_NOTIFY_FILE"
+        break
+      fi
+      shift
+    done
+    exit 0 ;;
   *) exit 0 ;;
 esac
 """
@@ -104,6 +114,7 @@ def _run(
         bin_dir,
         DEPLOY_SH_CALLS=str(calls),
         DEPLOY_TEST_SHA_FILE=str(deployed),
+        DEPLOY_TEST_NOTIFY_FILE=str(tmp_path / "notify-sha"),
     )
     result = subprocess.run(
         [str(_DEPLOY_SH), *argv],
@@ -205,6 +216,67 @@ def test_without_at_tag_validation_reads_the_working_tree(tmp_path):
     repo, _first, _second = _prepared(tmp_path)
     _result, calls, _deployed = _run(tmp_path, repo, "--tags", "sonarr")
     assert "--at" not in next(c for c in calls if "deploy_tags.py validate" in c)
+
+
+def test_an_at_with_no_value_is_refused(tmp_path):
+    """FLAGGED half: reading past the end of argv used to leave `--at` empty, silently.
+
+    An empty `at_ref` passes every check below it and `make_snapshot` falls through to
+    `${at_sha:-HEAD}`, so `--at "$sha"` with an unset variable deployed this checkout's tip and
+    said nothing about it. Measured before the fix: rc=0, deployed == HEAD, empty stderr.
+    """
+    repo, _first, _second = _prepared(tmp_path)
+    cases = (("--tags", "x", "--at"), ("--tags", "x", "--at", ""), ("--at=",))
+    for n, argv in enumerate(cases):
+        case = tmp_path / f"case{n}"
+        case.mkdir()
+        result, calls, deployed = _run(case, repo, *argv)
+        assert result.returncode == _BAD_FLAGS_EXIT, (
+            argv,
+            result.stdout,
+            result.stderr,
+        )
+        assert "--at needs a commit" in result.stderr
+        assert calls == [] and deployed == ""
+
+
+def test_an_at_does_not_swallow_the_flag_after_it(tmp_path):
+    """`--at --tags sonarr` names no commit, so it is the refusal above, not a tag named `--tags`."""
+    repo, _first, _second = _prepared(tmp_path)
+    result, _calls, _deployed = _run(tmp_path, repo, "--at", "--tags", "alpha")
+    assert result.returncode == _BAD_FLAGS_EXIT, result.stderr
+    assert "--at needs a commit" in result.stderr
+
+
+def test_the_detach_notifier_gates_the_snapshot_that_was_deployed(tmp_path):
+    """The second entry point to the same health gate, and it had no `cwd`.
+
+    `probe.py health <tag>` enumerates the workloads to check from its own working directory,
+    so the notifier must be pointed at the snapshot -- which therefore has to outlive the
+    playbook. Gating this checkout instead answers about the WORKING TREE: under `--at` a
+    different commit entirely, and a role the deployed commit adds enumerates nothing there and
+    posts `skipped` to Discord.
+    """
+    repo, first, second = _prepared(tmp_path)
+    notified = tmp_path / "notify-sha"
+    result, _calls, _deployed = _run(
+        tmp_path,
+        repo,
+        "--detach",
+        "--tags",
+        "alpha",
+        "--skip-tag-check",
+        "--skip-staleness-check",
+        "--at",
+        first,
+    )
+    assert result.returncode == 0, result.stderr
+    deadline = time.monotonic() + 30
+    while not notified.exists() and time.monotonic() < deadline:
+        time.sleep(0.1)
+    assert notified.exists(), "the backgrounded notifier never ran"
+    assert notified.read_text().strip() == first
+    assert notified.read_text().strip() != second
 
 
 def test_the_annotation_names_the_commit_that_was_deployed(tmp_path):

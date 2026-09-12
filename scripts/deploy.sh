@@ -351,8 +351,8 @@ say_tag_enumeration_failed() {
 
 say_snapshot_failed() {
     echo "deploy: could not snapshot ${at_sha:-HEAD} into $SNAPSHOT_ROOT -- nothing was deployed." >&2
-    echo "  The playbook renders from a detached worktree of HEAD, so without one there is" >&2
-    echo "  nothing to deploy from. Check the directory is writable and that" >&2
+    echo "  The playbook renders from a detached worktree of that commit, so without one" >&2
+    echo "  there is nothing to deploy from. Check the directory is writable and that" >&2
     echo "  'git worktree add --detach' works here; retrying alone will not fix either." >&2
 }
 
@@ -493,6 +493,7 @@ n=${#raw_args[@]}
 changed_requested=0
 changed_ref="origin/master"
 pre_skip_staleness=0
+at_given=0
 at_ref=""
 at_sha=""
 while [[ "$i" -lt "$n" ]]; do
@@ -507,14 +508,22 @@ while [[ "$i" -lt "$n" ]]; do
         continue
     fi
     if [[ "$a" == "--at" ]]; then
+        at_given=1
         i=$((i + 1))
-        at_ref="${raw_args[$i]-}"
-        i=$((i + 1))
+        # A missing value, and a next argument that is itself a flag, both leave at_ref empty
+        # and are refused below. Reading past the end used to leave it empty SILENTLY, and an
+        # empty at_ref falls through every check to `${at_sha:-HEAD}` -- so `--at "$sha"` with
+        # an unset variable deployed this checkout's tip and said nothing about it.
+        if [[ "$i" -lt "$n" && "${raw_args[$i]}" != -* ]]; then
+            at_ref="${raw_args[$i]}"
+            i=$((i + 1))
+        fi
         continue
     fi
     if [[ "$a" == --at=* ]]; then
         # Accepted because --tags= is: without this arm `--at=abc` would fall through to
         # ansible-playbook as an unknown flag rather than being read here.
+        at_given=1
         at_ref="${a#--at=}"
         i=$((i + 1))
         continue
@@ -536,7 +545,13 @@ set -- "${filtered_args[@]}"
 # derived tag matched no service, so nothing deployed" -- the wrong sentence entirely for a
 # committish that did not resolve. 64 is the code --detach with --check already uses for an
 # argument this wrapper refuses.
-if [[ -n "$at_ref" ]]; then
+if [[ "$at_given" == 1 ]]; then
+    if [[ -z "$at_ref" ]]; then
+        echo "deploy: --at needs a commit -- nothing was deployed." >&2
+        echo "  It was given none (or an empty one), and a run that asked for another" >&2
+        echo "  commit must not fall back to deploying this checkout's HEAD in silence." >&2
+        exit 64
+    fi
     if [[ "$changed_requested" == 1 ]]; then
         echo "deploy: --at <sha> with --changed is contradictory -- nothing was deployed." >&2
         echo "  --changed derives its tags from the WORKING TREE's diff, while --at renders" >&2
@@ -855,23 +870,35 @@ if [[ "$detach" == 1 ]]; then
         trap remove_snapshot EXIT
         run_playbook_in_snapshot "$@" >"$log" 2>&1
         run_status=$?
-        remove_snapshot
         release_service_locks
         # Annotated from inside the subshell, where the run actually finished — the parent
         # returned at exit 0 the moment it backgrounded this, long before there was anything
         # to record.
         emit_deploy_annotation "$run_status"
+        # The snapshot outlives the playbook by exactly this call, because the notifier's health
+        # gate renders the deployed role's manifests to enumerate what to check and `probe.py
+        # health` reads them from its own working directory. Gating from this checkout instead
+        # would answer about the WORKING TREE: under --at a different commit, and even without
+        # it a tree that can carry uncommitted edits the deploy never saw. A role the deployed
+        # commit ADDS enumerates nothing there, which reads as `skipped` -- a green Discord post
+        # for a workload nobody checked. UV_PROJECT_ENVIRONMENT for the reason
+        # run_playbook_in_snapshot sets it: the probe's own `uv run` would otherwise build an
+        # environment inside a directory removed seconds later.
+        #
         # shellcheck disable=SC2094  # false positive: the notifier only receives $log as a
         # path string (to mention in its Discord post) and never opens it itself -- the only
         # actual writer of the file is this append redirect.
-        uv run python scripts/deploy_tools/deploy_detach_notify.py \
+        UV_PROJECT_ENVIRONMENT="$repo_root/.venv" \
+            uv run python scripts/deploy_tools/deploy_detach_notify.py \
             --status "$run_status" \
             --log "$log" \
+            --cwd "$snapshot" \
             --tags "$(
                 IFS=,
                 echo "${split_tags[*]-}"
             )" \
             >>"$log" 2>&1
+        remove_snapshot
     ) &
     bg_pid=$!
     disown "$bg_pid" 2>/dev/null || true

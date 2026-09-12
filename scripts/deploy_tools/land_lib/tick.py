@@ -24,6 +24,12 @@ def kick_tick(ln: Landing) -> None:
     does next needs the primary checkout to be at that commit, so the tick is started only so
     the checkout converges for whoever reads it later.
 
+    DECIDED: called AFTER `deploy.sh` returns, not before it. `gitops-deploy.service` wraps
+    its whole unit run in the git-tree lock, and deploy.sh waits up to LOCK_WAIT (3000s) for
+    that same lock to cut its snapshot -- so a tick kicked first does not remove the wait, it
+    moves it out of `tick=` and into `lock=`. Kicked after, it runs while this landing gates,
+    and the gate's own snapshot takes no lock at all.
+
     DECIDED: a non-zero exit here is LOGGED AND IGNORED, where `run_tick` below ends the
     landing on one. The two are asked different questions. `run_tick` is the step that APPLIES
     the change, so a tick that did not run means nothing was deployed; this kick applies
@@ -36,10 +42,10 @@ def kick_tick(ln: Landing) -> None:
     """
     rc = ln.tools.tick(wait=False)
     if rc == TICK_OK:
-        say("tick kicked, not awaited (this landing deploys the merge commit itself)")
+        say("tick kicked, not awaited (this landing deployed the merge commit itself)")
         return
     say(
-        f"tick kick failed (exit {rc}); carrying on -- the deploy below renders the merge "
+        f"tick kick failed (exit {rc}); carrying on -- the deploy above rendered the merge "
         "commit, and the deployer's own timer converges the primary checkout"
     )
 

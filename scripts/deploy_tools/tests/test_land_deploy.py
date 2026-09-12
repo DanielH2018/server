@@ -213,12 +213,22 @@ def test_a_stale_tree_waits_on_its_own_merge_commit_before_reticking(landing):
     assert next(c for c in calls[first:] if c[0] == "await_ci")[1][0] == MERGE_SHA
 
 
-def test_the_stale_retrys_ci_wait_is_booked_under_wait_ci_not_deploy(landing):
+def test_the_stale_retrys_ci_wait_is_booked_under_wait_ci_and_its_tick_under_tick(
+    landing,
+):
+    """Two phases, two halves, and the board reads both.
+
+    Shifting t_ci and t_tick by the same amount is what keeps the backoff and the CI wait out
+    of `deploy=`. Adding the fallback tick's OWN seconds to t_tick alone is what stops `tick=0`
+    describing a landing that awaited a tick -- which the fast path's `tick=0` must keep
+    meaning, so the width has to grow here and nowhere else.
+    """
     ln, _ = _ready(landing, Fakes(deploy=[4, 0], tip="f" * 40))
     ln.resolved_tags = ["sonarr"]
     t_ci, t_tick = ln.ledger.t_ci, ln.ledger.t_tick
     deploy.deploy_phase(ln)
-    assert ln.ledger.t_ci > t_ci and ln.ledger.t_tick - ln.ledger.t_ci == t_tick - t_ci
+    assert ln.ledger.t_ci > t_ci
+    assert ln.ledger.t_tick - ln.ledger.t_ci > t_tick - t_ci
 
 
 def test_a_stale_retry_is_bounded(landing):
@@ -338,6 +348,56 @@ def test_a_later_commit_on_the_same_tags_falls_back_to_the_primary(landing, caps
     assert (
         "falling back to the tick and the primary checkout" in capsys.readouterr().out
     )
+
+
+def test_the_fallback_redeploys_every_host_from_one_tree(landing):
+    """A partial multi-host deploy must not leave two hosts rendered from two commits.
+
+    Host A succeeds at `--at <merge sha>`, host B exits 4. Keeping A in `deployed_hosts` would
+    retry B alone, and the single health gate would then render ONE of the two trees and call
+    the other settled unseen -- A's brand-new workload enumerating nothing in a primary that
+    has not pulled it. Forgetting the hosts with the commit is what keeps one landing to one
+    tree.
+    """
+    ln, calls = _ready(
+        landing,
+        Fakes(hosts="daniel-box\tsonarr\ndaniel-pi\talloy\n", deploy=[0, 4, 0, 0]),
+    )
+    ln.resolved_tags = ["sonarr", "alloy"]
+    deploy.deploy_phase(ln)
+    deploys = [(c[1][1], c[2]["at"]) for c in calls if c[0] == "deploy"]
+    assert deploys == [
+        (["sonarr"], MERGE_SHA),
+        (["alloy"], MERGE_SHA),
+        (["sonarr"], ""),
+        (["alloy"], ""),
+    ]
+    assert ln.deployed_at == ""
+
+
+def test_the_tick_is_kicked_after_the_deploy_not_before_it(landing):
+    """`gitops-deploy.service` holds the tree lock for its whole unit run.
+
+    Kicked first, deploy.sh waits that out inside its own flock to cut the snapshot and the
+    seconds move from `tick=` to `lock=` -- the wait is not removed, only relabelled. The
+    rejecting half is the test below: the exit-4 fallback awaits a tick instead, and must not
+    also kick one.
+    """
+    ln, calls = _ready(landing, Fakes())
+    ln.resolved_tags = ["sonarr"]
+    deploy.deploy_phase(ln)
+    names = [c[0] for c in calls]
+    assert names.index("deploy") < names.index("tick")
+    assert next(c for c in calls if c[0] == "tick")[2] == {"wait": False}
+
+
+def test_the_fallback_awaits_a_tick_and_does_not_also_kick_one(landing):
+    """One tick request per landing, as before `--at`: the fallback's is the awaited one."""
+    ln, calls = _ready(landing, Fakes(deploy=[4, 0]))
+    ln.resolved_tags = ["sonarr"]
+    deploy.deploy_phase(ln)
+    ticks = [c[2] for c in calls if c[0] == "tick"]
+    assert len(ticks) == 1 and "wait" not in ticks[0]
 
 
 def test_every_deploy_lets_the_landing_book_the_wait_inside_flock(landing):

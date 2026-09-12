@@ -190,15 +190,36 @@ def test_a_deploy_from_the_primary_gates_the_primary(landing):
     assert next(c for c in calls if c[0] == "gate")[2] == {"cwd": None}
 
 
-def test_a_snapshot_that_could_not_be_taken_still_gates(landing, capsys):
-    """The tree lock is taken non-blocking, so a busy one must degrade rather than skip the
-    gate: it falls back to the primary checkout and says which tree it read."""
-    ln, calls = _deployed(landing, Fakes(gate_snapshot=None))
+def test_a_snapshot_that_could_not_be_taken_fails_the_gate(landing, capsys):
+    """FLAGGED half: no tree that can answer, so no verdict -- never a green one.
+
+    Degrading to the primary is what the first cut did, and the primary is the one tree that
+    cannot see a role the deployed commit ADDS: `check_one` returns `skipped` and the landing
+    reads `settled` having gated nothing. That is the whole gap this path exists to close, so
+    here it fails closed instead.
+    """
+    ln, _calls = _deployed(landing, Fakes(gate_snapshot=None, merge_applied_rc=1))
+    ln.deployed_at = MERGE_SHA
+    with pytest.raises(Outcome) as exc:
+        health_verdict.health(ln)
+    assert exc.value.verdict == "unhealthy"
+    assert "does not carry it yet" in capsys.readouterr().out
+
+
+def test_a_snapshot_that_failed_over_a_primary_that_has_the_commit_gates_there(
+    landing, capsys
+):
+    """CLEAN half: an equivalent-or-newer primary answers the same question, so it may.
+
+    Without this arm a tick that converged the checkout a second before the gate would turn a
+    healthy landing unhealthy over a worktree that was never needed.
+    """
+    ln, calls = _deployed(landing, Fakes(gate_snapshot=None, merge_applied_rc=0))
     ln.deployed_at = MERGE_SHA
     with pytest.raises(Outcome):
         health_verdict.health(ln)
     assert next(c for c in calls if c[0] == "gate")[2] == {"cwd": None}
-    assert "rendering the primary checkout instead" in capsys.readouterr().out
+    assert "already carries it" in capsys.readouterr().out
 
 
 def test_an_unreadable_deployer_state_is_not_settled(landing, capsys):

@@ -77,6 +77,18 @@ def test_an_unreadable_ref_is_none_rather_than_an_empty_set(tmp_path):
     assert service_tags_at_or_none("deadbeefdeadbeefdeadbeef", tmp_path) is None
 
 
+def test_host_vars_that_do_not_parse_at_the_ref_are_none_too(tmp_path):
+    """The second damage mode, and the one the read actually meets: unparseable YAML.
+
+    `service_tags_at` parses what it fetches from the ref, so a `yaml.YAMLError` escaping here
+    turns `deploy_tags.py validate --at <sha>` into a traceback, which `deploy.sh` reports as
+    its tag-miss exit -- "a --tags value matched no service", for a file that merely does not
+    parse.
+    """
+    shas = _tags_repo(tmp_path, _WITHOUT, "containers_list:\n  - name: [unclosed\n")
+    assert service_tags_at_or_none(shas[1], tmp_path) is None
+
+
 def test_load_yaml_returns_a_mapping(tmp_path):
     path = tmp_path / "a.yml"
     path.write_text("key: value\n")

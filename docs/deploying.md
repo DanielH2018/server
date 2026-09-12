@@ -48,7 +48,7 @@ Each of these means **nothing was deployed**. None is a playbook failure.
 | 4 | The commit being deployed — `HEAD`, or `--at <sha>` — is behind `origin/master` on a path the deploy reaches | Pull, then retry. Never `--skip-staleness-check` |
 | 3 | The change is broad and maps to no single service | Run the playbook the change's plane needs |
 | 2 | The tag matched no service | `--list-services` prints the valid values |
-| 64 | The flags contradict each other, or `--at` named no commit this checkout has | Fix the command line |
+| 64 | The flags contradict each other, or `--at` named no commit this checkout has (or none at all) | Fix the command line |
 
 Being *ahead* of master is normal branch work and is never refused.
 

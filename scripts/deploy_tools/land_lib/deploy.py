@@ -266,6 +266,20 @@ def deploy_phase(ln: Landing) -> None:
             "checkout"
         )
         ln.deployed_at = ""
+        # The hosts already deployed at the merge commit are forgotten with it, so the retry
+        # redeploys every host from the primary. One landing renders one tree: keeping them
+        # would leave host A on the merge commit and host B on the primary, with a single gate
+        # that can only render one of the two and would call the other settled unseen.
+        ln.deployed_hosts.clear()
+    elif ln.deployed_at:
+        # DECIDED: the tick is kicked HERE, after deploy.sh has returned, not in step 4.
+        # `gitops-deploy.service` wraps its whole unit run in the tree lock, so a tick kicked
+        # before the deploy is one deploy.sh then queues behind inside its own `flock -w 3000`
+        # -- the same wait, moved out of `tick=` and into `lock=`. Kicked after, it converges
+        # the primary while this landing gates, and the gate's own snapshot needs no lock.
+        # Not on the fallback arm: the retry loop runs a tick WITH its wait, and two requests
+        # for the same work is one more than the path had before `--at`.
+        tick.kick_tick(ln)
     # 4 = the tree is behind origin/master: someone merged during the CI wait. The tick
     # fast-forwards to the newest GREEN commit in the incoming range, not only to a green tip,
     # so what this landing needs green is its OWN merge commit -- wait on that, every attempt,
@@ -321,7 +335,13 @@ def deploy_phase(ln: Landing) -> None:
         # implementation with step 4 rather than land.sh's un-retried, un-accounted copy, and
         # that implementation's failure mode is to raise. Listed as #1085 item 8 so it is not
         # re-derived as a parity bug.
+        ticked = t.clock()
         tick.run_tick(ln)
+        # Into t_tick ALONE, so `tick=` on the board stops reading 0 for a landing that
+        # awaited a tick. The seconds come out of `deploy=`, where they were being counted:
+        # step 4 stamped t_tick = t_ci for the fast path, and the shift above moves both by
+        # the same amount, so without this the wait here is invisible as a tick.
+        ln.ledger.t_tick = (ln.ledger.t_tick or 0.0) + (t.clock() - ticked)
         rc = deploy_by_host(ln)
     if rc == DEPLOY_STALE:
         # Every retry lost the tip race. `deploy-failed` is the wrong word for it: exit 4 means

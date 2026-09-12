@@ -5,11 +5,13 @@ Run: uv run pytest scripts/deploy_tools/tests/test_land_tools.py
 
 import fcntl
 import os
+import signal
 import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
 from _deploy_sh_fakes import git_free_env
 from deploy_tools.land_lib import tools
 
@@ -286,9 +288,8 @@ def _commit(repo: Path, name: str) -> str:
 def _snapshot_repo(tmp_path: Path) -> tuple[Path, str, str, str]:
     """A two-commit repo and a tree-lock path inside tmp_path; (repo, first, second, lock).
 
-    The lock is redirected for the reason `_deploy_sh_fakes.deploy_sh_env` redirects
-    deploy.sh's: the production path is the one a live gitops tick holds, and a test must
-    neither queue behind real work nor hold real work up.
+    The lock path is handed to the test that holds it while a snapshot is taken. It points
+    inside tmp_path, never at the production file a live gitops tick holds.
     """
     repo = tmp_path / "repo"
     repo.mkdir()
@@ -306,8 +307,8 @@ def _snapshot_repo(tmp_path: Path) -> tuple[Path, str, str, str]:
 
 def test_the_gate_snapshot_is_a_worktree_of_the_named_commit(tmp_path):
     """CLEAN half: the gate renders the commit that was deployed, not the checkout's HEAD."""
-    repo, first, second, lock = _snapshot_repo(tmp_path)
-    with tools.gate_snapshot(repo, first, lock=lock) as snap:
+    repo, first, second, _lock = _snapshot_repo(tmp_path)
+    with tools.gate_snapshot(repo, first) as snap:
         assert snap is not None
         head = subprocess.run(
             ("git", "rev-parse", "HEAD"),
@@ -335,23 +336,58 @@ def test_the_gate_snapshot_is_a_worktree_of_the_named_commit(tmp_path):
 
 
 def test_a_snapshot_of_an_unresolvable_commit_is_none(tmp_path):
-    """REJECTING half: the gate must degrade to the primary checkout, never raise."""
-    repo, _first, _second, lock = _snapshot_repo(tmp_path)
-    with tools.gate_snapshot(repo, "deadbeefdeadbeefdeadbeef", lock=lock) as snap:
+    """REJECTING half: it answers None rather than raising; the CALLER decides what that means.
+
+    `health_verdict.gate_from_the_deployed_tree` is where None is turned into a verdict, and
+    None must not read as permission to gate the primary.
+    """
+    repo, _first, _second, _lock = _snapshot_repo(tmp_path)
+    with tools.gate_snapshot(repo, "deadbeefdeadbeefdeadbeef") as snap:
         assert snap is None
     assert tools.UV_PROJECT_ENVIRONMENT not in os.environ
 
 
-def test_a_busy_tree_lock_yields_no_snapshot(tmp_path):
-    """Non-blocking by design: a held lock costs the gate its snapshot, never 3000s."""
+def test_a_held_tree_lock_does_not_cost_the_gate_its_snapshot(tmp_path):
+    """No lock is taken at all, because a detached add of a pinned SHA touches no working tree.
+
+    The first cut took it non-blocking and degraded to the primary on a refusal, which handed
+    the gap back on the likeliest path: `gitops-deploy.service` holds this lock for its whole
+    unit run, so the tick a landing races is exactly when the gate would have read `skipped`.
+    """
     repo, first, _second, lock = _snapshot_repo(tmp_path)
     held = os.open(lock, os.O_WRONLY | os.O_CREAT, 0o666)
     try:
         fcntl.flock(held, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        with tools.gate_snapshot(repo, first, lock=lock) as snap:
-            assert snap is None
+        with tools.gate_snapshot(repo, first) as snap:
+            assert snap is not None
     finally:
         os.close(held)
+
+
+def test_a_sigterm_during_the_gate_still_removes_the_worktree(tmp_path):
+    """A default SIGTERM skips every `finally` and leaves a registered worktree behind.
+
+    The handler is installed for the life of the snapshot and restored after it, so the signal
+    arrives as a KeyboardInterrupt the `finally` can run under -- and pytest's own handlers are
+    the ones in place again afterwards.
+    """
+    repo, first, _second, _lock = _snapshot_repo(tmp_path)
+    before = signal.getsignal(signal.SIGTERM)
+    with pytest.raises(KeyboardInterrupt):
+        with tools.gate_snapshot(repo, first) as snap:
+            kept = snap
+            os.kill(os.getpid(), signal.SIGTERM)
+    assert not kept.exists()
+    assert signal.getsignal(signal.SIGTERM) is before
+    listed = subprocess.run(
+        ("git", "worktree", "list"),
+        cwd=repo,
+        env=git_free_env(),
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    assert str(kept) not in listed
 
 
 def test_the_watched_tick_inherits_the_working_directory(monkeypatch):
