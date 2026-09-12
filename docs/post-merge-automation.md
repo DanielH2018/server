@@ -118,9 +118,26 @@ Sequence:
 
 1. Resolve the merge SHA from the PR.
 2. `await_ci.py <merge-sha>`.
-3. `gitops_tick.sh` — fetch, CI-gate, ff-merge, deploy what is eligible.
-4. `deploy.sh --tags <derived>` from `/home/ubuntu/server`, for what the tick deferred.
-5. The health verdict, via `deploy_detach_notify.py --no-post`.
+3. `gitops_tick.sh` — fetch, CI-gate, ff-merge, deploy what is eligible. A PR with service
+   tags skips this step entirely: step 4 renders the merge commit itself, so nothing after it
+   needs the primary checkout to have been fast-forwarded. A PR with no service tag waits for
+   the tick, because there it is the apply.
+4. `deploy.sh --tags <derived> --at <merge-sha>` from `/home/ubuntu/server`. `--at` snapshots
+   that commit rather than the checkout's HEAD, and scopes the staleness gate and the tag
+   check to it. Exit 4 there means a later commit reaches the same tags: that landing owns the
+   service, and this one falls back to waiting for the tick and deploying from the checkout.
+   On every other exit the tick is kicked here with `--no-wait`, once `deploy.sh` has
+   returned, to converge the primary checkout. After rather than before, because
+   `gitops-deploy.service` holds the git-tree lock for its whole unit run and `deploy.sh`
+   would queue behind it to cut its snapshot — the same wait, booked under `lock=` instead of
+   `tick=`.
+5. The health verdict, via `deploy_detach_notify.py --no-post`, rendered from a detached
+   worktree of the same merge commit: `probe.py health` enumerates the workloads to gate by
+   rendering the role's manifests from the checkout it runs in, so a role the merge commit
+   ADDS enumerates nothing in a primary that has not pulled it and the gate reads `skipped`.
+   That worktree takes no lock, and when it cannot be made the landing does **not** fall back
+   to the primary unless the primary already contains the commit — it reports `unhealthy`
+   rather than a verdict from a tree that cannot see what was deployed.
 6. Print a structured verdict block the session reads on re-invocation.
 
 **It holds no check of its own.** No health logic, no tag validation, no staleness logic — each of

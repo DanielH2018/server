@@ -98,15 +98,37 @@ def test_settled_end_to_end(land_run):
     assert rc == 0 and out.rstrip().endswith(
         f"VERDICT: settled (PR #999, {MERGE_SHA}, tags: sonarr)"
     )
+    # The tick sits BETWEEN the deploy and the gate, not before the deploy: the deployer's
+    # unit holds the tree lock for its whole run, so a tick kicked first is one deploy.sh
+    # waits out inside its own flock.
     assert [c[0] for c in calls if c[0] in ("await_ci", "tick", "deploy", "gate")] == [
         "await_ci",
-        "tick",
         "deploy",
+        "tick",
         "gate",
     ]
     assert "verdict=settled cause= exit=0" in logline and "tags=sonarr" in logline
     for k in ("wait_merge", "wait_ci", "tick", "deploy"):
         assert f"{k}=" in logline and f"{k}= " not in logline
+
+
+def test_a_tagged_landing_kicks_the_tick_and_books_no_tick_time(land_run):
+    """Step 4 is a kick, not a wait: step 5 deploys the merge commit itself.
+
+    `tick=0` on the board therefore means NO TICK WAS AWAITED, not a tick that took no time.
+    """
+    _rc, _out, _err, calls, logline = land_run([], Fakes())
+    assert next(c for c in calls if c[0] == "tick")[2] == {"wait": False}
+    assert "tick=0 " in logline
+
+
+def test_a_landing_with_no_service_tag_still_waits_for_the_tick(land_run):
+    """The rejecting half: there the tick IS the apply, and the verdict reads its markers."""
+    _rc, out, _err, calls, _logline = land_run(
+        [], Fakes(derived=([], "pr"), self_applied=True, state={"behind_since": "x"})
+    )
+    assert list(next(c for c in calls if c[0] == "tick")[2]) == ["observe"]
+    assert "VERDICT: deferred" in out
 
 
 def test_the_diff_fallback_reaches_the_tick_before_deriving(land_run):
@@ -115,6 +137,10 @@ def test_the_diff_fallback_reaches_the_tick_before_deriving(land_run):
     )
     names = [c[1][0] if c[0] == "deploy_tags" else c[0] for c in calls]
     assert names.index("tick") < names.index("changed") < names.index("deploy")
+    # And it AWAITS that tick. The derivation reads `<since>...HEAD` in the primary checkout,
+    # so this is the one tagged path the kick would break: an empty fallback tag list is what
+    # routes it away from the kick, and ordering alone would not notice if that changed.
+    assert list(next(c for c in calls if c[0] == "tick")[2]) == ["observe"]
 
 
 def test_a_missing_primary_checkout_is_named_before_any_phase_runs(land_run):

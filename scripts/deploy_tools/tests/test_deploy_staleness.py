@@ -282,3 +282,30 @@ def test_an_unresolvable_ref_does_not_refuse(repos):
     assert (
         main(["--repo", str(clone), "--no-fetch", "--ref", "origin/nonexistent"]) == 0
     )
+
+
+# -- --sha: the commit being deployed is not always HEAD --------------------------------
+#
+# `deploy.sh --at <sha>` snapshots <sha> and renders that, so the checkout it was launched
+# from renders nothing at all. Both halves: the range really moves to <sha>..<ref> (a deploy
+# OF the incoming commit is not behind on it), and `--sha` is not a way to bypass the guard
+# (a <sha> that is itself behind still refuses).
+
+
+def test_a_deploy_of_the_incoming_commit_is_not_behind_on_it(repos, capsys):
+    """The landing shape: the primary is behind, but the commit being deployed is the tip."""
+    clone = _behind_on(repos, SONARR)
+    tip = _git(clone, "rev-parse", "origin/master").strip()
+    rc = main(["--repo", str(clone), "--no-fetch", "--sha", tip, "--tags", "sonarr"])
+    assert rc == 0, capsys.readouterr().err
+
+
+def test_a_sha_that_is_itself_behind_still_refuses(repos, capsys):
+    """The rejecting half: naming a commit is not a way past the guard, and the refusal
+    names the commit rather than calling it 'this tree'."""
+    clone = _behind_on(repos, SONARR)
+    head = _git(clone, "rev-parse", "HEAD").strip()
+    rc = main(["--repo", str(clone), "--no-fetch", "--sha", head, "--tags", "sonarr"])
+    err = capsys.readouterr().err
+    assert rc == STALE_EXIT
+    assert head[:12] in err and "this tree is" not in err
