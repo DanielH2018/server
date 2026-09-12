@@ -167,9 +167,10 @@ before `land.sh` existed.
 checkout.** `land.sh` hands `deploy.sh --at <merge sha>`, so it neither needs nor waits for the
 tick to fast-forward that checkout first: the tick is kicked with `--no-wait` AFTER the deploy
 returns, and converges the checkout while the health gate runs. `tick=0` on the Landings board
-means no tick was awaited in step 4; a `lock=` wait beside it is a tick the deployer's timer
-started, not this landing's. A PR reaching no service tag still waits for the tick, because
-there the tick is the apply.
+means no tick was awaited in step 4; a `lock=` wait beside it is the deployer's timer-started
+tick, or another deploy of the same service holding its per-service lock — which is the common
+case, since the tree lock is held for the snapshot only. A PR reaching no service tag still
+waits for the tick, because there the tick is the apply.
 
 `cancelled`, `stale` and `skipped_by_concurrency` mean *no verdict for this SHA*, never *this
 SHA is bad* — `_CI_NO_VERDICT_CONCLUSIONS` in `deploy_logic.py` is the list, and a commit whose

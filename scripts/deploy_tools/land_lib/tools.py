@@ -58,6 +58,9 @@ LOCK = "/var/lock/server-git-tree.lock"
 UV_PROJECT_ENVIRONMENT = "UV_PROJECT_ENVIRONMENT"
 # `uv run` here resolves the venv from cwd, which is PRIMARY at every call site.
 DEPLOY_TAGS_ARGV = ("uv", "run", "python", "scripts/deploy_tools/deploy_tags.py")
+# The parent a gate snapshot is made in, and the env var that moves it for a test.
+GATE_TMP_ROOT = "/tmp"
+GATE_TMP_ROOT_ENV = "LAND_GATE_TMPDIR"
 
 
 # The two wrapper lines that report a wait ending in an ACQUIRE or a JOIN -- the waits
@@ -267,14 +270,20 @@ def gate_snapshot(primary: Path, sha: str) -> Iterator[Path | None]:
     that means -- it must NOT assume the primary can answer instead (see
     `health_verdict.gate_from_the_deployed_tree`).
 
-    A SIGKILL or a host reboot still leaks the registration: the directory survives under
-    /tmp, so nothing prunes it. Recover by hand with `rm -rf /tmp/land-gate-*` then
+    DECIDED: the parent directory is PINNED to GATE_TMP_ROOT rather than left to `mkdtemp`'s
+    own default, which honours TMPDIR -- on this host that is `/tmp/user/1000`, so a leaked
+    snapshot would sit somewhere the recovery below does not name and an operator following it
+    would delete nothing. A test moves it with GATE_TMP_ROOT_ENV; nothing else sets that.
+
+    A SIGKILL or a host reboot still leaks the registration: the directory survives, so
+    nothing prunes it. Recover by hand with `rm -rf /tmp/land-gate-*` then
     `git -C <primary> worktree prune`.
     """
     # The signal handlers wrap the try, not the reverse: they are restored only after the
     # worktree is gone, so a second signal arriving during the removal cannot skip it.
     with _dies_on_a_signal():
-        tmp = Path(tempfile.mkdtemp(prefix="land-gate-"))
+        root = os.environ.get(GATE_TMP_ROOT_ENV) or GATE_TMP_ROOT
+        tmp = Path(tempfile.mkdtemp(prefix="land-gate-", dir=root))
         snap = tmp / "tree"
         made = False
         previous = os.environ.get(UV_PROJECT_ENVIRONMENT)

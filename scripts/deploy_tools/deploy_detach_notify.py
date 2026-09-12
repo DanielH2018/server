@@ -32,11 +32,16 @@ from typing import NamedTuple
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from lib.repo_paths import REPO
+from lib.repo_paths import HOST_VARS, REPO
 
 # Same directory, so a direct invocation already has it on sys.path. `tag_platforms` is the
 # reader of containers_list that says which probe can see a tag's workload.
 import deploy_tags
+
+# The inventory directory as a path relative to a checkout root. `check_one` reads the
+# inventory from whichever tree the probe renders the manifests from, which is not always this
+# one, so it needs the shape of that path without repo_paths' own root baked in.
+HOST_VARS_REL = HOST_VARS.relative_to(REPO)
 
 HOST_LIB_PATH = Path("/opt/gitops-deploy/host_lib.py")
 CONFIG_ENV_PATH = Path("/etc/gitops-deploy/config.env")
@@ -72,8 +77,10 @@ class NotifyTools:
     """
 
     run: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run
-    tag_platforms: Callable[[str], set[str]] = field(
-        default=lambda tag: deploy_tags.tag_platforms(tag)
+    # Takes the inventory to read as a keyword, because which TREE answers is decided per call
+    # (see `check_one`), not once when the tools are built.
+    tag_platforms: Callable[..., set[str]] = field(
+        default=lambda tag, host_vars: deploy_tags.tag_platforms(tag, host_vars)
     )
 
 
@@ -106,8 +113,9 @@ def check_one(
     enumerates nothing and reads as `skipped`. A landing that deployed a snapshot of its merge
     commit passes that snapshot, so the workload list comes from the tree that was deployed.
 
-    `platforms` is the set of platforms whose containers_list declares the tag, read from the
-    inventory when not given. It decides which probe may answer:
+    `platforms` is the set of platforms whose containers_list declares the tag, read when not
+    given from the inventory of that SAME tree -- both halves of one verdict come from the tree
+    that was deployed. It decides which probe may answer:
 
       - {'docker'} probes the Pi only, and a miss there is `unhealthy`, never `skipped`. The
         k8s probe is not consulted at all: a Docker-only tag has no role under roles/k8s/, so
@@ -151,7 +159,13 @@ def check_one(
         return any(marker in line for marker in NOT_APPLICABLE_MARKERS)
 
     if platforms is None:
-        platforms = tools.tag_platforms(tag)
+        # The SAME tree the probe renders from, not this checkout's inventory: a PR that adds a
+        # Pi role and its containers_list entry together declares the tag only at the commit
+        # that was deployed, and the primary reads `set()` for it -- which falls through to the
+        # last branch below and probes k8s FIRST, where a same-named cluster workload answers.
+        # That is issue #929's shape, arriving through the half of the verdict that used to be
+        # read from the calling checkout while the manifests came from the snapshot.
+        platforms = tools.tag_platforms(tag, host_vars=(cwd or REPO) / HOST_VARS_REL)
 
     if platforms == {"docker"}:
         code, line = probe(["--docker"])

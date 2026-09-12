@@ -390,6 +390,27 @@ def test_a_sigterm_during_the_gate_still_removes_the_worktree(tmp_path):
     assert str(kept) not in listed
 
 
+def test_the_gate_snapshot_lands_in_the_pinned_root_its_docstring_names(
+    tmp_path, monkeypatch
+):
+    """The leak the docstring tells an operator to `rm -rf` has to be where it says it is.
+
+    `tempfile.mkdtemp` with no `dir=` honours TMPDIR, which on this host is `/tmp/user/1000`,
+    so a SIGKILLed landing left `land-gate-*` where the recovery command matches nothing -- and
+    the `worktree prune` after it then deregisters nothing either, the leaked directory still
+    being there. The constant is the oracle for the prose: the recovery command is built from
+    GATE_TMP_ROOT, so moving the snapshot without the text (or the reverse) fails here.
+    """
+    repo, first, _second, _lock = _snapshot_repo(tmp_path)
+    pinned = tmp_path / "pinned"
+    pinned.mkdir()
+    monkeypatch.setenv(tools.GATE_TMP_ROOT_ENV, str(pinned))
+    with tools.gate_snapshot(repo, first) as snap:
+        assert snap is not None
+        assert snap.parent.parent == pinned
+    assert f"rm -rf {tools.GATE_TMP_ROOT}/land-gate-*" in tools.gate_snapshot.__doc__
+
+
 def test_the_watched_tick_inherits_the_working_directory(monkeypatch):
     """`cwd=None`, not `HERE`.
 

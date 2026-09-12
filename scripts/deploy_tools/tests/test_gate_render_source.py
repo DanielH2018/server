@@ -23,7 +23,14 @@ def _result(returncode, stdout="", stderr=""):
 
 
 def _k8s_tools(run):
-    return notify_mod.NotifyTools(run=run, tag_platforms=lambda tag: {"k8s"})
+    return notify_mod.NotifyTools(run=run, tag_platforms=lambda tag, **_: {"k8s"})
+
+
+def _pi_inventory(root, tag):
+    """Write a checkout whose ONLY containers_list entry is `tag`, declared on the Pi."""
+    host_vars = root / "ansible" / "inventory" / "host_vars"
+    host_vars.mkdir(parents=True)
+    (host_vars / "daniel-pi.yml").write_text(f"containers_list:\n  - name: {tag}\n")
 
 
 def test_the_gate_renders_from_the_checkout_it_is_pointed_at(tmp_path):
@@ -79,3 +86,47 @@ def test_the_cwd_flag_reaches_the_probe(tmp_path):
     for extra in ([], ["--cwd", str(tmp_path)]):
         notify_mod.main(base + extra, tools=_k8s_tools(run))
     assert seen == [notify_mod.REPO, tmp_path]
+
+
+def test_the_platform_routing_reads_the_tree_the_probe_renders(tmp_path):
+    """A tag declared only at the deployed commit routes to the Pi, not k8s-first.
+
+    The manifests came from the snapshot while `tag_platforms` read the calling checkout's
+    inventory, so the two halves of one verdict came from two trees. For a PR that adds a Pi
+    role and its `containers_list` entry together, the calling tree answers `set()`, which falls
+    to the last branch of `check_one` and probes the CLUSTER first -- where a same-named
+    workload answers 0 for a Pi container nobody deployed. That is issue #929 again.
+
+    Driven through the real `tag_platforms`: a stub would assert nothing about which inventory
+    was read.
+    """
+    tag = "pi-only-at-the-snapshot"
+    _pi_inventory(tmp_path, tag)
+    seen = []
+
+    def run(argv, **kwargs):
+        seen.append(argv)
+        return _result(0, f"{tag}: up")
+
+    state, _detail = notify_mod.check_one(
+        tag, tools=notify_mod.NotifyTools(run=run), cwd=tmp_path
+    )
+    assert state == "ok"
+    assert [("--docker" in argv) for argv in seen] == [True]
+
+
+def test_a_tag_no_tree_declares_still_probes_k8s_first(tmp_path):
+    """CLEAN half: the fallback order is unchanged for a tag the rendered tree does not declare.
+
+    Same call with an inventory that declares nothing -- `set()` keeps the old order, k8s then
+    `--docker`, which is what a block tag reaching the gate relies on.
+    """
+    (tmp_path / "ansible" / "inventory" / "host_vars").mkdir(parents=True)
+    seen = []
+
+    def run(argv, **kwargs):
+        seen.append(argv)
+        return _result(0, "config: up")
+
+    notify_mod.check_one("config", tools=notify_mod.NotifyTools(run=run), cwd=tmp_path)
+    assert [("--docker" in argv) for argv in seen] == [False]

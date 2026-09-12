@@ -133,9 +133,12 @@ converges while the health gate runs, and the deployer's own 10-minute timer cov
 that failed. Kicking it BEFORE the deploy would not save the time: `gitops-deploy.service`
 holds the git-tree lock for its whole unit run, so `deploy.sh` would queue behind it inside
 its own `flock` and the seconds would move from `tick=` to `lock=`. `tick=0` on the Landings
-board means step 4 awaited no tick — a `lock=` wait beside it is a tick the deployer's TIMER
-started, not the one this landing kicked. Eleven landings in the 14 days to 2026-09-11 spent
-the full 540s in step 4 watching a deployer busy with somebody else's apply.
+board means step 4 awaited no tick. A `lock=` wait beside it is one of two other waits: a tick
+the deployer's TIMER started, or another deploy of the same service holding
+`server-deploy-<tag>.lock`. The second is the common case, because the tree lock is held for
+the snapshot alone. `holder=` tells them apart — the tree lock's wrapper line names its holder,
+the per-service line names none. Eleven landings in the 14 days to 2026-09-11 spent the full
+540s in step 4 watching a deployer busy with somebody else's apply.
 
 `tick=0` is about step 4 only. When the deploy exits 4 the landing falls back to the tick and
 the primary checkout, and that tick is awaited — its seconds are booked under `tick=` too, so
