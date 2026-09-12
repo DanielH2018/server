@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/backlog.py
-generated_at: 2026-09-12 06:17 UTC
-generated_sha: fde7491c1
+generated_at: 2026-09-12 18:17 UTC
+generated_sha: 71abb0266
 ---
 
 !!! warning "Generated file — do not edit"
@@ -17,6 +17,8 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | # | Severity | Kind | Domain | Finding | First seen | Re-observed | Claim | Verify-by |
 |---|---|---|---|---|---|---|---|---|
 | [#1778](https://github.com/DanielH2018/server/issues/1778) | high | gap | backup-observability | etcd Restore Drill full has failed on every run since it shipped | 2026-09-11 | 0 | - | ✓ |
+| [#1813](https://github.com/DanielH2018/server/issues/1813) | high | gap | cicd | A comma in a multi-tag deploy.sh snapshot path makes Ansible parse no inventory, so the run deploys nothing and exits 0 | 2026-09-12 | 0 | - | - |
+| [#1814](https://github.com/DanielH2018/server/issues/1814) | high | gap | cicd | A deploy.sh run that matches zero hosts exits 0 and land.sh calls it settled, because the health gate passes on the old pods | 2026-09-12 | 0 | - | - |
 | [#1779](https://github.com/DanielH2018/server/issues/1779) | medium | gap | backup-observability | A Kuma pod replacement blinds the long-interval push monitors for up to 25h | 2026-09-11 | 0 | - | ✓ |
 | [#1781](https://github.com/DanielH2018/server/issues/1781) | medium | improvement | backup-observability | Six drift push monitors have about an hour of margin over their producing cron | 2026-09-11 | 0 | - | ✓ |
 | [#1793](https://github.com/DanielH2018/server/issues/1793) | medium | gap | backup-observability | Alert History board still extracts the check name from a timestamp prefix monitor-bridge no longer prints | 2026-09-11 | 0 | - | ✓ |
