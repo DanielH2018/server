@@ -22,10 +22,33 @@ from deploy_tools.land_lib.outcome import (
 )
 
 
+def gate_from_the_deployed_tree(ln: Landing) -> tuple[bool, list[str]]:
+    """Ask the health gate, rendering the role's manifests from the tree that was deployed.
+
+    `probe.py health <tag>` enumerates the workloads to gate by rendering the role's
+    manifests, from the checkout it is invoked in. A landing that deployed a snapshot of its
+    merge commit (`deployed_at`) has not moved the primary checkout, so gating from there
+    enumerates nothing for a role that commit ADDS and the whole gate reads `skipped`.
+
+    A snapshot that could not be taken (the tree lock was busy, the worktree failed) degrades
+    to exactly the gate this ran before: the primary checkout, named in the log so a reader
+    can tell the two apart.
+    """
+    if not ln.deployed_at:
+        return ln.tools.gate(ln.resolved_tags)
+    with ln.tools.snapshot(ln.opts.primary, ln.deployed_at) as snap:
+        if snap is None:
+            say(
+                f"could not snapshot {ln.deployed_at[:12]} for the health gate; rendering "
+                "the primary checkout instead"
+            )
+        return ln.tools.gate(ln.resolved_tags, cwd=snap)
+
+
 def health(ln: Landing) -> NoReturn:
     """Gate every deployed tag, then settle, or name what is still open."""
     pr, sha, tags = ln.opts.pr, ln.merge_sha, ln.tags_csv
-    settled, lines = ln.tools.gate(ln.resolved_tags)
+    settled, lines = gate_from_the_deployed_tree(ln)
     for line in lines:
         say(line)
     if ln.plane:

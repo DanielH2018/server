@@ -109,6 +109,25 @@ def test_settled_end_to_end(land_run):
         assert f"{k}=" in logline and f"{k}= " not in logline
 
 
+def test_a_tagged_landing_kicks_the_tick_and_books_no_tick_time(land_run):
+    """Step 4 is a kick, not a wait: step 5 deploys the merge commit itself.
+
+    `tick=0` on the board therefore means NO TICK WAS AWAITED, not a tick that took no time.
+    """
+    _rc, _out, _err, calls, logline = land_run([], Fakes())
+    assert next(c for c in calls if c[0] == "tick")[2] == {"wait": False}
+    assert "tick=0 " in logline
+
+
+def test_a_landing_with_no_service_tag_still_waits_for_the_tick(land_run):
+    """The rejecting half: there the tick IS the apply, and the verdict reads its markers."""
+    _rc, out, _err, calls, _logline = land_run(
+        [], Fakes(derived=([], "pr"), self_applied=True, state={"behind_since": "x"})
+    )
+    assert list(next(c for c in calls if c[0] == "tick")[2]) == ["observe"]
+    assert "VERDICT: deferred" in out
+
+
 def test_the_diff_fallback_reaches_the_tick_before_deriving(land_run):
     _, _, _, calls, _ = land_run(
         ["--since", "abc"], Fakes(derived=([], "fallback"), changed="sonarr")

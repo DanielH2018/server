@@ -132,8 +132,16 @@ def no_tag_outcome(ln: Landing) -> NoReturn:
     )
 
 
-def deploy_by_host(ln: Landing) -> int:
-    """One deploy.sh per declaring host; the first non-zero exit. Retries resume at the failed host."""
+def deploy_by_host(ln: Landing, at: str = "") -> int:
+    """One deploy.sh per declaring host; the first non-zero exit. Retries resume at the failed host.
+
+    `at` is handed to `deploy.sh --at`: the commit each run renders. Empty renders the primary
+    checkout, which is what every retry after a stale tree does.
+
+    `deploy_tags.py hosts` still reads the PRIMARY checkout's inventory, `at` or not. A tag it
+    does not know yet lands under no host and falls through to one local deploy -- right for a
+    new cluster role, and for a new role on the Pi the health gate is what catches it.
+    """
     o, t = ln.opts, ln.tools
     r = t.deploy_tags(o.primary, ["hosts", ln.tags_csv])
     if r.returncode != DEPLOY_OK:
@@ -149,7 +157,7 @@ def deploy_by_host(ln: Landing) -> int:
     lines = [x for x in r.stdout.splitlines() if x.strip()]
     if not lines:
         return t.deploy(
-            o.primary, ln.resolved_tags, None, observe=ln.note_in_flock_wait
+            o.primary, ln.resolved_tags, None, observe=ln.note_in_flock_wait, at=at
         )
     local = t.hostname()
     for line in lines:
@@ -166,6 +174,7 @@ def deploy_by_host(ln: Landing) -> int:
             [x for x in host_tags.split(",") if x],
             target,
             observe=ln.note_in_flock_wait,
+            at=at,
         )
         if rc != DEPLOY_OK:
             return rc
@@ -173,13 +182,13 @@ def deploy_by_host(ln: Landing) -> int:
     return 0
 
 
-def deploy_with_lock_retry(ln: Landing) -> int:
+def deploy_with_lock_retry(ln: Landing, at: str = "") -> int:
     """deploy_by_host, retried while the git-tree lock stays busy (exit 75)."""
     o = ln.opts
     return retry_while_locked(
         ln,
         DEPLOY_LOCK_BUSY,
-        lambda: deploy_by_host(ln),
+        lambda: deploy_by_host(ln, at),
         lambda n: (
             f"deploy lock busy (attempt {n}/{o.lock_retries}); retrying in {o.lock_backoff}s"
         ),
@@ -240,7 +249,23 @@ def deploy_phase(ln: Landing) -> None:
     if not ln.resolved_tags:
         no_tag_outcome(ln)
     ln.ledger.tags_label = ln.tags_csv
-    rc = deploy_with_lock_retry(ln)
+    # The merge commit, rendered from a snapshot of itself rather than from the primary
+    # checkout. Step 4 no longer waits for the tick to fast-forward that checkout, so nothing
+    # before this point has moved it -- `--at` is what makes that safe.
+    ln.deployed_at = ln.merge_sha
+    rc = deploy_with_lock_retry(ln, at=ln.deployed_at)
+    if rc == DEPLOY_STALE and ln.deployed_at:
+        # DECIDED: exit 4 under `--at` means a commit MERGED AFTER this one reaches the same
+        # tags, and that newer landing owns the service. Deploying the merge commit anyway
+        # would revert their change; deploying the primary's HEAD would deploy a tree this
+        # landing never CI-gated. So this one falls back to the path it had before `--at`
+        # existed -- wait for the tick to fast-forward the primary onto the newest green
+        # commit, then deploy from there -- and the retry loop below is that path, unchanged.
+        say(
+            f"a later commit reaches {ln.tags_csv}; falling back to the tick and the primary "
+            "checkout"
+        )
+        ln.deployed_at = ""
     # 4 = the tree is behind origin/master: someone merged during the CI wait. The tick
     # fast-forwards to the newest GREEN commit in the incoming range, not only to a green tip,
     # so what this landing needs green is its OWN merge commit -- wait on that, every attempt,

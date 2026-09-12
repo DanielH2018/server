@@ -123,6 +123,12 @@ deliberately want that.
 # node) and the tasks run on the machine you typed it on — see ansible/inventory/hosts.ini.
 uv run ansible-playbook ansible/deploy.yml --tags "<service-name>" -e target=daniel-pi
 
+# Deploy a commit that is not this checkout's HEAD: the snapshot is cut from <sha>, and the
+# staleness gate and the tag check are asked about <sha> too. This is how land.sh deploys a
+# PR's merge commit without waiting for the tick to fast-forward the primary checkout.
+# Any committish this checkout's object store resolves; --at with --changed is exit 64.
+./scripts/deploy.sh --tags "<service-name>" --at <sha>
+
 # Deploy everything
 uv run ansible-playbook ansible/deploy.yml
 
@@ -173,6 +179,7 @@ than a failure. The seventh, 20, is the inverse: the playbook ran and changes ar
 | 77 | the snapshot worktree could not be created | check `/tmp/homelab-deploy-snapshots/` is writable and `git worktree add --detach` works |
 | 76 | flock failed on the lock file itself — not contention | `ls -l /var/lock/server-git-tree.lock`; retrying alone changes nothing |
 | 75 | a lock stayed busy — the tree lock, or one of this run's services' | retry |
+| 64 | the flags contradict each other, or `--at` named no commit | fix the command line; nothing ran |
 | 4 | the tree is behind `origin/master` | `git pull`, never `--skip-staleness-check` |
 | 3 | the change is broad and maps to no single service | deploy by hand, or see *When to wait* |
 | 2 | a `--tags` value matched no service | `--list-services` prints every valid value |
@@ -199,6 +206,13 @@ so any commit behind refuses — the rule this guard has always had. The narrowi
 because the GitOps deployer fast-forwards to the newest GREEN commit in its range rather than
 to the tip, so the primary checkout is legitimately behind a pending tip while every landing
 deploys from it.
+
+**With `--at <sha>`, the question is about `<sha>`, not about this checkout.** The run renders
+a snapshot of `<sha>`, so the gate asks what `<sha>..origin/master` carries and the tag check
+reads `containers_list` at `<sha>`. A checkout behind master therefore deploys a current
+commit without refusing, while a `<sha>` that is itself behind on the requested tags still
+exits 4. A committish this checkout cannot resolve is exit 64, not 2: it is a bad argument,
+and 2 means a tag matched no service.
 
 **Exit 4 is decided before exit 2.** `deploy.sh` asks whether the tree is stale before it
 validates `--tags`, so a stale tree carrying a tag it does not recognise reports 4, not 2

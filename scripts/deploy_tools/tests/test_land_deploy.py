@@ -311,6 +311,35 @@ def test_an_unreadable_deployer_state_is_not_settled(landing, capsys):
     assert "could not be read" in capsys.readouterr().out
 
 
+def test_a_tagged_pr_deploys_its_own_merge_commit(landing):
+    """The point of the slice: no waiting for the tick to fast-forward the primary onto it."""
+    ln, calls = _ready(landing, Fakes(hosts="daniel-box\tsonarr\ndaniel-pi\talloy\n"))
+    ln.resolved_tags = ["sonarr", "alloy"]
+    deploy.deploy_phase(ln)
+    assert [c[2]["at"] for c in calls if c[0] == "deploy"] == [MERGE_SHA, MERGE_SHA]
+    assert ln.deployed_at == MERGE_SHA
+
+
+def test_a_later_commit_on_the_same_tags_falls_back_to_the_primary(landing, capsys):
+    """Exit 4 under `--at` means a newer merge reaches these tags and owns the service.
+
+    The fallback is the path this had before `--at`: tick, then deploy the primary checkout.
+    The REJECTING half of the test above -- without it, an implementation that passed `--at`
+    on every retry would look identical from the first attempt alone.
+    """
+    ln, calls = _ready(landing, Fakes(deploy=[4, 0]))
+    ln.resolved_tags = ["sonarr"]
+    deploy.deploy_phase(ln)
+    ats = [c[2]["at"] for c in calls if c[0] == "deploy"]
+    assert ats == [MERGE_SHA, ""]
+    assert ln.deployed_at == ""
+    names = [c[0] for c in calls]
+    assert names.index("tick") < len(names) - 1
+    assert (
+        "falling back to the tick and the primary checkout" in capsys.readouterr().out
+    )
+
+
 def test_every_deploy_lets_the_landing_book_the_wait_inside_flock(landing):
     """deploy.sh waits inside `flock -w` and exits 0, so no retry ever books those seconds."""
     ln, calls = _ready(landing, Fakes(hosts="daniel-box\tsonarr\ndaniel-pi\talloy\n"))

@@ -22,6 +22,7 @@ Imported as ``from lib.render_guard import ...`` after the caller's own ``sys.pa
 bootstrap puts ``scripts/`` on the path (repo-root CLAUDE.md, *Directory Structure*).
 """
 
+import subprocess
 import sys
 from pathlib import Path
 
@@ -59,6 +60,7 @@ __all__ = [
     "make_env",
     "render_or_error",
     "service_tags_at",
+    "service_tags_at_or_none",
 ]
 
 # Non-secret fallbacks for host facts not in the plaintext inventory. Anything still missing
@@ -225,3 +227,18 @@ def service_tags_at(ref: str, cwd: Path) -> set[str]:
         for entry in containers_entries_in(loaded if isinstance(loaded, dict) else {}):
             tags.update(entry_tags(entry))
     return tags
+
+
+def service_tags_at_or_none(ref: str, cwd: Path) -> set[str] | None:
+    """``service_tags_at``, answering None for a read that cannot be trusted.
+
+    AN EMPTY READ IS DAMAGE, NEVER EVIDENCE. ``set()`` says no service is declared anywhere,
+    which for a caller validating deploy tags refuses every tag there is; for one classifying
+    roles it marks every changed role unregistered (issue #1331). A ref this checkout cannot
+    resolve raises inside ``git``, and an empty answer is indistinguishable from that here, so
+    both become None and the caller falls back to the tree it can read.
+    """
+    try:
+        return service_tags_at(ref, cwd) or None
+    except subprocess.SubprocessError, OSError, ValueError:
+        return None

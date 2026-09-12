@@ -3,11 +3,14 @@
 Run: uv run pytest scripts/deploy_tools/tests/test_land_tools.py
 """
 
+import fcntl
+import os
 import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
 
+from _deploy_sh_fakes import git_free_env
 from deploy_tools.land_lib import tools
 
 
@@ -226,6 +229,129 @@ def test_a_joined_line_books_its_wait_even_when_the_in_flight_seconds_are_missin
     assert tools.in_flock_wait(
         "gitops_tick: joined a tick already s in flight; waited 47s for it\n"
     ) == (47, "")
+
+
+def test_a_kicked_tick_passes_no_wait(monkeypatch):
+    """The landing deploys the merge commit itself, so it starts the tick and moves on."""
+    seen = _capture(monkeypatch)
+    tools.run_tick(wait=False)
+    assert seen["argv"] == [str(tools.HERE / "gitops_tick.sh"), "--no-wait"]
+
+
+def test_a_deploy_of_a_named_commit_passes_at(monkeypatch):
+    """Both halves in one pair with the test below: `--at` appears only when asked for."""
+    seen = _capture(monkeypatch)
+    tools.run_deploy(Path("/primary"), ["sonarr"], None, at="c0ffee")
+    assert seen["argv"] == [
+        "./scripts/deploy.sh",
+        "--tags",
+        "sonarr",
+        "--at",
+        "c0ffee",
+    ]
+
+
+def test_a_deploy_of_the_primary_checkout_passes_no_at(monkeypatch):
+    seen = _capture(monkeypatch)
+    tools.run_deploy(Path("/primary"), ["sonarr"], "daniel-pi")
+    assert seen["argv"] == [
+        "./scripts/deploy.sh",
+        "--tags",
+        "sonarr",
+        "-e",
+        "target=daniel-pi",
+    ]
+
+
+def _commit(repo: Path, name: str) -> str:
+    """Commit `name` into `repo` and return the new HEAD, with GIT_* scrubbed."""
+    env = git_free_env(
+        GIT_AUTHOR_NAME="t",
+        GIT_COMMITTER_NAME="t",
+        GIT_AUTHOR_EMAIL="t@example.invalid",
+        GIT_COMMITTER_EMAIL="t@example.invalid",
+    )
+
+    def run(*args: str) -> str:
+        return subprocess.run(
+            args, cwd=repo, env=env, check=True, capture_output=True, text=True
+        ).stdout.strip()
+
+    (repo / name).write_text(name)
+    run("git", "add", "-A")
+    run("git", "commit", "-q", "-m", name, "--no-gpg-sign")
+    return run("git", "rev-parse", "HEAD")
+
+
+def _snapshot_repo(tmp_path: Path) -> tuple[Path, str, str, str]:
+    """A two-commit repo and a tree-lock path inside tmp_path; (repo, first, second, lock).
+
+    The lock is redirected for the reason `_deploy_sh_fakes.deploy_sh_env` redirects
+    deploy.sh's: the production path is the one a live gitops tick holds, and a test must
+    neither queue behind real work nor hold real work up.
+    """
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(
+        ("git", "init", "-q", "-b", "master"),
+        cwd=repo,
+        env=git_free_env(),
+        check=True,
+        capture_output=True,
+    )
+    first = _commit(repo, "one")
+    second = _commit(repo, "two")
+    return repo, first, second, str(tmp_path / "tree.lock")
+
+
+def test_the_gate_snapshot_is_a_worktree_of_the_named_commit(tmp_path):
+    """CLEAN half: the gate renders the commit that was deployed, not the checkout's HEAD."""
+    repo, first, second, lock = _snapshot_repo(tmp_path)
+    with tools.gate_snapshot(repo, first, lock=lock) as snap:
+        assert snap is not None
+        head = subprocess.run(
+            ("git", "rev-parse", "HEAD"),
+            cwd=snap,
+            env=git_free_env(),
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        assert head == first and head != second
+        assert os.environ[tools.UV_PROJECT_ENVIRONMENT] == str(repo / ".venv")
+        assert (snap / "one").exists()
+    assert not snap.exists()
+    assert tools.UV_PROJECT_ENVIRONMENT not in os.environ
+    # And it deregistered itself, or the next `git worktree add` in this repo trips over it.
+    listed = subprocess.run(
+        ("git", "worktree", "list"),
+        cwd=repo,
+        env=git_free_env(),
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    assert str(snap) not in listed
+
+
+def test_a_snapshot_of_an_unresolvable_commit_is_none(tmp_path):
+    """REJECTING half: the gate must degrade to the primary checkout, never raise."""
+    repo, _first, _second, lock = _snapshot_repo(tmp_path)
+    with tools.gate_snapshot(repo, "deadbeefdeadbeefdeadbeef", lock=lock) as snap:
+        assert snap is None
+    assert tools.UV_PROJECT_ENVIRONMENT not in os.environ
+
+
+def test_a_busy_tree_lock_yields_no_snapshot(tmp_path):
+    """Non-blocking by design: a held lock costs the gate its snapshot, never 3000s."""
+    repo, first, _second, lock = _snapshot_repo(tmp_path)
+    held = os.open(lock, os.O_WRONLY | os.O_CREAT, 0o666)
+    try:
+        fcntl.flock(held, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        with tools.gate_snapshot(repo, first, lock=lock) as snap:
+            assert snap is None
+    finally:
+        os.close(held)
 
 
 def test_the_watched_tick_inherits_the_working_directory(monkeypatch):

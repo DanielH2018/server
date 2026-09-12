@@ -163,6 +163,12 @@ load-bearing, and why `--since` is needed are in the **`land-after-merge` skill*
 hand-poll CI and do not hand-merge** — hand-polling cost 835 polls across 213 wait episodes
 before `land.sh` existed.
 
+**A tagged PR is deployed from a snapshot of its own merge commit, not from the primary
+checkout.** `land.sh` hands `deploy.sh --at <merge sha>`, so it neither needs nor waits for the
+tick to fast-forward that checkout first: the tick is kicked with `--no-wait` and converges it
+on its own timer. `tick=0` on the Landings board means no tick was awaited. A PR reaching no
+service tag still waits for the tick, because there the tick is the apply.
+
 `cancelled`, `stale` and `skipped_by_concurrency` mean *no verdict for this SHA*, never *this
 SHA is bad* — `_CI_NO_VERDICT_CONCLUSIONS` in `deploy_logic.py` is the list, and a commit whose
 merge was immediately followed by another reads `cancelled` permanently. If you ever check by
@@ -179,8 +185,9 @@ pod. Exercise the thing you actually changed as well.
 - **Deploys of the same service serialize; the tree lock is held for the snapshot only** — the
   full exit-code table is in the **`deploy` skill**, and they are resume points rather than
   failures. Two mean another session got there first: 75 (a lock stayed busy — the tree lock,
-  or one of your services') and 4 (the tree is behind `origin/master`). Two landings on
-  disjoint services no longer queue behind each other at all.
+  or one of your services') and 4 (the tree is behind `origin/master`; under `--at`, a commit
+  merged after yours renders what your tags render, and that landing owns the service). Two
+  landings on disjoint services no longer queue behind each other at all.
 - **The tick pulls all of master, not just your commit.** Another session's merged work
   fast-forwards with yours. `land.sh` already scopes to your PR's own files; if you override with
   `--tags`, keep it to your own services.

@@ -5,10 +5,76 @@ non-mapping file to ``{}``; the shared one must keep doing so, or a host_vars fi
 top level is a list reaches a ``.get`` several calls later.
 """
 
+import os
+import subprocess
 from pathlib import Path
 
-from render_guard import HOST_VARS, REPO, host_files, load_yaml
+from render_guard import (
+    HOST_VARS,
+    HOST_VARS_IN_TREE,
+    REPO,
+    host_files,
+    load_yaml,
+    service_tags_at_or_none,
+)
 from repo_paths import ANSIBLE, INVENTORY, ROLES
+
+# One commit declaring a service, and one adding a second. `deploy.sh --at <sha>` validates
+# its tags against the commit it renders, so the answer must move with the ref.
+_WITHOUT = "containers_list:\n  - name: sonarr\n    platform: k8s\n"
+_WITH = _WITHOUT + "  - name: newsvc\n    platform: k8s\n"
+
+
+def _tags_repo(tmp_path: Path, *texts: str) -> list[str]:
+    """Commit each `texts` entry as the host_vars file in `tmp_path`; the shas, in order.
+
+    Every ``GIT_*`` variable is scrubbed: under a prek hook an inherited ``GIT_DIR`` beats
+    ``cwd``, and these commits would land in the real repository.
+    """
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    env |= {
+        "GIT_AUTHOR_NAME": "t",
+        "GIT_COMMITTER_NAME": "t",
+        "GIT_AUTHOR_EMAIL": "t@example.invalid",
+        "GIT_COMMITTER_EMAIL": "t@example.invalid",
+    }
+
+    def run(*args: str) -> str:
+        return subprocess.run(
+            args, cwd=tmp_path, env=env, check=True, capture_output=True, text=True
+        ).stdout.strip()
+
+    run("git", "init", "-q", "-b", "master")
+    host_vars = tmp_path / HOST_VARS_IN_TREE
+    host_vars.mkdir(parents=True)
+    shas = []
+    for n, text in enumerate(texts):
+        (host_vars / "daniel-box.yml").write_text(text)
+        run("git", "add", "-A")
+        run("git", "commit", "-q", "-m", f"c{n}", "--no-gpg-sign")
+        shas.append(run("git", "rev-parse", "HEAD"))
+    return shas
+
+
+def test_service_tags_at_a_ref_sees_what_that_commit_declares(tmp_path):
+    """CLEAN half: a role and its containers_list entry added together are declared at it."""
+    shas = _tags_repo(tmp_path, _WITHOUT, _WITH)
+    assert service_tags_at_or_none(shas[1], tmp_path) == {"sonarr", "newsvc"}
+
+
+def test_the_same_tag_is_absent_at_the_commit_before_it(tmp_path):
+    """The answer has to MOVE with the ref, or reading at one proves nothing."""
+    shas = _tags_repo(tmp_path, _WITHOUT, _WITH)
+    assert service_tags_at_or_none(shas[0], tmp_path) == {"sonarr"}
+
+
+def test_an_unreadable_ref_is_none_rather_than_an_empty_set(tmp_path):
+    """REJECTING half: `set()` says no service is declared anywhere, which refuses every tag.
+
+    None is what sends the caller back to the tree it can read (issue #1331).
+    """
+    _tags_repo(tmp_path, _WITHOUT)
+    assert service_tags_at_or_none("deadbeefdeadbeefdeadbeef", tmp_path) is None
 
 
 def test_load_yaml_returns_a_mapping(tmp_path):

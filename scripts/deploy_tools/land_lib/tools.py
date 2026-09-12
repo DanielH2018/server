@@ -21,12 +21,16 @@ boundaries.
 """
 
 import contextlib
+import fcntl
+import os
 import re
+import shutil
 import socket
 import subprocess
 import sys
+import tempfile
 import time
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, NamedTuple, Protocol
@@ -50,6 +54,8 @@ from lib.git import git
 # scripts/deploy_tools -- where land.py, gitops_tick.sh and the imported helpers live.
 HERE = _Path(__file__).resolve().parents[1]
 LOCK = "/var/lock/server-git-tree.lock"
+# What `uv run` reads to find an existing venv instead of building one where it stands.
+UV_PROJECT_ENVIRONMENT = "UV_PROJECT_ENVIRONMENT"
 # `uv run` here resolves the venv from cwd, which is PRIMARY at every call site.
 DEPLOY_TAGS_ARGV = ("uv", "run", "python", "scripts/deploy_tools/deploy_tags.py")
 
@@ -136,18 +142,25 @@ def stream_stderr(
     return proc.returncode
 
 
-def run_tick(observe: Callable[[int, str], None] | None = None) -> int:
+def run_tick(
+    observe: Callable[[int, str], None] | None = None, wait: bool = True
+) -> int:
     """Run gitops_tick.sh from beside land.py; its exit code.
 
     `observe` is given the seconds and holder of a wait the wrapper reports on its own
     stderr. Without one the child simply inherits stdio: the pipe is the more fragile
     arrangement, so it is taken only when a caller is booking what it reads.
 
+    `wait=False` passes `--no-wait`: the tick is started and this returns as soon as systemd
+    has the request. A landing that deploys its own merge commit (`deploy.sh --at`) needs the
+    primary checkout to converge eventually, not before it deploys, and the tick's own 10-min
+    timer converges it regardless.
+
     The SCRIPT comes from beside land.py (issue #851) but the working directory is inherited
     either way. Pinning it to `HERE` would have aimed the tick at this checkout's
     scripts/deploy_tools, which is the re-aiming this module's docstring warns about.
     """
-    argv = [str(HERE / "gitops_tick.sh")]
+    argv = [str(HERE / "gitops_tick.sh")] + ([] if wait else ["--no-wait"])
     if observe is None:
         return subprocess.run(argv, check=False).returncode
     return stream_stderr(argv, None, observe)
@@ -158,11 +171,16 @@ def run_deploy(
     tags: list[str],
     target: str | None,
     observe: Callable[[int, str], None] | None = None,
+    at: str = "",
 ) -> int:
     """Run deploy.sh in the primary checkout; its exit code.
 
     The tag list is joined HERE and nowhere earlier: `--tags` is an argv element, so this is
     the one place a landing needs a comma string rather than a list.
+
+    `at` is the commit to render, passed as `--at`. It is what lets a landing deploy its PR's
+    merge commit from a primary checkout the tick has not fast-forwarded onto it yet; empty
+    keeps deploy.sh rendering that checkout's HEAD.
 
     stdio is inherited unless `observe` is given, for the reason `run_tick` states: Ansible
     refuses a non-blocking handle, and deploy.sh clears O_NONBLOCK on the handles it is
@@ -170,6 +188,8 @@ def run_deploy(
     fake records three elements long.
     """
     argv = ["./scripts/deploy.sh", "--tags", ",".join(tags)]
+    if at:
+        argv += ["--at", at]
     if target:
         argv += ["-e", f"target={target}"]
     if observe is None:
@@ -186,6 +206,96 @@ def run_deploy_tags(primary: Path, args: list[str]) -> subprocess.CompletedProce
         text=True,
         check=False,
     )
+
+
+@contextlib.contextmanager
+def _tree_lock_held(path: str = LOCK) -> Iterator[bool]:
+    """Hold the git-tree lock for the block, NON-BLOCKING; False when it could not be taken.
+
+    `path` is the lock file, a parameter for the reason deploy.sh makes its own overridable:
+    a test that took the production lock would queue behind a live gitops tick and hold one
+    up behind itself.
+
+    DECIDED: non-blocking, and a refusal degrades the caller rather than queueing. deploy.sh
+    waits up to LOCK_WAIT (3000s) for this lock because it is about to deploy; the health
+    gate's snapshot is worth a few seconds at most, and blocking here would put back at the
+    LAST step of a landing exactly the wait this path removes from the middle of it.
+    """
+    try:
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT, 0o666)
+    except OSError:
+        yield False
+        return
+    try:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            yield False
+            return
+        yield True
+        fcntl.flock(fd, fcntl.LOCK_UN)
+    finally:
+        os.close(fd)
+
+
+@contextlib.contextmanager
+def gate_snapshot(primary: Path, sha: str, lock: str = LOCK) -> Iterator[Path | None]:
+    """A detached worktree of `sha` for the health gate to render from; None when there is none.
+
+    WHY. `probe.py health <tag>` renders the role's manifests to enumerate the workloads it
+    must gate, from the checkout the probe.py it ran came from. A landing that deployed a
+    snapshot of its merge commit has not moved the primary checkout at all, so a role whose
+    workloads that commit ADDS enumerates nothing there and the gate reads `skipped` -- green,
+    on the first landing of every new service, which is the landing that most needs gating.
+
+    UV_PROJECT_ENVIRONMENT is pointed at the primary's `.venv` for the life of the snapshot,
+    for the reason `deploy.sh`'s `run_playbook_in_snapshot` sets it: `uv run` resolves its
+    project from the working directory, and a snapshot carries no `.venv`, so the probe would
+    otherwise build a fresh environment inside a directory removed seconds later.
+
+    Not created under HOMELAB_DEPLOY_SNAPSHOT_ROOT: deploy.sh's reaper collects a directory
+    there whose owner lock nobody holds, and this snapshot holds none -- a concurrent deploy
+    would delete it mid-gate.
+
+    Yields None, never raises, when the tree lock is busy or the worktree could not be
+    created. The caller then gates from the primary, which is what it did before this existed.
+    """
+    tmp = Path(tempfile.mkdtemp(prefix="land-gate-"))
+    snap = tmp / "tree"
+    made = False
+    previous = os.environ.get(UV_PROJECT_ENVIRONMENT)
+    try:
+        with _tree_lock_held(lock) as locked:
+            made = locked and (
+                git(
+                    "worktree",
+                    "add",
+                    "--detach",
+                    str(snap),
+                    sha,
+                    cwd=primary,
+                    check=False,
+                ).returncode
+                == 0
+            )
+        if made:
+            os.environ[UV_PROJECT_ENVIRONMENT] = str(primary / ".venv")
+        yield snap if made else None
+    finally:
+        if made:
+            git(
+                "worktree",
+                "remove",
+                "--force",
+                str(snap),
+                cwd=primary,
+                check=False,
+            )
+        if previous is None:
+            os.environ.pop(UV_PROJECT_ENVIRONMENT, None)
+        else:
+            os.environ[UV_PROJECT_ENVIRONMENT] = previous
+        shutil.rmtree(tmp, ignore_errors=True)
 
 
 class CiVerdict(NamedTuple):
@@ -350,8 +460,13 @@ class Tools:
     deploy_tags: Callable[[Path, list[str]], subprocess.CompletedProcess[str]] = (
         run_deploy_tags
     )
-    gate: Callable[[list[str]], GateResult] = field(
-        default=lambda tags: health_gate(tags, True)
+    # `cwd` is the checkout the probe renders the deployed role's manifests from; None is the
+    # one this file lives in. `deploy_detach_notify.check_one` carries the argument.
+    gate: Callable[..., GateResult] = field(
+        default=lambda tags, cwd=None: health_gate(tags, True, cwd=cwd)
+    )
+    snapshot: Callable[[Path, str], contextlib.AbstractContextManager[Path | None]] = (
+        gate_snapshot
     )
     declared_at: Callable[[str, Path], set[str] | None] = declared_tags_at
     read_state: Callable[[Path, str], str | None] = read_state

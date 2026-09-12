@@ -21,7 +21,10 @@ Not a bare `ansible-playbook`. The wrapper does four things the bare form does n
   deploying different services run at the same time.
 - Renders from a detached worktree of `HEAD` under `/tmp/homelab-deploy-snapshots/`, not from
   the working tree. **An uncommitted edit is not deployed.** `--check` and `--dry-run` are the
-  exceptions and still read the working tree.
+  exceptions and still read the working tree. `--at <sha>` snapshots that commit instead of
+  `HEAD`, and asks the tag check and the staleness gate about it too. `land.sh` passes the
+  merge commit of the pull request it is landing, so a landing deploys without waiting for the
+  GitOps tick to fast-forward the primary checkout onto that commit.
 - Checks the tags against `containers_list` first, because Ansible itself exits 0 on a tag
   that matches nothing.
 - Refuses a tree that is behind `origin/master` on something the deploy renders, because a
@@ -42,9 +45,10 @@ Each of these means **nothing was deployed**. None is a playbook failure.
 |---|---|---|
 | 77 | The snapshot worktree could not be created | Check `/tmp/homelab-deploy-snapshots/` is writable and `git worktree add --detach` works |
 | 75 | A lock stayed busy — the tree lock, or one of this run's services' | Retry |
-| 4 | The tree is behind `origin/master` on a path the deploy reaches | Pull, then retry. Never `--skip-staleness-check` |
+| 4 | The commit being deployed — `HEAD`, or `--at <sha>` — is behind `origin/master` on a path the deploy reaches | Pull, then retry. Never `--skip-staleness-check` |
 | 3 | The change is broad and maps to no single service | Run the playbook the change's plane needs |
 | 2 | The tag matched no service | `--list-services` prints the valid values |
+| 64 | The flags contradict each other, or `--at` named no commit this checkout has | Fix the command line |
 
 Being *ahead* of master is normal branch work and is never refused.
 

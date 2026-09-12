@@ -95,8 +95,16 @@ def check_one(
     tag: str,
     tools: NotifyTools | None = None,
     platforms: set[str] | None = None,
+    cwd: Path | None = None,
 ) -> CheckResult:
     """('ok'|'unhealthy'|'skipped', first line of probe.py's output) for one service tag.
+
+    `cwd` is the checkout the probe runs in, defaulting to this file's own. It decides WHICH
+    TREE THE ROLE'S MANIFESTS ARE RENDERED FROM, because `scripts/diagnostics/probe.py` is
+    named relatively here and `probe_lib.health` derives every path it reads from the probe.py
+    it resolved: a role whose workloads exist only in a commit this checkout has not pulled
+    enumerates nothing and reads as `skipped`. A landing that deployed a snapshot of its merge
+    commit passes that snapshot, so the workload list comes from the tree that was deployed.
 
     `platforms` is the set of platforms whose containers_list declares the tag, read from the
     inventory when not given. It decides which probe may answer:
@@ -129,7 +137,7 @@ def check_one(
                     tag,
                     *extra,
                 ],
-                cwd=REPO,
+                cwd=cwd or REPO,
                 capture_output=True,
                 text=True,
                 timeout=PROBE_TIMEOUT_S,
@@ -176,12 +184,19 @@ def check_one(
 
 
 def gate(
-    tags: list[str], ansible_ok: bool, tools: NotifyTools | None = None
+    tags: list[str],
+    ansible_ok: bool,
+    tools: NotifyTools | None = None,
+    cwd: Path | None = None,
 ) -> GateResult:
     """(settled, report_lines). `settled` is the notification's headline verdict.
 
     A failed ansible-playbook run is authoritative on its own -- no health check runs, since a
     failed apply didn't necessarily reach the point of rolling anything out.
+
+    `cwd` is the checkout the probe renders the role's manifests from; `check_one` carries the
+    argument and the reason. None keeps deploy.sh's --detach behaviour, which renders the
+    checkout this file lives in.
     """
     if not ansible_ok:
         return GateResult(False, ["ansible-playbook exited non-zero -- see the log."])
@@ -190,7 +205,7 @@ def gate(
     if not tags:
         lines.append("no --tags given -- health not gated, ansible exit code only.")
     for tag in tags:
-        state, detail = check_one(tag, tools=tools)
+        state, detail = check_one(tag, tools=tools, cwd=cwd)
         if state == "skipped":
             lines.append(
                 f"{tag}: not a health-checkable workload (skipped) -- {detail}"

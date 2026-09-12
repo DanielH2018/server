@@ -125,7 +125,23 @@ four fanned-out agents ended their turn at step 0/6 or 3/6 believing otherwise o
 three of them saying in as many words that a watcher was armed (issue #1291). Run the wait
 above instead.
 
-The `VERDICT:` line is the last line of the logfile. `land.sh` waits for master CI on the merge commit, ticks, deploys what the tick deferred, and prints a
+**A tagged PR deploys its own merge commit; the tick is kicked, not awaited.** `deploy.sh
+--at <sha>` renders a snapshot of that commit, so nothing in the landing needs the primary
+checkout to have been fast-forwarded onto it first. `land.sh` starts the tick with
+`--no-wait` — the checkout still converges, on the deployer's own 10-minute timer — and goes
+straight to the deploy. `tick=0` on the Landings board therefore means NO TICK WAS AWAITED,
+not a tick that finished instantly. Eleven landings in the 14 days to 2026-09-11 spent the
+full 540s watching a deployer busy with somebody else's apply.
+
+A PR with **no** service tag keeps waiting for the tick: there the tick IS the apply, and the
+verdict reads the deployer's own markers straight afterwards.
+
+The health gate renders from the same snapshot. `probe.py health <tag>` enumerates the
+workloads to check by rendering the role's manifests from the checkout it runs in, so gating a
+brand-new role from a primary that has not pulled it yet enumerates nothing and reads
+`skipped` — green, on the landing that most needs a gate.
+
+The `VERDICT:` line is the last line of the logfile. `land.sh` waits for master CI on the merge commit, kicks the tick, deploys the merge commit, and prints a
 `VERDICT:` line — `settled`, `unhealthy`, `deploy-failed`, `nothing-to-deploy`, `blocked`,
 `needs-manual-apply`, `deferred`, `merge-conflict` (the PR cannot merge until it is
 rebased), `pr-ci-red` (the PR's own CI is red, so the armed auto-merge never fires — as
@@ -150,12 +166,17 @@ both halves ran against the local node: PR #928 (a `roles/containers/alloy` chan
 because the play matched no service on daniel-box and the gate guessed a same-named cluster
 workload (issue #929).
 
-If another PR merges during that CI wait, or the periodic tick simply hasn't fast-forwarded
-onto your own merge commit yet, the first `deploy.sh` exits 4 (the tree is behind origin) and
-`land.sh` retries, up to three times: each pass sleeps a backoff that DOUBLES (60s, then
-120s, then 240s), re-runs the blockers check, waits for master CI on YOUR OWN merge commit,
-then ticks and deploys. That wait is booked under `wait_ci` on the Landings board and normally
-returns at once, because step 3 already waited on the same SHA.
+If a PR that reaches YOUR OWN TAGS merges while this one is landing, the first `deploy.sh`
+exits 4 — under `--at` that is the staleness gate saying a commit in `<your sha>..origin/master`
+renders something your tags render. That newer landing owns the service, so this one falls
+back to the path it had before `--at` existed and `land.sh` retries, up to three times: each
+pass sleeps a backoff that DOUBLES (60s, then 120s, then 240s), re-runs the blockers check,
+waits for master CI on YOUR OWN merge commit, then ticks — with the wait this time — and
+deploys from the primary checkout. That wait is booked under `wait_ci` on the Landings board
+and normally returns at once, because step 3 already waited on the same SHA.
+
+A tail that touches nothing your tags render no longer refuses the deploy at all, `--at` or
+not: the gate is scoped to the paths the requested tags reach.
 
 **It waits on your merge commit rather than on the tip**, because the tick fast-forwards to
 the newest GREEN commit in its range rather than only to a green tip. A later merge whose CI

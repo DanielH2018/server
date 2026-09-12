@@ -55,6 +55,13 @@
 #     The staleness check runs BEFORE the derivation (issue #1593): on a tree that is only
 #     behind, the derived list is empty by construction and the wrapper would otherwise exit 0
 #     having deployed nothing.
+#   --at <sha> renders a snapshot of <sha> instead of HEAD, and asks the staleness gate and the
+#     tag validation about <sha> too. Any committish this checkout's object store resolves is
+#     accepted; one it cannot is exit 64, as is --at with --changed (the derivation reads the
+#     working tree's diff, so its tags would describe a tree the run never deploys). This is
+#     what lets `land.sh` deploy a PR's merge commit without first waiting for the GitOps tick
+#     to fast-forward the primary checkout onto it. --check and --dry-run still render the
+#     working tree.
 #   --detach backgrounds the ansible-playbook run (the ~83% of a deploy that is waiting on
 #     rollout/stabilisation) and returns immediately. The staleness check, tag validation, and
 #     the locks are still evaluated in THIS process before it returns, so exit 2/4 land exactly
@@ -264,7 +271,9 @@ make_snapshot() {
     stamp=$(date +%Y%m%d-%H%M%S)
     dir="$SNAPSHOT_ROOT/${tag_label//[^A-Za-z0-9_.,-]/_}-$stamp-$BASHPID"
     mkdir -p "$SNAPSHOT_ROOT" || return 1
-    git worktree add --detach "$dir" HEAD >/dev/null 2>&1 || return 1
+    # `${at_sha:-HEAD}`: --at names the commit to render, and a landing passes its PR's merge
+    # commit so the deploy no longer waits for the tick to fast-forward this checkout onto it.
+    git worktree add --detach "$dir" "${at_sha:-HEAD}" >/dev/null 2>&1 || return 1
     snapshot="$dir"
     snapshot_sha=$(git -C "$dir" rev-parse --short HEAD 2>/dev/null || echo unknown)
     # The owner lock, held until this run is done with the snapshot. On --detach the
@@ -341,7 +350,7 @@ say_tag_enumeration_failed() {
 }
 
 say_snapshot_failed() {
-    echo "deploy: could not snapshot HEAD into $SNAPSHOT_ROOT -- nothing was deployed." >&2
+    echo "deploy: could not snapshot ${at_sha:-HEAD} into $SNAPSHOT_ROOT -- nothing was deployed." >&2
     echo "  The playbook renders from a detached worktree of HEAD, so without one there is" >&2
     echo "  nothing to deploy from. Check the directory is writable and that" >&2
     echo "  'git worktree add --detach' works here; retrying alone will not fix either." >&2
@@ -473,6 +482,10 @@ cd "$repo_root" || exit 1
 # is an OPTIONAL positional: the single-pass case-statement loop below (which handles --tags'
 # own required argument via next_is_tags) can't tell "no ref given" from "the next flag" without
 # look-ahead, so --changed gets one.
+#
+# --at <sha> is resolved in the same pass, for the same look-ahead reason: its argument is
+# separate. It names the commit this run RENDERS -- the snapshot is taken of it rather than of
+# HEAD -- so it is stripped here and never reaches ansible-playbook.
 raw_args=("$@")
 filtered_args=()
 i=0
@@ -480,6 +493,8 @@ n=${#raw_args[@]}
 changed_requested=0
 changed_ref="origin/master"
 pre_skip_staleness=0
+at_ref=""
+at_sha=""
 while [[ "$i" -lt "$n" ]]; do
     a="${raw_args[$i]}"
     if [[ "$a" == "--changed" ]]; then
@@ -491,6 +506,19 @@ while [[ "$i" -lt "$n" ]]; do
         fi
         continue
     fi
+    if [[ "$a" == "--at" ]]; then
+        i=$((i + 1))
+        at_ref="${raw_args[$i]-}"
+        i=$((i + 1))
+        continue
+    fi
+    if [[ "$a" == --at=* ]]; then
+        # Accepted because --tags= is: without this arm `--at=abc` would fall through to
+        # ansible-playbook as an unknown flag rather than being read here.
+        at_ref="${a#--at=}"
+        i=$((i + 1))
+        continue
+    fi
     if [[ "$a" == "--skip-staleness-check" ]]; then
         pre_skip_staleness=1
     fi
@@ -498,6 +526,31 @@ while [[ "$i" -lt "$n" ]]; do
     i=$((i + 1))
 done
 set -- "${filtered_args[@]}"
+
+# Resolved here, before the fact-cache preflight and every helper call: an argument error must
+# not cost a subprocess, and everything below (the snapshot, the staleness range, the tag
+# validation, the annotation) uses the ONE full SHA this produces rather than re-resolving a
+# ref that another session can move between reads.
+#
+# 64 rather than 2: 2 is this wrapper's tag miss, which `land_lib/deploy.py` reports as "a
+# derived tag matched no service, so nothing deployed" -- the wrong sentence entirely for a
+# committish that did not resolve. 64 is the code --detach with --check already uses for an
+# argument this wrapper refuses.
+if [[ -n "$at_ref" ]]; then
+    if [[ "$changed_requested" == 1 ]]; then
+        echo "deploy: --at <sha> with --changed is contradictory -- nothing was deployed." >&2
+        echo "  --changed derives its tags from the WORKING TREE's diff, while --at renders" >&2
+        echo "  a snapshot of another commit, so the derived tags would describe a tree this" >&2
+        echo "  run never deploys. Pass --tags explicitly with --at." >&2
+        exit 64
+    fi
+    if ! at_sha=$(git rev-parse --verify --quiet "${at_ref}^{commit}"); then
+        echo "deploy: --at '$at_ref' does not resolve to a commit here -- nothing was" >&2
+        echo "  deployed. The snapshot is cut from this checkout's object store, so the" >&2
+        echo "  commit has to be in it: 'git fetch origin' first if it was merged elsewhere." >&2
+        exit 64
+    fi
+fi
 
 # The staleness gate, hoisted into a function so the --changed pass below can ask it FIRST
 # (issue #1593). It runs once per invocation whichever call site gets there first:
@@ -517,10 +570,15 @@ staleness_gate() {
     # The --changed call site reaches this before any tag has been derived, so it asks the
     # unscoped question. That is the right answer there: the derivation reads the same stale
     # tree, so there is no tag list to narrow by yet.
+    # --sha asks about the commit this run RENDERS. Without it the gate reads HEAD, and under
+    # --at that is the checkout the run was launched from -- a primary the tick has not
+    # fast-forwarded yet, which is behind on the very commit being deployed.
+    local at=()
+    [[ -z "$at_sha" ]] || at=(--sha "$at_sha")
     if [[ -n "$split_tags_csv" ]]; then
-        uv run python scripts/deploy_tools/deploy_staleness.py --tags "$split_tags_csv" || exit 4
+        uv run python scripts/deploy_tools/deploy_staleness.py "${at[@]}" --tags "$split_tags_csv" || exit 4
     else
-        uv run python scripts/deploy_tools/deploy_staleness.py || exit 4
+        uv run python scripts/deploy_tools/deploy_staleness.py "${at[@]}" || exit 4
     fi
 }
 
@@ -643,6 +701,15 @@ if [[ "$detach" == 1 && ( "$check_requested" == 1 || "$dry_run" == 1 ) ]]; then
     exit 64
 fi
 
+# Both modes exec ansible-playbook from the WORKING TREE below rather than snapshotting, so
+# --at reached the staleness gate and the tag validation and changes nothing else. Said out
+# loud rather than refused: rehearsing a landing's `--at <sha>` with --check is a reasonable
+# thing to type, and rendering a different tree in silence is the surprise.
+if [[ -n "$at_sha" && ("$check_requested" == 1 || "$dry_run" == 1) ]]; then
+    echo "deploy: --check/--dry-run render THIS working tree; --at ${at_sha:0:12} scoped the" >&2
+    echo "  staleness and tag checks to that commit and nothing else." >&2
+fi
+
 # The fact cache is shared by host across every worktree on this machine, and it pins the
 # interpreter of whichever session gathered facts first. A cache naming a worktree that is gone
 # fails EVERY deploy at Gathering Facts for the full 7200s TTL, with an error that names a module
@@ -678,8 +745,15 @@ fi
 # This still runs before the lock and before --check/--dry-run, since a dry run against a
 # nonexistent tag is just as misleading. --skip-tag-check bypasses, and is stripped in the
 # parse above so it never reaches ansible-playbook.
+#
+# Under --at the list is validated against `containers_list` AT THAT COMMIT, for the same
+# reason: a PR that adds a role and its entry together declares the new tag in no working tree
+# until the tick fast-forwards, so validating against the checkout refuses the first landing of
+# every new service.
 if [[ "$skip_tag_check" == 0 && ${#split_tags[@]} -gt 0 ]]; then
-    if ! uv run python scripts/deploy_tools/deploy_tags.py validate "${split_tags[@]}"; then
+    validate_at=()
+    [[ -z "$at_sha" ]] || validate_at=(--at "$at_sha")
+    if ! uv run python scripts/deploy_tools/deploy_tags.py validate "${validate_at[@]}" "${split_tags[@]}"; then
         exit 2
     fi
 fi

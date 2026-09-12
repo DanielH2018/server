@@ -3,6 +3,8 @@
 Run: uv run pytest scripts/deploy_tools/tests/test_land_health_verdict.py
 """
 
+from pathlib import Path
+
 import pytest
 
 from _land_fakes import MERGE_SHA, Fakes
@@ -162,6 +164,41 @@ def test_an_ordinary_service_pr_never_asks_about_a_broad_apply(landing):
     with pytest.raises(Outcome) as exc:
         health_verdict.health(ln)
     assert (exc.value.rc, exc.value.verdict) == (0, "settled")
+
+
+def test_the_gate_renders_the_tree_that_was_deployed(landing):
+    """`probe.py health` enumerates workloads by rendering the role's manifests from its cwd.
+
+    A landing that deployed a snapshot of its merge commit has not moved the primary checkout,
+    so a role that commit ADDS enumerates nothing there and the whole gate reads `skipped` --
+    green, on the first landing of a new service.
+    """
+    ln, calls = _deployed(landing)
+    ln.deployed_at = MERGE_SHA
+    with pytest.raises(Outcome):
+        health_verdict.health(ln)
+    assert next(c for c in calls if c[0] == "snapshot")[1][1] == MERGE_SHA
+    assert next(c for c in calls if c[0] == "gate")[2] == {"cwd": Path("/snap")}
+
+
+def test_a_deploy_from_the_primary_gates_the_primary(landing):
+    """CLEAN half: the fallback path keeps the gate call it has always made."""
+    ln, calls = _deployed(landing)
+    with pytest.raises(Outcome):
+        health_verdict.health(ln)
+    assert "snapshot" not in [c[0] for c in calls]
+    assert next(c for c in calls if c[0] == "gate")[2] == {"cwd": None}
+
+
+def test_a_snapshot_that_could_not_be_taken_still_gates(landing, capsys):
+    """The tree lock is taken non-blocking, so a busy one must degrade rather than skip the
+    gate: it falls back to the primary checkout and says which tree it read."""
+    ln, calls = _deployed(landing, Fakes(gate_snapshot=None))
+    ln.deployed_at = MERGE_SHA
+    with pytest.raises(Outcome):
+        health_verdict.health(ln)
+    assert next(c for c in calls if c[0] == "gate")[2] == {"cwd": None}
+    assert "rendering the primary checkout instead" in capsys.readouterr().out
 
 
 def test_an_unreadable_deployer_state_is_not_settled(landing, capsys):

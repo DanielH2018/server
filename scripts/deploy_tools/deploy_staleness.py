@@ -30,6 +30,12 @@ which is the rule this guard has always had. The narrowing matters because the G
 deployer fast-forwards to the newest GREEN commit in its range rather than to the tip, so the
 primary checkout is legitimately behind a pending tip while every landing deploys from it.
 
+WHICH COMMIT IS ASKED ABOUT. HEAD, unless `--sha` names another one. `deploy.sh --at <sha>`
+renders a snapshot of `<sha>` rather than of its own working tree, so `<sha>` is what can be
+behind and the checkout the run was launched from is irrelevant — a landing deploys the PR's
+merge commit from a primary checkout the tick has not fast-forwarded yet, and asking about
+HEAD there refuses a deploy of a commit that is not behind at all.
+
 NOT THE AUTOMATED PIPELINE. gitops_deploy.py invokes ansible-playbook directly
 (roles/setup/gitops_deploy/files/gitops_deploy.py:572), not this wrapper, and it pulls
 before deploying. This guard covers the interactive and agent path, where the failure was.
@@ -79,23 +85,34 @@ def _git(
     return git(*args, cwd=repo, check=False, timeout=timeout)
 
 
-def behind_ahead(repo, ref: str = "origin/master") -> tuple[int, int]:
-    """Return (behind, ahead) for HEAD relative to `ref`.
+def behind_ahead(
+    repo, ref: str = "origin/master", base: str = "HEAD"
+) -> tuple[int, int]:
+    """Return (behind, ahead) for `base` relative to `ref`.
 
-    Raises LookupError if `ref` cannot be resolved.
+    `base` is HEAD for a deploy that renders the working tree, and the commit named by
+    `deploy.sh --at` for one that renders a snapshot of something else: the question is
+    always about the bytes being deployed, and with `--at` those are not HEAD's.
+
+    Raises LookupError if `ref` or `base` cannot be resolved.
     """
-    proc = _git(str(repo), "rev-list", "--left-right", "--count", f"{ref}...HEAD")
+    proc = _git(str(repo), "rev-list", "--left-right", "--count", f"{ref}...{base}")
     if proc.returncode != 0:
-        raise LookupError(f"cannot resolve {ref}")
+        raise LookupError(f"cannot resolve {ref}...{base}")
     left, right = proc.stdout.split()
     return int(left), int(right)
 
 
-def format_refusal(behind: int, ahead: int, ref: str) -> str:
-    """The stderr message printed when the tree is behind `ref`, with the fixes to try."""
+def what_is_behind(base: str) -> str:
+    """How the refusals name the thing that is behind: the tree, or the named commit."""
+    return "this tree is" if base == "HEAD" else f"{base[:12]} is"
+
+
+def format_refusal(behind: int, ahead: int, ref: str, base: str = "HEAD") -> str:
+    """The stderr message printed when `base` is behind `ref`, with the fixes to try."""
     ahead_note = f" (and {ahead} ahead)" if ahead else ""
     return (
-        f"deploy: this tree is {behind} commit(s) behind {ref}{ahead_note} "
+        f"deploy: {what_is_behind(base)} {behind} commit(s) behind {ref}{ahead_note} "
         f"-- nothing was deployed.\n"
         f"  Deploying now would render stale templates and revert live config for the\n"
         f"  roles you target, while every repo-side check still reads green.\n"
@@ -104,14 +121,14 @@ def format_refusal(behind: int, ahead: int, ref: str) -> str:
     )
 
 
-def incoming(repo: str, ref: str, *args: str) -> list[str] | None:
-    """One `git log`/`git diff` read over HEAD..<ref> as lines, or None when it failed.
+def incoming(repo: str, ref: str, *args: str, base: str = "HEAD") -> list[str] | None:
+    """One `git log`/`git diff` read over <base>..<ref> as lines, or None when it failed.
 
-    Two dots and this direction: the question is what this tree has yet to receive, not what
-    it has changed. None is distinct from an empty list on purpose — a range that could not be
-    read is not a range shown to be unrelated, and the caller refuses on it.
+    Two dots and this direction: the question is what the deployed commit has yet to receive,
+    not what it has changed. None is distinct from an empty list on purpose — a range that
+    could not be read is not a range shown to be unrelated, and the caller refuses on it.
     """
-    proc = _git(repo, *args, f"HEAD..{ref}")
+    proc = _git(repo, *args, f"{base}..{ref}")
     if proc.returncode != 0:
         return None
     return [line for line in proc.stdout.splitlines() if line.strip()]
@@ -225,6 +242,7 @@ def format_tag_refusal(
     tags: list[str],
     paths: list[tuple[str, str]],
     commits: list[str],
+    base: str = "HEAD",
 ) -> str:
     """The stderr message for a tree behind on something this deploy DOES render.
 
@@ -239,8 +257,8 @@ def format_tag_refusal(
     if len(commits) > 10:
         log += f"\n    +{len(commits) - 10} more"
     return (
-        f"deploy: this tree is {behind} commit(s) behind {ref}, and {len(paths)} of the "
-        f"path(s) in that range reach what a deploy of {', '.join(tags)} renders "
+        f"deploy: {what_is_behind(base)} {behind} commit(s) behind {ref}, and {len(paths)} "
+        f"of the path(s) in that range reach what a deploy of {', '.join(tags)} renders "
         f"-- nothing was deployed.\n"
         f"  Deploying now would render stale templates and revert live config for those\n"
         f"  roles, while every repo-side check still reads green.\n"
@@ -252,7 +270,7 @@ def format_tag_refusal(
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Fetch origin, compare HEAD to `--ref`, and exit STALE_EXIT (4) when behind, else 0."""
+    """Fetch origin, compare `--sha` (default HEAD) to `--ref`; STALE_EXIT (4) when behind."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--repo", default=".")
     parser.add_argument("--ref", default="origin/master")
@@ -267,6 +285,16 @@ def main(argv: list[str] | None = None) -> int:
         help="skip refreshing the remote ref (tests, and offline runs)",
     )
     parser.add_argument(
+        "--sha",
+        default="",
+        help=(
+            "the commit this deploy renders, when it is not HEAD (`deploy.sh --at`). The "
+            "range asked about becomes <sha>..<ref> rather than HEAD..<ref>, because a "
+            "deploy from a snapshot of <sha> is behind on exactly what <sha> has yet to "
+            "receive — the working tree it was launched from renders nothing."
+        ),
+    )
+    parser.add_argument(
         "--tags",
         action="append",
         default=[],
@@ -278,6 +306,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
     tags = {t.strip() for arg in args.tags for t in arg.split(",") if t.strip()}
+    base = args.sha or "HEAD"
 
     if not args.no_fetch:
         # Best-effort. Offline is not a reason to block a deploy, but comparing against a
@@ -297,7 +326,7 @@ def main(argv: list[str] | None = None) -> int:
             )
 
     try:
-        behind, ahead = behind_ahead(args.repo, args.ref)
+        behind, ahead = behind_ahead(args.repo, args.ref, base)
     except LookupError:
         # No such ref: a fresh init, a detached CI checkout, a fork with another remote.
         # This is a staleness check, not a git-topology check — do not block the deploy.
@@ -310,7 +339,7 @@ def main(argv: list[str] | None = None) -> int:
             f"deploy: not narrowing the staleness check -- {blocked}.", file=sys.stderr
         )
     paths = (
-        incoming(args.repo, args.ref, "diff", "--name-only")
+        incoming(args.repo, args.ref, "diff", "--name-only", base=base)
         if behind and tags and not blocked
         else None
     )
@@ -324,8 +353,8 @@ def main(argv: list[str] | None = None) -> int:
             # Not silent: the tree IS behind, and an operator reading a deploy log has to be
             # able to tell this from a tree that was current.
             print(
-                f"deploy: this tree is {behind} commit(s) behind {args.ref}, but none of "
-                f"those commits reach {', '.join(sorted(tags))} -- deploying anyway.",
+                f"deploy: {what_is_behind(base)} {behind} commit(s) behind {args.ref}, but "
+                f"none of those commits reach {', '.join(sorted(tags))} -- deploying anyway.",
                 file=sys.stderr,
             )
             return 0
@@ -337,8 +366,11 @@ def main(argv: list[str] | None = None) -> int:
                 flagged,
                 # `or []` because the refusal stands either way: an unreadable log costs the
                 # message its commit list, never the verdict.
-                incoming(args.repo, args.ref, "log", "--oneline", "--no-decorate")
+                incoming(
+                    args.repo, args.ref, "log", "--oneline", "--no-decorate", base=base
+                )
                 or [],
+                base,
             ),
             file=sys.stderr,
         )
@@ -348,7 +380,7 @@ def main(argv: list[str] | None = None) -> int:
         return STALE_EXIT
 
     if behind:
-        print(format_refusal(behind, ahead, args.ref), file=sys.stderr)
+        print(format_refusal(behind, ahead, args.ref, base), file=sys.stderr)
         # Exit 4 names a rebase of THIS tree, which is the wrong repair when the deployer is
         # parked: the primary checkout is what has to converge, and rebasing a worktree onto an
         # origin the fleet is not running deploys nothing. The SessionStart banner already says

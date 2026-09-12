@@ -118,9 +118,18 @@ Sequence:
 
 1. Resolve the merge SHA from the PR.
 2. `await_ci.py <merge-sha>`.
-3. `gitops_tick.sh` — fetch, CI-gate, ff-merge, deploy what is eligible.
-4. `deploy.sh --tags <derived>` from `/home/ubuntu/server`, for what the tick deferred.
-5. The health verdict, via `deploy_detach_notify.py --no-post`.
+3. `gitops_tick.sh` — fetch, CI-gate, ff-merge, deploy what is eligible. A PR with service
+   tags passes `--no-wait` here: step 4 renders the merge commit itself, so nothing after this
+   needs the primary checkout to have been fast-forwarded, and the deployer's own timer
+   converges it. A PR with no service tag waits for the tick, because there it is the apply.
+4. `deploy.sh --tags <derived> --at <merge-sha>` from `/home/ubuntu/server`. `--at` snapshots
+   that commit rather than the checkout's HEAD, and scopes the staleness gate and the tag
+   check to it. Exit 4 there means a later commit reaches the same tags: that landing owns the
+   service, and this one falls back to waiting for the tick and deploying from the checkout.
+5. The health verdict, via `deploy_detach_notify.py --no-post`, rendered from a detached
+   worktree of the same merge commit: `probe.py health` enumerates the workloads to gate by
+   rendering the role's manifests from the checkout it runs in, so a role the merge commit
+   ADDS enumerates nothing in a primary that has not pulled it and the gate reads `skipped`.
 6. Print a structured verdict block the session reads on re-invocation.
 
 **It holds no check of its own.** No health logic, no tag validation, no staleness logic — each of

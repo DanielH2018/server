@@ -228,6 +228,11 @@ To run a tick without waiting for the timer, on `daniel-box`:
 
 It runs the identical code path the timer runs. **There is no dry-run mode** — this deploys.
 
+`--no-wait` starts the tick and returns at once, without watching it or printing its journal.
+That is what a landing uses: `land.sh` deploys the merge commit of its own pull request
+(`deploy.sh --at <sha>`), so it needs the tick only to converge the primary checkout, which
+the timer does within ten minutes whether the request landed or not.
+
 ## Gating on CI correctly
 
 To wait for master CI on a merge commit, read the same endpoint the deployer reads:

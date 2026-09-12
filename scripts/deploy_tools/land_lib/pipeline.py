@@ -24,8 +24,8 @@ through every phase, so this table is the contract no signature states:
 | `ci.preflight` | `opts.primary` | -- |
 | `ci.wait_master_ci` | `merge_sha`, `opts.ci_timeout` | `ledger.t_ci` |
 | `tick.run_tick` | `opts.lock_retries`, `opts.lock_backoff` | `ledger.lock_waited`, `ledger.lock_holder`, `ledger.t_tick`, `tick_watch_abandoned` |
-| `deploy.deploy_phase` | `resolved_tags`, `needs_diff`, `merge_sha`, `tick_watch_abandoned` | `resolved_tags`, `deployed_hosts`, `ledger.tags_label`, `ledger.cause`, `ledger.t_deploy` |
-| `health_verdict.health` | `resolved_tags`, `plane`, `self_applied`, `remaining_setup`, `tick_watch_abandoned` | `ledger.cause` |
+| `deploy.deploy_phase` | `resolved_tags`, `needs_diff`, `merge_sha`, `tick_watch_abandoned` | `resolved_tags`, `deployed_hosts`, `deployed_at`, `ledger.tags_label`, `ledger.cause`, `ledger.t_deploy` |
+| `health_verdict.health` | `resolved_tags`, `deployed_at`, `plane`, `self_applied`, `remaining_setup`, `tick_watch_abandoned` | `ledger.cause` |
 
 Every phase may end the landing by raising an `Outcome`, and the last one always does.
 """
@@ -55,7 +55,21 @@ def _step_ci(ln: Landing) -> None:
 
 
 def _step_tick(ln: Landing) -> None:
-    """Run the GitOps tick, and stamp when it finished."""
+    """Run the GitOps tick, and stamp when it finished — or kick it and stamp nothing.
+
+    A PR with service tags deploys its own merge commit in step 5 (`deploy.sh --at`), so it
+    needs the tick only to converge the primary checkout eventually. It is kicked and the
+    landing carries straight on; `tick=0` on the board means NO TICK WAS AWAITED. Eleven
+    landings in the 14 days to 2026-09-11 spent the full 540s here watching a deployer busy
+    with somebody else's apply.
+
+    A PR with no service tag keeps waiting: there the tick IS the apply, and `no_tag_outcome`
+    reads the deployer's own markers straight afterwards.
+    """
+    if ln.resolved_tags:
+        tick.kick_tick(ln)
+        ln.ledger.t_tick = ln.ledger.t_ci
+        return
     tick.run_tick(ln)
     ln.ledger.t_tick = ln.tools.clock()
 
