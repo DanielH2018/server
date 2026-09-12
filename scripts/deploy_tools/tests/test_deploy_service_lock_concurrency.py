@@ -200,7 +200,10 @@ def test_a_live_detached_snapshot_survives_a_concurrent_check_and_deploy(tmp_pat
     repo, env = _harness(tmp_path, uv_stub=_UV_DETACH_STUB)
     pwd_file = tmp_path / "playbook-pwd"
     env["DEPLOY_TEST_PWD_FILE"] = str(pwd_file)
-    env["DEPLOY_TEST_SLEEP"] = "10"
+    # Long enough for a `--check` and a scoped deploy to run inside it, and no longer: the
+    # assertions below are on state — the directory still exists, then it does not — rather
+    # than on elapsed time, and `--dist loadscope` keeps this whole module on one worker.
+    env["DEPLOY_TEST_SLEEP"] = "3"
     output = tmp_path / "detach-output"
     with output.open("w") as sink:
         detached = subprocess.run(
