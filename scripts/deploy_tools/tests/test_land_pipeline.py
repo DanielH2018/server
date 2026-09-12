@@ -134,6 +134,10 @@ def test_the_diff_fallback_reaches_the_tick_before_deriving(land_run):
     )
     names = [c[1][0] if c[0] == "deploy_tags" else c[0] for c in calls]
     assert names.index("tick") < names.index("changed") < names.index("deploy")
+    # And it AWAITS that tick. The derivation reads `<since>...HEAD` in the primary checkout,
+    # so this is the one tagged path the kick would break: an empty fallback tag list is what
+    # routes it away from the kick, and ordering alone would not notice if that changed.
+    assert list(next(c for c in calls if c[0] == "tick")[2]) == ["observe"]
 
 
 def test_a_missing_primary_checkout_is_named_before_any_phase_runs(land_run):

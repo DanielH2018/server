@@ -42,6 +42,18 @@ case "$*" in
 esac
 """
 
+# `logger` is absent from most test environments, and deploy.sh swallows that with `|| true`,
+# so the annotation is unobservable without a stub. Prefixed, because it shares the call log.
+_LOGGER_STUB = """#!/bin/bash
+echo "logger $*" >> "$DEPLOY_SH_CALLS"
+"""
+
+
+def _annotated_sha(calls: list[str]) -> str:
+    """The `sha=` field of the deploy annotation, which is a SHORT sha of unfixed width."""
+    line = next(c for c in calls if c.startswith("logger "))
+    return next(f for f in line.split() if f.startswith("sha=")).removeprefix("sha=")
+
 
 def _second_commit(repo: Path) -> tuple[str, str]:
     """Add one commit to `repo`; return (first sha, second sha), both full."""
@@ -80,7 +92,8 @@ def _run(
     bin_dir.mkdir()
     (bin_dir / "flock").write_text(FLOCK_STUB)
     (bin_dir / "uv").write_text(_UV_STUB)
-    for stub in ("flock", "uv"):
+    (bin_dir / "logger").write_text(_LOGGER_STUB)
+    for stub in ("flock", "uv", "logger"):
         (bin_dir / stub).chmod(0o755)
 
     calls = tmp_path / "calls.log"
@@ -192,3 +205,30 @@ def test_without_at_tag_validation_reads_the_working_tree(tmp_path):
     repo, _first, _second = _prepared(tmp_path)
     _result, calls, _deployed = _run(tmp_path, repo, "--tags", "sonarr")
     assert "--at" not in next(c for c in calls if "deploy_tags.py validate" in c)
+
+
+def test_the_annotation_names_the_commit_that_was_deployed(tmp_path):
+    """The annotation outlives the snapshot, and Grafana renders it as the record of the run.
+
+    It reads `snapshot_sha`, captured inside the worktree while it existed. Re-reading
+    `git rev-parse HEAD` at emit time -- the fallback that arm still carries -- would name this
+    checkout's tip under `--at`, a commit the run never rendered.
+    """
+    repo, first, second = _prepared(tmp_path)
+    _result, calls, _deployed = _run(
+        tmp_path, repo, "--skip-tag-check", "--skip-staleness-check", "--at", first
+    )
+    sha = _annotated_sha(calls)
+    assert first.startswith(sha), (sha, first)
+    assert not second.startswith(sha)
+
+
+def test_without_at_the_annotation_names_head(tmp_path):
+    """CLEAN half: the ordinary path annotates the commit it did snapshot, which is HEAD."""
+    repo, first, second = _prepared(tmp_path)
+    _result, calls, _deployed = _run(
+        tmp_path, repo, "--skip-tag-check", "--skip-staleness-check"
+    )
+    sha = _annotated_sha(calls)
+    assert second.startswith(sha), (sha, second)
+    assert not first.startswith(sha)
