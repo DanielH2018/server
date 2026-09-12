@@ -48,8 +48,11 @@ every 10 minutes (`gitops_deploy_tick_interval`). One tick, in order:
 --8<-- "assets/generated/fragments/staging-timeouts.md"
 
 All of it runs while holding `/var/lock/server-git-tree.lock`, which is what stops a tick
-racing an operator's deploy or the secret-rotation cron. See
-[ADR-0011](adr/0011-one-lock-serialises-every-deploy-path.md).
+rewriting the tree under the secret-rotation cron or under an operator's snapshot. The deploy
+steps also take one `/var/lock/server-deploy-<tag>.lock` per service, inside that hold, which
+is what stops a tick and an operator's deploy driving the same rollout. See
+[ADR-0011](adr/0011-one-lock-serialises-every-deploy-path.md) and
+[ADR-0017](adr/0017-the-tree-lock-guards-the-tree-not-the-cluster.md).
 
 ## Reading the deployer's state
 
@@ -247,8 +250,12 @@ A tick that cannot take the lock exits **75**, and the systemd unit **succeeds**
 resume point, not an error: the lock was busy and nothing was deployed.
 
 This is deliberate and documented at the line that sets it
-(`gitops-deploy.service.j2:64`). Treating contention as failure paged seven times in seven
-days, because every long operator deploy holds the same lock.
+(`gitops-deploy.service.j2:87`). Treating contention as failure paged seven times in seven
+days, because every long operator deploy held the same lock for its whole run. It no longer
+does — `scripts/deploy.sh` holds the tree lock for a snapshot of `HEAD` and nothing more
+([ADR-0017](adr/0017-the-tree-lock-guards-the-tree-not-the-cluster.md)) — so tree-lock
+contention should now be rare. A tick can still queue behind an operator deploying one of the
+same services, on that service's own lock.
 
 Contention is still not silent starvation: the lock path never writes `last_run`, so
 contention outlasting the maximum age pages through the GitOps-Alive monitor.

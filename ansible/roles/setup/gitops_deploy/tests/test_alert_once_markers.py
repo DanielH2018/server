@@ -22,6 +22,7 @@ _SOURCES = (
     "deploy_defer.py",
     "deploy_handlers.py",
     "deploy_phases.py",
+    "deploy_staging_io.py",
 )
 
 # The call sites known to exist today, named rather than just counted — so a call site

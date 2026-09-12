@@ -21,6 +21,7 @@ import re
 import subprocess
 from pathlib import Path
 
+from _deploy_sh_fakes import deploy_sh_env, make_snapshot_repo
 from deploy_tools import exit_codes as ec
 from deploy_tools.land_lib import tools
 
@@ -28,9 +29,27 @@ _REPO = Path(__file__).resolve().parents[3]
 _DEPLOY_SH = _REPO / "scripts" / "deploy.sh"
 _TICK_SH = _REPO / "scripts" / "deploy_tools" / "gitops_tick.sh"
 
-# `-n` is deploy.sh's uncontended probe and `-w` its timed acquire. Refusing the first and
-# sleeping in the second is a held lock as far as the script can tell, with nothing held.
+
+def _deploy_repo_env(tmp_path: Path, bin_dir: Path) -> tuple[Path, dict[str, str]]:
+    """A throwaway repo for deploy.sh to snapshot, and the env that keeps the run inside it.
+
+    deploy.sh now copies HEAD into a detached worktree before it runs the playbook. Run
+    against this checkout, every test here would register a real worktree under the real
+    `.git`; `git_free_env` is what stops a prek hook's `GIT_DIR` overriding `cwd` and doing
+    that anyway. The snapshot root and the per-service lock directory are redirected for the
+    same reason: nothing here may write under /var/lock or /tmp/homelab-deploy-snapshots.
+    """
+    return make_snapshot_repo(tmp_path / "repo"), deploy_sh_env(tmp_path, bin_dir)
+
+
+# deploy.sh's three flock shapes, and only two of them are the tree lock: `-n <fd>` is its
+# uncontended probe, `-w` its timed acquire, and `-n -x <fd>` the snapshot's own owner lock,
+# which nothing here contends. Refusing the probe and sleeping in the acquire is a held tree
+# lock as far as the script can tell, with nothing actually held.
 _FLOCK_CONTENDED = """#!/bin/bash
+case "$1 $2" in
+  "-n -x") exit 0 ;;
+esac
 case "$1" in
   -n) exit 1 ;;
   -w) sleep 1; exit 0 ;;
@@ -113,17 +132,22 @@ exit 0
 """
 
 
-def _stub_path(tmp_path: Path, stubs: dict[str, str]) -> dict[str, str]:
+def _stub_bin(tmp_path: Path, stubs: dict[str, str]) -> Path:
     bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
+    bin_dir.mkdir(exist_ok=True)
     for name, body in stubs.items():
         (bin_dir / name).write_text(body)
         (bin_dir / name).chmod(0o755)
+    return bin_dir
+
+
+def _stub_path(tmp_path: Path, stubs: dict[str, str]) -> dict[str, str]:
+    bin_dir = _stub_bin(tmp_path, stubs)
     return dict(os.environ, PATH=f"{bin_dir}:{os.environ['PATH']}")
 
 
 def _run_deploy(tmp_path: Path, flock: str) -> subprocess.CompletedProcess:
-    env = _stub_path(
+    bin_dir = _stub_bin(
         tmp_path,
         {
             "flock": flock,
@@ -133,6 +157,7 @@ def _run_deploy(tmp_path: Path, flock: str) -> subprocess.CompletedProcess:
             "logger": _LOGGER,
         },
     )
+    repo, env = _deploy_repo_env(tmp_path, bin_dir)
     env["FUSER_STUB_SELF_FDS"] = str(tmp_path / "self-fds")
     return subprocess.run(
         [
@@ -142,7 +167,7 @@ def _run_deploy(tmp_path: Path, flock: str) -> subprocess.CompletedProcess:
             "--skip-tag-check",
             "--skip-staleness-check",
         ],
-        cwd=_REPO,
+        cwd=repo,
         env=env,
         capture_output=True,
         text=True,
@@ -173,6 +198,53 @@ def test_an_uncontended_acquire_says_nothing(tmp_path):
     result = _run_deploy(tmp_path, _FLOCK_FREE)
     assert result.returncode == 0, result.stderr
     assert "lock acquired" not in result.stderr
+    assert "service lock" not in result.stderr
+
+
+# The tree lock is free (`-n` succeeds at once) and the per-tag lock is not: `-w` sleeps before
+# it grants. That is a deploy of the SAME service already running, which is the only thing a
+# service lock ever waits for, and the wait that used to be invisible because the tree lock had
+# already been paid by then.
+_FLOCK_SERVICE_CONTENDED = """#!/bin/bash
+case "$1" in
+  -n) exit 0 ;;
+  -s) exit 0 ;;
+  -w) sleep 1; exit 0 ;;
+esac
+exit 0
+"""
+
+
+def test_a_contended_service_lock_reports_its_tag_and_its_seconds(tmp_path):
+    """FLAGGED half: most of what a landing waits for is now THIS lock, not the tree lock.
+
+    Without this line a landing behind another deploy of the same service books `lock=0` and
+    charges the wait to `deploy` — the same gap the tree-lock line closed for the tree lock.
+    """
+    result = _run_deploy(tmp_path, _FLOCK_SERVICE_CONTENDED)
+    assert result.returncode == 0, result.stderr
+    line = next((x for x in result.stderr.splitlines() if "service lock" in x), "")
+    assert line, result.stderr
+    assert "service lock uptime-kuma acquired after" in line
+    booked = tools.in_flock_wait(line)
+    assert booked is not None, f"land.py no longer parses deploy.sh's line: {line!r}"
+    assert booked[0] >= 1
+    # The tree lock was free, so nothing may be booked against it.
+    assert "deploy: lock acquired after" not in result.stderr
+
+
+def test_the_service_lock_refusal_is_not_booked_as_a_wait():
+    """CLEAN half for the parser itself: only an ACQUIRE reports time this landing waited.
+
+    The refusal line names ${LOCK_WAIT} seconds. A pattern loose enough to match it would book
+    the whole budget onto a landing that deployed nothing, which is the opposite of what
+    `lock=` means.
+    """
+    refusal = "deploy: a service lock under /var/lock stayed busy for 3000s -- nothing"
+    assert tools.in_flock_wait(refusal) is None
+    assert (
+        tools.in_flock_wait("deploy: service lock sonarr acquired after 4s ok") is None
+    )
 
 
 def test_joining_a_tick_in_flight_reports_how_long_it_ran_and_how_long_we_waited(
@@ -264,25 +336,26 @@ def test_a_flock_failure_that_is_not_contention_exits_its_own_code(tmp_path):
 # `--detach` takes the same lock through a second, non-blocking call, so it needs both halves
 # of the same pair. Its `flock -n` carries `-E "$LOCK_BUSY"`, so a held lock answers 75 here.
 _FLOCK_DETACH_BUSY = """#!/bin/bash
-case "$1" in
-  -n) exit 75 ;;
+case "$1 $2" in
+  "-n -E") exit 75 ;;
 esac
 exit 0
 """
 
 _FLOCK_DETACH_ERRORS = """#!/bin/bash
-case "$1" in
-  -n) echo "flock: bad file descriptor" >&2; exit 65 ;;
+case "$1 $2" in
+  "-n -E") echo "flock: bad file descriptor" >&2; exit 65 ;;
 esac
 exit 0
 """
 
 
 def _run_detach(tmp_path: Path, flock: str) -> subprocess.CompletedProcess:
-    env = _stub_path(
+    bin_dir = _stub_bin(
         tmp_path,
         {"flock": flock, "fuser": _FUSER, "ps": _PS, "uv": _UV, "logger": _LOGGER},
     )
+    repo, env = _deploy_repo_env(tmp_path, bin_dir)
     env["FUSER_STUB_SELF_FDS"] = str(tmp_path / "self-fds")
     return subprocess.run(
         [
@@ -293,7 +366,7 @@ def _run_detach(tmp_path: Path, flock: str) -> subprocess.CompletedProcess:
             "--skip-tag-check",
             "--skip-staleness-check",
         ],
-        cwd=_REPO,
+        cwd=repo,
         env=env,
         capture_output=True,
         text=True,

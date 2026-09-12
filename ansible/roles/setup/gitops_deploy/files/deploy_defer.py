@@ -39,9 +39,35 @@ from deploy_remediation import (
     manual_plane_remediation,
 )
 from deploy_state import NO_PLAYBOOK, DeployerState
+from deploy_tick_types import TickTarget
 from deploy_toolbox import DeployTools
 
 INITIAL_SETUP = "ansible/initial_setup.yml"
+
+
+def for_contention(
+    tools: DeployTools, config: Config, target: TickTarget, exc: BaseException
+) -> int:
+    """A service lock stayed busy: undo the range and let the next tick re-evaluate.
+
+    The third deferral shape, and the only one that is not about a playbook nobody here can
+    run. Contention is not a failed deploy: nothing was applied, so holding the SHA would park
+    every later tick behind a lock that has since been released, and rolling back would
+    redeploy a version that is already live. The ff-merge IS undone, because `local..origin`
+    carrying the range is what makes the next tick look at it again.
+
+    Args:
+        tools: the tick's boundaries; its `run` performs the reset.
+        config: the tick's config, for the repo path.
+        target: the tick's refs; `local` is where the reset lands.
+        exc: the `deploy_locks.ServiceLockBusy` raised, naming the tag and the seconds.
+
+    Returns:
+        0. The tick completed, so `last_run` is written and the deployer reads alive.
+    """
+    log(f"{exc} — deferring to the next tick")
+    tools.run(["git", "reset", "--hard", target.local], cwd=config.repo)
+    return 0
 
 
 def unapplyable_setup_roles(cs) -> list[str]:
@@ -109,7 +135,7 @@ def record(
     config: Config,
     origin: str,
     roles: list[str],
-) -> None:
+) -> list[str]:
     """Record each role this tick merged past and cannot apply, then page once per SHA.
 
     A role already in the marker keeps its first-seen stamp, which is the age monitor-bridge
@@ -119,6 +145,10 @@ def record(
     The journal line here names only what this tick ADDED. `main()` already logs the whole
     pending set on every tick, including this one, so logging the set again here printed it
     twice whenever a role was already listed.
+
+    Returns:
+        The roles this tick added, which is what `unrecord` takes back when the ff-merge that
+        made them pending is rolled back. A role a previous tick recorded is not in it.
     """
     now = time.time()
     recorded = [
@@ -144,6 +174,26 @@ def record(
             origin, manual_plane_remediation(set(roles)), state.path("manual_plane")
         ),
     )
+    return recorded
+
+
+def unrecord(state: DeployerState, origin: str, roles: list[str]) -> None:
+    """Take back the lines `record` wrote, for a tick whose ff-merge was undone.
+
+    A pending role means merged-and-unapplied. When the tick resets to `local` — which
+    `for_contention` does, because nothing was applied — the merge half stops being true, so
+    the marker would page for six hours about work no tree carries. The dedupe page is cleared
+    with them, but only when it names THIS origin: a page for an earlier SHA is somebody else's.
+
+    Args:
+        state: the marker files.
+        origin: the SHA this tick recorded under.
+        roles: what `record` returned, so a role an earlier tick recorded is left alone.
+    """
+    for role in roles:
+        state.clear_manual_plane(setup_role_tag(role))
+    if roles and state.read("broad_alerted") == origin:
+        state.write("broad_alerted", None)
 
 
 def clear_applied(state: DeployerState, playbook: str, tags: list[str]) -> None:

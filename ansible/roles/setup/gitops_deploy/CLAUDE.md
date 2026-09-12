@@ -649,7 +649,7 @@ Three layers, and which one a function belongs in is decided by what it touches.
 | transport | `deploy_io`, `deploy_alerts` | subprocess, docker, every message body, and the alert queue's own I/O |
 | transport leaves | `deploy_config`, `deploy_state`, `deploy_failtext` | the config file, the state directory, and the text a failed run's alert quotes |
 | the seam | `deploy_toolbox` | `DeployTools`, one frozen object holding every boundary the tick crosses, and `default_tools(CONFIG)` which binds the CI gate to the parsed config |
-| the phases | `deploy_phases`, `deploy_handlers`, `deploy_defer` | `assess` and `plan_tick`; one `handle_*` per terminal branch, plus the staging gate's I/O shell (`consult_staging`, `record_staging_tick`, `consume_staging_override`); `deploy_defer` owns what the broad arm does with the half it will not apply — park it, or record it in `manual_plane` |
+| the phases | `deploy_phases`, `deploy_handlers`, `deploy_defer`, `deploy_staging_io` | `assess` and `plan_tick`; one `handle_*` per terminal branch; `deploy_staging_io` holds the staging gate's I/O shell (`consult_staging`, `record_staging_tick`, `consume_staging_override`), which `handle_k8s` alone calls; `deploy_defer` owns what the broad arm does with the half it will not apply — park it, or record it in `manual_plane` |
 | the tick | `gitops_deploy` | the config constants, `STATE`, `tick_config()`, `main()` sequencing the phases, and `entrypoint()` |
 
 **A transport leaf imports nothing from `deploy_io`.** `deploy_config` (the config file,
@@ -751,7 +751,7 @@ the other tree.
 
 **`deploy_staging` stays import-pure, and that is a constraint rather than a habit.** Its I/O
 shell — `consult_staging`, `record_staging_tick`, `consume_staging_override` — lives in
-`deploy_handlers.py`, one module up. `deploy_logic.py` re-exports `deploy_staging`, and
+`deploy_staging_io.py` (it was at the bottom of `deploy_handlers.py` until 2026-09-11). `deploy_logic.py` re-exports `deploy_staging`, and
 `scripts/deploy_tools/await_ci.py`, `land_tags.py` and `backfill_staging_gate.py` import that
 index with only this role's `files/` on `sys.path`. They never add `roles/setup/common/files`,
 so a module-level `import deploy_io` here reaches `deploy_config`'s `from host_lib import
@@ -876,7 +876,7 @@ deployer, whose systemd ExecStart is
 smoke run wait its full 180s and deploy nothing.
 
 **Since 2026-08-23 that failure is silent.** `-E 75` plus `SuccessExitStatus=75`
-(`gitops-deploy.service.j2:75`) make systemd report the unit `Result=success`, so
+(`gitops-deploy.service.j2:101`) make systemd report the unit `Result=success`, so
 `handlers/main.yml:11-16`'s `ansible.builtin.systemd: state: started` returns rc 0 and the play
 recaps green. Nothing deployed, `last_run` untouched, no Discord message (the webhook belongs to
 the deployer, which never started), no `OnFailure`. The first alert of any kind is GitOps-Alive,
@@ -1103,7 +1103,7 @@ secret-rotate cron take. In the pathological case (a stalled forward deploy foll
 stalled rollback), this unit can hold that lock for up to 2940s (600 + 120 + 900 + 1320 with the
 staging gate armed, 2220s without it, excluding its own flock wait) — past the 30-minute (1800s)
 timer interval. A concurrent `./scripts/deploy.sh`
-during that window waits `LOCK_WAIT=3000` (`deploy.sh:57`, used at `:286`) — **not** the unit's
+during that window waits `LOCK_WAIT=3000` (`deploy.sh:107`, used at `:282` and `:752`) — **not** the unit's
 own `-w 180`, which governs only the deployer — so it **outlasts the 2940s hold and then
 deploys**, rather than returning exit 75. It returns exit 75 only if the lock stays busy past
 the full 3000s. The secret-rotate cron waits on the same lock rather than failing outright,
@@ -1129,6 +1129,42 @@ than silently shortening an operator's wait, which is how `deploy.sh`'s copy rot
 Neither wait is silently wrong — both correctly report "the lock stayed busy" — but an operator
 seeing exit 75 during this window should check whether gitops-deploy is mid double-timeout before
 assuming the lock is stuck.
+
+**Since ADR-0017 the contention is one-directional.** `./scripts/deploy.sh` holds the tree lock
+only long enough to copy `HEAD` into a detached worktree, and runs its playbook from that
+snapshot under one `/var/lock/server-deploy-<tag>.lock` per service — so it no longer holds the
+tree lock for ~20 minutes and this unit no longer queues behind it for that long. This unit is
+unchanged: it still holds the tree lock across its whole run, so an operator deploy launched
+mid-tick still waits, for its snapshot alone. This unit takes the per-service locks too, inside
+that hold, which is what keeps a tick and an operator deploy off the same rollout. The lock
+order is `all` first, then each service in sorted order, and the `# DECIDED:` marker in
+`files/deploy_locks.py` says why the two orders cannot deadlock.
+
+**A busy service lock is contention, not a failed deploy.** `deploy_locks` raises its own
+`ServiceLockBusy`, each of the three deploy handlers catches it AHEAD of its failure arm, and
+`deploy_defer.for_contention` logs `service lock <tag> busy for <N>s — deferring to the next
+tick`, resets to `local` and returns 0. No `hold_sha`, no `hold_plane`, no rollback and no
+page: nothing was applied, so holding the SHA would park every later tick behind a lock that
+has since been released, and the rollback would redeploy a version that is already live. The
+reset undoes the ff-merge, which is what keeps `local..origin` carrying the range for the next
+tick. `tests/test_gitops_deploy_lock_contention.py` drives all three handlers.
+
+**A broad apply takes `all` EXCLUSIVELY, whatever its tags.** `deploy_io.deploy_broad` passes
+`exclusive_all=True`: `initial_setup.yml --tags <role>` names a tag, but what it reconfigures
+is the host every workload runs on, so sharing `all` the way a scoped service deploy does would
+let a host-plane apply overlap a rollout.
+
+**Waiting for a service lock spends the phase's own budget, not a second one.** This unit waits
+while it holds the tree lock, so a wait budgeted separately would add itself to every term in
+`_worst_lock_hold()` — 900s of k8s deploy plus 900s of queueing for it, and the same again for
+the rollback — and the four jobs that size their own tree-lock waits from that sum would start
+giving up and paging for ordinary contention. `deploy_locks.locked_budget` therefore shares one
+deadline between the wait and the playbook: a k8s phase queued behind an operator's deploy runs
+on what is left of `K8S_DEPLOY_TIMEOUT_S`, and holds the tree lock for no longer than a phase
+that never queued. The cost is the other direction — a phase that queues for most of its budget can
+have its playbook SIGTERMed early, which reads as a failed deploy and rolls back. The Docker
+`deploy()` is the one call site with no budget to share, so its wait falls back to
+`deploy_locks.SERVICE_LOCK_WAIT_S` (1800s).
 
 **Consequence for the operator: a pathological double-timeout run can overrun the 30-minute
 timer tick — verified live against the real unit, not inferred from the man page alone.**

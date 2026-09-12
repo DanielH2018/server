@@ -18,29 +18,16 @@ half the bug got wrong), and an unknown tag on a current tree must still refuse 
 Run: uv run pytest scripts/deploy_tools/tests/test_deploy_staleness_precedes_tag_validation.py
 """
 
-import os
 import subprocess
 from pathlib import Path
+
+from _deploy_sh_fakes import FLOCK_STUB, deploy_sh_env, make_snapshot_repo
 
 _REPO = Path(__file__).resolve().parents[3]
 _DEPLOY_SH = _REPO / "scripts" / "deploy.sh"
 
 _STALE_EXIT = 4
 _TAG_MISS_EXIT = 2
-
-_FLOCK_STUB = """#!/bin/bash
-# Drop flock's own flags and its lock-file argument, then run the rest: no real
-# /var/lock/server-git-tree.lock is taken, so this can never interleave with a live deploy.
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    -w|-E) shift 2 ;;
-    -n|-u) shift ;;
-    *) break ;;
-  esac
-done
-shift
-exec "$@"
-"""
 
 # One `uv` for every helper deploy.sh shells out to. Each call is appended to $DEPLOY_SH_CALLS
 # first, so the ORDER the wrapper asks its questions in is readable even when an early refusal
@@ -66,7 +53,7 @@ def _run(tmp_path, *, stale_exit, validate_exit, tag="definitely-not-a-real-serv
     """
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
-    (bin_dir / "flock").write_text(_FLOCK_STUB)
+    (bin_dir / "flock").write_text(FLOCK_STUB)
     (bin_dir / "uv").write_text(
         _UV_STUB.format(stale_exit=stale_exit, validate_exit=validate_exit)
     )
@@ -75,15 +62,14 @@ def _run(tmp_path, *, stale_exit, validate_exit, tag="definitely-not-a-real-serv
 
     calls = tmp_path / "calls.log"
     calls.write_text("")
-    env = dict(
-        os.environ,
-        PATH=f"{bin_dir}:{os.environ['PATH']}",
-        DEPLOY_SH_CALLS=str(calls),
-    )
+    # A throwaway repo, not this checkout: deploy.sh snapshots HEAD into a worktree before it
+    # runs anything, and the tests must not register worktrees in the real `.git`.
+    repo = make_snapshot_repo(tmp_path / "repo")
+    env = deploy_sh_env(tmp_path, bin_dir, DEPLOY_SH_CALLS=str(calls))
     argv = [str(_DEPLOY_SH)] + (["--tags", tag] if tag else [])
     result = subprocess.run(
         argv,
-        cwd=_REPO,
+        cwd=repo,
         env=env,
         capture_output=True,
         text=True,

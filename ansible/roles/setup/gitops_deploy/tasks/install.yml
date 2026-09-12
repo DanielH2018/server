@@ -36,7 +36,9 @@
     - deploy_health.py
     - deploy_inventory.py
     - deploy_k8s.py
+    - deploy_locks.py
     - deploy_staging.py
+    - deploy_staging_io.py
     - deploy_toolbox.py
     - deploy_tick_types.py
     - deploy_phases.py
@@ -231,6 +233,8 @@
         src: ansible/roles/setup/gitops_deploy/files/deploy_inventory.py
       - live: /opt/gitops-deploy/deploy_k8s.py
         src: ansible/roles/setup/gitops_deploy/files/deploy_k8s.py
+      - live: /opt/gitops-deploy/deploy_locks.py
+        src: ansible/roles/setup/gitops_deploy/files/deploy_locks.py
       - live: /opt/gitops-deploy/deploy_staging.py
         src: ansible/roles/setup/gitops_deploy/files/deploy_staging.py
       - live: /opt/gitops-deploy/deploy_toolbox.py
@@ -243,6 +247,8 @@
         src: ansible/roles/setup/gitops_deploy/files/deploy_handlers.py
       - live: /opt/gitops-deploy/deploy_defer.py
         src: ansible/roles/setup/gitops_deploy/files/deploy_defer.py
+      - live: /opt/gitops-deploy/deploy_staging_io.py
+        src: ansible/roles/setup/gitops_deploy/files/deploy_staging_io.py
       - live: /opt/gitops-deploy/deploy_narrow.py
         src: ansible/roles/setup/gitops_deploy/files/deploy_narrow.py
       - live: /opt/gitops-deploy/host_lib.py

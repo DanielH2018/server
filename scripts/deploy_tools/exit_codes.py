@@ -37,6 +37,10 @@ DEPLOY_LOCK_BUSY = 75
 # user cannot open. Nothing was deployed either way, so it is a refusal — but retrying clears
 # 75 and never clears this one, which is why it is its own code (issue #1775).
 DEPLOY_LOCK_UNAVAILABLE = 76
+# The snapshot worktree could not be created, so the wrapper had no tree to render from. Its
+# own code rather than 76's: 76 points at the lock file, this points at the snapshot root or
+# the git object store, and the two are fixed in different places (ADR-0017).
+DEPLOY_SNAPSHOT_FAILED = 77
 
 # The subset that means staging (or a landing) never formed an opinion, because deploy.sh
 # refused before it applied anything.
@@ -47,6 +51,7 @@ DEPLOY_SH_NO_VERDICT = frozenset(
         DEPLOY_STALE,
         DEPLOY_LOCK_BUSY,
         DEPLOY_LOCK_UNAVAILABLE,
+        DEPLOY_SNAPSHOT_FAILED,
     }
 )
 

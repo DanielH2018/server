@@ -38,6 +38,7 @@ FILES = pathlib.Path(__file__).resolve().parents[1] / "files"
 GITOPS_SRC = FILES / "gitops_deploy.py"
 IO_SRC = FILES / "deploy_io.py"
 HANDLERS_SRC = FILES / "deploy_handlers.py"
+STAGING_IO_SRC = FILES / "deploy_staging_io.py"
 STATE_PREFIX = "/var/lib/gitops-deploy/"
 # What the `tick` fixture arms the staging gate over. The production literal stays in
 # gitops_deploy.py, where scripts/docs/gen_doc_fragments.py reads it; this is only what puts the
@@ -47,6 +48,26 @@ STAGING_SUBSET = frozenset({"sonarr"})
 # At import, not in a fixture: a test module's own `import gitops_deploy` runs at collection,
 # before any fixture. pytest imports a directory's conftest.py ahead of its test modules.
 os.environ["GITOPS_DEPLOY_CONFIG"] = str(pathlib.Path(__file__).with_name("config.env"))
+
+
+@pytest.fixture(autouse=True)
+def service_lock_dir(tmp_path, monkeypatch) -> pathlib.Path:
+    """Point the per-service locks at tmp_path, and hand back the directory to read them from.
+
+    Every deploy this suite drives now flocks one file per service (ADR-0017). Left at
+    /var/lock those would sit beside the real locks, so a test would flock what a live deploy
+    holds and block on it. Autouse and directory-wide, because the set of modules that reach a
+    deploy function is not closed.
+
+    `_deploy_fakes.locks_taken` reads this directory: a lock file exists only because a deploy
+    took it, so the directory IS the record of which locks a call took.
+    """
+    locks = tmp_path / "service-locks"
+    locks.mkdir()
+    # `setenv`, not `setattr`: `deploy_locks.lock_dir()` reads the variable per call, the same
+    # one `scripts/deploy.sh` honours, so the redirect needs no seam in the module.
+    monkeypatch.setenv("HOMELAB_DEPLOY_LOCK_DIR", str(locks))
+    return locks
 
 
 @pytest.fixture(scope="session")
@@ -144,6 +165,12 @@ def handlers_fn(
 ) -> Callable[[str, ast.AST | None], ast.FunctionDef]:
     """`handlers_fn("handle_k8s")` is that FunctionDef; a missing name fails."""
     return _fn_finder(handlers_tree, "deploy_handlers.py")
+
+
+@pytest.fixture(scope="session")
+def staging_io_fn() -> Callable[[str, ast.AST | None], ast.FunctionDef]:
+    """`staging_io_fn("consult_staging")` is that FunctionDef in deploy_staging_io.py."""
+    return _fn_finder(ast.parse(STAGING_IO_SRC.read_text()), "deploy_staging_io.py")
 
 
 @pytest.fixture(scope="session")

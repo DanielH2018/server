@@ -12,12 +12,10 @@ than through the exit code; the `0 if posted else 1` branches are reached only w
 failure alert could not be delivered, and 1 there is what leaves systemd's OnFailure unit as
 the backstop.
 
-The staging gate's I/O shell sits at the bottom of this file — `consult_staging`,
-`record_staging_tick` and `consume_staging_override` — rather than beside the pure verdict it
-calls. `handle_k8s` is their only production caller, and `deploy_staging.py` has to stay
-import-pure: `deploy_logic.py` re-exports it to three tools in `scripts/deploy_tools/` that
-import with only this directory on `sys.path`, so an `import deploy_io` there reaches
-`host_lib` and breaks `land.sh`.
+The staging gate's I/O shell — `consult_staging`, `record_staging_tick` and
+`consume_staging_override` — sat at the bottom of this file until 2026-09-11 and is now
+`deploy_staging_io.py`. `handle_k8s` is still its only production caller; what moved it out was
+this file reaching its length cap.
 
 Reach `deploy_io` and `deploy_alerts` qualified, never by from-import.
 """
@@ -27,6 +25,7 @@ import time
 import deploy_alerts
 import deploy_defer
 import deploy_io
+import deploy_locks
 import deploy_narrow
 from deploy_changes import setup_tags_for
 from deploy_config import CHICAGO, Config, log
@@ -38,14 +37,8 @@ from deploy_git import (
 )
 from deploy_health import gate_services
 from deploy_k8s import declares_snapshot_claims, rollback_volume_revert_note
-from deploy_staging import (
-    STAGING_SKIPPED,
-    staging_blocks,
-    staging_scope,
-    staging_tick_outcome,
-    staging_verdict,
-    staging_verdict_summary,
-)
+from deploy_staging import staging_blocks
+from deploy_staging_io import consult_staging, consume_staging_override
 from deploy_state import DeployerState
 from deploy_tick_types import TickPlan, TickTarget
 from deploy_toolbox import DeployTools
@@ -167,8 +160,11 @@ def handle_broad(
     # and a record placed after it never ran: the role sat fast-forwarded on disk with no
     # marker, and once the operator fixed forward past the held SHA, `local..origin` no longer
     # carried that commit and this arm never saw the role again.
-    if pending:
-        deploy_defer.record(tools, state, config, origin, pending)
+    # Kept: what this tick ADDED, so the contention arm can take exactly that back. A role a
+    # previous tick already recorded keeps its first-seen stamp and is not in this list.
+    recorded = (
+        deploy_defer.record(tools, state, config, origin, pending) if pending else []
+    )
 
     # FORWARD-ONLY. deploy_logic.broad_budget_ok carries the argument and its 2026-08-29
     # re-derivation: at the 60min ceiling a full deploy.yml (1212s measured 2026-08-22) plus
@@ -185,6 +181,12 @@ def handle_broad(
             deploy_io.deploy_broad(
                 config.repo, playbook, tags, config.broad_deploy_timeout_s
             )
+    except deploy_locks.ServiceLockBusy as exc:
+        # Before the generic arm: nothing was applied, so this plane must not be held — and the
+        # reset undoes the ff-merge, so the manual_plane lines this tick just wrote describe a
+        # range that is no longer merged. Take them back with their page.
+        deploy_defer.unrecord(state, origin, recorded)
+        return deploy_defer.for_contention(tools, config, target, exc)
     except Exception as exc:
         log(f"broad apply failed ({playbook} {tags}): {exc}")
         state.write_hold(origin)
@@ -273,6 +275,10 @@ def handle_k8s(
     tools.run(["git", "merge", "--ff-only", origin], cwd=config.repo)
     try:
         deploy_io.deploy_k8s(config.repo, cs.k8s_deploy, config.k8s_deploy_timeout_s)
+    except deploy_locks.ServiceLockBusy as exc:
+        # Before the rollback arm: a rollback would revert volumes and redeploy the prior pin
+        # over a cluster this tick never touched.
+        return deploy_defer.for_contention(tools, config, target, exc)
     except Exception as exc:
         return _rollback_k8s(tools, state, config, target, plan, exc)
     # The ONLY place a hold can clear on an all-k8s host. state.write_hold(None) otherwise lives
@@ -390,6 +396,9 @@ def handle_docker(
     tools.run(["git", "merge", "--ff-only", origin], cwd=config.repo)
     try:
         deploy_io.deploy(config.repo, cs.services)
+    except deploy_locks.ServiceLockBusy as exc:
+        # Before the rollback arm, for handle_k8s's reason: there is nothing to repair.
+        return deploy_defer.for_contention(tools, config, target, exc)
     except Exception as exc:
         # Deploy-EXECUTION failure (ansible-playbook itself errored: bad image manifest, a failed
         # task) — distinct from the health gate below. Without this the exception propagates to
@@ -487,110 +496,3 @@ def handle_docker(
     # Exit 0 on a delivered detailed post so OnFailure's generic curl doesn't double-page (see the
     # exec-failure path above); exit 1 only if the detailed post failed, leaving OnFailure the backstop.
     return 0 if posted else 1
-
-
-# ── the staging gate's I/O shell ─────────────────────────────────────────────────────────
-
-
-def record_staging_tick(
-    tools: DeployTools,
-    state: DeployerState,
-    sha: str,
-    gated: set[str],
-    verdict: str,
-) -> None:
-    """Append this tick's verdict to the tick ledger. Never raises. See deploy_io.
-
-    A tick that measured nothing writes nothing — `staging_tick_outcome` returns None for
-    SKIPPED, and the tick runs every ten minutes, so recording those would bury the real
-    samples. That decision is made HERE rather than inside `deploy_io.record_staging_tick`,
-    which would otherwise have to import this module and close a cycle through
-    `deploy_toolbox`.
-    """
-    outcome = staging_tick_outcome(verdict)
-    if outcome is None:
-        return
-    deploy_io.record_staging_tick(
-        state.path("staging_ticks"),
-        CHICAGO,
-        tools.now,
-        sha,
-        gated,
-        verdict,
-        outcome,
-    )
-
-
-def consume_staging_override(state: DeployerState) -> bool:
-    """Spend the operator's one-tick override, if it is armed. True when it was."""
-    return deploy_io.consume_override(state.path("staging_override"))
-
-
-def consult_staging(
-    tools: DeployTools,
-    state: DeployerState,
-    config: Config,
-    services: set[str],
-    origin: str,
-) -> str:
-    """Ask the staging cluster about this commit, and return the one-word verdict.
-
-    The verdict is `staging_verdict`'s vocabulary: pass, rejected, no_verdict, or skipped when
-    nothing was asked at all. Whether it stops the prod deploy is `staging_blocks`' decision, not
-    this function's — returning a word and acting on it are kept apart so the gate can stay
-    advisory (slice 3) while the verdict is already the thing being logged and measured.
-
-    NOTHING HERE MAY BREAK A PROD DEPLOY, blocking or not. Every failure path — a missing script,
-    an ssh outage, a wedged guest, a bug in this function — is caught by
-    `deploy_io.run_staging_scripts` and reported as NO VERDICT, which `staging_blocks` never
-    blocks on. An internal error alerts on the same path as any other non-PASS: a silent
-    pass-through would make a bug here the one way past the gate that nobody sees.
-
-    Off by default (`STAGING_GATE` in the unit's env). Turning it on costs every k8s tick the
-    staging deploy's wall-clock, which is why it is a switch rather than a given.
-    """
-    if not config.staging_gate:
-        return STAGING_SKIPPED
-    # An ARMED gate with an empty subset can never gate anything, and the SKIPPED it returns
-    # below is the same word a tick that simply touched no staging service gets. Those two
-    # states are worth telling apart in the journal: the second is the ordinary case, the first
-    # means the operator turned the gate on and it is doing nothing. `load_config` does not
-    # parse STAGING_SUBSET — it is a `gitops_deploy.py` constant that `tick_config()` snapshots
-    # — so a Config built anywhere else carries the fail-safe empty default and lands here.
-    if not config.staging_subset:
-        log(
-            "staging: gate is ARMED but STAGING_SUBSET is empty — nothing can be gated, so "
-            "every service is reported unchecked"
-        )
-    gated, ungated = staging_scope(services, config.staging_subset)
-    if not gated:
-        log(staging_verdict_summary(gated, ungated, 0, 0))
-        return STAGING_SKIPPED
-
-    deploy_rc, expect_rc = tools.run_staging_scripts(
-        config.repo,
-        origin,
-        ",".join(sorted(gated)),
-        config.staging_gate_timeout_s,
-        config.staging_expect_timeout_s,
-    )
-    summary = staging_verdict_summary(gated, ungated, deploy_rc, expect_rc)
-    log(summary)
-    # Alerted, not silent: a journal line alone collects no operator judgement about whether a
-    # failure was staging's fault or the change's, which is the one thing the entry condition's
-    # false-failure rate is made of.
-    if deploy_rc != 0 or expect_rc != 0:
-        deploy_alerts.alert_once(
-            tools,
-            state,
-            config,
-            "staging_alerted",
-            "staging",
-            origin,
-            deploy_alerts.staging_verdict_alert(
-                origin, summary, config.staging_gate_blocking
-            ),
-        )
-    verdict = staging_verdict(deploy_rc, expect_rc)
-    record_staging_tick(tools, state, origin, gated, verdict)
-    return verdict

@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools import exit_codes as ec
 
 
-def test_the_no_verdict_set_is_exactly_the_five_refusals_by_name():
+def test_the_no_verdict_set_is_exactly_the_refusals_by_name():
     """`==`, not `<=`: a member dropped or added must both fail."""
     assert ec.DEPLOY_SH_NO_VERDICT == {
         ec.DEPLOY_TAG_MISS,
@@ -29,6 +29,7 @@ def test_the_no_verdict_set_is_exactly_the_five_refusals_by_name():
         ec.DEPLOY_STALE,
         ec.DEPLOY_LOCK_BUSY,
         ec.DEPLOY_LOCK_UNAVAILABLE,
+        ec.DEPLOY_SNAPSHOT_FAILED,
     }
 
 
@@ -40,6 +41,7 @@ def test_the_no_verdict_set_is_exactly_the_five_refusals_by_name():
         "DEPLOY_STALE",
         "DEPLOY_LOCK_BUSY",
         "DEPLOY_LOCK_UNAVAILABLE",
+        "DEPLOY_SNAPSHOT_FAILED",
     ],
 )
 def test_each_named_refusal_is_in_the_no_verdict_set(name):
@@ -63,6 +65,7 @@ def test_the_deploy_sh_values_match_the_wrapper_itself():
     text = (Path(__file__).resolve().parents[3] / "scripts" / "deploy.sh").read_text()
     assert f"LOCK_BUSY={ec.DEPLOY_LOCK_BUSY}" in text
     assert f"LOCK_UNAVAILABLE={ec.DEPLOY_LOCK_UNAVAILABLE}" in text
+    assert f"SNAPSHOT_FAILED={ec.DEPLOY_SNAPSHOT_FAILED}" in text
     assert f"PLAYBOOK_FAILED={ec.DEPLOY_PLAYBOOK_FAILED}" in text
     for rc in (ec.DEPLOY_TAG_MISS, ec.DEPLOY_STALE, ec.DEPLOY_BAD_FLAGS):
         assert f"exit {rc}\n" in text, f"deploy.sh no longer exits {rc}"

@@ -63,11 +63,13 @@ Steps:
 
    Deploy through `scripts/deploy.sh`, not `ansible-playbook` directly — it takes
    `/var/lock/server-git-tree.lock`, the same lock gitops-deploy.service and the
-   secret-rotate cron use. What that lock guards is the local git tree every deploy reads
-   its templates from, which gitops-deploy rewrites with a `git pull` mid-run — so a Pi
-   deploy takes it too, even though the writes land on the Pi. `--check` runs unlocked.
-   Exit 75 means the lock stayed busy for 25 minutes and **nothing was deployed** — that is
-   not a playbook failure.
+   secret-rotate cron use, long enough to copy `HEAD` into a snapshot worktree, then runs
+   the playbook from that snapshot under `/var/lock/server-deploy-<tag>.lock`, one per
+   service. So deploys of the same service serialize and deploys of different services do
+   not. A Pi deploy takes both too, even though the writes land on the Pi. `--check` runs
+   unlocked, from the working tree. **The snapshot is of `HEAD`: an uncommitted edit is not
+   deployed.** Exit 75 means a lock stayed busy and **nothing was deployed** — that is not a
+   playbook failure.
 5. **Verify it actually came up healthy** — Ansible reporting `ok`/`changed` only means the
    playbook ran, not that the workload is up (it can apply cleanly then crash-loop or fail
    its probes).
@@ -107,9 +109,9 @@ alone matches nothing).
 
 ## The command reference
 
-The bare `ansible-playbook` forms are what the wrapper runs. They work, but they have neither
-the lock, the tag check, nor the staleness check — use one only when you deliberately want
-that.
+The bare `ansible-playbook` forms are what the wrapper runs. They work, but they have none of
+the locks, the snapshot, the tag check or the staleness check — use one only when you
+deliberately want that.
 
 ```bash
 # Deploy a specific service
@@ -153,19 +155,24 @@ uv run ansible-playbook ansible/initial_setup.yml
 
 ## Why `deploy.sh` rather than the playbook
 
-It takes `/var/lock/server-git-tree.lock` — the same lock `gitops-deploy.service` (10-min
-timer) and the weekly secret-rotate cron hold — so a deploy cannot interleave with the
-automated pipeline or with another Claude session. The lock guards the local git tree every
-deploy reads its templates from, which gitops-deploy rewrites with a `git pull` mid-run, so a
-`-e target=daniel-pi` deploy takes it too.
+It takes two kinds of lock ([ADR-0017](../../../docs/adr/0017-the-tree-lock-guards-the-tree-not-the-cluster.md)).
+`/var/lock/server-git-tree.lock` — the same lock `gitops-deploy.service` (10-min timer) and
+the weekly secret-rotate cron hold — guards the local git tree every deploy renders from,
+which gitops-deploy rewrites with a `git pull` mid-run; `deploy.sh` holds it only to copy
+`HEAD` into a detached worktree under `/tmp/homelab-deploy-snapshots/`. It then releases that
+and holds one `/var/lock/server-deploy-<tag>.lock` per service across the playbook, which is
+what stops two deploys of the same service racing. A `-e target=daniel-pi` deploy takes both.
 
-Five of its non-zero exits mean **nothing was deployed**, and each is a resume point rather
-than a failure. The sixth, 20, is the inverse: the playbook ran and changes are live.
+Because the snapshot is of `HEAD`, **an uncommitted edit is not deployed** — commit first.
+
+Six of its non-zero exits mean **nothing was deployed**, and each is a resume point rather
+than a failure. The seventh, 20, is the inverse: the playbook ran and changes are live.
 
 | Exit | Meaning | What to do |
 |---|---|---|
+| 77 | the snapshot worktree could not be created | check `/tmp/homelab-deploy-snapshots/` is writable and `git worktree add --detach` works |
 | 76 | flock failed on the lock file itself — not contention | `ls -l /var/lock/server-git-tree.lock`; retrying alone changes nothing |
-| 75 | the lock stayed busy (the timer, or another session) | retry |
+| 75 | a lock stayed busy — the tree lock, or one of this run's services' | retry |
 | 4 | the tree is behind `origin/master` | `git pull`, never `--skip-staleness-check` |
 | 3 | the change is broad and maps to no single service | deploy by hand, or see *When to wait* |
 | 2 | a `--tags` value matched no service | `--list-services` prints every valid value |

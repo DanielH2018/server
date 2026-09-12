@@ -10,10 +10,18 @@ GitOps decides what to deploy on its own, this is you deciding.
 ./scripts/deploy.sh --tags "<service>"
 ```
 
-Not a bare `ansible-playbook`. The wrapper does three things the bare form does not:
+Not a bare `ansible-playbook`. The wrapper does four things the bare form does not:
 
-- Takes `/var/lock/server-git-tree.lock`, so the deploy cannot interleave with the GitOps
-  timer, the secret-rotation cron, or another session ([ADR-0011](adr/0011-one-lock-serialises-every-deploy-path.md)).
+- Takes `/var/lock/server-git-tree.lock` to snapshot `HEAD`, then one
+  `/var/lock/server-deploy-<tag>.lock` per service for the playbook, so the deploy cannot
+  interleave with the GitOps timer or the secret-rotation cron on the tree, nor with another
+  deploy of the same service on the cluster
+  ([ADR-0011](adr/0011-one-lock-serialises-every-deploy-path.md),
+  [ADR-0017](adr/0017-the-tree-lock-guards-the-tree-not-the-cluster.md)). Two sessions
+  deploying different services run at the same time.
+- Renders from a detached worktree of `HEAD` under `/tmp/homelab-deploy-snapshots/`, not from
+  the working tree. **An uncommitted edit is not deployed.** `--check` and `--dry-run` are the
+  exceptions and still read the working tree.
 - Checks the tags against `containers_list` first, because Ansible itself exits 0 on a tag
   that matches nothing.
 - Refuses a tree that is behind `origin/master` on something the deploy renders, because a
@@ -32,7 +40,8 @@ Each of these means **nothing was deployed**. None is a playbook failure.
 
 | Code | Means | Do |
 |---|---|---|
-| 75 | The lock stayed busy | Retry |
+| 77 | The snapshot worktree could not be created | Check `/tmp/homelab-deploy-snapshots/` is writable and `git worktree add --detach` works |
+| 75 | A lock stayed busy — the tree lock, or one of this run's services' | Retry |
 | 4 | The tree is behind `origin/master` on a path the deploy reaches | Pull, then retry. Never `--skip-staleness-check` |
 | 3 | The change is broad and maps to no single service | Run the playbook the change's plane needs |
 | 2 | The tag matched no service | `--list-services` prints the valid values |

@@ -71,6 +71,13 @@ _ACQUIRED = re.compile(
 _JOINED = re.compile(
     r"gitops_tick: joined a tick already [^;]*in flight; waited (\d+)s for it\s*$"
 )
+# deploy.sh holds the tree lock only for its snapshot and then queues on one lock per service
+# (ADR-0017), so most of what a landing waits for now arrives on THIS line rather than the one
+# above. It names no holder: a service lock is taken on a descriptor the way the tree lock is,
+# but nothing samples `fuser` for it — the holder is by construction another deploy of the same
+# service, which the line's own tag already says. A run can print several of these and
+# `note_in_flock_wait` sums them, which is the right total: they are taken in sequence.
+_SERVICE_ACQUIRED = re.compile(r"deploy: service lock \S+ acquired after (\d+)s\s*$")
 # `annotation_line` writes the holder as `holder="..."`, so an unstripped quote splits one
 # Loki row into fields the board reads as something else. `lock_holder` sanitises its own
 # return the same way; this is the choke point for the wrapper-reported source.
@@ -80,6 +87,10 @@ HOLDER_MAX = 200
 def in_flock_wait(line: str) -> tuple[int, str] | None:
     """The seconds and holder a wrapper's own wait line reports, or None for any other line.
 
+    Three lines qualify: the tree lock's acquire, a per-service lock's acquire, and a landing
+    that joined a tick already in flight. A deploy prints the tree line at most once and a
+    service line per lock it queued on, and the caller sums them all into `lock`.
+
     The joined-tick line carries two numbers and only the second is booked: the first is how
     long the tick had run BEFORE this landing arrived, which is time that elapsed outside the
     landing. Booking it would push `lock` above `tick`, and `lock` is a sub-part of `tick`
@@ -87,6 +98,8 @@ def in_flock_wait(line: str) -> tuple[int, str] | None:
     """
     if m := _ACQUIRED.search(line):
         return int(m[1]), (m[2] or "").replace('"', "")[:HOLDER_MAX]
+    if m := _SERVICE_ACQUIRED.search(line):
+        return int(m[1]), ""
     if m := _JOINED.search(line):
         return int(m[1]), ""
     return None

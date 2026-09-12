@@ -208,26 +208,92 @@ def test_a_non_superseded_status_yields_no_target():
 # Direction 1: an ADR's `governs:` anchors must resolve to a marker naming that ADR.
 
 
+def _text_anchor(anchor: str) -> tuple[str, str] | None:
+    """`path#some marker text` split into the two, or None for a `path:line` anchor.
+
+    The text form exists because a line number is wrong the moment anything above it moves,
+    and nothing but this file notices — three anchors in the ADR set had to be re-pointed by
+    hand while the change that moved them was being written. `#` rather than `:` separates
+    them, because marker text routinely contains a colon.
+    """
+    rel, sep, text = anchor.partition("#")
+    return (rel, text.strip()) if sep and text.strip() else None
+
+
+def _blocks_matching(target: Path, text: str) -> list[tuple[int, str]]:
+    """Every marker block in `target` containing `text`, as (1-indexed line, block)."""
+    lines = target.read_text().splitlines()
+    return [
+        (i + 1, _marker_block(lines, i))
+        for i, line in enumerate(lines)
+        if MARKER.search(line) and text in _marker_block(lines, i)
+    ]
+
+
 @pytest.mark.parametrize("adr", _adr_files(), ids=lambda p: p.name)
 def test_every_governs_anchor_resolves_to_a_marker_naming_this_adr(adr):
     fm = _frontmatter(adr)
     number = int(fm["id"])
     for anchor in fm["governs"]:
-        assert ":" in str(anchor), f"{adr.name}: {anchor!r} is not file:line"
-        rel, _, lineno = str(anchor).rpartition(":")
-        target = REPO / rel
-        assert target.is_file(), f"{adr.name}: {rel} does not exist"
-        lines = target.read_text().splitlines()
-        index = int(lineno) - 1
-        assert 0 <= index < len(lines), f"{adr.name}: {rel} has no line {lineno}"
-        assert MARKER.search(lines[index]), (
-            f"{adr.name}: {anchor} carries no '# DECIDED:' marker. The anchor must be the "
-            "marker's first line, not a line near it."
-        )
-        block = _marker_block(lines, index)
+        by_text = _text_anchor(str(anchor))
+        if by_text is not None:
+            rel, text = by_text
+            target = REPO / rel
+            assert target.is_file(), f"{adr.name}: {rel} does not exist"
+            matches = _blocks_matching(target, text)
+            assert len(matches) == 1, (
+                f"{adr.name}: {anchor} matches {len(matches)} markers in {rel}; the text "
+                "must name exactly one"
+            )
+            block = matches[0][1]
+        else:
+            assert ":" in str(anchor), f"{adr.name}: {anchor!r} is not file:line"
+            rel, _, lineno = str(anchor).rpartition(":")
+            target = REPO / rel
+            assert target.is_file(), f"{adr.name}: {rel} does not exist"
+            lines = target.read_text().splitlines()
+            index = int(lineno) - 1
+            assert 0 <= index < len(lines), f"{adr.name}: {rel} has no line {lineno}"
+            assert MARKER.search(lines[index]), (
+                f"{adr.name}: {anchor} carries no '# DECIDED:' marker. The anchor must be "
+                "the marker's first line, not a line near it."
+            )
+            block = _marker_block(lines, index)
         assert number in {int(m) for m in ADR_REF.findall(block)}, (
             f"{adr.name}: the marker at {anchor} does not reference ADR-{number:04d}"
         )
+
+
+def test_a_text_anchor_is_told_from_a_line_anchor():
+    """CLEAN half for `_text_anchor`: both forms parse as what they are.
+
+    A path can contain neither `#` nor a colon-digit suffix by accident, so the two forms
+    cannot collide — but a resolver that read every anchor as one form would silently pass
+    every anchor of the other.
+    """
+    assert _text_anchor("scripts/deploy.sh#ownership is this lock") == (
+        "scripts/deploy.sh",
+        "ownership is this lock",
+    )
+    assert _text_anchor("scripts/deploy.sh:194") is None
+    assert _text_anchor("scripts/deploy.sh#   ") is None
+
+
+def test_a_text_anchor_that_names_no_marker_is_flagged(tmp_path):
+    """FLAGGED half: a text anchor must be as falsifiable as a line number was.
+
+    An anchor matching nothing, or matching two markers, is the drift a text anchor is meant
+    to make impossible — it must not read as "resolved" just because it is not a number.
+    """
+    source = tmp_path / "thing.py"
+    source.write_text(
+        "# DECIDED: alpha holds. (ADR-0001)\nx = 1\n# DECIDED: alpha and beta. (ADR-0001)\n"
+    )
+    assert _blocks_matching(source, "beta") == [
+        (3, "# DECIDED: alpha and beta. (ADR-0001)")
+    ]
+    assert _blocks_matching(source, "gamma") == []
+    assert len(_blocks_matching(source, "alpha")) == 2
 
 
 # Direction 2: a marker naming an ADR must be listed in that ADR's `governs:`.
@@ -241,15 +307,27 @@ def test_every_adr_reference_in_a_marker_is_listed_by_that_adr():
 
     broken = []
     for path, lineno, block in _markers():
-        anchor = f"{path.relative_to(REPO)}:{lineno}"
+        rel = str(path.relative_to(REPO))
+        anchor = f"{rel}:{lineno}"
         for ref in {int(m) for m in ADR_REF.findall(block)}:
             if ref not in governs:
                 broken.append(
                     f"{anchor} references ADR-{ref:04d}, which does not exist"
                 )
-            elif anchor not in governs[ref]:
+            elif not _listed(governs[ref], rel, anchor, block):
                 broken.append(f"{anchor} is not in ADR-{ref:04d}'s governs list")
     assert not broken, "\n".join(broken)
+
+
+def _listed(anchors: set[str], rel: str, anchor: str, block: str) -> bool:
+    """Does this ADR's governs list name this marker, by line or by text?"""
+    if anchor in anchors:
+        return True
+    return any(
+        parsed[0] == rel and parsed[1] in block
+        for parsed in (_text_anchor(a) for a in anchors)
+        if parsed is not None
+    )
 
 
 # The index and the nav are two more places an ADR has to appear, and both drift silently.

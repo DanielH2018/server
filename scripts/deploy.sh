@@ -1,29 +1,46 @@
 #!/bin/bash
-# Run an interactive Ansible deploy under the same lock the automated deployers take.
+# Run an interactive Ansible deploy under the locks the automated deployers take.
 #
-# gitops-deploy.service (every 10 min) and the weekly secret-rotate cron both serialize on
-# /var/lock/server-git-tree.lock. A hand- or agent-run `ansible-playbook` took no lock at
-# all, so it could interleave with either of them -- writing the same rendered tree and
-# talking to the same cluster -- while several Claude sessions could do the same to each
-# other.
+# TWO LOCKS, GUARDING TWO DIFFERENT THINGS (ADR-0017).
 #
-# The wait is deliberately longer than gitops-deploy's own 180s: an interactive deploy
-# should queue behind the unattended pipeline rather than give up. Note this does NOT
+# /var/lock/server-git-tree.lock guards the git tree, and nothing else. gitops-deploy.service
+# (every 10 min), the weekly secret-rotate cron and the docs refresh all take it, because each
+# rewrites the tree every other deploy renders from. This wrapper holds it only long enough to
+# copy HEAD into a detached worktree under /tmp/homelab-deploy-snapshots -- seconds -- then
+# hands it back and runs the playbook against that snapshot. The rollout wait and the fixed
+# stabilisation pause that make up most of a deploy read no tree at all, so holding the tree
+# lock across them made two landings on disjoint services queue for no reason.
+#
+# /var/lock/server-deploy-<tag>.lock guards the CLUSTER, one lock per deploy tag, held across
+# the whole playbook. Two deploys of the same service still serialize; two deploys of different
+# services now run at once. A run that names no tag takes server-deploy-all.lock exclusively
+# and every scoped run takes it shared, so a full run and a scoped run still exclude each other.
+#
+# The tree-lock wait is deliberately longer than gitops-deploy's own 180s: an interactive
+# deploy should queue behind the unattended pipeline rather than give up. Note this does NOT
 # protect the pipeline from a slow deploy in the other direction -- if this run holds the
 # lock for more than 180s, the next gitops firing fails its unit and raises a Discord alert.
 # That alert is accurate (a deploy really was in progress) and the timer retries 10 minutes
-# later, so it is left as a true signal rather than suppressed.
+# later, so it is left as a true signal rather than suppressed. The snapshot makes that hold
+# short enough that it should now be rare.
 #
-# A `-e target=daniel-pi` deploy takes the lock too, even though it writes to the Pi: what
-# the lock guards is the local git tree every deploy reads its templates from, and
-# gitops-deploy rewrites that tree with a `git pull` mid-run.
+# A `-e target=daniel-pi` deploy takes both, even though it writes to the Pi: the tree lock
+# because it renders from the local tree, and the service locks because two deploys of the
+# Pi's wg-easy are as much a conflict as two deploys of sonarr.
+#
+# THE SNAPSHOT IS OF HEAD, NOT THE WORKING TREE. An uncommitted edit is not deployed. That is
+# a real behaviour change and a deliberate one: rendered manifests are then a function of a
+# commit, which is what makes the release record's `tree_dirty` structurally false and what
+# makes it safe to let the tree move while the playbook runs. Commit before deploying.
 #
 # Usage: scripts/deploy.sh --tags "<service>" [-e target=daniel-pi] [...]
-#   --check runs unlocked; a dry run writes nothing worth serializing.
+#   --check runs unlocked and un-snapshotted, from the WORKING TREE; a dry run writes nothing
+#     worth serializing, and reading the working tree is what makes it useful on an edit that
+#     is not committed yet.
 #   --dry-run validates the k8s manifests against the live API server without applying them
-#     (-e k8s_dry_run=true). Also unlocked, and for a stronger reason than --check: it mutates
-#     nothing at all, on the cluster or on the staging tree. See k8s_dry_run in
-#     inventory/group_vars/all.yml, including the 19 roles it refuses to cover.
+#     (-e k8s_dry_run=true). Also unlocked and from the working tree, and for a stronger reason
+#     than --check: it mutates nothing at all, on the cluster or on the staging tree. See
+#     k8s_dry_run in inventory/group_vars/all.yml, including the 19 roles it refuses to cover.
 #   --list-services prints every valid --tags value and exits.
 #   --skip-tag-check deploys a tag this wrapper does not recognise.
 #   --skip-staleness-check deploys from a tree behind origin/master. Refused by default
@@ -40,16 +57,19 @@
 #     having deployed nothing.
 #   --detach backgrounds the ansible-playbook run (the ~83% of a deploy that is waiting on
 #     rollout/stabilisation) and returns immediately. The staleness check, tag validation, and
-#     the lock are still evaluated in THIS process before it returns, so exit 2/4 land exactly
-#     as they do today; lock contention (exit 75) is checked non-blocking instead of queued for
-#     LOCK_WAIT, since waiting 45 minutes before returning would defeat the point of detaching —
-#     it fails fast and asks you to retry rather than sitting on the terminal. Output goes to a
+#     the locks are still evaluated in THIS process before it returns, so exit 2/4 land exactly
+#     as they do today; TREE-lock contention (exit 75) is checked non-blocking instead of queued
+#     for LOCK_WAIT, since waiting 50 minutes before returning would defeat the point of
+#     detaching — it fails fast and asks you to retry rather than sitting on the terminal. The
+#     SERVICE locks queue normally even here: a service lock is held by another deploy of the
+#     same service, where waiting is the right answer and the wait is bounded by that deploy.
+#     Output goes to a
 #     log file (path printed on return); on completion it posts to the gitops-deploy Discord
 #     webhook, gated on `probe.py health <svc>` for every deployed tag that supports it.
 #     Meaningless combined with --check or --dry-run (both already return immediately without
 #     touching the lock) — refused with a nonzero exit rather than silently ignored.
 #
-# Exit codes. 0 is a finished deploy; 76, 75, 4, 3 and 2 each mean NOTHING was deployed and
+# Exit codes. 0 is a finished deploy; 77, 76, 75, 4, 3 and 2 each mean NOTHING was deployed and
 # each is a resume point (see the table in the repo CLAUDE.md); 20 means the playbook RAN and a task
 # failed, so whatever applied before it is live. Nothing else is returned — ansible-playbook's
 # own status collides with 2/3/4 and is collapsed onto 20, see PLAYBOOK_FAILED below.
@@ -67,15 +87,26 @@ set -u
 # keeps it quiet — without it the flag would be cleared on /dev/null instead.
 python3 -c 'import os; [os.set_blocking(f, True) for f in (0, 1, 3)]' 3>&2 2>/dev/null || true
 
-LOCK=/var/lock/server-git-tree.lock
+# The git-tree lock (ADR-0011). Overridable for the same reason the two paths below are: the
+# concurrency tests take this lock for real, and taking the production one would queue a live
+# gitops tick behind a test -- and be queued behind one.
+LOCK="${HOMELAB_DEPLOY_TREE_LOCK:-/var/lock/server-git-tree.lock}"
+# Where the per-service locks live. One `server-deploy-<tag>.lock` per deploy tag, plus
+# `server-deploy-all.lock` for a run that names no tag. These are what serialize the CLUSTER
+# work, which is nearly all of a deploy's wall clock; the tree lock above is held only for the
+# snapshot. Overridable so the bash-level tests can take real flocks on a tmp_path.
+LOCK_DIR="${HOMELAB_DEPLOY_LOCK_DIR:-/var/lock}"
+# Where a run's detached snapshot worktree is created. Overridable for the same reason.
+SNAPSHOT_ROOT="${HOMELAB_DEPLOY_SNAPSHOT_ROOT:-/tmp/homelab-deploy-snapshots}"
 # Covers gitops-deploy's worst-case hold of 2940s (STAGING_GATE_TIMEOUT_S 600 +
 # STAGING_EXPECT_TIMEOUT_S 120 + K8S_DEPLOY_TIMEOUT_S 900 + K8S_ROLLBACK_TIMEOUT_S 1320), not its
 # TimeoutStartSec. Was 1500 from d1a5b6c9 until 2026-08-23, when the unit's TimeoutStartSec really
 # was 25min; it then went 25 -> 35 -> 45min and this value was left behind, so a deploy launched
 # during a pathological gitops run gave up having deployed nothing while the run it was queued
 # behind was still legitimately working. Derived from the same role defaults the deployer reads
-# and pinned by test_deploy_sh_lock_wait_clears_the_deployers_worst_case_hold, so raising any of
-# the four fails that test rather than silently shortening this wait again.
+# and pinned by test_deploy_lock_wait_budget.py, so raising any of the four fails that test
+# rather than silently shortening this wait again. It is also the budget each per-service lock
+# waits: a service lock is held across the same playbook the tree lock used to cover.
 LOCK_WAIT=3000
 LOCK_BUSY=75
 # flock failed for a reason that is NOT contention -- a bad descriptor (65), a lock file this
@@ -98,6 +129,11 @@ LOCK_UNAVAILABLE=76
 # deployed; tags: terraria,uptime-kuma)` for a run whose manifests both applied and which failed
 # in k8s/rollout-drain. 20 is outside {0,1,2,3,4,64,75}, so the two can never be confused again.
 PLAYBOOK_FAILED=20
+# The snapshot worktree could not be created, so there was no tree to render from and NOTHING
+# was deployed. Its own code rather than 76's, because the remedy differs: 76 is the lock file,
+# this is the snapshot root or the git object store. Both are environment faults a retry alone
+# does not clear, which is why neither collapses onto the contention code.
+SNAPSHOT_FAILED=77
 
 # Record a successful deploy where Grafana can draw it as a dashboard annotation.
 #
@@ -125,11 +161,265 @@ emit_deploy_annotation() {
         IFS=,
         echo "${tags[*]:-full}"
     )
+    # The snapshot's own commit, captured when the snapshot was made rather than read here.
+    # This runs after the snapshot is gone, and on --detach it runs long after the working
+    # tree may have moved on; re-reading git would annotate a commit this run never deployed.
+    local sha="${snapshot_sha:-}"
+    [[ -n "$sha" ]] || sha=$(git rev-parse --short HEAD 2>/dev/null || echo unknown)
+
     # logfmt, so a Grafana annotation query can pull `services` out as the annotation text
     # rather than showing the whole raw line.
     logger -t deploy-annotation \
-        "event=deploy services=${label} sha=$(git rev-parse --short HEAD 2>/dev/null || echo unknown) result=ok" \
+        "event=deploy services=${label} sha=${sha} result=ok" \
         2>/dev/null || true
+}
+
+# ── the snapshot ──────────────────────────────────────────────────────────────────────────
+#
+# WHY A SNAPSHOT. The tree lock guards the git tree (ADR-0011), and rendering is the only part
+# of a deploy that reads it. Rendering is a few seconds; the rollout wait and the fixed
+# stabilisation pause that follow are minutes, and they touch no tree at all. Copying HEAD into
+# a detached worktree lets this run render from bytes nothing else can move, so the tree lock
+# is released before the playbook starts and two landings on disjoint services stop queueing
+# behind each other. ADR-0017 holds the full reasoning.
+
+# The snapshot this run created, empty until `make_snapshot` succeeds, and the commit it holds.
+snapshot=""
+snapshot_sha=""
+# The descriptor this run holds its snapshot's owner lock on. See OWNER_LOCK below.
+snapshot_owner_fd=""
+
+# The advisory lock that says a snapshot is still in use, inside the snapshot itself.
+#
+# DECIDED: ownership is this lock, never the pid in the directory name. `--detach` runs its
+# playbook in a backgrounded subshell whose `$$` is still the PARENT's pid, and the parent
+# exits as soon as it has backgrounded the job -- so for the whole life of a detached deploy
+# the name's pid is dead, and a pid-based reaper (even one run by `--check`) deleted the
+# worktree out from under the running playbook. A process cannot lie about holding a flock.
+# (ADR-0017)
+OWNER_LOCK=.deploy-owner.lock
+
+# Remove this run's snapshot. Safe to call twice and safe to call having made none.
+#
+# `git worktree remove --force` deregisters the worktree itself, so no prune is needed here --
+# and an unconditional one would deregister other sessions' worktrees whose directories are
+# temporarily missing. The reaper below prunes, gated on having reaped something.
+remove_snapshot() {
+    [[ -n "$snapshot" ]] || return 0
+    if [[ -n "$snapshot_owner_fd" ]]; then
+        exec {snapshot_owner_fd}>&-
+        snapshot_owner_fd=""
+    fi
+    git worktree remove --force "$snapshot" >/dev/null 2>&1 || rm -rf "$snapshot"
+    snapshot=""
+}
+
+# Remove snapshots no deploy is using any more. CALL ONLY WHILE HOLDING THE TREE LOCK.
+#
+# A run killed outside its trap -- SIGKILL, a reboot, an OOM -- leaves both the directory and
+# git's registration of it. A live one is told apart by its owner lock: the process running the
+# playbook holds `<snapshot>/.deploy-owner.lock`, so `flock -n` on it fails while that deploy is
+# alive and succeeds the moment it is not, however it died. The pid in the directory name is for
+# a human reading `ls`; it decides nothing.
+#
+# The tree lock is what closes the window between `git worktree add` creating the directory and
+# `make_snapshot` flocking the owner lock inside it. For those few seconds the directory looks
+# ownerless, and an unlocked reaper -- a concurrent `--check`, which needs no lock of its own --
+# deleted the worktree a deploy was about to render from, then told the operator "retrying alone
+# will not fix either". Both snapshot-taking arms reap under the same lock they snapshot under;
+# `--check` and `--dry-run` take no tree lock and so reap nothing, which costs only the next
+# locked invocation's sweep.
+#
+# Fails open, like the fact-cache preflight above it: a snapshot this run cannot reap costs
+# disk, and refusing every deploy over that would be the worse failure.
+reap_dead_snapshots() {
+    [[ -d "$SNAPSHOT_ROOT" ]] || return 0
+    local dir reaped=0
+    for dir in "$SNAPSHOT_ROOT"/*; do
+        [[ -d "$dir" ]] || continue
+        # `true` under the lock: this only asks whether the lock is free. flock releases it
+        # when that command exits, so nothing is held across the removal below.
+        flock -n "$dir/$OWNER_LOCK" true >/dev/null 2>&1 || continue
+        git worktree remove --force "$dir" >/dev/null 2>&1 || rm -rf "$dir"
+        reaped=1
+    done
+    # Only after reaping something. `git worktree prune` deregisters every worktree whose
+    # directory is missing, other sessions' included, so an unconditional prune on every
+    # deploy would collect trees this run has nothing to do with.
+    [[ "$reaped" == 0 ]] || git worktree prune >/dev/null 2>&1 || true
+}
+
+# Copy HEAD into a detached worktree under SNAPSHOT_ROOT; sets `snapshot` and `snapshot_sha`.
+#
+# HEAD, not the working tree: a deploy now renders the commit, so an uncommitted edit is NOT
+# deployed. That is the cost ADR-0017 accepts, and it is what makes `tree_dirty` in the release
+# record structurally false. Called while the tree lock is held, which is the whole reason the
+# lock still exists.
+#
+# `--detach` so the snapshot claims no branch. A worktree on a branch would make that branch
+# unusable everywhere else, and `scripts/dev/prune_worktrees.py` keeps any detached worktree
+# rather than classifying it.
+make_snapshot() {
+    local stamp dir fd
+    stamp=$(date +%Y%m%d-%H%M%S)
+    dir="$SNAPSHOT_ROOT/${tag_label//[^A-Za-z0-9_.,-]/_}-$stamp-$BASHPID"
+    mkdir -p "$SNAPSHOT_ROOT" || return 1
+    git worktree add --detach "$dir" HEAD >/dev/null 2>&1 || return 1
+    snapshot="$dir"
+    snapshot_sha=$(git -C "$dir" rev-parse --short HEAD 2>/dev/null || echo unknown)
+    # The owner lock, held until this run is done with the snapshot. On --detach the
+    # backgrounded subshell inherits this descriptor and the parent closes its copy, so the
+    # lock follows the playbook rather than the shell that created the directory -- flock
+    # releases only when every descriptor on the open file description is closed.
+    # `-x` is flock's default and is spelled out here: it is what tells this acquire apart from
+    # the tree lock's own `flock -n <fd>` probe, for a reader and for the bash tests' stubs.
+    if ! exec {fd}>"$dir/$OWNER_LOCK" || ! flock -n -x "$fd"; then
+        remove_snapshot
+        return 1
+    fi
+    snapshot_owner_fd="$fd"
+}
+
+# Hand the snapshot to the backgrounded subshell that inherited its descriptors: forget it here
+# so the parent's EXIT trap leaves it alone, and close the parent's copy of the owner lock so
+# the subshell is its only holder.
+disown_snapshot() {
+    if [[ -n "$snapshot_owner_fd" ]]; then
+        exec {snapshot_owner_fd}>&-
+        snapshot_owner_fd=""
+    fi
+    snapshot=""
+}
+
+# Run the deploy playbook against the snapshot. The ONE place a locked run invokes ansible.
+#
+# UV_PROJECT_ENVIRONMENT points at the CALLING checkout's .venv. `uv run` resolves its project
+# from the working directory, and a snapshot carries no .venv, so without this every deploy
+# would build a fresh environment inside a directory deleted minutes later -- and the Ansible
+# fact cache, which is keyed by host and shared across checkouts, would be pinned to an
+# interpreter path that then disappears. That is the exact failure `fact_cache_guard.py`
+# exists to clean up after. Measured 2026-09-11 from a detached worktree: with this set,
+# `uv run python -c 'print(sys.prefix)'` reports the caller's .venv and creates nothing.
+run_playbook_in_snapshot() {
+    (
+        cd "$snapshot" || exit 1
+        UV_PROJECT_ENVIRONMENT="$repo_root/.venv" \
+            uv run ansible-playbook ansible/deploy.yml "$@"
+    )
+}
+
+# Every deploy tag this run must lock, read from the SNAPSHOT. Sets `full_run_tags`.
+#
+# Read from the snapshot rather than the working tree, and while the tree lock is still held:
+# a full run locks one tag per declared service, and the list has to come from the bytes it is
+# about to deploy. Reading it later, unlocked, would let a concurrent pull add a service
+# between the enumeration and the deploy -- which would then roll out under no lock at all.
+#
+# An empty list is a FAILURE, not a run with nothing to lock: `deploy_tags.py list` prints one
+# line per containers_list entry, so nothing at all means it did not run.
+full_run_tags=()
+enumerate_full_run_tags() {
+    local tag
+    full_run_tags=()
+    while read -r tag; do
+        [[ -n "$tag" ]] || continue
+        full_run_tags+=("$tag")
+    done < <(
+        cd "$snapshot" || exit 1
+        UV_PROJECT_ENVIRONMENT="$repo_root/.venv" \
+            uv run python scripts/deploy_tools/deploy_tags.py list 2>/dev/null |
+            LC_ALL=C sort -u
+    )
+    [[ ${#full_run_tags[@]} -gt 0 ]]
+}
+
+say_tag_enumeration_failed() {
+    echo "deploy: could not list the deploy tags from the snapshot -- nothing was deployed." >&2
+    echo "  A run with no --tags locks one lock per declared service, so an unreadable list" >&2
+    echo "  means it would deploy everything holding nothing. Check that" >&2
+    echo "  'uv run python scripts/deploy_tools/deploy_tags.py list' works in this checkout." >&2
+}
+
+say_snapshot_failed() {
+    echo "deploy: could not snapshot HEAD into $SNAPSHOT_ROOT -- nothing was deployed." >&2
+    echo "  The playbook renders from a detached worktree of HEAD, so without one there is" >&2
+    echo "  nothing to deploy from. Check the directory is writable and that" >&2
+    echo "  'git worktree add --detach' works here; retrying alone will not fix either." >&2
+}
+
+# ── the per-service locks ─────────────────────────────────────────────────────────────────
+#
+# DECIDED: the lock order is `server-deploy-all.lock` first -- shared for a scoped run,
+# exclusive for a full one -- then each tag's own lock in sorted order. Sorted order is what
+# makes two overlapping scoped runs deadlock-free; taking `all` before any tag is what makes a
+# full run and a scoped run deadlock-free. Across the two deploy paths: this wrapper takes the
+# tree lock, snapshots, RELEASES the tree lock and only then takes service locks, while the
+# GitOps deployer takes the tree lock and holds it across its service locks. There is no cycle
+# because this wrapper never re-takes the tree lock after releasing it. (ADR-0017)
+
+# The descriptors this run holds service locks on. Held for the life of the shell that runs the
+# playbook; on --detach the background subshell inherits them and the parent's copies close.
+service_lock_fds=()
+
+# Take one service lock, blocking up to LOCK_WAIT. Returns flock's status.
+take_service_lock() {
+    local label="$1" path="$2" mode="$3" fd started waited status
+    local flock_args=(-w "$LOCK_WAIT" -E "$LOCK_BUSY")
+    [[ "$mode" != shared ]] || flock_args=(-s "${flock_args[@]}")
+    # Its own message and its own code: flock never ran, so reporting this as "flock exit 1"
+    # sends an operator to look at a lock nobody took.
+    if ! exec {fd}>"$path"; then
+        echo "deploy: could not open the service lock file $path -- nothing was deployed." >&2
+        echo "  flock never ran. $LOCK_DIR must exist and be writable by this user" >&2
+        echo "  (ls -ld $LOCK_DIR); retrying changes nothing until it is." >&2
+        return "$LOCK_UNAVAILABLE"
+    fi
+    service_lock_fds+=("$fd")
+    started=$SECONDS
+    flock "${flock_args[@]}" "$fd"
+    status=$?
+    waited=$((SECONDS - started))
+    [[ "$status" == 0 ]] || return "$status"
+    # Silent at 0s, for the reason the tree lock's line is: a line on every deploy buries the
+    # ones that mean something. land.py books these seconds into the landing's `lock=` field
+    # (land_lib/tools.py:in_flock_wait), the same as the tree lock's.
+    if [[ "$waited" -gt 0 ]]; then
+        echo "deploy: service lock $label acquired after ${waited}s" >&2
+    fi
+}
+
+# Take every service lock this run needs, in the order the DECIDED note above fixes.
+take_service_locks() {
+    local tag
+    if [[ ${#split_tags[@]} -gt 0 ]]; then
+        # Shared on `all`: scoped runs do not exclude each other, but a full run does.
+        take_service_lock all "$LOCK_DIR/server-deploy-all.lock" shared || return $?
+        while read -r tag; do
+            [[ -n "$tag" ]] || continue
+            take_service_lock "$tag" "$LOCK_DIR/server-deploy-${tag//[^A-Za-z0-9_.-]/_}.lock" \
+                exclusive || return $?
+        done < <(printf '%s\n' "${split_tags[@]}" | LC_ALL=C sort -u)
+        return 0
+    fi
+    # A run with no tags deploys everything, so it excludes every scoped run through `all`
+    # AND takes each declared tag's own lock. The second half is redundant against a scoped
+    # run, which also takes `all`; it is what stops a full run from starting while some other
+    # actor holds a single tag's lock without `all`.
+    take_service_lock all "$LOCK_DIR/server-deploy-all.lock" exclusive || return $?
+    for tag in "${full_run_tags[@]}"; do
+        take_service_lock "$tag" "$LOCK_DIR/server-deploy-${tag//[^A-Za-z0-9_.-]/_}.lock" \
+            exclusive || return $?
+    done
+}
+
+# Drop every service lock this shell holds. Closing the descriptor releases the lock.
+release_service_locks() {
+    local fd
+    for fd in "${service_lock_fds[@]-}"; do
+        [[ -n "$fd" ]] || continue
+        exec {fd}>&-
+    done
+    service_lock_fds=()
 }
 
 # What flock said when it failed for a reason other than contention. Both lock paths print
@@ -137,10 +427,15 @@ emit_deploy_annotation() {
 # arm ran. It names flock's own number: 65 is a bad descriptor and 1 is a lock file this user
 # cannot open, and those want different fixes.
 say_lock_unavailable() {
-    echo "deploy: could not take $LOCK (flock exit $1) -- nothing was deployed." >&2
+    local path="${2:-$LOCK}" what=file
+    # The service-lock arm passes LOCK_DIR, so this names a directory there. "Check the lock
+    # file /var/lock exists" sent an operator looking for a file that is not supposed to be one.
+    [[ ! -d "$path" ]] || what=directory
+    echo "deploy: could not take $path (flock exit $1) -- nothing was deployed." >&2
     echo "  This is NOT contention: no deploy is holding the lock, flock itself failed." >&2
-    echo "  Check $LOCK exists and is writable by this user (ls -l $LOCK). Retrying" >&2
-    echo "  changes nothing until it is; nothing ran, so a re-run is safe once fixed." >&2
+    echo "  Check the lock $what $path exists and is writable by this user" >&2
+    echo "  (ls -ld $path). Retrying changes nothing until it is; nothing ran, so a" >&2
+    echo "  re-run is safe once fixed." >&2
 }
 
 # The tree lock's holder, in the shape land_lib/tools.py:lock_holder returns, or "" when
@@ -323,6 +618,13 @@ for tag_arg in "${tags[@]-}"; do
     IFS=$old_ifs
 done
 
+# The tags this run deploys, as one filesystem-safe word. Names both the --detach log and the
+# snapshot directory, so an operator reading either can tell which run left it.
+tag_label=$(
+    IFS=,
+    echo "${split_tags[*]:-full}"
+)
+
 # --detach + --check/--dry-run is meaningless: both of those already return immediately without
 # touching the lock, so there is nothing to background. Checked here, right after args are known
 # and before the (comparatively slow) staleness check, so a nonsensical combination fails fast
@@ -403,22 +705,6 @@ if [[ "$detach" == 1 ]]; then
     # gave up" the way it does without --detach.
     log_dir=/tmp/homelab-deploy-logs
     mkdir -p "$log_dir"
-    health_tags=()
-    if [[ ${#tags[@]} -gt 0 ]]; then
-        old_ifs=$IFS
-        for tag_arg in "${tags[@]}"; do
-            IFS=','
-            # shellcheck disable=SC2086  # unquoted on purpose: this IS the comma split
-            for tag in $tag_arg; do
-                health_tags+=("$tag")
-            done
-            IFS=$old_ifs
-        done
-    fi
-    tag_label=$(
-        IFS=,
-        echo "${health_tags[*]:-full}"
-    )
     log="$log_dir/deploy-${tag_label//[^A-Za-z0-9_.,-]/_}-$(date +%Y%m%d-%H%M%S)-$$.log"
 
     exec {lockfd}>"$LOCK"
@@ -447,11 +733,56 @@ if [[ "$detach" == 1 ]]; then
     # ran and land.py books the same field from both.
     say_lock_acquired 0 ""
 
-    (
-        uv run ansible-playbook ansible/deploy.yml "$@" >"$log" 2>&1
-        run_status=$?
+    # Under the tree lock, and the only thing this arm needs it for.
+    reap_dead_snapshots
+    if ! make_snapshot; then
         flock -u "$lockfd"
         exec {lockfd}>&-
+        say_snapshot_failed
+        exit "$SNAPSHOT_FAILED"
+    fi
+    # Still under the tree lock: a full run's tag list has to be read from the snapshot before
+    # anything else can move the tree.
+    if [[ ${#split_tags[@]} -eq 0 ]] && ! enumerate_full_run_tags; then
+        remove_snapshot
+        flock -u "$lockfd"
+        exec {lockfd}>&-
+        say_tag_enumeration_failed
+        exit "$SNAPSHOT_FAILED"
+    fi
+    flock -u "$lockfd"
+    exec {lockfd}>&-
+
+    # The service locks WAIT, unlike the tree lock above. --detach fails fast on the tree lock
+    # because that lock is held by unrelated work (the tick, the rotate cron) a caller can do
+    # nothing about; a service lock is held by another deploy of the SAME service, where
+    # queueing is the correct behaviour and the wait is bounded by the deploy it is behind.
+    if ! take_service_locks; then
+        service_lock_status=$?
+        release_service_locks
+        remove_snapshot
+        if [[ "$service_lock_status" == "$LOCK_BUSY" ]]; then
+            echo "deploy --detach: a deploy of one of these services held its lock for the" >&2
+            echo "  full ${LOCK_WAIT}s -- nothing was deployed. Retry." >&2
+        elif [[ "$service_lock_status" == "$LOCK_UNAVAILABLE" ]]; then
+            # take_service_lock already said which file it could not open.
+            exit "$LOCK_UNAVAILABLE"
+        else
+            say_lock_unavailable "$service_lock_status" "$LOCK_DIR"
+            exit "$LOCK_UNAVAILABLE"
+        fi
+        exit "$LOCK_BUSY"
+    fi
+
+    (
+        # The subshell installs its own cleanup: bash resets traps to their default in a
+        # backgrounded subshell, and the PARENT's EXIT trap fires the moment it backgrounds
+        # this one -- which would delete the snapshot out from under the playbook.
+        trap remove_snapshot EXIT
+        run_playbook_in_snapshot "$@" >"$log" 2>&1
+        run_status=$?
+        remove_snapshot
+        release_service_locks
         # Annotated from inside the subshell, where the run actually finished — the parent
         # returned at exit 0 the moment it backgrounded this, long before there was anything
         # to record.
@@ -464,13 +795,18 @@ if [[ "$detach" == 1 ]]; then
             --log "$log" \
             --tags "$(
                 IFS=,
-                echo "${health_tags[*]}"
+                echo "${split_tags[*]-}"
             )" \
             >>"$log" 2>&1
     ) &
     bg_pid=$!
     disown "$bg_pid" 2>/dev/null || true
-    exec {lockfd}>&-
+    release_service_locks
+    # The background subshell owns the snapshot now, so this shell must not reap it on the way
+    # out and must stop holding its owner lock -- while the subshell's inherited descriptor
+    # keeps that lock held, which is what stops the next invocation's reaper collecting a
+    # directory the playbook is still reading.
+    disown_snapshot
 
     echo "deploy --detach: running in background (pid $bg_pid)."
     echo "  log:  $log"
@@ -503,6 +839,8 @@ exec {lockfd}>"$LOCK"
 lock_started=$SECONDS
 lock_taken=0
 flock_status=0
+# 0 until the service-lock phase runs, so the refusal arms below can read it unconditionally.
+service_lock_status=0
 if flock -n "$lockfd"; then
     lock_taken=1
     # Nobody was in the way, so whatever the sample caught had already released. Naming it
@@ -528,13 +866,46 @@ if [[ "$lock_taken" == 1 ]]; then
     if [[ "$lock_waited" -gt 0 ]]; then
         say_lock_acquired "$lock_waited" "$lock_holder_seen"
     fi
-    uv run ansible-playbook ansible/deploy.yml "$@"
-    status=$?
+    # Snapshot HEAD, then hand the tree back. Everything after this point reads the snapshot,
+    # so the tick, the rotate cron and every other session are free while this run deploys.
+    snapshot_ok=0
+    tags_ok=1
+    reap_dead_snapshots
+    if make_snapshot; then
+        snapshot_ok=1
+        # Still under the tree lock, for the reason enumerate_full_run_tags gives.
+        if [[ ${#split_tags[@]} -eq 0 ]] && ! enumerate_full_run_tags; then
+            tags_ok=0
+            remove_snapshot
+        fi
+    fi
     flock -u "$lockfd"
+    exec {lockfd}>&-
+    if [[ "$snapshot_ok" == 0 ]]; then
+        say_snapshot_failed
+        exit "$SNAPSHOT_FAILED"
+    fi
+    if [[ "$tags_ok" == 0 ]]; then
+        say_tag_enumeration_failed
+        exit "$SNAPSHOT_FAILED"
+    fi
+    # From here the snapshot must go, whichever way this shell leaves.
+    trap remove_snapshot EXIT
+    take_service_locks
+    service_lock_status=$?
+    if [[ "$service_lock_status" == 0 ]]; then
+        run_playbook_in_snapshot "$@"
+        status=$?
+    else
+        status=$service_lock_status
+    fi
+    release_service_locks
+    remove_snapshot
+    trap - EXIT
 else
     status=$flock_status
+    exec {lockfd}>&-
 fi
-exec {lockfd}>&-
 
 # After the lock is released and only on success. `--check` and `--dry-run` never reach here —
 # both exec out well above — so a mode that changes nothing cannot annotate as though it had.
@@ -543,6 +914,23 @@ emit_deploy_annotation "$status"
 if [[ "$lock_taken" != 1 && "$flock_status" != "$LOCK_BUSY" ]]; then
     say_lock_unavailable "$flock_status"
     exit "$LOCK_UNAVAILABLE"
+fi
+
+# A SERVICE lock, not the tree lock. Its own message: "could not take the tree lock" would send
+# an operator to the tick and the rotate cron, and neither of those takes a service lock.
+if [[ "$service_lock_status" != 0 ]]; then
+    # take_service_lock already named the file it could not open; say nothing over it.
+    if [[ "$service_lock_status" == "$LOCK_UNAVAILABLE" ]]; then
+        exit "$LOCK_UNAVAILABLE"
+    fi
+    if [[ "$service_lock_status" != "$LOCK_BUSY" ]]; then
+        say_lock_unavailable "$service_lock_status" "$LOCK_DIR"
+        exit "$LOCK_UNAVAILABLE"
+    fi
+    echo "deploy: a service lock under $LOCK_DIR stayed busy for ${LOCK_WAIT}s -- nothing" >&2
+    echo "  was deployed. Another deploy of one of these services is in progress:" >&2
+    echo "  gitops-deploy.service, or another Claude session. Retry." >&2
+    exit "$LOCK_BUSY"
 fi
 
 if [[ "$status" == "$LOCK_BUSY" ]]; then

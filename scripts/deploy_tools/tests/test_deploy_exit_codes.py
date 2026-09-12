@@ -15,11 +15,12 @@ that simply stopped matching would look fixed.
 Run: uv run pytest scripts/deploy_tools/tests/test_deploy_exit_codes.py
 """
 
-import os
 import subprocess
 from pathlib import Path
 
 import pytest
+
+from _deploy_sh_fakes import FLOCK_STUB, deploy_sh_env, make_snapshot_repo
 
 _REPO = Path(__file__).resolve().parents[3]
 _DEPLOY_SH = _REPO / "scripts" / "deploy.sh"
@@ -28,19 +29,6 @@ _DEPLOY_SH = _REPO / "scripts" / "deploy.sh"
 # that disjointness IS the fix, so it is asserted rather than assumed.
 _PLAYBOOK_FAILED = 20
 _WRAPPER_REFUSALS = (2, 3, 4, 75)
-
-_FLOCK_STUB = """#!/bin/bash
-# Drop flock's own flags and its lock-file argument, then run the rest.
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    -w|-E) shift 2 ;;
-    -n|-u) shift ;;
-    *) break ;;
-  esac
-done
-shift
-exec "$@"
-"""
 
 _UV_STUB = """#!/bin/bash
 # Only the playbook run carries the exit code under test; the wrapper's own helper calls
@@ -63,12 +51,13 @@ def _run_with_stubs(tmp_path: Path, ansible_exit: int) -> subprocess.CompletedPr
     """
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
-    (bin_dir / "flock").write_text(_FLOCK_STUB)
+    (bin_dir / "flock").write_text(FLOCK_STUB)
     (bin_dir / "uv").write_text(_UV_STUB.format(ansible_exit=ansible_exit))
     for stub in ("flock", "uv"):
         (bin_dir / stub).chmod(0o755)
 
-    env = dict(os.environ, PATH=f"{bin_dir}:{os.environ['PATH']}")
+    repo = make_snapshot_repo(tmp_path / "repo")
+    env = deploy_sh_env(tmp_path, bin_dir)
     return subprocess.run(
         [
             str(_DEPLOY_SH),
@@ -77,7 +66,7 @@ def _run_with_stubs(tmp_path: Path, ansible_exit: int) -> subprocess.CompletedPr
             "--skip-tag-check",
             "--skip-staleness-check",
         ],
-        cwd=_REPO,
+        cwd=repo,
         env=env,
         capture_output=True,
         text=True,

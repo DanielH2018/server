@@ -92,7 +92,7 @@ def test_what_the_deployer_writes_is_what_the_backfill_reads(tmp_path, monkeypat
     # The recorder is the staging gate's I/O shell, which lives with the handlers rather than
     # in `deploy_staging` — that module stays import-pure so `deploy_logic` (and therefore
     # `land.sh`) can be imported without `host_lib` on the path.
-    import deploy_handlers
+    import deploy_staging_io
     import deploy_state
     import deploy_toolbox
 
@@ -102,7 +102,7 @@ def test_what_the_deployer_writes_is_what_the_backfill_reads(tmp_path, monkeypat
     ledger = pathlib.Path(state.path("staging_ticks"))
     # The real clock, from the deployer's own boundaries object: the row's `at` stamp is one of
     # the fields load_tick_ledger has to be able to construct from.
-    deploy_handlers.record_staging_tick(
+    deploy_staging_io.record_staging_tick(
         deploy_toolbox.DeployTools(),
         state,
         "c0ffee1234",

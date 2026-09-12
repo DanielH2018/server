@@ -111,18 +111,27 @@ Run ansible through `uv run` so it uses the repo's pinned env (`ansible-core` + 
 (the uv-tool shim) lacks those module deps and deploys will fail.
 **Deploy through `./scripts/deploy.sh --tags "<service>"`**, not the playbook directly. It
 takes `/var/lock/server-git-tree.lock` — the same lock `gitops-deploy.service` (10-min timer)
-and the weekly secret-rotate cron hold — so a deploy cannot interleave with the automated
-pipeline or with another Claude session.
+and the weekly secret-rotate cron hold — for as long as it takes to copy `HEAD` into a
+detached worktree under `/tmp/homelab-deploy-snapshots/`, then releases it and runs the
+playbook from that snapshot under one lock per deploy tag
+(`/var/lock/server-deploy-<tag>.lock`). So a deploy cannot interleave with the automated
+pipeline on the tree, nor with another deploy of the SAME service on the cluster — while two
+deploys of different services now run at once. `docs/adr/0017-…` is the record.
+
+**It deploys `HEAD`, not your working tree.** An uncommitted edit is not deployed, and nothing
+on the run says so. Commit first. `--check` and `--dry-run` still read the working tree, which
+is where an uncommitted edit is meant to be exercised.
 
 Before it takes the lock it clears an Ansible fact cache pinning another worktree's interpreter
 (`scripts/deploy_tools/fact_cache_guard.py`). That cache is keyed by host, not by checkout, so a
 pruned worktree used to fail EVERY deploy at Gathering Facts for the full 7200s TTL — with an
 error naming a module rather than the cache, after the ~9-minute wait on the lock.
 
-Its non-zero exits arrive as a bare `Exit code N`. Five of them mean **nothing was
+Its non-zero exits arrive as a bare `Exit code N`. Six of them mean **nothing was
 deployed** — a resume point rather than a playbook failure (retry a busy lock, `git pull` a
 stale tree — never `--skip-staleness-check` — deploy by hand on a broad change, check
-`--list-services` on a tag miss, fix the lock file itself on 76). The sixth, 20, is the inverse: the playbook ran, a task
+`--list-services` on a tag miss, fix the lock file itself on 76, fix the snapshot root on 77).
+The seventh, 20, is the inverse: the playbook ran, a task
 failed, and changes before it are live — not a safe re-run. The full table, why 20 collides
 with ansible's own exit codes, the Pi's `-e target=`, config-only runs, the GitOps tick, and
 initial setup are all in the **`deploy` skill**.
@@ -167,9 +176,11 @@ pod. Exercise the thing you actually changed as well.
 
 ### Working alongside other sessions
 
-- **The lock serializes, and the exit codes are resume points rather than failures** — the full
-  table is in the **`deploy` skill**. Two of them mean another session got there first: 75 (the
-  lock stayed busy) and 4 (the tree is behind `origin/master`).
+- **Deploys of the same service serialize; the tree lock is held for the snapshot only** — the
+  full exit-code table is in the **`deploy` skill**, and they are resume points rather than
+  failures. Two mean another session got there first: 75 (a lock stayed busy — the tree lock,
+  or one of your services') and 4 (the tree is behind `origin/master`). Two landings on
+  disjoint services no longer queue behind each other at all.
 - **The tick pulls all of master, not just your commit.** Another session's merged work
   fast-forwards with yours. `land.sh` already scopes to your PR's own files; if you override with
   `--tags`, keep it to your own services.
