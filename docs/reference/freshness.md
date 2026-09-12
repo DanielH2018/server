@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/freshness.py
-generated_at: 2026-09-12 06:17 UTC
-generated_sha: fde7491c1
+generated_at: 2026-09-12 18:17 UTC
+generated_sha: 71abb0266
 ---
 
 !!! warning "Generated file — do not edit"
@@ -18,7 +18,7 @@ generated_sha: fde7491c1
 |---|---|---|---|---|
 | [gitops-argo-flux-evaluation.md](../gitops-argo-flux-evaluation.md) | 2026-09-02 | 13 | 11 | `ansible/roles/setup/gitops_deploy/files/gitops_deploy.py` (2026-09-11) |
 | [healthchecks-io-deadman.md](../healthchecks-io-deadman.md) | 2026-09-02 | 14 | 9 | `scripts/deploy.sh` (2026-09-12) |
-| [failure-classes.md](../failure-classes.md) | 2026-09-03 | 15 | 9 | `docs/reference/backlog.md` (2026-09-11) |
+| [failure-classes.md](../failure-classes.md) | 2026-09-03 | 15 | 9 | `docs/reference/backlog.md` (2026-09-12) |
 | [staging-phase-c.md](../staging-phase-c.md) | 2026-09-05 | 16 | 8 | `scripts/deploy.sh` (2026-09-12) |
 | [b2-transaction-cap-monitoring-gaps.md](../b2-transaction-cap-monitoring-gaps.md) | 2026-09-02 | 8 | 7 | `scripts/deploy.sh` (2026-09-12) |
 | [networkpolicy-slice-answers.md](../networkpolicy-slice-answers.md) | 2026-09-03 | 18 | 7 | `scripts/deploy.sh` (2026-09-12) |
@@ -37,7 +37,9 @@ generated_sha: fde7491c1
 | [adr/0010-pull-based-gitops-over-argo-and-flux.md](../adr/0010-pull-based-gitops-over-argo-and-flux.md) | 2026-09-02 | 3 | 2 | `ansible/roles/setup/gitops_deploy/files/gitops_deploy.py` (2026-09-11) |
 | [adr/0016-code-scanning-stays-on-default-setup.md](../adr/0016-code-scanning-stays-on-default-setup.md) | 2026-09-05 | 10 | 2 | `scripts/deploy_tools/land_tags.py` (2026-09-11) |
 | [secret-rotation.md](../secret-rotation.md) | 2026-09-09 | 6 | 2 | `ansible/vars/secrets.yml` (2026-09-11) |
+| [break-glass.md](../break-glass.md) | 2026-09-11 | 17 | 2 | `docs/reference/secrets.md` (2026-09-12) |
 | [claude-tooling.md](../claude-tooling.md) | 2026-09-11 | 26 | 2 | `CLAUDE.md` (2026-09-12) |
+| [issue-claiming-and-fanout.md](../issue-claiming-and-fanout.md) | 2026-09-11 | 18 | 2 | `docs/reference/backlog.md` (2026-09-12) |
 | [email-to-rss.md](../email-to-rss.md) | 2026-08-15 | 1 | 1 | `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2` (2026-09-11) |
 | [adr/0002-k3s-over-docker-compose-for-the-cluster-nodes.md](../adr/0002-k3s-over-docker-compose-for-the-cluster-nodes.md) | 2026-08-24 | 1 | 1 | `scripts/diagnostics/probe.py` (2026-09-10) |
 | [adr/0005-traefik-is-the-edge-with-ingressroute-crds.md](../adr/0005-traefik-is-the-edge-with-ingressroute-crds.md) | 2026-08-24 | 1 | 1 | `ansible/templates/ingressroute.yml.j2` (2026-09-10) |
@@ -50,8 +52,6 @@ generated_sha: fde7491c1
 | [security-tools.md](../security-tools.md) | 2026-09-02 | 3 | 1 | `ansible/initial_setup.yml` (2026-09-10) |
 | [wireguard-private-homelab-access.md](../wireguard-private-homelab-access.md) | 2026-09-03 | 2 | 1 | `ansible/inventory/host_vars/daniel-box.yml` (2026-09-10) |
 | [anilist-integration.md](../anilist-integration.md) | 2026-09-06 | 3 | 1 | `scripts/diagnostics/probe.py` (2026-09-10) |
-| [break-glass.md](../break-glass.md) | 2026-09-11 | 17 | 1 | `scripts/deploy.sh` (2026-09-12) |
-| [issue-claiming-and-fanout.md](../issue-claiming-and-fanout.md) | 2026-09-11 | 18 | 1 | `CLAUDE.md` (2026-09-12) |
 | [k3s-etcd-restore.md](../k3s-etcd-restore.md) | 2026-09-11 | 7 | 1 | `scripts/deploy.sh` (2026-09-12) |
 | [adr/0004-authelia-is-the-single-sign-on-layer.md](../adr/0004-authelia-is-the-single-sign-on-layer.md) | 2026-09-02 | 0 | 0 | — |
 | [index.md](../index.md) | 2026-09-03 | 0 | 0 | — |
