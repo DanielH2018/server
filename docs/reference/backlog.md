@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/backlog.py
-generated_at: 2026-09-11 18:17 UTC
-generated_sha: 153ffa919
+generated_at: 2026-09-12 06:17 UTC
+generated_sha: fde7491c1
 ---
 
 !!! warning "Generated file — do not edit"
@@ -16,4 +16,17 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 
 | # | Severity | Kind | Domain | Finding | First seen | Re-observed | Claim | Verify-by |
 |---|---|---|---|---|---|---|---|---|
+| [#1778](https://github.com/DanielH2018/server/issues/1778) | high | gap | backup-observability | etcd Restore Drill full has failed on every run since it shipped | 2026-09-11 | 0 | - | ✓ |
+| [#1779](https://github.com/DanielH2018/server/issues/1779) | medium | gap | backup-observability | A Kuma pod replacement blinds the long-interval push monitors for up to 25h | 2026-09-11 | 0 | - | ✓ |
+| [#1781](https://github.com/DanielH2018/server/issues/1781) | medium | improvement | backup-observability | Six drift push monitors have about an hour of margin over their producing cron | 2026-09-11 | 0 | - | ✓ |
+| [#1793](https://github.com/DanielH2018/server/issues/1793) | medium | gap | backup-observability | Alert History board still extracts the check name from a timestamp prefix monitor-bridge no longer prints | 2026-09-11 | 0 | - | ✓ |
+| [#1798](https://github.com/DanielH2018/server/issues/1798) | medium | gap | cicd | issue-fanout groups by Ansible role, so two agents edited the same shared script | 2026-09-11 | 0 | - | ✓ |
+| [#1799](https://github.com/DanielH2018/server/issues/1799) | medium | gap | cicd | A test calling main() with no argv reads pytest's flags, and nothing guards the class | 2026-09-11 | 0 | - | ✓ |
+| [#1801](https://github.com/DanielH2018/server/issues/1801) | medium | gap | cicd | postflight tests fail under -n0, so pytest_shard.py --record cannot run | 2026-09-11 | 0 | - | ✓ |
+| [#1802](https://github.com/DanielH2018/server/issues/1802) | medium | gap | backup-observability | A zero-available Deployment can sit 15 minutes inside the new replica grace | 2026-09-11 | 0 | - | ✓ |
+| [#1803](https://github.com/DanielH2018/server/issues/1803) | medium | gap | backup-observability | A push monitor rejecting its token (HTTP 404) turns healthy checks into false DOWNs, unwatched | 2026-09-11 | 0 | - | ✓ |
+| [#1804](https://github.com/DanielH2018/server/issues/1804) | medium | gap | backup-observability | Unexplained whole-estate iSCSI session reset on daniel-box, 2026-09-09 20:12 | 2026-09-11 | 0 | - | ✓ |
 | [#1469](https://github.com/DanielH2018/server/issues/1469) | low | gap | container | Restore the Valheim mods disabled by the 1.0 break | 2026-09-09 | 0 | - | ✓ |
+| [#1787](https://github.com/DanielH2018/server/issues/1787) | low | gap | backup-observability | Two health crons push Kuma but log no status= line, so their DOWN periods reach no alerts episode | 2026-09-11 | 0 | - | ✓ |
+| [#1789](https://github.com/DanielH2018/server/issues/1789) | low | gap | container | daniel-pi autoheal stops recurrently; only the cron's restart hides it | 2026-09-11 | 0 | - | ✓ |
+| [#1790](https://github.com/DanielH2018/server/issues/1790) | low | gap | backup-observability | probe.py alerts --limit over Loki's 5000 cap crashes with a JSONDecodeError | 2026-09-11 | 0 | - | ✓ |
