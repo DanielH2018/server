@@ -116,6 +116,10 @@ spec:
               value: "{{ valheim_k8s_world_name }}"
             - name: SERVER_PUBLIC
               value: "{{ valheim_k8s_server_public }}"
+            # Rewrites /config/adminlist.txt on every boot (common's write_adminlist), so this
+            # var is the source of truth rather than anything edited in-place on the PVC.
+            - name: ADMINLIST_IDS
+              value: "{{ valheim_k8s_admin_ids }}"
             # Appended to the server's launch line unquoted by the image, so a multi-token
             # value works. Carries the vanilla `portals casual` world modifier — see defaults.
             - name: SERVER_ARGS

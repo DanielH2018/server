@@ -106,6 +106,18 @@ valheim_k8s_mods:
     version: 1.0.1
     url: https://thunderstore.io/package/download/Azumatt/AAABuildMenu/1.0.1/
     sha256: 673bfffbc519d6722a7b8190072987a56396118eebe706b151353f0b700b3c3d
+  # Added 2026-09-13. Vetted the same way as the two above: neither DLL references
+  # ZRoutedRpc.Everybody, the field l-1.0.7 removed that killed five sibling mods (see the
+  # block above). Necessary, not sufficient — confirm by the boot log's `Loading [...]`
+  # lines, not by pod Ready.
+  - name: Server_devcommands
+    version: 1.113.0
+    url: https://thunderstore.io/package/download/JereKuusela/Server_devcommands/1.113.0/
+    sha256: 82e2f539ee31076303fce3e7415ef8e3cea47e434398ce186a7c608520edcaee
+  - name: AchievementEnabler
+    version: 0.3.2
+    url: https://thunderstore.io/package/download/MidnightMods/AchievementEnabler/0.3.2/
+    sha256: 2e7346d86a975f9c1c8a3e3a7d4599fcad186114e0ccea1078e24ea17fd07d46
   # Disabled — see the block above for the per-mod evidence.
   # - name: Jotunn
   #   version: 2.29.3
@@ -193,6 +205,11 @@ valheim_k8s_world_name: Midgard
 # Listed in the in-game community browser, as before. Steam's server query (port 2457) only
 # answers for public servers; a private server is join-by-IP only.
 valheim_k8s_server_public: "true"
+
+# Space-separated SteamID64 list. The image's `common` script (write_adminlist) rewrites
+# /config/adminlist.txt from this var on every boot when it is non-empty, so the list here is
+# the source of truth rather than anything edited in-place on the PVC.
+valheim_k8s_admin_ids: "76561198091839404"
 
 # Extra Valheim CLI arguments, appended to the launch line by the image's `SERVER_ARGS`.
 #
