@@ -55,10 +55,21 @@ valheim_k8s_mods_image: "{{ k8s_registry_pull_host }}/valheim:latest"
 # resolving collection entry"), while `yaml.safe_load` accepts it — so the same file parsed
 # clean in a scratch check and failed the commit gate.
 #
-# WHY EACH DISABLED ENTRY IS DISABLED, all measured on `l-1.0.7`, 2026-09-09. Each error was
-# attributed by reading the boot log between consecutive `Loading [...]` lines, so it belongs
-# to the plugin named above it.
+# WHY EACH DISABLED ENTRY IS DISABLED, measured on `l-1.0.7` unless noted, 2026-09-09. Each
+# error was attributed by reading the boot log between consecutive `Loading [...]` lines, so
+# it belongs to the plugin named above it.
 #
+#   MouseTweaks 1.0.3
+#       Worked on l-1.0.7 (live from 2026-09-09). Broke when SteamCMD auto-updated the game to
+#       l-1.0.12, observed 2026-09-13: TypeLoadException, "Could not resolve type with token
+#       01000021 from typeref (expected class 'Element' in assembly '')". No newer Thunderstore
+#       release exists to bump to — 1.0.3 is still the latest published version. This is the
+#       UPDATE_CRON risk this file already documents landing, not a new mod ever having failed
+#       vetting.
+#   AAABuildMenu 1.0.1
+#       Same story, same boot: ArgumentException, "Undefined target method for patch method
+#       static void AAABuildMenu.EnhancedBuildMenuPatches::Player_PlacePiece_TrackUsage",
+#       rethrown as a HarmonyException. No newer release exists; 1.0.1 is still latest.
 #   Jotunn 2.29.3 (ReefTeam fork)
 #       Works, and is disabled only because nothing needs it now — it is a dependency of
 #       AdvancedPortals and MultiUserChest, never a request. Upstream ValheimModding-Jotunn
@@ -98,15 +109,7 @@ valheim_k8s_mods_image: "{{ k8s_registry_pull_host }}/valheim:latest"
 # is what decides. Re-enable a disabled entry ONE AT A TIME and read the log between its own
 # `Loading [...]` line and the next before adding another.
 valheim_k8s_mods:
-  - name: MouseTweaks
-    version: 1.0.3
-    url: https://thunderstore.io/package/download/Azumatt/MouseTweaks/1.0.3/
-    sha256: cfb2a7a3dc35ca12b8425ea78385d28cf621f85f202fd05de6a74e1989cdab2c
-  - name: AAABuildMenu
-    version: 1.0.1
-    url: https://thunderstore.io/package/download/Azumatt/AAABuildMenu/1.0.1/
-    sha256: 673bfffbc519d6722a7b8190072987a56396118eebe706b151353f0b700b3c3d
-  # Added 2026-09-13. Vetted the same way as the two above: neither DLL references
+  # Added 2026-09-13. Vetted the same way as the two disabled below were originally: neither DLL references
   # ZRoutedRpc.Everybody, the field l-1.0.7 removed that killed five sibling mods (see the
   # block above). Necessary, not sufficient — confirm by the boot log's `Loading [...]`
   # lines, not by pod Ready.
@@ -119,6 +122,14 @@ valheim_k8s_mods:
     url: https://thunderstore.io/package/download/MidnightMods/AchievementEnabler/0.3.2/
     sha256: 2e7346d86a975f9c1c8a3e3a7d4599fcad186114e0ccea1078e24ea17fd07d46
   # Disabled — see the block above for the per-mod evidence.
+  # - name: MouseTweaks
+  #   version: 1.0.3
+  #   url: https://thunderstore.io/package/download/Azumatt/MouseTweaks/1.0.3/
+  #   sha256: cfb2a7a3dc35ca12b8425ea78385d28cf621f85f202fd05de6a74e1989cdab2c
+  # - name: AAABuildMenu
+  #   version: 1.0.1
+  #   url: https://thunderstore.io/package/download/Azumatt/AAABuildMenu/1.0.1/
+  #   sha256: 673bfffbc519d6722a7b8190072987a56396118eebe706b151353f0b700b3c3d
   # - name: Jotunn
   #   version: 2.29.3
   #   url: https://thunderstore.io/package/download/ReefTeam/Jotunn/2.29.3/
