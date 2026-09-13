@@ -233,9 +233,10 @@ valheim_k8s_admin_ids: "76561198091839404"
 # redeploying is the whole procedure, in both directions.
 valheim_k8s_server_args: "-modifier portals casual"
 
-# Mirrors the archived resources('4.0', '6144M', '0.5', '2048M') — the dedicated server
-# simulates the whole world in RAM and wants headroom, not a tight cap.
-valheim_k8s_cpu_limit: "4"
-valheim_k8s_mem_limit: 6144Mi
-valheim_k8s_cpu_request: "500m"
-valheim_k8s_mem_request: 2048Mi
+# Originally mirrored the archived resources('4.0', '6144M', '0.5', '2048M'). Bumped 1.5x on
+# 2026-09-13 at the operator's request — the dedicated server simulates the whole world in
+# RAM and wants headroom, not a tight cap.
+valheim_k8s_cpu_limit: "6"
+valheim_k8s_mem_limit: 9216Mi
+valheim_k8s_cpu_request: "750m"
+valheim_k8s_mem_request: 3072Mi
