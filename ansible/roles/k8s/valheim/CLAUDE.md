@@ -12,7 +12,8 @@ that no longer exists. `k8s/terraria` is the sibling this role copies.
   publishes semver tags (the old one is stuck on `latest`/`dev`). No rolling-tag exception
   needed, unlike terraria. **The tag pins the wrapper, not the game** — SteamCMD fetches the
   current Valheim build on every start, so the game is on the latest release either way.
-- **Mods:** BepInEx, with seven plugins pinned in `defaults/main.yml` — see *Modding* below.
+- **Mods:** BepInEx, with 12 plugins pinned in `defaults/main.yml` (2 live, 10 disabled) —
+  see *Modding* below.
 - **Second image:** `localhost:5000/valheim:latest`, built in-cluster from
   `templates/Dockerfile.j2`, holding only the plugin DLLs.
 - **Host:** daniel-box, by a hard `nodeSelector` — a member of the **VIP unit** with
@@ -90,10 +91,14 @@ Added 2026-09-09 with the wrapper bump to 1.2.0 and a fresh world.
 - **The built image is named `valheim`, not `valheim-mods`.** `k8s/manifests` keys
   `k8s_rebuilt_images` on `manifests_service`, so a mismatched name pushes a new image that no
   pod ever runs — the recorded `n8n-runners` failure. It contains no server.
-- **The set is two, and Valheim 1.0 is why.** Live: MouseTweaks 1.0.3, AAABuildMenu 1.0.1.
-  Eight further mods were requested across 2026-09-09 and every one of them fails on
-  `l-1.0.7`, or is only needed by one that does; each sits commented in `defaults/main.yml`
-  with the error that disabled it. BepInExPack is not listed — the image installs it itself.
+- **The live set is two, and Valheim 1.0's rolling updates are why it keeps changing.** Live:
+  Server_devcommands 1.113.0, AchievementEnabler 0.3.2 (added 2026-09-13). MouseTweaks 1.0.3
+  and AAABuildMenu 1.0.1 were live from 2026-09-09 until SteamCMD auto-updated the game from
+  `l-1.0.7` to `l-1.0.12` and broke both — no newer Thunderstore release exists for either, so
+  they moved to the disabled block. Eight further mods were requested across 2026-09-09 and
+  every one of them fails on `l-1.0.7` or is only needed by one that does; each disabled entry
+  in `defaults/main.yml` carries the error that disabled it. BepInExPack is not listed — the
+  image installs it itself.
 - **Ore through portals is a vanilla world modifier, not a mod.** `valheim_k8s_server_args`
   passes `-modifier portals casual` through the image's `SERVER_ARGS`, so AdvancedPortals
   being disabled costs nothing. The other values are `hard` (default, no metals) and
