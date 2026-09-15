@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/freshness.py
-generated_at: 2026-09-14 18:17 UTC
-generated_sha: 50189f16b
+generated_at: 2026-09-15 18:17 UTC
+generated_sha: 88a7f4685
 ---
 
 !!! warning "Generated file — do not edit"
@@ -37,7 +37,7 @@ generated_sha: 50189f16b
 | [adr/0010-pull-based-gitops-over-argo-and-flux.md](../adr/0010-pull-based-gitops-over-argo-and-flux.md) | 2026-09-02 | 3 | 2 | `ansible/roles/setup/gitops_deploy/files/gitops_deploy.py` (2026-09-11) |
 | [adr/0016-code-scanning-stays-on-default-setup.md](../adr/0016-code-scanning-stays-on-default-setup.md) | 2026-09-05 | 10 | 2 | `scripts/deploy_tools/land_tags.py` (2026-09-11) |
 | [secret-rotation.md](../secret-rotation.md) | 2026-09-09 | 6 | 2 | `ansible/vars/secrets.yml` (2026-09-11) |
-| [break-glass.md](../break-glass.md) | 2026-09-11 | 17 | 2 | `docs/reference/secrets.md` (2026-09-14) |
+| [break-glass.md](../break-glass.md) | 2026-09-11 | 17 | 2 | `docs/reference/secrets.md` (2026-09-15) |
 | [claude-tooling.md](../claude-tooling.md) | 2026-09-11 | 26 | 2 | `CLAUDE.md` (2026-09-12) |
 | [issue-claiming-and-fanout.md](../issue-claiming-and-fanout.md) | 2026-09-11 | 18 | 2 | `docs/reference/backlog.md` (2026-09-12) |
 | [email-to-rss.md](../email-to-rss.md) | 2026-08-15 | 1 | 1 | `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2` (2026-09-11) |
