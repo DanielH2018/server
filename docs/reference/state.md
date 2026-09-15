@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/state.py
-generated_at: 2026-09-14 18:17 UTC
-generated_sha: 50189f16b
+generated_at: 2026-09-15 06:17 UTC
+generated_sha: 839ae542c
 ---
 
 !!! warning "Generated file — do not edit"
@@ -19,10 +19,10 @@ generated_sha: 50189f16b
 
 | Loop | Last run | Age | Cadence | Status | Last outcome |
 |---|---|---|---|---|---|
-| gitops-deploy | 2026-09-14T18:12:44+0000 | 4m | 10m | ok | ticked, no hold |
-| renovate-agent | 2026-09-12T12:04:20+0000 | 2d6h | 1d | late | session completed |
-| renovate-notify | 2026-09-14T13:01:13+0000 | 5h16m | 1d | ok | notified |
-| docs-refresh | 2026-09-14T06:17:00+0000 | 12h | 12h | ok | generators: ok |
-| secret-rotate | 2026-09-11T18:12:54+0000 | 3d | 7d | ok | last touched by: Drill the full etcd restore monthly in a throwaway guest on daniel-server |
-| longhorn-restore-drill | 2026-09-14T04:10:37+0000 | 14h6m | 1d | ok | PVC restore proven |
-| etcd-restore-drill | 2026-09-14T10:20:02+0000 | 7h57m | 7d | ok | list-only restore proven (snapshot offbox-daniel-box-1789353902.zip) |
+| gitops-deploy | 2026-09-15T06:10:54+0000 | 6m | 10m | ok | ticked, no hold |
+| renovate-agent | 2026-09-12T12:04:20+0000 | 2d18h | 1d | late | session completed |
+| renovate-notify | 2026-09-14T13:01:13+0000 | 17h16m | 1d | ok | notified |
+| docs-refresh | 2026-09-14T18:17:00+0000 | 12h | 12h | ok | generators: ok |
+| secret-rotate | 2026-09-11T18:12:54+0000 | 3d12h | 7d | ok | last touched by: Drill the full etcd restore monthly in a throwaway guest on daniel-server |
+| longhorn-restore-drill | 2026-09-15T04:10:57+0000 | 2h6m | 1d | ok | PVC restore proven |
+| etcd-restore-drill | 2026-09-14T10:20:02+0000 | 19h57m | 7d | ok | list-only restore proven (snapshot offbox-daniel-box-1789353902.zip) |
