@@ -103,8 +103,12 @@ exclude_docs: |
 # would 404 those links, while listing 38 superseded planning docs in the nav would bury the
 # live pages. Declaring it here is what separates "decided to leave unlinked" from "nobody
 # noticed", which is the distinction the nav coverage test now enforces.
+# `reference/backlog.md` is the same case for a different reason: `findings.py list` is the
+# open register, this page is only its rendering, and `issue-claiming-and-fanout.md` and
+# CLAUDE.md link INTO it directly — so it stays built and reachable, just off the nav.
 not_in_nav: |
   archive/
+  reference/backlog.md
 
 # ENFORCED by scripts/tests/test_mkdocs_config.py, in both directions: every entry below must
 # resolve to a file, and every docs/**.md must appear here OR be matched by exclude_docs above.
@@ -130,7 +134,6 @@ nav:
       - State of the lab: reference/state.md
       - Networking: reference/networking.md
       - Scripts: reference/scripts.md
-      - Backlog: reference/backlog.md
       - Topology: reference/topology.md
       - Doc freshness: reference/freshness.md
       - Decision markers: reference/decisions.md
