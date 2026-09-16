@@ -15,12 +15,19 @@ PR CI is scoped to changed files, so a whole-tree failure can appear only after 
 
 | Measure | Value | Source |
 |---|---|---|
-| Master CI on a merge commit | 260–300s | `gh run list --branch master`, 2026-08-29 |
+| Master CI on a merge commit | 260–300s | `gh run list --branch master`, 2026-08-29 — superseded, see below |
 | Hand-polls spent waiting | 835 across 213 episodes | measured 2026-08-29 |
 | Full `deploy.yml`, forward | 1212s, 1753 tasks ok | `ansible.log` pid 2004861, 2026-08-22 |
 
-The ~100s runs in `gh run list` are PR pushes. Only the ~290s runs are merge commits, and only
-those gate a deploy.
+**Do not select the run for a merge commit by duration.** A merge SHA fires two workflow runs, `CI`
+and `Push on master`, and only `CI` carries the required
+`prek (lint + validate + tests + secrets)` check that gates a deploy. Select by workflow name,
+never by which run took longest. The 260–300s above is a 2026-08-29 `gh run list` total and is
+not the `CI` run the gate waits on. Taking the `CI` run of each merge SHA from `run_started_at`
+to `updated_at` across the 15 landings measured in *The landing floor, measured* below gives
+77–137s; the per-run durations are in that task's report, not on this page. What accounts for
+the rest of the 2026-08-29 figure is not established here, so treat that row as history and
+77–137s as the number to use.
 
 ## The two problems are separable
 
@@ -250,6 +257,116 @@ behind-origin watchdog design already argues for.
 
 Its message is service-shaped — `checks/service.py` reads `deploy held at %s — revert the offending PR`. A held *plane* needs a variant naming the playbook that failed, because reverting the PR is
 not the remediation when the tree is already merged and the playbook is what broke.
+
+## The landing floor, measured
+
+The tick and the deploy have already been cut. What is left at the front of a landing is two
+polls, and the ledger says neither is worth shortening. This section records the measurement so
+nobody re-derives it.
+
+The two phases are the Landings ledger's own timers, written by `land_lib/ledger.py`:
+`wait_merge` runs from `t_start` to `t_merged`, `wait_ci` from `t_merged` to `t_ci`. The
+`land-after-merge` skill describes both beside the rest of the board's vocabulary.
+
+**Population.** 15 `verdict=settled` rows cover 2026-09-11 00:00 UTC through
+2026-09-16 22:00 UTC. That window opens at PR #1796, the last change to these two phases.
+
+```bash
+uv run python scripts/diagnostics/probe.py \
+    loki-query '{job="syslog"} |= "event=landing"' --since 7d --limit 500 > /tmp/landing_rows.txt
+
+awk '$1 >= "2026-09-11T00:00" && $1 < "2026-09-16T22:00" && /verdict=settled/' /tmp/landing_rows.txt
+```
+
+The `awk` filter is what selects the population; the query only has to fetch a superset of it.
+Two knobs decide whether it does, and both must be widened when the query runs later than the
+window. `--since` is relative to the run time, so 7d stops reaching 2026-09-11 after
+2026-09-18. `--limit` is the one that fails quietly: Loki reads backward, so the query returns
+the **newest** N matching lines and says nothing when it truncates, and `--limit` defaults to
+100. The 7d pull above matched 194 `event=landing` rows, so 500 was ample; a wider `--since`
+needs a limit above the number of landing rows in the whole range, not in the window. A limit
+that is too low drops the oldest rows first, which is exactly the window this page pins. Loki's
+retention is the outer bound on both.
+
+**Measure CI from the `CI` workflow run, selected by name.** A merge SHA fires two runs, `CI`
+and `Push on master`, and only `CI` carries the required
+`prek (lint + validate + tests + secrets)` check the gate waits on. `Push on master` is not a
+workflow file in `.github/workflows/` — it arrives on the `dynamic` event and shows only in the
+Actions API, so searching the tree for it finds nothing and proves nothing. Selecting by longest
+duration picks it and inflates every master figure by up to 25s. That inflation *subtracts* from
+the overhead past CI, so the error understates the overhead rather than manufacturing it: it can
+hide a median that is over the bar, which is the direction that matters here, since the verdict
+is to change nothing.
+
+```bash
+gh api "repos/DanielH2018/server/actions/runs?head_sha=<full sha>"   # PR head, then merge SHA
+```
+
+**The two medians**, each the overhead past CI — the seconds a phase spent beyond the CI it was
+waiting on — against the 15s bar the plan set for changing an interval:
+
+| Phase | Poll | Median overhead past CI | Verdict |
+|---|---|---|---|
+| `wait_merge` | `--await-merge`, 30s (`land_lib/options.py:15`) | 14s | keep 30s |
+| `wait_ci` | 20s, hardcoded at `land_lib/tools.py:333` | 10s | keep 20s |
+
+**Change `land_lib/tools.py:333` to move the `wait_ci` poll, not `await_ci.py:278`.** A landing
+reaches `await_ci` through `tools.await_ci_verdict`, which calls `await_ci.wait(sha, timeout_s,
+20)` with the interval as a literal. `await_ci.py:278`'s `--interval` default governs only a
+hand-run `await_ci.py`. Editing the CLI default alone leaves every `land.sh` polling at 20s
+while the suite still passes — a silent no-op that reads as shipped. Move both together.
+
+**What the `wait_merge` readings show.** Nine of the 15 landings are ones the split rule keeps
+out of the headline median, because their `wait_merge` is shorter than the CI duration of their
+own PR. Eight of the nine wait 4-7s in total and pay no poll cost. The ninth is PR #1817, which
+waits 66s, two polls, and pays two: the rule buckets it here on the arithmetic alone. For the
+eight, the ledger records no `--await-merge` flag, so a first check that found the PR already
+merged and a landing run without the flag look identical — the data cannot separate them.
+
+Three readings of the overhead, none of which reaches the bar:
+
+| Reading | Value |
+|---|---|
+| The six rows armed before CI finished: `[0, 9, 14, 14, 15, 19]` | 14s |
+| All 15 rows, an unpolled row contributing its own `wait_merge` | 6s |
+| Absolute clock: `t_merged` against the merge run's `run_started_at` | 0s |
+
+**Treat the 14s as consistent with the poll, not as a margin under the bar.** A remainder
+against a 30s poll has an expected median near 15s by construction, and the plan set the bar at
+half the interval, so a six-row median of 14s cannot discriminate — that test is close to a coin
+flip at this sample size. The robust evidence is the other two readings: most landings pay
+nothing, and anchoring on GitHub's own clock puts the overhead past CI at 0s because 10 of 15
+detect the merge within a second. The six-row figure also assumes `land.sh` was armed exactly
+when PR CI started, which the ledger cannot confirm.
+
+The 30s poll does visibly quantize `wait_merge` — the values cluster at 4-7s, 66-67s, 97-99s and
+136s, which is 0, 2, 3 and 4 polls. Only the five landings whose merge lands mid-sleep pay it,
+and for those the overhead past CI is 5-28s on the absolute-clock reading. That set is not the
+six armed before CI finished; the two counts answer different questions.
+
+**Why shortening the interval would not touch the four longest waits.** On the same reading as
+the 10s median, `wait_ci - master CI`, four rows sit far above the 20s interval: 435s, 80s, 76s
+and 52s. `await_ci` follows a moved tip when the polled SHA holds only no-verdict conclusions,
+so those rows span the CI of a later commit rather than their own, and no interval reaches them.
+Excluding the four, the remaining 11 run from -26s to 16s, a spread a 20s poll covers. The
+negative values are not a defect: `wait_ci` starts at `t_merged`, which itself lags the real
+merge by the merge-poll delay, so this reading nets the two polls against each other and reads
+low. Measuring the CI poll on its own clock, from `prek`'s `completed_at` to the green
+observation, puts its median at 12s — still under the bar.
+
+**Request cost is not the constraint.** `await_ci` authenticates through
+`deploy_git.github_token`, as the deployer's own gate does, which is 5000 requests/hour. At the
+measured median a landing spends about 5 polls, and about 45 in the worst case, riding the 900s
+timeout to its end. Halving the interval doubles both, and neither approaches the budget. The
+60/hour anonymous ceiling binds only if the token lookup returns `None` — a missing `gh`, an
+expired login, a slow keyring — which is the fallback path, not the ordinary one.
+
+**Re-measure when any of these changes**, because both medians sit within 5s of the bar and
+neither the window nor the verdict announces its own staleness:
+
+- The duration of PR CI itself moves by more than the poll interval it is measured against.
+- Either poll interval changes.
+- Steps 2-3 of a landing change, the way PR #1796 opened this window.
 
 ## Tests
 
