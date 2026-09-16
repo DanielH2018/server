@@ -693,10 +693,18 @@ done
 
 # The tags this run deploys, as one filesystem-safe word. Names both the --detach log and the
 # snapshot directory, so an operator reading either can tell which run left it.
+# Joined with `+`, not `,`: the snapshot dir becomes the deploy's cwd, and ansible-core's
+# inventory-source resolution treats a comma anywhere in that resolved path as an inline
+# comma-separated host list rather than a file path -- ansible.cfg's relative `inventory =`
+# setting then fails to parse with `Origin.path must be … instead of … _AnsibleTaggedStr`,
+# and every multi-tag deploy reports "no hosts matched" while exiting 0. Reproduced 2026-09-16:
+# `--tags "authelia,traefik"` deployed nothing from a `.../authelia,traefik-<stamp>/` snapshot;
+# an explicit `-i` or a single tag (no comma in the dir name) both work.
 tag_label=$(
     IFS=,
     echo "${split_tags[*]:-full}"
 )
+tag_label="${tag_label//,/+}"
 
 # --detach + --check/--dry-run is meaningless: both of those already return immediately without
 # touching the lock, so there is nothing to background. Checked here, right after args are known
