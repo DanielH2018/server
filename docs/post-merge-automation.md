@@ -251,6 +251,60 @@ behind-origin watchdog design already argues for.
 Its message is service-shaped — `checks/service.py` reads `deploy held at %s — revert the offending PR`. A held *plane* needs a variant naming the playbook that failed, because reverting the PR is
 not the remediation when the tree is already merged and the playbook is what broke.
 
+## The landing floor, measured
+
+The tick and the deploy have already been cut. What is left at the front of a landing is two
+polls, and the ledger says neither is worth shortening. This section records the measurement
+so nobody re-derives it.
+
+**Population.** The 15 `verdict=settled` rows the Landings ledger holds for
+2026-09-11 00:00 UTC through 2026-09-16 22:00 UTC — every settled landing since the last
+change to these two phases. Read them back with:
+
+```bash
+uv run python scripts/diagnostics/probe.py \
+    loki-query '{job="syslog"} |= "event=landing"' --since 7d --limit 500
+```
+
+Each row's CI duration is the `CI` workflow run for the PR head SHA and for the merge SHA,
+which is the run carrying the required `prek (lint + validate + tests + secrets)` check:
+
+```bash
+gh api "repos/DanielH2018/server/actions/runs?head_sha=<full sha>"
+```
+
+**The two medians**, each against the 15s bar the plan set for changing an interval:
+
+| Phase | Poll | Median overhead past CI | Verdict |
+|---|---|---|---|
+| `wait_merge` | `--await-merge`, 30s (`land_lib/options.py:15`) | 14s | keep 30s |
+| `wait_ci` | `await_ci.py --interval`, 20s (`await_ci.py:278`) | 10s | keep 20s |
+
+**How the `wait_merge` rows split.** Nine of the 15 PRs were already green when `land.sh`
+started: their whole `wait_merge` is 4-7s, so the merge poll is not what they wait on. The
+14s median is the other six, where the PR was armed before its CI finished and
+`wait_merge - PR CI` is the poll's own remainder: `[0, 9, 14, 14, 15, 19]`. Counting all 15
+rows, with an already-green row contributing its `wait_merge` rather than a negative, gives
+6s. Anchoring `t_merged` on the merge run's `run_started_at` instead of on CI duration gives
+0s, because 10 of 15 landings detect the merge within a second. Every reading is under the
+bar, so the split does not decide anything.
+
+The 30s poll does visibly quantize `wait_merge` — the values cluster at 4-7s, 66-67s, 97-99s
+and 136s, which is 0, 2, 3 and 4 polls. Only the five landings that merge during a sleep pay
+it, and for those the lag is 5-28s.
+
+**Why `wait_ci`'s 10s is not a poll-granularity number.** Four rows sit far above the 20s
+interval (74s, 75s, 79s, 432s), so no interval change touches them: `await_ci` follows a
+moved tip when the polled SHA holds only no-verdict conclusions, and those rows span the CI of
+a later commit rather than their own. Excluding them, the remaining 11 rows run 3-17s, which
+the 20s poll fully explains.
+
+**Halving `--interval` would cost more than it saves.** The anonymous GitHub limit is 60/hour
+per source IP and is shared with the deployer's own gate. At one poll per 20s against the
+900s timeout, one landing costs 45 of those 60 — a 10s interval would cost 90, above the
+whole anonymous budget, which is the failure that starved the tick on 2026-09-01
+(`scripts/deploy_tools/tests/test_await_ci.py`, the token comment).
+
 ## Tests
 
 Every new rule ships with a proof it can go red — one input it must accept, one it must reject.
