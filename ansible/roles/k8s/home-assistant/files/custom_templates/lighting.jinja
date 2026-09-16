@@ -33,7 +33,7 @@
    window end is still seamless (no sudden jump — the old curve stopped at 40% then AL popped the room
    to its daytime target). Three segments: 1% at window start (e=0) -> a low mid at the alarm (e=15)
    -> a still-dim knee at alarm+20 (e=35) -> 100% at alarm+30 (e=45). The steep run is deliberately
-   pushed into the final 10 min: you get a soft, non-jarring alarm (~8%) and it only gets bright once
+   pushed into the final 10 min: you get a soft, non-jarring alarm (~3%) and it only gets bright once
    you should already be up. Re-evaluated once a minute by bedroom_wake_ramp, so a single call
    returns the level for the current elapsed.
 
@@ -47,7 +47,7 @@
 {%- macro wake_brightness(elapsed_min) -%}
 {%- set e = elapsed_min | float(0) -%}
 {%- set start = 1 -%}
-{%- set mid = 8 -%}
+{%- set mid = 3 -%}
 {%- set knee = 20 -%}
 {%- set full = 100 -%}
 {%- if e <= 15 -%}

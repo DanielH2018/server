@@ -52,7 +52,7 @@ def test_in_wake_release_window_is_a_bounded_catchup():
 
 def test_wake_brightness_curve_endpoints():
     assert _brightness(0) == 1  # 1% at window start (alarm-15)
-    assert _brightness(15) == 8  # ~8% at the alarm (soft, non-jarring)
+    assert _brightness(15) == 3  # ~3% at the alarm (soft, non-jarring)
     assert (
         _brightness(35) == 20
     )  # still-dim knee at alarm+20 -> stays gentle past the alarm
@@ -61,9 +61,9 @@ def test_wake_brightness_curve_endpoints():
 
 def test_wake_brightness_is_gentle_then_steep():
     # Each segment is steeper than the last, with the climb pushed into the final 10 min:
-    # pre-alarm 7%/15min, alarm->knee 12%/20min (a dim plateau), knee->full 80%/10min.
-    assert _brightness(7.5) == 4  # 1 + (8-1)*0.5 = 4.5 -> banker's round -> 4
-    assert _brightness(25) == 14  # 8 + (20-8)*(10/20) -> ~06:10 stays dim
+    # pre-alarm 2%/15min, alarm->knee 17%/20min (a dim plateau), knee->full 80%/10min.
+    assert _brightness(7.5) == 2  # 1 + (3-1)*0.5 = 2
+    assert _brightness(25) == 12  # 3 + (20-3)*(10/20) = 11.5 -> banker's round -> 12
     assert (
         _brightness(40) == 60
     )  # 20 + (100-20)*(5/10) -> the steep tail near window end
