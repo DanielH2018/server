@@ -14,6 +14,7 @@ import textwrap
 
 import pytest
 
+
 import deploy_tags
 
 
@@ -389,3 +390,38 @@ def test_deploy_logic_importers_do_not_grow_sys_path_per_call():
         deploy_tags._is_broad_manual("ansible/bootstrap.yml")
         deploy_tags.comment_only_paths([], "HEAD", "HEAD")
     assert sys.path.count(entry) == before
+
+
+# -- validate --at: containers_list as a git ref declares it ----------------------------
+#
+# `deploy.sh --at <sha>` renders a snapshot of <sha>, so the tags it deploys are the ones
+# <sha> declares. A PR that adds a role and its containers_list entry together declares its
+# tag in NO working tree until the tick fast-forwards, which is how the first landing of a
+# new service read as a tag miss (the same read `land_lib.tools.declared_tags_at` fixes one
+# layer up, issue #1544).
+
+
+def test_known_tags_at_a_ref_still_carries_the_block_tags(host_vars):
+    """CLEAN half, against this checkout's own HEAD: a real ref and a real containers_list.
+
+    The read itself and its damage rule are `render_guard.service_tags_at_or_none`, tested in
+    scripts/lib/tests/test_render_guard.py; what is asserted here is that `known_tags` routes
+    through it and still adds the block tags a service list does not carry.
+    """
+    at_head = deploy_tags.known_tags(host_vars, at="HEAD")
+    assert {"config", "deploy", "always"} <= at_head
+    # The ref was read, not `host_vars`: traefik is declared in this checkout's inventory and
+    # in no fixture, and the two sets differ.
+    assert "traefik" in at_head
+    assert at_head != deploy_tags.known_tags(host_vars)
+
+
+def test_an_unreadable_ref_falls_back_to_the_working_tree(host_vars):
+    """REJECTING half: an empty read is damage, never evidence -- `set()` refuses every tag.
+
+    `host_vars` is the fixture inventory, so the fallback is visible: it answers `jellyfin`,
+    which this checkout's real containers_list does not declare.
+    """
+    fell_back = deploy_tags.known_tags(host_vars, at="deadbeefdeadbeef")
+    assert fell_back == deploy_tags.known_tags(host_vars)
+    assert "jellyfin" in fell_back

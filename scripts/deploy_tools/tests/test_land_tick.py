@@ -72,3 +72,22 @@ def test_the_tick_lets_the_landing_book_a_wait_it_reports_itself(landing):
     observe(47, "pid 8: gitops-deploy")
     assert ln.ledger.lock_waited == 47
     assert ln.ledger.lock_holder == "pid 8: gitops-deploy"
+
+
+def test_a_kick_does_not_wait_for_the_tick(landing, capsys):
+    """`--no-wait`: the landing deploys the merge commit itself and needs no fast-forward."""
+    ln, calls = landing()
+    tick.kick_tick(ln)
+    kick = next(c for c in calls if c[0] == "tick")
+    assert kick[2] == {"wait": False}
+    assert "tick kicked, not awaited" in capsys.readouterr().out
+    assert ln.ledger.lock_waited == 0
+
+
+def test_a_failed_kick_does_not_end_the_landing(landing, capsys):
+    """The rejecting half of `run_tick`'s own failure arm: a kick applies nothing, so a
+    landing whose deploy is still to come must not die on one. The deployer's timer
+    converges the primary checkout whether the request landed or not."""
+    ln, _ = landing(Fakes(tick=[1]))
+    tick.kick_tick(ln)
+    assert "tick kick failed (exit 1)" in capsys.readouterr().out

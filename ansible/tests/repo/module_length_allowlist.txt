@@ -29,7 +29,7 @@ ansible/tests/longhorn/test_longhorn_restore_drill.py 516
 ansible/tests/repo/test_documented_paths_exist.py 553
 ansible/tests/setup/test_cron_scripts_publish_via_pr.py 690
 ansible/tests/staging/test_staging_manifests_have_their_variables.py 613
-scripts/deploy_tools/tests/test_deploy_detach_notify.py 509
+scripts/deploy_tools/tests/test_deploy_detach_notify.py 508
 scripts/deploy_tools/tests/test_land_tags.py 511
 scripts/deploy_tools/tests/test_publish_pr.py 512
 scripts/docs/tests/test_gen_reference_scripts.py 575

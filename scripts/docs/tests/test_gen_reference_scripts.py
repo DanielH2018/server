@@ -396,16 +396,16 @@ def test_an_import_counts_even_from_another_scripts_test(live_script_rows):
     )
 
 
-def test_deploy_sh_is_credited_to_the_test_that_reads_it(live_script_rows):
-    """Not to `test_deploy_detach_notify.py`, whose first line merely names the path.
+def test_deploy_sh_is_credited_to_a_test_that_runs_it(live_script_rows):
+    """Membership, not equality: sort order decides WHICH runner is credited.
 
-    The credit moved from `test_deploy_annotations.py` on 2026-09-02, when
-    `test_deploy_exit_codes.py` began running the script itself over stubbed `uv` and `flock`.
-    Either is a test that reads deploy.sh; what the guard rules out is the notifier's test,
-    which only mentions the path.
+    Pinning one name makes the next runner named earlier in the alphabet read as a generator
+    bug. `_DEPLOY_SH = ... "deploy.sh"` separates a runner from the notifier's test.
     """
-    rows = {r["name"]: r for r in live_script_rows}
-    assert rows["deploy.sh"]["indirect_tests"] == "test_deploy_exit_codes.py"
+    d = Path(__file__).resolve().parents[2] / "deploy_tools" / "tests"
+    runs = {p.name for p in d.glob("test_*.py") if '"deploy.sh"' in p.read_text()}
+    got = {r["name"]: r for r in live_script_rows}["deploy.sh"]["indirect_tests"]
+    assert got in runs and len(runs) >= 5 and "test_deploy_detach_notify.py" not in runs
 
 
 _IMPORTED = {"diagram", "groups", "html_views", "live", "render", "style"}

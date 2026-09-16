@@ -55,6 +55,7 @@ from lib.render_guard import (
     containers_entries,
     entry_tags,
     host_files,
+    service_tags_at_or_none,
 )
 from deploy_tools.exit_codes import DEPLOY_BROAD
 from lib.repo_paths import GITOPS_DEPLOY_FILES
@@ -139,8 +140,16 @@ def service_records(host_vars: Path = HOST_VARS) -> list[ServiceRecord]:
     return records
 
 
-def known_tags(host_vars: Path = HOST_VARS) -> set[str]:
-    return service_tags(host_vars) | set(BLOCK_TAGS) | set(RESERVED_TAGS)
+def known_tags(host_vars: Path = HOST_VARS, at: str = "") -> set[str]:
+    """Every valid tag: the working tree's, or `containers_list` as `at` declares it.
+
+    `at` is for a `deploy.sh --at <sha>` run, which renders a snapshot of that commit. A PR
+    adding a role and its `containers_list` entry together declares the new tag in no working
+    tree until the tick fast-forwards, so validating against the checkout reads the first
+    landing of every new service as a tag miss. An unusable read falls back to the tree.
+    """
+    declared = service_tags_at_or_none(at, REPO) if at else None
+    return (declared or service_tags(host_vars)) | set(BLOCK_TAGS) | set(RESERVED_TAGS)
 
 
 def tags_by_host(tags, host_vars: Path = HOST_VARS) -> dict[str, list[str]]:
@@ -205,9 +214,11 @@ def dry_run_unsupported(all_vars: Path = ALL_VARS) -> set[str]:
     return set(loaded.get("k8s_dry_run_unsupported") or [])
 
 
-def unknown_tags(tags: list[str], host_vars: Path = HOST_VARS) -> list[str]:
+def unknown_tags(
+    tags: list[str], host_vars: Path = HOST_VARS, at: str = ""
+) -> list[str]:
     """The tags in `tags` that name no known service, order-preserving and de-duplicated."""
-    known = known_tags(host_vars)
+    known = known_tags(host_vars, at)
     # Order-preserving and de-duplicated, so the message reads in the order typed.
     seen: set[str] = set()
     out = []
@@ -218,20 +229,20 @@ def unknown_tags(tags: list[str], host_vars: Path = HOST_VARS) -> list[str]:
     return out
 
 
-def suggest(tag: str, host_vars: Path = HOST_VARS) -> list[str]:
+def suggest(tag: str, host_vars: Path = HOST_VARS, at: str = "") -> list[str]:
     """Nearest known tags, for a 'did you mean' line. Empty when nothing is close."""
     return difflib.get_close_matches(
-        tag, sorted(known_tags(host_vars)), n=3, cutoff=0.6
+        tag, sorted(known_tags(host_vars, at)), n=3, cutoff=0.6
     )
 
 
 def _cmd_validate(args: argparse.Namespace) -> int:
-    bad = unknown_tags(args.tags)
+    bad = unknown_tags(args.tags, at=args.at)
     if not bad:
         return 0
     for tag in bad:
         print(f"deploy: no service or block tag named '{tag}'.", file=sys.stderr)
-        matches = suggest(tag)
+        matches = suggest(tag, at=args.at)
         if matches:
             print(f"  Did you mean: {', '.join(matches)}?", file=sys.stderr)
     print(
@@ -538,6 +549,11 @@ def main(argv: list[str] | None = None) -> int:
 
     v = sub.add_parser("validate", help="exit 2 if any tag matches no service")
     v.add_argument("tags", nargs="*")
+    v.add_argument(
+        "--at",
+        default="",
+        help="read containers_list at this committish, not from the working tree",
+    )
     v.set_defaults(func=_cmd_validate)
 
     lst = sub.add_parser("list", help="print every valid tag, one per line")

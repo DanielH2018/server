@@ -10,6 +10,7 @@ that wants the REAL derivation passes `Classifier()` and keeps the fake boundari
 """
 
 import atexit
+import contextlib
 import subprocess
 import tempfile
 from dataclasses import dataclass, field
@@ -76,6 +77,9 @@ class Fakes:
     gate: tuple[bool, list[str]] = field(
         default_factory=lambda: (True, ["sonarr: healthy"])
     )
+    # What `tools.snapshot` yields: a directory for a snapshot that was taken, None for one
+    # that could not be (the tree lock busy, the worktree add failed).
+    gate_snapshot: Path | None = Path("/snap")
     plane: str = ""
     self_applied: bool = False
     self_applied_command: str = "`ansible-playbook ansible/initial_setup.yml --tags x`"
@@ -205,9 +209,19 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
             return _cp(f.changed_rc, f.changed)
         raise AssertionError(args)
 
-    def gate(tags):
-        calls.append(("gate", (tags,), {}))
+    def gate(tags, cwd=None):
+        calls.append(("gate", (tags,), {"cwd": cwd}))
         return GateResult(*f.gate)
+
+    @contextlib.contextmanager
+    def snapshot(primary, sha):
+        """The real one makes a worktree; this one only records that it was asked for.
+
+        `f.gate_snapshot` is None for a snapshot that could not be taken, which is the
+        degraded path the caller must still gate from.
+        """
+        calls.append(("snapshot", (primary, sha), {}))
+        yield f.gate_snapshot
 
     await_ci_seq = _seq(f.await_ci, calls, "await_ci")
 
@@ -229,6 +243,7 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         deploy=_seq(f.deploy, calls, "deploy"),
         deploy_tags=deploy_tags,
         gate=gate,
+        snapshot=snapshot,
         declared_at=lambda ref, primary: f.declared_at,
         read_state=lambda root, name: f.state.get(name, ""),
         lock_holder=_seq(f.lock_holder, calls, "lock_holder"),

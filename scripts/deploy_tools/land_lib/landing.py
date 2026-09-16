@@ -60,6 +60,11 @@ class Landing:
         self.remaining_setup = ""
         self.needs_diff = False
         self.deployed_hosts: set[str] = set()
+        # The commit the deploy phase rendered, when it rendered one that is not the primary
+        # checkout's HEAD -- `deploy.sh --at <sha>`. Empty means the deploy came from the
+        # primary, which is what the fallback on a stale tree goes back to. The health verdict
+        # reads it to gate from the same tree the deploy rendered.
+        self.deployed_at = ""
         # True once a tick attempt returned TICK_STILL_RUNNING: this landing stopped WATCHING
         # a tick that was still applying. Every later read of the deployer's markers is then
         # racing that apply, so `behind_since` set with `hold_sha` empty is the state of a run

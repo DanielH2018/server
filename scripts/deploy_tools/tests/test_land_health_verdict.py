@@ -3,6 +3,8 @@
 Run: uv run pytest scripts/deploy_tools/tests/test_land_health_verdict.py
 """
 
+from pathlib import Path
+
 import pytest
 
 from _land_fakes import MERGE_SHA, Fakes
@@ -162,6 +164,62 @@ def test_an_ordinary_service_pr_never_asks_about_a_broad_apply(landing):
     with pytest.raises(Outcome) as exc:
         health_verdict.health(ln)
     assert (exc.value.rc, exc.value.verdict) == (0, "settled")
+
+
+def test_the_gate_renders_the_tree_that_was_deployed(landing):
+    """`probe.py health` enumerates workloads by rendering the role's manifests from its cwd.
+
+    A landing that deployed a snapshot of its merge commit has not moved the primary checkout,
+    so a role that commit ADDS enumerates nothing there and the whole gate reads `skipped` --
+    green, on the first landing of a new service.
+    """
+    ln, calls = _deployed(landing)
+    ln.deployed_at = MERGE_SHA
+    with pytest.raises(Outcome):
+        health_verdict.health(ln)
+    assert next(c for c in calls if c[0] == "snapshot")[1][1] == MERGE_SHA
+    assert next(c for c in calls if c[0] == "gate")[2] == {"cwd": Path("/snap")}
+
+
+def test_a_deploy_from_the_primary_gates_the_primary(landing):
+    """CLEAN half: the fallback path keeps the gate call it has always made."""
+    ln, calls = _deployed(landing)
+    with pytest.raises(Outcome):
+        health_verdict.health(ln)
+    assert "snapshot" not in [c[0] for c in calls]
+    assert next(c for c in calls if c[0] == "gate")[2] == {"cwd": None}
+
+
+def test_a_snapshot_that_could_not_be_taken_fails_the_gate(landing, capsys):
+    """FLAGGED half: no tree that can answer, so no verdict -- never a green one.
+
+    Degrading to the primary is what the first cut did, and the primary is the one tree that
+    cannot see a role the deployed commit ADDS: `check_one` returns `skipped` and the landing
+    reads `settled` having gated nothing. That is the whole gap this path exists to close, so
+    here it fails closed instead.
+    """
+    ln, _calls = _deployed(landing, Fakes(gate_snapshot=None, merge_applied_rc=1))
+    ln.deployed_at = MERGE_SHA
+    with pytest.raises(Outcome) as exc:
+        health_verdict.health(ln)
+    assert exc.value.verdict == "unhealthy"
+    assert "does not carry it yet" in capsys.readouterr().out
+
+
+def test_a_snapshot_that_failed_over_a_primary_that_has_the_commit_gates_there(
+    landing, capsys
+):
+    """CLEAN half: an equivalent-or-newer primary answers the same question, so it may.
+
+    Without this arm a tick that converged the checkout a second before the gate would turn a
+    healthy landing unhealthy over a worktree that was never needed.
+    """
+    ln, calls = _deployed(landing, Fakes(gate_snapshot=None, merge_applied_rc=0))
+    ln.deployed_at = MERGE_SHA
+    with pytest.raises(Outcome):
+        health_verdict.health(ln)
+    assert next(c for c in calls if c[0] == "gate")[2] == {"cwd": None}
+    assert "already carries it" in capsys.readouterr().out
 
 
 def test_an_unreadable_deployer_state_is_not_settled(landing, capsys):

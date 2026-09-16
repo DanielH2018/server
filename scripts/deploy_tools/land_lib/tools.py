@@ -21,12 +21,16 @@ boundaries.
 """
 
 import contextlib
+import os
 import re
+import shutil
+import signal
 import socket
 import subprocess
 import sys
+import tempfile
 import time
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, NamedTuple, Protocol
@@ -50,8 +54,13 @@ from lib.git import git
 # scripts/deploy_tools -- where land.py, gitops_tick.sh and the imported helpers live.
 HERE = _Path(__file__).resolve().parents[1]
 LOCK = "/var/lock/server-git-tree.lock"
+# What `uv run` reads to find an existing venv instead of building one where it stands.
+UV_PROJECT_ENVIRONMENT = "UV_PROJECT_ENVIRONMENT"
 # `uv run` here resolves the venv from cwd, which is PRIMARY at every call site.
 DEPLOY_TAGS_ARGV = ("uv", "run", "python", "scripts/deploy_tools/deploy_tags.py")
+# The parent a gate snapshot is made in, and the env var that moves it for a test.
+GATE_TMP_ROOT = "/tmp"
+GATE_TMP_ROOT_ENV = "LAND_GATE_TMPDIR"
 
 
 # The two wrapper lines that report a wait ending in an ACQUIRE or a JOIN -- the waits
@@ -136,18 +145,25 @@ def stream_stderr(
     return proc.returncode
 
 
-def run_tick(observe: Callable[[int, str], None] | None = None) -> int:
+def run_tick(
+    observe: Callable[[int, str], None] | None = None, wait: bool = True
+) -> int:
     """Run gitops_tick.sh from beside land.py; its exit code.
 
     `observe` is given the seconds and holder of a wait the wrapper reports on its own
     stderr. Without one the child simply inherits stdio: the pipe is the more fragile
     arrangement, so it is taken only when a caller is booking what it reads.
 
+    `wait=False` passes `--no-wait`: the tick is started and this returns as soon as systemd
+    has the request. A landing that deploys its own merge commit (`deploy.sh --at`) needs the
+    primary checkout to converge eventually, not before it deploys, and the tick's own 10-min
+    timer converges it regardless.
+
     The SCRIPT comes from beside land.py (issue #851) but the working directory is inherited
     either way. Pinning it to `HERE` would have aimed the tick at this checkout's
     scripts/deploy_tools, which is the re-aiming this module's docstring warns about.
     """
-    argv = [str(HERE / "gitops_tick.sh")]
+    argv = [str(HERE / "gitops_tick.sh")] + ([] if wait else ["--no-wait"])
     if observe is None:
         return subprocess.run(argv, check=False).returncode
     return stream_stderr(argv, None, observe)
@@ -158,11 +174,16 @@ def run_deploy(
     tags: list[str],
     target: str | None,
     observe: Callable[[int, str], None] | None = None,
+    at: str = "",
 ) -> int:
     """Run deploy.sh in the primary checkout; its exit code.
 
     The tag list is joined HERE and nowhere earlier: `--tags` is an argv element, so this is
     the one place a landing needs a comma string rather than a list.
+
+    `at` is the commit to render, passed as `--at`. It is what lets a landing deploy its PR's
+    merge commit from a primary checkout the tick has not fast-forwarded onto it yet; empty
+    keeps deploy.sh rendering that checkout's HEAD.
 
     stdio is inherited unless `observe` is given, for the reason `run_tick` states: Ansible
     refuses a non-blocking handle, and deploy.sh clears O_NONBLOCK on the handles it is
@@ -170,6 +191,8 @@ def run_deploy(
     fake records three elements long.
     """
     argv = ["./scripts/deploy.sh", "--tags", ",".join(tags)]
+    if at:
+        argv += ["--at", at]
     if target:
         argv += ["-e", f"target={target}"]
     if observe is None:
@@ -186,6 +209,115 @@ def run_deploy_tags(primary: Path, args: list[str]) -> subprocess.CompletedProce
         text=True,
         check=False,
     )
+
+
+@contextlib.contextmanager
+def _dies_on_a_signal() -> Iterator[None]:
+    """SIGTERM and SIGINT raise inside the block, so an enclosing `finally` still runs.
+
+    Default SIGTERM disposition terminates the interpreter outright, skipping every `finally`
+    -- which for `gate_snapshot` leaves a worktree registered in the primary that nothing
+    collects. `KeyboardInterrupt` rather than a new exception type: `land.py` catches neither
+    (its own `finally` suppresses `Exception` only, so this propagates through it after the
+    ledger row is written), and reusing it keeps a SIGTERM'd landing and a Ctrl-C'd one on one
+    path. The previous handlers are restored on the way out, because the test suite runs this
+    in pytest's main thread.
+    """
+
+    def raise_it(signum, _frame):
+        raise KeyboardInterrupt(f"signal {signum}")
+
+    previous = {s: signal.getsignal(s) for s in (signal.SIGTERM, signal.SIGINT)}
+    for sig in previous:
+        signal.signal(sig, raise_it)
+    try:
+        yield
+    finally:
+        for sig, handler in previous.items():
+            signal.signal(sig, handler)
+
+
+@contextlib.contextmanager
+def gate_snapshot(primary: Path, sha: str) -> Iterator[Path | None]:
+    """A detached worktree of `sha` for the health gate to render from; None when there is none.
+
+    WHY. `probe.py health <tag>` renders the role's manifests to enumerate the workloads it
+    must gate, from the checkout the probe.py it ran came from. A landing that deployed a
+    snapshot of its merge commit has not moved the primary checkout at all, so a role whose
+    workloads that commit ADDS enumerates nothing there and the gate reads `skipped` -- green,
+    on the first landing of every new service, which is the landing that most needs gating.
+
+    UV_PROJECT_ENVIRONMENT is pointed at the primary's `.venv` for the life of the snapshot,
+    for the reason `deploy.sh`'s `run_playbook_in_snapshot` sets it: `uv run` resolves its
+    project from the working directory, and a snapshot carries no `.venv`, so the probe would
+    otherwise build a fresh environment inside a directory removed seconds later.
+
+    DECIDED: NO tree lock is taken. `git worktree add --detach <tmp> <pinned sha>` reads and
+    writes nothing in the primary's working tree -- it writes the new directory and one file
+    under `.git/worktrees/` -- so there is nothing here for the lock that guards that tree to
+    serialise. Taking it non-blocking and degrading on a refusal is what the first cut did,
+    and it reopened the gap this whole path closes: `gitops-deploy.service` holds that lock
+    for its entire unit run, so the tick most landings race is exactly when the gate would
+    have fallen back to the primary and read `skipped` on a role the primary has not pulled.
+
+    DECIDED: under `tempfile.mkdtemp`, NOT under HOMELAB_DEPLOY_SNAPSHOT_ROOT. deploy.sh's
+    reaper collects any directory there whose `.deploy-owner.lock` nobody holds -- and it
+    creates that lock file itself to ask, so an unowned live gate snapshot would be reaped
+    mid-gate by a concurrent deploy. Outside the root the reaper never looks, and the prune at
+    `deploy.sh:256` only deregisters worktrees whose directory is already gone.
+
+    Yields None, never raises, when the worktree could not be created. The caller decides what
+    that means -- it must NOT assume the primary can answer instead (see
+    `health_verdict.gate_from_the_deployed_tree`).
+
+    DECIDED: the parent directory is PINNED to GATE_TMP_ROOT rather than left to `mkdtemp`'s
+    own default, which honours TMPDIR -- on this host that is `/tmp/user/1000`, so a leaked
+    snapshot would sit somewhere the recovery below does not name and an operator following it
+    would delete nothing. A test moves it with GATE_TMP_ROOT_ENV; nothing else sets that.
+
+    A SIGKILL or a host reboot still leaks the registration: the directory survives, so
+    nothing prunes it. Recover by hand with `rm -rf /tmp/land-gate-*` then
+    `git -C <primary> worktree prune`.
+    """
+    # The signal handlers wrap the try, not the reverse: they are restored only after the
+    # worktree is gone, so a second signal arriving during the removal cannot skip it.
+    with _dies_on_a_signal():
+        root = os.environ.get(GATE_TMP_ROOT_ENV) or GATE_TMP_ROOT
+        tmp = Path(tempfile.mkdtemp(prefix="land-gate-", dir=root))
+        snap = tmp / "tree"
+        made = False
+        previous = os.environ.get(UV_PROJECT_ENVIRONMENT)
+        try:
+            made = (
+                git(
+                    "worktree",
+                    "add",
+                    "--detach",
+                    str(snap),
+                    sha,
+                    cwd=primary,
+                    check=False,
+                ).returncode
+                == 0
+            )
+            if made:
+                os.environ[UV_PROJECT_ENVIRONMENT] = str(primary / ".venv")
+            yield snap if made else None
+        finally:
+            if made:
+                git(
+                    "worktree",
+                    "remove",
+                    "--force",
+                    str(snap),
+                    cwd=primary,
+                    check=False,
+                )
+            if previous is None:
+                os.environ.pop(UV_PROJECT_ENVIRONMENT, None)
+            else:
+                os.environ[UV_PROJECT_ENVIRONMENT] = previous
+            shutil.rmtree(tmp, ignore_errors=True)
 
 
 class CiVerdict(NamedTuple):
@@ -350,8 +482,13 @@ class Tools:
     deploy_tags: Callable[[Path, list[str]], subprocess.CompletedProcess[str]] = (
         run_deploy_tags
     )
-    gate: Callable[[list[str]], GateResult] = field(
-        default=lambda tags: health_gate(tags, True)
+    # `cwd` is the checkout the probe renders the deployed role's manifests from; None is the
+    # one this file lives in. `deploy_detach_notify.check_one` carries the argument.
+    gate: Callable[..., GateResult] = field(
+        default=lambda tags, cwd=None: health_gate(tags, True, cwd=cwd)
+    )
+    snapshot: Callable[[Path, str], contextlib.AbstractContextManager[Path | None]] = (
+        gate_snapshot
     )
     declared_at: Callable[[str, Path], set[str] | None] = declared_tags_at
     read_state: Callable[[Path, str], str | None] = read_state

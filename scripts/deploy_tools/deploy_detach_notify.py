@@ -32,11 +32,16 @@ from typing import NamedTuple
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from lib.repo_paths import REPO
+from lib.repo_paths import HOST_VARS, REPO
 
 # Same directory, so a direct invocation already has it on sys.path. `tag_platforms` is the
 # reader of containers_list that says which probe can see a tag's workload.
 import deploy_tags
+
+# The inventory directory as a path relative to a checkout root. `check_one` reads the
+# inventory from whichever tree the probe renders the manifests from, which is not always this
+# one, so it needs the shape of that path without repo_paths' own root baked in.
+HOST_VARS_REL = HOST_VARS.relative_to(REPO)
 
 HOST_LIB_PATH = Path("/opt/gitops-deploy/host_lib.py")
 CONFIG_ENV_PATH = Path("/etc/gitops-deploy/config.env")
@@ -72,8 +77,10 @@ class NotifyTools:
     """
 
     run: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run
-    tag_platforms: Callable[[str], set[str]] = field(
-        default=lambda tag: deploy_tags.tag_platforms(tag)
+    # Takes the inventory to read as a keyword, because which TREE answers is decided per call
+    # (see `check_one`), not once when the tools are built.
+    tag_platforms: Callable[..., set[str]] = field(
+        default=lambda tag, host_vars: deploy_tags.tag_platforms(tag, host_vars)
     )
 
 
@@ -95,11 +102,20 @@ def check_one(
     tag: str,
     tools: NotifyTools | None = None,
     platforms: set[str] | None = None,
+    cwd: Path | None = None,
 ) -> CheckResult:
     """('ok'|'unhealthy'|'skipped', first line of probe.py's output) for one service tag.
 
-    `platforms` is the set of platforms whose containers_list declares the tag, read from the
-    inventory when not given. It decides which probe may answer:
+    `cwd` is the checkout the probe runs in, defaulting to this file's own. It decides WHICH
+    TREE THE ROLE'S MANIFESTS ARE RENDERED FROM, because `scripts/diagnostics/probe.py` is
+    named relatively here and `probe_lib.health` derives every path it reads from the probe.py
+    it resolved: a role whose workloads exist only in a commit this checkout has not pulled
+    enumerates nothing and reads as `skipped`. A landing that deployed a snapshot of its merge
+    commit passes that snapshot, so the workload list comes from the tree that was deployed.
+
+    `platforms` is the set of platforms whose containers_list declares the tag, read when not
+    given from the inventory of that SAME tree -- both halves of one verdict come from the tree
+    that was deployed. It decides which probe may answer:
 
       - {'docker'} probes the Pi only, and a miss there is `unhealthy`, never `skipped`. The
         k8s probe is not consulted at all: a Docker-only tag has no role under roles/k8s/, so
@@ -129,7 +145,7 @@ def check_one(
                     tag,
                     *extra,
                 ],
-                cwd=REPO,
+                cwd=cwd or REPO,
                 capture_output=True,
                 text=True,
                 timeout=PROBE_TIMEOUT_S,
@@ -143,7 +159,13 @@ def check_one(
         return any(marker in line for marker in NOT_APPLICABLE_MARKERS)
 
     if platforms is None:
-        platforms = tools.tag_platforms(tag)
+        # The SAME tree the probe renders from, not this checkout's inventory: a PR that adds a
+        # Pi role and its containers_list entry together declares the tag only at the commit
+        # that was deployed, and the primary reads `set()` for it -- which falls through to the
+        # last branch below and probes k8s FIRST, where a same-named cluster workload answers.
+        # That is issue #929's shape, arriving through the half of the verdict that used to be
+        # read from the calling checkout while the manifests came from the snapshot.
+        platforms = tools.tag_platforms(tag, host_vars=(cwd or REPO) / HOST_VARS_REL)
 
     if platforms == {"docker"}:
         code, line = probe(["--docker"])
@@ -176,12 +198,19 @@ def check_one(
 
 
 def gate(
-    tags: list[str], ansible_ok: bool, tools: NotifyTools | None = None
+    tags: list[str],
+    ansible_ok: bool,
+    tools: NotifyTools | None = None,
+    cwd: Path | None = None,
 ) -> GateResult:
     """(settled, report_lines). `settled` is the notification's headline verdict.
 
     A failed ansible-playbook run is authoritative on its own -- no health check runs, since a
     failed apply didn't necessarily reach the point of rolling anything out.
+
+    `cwd` is the checkout the probe renders the role's manifests from; `check_one` carries the
+    argument and the reason. None keeps deploy.sh's --detach behaviour, which renders the
+    checkout this file lives in.
     """
     if not ansible_ok:
         return GateResult(False, ["ansible-playbook exited non-zero -- see the log."])
@@ -190,7 +219,7 @@ def gate(
     if not tags:
         lines.append("no --tags given -- health not gated, ansible exit code only.")
     for tag in tags:
-        state, detail = check_one(tag, tools=tools)
+        state, detail = check_one(tag, tools=tools, cwd=cwd)
         if state == "skipped":
             lines.append(
                 f"{tag}: not a health-checkable workload (skipped) -- {detail}"
@@ -238,7 +267,7 @@ def notify(content: str) -> None:
             sys.path.remove(lib_dir)
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None, tools: NotifyTools | None = None) -> int:
     """Gate the deploy's health, post the verdict to Discord, and exit 0 if settled else 1."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
@@ -249,6 +278,15 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--tags", default="", help="comma-separated service tags that were deployed"
+    )
+    parser.add_argument(
+        "--cwd",
+        default="",
+        help=(
+            "the checkout to render the deployed role's manifests from; deploy.sh passes "
+            "its snapshot, so the gate enumerates the workloads of the commit that was "
+            "deployed rather than of whatever this working tree holds"
+        ),
     )
     parser.add_argument(
         "--no-post",
@@ -262,7 +300,11 @@ def main(argv: list[str] | None = None) -> int:
     ns = parser.parse_args(argv)
 
     tags = [t for t in ns.tags.split(",") if t]
-    settled, lines = gate(tags, ns.status == 0)
+    # `tools` is the same seam `gate` and `check_one` take, carried one level up so a test can
+    # watch where the probe is actually run rather than patching this module.
+    settled, lines = gate(
+        tags, ns.status == 0, tools=tools, cwd=Path(ns.cwd) if ns.cwd else None
+    )
 
     headline = "settled" if settled else "FAILED"
     content = "\n".join(
