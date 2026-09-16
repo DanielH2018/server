@@ -182,7 +182,7 @@ and the bedtime/wake routines that drive them.
   it still protects the B2-tap nightlight and any other direct caller of the dispatcher.
   The morning wake ramp is the next exception. It spans a **45-min window** (`alarm−15` →
   `alarm+30`, so the alarm sits 1/3 in — NOT centered), with a gentle-then-steep three-segment curve:
-  1% at window start → ~8% at the alarm → 20% at `alarm+20` (the knee) → **100% at `alarm+30`**.
+  1% at window start → ~3% at the alarm → 20% at `alarm+20` (the knee) → **100% at `alarm+30`**.
   The curve deliberately STAYS DIM through the alarm and the ~20 min after (a soft, non-jarring
   wake), then does the steep climb in the final 10 min (reshaped 2026-07-05 after "too bright at the
   alarm" — the old curve hit ~12%/40% earlier and reached 40% by `alarm+15`). Ramping all the way to
