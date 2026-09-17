@@ -63,7 +63,7 @@ Route to the source of truth by what you're doing, before reading linearly:
 | A Bash or `kubectl` command keeps prompting, or you need the full permission tables | `## Shell Commands — Shape Them to Auto-Approve` below (summary) · `docs/claude-shell-permissions.md` (full detail) |
 | Editing HA automations / lighting / fans | `ansible/roles/k8s/home-assistant/CLAUDE.md` (config and workload both live there; it routes to `docs/` for per-topic behaviour) · `/ha-edit-automation` |
 | Reviewing the homelab for gaps | `/homelab-review` skill (per-domain reviewer agents) |
-| Answering "what runs here / where / behind what" | `docs/reference/` — generated from the tree by the `docs-refresh` cron, browsable at `docs.local.<domain>`. Services, hosts, secret rotation, scheduled jobs, networking. **Never hand-edit a generated page**; a hook rejects it. Change the generator (`scripts/docs/build_docs.py` lists them). The hook decides by the `generated_from:` provenance banner rather than the path, so `reference/topology.md` — hand-written prose, the one page there nobody generates — stays editable. |
+| Answering "what runs here / where / behind what" | `docs/reference/` — generated from the tree by the `docs-refresh` cron, browsable at `docs.local.<domain>`. Services, hosts, secret rotation, scheduled jobs, networking. **Never hand-edit a generated page** (ENFORCED by `.claude/hooks/block-protected-edits.py` for `Edit|Write`, and by `block-protected-bash.py` for a `sed -i`/`tee`/heredoc write). Change the generator (`scripts/docs/build_docs.py` lists them). The hook decides by the `generated_from:` provenance banner rather than the path, so `reference/topology.md` — hand-written prose, the one page there nobody generates — stays editable. |
 | CI fails on `test_every_committed_fragment_matches_what_the_generator_writes_now` | You changed a tunable a docs fragment reads. *Generated docs fragments* below has the regenerate command, which tunables those are, and why this one gate is not left to the cron. |
 | Chasing a reliability / monitoring "gap" | The role's `CLAUDE.md` + monitor-bridge `files/registry.py` (the check registry) **first** — mature setup, most are handled |
 | Checking that a service's UI actually renders, not just that its pod is Ready | The `homelab-ui` MCP server — see `## Claude Tooling in This Repo` below, and `docs/claude-tooling.md` for the full reference. `probe.py health` cannot see a broken UI behind a healthy pod. **Grafana is the exception** — it still serves a login page behind Authelia, so drive it with `uv run pytest -m ui -k grafana` rather than by hand. That tier logs in through Authelia's OIDC provider and types no credential; the admin form stays on as break-glass. OIDC login is LAN-only: `root_url` pins the callback to `grafana.local.<domain>`. |
@@ -611,7 +611,11 @@ uv run pytest scripts         # just one suite
 - **Test-placement gotcha:** pytest tests must NOT live under `ansible/filter_plugins/` —
   Ansible's plugin loader imports every `.py` there at deploy time and would choke on the
   `pytest` import. `test_toposort.py` lives in `ansible/tests/` and imports its target via the
-  `pythonpath` setting in `pyproject.toml`.
+  `pythonpath` setting in `pyproject.toml`. ENFORCED, SCOPED:
+  `ansible/tests/repo/test_testpaths_covers_every_test_file.py::test_every_suite_file_sits_in_a_tests_directory`
+  refuses a test file beside the plugin. A `filter_plugins/tests/` subdirectory would pass it
+  and still load, because `PluginLoader._get_paths_with_context` globs two levels of
+  subdirectories.
 
 CI (`.github/workflows/ci.yml`) runs `prek run --all-files` on every PR and on push to master:
 these tests plus lint, template validation, and secret scanning.
