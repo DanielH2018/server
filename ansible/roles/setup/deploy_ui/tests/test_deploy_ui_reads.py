@@ -1,5 +1,7 @@
 """Readers behind the four panels. Each parser gets an accept and a reject case."""
 
+import os
+
 import deploy_ui_reads as reads
 
 PS = """\
@@ -12,27 +14,36 @@ PS = """\
  5001  5000    88 uv run ansible-playbook ansible/deploy.yml --tags homepage
  5002  5001    87 /x/python3 /x/ansible-playbook ansible/deploy.yml --tags homepage
  5100     1    30 bash ./scripts/deploy.sh --tags homepage
+ 5101  5100    29 flock -w 600 -E 75 11
  5200     1     1 bash ./scripts/deploy.sh --list-services
  6000     1    20 /x/python3 /opt/gitops-deploy/gitops_deploy.py
  6001  6000     2 git fetch
  7000     1     3 grep land.py
 """
-HELD = {
+# fuser: who has each lock file OPEN. The queued deploy (5100) has homepage.lock open
+# exactly like the holder, and its blocked `flock` child (5101) is in /proc/locks.
+OPENED = {
     "/var/lock/server-git-tree.lock": {6000, 6001},
     "/var/lock/server-deploy-all.lock": {5000, 5001, 5002, 4322},
-    "/var/lock/server-deploy-homepage.lock": {5000, 5001, 5002},
+    "/var/lock/server-deploy-homepage.lock": {5000, 5001, 5002, 5100, 5101},
     "/var/lock/server-deploy-n8n.lock": {4322},
+}
+LOCKS = {
+    "/var/lock/server-git-tree.lock": reads.FileLock(True, frozenset()),
+    "/var/lock/server-deploy-all.lock": reads.FileLock(True, frozenset()),
+    "/var/lock/server-deploy-homepage.lock": reads.FileLock(True, frozenset({5101})),
+    "/var/lock/server-deploy-n8n.lock": reads.FileLock(True, frozenset()),
 }
 
 
 def _rows():
-    return {r.pid: r for r in reads.runs(reads.parse_ps(PS), HELD)}
+    return {r.pid: r for r in reads.runs(reads.parse_ps(PS), OPENED, LOCKS)}
 
 
 def test_parse_ps_keys_every_process_by_pid_is_clean():
     procs = reads.parse_ps(PS)
     assert procs[5001].ppid == 5000 and procs[5001].elapsed_s == 88
-    assert len(procs) == 13
+    assert len(procs) == 14
 
 
 def test_runs_fold_each_family_to_its_root_is_clean():
@@ -53,9 +64,18 @@ def test_runs_deploy_reads_tag_and_locks_is_clean():
     assert r.locks == ("server-deploy-all.lock", "server-deploy-homepage.lock")
 
 
-def test_runs_queued_deploy_holds_nothing_is_flagged():
+def test_runs_queued_deploy_is_waiting_not_holding_is_flagged():
+    """The file is open in both families; only the kernel's waiter line separates them."""
     r = _rows()[5100]
     assert r.kind == "deploy" and r.locks == ()
+    assert r.waiting_on == ("server-deploy-homepage.lock",)
+    assert _rows()[5000].waiting_on == ()
+
+
+def test_runs_open_but_ungranted_file_is_not_held_is_flagged():
+    """fuser alone would call this a holder; without a granted lock it holds nothing."""
+    rows = {r.pid: r for r in reads.runs(reads.parse_ps(PS), OPENED, {})}
+    assert rows[5000].locks == () and rows[5000].waiting_on == ()
 
 
 def test_runs_bare_lock_holder_is_a_row_is_clean():
@@ -78,6 +98,37 @@ def test_parse_fuser_pairs_each_held_path_with_its_pids_is_clean():
 
 def test_parse_fuser_empty_holds_nothing_is_flagged():
     assert reads.parse_fuser("") == {}
+
+
+PROC_LOCKS = """\
+4: FLOCK  ADVISORY  WRITE 25343 41:10:13 0 EOF
+56: FLOCK  ADVISORY  WRITE 1930784 fc:00:6564011 0 EOF
+56: -> FLOCK  ADVISORY  WRITE 1930788 fc:00:6564011 0 EOF
+57: POSIX  ADVISORY  WRITE 1620 00:1b:1915 0 EOF
+58: FLOCK  ADVISORY  READ 1917491 00:1d:2364212 0 EOF
+"""
+
+
+def test_parse_proc_locks_reads_granted_and_waiting_is_clean():
+    """Measured shape: a `flock` holder and a second `flock -w` blocked on the same file."""
+    got = reads.parse_proc_locks(PROC_LOCKS)
+    assert got[(0xFC, 0, 6564011)] == reads.FileLock(True, frozenset({1930788}))
+    assert got[(0, 0x1D, 2364212)] == reads.FileLock(True, frozenset())
+
+
+def test_parse_proc_locks_ignores_posix_locks_is_flagged():
+    assert (0, 0x1B, 1915) not in reads.parse_proc_locks(PROC_LOCKS)
+
+
+def test_lock_key_matches_proc_locks_identity_is_clean(tmp_path):
+    p = tmp_path / "x.lock"
+    p.touch()
+    st = p.stat()
+    assert reads.lock_key(str(p)) == (
+        os.major(st.st_dev),
+        os.minor(st.st_dev),
+        st.st_ino,
+    )
 
 
 def test_read_state_missing_reads_clear_is_clean(state_dir):
@@ -135,5 +186,5 @@ TWO_PRS_PS = """\
 
 
 def test_runs_keep_landings_for_different_prs_apart_is_flagged():
-    got = reads.runs(reads.parse_ps(TWO_PRS_PS), {})
+    got = reads.runs(reads.parse_ps(TWO_PRS_PS), {}, {})
     assert [(r.pid, r.pr) for r in got] == [(4400, "1550"), (4500, "1551")]

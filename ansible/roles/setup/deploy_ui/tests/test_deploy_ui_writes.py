@@ -6,7 +6,7 @@ import time
 import deploy_ui_writes as w
 from deploy_ui_reads import Run
 
-L = Run(4321, 10, "land", "1543", "", "land.py --pr 1543", ())
+L = Run(4321, 10, "land", "1543", "", "land.py --pr 1543", (), ())
 
 
 def test_write_allowed_header_and_json_is_clean():

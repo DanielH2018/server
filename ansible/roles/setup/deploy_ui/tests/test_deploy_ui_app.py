@@ -1,12 +1,14 @@
 """The app's routing over an injected runner: every read degrades, every write is guarded."""
 
 import json
+import pathlib
 import subprocess
 import urllib.parse
 
 import pytest
 
 import deploy_ui
+import deploy_ui_reads as reads
 
 
 class FakeRun:
@@ -33,11 +35,13 @@ PS = """\
  5001  5000    88 /x/python3 /x/ansible-playbook ansible/deploy.yml --tags n8n
  5100     1    30 bash ./scripts/deploy.sh --tags n8n
 """
-# fuser with stderr merged: `<path>: <pids>` for each HELD file only; the argv names
-# every lock file under the App's lock_dir, so the prefix is the command alone.
+# fuser with stderr merged: `<path>: <pids>` for each OPEN file. The queued deploy
+# (5100) has the n8n lock open too: deploy.sh opens the descriptor, then blocks on it.
+# The argv names every lock file under the App's lock_dir, so the prefix is the command
+# alone; the paths are filled in by the fixture, which knows the tmp dir.
 FUSER = """\
-/var/lock/server-deploy-all.lock: 5000 5001
-/var/lock/server-deploy-n8n.lock: 5000 5001
+{d}/server-deploy-all.lock: 5000 5001
+{d}/server-deploy-n8n.lock: 5000 5001 5100
 """
 TABLE = {
     ("ps", "-eo", "pid=,ppid=,etimes=,args="): (PS, 0),
@@ -64,8 +68,16 @@ TABLE = {
 HDRS = {"X-Deploy-UI": "1", "Content-Type": "application/json"}
 
 
+def _proc_locks_line(path, waiter=None):
+    maj, mnr, ino = reads.lock_key(str(path))
+    arrow, pid = ("-> ", waiter) if waiter else ("", 4242)
+    return f"9: {arrow}FLOCK  ADVISORY  WRITE {pid} {maj:02x}:{mnr:02x}:{ino} 0 EOF\n"
+
+
 @pytest.fixture
 def lock_dir(tmp_path):
+    """Three lock files, and a /proc/locks in which all.lock and n8n.lock are granted
+    and 5100 is blocked on n8n.lock. Keys are the files' real (dev, inode)."""
     d = tmp_path / "lock"
     d.mkdir()
     for name in (
@@ -74,7 +86,18 @@ def lock_dir(tmp_path):
         "server-deploy-n8n.lock",
     ):
         (d / name).touch()
+    (tmp_path / "proc_locks").write_text(
+        _proc_locks_line(d / "server-deploy-all.lock")
+        + _proc_locks_line(d / "server-deploy-n8n.lock")
+        + _proc_locks_line(d / "server-deploy-n8n.lock", waiter=5100)
+    )
     return d
+
+
+def _table(lock_dir):
+    t = dict(TABLE)
+    t[("fuser",)] = (FUSER.format(d=lock_dir), 0)
+    return t
 
 
 @pytest.fixture
@@ -86,8 +109,9 @@ def app(tmp_path, state_dir, lock_dir):
         bind="127.0.0.1",
         port=0,
         lock_dir=lock_dir,
+        proc_locks=tmp_path / "proc_locks",
     )
-    return deploy_ui.App(cfg, run=FakeRun(dict(TABLE)))
+    return deploy_ui.App(cfg, run=FakeRun(_table(lock_dir)))
 
 
 def body(resp):
@@ -108,7 +132,9 @@ def test_inflight_lists_landing_deploy_and_queued_deploy_is_clean(app):
     assert set(rows) == {4321, 5000, 5100}
     assert rows[5000]["kind"] == "deploy" and rows[5000]["tag"] == "n8n"
     assert rows[5000]["locks"] == ["server-deploy-all.lock", "server-deploy-n8n.lock"]
+    # 5100 has n8n.lock open like the holder does; /proc/locks says it is blocked on it.
     assert rows[5100]["locks"] == []
+    assert rows[5100]["waiting_on"] == ["server-deploy-n8n.lock"]
     assert b["locks_watched"] == [
         "server-git-tree.lock",
         "server-deploy-all.lock",
@@ -136,6 +162,7 @@ def test_inflight_with_no_lock_files_says_so_is_flagged(tmp_path, state_dir):
     """`free` over no files is the empty-panel trap; the page needs the count to tell."""
     empty = tmp_path / "nolocks"
     empty.mkdir()
+    (tmp_path / "proc_locks").write_text("")
     cfg = deploy_ui.Config(
         repo=tmp_path,
         state_dir=state_dir,
@@ -143,11 +170,29 @@ def test_inflight_with_no_lock_files_says_so_is_flagged(tmp_path, state_dir):
         bind="",
         port=0,
         lock_dir=empty,
+        proc_locks=tmp_path / "proc_locks",
     )
     app = deploy_ui.App(cfg, run=FakeRun(dict(TABLE)))
     b = body(app.get("/api/inflight"))
     assert b["locks_watched"] == []
     assert not any(c[0] == "fuser" for c in app.run.calls)
+
+
+def test_inflight_unreadable_proc_locks_is_unavailable_is_flagged(
+    tmp_path, state_dir, lock_dir
+):
+    """A lock read that errors must never render `free`."""
+    cfg = deploy_ui.Config(
+        repo=tmp_path,
+        state_dir=state_dir,
+        log_dir=tmp_path,
+        bind="",
+        port=0,
+        lock_dir=lock_dir,
+        proc_locks=tmp_path / "missing",
+    )
+    b = body(deploy_ui.App(cfg, run=FakeRun(_table(lock_dir))).get("/api/inflight"))
+    assert "missing" in b["unavailable"]
 
 
 def test_inflight_degrades_when_ps_fails_is_flagged(tmp_path, state_dir):
@@ -393,3 +438,19 @@ def test_content_length_reads_a_byte_count_is_clean():
 def test_content_length_non_numeric_is_flagged():
     assert deploy_ui.content_length({"Content-Length": "seventeen"}) is None
     assert deploy_ui.content_length({"Content-Length": "-1"}) is None
+
+
+DEPLOY_SH = pathlib.Path(__file__).resolve().parents[5] / "scripts/deploy.sh"
+
+
+def test_lock_names_agree_with_deploy_sh_is_clean():
+    """The daemon runs outside the venv and cannot import the lock names, so this is
+    the literal-agreement guard: the tree lock path and the service-lock shape the page
+    watches are the ones deploy.sh takes."""
+    text = DEPLOY_SH.read_text()
+    assert f'"${{HOMELAB_DEPLOY_TREE_LOCK:-/var/lock/{deploy_ui.TREE_LOCK}}}"' in text
+    assert 'LOCK_DIR="${HOMELAB_DEPLOY_LOCK_DIR:-/var/lock}"' in text
+    assert str(deploy_ui.Config.__dataclass_fields__["lock_dir"].default) == "/var/lock"
+    prefix, suffix = deploy_ui.SERVICE_LOCK_GLOB.split("*")
+    assert f'"$LOCK_DIR/{prefix}all{suffix}"' in text
+    assert f'"$LOCK_DIR/{prefix}${{tag//[^A-Za-z0-9_.-]/_}}{suffix}"' in text

@@ -38,9 +38,12 @@ class Proc:
 class Run:
     """One process family in flight: a landing, a deploy, or a bare lock holder.
 
-    `locks` names the lock files the family holds, by basename. A `deploy` row with no
-    locks is queued on one: `deploy.sh` takes its service locks before the playbook, so a
-    second deploy of the same service waits there, silently, for the first.
+    `locks` names the lock files the family holds and `waiting_on` the ones it is queued
+    on, both by basename. `deploy.sh` opens a service lock's descriptor and then blocks
+    on it, so a queued second deploy of the same service has the file OPEN for the whole
+    wait and fuser lists it like the holder; only the kernel's lock table (`/proc/locks`)
+    tells the two apart. A `deploy` row with a `waiting_on` is the queue that was
+    silent before #1844.
     """
 
     pid: int
@@ -50,7 +53,54 @@ class Run:
     tag: str
     args: str
     locks: tuple[str, ...]
+    waiting_on: tuple[str, ...]
     log: str = ""
+
+
+@dataclass(frozen=True)
+class FileLock:
+    """One lock file's state from `/proc/locks`: granted or not, and who is blocked on it."""
+
+    held: bool
+    waiters: frozenset[int]
+
+
+# `56: FLOCK  ADVISORY  WRITE 1930784 fc:00:6564011 0 EOF` is a granted flock;
+# `56: -> FLOCK …` under it is a process blocked on the same lock. The pid on a granted
+# line can be dead: `deploy.sh` takes its locks with a `flock` CHILD on an inherited
+# descriptor, and the lock outlives the child. The pid on a `->` line is alive by
+# construction, blocked inside flock(2).
+_PROC_LOCK_RE = re.compile(
+    r"^\d+:\s*(->\s*)?FLOCK\s+\S+\s+(?:READ|WRITE)\s+(\d+)\s+"
+    r"([0-9a-f]+):([0-9a-f]+):(\d+)\s"
+)
+
+LockKey = tuple[int, int, int]
+
+
+def lock_key(path: str) -> LockKey:
+    """`(major, minor, inode)`, the identity `/proc/locks` names a file by."""
+    st = os.stat(path)
+    return (os.major(st.st_dev), os.minor(st.st_dev), st.st_ino)
+
+
+def parse_proc_locks(text: str) -> dict[LockKey, FileLock]:
+    """`/proc/locks` to the flocks in it, keyed the way `lock_key` keys a path."""
+    held: set[LockKey] = set()
+    waiters: dict[LockKey, set[int]] = {}
+    for line in text.splitlines():
+        m = _PROC_LOCK_RE.match(line)
+        if not m:
+            continue
+        key = (int(m.group(3), 16), int(m.group(4), 16), int(m.group(5)))
+        if m.group(1):
+            waiters.setdefault(key, set()).add(int(m.group(2)))
+        else:
+            held.add(key)
+    return {
+        key: FileLock(key in held, frozenset(waiters.get(key, ())))
+        for key in held | waiters.keys()
+    }
 
 
 def parse_ps(text: str) -> dict[int, Proc]:
@@ -87,7 +137,11 @@ def _is_run(args: str) -> bool:
     return bool(_RUN_RE.search(args)) and not _NOT_A_RUN.search(args)
 
 
-def runs(procs: dict[int, Proc], held: dict[str, set[int]]) -> list[Run]:
+def runs(
+    procs: dict[int, Proc],
+    opened: dict[str, set[int]],
+    locks: dict[str, FileLock],
+) -> list[Run]:
     """Fold processes into one row per family.
 
     The topmost run or lock holder on a pid's ancestor chain owns every run and holder
@@ -98,10 +152,16 @@ def runs(procs: dict[int, Proc], held: dict[str, set[int]]) -> list[Run]:
     so a held lock is never invisible because its holder matched no pattern. fuser lists
     every process with the file open, children included, which is why the fold has to
     include holders and not only runs.
+
+    `opened` is fuser's answer per lock path; `locks` is `/proc/locks` per lock path. A
+    family holds a lock when it has the file open, the kernel has granted a lock on it,
+    and no member of the family is blocked on it. A family with a member blocked on it
+    is waiting.
     """
-    holders = set().union(*held.values()) if held else set()
+    open_pids = set().union(*opened.values()) if opened else set()
+    waiter_pids = set().union(*(l.waiters for l in locks.values())) if locks else set()
     candidates = {pid for pid, p in procs.items() if _is_run(p.args)} | (
-        holders & procs.keys()
+        (open_pids | waiter_pids) & procs.keys()
     )
     families: dict[int, set[int]] = {}
     for pid in candidates:
@@ -115,11 +175,16 @@ def runs(procs: dict[int, Proc], held: dict[str, set[int]]) -> list[Run]:
     rows = []
     for root, members in families.items():
         p = procs[root]
-        locks = tuple(
-            sorted(
-                os.path.basename(path) for path, pids in held.items() if pids & members
-            )
-        )
+        holding, waiting = [], []
+        for path, pids in opened.items():
+            if not pids & members:
+                continue
+            lock = locks.get(path)
+            name = os.path.basename(path)
+            if lock and lock.waiters & members:
+                waiting.append(name)
+            elif lock and lock.held:
+                holding.append(name)
         if "land.py" in p.args:
             kind = "land"
         elif _is_run(p.args):
@@ -136,7 +201,8 @@ def runs(procs: dict[int, Proc], held: dict[str, set[int]]) -> list[Run]:
                 pr.group(1) if pr else "",
                 tag.group(1) if tag else "",
                 p.args,
-                locks,
+                tuple(sorted(holding)),
+                tuple(sorted(waiting)),
             )
         )
     return sorted(rows, key=lambda r: r.pid)

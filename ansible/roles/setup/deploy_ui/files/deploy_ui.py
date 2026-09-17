@@ -45,6 +45,7 @@ class Config:
     bind: str
     port: int
     lock_dir: Path = Path("/var/lock")
+    proc_locks: Path = Path("/proc/locks")
     pr_cache_s: int = 60
 
     @classmethod
@@ -122,25 +123,37 @@ class App:
         return [str(p) for p in paths]
 
     def inflight(self) -> dict:
-        """Every landing, deploy and lock holder as one row each, with the locks it holds.
+        """Every landing, deploy and lock holder as one row each, with its locks.
 
-        `locks_watched` names the files fuser was asked about. An empty list is its own
-        state on the page: `free` over no files would be the empty-panel trap this module's
-        docstring names. A holder this user cannot see in `/proc` (a root-owned tick) is a
-        limit of fuser, not of the read, and reads as free.
+        Two sources, because neither alone answers "who holds what": fuser names the
+        processes with each lock file OPEN (a queued deploy has it open too), and
+        `/proc/locks` says which files are granted and which pids are blocked on them.
+        `locks_watched` names the files asked about. An empty list is its own state on the
+        page: `free` over no files would be the empty-panel trap this module's docstring
+        names. A holder this user cannot see in `/proc` is a limit of fuser, not of the
+        read, and reads as free.
         """
         ps = self._out(["ps", "-eo", "pid=,ppid=,etimes=,args="], 10)
         paths = self._lock_paths()
-        held = (
+        opened = (
             reads.parse_fuser(
                 self._out(["fuser", *paths], 5, ok_rcs=(0, 1), merge_stderr=True)
             )
             if paths
             else {}
         )
+        try:
+            table = reads.parse_proc_locks(self.cfg.proc_locks.read_text())
+            keys = {p: reads.lock_key(p) for p in paths}
+        except OSError as exc:
+            raise Unavailable(f"{self.cfg.proc_locks}: {exc}") from exc
+        locks = {p: table[k] for p, k in keys.items() if k in table}
         runs = [
-            {**r.__dict__, "log": reads.log_path_of(r.pid)}
-            for r in reads.runs(reads.parse_ps(ps), held)
+            {
+                **r.__dict__,
+                "log": reads.log_path_of(r.pid) if r.kind != "lock" else "",
+            }
+            for r in reads.runs(reads.parse_ps(ps), opened, locks)
         ]
         return {"runs": runs, "locks_watched": [os.path.basename(p) for p in paths]}
 
@@ -247,6 +260,7 @@ class App:
                 reads.parse_ps(
                     self._out(["ps", "-eo", "pid=,ppid=,etimes=,args="], 10)
                 ),
+                {},
                 {},
             ),
             self.state()["hold_sha"],
