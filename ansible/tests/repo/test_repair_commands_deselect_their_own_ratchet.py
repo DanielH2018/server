@@ -36,8 +36,8 @@ BEFORE the repair writes and the guard reads the pre-repair state. Every other o
 
 The adjacent hazard the sweep found, not the self-satisfying shape: the two crons that commit
 with hooks on run the ENTIRE suite, so a ratchet that only a manual command can repair (the
-weights ratchet is the one instance) blocks their commits while it is red. That is master CI
-red by another route, and the same repair clears both.
+weights ratchet is the one instance) blocks their commits while it is red. Filed as #1899; it
+is master CI red by another route, and the same repair clears both.
 
 The guard: every first-party script that runs pytest as a subprocess must pass `--deselect`
 in that same argv. Found by AST rather than by text, so a `subprocess.run([...])` spread over
@@ -52,7 +52,7 @@ from pathlib import Path
 
 from _helpers import REPO
 
-SCRIPT_ROOTS = (REPO / "scripts", REPO / "ansible/roles")
+SCRIPT_ROOTS = (REPO / "scripts", REPO / "ansible/roles", REPO / "evals")
 KNOWN_INVOKERS = frozenset({"scripts/dev/pytest_shard.py"})
 _SUBPROCESS_CALLS = frozenset({"run", "call", "check_call", "check_output", "Popen"})
 

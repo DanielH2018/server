@@ -142,7 +142,7 @@ ROWS: list[Row] = [
     ),
     Row(
         "docs/post-merge-automation.md",
-        r"The unit now sets `TimeoutStartSec=(\d+min)`",
+        r"The unit sets `TimeoutStartSec=(\d+min)`",
         "gitops-deploy.service.j2 TimeoutStartSec",
         _unit_timeout_start_minutes,
     ),
