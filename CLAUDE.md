@@ -290,7 +290,12 @@ history, the `homelab-ui` DNS/auth/secrecy triad and its `-m ui` suite, per-file
     DaemonSet** is fully rolled out **and** no container restarted in the last 180s (an
     unreadable restart time counts as recent, so it fails closed). Both halves matter —
     readiness flips a Deployment to Available before a bad liveness probe starts killing it, so
-    a rollout check alone reports green on a crashlooping pod. `--docker` inspects the Pi's
+    a rollout check alone reports green on a crashlooping pod. A third half reads the
+    service's release record: a workload the last apply queued a restart of must carry a
+    `restartedAt` newer than that apply, or it FAILS as NOT ROLLED — the pods that were
+    already running satisfy the first two halves, so a deploy that changed the manifests and
+    rolled nothing read green until 2026-09-17 (#1867). No record, or an apply that changed
+    nothing, leaves the verdict as it was. `--docker` inspects the Pi's
     container over ssh instead, and is the only mode that touches Docker at all.
     **It gates the PRODUCTION cluster unless you say otherwise**, whichever cluster you just
     deployed to — the argv is a bare `k3s kubectl`. `--cluster prod|stage` names the intended

@@ -73,7 +73,7 @@ from diagnostics.probe_lib.health_kubectl import (
     node_names,
     pod_selector,
 )
-from diagnostics.probe_lib.health_rollout import format_k8s_health
+from diagnostics.probe_lib.health_rollout import format_k8s_health, unrolled_reason
 
 from lib.repo_paths import K8S_ROLES, REPO
 
@@ -209,7 +209,7 @@ def role_cronjob_targets(role, default_namespace):
     return [(namespace, name) for namespace, _kind, name in targets]
 
 
-def format_role_health(role, checked, now):
+def format_role_health(role, checked, now, expected_restarts=None):
     """(text, exit code) for a role whose manifests declare at least one workload.
 
     `checked` is [(namespace, kind, name, workload doc or None, pods doc or None)]. A None
@@ -219,9 +219,17 @@ def format_role_health(role, checked, now):
     test_deploy_detach_notify.py, because a rewording that happened to contain one would put a
     failed deploy back on the skip path with every test still green.
 
+    `expected_restarts` is {workload name: applied_at} from the service's release record
+    (`release_expected_restarts`): each named workload must carry a `restartedAt` newer than
+    that apply, or it FAILS the gate as NOT ROLLED (issue #1867). Empty or None — no record,
+    a record from before the field shipped, or an apply that changed nothing — leaves the
+    verdict exactly as it was, which is what keeps a standalone `probe.py health` and an
+    idempotent re-run green.
+
     Only the first line reaches the Discord verdict (the notifier reads `splitlines()[0]`), so
     it carries the whole result and the per-workload detail follows it.
     """
+    expected_restarts = expected_restarts or {}
     missing, unhealthy, lines = [], [], []
     for namespace, kind, name, workload, pods in checked:
         if workload is None:
@@ -232,6 +240,11 @@ def format_role_health(role, checked, now):
             )
             continue
         text, code = format_k8s_health(workload, pods, f"{namespace}/{name}", now)
+        if name in expected_restarts:
+            reason = unrolled_reason(workload, expected_restarts[name])
+            if reason:
+                text += f" — {reason}"
+                code = 1
         lines.append(f"  {text}")
         if code:
             unhealthy.append(f"{namespace}/{name}")
@@ -264,23 +277,59 @@ def _fetch_workload(name, namespace):
     return None, None
 
 
-def _deploy_applied_at(service):
-    """This service's `applied_at` from its release_stamp.yml record, or None if unreadable.
+def _release_record(service, release_dir=None):
+    """This service's release_stamp.yml record as a dict, or None if unreadable.
 
     `roles/k8s/manifests/tasks/release_stamp.yml` writes one record per service after every
     real apply (see `probe_lib/releases.py`, which reads the whole directory; this reads one
     record by name). None covers a service that has never been deployed since the stamp
-    shipped, and a truncated or missing file — format_cronjob_health treats a missing deploy
-    timestamp as "nothing to compare against" rather than a failure of its own.
+    shipped, and a truncated or missing file — every reader here treats that as "nothing to
+    compare against" rather than a failure of its own.
     """
     from diagnostics.probe_lib.releases import RELEASE_DIR
 
+    release_dir = RELEASE_DIR if release_dir is None else release_dir
     try:
-        return json.loads((RELEASE_DIR / f"{service}.json").read_text()).get(
-            "applied_at"
-        )
+        record = json.loads((release_dir / f"{service}.json").read_text())
     except OSError, ValueError:
         return None
+    return record if isinstance(record, dict) else None
+
+
+def _deploy_applied_at(service):
+    """This service's `applied_at` from its release record, or None if unreadable."""
+    return (_release_record(service) or {}).get("applied_at")
+
+
+def release_expected_restarts(record):
+    """{workload name: applied_at} for every workload the recorded apply queued a restart of.
+
+    Read from the record's `rollouts` list, which the stamp builds from the same facts the
+    restart tasks read (release_stamp.yml). Empty whenever the record cannot answer — no
+    record, no `rollouts` key (a record from before the field shipped), an unreadable
+    `applied_at` — so the gate's meaning does not change until a deploy has written the
+    field. Empty is the SAFE direction here, unlike the rest of this gate: an expectation
+    invented from a clock is the false red issue #1867 rejects, while a missing one leaves
+    the two existing halves of the gate in force.
+    """
+    if not isinstance(record, dict):
+        return {}
+    try:
+        applied_at = datetime.strptime(
+            record.get("applied_at") or "", "%Y-%m-%dT%H:%M:%SZ"
+        ).replace(tzinfo=timezone.utc)
+    except ValueError, TypeError:
+        return {}
+    rollouts = record.get("rollouts")
+    if not isinstance(rollouts, list):
+        return {}
+    return {
+        r["name"]: applied_at
+        for r in rollouts
+        if isinstance(r, dict)
+        and r.get("restart") is True
+        and isinstance(r.get("name"), str)
+    }
 
 
 def _fetch_cronjob(name, namespace):
@@ -423,6 +472,8 @@ def run_health(container, docker=False, cluster=DEFAULT_CLUSTER, served=_UNSET):
         (namespace, kind, name, *_fetch_workload(name, namespace))
         for namespace, kind, name in targets
     ]
-    text, code = format_role_health(container, checked, now)
+    text, code = format_role_health(
+        container, checked, now, release_expected_restarts(_release_record(container))
+    )
     print(text)
     return code

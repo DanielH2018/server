@@ -105,6 +105,51 @@
   register: manifests_release_stat
   become: true
 
+- name: Reset the rollout expectation for {{ manifests_service }}
+  tags: [deploy]
+  # set_fact is host-scoped and outlives this role, so without the reset the next service in
+  # the batch would append to the previous one's list.
+  ansible.builtin.set_fact:
+    manifests_release_rollouts: []
+
+- name: Work out which workloads this apply must roll for {{ manifests_service }}
+  tags: [deploy]
+  # `restart` mirrors the condition on the two `rollout restart` tasks in main.yml, one entry per
+  # workload they would target: the primary (`manifests_rollout`, empty for a role that rolls
+  # its own or nothing) and every `manifests_extra_rollouts` entry. `probe.py health` reads
+  # `restart: true` as "this apply queued a restart, so the workload's `restartedAt` must be
+  # newer than `applied_at`" -- the predicate issue #1867 asks for. A gate that compared pod
+  # age against a deploy's start would fail every idempotent re-run; this fires only where the
+  # play itself decided a roll was due. `kubectl rollout restart` stamps `restartedAt` on the
+  # workload's pod template, so a queued restart that never reached the workload reads as one.
+  #
+  # The `created` clause is the same one the restart tasks carry: a workload this apply created
+  # is not restarted (it races the initial rollout), so none is expected of it either. An
+  # extra entry's own `kind` and `image` win over the defaults, as in the extra restart task.
+  ansible.builtin.set_fact:
+    manifests_release_rollouts: >-
+      {{ manifests_release_rollouts + [{
+           'name': manifests_release_target.name,
+           'kind': manifests_release_target.kind | default(manifests_rollout_kind | default('deploy')),
+           'restart': (
+             (manifests_render is changed) or (manifests_secret_render is changed)
+             or ((manifests_release_target.image | default(manifests_release_target.name))
+                 in (k8s_rebuilt_images | default([])))
+           ) and not (manifests_apply.stdout | default('')) is search(
+             (manifests_release_target.kind | default(manifests_rollout_kind | default('deploy')) == 'daemonset')
+             | ternary('daemonset.apps/', 'deployment.apps/')
+             ~ manifests_release_target.name ~ ' created'),
+         }] }}
+  loop: >-
+    {{ ((manifests_rollout | default(manifests_service) | length > 0)
+        | ternary([{'name': manifests_rollout | default(manifests_service),
+                    'kind': manifests_rollout_kind | default('deploy'),
+                    'image': manifests_service}], []))
+       + (manifests_extra_rollouts | default([])) }}
+  loop_control:
+    loop_var: manifests_release_target
+    label: "{{ manifests_release_target.name }}"
+
 - name: Look for an existing release record for {{ manifests_service }}
   tags: [deploy]
   ansible.builtin.stat:
@@ -167,3 +212,5 @@
       manifests_digest: "{{ (manifests_release_files | dictsort | to_json) | hash('sha256') }}"
       # Names only — see the header. The count is what makes a dropped secret manifest visible.
       secret_manifests: "{{ manifests_secret_files | default([]) | sort }}"
+      # [{name, kind, restart}] -- see the task that builds it above.
+      rollouts: "{{ manifests_release_rollouts }}"

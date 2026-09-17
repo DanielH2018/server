@@ -156,6 +156,14 @@ config, and on this plane the config is the per-host Ansible variables that only
 rendering. Two commits can render identical manifests; one commit can render differently on two
 hosts. `tree_dirty` marks a render no commit reproduces.
 
+`rollouts` names each workload the shared restart tasks would target — the primary
+`manifests_rollout` and every `manifests_extra_rollouts` entry — with `restart: true` where this
+apply queued one (a changed render, a changed secret render, or a rebuilt image, and not a
+workload the apply created). `probe.py health` reads it and fails a `restart: true` workload
+whose `restartedAt` is not newer than `applied_at` (#1867). The stamp is included before the
+restart tasks for that comparison to hold, and after the rebuilt-image fact so both read one
+answer; `ansible/tests/k8s/test_release_stamp_rollout_expectation.py` pins the order.
+
 **Secret manifests are recorded by name and never hashed.** They are rendered under `no_log`
 from decrypted SOPS values, and hashing adds a new read path over that output — a task result,
 a fact, and anything that later prints either.
