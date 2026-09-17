@@ -276,7 +276,11 @@ def test_a_failed_branch_delete_on_a_missing_tree_is_reported_as_kept(
 
 def test_the_remote_command_resets_fetches_then_runs_the_worktrees_own_copy_of_the_script():
     cmd = remote_clean_command(B)
+    # The active-unit refusal (#1872) is the outermost test; everything else is its else.
     assert cmd.startswith(
+        "if systemctl --user is-active --quiet fanout-b; then "
+        f'echo "kept: {B.worktree} — unit fanout-b still active; stop it first"; '
+        "else "
         "systemctl --user reset-failed fanout-b 2>/dev/null; "
         "git -C /home/ubuntu/server fetch --quiet origin master && "
     )

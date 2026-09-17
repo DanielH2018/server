@@ -167,7 +167,16 @@ def read_clean_result(proc: subprocess.CompletedProcess) -> tuple[str, str]:
 def remote_clean_command(b: Batch, repo: str = REPO) -> str:
     """The command `clean` runs on `b.host` to clean up one batch.
 
-    Resets `b.unit` first (Ruling 11): the unit runs without `--collect`, so a failed run
+    Refuses while `b.unit` is still active, before anything else runs (#1872). On the
+    2026-09-17 fan-out a `clean` run to clear one batch's failed launch also removed two
+    batches whose units were still running: their trees were clean and at master, so the
+    merge check judged them landed, and the units carried on against a deleted cwd. An
+    active unit is a batch still working, so it reads `kept:` — the verdict that exits 0 and
+    tells the operator to come back — naming the unit and `stop` as the way through. A
+    `systemctl` that cannot reach the bus exits non-zero here and the chain proceeds as it
+    did before the check existed; the local leg's bus is pinned in `transport.local_env`.
+
+    Resets `b.unit` next (Ruling 11): the unit runs without `--collect`, so a failed run
     lingers in the user manager and a relaunch of the same batch id dies with "unit already
     exists". A `;` separates it from the rest, since a unit that never failed makes this a
     harmless error rather than something that should stop the clean.
@@ -242,6 +251,9 @@ def remote_clean_command(b: Batch, repo: str = REPO) -> str:
     wt, branch = b.worktree, b.branch
     gone_branch = f'echo "removed: {wt} (already gone)"'
     return (
+        f"if systemctl --user is-active --quiet {b.unit}; then "
+        f'echo "kept: {wt} — unit {b.unit} still active; stop it first"; '
+        f"else "
         f"systemctl --user reset-failed {b.unit} 2>/dev/null; "
         f"git -C {repo} fetch --quiet origin master && "
         f"if [ ! -e {wt} ]; then "
@@ -262,5 +274,6 @@ def remote_clean_command(b: Batch, repo: str = REPO) -> str:
         f"fi; "
         f"else cd {repo} && uv run --no-project --no-python-downloads --python 3.14.6 "
         f"python {wt}/scripts/dev/fanout_place.py clean-one {wt} {branch}; "
+        f"fi; "
         f"fi"
     )
