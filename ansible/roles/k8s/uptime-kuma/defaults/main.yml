@@ -203,7 +203,7 @@ kuma_status_page_groups:
   - name: Observability
     match:
       - "^monitor-bridge-(prometheus|targets|cluster-prometheus|cluster-targets)$"
-      - "^monitor-bridge-(loki|loki-reachable|promtail-dropped|discord|swallowed-verdicts)$"
+      - "^monitor-bridge-(loki|loki-reachable|promtail-dropped|discord|swallowed-verdicts|kuma-notify-failures)$"
       - "^monitor-bridge-traefik"
       # A routing signal, not a per-app tile: it probes ping@internal behind the edge's own
       # self-check path, so it groups with the other edge observability tiles rather than

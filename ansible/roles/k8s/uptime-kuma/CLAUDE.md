@@ -41,7 +41,11 @@ was: the `k3s Workload Health` tile's log showed `Down Count` climbing by 5 ever
 one beat per bridge push at 300s plus one per 1200s heartbeat window — and resetting past 360,
 so Discord got the down transition and then one resend a day. One of those resends was lost
 outright: Kuma logged `Cannot send notification to Homelab Alerts … HTTP 429 Too Many
-Requests` at 2026-09-15 14:50, and it does not retry a failed send.
+Requests` at 2026-09-15 14:50, and it does not retry a failed send. Since #1891 monitor-bridge
+reads that line out of Loki and pages the **Kuma Notification Delivery** tile, which notifies
+email as well as Discord (monitor-bridge/CLAUDE.md). A faster resend raises the POST volume a
+long multi-tile outage sends Discord, so the drop it makes likelier is reported rather than
+lost.
 
 The variable is `kuma_push_resend_down_beats` now, 90, which is six hours for a bridge-fed tile.
 `test_kuma_push_resend_beats.py` derives the spacing from the

@@ -180,6 +180,9 @@ EMAIL_TIER = {
     # the same second, and Discord's per-webhook bucket dropped five of them on 2026-09-06
     # (#1342). SMTP is a different bucket, so this one all-clear lands.
     "Homelab Edge (all-clear)",
+    # On the tier for the transport as well: it pages when Kuma dropped a Discord send, and a
+    # page for that carried only by the Discord webhook is the failure it reports (#1891).
+    "Kuma Notification Delivery",
 }
 
 

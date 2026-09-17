@@ -54,6 +54,7 @@ from checks.storage import (
     check_snapshot_headroom,
 )
 from checks.logs import (
+    check_kuma_notify_failures,
     check_loki_ingestion,
     check_shipper_dropped,
     check_swallowed_verdicts,
@@ -153,6 +154,15 @@ def build_checks(env: Mapping[str, str] | None = None) -> list[Check]:
             "swallowed_verdicts",
             tok("KUMA_PUSH_SWALLOWED_VERDICTS"),
             check_swallowed_verdicts,
+        ),
+        # Minted 2026-09-17 for #1891: Kuma logs `Cannot send notification to <name>` and
+        # does not retry, so that transition or resend reached nobody. check_discord GET-verifies
+        # the webhook and cannot see a dropped POST. Reads Kuma's own line out of Loki, so it is
+        # Loki-dependent; its tile notifies email as well as Discord.
+        Check(
+            "kuma_notify_failures",
+            tok("KUMA_PUSH_KUMA_NOTIFY_FAILURES"),
+            check_kuma_notify_failures,
         ),
         Check("discord", tok("KUMA_PUSH_DISCORD"), check_discord),
         Check("r2_usage", tok("KUMA_PUSH_R2_USAGE"), check_r2_usage),

@@ -200,3 +200,58 @@ def swallowed_verdicts(
         "reads stale until its deadline; `journalctl -t <tag>` has the verdict"
         % (named, len(landed), window)
     )
+
+
+# Kuma's `server/notification.js` logs `Cannot send notification to <name>` and moves on: a
+# failed send is not retried, so the alert it carried reached nobody (#1891). The line is
+# printed through Kuma's colour logger, so ANSI escapes surround the level tag and can follow
+# the name; the name runs to the first escape or the end of the line. The reason — the
+# 2026-09-15 line was a Discord HTTP 429 with `retry_after: 3` — is NOT in Loki: Kuma logs it
+# at debug level only, so this counts drops without saying why.
+_NOTIFY_FAILURE_RE = re.compile(
+    r"Cannot send notification to (?P<name>[^\x1b]+?)\s*(?:\x1b|$)"
+)
+
+
+def parse_notify_failure_line(line: str) -> str | None:
+    """The notification name Kuma failed to send to, else None."""
+    m = _NOTIFY_FAILURE_RE.search(line)
+    return m["name"] if m else None
+
+
+def kuma_notify_failures(
+    lines: list[tuple[int, str]], window: str, truncated: bool
+) -> tuple[bool, str]:
+    """Pure: did Kuma drop a notification send inside `window`?
+
+    `lines` is [(ts, line), ...] for the failure lines a range query returned over `window`;
+    `truncated` says the fetch hit its cap. Every failure counts — a drop is a drop whether the
+    tile in question was transitioning or resending, and Kuma's log does not say which. The
+    verdict names each notification with its drop count, so a Discord rate-limit and a dead
+    SMTP credential read differently on the tile, and the tile itself notifies BOTH channels
+    (uptime-kuma's static-monitors template) — a page for a dropped Discord POST sent only
+    over the same Discord webhook is the failure it reports.
+
+    The window is the whole hysteresis: a drop pages for `window` and then clears, and the
+    Discord tile's transition message plus this page together say "an alert went missing
+    around <time>; check the tiles' current state".
+    """
+    counts: dict[str, int] = {}
+    for _ts, line in lines:
+        name = parse_notify_failure_line(line)
+        if name is None:
+            continue
+        counts[name] = counts.get(name, 0) + 1
+    if not counts:
+        if truncated:
+            return True, (
+                "no dropped Kuma notifications in the newest part of %s — fetch hit its "
+                "line cap, older lines unread" % window
+            )
+        return True, "no dropped Kuma notifications in %s" % window
+    named = ", ".join("%s x%d" % (n, c) for n, c in sorted(counts.items()))
+    return False, (
+        "Kuma dropped %d notification send(s) in %s (%s) — Kuma does not retry a failed "
+        "send, so an alert reached nobody; check the DOWN tiles' current state"
+        % (sum(counts.values()), window, named)
+    )

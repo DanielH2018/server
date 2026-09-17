@@ -548,6 +548,14 @@ stringData:
    measured and rejected for paging on exactly those (uptime-kuma/CLAUDE.md). #}
   monitor-bridge-swallowed-verdicts.json: |
     {"type": "push", "name": "Swallowed Push Verdicts", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_swallowed_verdicts_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+{# Minted 2026-09-17 for #1891. Kuma logs `Cannot send notification to <name>` and does not
+   retry, so the transition or resend behind that line reached nobody — twice during the
+   qbittorrent lockout (2026-09-10 18:00, 2026-09-15 14:50), both Discord HTTP 429s. The
+   Discord Delivery tile GET-verifies the webhook and cannot see a dropped POST. This tile
+   notifies EMAIL as well as Discord on purpose: a page for a dropped Discord send that goes
+   only over the Discord webhook is the failure it reports. #}
+  monitor-bridge-kuma-notify-failures.json: |
+    {"type": "push", "name": "Kuma Notification Delivery", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_kuma_notify_failures_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
   monitor-bridge-loki-reachable.json: |
     {"type": "push", "name": "Loki Reachable", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_loki_reachable_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   monitor-bridge-discord.json: |
