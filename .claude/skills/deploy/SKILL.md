@@ -79,7 +79,10 @@ Steps:
      restarted in the last 180s; an unreadable restart timestamp counts as recent (fails
      closed). That restart window is exactly what `kubectl rollout status` can't see —
      readiness flips a Deployment `Available` before a bad liveness probe starts killing it,
-     so a rollout-status check alone can report green on a crashlooping pod.
+     so a rollout-status check alone can report green on a crashlooping pod. A third half
+     fails a workload the release record says this apply queued a restart of when its
+     `restartedAt` is not newer than the apply (`NOT ROLLED`) — a deploy that changed the
+     manifests and rolled nothing no longer reads green (#1867).
      - On failure, drill down: `kubectl -n <namespace> rollout status
        deployment/<service> --timeout=120s`, `kubectl -n <namespace> get pods -l
        app=<service>`, `kubectl -n <namespace> describe pod <pod>`, and

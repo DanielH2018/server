@@ -159,6 +159,16 @@ restarted in the last 180s. An unreadable restart time counts as recent, so it f
 Both halves matter — readiness flips a Deployment to Available before a bad liveness probe starts
 killing it, so a rollout check alone reports green on a crashlooping pod.
 
+A third half tells a workload that rolled from one that was merely healthy (issue #1867). The
+service's release record (`/var/lib/homelab/k8s-releases.d/<service>.json`, written by
+`roles/k8s/manifests/tasks/release_stamp.yml` before the restart tasks run) lists each workload
+the apply queued a restart of, decided from the same facts the restart tasks read. Every such
+workload must carry a `kubectl.kubernetes.io/restartedAt` newer than the record's `applied_at`,
+or the gate fails it as `NOT ROLLED`. The pods that were already running satisfy the first two
+halves, which is how a deploy that changed the manifests and rolled nothing read `settled`. The
+predicate is the record, not the clock, on purpose: an idempotent re-run queues no restart and
+stays green, and a standalone `probe.py health` with no record keeps the two-half verdict.
+
 `--docker` inspects the Pi's container over ssh instead. That was the only mode until 2026-08-16,
 which is why it died with `FileNotFoundError: 'docker'` on both cluster nodes for the two days
 after the Docker retirement.

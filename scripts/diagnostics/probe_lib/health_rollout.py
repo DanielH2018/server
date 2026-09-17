@@ -119,3 +119,56 @@ def format_k8s_health(deploy, pods, service, now):
     if recent:
         line += f" — RECENT RESTART: {'; '.join(recent)}"
     return (line, 0 if rolled_out and not recent else 1)
+
+
+# `kubectl rollout restart` writes the invocation time here, on the workload's pod template, so
+# the annotation moves exactly when a restart is issued and never otherwise. roles/k8s/manifests
+# issues one whenever a service's rendered manifests, secret manifests or built image changed,
+# and its release record says so (`rollouts[].restart`, release_stamp.yml). Comparing the two
+# is the "did the deploy change something that should have rolled a pod, and did one roll"
+# predicate of issue #1867 — pod age against the deploy's start would fail every idempotent
+# re-run, since an unchanged role rolls no pod by design.
+RESTARTED_AT_ANNOTATION = "kubectl.kubernetes.io/restartedAt"
+
+
+def restarted_at(workload):
+    """The `restartedAt` annotation on `workload`'s pod template as a datetime, or None.
+
+    None for a workload never restarted through kubectl (58 of this cluster's 72
+    Deployments carry the annotation, measured 2026-09-17) and for a value the parser
+    cannot read; `unrolled_reason` treats both as "no restart reached this workload".
+    """
+    template = (workload.get("spec") or {}).get("template") or {}
+    value = ((template.get("metadata") or {}).get("annotations") or {}).get(
+        RESTARTED_AT_ANNOTATION
+    )
+    if not isinstance(value, str):
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def unrolled_reason(workload, applied_at):
+    """Why `workload` did NOT roll for the apply stamped at `applied_at`, or None if it did.
+
+    Only asked when the release record says that apply queued a restart. The record is
+    written BEFORE the restart is issued (main.yml orders the stamp ahead of the rollout
+    tasks), so a restart that reached the workload stamps a strictly later time; one that
+    never did leaves the previous value, or no annotation at all. Either way the pods that
+    were already running satisfy the rollout-complete and no-recent-restart halves of the
+    gate, which is exactly the green-on-a-no-op that issue #1867 names.
+    """
+    when = restarted_at(workload)
+    if when is None:
+        return (
+            f"NOT ROLLED — the apply at {applied_at:%Y-%m-%dT%H:%M:%SZ} queued a restart "
+            "and the workload carries no restartedAt annotation"
+        )
+    if when < applied_at:
+        return (
+            f"NOT ROLLED — the apply at {applied_at:%Y-%m-%dT%H:%M:%SZ} queued a restart "
+            f"and the workload's last restart is older ({when:%Y-%m-%dT%H:%M:%S%z})"
+        )
+    return None

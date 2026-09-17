@@ -285,15 +285,6 @@
     loop_var: secret_file
   when: not k8s_dry_run | bool
 
-# After the apply, not after the rollout: this records WHICH BYTES are applied, which is a fact
-# the moment kubectl accepts them. Whether the resulting pods are healthy is a different
-# question, and post_tasks/k8s_stabilise_gate.yml already owns it. A record written only on a
-# healthy rollout would be missing for exactly the deploys an operator most needs to identify.
-- name: Record the applied release for {{ manifests_service }}
-  tags: [deploy]
-  ansible.builtin.include_tasks: release_stamp.yml
-  when: not k8s_dry_run | bool
-
 # Whether k8s/image-builder rebuilt THIS service's image to a new digest earlier in the play.
 # Keyed on manifests_service because every built image is named after the role that deploys it
 # — including n8n, whose image is built by the separate n8n-images role in an earlier batch,
@@ -309,6 +300,20 @@
   tags: [deploy]
   ansible.builtin.set_fact:
     manifests_image_changed: "{{ manifests_service in (k8s_rebuilt_images | default([])) }}"
+
+# After the apply, not after the rollout: this records WHICH BYTES are applied, which is a fact
+# the moment kubectl accepts them. Whether the resulting pods are healthy is a different
+# question, and post_tasks/k8s_stabilise_gate.yml already owns it. A record written only on a
+# healthy rollout would be missing for exactly the deploys an operator most needs to identify.
+#
+# Before the restarts below, not after: the record also names which workloads this apply must
+# roll (`rollouts[].restart`, read by `probe.py health`), and it decides that from the same
+# facts the restart tasks read -- so the rebuilt-image fact above has to be set first, and the
+# record's `applied_at` has to precede the `restartedAt` a restart stamps on the workload.
+- name: Record the applied release for {{ manifests_service }}
+  tags: [deploy]
+  ansible.builtin.include_tasks: release_stamp.yml
+  when: not k8s_dry_run | bool
 
 - name: Roll the deployment after a config change for {{ manifests_service }}
   tags: [deploy]
