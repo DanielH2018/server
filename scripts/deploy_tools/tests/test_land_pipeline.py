@@ -122,6 +122,55 @@ def test_a_tagged_landing_kicks_the_tick_and_books_no_tick_time(land_run):
     assert "tick=0 " in logline
 
 
+def test_a_landing_with_tags_and_a_self_applied_plane_awaits_the_tick(land_run):
+    """The FLAGGED half of the fast path: tags alone are not enough to skip the tick wait.
+
+    A PR touching a service role AND a setup role `initial_setup.yml` includes carries both
+    classifications, and step 6 grades the second half from the deployer's markers. Taking the
+    fast path there kicks a tick and reads its markers seconds later, so `broad_applied` still
+    names an older origin SHA and the landing prints `needs-manual-apply` (or `deferred`, with
+    `behind_since` set) for work the kicked tick applies a minute afterwards.
+    """
+    _rc, _out, _err, calls, _logline = land_run([], Fakes(self_applied=True))
+    assert [c[0] for c in calls if c[0] in ("await_ci", "tick", "deploy", "gate")] == [
+        "await_ci",
+        "tick",
+        "deploy",
+        "gate",
+    ]
+    assert list(next(c for c in calls if c[0] == "tick")[2]) == ["observe"]
+    assert next(c for c in calls if c[0] == "deploy")[2]["at"] == ""
+
+
+@pytest.mark.parametrize(
+    "self_applied,order,awaited",
+    [
+        (False, ["await_ci", "deploy", "tick", "gate"], False),
+        (True, ["await_ci", "tick", "deploy", "gate"], True),
+    ],
+)
+def test_a_tags_override_takes_the_same_two_paths_as_a_derived_landing(
+    land_run, self_applied, order, awaited
+):
+    """`--tags` skips the derivation, not the decision about which path this landing takes.
+
+    Both halves matter. The FLAGGED one is `self_applied=True`: `classify` used to return at
+    its first statement when `opts.tags` had populated `resolved_tags`, so the predicate read
+    False and a mixed PR landed with `--tags` deployed `--at` and printed a verdict that never
+    read the deployer's markers. The CLEAN one is the tags-only override, which must keep the
+    fast path -- classifying on this path must not turn into awaiting a tick for everyone.
+    """
+    _rc, _out, _err, calls, _logline = land_run(
+        ["--tags", "sonarr"], Fakes(self_applied=self_applied)
+    )
+    assert [
+        c[0] for c in calls if c[0] in ("await_ci", "tick", "deploy", "gate")
+    ] == order
+    tick_kwargs = next(c for c in calls if c[0] == "tick")[2]
+    assert (list(tick_kwargs) == ["observe"]) is awaited
+    assert (next(c for c in calls if c[0] == "deploy")[2]["at"] == "") is awaited
+
+
 def test_a_landing_with_no_service_tag_still_waits_for_the_tick(land_run):
     """The rejecting half: there the tick IS the apply, and the verdict reads its markers."""
     _rc, out, _err, calls, _logline = land_run(

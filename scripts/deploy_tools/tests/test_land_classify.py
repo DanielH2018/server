@@ -143,12 +143,17 @@ def test_classify_asks_what_a_self_applied_role_still_owes_other_hosts(landing):
     )
 
 
-def test_explicit_tags_skip_derivation(landing):
-    ln, calls = landing(tags="sonarr")
+def test_explicit_tags_skip_derivation_but_not_the_self_applied_half(landing):
+    """`--tags` overrides the derivation; it does not opt out of the plane classification.
+
+    The file list is read either way now, so the derivation being skipped is asserted by its
+    ANSWER not landing: `derived` names radarr and the override's sonarr survives.
+    """
+    ln, _ = landing(Fakes(derived=(["radarr"], "pr"), self_applied=True), tags="sonarr")
+    ln.merge_sha = MERGE_SHA
     classify.classify(ln)
-    assert ln.tags_csv == "sonarr" and not [
-        c for c in calls if c[0].startswith("gh:files")
-    ]
+    assert ln.tags_csv == "sonarr"
+    assert ln.self_applied and ln.tick_is_the_apply
 
 
 def test_a_truncated_file_list_without_since_is_a_usage_error(landing):

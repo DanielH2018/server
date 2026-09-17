@@ -9,11 +9,13 @@ to widen anything: `retry: true` tells it the call may be reissued, and the clas
 reissue exactly as it judged the first. Two retries per session cap it, so a command the
 classifier means to refuse still stops.
 
-`PostToolUseFailure` — decodes the deploy wrapper's exit codes. 75, 4, 3 and 2 all mean NOTHING
-WAS DEPLOYED, and each is a different next step, but they reach Claude as a bare `Exit code N`
-line that reads like a playbook failure. 20 is the inverse case, added 2026-09-02 for issue #840:
-the playbook ran and failed, so changes ARE live. CLAUDE.md says so in prose; this says it at the
-moment it happens, which is the difference between reading the runbook and being told.
+`PostToolUseFailure` — decodes the deploy wrapper's exit codes. Every code in `_DEPLOY_EXITS`
+below means NOTHING WAS DEPLOYED, and each is a different next step, but they reach Claude as a
+bare `Exit code N` line that reads like a playbook failure. 20 is the one inverse case, added
+2026-09-02 for issue #840: the playbook ran and failed, so changes ARE live. The dict is the
+list — enumerating it in prose here and in CLAUDE.md is what went stale when 77 and 76 were
+added. CLAUDE.md says the same in prose; this says it at the moment it happens, which is the
+difference between reading the runbook and being told.
 
 `classifierContext` is deliberately not used here. It is a PostToolUse field, and every fact
 worth sending the classifier from this repo is either a failure (which lands on
@@ -47,9 +49,11 @@ _NO_VERDICT_PREFIXES = (
 
 MAX_RETRIES_PER_SESSION = 2
 
-# 75, 4, 3 and 2 each mean the deploy refused BEFORE touching anything; 20 is the opposite and
-# says so in its own words. The text is the wrapper's own contract, kept in the same words
-# CLAUDE.md uses so the two don't drift into two stories.
+# Every key below except 20 means the deploy refused BEFORE touching anything; 20 is the
+# opposite and says so in its own words. Adding a key is the whole edit -- this comment
+# enumerated four of them and went stale the day 77 and 76 were added. The text is the
+# wrapper's own contract, kept in the same words CLAUDE.md uses so the two don't drift into
+# two stories.
 _DEPLOY_EXITS = {
     77: (
         "deploy.sh exit 77: the snapshot worktree could not be created, so NOTHING was "

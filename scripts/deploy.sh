@@ -854,8 +854,13 @@ if [[ "$detach" == 1 ]]; then
     # because that lock is held by unrelated work (the tick, the rotate cron) a caller can do
     # nothing about; a service lock is held by another deploy of the SAME service, where
     # queueing is the correct behaviour and the wait is bounded by the deploy it is behind.
-    if ! take_service_locks; then
-        service_lock_status=$?
+    # Called, then `$?`, then tested -- the shape the queued arm below already uses. `$?`
+    # inside `if ! take_service_locks; then` is the status of the NEGATION, so it read 0 for
+    # every refusal and both tests below were dead code: contention exited 76 ("retrying alone
+    # changes nothing") for the one case retrying is the whole remedy.
+    take_service_locks
+    service_lock_status=$?
+    if [[ "$service_lock_status" != 0 ]]; then
         release_service_locks
         remove_snapshot
         if [[ "$service_lock_status" == "$LOCK_BUSY" ]]; then
@@ -892,6 +897,17 @@ if [[ "$detach" == 1 ]]; then
         # for a workload nobody checked. UV_PROJECT_ENVIRONMENT for the reason
         # run_playbook_in_snapshot sets it: the probe's own `uv run` would otherwise build an
         # environment inside a directory removed seconds later.
+        #
+        # DECIDED: the two halves of this gate come from different trees, and that is accepted.
+        # `--cwd "$snapshot"` makes probe.py render the DEPLOYED commit's manifests, while the
+        # notifier script itself -- and so its `NOT_APPLICABLE_MARKERS`, the list that turns a
+        # probe message into `skipped` -- is the CALLING checkout's copy. The marker list is the
+        # notifier's own vocabulary for reading probe output, not a fact about the deployed
+        # tree, so answering it from the tree that is running the notifier is the right source.
+        # The failure it admits needs ONE commit to reword a probe health message and its marker
+        # together, deployed by a checkout that does not yet carry the reword; the same split
+        # was ruled met on the land path, where land_lib gates from a snapshot with its own
+        # code from the primary.
         #
         # shellcheck disable=SC2094  # false positive: the notifier only receives $log as a
         # path string (to mention in its Discord post) and never opens it itself -- the only

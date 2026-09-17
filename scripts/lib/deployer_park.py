@@ -107,7 +107,7 @@ MANUAL_PLANE = "manual_plane"
 # What an operator runs to clear one pending role once the role is applied by hand. The
 # deployer's own copy is `deploy_remediation.MANUAL_PLANE_CLEAR_CMD`; this module is stdlib
 # only and cannot import that tree, so
-# `scripts/lib/tests/test_manual_plane_parsers_agree.py` asserts the two agree.
+# `ansible/tests/deploy/test_manual_plane_parsers_agree.py` asserts the two agree.
 MANUAL_PLANE_CLEAR_CMD = (
     "uv run python scripts/deploy_tools/gitops_state.py clear-manual-plane <role>"
 )
