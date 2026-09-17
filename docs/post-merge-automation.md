@@ -247,11 +247,17 @@ timeout, mirroring the existing k8s path's `K8S_DEPLOY_TIMEOUT_S` / `K8S_ROLLBAC
 | Max flock wait | 180 | `gitops-deploy.service.j2` |
 | Full `deploy.yml`, forward | 1212 | measured 2026-08-22 |
 | Rollback re-run | 1212 | same playbook |
-| **Total** | **2604** | against `TimeoutStartSec=45min` (2700) |
+| **Total** | **2604** | against the 2700s ceiling the unit carried on 2026-08-22 |
 
 A 96-second margin is 3.5%. A run four percent slower than measured is SIGTERMed mid-rollback,
 which is precisely the failure the hold-before-reset comments throughout `gitops_deploy.py` exist
 to prevent.
+
+The unit sets `TimeoutStartSec=60min`, raised on 2026-08-29 to fund the staging gate, and
+the same numbers fit under it. The arm stays forward-only regardless: funding a broad rollback
+needs a fresh measurement, not a ceiling raised for an unrelated feature. The `# DECIDED:` marker
+on `broad_budget_ok` in `deploy_remediation.py` carries that ruling, and
+`test_docs_quote_current_values.py` pins the value quoted here to the unit template.
 
 So the deploy-plane arm is **forward-only**. On failure it writes `hold_sha`, leaves the tree
 fast-forwarded, and alerts.
@@ -260,7 +266,7 @@ It does not reset. Resetting without a redeploy leaves the tree claiming old whi
 half-new — worse than either end state, and undiagnosable from the repo side. `hold_sha` is what
 stops the retry loop, and it does that whether or not the tree was reset.
 
-Raising `TimeoutStartSec` is the lever that would fund a rollback. Taking it requires a fresh
+A larger `TimeoutStartSec` is only half of what funds a rollback. The other half is a fresh
 measurement of a full deploy, not the 2026-08-22 figure.
 
 ### The signal
