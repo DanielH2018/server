@@ -13,7 +13,12 @@ because it is a Loki arm folded into a cluster verdict — the caller reaches it
 from bridge.config import Config
 import bridge.net
 from verdicts.cluster import log_error_verdict
-from verdicts.logs import loki_ingestion_fresh, shipper_dropped, swallowed_verdicts
+from verdicts.logs import (
+    kuma_notify_failures,
+    loki_ingestion_fresh,
+    shipper_dropped,
+    swallowed_verdicts,
+)
 
 
 def check_loki_ingestion(cfg: Config) -> tuple[bool, str]:
@@ -160,4 +165,44 @@ def check_swallowed_verdicts(cfg: Config) -> tuple[bool, str]:
         lines,
         "%dh" % (window_s // 3600) if window_s % 3600 == 0 else "%ds" % window_s,
         truncated=len(lines) >= SWALLOWED_VERDICTS_LIMIT,
+    )
+
+
+# Kuma's own failed-send line, from its container log (#1891). `{container="uptime-kuma"}` is
+# the label Alloy gives the pod's stdout/stderr on the cluster. The filter is the fixed prefix
+# so the fetch is only the failure lines: measured 2026-09-17, 2 lines over 7 days.
+KUMA_NOTIFY_FAILURES_LOGQL = '{container="uptime-kuma"} |= "Cannot send notification"'
+# A long multi-tile outage resends every tile on its own beat count, so a burst of drops
+# clusters around a resend; 500 is far above any burst 76 tiles can produce in one window.
+KUMA_NOTIFY_FAILURES_LIMIT = 500
+
+
+def check_kuma_notify_failures(cfg: Config) -> tuple[bool, str]:
+    """A notification Kuma tried to send and dropped — a Discord 429, a dead SMTP login (#1891).
+
+    Kuma logs `Cannot send notification to <name>` and does not retry, so the transition or
+    resend that line stands for reached nobody. check_discord GET-verifies that the webhook
+    exists and cannot see a dropped POST. This reads Kuma's own line out of Loki and pages on
+    the tile that notifies email as well as Discord, so a dropped Discord send is not
+    reported over the channel that dropped it.
+
+    FAILS OPEN on a fetch error, on top of being in LOKI_DEPENDENT, for the reason
+    check_swallowed_verdicts gives: the gate probes `/labels`, and a range query is what a
+    busy Loki is slow at.
+    """
+    window_s = cfg.KUMA_NOTIFY_FAILURES_WINDOW_S
+    try:
+        lines = bridge.net.loki_lines(
+            cfg, KUMA_NOTIFY_FAILURES_LOGQL, window_s, KUMA_NOTIFY_FAILURES_LIMIT
+        )
+    except Exception as e:
+        return (
+            True,
+            "dropped-notification scan unavailable (%s) — Loki Reachable owns a Loki fault"
+            % e,
+        )
+    return kuma_notify_failures(
+        lines,
+        "%dh" % (window_s // 3600) if window_s % 3600 == 0 else "%ds" % window_s,
+        truncated=len(lines) >= KUMA_NOTIFY_FAILURES_LIMIT,
     )

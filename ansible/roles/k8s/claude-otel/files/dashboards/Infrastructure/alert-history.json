@@ -89,7 +89,7 @@
           },
           "direction": "backward",
           "editorMode": "code",
-          "expr": "sum by (name) (count_over_time({container=\"monitor-bridge\"} |= \"DOWN\" |~ \"$check\" | pattern `[<_>] DOWN <name> -<_>` [$__range]))",
+          "expr": "sum by (name) (count_over_time({container=\"monitor-bridge\"} |~ `^(\\[[^\\]]+\\] )?DOWN ` |~ \"$check\" | regexp `^(\\[[^\\]]+\\] )?DOWN (?P<name>\\S+) - ` [$__range]))",
           "legendFormat": "{{name}}",
           "queryType": "instant",
           "refId": "A"
@@ -197,7 +197,7 @@
           },
           "direction": "backward",
           "editorMode": "code",
-          "expr": "sum by (name) (count_over_time({container=\"monitor-bridge\"} |= \"DOWN\" |~ \"$check\" | pattern `[<_>] DOWN <name> -<_>` [$__auto]))",
+          "expr": "sum by (name) (count_over_time({container=\"monitor-bridge\"} |~ `^(\\[[^\\]]+\\] )?DOWN ` |~ \"$check\" | regexp `^(\\[[^\\]]+\\] )?DOWN (?P<name>\\S+) - ` [$__auto]))",
           "legendFormat": "{{name}}",
           "queryType": "range",
           "refId": "A"
@@ -250,7 +250,7 @@
           },
           "direction": "backward",
           "editorMode": "code",
-          "expr": "{container=\"monitor-bridge\"} |= \"DOWN\" |~ \"$check\"",
+          "expr": "{container=\"monitor-bridge\"} |~ `^(\\[[^\\]]+\\] )?DOWN ` |~ \"$check\"",
           "legendFormat": "",
           "queryType": "range",
           "refId": "A"

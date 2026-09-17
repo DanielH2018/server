@@ -1010,6 +1010,19 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     counted: its tile goes red at the deadline for a cron that ran, which is the library's
     retry's case (#1010), not a hidden finding. In `LOKI_DEPENDENT`. A fetch that hits the
     5000-line cap says so in the message rather than deciding on the newest part.)
+  - **Kuma Notification Delivery** (a notification Kuma tried to send and dropped — added
+    2026-09-17, #1891. Kuma logs `Cannot send notification to <name>` and does not retry, so
+    the transition or resend behind that line reached nobody: twice during the qbittorrent
+    lockout, 2026-09-10 18:00 and 2026-09-15 14:50, both Discord HTTP 429s. Discord Delivery
+    GET-verifies the webhook and cannot see a dropped POST. `check_kuma_notify_failures` reads
+    Kuma's own line out of `{container="uptime-kuma"}` over `KUMA_NOTIFY_FAILURES_WINDOW_S`
+    (3h) through `bridge.net.loki_lines`, and `down` names each notification with its drop
+    count. The reason is NOT in the line — Kuma logs the 429 and its `retry_after` at debug
+    level only — so this counts drops without saying why. The window is the whole hysteresis:
+    a drop pages for 3h and clears on its own, since nothing is cleared by hand. Its tile
+    notifies EMAIL as well as Discord, on purpose: a page for a dropped Discord send that goes
+    only over the same webhook is the failure it reports. In `LOKI_DEPENDENT`; a fetch that
+    hits the 500-line cap says so in the message.)
   - **Discord Delivery** (GET-verifies **all five** Discord notification webhooks: Kuma's own
     `monitor_discord_webhook_url` — the one Kuma POSTs every alert to — CrowdSec's
     `crowdsec_discord_webhook_url`, which CrowdSec POSTs ban alerts to *directly* (not via Kuma),

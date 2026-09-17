@@ -51,6 +51,7 @@ class IoConfig:
     SHIPPER_DROPPED_WINDOW: str
     SHIPPER_DROPPED_MAX: float
     SWALLOWED_VERDICTS_WINDOW_S: int
+    KUMA_NOTIFY_FAILURES_WINDOW_S: int
     DISCORD_WEBHOOK_URL: str = field(repr=False)
     DISCORD_CROWDSEC_WEBHOOK_URL: str = field(repr=False)
     DISCORD_GITOPS_WEBHOOK_URL: str = field(repr=False)
@@ -319,6 +320,11 @@ def io_config(
         # any window, so the window does not need to reach their period — the page fires
         # within a cycle and the tile's own deadline reports the same verdict a day later.
         SWALLOWED_VERDICTS_WINDOW_S=_int("SWALLOWED_VERDICTS_WINDOW_S", "10800"),
+        # How far back check_kuma_notify_failures reads Kuma's `Cannot send notification`
+        # lines (#1891). The same 3h as the swallowed-verdict window: a drop stays paged past
+        # Loki ingest lag and past the resend that likely follows it, and the tile clears on
+        # its own once the window passes — there is nothing an operator clears by hand.
+        KUMA_NOTIFY_FAILURES_WINDOW_S=_int("KUMA_NOTIFY_FAILURES_WINDOW_S", "10800"),
         # Discord delivery: Kuma fires every alert by POSTing to its Discord webhook
         # (monitor_discord_webhook_url). A rotated/revoked/deleted webhook leaves every monitor
         # green-in-UI while Discord goes silent — the one link in the alert chain no other
