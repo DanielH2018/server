@@ -33,11 +33,12 @@ verdict lines to loki-homelab. See repo-root `CLAUDE.md` for shared conventions.
   whose cost cannot be measured without a deploy, added to a process ~20 MB under its OOM
   line, is the case the issue's own drop rule names. The
   daemon-failure evidence the journal would have carried reaches Loki another way: when
-  `docker inspect` answers for no container, `pi-recovery-health` (`roles/setup/optimize_pi`)
-  appends the newest non-info `journalctl -u docker` lines to its own DOWN record, which
-  the `pi_health` source here already ships. To revisit the reader, raise the `resources()`
-  cap first, measure RSS for a week, and delete `test_the_journal_is_not_shipped` in the
-  same PR — the test is the enforcement for this decision.
+  dockerd stops answering, `pi-recovery-health` (`roles/setup/optimize_pi`) appends the
+  newest non-info `journalctl -u docker` lines to its own DOWN record, which the
+  `pi_health` source here already ships. To revisit the reader, settle #1944 first (what
+  drives the daily peak, and whether the cap or the sizing comments move), then measure
+  RSS for a week and delete `test_the_journal_is_not_shipped` in the same PR — the test is
+  the enforcement for this decision.
 - **No healthcheck, on purpose.** The image ships no HTTP client, so a `wget` probe fails to
   EXEC and reads as `unhealthy`; Prometheus `up{job="alloy-pi"}` covers liveness from outside.
   The compose template carries the history.

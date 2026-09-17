@@ -106,14 +106,23 @@ done
 # dockerd's own `time="…"` prefix is dropped as redundant with the record's timestamp; the
 # rest is flattened and capped like `Error` above so the record stays one line. The cron
 # user reads the journal through the `adm` group; no privilege.
+#
+# The gate asks the DAEMON, not a container: `docker version` is one /version round trip,
+# and a daemon that answers it now was up for the loop above. One `inspect failed` alone is
+# not evidence against the daemon — a container mid-recreate under a deploy reads the same
+# way for a few seconds while every other container answers — so a single entry would blame
+# dockerd for a recreate. The second arm covers a daemon that died during the loop and was
+# back by the time this ran: with dockerd gone every watched container reads `inspect
+# failed`, and nothing else makes all of them read it at once. The count is rendered rather
+# than read off the bash array: the array-length syntax starts with the two characters that
+# open a Jinja comment, and the template stops rendering there.
 DAEMON=""
-case "$DOWN" in
-  *"inspect failed"*)
-    DAEMON="$(journalctl -u docker --since -10min -n 40 -o cat --no-pager 2>/dev/null |
-      grep -vE 'level=(info|debug)|Security options with' | tail -n 5 | sed -E 's/^time="[^"]*" //' |
-      tr '\n' ' ' | cut -c1-400)"
-    ;;
-esac
+if ! docker version --format '{% raw %}{{.Server.Version}}{% endraw %}' >/dev/null 2>&1 ||
+  [ "$(grep -o 'inspect failed' <<<"$DOWN" | wc -l)" -eq {{ _names | length }} ]; then
+  DAEMON="$(journalctl -u docker --since -10min -n 40 -o cat --no-pager 2>/dev/null |
+    grep -vE 'level=(info|debug)|Security options with' | tail -n 5 | sed -E 's/^time="[^"]*" //' |
+    tr '\n' ' ' | cut -c1-400)"
+fi
 
 if [ -z "$DOWN" ]; then
   STATUS=up;   MSG="all {{ _names | length }} containers running"

@@ -228,6 +228,39 @@ def test_a_container_death_does_not_read_the_daemon_journal(tmp_path):
     assert journalctl_calls(tmp_path) == [], "journal read for a container-level death"
 
 
+def test_a_daemon_that_returned_during_the_cycle_is_still_named(tmp_path):
+    """ACCEPT: a restart loop can bring dockerd back between the loop and the direct probe.
+    Every container reading `inspect failed` is the fingerprint the second arm keys on.
+    """
+    _, msg, _, _ = run(
+        SCRIPT,
+        tmp_path,
+        running=ALL,
+        daemon_down=True,
+        daemon_back=True,
+        journal=DAEMON_JOURNAL,
+    )
+
+    assert msg.count("inspect failed") == len(ALL), msg
+    assert "Scheduled restart job" in msg, f"daemon evidence lost: {msg!r}"
+
+
+def test_one_container_mid_recreate_does_not_blame_the_daemon(tmp_path):
+    """REJECT: a deploy's recreate window reads `inspect failed` for ONE container while the
+    daemon answers for the rest — that is not a daemon failure, and the journal is not read.
+    """
+    running = [c for c in ALL if c != "glances"]
+    status, msg, _, _ = run(
+        SCRIPT, tmp_path, running=running, gone="glances", journal=DAEMON_JOURNAL
+    )
+
+    assert status == "down"
+    assert "glances [inspect failed]" in msg, msg
+    assert "restart FAILED: glances" in msg, msg
+    assert "dockerd:" not in msg, msg
+    assert journalctl_calls(tmp_path) == [], "journal read for one missing container"
+
+
 def test_a_dead_daemon_with_an_empty_journal_still_reports(tmp_path):
     """An empty ten-minute window adds nothing and breaks nothing: the seven `inspect failed`
     entries stand on their own.
