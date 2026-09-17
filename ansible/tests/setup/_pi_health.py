@@ -34,13 +34,30 @@ kuma_push() {
 # those whose start fails, which is the 2026-08-29 autoheal case. `inspect` answers with the
 # real CLI's shape for whatever --format asks: a running container reads status=running, a
 # stopped one carries $STUB_EXIT / $STUB_ERROR -- so a message that names an exit code proves
-# the script inspected BEFORE it started the container, not after.
+# the script inspected BEFORE it started the container, not after. $STUB_DAEMON_DOWN=1 is
+# dockerd itself gone: every verb prints nothing and fails, which is what the real CLI does
+# against a dead socket ("Cannot connect to the Docker daemon", on stderr). $STUB_GONE names
+# a container the daemon no longer HAS -- mid-recreate under a deploy -- so `inspect` and
+# `start` fail for it alone while the daemon answers everything else. $STUB_DAEMON_BACK=1
+# on top of $STUB_DAEMON_DOWN is a daemon that died during the loop and answers `version`
+# again by the time the script asks it directly.
 DOCKER_STUB = """\
 #!/usr/bin/env bash
+if [ "${STUB_DAEMON_DOWN:-0}" = "1" ]; then
+  if [ "$1" = version ] && [ "${STUB_DAEMON_BACK:-0}" = "1" ]; then
+    echo 29.5.3
+    exit 0
+  fi
+  echo "Cannot connect to the Docker daemon at unix:///var/run/docker.sock" >&2
+  exit 1
+fi
 case "$1" in
   inspect)
     name="${@: -1}"
-    if grep -qxF "$name" "$STATE_FILE" 2>/dev/null; then
+    if [ "$name" = "${STUB_GONE:-}" ]; then
+      echo "Error: No such object: $name" >&2
+      exit 1
+    elif grep -qxF "$name" "$STATE_FILE" 2>/dev/null; then
       echo "status=running exit=0 finished=0001-01-01T00:00:00Z error="
     else
       printf 'status=exited exit=%s finished=2026-09-13T07:36:32.677805668Z error=%s\\n' \\
@@ -59,13 +76,21 @@ case "$1" in
     fi
     ;;
   start)
-    case ",${UNSTARTABLE}," in
+    case ",${UNSTARTABLE},${STUB_GONE:-}," in
       *",$2,"*) exit 1 ;;
     esac
     echo "$2" >> "$STATE_FILE"
     ;;
 esac
 exit 0
+"""
+
+# journalctl, answering `-u docker` with $STUB_JOURNAL and recording that it was asked. The
+# real one is on /usr/bin and would read THIS host's journal, so the stub shadows it on PATH.
+JOURNALCTL_STUB = """\
+#!/usr/bin/env bash
+printf '%s\\n' "$*" >> "$JOURNALCTL_CALLS"
+printf '%b' "$STUB_JOURNAL"
 """
 
 # pi-sd-health reads the ext4 error counter from a sysfs path it builds itself; point it at
@@ -122,8 +147,16 @@ def run(
     jinja_vars=None,
     exit_code="137",
     error="",
+    daemon_down=False,
+    daemon_back=False,
+    gone="",
+    journal="",
 ):
-    """Run a health cron; return (status, msg, still_running, health_log_lines)."""
+    """Run a health cron; return (status, msg, still_running, health_log_lines).
+
+    `journal` is what the journalctl stub answers, `\\n`-separated; `journalctl_calls(tmp_path)`
+    reads back every invocation the script made.
+    """
     script, log = render(name, tmp_path, jinja_vars)
 
     if counter is not None:
@@ -136,6 +169,9 @@ def run(
     docker = bin_dir / "docker"
     docker.write_text(DOCKER_STUB)
     docker.chmod(0o755)
+    journalctl = bin_dir / "journalctl"
+    journalctl.write_text(JOURNALCTL_STUB)
+    journalctl.chmod(0o755)
 
     state = tmp_path / "running"
     state.write_text("".join(f"{c}\n" for c in running))
@@ -152,6 +188,11 @@ def run(
             "STUB_PUSH_OK": push_ok,
             "STUB_EXIT": exit_code,
             "STUB_ERROR": error,
+            "STUB_DAEMON_DOWN": "1" if daemon_down else "0",
+            "STUB_DAEMON_BACK": "1" if daemon_back else "0",
+            "STUB_GONE": gone,
+            "STUB_JOURNAL": journal,
+            "JOURNALCTL_CALLS": str(tmp_path / "journalctl.calls"),
             "KUMA_PUSH_OUT": str(out),
         },
     )
@@ -159,3 +200,9 @@ def run(
     status, msg = out.read_text().splitlines()
     lines = log.read_text().splitlines() if log.exists() else []
     return status, msg, set(state.read_text().split()), lines
+
+
+def journalctl_calls(tmp_path) -> list[str]:
+    """Every argv the journalctl stub was invoked with, one string per call."""
+    calls = tmp_path / "journalctl.calls"
+    return calls.read_text().splitlines() if calls.exists() else []

@@ -12,7 +12,8 @@
 // two health crons' verdict lines, via the pi_health source below: the narrow slice
 // `probe.py alerts` needs, at ~576 lines/day against the journal's ~38k. Turning the journal
 // on is one `loki.source.journal` block with a relabel setting `job` (its default job label is
-// the component id), and a decision about Loki volume — not a capability gap any more.
+// the component id) — not a capability gap any more. What decided against it is this
+// process's memory, not Loki volume: the RSS measurement is in this role's CLAUDE.md (#1922).
 //
 // Every label this file emits is a contract with the cluster's streams: `container`, `job`,
 // `machine`, `stream` — the same names the cluster shipper writes, so one LogQL query spans

@@ -45,8 +45,10 @@ container_healthcheck_interval: 60s
 # reads `unhealthy`, autoheal restarts it, and the `start` half can fail at the OCI runtime
 # ("Timeout waiting for systemd to create scope"), leaving it Exited until pi-recovery-health
 # starts it. An exec that eventually returns is not a failure; 60s covers the stalls seen and
-# 5 retries cover a window that outlasts one. Templates fall back to their own values (5-10s,
-# 3) where these are unset. Detection latency worst-case = 5 x (60s interval + 60s timeout)
+# 5 retries cover a window that outlasts one. wg-easy reads them too, over the probe its
+# image ships (its compose block carries timing and no `test:`, #1921). Templates fall back
+# to their own values (5-10s, 3) where these are unset. Detection latency worst-case =
+# 5 x (60s interval + 60s timeout)
 # = 10 min, against a 5-min Kuma monitor from outside for glances and wg-easy — the reason a
 # dead process is not the case this trades against: `restart: unless-stopped` covers that at
 # once, the healthcheck only covers a wedged-but-running one.

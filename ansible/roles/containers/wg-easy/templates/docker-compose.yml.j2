@@ -54,6 +54,22 @@ services:
 {% endif %}
     volumes:
       - ./config:/etc/wireguard
+    # TIMING ONLY, no `test:` — this is not the redundant probe the CLAUDE.md rule forbids. The
+    # image ships its own HEALTHCHECK (`wg show | grep -q interface`) and Docker keeps it:
+    # dockerd merges an unset `Test` from the image config when the container config carries a
+    # healthcheck (`merge()` in daemon/commit.go). Verified on daniel-pi 2026-09-17 against
+    # Docker 29.5.3 with this digest: a container created with only `--health-interval/
+    # --health-timeout/--health-retries` inspects with the image's `wg show` Test and 60s/60s/5.
+    # Without this block the container ran Docker's defaults (30s interval, 30s timeout,
+    # 3 retries) — the image's Dockerfile puts its `--interval=1m --timeout=5s --retries=3`
+    # INSIDE the CMD string, where they are positional args to `sh -c`, so `Config.Healthcheck`
+    # carries no timing at all. Under the deploy-window stall #1910 widened the other Pi probes
+    # for, a `wg show` exec through runc can outlast 30s three times running and autoheal
+    # restarts a working VPN (#1921). An 8.2s exec was measured passing on 2026-09-17.
+    healthcheck:
+      interval: {{ container_healthcheck_interval | default('30s') }}
+      timeout: {{ container_healthcheck_timeout | default('30s') }}
+      retries: {{ container_healthcheck_retries | default(3) }}
     restart: unless-stopped
     {{ service_networks() }}
     labels:
