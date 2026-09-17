@@ -263,6 +263,16 @@ def setup_file_hosts(
         # templates plus the role CLAUDE.md, and the CLAUDE.md alone reached every host.
         return frozenset()
     parts = Path(path).parts
+    if parts[4:5] == ("tests",):
+        # A role's own pytest guards ship nowhere either: nothing stages a `tests/` file
+        # (`ansible/tests/repo/test_no_role_ships_a_test_file.py` holds that tree-wide), so
+        # no host runs the old copy. `land_tags.is_role_test_path` is the same predicate,
+        # inlined because land_tags imports this module. Without it a `tests/` path fell
+        # through to the ROLE-level reach, and the union over a PR's files widened a
+        # box-only `files/` change back out to every host: PR #1884 touched
+        # gitops_deploy's `files/*.py` (daniel-box only) and its `tests/*.py`, and land.sh
+        # prescribed initial_setup.yml runs on daniel-server and daniel-pi (issue #1885).
+        return frozenset()
     prefix = ("ansible", "roles", "setup", role)
     if not role_hosts or parts[: len(prefix)] != prefix or len(parts) < 6:
         return role_hosts
