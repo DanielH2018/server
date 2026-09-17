@@ -37,7 +37,11 @@ verified against their crons at all. Set them to match this table.
 
 The period or expression is the cron in the table above: a `*/10` minute cron is a Simple
 check with a 10-minute period, and every other slug is a Cron check carrying that expression
-in UTC.
+in the timezone its cron runs in. That is UTC for every host cron, and `America/Chicago` for
+`pi-peer-backup` alone: it is a k8s CronJob whose manifest sets `timeZone: {{ tz }}`
+(`roles/k8s/pi-peer-backup/templates/cronjob.yaml.j2`), so its console check carries
+`30 23 * * *` in `America/Chicago`. A console read on 2026-09-17 (#1949) found the console
+already there, and the graces above are the values the console was reconciled to.
 
 | Check slug | Schedule type | Grace |
 |---|---|---|
