@@ -88,16 +88,21 @@ See repo-root `CLAUDE.md` for conventions.
    `^/api/push/` (authelia role). Nonzero count = explicit `down`; a dead cron/host
    trips the 600s push watchdog. Token: `pi_sd_health_push_token` in `secrets.yml`.
 10. **Container-recovery heartbeat** — AutoKuma reads only the SERVER's docker socket, so the
-    Pi's `autoheal` (restarts unhealthy containers) and `docker-proxy` (the read-only socket
-    promtail's container-log discovery and glances both read) have no liveness monitor — a dead
-    autoheal silently stops recovering Pi containers, and a dead docker-proxy stops this host's
-    container logs reaching Loki while promtail keeps running with zero targets and glances
-    keeps answering its own HTTP, so nothing else goes red.
-    `templates/pi-recovery-health.sh.j2` (cron, */5) pushes both containers' running-state
-    (via `docker ps`, which reads the real socket through the docker group — so it still
-    reports docker-proxy's own death) to the static "Daniel Pi Recovery" Kuma push monitor
-    (uptime-kuma role), same LAN-only `^/api/push/` bypass. Either down = explicit `down`; a
-    dead cron/host trips the 600s watchdog. Token: `pi_recovery_push_token` in `secrets.yml`.
+    Pi's containers have no liveness monitor of their own. The two that die silently are
+    `autoheal` (restarts unhealthy containers) and `docker-proxy` (the read-only socket
+    Alloy's container-log discovery and glances both read): a dead autoheal stops recovering
+    Pi containers, and a dead docker-proxy stops this host's container logs reaching Loki
+    while Alloy keeps running with zero targets and glances keeps answering its own HTTP.
+    `templates/pi-recovery-health.sh.j2` (cron, */5) watches **every container the host
+    deploys** — `containers_list`, plus `docker-proxy-lifecycle` (and `-codeserver` under
+    `has_code_server`), which are services inside the docker-proxy role's compose file rather
+    than list entries — via `docker ps`, which reads the real socket through the docker group
+    (so it still reports docker-proxy's own death), and pushes to the static "Daniel Pi
+    Recovery" Kuma push monitor (uptime-kuma role), same LAN-only `^/api/push/` bypass. Any
+    one down = explicit `down`; a dead cron/host trips the 600s watchdog. Token:
+    `pi_recovery_push_token` in `secrets.yml`. The set was autoheal + docker-proxy alone until
+    #1910: the same failed start reaches glances, wg-easy and docker-proxy-lifecycle, and Kuma
+    sees only the first two from outside.
     **It also RESTARTS what it finds dead**, and still pushes `down` for that cycle.
     `restart: unless-stopped` covers a container whose process exits, not one whose *create*
     fails at the OCI runtime — the failure this box actually produces under memory pressure.
@@ -106,6 +111,13 @@ See repo-root `CLAUDE.md` for conventions.
     was never the gap. Reporting `down` on a cycle that had to intervene is what keeps an
     auto-restart loop visible: pushing `up` after a successful restart would make a container
     crashing every 5 minutes read green forever.
+    **The DOWN line names why**, from `docker inspect` read BEFORE the `docker start`:
+    `not running: autoheal [status=exited exit=137 finished=<ts> error=<daemon text>]`. The
+    restart (or the next deploy's recreate) erases that state, the journal here rotates in
+    about a day (`SystemMaxUse=32M`), and `/var/log/pi-health/health.log` rotates daily on
+    log2ram — so the cron's own line, shipped to Loki under `job="syslog"`, is the only record
+    of a Pi container failure that survives a week (#1912). `State.Error` is flattened to one
+    line and capped at 300 chars so it cannot split the record the alert parser reads.
     ENFORCED by `ansible/tests/setup/test_pi_recovery_restarts_and_reports.py`, which renders and
     runs the script against a stub `docker`.
 

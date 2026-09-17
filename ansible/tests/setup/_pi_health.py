@@ -12,7 +12,7 @@ health log it appends to. Every decision the script makes runs unmodified.
 
 import subprocess
 import jinja2
-from _helpers import ANSIBLE
+from _helpers import ANSIBLE, HOST_VARS, load_yaml
 
 
 TEMPLATES = ANSIBLE / "roles" / "setup" / "optimize_pi" / "templates"
@@ -29,12 +29,24 @@ kuma_push() {
 }
 """
 
-# Enough of the docker CLI for pi-recovery-health: the `ps -q` liveness probe, and `start`.
-# Running containers live in $STATE_FILE, one name per line; $UNSTARTABLE names those whose
-# start fails, which is the 2026-08-29 autoheal case.
+# Enough of the docker CLI for pi-recovery-health: the `ps -q` liveness probe, `inspect`,
+# and `start`. Running containers live in $STATE_FILE, one name per line; $UNSTARTABLE names
+# those whose start fails, which is the 2026-08-29 autoheal case. `inspect` answers with the
+# real CLI's shape for whatever --format asks: a running container reads status=running, a
+# stopped one carries $STUB_EXIT / $STUB_ERROR -- so a message that names an exit code proves
+# the script inspected BEFORE it started the container, not after.
 DOCKER_STUB = """\
 #!/usr/bin/env bash
 case "$1" in
+  inspect)
+    name="${@: -1}"
+    if grep -qxF "$name" "$STATE_FILE" 2>/dev/null; then
+      echo "status=running exit=0 finished=0001-01-01T00:00:00Z error="
+    else
+      printf 'status=exited exit=%s finished=2026-09-13T07:36:32.677805668Z error=%s\\n' \\
+        "${STUB_EXIT:-137}" "${STUB_ERROR:-}"
+    fi
+    ;;
   ps)
     name=""
     for arg in "$@"; do
@@ -61,6 +73,10 @@ exit 0
 SD_COUNTER = "/sys/fs/ext4/mmcblk0p2/errors_count"
 
 
+# The Pi's own containers_list, so the recovery cron's watch set is the one the host deploys.
+PI_HOST_VARS = load_yaml(HOST_VARS / "daniel-pi.yml")
+
+
 def render(name, tmp_path, jinja_vars=None):
     """The real template, rendered, with only its absolute paths repointed at temp files."""
     template = TEMPLATES / f"{name}.sh.j2"
@@ -68,6 +84,8 @@ def render(name, tmp_path, jinja_vars=None):
         jinja2.Environment(undefined=jinja2.StrictUndefined)
         .from_string(template.read_text())
         .render(
+            containers_list=PI_HOST_VARS["containers_list"],
+            has_code_server=False,
             domain="example.test",
             k3s_metallb_ingress_vip="10.0.0.240",
             pi_recovery_push_token="stubtoken",
@@ -94,9 +112,19 @@ def render(name, tmp_path, jinja_vars=None):
     return script, log
 
 
-def run(name, tmp_path, running=(), unstartable="", push_ok="1", counter=None):
+def run(
+    name,
+    tmp_path,
+    running=(),
+    unstartable="",
+    push_ok="1",
+    counter=None,
+    jinja_vars=None,
+    exit_code="137",
+    error="",
+):
     """Run a health cron; return (status, msg, still_running, health_log_lines)."""
-    script, log = render(name, tmp_path)
+    script, log = render(name, tmp_path, jinja_vars)
 
     if counter is not None:
         counter_file = tmp_path / "errors_count"
@@ -122,6 +150,8 @@ def run(name, tmp_path, running=(), unstartable="", push_ok="1", counter=None):
             "STATE_FILE": str(state),
             "UNSTARTABLE": unstartable,
             "STUB_PUSH_OK": push_ok,
+            "STUB_EXIT": exit_code,
+            "STUB_ERROR": error,
             "KUMA_PUSH_OUT": str(out),
         },
     )

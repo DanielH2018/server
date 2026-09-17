@@ -12,8 +12,8 @@ services:
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:61208/"]
       interval: {{ container_healthcheck_interval | default('30s') }}
-      timeout: 10s
-      retries: 3
+      timeout: {{ container_healthcheck_timeout | default('10s') }}
+      retries: {{ container_healthcheck_retries | default(3) }}
       start_period: 15s
     cap_drop:
       - ALL
