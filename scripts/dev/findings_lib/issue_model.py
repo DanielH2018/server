@@ -165,8 +165,15 @@ _CITED_PATH_RE = re.compile(
 )
 
 
+# The trailer `trailer()` appends, from its rule on. It names `scripts/dev/findings.py` on
+# every issue, so without cutting it every two batches would share that file.
+_TRAILER_RE = re.compile(r"^---[ \t]*\nFingerprint: `[0-9a-f]+`\n.*\Z", re.M | re.S)
+
+
 def cited_paths(body: str) -> list[str]:
     """Every repo-relative file path an issue body cites, sorted and deduplicated.
+
+    The trailer is cut first: it is `findings.py`'s own text, not the finding's.
 
     This is the input to the fan-out's file-level collision check (#1798): two issues that
     cite one script are one batch, whatever their `domain` label says — #1780, #1784 and #1782
@@ -175,7 +182,8 @@ def cited_paths(body: str) -> list[str]:
     issue was filed with lands only in the fingerprint, so the body's own citations are the
     record.
     """
-    return sorted({m.group(1) for m in _CITED_PATH_RE.finditer(body or "")})
+    text = _TRAILER_RE.sub("", (body or "").replace("\r\n", "\n"))
+    return sorted({m.group(1) for m in _CITED_PATH_RE.finditer(text)})
 
 
 def label_names(issue: dict) -> set[str]:

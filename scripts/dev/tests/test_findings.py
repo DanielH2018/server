@@ -25,6 +25,7 @@ from dev.findings_lib.issue_model import (
     issue_rows,
     reobservations,
     sort_key,
+    trailer,
     verify_by_section,
 )
 from dev.findings_lib.plans import plan_close, plan_sync_labels, plan_touch
@@ -425,3 +426,11 @@ def test_next_rows_carry_the_cited_paths_for_triage():
         ]
     )
     assert row["paths"] == ["scripts/diagnostics/probe_lib/alerts.py"]
+
+
+def test_cited_paths_ignores_the_trailer_findings_py_writes():
+    # Every filed issue ends in `Filed by \`scripts/dev/findings.py\``; read as a citation, it
+    # would make every two batches collide on that one file.
+    body = "fix `scripts/dev/fanout_place.py`" + trailer("c0a05de5f0e9", "session")
+    assert cited_paths(body) == ["scripts/dev/fanout_place.py"]
+    assert cited_paths("nothing" + trailer("c0a05de5f0e9", "review")) == []
