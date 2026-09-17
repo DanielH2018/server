@@ -83,26 +83,27 @@ def dangerous(messages, patterns):
     return any(p in m for p in pats for m in low)
 
 
-def all_error_text(item):
-    """Returns statusMessage strings plus the queue record's top-level errorMessage.
-
-    Download-client communication errors often land in errorMessage rather than
-    statusMessages.
-    """
-    out = item_messages(item)
-    err = item.get("errorMessage")
-    if err:
-        out = out + [err]
-    return out
-
-
 def client_comm_error(item, patterns):
-    """True if the item's error text matches a transient download-client-communication issue.
+    """True if the record's top-level errorMessage names a download-client communication issue.
 
-    As opposed to a bad release — client unreachable / not responding. Reuses the same
+    Client unreachable / not responding, as opposed to a bad release. Reuses the same
     case-insensitive substring matcher as dangerous().
+
+    DECIDED: this reads errorMessage ONLY, never statusMessages[].messages, because the two
+    fields have different authors. errorMessage is DownloadClientItem.Message
+    (QueueService.cs), which the download client assigns from fixed localized strings — at
+    the pinned qBittorrent client every assignment is a GetLocalizedString() constant. A
+    statusMessage's messages come from TrackedDownload.Warn() and the import rejections,
+    and those interpolate release-controlled text: the release title ("... not found in
+    the grabbed release: {title}"), the folder name, and the download's output path ("No
+    files found are eligible for import in {path}"). Fail() (RejectedImportService, the
+    only writer of trackedDownloadStatus=='error', fired for a dangerous or executable
+    file) keeps whatever statusMessages an earlier Warn() left, so a release NAMED to
+    carry one of these phrases could exempt its own poisoned .exe from the blocklist.
+    Verified against Sonarr v4.0.19.2979 and Radarr v6.3.0.10514 (#1934).
     """
-    return dangerous(all_error_text(item), patterns)
+    err = item.get("errorMessage")
+    return bool(err) and dangerous([err], patterns)
 
 
 def is_candidate(item, patterns, client_error_patterns=()):
@@ -115,7 +116,8 @@ def is_candidate(item, patterns, client_error_patterns=()):
     - malware-signature (warning + dangerous statusMessage) -> candidate.
     - import-step failure (trackedDownloadState in importBlocked/importFailed) -> candidate
       (the download completed; a client outage can't produce these, so no exclusion).
-    - bare error (trackedDownloadStatus=='error') -> candidate UNLESS client_comm_error matches.
+    - bare error (trackedDownloadStatus=='error') -> candidate UNLESS client_comm_error
+      matches its errorMessage (statusMessages carry release text and do not count).
     - everything else (transient warning, plain importPending) -> not a candidate (fails SAFE).
     """
     status = item.get("trackedDownloadStatus")
