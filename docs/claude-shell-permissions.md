@@ -61,6 +61,32 @@ command against the hosts and domains named in `autoMode.environment` and makes 
 prefix rule never could. `allow-safe-curl.sh` / `allow-readonly-remote.sh` / `auto-approve-remote-ssh.sh`
 are retained because they still carry **Manual mode**, where no classifier runs.
 
+**Two PermissionRequest hooks judge a prompted ssh command since the dotfiles `claude_guard`
+cutover of 2026-09-17** (issue #1864). The user-level `guard-permission-request.sh` runs
+`claude_guard.judge()`, and this repo's `auto-approve-remote-ssh.sh` runs `classify_remote`;
+both read `TRUSTED_SSH_HOSTS` and `SECRET_PATH_RE` from the same package. Measured 2026-09-17
+on daniel-server, 20 runs each, payload `ssh daniel-server docker ps | head -3`:
+
+| hook | package reachable | median |
+|---|---|---|
+| `auto-approve-remote-ssh.sh` (`uv run --no-sync python`) | yes | 37 ms |
+| `auto-approve-remote-ssh.sh` | no — fails open, one stderr line | 35 ms |
+| `guard-permission-request.sh` (`uv python find` + `python -S -P`) | yes | 65 ms |
+| `guard-permission-request.sh` | no — exits at the `cli.py` existence check | 1 ms |
+
+So the double launch costs about 100 ms per command that reaches a prompt, and only there:
+the paragraph above says why an ssh command in a normal auto-mode session reaches no
+PermissionRequest hook at all. Two facts bound the finding further. daniel-server had no
+`~/.local/share/claude-guard` and a `~/.claude/settings.json` from the 2026-09-05 dotfiles
+when this was measured, so the judge hook was not on that host's chain; the numbers above
+come from a scratch clone of the dotfiles at `de79392` with `CLAUDE_GUARD_HOME` and
+`PYTHONPATH` pointed at it. And the two hooks are not interchangeable: on the payload above
+the judge emits nothing and the repo shim allows: `readonly_remote_safe` (`claude_guard/checks/remote.py`)
+returns no opinion unless the parse yields exactly one segment, while `classify_remote` walks each
+local stage. Retiring the repo shim would re-prompt `ssh <host> <cmd> |
+head` in Manual mode. Whether one of them retires is the dotfiles survey's re-planned slice 5
+(`docs/plans/2026-09-17-claude-guard-slice-5-survey.md` in the dotfiles repo), not this repo's.
+
 ### `kubectl` — what actually decides
 **Read this before trusting the per-verb allow-list below: in a normal session that list decides
 nothing.** Sessions default to auto mode (`defaultMode: auto`) with `autoMode.classifyAllShell: true`

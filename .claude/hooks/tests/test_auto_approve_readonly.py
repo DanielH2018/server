@@ -6,12 +6,27 @@ prompts for *provably* read-only commands, and must NEVER auto-approve a
 command that can write, delete, or execute. These tables lock that contract.
 
 Run: uv run pytest .claude/hooks
-(Still importable standalone — it loads the hook by path, no third-party deps.)
+(Still runnable standalone -- it loads the hook by path; pytest is the one dependency.)
+
+Each table is two lists. The `_SSH` half holds every vector with an `ssh` stage; its verdict
+runs through `SSH_HOSTS` and `_SSH_SECRET`, which `_readonly_tables.py` imports from the
+deployed `claude_guard` package. In GitHub CI that package is `conftest.py`'s in-process
+stand-in, a copy by construction, so a pass there proves nothing about the deployed tables.
+The `_SSH` tests skip under the stand-in rather than pass on the copy, which is what makes
+CI's own report show the hole. The `_LOCAL` half never touches those two values and runs
+everywhere. The split is broad on purpose: `ssh -L … daniel-server uptime` rejects on
+`_SSH_FLAGS`, a table this repo owns, but a vector left in `_LOCAL` that turns out to depend
+on the host set would pass silently on stand-in data, which is the exact hole being closed.
+`test_every_ssh_vector_is_in_an_ssh_list` holds the line.
 """
 
 import importlib.util
 import os
+import re
 import sys
+
+import pytest
+
 
 _HOOK = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -28,8 +43,18 @@ classify = _mod.classify
 classify_remote = _mod.classify_remote
 
 
-# MUST auto-approve: provably read-only.
-APPROVE = [
+_STAND_IN = getattr(sys.modules.get("claude_guard"), "__claude_guard_stand_in__", False)
+needs_deployed_tables = pytest.mark.skipif(
+    _STAND_IN,
+    reason="claude_guard is conftest.py's stand-in, not the deployed package; an ssh "
+    "verdict against the copy proves nothing about the tables the hook runs with",
+)
+
+# A vector with an `ssh` token anywhere: as argv[0] of any stage, or as a bare `ssh -i`.
+_HAS_SSH = re.compile(r"(^|\s)ssh(\s|$)")
+
+# MUST auto-approve: provably read-only. No ssh stage in this list.
+APPROVE_LOCAL = [
     ("ls", "bare ls"),
     ("cat foo.txt", "cat a file"),
     ("git status", "git read-only subcommand"),
@@ -40,29 +65,6 @@ APPROVE = [
     ("find . -name '*.yml'", "find without write actions"),
     ("cat a.txt | grep foo | head -5", "pure read-only pipeline"),
     ("pwd", "pwd builtin"),
-    ("ssh daniel-server docker ps", "bare remote read-only command"),
-    ("ssh daniel-pi uptime", "the other homelab host"),
-    ("ssh ubuntu@daniel-server hostname", "user@host form"),
-    ("ssh daniel-server 'docker ps | head -3'", "pipeline inside the remote string"),
-    ("ssh daniel-server docker ps | head -3", "pipeline on the local side"),
-    (
-        "ssh daniel-server docker logs monitor-bridge --since 3h 2>&1 | tail -12",
-        "remote logs with a 2>&1 dup and a local filter",
-    ),
-    (
-        "ssh -i /home/ubuntu/.ssh/id_ed25519 -o IdentitiesOnly=yes -o BatchMode=yes "
-        "daniel-server git -C /home/ubuntu/server log --oneline -1",
-        "the option prefix these calls are actually written with",
-    ),
-    ("ssh -o BatchMode=yes -o ConnectTimeout=8 daniel-pi hostname", "connect options"),
-    (
-        "ssh -q -p 22 daniel-server systemctl status traefik",
-        "-q/-p plus a guarded verb",
-    ),
-    (
-        "ssh daniel-server 'cd /home/ubuntu/server; git status'",
-        "; sequence, both stages read-only",
-    ),
     ("cd /home/ubuntu/server", "cd changes cwd only"),
     ("cd /srv && ls", "cd then ls"),
     ("cat a; cat b", "two reads joined by ;"),
@@ -122,8 +124,35 @@ APPROVE = [
     ("sensors -f", "sensors in fahrenheit"),
 ]
 
+# MUST auto-approve, and the verdict runs through the claude_guard tables.
+APPROVE_SSH = [
+    ("ssh daniel-server docker ps", "bare remote read-only command"),
+    ("ssh daniel-pi uptime", "the other homelab host"),
+    ("ssh ubuntu@daniel-server hostname", "user@host form"),
+    ("ssh daniel-server 'docker ps | head -3'", "pipeline inside the remote string"),
+    ("ssh daniel-server docker ps | head -3", "pipeline on the local side"),
+    (
+        "ssh daniel-server docker logs monitor-bridge --since 3h 2>&1 | tail -12",
+        "remote logs with a 2>&1 dup and a local filter",
+    ),
+    (
+        "ssh -i /home/ubuntu/.ssh/id_ed25519 -o IdentitiesOnly=yes -o BatchMode=yes "
+        "daniel-server git -C /home/ubuntu/server log --oneline -1",
+        "the option prefix these calls are actually written with",
+    ),
+    ("ssh -o BatchMode=yes -o ConnectTimeout=8 daniel-pi hostname", "connect options"),
+    (
+        "ssh -q -p 22 daniel-server systemctl status traefik",
+        "-q/-p plus a guarded verb",
+    ),
+    (
+        "ssh daniel-server 'cd /home/ubuntu/server; git status'",
+        "; sequence, both stages read-only",
+    ),
+]
+
 # MUST NOT auto-approve: can write, delete, or execute (or unparseable).
-REJECT = [
+REJECT_LOCAL = [
     ("rm -rf /tmp/x", "rm deletes"),
     ("git push", "git push mutates"),
     ("docker run alpine", "docker run executes"),
@@ -189,6 +218,10 @@ REJECT = [
     ("crontab -u ubuntu -r", "crontab -r for a user still deletes"),
     ("sensors -s", "sensors -s applies config to hardware"),
     ("sensors --set", "sensors --set writes"),
+]
+
+# MUST NOT auto-approve, and the verdict runs through the claude_guard tables.
+REJECT_SSH = [
     ("ssh daniel-server", "no remote command -> interactive shell"),
     ("ssh daniel-server rm -rf /tmp/x", "remote rm deletes"),
     ("ssh daniel-server docker run alpine", "remote docker run executes"),
@@ -219,27 +252,102 @@ REJECT = [
     ("ssh daniel-server ssh daniel-pi uptime", "second hop"),
 ]
 
-
-def _failures_approve():
-    return [(c, l) for c, l in APPROVE if classify(c) is None]
-
-
-def _failures_reject():
-    return [(c, l) for c, l in REJECT if classify(c) is not None]
+APPROVE = APPROVE_LOCAL + APPROVE_SSH
+REJECT = REJECT_LOCAL + REJECT_SSH
 
 
-def test_approves_read_only_commands():
-    bad = _failures_approve()
-    assert not bad, "Expected APPROVE but got a prompt:\n" + "\n".join(
+def _failures_approve(table=None):
+    return [
+        (c, l) for c, l in (APPROVE if table is None else table) if classify(c) is None
+    ]
+
+
+def _failures_reject(table=None):
+    return [
+        (c, l)
+        for c, l in (REJECT if table is None else table)
+        if classify(c) is not None
+    ]
+
+
+def _approve_report(bad):
+    return "Expected APPROVE but got a prompt:\n" + "\n".join(
         f"  [{l}] {c!r}" for c, l in bad
     )
 
 
-def test_rejects_unsafe_commands():
-    bad = _failures_reject()
-    assert not bad, "Expected REJECT but got auto-approve:\n" + "\n".join(
+def _reject_report(bad):
+    return "Expected REJECT but got auto-approve:\n" + "\n".join(
         f"  [{l}] {c!r} -> {classify(c)!r}" for c, l in bad
     )
+
+
+def test_approves_read_only_commands():
+    assert not (bad := _failures_approve(APPROVE_LOCAL)), _approve_report(bad)
+
+
+def test_rejects_unsafe_commands():
+    assert not (bad := _failures_reject(REJECT_LOCAL)), _reject_report(bad)
+
+
+@needs_deployed_tables
+def test_approves_read_only_commands_over_ssh():
+    assert not (bad := _failures_approve(APPROVE_SSH)), _approve_report(bad)
+
+
+@needs_deployed_tables
+def test_rejects_unsafe_commands_over_ssh():
+    assert not (bad := _failures_reject(REJECT_SSH)), _reject_report(bad)
+
+
+def misplaced_vectors(local, ssh):
+    """Vectors on the wrong side of the split: ssh tokens in `local`, none in `ssh`."""
+    return [c for c, _ in local if _HAS_SSH.search(c)] + [
+        c for c, _ in ssh if not _HAS_SSH.search(c)
+    ]
+
+
+def test_every_ssh_vector_is_in_an_ssh_list():
+    """The split is by hand; this is what keeps a table-dependent vector out of `_LOCAL`.
+
+    A vector with an `ssh` token that sits in a `_LOCAL` list runs unconditionally, so under
+    the stand-in it passes on the copy -- the hole the `_SSH` skip exists to show. The floors
+    are the counts at the split (10 approve, 25 reject); an `_SSH` list that emptied out
+    would otherwise skip nothing and prove nothing.
+    """
+    bad = misplaced_vectors(APPROVE_LOCAL + REJECT_LOCAL, APPROVE_SSH + REJECT_SSH)
+    assert not bad, "vectors on the wrong side of the split:\n" + "\n".join(
+        f"  {c!r}" for c in bad
+    )
+    assert len(APPROVE_SSH) >= 10
+    assert len(REJECT_SSH) >= 25
+
+
+def test_placement_check_is_clean_on_a_correct_split():
+    assert (
+        misplaced_vectors([("ls", ""), ("cat a | head", "")], [("ssh h ls", "")]) == []
+    )
+
+
+def test_placement_check_is_flagged_on_a_misplaced_vector():
+    planted = "cat a | ssh daniel-server ls"
+    assert misplaced_vectors([("ls", ""), (planted, "")], []) == [planted]
+    assert misplaced_vectors([], [("ls", "")]) == ["ls"]
+
+
+def test_ssh_tests_skip_under_the_stand_in_and_run_against_the_deploy():
+    """The skip tracks what fed the tables, not whether a directory exists.
+
+    `conftest.py` marks its fake package; the real one carries no such attribute. A HOME
+    pointed at an empty directory changes neither, which is why the marker is the signal.
+    """
+    guard = sys.modules["claude_guard"]
+    if _STAND_IN:
+        assert guard.__claude_guard_stand_in__ is True
+        assert not hasattr(guard, "__file__")
+    else:
+        assert not hasattr(guard, "__claude_guard_stand_in__")
+        assert guard.__file__
 
 
 # classify_remote answers `ask` rules, so it must speak only for the traffic that
@@ -257,6 +365,7 @@ LOCAL_NOT_REMOTE = [
 ]
 
 
+@needs_deployed_tables
 def test_permission_request_covers_remote_commands():
     bad = [(c, l) for c, l in REMOTE_ONLY if classify_remote(c) is None]
     assert not bad, "Expected a PermissionRequest allow:\n" + "\n".join(
@@ -271,25 +380,47 @@ def test_permission_request_stays_out_of_local_commands():
     )
 
 
-def test_permission_request_never_widens_classify():
-    # Everything classify() refuses must stay refused here -- this entry point may
-    # only ever narrow it.
-    bad = [(c, l) for c, l in REJECT if classify_remote(c) is not None]
-    assert not bad, "PermissionRequest approved a rejected command:\n" + "\n".join(
+def _widened(table):
+    return [(c, l) for c, l in table if classify_remote(c) is not None]
+
+
+def _widen_report(bad):
+    return "PermissionRequest approved a rejected command:\n" + "\n".join(
         f"  [{l}] {c!r} -> {classify_remote(c)!r}" for c, l in bad
     )
+
+
+# Everything classify() refuses must stay refused here -- this entry point may
+# only ever narrow it.
+def test_permission_request_never_widens_classify():
+    assert not (bad := _widened(REJECT_LOCAL)), _widen_report(bad)
+
+
+@needs_deployed_tables
+def test_permission_request_never_widens_classify_over_ssh():
+    assert not (bad := _widened(REJECT_SSH)), _widen_report(bad)
 
 
 if __name__ == "__main__":
     import sys
 
-    fa, fr = _failures_approve(), _failures_reject()
-    print(f"APPROVE cases: {len(APPROVE) - len(fa)}/{len(APPROVE)} passed")
-    for c, l in fa:
-        print(f"  MISS approve [{l}]: {c!r}")
-    print(f"REJECT cases:  {len(REJECT) - len(fr)}/{len(REJECT)} passed")
-    for c, l in fr:
-        print(f"  !! FALSE-APPROVE [{l}]: {c!r} -> {classify(c)!r}")
-    total_bad = len(fa) + len(fr)
+    tables = [
+        ("APPROVE_LOCAL", APPROVE_LOCAL, _failures_approve),
+        ("APPROVE_SSH", APPROVE_SSH, _failures_approve),
+        ("REJECT_LOCAL", REJECT_LOCAL, _failures_reject),
+        ("REJECT_SSH", REJECT_SSH, _failures_reject),
+    ]
+    total_bad = 0
+    for name, table, failures in tables:
+        bad = failures(table)
+        total_bad += len(bad)
+        note = (
+            " (against conftest's stand-in tables)"
+            if _STAND_IN and "SSH" in name
+            else ""
+        )
+        print(f"{name}: {len(table) - len(bad)}/{len(table)} passed{note}")
+        for c, l in bad:
+            print(f"  FAIL [{l}]: {c!r} -> {classify(c)!r}")
     print(f"\n{'ALL PASS' if total_bad == 0 else str(total_bad) + ' FAILURES'}")
     sys.exit(1 if total_bad else 0)
