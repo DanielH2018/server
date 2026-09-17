@@ -363,7 +363,7 @@
       "groupName": "{{depName}}"
     },
     {
-      "description": "Digest bumps on the k8s plane. 22 of 74 pins carry a @sha256 digest and 18 of those sit on a MUTABLE tag (latest, release, master-web/-collector, jvm-stable, vanilla-latest) where a VERSION bump can never be offered \u2014 only a digest one. That is ~28% of the fleet, and `matchUpdateTypes: [minor, patch]` above does not match updateType `digest`, so none of them auto-merged. Watchtower applied exactly this class automatically until it was retired 2026-08-09 with the note 'Renovate owns image updates' \u2014 leaving it manual was a regression against what it replaced, not a deliberate posture. minimumReleaseAge is 3 days rather than 7: there is no version to soak, only a re-push of the same tag, so the wait is purely to let a poisoned/yanked push be noticed. The auto-deploy denylist (roles/setup/gitops_deploy/defaults/main.yml) is the safety boundary \u2014 a denylisted service's digest PR still merges, it just never auto-deploys. A pin on a CHANNEL tag (`:latest@sha256:`) is the shape with no version anywhere in its diff, so a bump on one cannot be read for direction and a downgrade looks like an upgrade (issue #1524, the same shape as n8n's #1493). That class is accepted for the roles left eligible here and fenced by the denylist for the ones whose regression is expensive — the DECIDED marker recording why, and the guard holding the fence, are in ansible/tests/deploy/test_channel_tag_digest_pins_stay_off_autodeploy.py.",
+      "description": "Digest bumps on the k8s plane. 22 of 74 pins carry a @sha256 digest and 18 of those sit on a MUTABLE tag (latest, release, master-web/-collector, jvm-stable, vanilla-latest) where a VERSION bump can never be offered \u2014 only a digest one. That is ~28% of the fleet, and `matchUpdateTypes: [minor, patch]` above does not match updateType `digest`, so none of them auto-merged. Watchtower applied exactly this class automatically until it was retired 2026-08-09 with the note 'Renovate owns image updates' \u2014 leaving it manual was a regression against what it replaced, not a deliberate posture. minimumReleaseAge is 3 days rather than 7: there is no version to soak, only a re-push of the same tag, so the wait is purely to let a poisoned/yanked push be noticed. The auto-deploy denylist (derived by ansible/filter_plugins/k8s_autodeploy.py) is the safety boundary, and since #1886 the manual rule below keeps it on the merge side too: a denylisted service's digest PR opens as `manual \u2014` rather than merging into a drift alert. A pin on a CHANNEL tag (`:latest@sha256:`) is the shape with no version anywhere in its diff, so a bump on one cannot be read for direction and a downgrade looks like an upgrade (issue #1524, the same shape as n8n's #1493). That class is accepted for the roles left eligible here and fenced by the denylist for the ones whose regression is expensive — the DECIDED marker recording why, and the guard holding the fence, are in ansible/tests/deploy/test_channel_tag_digest_pins_stay_off_autodeploy.py.",
       "matchManagers": [
         "custom.regex"
       ],
@@ -377,6 +377,59 @@
       "automerge": true,
       "platformAutomerge": true,
       "minimumReleaseAge": "3 days"
+    },
+    {
+      "description": "NO automerge for an image bump in a role declaring `k8s_autodeploy: false` (issue #1886). The two automerge rules above say a machine may MERGE a k8s image bump; the deployer's denylist, derived from each role's own `k8s_autodeploy` flag by ansible/filter_plugins/k8s_autodeploy.py, says a machine may not APPLY one for these roles. Merging what nothing can apply moved the work to the drift monitor: Renovate merged authelia 4.39.23 (#1831) and 4.39.24 (#1862) unattended, the tick fast-forwarded each and applied nothing, and `Release Staleness Drift` paged for the hand deploy both times. So the automerge boundary now follows the denylist: a bump here opens as a `manual —` PR that the renovate-prs skill merges through land.sh, which deploys it from the merge commit. matchFileNames is the denylist spelled as paths, one `defaults/main.yml` per denied role, and ansible/tests/deploy/test_renovate_automerge_follows_the_autodeploy_denylist.py asserts the two are equal — flip a role's flag and the guard names the line to add or drop here. No matchUpdateTypes on purpose: the digest rule above automerged a denied role's digest re-push too, the hole test_k8s_autodeploy_denylist.py recorded as unenforced for tdarr. matchDatasources narrows the rule to container images, because the CrowdSec bouncer plugin pin shares traefik's defaults/main.yml and its own manual rule below must keep its group name. POSITION is load-bearing: this rule must sit AFTER the `k8s image {{depName}}` and digest rules whose automerge it overrides, and BEFORE the per-package manual rules, which override its groupName for the pins they own.",
+      "matchManagers": [
+        "custom.regex"
+      ],
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchFileNames": [
+        "ansible/roles/k8s/arr-notification/defaults/main.yml",
+        "ansible/roles/k8s/authelia/defaults/main.yml",
+        "ansible/roles/k8s/autofix-bridge/defaults/main.yml",
+        "ansible/roles/k8s/claude-otel/defaults/main.yml",
+        "ansible/roles/k8s/cloudflare-ddns/defaults/main.yml",
+        "ansible/roles/k8s/code-server/defaults/main.yml",
+        "ansible/roles/k8s/cronjob-gate/defaults/main.yml",
+        "ansible/roles/k8s/crowdsec/defaults/main.yml",
+        "ansible/roles/k8s/deploy-ui/defaults/main.yml",
+        "ansible/roles/k8s/dri-device-plugin/defaults/main.yml",
+        "ansible/roles/k8s/game-stats-lib/defaults/main.yml",
+        "ansible/roles/k8s/healthchecks/defaults/main.yml",
+        "ansible/roles/k8s/image-builder/defaults/main.yml",
+        "ansible/roles/k8s/janitorr/defaults/main.yml",
+        "ansible/roles/k8s/karakeep/defaults/main.yml",
+        "ansible/roles/k8s/livesync/defaults/main.yml",
+        "ansible/roles/k8s/loki-homelab/defaults/main.yml",
+        "ansible/roles/k8s/longhorn-api/defaults/main.yml",
+        "ansible/roles/k8s/longhorn-ui/defaults/main.yml",
+        "ansible/roles/k8s/monitor-bridge/defaults/main.yml",
+        "ansible/roles/k8s/mosquitto/defaults/main.yml",
+        "ansible/roles/k8s/n8n/defaults/main.yml",
+        "ansible/roles/k8s/navidrome/defaults/main.yml",
+        "ansible/roles/k8s/nut/defaults/main.yml",
+        "ansible/roles/k8s/pihole/defaults/main.yml",
+        "ansible/roles/k8s/qbittorrent/defaults/main.yml",
+        "ansible/roles/k8s/registry/defaults/main.yml",
+        "ansible/roles/k8s/scrutiny/defaults/main.yml",
+        "ansible/roles/k8s/tdarr/defaults/main.yml",
+        "ansible/roles/k8s/terraria/defaults/main.yml",
+        "ansible/roles/k8s/terraria-stats/defaults/main.yml",
+        "ansible/roles/k8s/traefik/defaults/main.yml",
+        "ansible/roles/k8s/uptime-kuma/defaults/main.yml",
+        "ansible/roles/k8s/valheim/defaults/main.yml",
+        "ansible/roles/k8s/valheim-stats/defaults/main.yml",
+        "ansible/roles/k8s/volume-claim/defaults/main.yml",
+        "ansible/roles/k8s/volume-revert/defaults/main.yml",
+        "ansible/roles/k8s/volume-snapshot/defaults/main.yml",
+        "ansible/roles/k8s/wg-easy/defaults/main.yml",
+        "ansible/roles/k8s/zigbee2mqtt/defaults/main.yml"
+      ],
+      "groupName": "k8s image {{depName}} (manual — k8s_autodeploy: false, so the tick applies nothing; land.sh deploys it)",
+      "automerge": false
     },
     {
       "description": "LinuxServer.io images tag as <upstream-version>-lsNN (e.g. 4.0.17.2952-ls312). Regex versioning both orders these correctly and rejects non-release tags (commit hashes like 438eee94-ls46, nightlies) as invalid, so they're never offered. Optional 4th version part -> build, OS suffix (ubu2404) -> compatibility, -lsNN -> revision.",
