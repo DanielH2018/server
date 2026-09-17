@@ -11,3 +11,8 @@ pi_peer_backup_k8s_claim: pi-peer-backup-data
 # 23:30 local, same slot the daniel-server host cron held (clear of the 03:30 Longhorn
 # nightly, which snapshots the PVC this fills).
 pi_peer_backup_k8s_schedule: "30 23 * * *"
+
+# The one directory the pull key may read. Named once because two places must agree on it:
+# the CronJob's PI_SRC and the forced command sshd pins the key to (files/pi-peer-backup-shell.sh
+# refuses any other path).
+pi_peer_backup_src_dir: "/home/{{ sys_user }}/server/containers/wg-easy/config/"
