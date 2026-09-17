@@ -259,6 +259,25 @@ can't quietly widen it.
   filter. **`validate:` cannot be used on the filter** — AppArmor confines `rsyslogd` to
   `/etc/rsyslog.conf` and `/etc/rsyslog.d/**`, and Ansible validates a candidate in a temp
   directory, so the config is checked in place afterwards and the write undone on failure.
+
+  **What the cap costs a forensic read, and how to read a boot in spite of it.** Priority-info
+  lines are gone from the journal, and from `/var/log/syslog` for every facility except
+  `kern`, `auth`, `authpriv` and `mail`. That set includes k3s's own output, every
+  `Starting`/`Started` unit line, and timesyncd's `Initial clock synchronization` step. An
+  empty `journalctl -u k3s` window therefore means *nothing at notice or above*, not
+  *nothing happened*; the systemd `Failed with result` lines are the only trace of a crash
+  loop, and the cause is unrecoverable after the fact. Kernel info lines DO survive, in
+  `/var/log/syslog` only: `NIC Link is Up`, veth/cni0 bridge events, `PM: suspend entry`. A
+  read that finds nothing in the journal is not finished until it has grepped syslog.
+  The second trap is the clock. daniel-box's RTC is dead (`PM: RTC time: 00:03:09, date:
+  2024-01-01` at every boot), so a boot with no network runs on the clock systemd restores
+  from `/var/lib/systemd/timesync/clock` — the *previous* shutdown's time — until the first NTP
+  step, and that step is itself an info line nobody stores. Detect it from the journal's
+  `__MONOTONIC_TIMESTAMP` against `__REALTIME_TIMESTAMP`: a jump in their difference is a
+  step, and every wall stamp before it is early by that amount. Issue #1804 is the worked
+  case: the box ran 5h08m with the wall clock 65 min slow, so the same event read as
+  "boot 13:57" in the journal and "boot 15:02" from monotonic, and the first `Link is Up`
+  of the boot read as a mid-life iSCSI reset.
 - **iGPU (`igpu` tag)** writes `/etc/modprobe.d/i915.conf` (`options i915 enable_guc=2`) and
   rebuilds the initramfs, but **never reboots** — unlike `Reboot Pi`, this fires on the machine
   running the whole homelab, so it only prints a reboot reminder.
