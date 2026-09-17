@@ -177,7 +177,7 @@ than a failure. The eighth, 20, is the inverse: the playbook ran and changes are
 | Exit | Meaning | What to do |
 |---|---|---|
 | 78 | the playbook matched no host — the `PLAY RECAP` names none, and ansible exits 0 for that | read the `[WARNING]` lines: an inventory that failed to parse, or a host pattern that matched nothing; fix it and retry |
-| 77 | the snapshot worktree could not be created | check `/tmp/homelab-deploy-snapshots/` is writable and `git worktree add --detach` works |
+| 77 | the snapshot worktree could not be created, or a full run could not list its deploy tags from it (the message says which; a list that took longer than `TAG_LIST_TIMEOUT` under the tree lock is the second) | check `/tmp/homelab-deploy-snapshots/` is writable and `git worktree add --detach` works; for the list, run `uv run python scripts/deploy_tools/deploy_tags.py list` once by hand, then retry |
 | 76 | flock failed on the lock file itself — not contention | `ls -l /var/lock/server-git-tree.lock`; retrying alone changes nothing |
 | 75 | a lock stayed busy — the tree lock, or one of this run's services' | retry |
 | 64 | the flags contradict each other, or `--at` named no commit (or none at all) | fix the command line; nothing ran |
