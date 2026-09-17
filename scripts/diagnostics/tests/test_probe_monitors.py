@@ -42,6 +42,37 @@ def test_parse_declared_monitors_reads_names_types_and_gating():
     assert declared["Off-box etcd Snapshot"]["gate"] == "etcd_snapshot_push_token"
 
 
+def _series(name, status="1"):
+    return {"metric": {"monitor_name": name}, "value": [1720000000, status]}
+
+
+def test_monitors_names_the_declared_monitors_the_exporter_has_not_exported():
+    # #1779: minutes after a Kuma pod replacement the exporter had 89 of 105 declared
+    # monitors, and `monitors` read "89/89 up" — the 16 unreported tiles included the etcd
+    # snapshot and secret-rotation dead-men. The ratio stays (it is still what is down), and
+    # the shortfall is named beside it. Exit code stays 0: absence is kuma-drift's verdict.
+    data = {"data": {"result": [_series("Root Disk"), _series("k3s Grafana")]}}
+    text, code = monitors.format_monitor_status(data, declared_total=4)
+    assert code == 0
+    assert text.startswith("2/2 monitors up\n")
+    assert "2 of 4 declared monitors have no monitor_status series" in text
+    assert "kuma-drift" in text
+
+
+def test_monitors_is_silent_about_coverage_when_every_declared_monitor_is_exported():
+    data = {"data": {"result": [_series("Root Disk"), _series("k3s Grafana")]}}
+    text, code = monitors.format_monitor_status(data, declared_total=2)
+    assert (text, code) == ("2/2 monitors up", 0)
+
+
+def test_declared_monitor_count_reads_the_real_template():
+    # The count `run_monitors` hands to the coverage line comes from the real static-monitors
+    # template, so a template that moved or a parse that returns nothing shows up here as a
+    # missing count rather than as a coverage line that is silent forever.
+    declared = monitors.declared_monitor_count()
+    assert declared is not None and declared >= 90, declared
+
+
 def test_kuma_drift_reports_a_declared_monitor_that_is_not_live():
     # The 2026-08-20 case: the tile is absent from the exporter, not down, so `monitors`
     # reported 81/81 up for a day. Long-uptime Kuma, so PENDING cannot be the explanation.

@@ -37,6 +37,73 @@ first sync lands, so the liveness probe needs an allowance in front of it or the
 mid-reconcile. That allowance is `initialDelaySeconds: 300` on the liveness probe — see the
 next trap for why it is not a startupProbe.
 
+### A pod replacement blinds Prometheus to the push monitors, not Kuma
+Minutes after a replacement on 2026-09-11, `probe.py kuma-drift` listed 16 push monitors with
+no `monitor_status` series — every `interval: 90000` (25h) tile, `Off-box etcd Snapshot` and
+`Secret Rotation` among them — while `probe.py monitors` read "89/89 up" (#1779). The open
+question was whether Kuma's down-timer restarts from zero on boot, which would blind
+detection for the full interval. It does not, and that is a property of the pinned source, not
+of this role.
+
+Read at `louislam/uptime-kuma` tag `2.5.3`, `server/model/monitor.js`, `beat()`:
+
+- **Detection re-arms from the DB.** The `if (!previousBeat || this.type === "push")` branch
+  re-reads the newest `heartbeat` row for a push monitor on EVERY cycle, and the push branch
+  compares `msSinceLastBeat` against `beatInterval`: a stale last beat throws `No heartbeat in
+  the time window` on the first cycle after boot, and a fresh one schedules the next check at
+  `interval - msSinceLastBeat`. The heartbeat table is on the persistent PVC, so the clock a
+  replacement inherits is the producer's real last push. With `max_retries: 0` an overdue
+  producer is DOWN within one cycle of the pod starting.
+- **The metric is not re-armed.** That healthy branch ends in `return` at the comment `No need
+  to insert successful heartbeat for push type, so end here`, before the
+  `this.prometheus?.update(bean, …)` call at the end of `beat()`. So a healthy push monitor has
+  no `monitor_status` series until its producer's next push or its timer expires — for a
+  daily producer, up to 25h. `master` carries the same `return`.
+
+What this bounds: Kuma's UI and its Discord notifications are DB-backed and see nothing wrong.
+Only the readers of `monitor_status` are blind — `probe.py monitors`, `postflight.py`'s Kuma
+gate and the uptime-kuma Grafana board. `monitors` now prints a coverage line when the exported
+set is smaller than the declared one, so the ratio cannot be read as full coverage;
+`kuma-drift` already separates a pending tile from a missing one.
+
+Two directions the issue floated, rejected: shortening the 25h intervals buys nothing for
+detection (it was never blind) and tightens the dead-man on producers that genuinely run daily;
+a Prometheus `absent()` rule has no delivery path here — `prometheus.yaml.j2` records that no
+`rule_files` exist, and monitor-bridge is this estate's alerting — and would page after every
+replacement for a window in which detection is live.
+
+### A fleet-wide `push failed (http=404)` burst is the edge, not the tokens
+`kuma-push-lib.sh` (the host crons' shared pusher) logs `push failed (http=… rc=…)` only after
+all three attempts fail. Issue #1803 read 226 such lines carrying `http=404` and `status=up` on
+2026-09-06 as Kuma rejecting the pushers' tokens — a monitor set that had moved ahead of, or
+behind, the crons — and asked for an ordering constraint. Loki has the cause: Traefik restarted
+at 07:41:43 after a host reboot, failed to download the CrowdSec bouncer plugin, and rejected
+every router that referenced the `crowdsec` Middleware, so every route on the edge answered 404
+until a deploy restarted Traefik at 11:07:41 and the plugin loaded — the `/api/push/` route
+included, and the 35 http tiles that went DOWN were right to. The 404s began at 07:42:17; Kuma
+itself started at 07:49:45, so the first of them predate the process the issue blamed. The Traefik
+startupProbe restart, the `Homelab Edge (all-clear)` tile and monitor-bridge's Traefik 404 Flood
+check own that class since the same day, and `#1321` in the issue is a coincidence — it touched
+`gitops_deploy` files only.
+
+Every burst of the final-failure line in the 15 days to 2026-09-17 was the same shape, a
+fleet-level event another check already pages: 2026-09-05 `http=403` x17 (Authelia answering
+while the k3s API was down), 2026-09-06 `http=404` x226, 2026-09-09 `rc=7` x317 (daniel-box down
+for 6h). A Kuma-side 4xx on ONE cron's tag while its siblings land is the token class the issue
+names, and it has not occurred. So no aggregate alert was added: measured against that
+population it would have paged four times for four causes that each paged already, and never
+for the class it would exist for. The census, per host and code:
+
+```
+sum by (machine, code) (count_over_time({job="syslog"}
+  |~ `push failed \(http=` | regexp `http=(?P<code>\d+)` [1d]))
+```
+
+`{job="syslog"}` is the label Alloy puts on these `logger` lines (`config.alloy.j2`); the
+transient-retry line reads `push failed transiently` and does not match. Loki's ingest time is
+not the event time — the 09-09 burst was shipped in one minute six hours after the lines were
+written — so read the timestamp inside the line.
+
 ### A startupProbe on the sidecar gated the whole pod's Service
 Until 2026-09-06 the allowance above was a startupProbe (`/health`, 30 x 10s). The kubelet holds
 `Ready = false` for a container whose startup probe has not succeeded, whether or not that

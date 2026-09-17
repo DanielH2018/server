@@ -38,10 +38,12 @@ from lib.repo_paths import REPO
 _MONITOR_STATUS_LABELS = {"0": "DOWN", "1": "UP", "2": "PENDING", "3": "MAINTENANCE"}
 
 
-def format_monitor_status(data):
+def format_monitor_status(data, declared_total=None):
     """Format Kuma's monitor_status vector (Prometheus job=uptime-kuma) into a down-monitors rollup.
 
-    Pure: takes the parsed instant-query response, returns (text, exit_code).
+    Pure: takes the parsed instant-query response, returns (text, exit_code). `declared_total`
+    is how many monitors the static-monitors template declares, or None to skip the coverage
+    line below.
 
     Kuma keeps no history of its own — that's why `alerts` reconstructs the past from Loki instead
     of asking Kuma for it — but it does hold live state, and Prometheus already scrapes that state
@@ -50,6 +52,14 @@ def format_monitor_status(data):
 
     exit_code is 0 only when every monitor reports UP (1); PENDING and MAINTENANCE count as not-up
     too, same as DOWN, since neither means "confirmed healthy".
+
+    The ratio's denominator is the EXPORTED set, not the declared one. Kuma exports a push
+    monitor only once a heartbeat has landed since the process started (see
+    `format_kuma_drift`), so for up to 25h after a pod replacement the `interval: 90000`
+    monitors have no series at all and "89/89 up" reads as full coverage while 16 tiles are
+    unreported (#1779). The coverage line names the shortfall so the ratio cannot be read that
+    way; it does not change the exit code, because absence is `kuma-drift`'s verdict — that
+    command knows which absences are pending, gated or real drift, and this one does not.
     """
     result = data.get("data", {}).get("result", [])
     if not result:
@@ -62,10 +72,13 @@ def format_monitor_status(data):
             up += 1
         else:
             problems.append(f"  {name}: {_MONITOR_STATUS_LABELS.get(status, status)}")
-    summary = f"{up}/{len(result)} monitors up"
-    if problems:
-        return "\n".join([summary] + sorted(problems)), 1
-    return summary, 0
+    lines = [f"{up}/{len(result)} monitors up"] + sorted(problems)
+    if declared_total is not None and declared_total > len(result):
+        lines.append(
+            f"  {declared_total - len(result)} of {declared_total} declared monitors have no "
+            "monitor_status series — `probe.py kuma-drift` says which and why"
+        )
+    return "\n".join(lines), 1 if problems else 0
 
 
 # kuma-drift: declared monitors vs live ones
@@ -418,6 +431,21 @@ def run_monitors(ns):
     data, err = core.fetch_json(url, resolve=pin)
     if err:
         return err
-    text, code = format_monitor_status(data)
+    text, code = format_monitor_status(data, declared_monitor_count())
     print(text)
     return code
+
+
+def declared_monitor_count():
+    """How many monitors the static-monitors template declares, or None if it cannot be read.
+
+    The count over-states by any monitor gated on a secret that is genuinely unset — the
+    coverage line only claims those monitors have no series, and defers the why to
+    `kuma-drift`, which resolves the gates. None rather than a raise: `monitors` answers
+    "what is down" and must still answer it from a checkout with no template.
+    """
+    try:
+        with open(STATIC_MONITORS_PATH) as f:
+            return len(parse_declared_monitors(f.read()))
+    except OSError:
+        return None
