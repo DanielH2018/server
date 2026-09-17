@@ -124,6 +124,15 @@ def parse_push_line(line: str) -> tuple[str, str, str, str, str] | None:
     return None
 
 
+# The crons that read KUMA_PUSH_OK and route a healthchecks.io `/fail` on a lost push, which
+# alerts at once. Their lost DOWN already pages, so counting it here is one root cause twice;
+# their `status=` lines still count as landed siblings. Pinned against the tree by
+# tests/test_check_swallowed_verdicts.py: a fourth reader has to be added here too.
+HC_ROUTED_TAGS = frozenset(
+    {"longhorn-backup-health", "pi-sd-health", "pi-recovery-health"}
+)
+
+
 def swallowed_verdicts(
     lines: list[tuple[int, str]], window: str, truncated: bool
 ) -> tuple[bool, str]:
@@ -148,6 +157,9 @@ def swallowed_verdicts(
     A swallowed `up` is not counted. Its tile goes red at the deadline for a cron that ran,
     which is a wrong diagnosis but not a hidden finding, and the library's retry (#1010) is the
     mechanism sized for that case.
+
+    A tag in HC_ROUTED_TAGS is not counted either: its own script already pages a lost push
+    through healthchecks.io.
     """
     latest: dict[str, tuple[int, str, str, str, str]] = {}
     for ts, line in lines:
@@ -159,7 +171,9 @@ def swallowed_verdicts(
         if prior is None or ts >= prior[0]:
             latest[tag] = (ts, host, kind, status, detail)
     swallowed = {
-        t: v for t, v in latest.items() if v[2] == "swallowed" and v[3] == "down"
+        t: v
+        for t, v in latest.items()
+        if v[2] == "swallowed" and v[3] == "down" and t not in HC_ROUTED_TAGS
     }
     landed = sorted(t for t, v in latest.items() if v[2] == "run")
     if not swallowed:

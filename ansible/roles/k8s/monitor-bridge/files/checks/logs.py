@@ -128,7 +128,7 @@ def with_log_errors(cfg: Config, ok: bool, msg: str) -> tuple[bool, str]:
 # and the one the Pi's promtail gives its health.log (alerts.py's `SYSLOG_ALERT_LOGQL` reads the
 # same stream).
 SWALLOWED_VERDICTS_LOGQL = '{job="syslog"} |~ `: (status=(up|down)|push failed \\()` != "push failed transiently"'
-# ~9x the population measured 2026-09-17 (548 lines / 3h) — see bridge.net.loki_lines.
+# ~9x the population measured 2026-09-17 (529 lines / 3h) — see bridge.net.loki_lines.
 SWALLOWED_VERDICTS_LIMIT = 5000
 
 
@@ -138,13 +138,24 @@ def check_swallowed_verdicts(cfg: Config) -> tuple[bool, str]:
     The library returns 0 after a failed push by design — a non-zero exit would fail the cron
     for an event already logged — so a swallowed verdict reaches nobody until the tile's
     heartbeat deadline, a day and an hour later for the daily drift producers. This reads the
-    library's own final-failure line out of Loki and pages within one cycle. Loki-dependent:
-    a raise here is a Loki outage, which Loki Reachable already pages.
+    library's own final-failure line out of Loki and pages within one cycle.
+
+    FAILS OPEN on a fetch error, on top of being in LOKI_DEPENDENT. The gate probes
+    `/loki/api/v1/labels`, which answers fast while a range query is the thing a busy Loki
+    is slow at, so a raise here would page this tile for a slow Loki rather than a lost
+    verdict. The tile's heartbeat deadline is still the backstop for the cycle this skips.
     """
     window_s = cfg.SWALLOWED_VERDICTS_WINDOW_S
-    lines = bridge.net.loki_lines(
-        cfg, SWALLOWED_VERDICTS_LOGQL, window_s, SWALLOWED_VERDICTS_LIMIT
-    )
+    try:
+        lines = bridge.net.loki_lines(
+            cfg, SWALLOWED_VERDICTS_LOGQL, window_s, SWALLOWED_VERDICTS_LIMIT
+        )
+    except Exception as e:
+        return (
+            True,
+            "swallowed-verdict scan unavailable (%s) — Loki Reachable owns a Loki fault"
+            % e,
+        )
     return swallowed_verdicts(
         lines,
         "%dh" % (window_s // 3600) if window_s % 3600 == 0 else "%ds" % window_s,

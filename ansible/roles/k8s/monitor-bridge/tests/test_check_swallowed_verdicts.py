@@ -6,10 +6,13 @@ input is the lone release-staleness-check http=500 of 2026-09-10 13:01; the nega
 the daniel-box-down burst of 2026-09-09, where every push failed and nothing landed.
 """
 
+from pathlib import Path
+
+import bridge.net
 import checks.logs
 import gates
 import registry
-from verdicts.logs import parse_push_line, swallowed_verdicts
+from verdicts.logs import HC_ROUTED_TAGS, parse_push_line, swallowed_verdicts
 
 _H = "2026-09-10T13:00:00.000000+00:00 daniel-box "
 _RUN_DOWN = _H + (
@@ -90,14 +93,13 @@ def test_a_swallowed_down_that_the_next_run_landed_is_clean():
 def test_a_fleet_wide_loss_where_nothing_lands_is_clean_and_names_the_owner():
     # 2026-09-09 18:31-19:01: daniel-box down, every cron on the estate lost its push. The
     # host and edge tiles page for that; a second page here is one root cause twice.
+    ups = _SIBLING_SWALLOWED.replace("longhorn-backup-health", "ups-secondary-health")
     ok, msg = swallowed_verdicts(
-        [(1, _RUN_DOWN), (2, _SWALLOWED_DOWN), (3, _SIBLING_SWALLOWED)],
-        "3h",
-        truncated=False,
+        [(1, _RUN_DOWN), (2, _SWALLOWED_DOWN), (3, ups)], "3h", truncated=False
     )
     assert ok, msg
     assert "fleet-wide" in msg
-    assert "longhorn-backup-health" in msg and "release-staleness-check" in msg
+    assert "ups-secondary-health" in msg and "release-staleness-check" in msg
 
 
 def test_a_swallowed_up_is_not_a_lost_verdict():
@@ -133,3 +135,42 @@ def test_the_check_is_registered_and_loki_gated():
     names = {c.name for c in registry.build_checks()}
     assert "swallowed_verdicts" in names
     assert "swallowed_verdicts" in gates.LOKI_DEPENDENT
+
+
+def test_a_tag_that_pages_its_own_lost_push_through_healthchecks_is_not_counted():
+    # longhorn-backup-health reads KUMA_PUSH_OK and sends hc-ping `/fail`, which alerts at
+    # once; a second page here is one root cause twice. Its run line still lands a sibling.
+    ok, msg = swallowed_verdicts(
+        [
+            (1, _SIBLING_SWALLOWED),
+            (2, _RUN_DOWN.replace("release-staleness-check", "disk-health")),
+        ],
+        "3h",
+        truncated=False,
+    )
+    assert ok, msg
+
+
+def test_hc_routed_tags_are_exactly_the_scripts_that_read_kuma_push_ok():
+    # Derived from the tree, not trusted from the constant: a fourth script that starts
+    # reading KUMA_PUSH_OK to route `/fail` has to be listed here, and one that stops has to
+    # be dropped, or the tile pages twice / not at all for that cron.
+    roles = Path(__file__).resolve().parents[3]
+    readers = {
+        p.name.removesuffix(".sh.j2")
+        for p in roles.rglob("templates/*.sh.j2")
+        if "KUMA_PUSH_OK" in p.read_text()
+    }
+    assert readers == HC_ROUTED_TAGS, sorted(readers ^ HC_ROUTED_TAGS)
+
+
+def test_a_fetch_error_fails_open_and_names_the_owner(monkeypatch, cfg):
+    # The Loki gate probes /labels, which stays fast while a range query is what a busy Loki
+    # is slow at, so a raise here would page this tile for a slow Loki, not a lost verdict.
+    def _raise(*a, **k):
+        raise RuntimeError("loki-homelab: timed out")
+
+    monkeypatch.setattr(bridge.net, "loki_lines", _raise)
+    ok, msg = checks.logs.check_swallowed_verdicts(cfg)
+    assert ok
+    assert "timed out" in msg and "Loki Reachable" in msg

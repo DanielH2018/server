@@ -51,6 +51,9 @@ window could list fewer recent episodes than a narrower one. The emitter/reader 
 enforced by `ansible/tests/services/test_monitor_bridge_down_line_shape.py`, and a truncated
 fetch prints its covered window *above* the episode list rather than a warning under an
 all-clear.
+Two more reader-side gaps closed with #1787: the retry-era `push failed (http=… rc=…)` line
+printed its whole scaffolding as the message, and the `push failed transiently` line that
+precedes every final failure twice was listed as an episode of its own.
 
 **Episode counts are still a lower bound against Prometheus `monitor_status`**, and that part is
 by construction: a push monitor also goes DOWN when its heartbeat expires, which writes no log

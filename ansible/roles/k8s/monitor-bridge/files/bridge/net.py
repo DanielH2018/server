@@ -252,8 +252,9 @@ def loki_lines(
     receives exactly `limit` lines has hit the cap and holds a truncated window, and has to
     say so rather than decide on the part it got.
 
-    Measured 2026-09-17 against the live Loki: `{job="syslog"}` filtered to the push-outcome
-    lines returned 548 lines over 3h in under a second, so a 5000 cap is ~9x the population.
+    Measured 2026-09-17 against the live Loki, this function, three runs: `{job="syslog"}`
+    filtered to the push-outcome lines returned 529 lines over 3h in 0.02s each, so a 5000
+    cap is ~9x the population.
     """
     now_ns = time.time_ns()
     params = {

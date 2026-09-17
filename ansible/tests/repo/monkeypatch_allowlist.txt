@@ -64,6 +64,7 @@ ansible/roles/k8s/monitor-bridge/tests/test_check_service.py 13
 ansible/roles/k8s/monitor-bridge/tests/test_check_snapshot_headroom.py 2
 ansible/roles/k8s/monitor-bridge/tests/test_check_speedtest.py 3
 ansible/roles/k8s/monitor-bridge/tests/test_check_streaks.py 6
+ansible/roles/k8s/monitor-bridge/tests/test_check_swallowed_verdicts.py 1
 ansible/roles/k8s/monitor-bridge/tests/test_check_traefik_404.py 1
 ansible/roles/k8s/monitor-bridge/tests/test_check_ups.py 1
 ansible/roles/k8s/monitor-bridge/tests/test_host_temp.py 1
