@@ -239,6 +239,13 @@ Write exploratory commands so they auto-approve; expect a prompt for the rest.
   (`> file`, `tee`, `sed -i`, subshells `(…)`, backgrounding `&`).
 - Restructure rather than loop: one `grep`/`find`/`awk` usually replaces the control flow.
 
+- **The remote-ssh auto-approve depends on a package deployed outside this repo.**
+  `.claude/hooks/_readonly_tables.py` imports its trusted-host set and secret-path pattern from
+  the dotfiles `claude_guard` package (`~/.local/share/claude-guard`) via
+  `.claude/hooks/_claude_guard.py`. A machine without that dotfiles deploy gets an `ImportError`
+  out of the hook rather than a stale local copy, so every remote-ssh command prompts instead of
+  auto-approving. `.claude/hooks/tests/test_claude_guard_import.py` is what catches that in CI.
+
 - **`./scripts/deploy_tools/gitops_tick.sh` is allow-listed but not guaranteed.** It is a write (it triggers
   a real deploy), so the auto-mode classifier judges it on its own and denied it once in seven
   runs on identical text. Measured 2026-08-22. A denial here is the classifier, not a broken

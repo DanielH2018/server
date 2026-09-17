@@ -9,10 +9,14 @@ refusal (`_SSH_SECRET`, `_SSH_GLOB`).
 
 That module imports them by bare name, which resolves both ways it is loaded: the hooks dir
 is ``sys.path[0]`` when Claude Code runs the hook, and the tests insert that dir before
-loading the hook by path. Same convention as ``_hook_common.py``. Stdlib-only.
+loading the hook by path. Same convention as ``_hook_common.py``. Stdlib-only except for the
+`claude_guard` import below, which `_claude_guard` bootstraps onto `sys.path`.
 """
 
 import re
+
+import _claude_guard  # noqa: F401  (bootstraps claude_guard onto sys.path)
+from claude_guard.tables import SECRET_PATH_RE, TRUSTED_SSH_HOSTS
 
 
 # Programs that cannot write or exec under ANY arguments
@@ -117,7 +121,8 @@ TIER1 = {
 
 # Homelab hosts whose read-only commands may auto-approve. Anything else falls
 # through to a prompt: reaching an unknown host is itself worth confirming.
-SSH_HOSTS = {"daniel-server", "daniel-pi"}
+# Defined once, in the dotfiles `claude_guard` package.
+SSH_HOSTS = frozenset(TRUSTED_SSH_HOSTS)
 
 # ssh flags that change only how we connect, never what runs. Everything absent
 # is refused, which is what keeps -L/-R/-D (forwarding), -F (alternate config),
@@ -142,15 +147,8 @@ _SSH_OPTIONS = {
 # held to a stricter standard than the local one (local `cat ~/.ssh/id_ed25519`
 # is already TIER1-approved). Mirrors the SECRET_RE in the user-level
 # allow-readonly-remote.sh, which governs the same traffic.
-_SSH_SECRET = re.compile(
-    r"\.env|\.ssh(/|\s|$)|id_rsa|id_ed25519|id_ecdsa|\.aws/credentials|\.aws/config"
-    r"|\.gnupg(/|\s|$)|\.netrc|\.pypirc|\.npmrc|/secrets(/|\s|$)|\.git-credentials"
-    r"|\.kube/config|\.docker/config\.json|\.config/gh/hosts\.yml|\.config/gcloud/"
-    r"|\.config/rclone/rclone\.conf|terraform\.tfstate|\.bash_history|\.claude\.json"
-    r"|/etc/shadow|/etc/gshadow|/proc/\S*environ|\.pem($|[^a-z])|\.key($|[^a-z])"
-    r"|\.p12($|[^a-z])|\.pfx($|[^a-z])",
-    re.IGNORECASE,
-)
+# Defined once, in the dotfiles `claude_guard` package.
+_SSH_SECRET = SECRET_PATH_RE
 
 # A glob is expanded by the REMOTE shell, after our checks have run, so a literal
 # that _SSH_SECRET doesn't match (`/proc/self/enviro?`) can still become a secret

@@ -41,14 +41,17 @@ read-only commands to fit it. Anything that writes or executes still prompts —
   numeric comparison — are conservatively rejected; use a different test or accept the prompt.)
 
 Source of truth: `.claude/hooks/auto-approve-readonly.py` holds the per-command guards and both
-entry points, `.claude/hooks/_readonly_tables.py` the allow-list and the ssh gate, and
-`.claude/hooks/_readonly_shell.py` the token splitting and the redirect rules. Tests:
-`.claude/hooks/tests/test_auto_approve_readonly.py`.
+entry points. `.claude/hooks/_readonly_tables.py` holds the allow-list and the ssh gate, except
+the trusted-host set and the secret-path pattern — those are `claude_guard.tables`'s
+`TRUSTED_SSH_HOSTS` and `SECRET_PATH_RE`, defined once in the dotfiles `claude_guard` package
+(deployed to `~/.local/share/claude-guard`) and imported through `.claude/hooks/_claude_guard.py`.
+`.claude/hooks/_readonly_shell.py` holds the token splitting and the redirect rules. Tests:
+`.claude/hooks/tests/test_auto_approve_readonly.py`, `.claude/hooks/tests/test_claude_guard_import.py`.
 The ssh case is wired separately, via `auto-approve-remote-ssh.sh` on **PermissionRequest**, because
 Claude Code evaluates `ask` rules whatever a PreToolUse hook returns, so a PreToolUse decision alone
-would never reach an ask-listed command. Registered in the *user-level* settings (chezmoi
-`settings.base.json`), not this repo's — a project's settings may only tighten what is auto-approved,
-never widen it, so that a repo can't grant itself permissions merely by being opened.
+would never reach an ask-listed command. Registered in **this repo's** `.claude/settings.json:101`
+(`PermissionRequest`, `Bash`) — not the user-level chezmoi `settings.base.json`, contrary to what
+this section previously said.
 
 **As of 2026-08-16 those PermissionRequest hooks no longer fire in a normal session.** `Bash(ssh:*)`
 and `Bash(curl:*)` were removed from the `ask` tier — they were the largest single source of prompts
