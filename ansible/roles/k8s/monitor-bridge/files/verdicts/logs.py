@@ -83,21 +83,29 @@ _SYSLOG_LINE_RE = re.compile(
 # A cron logs its verdict BEFORE it pushes — `logger -t <tag> "status=<up|down> <msg>"` — so
 # this is the record that a run happened. kuma-push-lib.sh then logs only when the push is
 # lost: `push failed (http=<code> rc=<rc>) (status=<up|down>: <msg>)`, after its retries, or
-# `push failed (status=...)` with no code on the Pi and in the pre-retry library. The
+# `push failed (status=...)` with no code on the Pi and in the pre-retry library. Since #1803
+# the http/rc pair carries ` by=kuma` when the answer was Kuma's own JSON rather than the
+# edge's page, so the pair is `http=… rc=…` followed by any further `k=v` words. The
 # transient-retry line reads `push failed transiently (...)` and matches neither.
 _RUN_RE = re.compile(r"^status=(?P<status>up|down)\b")
 _SWALLOWED_RE = re.compile(
-    r"^push failed \((?:(?P<detail>http=\S+ rc=\S+)\) \()?status=(?P<status>up|down):"
-    r"\s*(?P<msg>.*?)\)?$"
+    r"^push failed \((?:(?P<detail>http=\S+ rc=\S+(?: [a-z]+=\S+)*)\) \()?"
+    r"status=(?P<status>up|down):\s*(?P<msg>.*?)\)?$"
 )
+# The word kuma-push-lib.sh appends when the response was `application/json`: Kuma's push
+# route answered, and what it said was `Monitor not found or not active.` — no live monitor
+# holds the token the cron pushed. Traefik's no-router 404 is `text/plain` and carries nothing.
+KUMA_REJECTED = "by=kuma"
 
 
 def parse_push_line(line: str) -> tuple[str, str, str, str, str] | None:
     """(tag, host, kind, status, detail) for a push-outcome syslog line, else None.
 
-    `kind` is "run" for a cron's own `status=` line and "swallowed" for the library's final
-    `push failed` line. `detail` carries the http/rc pair on a swallowed line and the message
-    on a run line, so a page can name the failure class without a journal round trip.
+    `kind` is "run" for a cron's own `status=` line, "swallowed" for the library's final
+    `push failed` line, and "rejected" for that line when Kuma itself answered it
+    (KUMA_REJECTED in the http/rc pair). `detail` carries the http/rc pair on a swallowed or
+    rejected line and the message on a run line, so a page can name the failure class without
+    a journal round trip.
     """
     m = _SYSLOG_LINE_RE.match(line)
     if not m:
@@ -114,12 +122,13 @@ def parse_push_line(line: str) -> tuple[str, str, str, str, str] | None:
         )
     lost = _SWALLOWED_RE.match(rest)
     if lost:
+        detail = lost["detail"] or "no http code"
         return (
             m["tag"],
             m["host"],
-            "swallowed",
+            "rejected" if KUMA_REJECTED in detail.split() else "swallowed",
             lost["status"],
-            lost["detail"] or "no http code",
+            detail,
         )
     return None
 
@@ -158,6 +167,17 @@ def swallowed_verdicts(
     which is a wrong diagnosis but not a hidden finding, and the library's retry (#1010) is the
     mechanism sized for that case.
 
+    A REJECTED push — Kuma itself answered `Monitor not found or not active.`, `by=kuma` on
+    the line — is counted whatever its status and whether or not a sibling landed (#1803).
+    Kuma answering means the edge and Kuma are both up, so no other tile pages; and a token no
+    live monitor holds has no tile to go red at its deadline, so the deadline backstop above
+    does not exist for it. The cause is the cron and the static monitors carrying different
+    tokens — a static-monitors re-mint deployed ahead of the cron's re-render, or a tile
+    paused by hand — and it stays until one side is redeployed. A fleet-wide rejection
+    (every token gone — Kuma restored from an old backup) takes this tile's own token with
+    it; the three HC_ROUTED_TAGS crons page that case through healthchecks.io within their
+    own cycle, which is why they stay excluded here too.
+
     A tag in HC_ROUTED_TAGS is not counted either: its own script already pages a lost push
     through healthchecks.io.
     """
@@ -170,6 +190,21 @@ def swallowed_verdicts(
         prior = latest.get(tag)
         if prior is None or ts >= prior[0]:
             latest[tag] = (ts, host, kind, status, detail)
+    rejected = {
+        t: v
+        for t, v in latest.items()
+        if v[2] == "rejected" and t not in HC_ROUTED_TAGS
+    }
+    if rejected:
+        named = "; ".join(
+            "%s on %s (%s, status=%s)" % (tag, v[1], v[4], v[3])
+            for tag, v in sorted(rejected.items())
+        )
+        return False, (
+            "Kuma rejected the push for %s in %s — no live monitor holds the token the cron "
+            "pushes, so its verdicts reach nobody and no tile goes red; redeploy whichever of "
+            "the cron and uptime-kuma's static monitors is behind" % (named, window)
+        )
     swallowed = {
         t: v
         for t, v in latest.items()

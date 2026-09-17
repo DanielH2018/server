@@ -1020,8 +1020,16 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     a second time for one cause. That gate is what separates this from the plain count of
     push failures `uptime-kuma/CLAUDE.md` measured and rejected. A swallowed `up` is not
     counted: its tile goes red at the deadline for a cron that ran, which is the library's
-    retry's case (#1010), not a hidden finding. In `LOKI_DEPENDENT`. A fetch that hits the
-    5000-line cap says so in the message rather than deciding on the newest part.)
+    retry's case (#1010), not a hidden finding. The one push counted whatever its status and
+    company is one Kuma REJECTED — `by=kuma` in the http/rc pair, which the library appends
+    when the 404 came back as Kuma's own `application/json` rather than Traefik's `text/plain`
+    page (#1803). That is a token no live monitor holds: the edge and Kuma are both up so no
+    other tile pages, and there is no tile to reach a deadline, so the verdicts are lost for
+    as long as the cron and the static monitors carry different tokens. (The 2026-09-06 3.2h
+    burst of 602 `http=404` lines that #1803 read as this was the other kind — Traefik
+    rejecting every router over a missing crowdsec middleware, #1322 — which Traefik 404
+    Flood owns.) In `LOKI_DEPENDENT`. A fetch that hits the 5000-line cap says so in the
+    message rather than deciding on the newest part.)
   - **Kuma Notification Delivery** (a notification Kuma tried to send and dropped — added
     2026-09-17, #1891. Kuma logs `Cannot send notification to <name>` and does not retry, so
     the transition or resend behind that line reached nobody: twice during the qbittorrent

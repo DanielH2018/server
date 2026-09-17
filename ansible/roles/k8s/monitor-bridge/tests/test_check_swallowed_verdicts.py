@@ -40,6 +40,11 @@ _PI_SWALLOWED = (
 _SWALLOWED_UP = _H + (
     "release-staleness-check: push failed (http=404 rc=0) (status=up: 0 service(s) stale)"
 )
+# Kuma's own `Monitor not found or not active.` answer, as the library marks it since #1803.
+_REJECTED_UP = _H + (
+    "release-staleness-check: push failed (http=404 rc=0 by=kuma) (status=up: 0 service(s) "
+    "stale)"
+)
 
 
 def test_parse_reads_the_three_line_shapes_and_rejects_the_transient_one():
@@ -64,6 +69,13 @@ def test_parse_reads_the_three_line_shapes_and_rejects_the_transient_one():
         "swallowed",
         "down",
         "no http code",
+    )
+    assert parse_push_line(_REJECTED_UP) == (
+        "release-staleness-check",
+        "daniel-box",
+        "rejected",
+        "up",
+        "http=404 rc=0 by=kuma",
     )
     assert parse_push_line(_TRANSIENT) is None
     assert parse_push_line(_H + "sshd: Accepted publickey for ubuntu") is None
@@ -105,6 +117,27 @@ def test_a_fleet_wide_loss_where_nothing_lands_is_clean_and_names_the_owner():
 def test_a_swallowed_up_is_not_a_lost_verdict():
     ok, msg = swallowed_verdicts(
         [(1, _SWALLOWED_UP), (2, _SIBLING_RUN)], "3h", truncated=False
+    )
+    assert ok, msg
+
+
+def test_a_push_kuma_rejected_is_flagged_whatever_its_status_and_company():
+    # ACCEPT (#1803): the token the cron holds is not a live monitor. An `up` verdict, no
+    # sibling in the window — both of the conditions that keep a plain swallowed push quiet —
+    # and it still pages, because nothing else can: Kuma answered, so the edge tiles are green,
+    # and a token with no monitor has no tile to reach a deadline.
+    ok, msg = swallowed_verdicts([(1, _REJECTED_UP)], "3h", truncated=False)
+    assert not ok
+    assert "Kuma rejected the push for release-staleness-check on daniel-box" in msg
+    assert "http=404 rc=0 by=kuma, status=up" in msg
+
+
+def test_a_rejected_push_that_the_next_run_landed_is_clean():
+    # REJECT (the pair): the newest line decides here as everywhere — the tokens were
+    # re-aligned and the tag's next push landed.
+    later_run = _RUN_DOWN.replace("13:00:00", "13:30:00")
+    ok, msg = swallowed_verdicts(
+        [(1, _REJECTED_UP), (2, later_run)], "3h", truncated=False
     )
     assert ok, msg
 
