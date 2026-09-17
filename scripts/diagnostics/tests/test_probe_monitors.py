@@ -73,6 +73,14 @@ def test_declared_monitor_count_reads_the_real_template():
     assert declared is not None and declared >= 90, declared
 
 
+def test_declared_monitor_count_leaves_gated_declarations_out(tmp_path):
+    # A gated monitor whose secret is unset is never live; counting it would make the coverage
+    # line print on every healthy run, which is the line nobody reads when it matters.
+    template = tmp_path / "static-monitors.yaml.j2"
+    template.write_text(TEMPLATE_SAMPLE)
+    assert monitors.declared_monitor_count(str(template)) == 3
+
+
 def test_kuma_drift_reports_a_declared_monitor_that_is_not_live():
     # The 2026-08-20 case: the tile is absent from the exporter, not down, so `monitors`
     # reported 81/81 up for a day. Long-uptime Kuma, so PENDING cannot be the explanation.

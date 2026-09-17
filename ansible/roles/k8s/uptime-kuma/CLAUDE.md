@@ -62,8 +62,8 @@ Read at `louislam/uptime-kuma` tag `2.5.3`, `server/model/monitor.js`, `beat()`:
 
 What this bounds: Kuma's UI and its Discord notifications are DB-backed and see nothing wrong.
 Only the readers of `monitor_status` are blind — `probe.py monitors`, `postflight.py`'s Kuma
-gate and the uptime-kuma Grafana board. `monitors` now prints a coverage line when the exported
-set is smaller than the declared one, so the ratio cannot be read as full coverage;
+gate and the uptime-kuma Grafana board. `monitors` prints a coverage line when the exported
+set is smaller than the ungated declared one, so the ratio cannot be read as full coverage;
 `kuma-drift` already separates a pending tile from a missing one.
 
 Two directions the issue floated, rejected: shortening the 25h intervals buys nothing for

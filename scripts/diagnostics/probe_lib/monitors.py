@@ -436,16 +436,21 @@ def run_monitors(ns):
     return code
 
 
-def declared_monitor_count():
-    """How many monitors the static-monitors template declares, or None if it cannot be read.
+def declared_monitor_count(path=STATIC_MONITORS_PATH):
+    """How many UNGATED monitors the static-monitors template declares, or None if unreadable.
 
-    The count over-states by any monitor gated on a secret that is genuinely unset — the
-    coverage line only claims those monitors have no series, and defers the why to
-    `kuma-drift`, which resolves the gates. None rather than a raise: `monitors` answers
-    "what is down" and must still answer it from a checkout with no template.
+    Gated declarations are left out on purpose. A monitor behind `{% if <secret> %}` whose
+    secret is genuinely unset is never live, so counting it would print the coverage line on
+    every run in steady state — measured 2026-09-17 as a permanent "2 of 105" — and a line that
+    always prints is the one nobody reads when it says 16. Resolving the gates would need a
+    SOPS read, which `kuma-drift` does and this allow-listed command must not. The cost is that
+    a gated monitor whose secret IS set is not counted either, so its absence after a
+    replacement goes unreported here; `kuma-drift` still reports it. None rather than a raise:
+    `monitors` answers "what is down" and must still answer it from a checkout with no template.
     """
     try:
-        with open(STATIC_MONITORS_PATH) as f:
-            return len(parse_declared_monitors(f.read()))
+        with open(path) as f:
+            declared = parse_declared_monitors(f.read())
     except OSError:
         return None
+    return sum(1 for spec in declared.values() if not spec["gated"])
