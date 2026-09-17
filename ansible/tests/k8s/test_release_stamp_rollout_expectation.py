@@ -163,7 +163,12 @@ def test_a_role_that_rolls_nothing_records_no_entry():
 
 
 def test_roles_that_roll_nothing_still_exist_in_the_tree():
-    """Non-vacuity for the case above: the shape it protects is live, by name."""
+    """Non-vacuity for the case above: the shape it protects is live, by name.
+
+    cloudflare-ddns and pihole's `manifests_rollout: ''` are protected by the record's
+    silence (no entry, no expectation). claude-otel and pihole ALSO restart their own
+    workloads through private `rollout restart` tasks the record does not see, so the gate
+    holds no roll expectation for those -- a known gap, issue #1902."""
     opted_out = {
         p.parent.parent.name
         for p in (ANSIBLE / "roles/k8s").glob("*/tasks/main.yml")

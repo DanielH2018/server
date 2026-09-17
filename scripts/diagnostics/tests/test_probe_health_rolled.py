@@ -81,6 +81,13 @@ def test_a_restart_after_the_apply_is_rolled():
     assert health_rollout.unrolled_reason(_deploy(restarted_at=later), APPLIED) is None
 
 
+def test_a_restart_in_the_same_second_as_the_apply_is_rolled():
+    """Both stamps are second-precision and a fast role restarts within the stamp's second,
+    so the comparison is >=, not >: only an OLDER restart is evidence of no roll."""
+    same = APPLIED.strftime("%Y-%m-%dT%H:%M:%SZ")
+    assert health_rollout.unrolled_reason(_deploy(restarted_at=same), APPLIED) is None
+
+
 def test_a_restart_before_the_apply_is_not_rolled():
     earlier = (APPLIED - timedelta(days=3)).strftime("%Y-%m-%dT%H:%M:%SZ")
     reason = health_rollout.unrolled_reason(_deploy(restarted_at=earlier), APPLIED)
