@@ -18,47 +18,128 @@ MARKERS = (
     "behind_since",
     "staging_gate_override",
 )
-_LAND_RE = re.compile(r"\bland\.py\b")
+_RUN_RE = re.compile(r"\b(land\.py|deploy\.sh|ansible-playbook)\b")
 _PR_RE = re.compile(r"--pr\s+(\d+)")
+_TAGS_RE = re.compile(r"--tags[= ]+(\S+)")
+# `deploy.sh --list-services` is a read this daemon itself runs on every deploy POST, and
+# `grep` is whoever is looking for a run. Neither is a run.
+_NOT_A_RUN = re.compile(r"^grep\b|--list-services\b")
 
 
 @dataclass(frozen=True)
-class Landing:
+class Proc:
+    pid: int
+    ppid: int
+    elapsed_s: int
+    args: str
+
+
+@dataclass(frozen=True)
+class Run:
+    """One process family in flight: a landing, a deploy, or a bare lock holder.
+
+    `locks` names the lock files the family holds, by basename. A `deploy` row with no
+    locks is queued on one: `deploy.sh` takes its service locks before the playbook, so a
+    second deploy of the same service waits there, silently, for the first.
+    """
+
     pid: int
     elapsed_s: int
+    kind: str
     pr: str
+    tag: str
     args: str
+    locks: tuple[str, ...]
     log: str = ""
 
 
-def parse_ps(text: str) -> list[Landing]:
-    """`ps -eo pid=,etimes=,args=` lines to the landings among them, one row per landing.
-
-    A landing started as `uv run … land.py` shows up twice: the wrapper and the python
-    child it spawns. Rows sharing a `--pr` are one landing, so the lowest pid (the wrapper,
-    which owns the child) is kept. A row with no `--pr` names no landing to fold into and
-    is always kept.
-    """
-    out = []
+def parse_ps(text: str) -> dict[int, Proc]:
+    """`ps -eo pid=,ppid=,etimes=,args=` lines to every process, keyed by pid."""
+    procs = {}
     for line in text.splitlines():
-        parts = line.split(None, 2)
-        if len(parts) < 3 or not parts[0].isdigit():
+        parts = line.split(None, 3)
+        if len(parts) < 4 or not (parts[0].isdigit() and parts[1].isdigit()):
             continue
-        pid, etimes, args = int(parts[0]), int(parts[1]), parts[2]
-        if not _LAND_RE.search(args) or args.startswith("grep"):
+        pid, ppid, etimes, args = int(parts[0]), int(parts[1]), int(parts[2]), parts[3]
+        procs[pid] = Proc(pid, ppid, etimes, args)
+    return procs
+
+
+def parse_fuser(text: str) -> dict[str, set[int]]:
+    """`fuser <paths…>` with stderr merged into stdout: `<path>: <pid> <pid>` per HELD path.
+
+    fuser writes the path to stderr and the pids to stdout, one line per path that has a
+    holder, and nothing for a path that has none. psmisc flushes between them, so the
+    merged stream keeps the pairing (measured on psmisc 23.7 with two of three files held).
+    """
+    held: dict[str, set[int]] = {}
+    for line in text.splitlines():
+        path, sep, pids = line.partition(":")
+        if not sep:
             continue
-        m = _PR_RE.search(args)
-        out.append(Landing(pid, etimes, m.group(1) if m else "", args))
-    lowest: dict[str, Landing] = {}
-    unkeyed = []
-    for landing in out:
-        if not landing.pr:
-            unkeyed.append(landing)
-            continue
-        held = lowest.get(landing.pr)
-        if held is None or landing.pid < held.pid:
-            lowest[landing.pr] = landing
-    return sorted(unkeyed + list(lowest.values()), key=lambda l: l.pid)
+        found = {int(t) for t in pids.split() if t.isdigit()}
+        if found:
+            held[path.strip()] = found
+    return held
+
+
+def _is_run(args: str) -> bool:
+    return bool(_RUN_RE.search(args)) and not _NOT_A_RUN.search(args)
+
+
+def runs(procs: dict[int, Proc], held: dict[str, set[int]]) -> list[Run]:
+    """Fold processes into one row per family.
+
+    The topmost run or lock holder on a pid's ancestor chain owns every run and holder
+    below it. A landing is `uv run … land.py`, its python child, and the `deploy.sh` and
+    `ansible-playbook` it spawns: one row, kind `land`. A page-spawned deploy is
+    `deploy.sh`, `uv run ansible-playbook` and its child: one row, kind `deploy`. A lock
+    holder that is neither — the GitOps tick on the tree lock — is a row of kind `lock`,
+    so a held lock is never invisible because its holder matched no pattern. fuser lists
+    every process with the file open, children included, which is why the fold has to
+    include holders and not only runs.
+    """
+    holders = set().union(*held.values()) if held else set()
+    candidates = {pid for pid, p in procs.items() if _is_run(p.args)} | (
+        holders & procs.keys()
+    )
+    families: dict[int, set[int]] = {}
+    for pid in candidates:
+        root, cur, seen = pid, pid, set()
+        while cur in procs and cur not in seen:
+            seen.add(cur)
+            if cur in candidates:
+                root = cur
+            cur = procs[cur].ppid
+        families.setdefault(root, set()).add(pid)
+    rows = []
+    for root, members in families.items():
+        p = procs[root]
+        locks = tuple(
+            sorted(
+                os.path.basename(path) for path, pids in held.items() if pids & members
+            )
+        )
+        if "land.py" in p.args:
+            kind = "land"
+        elif _is_run(p.args):
+            kind = "deploy"
+        else:
+            kind = "lock"
+        pr = _PR_RE.search(p.args)
+        tag = _TAGS_RE.search(p.args)
+        rows.append(
+            Run(
+                p.pid,
+                p.elapsed_s,
+                kind,
+                pr.group(1) if pr else "",
+                tag.group(1) if tag else "",
+                p.args,
+                locks,
+            )
+        )
+    return sorted(rows, key=lambda r: r.pid)
 
 
 def log_path_of(pid: int) -> str:
@@ -67,12 +148,6 @@ def log_path_of(pid: int) -> str:
         return os.readlink(f"/proc/{pid}/fd/1")
     except OSError:
         return ""
-
-
-def parse_fuser_pid(stdout: str) -> int | None:
-    """The flock parent: the lowest pid fuser lists on the lock file."""
-    pids = [int(t) for t in stdout.split() if t.isdigit()]
-    return min(pids) if pids else None
 
 
 def read_state(state_dir: Path) -> dict[str, str]:

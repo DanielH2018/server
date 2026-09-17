@@ -28,7 +28,11 @@ from typing import ClassVar
 import deploy_ui_reads as reads
 import deploy_ui_writes as writes
 
-LOCK = "/var/lock/server-git-tree.lock"
+# The locks the in-flight panel reads. The tree lock is held for the snapshot only (ADR-0017),
+# so for nearly all of a deploy the running thing is a `server-deploy-<tag>.lock` holder --
+# or `server-deploy-all.lock`, taken shared by every tagged run and exclusive by a full one.
+TREE_LOCK = "server-git-tree.lock"
+SERVICE_LOCK_GLOB = "server-deploy-*.lock"
 PAGE = Path(__file__).with_name("deploy_ui.html")
 STALE_CACHE_S = 60
 
@@ -40,6 +44,7 @@ class Config:
     log_dir: Path
     bind: str
     port: int
+    lock_dir: Path = Path("/var/lock")
     pr_cache_s: int = 60
 
     @classmethod
@@ -53,6 +58,7 @@ class Config:
             ),
             bind=e("DEPLOY_UI_BIND", "127.0.0.1"),
             port=int(e("DEPLOY_UI_PORT", "8790")),
+            lock_dir=Path(e("DEPLOY_UI_LOCKS", "/var/lock")),
         )
 
 
@@ -73,8 +79,12 @@ class App:
         self._stale_cache: tuple[float, list] | None = None
 
     # ---- subprocess edge ----
-    def _capture(self, argv: list[str], timeout: int):
+    def _capture(self, argv: list[str], timeout: int, merge_stderr: bool = False):
         """Run argv in the repo and return the CompletedProcess, whatever its exit code.
+
+        `merge_stderr` folds stderr into stdout in write order, for a command whose two
+        streams only mean something together (fuser names the file on one and its holders
+        on the other).
 
         Raises:
             Unavailable: the command could not be run or timed out.
@@ -83,7 +93,8 @@ class App:
             return self.run(
                 argv,
                 cwd=self.cfg.repo,
-                capture_output=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT if merge_stderr else subprocess.PIPE,
                 text=True,
                 timeout=timeout,
                 check=False,
@@ -91,29 +102,47 @@ class App:
         except (OSError, subprocess.SubprocessError) as exc:
             raise Unavailable(f"{argv[0]}: {exc}") from exc
 
-    def _out(self, argv: list[str], timeout: int, ok_rcs=(0,)) -> str:
-        r = self._capture(argv, timeout)
+    def _out(
+        self, argv: list[str], timeout: int, ok_rcs=(0,), merge_stderr: bool = False
+    ) -> str:
+        r = self._capture(argv, timeout, merge_stderr)
         if r.returncode not in ok_rcs:
             raise Unavailable(
-                f"{argv[0]} exited {r.returncode}: {r.stderr.strip()[:200]}"
+                f"{argv[0]} exited {r.returncode}: {(r.stderr or '').strip()[:200]}"
             )
         return r.stdout
 
     # ---- reads ----
+    def _lock_paths(self) -> list[str]:
+        """The tree lock plus every service lock file that exists, absolute, sorted."""
+        d = self.cfg.lock_dir
+        paths = sorted(d.glob(SERVICE_LOCK_GLOB))
+        if (d / TREE_LOCK).exists():
+            paths.insert(0, d / TREE_LOCK)
+        return [str(p) for p in paths]
+
     def inflight(self) -> dict:
-        ps = self._out(["ps", "-eo", "pid=,etimes=,args="], 10)
-        landings = [
-            {**l.__dict__, "log": reads.log_path_of(l.pid)} for l in reads.parse_ps(ps)
+        """Every landing, deploy and lock holder as one row each, with the locks it holds.
+
+        `locks_watched` names the files fuser was asked about. An empty list is its own
+        state on the page: `free` over no files would be the empty-panel trap this module's
+        docstring names. A holder this user cannot see in `/proc` (a root-owned tick) is a
+        limit of fuser, not of the read, and reads as free.
+        """
+        ps = self._out(["ps", "-eo", "pid=,ppid=,etimes=,args="], 10)
+        paths = self._lock_paths()
+        held = (
+            reads.parse_fuser(
+                self._out(["fuser", *paths], 5, ok_rcs=(0, 1), merge_stderr=True)
+            )
+            if paths
+            else {}
+        )
+        runs = [
+            {**r.__dict__, "log": reads.log_path_of(r.pid)}
+            for r in reads.runs(reads.parse_ps(ps), held)
         ]
-        holder = None
-        pid = reads.parse_fuser_pid(self._out(["fuser", LOCK], 5, ok_rcs=(0, 1)))
-        if pid is not None:
-            line = self._out(
-                ["ps", "-o", "etimes=,args=", "-p", str(pid)], 5, ok_rcs=(0, 1)
-            ).strip()
-            et, _, args = line.partition(" ")
-            holder = {"pid": pid, "elapsed_s": int(et or 0), "args": args.strip()[:200]}
-        return {"landings": landings, "lock_holder": holder}
+        return {"runs": runs, "locks_watched": [os.path.basename(p) for p in paths]}
 
     def stale(self) -> dict:
         with self._stale_lock:
@@ -214,7 +243,12 @@ class App:
             return 400, "since must be a 7-40 character hex sha"
         refusal = writes.guard_land(
             pr,
-            reads.parse_ps(self._out(["ps", "-eo", "pid=,etimes=,args="], 10)),
+            reads.runs(
+                reads.parse_ps(
+                    self._out(["ps", "-eo", "pid=,ppid=,etimes=,args="], 10)
+                ),
+                {},
+            ),
             self.state()["hold_sha"],
         )
         if refusal:
@@ -249,7 +283,9 @@ class App:
             pid = int(body.get("pid", 0))
         except TypeError, ValueError:
             return 400, "pid must be an integer"
-        listed = {l["pid"] for l in self.inflight()["landings"]}
+        # Only a landing is cancellable from the page. SIGTERM to a deploy mid-play leaves
+        # whatever applied before it live (deploy.sh exit 20), which is not a cancel.
+        listed = {r["pid"] for r in self.inflight()["runs"] if r["kind"] == "land"}
         refusal = writes.guard_cancel(pid, listed)
         if refusal:
             return 409, refusal

@@ -164,7 +164,9 @@ def _defines_only(key: str, path: str, ctx: Context) -> bool:
     The one unsafe direction the whole-line rule leaves: a continuation line of a block
     scalar (`key: |`) that begins with `#` is content Ansible does read, and this skips it,
     so a key consumed only there would narrow rather than refuse. No block scalar in
-    `ansible/inventory/` has such a line; finding one is a reason to parse instead.
+    `ansible/inventory/` has such a line, and the one that appears is a reason to parse
+    instead. ENFORCED: `ansible/tests/deploy/
+    test_inventory_block_scalars_have_no_comment_shaped_lines.py` fails on the first one.
     """
     defines = re.compile(rf"^{re.escape(key)}\s*:")
     mentions = re.compile(rf"(?<!\w){re.escape(key)}(?!\w)")

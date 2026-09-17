@@ -25,10 +25,23 @@ class FakeRun:
         return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
 
 
-PS = " 4321   125 /x/python3 scripts/deploy_tools/land.py --pr 1543 --since 72c1a41\n"
+# A landing, a page-spawned deploy (deploy.sh and the playbook it runs, holding its two
+# service locks), and a second deploy of the same service queued on that lock.
+PS = """\
+ 4321     1   125 /x/python3 scripts/deploy_tools/land.py --pr 1543 --since 72c1a41
+ 5000     1    90 bash ./scripts/deploy.sh --tags n8n
+ 5001  5000    88 /x/python3 /x/ansible-playbook ansible/deploy.yml --tags n8n
+ 5100     1    30 bash ./scripts/deploy.sh --tags n8n
+"""
+# fuser with stderr merged: `<path>: <pids>` for each HELD file only; the argv names
+# every lock file under the App's lock_dir, so the prefix is the command alone.
+FUSER = """\
+/var/lock/server-deploy-all.lock: 5000 5001
+/var/lock/server-deploy-n8n.lock: 5000 5001
+"""
 TABLE = {
-    ("ps", "-eo", "pid=,etimes=,args="): (PS, 0),
-    ("fuser", "/var/lock/server-git-tree.lock"): ("4321", 0),
+    ("ps", "-eo", "pid=,ppid=,etimes=,args="): (PS, 0),
+    ("fuser",): (FUSER, 0),
     (
         "uv",
         "run",
@@ -52,13 +65,27 @@ HDRS = {"X-Deploy-UI": "1", "Content-Type": "application/json"}
 
 
 @pytest.fixture
-def app(tmp_path, state_dir):
+def lock_dir(tmp_path):
+    d = tmp_path / "lock"
+    d.mkdir()
+    for name in (
+        "server-git-tree.lock",
+        "server-deploy-all.lock",
+        "server-deploy-n8n.lock",
+    ):
+        (d / name).touch()
+    return d
+
+
+@pytest.fixture
+def app(tmp_path, state_dir, lock_dir):
     cfg = deploy_ui.Config(
         repo=tmp_path,
         state_dir=state_dir,
         log_dir=tmp_path / "logs",
         bind="127.0.0.1",
         port=0,
+        lock_dir=lock_dir,
     )
     return deploy_ui.App(cfg, run=FakeRun(dict(TABLE)))
 
@@ -72,15 +99,60 @@ def test_index_serves_the_page(app):
     assert status == 200 and "<title>Deploy queue</title>" in html
 
 
-def test_inflight_lists_landings_and_holder_is_clean(app):
+def test_inflight_lists_landing_deploy_and_queued_deploy_is_clean(app):
     b = body(app.get("/api/inflight"))
-    assert b["landings"][0]["pr"] == "1543"
-    assert b["lock_holder"]["pid"] == 4321
+    rows = {r["pid"]: r for r in b["runs"]}
+    assert rows[4321]["kind"] == "land" and rows[4321]["pr"] == "1543"
+    # The playbook (5001) folds into the deploy.sh that spawned it; the row carries the
+    # locks the family holds, and the tree lock is one of the files fuser was asked about.
+    assert set(rows) == {4321, 5000, 5100}
+    assert rows[5000]["kind"] == "deploy" and rows[5000]["tag"] == "n8n"
+    assert rows[5000]["locks"] == ["server-deploy-all.lock", "server-deploy-n8n.lock"]
+    assert rows[5100]["locks"] == []
+    assert b["locks_watched"] == [
+        "server-git-tree.lock",
+        "server-deploy-all.lock",
+        "server-deploy-n8n.lock",
+    ]
+
+
+def test_inflight_asks_fuser_about_every_lock_file_is_clean(app, lock_dir):
+    app.get("/api/inflight")
+    fuser = next(c for c in app.run.calls if c[0] == "fuser")
+    assert fuser == [
+        "fuser",
+        *(
+            str(lock_dir / n)
+            for n in (
+                "server-git-tree.lock",
+                "server-deploy-all.lock",
+                "server-deploy-n8n.lock",
+            )
+        ),
+    ]
+
+
+def test_inflight_with_no_lock_files_says_so_is_flagged(tmp_path, state_dir):
+    """`free` over no files is the empty-panel trap; the page needs the count to tell."""
+    empty = tmp_path / "nolocks"
+    empty.mkdir()
+    cfg = deploy_ui.Config(
+        repo=tmp_path,
+        state_dir=state_dir,
+        log_dir=tmp_path,
+        bind="",
+        port=0,
+        lock_dir=empty,
+    )
+    app = deploy_ui.App(cfg, run=FakeRun(dict(TABLE)))
+    b = body(app.get("/api/inflight"))
+    assert b["locks_watched"] == []
+    assert not any(c[0] == "fuser" for c in app.run.calls)
 
 
 def test_inflight_degrades_when_ps_fails_is_flagged(tmp_path, state_dir):
     t = dict(TABLE)
-    t[("ps", "-eo", "pid=,etimes=,args=")] = ("", "raise")
+    t[("ps", "-eo", "pid=,ppid=,etimes=,args=")] = ("", "raise")
     cfg = deploy_ui.Config(
         repo=tmp_path, state_dir=state_dir, log_dir=tmp_path, bind="", port=0
     )
@@ -226,6 +298,12 @@ def test_hold_clear_pair_is_clean(app, state_dir, monkeypatch):
         "/api/hold/clear", HDRS, json.dumps({"expected_sha": "deadbeef"})
     )
     assert status == 200 and not (state_dir / "hold_plane").exists()
+
+
+def test_cancel_deploy_row_is_flagged(app):
+    """A deploy is listed in flight but is not cancellable: SIGTERM mid-play is exit 20."""
+    status, text = app.post("/api/cancel", HDRS, json.dumps({"pid": 5000}))
+    assert status == 409 and "5000" in text
 
 
 def test_cancel_unlisted_pid_is_flagged(app):

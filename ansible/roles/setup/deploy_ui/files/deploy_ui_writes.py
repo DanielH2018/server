@@ -15,7 +15,7 @@ import time
 from collections.abc import Mapping
 from pathlib import Path
 
-from deploy_ui_reads import Landing
+from deploy_ui_reads import Run
 
 REQUIRED_HEADER = "X-Deploy-UI"
 
@@ -53,7 +53,7 @@ def _hold_refusal(hold_sha: str) -> str | None:
     return f"deployer holds {hold_sha}; clear the hold first" if hold_sha else None
 
 
-def guard_land(pr: str, inflight: list[Landing], hold_sha: str) -> str | None:
+def guard_land(pr: str, inflight: list[Run], hold_sha: str) -> str | None:
     """Refuse a duplicate landing for the same PR, or any landing while a hold is set."""
     if any(l.pr == pr for l in inflight):
         return f"a landing for PR {pr} is already running"

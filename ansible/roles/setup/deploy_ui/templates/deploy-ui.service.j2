@@ -12,6 +12,7 @@ Environment=DEPLOY_UI_BIND={{ server_ip }}
 Environment=DEPLOY_UI_PORT={{ deploy_ui_port }}
 Environment=DEPLOY_UI_REPO=/home/{{ sys_user }}/server
 Environment=DEPLOY_UI_STATE=/var/lib/gitops-deploy
+Environment=DEPLOY_UI_LOCKS=/var/lock
 Environment=DEPLOY_UI_LOGS=/home/{{ sys_user }}/.local/state/deploy-ui
 # Same interpreter pin as gitops-deploy.service. --no-python-downloads makes the pin
 # enforcement rather than a request: gitops-deploy is the ONLY unit exempt from it, because

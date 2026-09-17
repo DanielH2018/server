@@ -14,7 +14,7 @@ pre{background:var(--mantle);border:1px solid var(--surface1);padding:10px;max-h
 #msg{min-height:1.4em;color:var(--yellow)}
 </style></head><body><main>
 <h1>Deploy queue</h1><div id="msg"></div>
-<h2>Lock and landings in flight</h2><div id="inflight"></div>
+<h2>Locks, landings and deploys in flight</h2><div id="inflight"></div>
 <h2>Merged but undeployed</h2><div id="stale"></div>
 <h2>Deployer state</h2><div id="state"></div>
 <h2>Open pull requests</h2><div id="prs"></div>
@@ -27,9 +27,10 @@ async function post(path,payload){const r=await fetch(path,{method:'POST',header
   document.getElementById('msg').textContent=r.status+' '+t;if(r.status===202){logPath=JSON.parse(t).log;}refresh();}
 async function panel(id,path,render){const el=document.getElementById(id);try{const r=await fetch(path);const b=await r.json();
   el.innerHTML=b.unavailable?`<span class="unavail">unavailable: ${esc(b.unavailable)}</span>`:render(b);}catch(e){el.innerHTML=`<span class="unavail">unavailable: ${esc(e)}</span>`;}}
-function inflight(b){const h=b.lock_holder;let s=`<p>Lock: ${h?`<code>${esc(h.args)}</code> pid ${h.pid}, ${h.elapsed_s}s`:'<span class="clear">free</span>'}</p>`;
-  if(!b.landings.length)return s+'<p class="mute">no landings in flight</p>';
-  return s+'<table><tr><th>PR</th><th>pid</th><th>elapsed</th><th>command</th><th></th></tr>'+b.landings.map(l=>`<tr><td>#${esc(l.pr)}</td><td>${l.pid}</td><td>${l.elapsed_s}s</td><td><code>${esc(l.args)}</code><br><span class="mute">${esc(l.log)}</span></td><td><button class="danger" onclick="post('/api/cancel',{pid:${l.pid}})">cancel</button></td></tr>`).join('')+'</table>';}
+function inflight(b){const held=b.runs.filter(r=>r.locks.length);
+  let s=`<p>Locks: ${!b.locks_watched.length?'<span class="unavail">no lock files found</span>':held.length?held.map(r=>`<code>${esc(r.locks.join(' '))}</code> pid ${r.pid}, ${r.elapsed_s}s`).join('; '):`<span class="clear">free</span> <span class="mute">(${b.locks_watched.length} watched)</span>`}</p>`;
+  if(!b.runs.length)return s+'<p class="mute">nothing in flight</p>';
+  return s+'<table><tr><th>kind</th><th>PR / tag</th><th>pid</th><th>elapsed</th><th>locks</th><th>command</th><th></th></tr>'+b.runs.map(r=>`<tr><td>${esc(r.kind)}</td><td>${r.pr?'#'+esc(r.pr):esc(r.tag)}</td><td>${r.pid}</td><td>${r.elapsed_s}s</td><td>${r.locks.length?esc(r.locks.join(' ')):r.kind==='deploy'?'<span class="mute">queued on lock</span>':''}</td><td><code>${esc(r.args)}</code><br><span class="mute">${esc(r.log)}</span></td><td>${r.kind==='land'?`<button class="danger" onclick="post('/api/cancel',{pid:${r.pid}})">cancel</button>`:''}</td></tr>`).join('')+'</table>';}
 function stale(b){if(!b.stale.length)return '<p class="clear">every release is current</p>';
   return '<table><tr><th>service</th><th>why</th><th></th></tr>'+b.stale.map(r=>`<tr><td>${esc(r.service)}</td><td>${esc(r.reason)}</td><td><button onclick="post('/api/deploy',{tag:'${esc(r.service)}'})">deploy</button></td></tr>`).join('')+'</table>';}
 function state(b){const row=(k,v,extra='')=>`<tr><td>${k}</td><td>${v?`<code>${esc(v)}</code>`:'<span class="clear">clear</span>'}</td><td>${extra}</td></tr>`;
