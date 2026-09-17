@@ -1,10 +1,10 @@
 {% from 'ingressroute.yml.j2' import ingressroute, monitoring_route with context %}
 ---
 {#
-  csp-karakeep rides on both routes here, where the Docker labels() call attaches it to the main
-  router only. That is not a divergence worth avoiding: the extra coverage is the /api path,
-  which serves JSON, and a CSP on JSON does nothing — the compose template says as much where it
-  excludes the bypass router.
+  csp-karakeep rides on the main route only. The bypass documents the macro renders from
+  bridge_bypass_prefixes carry rate-limit alone, and that is fine: they serve JSON, and a CSP on
+  JSON does nothing — the archived compose template says as much where it excludes the bypass
+  router.
 #}
 {{ ingressroute(
     container_item.name,

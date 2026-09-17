@@ -5,8 +5,11 @@ Meilisearch Deployment for search, and a `time-tagger` sidecar that calls the ap
 loop to auto-tag bookmarks.
 
 ## At a glance
-- **Deploy tag:** `--tags "karakeep"`. Route: `karakeep.<domain>`, Authelia — except `/api/v1`,
-  deliberately public (Bearer-token auth; the browser extension and mobile app can't pass 2FA).
+- **Deploy tag:** `--tags "karakeep"`. Route: `karakeep.<domain>`, Authelia — except
+  `/api/v1/`, `/api/trpc/` and `/api/assets`, deliberately public (Bearer-token auth; the
+  browser extension and mobile app can't pass 2FA, and they speak tRPC, not the REST API).
+  `/api/auth/*` (next-auth's password login) stays behind Authelia: the bypass was `/api/`
+  until #1929, which put the app password alone in front of it on the internet.
 - **Persists:** `karakeep-data` (`longhorn`, backed up, ~487M) — bookmark library, page
   snapshots, `db.db`. `karakeep-meili` (`longhorn-nobackup`, ~286M) — the search index,
   deliberately unseeded and unbacked-up: it's rebuildable from `db.db` by reindexing.
