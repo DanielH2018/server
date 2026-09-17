@@ -323,7 +323,10 @@ class DeployerState:
 
         The first-seen stamp survives across the streak and only `last_seen` and `count`
         move: the age is how long a hand-held lock has kept the tick from deploying, and each
-        further tick that defers is more of the same waiting, not a fresh start.
+        further tick that defers is more of the same waiting, not a fresh start. It survives
+        a CHANGE of lock name too, on purpose: the streak measures "this deployer could not
+        deploy", not one lock's age, and two holders wedging alternate ticks would otherwise
+        reset the clock between them and never page. The marker names the latest lock.
 
         Args:
             origin: the origin SHA this tick was trying to reach.
