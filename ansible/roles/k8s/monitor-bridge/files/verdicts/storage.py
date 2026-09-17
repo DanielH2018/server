@@ -317,7 +317,10 @@ def pvc_fullness_verdict(
     15-minute updater cycle, because a Steam update stages a fourth copy of the install before
     swapping it in. A percentage cannot see that coming — 85% of a 10 Gi claim is 1.5 G of
     headroom against a 2.2 G copy — so such a claim declares the size of its largest transient
-    and breaches while its free bytes are below it, whatever its percentage reads. A rate
+    and breaches while its free bytes are below it, whatever its percentage reads. The floor
+    is SIZE-INDEPENDENT where the percentage is not: at 20 Gi the two arms happen to meet at
+    3 GiB free, but a resize moves the percentage's meaning silently and leaves the floor
+    where the transient is, which is the property the arm exists for. A rate
     signal on used bytes was rejected: the updater's cycle is 15 minutes and this check runs
     every 300 s, so a window wide enough to be stable fires after the ENOSPC as often as before
     it. A declared floor whose claim reports no free bytes is a BREACH, not silence — the same
