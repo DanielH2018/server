@@ -34,10 +34,11 @@ Where the long form lives, by topic:
 
 ## Autonomous-role contract (the crons that change state with no human in the loop)
 
-`tasks/health-crons.yml` installs a dozen crons. Most of them read the cluster and push a
-Kuma tile. Four change state, and their authority is written here so a later edit cannot
-quietly widen it — the same reason `k8s/autofix-bridge` and `initial_setup` carry this
-section.
+`tasks/health-crons.yml` installs a dozen crons, and most of them read the cluster and push
+a Kuma tile. Three of those crons change state, and so do the Longhorn RecurringJobs
+`tasks/longhorn.yml` applies as a manifest. The authority of those four actuators is written
+here so a later edit cannot quietly widen it — the same reason `k8s/autofix-bridge` and
+`initial_setup` carry this section.
 
 - **Scope, per actuator:**
   - **Longhorn filesystem trim** (`longhorn-trim-volumes.sh`, daily

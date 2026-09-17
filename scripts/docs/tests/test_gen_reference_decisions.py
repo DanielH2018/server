@@ -423,3 +423,15 @@ def test_the_counterexample_exemption_is_by_token_not_by_file(tmp_path):
     (tmp_path / "scripts").mkdir()
     unresolved = g.find_unresolved_pointers(_rows(tmp_path), tmp_path)
     assert [p for _r, p in unresolved] == ["scripts/nowhere.py"]
+
+
+def test_every_counterexample_exemption_still_names_a_live_pointer():
+    """An entry in `_COUNTEREXAMPLE_POINTERS` whose marker was reworded is dead text, and a
+    later genuinely dangling pointer with the same token in that file would ride it through.
+    """
+    rows = _live_rows()
+    for path, pointer in g._COUNTEREXAMPLE_POINTERS:
+        carried = [
+            r for r in rows if r["path"] == path and pointer in g._pointers_in(r, REPO)
+        ]
+        assert carried, f"{path} no longer carries the exempt pointer {pointer}"
