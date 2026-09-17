@@ -24,7 +24,11 @@ that no longer exists. `k8s/terraria` is the sibling this role copies.
   the router forward has to target a DHCP/ARP-known device, so not a MetalLB VIP
 - **Storage:** two claims on deliberately different backup postures —
   `valheim-config` (`longhorn`, **backed up**) for worlds/lists/prefs, and
-  `valheim-server` (`longhorn-nobackup`) for the SteamCMD install (1.8 G download, 3.8 G on disk)
+  `valheim-server` (`longhorn-nobackup`) for the SteamCMD install. 1.8 G download, 2.2 G
+  unpacked, but the image keeps three copies of it (`dl/server`, `server`, `bepinex`) and
+  writes a fourth into `bepinex.tmp` on every game update — 7.7 G at rest, ~10 G at the
+  peak. The claim is 20Gi for that peak; at 10Gi the 2026-09-17 update hit ENOSPC (#1866),
+  and the `# DECIDED:` block at `valheim_k8s_server_size` in `defaults/main.yml` has the numbers.
 - **Auth:** none possible — raw UDP game protocol, so no Traefik, no Authelia, no CrowdSec
   HTTP chain. The join password is the only access control.
 - **Config in:** `ansible/inventory/host_vars/daniel-box.yml` → `containers_list`
