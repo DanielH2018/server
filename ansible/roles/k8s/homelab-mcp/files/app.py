@@ -46,6 +46,11 @@ FILE_MAX_BYTES = 256 * 1024
 # The external hostname Traefik forwards. Must be allowlisted or the MCP transport's
 # DNS-rebinding guard rejects the request with 421 before auth is ever checked.
 PUBLIC_HOST = os.environ.get("MCP_PUBLIC_HOST", "")
+# The zones cert_expiry may dial (comma-separated suffixes) and the ports it may use. Unset
+# admits nothing: the tool then refuses every target rather than becoming a TCP-connect
+# oracle sourced from the pod (#1931). deployment.yaml.j2 renders both from `domain`.
+CERT_EXPIRY_DOMAINS = os.environ.get("CERT_EXPIRY_DOMAINS", "")
+CERT_EXPIRY_PORTS = os.environ.get("CERT_EXPIRY_PORTS", "443")
 
 _client = httpx.Client(timeout=httpx.Timeout(15.0))
 _hosts, _origins = safe_reads.allowed_hosts_and_origins(PUBLIC_HOST)
@@ -254,7 +259,15 @@ def disk_health() -> dict:
 
 @mcp.tool()
 def cert_expiry(host: str, port: int = 443) -> dict:
-    """TLS certificate expiry for host:port."""
+    """TLS certificate expiry for host:port, for a hostname this homelab routes."""
+    if not safe_reads.cert_target_allowed(
+        host, port, CERT_EXPIRY_DOMAINS, CERT_EXPIRY_PORTS
+    ):
+        raise ValueError(
+            f"{host}:{port} is not a TLS endpoint this homelab routes; cert_expiry accepts "
+            f"a hostname under {CERT_EXPIRY_DOMAINS or '(no zone configured)'} "
+            f"on port {CERT_EXPIRY_PORTS}"
+        )
     ctx = safe_reads.tls_context()
     with socket.create_connection((host, port), timeout=10) as sock:
         with ctx.wrap_socket(sock, server_hostname=host) as ss:

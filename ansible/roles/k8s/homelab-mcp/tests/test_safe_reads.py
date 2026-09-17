@@ -11,6 +11,7 @@ sys.path.insert(
 from safe_reads import (
     allowed_hosts_and_origins,
     bearer_token_valid,
+    cert_target_allowed,
     container_ref_valid,
     docker_base_or_raise,
     entity_id_valid,
@@ -355,3 +356,52 @@ def test_tls_context_states_the_protocol_floor():
     import ssl
 
     assert tls_context().minimum_version == ssl.TLSVersion.TLSv1_2
+
+
+# --- cert_target_allowed (#1931) ---------------------------------------------------------
+# cert_expiry hands its host/port to socket.create_connection; this predicate is what keeps a
+# bearer holder from using the pod as a TCP-connect oracle. Each shape has a clean and a
+# flagged half so the guard cannot stop matching unnoticed.
+
+
+@pytest.mark.parametrize(
+    "host,port",
+    [
+        ("example.com", 443),
+        ("n8n.example.com", 443),
+        ("grafana.local.example.com", 443),
+        ("N8N.Example.COM.", 443),  # case and a trailing dot are DNS-equivalent
+    ],
+)
+def test_cert_target_under_the_routed_zone_is_clean(host, port):
+    assert cert_target_allowed(host, port, "example.com")
+
+
+@pytest.mark.parametrize(
+    "host,port",
+    [
+        ("evil-example.com", 443),  # suffix match must sit on a label boundary
+        ("example.com.evil.net", 443),
+        ("10.42.0.7", 443),  # pod IP literal
+        ("127.0.0.1", 443),
+        ("n8n", 5678),  # a bare in-cluster Service name
+        ("n8n.example.com", 5678),  # the right zone on the wrong port
+        ("example.com", 80),
+        ("", 443),
+        ("n8n.example.com/../x", 443),
+    ],
+)
+def test_cert_target_off_the_routed_zone_is_flagged(host, port):
+    assert not cert_target_allowed(host, port, "example.com")
+
+
+def test_cert_target_with_no_zone_configured_admits_nothing():
+    """Unset env must fail closed: an empty allowlist is not an absent allowlist."""
+    assert not cert_target_allowed("example.com", 443, "")
+
+
+def test_cert_target_honours_a_second_zone_and_port():
+    assert cert_target_allowed(
+        "a.other.net", 8443, "example.com, other.net", "443,8443"
+    )
+    assert not cert_target_allowed("a.other.net", 443, "example.com", "443,8443")

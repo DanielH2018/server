@@ -76,6 +76,12 @@ spec:
             # Trusted host for the MCP transport's DNS-rebinding guard (else 421).
             - name: MCP_PUBLIC_HOST
               value: mcp.local.{{ domain }}
+            # The only destinations cert_expiry may dial: hostnames under the routed zone, on
+            # Traefik's HTTPS port. Unset, the tool refuses every target (#1931).
+            - name: CERT_EXPIRY_DOMAINS
+              value: "{{ domain }}"
+            - name: CERT_EXPIRY_PORTS
+              value: "443"
             - name: PORT
               value: "{{ container_item.port }}"
             - name: PYTHONDONTWRITEBYTECODE

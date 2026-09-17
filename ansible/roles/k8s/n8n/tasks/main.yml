@@ -81,14 +81,14 @@
   become: true
   changed_when: true
 
-# The probe's FIRST act is a control check against n8n:5678, and it exits 1 if that fails —
-# deliberately, because a probe that cannot reach the service proves nothing about the policy.
-# That control races n8n's own rollout. roles/k8s/manifests no longer waits inline; it queues the
-# rollout for k8s/rollout-drain, which drains at the END of the play (see that role's header), so
-# without this wait the probe fires while n8n is still rolling and the control fails on a service
-# that is merely not up YET. Observed 2026-08-16: n8n's pod started 14:52, the probe ran 14:53:04
-# and failed 4s later with "CONTROL FAILED: cannot reach n8n:5678 either" — a red deploy that said
-# nothing about the NetworkPolicy. Re-running against an already-up n8n passed.
+# The probe asserts that n8n:5678 is REFUSED from an unlabelled pod, and a refusal proves the
+# policy only if n8n is up: a pod that is merely not ready YET refuses the same way, and the Job
+# would go green for a reason that has nothing to do with the NetworkPolicy. This wait is what
+# makes the refusal attributable. (Until 2026-09-17 the control dialled n8n:5678 itself and the
+# same race read the other way — a red deploy on a service that was not up yet. Observed
+# 2026-08-16: n8n's pod started 14:52, the probe ran 14:53:04 and failed 4s later with "CONTROL
+# FAILED: cannot reach n8n:5678 either". roles/k8s/manifests no longer waits inline; it queues
+# the rollout for k8s/rollout-drain, which drains at the END of the play.)
 #
 # `rollout status`, NOT `kubectl wait --for=condition=Available`: n8n is single-replica, so the OLD
 # pod satisfies Available for the whole rolling update and the wait returns before the new pod is
@@ -117,8 +117,9 @@
       job/n8n-netpol-probe --timeout=120s
   become: true
   changed_when: false
-  # The Job succeeds only when the connection is REFUSED or times out. A pod that is not the
-  # runners reaching 5679 fails the Job, and therefore the deploy.
+  # The Job succeeds only when BOTH connections are REFUSED or time out. An unlabelled pod
+  # reaching 5678 (traefik and monitor-bridge only) or 5679 (the runners only) fails the Job,
+  # and therefore the deploy.
   register: n8n_netpol_probe
   failed_when: n8n_netpol_probe.rc != 0
 
@@ -126,5 +127,7 @@
   tags: [deploy]
   ansible.builtin.debug:
     msg: >-
-      NetworkPolicy n8n-broker verified: a pod without app=n8n-runners cannot reach
-      n8n:{{ n8n_k8s_broker_port }}, and the runners' initContainer proves the runners can.
+      NetworkPolicy n8n-broker verified: an unlabelled pod reaches neither
+      n8n:{{ container_item.port }} (traefik and monitor-bridge only) nor
+      n8n:{{ n8n_k8s_broker_port }} (the runners only); the runners' initContainer proves the
+      runners can reach the broker.

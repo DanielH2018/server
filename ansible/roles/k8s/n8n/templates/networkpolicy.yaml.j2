@@ -14,6 +14,9 @@
 #
 # The token is still a gate, not a replacement for one. This is the layer Compose could not
 # express.
+#
+# Since 2026-09-17 the file fences 5678 as well (#1926): the same policy, two ports, two peer
+# sets. netpol-probe-job.yaml.j2 proves both fences on every deploy.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -26,11 +29,23 @@ spec:
   policyTypes:
     - Ingress
   ingress:
-    # 5678 stays open to all sources, deliberately. It is what Traefik routes to and what the
-    # kubelet probes, and kube-router's handling of node-sourced probe traffic is exactly the
-    # thing that turns a "tighten it a little more" edit into a pod that never goes ready.
-    # Narrowing this would buy nothing either — 5678 is reachable from the whole network today.
-    - ports:
+    # 5678: traefik, where the Authelia two_factor middleware, the CrowdSec bouncer and the
+    # rate-limit run, and monitor-bridge, the one in-cluster API caller (check_n8n dials
+    # `n8n:5678` with X-N8N-API-KEY — roles/k8s/monitor-bridge/templates/env-secret.yaml.j2).
+    # Until 2026-09-17 this rule carried no `from:` and admitted every pod (#1926); under the
+    # namespace-scope baseline that made n8n the ONLY web workload whose port any pod could
+    # reach, and n8n is the one that executes workflow code and holds encrypted credentials.
+    # Kubelet probes need no rule: they reach the pod IP directly and kube-router does not
+    # subject that path to ingress enforcement (the headlamp and registry policies run on
+    # probes under the same shape). No scrape job targets n8n, so prometheus is not admitted.
+    - from:
+        - podSelector:
+            matchLabels:
+              app: traefik
+        - podSelector:
+            matchLabels:
+              app: monitor-bridge
+      ports:
         - protocol: TCP
           port: {{ container_item.port }}
     # 5679 is the point of the file.

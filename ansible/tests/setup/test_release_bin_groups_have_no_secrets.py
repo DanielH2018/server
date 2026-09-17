@@ -27,7 +27,7 @@ import sys
 from pathlib import Path
 
 import pytest
-from _helpers import ANSIBLE
+from _helpers import ANSIBLE, registry_secret_names
 
 REPO = ANSIBLE.parent
 
@@ -35,15 +35,11 @@ REPO = ANSIBLE.parent
 # cannot disagree about what a group contains. pytest's `pythonpath` covers the repo root only.
 sys.path.insert(0, str(REPO / "scripts"))
 
-from lib import yaml_fast  # noqa: E402
-
 from lib import release_bin_groups  # noqa: E402
 
-REGISTRY = ANSIBLE / "secret_rotation.yml"
-
-# Names that appear in the registry but are too generic to match on: a substring hit would flag
-# every script mentioning the word. This is the escape hatch for that, so a generic name is
-# handled here rather than by weakening the regex.
+# The name list lives in _helpers (`registry_secret_names`, `GENERIC_SECRET_NAMES`) since the
+# no_log census in ansible/tests/k8s started reading the same registry (#1932), so the two
+# guards cannot disagree about what counts as a secret.
 #
 # DECIDED: `domain` is exempt. It is in the registry at `tier: ignore`
 # (ansible/secret_rotation.yml:108-110) because it is a hostname, not a credential — leaking it
@@ -51,12 +47,7 @@ REGISTRY = ANSIBLE / "secret_rotation.yml"
 # candidate scripts plus one already converted, so the guard would refuse every group and be
 # turned off rather than obeyed. Exempting the name is right; loosening the whole-word regex
 # that finds it would not be.
-GENERIC_NAMES = frozenset({"domain"})
-
-
-def secret_names():
-    data = yaml_fast.safe_load(REGISTRY.read_text()) or {}
-    return sorted(set(data.get("entries", {})) - GENERIC_NAMES)
+secret_names = registry_secret_names
 
 
 def scan_for_secrets(text, names):
