@@ -21,7 +21,7 @@ import re
 import subprocess
 from pathlib import Path
 
-from _deploy_sh_fakes import deploy_sh_env, make_snapshot_repo
+from _deploy_sh_fakes import FAKE_RECAP, deploy_sh_env, make_snapshot_repo
 from deploy_tools import exit_codes as ec
 from deploy_tools.land_lib import tools
 
@@ -75,9 +75,13 @@ _PS = """#!/bin/bash
 echo "   99 uv run ansible-playbook ansible/deploy.yml --tags sonarr"
 """
 
+# Prints a one-host recap: the wrapper reads it, and an exit 0 in silence is a no-host run.
 _UV = """#!/bin/bash
-exit 0
-"""
+case "$*" in
+  *ansible-playbook*) {recap}; exit 0 ;;
+  *) exit 0 ;;
+esac
+""".replace("{recap}", FAKE_RECAP)
 
 # A fixed boot clock, handed to gitops_tick.sh through GITOPS_TICK_UPTIME_SOURCE, so the
 # arithmetic under test has no dependence on how long THIS machine has been up. Deriving the

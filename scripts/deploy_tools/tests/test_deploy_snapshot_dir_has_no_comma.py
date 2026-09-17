@@ -15,7 +15,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_deploy_snapshot_dir_has_no_co
 import subprocess
 from pathlib import Path
 
-from _deploy_sh_fakes import FLOCK_STUB, deploy_sh_env, make_snapshot_repo
+from _deploy_sh_fakes import FAKE_RECAP, FLOCK_STUB, deploy_sh_env, make_snapshot_repo
 
 _REPO = Path(__file__).resolve().parents[3]
 _DEPLOY_SH = _REPO / "scripts" / "deploy.sh"
@@ -24,11 +24,11 @@ _DEPLOY_SH = _REPO / "scripts" / "deploy.sh"
 # ansible-playbook there -- the one thing this bug depends on.
 _UV_STUB = """#!/bin/bash
 case "$*" in
-  *ansible-playbook*) pwd > "$DEPLOY_TEST_CWD_FILE"; exit 0 ;;
+  *ansible-playbook*) pwd > "$DEPLOY_TEST_CWD_FILE"; {recap}; exit 0 ;;
   *deploy_tags.py\\ validate*) exit 0 ;;
   *) exit 0 ;;
 esac
-"""
+""".replace("{recap}", FAKE_RECAP)
 
 
 def test_multi_tag_snapshot_dir_has_no_comma(tmp_path: Path) -> None:

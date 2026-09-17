@@ -19,7 +19,7 @@ import subprocess
 import time
 from pathlib import Path
 
-from _deploy_sh_fakes import deploy_sh_env, make_snapshot_repo
+from _deploy_sh_fakes import FAKE_RECAP, deploy_sh_env, make_snapshot_repo
 
 _REPO = Path(__file__).resolve().parents[3]
 _DEPLOY_SH = _REPO / "scripts" / "deploy.sh"
@@ -30,22 +30,22 @@ _SLEEP_S = 4
 
 _UV_STUB = """#!/bin/bash
 case "$*" in
-  *ansible-playbook*) sleep "$DEPLOY_TEST_SLEEP"; exit 0 ;;
+  *ansible-playbook*) sleep "$DEPLOY_TEST_SLEEP"; {recap}; exit 0 ;;
   *deploy_tags.py*) printf 'alpha\\nbeta\\n'; exit 0 ;;
   *) exit 0 ;;
 esac
-"""
+""".replace("{recap}", FAKE_RECAP)
 
 # The same stub, recording where the playbook was run from before it sleeps. `--detach` is the
 # only arm whose cleanup happens after the parent has exited, so where it ran and what it left
 # behind are both readable only from outside the process.
 _UV_DETACH_STUB = """#!/bin/bash
 case "$*" in
-  *ansible-playbook*) pwd >"$DEPLOY_TEST_PWD_FILE"; sleep "$DEPLOY_TEST_SLEEP"; exit 0 ;;
+  *ansible-playbook*) pwd >"$DEPLOY_TEST_PWD_FILE"; sleep "$DEPLOY_TEST_SLEEP"; {recap}; exit 0 ;;
   *deploy_tags.py*) printf 'alpha\\nbeta\\n'; exit 0 ;;
   *) exit 0 ;;
 esac
-"""
+""".replace("{recap}", FAKE_RECAP)
 
 
 def _harness(tmp_path: Path, uv_stub: str = _UV_STUB) -> tuple[Path, dict[str, str]]:

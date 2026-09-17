@@ -37,6 +37,7 @@ from lib.repo_paths import HOST_VARS, REPO
 # Same directory, so a direct invocation already has it on sys.path. `tag_platforms` is the
 # reader of containers_list that says which probe can see a tag's workload.
 import deploy_tags
+from deploy_tools.exit_codes import DEPLOY_NO_HOSTS
 
 # The inventory directory as a path relative to a checkout root. `check_one` reads the
 # inventory from whichever tree the probe renders the manifests from, which is not always this
@@ -305,11 +306,20 @@ def main(argv: list[str] | None = None, tools: NotifyTools | None = None) -> int
     settled, lines = gate(
         tags, ns.status == 0, tools=tools, cwd=Path(ns.cwd) if ns.cwd else None
     )
+    # deploy.sh's own code, not ansible's: the playbook exited 0 having matched no host, and
+    # the wrapper read that off the PLAY RECAP (issue #1814). Said in those words, because
+    # "exited non-zero -- see the log" sends the reader to a log whose ansible run looks clean.
+    who = "ansible"
+    if ns.status == DEPLOY_NO_HOSTS:
+        who = "deploy.sh"
+        lines = [
+            "the playbook matched NO host, so nothing was deployed -- see the log."
+        ]
 
     headline = "settled" if settled else "FAILED"
     content = "\n".join(
         [
-            f"deploy --detach {headline} (ansible exit {ns.status})",
+            f"deploy --detach {headline} ({who} exit {ns.status})",
             *lines,
             f"log: {ns.log}",
         ]

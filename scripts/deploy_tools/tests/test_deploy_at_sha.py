@@ -20,6 +20,7 @@ import time
 from pathlib import Path
 
 from _deploy_sh_fakes import (
+    FAKE_RECAP,
     FLOCK_STUB,
     deploy_sh_env,
     git_free_env,
@@ -37,7 +38,7 @@ _BAD_FLAGS_EXIT = 64
 _UV_STUB = """#!/bin/bash
 echo "$*" >> "$DEPLOY_SH_CALLS"
 case "$*" in
-  *ansible-playbook*) git rev-parse HEAD > "$DEPLOY_TEST_SHA_FILE"; exit 0 ;;
+  *ansible-playbook*) git rev-parse HEAD > "$DEPLOY_TEST_SHA_FILE"; {recap}; exit 0 ;;
   *deploy_tags.py\\ list*) printf 'alpha\\nbeta\\n'; exit 0 ;;
   *deploy_detach_notify.py*)
     while [[ $# -gt 0 ]]; do
@@ -50,7 +51,7 @@ case "$*" in
     exit 0 ;;
   *) exit 0 ;;
 esac
-"""
+""".replace("{recap}", FAKE_RECAP)
 
 # `logger` is absent from most test environments, and deploy.sh swallows that with `|| true`,
 # so the annotation is unobservable without a stub. Prefixed, because it shares the call log.

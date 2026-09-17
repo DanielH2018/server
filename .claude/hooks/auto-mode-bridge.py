@@ -55,6 +55,12 @@ MAX_RETRIES_PER_SESSION = 2
 # wrapper's own contract, kept in the same words CLAUDE.md uses so the two don't drift into
 # two stories.
 _DEPLOY_EXITS = {
+    78: (
+        "deploy.sh exit 78: the playbook matched NO host, so NOTHING was deployed. ansible "
+        "exits 0 for a run where no play matched, so the wrapper reads the PLAY RECAP itself. "
+        "Read the [WARNING] lines in the output — an inventory that failed to parse, or a host "
+        "pattern that matched nothing — fix that, then re-run; no task ran."
+    ),
     77: (
         "deploy.sh exit 77: the snapshot worktree could not be created, so NOTHING was "
         "deployed. The playbook renders from a detached worktree of HEAD under "

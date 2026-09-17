@@ -21,7 +21,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_deploy_staleness_precedes_cha
 import subprocess
 from pathlib import Path
 
-from _deploy_sh_fakes import FLOCK_STUB, deploy_sh_env, make_snapshot_repo
+from _deploy_sh_fakes import FAKE_RECAP, FLOCK_STUB, deploy_sh_env, make_snapshot_repo
 
 _REPO = Path(__file__).resolve().parents[3]
 _DEPLOY_SH = _REPO / "scripts" / "deploy.sh"
@@ -38,10 +38,10 @@ case "$*" in
   *deploy_staleness.py*) exit {stale_exit} ;;
   *deploy_tags.py*changed*) echo "{derived}"; exit {changed_exit} ;;
   *deploy_tags.py*validate*) exit 0 ;;
-  *ansible-playbook*) exit 0 ;;
+  *ansible-playbook*) {recap}; exit 0 ;;
   *) exit 0 ;;
 esac
-"""
+""".replace("{recap}", FAKE_RECAP)
 
 
 def _run(tmp_path, *, stale_exit, changed_exit=0, derived="", args=("--changed",)):
