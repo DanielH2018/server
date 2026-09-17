@@ -67,8 +67,12 @@ has_repo_checkout: true
 # expose_mode: lan
 
 # Unset by default — each compose template falls back to its own value (10s/30s). Raise it
-# on a slow/constrained host: every probe costs 2 runc invocations.
+# on a slow/constrained host: every probe costs 2 runc invocations. Timeout and retries are
+# tunable the same way (templates fall back to 5-10s / 3): widen them where a probe's exec
+# stalls under load without the service being down, so the stall does not read `unhealthy`.
 # container_healthcheck_interval: 60s
+# container_healthcheck_timeout: 60s
+# container_healthcheck_retries: 5
 
 # Disk-backed swap, created before the apt tasks run. Only needed on a host with too little
 # RAM for `upgrade: dist` / AIDE init (the 512 MB Pi Zero 2 W).

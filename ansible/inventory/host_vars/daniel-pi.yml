@@ -36,8 +36,22 @@ pi_swapfile_size: 1G
 # threaded Go — ~20-30 PIDs each incl. threads). At the template defaults (10-30s across
 # 6 containers) that was ~10 forks/sec, constant RCU expedited-stall warnings (~150/hr in
 # the journal) and 13% CPU PSI at idle. Templates fall back to their own defaults where
-# this is unset (the server keeps 10s/30s). Detection latency worst-case = 60s x 3 retries.
+# this is unset (the server keeps 10s/30s).
 container_healthcheck_interval: 60s
+# Wide timeout and retries on the same board, for the same reason autoheal lost its own
+# probe (#1789, #1910): a Pi deploy's memory thrash (load1 8-17, PSI full 20-25% in every
+# window measured over the 20 days to 2026-09-17) stalls a `wget`/`pgrep` exec through runc
+# past a 5-10s timeout — and past Docker's 30s default — three times running. The container
+# reads `unhealthy`, autoheal restarts it, and the `start` half can fail at the OCI runtime
+# ("Timeout waiting for systemd to create scope"), leaving it Exited until pi-recovery-health
+# starts it. An exec that eventually returns is not a failure; 60s covers the stalls seen and
+# 5 retries cover a window that outlasts one. Templates fall back to their own values (5-10s,
+# 3) where these are unset. Detection latency worst-case = 5 x (60s interval + 60s timeout)
+# = 10 min, against a 5-min Kuma monitor from outside for glances and wg-easy — the reason a
+# dead process is not the case this trades against: `restart: unless-stopped` covers that at
+# once, the healthcheck only covers a wedged-but-running one.
+container_healthcheck_timeout: 60s
+container_healthcheck_retries: 5
 containers_list:
   # Read-only Docker socket proxy — serves Alloy's docker_sd log discovery and glances;
   # the hardcoded docker-proxy-lifecycle sub-proxy (restart-only) serves autoheal.

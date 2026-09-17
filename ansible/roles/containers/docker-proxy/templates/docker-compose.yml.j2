@@ -43,8 +43,8 @@ services:
       # Host-tunable cadence: 10s is fine on the server, but each probe forks runc twice —
       # real CPU/PID churn on the Pi (see container_healthcheck_interval in its host_vars).
       interval: {{ container_healthcheck_interval | default('10s') }}
-      timeout: 5s
-      retries: 3
+      timeout: {{ container_healthcheck_timeout | default('5s') }}
+      retries: {{ container_healthcheck_retries | default(3) }}
       start_period: 10s
     labels:
       # Disable watchtower update
@@ -105,8 +105,8 @@ services:
     healthcheck:
       test: ["CMD-SHELL", "wget -qO /dev/null http://localhost:2375/version || exit 1"]
       interval: {{ container_healthcheck_interval | default('10s') }}
-      timeout: 5s
-      retries: 3
+      timeout: {{ container_healthcheck_timeout | default('5s') }}
+      retries: {{ container_healthcheck_retries | default(3) }}
       start_period: 10s
     labels:
       - "com.centurylinklabs.watchtower.enable=false"
@@ -153,8 +153,8 @@ services:
     healthcheck:
       test: ["CMD-SHELL", "wget -qO /dev/null http://localhost:2375/version || exit 1"]
       interval: {{ container_healthcheck_interval | default('10s') }}
-      timeout: 5s
-      retries: 3
+      timeout: {{ container_healthcheck_timeout | default('5s') }}
+      retries: {{ container_healthcheck_retries | default(3) }}
       start_period: 10s
     labels:
       - "com.centurylinklabs.watchtower.enable=false"

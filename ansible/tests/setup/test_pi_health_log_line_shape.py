@@ -20,12 +20,13 @@ Run: uv run pytest ansible/tests/setup/test_pi_health_log_line_shape.py
 """
 
 import pytest
-from _pi_health import run
+from _pi_health import PI_HOST_VARS, run
 
 from diagnostics.probe_lib.alerts import parse_syslog_down_line
 
 
-BOTH = ["autoheal", "docker-proxy"]
+# Every container the cron watches: the Pi's containers_list plus the docker-proxy sub-proxy.
+ALL = [c["name"] for c in PI_HOST_VARS["containers_list"]] + ["docker-proxy-lifecycle"]
 
 
 def _only_line(lines):
@@ -82,7 +83,7 @@ def test_a_failed_push_still_parses(tmp_path):
 
 @pytest.mark.parametrize(
     ("script", "kwargs"),
-    [("pi-recovery-health", {"running": BOTH}), ("pi-sd-health", {"counter": "0"})],
+    [("pi-recovery-health", {"running": ALL}), ("pi-sd-health", {"counter": "0"})],
 )
 def test_a_healthy_cycle_emits_a_line_that_is_not_an_episode(tmp_path, script, kwargs):
     """REJECT: `up` lines ship as a heartbeat, and must NOT become DOWN episodes.
