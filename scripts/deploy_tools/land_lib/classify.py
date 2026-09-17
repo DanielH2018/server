@@ -74,31 +74,18 @@ def classify(ln: Landing) -> None:
 
     Computed whether or not tags were derived: a PR can touch a deployable role AND a
     plane, and then the deploy succeeds while half the change is unapplied.
+
+    `--tags` skips the DERIVATION only. The self-applied half is classified on that path too,
+    because `tick_is_the_apply` decides whether step 4 awaits the tick and an override that
+    left it False landed a mixed PR on the fast path: the deploy succeeded, the tick's own
+    half was never graded, and the landing printed `settled` over an unapplied setup role.
+    `--tags` is the form CLAUDE.md prescribes for scoping to your own services, so it is the
+    common way to land, not an escape hatch.
     """
-    if ln.resolved_tags:
-        return
     t, c = ln.tools, ln.classifier
     view = ln.view("files,changedFiles")
     paths = [f["path"] for f in view.get("files", [])]
     quiet = c.quiet_paths(paths, pr_range(ln))
-    # WHICH TAGS EXIST is asked of the MERGE COMMIT, not of a checkout. A PR that adds a role
-    # and its `containers_list` entry together is absent from every tree until the tick
-    # fast-forwards, so a checkout answers "this role is unregistered" — the same thing it says
-    # about a role somebody forgot to register, and `needs-manual-apply` then prints the
-    # expensive remedy (a full `ansible/deploy.yml`) for a role one `--tags` run deploys.
-    # PR #1539 landed that way (issue #1544). None means the read failed, and every reader
-    # below falls back to its own tree exactly as it did before.
-    declared = _classified(
-        ln, "declared-tag read", t.declared_at, ln.merge_sha, ln.opts.primary
-    )
-    if declared is None:
-        say(
-            f"could not read containers_list at {ln.merge_sha[:8]} — "
-            "classifying against this checkout instead"
-        )
-    ln.plane = _classified(
-        ln, "plane classification", c.plane_note, paths, declared, quiet=quiet
-    )
     ln.self_applied = _classified(
         ln, "self-applied classification", c.self_applied, paths, quiet=quiet
     )
@@ -123,6 +110,31 @@ def classify(ln: Landing) -> None:
         paths,
         t.hostname(),
         quiet=quiet,
+    )
+    if ln.resolved_tags:
+        # `--tags` named the services, so nothing below runs: the operator's list wins over a
+        # derivation, and `plane` is what a HAND applies rather than an input to any wait this
+        # landing takes. Leaving it unread keeps the override's meaning -- deploy exactly these
+        # services -- and the broad half a `--tags` landing must not skip is caught earlier, by
+        # `ci.preflight`'s blockers read over the incoming range.
+        return
+    # WHICH TAGS EXIST is asked of the MERGE COMMIT, not of a checkout. A PR that adds a role
+    # and its `containers_list` entry together is absent from every tree until the tick
+    # fast-forwards, so a checkout answers "this role is unregistered" — the same thing it says
+    # about a role somebody forgot to register, and `needs-manual-apply` then prints the
+    # expensive remedy (a full `ansible/deploy.yml`) for a role one `--tags` run deploys.
+    # PR #1539 landed that way (issue #1544). None means the read failed, and every reader
+    # below falls back to its own tree exactly as it did before.
+    declared = _classified(
+        ln, "declared-tag read", t.declared_at, ln.merge_sha, ln.opts.primary
+    )
+    if declared is None:
+        say(
+            f"could not read containers_list at {ln.merge_sha[:8]} — "
+            "classifying against this checkout instead"
+        )
+    ln.plane = _classified(
+        ln, "plane classification", c.plane_note, paths, declared, quiet=quiet
     )
     # -1 rather than 0: `gh` omitting the field must not read as agreement with an empty
     # file list, which would silently license a zero-tag deploy.

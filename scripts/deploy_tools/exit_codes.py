@@ -22,10 +22,12 @@ Typical usage example:
 
 # -- scripts/deploy.sh ------------------------------------------------------------------
 # The wrapper's own contract, read off `scripts/deploy.sh` (its header comment and the
-# `exit` sites). 2, 3, 4, 75 and 76 each mean NOTHING was deployed and each is a resume point;
-# 20 is the inverse -- the playbook RAN and a task failed, so whatever applied before it is
-# live. ansible-playbook's own 2/3/4 are collapsed onto 20 by the wrapper for exactly that
-# reason; `tests/test_deploy_exit_codes.py` pins the disjointness.
+# `exit` sites). `DEPLOY_SH_NO_VERDICT` below is the set that means NOTHING was deployed --
+# 2, 3, 4, 75, 76 and 77 -- and every member is a resume point. Read the frozenset rather than
+# this sentence: it enumerated five of them until 77 was added. 20 is the inverse -- the
+# playbook RAN and a task failed, so whatever applied before it is live. ansible-playbook's own
+# 2/3/4 are collapsed onto 20 by the wrapper for exactly that reason;
+# `tests/test_deploy_exit_codes.py` pins the disjointness.
 DEPLOY_OK = 0
 DEPLOY_TAG_MISS = 2
 DEPLOY_BROAD = 3

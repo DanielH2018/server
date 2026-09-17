@@ -125,8 +125,8 @@ four fanned-out agents ended their turn at step 0/6 or 3/6 believing otherwise o
 three of them saying in as many words that a watcher was armed (issue #1291). Run the wait
 above instead.
 
-**A PR reaching service tags only deploys its own merge commit; the tick is kicked afterwards,
-not awaited.**
+**A PR reaching service tags and nothing the tick applies itself deploys its own merge commit;
+the tick is kicked afterwards, not awaited.**
 `deploy.sh --at <sha>` renders a snapshot of that commit, so nothing in the landing needs the
 primary checkout to have been fast-forwarded onto it first. Step 4 waits for nothing, the
 deploy runs, and only then does `land.sh` start the tick with `--no-wait` — the checkout
@@ -151,7 +151,11 @@ reaching service tags **and** something the tick applies itself — the deploy p
 role `initial_setup.yml` includes — is the other: it awaits the tick in step 4 and then deploys
 from the primary checkout with no `--at`, so `tick=` on its row is non-zero. Taking the fast
 path there would grade a tick that had not run, and print `needs-manual-apply` (or `deferred`)
-for work the kicked tick applies a minute later.
+for work the kicked tick applies a minute later. `--tags` does not opt out: the derivation is
+skipped there, the classification is not.
+
+A change **no** tick can apply — the `plane` a hand must run, which `needs-manual-apply` names —
+does not push a landing off the fast path. Nothing about awaiting a tick would settle it.
 
 The health gate renders from a detached worktree of the same commit. `probe.py health <tag>`
 enumerates the workloads to check by rendering the role's manifests from the checkout it runs

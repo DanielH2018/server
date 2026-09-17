@@ -49,9 +49,11 @@ _NO_VERDICT_PREFIXES = (
 
 MAX_RETRIES_PER_SESSION = 2
 
-# 75, 4, 3 and 2 each mean the deploy refused BEFORE touching anything; 20 is the opposite and
-# says so in its own words. The text is the wrapper's own contract, kept in the same words
-# CLAUDE.md uses so the two don't drift into two stories.
+# Every key below except 20 means the deploy refused BEFORE touching anything; 20 is the
+# opposite and says so in its own words. Adding a key is the whole edit -- this comment
+# enumerated four of them and went stale the day 77 and 76 were added. The text is the
+# wrapper's own contract, kept in the same words CLAUDE.md uses so the two don't drift into
+# two stories.
 _DEPLOY_EXITS = {
     77: (
         "deploy.sh exit 77: the snapshot worktree could not be created, so NOTHING was "

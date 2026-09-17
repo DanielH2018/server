@@ -125,15 +125,22 @@ Sequence:
 
 1. Resolve the merge SHA from the PR.
 2. `await_ci.py <merge-sha>`.
-3. `gitops_tick.sh` — fetch, CI-gate, ff-merge, deploy what is eligible. A PR with service
-   tags skips this step entirely: step 4 renders the merge commit itself, so nothing after it
-   needs the primary checkout to have been fast-forwarded. A PR with no service tag waits for
-   the tick, because there it is the apply.
+3. `gitops_tick.sh` — fetch, CI-gate, ff-merge, deploy what is eligible. A PR reaching service
+   tags and nothing the tick applies itself skips this step entirely: step 4 renders the merge
+   commit itself, so nothing after it needs the primary checkout to have been fast-forwarded.
+   Every other shape waits here, because the tick is the apply for part of its range: a PR with
+   no service tag, and a PR reaching tags **and** a self-applied plane (the deploy plane, or a
+   setup role `initial_setup.yml` includes) or a setup role reaching a host beyond this one.
+   `land_lib/landing.py`'s `tick_is_the_apply` is the predicate, and `--tags` does not opt out
+   of it. A change only a hand can apply is not one of these: no tick settles it, so it does
+   not cost the fast path.
 4. `deploy.sh --tags <derived> --at <merge-sha>` from `/home/ubuntu/server`. `--at` snapshots
    that commit rather than the checkout's HEAD, and scopes the staleness gate and the tag
-   check to it. Exit 4 there means a later commit reaches the same tags: that landing owns the
+   check to it. A landing that waited for the tick at step 3 passes no `--at` and deploys the
+   primary checkout the tick just fast-forwarded. Exit 4 under `--at` means a later commit
+   reaches the same tags: that landing owns the
    service, and this one falls back to waiting for the tick and deploying from the checkout.
-   On every other exit the tick is kicked here with `--no-wait`, once `deploy.sh` has
+   On every other `--at` exit the tick is kicked here with `--no-wait`, once `deploy.sh` has
    returned, to converge the primary checkout. After rather than before, because
    `gitops-deploy.service` holds the git-tree lock for its whole unit run and `deploy.sh`
    would queue behind it to cut its snapshot — the same wait, booked under `lock=` instead of

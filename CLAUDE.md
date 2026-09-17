@@ -163,17 +163,19 @@ load-bearing, and why `--since` is needed are in the **`land-after-merge` skill*
 hand-poll CI and do not hand-merge** — hand-polling cost 835 polls across 213 wait episodes
 before `land.sh` existed.
 
-**A PR reaching service tags only is deployed from a snapshot of its own merge commit, not from
-the primary checkout.** `land.sh` hands `deploy.sh --at <merge sha>`, so it neither needs nor waits for the
-tick to fast-forward that checkout first: the tick is kicked with `--no-wait` AFTER the deploy
-returns, and converges the checkout while the health gate runs. `tick=0` on the Landings board
-means no tick was awaited in step 4; a `lock=` wait beside it is the deployer's timer-started
-tick, or another deploy of the same service holding its per-service lock — which is the common
-case, since the tree lock is held for the snapshot only. Every other shape still waits for the
-tick, because there the tick is the apply: a PR reaching no service tag, and a PR reaching tags
-AND a plane the tick applies itself (the deploy plane, or a setup role `initial_setup.yml`
-includes). The mixed one waits because the verdict grades that half from the deployer's own
-markers, which say nothing about a tick that was kicked seconds earlier.
+**A PR reaching service tags and nothing the tick applies itself is deployed from a snapshot of
+its own merge commit, not from the primary checkout.** `land.sh` hands `deploy.sh --at <merge
+sha>`, so it neither needs nor waits for the tick to fast-forward that checkout first: the
+tick is kicked with `--no-wait` AFTER the deploy returns, and converges the checkout while the
+health gate runs. `tick=0` on the Landings board means no tick was awaited in step 4; a `lock=`
+wait beside it is the deployer's timer-started tick, or another deploy of the same service
+holding its per-service lock — which is the common case, since the tree lock is held for the
+snapshot only. A landing waits for the tick wherever the tick is the apply for part of its
+range: a PR reaching no service tag, and a PR reaching tags AND something the tick applies
+itself (the deploy plane, or a setup role `initial_setup.yml` includes — `--tags` does not opt
+out of this). The mixed one waits because the verdict grades that half from the deployer's own
+markers, which say nothing about a tick kicked seconds earlier. A change only a HAND can apply
+does not route to the tick and does not cost the fast path.
 
 `cancelled`, `stale` and `skipped_by_concurrency` mean *no verdict for this SHA*, never *this
 SHA is bad* — `_CI_NO_VERDICT_CONCLUSIONS` in `deploy_logic.py` is the list, and a commit whose

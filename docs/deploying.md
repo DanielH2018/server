@@ -105,7 +105,9 @@ So exercise the thing you actually changed as well.
 
 - Deploys of the same service serialize; the tree lock is held for the snapshot only, so two
   deploys of different services run at once (ADR-0017). Neither lock queues fairly. Exit 75
-  means one of them stayed busy through the whole wait and nothing was deployed — retry.
+  means a lock was busy and nothing was deployed — retry. The queued path reports it only
+  after the full `LOCK_WAIT`; `--detach` probes the tree lock with `flock -n` and reports it at
+  once, so 75 from a `--detach` run says nothing about how long the holder has held it.
 - Scope your deploy to your own services. A shared SHA range covers other sessions' work too,
   and deploying another session's half-finished landing is not yours to do.
 - **`--detach` returning is not a verified deploy.** It backgrounds the rollout wait, which is

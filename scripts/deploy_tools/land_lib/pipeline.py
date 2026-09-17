@@ -57,21 +57,24 @@ def _step_ci(ln: Landing) -> None:
 def _step_tick(ln: Landing) -> None:
     """Run the GitOps tick and stamp when it finished — or skip it here and stamp nothing.
 
-    A PR reaching service tags ONLY deploys its own merge commit in step 5 (`deploy.sh --at`),
-    so it needs the tick only to converge the primary checkout eventually. Step 5 kicks it
-    once the deploy has returned, because the tick holds the tree lock for its whole unit run
-    and deploy.sh would otherwise queue behind it. Nothing is awaited here and `tick=0` on the
-    board says so. Eleven landings in the 14 days to 2026-09-11 spent the full 540s in this
-    step watching a deployer busy with somebody else's apply.
+    A PR reaching service tags and NOTHING THE TICK APPLIES ITSELF deploys its own merge commit
+    in step 5 (`deploy.sh --at`), so it needs the tick only to converge the primary checkout
+    eventually. Step 5 kicks it once the deploy has returned, because the tick holds the tree
+    lock for its whole unit run and deploy.sh would otherwise queue behind it. Nothing is
+    awaited here and `tick=0` on the board says so. Eleven landings in the 14 days to
+    2026-09-11 spent the full 540s in this step watching a deployer busy with somebody else's
+    apply.
 
     Every other shape keeps waiting, because there the tick is the apply: a PR with no service
     tag, whose verdict `no_tag_outcome` reads off the deployer's markers, and a PR that
     reaches tags AND something the tick applies itself, which the DECIDED note below covers.
     """
-    # DECIDED: the fast path is for a PR that reaches SERVICE TAGS ONLY. A PR reaching tags AND
-    # something the tick applies itself -- `tick_is_the_apply`, which is `self_applied` or
-    # `remaining_setup` -- awaits the tick here exactly as it did before the fast path existed,
-    # and step 5 deploys from the primary checkout with no `--at`.
+    # DECIDED: the fast path is skipped when THE TICK IS THE APPLY for part of this range --
+    # `tick_is_the_apply`, which is `self_applied or remaining_setup`. It is not skipped for
+    # every broad prefix: a `Landing.plane` that is not self-applied is by definition what a
+    # HAND applies, so no tick can settle it and a tags-plus-plane PR keeps the fast path.
+    # A landing the predicate catches awaits the tick here exactly as it did before the fast
+    # path existed, and step 5 deploys from the primary checkout with no `--at`.
     #
     # Because for that half the TICK is the apply, and step 6 grades it from the deployer's own
     # markers (`tick_state`, `broad_applied_covers`). Kicking a tick and reading those markers
