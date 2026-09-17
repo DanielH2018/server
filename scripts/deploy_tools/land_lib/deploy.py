@@ -17,6 +17,7 @@ from deploy_tools.exit_codes import (
     DEPLOY_BROAD,
     DEPLOY_LOCK_BUSY,
     DEPLOY_LOCK_UNAVAILABLE,
+    DEPLOY_NO_HOSTS,
     DEPLOY_OK,
     DEPLOY_PLAYBOOK_FAILED,
     DEPLOY_STALE,
@@ -227,6 +228,16 @@ def deploy_outcome(ln: Landing, rc: int) -> None:
             1,
             f"PR #{pr} — the tree lock could not be taken at all, so nothing deployed; "
             f"tags: {tags}",
+        )
+    if rc == DEPLOY_NO_HOSTS:
+        # The playbook matched no host and ansible exited 0; the wrapper read the empty PLAY
+        # RECAP. Nothing was deployed, and until 2026-09-17 this exited 0, so the health gate
+        # graded the OLD pods and the landing read `settled` (issue #1814).
+        ln.ledger.cause = Cause.DEPLOY_EXIT_NO_HOSTS
+        ln.finish(
+            Verdict.DEPLOY_FAILED,
+            1,
+            f"PR #{pr} — the playbook matched no host, so nothing deployed; tags: {tags}",
         )
     if rc == DEPLOY_PLAYBOOK_FAILED:
         # The playbook RAN and a task failed: everything before it is live (issue #840).

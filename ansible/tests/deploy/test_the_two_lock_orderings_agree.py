@@ -40,16 +40,41 @@ def _declared_tags() -> list[str]:
     return [line for line in result.stdout.splitlines() if line.strip()]
 
 
-def _shell_sorted(tags: list[str]) -> list[str]:
-    """What `deploy.sh`'s own pipeline makes of them, `LC_ALL=C` and all."""
-    pipeline = next(
-        line.strip()
-        for line in _DEPLOY_SH.read_text().splitlines()
-        if "sort -u" in line and "split_tags" in line
-    )
-    _, _, sort_cmd = pipeline.partition("| ")
+# The two places `deploy.sh` sorts a tag list into lock order: the scoped run's `split_tags`
+# and the full run's enumeration from the snapshot (`enumerate_full_run_tags`). Both must
+# pin the locale, and until 2026-09-17 only the first was compared here (issue #1845).
+_SORT_SITES = frozenset({"split_tags", "listed"})
+
+
+def _shell_sort_commands() -> dict[str, str]:
+    """Each `sort -u` pipeline in `deploy.sh`, keyed by the variable it sorts."""
+    found = {}
+    for line in _DEPLOY_SH.read_text().splitlines():
+        if "sort -u" not in line:
+            continue
+        for site in _SORT_SITES:
+            if f'"${site}' in line or f'"${{{site}' in line:
+                _, _, sort_cmd = line.strip().partition("| ")
+                found[site] = sort_cmd.rstrip(")")
+    return found
+
+
+def test_both_sort_sites_are_found():
+    """Non-vacuity for the census below: a site renamed out of the pattern must fail here."""
+    assert set(_shell_sort_commands()) == _SORT_SITES
+
+
+def test_the_full_run_sorts_the_same_way_the_scoped_run_does():
+    """The enumeration's pipeline is byte-for-byte the scoped run's, `LC_ALL=C` included."""
+    commands = _shell_sort_commands()
+    assert commands["listed"] == commands["split_tags"], commands
+
+
+def _shell_sorted(tags: list[str], site: str = "split_tags") -> list[str]:
+    """What `deploy.sh`'s own pipeline at `site` makes of them, `LC_ALL=C` and all."""
+    sort_cmd = _shell_sort_commands()[site]
     result = subprocess.run(
-        ["bash", "-c", f"cat | {sort_cmd.rstrip(')')}"],
+        ["bash", "-c", f"cat | {sort_cmd}"],
         input="\n".join(tags) + "\n",
         capture_output=True,
         text=True,
@@ -96,10 +121,12 @@ def test_both_deploy_paths_lock_the_real_tag_list_in_the_same_order(tmp_path):
     context manager the deployer holds — against every tag this repo declares.
     """
     tags = _declared_tags()
-    assert _shell_sorted(tags) == _deployer_order(tags, tmp_path), (
-        "deploy.sh and deploy_locks.py order the service locks differently, so two deploys "
-        "sharing two services can each hold the lock the other is waiting for"
-    )
+    deployer = _deployer_order(tags, tmp_path)
+    for site in sorted(_SORT_SITES):
+        assert _shell_sorted(tags, site) == deployer, (
+            f"deploy.sh ({site}) and deploy_locks.py order the service locks differently, so "
+            "two deploys sharing two services can each hold the lock the other is waiting for"
+        )
 
 
 def test_the_locale_default_is_what_would_break_it():

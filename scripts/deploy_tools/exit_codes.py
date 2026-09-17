@@ -23,8 +23,8 @@ Typical usage example:
 # -- scripts/deploy.sh ------------------------------------------------------------------
 # The wrapper's own contract, read off `scripts/deploy.sh` (its header comment and the
 # `exit` sites). `DEPLOY_SH_NO_VERDICT` below is the set that means NOTHING was deployed --
-# 2, 3, 4, 75, 76 and 77 -- and every member is a resume point. Read the frozenset rather than
-# this sentence: it enumerated five of them until 77 was added. 20 is the inverse -- the
+# 2, 3, 4, 75, 76, 77 and 78 -- and every member is a resume point. Read the frozenset rather
+# than this sentence: it enumerated five of them until 77 was added. 20 is the inverse -- the
 # playbook RAN and a task failed, so whatever applied before it is live. ansible-playbook's own
 # 2/3/4 are collapsed onto 20 by the wrapper for exactly that reason;
 # `tests/test_deploy_exit_codes.py` pins the disjointness.
@@ -43,6 +43,11 @@ DEPLOY_LOCK_UNAVAILABLE = 76
 # own code rather than 76's: 76 points at the lock file, this points at the snapshot root or
 # the git object store, and the two are fixed in different places (ADR-0017).
 DEPLOY_SNAPSHOT_FAILED = 77
+# The playbook reached PLAY RECAP naming no host. ansible exits 0 for that -- no play matched,
+# so no task failed -- and the wrapper reads the recap to tell it apart from a deploy. Nothing
+# was deployed, and unlike 77 the fault is in the inventory or the host pattern, not the
+# snapshot (issue #1814).
+DEPLOY_NO_HOSTS = 78
 
 # The subset that means staging (or a landing) never formed an opinion, because deploy.sh
 # refused before it applied anything.
@@ -54,6 +59,7 @@ DEPLOY_SH_NO_VERDICT = frozenset(
         DEPLOY_LOCK_BUSY,
         DEPLOY_LOCK_UNAVAILABLE,
         DEPLOY_SNAPSHOT_FAILED,
+        DEPLOY_NO_HOSTS,
     }
 )
 

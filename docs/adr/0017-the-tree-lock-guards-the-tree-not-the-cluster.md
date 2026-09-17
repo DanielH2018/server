@@ -120,6 +120,13 @@ read as a failed deploy.
 from 76 because the two are fixed in different places — 76 is the lock file, 77 the snapshot
 root or the object store.
 
+**The hold is bounded in code, not only by argument.** Two calls run inside it besides the
+snapshot: the full run's tag enumeration (`deploy_tags.py list` through `uv run`, which a cold
+`uv sync` can stretch to minutes) and the reaper's removal of dead snapshots. `deploy.sh` puts
+`timeout` on the first (`TAG_LIST_TIMEOUT`, exit 77 with its own message) and caps the second
+per run (`REAP_MAX_PER_RUN`; the rest wait for the next locked run), so a slow venv or a root
+full of dead directories cannot turn "seconds" into the deployer's whole `TimeoutStartSec`.
+
 ## Governs
 
 The `# DECIDED:` markers recording the lock order at each of the two deploy paths

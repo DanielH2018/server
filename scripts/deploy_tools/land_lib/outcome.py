@@ -64,6 +64,7 @@ class Cause(StrEnum):
     DEPLOY_EXIT_STALE = "deploy-exit-4"
     DEPLOY_EXIT_BAD_FLAGS = "deploy-exit-64"
     DEPLOY_EXIT_LOCK_UNAVAILABLE = "deploy-exit-76"
+    DEPLOY_EXIT_NO_HOSTS = "deploy-exit-78"
     DEPLOY_EXIT_OTHER = "deploy-exit-other"
     INVALID = "invalid-cause"
 
@@ -84,6 +85,7 @@ _DEPLOY_EXIT_CAUSES = {
     4: Cause.DEPLOY_EXIT_STALE,
     64: Cause.DEPLOY_EXIT_BAD_FLAGS,
     76: Cause.DEPLOY_EXIT_LOCK_UNAVAILABLE,
+    78: Cause.DEPLOY_EXIT_NO_HOSTS,
 }
 
 

@@ -38,6 +38,16 @@ shift
 exec "$@"
 """
 
+# What a stubbed `ansible-playbook` must print for `deploy.sh` to count the run as a deploy.
+# The wrapper reads the PLAY RECAP and refuses (exit 78) when it names no host -- ansible
+# exits 0 for that -- so a stub that exits 0 in silence is a no-host run, not a success. One
+# host line, in ansible's own layout, is the whole requirement. `test_deploy_exit_codes.py`
+# holds the red half, where a stub prints the banner alone.
+FAKE_RECAP = (
+    'echo "PLAY RECAP *********"; '
+    'echo "daniel-box                 : ok=3    changed=1    unreachable=0    failed=0"'
+)
+
 
 def git_free_env(**overrides: str) -> dict[str, str]:
     """`os.environ` with every `GIT_*` variable removed, plus `overrides`.

@@ -43,6 +43,7 @@ Each of these means **nothing was deployed**. None is a playbook failure.
 
 | Code | Means | Do |
 |---|---|---|
+| 78 | The playbook matched no host — ansible exits 0 for that, so the wrapper reads the `PLAY RECAP` itself | Read the `[WARNING]` lines: an inventory that failed to parse, or a host pattern that matched nothing. Fix it, then retry |
 | 77 | The snapshot worktree could not be created | Check `/tmp/homelab-deploy-snapshots/` is writable and `git worktree add --detach` works |
 | 75 | A lock stayed busy — the tree lock, or one of this run's services' | Retry |
 | 4 | The commit being deployed — `HEAD`, or `--at <sha>` — is behind `origin/master` on a path the deploy reaches | Pull, then retry. Never `--skip-staleness-check` |

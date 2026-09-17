@@ -76,9 +76,9 @@
 #     Meaningless combined with --check or --dry-run (both already return immediately without
 #     touching the lock) — refused with a nonzero exit rather than silently ignored.
 #
-# Exit codes. 0 is a finished deploy; 77, 76, 75, 4, 3 and 2 each mean NOTHING was deployed and
-# each is a resume point (see the table in the repo CLAUDE.md); 20 means the playbook RAN and a task
-# failed, so whatever applied before it is live. Nothing else is returned — ansible-playbook's
+# Exit codes. 0 is a finished deploy; 78, 77, 76, 75, 4, 3 and 2 each mean NOTHING was deployed
+# and each is a resume point (see the table in the repo CLAUDE.md); 20 means the playbook RAN and
+# a task failed, so whatever applied before it is live. Nothing else is returned — ansible-playbook's
 # own status collides with 2/3/4 and is collapsed onto 20, see PLAYBOOK_FAILED below.
 
 set -u
@@ -141,6 +141,26 @@ PLAYBOOK_FAILED=20
 # this is the snapshot root or the git object store. Both are environment faults a retry alone
 # does not clear, which is why neither collapses onto the contention code.
 SNAPSHOT_FAILED=77
+# The playbook reached PLAY RECAP naming no host, so NOTHING was deployed -- and ansible exits
+# 0 for that, because no play matched and so no task failed. A run asked to deploy a tag that
+# matched nothing is an environment fault (an inventory that failed to parse, a host pattern
+# that matched nothing), not a no-op. Until 2026-09-17 it exited 0, and land.sh then read the
+# still-running OLD pods as a healthy rollout and printed `settled` for a change that was not
+# live (issue #1814; the trigger that day was a comma in the snapshot path, issue #1813). A
+# resume point like the codes above: the fault clears, and a retry is the right response.
+NO_HOSTS_MATCHED=78
+# How long `deploy_tags.py list` may take under the tree lock. A full run enumerates its
+# service locks from the snapshot while the tree lock is held, and ADR-0017's "the hold is
+# seconds" rests on that call staying fast -- a cold `uv sync` inside it would otherwise hold
+# the tick and the rotate cron for as long as it took. Measured 2026-09-17 on a warm venv:
+# 0.9s. 120s is two orders of magnitude over that and still well inside the deployer's
+# TimeoutStartSec. Overridable so the bash-level tests can prove the bound fires.
+TAG_LIST_TIMEOUT="${HOMELAB_DEPLOY_TAG_LIST_TIMEOUT:-120}"
+# How many dead snapshots one locked run removes, for the same reason: the reaper runs under
+# the tree lock, and `git worktree remove` on a full checkout is ~0.3s each, so a root left
+# with hundreds of dead directories (a reboot mid-fleet, a runaway --detach loop) would turn
+# the hold into minutes. The rest wait for the next locked run.
+REAP_MAX_PER_RUN="${HOMELAB_DEPLOY_REAP_MAX_PER_RUN:-20}"
 
 # Record a successful deploy where Grafana can draw it as a dashboard annotation.
 #
@@ -247,8 +267,13 @@ reap_dead_snapshots() {
         # `true` under the lock: this only asks whether the lock is free. flock releases it
         # when that command exits, so nothing is held across the removal below.
         flock -n "$dir/$OWNER_LOCK" true >/dev/null 2>&1 || continue
+        if [[ "$reaped" -ge "$REAP_MAX_PER_RUN" ]]; then
+            echo "deploy: reaped $reaped dead snapshots under $SNAPSHOT_ROOT and stopped at the" >&2
+            echo "  per-run cap; the rest go on the next locked run (REAP_MAX_PER_RUN)." >&2
+            break
+        fi
         git worktree remove --force "$dir" >/dev/null 2>&1 || rm -rf "$dir"
-        reaped=1
+        reaped=$((reaped + 1))
     done
     # Only after reaping something. `git worktree prune` deregisters every worktree whose
     # directory is missing, other sessions' included, so an unconditional prune on every
@@ -269,7 +294,11 @@ reap_dead_snapshots() {
 make_snapshot() {
     local stamp dir fd
     stamp=$(date +%Y%m%d-%H%M%S)
-    dir="$SNAPSHOT_ROOT/${tag_label//[^A-Za-z0-9_.,-]/_}-$stamp-$BASHPID"
+    # No `,` in the permitted set: ansible-core reads a comma anywhere in the resolved
+    # inventory path as an inline host list, and this directory is the playbook's cwd. The
+    # label is joined with `+` upstream for that reason; the class is the second line of
+    # defence, so a regression there cannot reach the path (issue #1813).
+    dir="$SNAPSHOT_ROOT/${tag_label//[^A-Za-z0-9_.-]/_}-$stamp-$BASHPID"
     mkdir -p "$SNAPSHOT_ROOT" || return 1
     # `${at_sha:-HEAD}`: --at names the commit to render, and a landing passes its PR's merge
     # commit so the deploy no longer waits for the tick to fast-forward this checkout onto it.
@@ -309,12 +338,55 @@ disown_snapshot() {
 # interpreter path that then disappears. That is the exact failure `fact_cache_guard.py`
 # exists to clean up after. Measured 2026-09-11 from a detached worktree: with this set,
 # `uv run python -c 'print(sys.prefix)'` reports the caller's .venv and creates nothing.
+#
+# Stdout is tee'd into a capture file so the PLAY RECAP can be read after the run, while the
+# operator (or the --detach log) still gets it live. ansible exits 0 when no play matched any
+# host -- nothing failed because nothing ran -- so the recap is the only evidence that a run
+# asked to deploy a tag touched a host at all. `${PIPESTATUS[0]}` rather than `pipefail`: this
+# script runs under `set -u` alone, and a pipefail scoped here would still hand out tee's
+# status on the rare tee failure instead of ansible's. Colour is forced only when stdout was a
+# terminal before the pipe, so an interactive run keeps its colours and a logged one gains none.
 run_playbook_in_snapshot() {
+    local capture status force_color=""
+    capture=$(mktemp) || return 1
+    [[ ! -t 1 ]] || force_color=1
     (
         cd "$snapshot" || exit 1
+        # Decided outside the subshell: in here stdout is already the pipe.
+        [[ -z "$force_color" ]] || export ANSIBLE_FORCE_COLOR=1
         UV_PROJECT_ENVIRONMENT="$repo_root/.venv" \
             uv run ansible-playbook ansible/deploy.yml "$@"
-    )
+    ) | tee "$capture"
+    status=${PIPESTATUS[0]}
+    recap_names_a_host "$capture"
+    case "$?" in
+        0) ;;
+        # A recap with no host under it: nothing ran, whatever ansible returned. A run that
+        # exited 0 with no recap at all is the same fault -- ansible always prints one when it
+        # finishes -- while a non-zero exit with no recap (killed mid-run, a parse error before
+        # any play) keeps ansible's own status, since something may have applied.
+        1) status=$NO_HOSTS_MATCHED ;;
+        2) [[ "$status" != 0 ]] || status=$NO_HOSTS_MATCHED ;;
+    esac
+    rm -f "$capture"
+    return "$status"
+}
+
+# Read a playbook's captured stdout: 0 when the PLAY RECAP names at least one host, 1 when a
+# recap was printed with no host under it, 2 when no recap was printed at all.
+#
+# A host line is `<host> : ok=N changed=N …`, ANSI colour stripped first because the interactive
+# path forces it. Matched on `ok=` after the colon rather than on the host name, so a host
+# named anything -- `localhost`, an IP, `daniel-pi` -- counts, and the `PLAY RECAP ****` banner
+# itself, which has no colon, does not.
+recap_names_a_host() {
+    sed -E 's/\x1b\[[0-9;]*[A-Za-z]//g' "$1" | awk '
+        /^PLAY RECAP/ { recap = 1; hosts = 0; next }
+        recap && /^[^ ]+[ ]+:[ ]+ok=[0-9]+/ { hosts++ }
+        END {
+            if (!recap) exit 2
+            exit (hosts > 0) ? 0 : 1
+        }'
 }
 
 # Every deploy tag this run must lock, read from the SNAPSHOT. Sets `full_run_tags`.
@@ -326,23 +398,42 @@ run_playbook_in_snapshot() {
 #
 # An empty list is a FAILURE, not a run with nothing to lock: `deploy_tags.py list` prints one
 # line per containers_list entry, so nothing at all means it did not run.
+#
+# Bounded by TAG_LIST_TIMEOUT because it runs under the tree lock. Read into a variable rather
+# than through `< <(...)`: a process substitution's exit status is unreadable, and the timeout
+# has to be told apart from a list that failed to print, since the two have different remedies.
 full_run_tags=()
+tag_list_timed_out=0
 enumerate_full_run_tags() {
-    local tag
+    local tag listed status
     full_run_tags=()
+    tag_list_timed_out=0
+    listed=$(
+        cd "$snapshot" || exit 1
+        UV_PROJECT_ENVIRONMENT="$repo_root/.venv" \
+            timeout "$TAG_LIST_TIMEOUT" \
+            uv run python scripts/deploy_tools/deploy_tags.py list 2>/dev/null
+    )
+    status=$?
+    if [[ "$status" == 124 ]]; then
+        tag_list_timed_out=1
+        return 1
+    fi
     while read -r tag; do
         [[ -n "$tag" ]] || continue
         full_run_tags+=("$tag")
-    done < <(
-        cd "$snapshot" || exit 1
-        UV_PROJECT_ENVIRONMENT="$repo_root/.venv" \
-            uv run python scripts/deploy_tools/deploy_tags.py list 2>/dev/null |
-            LC_ALL=C sort -u
-    )
+    done < <(printf '%s\n' "$listed" | LC_ALL=C sort -u)
     [[ ${#full_run_tags[@]} -gt 0 ]]
 }
 
 say_tag_enumeration_failed() {
+    if [[ "$tag_list_timed_out" == 1 ]]; then
+        echo "deploy: listing the deploy tags took longer than ${TAG_LIST_TIMEOUT}s under the" >&2
+        echo "  tree lock, so the run was abandoned -- nothing was deployed. That hold is meant" >&2
+        echo "  to be seconds (ADR-0017); a cold 'uv sync' is the usual cause. Run" >&2
+        echo "  'uv run python scripts/deploy_tools/deploy_tags.py list' once by hand, then retry." >&2
+        return
+    fi
     echo "deploy: could not list the deploy tags from the snapshot -- nothing was deployed." >&2
     echo "  A run with no --tags locks one lock per declared service, so an unreadable list" >&2
     echo "  means it would deploy everything holding nothing. Check that" >&2
@@ -802,7 +893,7 @@ if [[ "$detach" == 1 ]]; then
     # gave up" the way it does without --detach.
     log_dir=/tmp/homelab-deploy-logs
     mkdir -p "$log_dir"
-    log="$log_dir/deploy-${tag_label//[^A-Za-z0-9_.,-]/_}-$(date +%Y%m%d-%H%M%S)-$$.log"
+    log="$log_dir/deploy-${tag_label//[^A-Za-z0-9_.-]/_}-$(date +%Y%m%d-%H%M%S)-$$.log"
 
     exec {lockfd}>"$LOCK"
     # `-E "$LOCK_BUSY"` for the same reason the queued path passes it: without it `flock -n`
@@ -1064,6 +1155,14 @@ if [[ "$status" == "$LOCK_BUSY" ]]; then
     echo "  (systemctl status gitops-deploy.service), the weekly secret-rotate cron," >&2
     echo "  or another Claude session (uv run python scripts/dev/prune_worktrees.py)." >&2
     exit "$status"
+fi
+
+if [[ "$status" == "$NO_HOSTS_MATCHED" ]]; then
+    echo "deploy: the playbook matched NO host, so nothing was deployed -- the PLAY RECAP" >&2
+    echo "  names none. ansible exits 0 for this, which is why the wrapper checks the recap." >&2
+    echo "  Read the [WARNING] lines above: an inventory that failed to parse, or a host" >&2
+    echo "  pattern that matched nothing. Fix that, then retry; no task ran." >&2
+    exit "$NO_HOSTS_MATCHED"
 fi
 
 if [[ "$status" != 0 ]]; then
