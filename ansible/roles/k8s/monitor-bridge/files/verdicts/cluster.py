@@ -177,6 +177,7 @@ def k8s_workloads_verdict(
     ds_offenders: Sequence[tuple[dict, float]] = (),
     min_daemonsets: float | None = None,
     stalled_offenders: Sequence[tuple[dict, float]] = (),
+    zero_offenders: Sequence[tuple[dict, float]] = (),
 ) -> tuple[bool, str]:
     """Pure: (ok, msg) from the deployment-series COUNT and the unavailable-replica offenders.
 
@@ -210,6 +211,11 @@ def k8s_workloads_verdict(
     one up. The unavailable-replica arm sees that shape; nothing saw this one. The caller gates
     this arm on a streak, because mid-rollout `updated < desired` is the normal state of every
     healthy Deployment.
+
+    zero_offenders is the zero-available arm (2026-09-17, #1802): the same Deployments the
+    unavailable arm sees, restricted to `available == 0`, which the caller holds for a shorter
+    streak. It is judged before `offenders` so the stronger statement wins the message once
+    both streaks have run out — a Deployment at zero is in both sets.
     """
     if total is None:
         return False, (
@@ -234,6 +240,11 @@ def k8s_workloads_verdict(
                 "kube-state-metrics is partially loaded, so daemonset health is UNKNOWN, not OK"
                 % (int(ds_total), min_daemonsets)
             )
+    if zero_offenders:
+        return False, (
+            "k8s workloads with NO available replicas (available/desired): %s"
+            % stalled_rollout_names(zero_offenders)
+        )
     if offenders:
         return False, "k8s workloads with unavailable replicas: %s" % (
             replica_offender_names(offenders)

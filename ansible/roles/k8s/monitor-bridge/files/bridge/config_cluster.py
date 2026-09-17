@@ -36,6 +36,7 @@ class ClusterConfig:
     K8S_MIN_DAEMONSETS: int
     K8S_WORKLOADS_CONSECUTIVE: int
     K8S_ROLLOUT_STALL_CONSECUTIVE: int
+    K8S_ZERO_AVAILABLE_CONSECUTIVE: int
     LONGHORN_CONSECUTIVE: int
     PVC_MAX_PCT: float
     PVC_MIN_CLAIMS: int
@@ -182,6 +183,18 @@ def cluster_config(
         # ones. It is also longer than the 300s the playbook's own `rollout status` waits, so a
         # rollout the playbook is still waiting on cannot reach it.
         K8S_ROLLOUT_STALL_CONSECUTIVE=_int("K8S_ROLLOUT_STALL_CONSECUTIVE", "3"),
+        # Consecutive cycles a Deployment may sit with ZERO available replicas (spec > 0) before
+        # check_k8s_workloads' zero-available arm pages (#1802). K8S_WORKLOADS_CONSECUTIVE holds
+        # a Deployment that is down as long as one that is rolling; this arm reads the same
+        # Deployments through `available == 0` and holds them less. 2 cycles = 10 min at
+        # INTERVAL=300, chosen against 16 days of the series on 2026-09-17: every episode of two
+        # or more 5-minute samples at zero was a crash loop the restart arm had already paged on
+        # its first cycle (authelia 09-10, jellyfin/valheim 09-09, zigbee2mqtt 09-12), a cold
+        # start after a node event lasting 20 minutes (jellyfin 09-02, traefik 09-03 — the
+        # existing arm paged those at 15), or the 2026-09-05 outage. A single 2-sample cold
+        # start (sonarr 09-01) is the measured cost of 2 over 3. At 1 the arm pages every
+        # Recreate swap of a slow-starting workload, which the census counts in the dozens.
+        K8S_ZERO_AVAILABLE_CONSECUTIVE=_int("K8S_ZERO_AVAILABLE_CONSECUTIVE", "2"),
         # Hysteresis for check_longhorn_volumes. A node drain and the Sunday 07:30 reboot both
         # degrade every volume on the departing node BY DESIGN, so a single breaching cycle must
         # not page — 3 cycles at the bridge cadence is longer than either takes to settle. Same

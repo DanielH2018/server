@@ -199,19 +199,19 @@ stringData:
   # against kubernetes-cadvisor, cluster-scoped and grouped by pod — fresh k3s-named
   # monitors on the Docker-era tokens.
   k3s-container-restarts.json: |
-    {"type": "push", "name": "k3s Container Restarts", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_restarts_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "k3s Container Restarts", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_restarts_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   k3s-container-oom.json: |
-    {"type": "push", "name": "k3s Container OOM", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_oom_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "k3s Container OOM", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_oom_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   k3s-cpu-throttling.json: |
-    {"type": "push", "name": "k3s CPU Throttling", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_cpu_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "k3s CPU Throttling", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_cpu_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   # 600s like its monitor-bridge siblings, NOT the app's 6-hour test cadence. The producer is
   # the bridge's 5-minute loop re-reading the newest row, not the speedtest run itself, so the
   # deadline tracks the bridge's period. A dead bridge is what push silence means here; a dead
   # speedtest scheduler is caught by the check's own staleness arm instead.
   k3s-speedtest.json: |
-    {"type": "push", "name": "k3s Speedtest", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_speedtest_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "k3s Speedtest", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_speedtest_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   crowdsec-home-allowlist.json: |
-    {"type": "push", "name": "CrowdSec Home Allowlist", "interval": 600, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_home_allowlist_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "CrowdSec Home Allowlist", "interval": 600, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_home_allowlist_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   # DECIDED: 360s, not 300 — the deadline must exceed the producer's PERIOD, and the period
   # is the cron plus the work. Both DDNS pods run the image's default UPDATE_CRON=@every 5m
   # and ping Kuma at the END of each cycle, after IP detection and the record check, so a
@@ -224,19 +224,19 @@ stringData:
   # UPDATE_CRON=@every 4m in both deployments — that edits two files and makes the
   # Cloudflare API busier to cure a monitoring artifact. Raise this if the cadence changes.
   cloudflare-ddns-proxied-push.json: |
-    {"type": "push", "name": "Cloudflare DDNS Proxied", "interval": 360, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ cloudflare_ddns_proxied_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "Cloudflare DDNS Proxied", "interval": 360, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ cloudflare_ddns_proxied_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   cloudflare-ddns-direct-push.json: |
-    {"type": "push", "name": "Cloudflare DDNS Direct", "interval": 360, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ cloudflare_ddns_direct_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "Cloudflare DDNS Direct", "interval": 360, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ cloudflare_ddns_direct_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   longhorn-backup.json: |
-    {"type": "push", "name": "k3s Longhorn Backup", "interval": 1200, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ longhorn_backup_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
+    {"type": "push", "name": "k3s Longhorn Backup", "interval": 1200, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ longhorn_backup_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
   monitor-bridge-longhorn-volumes.json: |
-    {"type": "push", "name": "Longhorn Volume Redundancy", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_longhorn_volumes_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
+    {"type": "push", "name": "Longhorn Volume Redundancy", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_longhorn_volumes_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
   # The space axis of the storage layer, where Longhorn Volume Redundancy above is the replica
   # axis. A PVC has a fixed capacity of its own, so a full one is invisible to daniel-box Disk
   # below and to Root Disk — email is attached for the same reason redundancy has it: the fix is
   # an operator expanding a volume.
   monitor-bridge-pvc-fullness.json: |
-    {"type": "push", "name": "k3s PVC Fullness", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_pvc_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
+    {"type": "push", "name": "k3s PVC Fullness", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_pvc_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
   # The snapshot-space axis of the same layer: how close a capped Longhorn volume is to its
   # spec.snapshotMaxSize (#1627). Snapshots live in the backend rather than in the claim's
   # filesystem, so PVC Fullness above cannot see one filling; a reached cap makes Longhorn refuse
@@ -249,15 +249,15 @@ stringData:
   # conditional — a missing token now fails the render instead of silently removing the
   # monitor (#1632).
   monitor-bridge-snapshot-headroom.json: |
-    {"type": "push", "name": "Longhorn Snapshot Headroom", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_snapshot_headroom_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
+    {"type": "push", "name": "Longhorn Snapshot Headroom", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_snapshot_headroom_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
   # #1243: the CSI global mounts under var/lib/kubelet/plugins/ ext4 remounted read-only after a
   # journal abort, with every existing monitor silent for 50 minutes (Volume CRs stayed
   # `attached healthy` throughout). email attached for the same reason as its two siblings above:
   # the fix is an operator action (remount/recreate), not a self-healing retry.
   monitor-bridge-kubelet-readonly.json: |
-    {"type": "push", "name": "Kubelet CSI Mount Read-Only", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_kubelet_readonly_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
+    {"type": "push", "name": "Kubelet CSI Mount Read-Only", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_kubelet_readonly_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
   daniel-box-disk.json: |
-    {"type": "push", "name": "daniel-box Disk", "interval": 1200, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ daniel_box_disk_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
+    {"type": "push", "name": "daniel-box Disk", "interval": 1200, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ daniel_box_disk_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
 {# The host half of the shutdown chain. Its producer is nut_host's root cron, whose cadence and
    this deadline both derive from nut_host_watchdog_interval_minutes, so a schedule change cannot
    leave the tile graced against the old one. Gated on the token like its siblings: an ungated
@@ -272,11 +272,11 @@ stringData:
    moved from the generic "(host)" to "(daniel-box)" — so its Kuma history survives. #}
 {% if ups_secondary_push_token | default('') %}
   ups-secondary.json: |
-    {"type": "push", "name": "UPS Secondary (daniel-box)", "interval": {{ nut_host_watchdog_interval_minutes | default(10) * 60 * 2 }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ ups_secondary_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
+    {"type": "push", "name": "UPS Secondary (daniel-box)", "interval": {{ nut_host_watchdog_interval_minutes | default(10) * 60 * 2 }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ ups_secondary_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
 {% endif %}
 {% if ups_secondary_daniel_server_push_token | default('') %}
   ups-secondary-daniel-server.json: |
-    {"type": "push", "name": "UPS Secondary (daniel-server)", "interval": {{ nut_host_watchdog_interval_minutes | default(10) * 60 * 2 }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ ups_secondary_daniel_server_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
+    {"type": "push", "name": "UPS Secondary (daniel-server)", "interval": {{ nut_host_watchdog_interval_minutes | default(10) * 60 * 2 }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ ups_secondary_daniel_server_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
 {% endif %}
 {# The Loki read route's only witness (issue #1712). Its caller is a host process, and the route's
    guard is a ClientIP set of node-owned addresses, so no pod can probe it — see
@@ -292,11 +292,11 @@ stringData:
    a service outage, so Discord is proportionate. #}
 {% if loki_route_witness_push_token | default('') %}
   loki-read-route-daniel-box.json: |
-    {"type": "push", "name": "Loki Read Route (daniel-box)", "interval": 7200, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ loki_route_witness_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "Loki Read Route (daniel-box)", "interval": 7200, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ loki_route_witness_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
 {% endif %}
 {% if loki_route_witness_daniel_server_push_token | default('') %}
   loki-read-route-daniel-server.json: |
-    {"type": "push", "name": "Loki Read Route (daniel-server)", "interval": 7200, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ loki_route_witness_daniel_server_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "Loki Read Route (daniel-server)", "interval": 7200, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ loki_route_witness_daniel_server_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
 {% endif %}
   # DECIDED: 5400s, not the 1200 its host-cron siblings use — the deadline must exceed the
   # PRODUCER'S PERIOD, and this producer is an hourly cron (k3s_remember_logs_cron_minute), not a
@@ -304,25 +304,25 @@ stringData:
   # every hour with nothing wrong, which is the failure the Cloudflare DDNS entries above record.
   # Move this and the cron minute together or neither.
   remember-logs-health.json: |
-    {"type": "push", "name": "Remember Log Rotation", "interval": 5400, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ remember_logs_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "Remember Log Rotation", "interval": 5400, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ remember_logs_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   claude-otel-health.json: |
-    {"type": "push", "name": "k3s Telemetry Stack", "interval": 1200, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ claude_otel_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "k3s Telemetry Stack", "interval": 1200, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ claude_otel_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   configarr.json: |
-    {"type": "push", "name": "Configarr Sync", "interval": 1200, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_configarr_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "Configarr Sync", "interval": 1200, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_configarr_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   monitor-bridge-janitorr.json: |
-    {"type": "push", "name": "Janitorr Errors", "interval": 1200, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_janitorr_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "Janitorr Errors", "interval": 1200, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_janitorr_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   autofix-fake-remux.json: |
-    {"type": "push", "name": "Fake Remux Scan", "interval": 1200, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_fake_remux_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "Fake Remux Scan", "interval": 1200, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_fake_remux_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   autofix-fake-remux-replace.json: |
-    {"type": "push", "name": "Fake Remux Replace", "interval": 1200, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_fake_remux_replace_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "Fake Remux Replace", "interval": 1200, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_fake_remux_replace_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   mkv-attachment-repair.json: |
-    {"type": "push", "name": "MKV Attachment Repair", "interval": 1200, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ mkv_attachment_repair_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "MKV Attachment Repair", "interval": 1200, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ mkv_attachment_repair_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   daniel-pi-sd-health.json: |
-    {"type": "push", "name": "Daniel Pi SD Health", "interval": 600, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ pi_sd_health_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
+    {"type": "push", "name": "Daniel Pi SD Health", "interval": 600, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ pi_sd_health_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
   daniel-pi-recovery.json: |
-    {"type": "push", "name": "Daniel Pi Recovery", "interval": 600, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ pi_recovery_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "Daniel Pi Recovery", "interval": 600, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ pi_recovery_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   secret-rotation.json: |
-    {"type": "push", "name": "Secret Rotation", "interval": 90000, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ secret_rotation_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "Secret Rotation", "interval": 90000, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ secret_rotation_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
 {# DECIDED: the one-period-plus-an-hour margin on the drift tiles below (Docs Refresh, Manifest
    Prune, Release Staleness, Setup Plane, Live Object, GitHub Ruleset) stays. #1781 ranked them
    by 30-day down-time and read the margin as the cause. Measured 2026-09-17 from each producer's
@@ -345,11 +345,11 @@ stringData:
    that merely takes a minute fires DOWN with nothing wrong. #}
 {% if docs_refresh_push_token | default('') %}
   docs-refresh.json: |
-    {"type": "push", "name": "Docs Refresh", "interval": 46800, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ docs_refresh_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "Docs Refresh", "interval": 46800, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ docs_refresh_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
 {% endif %}
 {% if manifest_prune_push_token | default('') %}
   manifest-prune-check.json: |
-    {"type": "push", "name": "Manifest Prune Drift", "interval": 90000, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ manifest_prune_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "Manifest Prune Drift", "interval": 90000, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ manifest_prune_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
 {% endif %}
 {# Issue #947: the durable signal for a deferred k8s role change gitops_deploy.py's `cs.k8s`
    branch ff-merges with only a one-shot Discord page. `probe.py releases --stale-only` reads the
@@ -360,7 +360,7 @@ stringData:
    -- the same margin the */10 heartbeats keep against their 600s cron. Move both together. #}
 {% if release_staleness_push_token | default('') %}
   release-staleness-check.json: |
-    {"type": "push", "name": "Release Staleness Drift", "interval": 3600, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ release_staleness_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "Release Staleness Drift", "interval": 3600, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ release_staleness_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
 {% endif %}
 {# The same two drift arms, on the hosts the monitor above cannot see: manifest-prune-check is
    installed only on k3s server nodes, so daniel-server rendered the whole UPS shutdown chain
@@ -369,7 +369,7 @@ stringData:
    creation. Daily cron, hence the same 90000s interval. #}
 {% if setup_drift_push_token | default('') %}
   setup-drift-check.json: |
-    {"type": "push", "name": "Setup Plane Drift (agent hosts)", "interval": 90000, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ setup_drift_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "Setup Plane Drift (agent hosts)", "interval": 90000, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ setup_drift_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
 {% endif %}
 {# Gated the same way as the check above: the cron skips its push until the token exists, so an
    ungated monitor would sit red from creation until /add-secret is run. Daily cron, so the same
@@ -379,7 +379,7 @@ stringData:
    ungated monitor would sit red from creation. Daily cron, hence the same 90000s interval. #}
 {% if live_drift_push_token | default('') %}
   live-drift-check.json: |
-    {"type": "push", "name": "Live Object Drift", "interval": 90000, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ live_drift_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "Live Object Drift", "interval": 90000, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ live_drift_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
 {% endif %}
 {# Gated on the token like its siblings: no homelab_eval_push_token means no ANTHROPIC secret
    exists yet either (initial_setup's eval-run.sh.j2 header), so the cron is disarmed and this
@@ -389,11 +389,11 @@ stringData:
    script's — 626400s (+6h) so a sweep that merely runs long doesn't fire DOWN. #}
 {% if homelab_eval_push_token | default('') %}
   homelab-eval-sweep.json: |
-    {"type": "push", "name": "Homelab Evals", "interval": 626400, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ homelab_eval_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "Homelab Evals", "interval": 626400, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ homelab_eval_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
 {% endif %}
 {% if etcd_snapshot_push_token | default('') %}
   etcd-snapshot-offbox.json: |
-    {"type": "push", "name": "Off-box etcd Snapshot", "interval": 90000, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ etcd_snapshot_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
+    {"type": "push", "name": "Off-box etcd Snapshot", "interval": 90000, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ etcd_snapshot_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
 {% endif %}
 {# The FULL restore drill, run monthly in a throwaway guest on daniel-server (roles/setup/hypervisor,
    issue #1175). Distinct from monitor-bridge's `etcd Restore Drill` tile, which reads daniel-box's
@@ -403,7 +403,7 @@ stringData:
    stopped passing is the class of silence the off-box snapshot tile above already escalates. #}
 {% if etcd_drill_full_push_token | default('') %}
   etcd-restore-drill-full.json: |
-    {"type": "push", "name": "etcd Restore Drill (full)", "interval": {{ etcd_drill_full_kuma_interval_s }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ etcd_drill_full_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
+    {"type": "push", "name": "etcd Restore Drill (full)", "interval": {{ etcd_drill_full_kuma_interval_s }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ etcd_drill_full_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
 {% endif %}
   # ── Transcribed 2026-08-10: the LIVE push fleet whose labels sit inert on the
   # monitor-bridge / autofix-bridge composes (the transcription ledger, pre-ON_DELETE flip).
@@ -412,37 +412,37 @@ stringData:
   # apply prunes the keys (baseline exists since the kubectl-replace reset) and the live
   # monitors were kuma-cli-deleted at the same cutover.
   monitor-bridge-disk.json: |
-    {"type": "push", "name": "Root Disk", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_disk_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
+    {"type": "push", "name": "Root Disk", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_disk_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
   monitor-bridge-cert.json: |
-    {"type": "push", "name": "TLS Cert Expiry", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_cert_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
+    {"type": "push", "name": "TLS Cert Expiry", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_cert_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
   monitor-bridge-mem.json: |
-    {"type": "push", "name": "Memory", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_mem_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "Memory", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_mem_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   monitor-bridge-prometheus.json: |
-    {"type": "push", "name": "Prometheus Reachable", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_prometheus_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "Prometheus Reachable", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_prometheus_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   monitor-bridge-targets.json: |
-    {"type": "push", "name": "Scrape Targets", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_targets_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "Scrape Targets", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_targets_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   monitor-bridge-traefik.json: |
-    {"type": "push", "name": "Traefik 5xx", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_traefik_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "Traefik 5xx", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_traefik_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   monitor-bridge-traefik-latency.json: |
-    {"type": "push", "name": "Traefik Latency", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_traefik_latency_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "Traefik Latency", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_traefik_latency_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   # Minted 2026-09-06 for #1340, ahead of the check that pushes to it. Its two siblings above
   # are per-SERVICE and read green through the 3.5-hour total-404 edge of #1322, because zero
   # routers means no traefik_service_* series to iterate; check_traefik_404_flood reads the
   # entrypoint counter, which survives that failure.
   monitor-bridge-traefik-404.json: |
-    {"type": "push", "name": "Traefik 404 Flood", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_traefik_404_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "Traefik 404 Flood", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_traefik_404_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   monitor-bridge-n8n.json: |
-    {"type": "push", "name": "n8n Prod Workflows", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_n8n_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "n8n Prod Workflows", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_n8n_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   monitor-bridge-arr-queue.json: |
-    {"type": "push", "name": "Arr Queue Warnings", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_arr_queue_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "Arr Queue Warnings", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_arr_queue_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   monitor-bridge-bazarr.json: |
-    {"type": "push", "name": "Bazarr Health", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_bazarr_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "Bazarr Health", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_bazarr_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   monitor-bridge-prowlarr-indexers.json: |
-    {"type": "push", "name": "Prowlarr Indexers", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_prowlarr_indexers_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "Prowlarr Indexers", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_prowlarr_indexers_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   gitops-deploy-alive.json: |
-    {"type": "push", "name": "GitOps Deploy — Alive", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_gitops_alive_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "GitOps Deploy — Alive", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_gitops_alive_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   gitops-deploy-status.json: |
-    {"type": "push", "name": "GitOps Deploy — Status", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_gitops_status_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "GitOps Deploy — Status", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_gitops_status_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   # Pushed every bridge cycle like its neighbours, so the standard interval applies — the
   # RATCHET is hourly, but the CHECK reading its heartbeat runs every cycle, and it is the check
   # that beats. The staleness window lives in bridge_config.py (STAGING_BACKFILL_MAX_AGE_S, 150
@@ -450,24 +450,24 @@ stringData:
   # still evaluating it. Green while the gate is disarmed, with the reason in the message — the
   # ratchet's timer is stopped then, so no heartbeat is expected.
   staging-backfill-ratchet.json: |
-    {"type": "push", "name": "Staging Backfill Ratchet", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_staging_backfill_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "Staging Backfill Ratchet", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_staging_backfill_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   # Pushed every bridge cycle like its neighbours, so the standard 600s interval applies — the
   # DRILL is weekly, but the CHECK reading its stamp runs every cycle, and it is the check that
   # beats. The staleness window lives in check.py (ETCD_DRILL_MAX_AGE_S, 8 days derived from the
   # cron); this interval is only the heartbeat that says the bridge is still evaluating it.
   etcd-restore-drill.json: |
-    {"type": "push", "name": "etcd Restore Drill", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_etcd_drill_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "etcd Restore Drill", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_etcd_drill_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   # Board and CPU temperature across all three hosts, pushed every bridge cycle. The hysteresis
   # that keeps a boost excursion off this tile is HWMON_TEMP_CONSECUTIVE (12 cycles = 60 min)
   # in the monitor-bridge role's files/bridge/config_host.py, not
   # max_retries here — a held cycle still pushes `up`, so the tile stays green through the grace.
   host-temperature.json: |
-    {"type": "push", "name": "Host Temperature", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_host_temp_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "Host Temperature", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_host_temp_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   # Host flip 1 (2026-08-14): pushed once nightly by the k8s/pi-peer-backup CronJob
   # (23:30), not every bridge cycle — the window is 2.5 days (two missed runs + slack,
   # the same tolerance the retired pi_peers check applied). Same token.
   wg-easy-pi-peers.json: |
-    {"type": "push", "name": "WG Pi Peer Backup", "interval": 216000, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_pi_peers_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "WG Pi Peer Backup", "interval": 216000, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_pi_peers_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   # E7 (2026-08-13): DOCKER-USER Origin Lock retired with the public 80/443 it guarded.
   # CrowdSec AppSec stays — its feeder moved to daniel-box (k8s/crowdsec's
   # crowdsec-appsec-verify.sh cron, pushing directly; same token).
@@ -478,51 +478,51 @@ stringData:
   # k8s/traefik's cloudflare-ip-drift.sh daily cron (same direct-push shape). 90000s (25h)
   # gives a daily push one missed run of slack, matching Secret Rotation / Manifest Prune.
   cloudflare-ip-drift.json: |
-    {"type": "push", "name": "Cloudflare IP Drift", "interval": 90000, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_cloudflare_drift_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "Cloudflare IP Drift", "interval": 90000, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_cloudflare_drift_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   # 90000s (25h) for the same reason as Cloudflare IP Drift directly above: fed by a DAILY cron
   # (setup/gitops_deploy's github-ruleset-drift.sh), so the interval gives one missed run of
   # slack. Watches the merge gate the deployer's CI verdict rests on — a required context
   # removed in the GitHub UI otherwise changes what can reach master with no commit anywhere.
   github-ruleset-drift.json: |
-    {"type": "push", "name": "GitHub Ruleset Drift", "interval": 90000, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ ruleset_drift_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "GitHub Ruleset Drift", "interval": 90000, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ ruleset_drift_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   # 90000s (25h), daily feeder: setup/gitops_deploy's github-interaction-limit.sh. Watches the
   # setting that keeps the public repo closed to non-collaborators — GitHub grants it for six
   # months at most and lets it lapse silently, so the cron re-arms it and this tile says whether
   # the re-arm happened. A missed beat here means the lapse window is open again.
   github-interaction-limit.json: |
-    {"type": "push", "name": "GitHub Interaction Limit", "interval": 90000, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ interaction_limit_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "GitHub Interaction Limit", "interval": 90000, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ interaction_limit_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   # 1800s, NOT the bridge fleet's 600s: this monitor's feeder is k8s/crowdsec's `*/15`
   # cron, not the 300s monitor-bridge loop. A 600s interval expired mid-cycle, so the tile
   # alternated up/down every ~7.5 min (measured 2026-08-21: 24 transitions in 3h, up 2/3
   # of the time = 600/900) with `max_retries: 0` turning each expiry straight into DOWN.
   # 1800 = two cron periods, the same one-missed-run slack 600 gives the 300s bridge loop.
   crowdsec-appsec.json: |
-    {"type": "push", "name": "CrowdSec AppSec", "interval": 1800, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_appsec_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "CrowdSec AppSec", "interval": 1800, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_appsec_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   monitor-bridge-b2-reachable.json: |
-    {"type": "push", "name": "B2 Reachable", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_b2_reachable_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
+    {"type": "push", "name": "B2 Reachable", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_b2_reachable_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
   monitor-bridge-k8s-workloads.json: |
-    {"type": "push", "name": "k3s Workload Health", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_k8s_workloads_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "k3s Workload Health", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_k8s_workloads_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   monitor-bridge-r2-usage.json: |
-    {"type": "push", "name": "R2 Free Tier Headroom", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_r2_usage_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
+    {"type": "push", "name": "R2 Free Tier Headroom", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_r2_usage_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
   monitor-bridge-b2-storage.json: |
-    {"type": "push", "name": "B2 Free Tier Headroom", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_b2_storage_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
+    {"type": "push", "name": "B2 Free Tier Headroom", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_b2_storage_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
   monitor-bridge-cluster-targets.json: |
-    {"type": "push", "name": "Cluster Scrape Targets", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_cluster_targets_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "Cluster Scrape Targets", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_cluster_targets_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   monitor-bridge-cluster-prometheus.json: |
-    {"type": "push", "name": "Cluster Prometheus Reachable", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_cluster_prometheus_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "Cluster Prometheus Reachable", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_cluster_prometheus_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   monitor-bridge-scrutiny.json: |
-    {"type": "push", "name": "SMART Data / Health", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_scrutiny_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
+    {"type": "push", "name": "SMART Data / Health", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_scrutiny_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
   monitor-bridge-ups.json: |
-    {"type": "push", "name": "UPS Battery Health", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_ups_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
+    {"type": "push", "name": "UPS Battery Health", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_ups_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
   monitor-bridge-pi.json: |
-    {"type": "push", "name": "Pi Pressure", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_pi_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "Pi Pressure", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_pi_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   monitor-bridge-ha.json: |
-    {"type": "push", "name": "Home Assistant Automations", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_ha_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "Home Assistant Automations", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_ha_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   # Host flip 2 (2026-08-14): pushed once daily by renovate-notify's ExecStartPost on
   # daniel-box (13:00 timer), not every bridge cycle — 36h window = one missed run +
   # slack, the same tolerance the retired renovate_alive check applied. Same token.
   renovate-notify-alive.json: |
-    {"type": "push", "name": "Renovate Notifier — Alive", "interval": 129600, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_renovate_alive_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "Renovate Notifier — Alive", "interval": 129600, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_renovate_alive_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   # Pushed once daily by renovate-agent's ExecStartPost on daniel-box (15:00 timer), and only
   # when the session wrapper exited 0 — a failed run is the OnFailure alert's job, this tile
   # reports silence. DECIDED: 100800s (28h), not the 90000 the other daily tiles use — the
@@ -533,12 +533,12 @@ stringData:
   # token so a checkout without the secret renders no tile rather than one that sits red.
 {% if renovate_agent_kuma_push_token | default('') %}
   renovate-agent-alive.json: |
-    {"type": "push", "name": "Renovate Agent — Alive", "interval": 100800, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ renovate_agent_kuma_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "Renovate Agent — Alive", "interval": 100800, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ renovate_agent_kuma_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
 {% endif %}
   monitor-bridge-loki.json: |
-    {"type": "push", "name": "Loki Log Ingestion", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_loki_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "Loki Log Ingestion", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_loki_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   monitor-bridge-promtail-dropped.json: |
-    {"type": "push", "name": "Log Shipper Dropped Entries", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_promtail_dropped_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "Log Shipper Dropped Entries", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_promtail_dropped_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
 {# Minted 2026-09-17 for #1869. kuma-push-lib.sh logs a lost push and returns 0 by design, so
    a host cron's DOWN verdict that never reached its tile was reported only by that tile's
    heartbeat deadline — the one-period-plus-an-hour margin the DECIDED marker above the drift
@@ -547,13 +547,13 @@ stringData:
    fleet-wide loss is the edge or host tiles' page, and a plain count of push failures was
    measured and rejected for paging on exactly those (uptime-kuma/CLAUDE.md). #}
   monitor-bridge-swallowed-verdicts.json: |
-    {"type": "push", "name": "Swallowed Push Verdicts", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_swallowed_verdicts_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "Swallowed Push Verdicts", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_swallowed_verdicts_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   monitor-bridge-loki-reachable.json: |
-    {"type": "push", "name": "Loki Reachable", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_loki_reachable_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "Loki Reachable", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_loki_reachable_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   monitor-bridge-discord.json: |
-    {"type": "push", "name": "Discord Delivery", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_discord_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
+    {"type": "push", "name": "Discord Delivery", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_discord_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
   arr-autoblock.json: |
-    {"type": "push", "name": "Arr Auto-Block", "interval": 600, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ arr_autoblock_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "Arr Auto-Block", "interval": 600, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ arr_autoblock_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
 {# Deadman for the status-page-sync CronJob in this role — the job that owns the /status/
    containers group list. Nothing else watches a k8s Job: monitor-bridge's cluster checks
    cover Deployments and DaemonSets only, so without this tile a sync that started failing
@@ -564,7 +564,7 @@ stringData:
    is a healthy run, and the common case. #}
 {% if kuma_status_page_sync_push_token | default('') %}
   status-page-sync.json: |
-    {"type": "push", "name": "Status Page Sync", "interval": 1800, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ kuma_status_page_sync_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "Status Page Sync", "interval": 1800, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ kuma_status_page_sync_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
 {% endif %}
   # ── fleet-level all-clear ──────────────────────────────────────────────────────────────
   # One tile whose recovery is ONE message, so a fleet-wide outage gets an all-clear at all.
