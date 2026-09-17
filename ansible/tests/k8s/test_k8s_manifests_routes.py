@@ -122,8 +122,10 @@ AUTHELIA_BYPASS_ROUTES = {
     ),
     "karakeep-public-api-trpc": (
         "What the extension and the mobile app actually speak; protected procedures 401 "
-        "without a key, and the one password-taking public procedure (apiKeys.exchange, the "
-        "extension's login) is throttled by the app at 10 per 15 minutes."
+        "without a key. The public procedures are the account flows (apiKeys.exchange — the "
+        "extension's password login — signup, invite, email verify, password reset) and the "
+        "public-list reads; every account flow carries the app's own rate limit (3-10 per "
+        "window) and signup is closed by DISABLE_NEW_USERS_REGISTRATION."
     ),
     "karakeep-public-api-assets": (
         "Asset upload and download for the mobile app, behind the app's authMiddleware. No "
