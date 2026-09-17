@@ -19,12 +19,11 @@ from bridge.types import Check
 from checks.notify import (
     check_discord,
 )
+from checks.gitops import check_gitops_alive, check_gitops_status
 from checks.service import (
     check_arr_queue,
     check_bazarr,
     check_etcd_restore_drill,
-    check_gitops_alive,
-    check_gitops_status,
     check_staging_backfill_alive,
     check_ha_heartbeat,
     check_n8n,

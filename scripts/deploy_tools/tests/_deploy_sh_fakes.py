@@ -112,3 +112,19 @@ def make_snapshot_repo(path: Path) -> Path:
         capture_output=True,
     )
     return path
+
+
+def stub_bin(tmp_path: Path, stubs: dict[str, str]) -> Path:
+    """Write each stub as an executable under `tmp_path/bin` and return that directory."""
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir(exist_ok=True)
+    for name, body in stubs.items():
+        (bin_dir / name).write_text(body)
+        (bin_dir / name).chmod(0o755)
+    return bin_dir
+
+
+def stub_path(tmp_path: Path, stubs: dict[str, str]) -> dict[str, str]:
+    """`os.environ` with the stubs from `stub_bin` ahead of everything on PATH."""
+    bin_dir = stub_bin(tmp_path, stubs)
+    return dict(os.environ, PATH=f"{bin_dir}:{os.environ['PATH']}")

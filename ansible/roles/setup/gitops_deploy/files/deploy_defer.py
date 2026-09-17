@@ -46,7 +46,11 @@ INITIAL_SETUP = "ansible/initial_setup.yml"
 
 
 def for_contention(
-    tools: DeployTools, config: Config, target: TickTarget, exc: BaseException
+    tools: DeployTools,
+    state: DeployerState,
+    config: Config,
+    target: TickTarget,
+    exc: BaseException,
 ) -> int:
     """A service lock stayed busy: undo the range and let the next tick re-evaluate.
 
@@ -56,8 +60,16 @@ def for_contention(
     redeploy a version that is already live. The ff-merge IS undone, because `local..origin`
     carrying the range is what makes the next tick look at it again.
 
+    The streak is recorded in `contention_since`, because the reset leaves no other durable
+    trace: `last_run` advances (the tick completed), `hold_sha` stays empty (nothing failed),
+    and `behind_since` ages toward a six-hour page sized for a dirty tree. A wedged operator
+    `deploy.sh` holding one service lock therefore deferred every tick silently for as long
+    as it lived (issue #1847). monitor-bridge pages once the streak's first-seen stamp is
+    older than `GITOPS_CONTENTION_MAX_MIN`, and the SessionStart banner names the lock.
+
     Args:
         tools: the tick's boundaries; its `run` performs the reset.
+        state: the marker files, for the streak.
         config: the tick's config, for the repo path.
         target: the tick's refs; `local` is where the reset lands.
         exc: the `deploy_locks.ServiceLockBusy` raised, naming the tag and the seconds.
@@ -65,7 +77,13 @@ def for_contention(
     Returns:
         0. The tick completed, so `last_run` is written and the deployer reads alive.
     """
-    log(f"{exc} — deferring to the next tick")
+    entry = state.record_contention(
+        target.origin, getattr(exc, "lock", ""), time.time()
+    )
+    log(
+        f"{exc} — deferring to the next tick (consecutive deferral {entry.count}, "
+        f"first at {int(entry.first_seen)})"
+    )
     tools.run(["git", "reset", "--hard", target.local], cwd=config.repo)
     return 0
 

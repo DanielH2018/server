@@ -40,6 +40,7 @@ monitor_bridge_modules:
   - checks/cluster.py
   - checks/cluster_rollout.py
   - checks/service.py
+  - checks/gitops.py
   - checks/notify.py
   - bridge/common.py
   - bridge/parsing.py

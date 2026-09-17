@@ -15,7 +15,7 @@ from dataclasses import replace
 
 import pytest
 
-import checks.service
+import checks.gitops
 
 _REPO = Path(__file__).resolve().parents[5]
 
@@ -30,7 +30,7 @@ _REPO = Path(__file__).resolve().parents[5]
     ],
 )
 def test_gitops_alive(age_s, max_age, ok, must_contain):
-    result_ok, msg = checks.service.gitops_alive(age_s, max_age)
+    result_ok, msg = checks.gitops.gitops_alive(age_s, max_age)
     assert result_ok is ok
     for s in must_contain:
         assert s in msg
@@ -63,7 +63,7 @@ def test_gitops_alive(age_s, max_age, ok, must_contain):
     ],
 )
 def test_gitops_status(hold, diverged, ok, must_contain, exact_msg, cfg):
-    result_ok, msg = checks.service.gitops_status(cfg, hold, diverged)
+    result_ok, msg = checks.gitops.gitops_status(cfg, hold, diverged)
     assert result_ok is ok
     if exact_msg is not None:
         assert msg == exact_msg
@@ -89,7 +89,7 @@ def test_check_gitops_alive(tmp_path, monkeypatch, content_fn, ok, must_contain,
     cfg = replace(cfg, GITOPS_STATE_DIR=str(tmp_path))
     if content_fn is not None:
         _gw(tmp_path, "last_run", content_fn())
-    result_ok, msg = checks.service.check_gitops_alive(cfg)
+    result_ok, msg = checks.gitops.check_gitops_alive(cfg)
     assert result_ok is ok
     for s in must_contain:
         assert s in msg
@@ -111,7 +111,7 @@ def test_check_gitops_status(
     cfg = replace(cfg, GITOPS_STATE_DIR=str(tmp_path))
     if filename is not None:
         _gw(tmp_path, filename, content)
-    result_ok, msg = checks.service.check_gitops_status(cfg)
+    result_ok, msg = checks.gitops.check_gitops_status(cfg)
     assert result_ok is ok
     for s in must_contain:
         assert s in msg
@@ -119,7 +119,7 @@ def test_check_gitops_status(
 
 def test_gitops_status_behind_briefly_is_ok(cfg):
     # A routine push leaves the host behind for one tick. That must never page.
-    ok, msg = checks.service.gitops_status(
+    ok, msg = checks.gitops.gitops_status(
         cfg, None, None, "abc123def4567890 1000.0", now=1600.0
     )
     assert ok
@@ -127,7 +127,7 @@ def test_gitops_status_behind_briefly_is_ok(cfg):
 
 
 def test_gitops_status_behind_too_long_pages(cfg):
-    ok, msg = checks.service.gitops_status(
+    ok, msg = checks.gitops.gitops_status(
         cfg, None, None, "abc123def4567890 1000.0", now=1000.0 + 7 * 3600
     )
     assert not ok
@@ -136,7 +136,7 @@ def test_gitops_status_behind_too_long_pages(cfg):
 
 
 def test_gitops_status_behind_respects_threshold_argument(cfg):
-    ok, _ = checks.service.gitops_status(
+    ok, _ = checks.gitops.gitops_status(
         cfg, None, None, "abc123def4567890 1000.0", now=1000.0 + 120, max_behind_s=60
     )
     assert not ok
@@ -144,7 +144,7 @@ def test_gitops_status_behind_respects_threshold_argument(cfg):
 
 def test_gitops_status_hold_wins_over_behind(cfg):
     # A hold leaves the host behind too, but names the actual cause — report that, not the symptom.
-    ok, msg = checks.service.gitops_status(
+    ok, msg = checks.gitops.gitops_status(
         cfg, "held123abc456789", None, "abc123def4567890 1.0", now=1e9
     )
     assert not ok
@@ -152,7 +152,7 @@ def test_gitops_status_hold_wins_over_behind(cfg):
 
 
 def test_gitops_status_diverged_wins_over_behind(cfg):
-    ok, msg = checks.service.gitops_status(
+    ok, msg = checks.gitops.gitops_status(
         cfg, None, "div123abc4567890", "abc123def4567890 1.0", now=1e9
     )
     assert not ok
@@ -162,12 +162,12 @@ def test_gitops_status_diverged_wins_over_behind(cfg):
 def test_gitops_status_unparseable_behind_marker_is_ok(cfg):
     # A garbled marker must read as "not behind" rather than page forever on garbage.
     for marker in ("garbage", "abc123 notanumber", "abc123", ""):
-        ok, _ = checks.service.gitops_status(cfg, None, None, marker, now=1e9)
+        ok, _ = checks.gitops.gitops_status(cfg, None, None, marker, now=1e9)
         assert ok, marker
 
 
 def test_a_service_hold_names_the_pr(cfg):
-    ok, msg = checks.service.gitops_status(cfg, "deadbeefcafe")
+    ok, msg = checks.gitops.gitops_status(cfg, "deadbeefcafe")
     assert not ok
     assert "revert the offending PR" in msg
 
@@ -178,7 +178,7 @@ def test_a_plane_hold_names_the_playbook_instead(cfg):
     Reverting the PR undoes none of that, so the message must name what to re-run instead --
     otherwise the monitor prescribes a remediation that cannot work.
     """
-    ok, msg = checks.service.gitops_status(
+    ok, msg = checks.gitops.gitops_status(
         cfg, "deadbeefcafe", hold_plane="ansible/initial_setup.yml renovate_notify"
     )
     assert not ok
@@ -191,7 +191,7 @@ def test_a_plane_marker_without_a_hold_does_not_page(cfg):
 
     A stale hold_plane left behind by a cleared hold must not keep the monitor red on its own.
     """
-    ok, _ = checks.service.gitops_status(cfg, None, hold_plane="ansible/deploy.yml")
+    ok, _ = checks.gitops.gitops_status(cfg, None, hold_plane="ansible/deploy.yml")
     assert ok
 
 
@@ -206,7 +206,7 @@ def test_a_freshly_pending_role_is_ok(cfg):
 
     Paging on it immediately would page on every one of those merges.
     """
-    ok, msg = checks.service.gitops_status(
+    ok, msg = checks.gitops.gitops_status(
         cfg, None, None, None, now=1000.0 + 600, manual_plane=_K3S_PENDING
     )
     assert ok
@@ -214,7 +214,7 @@ def test_a_freshly_pending_role_is_ok(cfg):
 
 
 def test_a_role_pending_too_long_pages_and_names_it(cfg):
-    ok, msg = checks.service.gitops_status(
+    ok, msg = checks.gitops.gitops_status(
         cfg, None, None, None, now=1000.0 + 7 * 3600, manual_plane=_K3S_PENDING
     )
     assert not ok
@@ -228,7 +228,7 @@ def test_the_oldest_pending_role_decides(cfg):
     A role recorded this minute must not reset the clock on one that has waited all day.
     """
     marker = _K3S_PENDING + "\ndef456abc7890123 none common 25000.0"
-    ok, msg = checks.service.gitops_status(
+    ok, msg = checks.gitops.gitops_status(
         cfg, None, None, None, now=1000.0 + 7 * 3600, manual_plane=marker
     )
     assert not ok
@@ -238,7 +238,7 @@ def test_the_oldest_pending_role_decides(cfg):
 def test_an_unparseable_manual_plane_marker_is_ok(cfg):
     """Same rule as `behind_since`: garbage must not page forever with nothing to clear."""
     for marker in ("garbage", "a b c notanumber", "", "a b c"):
-        ok, _ = checks.service.gitops_status(
+        ok, _ = checks.gitops.gitops_status(
             cfg, None, None, None, now=1e9, manual_plane=marker
         )
         assert ok, marker
@@ -246,7 +246,7 @@ def test_an_unparseable_manual_plane_marker_is_ok(cfg):
 
 def test_a_hold_wins_over_a_pending_role(cfg):
     """A hold names a broken apply; a pending role names work nobody has started yet."""
-    ok, msg = checks.service.gitops_status(
+    ok, msg = checks.gitops.gitops_status(
         cfg, "held123abc456789", None, None, now=1e9, manual_plane=_K3S_PENDING
     )
     assert not ok
@@ -261,7 +261,7 @@ def test_a_stale_behind_marker_wins_over_a_pending_role(cfg):
     means the deployer has stopped and every other session's landing exits 4 from deploy.sh
     until a hand pulls the primary checkout. A pending role blocks nobody.
     """
-    ok, msg = checks.service.gitops_status(
+    ok, msg = checks.gitops.gitops_status(
         cfg,
         None,
         None,
@@ -278,7 +278,7 @@ def test_check_gitops_status_reads_the_manual_plane_file(tmp_path, cfg):
     """The marker is read off the same :ro state mount as `behind_since`."""
     cfg = replace(cfg, GITOPS_STATE_DIR=str(tmp_path))
     _gw(tmp_path, "manual_plane", "abc123def4567890 ansible/k3s-bringup.yml k3s 1.0")
-    ok, msg = checks.service.check_gitops_status(cfg)
+    ok, msg = checks.gitops.check_gitops_status(cfg)
     assert not ok
     assert "k3s" in msg
 
@@ -295,6 +295,80 @@ def test_the_clear_command_matches_the_one_the_deployer_prescribes():
     sys.path.insert(0, str(_REPO / "ansible/roles/setup/gitops_deploy/files"))
     import deploy_remediation
 
-    assert (
-        checks.service.MANUAL_PLANE_CLEAR in deploy_remediation.MANUAL_PLANE_CLEAR_CMD
+    assert checks.gitops.MANUAL_PLANE_CLEAR in deploy_remediation.MANUAL_PLANE_CLEAR_CMD
+
+
+# ── consecutive ticks deferred on a busy service lock (issue #1847) ───────────────────────────
+_CONTENTION = "abc123def4567890 sonarr 1000.0 1900.0 2"
+
+
+def test_a_short_contention_streak_is_ok(cfg):
+    """CLEAN half: one operator deploy holding a lock for a few minutes is not a fault."""
+    ok, _ = checks.gitops.gitops_status(
+        cfg, None, contention_since=_CONTENTION, now=1000.0 + 20 * 60
     )
+    assert ok
+
+
+def test_a_long_contention_streak_pages_naming_the_lock(cfg):
+    """FLAGGED half: the streak is older than the deployer's longest apply budget."""
+    ok, msg = checks.gitops.gitops_status(
+        cfg, None, contention_since=_CONTENTION, now=1000.0 + 31 * 60
+    )
+    assert not ok
+    assert "service lock sonarr" in msg
+    assert "2 consecutive" in msg
+    assert "clear-contention" in msg
+
+
+def test_contention_respects_threshold_argument(cfg):
+    ok, _ = checks.gitops.gitops_status(
+        cfg, None, contention_since=_CONTENTION, now=1000.0 + 120, max_contention_s=60
+    )
+    assert not ok
+
+
+def test_an_unparseable_contention_marker_is_ok(cfg):
+    ok, _ = checks.gitops.gitops_status(
+        cfg, None, contention_since="abc123 sonarr not-a-stamp 1 1", now=1e9
+    )
+    assert ok
+
+
+def test_a_stale_contention_streak_is_reported_ahead_of_behind(cfg):
+    """The streak names the cause; behind names the symptom the same fault produces."""
+    ok, msg = checks.gitops.gitops_status(
+        cfg,
+        None,
+        None,
+        "abc123def4567890 1000.0",
+        now=1000.0 + 7 * 3600,
+        contention_since=_CONTENTION,
+    )
+    assert not ok
+    assert "service lock" in msg
+
+
+def test_hold_wins_over_contention(cfg):
+    ok, msg = checks.gitops.gitops_status(
+        cfg, "abc123def4567890", contention_since=_CONTENTION, now=1e9
+    )
+    assert not ok
+    assert "held" in msg
+
+
+def test_check_gitops_status_reads_the_contention_file(tmp_path, cfg):
+    cfg = replace(cfg, GITOPS_STATE_DIR=str(tmp_path))
+    _gw(tmp_path, "contention_since", "abc123def4567890 all 1.0 1.0 1")
+    ok, msg = checks.gitops.check_gitops_status(cfg)
+    assert not ok
+    assert "service lock all" in msg
+
+
+def test_the_contention_clear_command_matches_the_one_the_deployer_prescribes():
+    import sys
+
+    sys.path.insert(0, str(_REPO / "ansible/roles/setup/gitops_deploy/files"))
+    import deploy_remediation
+
+    assert checks.gitops.CONTENTION_CLEAR == deploy_remediation.CONTENTION_CLEAR_CMD

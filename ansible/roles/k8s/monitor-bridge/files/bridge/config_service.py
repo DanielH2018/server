@@ -46,6 +46,7 @@ class ServiceConfig:
     ETCD_DRILL_MAX_AGE_S: float
     STAGING_BACKFILL_MAX_AGE_S: float
     GITOPS_BEHIND_MAX_S: float
+    GITOPS_CONTENTION_MAX_S: float
     HA_URL: str
     HA_TOKEN: str = field(repr=False)
     HA_HEARTBEAT_MAX_AGE_S: float
@@ -222,6 +223,13 @@ def service_config(
         # is behind by design for as long as the edit lasts. 6 h pages a genuinely-stuck host
         # well inside a day while never firing on a normal push or a long editing session.
         GITOPS_BEHIND_MAX_S=_num("GITOPS_BEHIND_MAX_MIN", "360") * 60,
+        # How long consecutive ticks may defer on one busy service lock before GitOps Status
+        # pages (issue #1847). Derived from the longest deploy the deployer itself is allowed
+        # — `gitops_deploy_broad_timeout_s`, 1800 s, the same ceiling `SERVICE_LOCK_WAIT_S`
+        # gives one wait: a holder still on the lock 30 min after the first tick gave up has
+        # outlived every legitimate deploy. The behind arm above would page the same fault,
+        # but only after six hours sized for a dirty tree.
+        GITOPS_CONTENTION_MAX_S=_num("GITOPS_CONTENTION_MAX_MIN", "30") * 60,
         # HA automation-engine heartbeat: an HA time_pattern automation stamps
         # input_datetime.ha_heartbeat with now() every minute, so its last_changed is fresh ONLY
         # while HA's automation scheduler is executing. We poll HA's /api/states over the apps

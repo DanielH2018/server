@@ -25,6 +25,13 @@ BRANCH_DEFAULT = "master"
 MANUAL_PLANE_CLEAR_CMD = (
     "uv run python scripts/deploy_tools/gitops_state.py clear-manual-plane <role>"
 )
+# What an operator runs to end a contention streak by hand once the lock's holder is gone.
+# The tick clears it itself on the next tick that is not deferred; this is for a marker an
+# operator wants gone now. monitor-bridge and `lib.deployer_park` carry copies, pinned to
+# this one by their tests.
+CONTENTION_CLEAR_CMD = (
+    "uv run python scripts/deploy_tools/gitops_state.py clear-contention"
+)
 
 
 # A rollback re-run must fit inside the unit's TimeoutStartSec alongside the forward run and

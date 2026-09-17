@@ -67,7 +67,8 @@ DEPLOY_SH_NO_VERDICT = frozenset(
 # 3 = the tick was skipped because the tree lock was held, so it fast-forwarded NOTHING.
 # 4 = `--no-wait` joined a tick already in flight and started none. That tick fetched before
 #     the request, so a commit merged since is not in it (issue #1843). Never seen with a wait
-#     budget: there the wrapper watches the joined run and exits by its outcome.
+#     budget: there the wrapper watches the joined run and, when it ends cleanly, starts a
+#     fresh run on the same budget and exits by THAT run's outcome (issue #1879).
 # 75 = the wrapper stopped watching a run still in flight, which is not a failure.
 TICK_OK = 0
 TICK_LOCK_CONTENTION = 3

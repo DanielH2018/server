@@ -82,11 +82,15 @@ sys.path.insert(0, os.path.join(REPO, "scripts"))
 try:
     from lib.deployer_park import (
         BEHIND_PARK_SECONDS,
+        CONTENTION_CLEAR_CMD,
+        CONTENTION_PARK_SECONDS,
         GITOPS_STATE_DIR,
         MANUAL_PLANE_CLEAR_CMD,
+        contention_pending,
         manual_plane_pending,
         park_age,
         read_behind_marker,
+        read_contention_marker,
         read_manual_plane_marker,
     )
 
@@ -100,8 +104,10 @@ except ImportError as exc:
     # be the second derivation issue #1429 removed, so these are deliberately not the real
     # threshold or the real marker directory, and the raising stubs say so if one is ever called.
     BEHIND_PARK_SECONDS = 0
+    CONTENTION_PARK_SECONDS = 0
     GITOPS_STATE_DIR = ""
     MANUAL_PLANE_CLEAR_CMD = ""
+    CONTENTION_CLEAR_CMD = ""
 
     def _park_unavailable(*_args, **_kwargs):
         raise ImportError(DEPLOYER_PARK_IMPORT_ERROR)
@@ -110,6 +116,8 @@ except ImportError as exc:
     read_behind_marker = _park_unavailable
     manual_plane_pending = _park_unavailable
     read_manual_plane_marker = _park_unavailable
+    contention_pending = _park_unavailable
+    read_contention_marker = _park_unavailable
 
 __all__ = ["BEHIND_PARK_SECONDS", "GITOPS_STATE_DIR"]
 
@@ -255,8 +263,34 @@ def manual_plane_lines(marker, now):
     return lines
 
 
+def contention_lines(marker, now):
+    """One banner line while the deployer has deferred on a busy service lock for too long.
+
+    A contention defer resets the tree and returns 0, so `last_run` advances, `hold_sha` stays
+    empty and only `behind_since` ages — toward the six-hour page sized for a dirty tree. This
+    names the lock and its holder's shape instead (issue #1847). Age-gated like
+    `behind_park_lines`: one operator deploy holding a lock for a tick is routine.
+    """
+    pending = contention_pending(marker)
+    if pending is None or now - pending[1] < CONTENTION_PARK_SECONDS:
+        return []
+    lock, first_seen, count = pending
+    age = now - first_seen
+    return [
+        f"  ✗ the GitOps deployer has deferred {count} consecutive tick(s) on service lock "
+        f"`{lock}` for {_age_phrase(age)} — a deploy.sh holding "
+        f"/var/lock/server-deploy-{lock}.lock has outlived any legitimate deploy; find it "
+        f"(fuser), end it, then `{CONTENTION_CLEAR_CMD}`"
+    ]
+
+
 def parked_deployer_problems(
-    list_worktrees=None, status=None, read_marker=None, now=None, read_manual=None
+    list_worktrees=None,
+    status=None,
+    read_marker=None,
+    now=None,
+    read_manual=None,
+    read_contention=None,
 ):
     """The primary-checkout and deployer-park banner lines, as one list.
 
@@ -299,6 +333,11 @@ def parked_deployer_problems(
         def read_manual():
             return read_manual_plane_marker(GITOPS_STATE_DIR)
 
+    if read_contention is None:
+
+        def read_contention():
+            return read_contention_marker(GITOPS_STATE_DIR)
+
     # Deferred like the `lib.git` import above, and for the same reason the rest of this file
     # defers: nothing at module scope may be able to stop the banner. The one module-scope
     # import this file does keep — `lib.deployer_park` — is wrapped up there and reported here.
@@ -330,6 +369,7 @@ def parked_deployer_problems(
         # same tick, and a host can be in both. A read that raises keeps the lines gathered
         # before it, the same way the park read does.
         lines += manual_plane_lines(read_manual(), clock)
+        lines += contention_lines(read_contention(), clock)
     except Exception:
         return lines
     return lines

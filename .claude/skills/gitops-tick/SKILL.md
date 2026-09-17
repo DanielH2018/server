@@ -27,9 +27,12 @@ like the unit never ran. The wrapper therefore also prints `last_run`, `hold_sha
 
 A tick started while one is already in flight is **joined, not duplicated**: systemd coalesces
 the request into the run already `activating`. The wrapper detects that and says so. The joined
-run fetched origin before your request, so a commit merged since is not in it; with a wait
-budget the wrapper watches that run, and under `--no-wait` it exits **4** having started
-nothing, so the caller knows to re-run once the run ends.
+run fetched origin before your request, so a commit merged since is not in it. With a wait
+budget the wrapper watches that run and, once it ends cleanly, starts a fresh run on the same
+budget and exits by the fresh run's outcome, so the tick you are graded on is one that saw
+origin as it is now. A joined run that failed or hit contention is graded as itself. Under
+`--no-wait` it exits **4** having started nothing, so the caller knows to re-run once the run
+ends.
 
 Exit codes: **75** = still running, the script stopped watching; **4** = `--no-wait` joined a
 run in flight and started none; **3** = the tick was skipped for lock contention, so nothing

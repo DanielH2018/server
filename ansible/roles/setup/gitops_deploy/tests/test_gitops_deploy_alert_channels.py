@@ -450,3 +450,49 @@ def test_a_parked_tick_keeps_the_existing_behind_since_stamp(
     assert gitops_deploy.entrypoint(tick.tools) == 0
     assert tick.merges == []
     assert (state_dir / "behind_since").read_text() == f"{origin} 1000.0"
+
+
+# ── the contention streak ends with the first tick that is not a contention defer ─────────────
+def test_a_tick_that_did_not_defer_on_a_lock_clears_the_contention_streak(
+    gitops_deploy, tick, state_dir
+):
+    """CLEAN half of #1847: a converged noop tick means the lock stopped wedging the deployer."""
+    (state_dir / "contention_since").write_text(f"{ORIGIN} sonarr 1000.0 1000.0 3")
+    tick.origin = tick.local
+    assert gitops_deploy.entrypoint(tick.tools) == 0
+    assert _marker(state_dir, "contention_since") is None
+
+
+def test_a_crashed_tick_leaves_the_contention_streak(gitops_deploy, tick, state_dir):
+    """A crash is not evidence the lock was released, so the streak keeps its age."""
+    (state_dir / "contention_since").write_text(f"{ORIGIN} sonarr 1000.0 1000.0 3")
+    tick.run_error = RuntimeError("git rev-parse HEAD -> 128")
+    with pytest.raises(RuntimeError):
+        gitops_deploy.entrypoint(tick.tools)
+    assert _marker(state_dir, "contention_since") == f"{ORIGIN} sonarr 1000.0 1000.0 3"
+
+
+def test_a_parked_range_keeps_its_stamp_while_green_commits_land_above_it(
+    gitops_deploy, tick, state_dir
+):
+    """Issue #1846, refuted: a wedge cannot game the re-stamp, because a fast-forward to any
+    commit above it crosses it and every deferral that stops the tick leaves HEAD in place.
+
+    Three ticks, each with a new green commit landed above a bring-up change that parks.
+    The walk finds the green ancestor every time; the range it would fast-forward still
+    carries the park, so the tick parks, HEAD never moves and the first stamp survives.
+    """
+    park_at = "3" * 40
+    (state_dir / "behind_since").write_text(f"{park_at} 1000.0")
+    tick.paths = ["ansible/k3s-bringup.yml"]
+    for n, tip in enumerate(("4" * 40, "5" * 40, "6" * 40), start=1):
+        tick.origin = tip
+        tick.ci = "pending"
+        tick.rev_list = [tip, park_at]
+        tick.ancestor_ci = {park_at: "pass"}
+        assert gitops_deploy.entrypoint(tick.tools) == 0, f"tick {n}"
+        assert tick.merges == [], f"tick {n} fast-forwarded a parked range"
+        assert tick.head == tick.local, f"tick {n} moved HEAD"
+    assert (state_dir / "behind_since").read_text().split()[1] == "1000.0", (
+        "the stamp was renewed by a tick that moved nothing"
+    )

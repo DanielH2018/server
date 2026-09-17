@@ -53,6 +53,28 @@ class ManualPlaneEntry(NamedTuple):
     at: float
 
 
+class ContentionEntry(NamedTuple):
+    """The `contention_since` marker: consecutive ticks deferred on a busy service lock.
+
+    Attributes:
+        origin: the origin SHA the most recent deferred tick was trying to reach.
+        lock: the lock that stayed busy, as `deploy_locks.ServiceLockBusy.lock` names it.
+        first_seen: when the first tick of the streak deferred, in `time.time()` terms. The
+            age monitor-bridge and the SessionStart banner read; never refreshed within a
+            streak, for the reason `record_manual_plane` gives.
+        last_seen: when the most recent tick deferred. `entrypoint()` compares it with the
+            tick's own start to clear a marker no tick has touched since — a tick that ended
+            any other way means the lock stopped wedging the deployer.
+        count: how many consecutive ticks deferred.
+    """
+
+    origin: str
+    lock: str
+    first_seen: float
+    last_seen: float
+    count: int
+
+
 class DeployerState:
     """The marker files under /var/lib/gitops-deploy, as one object with typed accessors.
 
@@ -84,6 +106,9 @@ class DeployerState:
         # One line per setup role this host fast-forwarded past and cannot apply itself,
         # `"<origin_sha> <playbook-or-none> <role> <unix_ts>"`. See `record_manual_plane`.
         "manual_plane": "manual_plane",
+        # `"<origin_sha> <lock> <unix_ts_first_seen> <unix_ts_last_seen> <count>"` while
+        # consecutive ticks defer on one busy service lock. See `record_contention`.
+        "contention": "contention_since",
         "last_run": "last_run",
         "diverged": "diverged_sha",
         "behind": "behind_since",
@@ -190,7 +215,7 @@ class DeployerState:
         """Every pending role, oldest line first.
 
         A line this cannot parse is SKIPPED rather than guessed at, the way
-        `checks/service.py::_parse_behind` treats a garbled `behind_since`: the age it would
+        `checks/gitops.py::_parse_behind` treats a garbled `behind_since`: the age it would
         carry decides whether monitor-bridge pages, and a page nobody can silence on garbage
         teaches an operator to ignore the tile. `record_manual_plane` and
         `clear_manual_plane` still carry such a line through, so it is skipped, never lost.
@@ -272,6 +297,82 @@ class DeployerState:
         for role in cleared:
             self.clear_manual_plane(role)
         return cleared
+
+    # ── consecutive ticks deferred on a busy service lock ─────────────────────────────────
+
+    def contention_pending(self) -> ContentionEntry | None:
+        """The streak the `contention_since` marker records, or None.
+
+        A marker this cannot parse reads as None, the way `_parse_behind` treats a garbled
+        `behind_since`: its age decides whether monitor-bridge pages, and a page raised off
+        garbage names no lock and cannot be cleared. `record_contention` overwrites such a
+        marker rather than carrying it.
+        """
+        parts = (self.read("contention") or "").split()
+        if len(parts) != 5:
+            return None
+        try:
+            return ContentionEntry(
+                parts[0], parts[1], float(parts[2]), float(parts[3]), int(parts[4])
+            )
+        except ValueError:
+            return None
+
+    def record_contention(self, origin: str, lock: str, now: float) -> ContentionEntry:
+        """Record that this tick deferred on `lock`, extending the streak or starting one.
+
+        The first-seen stamp survives across the streak and only `last_seen` and `count`
+        move: the age is how long a hand-held lock has kept the tick from deploying, and each
+        further tick that defers is more of the same waiting, not a fresh start. It survives
+        a CHANGE of lock name too, on purpose: the streak measures "this deployer could not
+        deploy", not one lock's age, and two holders wedging alternate ticks would otherwise
+        reset the clock between them and never page. The marker names the latest lock.
+
+        Args:
+            origin: the origin SHA this tick was trying to reach.
+            lock: the lock that stayed busy; `deploy_locks.SERVICE_LOCK_ALL` or a tag. An
+                empty name is recorded as `unknown` so the marker keeps its five fields.
+            now: the current time, in `time.time()` terms.
+
+        Returns:
+            The entry as written.
+        """
+        prior = self.contention_pending()
+        entry = ContentionEntry(
+            origin,
+            lock or "unknown",
+            prior.first_seen if prior else now,
+            now,
+            (prior.count if prior else 0) + 1,
+        )
+        self.write(
+            "contention",
+            f"{entry.origin} {entry.lock} {entry.first_seen} {entry.last_seen} {entry.count}",
+        )
+        return entry
+
+    def clear_contention(self) -> bool:
+        """Drop the marker; True when one was there. An operator's clear and the tick's."""
+        if self.read("contention") is None:
+            return False
+        self.write("contention", None)
+        return True
+
+    def clear_contention_unless_touched_since(self, tick_started: float) -> bool:
+        """Clear the streak when this tick ended some other way than a contention defer.
+
+        `for_contention` stamps `last_seen` during the tick, so a marker whose `last_seen`
+        predates `tick_started` was not written by this tick, and the lock has stopped
+        wedging it — whether the tick deployed, parked, or found nothing to do. A marker
+        this cannot parse is cleared too: nothing can ever extend it.
+
+        Returns:
+            True when a marker was removed.
+        """
+        entry = self.contention_pending()
+        if entry is not None and entry.last_seen >= tick_started:
+            return False
+        return self.clear_contention()
 
     @staticmethod
     def _line_role(line: str) -> str | None:

@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """Operate on the GitOps deployer's own state markers, from the deploy host's shell.
 
-One subcommand today. `clear-manual-plane <role>` drops a role's line from
+Two subcommands. `clear-contention` removes `/var/lib/gitops-deploy/contention_since`, the
+marker the deployer writes while consecutive ticks defer on one busy service lock (issue
+#1847); the tick clears it itself on its next run that is not deferred, so this is for a
+marker an operator wants gone now, after ending the holder. `clear-manual-plane <role>` drops a role's line from
 `/var/lib/gitops-deploy/manual_plane`, the marker the deployer writes when a range carries a
 setup role no playbook it runs can apply — `k3s` (applied by `k3s-bringup.yml`) or `common`
 (applied by no playbook at all). The tick fast-forwards past such a range rather than parking
@@ -171,6 +174,48 @@ def clear_manual_plane(
     return 0
 
 
+def clear_contention(
+    state: DeployerState,
+    lock_path: str | None = None,
+    lock_wait_s: float | None = None,
+) -> int:
+    """Remove the `contention_since` marker. Exit 0 whether or not there was one.
+
+    Serialised against the tree lock exactly as `clear_manual_plane` is, and refused the same
+    way while a tick holds it — a tick mid-defer is about to rewrite this marker.
+    """
+    try:
+        with tree_lock(TREE_LOCK if lock_path is None else lock_path, lock_wait_s):
+            cleared = state.clear_contention()
+    except LockBusy as busy:
+        print(
+            f"{busy.args[0]} is held — a deploy or a gitops tick is running. Nothing was "
+            "changed; re-run this when it finishes.",
+            file=sys.stderr,
+        )
+        return 1
+    except LockUnavailable as bad_lock:
+        path, exc = bad_lock.args
+        print(
+            f"cannot open the tree lock {path}: {exc}. Nothing was changed — this command "
+            "serialises against that lock and will not write the marker without it.",
+            file=sys.stderr,
+        )
+        return 1
+    except PermissionError:
+        print(
+            f"cannot write {state.path('contention')} as this user — the state directory "
+            "is owned by the deploy user; retry with `sudo -u ubuntu`",
+            file=sys.stderr,
+        )
+        return 1
+    if not cleared:
+        print(f"no contention streak in {state.path('contention')} — nothing to clear")
+        return 0
+    print(f"cleared {state.path('contention')}")
+    return 0
+
+
 def main(
     argv: list[str] | None = None,
     lock_path: str | None = None,
@@ -198,8 +243,14 @@ def main(
         help="drop one setup role's pending line, AFTER applying it by hand",
     )
     clear.add_argument("role", help="the setup role, e.g. k3s or common")
+    sub.add_parser(
+        "clear-contention",
+        help="drop the busy-service-lock streak marker, AFTER ending the lock's holder",
+    )
     args = parser.parse_args(argv)
     state = DeployerState(args.state_dir)
+    if args.command == "clear-contention":
+        return clear_contention(state, lock_path, lock_wait_s)
     if args.command != "clear-manual-plane":
         # argparse refuses any other value, so this catches a subcommand added to the parser
         # and not to this dispatch — which would otherwise run the clear with its arguments.

@@ -239,8 +239,9 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     `gitops_deploy` deployer rewrites each non-crashing tick; `down` once it's older than
     `GITOPS_MAX_AGE_MIN` — i.e. the deployer stalled / host down. The deployer no longer pushes
     to Kuma itself — see [[the gitops_deploy CLAUDE.md]])
-  - **GitOps Deploy — Status** (reads `/gitops-state/hold_sha`, `/gitops-state/diverged_sha`
-    **and `/gitops-state/behind_since`**;
+  - **GitOps Deploy — Status** (reads `/gitops-state/hold_sha`, `/gitops-state/diverged_sha`,
+    `/gitops-state/contention_since`, `/gitops-state/manual_plane` **and
+    `/gitops-state/behind_since`**;
     `down` while a rolled-back commit is held pending the operator reverting the offending PR —
     self-heals when the hold clears — OR while local and origin have **diverged** so the deployer
     can't fast-forward and silently noops forever while origin's new commits never deploy (both other
@@ -253,8 +254,16 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     un-deployed Pi-hole DNS records were noticed by hand. Age-gated, not presence-gated: a routine push
     is behind for one tick and the deployer's dirty-tree path is behind for a whole edit session by
     design, so only sustained behind-ness is a fault. hold/diverged are reported ahead of it — they
-    name the cause where "behind" names the symptom. Pure `gitops_status()`/`_parse_behind()` are
-    unit-tested; an unparseable marker reads as not-behind rather than paging forever on garbage.)
+    name the cause where "behind" names the symptom. So is the **busy service lock** arm
+    (`contention_since`, issue #1847): a tick that finds an operator `deploy.sh` still holding a
+    service lock for its whole budget resets its tree and returns 0, so `last_run` advances,
+    `hold_sha` stays empty and only `behind_since` ages — toward this six-hour threshold, sized
+    for a dirty tree. The deployer records the streak's first tick in `contention_since` and
+    this pages once it is older than `GITOPS_CONTENTION_MAX_MIN` (30 = the deployer's longest
+    apply budget, `gitops_deploy_broad_timeout_s`), naming the lock; the tick clears the marker
+    on its next run that is not deferred, and `gitops_state.py clear-contention` clears it by
+    hand. Pure `gitops_status()` and its parsers are unit-tested; an unparseable marker reads as
+    not-behind rather than paging forever on garbage.)
   - **WG Pi Peer Backup** — RETIRED from this container at the host flips (2026-08-14). The pull
     became the `pi-peer-backup` k8s CronJob, which pushes its Kuma monitor directly, so there is
     no `/pi-peers/state.json` on this host and no `pi_peers()` check here. The monitor and the
@@ -1227,7 +1236,8 @@ run loop alone on 2026-09-05).
 | `registry.py` | `build_checks(env)`, the list of every `Check` with its `KUMA_PUSH_*` token read from the environment it is handed |
 | `gates.py` | the five `*_DEPENDENT` sets, `STARTUP_GRACE`, `GATE_DEPENDENTS`, `check_enabled`, `validate_check_filter`, `expand_gates_for_cli`, `down_exporters`, `_evaluate`, `_gate`, and the frozen `Gates` seam `run_once` reads every gate fact through |
 | `bridge/types.py` | `Check`, `CheckResult`, `CheckFn` — the types `registry.py` and `check.py` share without importing one another |
-| `checks/service.py` | `check_n8n` with `_n8n_streaks`, `check_arr_queue`, `check_bazarr` with `bazarr_problems`, `check_prowlarr_indexers`, the gitops pair with `gitops_status` and `_parse_behind`, `check_etcd_restore_drill`, `check_ha_heartbeat` with `with_ha_ban` |
+| `checks/service.py` | `check_n8n` with `_n8n_streaks`, `check_arr_queue`, `check_bazarr` with `bazarr_problems`, `check_prowlarr_indexers`, `check_staging_backfill_alive`, `check_etcd_restore_drill`, `check_ha_heartbeat` with `with_ha_ban` |
+| `checks/gitops.py` | the gitops pair: `check_gitops_alive`, `check_gitops_status` with `gitops_status` and its marker parsers `_parse_behind`, `_parse_manual_plane`, `_parse_contention`. Its own module because `checks/service.py` reached the 600-line cap when the busy-lock arm landed (issue #1847) — same split idiom as `checks/host_edge.py` |
 | `checks/notify.py` | `check_discord` with `_discord_webhooks`, `email_backstop` with `_smtp_login_ok` and `_email_probe` |
 | `checks/logs.py` | `check_loki_ingestion`, `check_shipper_dropped`, `check_loki_reachable`, `with_log_errors` (the Loki arm `check_k8s_workloads` folds in) |
 | `checks/cluster.py` | the cAdvisor trio `check_restarts` / `check_oom` / `check_cpu_throttle` with `_cadvisor_blind`, `_cadvisor_streaks` and `_cpu_breach_streak`; `check_prometheus`, `check_targets_down`, `check_traefik_5xx`, `check_traefik_latency`, `check_k8s_workloads`, `check_cluster_targets`, `check_cluster_prometheus` |
@@ -1254,10 +1264,10 @@ run loop alone on 2026-09-05).
 | `verdicts/logs.py` | `loki_ingestion_fresh`, `shipper_dropped` |
 | `verdicts/notify.py` | `discord_webhook_ok` |
 
-`gitops_status` is the one verdict that lives in a `checks_*` module rather than in
-`verdicts/service.py`, because it reads `cfg.GITOPS_BEHIND_MAX_S` itself; `gitops_alive` takes
-its threshold as an argument. Its private helper `_parse_behind` sits beside it, so the only
-caller and the helper stay together.
+`gitops_status` is the one verdict that lives in a `checks_*` module (`checks/gitops.py`)
+rather than in `verdicts/service.py`, because it reads `cfg.GITOPS_BEHIND_MAX_S` and
+`cfg.GITOPS_CONTENTION_MAX_S` itself; `gitops_alive` takes its threshold as an argument. Its
+private marker parsers sit beside it, so the only caller and the helpers stay together.
 
 ## Configuration is a parameter, not a module global
 

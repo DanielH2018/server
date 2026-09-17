@@ -133,7 +133,11 @@ Sequence:
    setup role `initial_setup.yml` includes) or a setup role reaching a host beyond this one.
    `land_lib/landing.py`'s `tick_is_the_apply` is the predicate, and `--tags` does not opt out
    of it. A change only a hand can apply is not one of these: no tick settles it, so it does
-   not cost the fast path.
+   not cost the fast path. A wait that finds a tick already in flight joins it, and once the
+   joined run ends cleanly the wrapper starts a fresh run and grades that one: the joined run
+   fetched before the merge, so its markers describe a tree without the PR, and a landing
+   graded on them read `deferred` or `needs-manual-apply` for work the next timer tick
+   applied (issue #1879).
 4. `deploy.sh --tags <derived> --at <merge-sha>` from `/home/ubuntu/server`. `--at` snapshots
    that commit rather than the checkout's HEAD, and scopes the staleness gate and the tag
    check to it. A landing that waited for the tick at step 3 passes no `--at` and deploys the
@@ -266,7 +270,7 @@ broad fast-forward, reached by a different route. `behind_since` is clear by the
 it.
 
 `hold_sha` carries it instead. It already pages through **GitOps Deploy — Status**
-(`monitor-bridge/files/checks/service.py`, the GitOps check) with no new timer, which is the reuse the existing
+(`monitor-bridge/files/checks/gitops.py`, the GitOps check) with no new timer, which is the reuse the existing
 behind-origin watchdog design already argues for.
 
 Its message is service-shaped — `checks/service.py` reads `deploy held at %s — revert the offending PR`. A held *plane* needs a variant naming the playbook that failed, because reverting the PR is
