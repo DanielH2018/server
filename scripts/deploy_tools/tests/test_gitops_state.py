@@ -7,6 +7,8 @@ clearing a role nobody applied silences the page that says so.
 Run: uv run pytest scripts/deploy_tools/tests/test_gitops_state.py
 """
 
+import fcntl
+import os
 import sys
 from pathlib import Path
 
@@ -152,3 +154,30 @@ def test_the_role_is_resolved_through_the_deployers_own_tag_map(marker):
     reader's head.
     """
     assert gitops_state.marker_key("k3s") == "k3s"
+
+
+# ── clear-contention (issue #1847) ────────────────────────────────────────────────────────
+def test_clear_contention_removes_the_marker(tmp_path, run, capsys):
+    (tmp_path / "contention_since").write_text(f"{'a' * 40} sonarr 1.0 2.0 3\n")
+    assert run(tmp_path, "clear-contention") == 0
+    assert not (tmp_path / "contention_since").exists()
+    assert "cleared" in capsys.readouterr().out
+
+
+def test_clear_contention_with_no_marker_exits_zero_and_says_so(tmp_path, run, capsys):
+    assert run(tmp_path, "clear-contention") == 0
+    assert "nothing to clear" in capsys.readouterr().out
+
+
+def test_clear_contention_refuses_while_the_tree_lock_is_held(
+    tmp_path, tree_lock, run, capsys
+):
+    (tmp_path / "contention_since").write_text(f"{'a' * 40} sonarr 1.0 2.0 3\n")
+    fd = os.open(tree_lock, os.O_RDONLY | os.O_CREAT, 0o666)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        assert run(tmp_path, "clear-contention") == 1
+    finally:
+        os.close(fd)
+    assert (tmp_path / "contention_since").exists()
+    assert "is held" in capsys.readouterr().err

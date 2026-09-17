@@ -34,7 +34,7 @@ def state(tmp_path: pathlib.Path) -> deploy_io.DeployerState:
 
 # ── the paths did not move ────────────────────────────────────────────────────────────────
 def test_every_marker_resolves_to_the_constant_gitops_deploy_declares(gitops_deploy):
-    """The two representations of the same twenty-one paths, asserted equal by name.
+    """The two representations of the same twenty-two paths, asserted equal by name.
 
     A named mapping rather than a count: a marker that lost its constant has to fail with its
     own name in the message, and a count would also pass if two were swapped.
@@ -45,6 +45,7 @@ def test_every_marker_resolves_to_the_constant_gitops_deploy_declares(gitops_dep
         ("hold_plane", "HOLD_PLANE_FILE"),
         ("broad_applied", "BROAD_APPLIED_FILE"),
         ("manual_plane", "MANUAL_PLANE_FILE"),
+        ("contention", "CONTENTION_FILE"),
         ("last_run", "LAST_RUN"),
         ("diverged", "DIVERGED_FILE"),
         ("behind", "BEHIND_FILE"),
@@ -67,8 +68,8 @@ def test_every_marker_resolves_to_the_constant_gitops_deploy_declares(gitops_dep
 
 
 def test_the_marker_table_covers_every_constant_and_no_more():
-    """Non-vacuity for the loop above: it names twenty-one markers, and so must the table."""
-    assert len(deploy_io.DeployerState.MARKERS) == 21
+    """Non-vacuity for the loop above: it names twenty-two markers, and so must the table."""
+    assert len(deploy_io.DeployerState.MARKERS) == 22
 
 
 def test_an_unknown_marker_is_a_typo_not_a_new_file(state):
@@ -241,3 +242,44 @@ def test_the_marker_key_is_the_role_name_for_every_pending_role():
     assert roles >= {"k3s", "common"}, roles
     for role in roles:
         assert deploy_changes.setup_role_tag(role) == role, role
+
+
+# ── the contention_since marker (issue #1847) ─────────────────────────────────────────────
+def test_a_contention_streak_keeps_its_first_seen_and_counts(state):
+    first = state.record_contention(SHA, "sonarr", 1000.0)
+    assert (first.first_seen, first.last_seen, first.count) == (1000.0, 1000.0, 1)
+    second = state.record_contention(SHA, "sonarr", 1900.0)
+    assert (second.first_seen, second.last_seen, second.count) == (1000.0, 1900.0, 2)
+    assert state.contention_pending() == second
+    assert state.read("contention") == f"{SHA} sonarr 1000.0 1900.0 2"
+
+
+def test_a_contention_marker_with_no_lock_name_keeps_five_fields(state):
+    """`ServiceLockBusy` raised with a message alone has no lock; the readers split on
+    whitespace and a four-field line would read as garbage."""
+    assert state.record_contention(SHA, "", 1.0).lock == "unknown"
+    assert state.contention_pending() is not None
+
+
+def test_a_garbled_contention_marker_reads_as_no_streak_and_is_overwritten(state):
+    """Fails open like `behind_since`: garbage must not page. A new defer starts over."""
+    state.write("contention", f"{SHA} sonarr not-a-stamp 2 1")
+    assert state.contention_pending() is None
+    assert state.record_contention(SHA, "sonarr", 5.0).count == 1
+
+
+def test_a_tick_that_ended_another_way_clears_the_streak(state):
+    """The reverse of `record_contention`, keyed on `last_seen` against the tick's start."""
+    state.record_contention(SHA, "sonarr", 1000.0)
+    assert not state.clear_contention_unless_touched_since(tick_started=900.0), (
+        "the tick that wrote the marker must not clear it"
+    )
+    assert state.clear_contention_unless_touched_since(tick_started=1500.0)
+    assert state.contention_pending() is None
+    assert not state.clear_contention(), "clearing twice is a no-op, not an error"
+
+
+def test_an_operators_clear_removes_the_marker(state):
+    state.record_contention(SHA, "all", 1.0)
+    assert state.clear_contention()
+    assert state.read("contention") is None

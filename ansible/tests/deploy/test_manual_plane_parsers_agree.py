@@ -1,7 +1,7 @@
 """Three modules parse the deployer's `manual_plane` marker; they must agree (issue #1774).
 
 `DeployerState.manual_plane_pending` writes and reads it, monitor-bridge's
-`checks.service._parse_manual_plane` pages off it, and `lib.deployer_park.manual_plane_pending`
+`checks.gitops._parse_manual_plane` pages off it, and `lib.deployer_park.manual_plane_pending`
 puts it on the SessionStart banner. Neither of the last two may import the deployer's tree —
 the monitor runs in a pod and `deployer_park` is imported by a hook before anything is on
 `sys.path` — so the duplication is deliberate and this test is its price.
@@ -21,7 +21,7 @@ from _helpers import REPO
 # reached as `lib.deployer_park` — the same form the SessionStart hook uses.
 sys.path.insert(0, str(REPO / "scripts"))
 
-from checks.service import MANUAL_PLANE_CLEAR, _parse_manual_plane
+from checks.gitops import MANUAL_PLANE_CLEAR, _parse_manual_plane
 from deploy_remediation import MANUAL_PLANE_CLEAR_CMD
 from deploy_state import DeployerState
 

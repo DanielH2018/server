@@ -262,6 +262,9 @@ if [[ -s "$state_dir/behind_since" ]]; then
 else
   echo "behind_since: empty (converged with origin)"
 fi
+if [[ -s "$state_dir/contention_since" ]]; then
+  echo "contention:   $(cat "$state_dir/contention_since")  <-- consecutive ticks deferred on a busy service lock (sha lock first last count)"
+fi
 echo "─────────────────────────────────────────────────────────────────────────────"
 
 state="$(show ActiveState)"

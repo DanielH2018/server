@@ -112,6 +112,14 @@ BROAD_APPLIED_FILE = "/var/lib/gitops-deploy/broad_applied"
 # (DeployerState.clear_manual_plane_applied) or by an operator running
 # `scripts/deploy_tools/gitops_state.py clear-manual-plane <role>`.
 MANUAL_PLANE_FILE = "/var/lib/gitops-deploy/manual_plane"
+# "<origin_sha> <lock> <unix_ts_first_seen> <unix_ts_last_seen> <count>" while consecutive
+# ticks defer on one busy service lock. The contention defer resets the tree and returns 0,
+# so without this it left no durable trace at all: last_run advanced, hold_sha stayed empty
+# and behind_since aged toward a six-hour page sized for a dirty tree (issue #1847).
+# monitor-bridge pages on the first-seen stamp's age; the banner names the lock. Cleared by
+# any tick that ends some other way, or by
+# `scripts/deploy_tools/gitops_state.py clear-contention`.
+CONTENTION_FILE = "/var/lib/gitops-deploy/contention_since"
 # The sorted stale-compose set last alerted on, so a lingering stale dir doesn't re-page
 # every tick — only a CHANGED set (new stale dir, or one cleaned up) re-alerts.
 STALE_COMPOSE_FILE = "/var/lib/gitops-deploy/stale_composes_alerted"
@@ -476,6 +484,9 @@ def entrypoint(tools: DeployTools | None = None) -> int:
     """
     tools = tools if tools is not None else default_tools(CONFIG)
     config = tick_config()
+    # When this tick began, so the contention streak below can tell a marker this tick wrote
+    # from one an earlier tick left: `for_contention` stamps `last_seen` with the wall clock.
+    tick_started = time.time()
     # HEAD as the tick found it, so the behind-origin stamp below can tell a tick that MOVED
     # the tree from one that parked. None when it could not be read, which disarms the
     # re-stamp rather than guessing: an unreadable HEAD is not evidence of progress.
@@ -543,6 +554,12 @@ def entrypoint(tools: DeployTools | None = None) -> int:
         )
     except Exception as e:
         log(f"could not record behind-origin state: {e}")
+    # A tick that got here without deferring on a service lock ends any contention streak:
+    # the lock has stopped wedging the deployer, whatever else this tick did. Only a tick
+    # that reaches this line clears it — a crash above raises past here, and a crash is not
+    # evidence the lock was released.
+    if STATE.clear_contention_unless_touched_since(tick_started):
+        log("contention_since cleared: this tick was not deferred on a service lock")
     # Liveness marker: a tick that completed without crashing (incl. a rollback, rc=1).
     # monitor-bridge reads this; a crash skips the write so the Alive monitor goes stale.
     STATE.write("last_run", str(time.time()))

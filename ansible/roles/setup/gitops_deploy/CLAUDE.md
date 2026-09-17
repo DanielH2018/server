@@ -316,11 +316,20 @@ stay).
     under the per-SHA rule that preceded this its stamp aged past six hours while it was working
     normally. Every reader says so in its own prose: `scripts/lib/deployer_park.py` (shared by
     `deploy.sh` exit 4 and the SessionStart banner) and
-    `monitor-bridge/files/checks/service.py`.
+    `monitor-bridge/files/checks/gitops.py`.
+    A wedge cannot game the re-stamp (issue #1846, refuted): every path that stops the
+    deployer converging — a park, a hold at the tip, a dirty tree, a diverged tree, a tail
+    with no green ancestor, a contention reset, a rollback — leaves HEAD where the tick found
+    it, so `fast_forwarded` is false and the stamp is kept. And a fast-forward to any commit
+    above a wedged range crosses that range, because the walk chooses a SHA on the first-parent
+    chain and the ff-merge goes TO it. `tests/test_gitops_deploy_alert_channels.py::
+    test_a_parked_range_keeps_its_stamp_while_green_commits_land_above_it` pins the
+    combination: a parked bring-up change with green commits landing above it every tick
+    keeps the first stamp.
   - **The `manual_plane` marker is the second arm of that watchdog, for the deferral that no
     longer leaves the host behind.** A recorded role fast-forwards, so `behind_since` clears
     and every marker the watchdog reads goes quiet while the role stays unapplied.
-    `checks.service.gitops_status` therefore reads `manual_plane` too and pages once the
+    `checks.gitops.gitops_status` therefore reads `manual_plane` too and pages once the
     OLDEST pending line is older than the same `GITOPS_BEHIND_MAX_S` (6 h), naming the roles
     and the clear command. Reported LAST of the four, behind rather than ahead of the behind
     arm: the other three name a deployer that has stopped — a host sustained-behind exits every
@@ -819,7 +828,7 @@ stayed unapplied (issue #878). The k8s and Docker branches did the same through 
 they cleared `hold_sha` and never touched `hold_plane`, orphaning it.
 
 **Why that is worse than a lost diagnostic.** Every consumer gates on `hold_sha` alone:
-`checks.service.gitops_status` reads `hold_plane` only to choose which sentence to print,
+`checks.gitops.gitops_status` reads `hold_plane` only to choose which sentence to print,
 `land.sh` reports `deploy-failed` off `hold_sha`, and `renovate_agent.decide` refuses to run a
 session while one is set. So the erasure turned **GitOps Deploy — Status** green over a plane
 nothing had applied.
@@ -1148,6 +1157,20 @@ page: nothing was applied, so holding the SHA would park every later tick behind
 has since been released, and the rollback would redeploy a version that is already live. The
 reset undoes the ff-merge, which is what keeps `local..origin` carrying the range for the next
 tick. `tests/test_gitops_deploy_lock_contention.py` drives all three handlers.
+
+**A contention streak IS recorded, in `contention_since`** (issue #1847). The reset leaves no
+other durable trace: `last_run` advances, `hold_sha` stays empty, and `behind_since` ages
+toward a six-hour page sized for a dirty tree, while the lock's legitimate holder is a deploy
+no longer than thirty minutes — so a wedged operator `deploy.sh` deferred every tick silently
+for as long as it lived. `for_contention` writes `"<origin_sha> <lock> <first_seen>
+<last_seen> <count>"`, keeping `first_seen` across the streak and moving the other two;
+`entrypoint()` clears the marker after any tick whose `last_seen` it did not write, which is
+every tick that ended some other way. A crash raises past that clear and keeps the streak: a
+crash is not evidence the lock was released. monitor-bridge pages once `first_seen` is older
+than `GITOPS_CONTENTION_MAX_MIN` (30, the deployer's own longest apply budget), the
+SessionStart banner names the lock past the same threshold (`lib.deployer_park`), and
+`scripts/deploy_tools/gitops_state.py clear-contention` drops the marker by hand. Three readers
+parse it; `ansible/tests/deploy/test_contention_parsers_agree.py` holds them together.
 
 **A broad apply takes `all` EXCLUSIVELY, whatever its tags.** `deploy_io.deploy_broad` passes
 `exclusive_all=True`: `initial_setup.yml --tags <role>` names a tag, but what it reconfigures

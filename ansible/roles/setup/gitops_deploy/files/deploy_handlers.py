@@ -186,7 +186,7 @@ def handle_broad(
         # reset undoes the ff-merge, so the manual_plane lines this tick just wrote describe a
         # range that is no longer merged. Take them back with their page.
         deploy_defer.unrecord(state, origin, recorded)
-        return deploy_defer.for_contention(tools, config, target, exc)
+        return deploy_defer.for_contention(tools, state, config, target, exc)
     except Exception as exc:
         log(f"broad apply failed ({playbook} {tags}): {exc}")
         state.write_hold(origin)
@@ -278,7 +278,7 @@ def handle_k8s(
     except deploy_locks.ServiceLockBusy as exc:
         # Before the rollback arm: a rollback would revert volumes and redeploy the prior pin
         # over a cluster this tick never touched.
-        return deploy_defer.for_contention(tools, config, target, exc)
+        return deploy_defer.for_contention(tools, state, config, target, exc)
     except Exception as exc:
         return _rollback_k8s(tools, state, config, target, plan, exc)
     # The ONLY place a hold can clear on an all-k8s host. state.write_hold(None) otherwise lives
@@ -398,7 +398,7 @@ def handle_docker(
         deploy_io.deploy(config.repo, cs.services)
     except deploy_locks.ServiceLockBusy as exc:
         # Before the rollback arm, for handle_k8s's reason: there is nothing to repair.
-        return deploy_defer.for_contention(tools, config, target, exc)
+        return deploy_defer.for_contention(tools, state, config, target, exc)
     except Exception as exc:
         # Deploy-EXECUTION failure (ansible-playbook itself errored: bad image manifest, a failed
         # task) — distinct from the health gate below. Without this the exception propagates to

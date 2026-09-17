@@ -54,7 +54,8 @@ def _deferred(tick, state_dir, posts: int = 0) -> None:
     """What every contention branch must leave behind, whichever handler took it.
 
     `posts` is what the tick had ALREADY sent before it reached the deploy — the manual_plane
-    page of a mixed range is the only one. The contention arm itself never pages.
+    page of a mixed range is the only one. The contention arm itself never pages: the
+    `contention_since` marker it writes is what monitor-bridge pages on (issue #1847).
     """
     assert tick.head == LOCAL, (
         "the ff-merge was not undone, so the next tick sees no range"
@@ -62,6 +63,10 @@ def _deferred(tick, state_dir, posts: int = 0) -> None:
     assert not (state_dir / "hold_sha").exists(), "contention must not hold the SHA"
     assert not (state_dir / "hold_plane").exists(), "contention must not hold a plane"
     assert len(tick.posts) == posts, "contention is not a page; the next tick retries"
+    marker = (state_dir / "contention_since").read_text().split()
+    assert marker[0] == ORIGIN and marker[4] == "1", (
+        "a contention defer must leave the streak marker, or it leaves nothing durable"
+    )
 
 
 def test_a_busy_service_lock_defers_a_k8s_deploy(
@@ -121,6 +126,36 @@ def test_a_busy_service_lock_defers_a_broad_apply(
         "an apply that never ran was recorded as one; land.sh reads this to believe a plane "
         "is live"
     )
+
+
+def test_a_busy_service_lock_names_the_lock_in_the_marker(
+    gitops_deploy, tick, settings, state_dir
+):
+    tick.playbook_outcomes = [deploy_locks.ServiceLockBusy(BUSY, lock="sonarr")]
+    plan = _plan(ChangeSet(k8s_deploy={"sonarr"}))
+    deploy_handlers.handle_k8s(
+        tick.tools, gitops_deploy.STATE, settings, _target(), plan
+    )
+    assert (state_dir / "contention_since").read_text().split()[1] == "sonarr"
+
+
+def test_consecutive_contention_defers_extend_one_streak(
+    gitops_deploy, tick, settings, state_dir
+):
+    """The second defer keeps the first tick's stamp: the age monitor-bridge reads is how
+    long the lock has kept the deployer from deploying, not how long since the last try."""
+    tick.playbook_outcomes = [
+        deploy_locks.ServiceLockBusy(BUSY),
+        deploy_locks.ServiceLockBusy(BUSY),
+    ]
+    plan = _plan(ChangeSet(k8s_deploy={"sonarr"}))
+    for _ in range(2):
+        deploy_handlers.handle_k8s(
+            tick.tools, gitops_deploy.STATE, settings, _target(), plan
+        )
+    entry = gitops_deploy.STATE.contention_pending()
+    assert entry.count == 2
+    assert entry.first_seen <= entry.last_seen
 
 
 # A range carrying BOTH an applyable setup role and one no playbook here can apply. The second

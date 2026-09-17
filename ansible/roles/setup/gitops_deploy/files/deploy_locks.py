@@ -54,7 +54,15 @@ class ServiceLockBusy(RuntimeError):
     Contention, not failure: nothing was applied, so the caller undoes its range and lets the
     next tick re-evaluate rather than holding the SHA and rolling back. The message is the
     journal line's subject — `service lock <tag> busy for <N>s`.
+
+    Attributes:
+        lock: the lock name that stayed busy (a service tag, or SERVICE_LOCK_ALL), for the
+            `contention_since` marker. Empty when raised with a message alone.
     """
+
+    def __init__(self, message: str, lock: str = "") -> None:
+        super().__init__(message)
+        self.lock = lock
 
 
 def lock_dir() -> str:
@@ -90,7 +98,7 @@ def _take(name: str, mode: int, deadline: float) -> tuple[str, int]:
                 os.close(fd)
                 waited = round(time.monotonic() - started)
                 raise ServiceLockBusy(
-                    f"service lock {name} busy for {waited}s"
+                    f"service lock {name} busy for {waited}s", lock=name
                 ) from None
             time.sleep(SERVICE_LOCK_POLL_S)
 

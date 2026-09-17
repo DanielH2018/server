@@ -15,6 +15,13 @@ host has been behind the tip, and not how long ago the last tick ran. The distin
 bearing since the tick started landing at the newest green ancestor: a deployer working
 normally is behind the tip on nearly every tick, and only one that stops moving ages this.
 
+The third marker is ``contention_since``, written while consecutive ticks defer on one busy
+service lock — an operator ``deploy.sh`` that never returned. The tick resets its tree on that
+path, so ``behind_since`` ages toward a six-hour page sized for a dirty tree while the lock's
+legitimate holder is a deploy no longer than thirty minutes (issue #1847). Same three readers
+as ``manual_plane`` below, held together by
+``ansible/tests/deploy/test_contention_parsers_agree.py``.
+
 The second marker is ``manual_plane``, one line per setup role the tick fast-forwarded past and
 cannot apply itself. A recorded role leaves ``behind_since`` empty, so the park half above says
 nothing while the change sits merged and unapplied — only the banner names it. THREE READERS
@@ -119,7 +126,7 @@ def manual_plane_pending(marker: str | None) -> list[tuple[str, str, float]]:
     A line this cannot parse is SKIPPED rather than guessed at, the way `park_age` treats a
     garbled `behind_since`: the banner names a role and a command to clear it, and neither can
     be derived from a torn line. `DeployerState.manual_plane_pending` and monitor-bridge's
-    `checks.service._parse_manual_plane` skip the same lines for the same reason — that
+    `checks.gitops._parse_manual_plane` skip the same lines for the same reason — that
     agreement is a test, not a coincidence.
 
     `playbook` is the literal marker field, which the deployer writes as `none` when no
@@ -146,3 +153,41 @@ def read_manual_plane_marker(state_dir: str = GITOPS_STATE_DIR) -> str | None:
     the answer is no.
     """
     return _read(state_dir, MANUAL_PLANE)
+
+
+# The deployer's `contention_since` marker: one line,
+# `"<origin_sha> <lock> <unix_ts_first_seen> <unix_ts_last_seen> <count>"`, while consecutive
+# ticks defer on one busy service lock.
+CONTENTION = "contention_since"
+
+# How long a streak may run before the banner names it. The same number monitor-bridge pages
+# on (`GITOPS_CONTENTION_MAX_MIN`, 30): the deployer's longest apply budget,
+# `gitops_deploy_broad_timeout_s` = 1800 s, so a holder past it has outlived every legitimate
+# deploy. `ansible/tests/deploy/test_contention_parsers_agree.py` pins the two together.
+CONTENTION_PARK_SECONDS = 30 * 60
+
+# What an operator runs to drop the marker once the holder is gone. The deployer's own copy is
+# `deploy_remediation.CONTENTION_CLEAR_CMD`; the agreement test asserts the two match.
+CONTENTION_CLEAR_CMD = (
+    "uv run python scripts/deploy_tools/gitops_state.py clear-contention"
+)
+
+
+def contention_pending(marker: str | None) -> tuple[str, float, int] | None:
+    """The streak as `(lock, first_seen, count)`, or None for an absent or garbled marker.
+
+    Garbage reads as no streak, the way `park_age` treats a torn `behind_since`: the banner
+    would name a lock nobody can find.
+    """
+    parts = (marker or "").split()
+    if len(parts) != 5:
+        return None
+    try:
+        return parts[1], float(parts[2]), int(parts[4])
+    except ValueError:
+        return None
+
+
+def read_contention_marker(state_dir: str = GITOPS_STATE_DIR) -> str | None:
+    """The host's `contention_since` marker text, or None when it cannot be read."""
+    return _read(state_dir, CONTENTION)
