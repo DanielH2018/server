@@ -31,6 +31,13 @@ _ROLE_ENTRY = re.compile(
     r"""^\s*-\s*\{\s*role:\s*(?P<role>[a-z0-9_]+)\s*,\s*tags:\s*\[\s*["'](?P<tag>[^"']+)["']""",
     re.M,
 )
+# The block form the same entry takes once its `when:` outgrows one line -- `nut_host` is
+# written that way. Skipping it here is how a role can sit in a playbook and read as included
+# by nothing.
+_ROLE_BLOCK_ENTRY = re.compile(
+    r"""^\s*-\s*role:\s*(?P<role>[a-z0-9_]+)\s*\n\s*tags:\s*\[\s*["'](?P<tag>[^"']+)["']""",
+    re.M,
+)
 
 
 def roles_declared_in_playbooks() -> dict[str, set[tuple[str, str]]]:
@@ -45,7 +52,8 @@ def roles_declared_in_playbooks() -> dict[str, set[tuple[str, str]]]:
         path = _ANSIBLE / name
         if not path.exists():
             continue
-        for m in _ROLE_ENTRY.finditer(path.read_text()):
+        text = path.read_text()
+        for m in (*_ROLE_ENTRY.finditer(text), *_ROLE_BLOCK_ENTRY.finditer(text)):
             role = m.group("role")
             if not (_SETUP_ROLES_DIR / role).is_dir():
                 continue  # a role from another plane; this map only covers roles/setup/

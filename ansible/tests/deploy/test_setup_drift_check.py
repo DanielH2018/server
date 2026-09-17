@@ -7,7 +7,7 @@ on daniel-box and nowhere else — while daniel-server renders the whole UPS shu
 /etc/nut/upsmon.conf was dated Aug 17 against a template changed on 2026-08-28.
 
 THE REFUTED FIX, and why the tests below are shaped the way they are: adding the stamp to
-roles/nut_host was vetted LAUNDERS, because it writes a fragment on a host with no reader. So
+roles/setup/nut_host was vetted LAUNDERS, because it writes a fragment on a host with no reader. So
 every arm here is EXECUTED against a real fixture rather than asserted from the script's text —
 a shell library is only ever observed passing, and the accept half alone cannot tell a working
 arm from one that fires on nothing.
@@ -133,12 +133,14 @@ def _old_repo(tmp_path, permissive_system_config=False):
 
 
 def test_a_current_render_is_clean(tmp_path):
-    repo_files = {"ansible/roles/nut_host/templates/host-upsmon.conf.j2": "MONITOR x\n"}
+    repo_files = {
+        "ansible/roles/setup/nut_host/templates/host-upsmon.conf.j2": "MONITOR x\n"
+    }
     repo = tmp_path / "repo"
-    (repo / "ansible/roles/nut_host/templates").mkdir(parents=True)
-    tpl = repo / "ansible/roles/nut_host/templates/host-upsmon.conf.j2"
+    (repo / "ansible/roles/setup/nut_host/templates").mkdir(parents=True)
+    tpl = repo / "ansible/roles/setup/nut_host/templates/host-upsmon.conf.j2"
     tpl.write_text("MONITOR x\n")
-    frag = f"ansible/roles/nut_host/templates/host-upsmon.conf.j2 {_sha(tpl)}\n"
+    frag = f"ansible/roles/setup/nut_host/templates/host-upsmon.conf.j2 {_sha(tpl)}\n"
     got = _run_scan(tmp_path, rendered=[frag], repo_files=repo_files)
     assert got["STALE"] == ""
     assert got["MANIFEST_NOTE"] == "", (
@@ -153,18 +155,18 @@ def test_a_changed_template_is_reported_stale(tmp_path):
     daniel-server can see the difference.
     """
     repo = tmp_path / "repo"
-    (repo / "ansible/roles/nut_host/templates").mkdir(parents=True)
-    tpl = repo / "ansible/roles/nut_host/templates/host-upsmon.conf.j2"
+    (repo / "ansible/roles/setup/nut_host/templates").mkdir(parents=True)
+    tpl = repo / "ansible/roles/setup/nut_host/templates/host-upsmon.conf.j2"
     tpl.write_text("MONITOR x\n")
     stale_sha = _sha(tpl)
     tpl.write_text("MONITOR x\nMONITOR y\n")  # the 2026-08-28 template change
-    frag = f"ansible/roles/nut_host/templates/host-upsmon.conf.j2 {stale_sha}\n"
+    frag = f"ansible/roles/setup/nut_host/templates/host-upsmon.conf.j2 {stale_sha}\n"
     got = _run_scan(tmp_path, rendered=[frag])
     assert "host-upsmon.conf.j2" in got["STALE"]
 
 
 def test_a_template_deleted_from_the_repo_is_reported(tmp_path):
-    frag = "ansible/roles/nut_host/templates/gone.j2 " + "0" * 64 + "\n"
+    frag = "ansible/roles/setup/nut_host/templates/gone.j2 " + "0" * 64 + "\n"
     got = _run_scan(tmp_path, rendered=[frag])
     assert "template gone from the repo" in got["STALE"]
 
@@ -354,7 +356,7 @@ def test_the_reader_is_armed_where_no_manifest_prune_check_runs():
     gv = yaml_fast.safe_load(_GROUP_VARS.read_text())
     hosts = gv["setup_drift_check_hosts"]
     assert "daniel-server" in hosts, (
-        "daniel-server renders roles/nut_host — the UPS shutdown chain — and is the host the "
+        "daniel-server renders roles/setup/nut_host — the UPS shutdown chain — and is the host the "
         "finding is about"
     )
     for server in gv["k3s_server_hosts"]:

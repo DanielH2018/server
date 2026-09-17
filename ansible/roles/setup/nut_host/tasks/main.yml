@@ -149,10 +149,10 @@
 # reported on the host that actually renders them.
 - name: Record the rendered UPS host config
   when: nut_host_watchdog_armed | bool
-  ansible.builtin.import_tasks: "{{ role_path }}/../setup/common/tasks/stamp_render.yml"
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_render.yml"
   vars:
     stamp_render_name: nut-host
     stamp_render_templates:
-      - ansible/roles/nut_host/templates/host-upsmon.conf.j2
-      - ansible/roles/nut_host/templates/host-nut.conf.j2
-      - ansible/roles/nut_host/templates/ups-secondary-health.sh.j2
+      - ansible/roles/setup/nut_host/templates/host-upsmon.conf.j2
+      - ansible/roles/setup/nut_host/templates/host-nut.conf.j2
+      - ansible/roles/setup/nut_host/templates/ups-secondary-health.sh.j2

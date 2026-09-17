@@ -50,6 +50,11 @@ EXEMPT: dict[str, str] = {
         "reads the open Renovate PRs from GitHub and posts to Discord; it merges, closes and "
         "edits nothing — `renovate_agent` is the role that acts, and it carries the contract"
     ),
+    "nut_host": (
+        "`ups-secondary-health.sh` reads upsmon.conf, `systemctl is-active nut-monitor` and "
+        "`upsc ups.status`, then pushes a Kuma heartbeat; the actor that powers a host off is "
+        "the `nut-monitor` systemd service, not this cron"
+    ),
 }
 
 

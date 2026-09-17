@@ -10,17 +10,24 @@ Run: uv run pytest scripts/secrets_mgmt/tests/test_secret_registry.py
 """
 
 import datetime as dt
+from pathlib import Path
+
+from lib import yaml_fast
 
 from secrets_mgmt.secret_classify import classify
 from secrets_mgmt.secret_registry import (
     audit,
     due_date,
+    is_record,
+    record_names,
     registry_drift,
     seed_last_rotated,
     stagger_span,
     sync,
 )
-from secrets_mgmt.rotation_tools import DEFAULT_TIER_DAYS
+from secrets_mgmt.rotation_tools import DEFAULT_TIER_DAYS, REGISTRY_FILE
+
+REGISTRY = Path(REGISTRY_FILE)
 
 
 def _reg(*entries):
@@ -194,3 +201,52 @@ def test_registry_drift_detects_missing_and_stale():
 
 def test_registry_drift_clean_when_in_sync():
     assert registry_drift({"a", "b"}, {"a", "b"}) == ([], [])
+
+
+# ── `source: record` (issue #1914) ──────────────────────────────────────────
+
+
+def test_sync_preserves_the_record_source_field():
+    """`sync` adds only what is missing, so a hand-set `source: record` survives every run."""
+    today = dt.date(2026, 6, 11)
+    reg = {
+        "entries": {
+            "bazarr_api_key": {
+                "tier": "assisted",
+                "last_rotated": "2026-01-01",
+                "source": "record",
+            }
+        }
+    }
+    sync(reg, ["bazarr_api_key", "new_push_token"], today)
+    assert reg["entries"]["bazarr_api_key"]["source"] == "record"
+    assert "source" not in reg["entries"]["new_push_token"], (
+        "a freshly seeded entry must not be presumed a record"
+    )
+
+
+def test_is_record_reads_only_the_exact_marker():
+    reg = {
+        "entries": {
+            "a": {"tier": "assisted", "source": "record"},
+            "b": {"tier": "assisted"},
+            "c": {"tier": "assisted", "source": "repo"},
+        }
+    }
+    assert is_record(reg, "a") is True
+    assert is_record(reg, "b") is False
+    assert is_record(reg, "c") is False
+    assert is_record(reg, "missing") is False
+    assert record_names(reg) == ["a"]
+
+
+def test_the_live_registry_marks_exactly_the_three_record_keys():
+    """The keys the 2026-08-30 rotation found inert: authelia derives its hash from the live
+    Secret and prefers it, healthchecks reads SUPERUSER_PASSWORD only on first boot, and the
+    only bazarr_api_key reference in the tree is a monitor-bridge reader."""
+    reg = yaml_fast.safe_load(REGISTRY.read_text())
+    assert record_names(reg) == [
+        "authelia_password",
+        "bazarr_api_key",
+        "healthchecks_password",
+    ]

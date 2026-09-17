@@ -63,7 +63,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from secrets_mgmt.consumers import consumer_commands, consumer_tags, tree_consumers
 from secrets_mgmt.git_dates import advance_last_rotated, derived_rotation_dates
-from secrets_mgmt.secret_registry import audit, registry_drift, sync
+from secrets_mgmt.secret_registry import (
+    audit,
+    is_record,
+    record_refusal,
+    registry_drift,
+    sync,
+)
 from secrets_mgmt.rotation_tools import RotationTools
 from secrets_mgmt.sops_io import malformed_push_tokens
 
@@ -271,6 +277,9 @@ def cmd_rotate(args, tools: RotationTools) -> int:
     now = tools.today()
     res = audit(reg, now, tools.tier_days)
     if args.name:
+        if is_record(reg, args.name):
+            print(record_refusal(args.name), file=sys.stderr)
+            return 2
         targets = [r for r in res["all"] if r[0] == args.name]
         if targets and targets[0][1] != "auto":
             print(
@@ -284,9 +293,15 @@ def cmd_rotate(args, tools: RotationTools) -> int:
         # consumer. Tokens with no consumer_tag (cross-host / self-referential) are reported
         # but skipped.
         due_auto = unattended_due(res["all"], args.all)
-        targets = [r for r in due_auto if consumer_tags(r[0])]
+        # A record key classified `auto` by name (a `*_push_token` the app mints) would be
+        # `sops set` here with no refusal, so the batch filters it the same way `--name` does.
+        targets = [
+            r for r in due_auto if consumer_tags(r[0]) and not is_record(reg, r[0])
+        ]
         for name, _t, _d, _dl in due_auto:
-            if not consumer_tags(name):
+            if is_record(reg, name):
+                print("  skip (record: the app holds the source) %s" % name)
+            elif not consumer_tags(name):
                 print("  skip (manual: cross-host consumer) %s" % name)
     if not targets:
         print(

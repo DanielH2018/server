@@ -24,6 +24,7 @@ MUST_FIND = frozenset(
         "roles/setup/k3s/templates/kuma-push.env.j2",
         "roles/setup/gitops_deploy/templates/gitops-deploy.service.j2",
         "roles/setup/common/templates/resolv.conf.j2",
+        "roles/setup/nut_host/templates/host-upsmon.conf.j2",
         "roles/setup/hypervisor/templates/staging-nwfilter.xml.j2",
     }
 )
@@ -80,6 +81,7 @@ def test_a_defined_variable_is_clean(tmp_path, ctx, known):
         'runtime: "{{ k3s_longhorn_b2_region }}"\n'  # set_fact in a setup-plane task
         'inventory: "{{ domain }}"\n'  # group_vars/all.yml
         'magic: "{{ inventory_hostname }}"\n'  # Ansible-supplied
+        'required: "{{ ups_secondary_push_token | mandatory }}"\n'  # the Ansible filter
     )
     assert v.check_template(tpl, ctx, known) == []
 

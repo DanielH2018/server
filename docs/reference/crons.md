@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/crons.py
-generated_at: 2026-09-11 18:17 UTC
-generated_sha: 153ffa919
+generated_at: 2026-09-17 18:46 UTC
+generated_sha: 5c838445
 ---
 
 !!! warning "Generated file — do not edit"
@@ -48,7 +48,7 @@ generated_sha: 153ffa919
 | Setup-plane drift check | `50 7 * * *` | conditional (inventory_hostname in setup_drift_check_hosts) | `root` | read the script | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
 | Sync peer Claude artifacts | `{{ artifacts_sync_minute }} * * * *` | conditional (not k8s_dry_run | bool) | `{{ sys_user }}` | read the script | `ansible/roles/k8s/artifacts/tasks/main.yml` |
 | TLS cert-expiry watch | `10 5 * * *` | daniel-box | `{{ sys_user }}` | no (read-only by its command) | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
-| UPS secondary watchdog | `*/{{ nut_host_watchdog_interval_minutes }} * * * *` | conditional (nut_host_watchdog_armed | bool) | `root` | read the script | `ansible/roles/nut_host/tasks/main.yml` |
+| UPS secondary watchdog | `*/{{ nut_host_watchdog_interval_minutes }} * * * *` | conditional (nut_host_watchdog_armed | bool) | `root` | read the script | `ansible/roles/setup/nut_host/tasks/main.yml` |
 | Weekly AIDE file integrity check | `0 3 * * 1` | every host in the play | `root` | no (read-only by its command) | `ansible/roles/setup/initial_setup/tasks/integrity.yml` |
 | Weekly apt autoremove | `0 2 * * 0` | every host in the play | `root` | no (read-only by its command) | `ansible/roles/setup/initial_setup/tasks/accounting.yml` |
 | Weekly dpkg purge orphaned configs | `15 2 * * 0` | every host in the play | `root` | no (read-only by its command) | `ansible/roles/setup/initial_setup/tasks/accounting.yml` |

@@ -38,7 +38,8 @@ from secrets_mgmt.secret_bearing_host_paths import (
 # Path -> a secret name the census MUST report for it. Three entries chosen to span the shapes
 # the derivation has to cover, so a narrowing cannot survive by keeping one of them:
 #   * secret-rotation-audit.sh — the incident the module's docstring records (roles/setup/)
-#   * ups-secondary-health.sh  — the nut_host plane, pinning "walks every role, not just k8s"
+#   * ups-secondary-health.sh  — setup/nut_host, a role initial_setup.yml alone applies (it sat at
+#     roles/nut_host/ until 2026-09-17, which is the "not just k8s" shape this used to pin)
 #   * qbittorrent-prefs-check.sh — a name that is not `*_push_token`, so the census cannot
 #     silently narrow to push-token-shaped matches and still pass
 #   * secret-rotate.sh — the path #1183 narrowed. It used to be reported for `email` as well

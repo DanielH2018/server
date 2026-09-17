@@ -27,7 +27,7 @@ from lib import yaml_fast
 from _helpers import ANSIBLE
 
 
-ROLE = ANSIBLE / "roles" / "nut_host"
+ROLE = ANSIBLE / "roles" / "setup" / "nut_host"
 TASKS = (ROLE / "tasks" / "main.yml").read_text()
 UPSMON = (ROLE / "templates" / "host-upsmon.conf.j2").read_text()
 GROUP_VARS = (ANSIBLE / "inventory" / "group_vars" / "all.yml").read_text()

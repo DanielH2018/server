@@ -48,7 +48,7 @@ nut_k8s_mem_request: 16Mi
 # There is exactly ONE upssched (the pod, the primary), so FSD is a single global event every
 # secondary sees at the same moment, and this value delays every armed host equally. That is the
 # intent rather than a limitation: see the DECIDED marker at FINALDELAY in
-# roles/nut_host/templates/host-upsmon.conf.j2 for why the two hosts need no staggering.
+# roles/setup/nut_host/templates/host-upsmon.conf.j2 for why the two hosts need no staggering.
 #
 # Order of operations when arming a further host: raise this FIRST, run the console-attended
 # `upsmon -c fsd` drill there, and only then set nut_host_secondary_armed for it.

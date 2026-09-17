@@ -129,3 +129,30 @@ def registry_drift(registered: set, present: set) -> tuple[list, list]:
     Reads plaintext key NAMES only — never decrypts a value, so it's CI-safe.
     """
     return sorted(present - registered), sorted(registered - present)
+
+
+# The registry value that marks a key SOPS only records: the app holds the credential, nothing
+# in the tree writes it there, and `sops set` alone rotates nothing. `sync` never touches an
+# existing entry, so the field survives it; `rotate` refuses the key in both of its paths.
+# docs/secret-rotation.md names each key's mechanism.
+RECORD_SOURCE = "record"
+
+
+def is_record(reg: dict, name: str) -> bool:
+    """Whether `name`'s registry entry carries `source: record`."""
+    entry = reg.get("entries", {}).get(name, {})
+    return entry.get("source") == RECORD_SOURCE
+
+
+def record_names(reg: dict) -> list[str]:
+    """Every key marked `source: record`, sorted."""
+    return sorted(n for n in reg.get("entries", {}) if is_record(reg, n))
+
+
+def record_refusal(name: str) -> str:
+    """The one-line reason `rotate` prints when refusing a record key."""
+    return (
+        "refusing: %s is `source: record` — SOPS holds a copy of a credential the app owns, and "
+        "nothing in the tree writes it there. Rotate it in the app, then `sops set` the new "
+        "value here by hand (docs/secret-rotation.md, 'Record keys')." % name
+    )

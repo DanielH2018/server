@@ -52,7 +52,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
-from ansible.plugins.filter.core import comment, to_bool, to_uuid
+from ansible.plugins.filter.core import comment, mandatory, to_bool, to_uuid
 
 from lib import yaml_fast
 from lib.render_guard import (
@@ -211,11 +211,14 @@ def build_env(template_dir: Path, undefined_cls):
     gives: `bool("false")` is True in Python, so a hand-rolled shim would take the opposite
     branch from a real deploy. `comment` and `to_uuid` are likewise the real implementations —
     `to_uuid` is a deterministic UUIDv5, so a stub would render a different file every run.
+    `mandatory` is the real one too: it raises only on Ansible's own UndefinedMarker, so the
+    tracking Undefined this guard renders with passes through it and is judged by name as usual.
     """
     env = make_env([template_dir, SHARED_TPL], undefined_cls=undefined_cls)
     env.filters["bool"] = to_bool
     env.filters["comment"] = comment
     env.filters["to_uuid"] = to_uuid
+    env.filters["mandatory"] = mandatory
     return env
 
 

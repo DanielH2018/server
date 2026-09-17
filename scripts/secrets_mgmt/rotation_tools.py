@@ -87,6 +87,10 @@ _HEADER = """\
 # `last_rotated` — `rotate` updates it, and `audit` reads the real date out of the git
 # history of secrets.yml when a value changed later than this file records.
 # Tiers: auto|assisted|external|pinned|ignore.
+# `source: record` marks a key whose value SOPS only RECORDS — the app holds the credential and
+# nothing in the tree writes it there, so `sops set` alone rotates nothing and the deploy reads
+# green either way. `rotate` refuses these; change the credential in the app first, then record
+# it here. docs/secret-rotation.md names each key's mechanism. sync preserves the field.
 """
 
 

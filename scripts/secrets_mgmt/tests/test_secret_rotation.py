@@ -212,3 +212,64 @@ def test_rotate_reports_the_names_already_written_when_a_sops_set_hangs(capsys):
     assert "run" not in named_calls(recorded), (
         "a timed-out batch must not deploy, for the same reason a failed one must not"
     )
+
+
+# ── `source: record` keys (issue #1914) ─────────────────────────────────────
+#
+# For authelia_password, healthchecks_password and bazarr_api_key, SOPS holds a copy of a
+# credential the app owns: nothing in the tree writes the value to the app, so `sops set` plus
+# a deploy reads green and rotates nothing. Every fixture below classifies the record key
+# `auto`, so a refusal that came from the tier check instead would fail these tests: the
+# record check must be the one that fires.
+
+
+def _record_registry(name: str, **extra) -> dict:
+    return {
+        "entries": {
+            name: {"tier": "auto", "last_rotated": "2026-01-01", **extra},
+        }
+    }
+
+
+def test_rotate_refuses_a_record_key_by_name_with_the_reason(capsys):
+    name = "app_owned_push_token"
+    tools, recorded = build_tools(
+        Fakes(registry=_record_registry(name, source="record"))
+    )
+    args = SimpleNamespace(name=name, all=False, commit=True, deploy=False)
+    assert sr.cmd_rotate(args, tools) == 2
+    err = capsys.readouterr().err
+    assert name in err and "source: record" in err and "Rotate it in the app" in err
+    assert process_calls(recorded) == [], "a record key must never reach `sops set`"
+    assert "save_registry" not in named_calls(recorded)
+
+
+def test_rotate_writes_the_same_auto_key_when_it_is_not_a_record():
+    """The accepting half: identical fixture minus `source: record` is rotated."""
+    name = "app_owned_push_token"
+    tools, recorded = build_tools(Fakes(registry=_record_registry(name)))
+    args = SimpleNamespace(name=name, all=False, commit=True, deploy=False)
+    assert sr.cmd_rotate(args, tools) == 0
+    assert len(process_calls(recorded)) == 1
+
+
+def test_unattended_rotate_skips_a_record_key_and_says_so(capsys):
+    """The weekly cron's path has no `--name`, so the batch filter is the only guard there."""
+    name = "monitor_bridge_test_token"  # a name consumer_tags() resolves, so only the record
+    tools, recorded = build_tools(  # field stands between it and `sops set`
+        Fakes(registry=_record_registry(name, source="record"))
+    )
+    args = SimpleNamespace(name=None, all=True, commit=True, deploy=False)
+    assert sr.cmd_rotate(args, tools) == 0
+    assert process_calls(recorded) == []
+    assert (
+        "skip (record: the app holds the source) %s" % name in capsys.readouterr().out
+    )
+
+
+def test_unattended_rotate_still_writes_the_same_key_without_the_record_field():
+    name = "monitor_bridge_test_token"
+    tools, recorded = build_tools(Fakes(registry=_record_registry(name)))
+    args = SimpleNamespace(name=None, all=True, commit=True, deploy=False)
+    assert sr.cmd_rotate(args, tools) == 0
+    assert len(process_calls(recorded)) == 1
