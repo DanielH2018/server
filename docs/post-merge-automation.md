@@ -307,14 +307,16 @@ waiting on — against the 15s bar the plan set for changing an interval:
 
 | Phase | Poll | Median overhead past CI | Verdict |
 |---|---|---|---|
-| `wait_merge` | `--await-merge`, 30s (`land_lib/options.py:15`) | 14s | keep 30s |
-| `wait_ci` | 20s, hardcoded at `land_lib/tools.py:333` | 10s | keep 20s |
+| `wait_merge` | `--await-merge`, 30s (`MERGE_POLL_S` in `land_lib/options.py`) | 14s | keep 30s |
+| `wait_ci` | 20s, the literal in `await_ci_verdict` (`land_lib/tools.py`) | 10s | keep 20s |
 
-**Change `land_lib/tools.py:333` to move the `wait_ci` poll, not `await_ci.py:278`.** A landing
-reaches `await_ci` through `tools.await_ci_verdict`, which calls `await_ci.wait(sha, timeout_s,
-20)` with the interval as a literal. `await_ci.py:278`'s `--interval` default governs only a
-hand-run `await_ci.py`. Editing the CLI default alone leaves every `land.sh` polling at 20s
-while the suite still passes — a silent no-op that reads as shipped. Move both together.
+**Change the `await_ci.wait(sha, timeout_s, 20)` call in `land_lib/tools.py` to move the
+`wait_ci` poll, not `await_ci.py`'s `--interval` default.** A landing reaches `await_ci` through
+`tools.await_ci_verdict`, which passes that interval as a literal. The CLI default governs only
+a hand-run `await_ci.py`. Editing it alone leaves every `land.sh` polling at 20s while the suite
+still passes — a silent no-op that reads as shipped. Move both together. (Cited by symbol, not
+by line: the `options.py:15` this table used to carry was already one line off the
+`MERGE_POLL_S` it pointed at.)
 
 **What the `wait_merge` readings show.** Nine of the 15 landings are ones the split rule keeps
 out of the headline median, because their `wait_merge` is shorter than the CI duration of their

@@ -103,7 +103,9 @@ So exercise the thing you actually changed as well.
 
 ## Working alongside other sessions
 
-- The lock serialises; it does not queue fairly. Exit 75 means retry.
+- Deploys of the same service serialize; the tree lock is held for the snapshot only, so two
+  deploys of different services run at once (ADR-0017). Neither lock queues fairly. Exit 75
+  means one of them stayed busy through the whole wait and nothing was deployed — retry.
 - Scope your deploy to your own services. A shared SHA range covers other sessions' work too,
   and deploying another session's half-finished landing is not yours to do.
 - **`--detach` returning is not a verified deploy.** It backgrounds the rollout wait, which is
