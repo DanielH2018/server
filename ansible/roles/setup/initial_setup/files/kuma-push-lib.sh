@@ -29,12 +29,6 @@
 # gates its off-site dead-man's-switch ping on it). Reading it is opt-in; ignoring it leaves
 # the pre-existing behaviour of every other caller unchanged.
 #
-# The final `push failed` line below is not only a journal record: monitor-bridge's Swallowed
-# Push Verdicts check reads it out of Loki and pages a lost `status=down` within a cycle, so a
-# caller that ignores KUMA_PUSH_OK still gets its lost verdict reported before the tile's
-# heartbeat deadline (#1869). Its parser pins this line's shape
-# (roles/k8s/monitor-bridge/tests/test_check_swallowed_verdicts.py); change the two together.
-#
 # Retries up to twice more (three attempts total), after a fixed backoff, on anything that isn't
 # Kuma answering with a genuine permanent rejection — a bad or revoked token, HTTP 401/403
 # (retrying cannot fix those, and delaying the log line that surfaces them costs more than it
