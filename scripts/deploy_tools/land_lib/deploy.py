@@ -252,7 +252,13 @@ def deploy_phase(ln: Landing) -> None:
     # The merge commit, rendered from a snapshot of itself rather than from the primary
     # checkout. Step 4 no longer waits for the tick to fast-forward that checkout, so nothing
     # before this point has moved it -- `--at` is what makes that safe.
-    ln.deployed_at = ln.merge_sha
+    #
+    # Unless the tick applies part of this PR itself, in which case step 4 DID await it and the
+    # primary is the tree that tick fast-forwarded. Same predicate as `pipeline._step_tick`,
+    # whose DECIDED note carries the reasoning; an empty `deployed_at` also keeps this landing
+    # off the kick below, since the awaited tick is the one request it needs.
+    if not ln.tick_is_the_apply:
+        ln.deployed_at = ln.merge_sha
     rc = deploy_with_lock_retry(ln, at=ln.deployed_at)
     if rc == DEPLOY_STALE and ln.deployed_at:
         # DECIDED: exit 4 under `--at` means a commit MERGED AFTER this one reaches the same

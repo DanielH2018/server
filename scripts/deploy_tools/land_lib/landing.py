@@ -76,6 +76,24 @@ class Landing:
         """`resolved_tags` as the comma string an argv, a label or a message needs."""
         return ",".join(self.resolved_tags)
 
+    @property
+    def tick_is_the_apply(self) -> bool:
+        """Does the TICK apply part of this PR, so that its state decides this landing?
+
+        Exactly the two classifications `health_verdict.health` grades against the deployer's
+        own markers: `self_applied` (a deploy-plane change, or a setup role
+        `initial_setup.yml` includes) gates the `tick_state` / `broad_applied_covers` reads,
+        and `remaining_setup` gates the branch that asserts the tick applied on this host.
+
+        NOT `plane`, which is by construction what the tick does not apply: awaiting a tick
+        cannot change that verdict, so a tags-plus-plane PR keeps the fast path.
+
+        One property rather than the same `or` at two call sites, because `pipeline._step_tick`
+        and `deploy.deploy_phase` have to answer it identically -- one awaiting the tick while
+        the other deploys `--at` is the mixed state neither path is written for.
+        """
+        return self.self_applied or bool(self.remaining_setup)
+
     # -- ending the landing -------------------------------------------------------------
 
     def die(self, msg: str, rc: int = 2, verdict: str | None = None) -> NoReturn:

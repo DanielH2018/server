@@ -57,17 +57,35 @@ def _step_ci(ln: Landing) -> None:
 def _step_tick(ln: Landing) -> None:
     """Run the GitOps tick and stamp when it finished — or skip it here and stamp nothing.
 
-    A PR with service tags deploys its own merge commit in step 5 (`deploy.sh --at`), so it
-    needs the tick only to converge the primary checkout eventually. Step 5 kicks it once the
-    deploy has returned, because the tick holds the tree lock for its whole unit run and
-    deploy.sh would otherwise queue behind it. Nothing is awaited here and `tick=0` on the
+    A PR reaching service tags ONLY deploys its own merge commit in step 5 (`deploy.sh --at`),
+    so it needs the tick only to converge the primary checkout eventually. Step 5 kicks it
+    once the deploy has returned, because the tick holds the tree lock for its whole unit run
+    and deploy.sh would otherwise queue behind it. Nothing is awaited here and `tick=0` on the
     board says so. Eleven landings in the 14 days to 2026-09-11 spent the full 540s in this
     step watching a deployer busy with somebody else's apply.
 
-    A PR with no service tag keeps waiting: there the tick IS the apply, and `no_tag_outcome`
-    reads the deployer's own markers straight afterwards.
+    Every other shape keeps waiting, because there the tick is the apply: a PR with no service
+    tag, whose verdict `no_tag_outcome` reads off the deployer's markers, and a PR that
+    reaches tags AND something the tick applies itself, which the DECIDED note below covers.
     """
-    if ln.resolved_tags:
+    # DECIDED: the fast path is for a PR that reaches SERVICE TAGS ONLY. A PR reaching tags AND
+    # something the tick applies itself -- `tick_is_the_apply`, which is `self_applied` or
+    # `remaining_setup` -- awaits the tick here exactly as it did before the fast path existed,
+    # and step 5 deploys from the primary checkout with no `--at`.
+    #
+    # Because for that half the TICK is the apply, and step 6 grades it from the deployer's own
+    # markers (`tick_state`, `broad_applied_covers`). Kicking a tick and reading those markers
+    # seconds later grades a tick that has not run: `broad_applied` still holds an older origin
+    # SHA, so `broad_applied_covers` is False and the landing prints `needs-manual-apply` with
+    # a hand-run remedy the kicked tick performs a minute later -- or `deferred` (exit 75) when
+    # a concurrent tick has left `behind_since` set. Neither is recoverable by re-reading: the
+    # verdict has already been printed and the exit code returned.
+    #
+    # The alternative -- keep the fast path and await the kicked tick inside step 6 -- buys the
+    # deploy's seconds back and costs the landing a second place that knows about tick timing,
+    # in the phase whose whole job is to report. The latency this gives up is bounded to the
+    # PRs that touch a service role and a setup role together.
+    if ln.resolved_tags and not ln.tick_is_the_apply:
         say(
             "this landing deploys its own merge commit, so the tick is not awaited; step 5 "
             "kicks it after the deploy to converge the primary checkout"

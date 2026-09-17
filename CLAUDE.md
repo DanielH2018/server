@@ -163,14 +163,17 @@ load-bearing, and why `--since` is needed are in the **`land-after-merge` skill*
 hand-poll CI and do not hand-merge** — hand-polling cost 835 polls across 213 wait episodes
 before `land.sh` existed.
 
-**A tagged PR is deployed from a snapshot of its own merge commit, not from the primary
-checkout.** `land.sh` hands `deploy.sh --at <merge sha>`, so it neither needs nor waits for the
+**A PR reaching service tags only is deployed from a snapshot of its own merge commit, not from
+the primary checkout.** `land.sh` hands `deploy.sh --at <merge sha>`, so it neither needs nor waits for the
 tick to fast-forward that checkout first: the tick is kicked with `--no-wait` AFTER the deploy
 returns, and converges the checkout while the health gate runs. `tick=0` on the Landings board
 means no tick was awaited in step 4; a `lock=` wait beside it is the deployer's timer-started
 tick, or another deploy of the same service holding its per-service lock — which is the common
-case, since the tree lock is held for the snapshot only. A PR reaching no service tag still
-waits for the tick, because there the tick is the apply.
+case, since the tree lock is held for the snapshot only. Every other shape still waits for the
+tick, because there the tick is the apply: a PR reaching no service tag, and a PR reaching tags
+AND a plane the tick applies itself (the deploy plane, or a setup role `initial_setup.yml`
+includes). The mixed one waits because the verdict grades that half from the deployer's own
+markers, which say nothing about a tick that was kicked seconds earlier.
 
 `cancelled`, `stale` and `skipped_by_concurrency` mean *no verdict for this SHA*, never *this
 SHA is bad* — `_CI_NO_VERDICT_CONCLUSIONS` in `deploy_logic.py` is the list, and a commit whose
@@ -337,8 +340,10 @@ history, the `homelab-ui` DNS/auth/secrecy triad and its `-m ui` suite, per-file
   `environment:` is not flagged). Editing a `tasks/main.yml` costs ~1.6 s to `ansible-lint`,
   an order of magnitude more than any other file type — that is coverage, not a stuck hook.
 - **auto-mode-bridge** (PermissionDenied + PostToolUseFailure, both Bash) — retries a denied
-  `gitops_tick.sh` (classifier variance, ~1 run in 7), and decodes `deploy.sh` exits 75/4/3/2,
-  all four of which mean *nothing was deployed* and reach Claude as a bare `Exit code N`.
+  `gitops_tick.sh` (classifier variance, ~1 run in 7), and decodes the `deploy.sh` exits in its
+  own `_DEPLOY_EXITS` — read that dict rather than a list here, which is what drifted before.
+  Every code in it means *nothing was deployed* except 20, where the playbook ran and a task
+  failed. All of them reach Claude as a bare `Exit code N`.
 - **session-health** (SessionStart) — on opening a session here, prints a banner of any unhealthy/
   restarting containers + down Prometheus targets (silent when all-green; read-only, timeout-bounded).
   It also names a **dirty primary checkout**, a **GitOps deployer parked behind origin**, and a
