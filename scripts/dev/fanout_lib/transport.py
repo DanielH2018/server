@@ -5,6 +5,7 @@ The land_lib/tools.py shape: a test replaces one field and never patches a modul
 """
 
 import json
+import os
 import socket
 import subprocess
 from collections.abc import Callable
@@ -57,6 +58,35 @@ def _argv(host: str, command: str, local_host: str) -> list[str]:
     return ["ssh", *SSH_OPTS, host, command]
 
 
+def local_env(environ: dict[str, str], uid: int) -> dict[str, str]:
+    """The environment a LOCAL leg runs under: `environ`, plus the user bus when it is unset.
+
+    `systemd-run --user` and `systemctl --user` find the user manager through
+    `DBUS_SESSION_BUS_ADDRESS`, or through `XDG_RUNTIME_DIR` (`$XDG_RUNTIME_DIR/bus`). An
+    interactive Claude session's shell carries neither, so on 2026-09-17 the local leg of a
+    launch failed with "Failed to connect to bus: No medium found" after its worktree was
+    already created and locked, and `status` read the unit it could not reach as `failed
+    (exit unknown)` while `systemctl` under a pinned env showed it active (#1872). The ssh
+    leg gets a login environment and never hit this, which is why every remote batch in the
+    same call launched cleanly.
+
+    Both are derived from the uid rather than hard-coded: `/run/user/<uid>` is where
+    systemd-logind puts the runtime directory, and the bus socket has a fixed name inside
+    it. A value already present is kept — a shell that set its own is not second-guessed.
+
+    Args:
+        environ: the caller's environment, typically `os.environ`.
+        uid: the real uid the user manager belongs to.
+
+    Returns:
+        A new dict; `environ` is not modified.
+    """
+    env = dict(environ)
+    runtime_dir = env.setdefault("XDG_RUNTIME_DIR", f"/run/user/{uid}")
+    env.setdefault("DBUS_SESSION_BUS_ADDRESS", f"unix:path={runtime_dir}/bus")
+    return env
+
+
 def run_command(
     host: str,
     command: str,
@@ -65,6 +95,10 @@ def run_command(
     local_host: str | None = None,
 ) -> subprocess.CompletedProcess:
     """Run `command` on `host` — locally when it is this host, else over ssh.
+
+    The local leg runs under `local_env`, so its `systemd-run --user` / `systemctl --user`
+    reach the user bus from a shell that never exported it. The ssh leg's environment is
+    the remote login's own and is left alone.
 
     Args:
         host: the target host.
@@ -77,8 +111,15 @@ def run_command(
         The finished `subprocess.CompletedProcess` (never raises on a non-zero exit).
     """
     argv = _argv(host, command, local_host or _local_host())
+    env = local_env(dict(os.environ), os.getuid()) if argv[0] == "bash" else None
     return subprocess.run(
-        argv, input=stdin, capture_output=True, text=True, timeout=timeout, check=False
+        argv,
+        input=stdin,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        check=False,
+        env=env,
     )
 
 

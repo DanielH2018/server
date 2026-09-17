@@ -461,6 +461,16 @@ say_snapshot_failed() {
 # playbook; on --detach the background subshell inherits them and the parent's copies close.
 service_lock_fds=()
 
+# Whole seconds elapsed since "$1", an earlier $EPOCHREALTIME sample. NOT $SECONDS: that is the
+# wall clock's integer second, so a 5ms acquire that happened to straddle a second boundary read
+# as 1s, printed a wait line for a lock nobody held, and booked a phantom `lock=1` on the Landings
+# board. CI flaked on exactly that on 2026-09-17 (#1881). $EPOCHREALTIME carries microseconds, so
+# only a wait that really lasted a second rounds up to one.
+whole_seconds_since() {
+    local start="$1" now="$EPOCHREALTIME"
+    echo $(( (10#${now/./} - 10#${start/./}) / 1000000 ))
+}
+
 # Take one service lock, blocking up to LOCK_WAIT. Returns flock's status.
 take_service_lock() {
     local label="$1" path="$2" mode="$3" fd started waited status
@@ -475,10 +485,10 @@ take_service_lock() {
         return "$LOCK_UNAVAILABLE"
     fi
     service_lock_fds+=("$fd")
-    started=$SECONDS
+    started=$EPOCHREALTIME
     flock "${flock_args[@]}" "$fd"
     status=$?
-    waited=$((SECONDS - started))
+    waited=$(whole_seconds_since "$started")
     [[ "$status" == 0 ]] || return "$status"
     # Silent at 0s, for the reason the tree lock's line is: a line on every deploy buries the
     # ones that mean something. land.py books these seconds into the landing's `lock=` field
@@ -1052,7 +1062,7 @@ lock_holder_seen=$(read_lock_holder)
 # created by whichever of the deploy user and gitops-deploy.service takes it first, and both
 # run as sys_user.
 exec {lockfd}>"$LOCK"
-lock_started=$SECONDS
+lock_started=$EPOCHREALTIME
 lock_taken=0
 flock_status=0
 # 0 until the service-lock phase runs, so the refusal arms below can read it unconditionally.
@@ -1062,6 +1072,9 @@ if flock -n "$lockfd"; then
     # Nobody was in the way, so whatever the sample caught had already released. Naming it
     # would credit the wait to a holder there was no wait for.
     lock_holder_seen=""
+    # 0 by construction, as the --detach arm's is: `flock -n` took the lock at once, and the
+    # only time that can cost is the fork -- which is not a wait, however the clock reads it.
+    lock_waited=0
 else
     # `-E "$LOCK_BUSY"` applies to the descriptor form as it did to the command form, and it
     # is what keeps CONTENTION distinct from any other flock failure: only a timeout returns
@@ -1073,8 +1086,8 @@ else
     if [[ "$flock_status" == 0 ]]; then
         lock_taken=1
     fi
+    lock_waited=$(whole_seconds_since "$lock_started")
 fi
-lock_waited=$((SECONDS - lock_started))
 
 if [[ "$lock_taken" == 1 ]]; then
     # Silent at 0s: an uncontended acquire is the ordinary case, and a line on every deploy

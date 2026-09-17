@@ -45,6 +45,49 @@ def test_argv_picks_ssh_for_a_remote_host_and_bash_for_the_local_one():
     assert _argv("daniel-box", "echo hi", "daniel-box") == ["bash", "-c", "echo hi"]
 
 
+def test_the_local_leg_pins_the_user_bus_when_the_shell_has_none():
+    """FLAGGED half for #1872: an interactive session's shell exports neither variable, and
+    `systemd-run --user` then dies with "Failed to connect to bus: No medium found"."""
+    from fanout_lib.transport import local_env
+
+    env = local_env({"PATH": "/usr/bin"}, 1000)
+    assert env["XDG_RUNTIME_DIR"] == "/run/user/1000"
+    assert env["DBUS_SESSION_BUS_ADDRESS"] == "unix:path=/run/user/1000/bus"
+    assert env["PATH"] == "/usr/bin"
+
+
+def test_the_local_leg_keeps_a_bus_the_shell_already_named():
+    """CLEAN half: a shell that set its own runtime dir gets a bus derived from THAT, and a
+    bus it named outright is left alone."""
+    from fanout_lib.transport import local_env
+
+    derived = local_env({"XDG_RUNTIME_DIR": "/run/user/7"}, 1000)
+    assert derived["DBUS_SESSION_BUS_ADDRESS"] == "unix:path=/run/user/7/bus"
+    named = local_env({"DBUS_SESSION_BUS_ADDRESS": "unix:path=/x"}, 1000)
+    assert named["DBUS_SESSION_BUS_ADDRESS"] == "unix:path=/x"
+    assert named["XDG_RUNTIME_DIR"] == "/run/user/1000"
+
+
+def test_run_command_hands_the_pinned_bus_to_the_local_child(monkeypatch):
+    """The builder above is what the local leg actually runs under: a child started from a
+    shell with both stripped still sees both. `bash -c echo` stays inside the process tree,
+    so leakguard has nothing to object to."""
+    import os
+
+    from fanout_lib.transport import run_command
+
+    monkeypatch.delenv("XDG_RUNTIME_DIR", raising=False)
+    monkeypatch.delenv("DBUS_SESSION_BUS_ADDRESS", raising=False)
+    proc = run_command(
+        "here",
+        'echo "$XDG_RUNTIME_DIR $DBUS_SESSION_BUS_ADDRESS"',
+        10.0,
+        local_host="here",
+    )
+    uid = os.getuid()
+    assert proc.stdout.strip() == f"/run/user/{uid} unix:path=/run/user/{uid}/bus"
+
+
 def test_daniel_box_brief_lands_and_daniel_server_brief_stops_at_the_pr():
     box = render_brief(ISSUES, "daniel-box", "1345-1386", "worktree-orch", [])
     server = render_brief(ISSUES, "daniel-server", "1345-1386", "worktree-orch", [])

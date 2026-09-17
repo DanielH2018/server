@@ -146,6 +146,37 @@ def test_an_uncontended_acquire_says_nothing(tmp_path):
     assert "service lock" not in result.stderr
 
 
+# Every acquire succeeds at once, but the uncontended probe and each service acquire take a
+# moment to do it -- a slow runner's fork, exaggerated. `-n` sleeps a whole second so that,
+# read off `$SECONDS`, the tree lock's "wait" is 1s on EVERY run rather than on the runs where
+# the fork straddled a second boundary; `-w` sleeps under a second, which `$SECONDS` reads as 1
+# whenever a boundary falls inside it.
+_FLOCK_SLOW_BUT_FREE = """#!/bin/bash
+case "$1" in
+  -n) sleep 1; exit 0 ;;
+  -s) sleep 0.2; exit 0 ;;
+  -w) sleep 0.2; exit 0 ;;
+esac
+exit 0
+"""
+
+
+def test_a_slow_uncontended_acquire_is_still_not_a_wait(tmp_path):
+    """FLAGGED half for #1881: the clock, not the lock, produced `lock acquired after 1s`.
+
+    deploy.sh measured both acquires with `$SECONDS`, which is the wall clock's integer
+    second, so an immediate `flock -n` whose fork straddled a boundary reported a 1s wait for
+    a lock nobody held -- and land.py booked it as `lock=1`. On CI run 35225029652 that
+    turned the sibling service-lock test red on a merge commit, which is permanent for that
+    SHA. `-n` succeeding is 0s by construction now, and the `-w` acquires are measured in
+    microseconds and floored, so only a wait that really lasted a second reports one.
+    """
+    result = _run_deploy(tmp_path, _FLOCK_SLOW_BUT_FREE)
+    assert result.returncode == 0, result.stderr
+    assert "deploy: lock acquired after" not in result.stderr
+    assert "service lock" not in result.stderr
+
+
 # The tree lock is free (`-n` succeeds at once) and the per-tag lock is not: `-w` sleeps before
 # it grants. That is a deploy of the SAME service already running, which is the only thing a
 # service lock ever waits for, and the wait that used to be invisible because the tree lock had

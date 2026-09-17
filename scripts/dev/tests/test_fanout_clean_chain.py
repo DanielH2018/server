@@ -96,11 +96,14 @@ def _scratch_with_a_gone_worktree(tmp_path):
     return repo, worktree, tip
 
 
-def _stub_bin(tmp_path, gh_prints=None):
+def _stub_bin(tmp_path, gh_prints=None, unit_active=False):
     """A bin directory to prepend to PATH, holding the stubs this chain must not escape.
 
     `systemctl` is always stubbed and records its arguments to `systemctl-calls`; the chain
-    resets a transient unit, which on this host would reach the real user manager.
+    resets a transient unit, which on this host would reach the real user manager. Its
+    `is-active` answers `unit_active` — 0 for active, 3 for inactive, systemctl's own codes —
+    and every other verb exits 0. A stub that exited 0 for everything would read every unit
+    as active and send every chain down the refusal branch.
 
     `gh_prints=None` models a host with no `gh` — as a stub that exits 127 printing nothing,
     which is what an absent binary looks like from inside the chain's pipeline. Simply
@@ -110,7 +113,11 @@ def _stub_bin(tmp_path, gh_prints=None):
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir(exist_ok=True)
     systemctl = bin_dir / "systemctl"
-    systemctl.write_text(f'#!/bin/sh\necho "$@" >> {bin_dir / "systemctl-calls"}\n')
+    is_active_rc = 0 if unit_active else 3
+    systemctl.write_text(
+        f'#!/bin/sh\necho "$@" >> {bin_dir / "systemctl-calls"}\n'
+        f'case "$2" in is-active) exit {is_active_rc} ;; esac\nexit 0\n'
+    )
     systemctl.chmod(0o755)
     gh = bin_dir / "gh"
     if gh_prints is None:
@@ -197,6 +204,37 @@ def test_the_chain_resets_the_units_failed_state(tmp_path):
     repo, worktree, tip = _scratch_with_a_gone_worktree(tmp_path)
     stub_bin = _stub_bin(tmp_path, f"{tip}\n")
     _run_chain(repo, worktree, stub_bin)
-    assert (stub_bin / "systemctl-calls").read_text().strip() == (
-        f"--user reset-failed {UNIT}"
+    assert (stub_bin / "systemctl-calls").read_text().splitlines() == [
+        f"--user is-active --quiet {UNIT}",
+        f"--user reset-failed {UNIT}",
+    ]
+
+
+def test_an_active_unit_is_kept_and_nothing_is_touched(tmp_path):
+    """FLAGGED half for #1872: a batch still running is never cleaned out from under itself.
+
+    Executed with the merged answer that would otherwise delete the branch: the refusal has
+    to come before the merge check, because a clean tree at master is exactly what a running
+    batch that has not committed yet looks like.
+    """
+    repo, worktree, tip = _scratch_with_a_gone_worktree(tmp_path)
+    stub_bin = _stub_bin(tmp_path, f"{tip}\n", unit_active=True)
+    proc = _run_chain(repo, worktree, stub_bin)
+    assert proc.stdout.strip() == (
+        f"kept: {worktree} — unit {UNIT} still active; stop it first"
     )
+    assert BRANCH in _branches(repo)
+    assert str(worktree) in _registrations(repo)
+    # Nothing past the probe ran: no reset, no fetch, no gh.
+    assert (stub_bin / "systemctl-calls").read_text().splitlines() == [
+        f"--user is-active --quiet {UNIT}"
+    ]
+
+
+def test_an_inactive_unit_is_cleaned(tmp_path):
+    """CLEAN half: `stop` (or a finished run) makes the unit inactive, and the chain proceeds."""
+    repo, worktree, tip = _scratch_with_a_gone_worktree(tmp_path)
+    proc = _run_chain(
+        repo, worktree, _stub_bin(tmp_path, f"{tip}\n", unit_active=False)
+    )
+    assert proc.stdout.strip() == f"removed: {worktree} (already gone)"

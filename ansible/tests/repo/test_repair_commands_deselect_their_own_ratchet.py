@@ -36,8 +36,12 @@ BEFORE the repair writes and the guard reads the pre-repair state. Every other o
 
 The adjacent hazard the sweep found, not the self-satisfying shape: the two crons that commit
 with hooks on run the ENTIRE suite, so a ratchet that only a manual command can repair (the
-weights ratchet is the one instance) blocks their commits while it is red. Filed as #1899; it
-is master CI red by another route, and the same repair clears both.
+weights ratchet is the one instance) blocked their commits while it was red (#1899). Both now
+deselect it through PYTEST_ADDOPTS around their commit, the way `--record` deselects it in
+its argv; CI's sharded job still enforces it. That deselect is shell, not a subprocess argv,
+so the AST guard below cannot see it --
+`ansible/tests/setup/test_crons_deselect_the_weights_ratchet.py` pins the templates to
+`pytest_shard.RATCHET_NODE_ID` instead.
 
 The guard: every first-party script that runs pytest as a subprocess must pass `--deselect`
 in that same argv. Found by AST rather than by text, so a `subprocess.run([...])` spread over

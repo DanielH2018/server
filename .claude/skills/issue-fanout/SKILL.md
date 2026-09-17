@@ -206,9 +206,17 @@ reports a kept tree with its reason. `clean` records each removal in the run's m
 later pass skips a batch it already removed rather than reading a host for a worktree that is
 gone, and `status` shows such a batch as `cleaned`. `clean` deletes the manifest under
 `~/.claude/fanout/` only once every batch is removed, and exits 1 naming any batch whose remote
-leg failed outright — an unreachable host is not a tree to re-clean once merged.
+leg failed outright — an unreachable host is not a tree to re-clean once merged. A batch whose
+unit is still active is kept, naming the unit: a running agent's tree is clean and at master
+until it commits, which is exactly what a merged tree looks like, and a `clean` run too early
+on 2026-09-17 removed two working batches' trees out from under their units (#1872).
 `stop <run-id>` stops the units first, for a fan-out abandoned
 before landing — run `clean` once the survivors' PRs merge.
+
+The local leg — the batch placed on the host you run from — runs its `systemd-run --user` and
+`systemctl --user` under a pinned `XDG_RUNTIME_DIR` / `DBUS_SESSION_BUS_ADDRESS`
+(`transport.local_env`), because an interactive session's shell exports neither and the user
+bus is unreachable without one. No prefix on the command is needed.
 
 **Width is bounded by memory, measured, not by a number here.** Each batch costs one 2.5 GiB
 reservation (`RESERVATION_BYTES` in `scripts/dev/fanout_lib/placement.py`). Every agent runs

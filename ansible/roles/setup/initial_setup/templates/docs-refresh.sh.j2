@@ -366,7 +366,13 @@ STAGED_STATUS="$(git diff --cached --name-status --no-renames)"
 # "hook rejection?" was only ever this script's guess -- the 2026-09-05 06:18 failure was filed
 # undiagnosed (#1155) precisely because the alert named no cause, and git's own code separates a
 # rejected hook (1) from a signing or ref failure.
-git commit -m "docs: refresh generated reference pages" >"$LOG" 2>&1
+# The shard-weights coverage ratchet is deselected for THIS commit only. The prek pytest hook
+# runs the whole suite, and that ratchet goes red when enough test files land unweighted --
+# a state only a manual `pytest_shard.py --record` repairs, so while red it failed every one
+# of this cron's commits (#1899). CI's sharded pytest job sets no PYTEST_ADDOPTS and still
+# enforces it. The node id is pytest_shard.RATCHET_NODE_ID; a test pins the two to each other.
+PYTEST_ADDOPTS="--deselect ansible/tests/repo/test_pytest_shards_partition_the_suite.py::test_the_recorded_weights_still_cover_most_of_the_suite" \
+  git commit -m "docs: refresh generated reference pages" >"$LOG" 2>&1
 COMMIT_RC=$?
 if [ "$COMMIT_RC" -ne 0 ]; then
   keep_failure_log "$LOG"
