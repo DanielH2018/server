@@ -31,6 +31,36 @@ Every POST also needs `X-Deploy-UI: 1` so a cross-site form cannot ride the Auth
   from that list keeps its rule until someone deletes it by hand:
   `ufw delete allow proto tcp from <src> to any port 8790`.
 
+## In flight
+
+The panel reads the per-service locks, not the tree lock alone. `deploy.sh` holds
+`/var/lock/server-git-tree.lock` for the snapshot only (ADR-0017), so a page that read that
+one lock said `free` for nearly all of a deploy, and its own deploy button queued on
+`server-deploy-<tag>.lock` with nothing on the page saying so (#1844).
+
+Two sources, because neither alone says who holds what. One merged-stream `fuser` call over
+the tree lock and every `server-deploy-*.lock` under `DEPLOY_UI_LOCKS` names the processes
+with each file OPEN — and a queued deploy has the file open too: `deploy.sh` opens the
+descriptor, then blocks on it, so fuser lists the waiter exactly like the holder (measured:
+a `flock` holder and a `flock -w` waiter both appear). `/proc/locks` is the kernel's own
+table: a granted flock per file, and a `->` line with a live pid for each process blocked
+on it. The pid on a granted line can be dead — `deploy.sh` takes its locks with a `flock`
+child on an inherited descriptor — which is why the holder comes from fuser and only the
+waiter from `/proc/locks`. Measured on daniel-box: fuser over the 31 lock files takes 45 ms.
+
+`ps` with `ppid` folds each process family — a landing with the `deploy.sh` it spawned, a
+`deploy.sh` with its playbook — to one row carrying `locks` (held) and `waiting_on`. A
+holder that matches no run pattern (the GitOps tick on the tree lock) is a `lock` row rather
+than nothing. `deploy.sh --list-services`, which the daemon itself runs on every deploy
+POST, is excluded by name. fuser lists only processes whose `/proc/<pid>/fd` this user can
+read; every deployer here runs as `{{ sys_user }}`, the daemon's own user.
+
+Only a `land` row is cancellable. SIGTERM to a deploy mid-play leaves whatever applied
+before it live (`deploy.sh` exit 20), which is not a cancel.
+
+`test_lock_names_agree_with_deploy_sh_is_clean` pins the lock names to the literals in
+`deploy.sh`, because the daemon runs outside the venv and cannot import them.
+
 ## Writes
 
 Each write spawns the command detached, logs to `~/.local/state/deploy-ui/`, and emits one

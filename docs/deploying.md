@@ -117,7 +117,7 @@ So exercise the thing you actually changed as well.
 ## The deploy queue page
 
 `deploy.local.<domain>` (Authelia two-factor) shows the four things "the queue" means here:
-landings in flight and who holds the tree lock, services whose release is behind master,
+landings and deploys in flight with the locks each holds, services whose release is behind master,
 the deployer's markers, and open PRs. Each button runs the command you would type: land
 runs `land.sh --pr <n> --since <sha>`, deploy runs `deploy.sh --tags <svc>`, cancel
 SIGTERMs a listed landing, clear hold removes `hold_sha` and `hold_plane` together against a
