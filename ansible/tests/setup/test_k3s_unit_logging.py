@@ -106,6 +106,32 @@ def test_the_drop_in_sends_both_streams_to_the_file(unit: str):
     )
 
 
+def directory_paths(tasks) -> set[str]:
+    """Every `path` an ansible.builtin.file task creates as a directory."""
+    return {
+        task["ansible.builtin.file"]["path"]
+        for task in walk_tasks(tasks)
+        if isinstance(task.get("ansible.builtin.file"), dict)
+        and task["ansible.builtin.file"].get("state") == "directory"
+    }
+
+
+@pytest.mark.parametrize("unit", sorted(UNITS))
+def test_the_drop_in_directory_is_created_before_the_copy(unit: str):
+    """copy: does not create parents, and no `.d/` exists for a unit without drop-ins."""
+    raw = UNIT_LOGGING.read_text().replace("{{ k3s_log_unit }}", unit)
+    tasks = yaml_fast.safe_load(raw)
+    dropin_dir = f"/etc/systemd/system/{unit}.service.d"
+    assert dropin_dir in directory_paths(tasks), (
+        f"no task creates {dropin_dir}, so the drop-in copy fails on a host that has never "
+        "had one — which was both hosts when this was written"
+    )
+    names = [t["name"] for t in walk_tasks(tasks) if "name" in t]
+    made = next(i for i, n in enumerate(names) if "drop-in directory" in n)
+    copied = next(i for i, n in enumerate(names) if n.startswith("Send stdout"))
+    assert made < copied, "the directory is created after the file that needs it"
+
+
 @pytest.mark.parametrize("unit", sorted(UNITS))
 def test_rotation_truncates_in_place_because_systemd_holds_the_fd(unit: str):
     directives = logrotate_directives(rendered(unit)[f"/etc/logrotate.d/{unit}"])
@@ -131,6 +157,16 @@ def test_a_drop_in_that_leaves_stdout_in_the_journal_is_detected():
 
 def test_a_task_file_that_never_imports_the_drop_in_is_detected():
     assert importing_unit(SYSTEM_TUNING) is None
+
+
+def test_a_missing_drop_in_directory_is_detected():
+    tasks = [
+        {
+            "name": "x",
+            "ansible.builtin.file": {"path": "/var/log/k3s.log", "state": "touch"},
+        }
+    ]
+    assert "/etc/systemd/system/k3s.service.d" not in directory_paths(tasks)
 
 
 def test_a_rename_rotation_is_detected():

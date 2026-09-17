@@ -35,6 +35,17 @@
     access_time: preserve
   become: true
 
+- name: Create the drop-in directory for {{ k3s_log_unit }}
+  # copy: does not create parents, and neither the installer nor systemd makes a `.d/` for
+  # a unit that has no drop-ins — both hosts lacked it when this was written.
+  ansible.builtin.file:
+    path: "/etc/systemd/system/{{ k3s_log_unit }}.service.d"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
 - name: Send stdout and stderr to that file for {{ k3s_log_unit }}
   ansible.builtin.copy:
     dest: "/etc/systemd/system/{{ k3s_log_unit }}.service.d/10-log-to-file.conf"
