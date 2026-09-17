@@ -126,6 +126,14 @@
   # The `created` clause is the same one the restart tasks carry: a workload this apply created
   # is not restarted (it races the initial rollout), so none is expected of it either. An
   # extra entry's own `kind` and `image` win over the defaults, as in the extra restart task.
+  #
+  # `manifests_self_rollouts` is the third source (issue #1902): the workloads a role with
+  # `manifests_rollout: ''` restarts through a PRIVATE task after this role returns
+  # (claude-otel's loop, pihole's roll_one.yml). Those tasks gate on the same three facts, so
+  # the record can hold the expectation for them; appending from the private task itself is
+  # too late, since the record is written here, before that task runs. An entry here reaches
+  # `rollouts[]` and nothing else -- not the shared restart, not the batch drain -- which is
+  # exactly what those roles opted out of.
   ansible.builtin.set_fact:
     manifests_release_rollouts: >-
       {{ manifests_release_rollouts + [{
@@ -145,7 +153,8 @@
         | ternary([{'name': manifests_rollout | default(manifests_service),
                     'kind': manifests_rollout_kind | default('deploy'),
                     'image': manifests_service}], []))
-       + (manifests_extra_rollouts | default([])) }}
+       + (manifests_extra_rollouts | default([]))
+       + (manifests_self_rollouts | default([])) }}
   loop_control:
     loop_var: manifests_release_target
     label: "{{ manifests_release_target.name }}"

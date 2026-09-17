@@ -34,6 +34,12 @@
     # The shared role waits on ONE Deployment in {{ k8s_namespace }}; this role has three,
     # in a different namespace. Skip its wait and roll our own below.
     manifests_rollout: ''
+    # ...but tell the release record which workloads that private restart targets, so
+    # `probe.py health` expects them to roll after a changed render (issue #1902). The same
+    # list the restart loop below and the stabilisation snapshot iterate; the record decides
+    # `restart` from the same facts that loop gates on. Record-only: the shared role neither
+    # restarts nor drains these.
+    manifests_self_rollouts: "{{ claude_otel_stabilise_workloads }}"
 
 - name: Restart the telemetry workloads after a config change
   tags: [deploy]
