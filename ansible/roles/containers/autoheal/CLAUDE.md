@@ -29,6 +29,18 @@ See repo-root `CLAUDE.md` for shared conventions.
   container stays healthy, and the deploy reads green. ENFORCED by
   `ansible/tests/services/test_autoheal_webhook_payload_key.py`. The channel is the shared
   `monitor_discord_webhook_url`.
+- **autoheal carries no healthcheck of its own, on purpose.** `AUTOHEAL_CONTAINER_LABEL=all`
+  has no self-exclusion, so while the image's baked `pgrep -f autoheal` probe ran, autoheal was
+  its own patient: a Pi deploy's memory thrash stalled that exec past its timeout, autoheal
+  read itself `unhealthy`, restarted itself, and the `start` failed at the OCI runtime
+  ("Timeout waiting for systemd to create scope"). A failed start does not fire
+  `restart: unless-stopped`, so it sat Exited until `pi-recovery-health`'s `docker start`
+  arm ran — the 2026-08-29 and 2026-09-02/03 stops (#1789). The probe detected nothing the
+  restart policy and that cron do not already cover, so `healthcheck: disable: true` removes
+  the self-restart path and loses no recovery. A wedged-but-running autoheal is detected by
+  neither, before or after; the `pgrep` probe passed a hung shell loop too. The `# DECIDED:`
+  marker in the compose template carries the evidence; ENFORCED by
+  `ansible/tests/services/test_autoheal_does_not_watch_itself.py`.
 - **`AUTOHEAL_START_PERIOD` is a startup sleep, not a per-container grace period.** Docker
   already suppresses `unhealthy` during a container's own `healthcheck.start_period`. This
   covers the Pi rebooting, when autoheal and everything it watches start together. It also
