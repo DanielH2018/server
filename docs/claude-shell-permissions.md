@@ -81,8 +81,9 @@ PermissionRequest hook at all. Two facts bound the finding further. daniel-serve
 when this was measured, so the judge hook was not on that host's chain; the numbers above
 come from a scratch clone of the dotfiles at `de79392` with `CLAUDE_GUARD_HOME` and
 `PYTHONPATH` pointed at it. And the two hooks are not interchangeable: on the payload above
-the judge emits nothing and the repo shim allows, because `classify_remote` walks the local
-pipeline and the judge does not. Retiring the repo shim would re-prompt `ssh <host> <cmd> |
+the judge emits nothing and the repo shim allows: `readonly_remote_safe` (`claude_guard/checks/remote.py`)
+returns no opinion unless the parse yields exactly one segment, while `classify_remote` walks each
+local stage. Retiring the repo shim would re-prompt `ssh <host> <cmd> |
 head` in Manual mode. Whether one of them retires is the dotfiles survey's re-planned slice 5
 (`docs/plans/2026-09-17-claude-guard-slice-5-survey.md` in the dotfiles repo), not this repo's.
 

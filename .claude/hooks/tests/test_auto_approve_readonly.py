@@ -6,7 +6,7 @@ prompts for *provably* read-only commands, and must NEVER auto-approve a
 command that can write, delete, or execute. These tables lock that contract.
 
 Run: uv run pytest .claude/hooks
-(Still importable standalone — it loads the hook by path, no third-party deps.)
+(Still runnable standalone -- it loads the hook by path; pytest is the one dependency.)
 
 Each table is two lists. The `_SSH` half holds every vector with an `ssh` stage; its verdict
 runs through `SSH_HOSTS` and `_SSH_SECRET`, which `_readonly_tables.py` imports from the
@@ -300,6 +300,13 @@ def test_rejects_unsafe_commands_over_ssh():
     assert not (bad := _failures_reject(REJECT_SSH)), _reject_report(bad)
 
 
+def misplaced_vectors(local, ssh):
+    """Vectors on the wrong side of the split: ssh tokens in `local`, none in `ssh`."""
+    return [c for c, _ in local if _HAS_SSH.search(c)] + [
+        c for c, _ in ssh if not _HAS_SSH.search(c)
+    ]
+
+
 def test_every_ssh_vector_is_in_an_ssh_list():
     """The split is by hand; this is what keeps a table-dependent vector out of `_LOCAL`.
 
@@ -308,16 +315,24 @@ def test_every_ssh_vector_is_in_an_ssh_list():
     are the counts at the split (10 approve, 25 reject); an `_SSH` list that emptied out
     would otherwise skip nothing and prove nothing.
     """
-    misplaced = [c for c, _ in APPROVE_LOCAL + REJECT_LOCAL if _HAS_SSH.search(c)]
-    assert not misplaced, "ssh vectors in a _LOCAL list:\n" + "\n".join(
-        f"  {c!r}" for c in misplaced
-    )
-    not_ssh = [c for c, _ in APPROVE_SSH + REJECT_SSH if not _HAS_SSH.search(c)]
-    assert not not_ssh, "non-ssh vectors in an _SSH list:\n" + "\n".join(
-        f"  {c!r}" for c in not_ssh
+    bad = misplaced_vectors(APPROVE_LOCAL + REJECT_LOCAL, APPROVE_SSH + REJECT_SSH)
+    assert not bad, "vectors on the wrong side of the split:\n" + "\n".join(
+        f"  {c!r}" for c in bad
     )
     assert len(APPROVE_SSH) >= 10
     assert len(REJECT_SSH) >= 25
+
+
+def test_placement_check_is_clean_on_a_correct_split():
+    assert (
+        misplaced_vectors([("ls", ""), ("cat a | head", "")], [("ssh h ls", "")]) == []
+    )
+
+
+def test_placement_check_is_flagged_on_a_misplaced_vector():
+    planted = "cat a | ssh daniel-server ls"
+    assert misplaced_vectors([("ls", ""), (planted, "")], []) == [planted]
+    assert misplaced_vectors([], [("ls", "")]) == ["ls"]
 
 
 def test_ssh_tests_skip_under_the_stand_in_and_run_against_the_deploy():
@@ -389,13 +404,23 @@ def test_permission_request_never_widens_classify_over_ssh():
 if __name__ == "__main__":
     import sys
 
-    fa, fr = _failures_approve(), _failures_reject()
-    print(f"APPROVE cases: {len(APPROVE) - len(fa)}/{len(APPROVE)} passed")
-    for c, l in fa:
-        print(f"  MISS approve [{l}]: {c!r}")
-    print(f"REJECT cases:  {len(REJECT) - len(fr)}/{len(REJECT)} passed")
-    for c, l in fr:
-        print(f"  !! FALSE-APPROVE [{l}]: {c!r} -> {classify(c)!r}")
-    total_bad = len(fa) + len(fr)
+    tables = [
+        ("APPROVE_LOCAL", APPROVE_LOCAL, _failures_approve),
+        ("APPROVE_SSH", APPROVE_SSH, _failures_approve),
+        ("REJECT_LOCAL", REJECT_LOCAL, _failures_reject),
+        ("REJECT_SSH", REJECT_SSH, _failures_reject),
+    ]
+    total_bad = 0
+    for name, table, failures in tables:
+        bad = failures(table)
+        total_bad += len(bad)
+        note = (
+            " (against conftest's stand-in tables)"
+            if _STAND_IN and "SSH" in name
+            else ""
+        )
+        print(f"{name}: {len(table) - len(bad)}/{len(table)} passed{note}")
+        for c, l in bad:
+            print(f"  FAIL [{l}]: {c!r} -> {classify(c)!r}")
     print(f"\n{'ALL PASS' if total_bad == 0 else str(total_bad) + ' FAILURES'}")
     sys.exit(1 if total_bad else 0)
