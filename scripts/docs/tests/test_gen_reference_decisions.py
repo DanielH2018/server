@@ -24,6 +24,14 @@ def _rows(tmp_path):
     return g.build_rows(tmp_path, tmp_path)
 
 
+def _adr_marker(adr: str) -> str:
+    """A marker line citing an ADR, assembled so this file's own source never carries the
+    marker and the ADR token on one line: `ansible/tests/repo/test_adr_links.py` scans .py
+    sources for exactly that pair and would demand an ADR entry for a fixture.
+    """
+    return "# " + "DECIDED: one lock. See " + adr + ".\n"
+
+
 def test_marker_line_renders_a_row(tmp_path):
     _write(tmp_path, "scripts/foo.py", "# DECIDED: keep it simple.\nx = 1\n")
     rows = _rows(tmp_path)
@@ -250,3 +258,168 @@ def test_live_tree_excludes_its_own_generator_and_test_file():
     paths = {r["path"] for r in rows}
     assert "scripts/docs/reference/decisions.py" not in paths
     assert "scripts/docs/tests/test_gen_reference_decisions.py" not in paths
+
+
+# ── Pointer resolution ───────────────────────────────────────────────────────────────────
+
+
+def test_this_roles_claude_md_pointer_is_flagged_when_the_file_is_missing(tmp_path):
+    """The shape issue #1857 was filed on: setup/k3s markers said "this role's CLAUDE.md"
+    while `ansible/roles/setup/k3s/CLAUDE.md` did not exist.
+    """
+    _write(
+        tmp_path,
+        "ansible/roles/setup/widget/templates/check.sh.j2",
+        "# DECIDED: cron, not a server flag.\n# Full account in this role's CLAUDE.md.\n",
+    )
+    rows = _rows(tmp_path)
+    assert [(r["line"], p) for r, p in g.find_unresolved_pointers(rows, tmp_path)] == [
+        ("1", "this role's CLAUDE.md")
+    ]
+
+
+def test_this_roles_claude_md_pointer_resolves_when_the_file_exists(tmp_path):
+    """The red-proof pair to the flag above: same marker, the role doc present."""
+    _write(
+        tmp_path,
+        "ansible/roles/setup/widget/templates/check.sh.j2",
+        "# DECIDED: cron, not a server flag.\n# Full account in this role's CLAUDE.md.\n",
+    )
+    _write(tmp_path, "ansible/roles/setup/widget/CLAUDE.md", "# widget\n")
+    assert g.find_unresolved_pointers(_rows(tmp_path), tmp_path) == []
+
+
+def test_this_roles_claude_md_outside_a_role_is_flagged(tmp_path):
+    """A marker under scripts/ has no role to point at, so the phrase itself is the defect."""
+    _write(tmp_path, "scripts/foo.py", "# DECIDED: see this role's CLAUDE.md.\n")
+    unresolved = g.find_unresolved_pointers(_rows(tmp_path), tmp_path)
+    assert [p for _r, p in unresolved] == ["this role's CLAUDE.md"]
+
+
+def test_adr_pointer_resolves_by_number_whatever_the_slug(tmp_path):
+    _write(tmp_path, "scripts/foo.py", _adr_marker("ADR-0011"))
+    _write(
+        tmp_path, "docs/adr/0011-one-lock-serialises-every-deploy-path.md", "# ADR\n"
+    )
+    assert g.find_unresolved_pointers(_rows(tmp_path), tmp_path) == []
+
+
+def test_adr_pointer_with_no_file_is_flagged(tmp_path):
+    _write(tmp_path, "scripts/foo.py", _adr_marker("ADR-0099"))
+    (tmp_path / "docs" / "adr").mkdir(parents=True)
+    unresolved = g.find_unresolved_pointers(_rows(tmp_path), tmp_path)
+    assert [p for _r, p in unresolved] == ["ADR-0099"]
+
+
+def test_repo_path_pointer_resolves_against_the_tree_root(tmp_path):
+    _write(
+        tmp_path,
+        "scripts/foo.py",
+        "# DECIDED: restore etcd first. docs/k3s-etcd-restore.md has the procedure.\n",
+    )
+    _write(tmp_path, "docs/k3s-etcd-restore.md", "# restore\n")
+    assert g.find_unresolved_pointers(_rows(tmp_path), tmp_path) == []
+
+
+def test_repo_path_pointer_with_no_file_is_flagged(tmp_path):
+    _write(
+        tmp_path,
+        "scripts/foo.py",
+        "# DECIDED: restore etcd first. docs/k3s-etcd-restore.md has the procedure.\n",
+    )
+    (tmp_path / "docs").mkdir()
+    unresolved = g.find_unresolved_pointers(_rows(tmp_path), tmp_path)
+    assert [p for _r, p in unresolved] == ["docs/k3s-etcd-restore.md"]
+
+
+def test_repo_path_pointer_resolves_relative_to_the_markers_own_directory(tmp_path):
+    """`templates/foo.j2` written from inside a role names the sibling, not a root path."""
+    _write(
+        tmp_path,
+        "ansible/roles/setup/widget/defaults/main.yml",
+        "# DECIDED: daily. See templates/check.sh.j2 for the cron body.\n",
+    )
+    _write(
+        tmp_path,
+        "ansible/roles/setup/widget/defaults/templates/check.sh.j2",
+        "#!/bin/sh\n",
+    )
+    assert g.find_unresolved_pointers(_rows(tmp_path), tmp_path) == []
+
+
+def test_a_double_extension_path_is_taken_whole(tmp_path):
+    """`foo.sh.j2` must resolve as `foo.sh.j2`, not be cut at `foo.sh` and flagged."""
+    _write(
+        tmp_path,
+        "scripts/foo.py",
+        "# DECIDED: see ansible/roles/setup/widget/templates/check.sh.j2 for the rest.\n",
+    )
+    _write(tmp_path, "ansible/roles/setup/widget/templates/check.sh.j2", "#!/bin/sh\n")
+    assert g.find_unresolved_pointers(_rows(tmp_path), tmp_path) == []
+
+
+def test_a_path_whose_top_level_directory_does_not_exist_is_not_a_pointer(tmp_path):
+    """`host/path.sh` in prose is a host path, not a repo path; only a real top-level
+    directory under `root` makes a token a pointer this can resolve.
+    """
+    _write(
+        tmp_path,
+        "scripts/foo.py",
+        "# DECIDED: cron runs /usr/local/bin/check.sh nightly.\n",
+    )
+    assert g.find_unresolved_pointers(_rows(tmp_path), tmp_path) == []
+
+
+def test_markdown_renders_the_unresolved_pointers_warning(tmp_path):
+    _write(tmp_path, "scripts/foo.py", _adr_marker("ADR-0099"))
+    (tmp_path / "docs" / "adr").mkdir(parents=True)
+    out = g.render_markdown(_rows(tmp_path), tmp_path)
+    assert "Unresolved pointers" in out
+    assert "scripts/foo.py:1" in out
+    assert "ADR-0099" in out
+
+
+def test_markdown_omits_the_unresolved_pointers_warning_when_all_resolve(tmp_path):
+    _write(tmp_path, "scripts/foo.py", _adr_marker("ADR-0011"))
+    _write(tmp_path, "docs/adr/0011-one-lock.md", "# ADR\n")
+    out = g.render_markdown(_rows(tmp_path), tmp_path)
+    assert "Unresolved pointers" not in out
+
+
+def test_live_tree_carries_pointers_and_every_one_resolves():
+    """Both halves in one place: the census must FIND pointers (non-vacuity — 45 on
+    2026-09-17, floor set well under that) and none may dangle. A marker that sends a
+    reviewer to a file that does not exist is what issue #1857 was filed on.
+    """
+    rows = _live_rows()
+    found = sum(len(g._pointers_in(r, REPO)) for r in rows)
+    assert found >= 30, f"only {found} pointers found across {len(rows)} markers"
+    unresolved = g.find_unresolved_pointers(list(rows), REPO)
+    assert not unresolved, "\n".join(
+        f"{r['path']}:{r['line']} -> {p}" for r, p in unresolved
+    )
+
+
+def test_a_counterexample_pointer_is_not_flagged(tmp_path):
+    """`test_documented_paths_exist.py` quotes `scripts/gen_infra_map.py` as the stale path its
+    own guard must reject; that pointer must not exist, so it is exempt by (file, token).
+    """
+    _write(
+        tmp_path,
+        "ansible/tests/repo/test_documented_paths_exist.py",
+        "# DECIDED: a suffix, never a bare basename. scripts/gen_infra_map.py is not a suffix.\n",
+    )
+    (tmp_path / "scripts").mkdir()
+    assert g.find_unresolved_pointers(_rows(tmp_path), tmp_path) == []
+
+
+def test_the_counterexample_exemption_is_by_token_not_by_file(tmp_path):
+    """The red-proof pair: a different dangling pointer in the same file is still flagged."""
+    _write(
+        tmp_path,
+        "ansible/tests/repo/test_documented_paths_exist.py",
+        "# DECIDED: a suffix, never a bare basename. See scripts/nowhere.py.\n",
+    )
+    (tmp_path / "scripts").mkdir()
+    unresolved = g.find_unresolved_pointers(_rows(tmp_path), tmp_path)
+    assert [p for _r, p in unresolved] == ["scripts/nowhere.py"]

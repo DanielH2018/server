@@ -844,7 +844,8 @@ k3s_manifest_prune_cron_minute: "15"
 # the durable signal for a k8s role change gitops_deploy.py's `cs.k8s` branch ff-merges and
 # defers-and-alerts: the Discord page fires once per SHA and clears the moment the tree
 # ff-merges, so nothing else watches the gap between "merged" and "applied" — see the
-# `# DECIDED:` at that branch in gitops_deploy.py.
+# `# DECIDED:` at that branch of `deploy_alerts.alert_deferred` in
+# roles/setup/gitops_deploy/files/.
 #
 # Every 30 minutes, not daily like manifest-prune above: the deployer ticks every 10 minutes, so
 # a deferred change can land at any point in the day, and a daily window would leave it unwatched

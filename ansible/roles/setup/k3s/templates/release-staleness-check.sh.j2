@@ -7,7 +7,9 @@
 # -- so every OTHER monitored marker reads clean while the cluster keeps running the old
 # manifests. Renovate automerges digest bumps on the 20+ `k8s_autodeploy: false` roles, so this
 # path runs unattended with one Discord line as its entire signal. See the `# DECIDED:` at the
-# `cs.k8s` branch in gitops_deploy.py and this role's CLAUDE.md for the full account.
+# `cs.k8s` branch of `deploy_alerts.alert_deferred` (roles/setup/gitops_deploy/files/), the
+# `#947` bullet in roles/setup/gitops_deploy/CLAUDE.md for the full account, and this role's
+# CLAUDE.md for where this check sits among the other drift crons.
 #
 # THE SIGNAL. `roles/k8s/manifests/tasks/release_stamp.yml` records, per service, the commit that
 # produced its applied manifests. `probe.py releases --stale-only` reads those records and

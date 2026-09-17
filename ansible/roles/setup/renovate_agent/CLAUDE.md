@@ -63,6 +63,36 @@ RENOVATE_AGENT_CONFIG=/tmp/agent-test.env \
 The override exists for exactly this. Without it the first armed tick would be the first time
 this code ever ran.
 
+## Autonomous-role contract (it merges and deploys with no human in the loop)
+
+The acting half of the Renovate pair. Its authority is written down so an edit to the prompt,
+the caps or the schedule cannot quietly widen it.
+
+- **Scope / exclusions:** the repo's open PRs authored by `app/renovate`, worked through the
+  `renovate-prs` skill: finish the manual half of a grouped bump, merge through
+  `land.sh --arm-merge`, land and verify. **Never** a PR by another author, **never** a bare
+  `gh pr merge`, **never** a session in the primary checkout, **never** a worktree that still
+  holds unlanded work (the tick skips and posts the path instead).
+- **Mode (explicit + reversible):** `renovate_agent_enabled`, which ships `false`. It alone
+  arms the timer, and setting it back stops AND disables the unit (*Arming it*;
+  `test_renovate_agent_unit.py` pins both directions). There is deliberately no run-once
+  handler: a config edit must not kick a paid session as a side effect.
+- **Authoritative sources:** `gh pr list --author app/renovate --state open` before and
+  after the session, CI's own verdict through `land.sh`, and the health gate `land.sh` runs.
+  Never the session's closing paragraph — it reads confident whatever happened.
+- **Abort valves:** `renovate_agent_max_prs` (the bound that stops a normal run),
+  `renovate_agent_run_timeout_s` and the systemd `renovate_agent_unit_timeout` backstop, and
+  `renovate_agent_budget_usd` as a runaway catch that must never be the binding constraint
+  (*What bounds the run*).
+- **Required evidence:** a Discord digest whose headline is the before/after PR delta
+  (`resolved`, `ran and no Renovate PR changed state`, or `FAILED — <reason>`), plus the
+  `Renovate Agent — Alive` push tile, beaten only on exit 0; a crash pushes its own `down`
+  with the exception text (*The digest measures effect, not completion*, *The alive
+  monitor*). `permission denials:` on a digest line is the signal the design rests on
+  having gone missing.
+- **Next-run review:** before raising a cap or widening the prompt, read the last week's
+  digests for what the sessions actually resolved and what they timed out on.
+
 ## What bounds the run
 
 The unit is deliberately **not** sandboxed, unlike the sibling `renovate-notify.service`.

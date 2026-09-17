@@ -33,6 +33,15 @@ collapsed) to a near-identical string are flagged at the top of the page. A near
 usually means the same trade-off was re-decided in two places, or a marker was copied and
 never specialised — either way it is worth a human's second look, not a generator's verdict.
 
+UNRESOLVED POINTERS. A marker block is a pointer as often as it is an argument: "full analysis
+in this role's CLAUDE.md", "see ADR-0017", "docs/k3s-etcd-restore.md has the procedure". A
+pointer at a file that does not exist sends the reviewer the marker is written for to a dead
+end, and nothing else in the tree reads a marker's prose. `find_unresolved_pointers` extracts
+three pointer shapes from each row's text — a repo-relative path with a source or doc
+extension, the phrase "this role's CLAUDE.md", and an `ADR-NNNN` token — and resolves each
+against the tree. The unresolved ones are flagged at the top of the page beside the possible
+duplicates, and `test_gen_reference_decisions.py` asserts the live tree has none.
+
 Usage::
 
     uv run python scripts/docs/reference/decisions.py --out docs/reference/decisions.md
@@ -102,6 +111,35 @@ _PLANES: list[tuple[str, str]] = [
 # flagged. 1.0 is exact (after case/whitespace normalisation); this is deliberately looser so
 # a marker copied and lightly edited still surfaces.
 _DUPLICATE_THRESHOLD = 0.90
+
+# A repo-relative path a marker names: a top-level directory, slash-separated segments, and one
+# of these extensions. The top-level directory must exist under `root` (checked at match time,
+# see `_pointers_in`), so a fixture tree resolves its own paths and a stray `foo/bar.md` in
+# prose is not read as a repo path. The extension set is what the census found markers
+# pointing at (2026-09-17: 43 pointers in 312 markers, every one of them in this set); a
+# pointer with no extension (`gitops_deploy.py`'s bare module name, a directory) is not a path
+# this can resolve and is left alone. The trailing lookahead refuses a `.`-then-word so
+# `foo.sh.j2` is taken whole rather than as `foo.sh`, while a sentence-ending `foo.md.` still
+# matches `foo.md`.
+_REPO_PATH_RE = re.compile(
+    r"(?<![\w/.-])([\w.-]+(?:/[\w.-]+)+\.(?:md|py|j2|yml|yaml|sh|toml|json))(?!\.?[\w/-])"
+)
+_ADR_RE = re.compile(r"\bADR-(\d{4})\b")
+_THIS_ROLE_RE = re.compile(r"this role'?s `?CLAUDE\.md`?", re.IGNORECASE)
+_ROLE_DIR_RE = re.compile(r"^(ansible/roles/[^/]+/[^/]+)/")
+
+# (marker file, pointer) pairs that name a path which must NOT exist: the marker quotes the
+# stale path as the counterexample its own guard rejects. Keyed by file and token rather than
+# line, so an edit above the marker does not silently drop the entry; a marker that moves to
+# another file re-appears as unresolved and the entry is updated by hand.
+_COUNTEREXAMPLE_POINTERS = frozenset(
+    {
+        (
+            "ansible/tests/repo/test_documented_paths_exist.py",
+            "scripts/gen_infra_map.py",
+        ),
+    }
+)
 
 
 def _tracked_files(root: Path) -> list[str] | None:
@@ -266,6 +304,10 @@ def build_rows(root: Path = REPO, repo: Path = REPO) -> list[dict[str, str]]:
                     "plane": _plane(rel_path),
                     "first_sentence": first_sentence,
                     "text": full_text or "(no text after the marker)",
+                    # The whole block, not the first-sentence cut `text` renders: a pointer
+                    # usually sits in the marker line's SECOND sentence ("…, not X. See
+                    # ADR-0011."), which `text` drops.
+                    "block": " ".join([after, *continuation]).strip(),
                     "decided": _blame_date(rel_path, idx + 1, repo),
                 }
             )
@@ -300,11 +342,73 @@ def find_possible_duplicates(
     return pairs
 
 
-def render_markdown(rows: list[dict[str, str]]) -> str:
+def _pointers_in(row: dict[str, str], root: Path) -> list[str]:
+    """Every pointer a marker's text carries, as the literal token found.
+
+    A repo path counts only when its first segment is a directory under `root`; that is what
+    keeps `git show <sha>^:ansible/…` (a real repo path, resolved below) apart from a
+    `host/path.sh` that happens to look like one.
+    """
+    text = row["block"]
+    found: list[str] = []
+    for match in _REPO_PATH_RE.finditer(text):
+        token = match.group(1)
+        if (root / token.split("/", 1)[0]).is_dir():
+            found.append(token)
+    found.extend(f"ADR-{m.group(1)}" for m in _ADR_RE.finditer(text))
+    if _THIS_ROLE_RE.search(text):
+        found.append("this role's CLAUDE.md")
+    return found
+
+
+def _pointer_resolves(row: dict[str, str], pointer: str, root: Path) -> bool:
+    """True when `pointer` names something that exists under `root`.
+
+    `this role's CLAUDE.md` resolves to `<role dir>/CLAUDE.md` for a marker under
+    `ansible/roles/<plane>/<role>/`, and to nothing for a marker anywhere else — a marker in
+    `scripts/` has no role to point at, so the phrase there is itself the defect. `ADR-NNNN`
+    resolves to the `docs/adr/NNNN-*.md` file, whatever its slug. A repo path resolves against
+    `root`, then against the marker's own directory, so `templates/foo.j2` written from inside
+    a role still counts.
+    """
+    if pointer == "this role's CLAUDE.md":
+        match = _ROLE_DIR_RE.match(row["path"])
+        return bool(match) and (root / match.group(1) / "CLAUDE.md").is_file()
+    if pointer.startswith("ADR-"):
+        return any((root / "docs" / "adr").glob(f"{pointer[4:]}-*.md"))
+    return (root / pointer).exists() or (root / row["path"]).parent.joinpath(
+        pointer
+    ).exists()
+
+
+def find_unresolved_pointers(
+    rows: list[dict[str, str]], root: Path = REPO
+) -> list[tuple[dict[str, str], str]]:
+    """`(row, pointer)` for every pointer in a marker block that names nothing in the tree.
+
+    Args:
+        rows: Marker rows as returned by `build_rows`.
+        root: The tree the pointers are resolved against — the same `root` the rows were
+            built from, so a fixture tree checks its own paths.
+
+    Returns:
+        One tuple per unresolved pointer, in row order; empty when every pointer resolves.
+    """
+    return [
+        (row, pointer)
+        for row in rows
+        for pointer in _pointers_in(row, root)
+        if (row["path"], pointer) not in _COUNTEREXAMPLE_POINTERS
+        and not _pointer_resolves(row, pointer, root)
+    ]
+
+
+def render_markdown(rows: list[dict[str, str]], root: Path = REPO) -> str:
     """Render `rows` as the "Decisions" reference page, banner and duplicate flags included.
 
     Args:
         rows: Marker rows as returned by `build_rows`.
+        root: The tree the rows' pointers are resolved against.
 
     Returns:
         The full page as Markdown text, ending in a single trailing newline.
@@ -335,6 +439,18 @@ def render_markdown(rows: list[dict[str, str]]) -> str:
                 f"    * `{row_a['path']}:{row_a['line']}` and "
                 f"`{row_b['path']}:{row_b['line']}`"
             )
+        parts.append("")
+
+    unresolved = find_unresolved_pointers(rows, root)
+    if unresolved:
+        parts.append('!!! warning "Unresolved pointers"')
+        parts.append(
+            "    A marker below points at a file, a role's CLAUDE.md or an ADR that does "
+            "not exist in the tree. The marker's reasoning is still there; the long form "
+            "it sends a reader to is not.\n"
+        )
+        for row, pointer in unresolved:
+            parts.append(f"    * `{row['path']}:{row['line']}` → `{pointer}`")
         parts.append("")
 
     for _plane_prefix, plane_name in [*_PLANES, ("", "other")]:
@@ -369,7 +485,11 @@ def main(argv: list[str] | None = None) -> int:
 
     rows = build_rows(args.root, args.root)
     return finish_generator(
-        "docs.reference.decisions", args.out, rows, render_markdown, "marker"
+        "docs.reference.decisions",
+        args.out,
+        rows,
+        lambda page_rows: render_markdown(page_rows, args.root),
+        "marker",
     )
 
 

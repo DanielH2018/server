@@ -144,6 +144,37 @@ look like a k3s server node whose k3s is stopped, and the script runs there unmo
 ENFORCED by `ansible/tests/staging/test_etcd_drill_vm.py`: MAC ↔ reservation, the fence, the
 pinned host key, no `define`, and the deadline pinned between one cron period and two.
 
+## Autonomous-role contract (the monthly drill creates and destroys a guest)
+
+One cron here changes state: `Full etcd restore drill in a throwaway guest`
+(`cron_file: etcd-restore-drill-vm`), the monthly root cron that runs the FULL etcd restore
+drill in the guest above. The staging guest itself is created by the
+role, not by a cron, and is out of this contract.
+
+- **Scope / exclusions:** `virsh create` the `etcd-drill` guest from a disk converted from
+  the base image, run `scripts/backup/etcd_restore_drill.sh` inside it against the newest
+  off-box snapshot in R2, then `virsh destroy` the guest and delete the disk. **Never** `virsh define`
+  (so no guest outlives a run), **never** the live cluster, **never** the staging guest —
+  its fence and its disk are untouched.
+- **Mode (explicit + reversible):** `hypervisor_etcd_drill_armed` (`defaults/main.yml`,
+  `true`) is the cron's `state:`; `false` removes it on the next run. The cadence is
+  `etcd_drill_full_cron` in `group_vars/all.yml`, shared with `k8s/uptime-kuma`, which sizes
+  the tile's deadline from it.
+- **Authoritative sources:** the snapshot listed in R2 (the same bucket the daily off-box
+  snapshot writes), daniel-server's own `/usr/local/bin/k3s`, and `K3S_TOKEN` from the
+  k3s-agent unit's env file. A wrong token fails the restore stage loudly rather than
+  restoring something else.
+- **Abort valves:** teardown on every exit path; the pinned guest host key
+  (`StrictHostKeyChecking=yes` against one public half, so the orchestrator never accepts an
+  unknown guest on the shared bridge); the deadline pinned between one cron period and two.
+- **Required evidence:** `/var/log/etcd-restore-drill/<run-id>/` (drill stdout,
+  `restore.log`, `server.log`), retained `hypervisor_etcd_drill_log_retention_days`; the
+  `etcd Restore Drill (full)` Kuma tile, which is the alarm. Nothing in the cluster reads the
+  local stamp — monitor-bridge accepts only daniel-box's `--list-only` stamp by design.
+- **Next-run review:** before changing the cadence or what ships into the guest, read the
+  last run's directory; `ansible/tests/staging/test_etcd_drill_vm.py` pins the fence, the
+  host key, no `define`, and the deadline, so a widening that breaks one fails there first.
+
 ## The default network is stopped on purpose
 
 Installing `libvirt-daemon-system` brings up a `default` NAT network and `virbr0`, with its
