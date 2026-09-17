@@ -115,6 +115,17 @@ def test_a_lookup_with_a_variable_target_is_not_judged():
     assert misplaced_template_lookups("{{ lookup('template', src) | indent(4) }}") == []
 
 
+def test_a_commented_out_lookup_is_not_judged():
+    src = (
+        "# not lookup('template', playbook_dir + '/roles/k8s/x/templates/old.yaml.j2')\n"
+        "{# "
+        + (_EMBED % "also-old.yaml.j2")
+        + " #}\n"
+        + (_EMBED % "config/live.yaml.j2")
+    )
+    assert misplaced_template_lookups(src) == []
+
+
 def test_a_render_of_kinded_objects_is_clean():
     docs = [{"kind": "Deployment", "metadata": {}}, None, {"kind": "Service"}]
     assert non_manifest_documents(docs) == []

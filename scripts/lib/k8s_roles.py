@@ -106,6 +106,8 @@ def is_manifest_template(path: Path) -> bool:
 
 _TEMPLATE_LOOKUP = re.compile(r"""lookup\(\s*['"]template['"]\s*,\s*([^)]*)\)""")
 _TEMPLATES_PATH = re.compile(r"""['"][^'"]*/templates/([^'"]*)['"]""")
+_JINJA_COMMENT = re.compile(r"\{#.*?#\}", re.S)
+_YAML_COMMENT_LINE = re.compile(r"^\s*#.*$", re.M)
 
 
 def misplaced_template_lookups(source: str) -> list[str]:
@@ -119,8 +121,11 @@ def misplaced_template_lookups(source: str) -> list[str]:
 
     Only a literal path is judged. A target passed as a variable (image-builder's
     `lookup('template', src)`) resolves at task time from the caller's vars, which a text scan
-    cannot see; those roles are in SKIP_ROLES regardless.
+    cannot see; those roles are in SKIP_ROLES regardless. Comments are stripped first — a
+    `{# #}` block and a `#` line — so a comment that names a lookup by example (pihole's
+    configmap.yaml.j2 does) is not judged as a call.
     """
+    source = _YAML_COMMENT_LINE.sub("", _JINJA_COMMENT.sub("", source))
     misplaced = []
     for call in _TEMPLATE_LOOKUP.finditer(source):
         path = _TEMPLATES_PATH.search(call.group(1))
