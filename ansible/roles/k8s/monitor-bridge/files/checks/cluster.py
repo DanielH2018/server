@@ -17,6 +17,7 @@ from bridge.config import Config
 import bridge.net
 import bridge.streaks
 import checks.cluster_rollout
+import checks.cluster_zero
 import checks.logs
 from verdicts.cluster import (
     traefik_latency_verdict,
@@ -24,7 +25,6 @@ from verdicts.cluster import (
     extended_resource_verdict,
     k8s_workloads_verdict,
     ksm_resource_label,
-    replica_offender_names,
     targets_verdict,
 )
 
@@ -398,39 +398,6 @@ def check_traefik_404_flood(cfg: Config) -> tuple[bool, str]:
     )
 
 
-def _held_replica_offenders(
-    cfg: Config, offenders: list[tuple[dict, float]]
-) -> tuple[list[tuple[dict, float]], str]:
-    """Hold unavailable-replica offenders back until they persist K8S_WORKLOADS_CONSECUTIVE cycles.
-
-    Returns (offenders the verdict should judge, note). The note is empty unless the streak is
-    holding, in which case it carries the sibling "down streak n/N (rollout)" text naming the
-    workloads being held — a monitor that stays up while a fault accumulates has to say so, and
-    the green verdict text alone ("N k8s workloads healthy") would read identical to a cycle
-    with nothing rolling at all.
-
-    The gate is on THIS ARM ALONE. A Deployment rolling has one unavailable replica by
-    definition, which is what every single-cycle DOWN episode this closes named — uptime-kuma(1),
-    valheim(1), radarr(1), jellyfin(1), speedtest(1), karakeep-chrome(1) over the 30 days to
-    2026-09-11. The crash-loop, DaemonSet, floor and log arms keep no grace: a crash-loop is
-    already a multi-cycle condition by the time `increase()` sees it, and a floor breach means
-    the check is blind, which delaying helps nobody.
-    """
-    if not offenders:
-        bridge.streaks._down_streaks["k8s_workload_replicas"] = 0
-        return offenders, ""
-    count, held, note = bridge.streaks.down_streak(
-        bridge.streaks._down_streaks.get("k8s_workload_replicas", 0),
-        cfg.K8S_WORKLOADS_CONSECUTIVE,
-        "unavailable replicas: %s" % replica_offender_names(offenders),
-        "rollout",
-    )
-    bridge.streaks._down_streaks["k8s_workload_replicas"] = count
-    if held:
-        return [], note
-    return offenders, ""
-
-
 def check_k8s_workloads(cfg: Config, fetch=None, scalar=None) -> tuple[bool, str]:
     """Deployment readiness for every workload in the k3s cluster.
 
@@ -486,7 +453,12 @@ def check_k8s_workloads(cfg: Config, fetch=None, scalar=None) -> tuple[bool, str
     stalled_offenders, stall_note = checks.cluster_rollout.held_stalled_offenders(
         cfg, checks.cluster_rollout.stalled_rollout_offenders(cfg, fetch)
     )
-    offenders, replica_note = _held_replica_offenders(cfg, offenders)
+    zero_offenders, zero_note = checks.cluster_zero.held_zero_available_offenders(
+        cfg, checks.cluster_zero.zero_available_offenders(cfg, fetch)
+    )
+    offenders, replica_note = checks.cluster_rollout.held_replica_offenders(
+        cfg, offenders
+    )
     ok, msg = k8s_workloads_verdict(
         total,
         offenders,
@@ -496,6 +468,7 @@ def check_k8s_workloads(cfg: Config, fetch=None, scalar=None) -> tuple[bool, str
         ds_offenders,
         cfg.K8S_MIN_DAEMONSETS,
         stalled_offenders,
+        zero_offenders,
     )
     # Folded into this monitor rather than given its own: a new Kuma monitor needs a new push
     # token in SOPS, and this arm answers the same question the DaemonSet arm does — is the
@@ -521,7 +494,7 @@ def check_k8s_workloads(cfg: Config, fetch=None, scalar=None) -> tuple[bool, str
             source="cluster prometheus",
         ),
     )
-    notes = [n for n in (replica_note, stall_note) if n]
+    notes = [n for n in (zero_note, replica_note, stall_note) if n]
     tail = ", %s" % ", ".join(notes) if notes else ""
     if not res_ok:
         # The resource fault wins the message: an unschedulable-by-design cluster is more urgent

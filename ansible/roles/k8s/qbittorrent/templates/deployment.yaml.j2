@@ -40,6 +40,14 @@ spec:
         - name: wireguard
           image: {{ qbittorrent_k8s_wireguard_image }}
           restartPolicy: Always
+          # files/netns-reset.sh runs before the image's own /init on EVERY start of this
+          # container. The pod netns outlives the container, so a restart inherits the dead
+          # wg0, wg-quick's policy rules, the LAN routes and the kill-switch from the previous
+          # one, and the mod cannot bring a tunnel up behind them — the 2026-08-16 (9h) and
+          # 2026-09-13 (3.5d) deadlocks, cleared both times by a pod delete. The reset makes a
+          # container restart equivalent to that delete, and gates qbittorrent's uid off eth0
+          # while the tunnel is down. `exec` keeps /init as PID 1, which s6 requires.
+          command: ["/bin/sh", "-c", "/opt/netns-reset/netns-reset.sh && exec /init"]
           # NET_ADMIN for the tunnel interface and its routing/fwmark rules; NET_RAW
           # because the Mullvad mod's kill-switch initialises the iptables `raw` table,
           # which fails with "unable to initialize table 'raw'" without it. Plus the LSIO
@@ -81,6 +89,9 @@ spec:
               subPath: modcache
             - name: qbittorrent-mullvad
               mountPath: {{ qbittorrent_k8s_secret_mount }}
+              readOnly: true
+            - name: netns-reset
+              mountPath: /opt/netns-reset
               readOnly: true
           startupProbe:
             # THE GATE. Nothing else in this pod runs until this passes, so it must assert the
@@ -164,7 +175,8 @@ spec:
             # container restart (a recorded incident deadlocked qbittorrent for 9h behind 107
             # restarts before that was understood). Restarting just this container can't touch
             # that netns state, so if a wedge outlives several restarts here, the fault is
-            # netns-adjacent — the fix is deleting the POD, not tightening this probe further.
+            # netns-adjacent — the sidecar's own restart resets it (files/netns-reset.sh);
+            # tightening this probe would not.
             httpGet:
               path: /
               port: {{ qbittorrent_k8s_webui_port }}
@@ -184,3 +196,7 @@ spec:
           secret:
             secretName: qbittorrent-mullvad
             defaultMode: 0400
+        - name: netns-reset
+          configMap:
+            name: qbittorrent-netns-reset
+            defaultMode: 0555

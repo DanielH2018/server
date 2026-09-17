@@ -11,8 +11,9 @@ role's rendered declarations. See repo-root `CLAUDE.md` for shared conventions.
 AutoKuma **v2.0.0** declared `resendInterval` on three monitor variants only — `MonitorHttp`,
 `MonitorJsonQuery`, `MonitorKeyword`. `MonitorPush` had no such field, so serde dropped it as
 unknown and the value never reached Kuma. The fleet-wide
-`kuma_push_resend_interval_minutes: 360` set on 2026-08-16 applied to the 25 http tiles and to
-none of the 50 push tiles, which notified once per outage and then stayed silent.
+`kuma_push_resend_interval_minutes: 360` set on 2026-08-16 (renamed `kuma_push_resend_down_beats`
+on 2026-09-17 — see the next trap) applied to the 25 http tiles and to none of the 50 push
+tiles, which notified once per outage and then stayed silent.
 
 Fixed on **2026-08-21** by taking `ghcr.io/bigboot/autokuma:2.1.0-rc.2` (PR #308). Upstream
 moved `resend_interval` into `with_monitor_common_fields_impl!` in 2.1.0-rc.1 (#152), where
@@ -29,6 +30,25 @@ another edit in the same deploy does. Before believing any AutoKuma field is liv
 it exists on that monitor variant in the pinned tag's `kuma-client/src/models/monitor.rs`.
 `test_autokuma_pin_carries_resend_interval_on_push_monitors` enumerates the tags verified that
 way and fails when the pin moves off one.
+
+### `resendInterval` counts DOWN beats, not minutes
+Kuma re-notifies when a monitor's consecutive `downCount` reaches `resendInterval`
+(`server/model/monitor.js`; the push route in `server/routers/api-router.js` does the same),
+and its UI labels the field "Resend Notification if Down X times consecutively". The role
+carried the value as `kuma_push_resend_interval_minutes: 360` for a month on the reading that
+it was six hours. The 3.5-day qbittorrent outage (#1838, 2026-09-13 to 09-16) measured what it
+was: the `k3s Workload Health` tile's log showed `Down Count` climbing by 5 every 20 minutes —
+one beat per bridge push at 300s plus one per 1200s heartbeat window — and resetting past 360,
+so Discord got the down transition and then one resend a day. One of those resends was lost
+outright: Kuma logged `Cannot send notification to Homelab Alerts … HTTP 429 Too Many
+Requests` at 2026-09-15 14:50, and it does not retry a failed send.
+
+The variable is `kuma_push_resend_down_beats` now, 90, which is six hours for a bridge-fed tile.
+`test_kuma_push_resend_beats.py` derives the spacing from the
+bridge's `INTERVAL` and `kuma_bridge_push_interval` and fails outside 4-12h, so a value that
+reads as hours again cannot land. The count cannot mean six hours for every tile — a cron-fed
+one on a slower cadence resends less often, and a dead bridge leaves only the window's own
+beats — which is why the unit is beats and not a time.
 
 Two rc-2 facts the deployment depends on. `@/path` in an env value makes AutoKuma read the
 file and strip one trailing newline, so the admin password needs no shell wrapper — which

@@ -31,6 +31,9 @@
       # -f <dir>` does not guarantee that ordering, which is why the gap is also survivable: the
       # pod takes seconds to pull and start, and the policy is applied in the same call.
       - networkpolicy.yaml
+      # The sidecar's entrypoint wrapper (files/netns-reset.sh). Listed before the Deployment
+      # for the same reason as the policy: the pod mounts it, so it should exist first.
+      - configmap-netns-reset.yaml
       - deployment.yaml
       - service.yaml
       # The Docker-era `wireguard:8080` name, which radarr's and sonarr's databases still hold

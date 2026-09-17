@@ -766,8 +766,26 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     longer than the 300s the playbook itself waits. The desired count comes from a SECOND query,
     because a PromQL `<` returns the left-hand series alone — `authelia(0/1)` reads as "zero of
     one replicas carry the new spec", where a bare `authelia(0)` would read as "zero replicas",
-    a different fault. The two helpers live in `checks/cluster_rollout.py` rather than
-    `checks/cluster.py`, which is at the 600-line module cap.
+    a different fault. The stall helpers and BOTH replica streak gates live in
+    `checks/cluster_rollout.py` rather than `checks/cluster.py`, which is at the 600-line
+    module cap.
+    **A Deployment at ZERO available replicas is its own arm** (added 2026-09-17, #1802):
+    `kube_deployment_status_replicas_available == 0 and on(namespace, deployment)
+    kube_deployment_spec_replicas > 0`, gated by `K8S_ZERO_AVAILABLE_CONSECUTIVE` (2), in
+    `checks/cluster_zero.py`. Zero available is down, not rolling, and the unavailable arm's
+    15-minute grace held the two alike. The census that set 2 rather than 1: over the 16 days
+    Prometheus retained on 2026-09-17, every zero-available episode of two or more 5-minute
+    samples was either a crash loop the restart arm had paged on its first cycle (authelia
+    2026-09-10 — the incident #1802 cites was paged at 12:53 by that arm, one minute in —
+    jellyfin/valheim 09-09, zigbee2mqtt 09-12), a 20-minute cold start after a node event
+    (jellyfin 09-02, traefik 09-03, both paged by the 3-cycle arm), or the 2026-09-05 outage.
+    The issue's "valheim 9, jellyfin 12, traefik 5, authelia 6" sample counts were those
+    incidents, not routine Recreate swaps: a routine swap is one sample, and at 1 cycle this arm
+    would page each of them. The one page 2 adds over 3 in that window is sonarr 09-01, a
+    two-sample cold start. The streak is separate from the unavailable arm's, so a Deployment at
+    zero is held with two notes (`cold start` and `rollout`), pages here on its second cycle,
+    and is named again by the unavailable arm on its third; the `desired` count comes from the
+    same second query the stall arm makes, so the message reads `authelia(0/1)`.
     **A second arm covers DaemonSets** (added 2026-08-13):
     `kube_daemonset_status_number_unavailable`, with its own `K8S_MIN_DAEMONSETS` floor (9) and
     the same fail-closed-on-absent-series logic — a Deployment-shaped census cannot see promtail,
@@ -1240,6 +1258,8 @@ run loop alone on 2026-09-05).
 | `checks/gitops.py` | the gitops pair: `check_gitops_alive`, `check_gitops_status` with `gitops_status` and its marker parsers `_parse_behind`, `_parse_manual_plane`, `_parse_contention`. Its own module because `checks/service.py` reached the 600-line cap when the busy-lock arm landed (issue #1847) — same split idiom as `checks/host_edge.py` |
 | `checks/notify.py` | `check_discord` with `_discord_webhooks`, `email_backstop` with `_smtp_login_ok` and `_email_probe` |
 | `checks/logs.py` | `check_loki_ingestion`, `check_shipper_dropped`, `check_loki_reachable`, `with_log_errors` (the Loki arm `check_k8s_workloads` folds in) |
+| `checks/cluster_rollout.py` | `stalled_rollout_offenders`, and the two replica streak gates `held_replica_offenders` / `held_stalled_offenders` — split from `checks/cluster.py` at its 600-line cap |
+| `checks/cluster_zero.py` | `zero_available_offenders` and `held_zero_available_offenders`, the zero-available arm (#1802) |
 | `checks/cluster.py` | the cAdvisor trio `check_restarts` / `check_oom` / `check_cpu_throttle` with `_cadvisor_blind`, `_cadvisor_streaks` and `_cpu_breach_streak`; `check_prometheus`, `check_targets_down`, `check_traefik_5xx`, `check_traefik_latency`, `check_k8s_workloads`, `check_cluster_targets`, `check_cluster_prometheus` |
 | `checks/host.py` | `check_disk`, `check_cert`, `check_mem` with its `with_claude_cgroups` arm, and the `_host_origin_shortfall` floor with `_host_origin_streaks`, which `checks/host_thermal.py` reads qualified off this module |
 | `checks/host_thermal.py` | `check_scrutiny` with `scrutiny_wear_devices`, `check_host_temp`, `check_ups` — the hardware-health arms |

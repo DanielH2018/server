@@ -8,7 +8,7 @@ uptime_kuma_k8s_image: louislam/uptime-kuma:2.5.3
 # versioned pins. v2.0.0 is what the KD5 gate verified (docker.enabled, static-file
 # notification entities, on_delete semantics); 2.1.0-rc.2 is a deliberate prerelease, taken on
 # 2026-08-21 because it is the only release where `resendInterval` reaches a push monitor — see
-# the caveat under kuma_push_resend_interval_minutes.
+# the caveat under kuma_push_resend_down_beats.
 #
 # Two rc-2 mechanisms this deployment now depends on, read from the tagged source rather than
 # the changelog: `@/path` in an env value reads the file and strips one trailing newline
@@ -60,17 +60,31 @@ autokuma_k8s_mem_limit: 128Mi
 autokuma_k8s_cpu_request: "20m"
 autokuma_k8s_mem_request: 32Mi
 
-# Minutes before Kuma re-notifies about a monitor that is STILL down. Kuma's own default is 0,
-# which means "notify once on the down transition and then never again" — so until 2026-08-16
-# every one of the static push monitors produced exactly one Discord message per outage, however
-# long it ran. A tile that went down at 04:30 was silent by breakfast and stayed silent all day.
+# Consecutive DOWN heartbeats before Kuma re-notifies about a monitor that is STILL down. Kuma's
+# own default is 0, which means "notify once on the down transition and then never again" — so
+# until 2026-08-16 every one of the static push monitors produced exactly one Discord message per
+# outage, however long it ran. A tile that went down at 04:30 was silent by breakfast and stayed
+# silent all day.
 #
-# 6h rather than hourly: these monitors watch things that take a human intervention to fix, so a
-# faster resend would mostly train the reader to mute the channel — which is the failure mode that
-# loses the NEXT alert. Applied uniformly and asserted by a test, rather than set per-tile, so a
-# new monitor cannot be added without one (the GitOps tile was the known instance; the gap was
-# every push monitor).
-kuma_push_resend_interval_minutes: 360
+# A BEAT COUNT, NOT MINUTES. Kuma compares `downCount` against `resendInterval` on every DOWN
+# beat (server/model/monitor.js and the push route in server/routers/api-router.js) and the UI
+# labels the field "Resend Notification if Down X times consecutively". This variable was named
+# `..._interval_minutes: 360` from 2026-08-16 to 2026-09-17 on the reading that it was minutes,
+# and the 3.5-day qbittorrent outage (#1838) measured what 360 really bought: a bridge-fed tile
+# accumulates one DOWN beat per bridge push (every 300s) plus one per heartbeat window
+# (kuma_bridge_push_interval, 1200s) — 15 an hour, which Kuma's own log showed as `Down Count`
+# climbing 5 per 20 minutes and resetting past 360 — so the resend came once a DAY, not every
+# six hours.
+#
+# 90 is six hours at that cadence. Six hours rather than hourly: these monitors watch things
+# that take a human intervention to fix, so a faster resend would mostly train the reader to
+# mute the channel — which is the failure mode that loses the NEXT alert. The same count on a
+# tile fed by a slower cron resends less often (a 30-minute cron on a 3600s window is 3 beats an
+# hour, 30h), and a DEAD bridge leaves only the window's own beats (3 an hour, 30h). Neither is
+# expressible in minutes, which is why the unit is beats. Applied uniformly and asserted by a
+# test, rather than set per-tile, so a new monitor cannot be added without one (the GitOps tile
+# was the known instance; the gap was every push monitor).
+kuma_push_resend_down_beats: 90
 
 # Heartbeat window for the 34 push monitors monitor-bridge feeds. The bridge pushes each of them
 # once per loop (INTERVAL=300s), so this is how many consecutive pushes may go missing before Kuma

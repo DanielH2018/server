@@ -24,7 +24,9 @@ The mod fetch failed as `[mod-init] (ERROR) No response from lscr.io` — not a 
 then `OFFLINE: ... not found in modcache, skipping`, so `wg0.conf` was never written, so
 `wg0` never came up, so the rules never lifted. Self-sustaining.
 
-Recovery is `delete pod`, never a container restart. Only a new pod gets a new netns.
+Recovery was `delete pod`, never a container restart, because only a new pod got a new netns.
+**Since 2026-09-17 the sidecar resets the netns itself** — see "The sidecar resets the netns
+on every start" below — so a container restart now clears this state without a human.
 
 What made the diagnosis certain: lscr.io answered the host fine (`HTTP 401` in 0.36s, the
 expected unauthenticated reply) and cluster DNS returned three A records with an empty AAAA,
@@ -37,10 +39,48 @@ before the remote host.
 The failure is also invisible while it happens: the init container exits **0** ("Completed"),
 so it reads as a restart loop rather than an error.
 
+It recurred on 2026-09-13 with a different trigger and the same deadlock (#1838): the mod's
+first API call failed with `curl: (6) Could not resolve host: api.mullvad.net (Could not contact
+DNS servers)` after the previous container's tunnel had dropped, and 1005 sidecar restarts over
+3.5 days never cleared it. The stale state is self-sustaining twice over, not once: the API call
+routes into the dead wg0 and fails, and even a successful call ends in wg-quick's PostUp hitting
+the LAN routes the previous PostUp already added (`RTNETLINK answers: File exists`, the fatal
+case documented on `qbittorrent_k8s_lan_networks`), so the tunnel is torn back down.
+
 **The standing design risk is now addressed — see the next section.** The sidecar mounts a
 persistent `/modcache`, so a start that cannot reach lscr.io applies the cached mod instead of
 stranding. What has *not* changed is that a mod is still fetched over the network on a cold
 cache; the cache makes the failure survivable, not impossible.
+
+## The sidecar resets the netns on every start
+
+`files/netns-reset.sh` runs as the wireguard container's entrypoint wrapper
+(`command: ["/bin/sh", "-c", "/opt/netns-reset/netns-reset.sh && exec /init"]`, mounted from
+the `qbittorrent-netns-reset` ConfigMap) before the image's own s6 init. It removes what a
+previous container left in the pod netns — the wg0 link, wg-quick's two policy rules, the
+`LAN_NETWORKS` routes, and every rule in the filter OUTPUT chain and the raw/mangle tables — so
+a container restart is equivalent to the pod delete that used to be the only recovery.
+
+**The gate goes up before the tunnel comes down, and that order is the privacy argument.**
+qbittorrent keeps running while the sidecar restarts, and between the reset and the mod's
+PostUp the netns would otherwise have no tunnel and no kill-switch. The script's first act is
+one atomic `iptables-restore` that installs the `LAN_NETWORKS` ACCEPTs and
+`! -o wg0 -m owner --uid-owner $PUID ... -j REJECT`: every off-LAN packet from qbittorrent's
+uid that is not leaving via wg0 is refused, root's (the mod's API calls) is not. The mod's own
+mark-exempt REJECT lands after it; both stay, and they agree wherever they overlap. If that
+restore fails the script exits 1 and touches nothing — the old deadlock, never a leak.
+
+Measured in the real image on daniel-pi (2026-09-17, `linuxserver/wireguard` under Docker
+with NET_ADMIN+NET_RAW, staged stale state, then the script): the after-state had no wg0, no
+fwmark/suppress rules, no LAN routes, empty raw/mangle, and the OUTPUT chain reduced to the
+gate; a second run on the clean netns was a no-op. Through the gate, `curl https://1.1.1.1`
+as uid 1000 was refused (`curl: (7)`), as root it reached the host, and a LAN address passed.
+To rerun it, copy the script to the Pi and stage the state inside the image the same way — the
+cluster nodes refuse unprivileged user namespaces, so there is no sandbox on them.
+
+What the reset does NOT do: fetch the mod or bring the tunnel up. A start whose API call still
+fails restarts every ~5 minutes on the startup probe as before, with the gate holding each
+time; the difference is that the first start after the outside world recovers succeeds.
 
 ## The modcache, and the lock file it can leave behind
 
@@ -103,8 +143,8 @@ delete /modcache/<name>.lock". `verify.yml` warns when a lock is present rather 
 because a lock is legitimate while a download is genuinely in flight.
 
 Diagnosing it: if the sidecar logs a skip or a lock timeout rather than `Downloading` or
-`found in modcache`, delete the lock file from the volume and delete the POD (not the
-container — the kill-switch lives in the netns, per the trap above).
+`found in modcache`, delete the lock file from the volume; the sidecar's next restart resets
+the netns (the section above) and the modcache is re-read on the start after that.
 
 ## Throughput settings live on the PVC, not in this role
 

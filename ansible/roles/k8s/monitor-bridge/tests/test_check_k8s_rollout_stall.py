@@ -59,10 +59,18 @@ def _vector(answers, _cfg, promql, **_kw):
     return []
 
 
+ZERO_QUERY = "kube_deployment_status_replicas_available == 0"
+
+
 @pytest.fixture
 def vectors():
-    """Per-query answers keyed by an identifying PromQL substring; unnamed arms answer empty."""
-    return {}
+    """Per-query answers keyed by an identifying PromQL substring; unnamed arms answer empty.
+
+    The zero-available arm's query joins on `kube_deployment_spec_replicas` too, so it is named
+    here explicitly: the longest-fragment match above would otherwise answer it with the
+    desired vector and put every Deployment named there at zero.
+    """
+    return {ZERO_QUERY: []}
 
 
 @pytest.fixture(autouse=True)
