@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/scripts.py
-generated_at: 2026-09-12 06:17 UTC
-generated_sha: fde7491c1
+generated_at: 2026-09-17 06:17 UTC
+generated_sha: 72f7b5d07
 ---
 
 !!! warning "Generated file — do not edit"
@@ -63,7 +63,7 @@ The sections below split them by **how each one is run**, which is derived from 
 |---|---|---|---|
 | `scripts/validate/compose_templates.py` | Render every configured container's docker-compose.yml.j2 and assert it parses as YAML. | prek hook (every commit) | `test_validate_compose_templates.py` *(indirect)* |
 | `scripts/validate/config_templates.py` | Render the high-value NON-compose YAML config templates (monitoring) and assert they parse. | prek hook (every commit) | `test_validate_config_templates.py` *(indirect)* |
-| `scripts/deploy.sh` | Run an interactive Ansible deploy under the locks the automated deployers take. | deploy: ansible/roles/setup/deploy_ui/files/deploy_ui.py | `test_deploy_exit_codes.py` *(indirect)* |
+| `scripts/deploy.sh` | Run an interactive Ansible deploy under the locks the automated deployers take. | deploy: ansible/roles/setup/deploy_ui/files/deploy_ui.py | `test_deploy_at_sha.py` *(indirect)* |
 | `scripts/deploy_tools/deploy_detach_notify.py` | Post-deploy notifier for `scripts/deploy.sh --detach`. | every deploy (deploy.sh) | `test_deploy_detach_notify.py` |
 | `scripts/deploy_tools/deploy_staleness.py` | Refuse a deploy from a git tree that is behind origin/master. | every deploy (deploy.sh) | `test_deploy_staleness.py` |
 | `scripts/deploy_tools/deploy_tags.py` | Validate the --tags a deploy was given, before Ansible silently accepts them. | every deploy (deploy.sh) | `test_deploy_tags.py` |
