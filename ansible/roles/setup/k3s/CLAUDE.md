@@ -97,6 +97,18 @@ the local ledger, which is bookkeeping, not state.
 
 ## Notable
 
+- **k3s's own output is in `/var/log/k3s.log`, not the journal.** journald stores nothing
+  below notice on these hosts and every line k3s writes is priority info — logrus and klog
+  emit plain text to stderr with no `<N>` prefix, so INFO, WARN and FATA all take the unit's
+  `SyslogLevel=info` default. On 2026-09-09 k3s crash-looped ~3000 times over 5h08m and the
+  journal kept only systemd's `status=1/FAILURE` lines (#1918). `tasks/unit-logging.yml`
+  writes a `StandardOutput=append:` drop-in for `k3s.service` and `k3s-agent.service`, plus
+  a `copytruncate` logrotate stanza — truncate, because systemd holds the fd and a rename
+  would leave the unit writing to the rotated inode. A drop-in rather than the unit because
+  `k3s-install.sh` rewrites the unit file wholesale. Raising the unit's `SyslogLevel` to
+  notice was the alternative and was rejected: notice passes the rsyslog info filter, so
+  every k3s line would land in `/var/log/syslog` and ship to Loki.
+  `ansible/tests/setup/test_k3s_unit_logging.py` holds both node types to it.
 - **The release-staleness check is the durable half of a one-shot Discord page.** When the
   deployer defers a k8s change it cannot auto-apply (`deploy_alerts.alert_deferred`'s
   `cs.k8s` branch), it fast-forwards the tree and pages once per SHA; the ff-merge clears the

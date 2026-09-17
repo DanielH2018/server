@@ -266,7 +266,10 @@ can't quietly widen it.
   `Starting`/`Started` unit line, and timesyncd's `Initial clock synchronization` step. An
   empty `journalctl -u k3s` window therefore means *nothing at notice or above*, not
   *nothing happened*; the systemd `Failed with result` lines are the only trace of a crash
-  loop, and the cause is unrecoverable after the fact. Kernel info lines DO survive, in
+  loop in the journal. The cause is in `/var/log/k3s.log` since #1918: the k3s role's
+  `tasks/unit-logging.yml` sends the unit's stdout and stderr there through a drop-in,
+  because every k3s line is priority info and this cap dropped all of them — on 2026-09-09
+  k3s crash-looped ~3000 times over five hours and left no reason behind. Kernel info lines DO survive, in
   `/var/log/syslog` only: `NIC Link is Up`, veth/cni0 bridge events, `PM: suspend entry`. A
   read that finds nothing in the journal is not finished until it has grepped syslog.
   The second trap is the clock. daniel-box's RTC is dead (`PM: RTC time: 00:03:09, date:

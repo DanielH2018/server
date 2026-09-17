@@ -201,6 +201,49 @@ call site skips its block, leaving the hosts exactly as they were. To turn it on
 4. **Point the checks at Discord** — the same webhook the rest of the homelab alerts to. The
    free tier allows the integration.
 
+## What it recorded on 2026-09-09
+
+The one time the whole cluster was down for hours, this path is the only one that recorded
+the outage as it happened. daniel-box powered off at 13:55:46 UTC and came back with no
+carrier on `eno1`; k3s crash-looped until the link returned at 20:10:39 (#1804, #1918).
+Kuma runs on that cluster and recorded only the 20:14→21:49 recovery. The flips below are the record
+the Healthchecks.io API returns, read with `healthchecks_api_read_only_key`:
+
+| Check slug | Down | Up | Detection after power-off |
+|---|---|---|---|
+| `uptime-kuma-alive` | 14:20:04 UTC | 20:20:07 UTC | 24 min |
+| `daniel-box-disk-health` | 14:25:02 UTC | 20:20:03 UTC | 29 min |
+| `longhorn-backup-health` | 14:25:03 UTC | 20:20:06 UTC | 29 min |
+
+Each down flip is the last ping (13:50) plus the 10-minute period plus the check's grace, to
+the second: 1200 s for `uptime-kuma-alive`, 1500 s for the other two. The four daily checks
+recorded no flip, as expected — none had a slot inside the window. The up flips are the
+first `*/10` run after the link returned; the boot grace did not apply, the host having been
+up for five hours.
+
+What that record does not show is delivery. The read-only key cannot list a project's
+channels (`/api/v3/channels/` answers `401`), so whether the 14:20 flip reached Discord is
+readable only in the console or in the Discord channel itself. **The flip is the control**:
+a control-plane host with no link is detected off-site within one grace, and the question
+the incident left open — "did anything external notice" — is answered yes, within 24 minutes.
+
+### The console has drifted from the table above
+
+The same read shows the live settings disagree with *Period and grace* in three places, and
+the doc's own derivation rules two of them out:
+
+| Check slug | Documented | Live |
+|---|---|---|
+| `daniel-box-disk-health`, `longhorn-backup-health` | grace 20 min | grace 25 min |
+| `manifest-prune-check` | grace 1 hour | grace 2 hours |
+| `pi-peer-backup` | grace 1 hour, cron in UTC | grace 2 hours, cron `30 23 * * *` in `America/Chicago` |
+
+The 25-minute grace cost five minutes of detection on 2026-09-09. The Chicago timezone
+matches the UTC cron during daylight time and drifts an hour behind it in winter; an early
+ping is harmless, so it is a wording drift rather than a false alarm. Nothing in the repo can
+set these, and nothing checks them — the read-only key that can read them has no other
+consumer. That guard is filed rather than built here: #1949.
+
 ## Verifying
 
 The `/10`-minute checks report within ten minutes of the deploy. To force the daily ones:
