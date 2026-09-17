@@ -26,6 +26,8 @@ EXPECTED_IGNORED = frozenset(
         ".ansible",  # ansible's own tmp/collections cache when it runs from the root
         "ansible.log",  # `log_path = ./ansible.log` in ansible.cfg
         "site",  # a bare `mkdocs build` (the cron builds to a temp dir)
+        # the prek `mkdocs-strict` hook builds here and leaves it, on purpose (prek.toml)
+        ".mkdocs-strict-check",
         ".mypy_cache",
     }
 )

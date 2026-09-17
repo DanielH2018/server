@@ -37,7 +37,7 @@ FSD, not to complete `SHUTDOWNCMD`, and both hosts observe it within one `POLLFR
 (5 s) of the pod's `upsmon -c fsd` — far ahead of daniel-server's poweroff reaching
 containerd. Staggering by `FINALDELAY` would additionally rest on that setting applying in
 secondary mode, which `upsmon.conf(5)` documents for **primary** mode only. Hence the
-`# DECIDED:` marker at `FINALDELAY` in `roles/nut_host/templates/host-upsmon.conf.j2`.
+`# DECIDED:` marker at `FINALDELAY` in `roles/setup/nut_host/templates/host-upsmon.conf.j2`.
 
 ### Timer vs. safety net
 `nut_onbatt_shutdown_delay` (300 s, `defaults/main.yml`) decides how long a blip is ridden out
@@ -53,7 +53,7 @@ within ~15 s (HOSTSYNC).
 
 **The stale-ClusterIP gap is closed.** `nut_host_upsd_clusterip` is still a deploy-time
 snapshot — the role asserts upsd is reachable when it runs, and nothing re-checks that address
-afterwards — but `roles/nut_host/templates/ups-secondary-health.sh.j2` now re-proves the link
+afterwards — but `roles/setup/nut_host/templates/ups-secondary-health.sh.j2` now re-proves the link
 itself every `nut_host_watchdog_interval_minutes` (10 min), from the deployed
 `/etc/nut/upsmon.conf`, on **every** armed host (daniel-box and `ups_host`/daniel-server both,
 since 2026-09). Each host pushes its own Kuma tile —
@@ -72,7 +72,7 @@ because each host's token and tile are provisioned together, one leg at a time.
 ## Editing
 - Manifests/config: `templates/*.j2` (config-secret.yaml.j2 holds all six NUT files)
 - Deploy (on daniel-box): `uv run ansible-playbook ansible/deploy.yml --tags "nut"`
-- Host half (udev rule, secondary upsmon): `ansible/roles/nut_host/`, via
+- Host half (udev rule, secondary upsmon): `ansible/roles/setup/nut_host/`, via
   `initial_setup.yml --tags nut_host` on **both** daniel-server and daniel-box. The role's
   own `when:` (`initial_setup.yml`) is `inventory_hostname == ups_host or
   nut_host_secondary_armed`, so daniel-box is in scope from the moment its secondary was

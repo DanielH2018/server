@@ -132,7 +132,7 @@ def secret_bearing_host_paths(
 ) -> dict[str, list[str]]:
     """Deployed host path -> the secret names its source renders.
 
-    Walks every role task file, not just k8s: `nut_host` and the `setup/` plane deploy host
+    Walks every role task file, not just k8s: the `setup/` plane (`nut_host` among them) deploys host
     scripts too, and `setup/fake_remux` is the consumer `deploy.sh` structurally cannot reach.
     `archive/` is skipped — those roles deploy nothing.
 
