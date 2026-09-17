@@ -42,7 +42,8 @@ one beat per bridge push at 300s plus one per 1200s heartbeat window — and res
 so Discord got the down transition and then one resend a day. One of those resends was lost
 outright: Kuma logged `Cannot send notification to Homelab Alerts … HTTP 429 Too Many
 Requests` at 2026-09-15 14:50, and it does not retry a failed send. Since #1891 monitor-bridge
-reads that line out of Loki and pages the **Kuma Notification Delivery** tile, which notifies
+reads that line out of Loki — and since #1895 the ERROR-level reason line Kuma writes right
+after it, so the tile names the status — and pages the **Kuma Notification Delivery** tile, which notifies
 email as well as Discord (monitor-bridge/CLAUDE.md). A faster resend raises the POST volume a
 long multi-tile outage sends Discord, so the drop it makes likelier is reported rather than
 lost.

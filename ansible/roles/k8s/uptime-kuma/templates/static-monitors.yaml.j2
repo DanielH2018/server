@@ -551,6 +551,7 @@ stringData:
 {# Minted 2026-09-17 for #1891. Kuma logs `Cannot send notification to <name>` and does not
    retry, so the transition or resend behind that line reached nobody — twice during the
    qbittorrent lockout (2026-09-10 18:00, 2026-09-15 14:50), both Discord HTTP 429s. The
+   verdict names the status Kuma logged beside each drop (#1895). The
    Discord Delivery tile GET-verifies the webhook and cannot see a dropped POST. This tile
    notifies EMAIL as well as Discord on purpose: a page for a dropped Discord send that goes
    only over the Discord webhook is the failure it reports. #}
