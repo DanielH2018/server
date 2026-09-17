@@ -3,8 +3,13 @@
 Authelia guards most public routes as a Traefik forward-auth middleware. See repo-root
 `CLAUDE.md` for shared conventions.
 
-**Deploy tag:** `--tags "authelia"`. Denylisted from GitOps auto-deploy (platform — SSO/OIDC
-gate; a failed deploy locks out access to everything behind it, including the tools to fix it).
+## At a glance
+- **Deploy tag:** `--tags "authelia"`.
+- **Route:** `auth.<domain>`, the portal itself — `use_authelia: false`, since it is the
+  middleware every other route calls.
+- **Claims:** `authelia-config` (daily tier, R2). Sessions live in redis, not on the claim.
+- **`k8s_autodeploy: false`** (platform — SSO/OIDC gate; a failed deploy locks out access to
+  everything behind it, including the tools to fix it).
 
 ## OIDC clients
 

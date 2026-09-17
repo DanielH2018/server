@@ -3,7 +3,14 @@
 Uptime Kuma plus an AutoKuma sidecar that creates monitors and notifications from this
 role's rendered declarations. See repo-root `CLAUDE.md` for shared conventions.
 
-**Deploy tag:** `--tags "uptime-kuma"`.
+## At a glance
+- **Deploy tag:** `--tags "uptime-kuma"`.
+- **Route:** `uptime-kuma.<domain>`, behind Authelia.
+- **Claims:** `uptime-kuma-data` and `autokuma-data`, both in the no-backup tier — monitors and
+  notifications regenerate from the rendered static-monitors Secret; status history is kept
+  nowhere.
+- **`k8s_autodeploy: false`** (observability — the alerting spine; a broken deploy cannot page
+  about being broken).
 
 ## Traps
 

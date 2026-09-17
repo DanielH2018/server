@@ -63,6 +63,15 @@ every write verb targets a `tmp_path` repo through `git -C`, `GIT_DIR`/`GIT_INDE
 appear in zero child environments, and all twelve `clone`/`fetch` calls name a local
 `tmp_path` origin.
 
+## The git hook variables are stripped, not shimmed
+
+`git commit` exports `GIT_DIR` and `GIT_INDEX_FILE` to its hooks, and git resolves those
+before `-C` or `cwd`. So a test that `prek`'s pytest hook runs, and that runs `git -C
+<tmp_path> commit`, writes the REAL repository. Fourteen tests each scrub the variables for
+themselves (`_ci_scoping.scrubbed_env` is the shared shape); this plugin does it once, for
+every test, at load. `GIT_HOOK_VARS` is the set and `strip_git_hook_env` the seam
+`test_leakguard.py` drives.
+
 `ansible-playbook` — six tests in `ansible/tests/longhorn/` deliberately run a real play
 against `localhost`, and a stub returning a fixed exit code fails all six. Their remaining
 side effect, the shared fact cache, is fenced at the source by `ANSIBLE_CACHE_PLUGIN=memory`
@@ -138,6 +147,23 @@ exit 127
 """
 
 _state: dict[str, object] = {}
+
+# What `git commit` exports to its hooks. Each one redirects every git call in the process,
+# including one aimed at a `tmp_path` repo with `-C`, at the committing repository.
+GIT_HOOK_VARS = frozenset({"GIT_DIR", "GIT_INDEX_FILE", "GIT_WORK_TREE"})
+
+
+def strip_git_hook_env(environ) -> list[str]:
+    """Remove every `GIT_HOOK_VARS` name from `environ`; returns the names removed, sorted."""
+    removed = sorted(name for name in GIT_HOOK_VARS if name in environ)
+    for name in removed:
+        del environ[name]
+    return removed
+
+
+# At import rather than in a hook: the controller strips before xdist spawns its workers, each
+# worker strips again as it loads the plugin, and no session fixture runs first.
+strip_git_hook_env(os.environ)
 
 
 def _is_exempt() -> bool:

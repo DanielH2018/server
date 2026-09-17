@@ -3,7 +3,13 @@
 qBittorrent with a `wireguard` sidecar init container that tunnels all egress through
 Mullvad. See repo-root `CLAUDE.md` for shared conventions.
 
-**Deploy tag:** `--tags "qbittorrent"`.
+## At a glance
+- **Deploy tag:** `--tags "qbittorrent"`.
+- **Route:** `qbittorrent.<domain>`, behind Authelia.
+- **Claims:** `qbittorrent-config` (weekly tier, B2) and the shared `media-data` (mounted,
+  not owned).
+- **`k8s_autodeploy: false`** — state is coupled outside the volume, so a snapshot revert of
+  `qbittorrent-config` cannot undo what the tracker and the `/data/torrents` tree already saw.
 
 ## Traps
 

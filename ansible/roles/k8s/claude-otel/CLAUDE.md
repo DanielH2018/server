@@ -11,6 +11,15 @@ read them. Their Services stay ClusterIP; the `hostIP` pin is what keeps the nod
 listener off the LAN. Tempo's second port (otlp-grpc 4317) has no `hostPort` on purpose:
 the collector owns 4317, and two hostPorts on one number wedge a pod in `Pending`.
 
+## At a glance
+- **Deploy tag:** `--tags "claude-otel"`. `probe.py health claude-otel` gates all six
+  workloads in `observability`, none of them named claude-otel.
+- **Route:** `grafana.<domain>`, behind Authelia, with OIDC login on the LAN route.
+- **Claims:** `loki-data`, `prometheus-data`, `tempo-data`, `grafana-data` — each stateful
+  sub-service is `Recreate` on its own PVC; `grafana-data` is `longhorn-nobackup`.
+- **`k8s_autodeploy: false`** (observability — six sub-images across several Deployments,
+  and several independently migrating stores under one tag).
+
 ## Eviction tiers
 
 DECIDED: claude-otel tiers — Prometheus is `homelab-critical`; the other five pod templates

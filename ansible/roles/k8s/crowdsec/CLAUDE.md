@@ -3,6 +3,15 @@
 CrowdSec LAPI plus remote agents; the role registers the agent machines on the LAPI after
 applying the manifests. See repo-root `CLAUDE.md` for shared conventions.
 
+## At a glance
+- **Deploy tag:** `--tags "crowdsec"`. Traefik's entry declares `depends_on: [crowdsec]`, so
+  the LAPI is up before the bouncer that needs its credential.
+- **Route:** `crowdsec-lapi.<domain>`, `use_authelia: false` — bouncers authenticate with
+  their own API keys.
+- **Claims:** `crowdsec-db` (no-backup tier: decisions expire and re-derive from logs).
+- **`k8s_autodeploy: false`** (platform — the LAPI/AppSec/decision engine every bouncer
+  queries; a failed deploy can open or close traffic unpredictably fleet-wide).
+
 ## Traps
 
 ### A crowdsec deploy races its own rollout
