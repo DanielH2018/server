@@ -145,6 +145,35 @@ redeploy the app **and** every consumer (for example, Homepage, monitor-bridge, 
   live OIDC client; beszel's client is provisioned but parked in `archive/`, re-pair only
   if reactivated).
 
+### Record keys — `source: record` in the registry
+
+For three keys SOPS holds a **copy** of a credential the app owns. Nothing in the tree writes
+the value to the app, so `sops set` plus a deploy rotates nothing: the recap says `changed`, the
+pod rolls, and the old credential still works. The registry marks them `source: record`, and
+`secret_rotation.py rotate` refuses them in both of its paths (`--name`, and the unattended
+batch) with a reason naming this section. `sync` never touches an existing entry, so the field
+survives it. Each has a different mechanism:
+
+- `authelia_password` — the role reads the argon2 digest back out of the live `authelia-config`
+  Secret and reuses it, hashing the SOPS value only when that read is empty. Salts are random,
+  so re-hashing every run would roll the pod on every deploy; the read-back is deliberate and
+  makes a changed `authelia_password` inert. The one path that applies a new value is
+  `./scripts/deploy.sh --tags authelia -e authelia_k8s_rehash_passwords=true`
+  (`roles/k8s/authelia/defaults/main.yml` documents the flag).
+- `healthchecks_password` — feeds `SUPERUSER_PASSWORD`, which Django reads only while the
+  superuser does not exist. The seeded database has one, so the key documents the app's
+  password. Change it in Healthchecks (or `manage.py changepassword`), then record it here.
+- `bazarr_api_key` — the only reference in the tree is a reader,
+  `roles/k8s/monitor-bridge/templates/env-secret.yaml.j2`. Regenerate it in Bazarr's
+  Settings → General, `sops set` the new value, then redeploy monitor-bridge; setting SOPS
+  alone breaks the checker with an HTTP 401 that reads as a monitoring fault.
+
+Verify against the app, not the deploy: a login, an API call, a monitor past its grace window.
+`audit` cannot tell the cases apart — it derives `last_rotated` from the git history of
+`secrets.yml`, so committing the copy advances the date either way. Before calling any
+rotation done, grep the key across `ansible/` and ask whether a hit *writes* it to the app or
+only reads it; a single reader means SOPS is a record, and the key belongs in this list.
+
 ## `external` — provider consoles (audit-only)
 
 Mint a new value in the provider, then `sops set` + redeploy the consumer:
