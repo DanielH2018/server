@@ -52,6 +52,7 @@ from fanout_lib import manifest as manifest_mod
 from fanout_lib import signing as signing_mod
 from fanout_lib import status as status_mod
 from fanout_lib.brief import REQUIRED_LABEL, Issue, render_brief
+from fanout_lib.collisions import refuse_shared_files
 from fanout_lib.placement import NoHeadroom, place
 from fanout_lib.transport import (
     HOSTS,
@@ -243,6 +244,8 @@ def cmd_launch(args, tools: Tools) -> int:
         return 1
     fetched = _fetch_issues(tools, batches)
     if fetched is None:
+        return 1
+    if refuse_shared_files(batches, fetched, args.allow_shared_files):
         return 1
     # Read the registered keys before the first ssh: a gh outage then refuses having spent no
     # connection against the per-host ssh limit.
@@ -534,6 +537,12 @@ def main(argv=None, tools: Tools | None = None) -> int:
     )
     launch_parser.add_argument(
         "--orchestrator-branch", required=True, help="the branch holding the claims"
+    )
+    launch_parser.add_argument(
+        "--allow-shared-files",
+        action="store_true",
+        help="launch even when two batches cite one file (the citation is context, not an "
+        "edit target); the collisions are still printed",
     )
     _add_manifest_root(launch_parser)
     launch_parser.set_defaults(fn=cmd_launch)
