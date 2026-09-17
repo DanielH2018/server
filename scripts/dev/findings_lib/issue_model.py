@@ -155,6 +155,37 @@ def parse_verify_by(body: str) -> str | None:
     return section or None
 
 
+# A repo-relative FILE path as an issue body cites one: two or more `/`-joined segments ending
+# in a file extension, the first segment a bare directory name (`scripts`, `.claude`) so a
+# hostname (`docs.local.example.com/...`) never matches. An optional `:<line>` is dropped.
+# Files only — a directory citation (`ansible/roles/k8s/monitor-bridge/`) is the role-level
+# grouping the fan-out already does, and the shared-code hazard #1798 records is one FILE.
+_CITED_PATH_RE = re.compile(
+    r"(?<![\w/.:-])(\.?[A-Za-z0-9_-]+(?:/[A-Za-z0-9_.-]+)+\.[A-Za-z0-9]+)(?::\d+)?(?![\w/])"
+)
+
+
+# The trailer `trailer()` appends, from its rule on. It names `scripts/dev/findings.py` on
+# every issue, so without cutting it every two batches would share that file.
+_TRAILER_RE = re.compile(r"^---[ \t]*\nFingerprint: `[0-9a-f]+`\n.*\Z", re.M | re.S)
+
+
+def cited_paths(body: str) -> list[str]:
+    """Every repo-relative file path an issue body cites, sorted and deduplicated.
+
+    The trailer is cut first: it is `findings.py`'s own text, not the finding's.
+
+    This is the input to the fan-out's file-level collision check (#1798): two issues that
+    cite one script are one batch, whatever their `domain` label says — #1780, #1784 and #1782
+    all carried `backup-observability`, and two of them were dispatched to two agents that
+    wrote the same regex into `scripts/diagnostics/probe_lib/alerts.py`. The `--file` an
+    issue was filed with lands only in the fingerprint, so the body's own citations are the
+    record.
+    """
+    text = _TRAILER_RE.sub("", (body or "").replace("\r\n", "\n"))
+    return sorted({m.group(1) for m in _CITED_PATH_RE.finditer(text)})
+
+
 def label_names(issue: dict) -> set[str]:
     return {lab["name"] for lab in issue.get("labels", [])}
 
@@ -462,6 +493,7 @@ def issue_rows(issues: list[dict]) -> list[dict]:
                 "accepted": "accepted" in names,
                 "no_vetted_remediation": "no-vetted-remediation" in names,
                 "verify_by": parse_verify_by(issue.get("body") or "") is not None,
+                "paths": cited_paths(issue.get("body") or ""),
                 "manual": "manual" in names,
                 "not_before": day.isoformat() if day else None,
                 "claimed": current_claim(issue),

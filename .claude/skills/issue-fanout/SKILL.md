@@ -39,9 +39,26 @@ conclusion before `next` could say it (#1739). When an agent finds an issue is d
 `findings.py defer <n> --until <date>` records it, and `next` offers the issue again on that
 date with nothing to clear.
 
-Group the results so that **no two agents touch the same Ansible role**. Read each issue's
-cited file to find its role; two agents editing one role concurrently is the hazard
-`CLAUDE.md`'s parallel-sessions section already warns about, with more agents.
+Group the results so that **no two agents touch the same Ansible role, and no two agents
+touch the same file**. Read each issue's cited file to find its role; two agents editing one
+role concurrently is the hazard `CLAUDE.md`'s parallel-sessions section already warns about,
+with more agents.
+
+The role rule alone misses the shared code under `scripts/`, `.claude/` and `docs/`, so the
+second half is a **file-level collision check**: every row `next --json` prints carries
+`paths`, the repo-relative files its body cites, and two issues that share one go in ONE
+batch — one agent, one fix. Group by those paths, not by `domain`: on the 2026-09-11 wave
+#1780, #1784 and #1782 all carried `backup-observability`, were split by role into two
+batches, and two agents wrote a character-identical regex into
+`scripts/diagnostics/probe_lib/alerts.py`; the second PR had to be superseded by hand
+(#1798). `launch` runs the same check on the fetched bodies and refuses a grouping that
+shares a file, naming the file and the batches, before it touches a host. A citation that is
+context rather than an edit target — a `docs/` page three findings each mention — is excused
+with `--allow-shared-file <path>`, one path per use: the override names what it excuses, so
+a script collision beside the doc still refuses, and the excused one still prints. The
+direction differs from the two wave-level bounds below: a shared file is
+merged into one batch, never held for the next wave, because holding it would still produce
+two identical fixes.
 
 Two shapes collide across roles as well, so they are bounded per wave rather than per role.
 Both were measured on the 2026-09-10 fan-outs:
@@ -61,8 +78,9 @@ Both were measured on the 2026-09-10 fan-outs:
 split this way — and wait. Spawning several Opus agents is not a routine action.
 
 Done when: `reap` has run, every issue `next` returned is in exactly one batch or named as
-held for the next wave, no two batches share a role, at most one batch touches SOPS, no batch
-that adds a role shares the wave, and the operator has approved the grouping.
+held for the next wave, no two batches share a role, no two batches share a cited file, at
+most one batch touches SOPS, no batch that adds a role shares the wave, and the operator has
+approved the grouping.
 
 ## 2. Claim before spawning, under the orchestrator's own worktree name
 

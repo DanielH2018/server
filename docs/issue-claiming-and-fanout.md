@@ -350,7 +350,12 @@ what exit 6 would refuse without spending an agent.
 1. **Triage.** Read `findings.py next --json`. Group the candidates so that no two agents touch
    the same Ansible role — the repo's parallel-sessions guidance already warns about several
    sessions editing a shared role, and two agents in one role is the same hazard with more
-   agents. Two shapes collide across roles and are bounded per wave instead: at most one batch
+   agents — and so that no two agents touch the same file. Each row carries `paths`, the
+   files its body cites; two issues that share one go in one batch, since the role rule does
+   not see the shared code under `scripts/` (#1798: two batches, one `alerts.py`, two
+   identical fixes). `fanout_place.py launch` refuses a grouping that shares a file, and
+   `--allow-shared-file <path>` excuses a citation that is context rather than an edit
+   target. Two shapes collide across roles and are bounded per wave instead: at most one batch
    touches `ansible/vars/secrets.yml` (ciphertext conflicts are not hand-resolvable), and a
    batch that adds a `containers_list` entry runs alone (a broad apply that fails on any
    service parks every other batch's landing). The skill's triage step has the measured cases.

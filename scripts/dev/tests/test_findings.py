@@ -16,6 +16,7 @@ from _findings_fakes import Fakes
 from dev import findings
 from dev.findings_lib.gh_calls import run
 from dev.findings_lib.issue_model import (
+    cited_paths,
     LABELS,
     _prefixed,
     claim_comment,
@@ -24,6 +25,7 @@ from dev.findings_lib.issue_model import (
     issue_rows,
     reobservations,
     sort_key,
+    trailer,
     verify_by_section,
 )
 from dev.findings_lib.plans import plan_close, plan_sync_labels, plan_touch
@@ -392,3 +394,43 @@ def test_help_carries_the_docstring_summary(capsys, make_tools):
     # the rendered text is compared with the escapes stripped and the whitespace collapsed.
     plain = " ".join(re.sub(r"\x1b\[[0-9;]*m", "", capsys.readouterr().out).split())
     assert "close Claude's unfixed findings as GitHub Issues" in plain
+
+
+# The fan-out's file-level collision check (#1798) groups by these.
+def test_cited_paths_finds_files_and_drops_line_numbers_directories_and_hosts():
+    body = (
+        f"see `{'scripts/diagnostics/probe_lib/alerts.py'}:42`, `ansible/roles/k8s/monitor-bridge/`, "
+        "`.claude/hooks/block-footguns.py`, docs.local.example.com/reference/services.md, "
+        "https://github.com/DanielH2018/server/issues/1790, and/or 1.5x"
+    )
+    assert cited_paths(body) == [
+        ".claude/hooks/block-footguns.py",
+        "scripts/diagnostics/probe_lib/alerts.py",
+    ]
+
+
+def test_cited_paths_is_empty_for_prose_that_names_no_file():
+    assert cited_paths("the deploy tick joined; nothing cited") == []
+    assert cited_paths("") == []
+
+
+def test_next_rows_carry_the_cited_paths_for_triage():
+    (row,) = issue_rows(
+        [
+            {
+                "number": 1,
+                "title": "t",
+                "body": f"fix {'scripts/diagnostics/probe_lib/alerts.py'} please",
+                "labels": [],
+            }
+        ]
+    )
+    assert row["paths"] == ["scripts/diagnostics/probe_lib/alerts.py"]
+
+
+def test_cited_paths_ignores_the_trailer_findings_py_writes():
+    # Every filed issue ends in `Filed by \`scripts/dev/findings.py\``; read as a citation, it
+    # would make every two batches collide on that one file.
+    body = "fix `scripts/dev/fanout_place.py`" + trailer("c0a05de5f0e9", "session")
+    assert cited_paths(body) == ["scripts/dev/fanout_place.py"]
+    assert cited_paths("nothing" + trailer("c0a05de5f0e9", "review")) == []

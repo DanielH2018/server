@@ -242,6 +242,31 @@ def fetch(url, resolve=None):
     return out.stdout
 
 
+class NonJsonResponse(SystemExit):
+    """fetch() returned a body `json.loads` cannot read — an HTTP error page, in practice.
+
+    `curl -sS` without `--fail` exits 0 on a 4xx/5xx and hands the error body back as the
+    response, so a rejected query used to reach `json.loads` and die as a JSONDecodeError that
+    named the probe rather than the server (#1790). Raising SystemExit with the body means an
+    uncaught one prints the server's own words and exits 1; a caller that can read the body
+    (alerts' cap clamp) catches it and does.
+    """
+
+    def __init__(self, url, body):
+        self.url = url
+        self.body = body
+        super().__init__(f"{url} returned a non-JSON body:\n{body.strip()}")
+
+
+def fetch_parsed(url, resolve=None):
+    """fetch(url) parsed as JSON, raising NonJsonResponse on a body that is not JSON."""
+    body = fetch(url, resolve=resolve)
+    try:
+        return json.loads(body)
+    except json.JSONDecodeError:
+        raise NonJsonResponse(url, body) from None
+
+
 def fetch_json(url, resolve=None):
     """fetch(url) parsed as JSON.
 
