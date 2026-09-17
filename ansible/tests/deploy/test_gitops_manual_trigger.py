@@ -12,8 +12,9 @@ carelessly, so they are pinned here rather than left to review:
    failure looks identical to having no rule at all, which is what makes it worth a test.
 
 2. **The wrapper must start the unit with `--no-block`.** `gitops-deploy.service` is
-   Type=oneshot with TimeoutStartSec=45min, so a blocking start returns only when the whole
-   tick finishes. Any caller with a shorter patience than 45 minutes — a 10-minute Bash tool
+   Type=oneshot with a TimeoutStartSec of an hour (`test_unit_timeout_covers_the_measured_k8s_worst_case`
+   pins the exact value), so a blocking start returns only when the whole tick finishes. Any
+   caller with a shorter patience than that — a 10-minute Bash tool
    call is the motivating one — reads that as a hang, not as a running deploy.
 
 Scope is also asserted: the rule covers this one unit and only the `start` verb. stop/restart
@@ -93,7 +94,7 @@ def test_wrapper_starts_the_unit_without_blocking():
     for line in starts:
         assert "--no-block" in line, (
             f"{_WRAPPER} starts the unit blocking: {line!r}. Type=oneshot plus "
-            "TimeoutStartSec=45min means that returns only when the tick finishes."
+            "TimeoutStartSec=60min means that returns only when the tick finishes."
         )
 
 
@@ -202,8 +203,8 @@ def test_unit_pages_on_failure():
 def test_unit_timeout_covers_the_measured_k8s_worst_case():
     # 180s max flock wait + STAGING_GATE_TIMEOUT_S (600) + STAGING_EXPECT_TIMEOUT_S (120) +
     # K8S_DEPLOY_TIMEOUT_S (900) + K8S_ROLLBACK_TIMEOUT_S (1320) = 3120s, which is why the unit's
-    # own arithmetic comment sizes TimeoutStartSec to 60min rather than the 45min the docstring
-    # at the top of this file still (stale) describes.
+    # own arithmetic comment sizes TimeoutStartSec to 60min rather than the 45min it carried
+    # before the gate. The docstring at the top of this file defers to this pin for the value.
     unit = _UNIT_TEMPLATE.read_text()
     assert re.search(r"^TimeoutStartSec=60min$", unit, re.MULTILINE), (
         f"{_UNIT_TEMPLATE}'s TimeoutStartSec no longer reads 60min. If this is a deliberate "

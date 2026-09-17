@@ -9,7 +9,7 @@
 //
 // Scope is deliberately narrow: this one unit, and only the `start` verb.
 //   - stop/restart/kill stay privileged. A wedged run is an incident, not a routine
-//     action, and TimeoutStartSec=45min already bounds it.
+//     action, and the unit's TimeoutStartSec already bounds it.
 //   - Starting is safe to expose because it is idempotent in the way that matters:
 //     systemd coalesces a start request for a unit already `activating` into the run
 //     in flight rather than spawning a second one (see gitops-deploy.service.j2), and

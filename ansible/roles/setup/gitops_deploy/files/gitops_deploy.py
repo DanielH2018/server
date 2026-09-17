@@ -207,12 +207,15 @@ HOSTNAME = CONFIG.hostname
 TIMEOUT = CONFIG.health_timeout_s
 # Wall-clock budget (measured from process start, `DeployTools.run_start`) for the whole run's
 # health-gating phase. Once spent, the gate stops and rolls back so the rollback (git reset +
-# one redeploy) still finishes inside the unit's TimeoutStartSec (25min) — otherwise systemd
-# SIGTERMs the deployer mid-gate, before write_hold()/rollback, and the bad commit is left live.
+# one redeploy) still finishes inside the unit's TimeoutStartSec — otherwise systemd SIGTERMs
+# the deployer mid-gate, before write_hold()/rollback, and the bad commit is left live.
 # `run_start` is measured AFTER `flock -w 180` acquires, but TimeoutStartSec counts the flock
 # wait too, so the budget is sized 180 (max flock wait) + 1020 (this gate) + 300
-# (HEALTH_TIMEOUT_S) = 1500 = the 25min timeout, keeping the rollback intact even under max lock
-# contention with the weekly secret-rotate. See gitops-deploy.service.j2.
+# (HEALTH_TIMEOUT_S) = 1500s, which must fit inside the unit's TimeoutStartSec, keeping the
+# rollback intact even under max lock contention with the weekly secret-rotate. Read
+# gitops-deploy.service.j2 for the live ceiling rather than a number restated here: this
+# comment called 1500s "the 25min timeout" through two raises of that ceiling, and
+# test_gitops_deploy_timeout_budgets.py is what holds the sum inside it.
 RUN_BUDGET_S = CONFIG.run_budget_s
 
 # ── k8s auto-deploy ───────────────────────────────────────────────────────────────────────────
