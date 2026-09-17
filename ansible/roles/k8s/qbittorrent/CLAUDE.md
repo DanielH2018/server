@@ -84,6 +84,18 @@ as uid 1000 was refused (`curl: (7)`), as root it reached the host, and a LAN ad
 To rerun it, copy the script to the Pi and stage the state inside the image the same way — the
 cluster nodes refuse unprivileged user namespaces, so there is no sandbox on them.
 
+**That measurement never sent uid-1000 traffic through a live tunnel, and the first deploy
+did.** A packet qbittorrent sends into wg0 leaves the pod as an encrypted UDP carrier on
+eth0, and the carrier still belongs to the originating socket: `--uid-owner 1000` matched
+it, `! -o wg0` was true, and the gate rejected it. Deployed 2026-09-17 15:20, the tunnel
+stayed up (the liveness curl runs as root), the pod read 2/2 Ready, and qbittorrent saw only
+timeouts — `DHT: 0 nodes`, every tracker and peer dead, `s6-setuidgid abc curl https://1.1.1.1`
+timing out where root's succeeded. The gate now exempts fwmark 51820 (`wg set wg0 fwmark`)
+exactly as the mod's own REJECT does; `test_the_gate_exempts_wireguards_own_carrier_packets`
+holds it. Verify a gate change by the rule's packet counter after a uid-1000 attempt
+(`iptables -Z OUTPUT; s6-setuidgid abc curl …; iptables -L OUTPUT -v -n`), never by root's
+curl — root is the uid the gate exempts.
+
 What the reset does NOT do: fetch the mod or bring the tunnel up. A start whose API call still
 fails restarts every ~5 minutes on the startup probe as before, with the gate holding each
 time; the difference is that the first start after the outside world recovers succeeds.
