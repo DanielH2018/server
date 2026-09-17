@@ -85,6 +85,12 @@
     - Restart k3s
     - Wait for the node to report Ready again
 
+- name: Keep k3s's own output in a file the journald cap cannot drop
+  ansible.builtin.import_tasks: unit-logging.yml
+  tags: [k3s_server]
+  vars:
+    k3s_log_unit: k3s
+
 - name: Read the installed k3s systemd unit
   tags: [k3s_server]
   ansible.builtin.slurp:
@@ -140,6 +146,22 @@
      | length > 0)
     or (k3s_version not in (k3s_installed_version.stdout | default('')))
   changed_when: true
+  register: k3s_server_install
+
+- name: Restart k3s so the log drop-in takes effect # noqa no-handler
+  tags: [k3s_server]
+  # A drop-in changes nothing until the unit next execs. Skipped when the installer just ran,
+  # because the installer restarts k3s itself and a second restart would take the API server
+  # away twice. Not a handler: the agent has the same task against its own unit, and a
+  # handler named `k3s` would fail on that host.
+  ansible.builtin.systemd_service:
+    name: k3s
+    state: restarted
+    daemon_reload: true
+  become: true
+  when:
+    - k3s_unit_logging_dropin is changed
+    - k3s_server_install is not changed
 
 - name: Wait for the node to report Ready
   tags: [k3s_server]

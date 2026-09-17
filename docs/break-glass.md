@@ -128,7 +128,9 @@ to start, and the k3s unit is `Type=notify` with `TimeoutStartSec=0` — so the 
 indefinitely** instead of failing, which is the same symptom the `--node-ip` note in that file
 describes for a different cause.
 
-1. Read `journalctl -u k3s -n 200` on daniel-box. A rejected flag names itself.
+1. Read `tail -n 200 /var/log/k3s.log` on daniel-box. A rejected flag names itself. (Not
+   `journalctl -u k3s`: k3s's own lines are priority info, which the journald cap drops;
+   the k3s role sends them to that file instead.)
 2. Fix `ExecStart` in `/etc/systemd/system/k3s.service` directly, `systemctl daemon-reload`,
    and restart. The unit file is the live configuration; the repo is not.
 3. Then fix the repo, because the install task detects an argument that was **added**, never

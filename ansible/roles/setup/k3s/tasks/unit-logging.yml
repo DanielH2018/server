@@ -1,0 +1,88 @@
+---
+# Keep k3s's own output somewhere the journald cap cannot drop it.
+#
+# Imported by server.yml (k3s_log_unit=k3s) and agent.yml (k3s_log_unit=k3s-agent), before
+# the installer, so a fresh host's first start already carries the drop-in. The caller owns
+# the restart: a drop-in changes nothing until the unit next execs, and the two units have
+# different restart costs.
+#
+# WHY A FILE AND NOT A PRIORITY. journald stores nothing below notice on these hosts
+# (`MaxLevelStore=notice`, initial_setup/tasks/system-tuning.yml), and every line k3s writes
+# is priority info: logrus and klog both emit plain text to stderr, with no `<N>` prefix
+# for journald to read a level from, so the unit's `SyslogLevel=info` default applies to
+# INFO, WARN and FATA alike. On 2026-09-09 k3s crash-looped ~3000 times over 5h08m and the
+# journal kept only systemd's `status=1/FAILURE` lines; the reason k3s exited is gone (#1918).
+# `SyslogLevel=notice` on the unit would keep the lines, but at notice they also pass the
+# rsyslog info filter, land in /var/log/syslog and ship to Loki — the volume the cap was
+# set to stop, from the noisiest unit on the box. A file keeps the journal and Loki as
+# they are and is bounded by logrotate instead.
+#
+# `append:` is opened by systemd at exec, so the file is created root-owned whatever k3s
+# does, and logrotate must `copytruncate` — a rename would leave the unit writing to the
+# rotated inode until its next restart. `inherit` on stderr dups the stdout fd.
+#
+# A drop-in, not the unit: k3s-install.sh rewrites /etc/systemd/system/<unit>.service
+# wholesale on every args or version change, and the `.d/` directory is the only placement
+# it leaves alone.
+- name: Create the log file with syslog's ownership for {{ k3s_log_unit }}
+  ansible.builtin.file:
+    path: "{{ k3s_log_file }}"
+    state: touch
+    owner: root
+    group: adm
+    mode: "0640"
+    modification_time: preserve
+    access_time: preserve
+  become: true
+
+- name: Create the drop-in directory for {{ k3s_log_unit }}
+  # copy: does not create parents, and neither the installer nor systemd makes a `.d/` for
+  # a unit that has no drop-ins — both hosts lacked it when this was written.
+  ansible.builtin.file:
+    path: "/etc/systemd/system/{{ k3s_log_unit }}.service.d"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: Send stdout and stderr to that file for {{ k3s_log_unit }}
+  ansible.builtin.copy:
+    dest: "/etc/systemd/system/{{ k3s_log_unit }}.service.d/10-log-to-file.conf"
+    content: |
+      # Managed by Ansible (k3s role, tasks/unit-logging.yml) — edits here are overwritten.
+      # journald stores nothing below notice on this host and every k3s line is info, so the
+      # journal keeps none of it. This file is where a crash loop's reason lands.
+      [Service]
+      StandardOutput=append:{{ k3s_log_file }}
+      StandardError=inherit
+    mode: "0644"
+    owner: root
+    group: root
+  become: true
+  register: k3s_unit_logging_dropin
+
+- name: Rotate the log for {{ k3s_log_unit }}
+  # `copytruncate`, NOT `create`: systemd holds the fd from `append:` and reopens it only on
+  # the unit's next exec, so a renamed file keeps receiving every line until then. The
+  # dual-arm is the crash-loop shape: 2026-09-09 restarted k3s ~3000 times in 5h, and each
+  # start logs its whole startup, so `maxsize` bounds the file per logrotate run while
+  # `rotate 4` bounds the history.
+  ansible.builtin.copy:
+    dest: "/etc/logrotate.d/{{ k3s_log_unit }}"
+    content: |
+      # Managed by Ansible (k3s role, tasks/unit-logging.yml) — edits here are overwritten.
+      {{ k3s_log_file }} {
+        daily
+        maxsize 50M
+        rotate 4
+        compress
+        delaycompress
+        missingok
+        notifempty
+        copytruncate
+      }
+    mode: "0644"
+    owner: root
+    group: root
+  become: true

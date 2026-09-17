@@ -9,6 +9,11 @@ k3s_version: v1.36.4+k3s1
 k3s_metallb_version: v0.16.0
 k3s_longhorn_version: v1.12.1
 
+# Where k3s's own stdout/stderr goes on both node types (tasks/unit-logging.yml). journald
+# stores nothing below notice on these hosts and every k3s line is info, so without this the
+# reason for a crash loop is lost — #1918. Read this file, not `journalctl -u k3s`.
+k3s_log_file: /var/log/k3s.log
+
 # Flags for the k3s server install:
 #   --cluster-init       embedded etcd from day one. Not a one-way door (k3s converts
 #                        SQLite->etcd on restart with this flag) but it saves a
@@ -128,7 +133,8 @@ k3s_secrets_encryption: true
 # than failing — the same hang the --node-ip comment above describes. The validation is
 # stricter than it looks; `prefix` alone has two rules the flag path did not have (see the
 # template). `ansible/tests/setup/test_k3s_oidc_trusts_authelia.py` renders and shape-checks
-# it for that reason. Read `journalctl -u k3s` before walking away.
+# it for that reason. Read `/var/log/k3s.log` (not `journalctl -u k3s`, which keeps none of
+# k3s's own lines — see k3s_log_file) before walking away.
 #
 # ARMING THIS NEEDED NO EXTRA STEP, and that is worth stating because the install task's own
 # comment reads as though it did. That guard detects an argument that was ADDED and never one

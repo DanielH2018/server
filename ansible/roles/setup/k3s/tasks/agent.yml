@@ -103,6 +103,12 @@
     mode: "0755"
   become: true
 
+- name: Keep k3s-agent's own output in a file the journald cap cannot drop
+  ansible.builtin.import_tasks: unit-logging.yml
+  tags: [k3s_agent]
+  vars:
+    k3s_log_unit: k3s-agent
+
 - name: Read the installed k3s-agent systemd unit
   tags: [k3s_agent]
   ansible.builtin.slurp:
@@ -145,6 +151,21 @@
      | length > 0)
     or (k3s_version not in (k3s_agent_installed_version.stdout | default('')))
   changed_when: true
+  register: k3s_agent_install
+
+- name: Restart k3s-agent so the log drop-in takes effect # noqa no-handler
+  tags: [k3s_agent]
+  # Same shape as the server's restart task: a drop-in takes effect at the next exec, and
+  # the installer already restarted the unit when it ran. Restarting the agent restarts the
+  # kubelet only; containerd keeps the pods up.
+  ansible.builtin.systemd_service:
+    name: k3s-agent
+    state: restarted
+    daemon_reload: true
+  become: true
+  when:
+    - k3s_unit_logging_dropin is changed
+    - k3s_agent_install is not changed
 
 # ── Registry mirror (2026-08-14, nut→k8s port) ────────────────────────────────────────
 # Same template as the server node, but the mirror endpoint resolves to the registry
