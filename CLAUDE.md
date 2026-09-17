@@ -239,6 +239,17 @@ Write exploratory commands so they auto-approve; expect a prompt for the rest.
   (`> file`, `tee`, `sed -i`, subshells `(…)`, backgrounding `&`).
 - Restructure rather than loop: one `grep`/`find`/`awk` usually replaces the control flow.
 
+- **The remote-ssh auto-approve depends on a package deployed outside this repo.**
+  `.claude/hooks/_readonly_tables.py` imports its trusted-host set and secret-path pattern from
+  the dotfiles `claude_guard` package (`~/.local/share/claude-guard`) via
+  `.claude/hooks/_claude_guard.py`. A machine without that dotfiles deploy gets no auto-approve
+  on that path rather than a stale local copy: the hook prints one `classifier did not run`
+  line to stderr and exits 0 with no stdout, the same fail-open shape as the shims' own cd
+  guard, so the prompt stands. `.claude/hooks/tests/test_claude_guard_import.py` measures that
+  end to end, and diffs the CI stand-in in `tests/conftest.py` against the deployed tables —
+  a diff CI itself cannot run, since CI has no dotfiles deploy; it goes red under `prek run`
+  on a deployed host.
+
 - **`./scripts/deploy_tools/gitops_tick.sh` is allow-listed but not guaranteed.** It is a write (it triggers
   a real deploy), so the auto-mode classifier judges it on its own and denied it once in seven
   runs on identical text. Measured 2026-08-22. A denial here is the classifier, not a broken
@@ -445,9 +456,10 @@ Several sessions work this repo at once, each in its own `.claude/worktrees/<nam
   driver still decrypts, but those emit no file content, so no plaintext reaches stdout. To see
   what actually changed, open it with `sops ansible/vars/secrets.yml`.
   **Do not filter the plaintext through a pipe.** This file prescribed
-  `git diff … | grep -oE '^[-+][a-z_]+:'` until 2026-08-29, and `block-dangerous-bash` now denies
-  every `git diff`/`show`/`log -p` naming a SOPS path unless one of the content-free flags above
-  is present. Two reasons, and the second is the one that generalises. The hook matched the
+  `git diff … | grep -oE '^[-+][a-z_]+:'` until 2026-08-29, and the user-level deny hook
+  (`claude_guard.deny`, behind `~/.claude/hooks/guard-pre-tool-use.sh` since 2026-09-17; it was
+  `block-dangerous-bash.sh` before that) denies every `git diff`/`show`/`log -p` naming a SOPS
+  path unless one of the content-free flags above is present. Two reasons, and the second is the one that generalises. The hook matched the
   `git diff` half regardless of what followed the pipe, so for a while the remedy this file named
   was denied by the rule printing it. And `-o` is load-bearing: without it grep prints the whole
   matching line — key *and* plaintext value. That is not hypothetical, it is how this line read

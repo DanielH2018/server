@@ -426,3 +426,22 @@ include = [
 ]
 [tool.ty.overrides.rules]
 unresolved-import = "ignore"
+
+[[tool.ty.overrides]]
+# `claude_guard` is a different kind of external import from the block above: not a container
+# image, but a sibling homelab package the dotfiles repo deploys to `~/.local/share/claude-guard`
+# outside this checkout entirely — no `extra-paths` entry can reach it, since that path does not
+# exist in CI or in a fresh clone. `.claude/hooks/_claude_guard.py` bootstraps it onto `sys.path`
+# at runtime; `test_claude_guard_import.py::test_deployed_import_reaches_both_trusted_hosts` is
+# what actually proves the import resolves, on a host where the package is deployed.
+#
+# Same collateral as above: `_readonly_tables.py` and `test_claude_guard_import.py` also lose
+# the check on `import _claude_guard`, a first-party, `extra-paths`-covered import — a typo there
+# would surface as a hook crash instead. `_claude_guard.py` imports nothing else first-party.
+include = [
+  ".claude/hooks/_claude_guard.py",
+  ".claude/hooks/_readonly_tables.py",
+  ".claude/hooks/tests/test_claude_guard_import.py",
+]
+[tool.ty.overrides.rules]
+unresolved-import = "ignore"
