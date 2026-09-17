@@ -91,6 +91,7 @@ For each PR read the file list and the diff — `gh pr diff <n> --name-only`, th
 |---|---|---|
 | `uv.lock` | lock file maintenance | merge; nothing to deploy |
 | `ansible/roles/k8s/*/defaults/main.yml` | k8s image pin | merge, land with the role's tag |
+| same, title carries `(manual — k8s_autodeploy: false, …)` | k8s image pin the tick cannot apply | nothing to finish; merge through `land.sh`, which deploys it from the merge commit — a bare merge leaves it to the drift monitor (#1886) |
 | `ansible/roles/setup/*/defaults/main.yml` | host plane | often `manual —`; check the rule |
 | `ansible/roles/k8s/*/templates/Dockerfile*.j2` | in-cluster-built image | merge, land, then verify the pod took the rebuild |
 | `prek.toml`, `.github/workflows/*` | tooling | merge; CI is the only consumer |

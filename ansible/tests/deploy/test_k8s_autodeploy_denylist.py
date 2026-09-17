@@ -246,9 +246,10 @@ def test_the_real_repo_derives_a_plausible_denylist() -> None:
     # recurring — the compounding reasons are specific to it: it also mounts media-data (shared
     # RWX, never reverted) and rewrites library files there IN PLACE, so a revert can't undo an
     # already-committed transcode; its own two claims (tdarr-configs, tdarr-server) revert
-    # non-atomically; and the digest pin's "stays manual" intent is unenforced by renovate.json,
-    # which automerges a digest re-push after a 3-day soak. Checked by name for the same reason
-    # as the groups above.
+    # non-atomically; and until #1886 the digest pin's "stays manual" intent was unenforced by
+    # renovate.json, which automerged a digest re-push after a 3-day soak — the denylist now
+    # turns automerge off too (test_renovate_automerge_follows_the_autodeploy_denylist.py).
+    # Checked by name for the same reason as the groups above.
     for role in ("tdarr",):
         assert role in denied
     # The eight slice 7b roles actually left promoted, checked by name so a regression reads as

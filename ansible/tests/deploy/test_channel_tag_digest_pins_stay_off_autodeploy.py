@@ -8,7 +8,9 @@ PR #1440 proposed exactly that downgrade on n8n through nine green checks (issue
 
 n8n's group is `automerge: false` and a human reads the PR. On `roles/k8s/*/defaults/main.yml`
 the same shape is automerged (renovate.json's digest rule) AND auto-deployable, so there is no
-human in it at all.
+human in it at all. Since #1886 the fence has a second arm: a denied role's bump no longer
+automerges either (test_renovate_automerge_follows_the_autodeploy_denylist.py), so for the
+expensive three a human reads the PR as well as deploying it.
 
 # DECIDED: the class is accepted for the services whose regression is cheap, and fenced by the
 # auto-deploy denylist for the ones whose regression is not. Censused 2026-09-10: of the 13 k8s
