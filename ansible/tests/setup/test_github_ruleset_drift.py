@@ -155,11 +155,24 @@ def _run(tmp_path, curl_body=None, curl_rc=0, branch_body=None):
     sudo.write_text("#!/usr/bin/env bash\nexit 1\n")
     sudo.chmod(0o755)
 
+    # logger stub: the script's journal line. Recorded rather than sent, so a case can assert the
+    # verdict reached the journal without reading the host's own. The real logger is what a
+    # `journalctl -t github-ruleset-drift` on the deployer reads, which is how #1781's verify-by
+    # confirms this producer ran; until that line existed a clean run left nothing there.
+    logger = binstub / "logger"
+    logger.write_text(
+        "#!/usr/bin/env bash\n"
+        "shift 2  # -t <tag>\n"
+        'printf \'%s\\n\' "$*" >> "$LOGGER_OUT"\n'
+    )
+    logger.chmod(0o755)
+
     out = tmp_path / "push.out"
     env = {
         **os.environ,
         "PATH": f"{binstub}:{os.environ['PATH']}",
         "KUMA_PUSH_OUT": str(out),
+        "LOGGER_OUT": str(tmp_path / "journal.out"),
     }
     proc = subprocess.run(
         ["bash", str(script)], env=env, capture_output=True, text=True, timeout=60
@@ -209,6 +222,34 @@ def test_an_unreachable_api_reports_unverified_not_clean(tmp_path):
     assert status == "down"
     assert "UNVERIFIED" in msg
     assert "DRIFTED" not in msg
+
+
+def _journal(tmp_path):
+    path = tmp_path / "journal.out"
+    return path.read_text().splitlines() if path.exists() else []
+
+
+def test_a_clean_run_reaches_the_journal(tmp_path):
+    """The accepting half of the journal line: a clean run logs its verdict, not only a failed one.
+
+    The push library logs a push only when it fails, so before this line a clean run left no
+    trace on the host — and #1781's verify-by, "confirmed green from its journal", could not be
+    met for this producer at all.
+    """
+    _run(tmp_path, curl_body=_ruleset_body(DECLARED))
+    lines = _journal(tmp_path)
+    assert len(lines) == 1
+    assert lines[0].startswith("status=up ")
+    assert "matches the declared set" in lines[0]
+
+
+def test_a_down_run_reaches_the_journal_with_its_reason(tmp_path):
+    """The rejecting half: a DOWN logs the same reason the tile shows."""
+    _run(tmp_path, curl_body=_ruleset_body(DECLARED[1:]))
+    lines = _journal(tmp_path)
+    assert len(lines) == 1
+    assert lines[0].startswith("status=down ")
+    assert "DRIFTED" in lines[0]
 
 
 def test_a_200_that_is_not_a_ruleset_is_a_bad_fetch(tmp_path):
