@@ -12,6 +12,13 @@
     # back to back and defers every wait to the end-of-batch drain, which would take both
     # Pi-holes down at once — exactly the outage the second instance exists to prevent.
     manifests_rollout: ''
+    # Both instances roll_one.yml restarts, declared to the release record so `probe.py
+    # health` expects each to roll after a changed render (issue #1902). `image: pihole` on
+    # both: roll_one.yml also fires on manifests_image_changed, which keys on the SERVICE
+    # name, and the record's own image check would otherwise miss pihole-2. Record-only.
+    manifests_self_rollouts:
+      - { name: pihole, kind: deploy, image: pihole }
+      - { name: pihole-2, kind: deploy, image: pihole }
     manifests_files:
       - pvc.yaml
       - configmap.yaml

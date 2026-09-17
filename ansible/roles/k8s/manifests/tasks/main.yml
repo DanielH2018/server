@@ -8,6 +8,12 @@
 #   manifests_rollout       workload to wait on; set '' to skip the wait entirely
 #   manifests_rollout_kind  kubectl kind of that workload (and of every entry in
 #                           manifests_extra_rollouts): 'deploy' (default) or 'daemonset'
+#   manifests_self_rollouts [{name, kind, image?}] a role with `manifests_rollout: ''`
+#                           restarts through its OWN task after this role returns. Reaches
+#                           only the release record's `rollouts[]` (release_stamp.yml), so
+#                           `probe.py health` holds the same roll expectation for them it
+#                           holds for the shared restart's targets -- never the restart or
+#                           the drain, which such a role opted out of. Issue #1902.
 #
 # Derived here, not passed in:
 #   manifests_image_changed  true when k8s/image-builder rebuilt this service's image to a new
@@ -51,17 +57,19 @@
   tags: [deploy]
   # Same alias trap as the assert above, reached through the loop instead of the role var: an
   # extra rollout can set its own `kind` (mixing deploy and daemonset in one role is legitimate
-  # — claude-otel does exactly that, though via its own private loop rather than
-  # manifests_extra_rollouts), so it needs the same constraint the primary rollout gets.
+  # — claude-otel does exactly that, though via its own private loop, declared to the release
+  # record as manifests_self_rollouts), so it needs the same constraint the primary rollout
+  # gets. A self rollout's kind picks the `created` prefix the record checks, so it is held to
+  # the same two literals.
   ansible.builtin.assert:
     that:
       - item.kind | default('deploy') in ['deploy', 'daemonset']
     fail_msg: >-
-      manifests_extra_rollouts entry '{{ item.name }}' has kind '{{ item.kind | default('deploy') }}',
+      rollout entry '{{ item.name }}' has kind '{{ item.kind | default('deploy') }}',
       which must be 'deploy' or 'daemonset'. kubectl aliases like 'ds' or 'DaemonSet' are
       rejected here on purpose — see the manifests_rollout_kind assert above.
     quiet: true
-  loop: "{{ manifests_extra_rollouts | default([]) }}"
+  loop: "{{ (manifests_extra_rollouts | default([])) + (manifests_self_rollouts | default([])) }}"
   loop_control:
     label: "{{ item.name }}"
 

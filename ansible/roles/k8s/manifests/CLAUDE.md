@@ -23,8 +23,9 @@ with the Docker-side `roles/containers/common` namespace.
     manifests_rollout_kind: deploy        # or 'daemonset'; default 'deploy'
 ```
 
-Optional, and empty by default: `manifests_extra_rollouts` (below),
-`manifests_rollout_timeout` (default `300s`), `k8s_autodeploy_snapshot_pvcs` (below).
+Optional, and empty by default: `manifests_extra_rollouts` (below), `manifests_self_rollouts`
+(below, under the release record), `manifests_rollout_timeout` (default `300s`),
+`k8s_autodeploy_snapshot_pvcs` (below).
 
 **Templates stay in the caller's role**, at `roles/k8s/<service>/templates/<name>.j2`. The
 `src` is derived from `manifests_service` and anchored to `playbook_dir` on purpose. A relative
@@ -163,6 +164,16 @@ workload the apply created). `probe.py health` reads it and fails a `restart: tr
 whose `restartedAt` is not newer than `applied_at` (#1867). The stamp is included before the
 restart tasks for that comparison to hold, and after the rebuilt-image fact so both read one
 answer; `ansible/tests/k8s/test_release_stamp_rollout_expectation.py` pins the order.
+
+A role that sets `manifests_rollout: ''` and restarts its workloads through a private task
+after this role returns declares them in `manifests_self_rollouts` (`[{name, kind, image?}]`),
+and the record carries them with the same `restart` decision (#1902). claude-otel passes
+`claude_otel_stabilise_workloads`; pihole names both instances with `image: pihole`, since
+`roll_one.yml` also fires on `manifests_image_changed`, which keys on the service name. The
+entry reaches `rollouts[]` only: the shared restart and the batch drain never read it, which is
+what those roles opted out of. Appending from the private task itself cannot work, because the
+record is written before that task runs. The same test file holds each role's declaration equal
+to the loop its private restart iterates.
 
 **Secret manifests are recorded by name and never hashed.** They are rendered under `no_log`
 from decrypted SOPS values, and hashing adds a new read path over that output — a task result,
