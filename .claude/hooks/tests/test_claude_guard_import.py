@@ -28,12 +28,17 @@ sys.path.insert(0, str(HOOKS))  # _readonly_tables imports _claude_guard by bare
 import _readonly_tables  # noqa: E402
 import claude_guard.tables as _tables  # noqa: E402
 
-# Same hardcoded path and reasoning as test_auto_approve_remote_ssh.py:40-46: only `uv`
-# missing is a reason to skip, not a broken bootstrap.
+# Same hardcoded path and reasoning as test_auto_approve_remote_ssh.py:40-46: `uv` missing
+# is one reason to skip. The other is the real deploy target itself: this test spawns a
+# SEPARATE subprocess, which starts its own sys.modules and never sees conftest.py's
+# in-process stand-in, so on a host that genuinely lacks the dotfiles deploy it can only ever
+# fail, not prove anything — the same reasoning as the e2e wrapper tests below.
 UV_BIN = Path("/home/ubuntu/.local/bin/uv")
+_CLAUDE_GUARD_DIR = Path("~/.local/share/claude-guard").expanduser()
 
 _runnable = pytest.mark.skipif(
-    not UV_BIN.exists(), reason="uv not found at the hardcoded path"
+    not (UV_BIN.exists() and _CLAUDE_GUARD_DIR.is_dir()),
+    reason="uv or the deployed claude_guard package is not present on this machine",
 )
 
 
