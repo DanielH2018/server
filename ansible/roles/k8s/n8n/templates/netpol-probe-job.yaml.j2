@@ -1,18 +1,27 @@
 {% from 'container-resources.yml.j2' import container_resources with context %}
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
 ---
-# The negative test for networkpolicy.yaml.j2: a pod that is NOT the runners must not reach the
-# task-runner broker. It carries no app=n8n-runners label, which is the only thing the policy
-# admits on {{ n8n_k8s_broker_port }}.
+# The negative test for networkpolicy.yaml.j2: a pod that is neither traefik, monitor-bridge nor
+# the runners must reach NEITHER of n8n's ports. It carries no app label at all, so the policy
+# admits it on nothing.
 #
-# Inverted on purpose — this Job SUCCEEDS when the connection fails. `nc -w 5 -z` exits non-zero
+# Inverted on purpose — this Job SUCCEEDS when the connections fail. `nc -w 5 -z` exits non-zero
 # on refused or timed-out, so `if ... then exit 1 else exit 0`. Reading it the other way round
 # would make a broken policy look like a passing test, which is the exact failure this exists to
 # rule out.
 #
-# It checks 5678 first, as a control. Without that, a probe pod with no network at all, a wrong
-# Service name, or a DNS failure would "pass" the isolation test for reasons that have nothing
-# to do with the policy.
+# It leads with a CONTROL against traefik:80, which is open to the whole namespace and up
+# whenever the cluster serves anything (the same control headlamp's probe uses). Without that, a
+# probe pod with no network at all or a DNS failure would "pass" both isolation checks for reasons
+# that have nothing to do with the policy. Until 2026-09-17 the control was n8n:5678 itself, which
+# asserted the hole this file now proves closed (#1926). The other half of attribution — that n8n
+# is UP when 5678 is refused — is the `rollout status` wait in tasks/main.yml.
+#
+# The positive legs live elsewhere, deliberately: a probe pod labelled `app: traefik` or
+# `app: monitor-bridge` would join that Service's Endpoints and receive real traffic. The
+# runners' initContainer proves 5679 admits the runners; monitor-bridge's check_n8n (the "n8n
+# Prod Workflows" Kuma monitor) proves 5678 admits monitor-bridge; the Authelia-gated route
+# proves it admits traefik.
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -39,12 +48,19 @@ spec:
             - sh
             - -c
             - |
-              if ! nc -w 5 -z n8n {{ container_item.port }}; then
-                echo "CONTROL FAILED: cannot reach n8n:{{ container_item.port }} either, so this"
-                echo "probe proves nothing about the policy. Check DNS and the Service."
+              if ! nc -w 5 -z traefik 80; then
+                echo "CONTROL FAILED: cannot reach traefik:80 either, so this probe proves"
+                echo "nothing about the policy. Check DNS and the Service."
                 exit 1
               fi
-              echo "control ok: n8n:{{ container_item.port }} reachable"
+              echo "control ok: traefik:80 reachable from this pod"
+              if nc -w 5 -z n8n {{ container_item.port }}; then
+                echo "POLICY NOT ENFORCED: reached n8n:{{ container_item.port }} from a pod that"
+                echo "is neither traefik nor monitor-bridge. That path skips Authelia, CrowdSec"
+                echo "and the rate-limit. NetworkPolicy n8n-broker is not taking effect (#1926)."
+                exit 1
+              fi
+              echo "isolated: n8n:{{ container_item.port }} refused, as intended"
               if nc -w 5 -z n8n {{ n8n_k8s_broker_port }}; then
                 echo "POLICY NOT ENFORCED: reached broker port {{ n8n_k8s_broker_port }} from a"
                 echo "pod without app=n8n-runners. NetworkPolicy n8n-broker is not taking effect."

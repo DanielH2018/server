@@ -45,6 +45,26 @@ def load_yaml(path: Path):
     return yaml_fast.safe_load(path.read_text())
 
 
+SECRET_REGISTRY = ANSIBLE / "secret_rotation.yml"
+
+# Registry names too generic to match on: a whole-word hit on one would flag every script
+# mentioning the word, and the guards that read this list would be turned off rather than
+# obeyed. `domain` is in the registry at `tier: ignore` because it is a hostname, not a
+# credential, and every script that builds a URL names it.
+GENERIC_SECRET_NAMES = frozenset({"domain"})
+
+
+def registry_secret_names() -> list[str]:
+    """Every credential name in `ansible/secret_rotation.yml`, minus the generic ones.
+
+    The registry is plaintext by design — names, dates and tiers, never values — so a guard
+    built on it needs no SOPS key and runs on a CI runner. Shared by the release_bin guard and
+    the no_log census so the two cannot disagree about what counts as a secret.
+    """
+    data = load_yaml(SECRET_REGISTRY) or {}
+    return sorted(set(data.get("entries", {})) - GENERIC_SECRET_NAMES)
+
+
 def load_tasks(path: Path) -> list[dict]:
     """The task list in a tasks file, empty for a file with no tasks."""
     return load_yaml(path) or []

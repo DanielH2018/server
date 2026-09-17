@@ -198,6 +198,32 @@ def bearer_token_valid(header: str | None, expected: str) -> bool:
     return hmac.compare_digest(header[len(prefix) :], expected)
 
 
+def cert_target_allowed(host: str, port: int, domains: str, ports: str = "443") -> bool:
+    """True if `host:port` is a TLS endpoint this homelab routes, by the operator's own list.
+
+    `cert_expiry` is the one tool that hands caller input straight to `socket.create_connection`.
+    Its siblings each constrain their input to the character set the downstream uses
+    (container_ref_valid, entity_id_valid, k8s_name_valid); this is the same idea for a socket:
+    the destination is bounded to the hostnames Traefik serves, so a bearer holder cannot use
+    the pod as a TCP-connect oracle against the pod network, the LAN or the internet (#1931).
+
+    `domains` is a comma-separated list of zone suffixes (`CERT_EXPIRY_DOMAINS`, rendered from
+    `domain`); a host matches when it IS a listed zone or sits under one. The match is on a
+    label boundary — `evil-example.com` does not match `example.com` — and an IP literal never
+    matches, because a zone suffix is a name. `ports` is the same shape for the port
+    (`CERT_EXPIRY_PORTS`, default 443: everything this homelab serves TLS on sits behind
+    Traefik's one HTTPS entrypoint). An empty `domains` admits nothing rather than everything.
+    """
+    zones = [z.strip().lower().rstrip(".") for z in domains.split(",") if z.strip()]
+    allowed_ports = {int(p) for p in ports.split(",") if p.strip().isdigit()}
+    name = host.strip().lower().rstrip(".")
+    if not name or not zones or port not in allowed_ports:
+        return False
+    if not all(c.isascii() and (c.isalnum() or c in ".-") for c in name):
+        return False
+    return any(name == z or name.endswith("." + z) for z in zones)
+
+
 def allowed_hosts_and_origins(public_host: str) -> tuple[list[str], list[str]]:
     """Trusted Host/Origin allowlist for the MCP transport's DNS-rebinding guard.
 

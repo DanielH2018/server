@@ -211,8 +211,10 @@ A bare `podSelector` is always scoped to the policy's own namespace.
 ### Traefik's own ports stay open
 
 The baseline selects Traefik too. Its web ports (`:80`/`:443`) must stay reachable from all
-sources, for the reason `n8n`'s policy already gives for :5678 — they are reachable from the
-whole network today and narrowing buys nothing. The alternative is enumerating LAN,
+sources: they are the front door, reachable from the whole network by design, and narrowing
+buys nothing. (`n8n`'s policy gave the same reason for :5678 until 2026-09-17; #1926 fenced
+that port to traefik and monitor-bridge, because under namespace scope it was the one web port
+any pod could reach.) The alternative is enumerating LAN,
 WireGuard and Cloudflare CIDRs for the front door, and with ETP=Local the real client IP is
 preserved, so external traffic arrives as `10.0.0.x` rather than a node IP.
 

@@ -118,6 +118,7 @@
     owner: root
     group: root
   become: true
+  no_log: true  # renders the Kuma push token
 
 - name: Schedule the Cloudflare IP drift check
   tags: [cron]

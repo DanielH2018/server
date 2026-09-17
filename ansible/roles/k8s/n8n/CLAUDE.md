@@ -15,9 +15,11 @@ n8n with an external task-runner sidecar. See repo-root `CLAUDE.md`.
 - **Host:** daniel-box (k8s) · **Port:** 5678 · **URL:** `n8n.<domain>` (Authelia: yes)
 - **Network:** the cluster pod network. The broker binds `0.0.0.0:5679` (n8n has no
   per-interface bind option), so the `n8n-broker` NetworkPolicy in
-  `templates/networkpolicy.yaml.j2` is what fences 5679 to `app: n8n-runners`. The
-  `n8n-netpol-probe` Job (`templates/netpol-probe-job.yaml.j2`, applied by `tasks/main.yml`)
-  verifies that fence on every deploy. `n8n_runner_auth_token` is the second layer, not the
+  `templates/networkpolicy.yaml.j2` is what fences 5679 to `app: n8n-runners`. Since
+  2026-09-17 the same policy fences 5678 to `app: traefik` and `app: monitor-bridge` (#1926);
+  before that any pod could reach the web port and skip Authelia, CrowdSec and the rate-limit.
+  The `n8n-netpol-probe` Job (`templates/netpol-probe-job.yaml.j2`, applied by
+  `tasks/main.yml`) verifies both fences on every deploy. `n8n_runner_auth_token` is the second layer, not the
   only one.
 - **Depends on:** traefik, authelia
 - **Config in:** `defaults/main.yml` — images, sizing, claims and the auto-deploy stance. The
