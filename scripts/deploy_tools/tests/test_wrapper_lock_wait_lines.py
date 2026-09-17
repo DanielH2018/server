@@ -389,3 +389,29 @@ def test_detach_tells_a_broken_lock_file_from_a_held_one(tmp_path):
     assert result.returncode == ec.DEPLOY_LOCK_UNAVAILABLE, result.stderr
     assert "flock exit 65" in result.stderr
     assert "A deploy is already running" not in result.stderr
+
+
+# The SERVICE locks, not the tree lock. `--detach` fails fast on the tree lock (`flock -n -E`)
+# and then WAITS on each service lock (`flock -w -E`, `-s -w -E` for the shared `all` one), so
+# `-w` in the argv is exactly the service-lock acquire. A holder that never lets go answers
+# `-E`'s 75 there.
+_FLOCK_SERVICE_BUSY = """#!/bin/bash
+for arg in "$@"; do
+  [[ "$arg" == "-w" ]] && exit 75
+done
+exit 0
+"""
+
+
+def test_detach_reports_a_busy_service_lock_as_contention(tmp_path):
+    """FLAGGED half for the `$?`-inside-`if !` read: contention exited 76, not 75.
+
+    `service_lock_status=$?` inside `if ! take_service_locks; then` reads the status of the
+    NEGATION, which is always 0, so neither the LOCK_BUSY nor the LOCK_UNAVAILABLE test could
+    match and every service-lock refusal fell through to `say_lock_unavailable 0`. 76 tells the
+    session "retrying alone changes nothing" for the one case where retrying is the whole
+    remedy: another deploy of the same service is holding the lock and will release it.
+    """
+    result = _run_detach(tmp_path, _FLOCK_SERVICE_BUSY)
+    assert result.returncode == ec.DEPLOY_LOCK_BUSY, result.stderr
+    assert "flock exit 0" not in result.stderr
