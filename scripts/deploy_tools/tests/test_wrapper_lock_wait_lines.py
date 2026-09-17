@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""The wait lines `deploy.sh` and `gitops_tick.sh` print, and that land.py books them.
+"""The wait lines `deploy.sh` prints, and that land.py books them.
 
 `land_lib/landing.py:retry_while_locked` books a wait only when an attempt EXITS 75. Both
 wrappers can wait a long time and exit 0 instead -- deploy.sh inside `flock -w LOCK_WAIT`,
-gitops_tick.sh watching a tick another actor started -- so over the 14 days to 2026-09-11
+gitops_tick.sh watching a tick another actor started (`test_gitops_tick_wrapper.py`) -- so over the 14 days to 2026-09-11
 every ledger row read `lock=0` while the tree lock was busy 17% of one day. These are the
 lines that close that gap, asserted together with the parser that reads them: a wording
 change on either side that the other does not follow is exactly the drift this file catches.
@@ -16,12 +16,10 @@ gitops_tick.sh's own `/var/lib/gitops-deploy` markers.
 Run: uv run pytest scripts/deploy_tools/tests/test_wrapper_lock_wait_lines.py
 """
 
-import os
-import re
 import subprocess
 from pathlib import Path
 
-from _deploy_sh_fakes import FAKE_RECAP, deploy_sh_env, make_snapshot_repo
+from _deploy_sh_fakes import FAKE_RECAP, deploy_sh_env, make_snapshot_repo, stub_bin
 from deploy_tools import exit_codes as ec
 from deploy_tools.land_lib import tools
 
@@ -83,49 +81,6 @@ case "$*" in
 esac
 """.replace("{recap}", FAKE_RECAP)
 
-# A fixed boot clock, handed to gitops_tick.sh through GITOPS_TICK_UPTIME_SOURCE, so the
-# arithmetic under test has no dependence on how long THIS machine has been up. Deriving the
-# stamp from the real /proc/uptime cannot work: on a runner whose uptime is under
-# `_IN_FLIGHT_S`, `uptime - 300` is negative, the script's `^[0-9]+$` guard rejects it, and
-# the test silently lands in the `${seconds:-0}` fallback instead of the arithmetic it exists
-# to check. That is how PR #1769 read `already 0s in flight` on CI and 300s here.
-# Whole seconds so the subtraction is exact in floating point.
-_UPTIME_S = 123456
-_IN_FLIGHT_S = 300
-_UPTIME_FIXTURE = f"{_UPTIME_S}.00 98765.43\n"
-_MONOTONIC_US = (_UPTIME_S - _IN_FLIGHT_S) * 1_000_000
-
-# `show <property>` expands to `systemctl show <unit> -p <property> --value`, so the property
-# is $4 here. ActiveState answers `activating` once and then takes two seconds to answer
-# `inactive`, which is a tick that finished while this script was watching it.
-_SYSTEMCTL = f"""#!/bin/bash
-case "$1" in
-  cat) exit 0 ;;
-  show)
-    case "$4" in
-      ActiveState)
-        if [[ -e "$TICK_STUB_STATE" ]]; then
-          sleep 2
-          echo inactive
-        else
-          : >"$TICK_STUB_STATE"
-          echo activating
-        fi
-        ;;
-      ExecMainStartTimestampMonotonic) echo {_MONOTONIC_US} ;;
-      ExecMainStartTimestamp) echo "Thu 2026-09-11 10:00:00 CDT" ;;
-      Result) echo success ;;
-      ExecMainStatus) echo 0 ;;
-      *) echo "" ;;
-    esac ;;
-esac
-exit 0
-"""
-
-_JOURNALCTL = """#!/bin/bash
-exit 0
-"""
-
 # `_UV` exits 0 for the playbook, so deploy.sh reaches `emit_deploy_annotation`, which writes
 # an `event=deploy` line through `logger`. conftest's autouse `_no_syslog` already intercepts
 # that directory-wide, and measurement confirms no test run reached /var/log/syslog. This stub
@@ -136,22 +91,8 @@ exit 0
 """
 
 
-def _stub_bin(tmp_path: Path, stubs: dict[str, str]) -> Path:
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir(exist_ok=True)
-    for name, body in stubs.items():
-        (bin_dir / name).write_text(body)
-        (bin_dir / name).chmod(0o755)
-    return bin_dir
-
-
-def _stub_path(tmp_path: Path, stubs: dict[str, str]) -> dict[str, str]:
-    bin_dir = _stub_bin(tmp_path, stubs)
-    return dict(os.environ, PATH=f"{bin_dir}:{os.environ['PATH']}")
-
-
 def _run_deploy(tmp_path: Path, flock: str) -> subprocess.CompletedProcess:
-    bin_dir = _stub_bin(
+    bin_dir = stub_bin(
         tmp_path,
         {
             "flock": flock,
@@ -251,100 +192,6 @@ def test_the_service_lock_refusal_is_not_booked_as_a_wait():
     )
 
 
-def test_joining_a_tick_in_flight_reports_how_long_it_ran_and_how_long_we_waited(
-    tmp_path,
-):
-    """FLAGGED half: the join exits 0, so nothing else in the landing can see the wait."""
-    env = _stub_path(tmp_path, {"systemctl": _SYSTEMCTL, "journalctl": _JOURNALCTL})
-    env["TICK_STUB_STATE"] = str(tmp_path / "seen-activating")
-    uptime = tmp_path / "uptime"
-    uptime.write_text(_UPTIME_FIXTURE)
-    env["GITOPS_TICK_UPTIME_SOURCE"] = str(uptime)
-    result = subprocess.run(
-        [str(_TICK_SH)],
-        cwd=_REPO,
-        env=env,
-        capture_output=True,
-        text=True,
-        timeout=120,
-        check=False,
-    )
-    line = next(
-        (x for x in result.stderr.splitlines() if "gitops_tick: joined" in x), ""
-    )
-    assert line, f"stdout={result.stdout!r} stderr={result.stderr!r}"
-    in_flight = re.search(r"already (\d+)s in flight", line)
-    # Exact, not a window: both operands are fixed, so any drift is a real arithmetic change.
-    # `!= 0` is the load-bearing part -- 0 is what the `${seconds:-0}` fallback produces, and a
-    # test that accepted it would pass while checking none of the conversion.
-    assert in_flight and int(in_flight[1]) == _IN_FLIGHT_S, line
-    booked = tools.in_flock_wait(line)
-    assert booked is not None, (
-        f"land.py no longer parses gitops_tick.sh's line: {line!r}"
-    )
-    assert booked[0] >= 1
-
-
-# `systemctl show` answers `activating` forever: a run in flight that does not end while the
-# script looks. `start` records that it was asked, which is the thing the join must not do.
-_SYSTEMCTL_IN_FLIGHT = f"""#!/bin/bash
-case "$1" in
-  cat) exit 0 ;;
-  start) : >"$TICK_STUB_STARTED"; exit 0 ;;
-  show)
-    case "$4" in
-      ActiveState) echo activating ;;
-      ExecMainStartTimestampMonotonic) echo {_MONOTONIC_US} ;;
-      ExecMainStartTimestamp) echo "Thu 2026-09-11 10:00:00 CDT" ;;
-      *) echo "" ;;
-    esac ;;
-esac
-exit 0
-"""
-
-_SYSTEMCTL_IDLE = _SYSTEMCTL_IN_FLIGHT.replace("echo activating", "echo inactive")
-
-
-def _kick(tmp_path: Path, systemctl: str) -> tuple[subprocess.CompletedProcess, bool]:
-    """`gitops_tick.sh --no-wait` against a stub; (result, whether `start` was asked)."""
-    env = _stub_path(tmp_path, {"systemctl": systemctl, "journalctl": _JOURNALCTL})
-    started = tmp_path / "started"
-    env["TICK_STUB_STARTED"] = str(started)
-    uptime = tmp_path / "uptime"
-    uptime.write_text(_UPTIME_FIXTURE)
-    env["GITOPS_TICK_UPTIME_SOURCE"] = str(uptime)
-    result = subprocess.run(
-        [str(_TICK_SH), "--no-wait"],
-        cwd=_REPO,
-        env=env,
-        capture_output=True,
-        text=True,
-        timeout=60,
-        check=False,
-    )
-    return result, started.exists()
-
-
-def test_a_no_wait_kick_that_joins_a_run_in_flight_exits_4_and_starts_nothing(tmp_path):
-    """Issue #1843: the run in flight fetched before the caller's commit merged, so exit 0
-    here told land.sh the primary was converging when nothing would converge it."""
-    result, started = _kick(tmp_path, _SYSTEMCTL_IN_FLIGHT)
-    assert result.returncode == ec.TICK_JOINED, result.stdout
-    assert not started, "the join must not issue a second `systemctl start`"
-    assert "Nothing started" in result.stdout
-    assert f"already {_IN_FLIGHT_S}s" in result.stdout
-
-
-def test_a_no_wait_kick_on_an_idle_unit_starts_one_and_exits_0(tmp_path):
-    """CLEAN half: with no run in flight the request starts a tick, as before."""
-    result, started = _kick(tmp_path, _SYSTEMCTL_IDLE)
-    assert result.returncode == ec.TICK_OK, result.stdout
-    assert started
-    assert "Started." in result.stdout
-
-
-# `-w` answering 75 is a real timeout (deploy.sh passes `-E "$LOCK_BUSY"`); `-w` answering 1
-# is any OTHER flock failure, which must not be reported as contention. Measured 2026-09-11
 # against real flock on a descriptor: a timeout with `-E 75` exits 75, without it exits 1, and
 # a bad descriptor exits 65 — so the flag is what keeps the two apart.
 _FLOCK_TIMES_OUT = """#!/bin/bash
@@ -413,7 +260,7 @@ exit 0
 
 
 def _run_detach(tmp_path: Path, flock: str) -> subprocess.CompletedProcess:
-    bin_dir = _stub_bin(
+    bin_dir = stub_bin(
         tmp_path,
         {"flock": flock, "fuser": _FUSER, "ps": _PS, "uv": _UV, "logger": _LOGGER},
     )

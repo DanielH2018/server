@@ -30,8 +30,11 @@
 #   4   `--no-wait` only: a tick was already in flight, so the request JOINED it and started
 #       nothing. That tick fetched before this request arrived, so a commit merged since is
 #       not in it, and nothing converges the checkout onto that commit until the next tick.
-#       A caller that needs its own commit fast-forwarded re-runs once the run ends; with a
-#       wait budget the wrapper watches the joined run instead and exits by its outcome.
+#       A caller that needs its own commit fast-forwarded re-runs once the run ends. With a
+#       wait budget the wrapper does that itself: it watches the joined run, and when that
+#       run ends cleanly it starts a FRESH run on the same budget and exits by the fresh
+#       run's outcome (issue #1879). A joined run that failed or hit contention is graded
+#       as itself.
 #   3   the tick was skipped for lock contention — the unit's `flock -E 75` fired and
 #       `SuccessExitStatus=75` makes systemd call that a success. Nothing deployed,
 #       nothing failed, and nothing alerted. Detected from the unit's ExecStopPost
@@ -156,17 +159,33 @@ if [[ "$WAIT_S" -eq 0 ]]; then
   exit 0
 fi
 
+# Watch the unit until the run in flight ends or `deadline` (in $SECONDS terms) passes. A
+# run has ended when the unit is neither activating nor deactivating AND its start stamp is
+# not `started_before`; the stamp is what tells "our run finished" from "the unit never
+# started". Every caller compares the two afterwards for its own verdict.
+watch_run() {
+  local deadline="$1" state
+  while [[ $SECONDS -lt $deadline ]]; do
+    state="$(show ActiveState)"
+    if [[ "$state" != "activating" && "$state" != "deactivating" &&
+          "$(show ExecMainStartTimestampMonotonic)" != "$started_before" ]]; then
+      break
+    fi
+    sleep 5
+  done
+}
+
+# Whether the run whose journal starts at `since` ended on the contention marker. Checked by
+# journal marker rather than exit code; the block ahead of the final verdict says why.
+ended_in_contention() {
+  journalctl -u "$UNIT" --since "$since" --no-pager 2>/dev/null |
+    grep -qF "$CONTENTION_MARKER"
+}
+
 echo "Waiting up to ${WAIT_S}s for it to finish..."
 wait_started=$SECONDS
 deadline=$((SECONDS + WAIT_S))
-while [[ $SECONDS -lt $deadline ]]; do
-  state="$(show ActiveState)"
-  if [[ "$state" != "activating" && "$state" != "deactivating" &&
-        "$(show ExecMainStartTimestampMonotonic)" != "$started_before" ]]; then
-    break
-  fi
-  sleep 5
-done
+watch_run "$deadline"
 waited=$((SECONDS - wait_started))
 
 # Neither wait is visible anywhere else in a landing: a joined tick and a slow one both exit
@@ -179,6 +198,40 @@ if [[ "$joined" == 1 ]]; then
   echo "gitops_tick: joined a tick already ${joined_after}s in flight; waited ${waited}s for it" >&2
 elif [[ "$waited" -ge 60 ]]; then
   echo "gitops_tick: waited ${waited}s" >&2
+fi
+
+# A joined run that ENDED is not this request's tick. It fetched origin before the request
+# arrived, so a commit merged since is not in it, and the markers it leaves describe a tree
+# that predates the caller's change: `behind_since` still set, no `broad_applied` for the
+# caller's plane. land.sh read those as `deferred` or `needs-manual-apply` for work the next
+# timer tick applied a minute later (issue #1879, the wait-mode half of #1843). So once the
+# joined run ends cleanly, START A FRESH RUN and grade that one instead: the remaining budget
+# covers it, and a healthy tick takes about five seconds. A joined run that FAILED or hit
+# contention is graded as itself below -- a fresh run after a failure would skip on the hold
+# it just wrote and read green over a fault the caller has to see, and after contention the
+# lock is still held, which the caller's own retry loop handles.
+fresh=0
+if [[ "$joined" == 1 && "$WAIT_S" -gt 0 ]]; then
+  state="$(show ActiveState)"
+  if [[ "$state" != "activating" && "$state" != "deactivating" &&
+        "$(show Result)" == "success" && "$(show ExecMainStatus)" == "0" ]] &&
+     ! ended_in_contention; then
+    echo "The joined run ended after ${waited}s; it fetched before this request, so a fresh"
+    echo "run is started and graded instead."
+    # Re-stamped for the fresh run: `since` bounds the journal and the contention grep
+    # below, and a stamp left at the joined run's start would grade the fresh run by the
+    # joined run's lines. `started_before` goes back to a REAL monotonic stamp -- the
+    # joined run's -- so the watch can see the new activation replace it.
+    since="$(date '+%Y-%m-%d %H:%M:%S')"
+    started_before="$(show ExecMainStartTimestampMonotonic)"
+    if ! systemctl start --no-block "$UNIT"; then
+      echo "gitops_tick.sh: could not start $UNIT for the fresh run." >&2
+      exit 1
+    fi
+    fresh=1
+    watch_run "$deadline"
+    echo "gitops_tick: joined run ended; started a fresh run and waited $((SECONDS - wait_started - waited))s for it" >&2
+  fi
 fi
 
 echo
@@ -212,7 +265,12 @@ fi
 echo "─────────────────────────────────────────────────────────────────────────────"
 
 state="$(show ActiveState)"
-if [[ "$state" == "activating" || "$state" == "deactivating" ]]; then
+# The fresh run's start is asynchronous (`--no-block`), so at the deadline it may not have
+# replaced the joined run's stamp yet: the unit reads `inactive` with the JOINED run's
+# Result, which would grade the fresh run by a run that is not it. An unchanged stamp means
+# the fresh run was never seen to start, and that is "still in flight" for this script.
+if [[ "$state" == "activating" || "$state" == "deactivating" ]] ||
+   [[ "$fresh" == 1 && "$(show ExecMainStartTimestampMonotonic)" == "$started_before" ]]; then
   echo
   echo "Still running after ${WAIT_S}s — the run is fine, this script stopped watching."
   echo "Follow it with: journalctl -u $UNIT --since '$since' --no-pager"
@@ -231,8 +289,7 @@ echo
 # deploy both read back `Result=success ExecMainStatus=0`, and only the unit's ExecStopPost
 # marker distinguishes them. A genuinely failed unit is different — it stays in `failed`, which
 # is why the branch below can still trust $status.
-if journalctl -u "$UNIT" --since "$since" --no-pager 2>/dev/null |
-  grep -qF "$CONTENTION_MARKER"; then
+if ended_in_contention; then
   echo "Tick did not run: another holder had /var/lock/server-git-tree.lock for the"
   echo "unit's full flock wait. Nothing was deployed and last_run is untouched."
   echo "No alert fires for this — OnFailure cannot fire on a unit systemd considers"
