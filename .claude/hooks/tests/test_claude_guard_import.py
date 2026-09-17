@@ -10,6 +10,7 @@ Run: uv run pytest .claude/hooks
 """
 
 import importlib
+import json
 import os
 import re
 import subprocess
@@ -103,6 +104,63 @@ def test_bootstrap_raises_when_the_deploy_is_missing(tmp_path, monkeypatch):
             if name == "_claude_guard" or name.startswith("claude_guard"):
                 del sys.modules[name]
         sys.modules.update(saved_modules)
+
+
+@pytest.mark.skipif(
+    not _CLAUDE_GUARD_DIR.is_dir(),
+    reason="the deployed claude_guard package is not present, so there is nothing to diff against",
+)
+def test_the_ci_stand_in_matches_the_deployed_tables(claude_guard_stand_in):
+    """conftest.py's stand-in is a second copy by construction; this is what diffs it.
+
+    Skips where the real package is absent (every CI run), since that is exactly where the
+    stand-in is the only copy. Goes red on a deployed host the moment `claude_guard.tables`
+    moves and the stand-in does not — and `prek run` executes this suite before every commit
+    from such a host.
+    """
+    hosts, secret_re = claude_guard_stand_in
+    assert hosts == frozenset(_tables.TRUSTED_SSH_HOSTS)
+    assert secret_re.pattern == _tables.SECRET_PATH_RE.pattern
+    assert secret_re.flags == _tables.SECRET_PATH_RE.flags
+
+
+@pytest.mark.skipif(not UV_BIN.exists(), reason="uv is not present on this machine")
+def test_the_hook_fails_open_when_the_deploy_is_missing(tmp_path):
+    """The shims' contract, one layer down: no package -> one stderr line, exit 0, no stdout.
+
+    `test_hook_shim_fail_open.py` pins this shape for the `.sh` shims' own failures; it walks
+    `*.sh` only, so a failure inside the Python they exec is out of its reach. HOME is pointed
+    at an empty directory so `~/.local/share/claude-guard` is absent; the process is the real
+    entry point under the real `uv run` shape, so nothing in-process (conftest's stand-in
+    included) can reach it.
+    """
+    env = dict(os.environ)
+    env["HOME"] = str(tmp_path)
+    payload = json.dumps(
+        {"tool_name": "Bash", "tool_input": {"command": "ssh daniel-server uptime"}}
+    )
+    proc = subprocess.run(
+        [
+            str(UV_BIN),
+            "run",
+            "--no-sync",
+            "--quiet",
+            "python",
+            str(HOOKS / "auto-approve-readonly.py"),
+            "--permission-request",
+        ],
+        cwd=REPO,
+        env=env,
+        input=payload,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout == ""
+    assert "classifier did not run" in proc.stderr
+    assert str(tmp_path) in proc.stderr
+    assert "Traceback" not in proc.stderr
 
 
 def test_readonly_tables_ssh_objects_are_claude_guards_own():

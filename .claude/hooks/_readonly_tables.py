@@ -14,8 +14,24 @@ loading the hook by path. Same convention as ``_hook_common.py``. Stdlib-only ex
 """
 
 import re
+import sys
 
-import _claude_guard  # noqa: F401  (bootstraps claude_guard onto sys.path)
+# The same fail-open idiom the .sh shims use for a failed cd (test_hook_shim_fail_open.py):
+# one line on stderr, exit 0, nothing on stdout, so the prompt stands. Without this the
+# ImportError propagates as exit 1 with a two-part traceback — the harness treats any
+# nonzero exit other than 2 as non-blocking, so that is fail-open too, but it reads as a
+# crash rather than a classifier declining to run. Raising stays the library behaviour of
+# `_claude_guard` itself (conftest.py and test_claude_guard_import.py rely on it); the exit
+# belongs here, on the module every allow-side entry point imports.
+try:
+    import _claude_guard  # noqa: F401  (bootstraps claude_guard onto sys.path)
+except ImportError as exc:
+    print(
+        f"_readonly_tables: classifier did not run ({exc}) — command falls through to the "
+        "normal permission flow",
+        file=sys.stderr,
+    )
+    sys.exit(0)
 from claude_guard.tables import SECRET_PATH_RE, TRUSTED_SSH_HOSTS
 
 

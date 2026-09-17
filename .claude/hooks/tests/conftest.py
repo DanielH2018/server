@@ -38,11 +38,12 @@ padded, and only when the real package is unreachable from it.
 test this stand-in cannot help -- it runs the real subprocess invocation, so it skips
 (rather than passing on faked data) wherever the real package is absent.
 
-DECIDED: the two values below are a second copy, by construction -- this stand-in exists
-only because CI cannot reach the real one. Keep them in sync with
-`~/.local/share/claude-guard/claude_guard/tables.py`'s `TRUSTED_SSH_HOSTS` and
-`SECRET_PATH_RE` by hand; nothing here can enforce that automatically, since a machine that
-could compare them already has the real package and would never take this branch.
+DECIDED: the two `STAND_IN_*` values below are a second copy, by construction -- this
+stand-in exists only because CI cannot reach the real one. They are module constants rather
+than literals inside the `except` so that a machine WITH the real package can diff them:
+`test_claude_guard_import.py::test_the_ci_stand_in_matches_the_deployed_tables` does, and
+`prek run` executes that test on every commit from a deployed host. CI itself cannot see the
+drift; the deployed hosts' own runs are where it goes red.
 """
 
 import os
@@ -93,22 +94,33 @@ HOOKS = Path(__file__).resolve().parent.parent
 if str(HOOKS) not in sys.path:
     sys.path.insert(0, str(HOOKS))
 
+STAND_IN_TRUSTED_SSH_HOSTS = frozenset({"daniel-server", "daniel-pi"})
+# Byte-for-byte the deployed pattern: the diff test compares `.pattern`, not behaviour.
+STAND_IN_SECRET_PATH_RE = re.compile(
+    r"(\.env|\.ssh(/|\s|$)|id_rsa|id_ed25519|id_ecdsa|\.aws/credentials|\.aws/config|"
+    r"\.gnupg(/|\s|$)|\.netrc|\.pypirc|\.npmrc|/secrets(/|\s|$)|\.git-credentials|"
+    r"\.kube/config|\.docker/config\.json|\.config/gh/hosts\.yml|\.config/gcloud/|"
+    r"\.config/rclone/rclone\.conf|terraform\.tfstate|\.bash_history|\.claude\.json|"
+    r"/etc/shadow|/etc/gshadow|/proc/\S*environ|\.pem($|[^a-z])|\.key($|[^a-z])|"
+    r"\.p12($|[^a-z])|\.pfx($|[^a-z]))",
+    re.IGNORECASE,
+)
+
+
+@pytest.fixture
+def claude_guard_stand_in():
+    """The stand-in's two values, for the test that diffs them against the deployed tables."""
+    return STAND_IN_TRUSTED_SSH_HOSTS, STAND_IN_SECRET_PATH_RE
+
+
 try:
     import _claude_guard  # noqa: F401  (real bootstrap; populates sys.modules on success)
 except ImportError:
     _fake_pkg = types.ModuleType("claude_guard")
     _fake_pkg.__path__ = []  # marks it as a package so `claude_guard.tables` resolves
     _fake_tables = types.ModuleType("claude_guard.tables")
-    _fake_tables.TRUSTED_SSH_HOSTS = frozenset({"daniel-server", "daniel-pi"})
-    _fake_tables.SECRET_PATH_RE = re.compile(
-        r"\.env|\.ssh(/|\s|$)|id_rsa|id_ed25519|id_ecdsa|\.aws/credentials|\.aws/config"
-        r"|\.gnupg(/|\s|$)|\.netrc|\.pypirc|\.npmrc|/secrets(/|\s|$)|\.git-credentials"
-        r"|\.kube/config|\.docker/config\.json|\.config/gh/hosts\.yml|\.config/gcloud/"
-        r"|\.config/rclone/rclone\.conf|terraform\.tfstate|\.bash_history|\.claude\.json"
-        r"|/etc/shadow|/etc/gshadow|/proc/\S*environ|\.pem($|[^a-z])|\.key($|[^a-z])"
-        r"|\.p12($|[^a-z])|\.pfx($|[^a-z])",
-        re.IGNORECASE,
-    )
+    _fake_tables.TRUSTED_SSH_HOSTS = STAND_IN_TRUSTED_SSH_HOSTS
+    _fake_tables.SECRET_PATH_RE = STAND_IN_SECRET_PATH_RE
     _fake_pkg.tables = _fake_tables
     sys.modules["claude_guard"] = _fake_pkg
     sys.modules["claude_guard.tables"] = _fake_tables

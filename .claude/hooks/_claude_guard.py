@@ -20,11 +20,10 @@ package is not already importable, then imports `claude_guard` itself so a calle
 # decision that looks current but was pinned at whatever the fallback last held — nobody sees
 # that it fell behind. Crashing here is what the allow-side hook's contract requires:
 # `SSH_HOSTS`/`_SSH_SECRET` gate an auto-approve, and a hook that cannot import its own tables
-# must not approve anything at all. Measured, not assumed: the shim `exec`s this process, so
-# the ImportError surfaces as a nonzero exit with the traceback on stderr, not a clean
-# no-output exit — Claude Code's own handling of a hook that exits that way is outside what
-# this repo controls, but the one thing this module guarantees is that no auto-approve
-# decision comes out of it.
+# must not approve anything at all. This module raises; `_readonly_tables.py`, the module
+# every allow-side entry point imports, turns that into the shims' own fail-open shape (one
+# stderr line, exit 0, no stdout). `test_the_hook_fails_open_when_the_deploy_is_missing`
+# measures that end to end.
 """
 
 import sys
