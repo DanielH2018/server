@@ -176,7 +176,9 @@ def swallowed_verdicts(
     paused by hand — and it stays until one side is redeployed. A fleet-wide rejection
     (every token gone — Kuma restored from an old backup) takes this tile's own token with
     it; the three HC_ROUTED_TAGS crons page that case through healthchecks.io within their
-    own cycle, which is why they stay excluded here too.
+    own cycle, which is why they stay excluded here too. A rejection wins the message over
+    a swallowed DOWN on another tag in the same window: the tile is red either way, and the
+    swallowed one is named on the next cycle once the rejection is cleared.
 
     A tag in HC_ROUTED_TAGS is not counted either: its own script already pages a lost push
     through healthchecks.io.
