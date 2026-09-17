@@ -150,6 +150,19 @@ the same way in every brief:
 
 Uncertain between two tiers? Take the higher one — the cost of a wrong tier is one extra skeptic.
 
+**A fourth bucket, `NEEDS VALIDATION`, for a finding the reviewer cannot settle from the repo.**
+A reviewer that traces a real boundary and then hits a fact only the live system holds — the
+router's port-forward rule, how a VPN client is masqueraded, what a pinned image serves under a
+path — must not guess either way and must not drop the lead. It returns it in this bucket with:
+the `file:line` trace, the **exact fact** that decides it, and an **owner-observed check** (a
+config to read, a log field to look at, a command that sends no traffic to a service). No
+severity. Step 6 dispatches a skeptic per lead exactly as it does for High/Medium, and that
+skeptic's job is to *resolve the fact* against live state, which the reviewer could not touch.
+A lead the skeptic resolves becomes a finding at the tier the resolved fact supports, or a
+refutation; one the skeptic cannot resolve ships in the report as a lead, never as a finding.
+(Adapted from the `needs_validation` verdict in `cloudflare/security-audit-skill`, whose
+2026-09-17 trial on this repo produced 8 leads against 1 confirmed finding.)
+
 ## 5. Collect, then deduplicate (before anything is verified)
 **Manifest what came back first.** List every agent you dispatched in step 3 and, next to each,
 whether it returned findings, returned an explicit "clean", or returned nothing. An agent that
@@ -157,6 +170,22 @@ died, errored, or came back empty leaves a **coverage hole** — report it as an
 never as a clean one. This is the step-6 manifest rule one level up: silence from a reviewer is a
 missing answer, not a passing grade. Re-dispatch a failed agent if the run is still cheap; if not,
 name the gap in the report.
+
+**Write that manifest as the run's coverage ledger**, `evals/review_coverage/<date>.json` — one
+row per domain (all six, including the ones step 1 scoped out as `out_of_scope`), with the
+agent, its status (`covered` / `clean` / `hole` / `out_of_scope`), the paths it named as
+reviewed, and the fingerprints of its findings and `NEEDS VALIDATION` leads. The shape and the
+rules are in `evals/review_coverage/README.md`; `REVIEW_DOMAINS` in
+`scripts/dev/review_metrics.py` is the domain list. Validate it before step 6:
+
+```bash
+uv run python scripts/dev/review_metrics.py --check-coverage evals/review_coverage/<date>.json
+```
+
+A `hole` row needs a reason and a `clean` row needs the paths it cleared, so "nobody looked"
+and "looked and found nothing" are two different rows in the file rather than the same
+silence in the report. `evals/review_outcomes.jsonl` (step 7) counts what the run found; this
+file records what it looked at.
 
 Then merge findings that several agents surfaced — e.g. a healthcheck gap seen by both the security and
 container reviewers is one finding, not two.
@@ -171,7 +200,10 @@ Reviews here have a misfire history (an Authelia `trusted_proxies` proposal that
 crash-looped it; a PEP-758 `except X, Y:` misread as a syntax bug; and in the 2026-08-15 run both a
 proposed `N8N_PROXY_HOPS` change and a Pi `:latest`-pinning "fix" would have caused damage) — a
 wrong finding costs the operator more than a missed one. So: for each deduplicated High/Medium
-finding dispatch one **`skeptic`** agent, all in one parallel message. That agent carries the whole
+finding, and for each `NEEDS VALIDATION` lead from step 4, dispatch one **`skeptic`** agent, all
+in one parallel message. A lead's brief names the exact fact to resolve and the owner-observed
+check the reviewer proposed; the skeptic runs that check against live state and returns
+CONFIRMED (with the tier the resolved fact supports), REFUTED, or UNCERTAIN. That agent carries the whole
 refutation contract — where to look (role CLAUDE.md, tasks/templates, `check.py` + crons,
 don't-re-flag memories, `git log`/`git blame`, `gh pr list`, `probe.py`/`kubectl` for live state),
 the rule that a comment or a reassuring name is not evidence, and the three verdicts. Do not restate

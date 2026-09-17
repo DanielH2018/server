@@ -81,6 +81,94 @@ def validate_row(obj: dict) -> list[str]:
     return problems
 
 
+# --- coverage ledger -------------------------------------------------------------------
+#
+# One file per review run under evals/review_coverage/<date>.json: a JSON array with one row
+# per review domain. The row says what the domain's agent did — returned findings, returned an
+# explicit clean, or returned nothing — so "no finding here" and "nobody looked here" are
+# different rows rather than the same silence. Adapted from the coverage ledger in
+# cloudflare/security-audit-skill, cut down to homelab-review's own unit, the domain.
+COVERAGE_DIR = REPO / "evals" / "review_coverage"
+
+# The six areas homelab-review's step 1 dispatches, by the name findings.py --domain uses.
+# A domain renamed in the skill fails here by name instead of validating an empty set.
+REVIEW_DOMAINS = frozenset(
+    {"security", "network", "backup-observability", "cicd", "container", "docs"}
+)
+
+# covered: the agent returned findings or leads. clean: it returned an explicit "nothing found"
+# for the paths it names. hole: it returned nothing, errored, or was never dispatched — never
+# a passing grade. out_of_scope: the operator scoped the run to a subset (step 1).
+COVERAGE_STATUSES = frozenset({"covered", "clean", "hole", "out_of_scope"})
+
+_COVERAGE_REQUIRED = (
+    "date",
+    "domain",
+    "agent",
+    "status",
+    "reviewed",
+    "findings",
+    "leads",
+)
+
+
+def validate_coverage(rows: list[dict]) -> list[str]:
+    """Return the schema problems in one run's coverage ledger, or [] if it's clean.
+
+    A ledger is one row per REVIEW_DOMAINS member. A `covered` row names what it reviewed and
+    carries at least one finding or lead; a `clean` row names what it reviewed and carries
+    none; a `hole` row carries a `reason` and no evidence; an `out_of_scope` row carries none.
+    """
+    problems = []
+    if not isinstance(rows, list):
+        return ["ledger is not a list"]
+    seen: dict[str, int] = {}
+    for i, row in enumerate(rows):
+        base = f"row {i}"
+        if not isinstance(row, dict):
+            problems.append(f"{base}: not an object")
+            continue
+        for field in _COVERAGE_REQUIRED:
+            if field not in row:
+                problems.append(f"{base}: missing field: {field}")
+        domain = row.get("domain")
+        if domain not in REVIEW_DOMAINS:
+            problems.append(f"{base}: unknown domain: {domain!r}")
+        else:
+            seen[domain] = seen.get(domain, 0) + 1
+        status = row.get("status")
+        if status not in COVERAGE_STATUSES:
+            problems.append(f"{base}: unknown status: {status!r}")
+            continue
+        for field in ("reviewed", "findings", "leads"):
+            if field in row and not (
+                isinstance(row[field], list)
+                and all(isinstance(x, str) for x in row[field])
+            ):
+                problems.append(f"{base}: {field} is not a list of strings")
+        reviewed = row.get("reviewed") or []
+        evidence = (row.get("findings") or []) + (row.get("leads") or [])
+        if status in ("covered", "clean") and not reviewed:
+            problems.append(f"{base}: {status} row names nothing it reviewed")
+        if status == "covered" and not evidence:
+            problems.append(f"{base}: covered row carries no finding or lead")
+        if status in ("clean", "hole", "out_of_scope") and evidence:
+            problems.append(f"{base}: {status} row carries findings or leads")
+        if status == "hole" and not row.get("reason"):
+            problems.append(f"{base}: hole row has no reason")
+    for domain in sorted(REVIEW_DOMAINS):
+        n = seen.get(domain, 0)
+        if n == 0:
+            problems.append(f"domain absent from the ledger: {domain}")
+        elif n > 1:
+            problems.append(f"domain appears {n} times: {domain}")
+    return problems
+
+
+def load_coverage(path: Path) -> list[dict]:
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
 def load_outcomes(path: Path = OUTCOMES) -> list[dict]:
     if not path.is_file():
         return []
@@ -150,7 +238,18 @@ def main() -> None:
     parser.add_argument(
         "--json", action="store_true", help="emit the table as JSON instead of text"
     )
+    parser.add_argument(
+        "--check-coverage",
+        type=Path,
+        metavar="LEDGER",
+        help="validate one evals/review_coverage/<date>.json ledger and exit 1 on a problem",
+    )
     args = parser.parse_args()
+    if args.check_coverage:
+        problems = validate_coverage(load_coverage(args.check_coverage))
+        for p in problems:
+            print(p, file=_sys.stderr)
+        raise SystemExit(1 if problems else 0)
     table = build_table(load_outcomes())
     if args.json:
         print(json.dumps(table, indent=2))
