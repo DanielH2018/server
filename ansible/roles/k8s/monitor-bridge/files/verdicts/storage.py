@@ -293,11 +293,17 @@ def longhorn_redundancy_verdict(
     )
 
 
+def _gib(n: float) -> str:
+    return "%.1fG" % (n / 1024**3)
+
+
 def pvc_fullness_verdict(
     watched: list[tuple[str, str, float]],
     claims: float | None,
     max_pct: float,
     min_claims: float,
+    floors: dict[str, int] | None = None,
+    free: dict[str, float] | None = None,
 ) -> tuple[str, str, str]:
     """(breach_msg, census_msg, summary_msg) for PVC fullness. Each is "" when that arm is silent.
 
@@ -306,6 +312,18 @@ def pvc_fullness_verdict(
     PVC_CLAIMS_CONSECUTIVE. A claim that IS reporting and IS full outranks a complaint about the
     ones that are not — same ordering as check_disk, and for the same reason.
 
+    The free-bytes floor (#1875) is the second breach arm, for a claim whose peak is a STEP
+    rather than a slope: valheim-server sat at 79% for days and reached 100% inside one
+    15-minute updater cycle, because a Steam update stages a fourth copy of the install before
+    swapping it in. A percentage cannot see that coming — 85% of a 10 Gi claim is 1.5 G of
+    headroom against a 2.2 G copy — so such a claim declares the size of its largest transient
+    and breaches while its free bytes are below it, whatever its percentage reads. A rate
+    signal on used bytes was rejected: the updater's cycle is 15 minutes and this check runs
+    every 300 s, so a window wide enough to be stable fires after the ENOSPC as often as before
+    it. A declared floor whose claim reports no free bytes is a BREACH, not silence — the same
+    rule as snapshot_headroom_verdict, because an arm that goes quiet when its input vanishes
+    reads exactly like one with nothing to report.
+
     Args:
       watched: (pvc, namespace, pct_full) for every claim this arm judges, exclusions already
         dropped.
@@ -313,7 +331,11 @@ def pvc_fullness_verdict(
         the metric family is being scraped at all. None when the count query returned nothing.
       max_pct: Fullness percentage at which a claim breaches.
       min_claims: The census floor below which fullness is UNKNOWN rather than OK.
+      floors: pvc -> minimum free bytes, from PVC_MIN_FREE. Empty or None when none declared.
+      free: pvc -> free bytes as scraped, exclusions already dropped; only read when `floors` is.
     """
+    floors = floors or {}
+    free = free or {}
     if not watched:
         # A DIFFERENT fault from a thin claim census: the ratio query returned nothing at all,
         # which looks exactly like "no claim is full" and is not the same fact. It also means
@@ -332,6 +354,30 @@ def pvc_fullness_verdict(
     breach_msg = (
         "PVC over %.0f%%: %s" % (max_pct, ", ".join(breaching[:5])) if breaching else ""
     )
+    namespace_of = {pvc: ns for pvc, ns, _pct in watched}
+    under_floor = []
+    unseen = []
+    for pvc, floor in sorted(floors.items()):
+        if pvc not in free:
+            unseen.append(pvc)
+        elif free[pvc] < floor:
+            under_floor.append(
+                "%s/%s %s free < %s"
+                % (namespace_of.get(pvc, "?"), pvc, _gib(free[pvc]), _gib(floor))
+            )
+    floor_msgs = []
+    if under_floor:
+        floor_msgs.append(
+            "PVC under its free-space floor (its largest transient would not fit): %s"
+            % ", ".join(under_floor[:5])
+        )
+    if unseen:
+        floor_msgs.append(
+            "PVC_MIN_FREE names %s, which reports no free bytes (excluded, renamed or not "
+            "scraped) — its floor is UNMONITORED, not OK" % ", ".join(unseen)
+        )
+    if floor_msgs:
+        breach_msg = "; ".join(([breach_msg] if breach_msg else []) + floor_msgs)
     census_msg = ""
     if claims is None or claims < min_claims:
         seen = "no" if claims is None else "only %d" % int(claims)
@@ -347,6 +393,14 @@ def pvc_fullness_verdict(
         worst[0],
         worst[2],
     )
+    if floors:
+        # Named on the green line too, so a floor that stopped being evaluated is visible as
+        # its absence here rather than indistinguishable from one that is passing.
+        summary += "; floors held: %s" % ", ".join(
+            "%s %s free >= %s" % (pvc, _gib(free[pvc]), _gib(floor))
+            for pvc, floor in sorted(floors.items())
+            if pvc in free
+        )
     return breach_msg, census_msg, summary
 
 
@@ -371,14 +425,37 @@ def parse_snapshot_caps(raw: str) -> dict[str, int]:
     declared value sound; `tests/test_check_snapshot_headroom.py` derives the capped set from the
     tree and fails when a role caps a volume this map does not name.
     """
-    caps: dict[str, int] = {}
+    return parse_pvc_bytes(raw)
+
+
+def parse_pvc_floors(raw: str) -> dict[str, int]:
+    """Pure: the `PVC_MIN_FREE` env string as a PVC-name -> minimum-free-bytes map (#1875).
+
+    Same `<pvc>=<bytes>` shape and the same drop-don't-raise rule as parse_snapshot_caps, and
+    for the same reason a declared value is sound: the transient a floor stands for is a fact
+    about the workload's own updater, which only its role knows, and nothing exports it. The
+    valheim role declares its transient as `valheim_k8s_server_update_transient_bytes`;
+    `tests/test_check_pvc_floors.py` reads that declaration from the tree and fails when the
+    value here drifts from it.
+    """
+    return parse_pvc_bytes(raw)
+
+
+def parse_pvc_bytes(raw: str) -> dict[str, int]:
+    """Pure: a `<pvc>=<bytes>` comma-separated string as a name -> positive-int map.
+
+    A malformed or non-positive entry is DROPPED rather than raising; both callers report a
+    non-empty string that parsed to nothing as a breach, so a dropped entry cannot read as
+    "nothing to watch".
+    """
+    parsed: dict[str, int] = {}
     for entry in raw.split(","):
         name, _, value = entry.partition("=")
         name, value = name.strip(), value.strip()
         if not name or not value.isdigit() or int(value) <= 0:
             continue
-        caps[name] = int(value)
-    return caps
+        parsed[name] = int(value)
+    return parsed
 
 
 def snapshot_used_by_pvc(
