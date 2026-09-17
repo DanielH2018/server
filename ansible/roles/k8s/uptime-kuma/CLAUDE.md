@@ -92,7 +92,11 @@ while the k3s API was down), 2026-09-06 `http=404` x226, 2026-09-09 `rc=7` x317 
 for 6h). A Kuma-side 4xx on ONE cron's tag while its siblings land is the token class the issue
 names, and it has not occurred. So no aggregate alert was added: measured against that
 population it would have paged four times for four causes that each paged already, and never
-for the class it would exist for. The census, per host and code:
+for the class it would exist for. What was added instead (#1869, 2026-09-17) is monitor-bridge's
+**Swallowed Push Verdicts**, which pages on a lost `status=down` push only when a sibling cron
+landed its push in the same window — the three bursts above have no landed sibling and read as
+fleet-wide there, while release-staleness-check's lone `http=500` on 2026-09-10 13:01 and
+setup-drift-check's lost DOWN of 2026-08-29 16:47 do page. The census, per host and code:
 
 ```
 sum by (machine, code) (count_over_time({job="syslog"}

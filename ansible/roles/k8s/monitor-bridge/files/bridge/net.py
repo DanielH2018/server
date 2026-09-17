@@ -18,6 +18,7 @@ read `cfg.PROM_ORIGIN`, and the gates test renders them to prove where the origi
 """
 
 import json
+import time
 from typing import Any
 import urllib.error
 import urllib.parse
@@ -238,6 +239,41 @@ def loki_vector(cfg: Config, query: str) -> list[tuple[dict, float]]:
         (series.get("metric", {}), float(series["value"][1]))
         for series in _instant_query(cfg.LOKI_URL, "/loki/api/v1/query", query, "loki")
     ]
+
+
+def loki_lines(
+    cfg: Config, logql: str, window_s: int, limit: int
+) -> list[tuple[int, str]]:
+    """Range LogQL query: the raw lines matching `logql` over the last `window_s` seconds.
+
+    Returns [(loki_ts_ns, line), ...] oldest first. The metric helpers above answer "how
+    many"; this one exists for a verdict that needs ORDER — which of a cron's lines is the
+    most recent — and no LogQL metric function returns a line's timestamp. A caller that
+    receives exactly `limit` lines has hit the cap and holds a truncated window, and has to
+    say so rather than decide on the part it got.
+
+    Measured 2026-09-17 against the live Loki: `{job="syslog"}` filtered to the push-outcome
+    lines returned 548 lines over 3h in under a second, so a 5000 cap is ~9x the population.
+    """
+    now_ns = time.time_ns()
+    params = {
+        "query": logql,
+        "limit": str(limit),
+        "start": str(now_ns - window_s * 1_000_000_000),
+        "end": str(now_ns),
+        "direction": "forward",
+    }
+    url = cfg.LOKI_URL + "/loki/api/v1/query_range?" + urllib.parse.urlencode(params)
+    data = _get_json(url)
+    if data.get("status") != "success":
+        raise RuntimeError("loki query status=%s" % data.get("status"))
+    lines = [
+        (int(ts), line)
+        for stream in data.get("data", {}).get("result", [])
+        for ts, line in stream.get("values", [])
+    ]
+    lines.sort()
+    return lines
 
 
 def log_error_counts(

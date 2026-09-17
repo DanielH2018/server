@@ -50,6 +50,7 @@ class IoConfig:
     SHIPPER_DROPPED_SERVER_METRIC: str
     SHIPPER_DROPPED_WINDOW: str
     SHIPPER_DROPPED_MAX: float
+    SWALLOWED_VERDICTS_WINDOW_S: int
     DISCORD_WEBHOOK_URL: str = field(repr=False)
     DISCORD_CROWDSEC_WEBHOOK_URL: str = field(repr=False)
     DISCORD_GITOPS_WEBHOOK_URL: str = field(repr=False)
@@ -311,6 +312,13 @@ def io_config(
         # was rejected on its own evidence: that episode ran 11 cycles, so a streak would have
         # removed 3 of them and left the tile red for 40 minutes.
         SHIPPER_DROPPED_MAX=_num("SHIPPER_DROPPED_MAX", "3000"),
+        # How far back check_swallowed_verdicts reads the host crons' push-outcome lines. Long
+        # enough that a lost DOWN verdict stays paged past a cycle or two of Loki ingest lag,
+        # and past the next run of a */30 producer that may land; short enough that the fetch
+        # stays a few hundred lines. The daily producers the check exists for run once inside
+        # any window, so the window does not need to reach their period — the page fires
+        # within a cycle and the tile's own deadline reports the same verdict a day later.
+        SWALLOWED_VERDICTS_WINDOW_S=_int("SWALLOWED_VERDICTS_WINDOW_S", "10800"),
         # Discord delivery: Kuma fires every alert by POSTing to its Discord webhook
         # (monitor_discord_webhook_url). A rotated/revoked/deleted webhook leaves every monitor
         # green-in-UI while Discord goes silent — the one link in the alert chain no other

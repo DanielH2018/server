@@ -95,6 +95,61 @@ def test_parse_syslog_down_line_survives_rsyslog_truncation():
     assert msg.startswith("push failed: backups in Error state:")
 
 
+# The two pushers #1787 named as writing no `status=` line. Both are real lines from Loki on
+# 2026-09-14 and 2026-09-17 (the live-drift one with `up` swapped for `down` — it has not been
+# DOWN inside Loki's retention), so a reader that stops matching either fails here rather than
+# reading "no logs" the way the 2026-08-22 query did.
+SYSLOG_SECRET_ROTATION_AUDIT = (
+    "2026-09-14T08:00:01.885103+00:00 daniel-box secret-rotation-audit: status=down unlanded "
+    "rotation branch secret-rotate/2026-09-13-0902 is on origin >6h"
+)
+SYSLOG_LIVE_DRIFT = (
+    "2026-09-17T05:45:02.793486+00:00 daniel-box live-drift-check: status=down 2 object(s) "
+    "changed since applied"
+)
+# kuma-push-lib.sh's final-failure line since the retry landed (#1010), verbatim from the
+# daniel-box journal, and the transient line that precedes it twice.
+SYSLOG_PUSH_FAILED_WITH_CODE = (
+    "2026-09-10T13:01:13.997804+00:00 daniel-box release-staleness-check: push failed "
+    "(http=500 rc=0) (status=down: homepage: changed since applied: "
+    "ansible/roles/k8s/homepage/templates/config/custom.css.j2)"
+)
+SYSLOG_PUSH_FAILED_TRANSIENT = (
+    "2026-09-10T13:00:41.000000+00:00 daniel-box release-staleness-check: push failed "
+    "transiently (http=500 rc=0) (status=down: homepage: changed since applied: "
+    "ansible/roles/k8s/homepage/templates/config/custom.css.j2), retrying in 30s"
+)
+
+
+def test_parse_syslog_down_line_reads_the_two_pushers_1787_named():
+    assert alerts.parse_syslog_down_line(SYSLOG_SECRET_ROTATION_AUDIT) == (
+        "secret-rotation-audit",
+        "unlanded rotation branch secret-rotate/2026-09-13-0902 is on origin >6h",
+    )
+    assert alerts.parse_syslog_down_line(SYSLOG_LIVE_DRIFT) == (
+        "live-drift-check",
+        "2 object(s) changed since applied",
+    )
+
+
+def test_parse_syslog_down_line_unwraps_the_retry_era_failed_push():
+    # The `(http=… rc=…)` pair is the failure class, and it belongs in the message no more than
+    # the "push failed (status=down: " scaffolding does — the prefix already says the push was
+    # lost.
+    name, msg = alerts.parse_syslog_down_line(SYSLOG_PUSH_FAILED_WITH_CODE)
+    assert name == "release-staleness-check"
+    assert msg == (
+        "push failed: homepage: changed since applied: "
+        "ansible/roles/k8s/homepage/templates/config/custom.css.j2"
+    )
+
+
+def test_parse_syslog_down_line_drops_the_transient_retry_line():
+    # Two of these precede every final failure; listed, they triple one lost push into three
+    # episodes, and a push that lands on retry has the cron's own status= line as its record.
+    assert alerts.parse_syslog_down_line(SYSLOG_PUSH_FAILED_TRANSIENT) is None
+
+
 def test_parse_syslog_down_line_ignores_up_and_unrelated_lines():
     assert alerts.parse_syslog_down_line("not a syslog line") is None
     assert (

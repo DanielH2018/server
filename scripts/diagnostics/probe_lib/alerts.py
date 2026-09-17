@@ -86,11 +86,15 @@ def parse_down_line(line):
 # longhorn-backup-health (465 lines), manifest-prune-check (2) and claude-otel-health (1) — so
 # the filter is precise, not a net that drags in unrelated syslog traffic.
 #
-# COVERAGE IS PARTIAL AND DELIBERATE. Two pushers emit no `status=` token at all and stay
-# invisible here: secret-rotation-audit logs a bare reason string, and live_drift_check's cron
-# pipes nothing to `logger`. Both fixes are one-line edits to files this change does not own
-# (roles/k8s/.../secret-rotation-audit.sh.j2 and setup/k3s/tasks/health-crons.yml). Confirmed
-# absent, not merely unmatched: a 7-day Loki query for either name returned "no logs".
+# Every pusher this reads emits the `status=` token, and the two that once did not are pinned:
+# secret-rotation-audit logged a bare reason string and live_drift_check's cron piped nothing
+# to `logger` until 2026-08-22 (467983961), which is why a 7-day Loki query for either name
+# returned "no logs" then. Their lines are the fixtures in
+# scripts/diagnostics/tests/test_probe_alerts_parsing.py, and #1787 was filed off this comment's
+# earlier wording — three secret-rotation-audit episodes were already in `alerts --days 7` on
+# the day it was closed. What stays out of reach is heartbeat EXPIRY: a push monitor also goes
+# DOWN when nothing pushes, which writes no line anywhere, so this view is a lower bound against
+# Prometheus `monitor_status` by construction.
 #
 # daniel-pi WAS invisible here for two independent reasons, and fixing either alone changed
 # nothing. A real "Daniel Pi Recovery" DOWN on 2026-08-29 — autoheal exited and stayed down
@@ -118,8 +122,18 @@ _SYSLOG_LINE_RE = re.compile(
 # The closing paren is OPTIONAL because rsyslog truncates a long line — observed on
 # longhorn-backup-health, whose status message runs past the limit and arrives with no closing
 # paren at all. Anchoring on `\)$` dropped those lines to the raw fallback below, printing the
-# "push failed (status=down: " scaffolding as if it were the message.
-_SYSLOG_PUSH_FAILED_RE = re.compile(r"^push failed \(status=down:\s*(?P<msg>.*?)\)?$")
+# "push failed (status=down: " scaffolding as if it were the message. The `(http=… rc=…)` pair
+# is optional for the same reason in the other direction: kuma-push-lib.sh has logged it since
+# the retry landed (#1010), the Pi's health.log and the pre-retry lines carry none, and this
+# reader followed neither until 2026-09-17 — every retry-era lost push printed the whole
+# scaffolding as its message. The library's `push failed transiently` line is NOT a verdict
+# record (the final line follows it, or the push lands and the cron's own `status=` line is
+# the record), so it is dropped rather than listed as an episode of its own; monitor-bridge's
+# check_swallowed_verdicts excludes it in LogQL for the same reason.
+_SYSLOG_PUSH_FAILED_RE = re.compile(
+    r"^push failed \((?:http=\S+ rc=\S+\) \()?status=down:\s*(?P<msg>.*?)\)?$"
+)
+_SYSLOG_TRANSIENT_RE = re.compile(r"^push failed transiently \(")
 _SYSLOG_STATUS_RE = re.compile(r"^status=down\s*(?P<msg>.*)$")
 # The rsyslog-shaped prefix's second token, e.g. "2026-09-03T13:05:06+00:00 daniel-pi
 # pi-recovery-health: ...". Verified against the Pi's real health.log (`hostname` there prints
@@ -147,6 +161,8 @@ def parse_syslog_down_line(line):
     if not m:
         return None
     rest = m["rest"]
+    if _SYSLOG_TRANSIENT_RE.match(rest):
+        return None
     hit = _SYSLOG_STATUS_RE.match(rest)
     if hit:
         return m["name"], hit["msg"].strip()

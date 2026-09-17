@@ -102,7 +102,7 @@ EXPORTER_DEPENDENT = {
 # these (pushes `up` with a skip msg so their push heartbeats stay alive) so only Loki Reachable
 # pages. Loki being UP but a shipper not shipping is a different signal Loki Log Ingestion still
 # surfaces (it evaluates whenever Loki is reachable). Guarded by a test against the registry.
-LOKI_DEPENDENT = frozenset({"loki_ingestion"})
+LOKI_DEPENDENT = frozenset({"loki_ingestion", "swallowed_verdicts"})
 
 # B2-reachability gate — the third peer of the Prometheus and Loki gates (see check_b2_reachable /
 # b2_reachable in run_once), and the fix for G2/G4 of docs/b2-transaction-cap-monitoring-gaps.md.
