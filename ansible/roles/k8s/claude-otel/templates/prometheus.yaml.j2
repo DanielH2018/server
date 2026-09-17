@@ -823,6 +823,10 @@ spec:
       # kubernetes_sd_configs then discovers zero targets and the cadvisor job silently reports
       # no series rather than erroring.
       serviceAccountName: prometheus
+      # Tier 1: monitor-bridge (itself homelab-critical) reads this Prometheus every cycle for
+      # its disk, memory, OOM, restart and PVC verdicts — see `DECIDED: claude-otel tiers` in
+      # this role's CLAUDE.md.
+      priorityClassName: homelab-critical
       enableServiceLinks: false
       securityContext:
         runAsUser: 65534

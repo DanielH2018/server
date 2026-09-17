@@ -11,6 +11,27 @@ read them. Their Services stay ClusterIP; the `hostIP` pin is what keeps the nod
 listener off the LAN. Tempo's second port (otlp-grpc 4317) has no `hostPort` on purpose:
 the collector owns 4317, and two hostPorts on one number wedge a pod in `Pending`.
 
+## Eviction tiers
+
+DECIDED: claude-otel tiers — Prometheus is `homelab-critical`; the other five pod templates
+are `homelab-best-effort`. Every pod template here names a class since 2026-09-17 (#1851).
+Before that none did, which placed the whole stack at priority 0, below `homelab-best-effort`
+(1000) — `roles/setup/k3s/templates/priorityclass.yaml.j2` explains why that class exists
+as a real value rather than as the absence of one.
+
+Prometheus earns tier 1 because tier 1 names alerting in its own description ("edge, auth,
+DNS, WAF, registry, alerting") and monitor-bridge, itself tier 1, reads it every cycle:
+`CLUSTER_PROMETHEUS_URL` and `PROMETHEUS_URL` in `monitor-bridge/templates/env-secret.yaml.j2`
+both point at this Prometheus, and the disk, memory, OOM, restart, PVC-fullness and
+scrape-target verdicts all read from it. Evicting Prometheus under pressure would degrade the
+bridge's verdicts at the moment pressure makes them matter. The exporters it scrapes
+(kube-state-metrics here, node-exporter and gpu-exporter in their own roles) stay tier 4: a
+lost exporter surfaces loudly as `up == 0` through the scrape-target check, so the exporter
+does not need to outlive the thing that reports it missing. Grafana, Loki, Tempo and the
+collector are dashboards and Claude Code telemetry, which is tier 4 by the class's own
+description. `ansible/tests/k8s/test_pod_template_hygiene.py` enforces that every
+long-running pod template names one of the four classes.
+
 ## Grafana logs in through Authelia (OIDC), and the admin form stays on
 
 Grafana is an OIDC client of the Authelia portal — client `grafana` in

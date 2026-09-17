@@ -84,6 +84,9 @@ spec:
         app: loki
         netpol-baseline: enforced
     spec:
+      # Tier 4, with prometheus.yaml.j2 the one exception — see `DECIDED: claude-otel tiers`
+      # in this role's CLAUDE.md.
+      priorityClassName: homelab-best-effort
       enableServiceLinks: false
       securityContext:
         runAsUser: 10001

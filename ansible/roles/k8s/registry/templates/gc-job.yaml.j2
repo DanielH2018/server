@@ -31,6 +31,7 @@ spec:
         runAsGroup: 1000
         fsGroup: 1000
       automountServiceAccountToken: false
+      enableServiceLinks: false
       containers:
         - name: gc
           image: {{ registry_k8s_image }}

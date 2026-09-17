@@ -42,6 +42,9 @@ spec:
         # sqlite3.connect() died with "unable to open database file" and crash-looped.
         # fsGroup makes the kubelet chown the volume to this group at mount.
         fsGroup: {{ pgid }}
+      # No serviceAccountName and the poller never talks to the API, so the default-SA token
+      # would only ever sit unused in the pod.
+      automountServiceAccountToken: false
       priorityClassName: homelab-best-effort
       # Preference, never a pin: daniel-box carries the storage- and VIP-pinned workloads and runs the hotter of the two nodes, so latency-insensitive services default here.
       # Weighted so the pod still schedules if daniel-server is cordoned or full.

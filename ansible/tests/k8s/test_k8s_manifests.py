@@ -11,8 +11,10 @@ The four split along those consequences on 2026-09-02: the moved VIP is
 `test_k8s_manifests_metallb.py`, the corrupted session and the ungated or unprotected edge
 are `test_k8s_manifests_routes.py`, and the read-only RBAC that keeps Ansible the only write
 path is `test_k8s_manifests_rbac.py`. What stays here is pod-level hygiene — nothing mounts
-over the ServiceAccount token path, no Deployment injects service-link env — plus two guards
-on the k8s play itself. The renderer and inventory vars they share are `_manifest_guards.py`.
+over the ServiceAccount token path — plus two guards on the k8s play itself. Pod-template
+hygiene the whole fleet must satisfy (priority tier, SA token, service links) is
+`test_pod_template_hygiene.py`. The renderer and inventory vars shared here are
+`_manifest_guards.py`.
 
 Run: uv run pytest ansible/tests/k8s/test_k8s_manifests.py
 """
@@ -124,34 +126,12 @@ def test_no_template_names_a_mount_under_run_secrets():
     assert not offenders, f"ServiceAccount-token-shadowing mounts: {offenders}"
 
 
-def test_every_deployment_disables_service_link_env_vars():
-    """Kubernetes' legacy Docker-link env vars are read as config by some apps.
-
-    It injects <NAME>_SERVICE_HOST, <NAME>_PORT_<n>_TCP and so on for every Service in the
-    namespace. Any app that reads its own config from <NAME>_* env vars then picks them up as
-    configuration. Authelia did, and exited before serving anything (daniel-box, 2026-08-02):
-
-        error occurred performing deprecation mapping for keys 'server.host', 'server.port',
-        and 'server.path' to new key server.address: the new key already exists with value
-        'tcp4://:9091' but the deprecated keys and the new key can't both be configured
-
-    Triggering it needs only that a Service name match an app's env-var prefix, which is the
-    normal case in this namespace — so the guard covers every workload, not just Authelia.
-    """
-    for entry in _k8s_entries():
-        tpl = K8S / entry["name"] / "templates" / "deployment.yaml.j2"
-        if not tpl.exists():
-            continue
-        rendered = _render(
-            tpl,
-            container_item=entry,
-            **_DEPLOYMENT_STUBS,
-            **_role_defaults(entry["name"]),
-        )
-        for doc in yaml_fast.safe_load_all(rendered):
-            assert doc["spec"]["template"]["spec"].get("enableServiceLinks") is False, (
-                f"{entry['name']} inherits Docker-link env vars for every Service in the namespace"
-            )
+# test_every_deployment_disables_service_link_env_vars lived here until 2026-09-17 and MOVED
+# to test_pod_template_hygiene.py as test_every_pod_template_disables_service_link_env_vars.
+# It rendered `deployment.yaml.j2` per role through `_render`, so 16 Deployments in other
+# filenames and every DaemonSet, Job and CronJob were never checked, and deleting the field
+# from claude-otel/templates/grafana.yaml.j2 passed the suite (#1858). The replacement reads
+# the whole rendered corpus. The Authelia incident that justifies the guard is in its docstring.
 
 
 # test_routes_stay_lan_only_while_the_k8s_edge_has_no_crowdsec lived here and was REMOVED
