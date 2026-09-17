@@ -75,6 +75,8 @@ from lib.k8s_roles import (
     SKIP_ROLES,
     is_manifest_template,
     k8s_entries,
+    misplaced_template_lookups,
+    non_manifest_documents,
 )
 from lib.k8s_schema import (
     K8S_SCHEMA_VERSION,
@@ -128,6 +130,8 @@ __all__ = [
     "is_manifest_template",
     "k8s_entries",
     "load_yaml",
+    "misplaced_template_lookups",
+    "non_manifest_documents",
     "main",
     "make_env",
     "make_lookup",
@@ -303,16 +307,38 @@ def main() -> int:
         pvc_names.update(volume_claim_pvc_names(role, ctx, claim_env))
         for tpl in templates:
             checked += 1
-            err, docs = check_template(role, tpl, ctx)
             rel = f"{role}/{tpl.name}"
+            # Placement, read off the source before rendering: an embedded app config that
+            # sits at templates/ top level is parsed as a manifest below and checked as
+            # nothing, since the schema pass skips a document with no `kind`.
+            for target in misplaced_template_lookups(tpl.read_text()):
+                failures += 1
+                print(
+                    f"  [FAIL] {rel}: lookup('template') embeds templates/{target}, which "
+                    f"is app config at templates/ top level — move it to templates/config/",
+                    file=sys.stderr,
+                )
+            err, docs = check_template(role, tpl, ctx)
             if err:
                 failures += 1
                 print(f"  [FAIL] {rel}: {err}", file=sys.stderr)
-            else:
-                for doc in docs:
-                    pvc_names.update(find_pvc_names(doc))
-                parsed_templates.append((rel, docs))
-                print(f"  [ok]   {rel}")
+                continue
+            kindless = non_manifest_documents(docs)
+            if kindless:
+                # The other half of the same placement rule, for a config nothing embeds by
+                # a literal path: a top-level template that renders to a document with no
+                # `kind` is not a manifest, and nothing downstream would look at it.
+                failures += 1
+                print(
+                    f"  [FAIL] {rel}: renders {len(kindless)} document(s) with no `kind` — "
+                    "not a Kubernetes manifest; app config belongs in templates/config/",
+                    file=sys.stderr,
+                )
+                continue
+            for doc in docs:
+                pvc_names.update(find_pvc_names(doc))
+            parsed_templates.append((rel, docs))
+            print(f"  [ok]   {rel}")
 
     # WARNING ONLY, deliberately — not folded into `failures`. This is new and unproven against
     # the real tree; a false positive here must not be able to block a deploy the way a `[FAIL]`

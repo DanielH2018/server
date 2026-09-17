@@ -12,12 +12,11 @@ daniel-box since E3 (2026-08-12). See repo-root `CLAUDE.md` for shared conventio
 ## Where the config lives
 All of it renders into one Secret (`config-secret.yaml.j2`), which mounts read-only:
 
-- `templates/config/{settings,bookmarks,widgets}.yaml.j2` + `custom.css.j2` — moved here
-  from the retired Docker role, which used to own them. They sit one level down because
-  `validate/k8s_manifests.py` parses every `templates/*.j2` as a manifest, and `custom.css`
-  is not YAML.
-- `templates/services.yaml.j2`, `docker.yaml.j2`, `kubernetes.yaml.j2` — always this role's
-  own. `services.yaml` is the tile list; edit it here and nowhere else.
+- `templates/config/{settings,bookmarks,widgets,services,docker,kubernetes}.yaml.j2` +
+  `custom.css.j2` — every app config file, one level down because
+  `validate/k8s_manifests.py` parses every `templates/*.j2` as a manifest and fails a
+  `lookup('template')` that names one outside `config/`. `services.yaml` is the tile list;
+  edit it here and nowhere else.
 - `templates/icons-configmap.yaml.j2` — base64s the PNGs in `files/` into a ConfigMap.
 
 Edit the `.j2` files, never the live config: homepage seeds any missing file into

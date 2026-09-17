@@ -33,6 +33,8 @@ __all__ = [
     "SKIP_ROLES",
     "is_manifest_template",
     "k8s_entries",
+    "misplaced_template_lookups",
+    "non_manifest_documents",
     "role_callers",
 ]
 
@@ -75,11 +77,11 @@ NO_MANIFEST_ROLES = {
 # Dockerfile, which claim — and this validator reads role defaults and inventory, not task-level
 # `vars:` overrides. Rendering them standalone produces STUB-filled manifests that prove nothing.
 #
-# That exemption is a coverage gap, not a clean bill: four manifests (volume-claim's pvc and
-# seed-pod, image-builder's build-job and context-configmap) are parsed as YAML nowhere, and are
-# covered only by one securityContext property each in test_seed_pod_security_context.py and
-# test_image_builder_security_context.py. Closing it means rendering them against a fixture of
-# the caller vars; until then this names the gap where someone will look for it.
+# That exemption is a coverage gap, not a clean bill: three manifests (volume-claim's pvc,
+# image-builder's build-job and context-configmap) are parsed as YAML nowhere. The build job is
+# covered for one securityContext property by test_image_builder_security_context.py; the PVC
+# has no pod spec and nothing covers it. Closing the gap means rendering them against a fixture
+# of the caller vars; until then this names the gap where someone will look for it.
 CALLER_RENDERED_ROLES = {
     "volume-claim",
     "image-builder",
@@ -100,6 +102,50 @@ def is_manifest_template(path: Path) -> bool:
     A test that reimplemented the predicate would keep passing after this one changed.
     """
     return not path.name.endswith(".sh.j2") and not path.name.startswith("Dockerfile")
+
+
+_TEMPLATE_LOOKUP = re.compile(r"""lookup\(\s*['"]template['"]\s*,\s*([^)]*)\)""")
+_TEMPLATES_PATH = re.compile(r"""['"][^'"]*/templates/([^'"]*)['"]""")
+_JINJA_COMMENT = re.compile(r"\{#.*?#\}", re.S)
+_YAML_COMMENT_LINE = re.compile(r"^\s*#.*$", re.M)
+
+
+def misplaced_template_lookups(source: str) -> list[str]:
+    """The `lookup('template', …)` targets in a manifest's source that sit at `templates/` top level.
+
+    App config a manifest embeds belongs in `templates/config/`, one level down: the validator
+    parses every top-level `templates/*.j2` as a manifest, so config sitting there is
+    schema-checked as nothing (a document with no `kind` is skipped) and placement-checked as
+    nothing. Four files sat that way until #1856 — homepage's services/docker/kubernetes.yaml.j2
+    and crowdsec's crowdsec-discord.yaml.j2.
+
+    Only a literal path is judged. A target passed as a variable (image-builder's
+    `lookup('template', src)`) resolves at task time from the caller's vars, which a text scan
+    cannot see; those roles are in SKIP_ROLES regardless. Comments are stripped first — a
+    `{# #}` block and a `#` line — so a comment that names a lookup by example (pihole's
+    configmap.yaml.j2 does) is not judged as a call.
+    """
+    source = _YAML_COMMENT_LINE.sub("", _JINJA_COMMENT.sub("", source))
+    misplaced = []
+    for call in _TEMPLATE_LOOKUP.finditer(source):
+        path = _TEMPLATES_PATH.search(call.group(1))
+        if path and not path.group(1).startswith("config/"):
+            misplaced.append(path.group(1))
+    return misplaced
+
+
+def non_manifest_documents(docs) -> list:
+    """The parsed documents of a rendered top-level template that are not Kubernetes objects.
+
+    A manifest renders one object per document, each carrying `kind`. A dict without one, a
+    list, or a scalar is app config parsed as a manifest — the same placement failure as
+    `misplaced_template_lookups`, seen from the render side for a file nothing embeds by a
+    literal path. An empty document (`None`) is not counted: a template that renders nothing
+    under a condition is still a manifest template.
+    """
+    return [
+        d for d in docs if d is not None and not (isinstance(d, dict) and "kind" in d)
+    ]
 
 
 def k8s_entries() -> dict[str, dict]:

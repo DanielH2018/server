@@ -48,16 +48,20 @@ _PRIVILEGED = {
 # THE BLIND SPOT THIS PINS (2026-08-23): rendered_docs() filters on
 # validate.k8s_manifests.SKIP_ROLES — a list maintained for a DIFFERENT purpose, namely what the
 # manifest validator can render standalone. Coverage of this security guard was therefore a side
-# effect of someone else's list. volume-claim is on it, and seed-pod.yaml.j2 runs `runAsUser: 0`
-# with no container securityContext at all, so every assertion in this file passed while that pod
-# was never examined. Pinning the exempt set turns a role joining it into a failure here instead
-# of a silent contraction; anything added below needs a justification and, if it renders a pod
-# spec, its own test.
+# effect of someone else's list. volume-claim was on it while it still rendered a seed pod that
+# ran `runAsUser: 0` with no container securityContext at all, so every assertion in this file
+# passed while that pod was never examined. (That pod went with the rest of the seeding in
+# 05f990a1d, 2026-09-01; the role renders only a PVC since.) Pinning the exempt set turns a role
+# joining it into a failure here instead of a silent contraction; anything added below needs a
+# justification and, if it renders a pod spec, its own test. A justification that names a file
+# must name one that exists: test_uncovered_roles_justifications_resolve.py checks every
+# `*.j2` and `test_*.py` token in this block against the tree.
 _UNCOVERED_ROLES = {
     # Renders no manifests of its own — it is the shared apply/rollout machinery.
     "manifests",
-    # Per-deploy state, not a service manifest set. seed-pod.yaml.j2 IS a pod spec and is
-    # deliberately not covered here; test_seed_pod_security_context.py owns it.
+    # Per-deploy PVC state, not a service manifest set: pvc.yaml.j2 is its only template and
+    # renders no pod spec, so there is no container here for a securityContext to be wrong
+    # about.
     "volume-claim",
     # Builds images in-cluster; its Job carries reasoned Unconfined seccomp/AppArmor for
     # rootless BuildKit (build-job.yaml.j2). That reason covers only the two profiles, where

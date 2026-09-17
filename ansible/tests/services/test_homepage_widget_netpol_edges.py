@@ -42,7 +42,13 @@ _sys.path.insert(0, str(_ANSIBLE / "tests"))
 from _k8s_render import rendered_docs
 
 SERVICES_TEMPLATE = (
-    _ANSIBLE / "roles" / "k8s" / "homepage" / "templates" / "services.yaml.j2"
+    _ANSIBLE
+    / "roles"
+    / "k8s"
+    / "homepage"
+    / "templates"
+    / "config"
+    / "services.yaml.j2"
 )
 
 # Widget targets this suite knows are in place. Named rather than counted: the census below is a

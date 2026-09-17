@@ -135,7 +135,7 @@ kuma_bridge_push_interval: 1200
 
 # ── status page group sync ─────────────────────────────────────────────────────────────────
 # Kuma's status page at /status/<slug> — the one Homepage's `uptimekuma` widget reads
-# (roles/k8s/homepage/templates/services.yaml.j2). The CronJob below owns its group list; the
+# (roles/k8s/homepage/templates/config/services.yaml.j2). The CronJob below owns its group list; the
 # page object itself is hand-created and stays that way. Do NOT declare it as an AutoKuma
 # `status_page` entity: AutoKuma at the pinned tag CREATES a status page and never edits one
 # (sync.rs's `match (merge, current)` has no StatusPage arm, on the pin and on master), and
