@@ -83,6 +83,9 @@ spec:
         netpol-baseline: enforced
     spec:
       serviceAccountName: kube-state-metrics
+      # Tier 4, with prometheus.yaml.j2 the one exception — see `DECIDED: claude-otel tiers`
+      # in this role's CLAUDE.md.
+      priorityClassName: homelab-best-effort
       enableServiceLinks: false
       securityContext:
         runAsUser: 65534

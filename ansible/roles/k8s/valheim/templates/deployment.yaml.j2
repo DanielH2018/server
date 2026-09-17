@@ -42,6 +42,9 @@ spec:
       nodeSelector:
         kubernetes.io/hostname: {{ k8s_primary_node }}
       enableServiceLinks: false
+      # No serviceAccountName and the server never talks to the API, so the default-SA token
+      # would only ever sit unused in the pod.
+      automountServiceAccountToken: false
       priorityClassName: homelab-standard
       # Places the pinned BepInEx plugins before the server starts. Runs as root, like the
       # server container: /config and /opt/valheim are root-owned (PUID/PGID default to 0), and

@@ -35,6 +35,7 @@ spec:
         runAsUser: {{ puid }}
         runAsGroup: {{ pgid }}
       automountServiceAccountToken: false
+      enableServiceLinks: false
       containers:
         - name: probe
           image: {{ media_volume_probe_image }}

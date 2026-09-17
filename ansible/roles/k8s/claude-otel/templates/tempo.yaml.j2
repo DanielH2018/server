@@ -77,6 +77,9 @@ spec:
         app: tempo
         netpol-baseline: enforced
     spec:
+      # Tier 4, with prometheus.yaml.j2 the one exception — see `DECIDED: claude-otel tiers`
+      # in this role's CLAUDE.md.
+      priorityClassName: homelab-best-effort
       enableServiceLinks: false
       securityContext:
         # The compose bundle needs a `tempo-init` sidecar that runs `chown -R 10001:10001
