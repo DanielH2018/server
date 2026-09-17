@@ -294,11 +294,20 @@ containers_list:
     hostname: "karakeep"
     port: 3000
     use_authelia: true
-    # /api/v1 is Bearer-token authenticated and the browser extension and mobile app cannot
-    # pass 2FA, so this route is public on purpose. The trailing slash is load-bearing:
-    # PathPrefix(`/api`) would also match siblings like /api-docs and widen the bypass.
+    # The browser extension and mobile app authenticate with Bearer API keys and cannot pass
+    # 2FA, so the paths they call are public on purpose. Each prefix is one the app itself
+    # key-gates (packages/api/index.ts in the pinned image): the extension and the app speak
+    # tRPC at /api/trpc/, the app uploads to /api/assets and reads /api/assets/<id>, and
+    # /api/v1/ is the REST API. The list is an allow-list, not `/api/` — that prefix also
+    # reached next-auth's /api/auth/* (password login, no app-side throttle) and cookie-session
+    # auth on every other child, so the app password was the only gate on the internet (#1929).
+    # The trailing slashes are load-bearing: PathPrefix(`/api`) would also match siblings like
+    # /api-docs. /api/assets has none because the mobile upload POSTs to exactly that path;
+    # nothing else under /api/ starts with `assets`.
     bridge_bypass_prefixes:
-      - /api/
+      - /api/v1/
+      - /api/trpc/
+      - /api/assets
   # An unauthenticated plain-HTTP registry, reachable only on the node's loopback via
   # hostPort and in-cluster via its Service. Giving it an ingress would put push access on
   # the LAN.

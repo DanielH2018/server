@@ -111,9 +111,24 @@ AUTHELIA_BYPASS_ROUTES = {
         "External services POST /webhook/ with no session; gating it silently breaks every "
         "registered webhook while the callers keep reporting success."
     ),
-    "karakeep-public-api": (
-        "The karakeep API bypass the Docker edge already serves publicly (trailing slash "
-        "keeps /api-docs and siblings out); the app's own API keys are the gate."
+    # karakeep's session-less callers are the browser extension and the mobile app, Bearer
+    # API-key clients that cannot pass 2FA. Three prefixes rather than `/api/`: that width
+    # also reached next-auth's /api/auth/* and the cookie-authenticated children, where the
+    # app password was the only gate on the internet (#1929). Each entry names the gate the
+    # app itself applies to that prefix, which is what makes it safe to leave Authelia off.
+    "karakeep-public-api-v1": (
+        "The REST API; every /api/v1 route sits behind the app's authMiddleware, which 401s "
+        "without a valid Bearer key or session."
+    ),
+    "karakeep-public-api-trpc": (
+        "What the extension and the mobile app actually speak; protected procedures 401 "
+        "without a key, and the one password-taking public procedure (apiKeys.exchange, the "
+        "extension's login) is throttled by the app at 10 per 15 minutes."
+    ),
+    "karakeep-public-api-assets": (
+        "Asset upload and download for the mobile app, behind the app's authMiddleware. No "
+        "trailing slash: the upload POSTs to exactly /api/assets, and nothing else under "
+        "/api/ starts with `assets`."
     ),
 }
 
