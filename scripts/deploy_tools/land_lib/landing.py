@@ -88,6 +88,12 @@ class Landing:
         NOT `plane`, which is by construction what the tick does not apply: awaiting a tick
         cannot change that verdict, so a tags-plus-plane PR keeps the fast path.
 
+        `remaining_setup` is near-implied by `self_applied` and is UNTESTED on its own:
+        `remaining_setup_hosts_note` resolves its hosts through `initial_setup.yml`, and a
+        setup role that playbook includes is what makes `self_applied` True. It is named here
+        because the branch that reads it asserts the tick applied on the local host, so a
+        landing reaching it must have awaited the tick whatever `self_applied` said.
+
         One property rather than the same `or` at two call sites, because `pipeline._step_tick`
         and `deploy.deploy_phase` have to answer it identically -- one awaiting the tick while
         the other deploys `--at` is the mixed state neither path is written for.
