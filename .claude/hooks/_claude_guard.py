@@ -13,15 +13,18 @@ chezmoi to `~/.local/share/claude-guard`. Import this module before anything fro
 package is not already importable, then imports `claude_guard` itself so a caller can rely on
 `sys.modules["claude_guard"]` being populated.
 
-# DECIDED: no fallback to a stale local copy when the deploy is missing. Raise instead, and
-# let the hook shim's fail-open posture turn that into a prompt rather than a silent wrong
-# answer. The slice-3 ledger's #484 half-deploy (~/.claude/artifacts/claude-guard-slice3/
-# sdd-ledger/progress.md) is why: a machine mid-deploy can have the new hook code without yet
-# having the dotfiles package behind it, and a private fallback copy would keep serving a
-# permission decision that looks current but was pinned at whatever the fallback last held —
-# nobody sees that it fell behind. Crashing here is what the allow-side hook's contract
-# requires: `SSH_HOSTS`/`_SSH_SECRET` gate an auto-approve, and a hook that cannot import its
-# own tables must not approve anything at all.
+# DECIDED: no fallback to a stale local copy when the deploy is missing. Raise instead. The
+# slice-3 ledger's #484 half-deploy (~/.claude/artifacts/claude-guard-slice3/sdd-ledger/
+# progress.md) is why: a machine mid-deploy can have the new hook code without yet having the
+# dotfiles package behind it, and a private fallback copy would keep serving a permission
+# decision that looks current but was pinned at whatever the fallback last held — nobody sees
+# that it fell behind. Crashing here is what the allow-side hook's contract requires:
+# `SSH_HOSTS`/`_SSH_SECRET` gate an auto-approve, and a hook that cannot import its own tables
+# must not approve anything at all. Measured, not assumed: the shim `exec`s this process, so
+# the ImportError surfaces as a nonzero exit with the traceback on stderr, not a clean
+# no-output exit — Claude Code's own handling of a hook that exits that way is outside what
+# this repo controls, but the one thing this module guarantees is that no auto-approve
+# decision comes out of it.
 """
 
 import sys

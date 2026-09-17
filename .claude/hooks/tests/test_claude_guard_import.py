@@ -106,6 +106,12 @@ def test_bootstrap_raises_when_the_deploy_is_missing(tmp_path, monkeypatch):
 
 
 def test_readonly_tables_ssh_objects_are_claude_guards_own():
-    """Identity, not just equal value — a future local redefinition breaks this, not `==`."""
+    """Identity, not just equal value — a future local redefinition breaks this, not `==`.
+
+    This pins the WIRING, not the values: wherever conftest.py's stand-in is in play (every
+    CI run, since CI has no dotfiles deploy), `_tables` IS that stand-in, so the assertion is
+    `x is x` regardless of what the real `claude_guard.tables` holds. Only a run with the real
+    package deployed exercises the values this identity check is meant to protect.
+    """
     assert _readonly_tables.SSH_HOSTS == frozenset(_tables.TRUSTED_SSH_HOSTS)
     assert _readonly_tables._SSH_SECRET is _tables.SECRET_PATH_RE
