@@ -81,9 +81,12 @@ autokuma_k8s_mem_request: 32Mi
 # mute the channel — which is the failure mode that loses the NEXT alert. The same count on a
 # tile fed by a slower cron resends less often (a 30-minute cron on a 3600s window is 3 beats an
 # hour, 30h), and a DEAD bridge leaves only the window's own beats (3 an hour, 30h). Neither is
-# expressible in minutes, which is why the unit is beats. Applied uniformly and asserted by a
-# test, rather than set per-tile, so a new monitor cannot be added without one (the GitOps tile
-# was the known instance; the gap was every push monitor).
+# expressible in minutes, which is why the unit is beats. The bridge is the fastest feeder in
+# the estate, so no tile can beat faster than its 12 pushes an hour plus its own window's
+# watchdog beats: at the narrowest window (360s) that is 22 an hour and 90 beats is ~4h, the
+# floor `test_kuma_push_resend_beats.py` holds. Applied uniformly and asserted by a test,
+# rather than set per-tile, so a new monitor cannot be added without one (the GitOps tile was
+# the known instance; the gap was every push monitor).
 kuma_push_resend_down_beats: 90
 
 # Heartbeat window for the 34 push monitors monitor-bridge feeds. The bridge pushes each of them

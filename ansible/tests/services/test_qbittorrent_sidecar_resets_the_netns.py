@@ -54,6 +54,18 @@ def test_the_reset_script_is_mounted_from_the_configmap_that_carries_it():
     )
 
 
+def test_the_gate_scopes_to_the_uid_qbittorrent_actually_runs_as():
+    # The script reads PUID from the SIDECAR's environment and qbittorrent runs as the PUID of
+    # ITS container. If the two ever decouple the gate matches nothing and reads green — the
+    # Pi run showed uid 911 egressing freely past a uid-1000 gate.
+    spec, wg = _sidecar()
+    qbt = next(c for c in spec["containers"] if c["name"] == "qbittorrent")
+    env = lambda c: {e["name"]: e.get("value") for e in c["env"]}
+    assert env(wg)["PUID"] == env(qbt)["PUID"], (
+        "the sidecar's PUID must be the uid qbittorrent runs as"
+    )
+
+
 def test_the_gate_goes_up_before_the_stale_tunnel_comes_down():
     # The order is the whole privacy argument: qbittorrent keeps running while the sidecar
     # restarts, and between the reset and the mod's PostUp the netns has no tunnel. The
