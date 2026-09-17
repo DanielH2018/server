@@ -165,6 +165,51 @@ def secret_bearing_host_paths(
     return found
 
 
+def readable_beyond_owner_and_group(mode) -> bool:
+    """True when `mode` grants anything to `other`, or is absent (the module's default is 0644)."""
+    if mode is None:
+        return True
+    return int(str(mode), 8) & 0o007 != 0
+
+
+def world_readable_secret_bearing_tasks(
+    ansible: _Path = ANSIBLE, registry: _Path = REGISTRY
+) -> list[tuple[str, str, str | None]]:
+    """(task file, dest, mode) for every secret-bearing host path deployed with `other` bits.
+
+    The census above says WHICH paths embed a credential; this says which of them any local
+    user can read. Four roles carry a `DECIDED: 0700` marker for the same reason, and until
+    this existed the other twelve were checked by hand or not at all.
+    """
+    secret_paths = secret_bearing_host_paths(ansible, registry)
+    offenders = []
+    for task_file in sorted(ansible.glob("roles/**/tasks/*.yml")):
+        if "/archive/" in str(task_file):
+            continue
+        try:
+            doc = yaml_fast.safe_load(task_file.read_text(errors="replace"))
+        except yaml.YAMLError:
+            continue
+        for node in _walk(doc):
+            dest = node.get("dest")
+            if (
+                not isinstance(dest, str)
+                or dest not in secret_paths
+                or "src" not in node
+            ):
+                continue
+            if readable_beyond_owner_and_group(node.get("mode")):
+                mode = node.get("mode")
+                offenders.append(
+                    (
+                        str(task_file.relative_to(ansible)),
+                        dest,
+                        None if mode is None else str(mode),
+                    )
+                )
+    return offenders
+
+
 def main() -> int:
     paths = secret_bearing_host_paths()
     for dest, names in sorted(paths.items()):

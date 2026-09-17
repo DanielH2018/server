@@ -113,7 +113,13 @@ def test_a_plain_test_connects_in_process():
 """
 
 
-def _run_child(tmp_path: Path, body: str) -> subprocess.CompletedProcess[str]:
+def _run_child(
+    tmp_path: Path,
+    body: str,
+    *,
+    plugin: bool = True,
+    extra_env: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
     (tmp_path / "pytest.ini").write_text(_CHILD_INI)
     test_file = tmp_path / "test_child.py"
     test_file.write_text(body)
@@ -122,8 +128,7 @@ def _run_child(tmp_path: Path, body: str) -> subprocess.CompletedProcess[str]:
             sys.executable,
             "-m",
             "pytest",
-            "-p",
-            "leakguard",
+            *(["-p", "leakguard"] if plugin else []),
             "-p",
             "no:cacheprovider",
             "-c",
@@ -134,7 +139,11 @@ def _run_child(tmp_path: Path, body: str) -> subprocess.CompletedProcess[str]:
         cwd=tmp_path,
         # `ansible/tests` is on pythonpath for the parent through pyproject.toml; the child
         # runs under its own bare ini, so it needs the path spelled out.
-        env={"PATH": "/usr/bin:/bin", "PYTHONPATH": str(REPO / "ansible" / "tests")},
+        env={
+            "PATH": "/usr/bin:/bin",
+            "PYTHONPATH": str(REPO / "ansible" / "tests"),
+            **(extra_env or {}),
+        },
         capture_output=True,
         text=True,
         timeout=120,
@@ -357,3 +366,47 @@ def test_every_allowlisted_nodeid_names_a_test_that_exists() -> None:
 def test_the_shim_set_still_covers_the_core_egress_binaries(binary: str) -> None:
     """Non-vacuity for the other half: an emptied tuple would shim nothing and pass."""
     assert binary in leakguard.SHIMMED_BINARIES
+
+
+# What `git commit` hands its hooks. The child asserts the plugin took them away before its
+# body ran; the same child WITHOUT the plugin proves the assertion can fail, so a plugin that
+# stopped stripping is caught rather than passing on an environment that never had them.
+_HOOK_ENV = {
+    "GIT_DIR": "/nonexistent/.git",
+    "GIT_INDEX_FILE": "/nonexistent/.git/index",
+    "GIT_WORK_TREE": "/nonexistent",
+}
+
+_READS_GIT_HOOK_ENV = """
+import os
+
+
+def test_no_git_hook_variable_is_visible():
+    assert not {"GIT_DIR", "GIT_INDEX_FILE", "GIT_WORK_TREE"} & set(os.environ)
+"""
+
+
+def test_the_plugin_strips_the_git_hook_variables_before_any_test_runs(
+    tmp_path: Path,
+) -> None:
+    proc = _run_child(tmp_path, _READS_GIT_HOOK_ENV, extra_env=_HOOK_ENV)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+
+
+def test_without_the_plugin_the_git_hook_variables_reach_the_test(
+    tmp_path: Path,
+) -> None:
+    """The red half: the child's assertion is real, and only the plugin satisfies it."""
+    proc = _run_child(tmp_path, _READS_GIT_HOOK_ENV, plugin=False, extra_env=_HOOK_ENV)
+    assert proc.returncode != 0, proc.stdout + proc.stderr
+
+
+def test_strip_git_hook_env_removes_only_the_hook_variables() -> None:
+    environ = {**_HOOK_ENV, "GIT_AUTHOR_NAME": "t", "PATH": "/bin"}
+    assert leakguard.strip_git_hook_env(environ) == [
+        "GIT_DIR",
+        "GIT_INDEX_FILE",
+        "GIT_WORK_TREE",
+    ]
+    assert environ == {"GIT_AUTHOR_NAME": "t", "PATH": "/bin"}
+    assert leakguard.strip_git_hook_env(environ) == []

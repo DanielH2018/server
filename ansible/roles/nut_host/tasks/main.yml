@@ -117,9 +117,11 @@
   ansible.builtin.template:
     src: ups-secondary-health.sh.j2
     dest: /usr/local/bin/ups-secondary-health.sh
+    # DECIDED: 0700, not 0755 — the script renders nut_monitor_password inline, and its cron
+    # below runs as root, so root:root 0700 reaches its only caller.
     owner: root
     group: root
-    mode: "0755"
+    mode: "0700"
   become: true
 
 # Root-run because the script reads /etc/nut/upsmon.conf (0640 root:nut) to take the endpoint

@@ -617,9 +617,13 @@
   ansible.builtin.template:
     src: docs-refresh.sh.j2
     dest: /usr/local/bin/docs-refresh.sh
-    owner: root
-    group: root
-    mode: "0755"
+    # DECIDED: 0700 owned by sys_user, not 0755 root — embeds a live Kuma push token, and the
+    # cron below runs as sys_user, so root:root 0700 would lock out its own caller. Same marker
+    # as roles/k8s/configarr/tasks/main.yml; test_secret_bearing_host_scripts_are_not_world_
+    # readable.py holds every such script to it.
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0700"
   become: true
 
 - name: Schedule the generated-docs refresh (box only)
@@ -684,9 +688,11 @@
   ansible.builtin.template:
     src: eval-run.sh.j2
     dest: /usr/local/bin/eval-run.sh
-    owner: root
-    group: root
-    mode: "0755"
+    # DECIDED: 0700 owned by sys_user, not 0755 root — embeds two Kuma push tokens, and the
+    # cron below runs as sys_user. See the docs-refresh marker above.
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0700"
   become: true
 
 - name: Schedule the weekly homelab eval sweep (box only)
