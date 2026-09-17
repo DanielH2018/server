@@ -20,6 +20,14 @@
 # refused, while root's — the mod's API calls — is not. The mod's own mark-exempt REJECT
 # lands after it once the tunnel is up. Both rules stay; they agree wherever they overlap.
 #
+# The gate exempts fwmark 51820 as well as `-o wg0`, and the exemption is load-bearing. A
+# packet qbittorrent sends into wg0 leaves the pod as an encrypted UDP carrier on eth0, and
+# that carrier still belongs to the originating socket — so `--uid-owner` matches it and
+# `! -o wg0` is true. Without the mark exemption the gate rejected every carrier packet for
+# uid 1000 on 2026-09-17: the tunnel was up, root reached the internet through it, and
+# qbittorrent saw only timeouts (DHT 0 nodes, every peer and tracker dead). wg-quick sets
+# the mark (`wg set wg0 fwmark 51820`) and the mod's own REJECT exempts it the same way.
+#
 # Fails closed. If the gate cannot be installed, the script exits non-zero and the container
 # restarts without touching the netns — the deadlock this script exists to break, but never a
 # leak. The one thing that can refuse it is the `owner` match being unavailable in the pod's
@@ -49,7 +57,7 @@ COMMIT
 :INPUT ACCEPT [0:0]
 :FORWARD ACCEPT [0:0]
 :OUTPUT ACCEPT [0:0]
-${rules}-A OUTPUT ! -o wg0 -m owner --uid-owner ${uid} -m addrtype ! --dst-type LOCAL -j REJECT
+${rules}-A OUTPUT ! -o wg0 -m mark ! --mark 51820 -m owner --uid-owner ${uid} -m addrtype ! --dst-type LOCAL -j REJECT
 COMMIT
 EOF
 then

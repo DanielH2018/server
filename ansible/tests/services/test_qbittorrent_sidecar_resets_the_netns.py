@@ -80,3 +80,19 @@ def test_the_gate_goes_up_before_the_stale_tunnel_comes_down():
     assert "-m owner --uid-owner ${uid}" in text and "! -o wg0" in text, (
         "the gate scopes to qbittorrent's uid and exempts traffic leaving via wg0"
     )
+
+
+def test_the_gate_exempts_wireguards_own_carrier_packets():
+    # `-o wg0` is not enough. qbittorrent's packet enters wg0, and the encrypted carrier
+    # WireGuard then emits on eth0 still belongs to the originating socket, so `--uid-owner`
+    # matches it and `! -o wg0` is true: the gate rejected every carrier packet for uid 1000
+    # on 2026-09-17 (DHT 0 nodes, every peer and tracker timing out, root's curl through the
+    # same tunnel fine). wg-quick marks the carrier with fwmark 51820 (`wg set wg0 fwmark`),
+    # which is exactly how the mod's own kill-switch exempts it; the gate must too.
+    gate_line = next(
+        line for line in SCRIPT.read_text().splitlines() if "--uid-owner ${uid}" in line
+    )
+    assert "-m mark ! --mark 51820" in gate_line, (
+        "the uid gate must exempt WireGuard's fwmark-51820 carrier packets, or it rejects "
+        "the tunnel it is meant to force traffic through"
+    )
