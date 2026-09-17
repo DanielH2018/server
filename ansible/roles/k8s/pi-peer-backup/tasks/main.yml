@@ -5,12 +5,32 @@
 # pushes the "WG Pi Peer Backup" Kuma monitor directly — the monitor-bridge `pi_peers`
 # state-file check retired with this flip.
 
+# The wrapper lands BEFORE the key is pinned to it: the reverse order would leave a key whose
+# forced command does not exist, and the nightly would fail until the next task ran. Root-owned
+# so the key holder, who reaches only this script, cannot rewrite what it allows.
+- name: Install the forced-command wrapper on daniel-pi
+  tags: [config]
+  delegate_to: daniel-pi
+  become: true
+  ansible.builtin.copy:
+    src: pi-peer-backup-shell.sh
+    dest: /usr/local/bin/pi-peer-backup-shell
+    owner: root
+    group: root
+    mode: "0755"
+
+# `restrict` drops pty, port/agent/X11 forwarding and user-rc; `command=` replaces whatever the
+# client asked for with the wrapper, which re-derives one `sudo rsync --server --sender` from
+# SSH_ORIGINAL_COMMAND and refuses everything else (#1927). Before these options the key was
+# an interactive shell as a NOPASSWD-sudo user. Ansible reaches the Pi over a different key
+# (`ubuntu@daniel-server-ansible`), so pinning this one cannot lock the deploy out.
 - name: Authorize the pull key on daniel-pi
   tags: [config]
   delegate_to: daniel-pi
   ansible.posix.authorized_key:
     user: "{{ hostvars['daniel-pi'].ansible_user | default('ubuntu') }}"
     key: "{{ lookup('file', role_path ~ '/files/pi-peer-backup.pub') }}"
+    key_options: 'restrict,command="/usr/local/bin/pi-peer-backup-shell {{ pi_peer_backup_src_dir }}"'
     state: present
 
 # Over Ansible's own (operator-trusted) connection, so the job VERIFIES rather than

@@ -36,7 +36,7 @@ spec:
               imagePullPolicy: Always
               env:
                 - name: PI_SRC
-                  value: "{{ hostvars['daniel-pi'].ansible_user | default('ubuntu') }}@{{ hostvars['daniel-pi'].ansible_host }}:/home/{{ sys_user }}/server/containers/wg-easy/config/"
+                  value: "{{ hostvars['daniel-pi'].ansible_user | default('ubuntu') }}@{{ hostvars['daniel-pi'].ansible_host }}:{{ pi_peer_backup_src_dir }}"
                 - name: KUMA_PUSH_URL
                   valueFrom:
                     secretKeyRef:
