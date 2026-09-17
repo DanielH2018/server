@@ -114,26 +114,36 @@ def test_import_pending_with_messages_is_not_a_candidate():
     )
 
 
-def test_client_comm_error_helper_checks_both_sources():
-    in_status = _item(
-        status="error", messages=["Unable to communicate with qBittorrent."]
-    )
-    assert autofix.client_comm_error(in_status, CLIENT_PATTERNS) is True
-
+def test_client_comm_error_reads_errormessage_only():
     in_error_message = _item(
         status="error", error_message="qBittorrent is not responding"
     )
     assert autofix.client_comm_error(in_error_message, CLIENT_PATTERNS) is True
 
-
-def test_error_with_client_comm_statusmessage_excluded():
-    item = _item(status="error", messages=["Unable to communicate with qBittorrent."])
-    assert autofix.is_candidate(item, PATTERNS, CLIENT_PATTERNS) is False
+    in_status = _item(
+        status="error", messages=["Unable to communicate with qBittorrent."]
+    )
+    assert autofix.client_comm_error(in_status, CLIENT_PATTERNS) is False
 
 
 def test_error_with_client_comm_in_errormessage_excluded():
     item = _item(status="error", error_message="qBittorrent is not responding")
     assert autofix.is_candidate(item, PATTERNS, CLIENT_PATTERNS) is False
+
+
+def test_error_with_release_carried_phrase_in_statusmessage_still_candidate():
+    # A release named to carry a client-error phrase reaches statusMessages[].messages
+    # through the *arr's own import rejection text, and Fail() (a dangerous file) keeps
+    # those messages while flipping the status to `error`. That text must not exempt it.
+    item = _item(
+        status="error",
+        state="failedPending",
+        messages=[
+            "Episode S01E01 was not found in the grabbed release: "
+            "[GRP] Show - 01 connection refused [1080p]"
+        ],
+    )
+    assert autofix.is_candidate(item, PATTERNS, CLIENT_PATTERNS) is True
 
 
 def test_error_without_client_message_still_candidate():

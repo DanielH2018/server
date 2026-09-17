@@ -54,7 +54,10 @@ elsewhere in this doc; this is the governed summary a change here must satisfy.
    valves: `GRACE_CYCLES=3` (an item must stay a candidate ~15 min first), `MAX_ACTIONS_PER_CYCLE=5`
    (a mass-flag = systemic cause → act on NONE + alert), `DANGEROUS_MSG_PATTERNS` (the poisoned-`.exe`
    class), and `CLIENT_ERROR_PATTERNS` — a download-client/VPN outage is EXCLUDED so a legit
-   in-progress download isn't wrongly blocklisted (see [[qbittorrent-bind-wg0]]). Flip
+   in-progress download isn't wrongly blocklisted (see [[qbittorrent-bind-wg0]]). That
+   exclusion reads the queue record's `errorMessage` only, the field the download client
+   authors; `statusMessages` carry the release title and output path, so a release named to
+   contain one of the phrases must not exempt itself (`client_comm_error`'s `DECIDED:`, #1934). Flip
    `DRY_RUN=true` + redeploy to return to report-only.
 2. **Host plane** — two daily/hourly crons doing work the locked-down container can't (docker
    daemon, `docker exec`, ffprobe), each reporting via a `{ts,ok,msg}` state file monitor-bridge
