@@ -118,8 +118,15 @@ See repo-root `CLAUDE.md` for conventions.
     log2ram — so the cron's own line, shipped to Loki under `job="syslog"`, is the only record
     of a Pi container failure that survives a week (#1912). `State.Error` is flattened to one
     line and capped at 300 chars so it cannot split the record the alert parser reads.
+    **When dockerd itself is gone**, every container reads `inspect failed` and the reason is
+    the daemon's, so the line carries `; dockerd: <newest non-info journalctl -u docker lines>`
+    — systemd's "Main process exited" / "Scheduled restart job" and dockerd's own
+    `level=error`, capped at 400 chars (#1922). Not `journalctl -p warning`: dockerd's stderr
+    lands at journal priority 6 whatever its `level=` says, so a priority filter returns
+    nothing. This is the only path a daemon-level failure reaches Loki by — the Pi ships no
+    journal, and `roles/containers/alloy/CLAUDE.md` records the RSS measurement behind that.
     ENFORCED by `ansible/tests/setup/test_pi_recovery_restarts_and_reports.py`, which renders and
-    runs the script against a stub `docker`.
+    runs the script against a stub `docker` and a stub `journalctl`.
 
 11. **Both health crons leave a durable record** at `/var/log/pi-health/health.log`, which the
     Pi's promtail tails as its `pi-health` job under `job="syslog"`. Kuma keeps only current

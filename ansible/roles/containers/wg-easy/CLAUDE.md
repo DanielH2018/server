@@ -81,10 +81,20 @@ the port split only makes sense read together.
   monitor — `down` on a failed pull, >2.5 d staleness, or missing state. The pulled `pi-peers/wg0.json`
   is also the monthly restore-drill sentinel for `wg-easy`. Deploy `wg-easy` before `monitor-bridge`
   on a fresh host so the state dir exists sys_user-owned. Push token `monitor_bridge_pi_peers_push_token`.
-- **Built-in healthcheck:** the `wg-easy/wg-easy` image ships its own Docker `HEALTHCHECK`
-  (`wg show | grep -q interface` — verifies the WireGuard *interface* is up, not just the
-  UI), so there is no compose `healthcheck:` block. `autoheal` and uptime-kuma rely on this
-  native status — don't add a redundant probe.
+- **Built-in healthcheck, compose-supplied timing.** The `wg-easy/wg-easy` image ships its own
+  Docker `HEALTHCHECK` (`wg show | grep -q interface` — verifies the WireGuard *interface* is
+  up, not just the UI). `autoheal` and uptime-kuma rely on this native status — don't add a
+  redundant probe: the compose `healthcheck:` block carries `interval`/`timeout`/`retries`
+  from the Pi's `container_healthcheck_*` vars and **no `test:`**, and dockerd fills `Test`
+  from the image (`merge()` in `daemon/commit.go`; verified on daniel-pi's Docker 29.5.3,
+  2026-09-17, with a throwaway `docker create`). Two facts decided the block (#1921). The
+  image's Dockerfile places `--interval=1m --timeout=5s --retries=3` inside the `CMD` string,
+  so `Config.Healthcheck` carried no timing and the container ran Docker's 30s/30s/3
+  defaults — a fourth probe fork rate `container_healthcheck_interval` was tuned to remove.
+  And the probe's inner `timeout 5s` bounds only `wg show` itself, not the runc exec that the
+  deploy-window stall delays: an exec measured at 8.2s end-to-end passed on 2026-09-17, so Docker's
+  `timeout` is the limit that decides `unhealthy` under that stall, and 60s is what the other
+  Pi probes got from #1910.
 
 ## Editing
 - Compose: `templates/docker-compose.yml.j2`

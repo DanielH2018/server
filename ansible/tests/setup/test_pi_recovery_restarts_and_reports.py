@@ -17,12 +17,16 @@ not the two the script was born with (#1910): the same failed start reaches glan
 and docker-proxy-lifecycle, and only the last is invisible to Kuma from outside. And the
 DOWN line records `docker inspect`'s exit code and error BEFORE the restart erases them
 (#1912): the Pi's journal rotates in a day, so that line is the only evidence that survives.
+A third covers the daemon rather than a container (#1922): when dockerd itself is gone every
+container reads `inspect failed` and the reason lives only in `journalctl -u docker`, so the
+line carries the newest non-info lines of that unit — through a stub, since the real
+journalctl on PATH would read this host's journal.
 
 Run: uv run pytest ansible/tests/setup/test_pi_recovery_restarts_and_reports.py
 """
 
 import pytest
-from _pi_health import PI_HOST_VARS, run
+from _pi_health import PI_HOST_VARS, journalctl_calls, run
 
 
 SCRIPT = "pi-recovery-health"
@@ -161,3 +165,77 @@ def test_a_multi_line_daemon_error_stays_one_health_log_record(tmp_path):
 
     assert len(lines) == 1, f"the daemon error split the record: {lines!r}"
     assert "first line second line" in msg, msg
+
+
+# What dockerd's journal holds when the daemon itself fails: systemd's unit lines carry no
+# `level=`, dockerd's own carry one, and the info chatter around them is what must NOT be kept.
+DAEMON_JOURNAL = (
+    'time="2026-09-13T07:36:30Z" level=info msg="Loading containers: start."\\n'
+    'time="2026-09-13T07:36:31Z" level=warning msg="Security options with `:` as a separator are deprecated"\\n'
+    'time="2026-09-13T07:36:32Z" level=error msg="failed to start container" error="Timeout waiting for systemd to create scope"\\n'
+    "docker.service: Main process exited, code=killed, status=9/KILL\\n"
+    'time="2026-09-13T07:36:33Z" level=info msg="Daemon shutdown complete"\\n'
+    "docker.service: Scheduled restart job, restart counter is at 3.\\n"
+)
+
+
+def test_a_dead_daemon_is_named_from_its_own_journal(tmp_path):
+    """ACCEPT (#1922): every container reads `inspect failed`, so the line carries dockerd's
+    journal — the only copy that outlives the Pi's 32M journal rotation is this record.
+    """
+    status, msg, _, lines = run(
+        SCRIPT, tmp_path, running=ALL, daemon_down=True, journal=DAEMON_JOURNAL
+    )
+
+    assert status == "down"
+    assert msg.count("inspect failed") == len(ALL), msg
+    assert "; dockerd: " in msg, f"no daemon evidence in {msg!r}"
+    daemon = msg.split("; dockerd: ", 1)[1]
+    assert "Timeout waiting for systemd to create scope" in daemon, daemon
+    assert "Main process exited, code=killed, status=9/KILL" in daemon, daemon
+    assert "Scheduled restart job" in daemon, daemon
+    assert len(lines) == 1 and "Scheduled restart job" in lines[0], lines
+    # The record's own timestamp already says when; dockerd's is dropped, not the message.
+    assert 'time="' not in daemon, daemon
+    calls = journalctl_calls(tmp_path)
+    assert calls and all("-u docker" in c for c in calls), calls
+
+
+def test_daemon_info_chatter_and_the_create_deprecation_are_not_kept(tmp_path):
+    """REJECT: `level=info` lines and the per-create `Security options` warning are noise that
+    would crowd the five lines kept — dockerd emits the warning on every container create.
+    """
+    _, msg, _, _ = run(
+        SCRIPT, tmp_path, running=ALL, daemon_down=True, journal=DAEMON_JOURNAL
+    )
+    daemon = msg.split("; dockerd: ", 1)[1]
+
+    assert "Loading containers" not in daemon, daemon
+    assert "Daemon shutdown complete" not in daemon, daemon
+    assert "Security options with" not in daemon, daemon
+
+
+def test_a_container_death_does_not_read_the_daemon_journal(tmp_path):
+    """REJECT: `inspect` answered, so the reason is the container's own and the journal is
+    not consulted — a `dockerd:` section here would blame the daemon for a container exit.
+    """
+    running = [c for c in ALL if c != "autoheal"]
+    _, msg, _, _ = run(
+        SCRIPT, tmp_path, running=running, journal=DAEMON_JOURNAL, error=OCI_ERROR
+    )
+
+    assert "dockerd:" not in msg, msg
+    assert journalctl_calls(tmp_path) == [], "journal read for a container-level death"
+
+
+def test_a_dead_daemon_with_an_empty_journal_still_reports(tmp_path):
+    """An empty ten-minute window adds nothing and breaks nothing: the seven `inspect failed`
+    entries stand on their own.
+    """
+    status, msg, _, lines = run(
+        SCRIPT, tmp_path, running=ALL, daemon_down=True, journal=""
+    )
+
+    assert status == "down"
+    assert "dockerd:" not in msg, msg
+    assert len(lines) == 1, lines

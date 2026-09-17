@@ -49,10 +49,12 @@ def test_container_streams_are_job_pi_on_machine_daniel_pi(alloy_config: str) ->
 
 
 def test_the_journal_is_not_shipped(alloy_config: str) -> None:
-    """The header records why: ~38k lines/day for a signal pi-health carries in ~576.
+    """The role's CLAUDE.md records why: RSS, not line volume (#1922).
 
-    Enabling it is a deliberate decision about Loki volume, so this fails the moment someone
-    adds the block without also deleting this test and the header's reasoning.
+    The shipper peaks at 75-82 MB every day against a 96 MiB cap, and a journal reader's own
+    footprint on top of that is unmeasured. Enabling it is a deliberate decision that starts
+    with raising the cap, so this fails the moment someone adds the block without also
+    deleting this test and the CLAUDE.md reasoning.
     """
     assert "loki.source.journal" not in re.sub(r"//[^\n]*", "", alloy_config)
 

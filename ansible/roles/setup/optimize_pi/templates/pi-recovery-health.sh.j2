@@ -88,6 +88,33 @@ for c in "${CONTAINERS[@]}"; do
   fi
 done
 
+# WHEN THE DAEMON ITSELF IS THE FAILURE, name it from its own journal. `inspect failed` is
+# what every container reads while dockerd is down, restarting, or wedged — the 2026-09-13
+# boot's "Timeout waiting for systemd to create scope", an OOM kill, a restart loop — and the
+# inspect above cannot say why, because the daemon that would answer is the thing that is
+# gone. The reason sits in `journalctl -u docker`, which SystemMaxUse=32M on the RAM-backed
+# /var/log rotates away in about a day; this line is the only copy that reaches Loki (the
+# Pi ships no journal — see roles/containers/alloy/CLAUDE.md for the RSS measurement that
+# decided against a journal reader, #1922). The newest five lines of the last ten minutes
+# that are not dockerd's own info/debug chatter — its `level=warning`/`error` lines and
+# systemd's own unit lines ("Main process exited", "Scheduled restart job"), which carry no
+# `level=` at all. NOT `journalctl -p warning`: dockerd writes to stderr, so every line sits
+# at journal PRIORITY 6 whatever its `level=` says (measured 2026-09-17), and a priority
+# filter returns nothing. The `Security options with ':'` deprecation warning goes too: dockerd
+# emits one per container create (every compose file here writes `no-new-privileges:true`),
+# and over a 48h window it was the ONLY non-info line, so it would crowd out the five kept.
+# dockerd's own `time="…"` prefix is dropped as redundant with the record's timestamp; the
+# rest is flattened and capped like `Error` above so the record stays one line. The cron
+# user reads the journal through the `adm` group; no privilege.
+DAEMON=""
+case "$DOWN" in
+  *"inspect failed"*)
+    DAEMON="$(journalctl -u docker --since -10min -n 40 -o cat --no-pager 2>/dev/null |
+      grep -vE 'level=(info|debug)|Security options with' | tail -n 5 | sed -E 's/^time="[^"]*" //' |
+      tr '\n' ' ' | cut -c1-400)"
+    ;;
+esac
+
 if [ -z "$DOWN" ]; then
   STATUS=up;   MSG="all {{ _names | length }} containers running"
 else
@@ -104,6 +131,7 @@ else
   STATUS=down; MSG="not running: ${DOWN}"
   [ -n "$RECOVERED" ] && MSG="${MSG}; restarted: ${RECOVERED}"
   [ -n "$FAILED" ] && MSG="${MSG}; restart FAILED: ${FAILED}"
+  [ -n "$DAEMON" ] && MSG="${MSG}; dockerd: ${DAEMON% }"
 fi
 
 kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" pi-recovery-health
