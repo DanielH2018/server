@@ -71,7 +71,7 @@ Route to the source of truth by what you're doing, before reading linearly:
 | A config edit won't recreate the container (Docker) | `ansible/roles/containers/common/CLAUDE.md` (config-change wiring) |
 | A host can't decrypt secrets | `add-secret` skill → *Onboarding a host that cannot decrypt yet* |
 | Starting Claude Code sessions from a phone | `ansible/roles/setup/claude_code/CLAUDE.md` — `claude-rc.service` hosts them. `/remote-control` inside a session and `claude rc` from a shell are different features; only the second creates sessions on demand. |
-| Adding / changing a cron that changes state | that role's `CLAUDE.md` *Autonomous-role contract* |
+| Adding / changing a cron that changes state | that role's `CLAUDE.md` *Autonomous-role contract*. Every setup role whose cron or timer changes state carries one, and every setup role has a `CLAUDE.md` — `ansible/tests/setup/test_setup_roles_have_claude_md.py` derives the cron-installing set from `tasks/` and names the heartbeat-only exemptions |
 | Recording a finding, fix or improvement you will not do this session | `findings.py open` (flags: `docs/reference/scripts.md`) — files a GitHub Issue labelled `claude`, deduped by title/file. `findings.py list` is the open register; `docs/reference/backlog.md` renders it. Never `gh issue create` by hand. |
 
 ## Adding a New Service

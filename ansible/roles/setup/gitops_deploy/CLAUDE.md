@@ -75,6 +75,43 @@ pin commit made the gate poll a container that could never exist. When migrating
 host, delete its `containers/<svc>/docker-compose.yml` on that host (config/ and data dirs can
 stay).
 
+## Autonomous-role contract (it deploys to production with no human in the loop)
+
+This is a **change-producing autonomous role**: every 10 minutes it may fast-forward the
+primary checkout, run `deploy.yml` against the cluster, and on a failed health gate roll the
+tree and the service back. Its authority is written down here so a later edit cannot quietly
+widen it. Each line is a summary; the section it names carries the detail.
+
+- **Scope / exclusions:** a Docker service whose template or bind-mounted config changed; a
+  k8s role ONLY for an image-pin bump to a non-denylisted service; every setup-plane change
+  the role can apply itself, and its own role. **Never** the bring-up playbooks
+  (`_BROAD_MANUAL_PREFIXES`: `bootstrap.yml`, `k3s-bringup.yml`, `initial_setup.yml`),
+  **never** a `tasks/`- or docs-only change, **never** a red or unfinished CI verdict, and
+  **never** a SHA a previous tick held. The two daily GitHub crons act on one setting each:
+  `github-interaction-limit.sh` re-applies a declared value; `github-ruleset-drift.sh` only
+  alerts (*The two GitHub settings this role watches*).
+- **Mode (explicit + reversible):** `has_gitops` in `host_vars` installs the timer on one
+  host and tears it down everywhere else, and the code refuses on its own when the var reads
+  `false` (*A host with `has_gitops: false` is reaped*). Returning a host to hand-deploy is
+  the var flip plus a re-run of `initial_setup.yml --tags gitops_deploy`.
+- **Authoritative sources:** `origin/master` as fetched this tick; GitHub's check-runs API for
+  the CI verdict, authenticated through `gh auth token`; the live rollout and restart state
+  for the health gate. Never a cached verdict, never the working tree.
+- **Abort valves:** the CI gate (a non-green tip deploys the newest green ancestor or
+  nothing — *Safety*); `hold_sha` / `hold_plane`, which park a failed SHA until a later
+  successful apply of the same plane clears it (*Health gate + rollback*, *Which apply clears
+  a hold*); `RUN_BUDGET_S` and the rollback budget, which bound one tick's wall clock; the
+  staging gate, which asks `daniel-stage` about every commit that would auto-deploy a k8s
+  service and, when `STAGING_GATE_BLOCKING` is on, stops the prod deploy on a rejection.
+- **Required evidence:** every tick writes `last_run` (the GitOps-Alive tile expires without
+  it); every deploy, rollback, hold and deferral posts to the dedicated Discord webhook, and
+  a `hold_sha` pages through the **GitOps Deploy — Status** tile until cleared. An
+  uneventful tick logs nothing, so `last_run` is the record that it ran.
+- **Next-run review:** before widening scope (a new auto-deployable plane, a shorter
+  `hold` rule, a wider denylist exemption), read the last week's Discord log for the holds
+  and rollbacks that actually fired — the *Traps* section is the list of what an earlier
+  widening cost.
+
 ## Safety
 - **CI gate — the tip must be green before anything is merged or deployed** (`REQUIRE_CI`,
   `deploy_logic.ci_verdict`). Before this the deployer applied whatever landed on master: nothing
