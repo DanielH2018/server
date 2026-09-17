@@ -40,11 +40,24 @@ services:
       - AUTOHEAL_START_PERIOD=120
       - DOCKER_SOCK=tcp://docker-proxy-lifecycle:2375
     healthcheck:
-      # Interval-only override: `test` is deliberately omitted, so Docker inherits the
-      # image's own probe (pgrep -f autoheal). The image bakes interval=5s — that's a
-      # sh+pgrep exec (2 runc invocations) every 5s, the single largest source of
-      # process churn on the Pi (2026-06-11). A self-pgrep doesn't need 5s cadence.
-      interval: {{ container_healthcheck_interval | default('30s') }}
+      # DECIDED: autoheal runs with NO healthcheck, so it can never restart ITSELF (#1789).
+      # `AUTOHEAL_CONTAINER_LABEL=all` has no self-exclusion — the entrypoint filters on
+      # `health=unhealthy` alone — so the image's baked probe (`pgrep -f autoheal`, a sh+pgrep
+      # exec through runc) made autoheal its own patient. Under the load a Pi deploy puts on
+      # this 512 MB board (load1 8-17, PSI full 20-25%, swap 350 MiB+ in every episode), that
+      # exec stalls past Docker's 30s timeout three times running, autoheal reads itself
+      # `unhealthy` and issues `docker restart` on its own container, and the `start` half
+      # then fails at the OCI runtime ("Timeout waiting for systemd to create scope"). A
+      # failed start does not fire `restart: unless-stopped` — that policy covers a process
+      # that EXITS — so autoheal sat at Exited/RestartCount 0 until pi-recovery-health's
+      # `docker start` arm ran. Observed directly on 2026-09-04 18:47Z ("Container /autoheal
+      # found to be unhealthy - Restarting container now", at the window's load1 peak of
+      # 17.58); the 2026-08-29 and 2026-09-02/03 stops carry the same load signature and the
+      # same failed-start shape. Nothing is lost by dropping the probe: `pgrep` only ever
+      # detected a dead process, which `restart: unless-stopped` and the cron's `docker start`
+      # both already cover, and a wedged-but-running shell loop passed it anyway. ENFORCED by
+      # ansible/tests/services/test_autoheal_does_not_watch_itself.py.
+      disable: true
     {{ service_networks() }}
     labels:
       # Watchtower
