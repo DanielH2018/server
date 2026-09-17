@@ -8,7 +8,7 @@
 # is installed by roles/setup/k3s/tasks/health-crons.yml, imported only from that role's
 # main.yml, which k3s-bringup.yml asserts onto k3s_server_hosts. So the reader exists on
 # daniel-box and NOWHERE else, while daniel-server renders the entire UPS shutdown chain
-# (roles/setup/nut_host: upsmon.conf, nut.conf, the secondary watchdog). Live on 2026-08-29:
+# (roles/nut_host: upsmon.conf, nut.conf, the secondary watchdog). Live on 2026-08-29:
 # daniel-server had no /var/lib/homelab/setup-render-manifest.d at all, and its
 # /etc/nut/upsmon.conf was dated Aug 17 against a template changed on 2026-08-28.
 #
