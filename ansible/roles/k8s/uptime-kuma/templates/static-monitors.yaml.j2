@@ -331,9 +331,10 @@ stringData:
    with a reason — `commit failed`, `deployed code differs from the repo`, `changed since applied`,
    the branch-ruleset arm #1761 added. No episode traces to a producer that failed to RUN.
    Where the push itself failed (`journalctl -t <tag> | grep 'push failed'` — setup-drift-check,
-   2026-08-29 16:47, a verdict the library logged and then swallowed, #1869) the deadline is
-   what reported it, which is the margin doing its job. A sticky DOWN with a message is the
-   tile doing its job too. Widening one to shorten those episodes would hide the finding, not
+   2026-08-29 16:47, a verdict the library logged and then swallowed) the deadline is what
+   reported it, which is the margin doing its job; since #1869 the Swallowed Push Verdicts tile
+   below pages that case within a cycle, and the deadline stays as the backstop. A sticky DOWN
+   with a message is the tile doing its job too. Widening one to shorten those episodes would hide the finding, not
    the gap, and lengthen how long a dropped verdict stays invisible. Re-check the same way
    before touching any of them. #}
 {# Gated on the token like its siblings, so this lands before the secret does and neither half
@@ -538,6 +539,15 @@ stringData:
     {"type": "push", "name": "Loki Log Ingestion", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_loki_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   monitor-bridge-promtail-dropped.json: |
     {"type": "push", "name": "Log Shipper Dropped Entries", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_promtail_dropped_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+{# Minted 2026-09-17 for #1869. kuma-push-lib.sh logs a lost push and returns 0 by design, so
+   a host cron's DOWN verdict that never reached its tile was reported only by that tile's
+   heartbeat deadline — the one-period-plus-an-hour margin the DECIDED marker above the drift
+   tiles keeps. monitor-bridge reads the library's final `push failed` line out of Loki and
+   pages here within a cycle, but ONLY when a sibling cron landed a push in the same window: a
+   fleet-wide loss is the edge or host tiles' page, and a plain count of push failures was
+   measured and rejected for paging on exactly those (uptime-kuma/CLAUDE.md). #}
+  monitor-bridge-swallowed-verdicts.json: |
+    {"type": "push", "name": "Swallowed Push Verdicts", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_swallowed_verdicts_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   monitor-bridge-loki-reachable.json: |
     {"type": "push", "name": "Loki Reachable", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ monitor_bridge_loki_reachable_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   monitor-bridge-discord.json: |

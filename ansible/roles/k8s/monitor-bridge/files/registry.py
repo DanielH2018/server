@@ -57,6 +57,7 @@ from checks.storage import (
 from checks.logs import (
     check_loki_ingestion,
     check_shipper_dropped,
+    check_swallowed_verdicts,
 )
 
 
@@ -144,6 +145,15 @@ def build_checks(env: Mapping[str, str] | None = None) -> list[Check]:
             "shipper_dropped",
             tok("KUMA_PUSH_SHIPPER_DROPPED"),
             check_shipper_dropped,
+        ),
+        # Minted 2026-09-17 for #1869: kuma-push-lib.sh logs a lost push and returns 0, so a
+        # host cron's DOWN verdict that never reached its tile was reported only by that
+        # tile's heartbeat deadline — a day and an hour later for the daily drift producers.
+        # Reads the library's own final-failure line out of Loki, so it is Loki-dependent.
+        Check(
+            "swallowed_verdicts",
+            tok("KUMA_PUSH_SWALLOWED_VERDICTS"),
+            check_swallowed_verdicts,
         ),
         Check("discord", tok("KUMA_PUSH_DISCORD"), check_discord),
         Check("r2_usage", tok("KUMA_PUSH_R2_USAGE"), check_r2_usage),

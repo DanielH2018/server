@@ -965,6 +965,24 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     broke, and nothing but this arm would have shown an operator the shape of what happened.
     Land a shipper change more than an hour before pointing this check at its counters, to
     keep the cutover's own re-tail from paging the deploy.)
+  - **Swallowed Push Verdicts** (a host cron's DOWN verdict that `kuma-push-lib.sh` logged
+    and then lost — added 2026-09-17, #1869. The library returns 0 after a failed push by
+    design, so the cron does not fail, and the verdict reached nobody until the tile's
+    heartbeat deadline: a day and an hour later for the daily drift producers, which is what
+    reported setup-drift-check's lost DOWN of 2026-08-29 and release-staleness-check's
+    http=500 of 2026-09-10. `check_swallowed_verdicts` reads the crons' push-outcome lines out
+    of Loki over `SWALLOWED_VERDICTS_WINDOW_S` (3h) — the cron's own `status=<up|down>` line
+    and the library's final `push failed (` line, the transient-retry line excluded in the
+    LogQL — through `bridge.net.loki_lines`, a range query, because the newest line per tag is
+    what decides and no metric query returns a line's timestamp. `down` when some tag's newest
+    line is a swallowed `status=down` AND some other tag landed a push in the window; when
+    nothing landed the loss is fleet-wide — Kuma unreachable, a total-404 edge, the host that
+    runs Kuma down — and the message names the edge/host tiles as the owner instead of paging
+    a second time for one cause. That gate is what separates this from the plain count of
+    push failures `uptime-kuma/CLAUDE.md` measured and rejected. A swallowed `up` is not
+    counted: its tile goes red at the deadline for a cron that ran, which is the library's
+    retry's case (#1010), not a hidden finding. In `LOKI_DEPENDENT`. A fetch that hits the
+    5000-line cap says so in the message rather than deciding on the newest part.)
   - **Discord Delivery** (GET-verifies **all five** Discord notification webhooks: Kuma's own
     `monitor_discord_webhook_url` — the one Kuma POSTs every alert to — CrowdSec's
     `crowdsec_discord_webhook_url`, which CrowdSec POSTs ban alerts to *directly* (not via Kuma),
