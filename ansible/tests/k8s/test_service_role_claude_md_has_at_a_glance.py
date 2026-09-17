@@ -41,8 +41,7 @@ def missing_glance(names, roles_dir=K8S_ROLES) -> list[str]:
     return sorted(
         name
         for name in names
-        if name not in EXEMPT
-        and HEADING not in (roles_dir / name / "CLAUDE.md").read_text()
+        if name not in EXEMPT and HEADING not in _doc_text(roles_dir / name)
     )
 
 
@@ -65,3 +64,9 @@ def test_a_doc_without_the_heading_is_flagged(tmp_path):
         (tmp_path / name).mkdir()
         (tmp_path / name / "CLAUDE.md").write_text(body)
     assert missing_glance(["with", "without"], tmp_path) == ["without"]
+
+
+def _doc_text(role_dir) -> str:
+    doc = role_dir / "CLAUDE.md"
+    # A missing doc is test_k8s_roles_have_claude_md.py's finding; here it reads as "no heading".
+    return doc.read_text() if doc.is_file() else ""

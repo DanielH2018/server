@@ -17,11 +17,15 @@ import pytest
 
 from secrets_mgmt.secret_bearing_host_paths import (
     readable_beyond_owner_and_group,
+    secret_bearing_host_paths,
     world_readable_secret_bearing_tasks,
 )
 
 
 def test_no_secret_bearing_host_script_is_world_readable():
+    # The census this filters is floored by name in test_secret_bearing_host_paths.py; the
+    # count here keeps this file from passing on an emptied one.
+    assert len(secret_bearing_host_paths()) >= 16
     assert world_readable_secret_bearing_tasks() == []
 
 

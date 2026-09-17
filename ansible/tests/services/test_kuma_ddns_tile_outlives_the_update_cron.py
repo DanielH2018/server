@@ -43,7 +43,14 @@ def _ddns_envs() -> dict[str, list[dict]]:
             (container,) = doc["spec"]["template"]["spec"]["containers"]
             envs[doc["metadata"]["name"]] = container.get("env", [])
     assert len(envs) == 2, sorted(envs)
+    # The selector reaches the env list it would find UPDATE_CRON in: both carry DOMAINS.
+    assert all("DOMAINS" in {v.get("name") for v in env} for env in envs.values()), envs
     return envs
+
+
+def tile_outlives_cycle(interval: int, envs: dict[str, list[dict]]) -> bool:
+    """True when a beat from the slowest producer still lands inside the tile's deadline."""
+    return interval > max(cron_period(env) + CYCLE_WORK_CAP for env in envs.values())
 
 
 def test_each_ddns_tile_interval_exceeds_the_slowest_possible_cycle():
@@ -51,17 +58,18 @@ def test_each_ddns_tile_interval_exceeds_the_slowest_possible_cycle():
         e["name"]: e["interval"] for e in _entities().values() if e.get("name") in TILES
     }
     assert set(tiles) == TILES
-    bound = max(cron_period(env) + CYCLE_WORK_CAP for env in _ddns_envs().values())
+    envs = _ddns_envs()
     for name, interval in tiles.items():
-        assert interval > bound, (
-            f"{name} waits {interval}s but a DDNS cycle can take {bound}s; re-derive the "
+        assert tile_outlives_cycle(interval, envs), (
+            f"{name} waits {interval}s, less than one DDNS cycle can take; re-derive the "
             "tile from the DECIDED marker in static-monitors.yaml.j2"
         )
 
 
 def test_a_slower_cron_or_a_rounded_tile_would_be_caught():
-    assert cron_period([]) == IMAGE_DEFAULT_PERIOD
-    assert cron_period([{"name": "UPDATE_CRON", "value": "@every 10m"}]) == 600
-    assert not 360 > 600 + CYCLE_WORK_CAP
-    assert not 300 > IMAGE_DEFAULT_PERIOD + CYCLE_WORK_CAP
-    assert 360 > IMAGE_DEFAULT_PERIOD + CYCLE_WORK_CAP
+    default = {"proxied": [], "direct": []}
+    slower = {"proxied": [{"name": "UPDATE_CRON", "value": "@every 10m"}], "direct": []}
+    assert cron_period(slower["proxied"]) == 600
+    assert tile_outlives_cycle(360, default)
+    assert not tile_outlives_cycle(300, default)
+    assert not tile_outlives_cycle(360, slower)
