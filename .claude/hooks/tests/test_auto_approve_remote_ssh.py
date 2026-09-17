@@ -37,10 +37,20 @@ WRAPPER_TEXT = WRAPPER.read_text(encoding="utf-8")
 # The wrapper hardcodes these; it cannot run without them.
 UV_BIN = Path("/home/ubuntu/.local/bin/uv")
 REPO_DIR = Path("/home/ubuntu/server")
+# The classifier's ssh tables come from the dotfiles `claude_guard` package (79c26155). Without
+# that deploy the wrapper's documented output is nothing — the prompt stands — so the allow
+# case below cannot be exercised there; test_claude_guard_import.py gates on the same directory.
+CLAUDE_GUARD_DIR = Path("~/.local/share/claude-guard").expanduser()
 
 _runnable = pytest.mark.skipif(
-    not (UV_BIN.exists() and REPO_DIR.is_dir() and shutil.which("bash")),
-    reason="wrapper hardcodes /home/ubuntu paths and needs uv; not runnable here",
+    not (
+        UV_BIN.exists()
+        and REPO_DIR.is_dir()
+        and CLAUDE_GUARD_DIR.is_dir()
+        and shutil.which("bash")
+    ),
+    reason="wrapper hardcodes /home/ubuntu paths and needs uv plus the deployed "
+    "claude_guard package; not runnable here",
 )
 
 

@@ -323,6 +323,19 @@ stringData:
     {"type": "push", "name": "Daniel Pi Recovery", "interval": 600, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ pi_recovery_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   secret-rotation.json: |
     {"type": "push", "name": "Secret Rotation", "interval": 90000, "max_retries": 0, "resendInterval": {{ kuma_push_resend_interval_minutes }}, "push_token": "{{ secret_rotation_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+{# DECIDED: the one-period-plus-an-hour margin on the drift tiles below (Docs Refresh, Manifest
+   Prune, Release Staleness, Setup Plane, Live Object, GitHub Ruleset) stays. #1781 ranked them
+   by 30-day down-time and read the margin as the cause. Measured 2026-09-17 from each producer's
+   own journal (`journalctl -t <tag>` on the host that runs it — no sudo needed): every DOWN
+   episode in the 22 days Prometheus held lines up with a run that completed and pushed `status=down`,
+   with a reason — `commit failed`, `deployed code differs from the repo`, `changed since applied`,
+   the branch-ruleset arm #1761 added. No episode traces to a producer that failed to RUN.
+   Where the push itself failed (`journalctl -t <tag> | grep 'push failed'` — setup-drift-check,
+   2026-08-29 16:47, a verdict the library logged and then swallowed, #1869) the deadline is
+   what reported it, which is the margin doing its job. A sticky DOWN with a message is the
+   tile doing its job too. Widening one to shorten those episodes would hide the finding, not
+   the gap, and lengthen how long a dropped verdict stays invisible. Re-check the same way
+   before touching any of them. #}
 {# Gated on the token like its siblings, so this lands before the secret does and neither half
    sits red waiting for the other.
    INTERVAL IS DERIVED FROM THE CRONTAB, not chosen: docs-refresh runs at minute 17 of hours 6
