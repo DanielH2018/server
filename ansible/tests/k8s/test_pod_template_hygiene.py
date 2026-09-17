@@ -249,14 +249,24 @@ def test_every_long_running_pod_template_names_a_homelab_tier():
 
 def test_system_tier_allowlist_names_only_templates_that_use_it():
     """The allowlist is the real guard, so a stale entry — a template that moved back to a
-    homelab tier, or was deleted — must not linger as a silent permission."""
-    actual = {
-        (role, tpl): pod.get("priorityClassName")
-        for role, tpl, _label, pod in _pod_templates(_LONG_RUNNING)
-        if pod.get("priorityClassName") not in _homelab_tiers()
-    }
-    assert actual == _SYSTEM_TIER, (
-        f"long-running pod templates outside the homelab tiers: {actual}; "
+    homelab tier, or was deleted — must not linger as a silent permission.
+
+    A template naming NO class is the census test's finding, not this one's, so it is
+    filtered out here rather than reported twice. Two objects in one template that name
+    different system classes would collapse under a `(role, tpl)` key, so the key carries
+    the object label and is reduced to the allowlist's shape only after the check that
+    every value agrees."""
+    tiers = _homelab_tiers()
+    actual: dict[tuple[str, str], set[str]] = {}
+    for role, tpl, _label, pod in _pod_templates(_LONG_RUNNING):
+        name = pod.get("priorityClassName")
+        if name is not None and name not in tiers:
+            actual.setdefault((role, tpl), set()).add(name)
+    split = {k: v for k, v in actual.items() if len(v) > 1}
+    assert not split, f"one template names several system classes: {split}"
+    flat = {k: next(iter(v)) for k, v in actual.items()}
+    assert flat == _SYSTEM_TIER, (
+        f"long-running pod templates outside the homelab tiers: {flat}; "
         f"allowlisted: {_SYSTEM_TIER}"
     )
 

@@ -19,7 +19,8 @@ Before that none did, which placed the whole stack at priority 0, below `homelab
 (1000) — `roles/setup/k3s/templates/priorityclass.yaml.j2` explains why that class exists
 as a real value rather than as the absence of one.
 
-Prometheus earns tier 1 because monitor-bridge, itself tier 1, reads it every cycle:
+Prometheus earns tier 1 because tier 1 names alerting in its own description ("edge, auth,
+DNS, WAF, registry, alerting") and monitor-bridge, itself tier 1, reads it every cycle:
 `CLUSTER_PROMETHEUS_URL` and `PROMETHEUS_URL` in `monitor-bridge/templates/env-secret.yaml.j2`
 both point at this Prometheus, and the disk, memory, OOM, restart, PVC-fullness and
 scrape-target verdicts all read from it. Evicting Prometheus under pressure would degrade the
