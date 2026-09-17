@@ -118,6 +118,9 @@ try:
 except ImportError:
     _fake_pkg = types.ModuleType("claude_guard")
     _fake_pkg.__path__ = []  # marks it as a package so `claude_guard.tables` resolves
+    # The signal the ssh-dependent tests skip on. The real package never carries this
+    # attribute, and a directory check would not say what actually fed the tables.
+    _fake_pkg.__claude_guard_stand_in__ = True
     _fake_tables = types.ModuleType("claude_guard.tables")
     _fake_tables.TRUSTED_SSH_HOSTS = STAND_IN_TRUSTED_SSH_HOSTS
     _fake_tables.SECRET_PATH_RE = STAND_IN_SECRET_PATH_RE
