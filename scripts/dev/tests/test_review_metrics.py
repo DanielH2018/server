@@ -87,3 +87,68 @@ def test_validate_row_flags_missing_field_and_wrong_types():
     assert any("high is not an int" in p for p in problems)
     assert any("prs is not a list" in p for p in problems)
     assert any("ledger is not a string" in p for p in problems)
+
+
+def _coverage_rows():
+    rows = []
+    for domain in sorted(rm.REVIEW_DOMAINS):
+        rows.append(
+            {
+                "date": "2026-09-17",
+                "domain": domain,
+                "agent": None,
+                "status": "out_of_scope",
+                "reviewed": [],
+                "findings": [],
+                "leads": [],
+            }
+        )
+    rows[0].update(
+        status="covered",
+        agent="security-review",
+        reviewed=["ansible/roles/k8s/n8n"],
+        findings=["k8s/n8n/x"],
+    )
+    rows[1].update(
+        status="clean",
+        agent="homelab-cicd-reviewer",
+        reviewed=["ansible/roles/setup/gitops_deploy"],
+    )
+    rows[2].update(
+        status="hole",
+        agent="homelab-docs-freshness-reviewer",
+        reason="agent returned nothing",
+    )
+    return rows
+
+
+def test_validate_coverage_accepts_one_row_per_domain():
+    assert rm.validate_coverage(_coverage_rows()) == []
+
+
+def test_validate_coverage_flags_absent_domain_and_evidence_state_mismatches():
+    rows = _coverage_rows()
+    dropped = rows.pop()  # one domain absent
+    rows[1]["findings"] = ["k8s/x"]  # clean row carrying a finding
+    rows[2].pop("reason")  # hole without a reason
+    rows[0]["reviewed"] = []  # covered row naming nothing
+    problems = rm.validate_coverage(rows)
+    assert f"domain absent from the ledger: {dropped['domain']}" in problems
+    assert any("clean row carries findings" in p for p in problems)
+    assert any("hole row has no reason" in p for p in problems)
+    assert any("covered row names nothing it reviewed" in p for p in problems)
+
+
+def test_every_committed_coverage_ledger_validates():
+    ledgers = sorted(rm.COVERAGE_DIR.glob("*.json"))
+    assert ledgers, "no coverage ledger committed under evals/review_coverage/"
+    for path in ledgers:
+        assert rm.validate_coverage(rm.load_coverage(path)) == [], path.name
+
+
+def test_review_domains_match_findings_domain_choices():
+    # The ledger's domain names are findings.py --domain's choices minus home-assistant, which
+    # /ha-review owns; a rename on either side fails here by name.
+    from findings_lib.issue_model import DOMAINS
+
+    assert rm.REVIEW_DOMAINS == frozenset(DOMAINS) - {"home-assistant"}

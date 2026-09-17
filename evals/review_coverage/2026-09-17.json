@@ -1,0 +1,95 @@
+[
+  {
+    "date": "2026-09-17",
+    "domain": "security",
+    "agent": "security-review (7 hunters + 9 verifiers, cloudflare security-audit skill, quick profile)",
+    "status": "covered",
+    "reviewed": [
+      "ansible/roles/k8s/n8n/templates",
+      "ansible/roles/k8s/netpol-baseline",
+      "ansible/roles/k8s/homelab-mcp/files",
+      "ansible/roles/k8s/traefik/templates/livesync-gate-secret.yaml.j2",
+      "ansible/roles/k8s/authelia/templates/config-secret.yaml.j2",
+      "ansible/roles/k8s/*/templates/*.sh.j2",
+      "ansible/roles/k8s/*/templates/*secret*.yaml.j2",
+      "ansible/roles/k8s/monitor-bridge/templates",
+      "ansible/roles/k8s/autofix-bridge/files/autofix.py",
+      "ansible/roles/k8s/pi-peer-backup",
+      "ansible/roles/k8s/image-builder",
+      "ansible/roles/k8s/*/templates/rbac.yaml.j2",
+      "ansible/roles/k8s/*/templates (privileged, hostPath, hostNetwork, NET_ADMIN)"
+    ],
+    "findings": [
+      "k8s/n8n/networkpolicy:5678-open-from-all-sources-bypasses-authelia"
+    ],
+    "leads": [
+      "k8s/pi-peer-backup/authorized_key:unrestricted-key-with-passwordless-sudo",
+      "k8s/homelab-mcp/cert-expiry-unbounded-connect",
+      "k8s/host-scripts/push-token-template-task-without-no-log",
+      "k8s/autofix-bridge/client-error-exemption-reads-errormessage",
+      "k8s/ingress/karakeep-api-prefix-wider-than-bearer-gate"
+    ],
+    "notes": "Source-only run, no sandbox: every check a source read. Full ledger with 41 units in ~/security-audit-skill/server/run-1/coverage-ledger.json."
+  },
+  {
+    "date": "2026-09-17",
+    "domain": "network",
+    "agent": "security-review (hunter-authelia-identity, hunter-network-lifecycle + verifiers)",
+    "status": "covered",
+    "reviewed": [
+      "ansible/templates/ingressroute.yml.j2",
+      "ansible/roles/k8s/traefik/templates/static-config.yaml.j2",
+      "ansible/roles/k8s/traefik/templates/dynamic.yaml.j2",
+      "ansible/roles/k8s/crowdsec/templates/ingressroute.yaml.j2",
+      "ansible/roles/k8s/*/templates/service.yaml.j2 (LoadBalancer VIPs and hostPorts)",
+      "ansible/roles/k8s/speedtest/templates/ingressroute.yaml.j2"
+    ],
+    "findings": [],
+    "leads": [
+      "k8s/edge/forwarded-source-ip-attribution",
+      "k8s/ingress/local-host-rule-reachable-off-lan",
+      "k8s/ingress/monitoring-route-app-auth-assumed-speedtest"
+    ],
+    "notes": "CrowdSec bouncer client-IP key and rate-limit sourceCriterion accepted by the critic as a gap and deferred."
+  },
+  {
+    "date": "2026-09-17",
+    "domain": "backup-observability",
+    "agent": null,
+    "status": "out_of_scope",
+    "reviewed": [],
+    "findings": [],
+    "leads": [],
+    "notes": "Run scoped to ansible/roles/k8s security surfaces; Longhorn, Kuma and the monitor chain were not reviewed."
+  },
+  {
+    "date": "2026-09-17",
+    "domain": "cicd",
+    "agent": null,
+    "status": "out_of_scope",
+    "reviewed": [],
+    "findings": [],
+    "leads": [],
+    "notes": "Only the image-builder to registry handoff was reviewed, under security; the deploy plane and GitOps deployer were recorded as out_of_scope units."
+  },
+  {
+    "date": "2026-09-17",
+    "domain": "container",
+    "agent": null,
+    "status": "out_of_scope",
+    "reviewed": [],
+    "findings": [],
+    "leads": [],
+    "notes": "Workload securityContext and hostPath hygiene were reviewed under security; the *arr and media stack were not."
+  },
+  {
+    "date": "2026-09-17",
+    "domain": "docs",
+    "agent": null,
+    "status": "out_of_scope",
+    "reviewed": [],
+    "findings": [],
+    "leads": [],
+    "notes": "Not part of the run."
+  }
+]
