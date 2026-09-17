@@ -81,7 +81,10 @@ def rearm_tick(ln: Landing) -> None:
     after the kick -- a rollout wait plus the 180s restart window -- so it is the one point
     where the joined run has most likely ended. A second join is booked and said, not
     retried: the deployer's own 10-minute timer converges the checkout, and this landing's
-    deploy is already live and gated. No-op unless the first kick joined.
+    deploy is already live and gated. No-op unless the first kick joined. Unreachable after a
+    deploy that failed, because `deploy_outcome` ends the landing before the gate: a `joined`
+    row beside a `deploy-failed` verdict was asked once, and convergence is moot when nothing
+    shipped.
     """
     if ln.ledger.kick != "joined":
         return

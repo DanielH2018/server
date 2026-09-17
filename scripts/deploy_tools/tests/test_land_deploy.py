@@ -75,6 +75,16 @@ def test_an_unreadable_merge_commit_falls_back_to_the_primary_read(landing):
     assert [c[1][1:] for c in calls if c[0] == "deploy"] == [(["alloy"], "daniel-pi")]
 
 
+def test_a_tag_the_merge_commit_declares_on_no_host_deploys_locally(landing):
+    """`{}` is a read that SUCCEEDED and found no declaring host -- a new cluster role -- so it
+    is one local deploy, not the primary fallback that None is."""
+    ln, calls = _ready(landing, Fakes(hosts="daniel-pi\talloy\n", hosts_at={}))
+    ln.resolved_tags = ["k8s-manifests"]
+    assert deploy.deploy_by_host(ln, at=MERGE_SHA) == 0
+    assert [c[0] for c in calls if c[0] == "deploy_tags"] == []
+    assert [c[1][1:] for c in calls if c[0] == "deploy"] == [(["k8s-manifests"], None)]
+
+
 def test_without_at_the_hosts_come_from_the_primary(landing):
     """The exit-4 fallback deploys the primary checkout, so it routes from that tree too."""
     ln, calls = _ready(landing, Fakes(hosts="", hosts_at={"daniel-pi": ["alloy"]}))
