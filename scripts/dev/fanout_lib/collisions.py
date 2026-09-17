@@ -50,21 +50,34 @@ def shared_files(
 
 
 def refuse_shared_files(
-    batches: Mapping[str, Sequence[int]], issues: Mapping[int, Issue], allowed: bool
+    batches: Mapping[str, Sequence[int]],
+    issues: Mapping[int, Issue],
+    allowed: Sequence[str] = (),
 ) -> bool:
     """Whether `launch` must refuse this grouping, having printed every collision to stderr.
 
     Runs before the first ssh, like the label gate: a refusal here costs nothing. `allowed`
-    is the `--allow-shared-files` override for a citation that is context rather than an
-    edit target; the collisions still print, so the override is a decision on the record.
+    is the `--allow-shared-file PATH` override, one path per use, for a citation that is
+    context rather than an edit target — `docs/claude-tooling.md` cited by three findings
+    that each edit a different script. It names the file it excuses, so a wave that trips on
+    a doc path cannot switch the check off for the script collision beside it; that collision
+    still refuses. An excused collision still prints, so the override is on the record.
     """
     collisions = shared_files(batches, issues)
+    refused = False
     for path, names in collisions:
+        if path in allowed:
+            print(
+                f"launch: batches {', '.join(names)} all cite {path} — allowed by "
+                "--allow-shared-file",
+                file=sys.stderr,
+            )
+            continue
+        refused = True
         print(
             f"launch: batches {', '.join(names)} all cite {path} — two agents editing one "
-            "file is the #1798 conflict; regroup them into one batch",
+            "file is the #1798 conflict; regroup them into one batch, or pass "
+            f"--allow-shared-file {path} if the citation is context rather than an edit",
             file=sys.stderr,
         )
-    if collisions and allowed:
-        print("launch: --allow-shared-files set, launching anyway", file=sys.stderr)
-    return bool(collisions) and not allowed
+    return refused

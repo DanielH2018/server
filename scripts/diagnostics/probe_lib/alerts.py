@@ -447,10 +447,16 @@ def run_alerts(ns):
     # BEFORE the view, not after it. A truncated window that lists no episode prints "no DOWN
     # alerts in the last Nd", and a warning underneath that line arrives too late to stop it
     # being read as an all-clear. On stderr under `--json`, so stdout stays parseable.
-    # "Raise --limit" only when raising it can work: once the limit is the server's cap — the
-    # clamp above, or a `--limit` the operator set at it — the only remedy is a narrower window,
-    # and naming the other one sends them straight back to the rejection (#1790).
-    remedy = "Narrow --days" if limit < ns.limit else "Raise --limit or narrow --days"
+    # "Raise --limit" only when raising it can work. After the clamp it cannot, and the notice
+    # says so. Without one, whether it can depends on a cap this run never learned — the
+    # default 5000 is the server's default too, so a plain run that truncates is AT the cap and
+    # a bare "raise --limit" would send the operator round the clamp and back here (#1790).
+    remedy = (
+        "Narrow --days"
+        if limit < ns.limit
+        else "Narrow --days, or raise --limit if it is below Loki's "
+        "max_entries_limit_per_query"
+    )
     for logql, oldest_ns in truncated:
         print(
             f"(warning: hit --limit {limit} log lines on {logql} — this window is cut off "

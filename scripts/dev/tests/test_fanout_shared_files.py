@@ -57,7 +57,7 @@ def test_launch_refuses_two_batches_that_cite_one_file_before_any_ssh(tmp_path, 
     assert not run.calls
     err = capsys.readouterr().err
     assert f"batches 1780-1784, 1782 all cite {ALERTS}" in err
-    assert "regroup them into one batch" in err
+    assert f"regroup them into one batch, or pass --allow-shared-file {ALERTS}" in err
     assert not list(tmp_path.glob("*.json"))
 
 
@@ -67,25 +67,49 @@ def test_launch_proceeds_when_the_shared_script_is_grouped_into_one_batch(tmp_pa
     assert [c for c in run.calls if "worktree add" in c[1]]
 
 
-def test_allow_shared_files_launches_anyway_and_still_prints_the_collision(
-    tmp_path, capsys
-):
-    tools, run = fake_tools(answers={"daniel-box": ok(HEADROOM)}, issues=ISSUES)
+def test_allow_shared_file_excuses_the_named_file_only(tmp_path, capsys):
+    # A doc path is context for both batches; the override names it and nothing else, so the
+    # script collision beside it still refuses.
+    doc = "docs/claude-tooling.md"
+    issues = [
+        Issue(1780, "bridge", f"`{ALERTS}` and `{doc}`", ("claude",)),
+        Issue(1782, "probe", f"`{ALERTS}` and `{doc}`", ("claude",)),
+    ]
+    tools, run = fake_tools(answers={"daniel-box": ok(HEADROOM)}, issues=issues)
     assert (
         _launch(
             tools,
             tmp_path,
             "--batch",
-            "1780,1784",
+            "1780",
             "--batch",
             "1782",
-            "--allow-shared-files",
+            "--allow-shared-file",
+            doc,
+        )
+        == 1
+    )
+    err = capsys.readouterr().err
+    assert f"all cite {doc} — allowed by --allow-shared-file" in err
+    assert f"all cite {ALERTS} — two agents editing one file" in err
+    assert not run.calls
+
+    tools, run = fake_tools(answers={"daniel-box": ok(HEADROOM)}, issues=issues)
+    assert (
+        _launch(
+            tools,
+            tmp_path,
+            "--batch",
+            "1780",
+            "--batch",
+            "1782",
+            "--allow-shared-file",
+            doc,
+            "--allow-shared-file",
+            ALERTS,
         )
         == 0
     )
-    err = capsys.readouterr().err
-    assert f"all cite {ALERTS}" in err
-    assert "--allow-shared-files set, launching anyway" in err
     assert [c for c in run.calls if "worktree add" in c[1]]
 
 
@@ -98,5 +122,5 @@ def test_the_triage_step_names_the_file_level_collision_check():
     triage = skill[skill.index("## 1. Triage") : skill.index("## 2.")]
     assert "file-level collision check" in triage
     assert "`paths`" in triage
-    assert "--allow-shared-files" in triage
+    assert "--allow-shared-file" in triage
     assert "no two batches share a cited file" in triage

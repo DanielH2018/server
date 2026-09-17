@@ -53,8 +53,10 @@ batches, and two agents wrote a character-identical regex into
 `scripts/diagnostics/probe_lib/alerts.py`; the second PR had to be superseded by hand
 (#1798). `launch` runs the same check on the fetched bodies and refuses a grouping that
 shares a file, naming the file and the batches, before it touches a host. A citation that is
-context rather than an edit target gets `--allow-shared-files`, which still prints the
-collision. The direction differs from the two wave-level bounds below: a shared file is
+context rather than an edit target — a `docs/` page three findings each mention — is excused
+with `--allow-shared-file <path>`, one path per use: the override names what it excuses, so
+a script collision beside the doc still refuses, and the excused one still prints. The
+direction differs from the two wave-level bounds below: a shared file is
 merged into one batch, never held for the next wave, because holding it would still produce
 two identical fixes.
 
