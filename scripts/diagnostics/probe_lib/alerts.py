@@ -129,9 +129,10 @@ _SYSLOG_LINE_RE = re.compile(
 # scaffolding as its message. The library's `push failed transiently` line is NOT a verdict
 # record (the final line follows it, or the push lands and the cron's own `status=` line is
 # the record), so it is dropped rather than listed as an episode of its own; monitor-bridge's
-# check_swallowed_verdicts excludes it in LogQL for the same reason.
+# check_swallowed_verdicts excludes it in LogQL for the same reason. The pair may be followed
+# by further `k=v` words — ` by=kuma` since #1803, when Kuma itself answered the push.
 _SYSLOG_PUSH_FAILED_RE = re.compile(
-    r"^push failed \((?:http=\S+ rc=\S+\) \()?status=down:\s*(?P<msg>.*?)\)?$"
+    r"^push failed \((?:http=\S+ rc=\S+(?: [a-z]+=\S+)*\) \()?status=down:\s*(?P<msg>.*?)\)?$"
 )
 _SYSLOG_TRANSIENT_RE = re.compile(r"^push failed transiently \(")
 _SYSLOG_STATUS_RE = re.compile(r"^status=down\s*(?P<msg>.*)$")

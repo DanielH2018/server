@@ -47,10 +47,20 @@
 # rollout pushes, the "green and inert" failure this repo has paid for more than once (repo-root
 # CLAUDE.md). So this classifies on the HTTP status curl reports via `-w`, not on `-f`'s collapse
 # of it: retry a `curl_rc != 0` or any HTTP code except 2xx/401/403, stop only on 401 or 403. A
-# no-router 404 and a bad-token 404 are indistinguishable to curl — the trade is that a
-# genuinely bad token now burns the retry budget before its log line appears, which the sibling
-# cron `ansible/roles/k8s/crowdsec/templates/crowdsec-update-home-allowlist.sh.j2` already
-# accepts and records for the same reason.
+# no-router 404 and a bad-token 404 are the same code, so a genuinely bad token burns the retry
+# budget before its log line appears, which the sibling cron
+# `ansible/roles/k8s/crowdsec/templates/crowdsec-update-home-allowlist.sh.j2` already accepts
+# and records for the same reason. They are NOT the same response, and the final log line says
+# which (#1803): Kuma's push route answers `{"ok":false,"msg":"Monitor not found or not
+# active."}` as `application/json`, while Traefik's no-router 404 is Go's `404 page not found`
+# as `text/plain` (both measured 2026-09-17 against the live VIP). The content type travels
+# out through `-w` beside the code — the body itself stays discarded — and a JSON answer adds
+# `by=kuma` to the failure line. That field is what separates a token the cron holds that
+# Kuma has no live monitor for (a deploy that re-minted the static monitors ahead of the cron,
+# a paused tile) from an edge with no route: the first is Kuma answering, so the edge and
+# Kuma are both fine and the verdict is lost for as long as the two stay apart, with no tile
+# to go red at its deadline. monitor-bridge's swallowed-verdicts check reads the field out of
+# Loki and pages on it (`verdicts/logs.py`); the retry classification is unchanged.
 #
 # Issue #994 measured 49 dropped pushes across 11 crons clustered at three uptime-kuma rollouts,
 # with every one of them computed as `status=up` and thrown away — the static monitors run
@@ -74,7 +84,7 @@
 kuma_push() {
   local status="$1" msg="$2" push_url="$3" kuma_host="$4" resolve_ip="$5" tag="$6"
   local -r retry_delay_s=30
-  local attempt http_code curl_rc
+  local attempt http_code curl_rc reply ctype by
   # shellcheck disable=SC2034  # read by the sourcing script, not by this file
   KUMA_PUSH_OK=1
   # The URL embeds the push token, so it goes in via a config file on stdin rather than as an
@@ -88,19 +98,28 @@ kuma_push() {
   # config-supplied URL exactly as before. No caller reads stdin, so `-K -` conflicts with
   # nothing. No `-f`: it collapses every HTTP >=400 to one exit code, which is exactly the
   # distinction the retry needs to make. `-w '%{http_code}'` reports the status directly instead,
-  # and `-o /dev/null` discards the body Kuma's push endpoint returns. The `curl_rc=$? ||`
-  # guard on the assignment (rather than reading $? on the next line) keeps this safe under a
-  # future `set -e` caller — every current caller runs `set -uo pipefail`, not `-e`, but the
-  # function has no way to know what a caller five years from now will set.
+  # and `-o /dev/null` discards the body Kuma's push endpoint returns; `%{content_type}` rides
+  # beside the code so the log line can name who answered without carrying the body (header
+  # above). The `curl_rc=$? ||` guard on the assignment (rather than reading $? on the next
+  # line) keeps this safe under a future `set -e` caller — every current caller runs
+  # `set -uo pipefail`, not `-e`, but the function has no way to know what a caller five years
+  # from now will set.
   for attempt in 1 2 3; do
-    http_code=$(
+    reply=$(
       printf 'url = "%s"\n' "$push_url" |
         curl -sS --max-time 10 -G -K - \
           --resolve "${kuma_host}:443:${resolve_ip}" \
           --data-urlencode "status=${status}" \
           --data-urlencode "msg=${msg}" \
-          -o /dev/null -w '%{http_code}'
+          -o /dev/null -w '%{http_code} %{content_type}'
     ) && curl_rc=0 || curl_rc=$?
+    # A curl that dies before any response still prints `000 ` through -w; a stub or an older
+    # curl may print the code alone, so the split tolerates a missing second field.
+    http_code=${reply%% *}
+    ctype=""
+    case "$reply" in *" "*) ctype=${reply#* } ;; esac
+    by=""
+    case "$ctype" in application/json*) by=" by=kuma" ;; esac
     if [ "$curl_rc" -eq 0 ]; then
       case "$http_code" in
       2??) return 0 ;;
@@ -113,7 +132,7 @@ kuma_push() {
       esac
     fi
     if [ "$attempt" -lt 3 ]; then
-      logger -t "$tag" "push failed transiently (http=${http_code} rc=${curl_rc}) (status=${status}: ${msg}), retrying in ${retry_delay_s}s"
+      logger -t "$tag" "push failed transiently (http=${http_code} rc=${curl_rc}${by}) (status=${status}: ${msg}), retrying in ${retry_delay_s}s"
       sleep "$retry_delay_s"
     fi
   done
@@ -123,8 +142,9 @@ kuma_push() {
   # failure mode was measured wrong once already (issue #1010: assumed 503, observed 404 in 88 of
   # 100 non-200 responses) — logging the code lets the next rollout's journal settle the class
   # directly instead of by inference. `journalctl --since ... | grep "push failed"` then reads
-  # the actual class. Neither value can carry the push token; both are numbers.
-  logger -t "$tag" "push failed (http=${http_code} rc=${curl_rc}) (status=${status}: ${msg})"
+  # the actual class. Neither value can carry the push token; both are numbers, and `by=kuma`
+  # is a fixed word derived from the content type, never from the body.
+  logger -t "$tag" "push failed (http=${http_code} rc=${curl_rc}${by}) (status=${status}: ${msg})"
   return 0
 }
 

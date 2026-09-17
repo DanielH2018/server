@@ -144,6 +144,17 @@ def test_parse_syslog_down_line_unwraps_the_retry_era_failed_push():
     )
 
 
+def test_parse_syslog_down_line_unwraps_a_push_kuma_rejected():
+    # The pair grows a ` by=kuma` word when Kuma answered the push itself (#1803); the word is
+    # a class marker like the pair and stays out of the message with it.
+    line = SYSLOG_PUSH_FAILED_WITH_CODE.replace(
+        "(http=500 rc=0)", "(http=404 rc=0 by=kuma)"
+    )
+    name, msg = alerts.parse_syslog_down_line(line)
+    assert name == "release-staleness-check"
+    assert msg.startswith("push failed: homepage: changed since applied:")
+
+
 def test_parse_syslog_down_line_drops_the_transient_retry_line():
     # Two of these precede every final failure; listed, they triple one lost push into three
     # episodes, and a push that lands on retry has the cron's own status= line as its record.

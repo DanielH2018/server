@@ -545,7 +545,9 @@ stringData:
    tiles keeps. monitor-bridge reads the library's final `push failed` line out of Loki and
    pages here within a cycle, but ONLY when a sibling cron landed a push in the same window: a
    fleet-wide loss is the edge or host tiles' page, and a plain count of push failures was
-   measured and rejected for paging on exactly those (uptime-kuma/CLAUDE.md). #}
+   measured and rejected for paging on exactly those (uptime-kuma/CLAUDE.md). The exception is
+   a push Kuma itself rejected (`by=kuma` on the line, #1803): a token no monitor here holds
+   has no tile to go red, so it pages here whatever its status and company. #}
   monitor-bridge-swallowed-verdicts.json: |
     {"type": "push", "name": "Swallowed Push Verdicts", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_swallowed_verdicts_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
 {# Minted 2026-09-17 for #1891. Kuma logs `Cannot send notification to <name>` and does not

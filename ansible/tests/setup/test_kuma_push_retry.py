@@ -21,9 +21,12 @@ CLAUDE.md names).
 The fix (#1010) retries on anything that isn't Kuma answering with a genuine permanent
 rejection — HTTP 401 or 403 — and stops only on those. Everything else retries: curl itself
 failing before a response exists (couldn't connect / timeout / TLS), a 5xx *response*, and any
-OTHER 4xx, in particular the 404 above. A no-router 404 and a bad-token 404 are indistinguishable
-to curl, so a genuinely bad token now burns the retry budget before its log line appears — the
-same trade the sibling cron `crowdsec-update-home-allowlist.sh.j2` already accepted. The retry
+OTHER 4xx, in particular the 404 above. A no-router 404 and a bad-token 404 share a code, so a
+genuinely bad token burns the retry budget before its log line appears — the same trade the
+sibling cron `crowdsec-update-home-allowlist.sh.j2` already accepted. Since #1803 the final
+line says which of the two it was: Kuma's own rejection is `application/json`, Traefik's
+no-router page is `text/plain`, and the library appends `by=kuma` from the content type (the
+body stays discarded). The retry
 budget also grew from two attempts to three: a single 30s backoff is under the 31s longest
 endpoint-less window #1010 measured, so a lone retry could still land inside the outage; three
 attempts at a fixed 30s backoff put the second retry at t=60s, ~2x that window. Each behaviour
@@ -40,8 +43,9 @@ LIB = ANSIBLE / "roles/setup/initial_setup/files/kuma-push-lib.sh"
 def _run_push(tmp_path, responses, extra_prelude=""):
     """Run kuma_push with `curl` stubbed to return `responses` in sequence, one per call.
 
-    Each response is an (http_code, curl_rc) pair: http_code is what `-w '%{http_code}'` would
-    have printed to stdout, curl_rc is curl's own exit status. curl sits as the last stage of
+    Each response is an (http_code, curl_rc) pair: http_code is what `-w '%{http_code}
+    %{content_type}'` would have printed to stdout — the bare code, or the code, a space and a
+    content type — and curl_rc is curl's own exit status. curl sits as the last stage of
     `printf ... | curl ...` inside a `$(...)` command substitution, which runs in a subshell, so
     the stub can't set a variable back into the caller — it records each call as a line in a
     file instead, the same way the production pipeline's own side effect (the HTTP request)
@@ -53,7 +57,7 @@ def _run_push(tmp_path, responses, extra_prelude=""):
     sleeps_file.write_text("")
     logs_file = tmp_path / "logs"
     logs_file.write_text("")
-    codes = " ".join(code for code, _ in responses)
+    codes = " ".join('"%s"' % code for code, _ in responses)
     rcs = " ".join(str(rc) for _, rc in responses)
     script = f"""
     {extra_prelude}
@@ -121,6 +125,36 @@ def test_404_then_success_delivers_the_beat(tmp_path):
     assert "rc=0 ok=1" in result.stdout
     assert calls == 2
     assert sleeps == [30]
+
+
+def test_a_kuma_json_404_is_logged_as_answered_by_kuma(tmp_path):
+    # ACCEPT (#1803): Kuma's push route rejecting the token answers 404 as application/json.
+    # The final line carries `by=kuma` so the swallowed-verdicts check can tell a token no live
+    # monitor holds from an edge with no route. The retry itself is unchanged — three attempts,
+    # since the code alone still decides the classification.
+    _result, calls, _sleeps, logs = _run_push(
+        tmp_path,
+        [("404 application/json; charset=utf-8", 0)] * 3,
+    )
+    assert calls == 3
+    final = [line for line in logs if "push failed (" in line]
+    assert final == [
+        "test-tag push failed (http=404 rc=0 by=kuma) (status=up: test-msg)"
+    ]
+    # Never the body: the field is a fixed word, so a Kuma message can't reach syslog through it.
+    assert not any("Monitor not found" in line for line in logs)
+
+
+def test_a_traefik_text_404_is_not_attributed_to_kuma(tmp_path):
+    # REJECT (the pair): Traefik's no-router 404 is text/plain, and a bare code with no content
+    # type (an older curl, a stub) is not attributed either — the line keeps its #1010 shape.
+    _result, _calls, _sleeps, logs = _run_push(
+        tmp_path,
+        [("404 text/plain; charset=utf-8", 0), ("404", 0), ("404 text/plain", 0)],
+    )
+    final = [line for line in logs if "push failed (" in line]
+    assert final == ["test-tag push failed (http=404 rc=0) (status=up: test-msg)"]
+    assert not any("by=" in line for line in logs)
 
 
 def test_persistent_failure_gives_up_after_three_attempts(tmp_path):
