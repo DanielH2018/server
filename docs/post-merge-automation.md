@@ -144,7 +144,14 @@ Sequence:
    returned, to converge the primary checkout. After rather than before, because
    `gitops-deploy.service` holds the git-tree lock for its whole unit run and `deploy.sh`
    would queue behind it to cut its snapshot — the same wait, booked under `lock=` instead of
-   `tick=`.
+   `tick=`. A kick that finds a tick already in flight joins it and starts nothing
+   (`gitops_tick.sh` exit 4): that run fetched before the merge, so step 5 asks again after
+   the health gate, and the landing's `kick=` field records `started`, `rearmed`, `joined`
+   or `failed`. Under `joined` nothing the landing did converges the checkout; the deployer's
+   timer does.
+   Under `--at` the per-host split reads `containers_list` at the merge commit too, so a PR
+   that adds a Pi role and its entry together deploys with `-e target=daniel-pi` on its first
+   landing rather than after the tick has fast-forwarded the checkout (issue #1839).
 5. The health verdict, via `deploy_detach_notify.py --no-post`, rendered from a detached
    worktree of the same merge commit: `probe.py health` enumerates the workloads to gate by
    rendering the role's manifests from the checkout it runs in, so a role the merge commit

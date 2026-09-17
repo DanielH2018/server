@@ -37,7 +37,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 # `service_tags_at` is re-exported rather than defined here: `narrow_broad` needs it too,
 # and importing this module for it would put a cycle through `deploy_tags`.
-from lib.render_guard import containers_entries_in, service_tags_at  # noqa: F401
+from lib.render_guard import (  # noqa: F401
+    containers_entries_in,
+    hosts_for_tags,
+    service_records_at_or_none,
+    service_tags_at,
+)
 from lib.repo_paths import GITOPS_DEPLOY_FILES
 
 sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
@@ -91,6 +96,29 @@ _ROTATION_NOTE = (
 def declared_tags() -> set[str]:
     """Every name that selects a service, read from containers_list."""
     return deploy_tags.service_tags()
+
+
+def landing_hosts_at(tags, ref: str, cwd: Path) -> dict[str, list[str]] | None:
+    """`deploy_tags.landing_hosts`, with containers_list read AT `ref` rather than a checkout.
+
+    A landing that deploys its PR's merge commit (`deploy.sh --at`) must route each tag from
+    that commit's inventory: a PR adding a Pi role and its containers_list entry together
+    declares the role on daniel-pi in NO checkout until the tick fast-forwards, so the primary
+    read routed it to no host and the landing ran deploy.sh locally without `-e target=`
+    (issue #1839). Same routing rule and the same staging exclusion as the tree read, through
+    the one definition of each.
+
+    None when the ref cannot be read, for `service_records_at_or_none`'s reason: an empty
+    answer here would route every tag to no host, and the caller falls back to the tree.
+    """
+    records = service_records_at_or_none(ref, cwd)
+    if records is None:
+        return None
+    return {
+        host: host_tags
+        for host, host_tags in hosts_for_tags(tags, records).items()
+        if host not in deploy_tags.HOSTS_LAND_SH_NEVER_DEPLOYS
+    }
 
 
 def role_for(path: str) -> str | None:

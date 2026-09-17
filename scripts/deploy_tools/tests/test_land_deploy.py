@@ -44,6 +44,46 @@ def test_tags_no_host_declares_fall_through_to_one_deploy(landing):
     ]
 
 
+def test_under_at_the_hosts_are_read_at_the_merge_commit(landing, capsys):
+    """Issue #1839: a PR adding a Pi role and its containers_list entry together declares the
+    role on daniel-pi in no checkout until the tick fast-forwards. The primary read routed it
+    to no host and the landing ran deploy.sh locally, without `-e target=daniel-pi`."""
+    ln, calls = _ready(landing, Fakes(hosts="", hosts_at={"daniel-pi": ["newpi"]}))
+    ln.resolved_tags = ["newpi"]
+    assert deploy.deploy_by_host(ln, at=MERGE_SHA) == 0
+    assert [c[1] for c in calls if c[0] == "landing_hosts_at"] == [
+        (["newpi"], MERGE_SHA)
+    ]
+    assert [c[0] for c in calls if c[0] == "deploy_tags"] == []
+    assert [(c[1][1:], c[2]["at"]) for c in calls if c[0] == "deploy"] == [
+        ((["newpi"], "daniel-pi"), MERGE_SHA)
+    ]
+    assert "declared on daniel-pi, deploying there" in capsys.readouterr().out
+
+
+def test_an_unreadable_merge_commit_falls_back_to_the_primary_read(landing):
+    """REJECTING half: None from the ref read is damage, not "no host declares it".
+
+    The fallback is the subprocess against the primary, whose failure arm below stays the one
+    that ends the landing; only an empty answer from BOTH reads falls through to one local
+    deploy.
+    """
+    ln, calls = _ready(landing, Fakes(hosts="daniel-pi\talloy\n", hosts_at=None))
+    ln.resolved_tags = ["alloy"]
+    assert deploy.deploy_by_host(ln, at=MERGE_SHA) == 0
+    assert [c[1] for c in calls if c[0] == "deploy_tags"] == [("hosts", "alloy")]
+    assert [c[1][1:] for c in calls if c[0] == "deploy"] == [(["alloy"], "daniel-pi")]
+
+
+def test_without_at_the_hosts_come_from_the_primary(landing):
+    """The exit-4 fallback deploys the primary checkout, so it routes from that tree too."""
+    ln, calls = _ready(landing, Fakes(hosts="", hosts_at={"daniel-pi": ["alloy"]}))
+    ln.resolved_tags = ["alloy"]
+    assert deploy.deploy_by_host(ln) == 0
+    assert [c[0] for c in calls if c[0] == "landing_hosts_at"] == []
+    assert [c[1][1:] for c in calls if c[0] == "deploy"] == [(["alloy"], None)]
+
+
 def test_a_retry_resumes_at_the_host_that_failed(landing):
     ln, calls = _ready(
         landing,

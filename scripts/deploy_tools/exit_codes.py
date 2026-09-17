@@ -65,9 +65,13 @@ DEPLOY_SH_NO_VERDICT = frozenset(
 
 # -- scripts/deploy_tools/gitops_tick.sh ------------------------------------------------
 # 3 = the tick was skipped because the tree lock was held, so it fast-forwarded NOTHING.
+# 4 = `--no-wait` joined a tick already in flight and started none. That tick fetched before
+#     the request, so a commit merged since is not in it (issue #1843). Never seen with a wait
+#     budget: there the wrapper watches the joined run and exits by its outcome.
 # 75 = the wrapper stopped watching a run still in flight, which is not a failure.
 TICK_OK = 0
 TICK_LOCK_CONTENTION = 3
+TICK_JOINED = 4
 TICK_STILL_RUNNING = 75
 
 # -- scripts/deploy_tools/await_ci.py ---------------------------------------------------

@@ -82,6 +82,7 @@ def test_a_kick_does_not_wait_for_the_tick(landing, capsys):
     assert kick[2] == {"wait": False}
     assert "tick kicked, not awaited" in capsys.readouterr().out
     assert ln.ledger.lock_waited == 0
+    assert ln.ledger.kick == "started"
 
 
 def test_a_failed_kick_does_not_end_the_landing(landing, capsys):
@@ -91,3 +92,53 @@ def test_a_failed_kick_does_not_end_the_landing(landing, capsys):
     ln, _ = landing(Fakes(tick=[1]))
     tick.kick_tick(ln)
     assert "tick kick failed (exit 1)" in capsys.readouterr().out
+    assert ln.ledger.kick == "failed"
+
+
+def test_a_kick_that_joined_a_run_in_flight_is_not_booked_as_started(landing, capsys):
+    """Issue #1843: exit 4 is "a tick was already running, none was started". That run fetched
+    before the merge, so it does not carry this landing's commit; reading it as `started` is
+    what let the primary sit behind until the timer."""
+    ln, _ = landing(Fakes(tick=[4]))
+    tick.kick_tick(ln)
+    assert ln.ledger.kick == "joined"
+    out = capsys.readouterr().out
+    assert "joined a run already in flight" in out
+    assert "kick failed" not in out
+
+
+def test_a_joined_kick_is_re_armed_after_the_gate(landing, capsys):
+    """The second request starts a tick of its own once the joined run has ended."""
+    ln, calls = landing(Fakes(tick=[4, 0]))
+    tick.kick_tick(ln)
+    tick.rearm_tick(ln)
+    assert [c[2] for c in calls if c[0] == "tick"] == [{"wait": False}, {"wait": False}]
+    assert ln.ledger.kick == "rearmed"
+    assert "tick re-armed after the gate" in capsys.readouterr().out
+
+
+def test_a_second_join_is_booked_as_not_converged_by_this_landing(landing, capsys):
+    """REJECTING half: the joined run is still in flight after the gate. Said and booked, not
+    retried -- the deployer's timer converges the checkout, and the deploy is already live."""
+    ln, _ = landing(Fakes(tick=[4, 4]))
+    tick.kick_tick(ln)
+    tick.rearm_tick(ln)
+    assert ln.ledger.kick == "joined"
+    assert "did NOT converge the primary checkout" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("first", [0, 1])
+def test_only_a_joined_kick_is_re_armed(landing, first):
+    """A kick that started its own tick, or that systemd refused, is not asked twice."""
+    ln, calls = landing(Fakes(tick=[first, 0]))
+    tick.kick_tick(ln)
+    tick.rearm_tick(ln)
+    assert [c[0] for c in calls].count("tick") == 1
+
+
+def test_a_landing_that_kicked_nothing_re_arms_nothing(landing):
+    """The fallback path awaited its tick; there is no kick to re-arm."""
+    ln, calls = landing()
+    tick.rearm_tick(ln)
+    assert [c[0] for c in calls].count("tick") == 0
+    assert ln.ledger.kick == ""

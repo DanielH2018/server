@@ -131,7 +131,11 @@ the tick is kicked afterwards, not awaited.**
 primary checkout to have been fast-forwarded onto it first. Step 4 waits for nothing, the
 deploy runs, and only then does `land.sh` start the tick with `--no-wait` — the checkout
 converges while the health gate runs, and the deployer's own 10-minute timer covers a kick
-that failed. Kicking it BEFORE the deploy would not save the time: `gitops-deploy.service`
+that failed. A kick that finds a tick already in flight starts nothing: that run fetched
+before the merge and does not carry the commit, so `land.sh` asks again after the health
+gate. `kick=` on the Landings board says which happened — `started`, `rearmed` (the second
+request started one), `joined` (both joined; the timer converges the checkout, this landing
+did not), `failed`. Kicking it BEFORE the deploy would not save the time: `gitops-deploy.service`
 holds the git-tree lock for its whole unit run, so `deploy.sh` would queue behind it inside
 its own `flock` and the seconds would move from `tick=` to `lock=`. `tick=0` on the Landings
 board means step 4 awaited no tick. A `lock=` wait beside it is one of two other waits: a tick

@@ -14,7 +14,9 @@ from render_guard import (
     HOST_VARS_IN_TREE,
     REPO,
     host_files,
+    hosts_for_tags,
     load_yaml,
+    service_records_at_or_none,
     service_tags_at_or_none,
 )
 from repo_paths import ANSIBLE, INVENTORY, ROLES
@@ -25,8 +27,11 @@ _WITHOUT = "containers_list:\n  - name: sonarr\n    platform: k8s\n"
 _WITH = _WITHOUT + "  - name: newsvc\n    platform: k8s\n"
 
 
-def _tags_repo(tmp_path: Path, *texts: str) -> list[str]:
+def _tags_repo(tmp_path: Path, *texts: str | dict[str, str]) -> list[str]:
     """Commit each `texts` entry as the host_vars file in `tmp_path`; the shas, in order.
+
+    A str is `daniel-box.yml`'s text; a dict is `{file name: text}` for a commit that writes
+    several hosts at once.
 
     Every ``GIT_*`` variable is scrubbed: under a prek hook an inherited ``GIT_DIR`` beats
     ``cwd``, and these commits would land in the real repository.
@@ -49,7 +54,9 @@ def _tags_repo(tmp_path: Path, *texts: str) -> list[str]:
     host_vars.mkdir(parents=True)
     shas = []
     for n, text in enumerate(texts):
-        (host_vars / "daniel-box.yml").write_text(text)
+        files = text if isinstance(text, dict) else {"daniel-box.yml": text}
+        for name, content in files.items():
+            (host_vars / name).write_text(content)
         run("git", "add", "-A")
         run("git", "commit", "-q", "-m", f"c{n}", "--no-gpg-sign")
         shas.append(run("git", "rev-parse", "HEAD"))
@@ -87,6 +94,38 @@ def test_host_vars_that_do_not_parse_at_the_ref_are_none_too(tmp_path):
     """
     shas = _tags_repo(tmp_path, _WITHOUT, "containers_list:\n  - name: [unclosed\n")
     assert service_tags_at_or_none(shas[1], tmp_path) is None
+
+
+def test_service_records_at_a_ref_keep_the_declaring_host(tmp_path):
+    """CLEAN half of issue #1839: the host survives the read, so a Pi entry added at the
+    commit routes to daniel-pi through the same rule the working-tree read uses."""
+    shas = _tags_repo(
+        tmp_path,
+        _WITHOUT,
+        {
+            "daniel-pi.yml": "containers_list:\n  - name: newpi\n",
+            "_example.yml": "x: 1\n",
+        },
+    )
+    records = service_records_at_or_none(shas[1], tmp_path)
+    assert records == [
+        ("daniel-box", "k8s", "sonarr"),
+        ("daniel-pi", "docker", "newpi"),
+    ]
+    assert hosts_for_tags(["newpi", "sonarr", "config"], records) == {
+        "daniel-box": ["sonarr"],
+        "daniel-pi": ["newpi"],
+    }
+    # The same tag is declared on NO host at the commit before it.
+    assert (
+        hosts_for_tags(["newpi"], service_records_at_or_none(shas[0], tmp_path)) == {}
+    )
+
+
+def test_unreadable_service_records_are_none_rather_than_an_empty_list(tmp_path):
+    """REJECTING half: `[]` would route every tag to no host, which is a local deploy."""
+    _tags_repo(tmp_path, _WITHOUT)
+    assert service_records_at_or_none("deadbeefdeadbeefdeadbeef", tmp_path) is None
 
 
 def test_load_yaml_returns_a_mapping(tmp_path):

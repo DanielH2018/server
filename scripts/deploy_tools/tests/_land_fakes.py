@@ -72,6 +72,10 @@ class Fakes:
     blockers: list[int] = field(default_factory=lambda: [0])
     hosts: str = ""
     hosts_rc: int = 0
+    # What `containers_list` routes each tag to at the merge commit (`tools.landing_hosts_at`).
+    # None is the read having failed, so a landing falls back to `deploy_tags.py hosts`
+    # against the primary -- the `hosts` string above.
+    hosts_at: dict[str, list[str]] | None = None
     changed: str = ""
     changed_rc: int = 0
     gate: tuple[bool, list[str]] = field(
@@ -209,6 +213,10 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
             return _cp(f.changed_rc, f.changed)
         raise AssertionError(args)
 
+    def landing_hosts_at(tags, ref, primary):
+        calls.append(("landing_hosts_at", (list(tags), ref), {"cwd": primary}))
+        return f.hosts_at
+
     def gate(tags, cwd=None):
         calls.append(("gate", (tags,), {"cwd": cwd}))
         return GateResult(*f.gate)
@@ -245,6 +253,7 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         gate=gate,
         snapshot=snapshot,
         declared_at=lambda ref, primary: f.declared_at,
+        landing_hosts_at=landing_hosts_at,
         read_state=lambda root, name: f.state.get(name, ""),
         lock_holder=_seq(f.lock_holder, calls, "lock_holder"),
         hostname=lambda: f.hostname,

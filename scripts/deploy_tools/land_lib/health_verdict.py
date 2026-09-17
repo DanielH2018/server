@@ -12,6 +12,7 @@ import sys as _sys
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
+from deploy_tools.land_lib import tick
 from deploy_tools.land_lib.landing import Landing, TickState
 from deploy_tools.land_lib.outcome import (
     ABANDONED_WATCH_NOTE,
@@ -61,6 +62,9 @@ def health(ln: Landing) -> NoReturn:
     settled, lines = gate_from_the_deployed_tree(ln)
     for line in lines:
         say(line)
+    # Before any verdict, so every exit below has asked: the gate is the wait that lets a
+    # joined tick end (`tick.rearm_tick`).
+    tick.rearm_tick(ln)
     if ln.plane:
         print(f"  STILL UNAPPLIED, and no deploy tag covers it: {ln.plane}")
     if not settled:

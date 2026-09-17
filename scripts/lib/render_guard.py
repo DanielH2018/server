@@ -55,11 +55,15 @@ __all__ = [
     "containers_entries",
     "containers_entries_in",
     "dump_numbered",
+    "entry_platform",
     "entry_tags",
     "host_files",
+    "hosts_for_tags",
     "load_yaml",
     "make_env",
     "render_or_error",
+    "service_records_at",
+    "service_records_at_or_none",
     "service_tags_at",
     "service_tags_at_or_none",
 ]
@@ -203,20 +207,35 @@ def entry_tags(entry: dict) -> list[str]:
     return list(entry.get("tags") or [entry["name"]])
 
 
-def service_tags_at(ref: str, cwd: Path) -> set[str]:
-    """Every name that selects a service AT ``ref``, read with git rather than from a worktree.
+def entry_platform(entry: dict) -> str:
+    """The platform one ``containers_list`` entry deploys on: ``k8s`` or ``docker``.
+
+    No host_vars file sets ``platform`` on a docker entry (daniel-pi's don't carry the key at
+    all) -- k8s is the one that's always explicit, so docker is the default rather than an
+    unlabelled third state. One definition, because ``deploy_tags.service_records`` reads the
+    working tree and ``service_records_at`` below reads a git ref.
+    """
+    return entry.get("platform", "docker")
+
+
+def service_records_at(ref: str, cwd: Path) -> list[tuple[str, str, str]]:
+    """``(host, platform, tag)`` for every ``containers_list`` entry AT ``ref``, read with git.
 
     A PR that adds a role and its ``containers_list`` entry together is the case a checkout
     answers wrongly: the entry is in no tree until the tick fast-forwards, so the role reads as
-    one nobody registered (issue #1544; ``land_lib/classify.py`` carries the argument). Names are
-    listed at ``ref`` too, so a host_vars file the same PR adds counts, and ``_example.yml`` is
-    excluded for the reason ``host_files`` excludes it.
+    one nobody registered (issue #1544; ``land_lib/classify.py`` carries the argument), and a
+    new Pi role reads as declared on NO host, so its first landing deploys locally instead of
+    with ``-e target=daniel-pi`` (issue #1839). Names are listed at ``ref`` too, so a host_vars
+    file the same PR adds counts, and ``_example.yml`` is excluded for the reason
+    ``host_files`` excludes it. The host is the file's stem, as ``deploy_tags.service_records``
+    names it from a path.
 
-    Reuses ``entry_tags`` and ``containers_entries_in`` rather than re-reading a containers_list
-    entry its own way: two derivations of "which tags exist" that disagree is exactly the defect
-    this answer is meant to fix. Raises ``CalledProcessError`` on an unreadable ref.
+    Reuses ``entry_tags``, ``entry_platform`` and ``containers_entries_in`` rather than
+    re-reading a containers_list entry its own way: two derivations of "which tags exist" that
+    disagree is exactly the defect this answer is meant to fix. Raises ``CalledProcessError``
+    on an unreadable ref.
     """
-    tags: set[str] = set()
+    records: list[tuple[str, str, str]] = []
     for name in git_stdout(
         "ls-tree", "--name-only", f"{ref}:{HOST_VARS_IN_TREE}", cwd=cwd
     ).splitlines():
@@ -225,19 +244,24 @@ def service_tags_at(ref: str, cwd: Path) -> set[str]:
         loaded = yaml_fast.safe_load(
             git("show", f"{ref}:{HOST_VARS_IN_TREE}/{name}", cwd=cwd).stdout
         )
+        host = name.removesuffix(".yml")
         for entry in containers_entries_in(loaded if isinstance(loaded, dict) else {}):
-            tags.update(entry_tags(entry))
-    return tags
+            for tag in entry_tags(entry):
+                records.append((host, entry_platform(entry), tag))
+    return records
 
 
-def service_tags_at_or_none(ref: str, cwd: Path) -> set[str] | None:
-    """``service_tags_at``, answering None for a read that cannot be trusted.
+def service_records_at_or_none(
+    ref: str, cwd: Path
+) -> list[tuple[str, str, str]] | None:
+    """``service_records_at``, answering None for a read that cannot be trusted.
 
-    AN EMPTY READ IS DAMAGE, NEVER EVIDENCE. ``set()`` says no service is declared anywhere,
+    AN EMPTY READ IS DAMAGE, NEVER EVIDENCE. ``[]`` says no service is declared anywhere,
     which for a caller validating deploy tags refuses every tag there is; for one classifying
-    roles it marks every changed role unregistered (issue #1331). A ref this checkout cannot
-    resolve raises inside ``git``, and an empty answer is indistinguishable from that here, so
-    both become None and the caller falls back to the tree it can read.
+    roles it marks every changed role unregistered (issue #1331); for one routing tags to
+    hosts it routes every tag to no host. A ref this checkout cannot resolve raises inside
+    ``git``, and an empty answer is indistinguishable from that here, so both become None and
+    the caller falls back to the tree it can read.
 
     ``yaml.YAMLError`` is in the set because the read parses YAML fetched from ``ref``: a
     host_vars file that does not parse at that commit is a damaged read like any other, and
@@ -246,6 +270,34 @@ def service_tags_at_or_none(ref: str, cwd: Path) -> set[str] | None:
     that is merely unparseable.
     """
     try:
-        return service_tags_at(ref, cwd) or None
+        return service_records_at(ref, cwd) or None
     except subprocess.SubprocessError, OSError, ValueError, yaml.YAMLError:
         return None
+
+
+def hosts_for_tags(tags, records) -> dict[str, list[str]]:
+    """``{host: sorted tags}`` for every host whose records declare one of ``tags``.
+
+    ``records`` is a ``(host, platform, tag)`` list: the working tree's
+    (``deploy_tags.service_records``) or a git ref's (``service_records_at``). The routing
+    rule lives once, here, so ``land_tags.landing_hosts_at`` -- records read at a merge
+    commit, issue #1839 -- cannot route a tag differently from ``deploy_tags.tags_by_host``.
+    A tag no host declares lands under none.
+    """
+    wanted = set(tags)
+    by_host: dict[str, set[str]] = {}
+    for host, _platform, tag in records:
+        if tag in wanted:
+            by_host.setdefault(host, set()).add(tag)
+    return {host: sorted(by_host[host]) for host in sorted(by_host)}
+
+
+def service_tags_at(ref: str, cwd: Path) -> set[str]:
+    """Every name that selects a service AT ``ref``: ``service_records_at`` flattened to tags."""
+    return {tag for _host, _platform, tag in service_records_at(ref, cwd)}
+
+
+def service_tags_at_or_none(ref: str, cwd: Path) -> set[str] | None:
+    """``service_tags_at`` under ``service_records_at_or_none``'s damage rule: None, never ``set()``."""
+    records = service_records_at_or_none(ref, cwd)
+    return None if records is None else {tag for _host, _platform, tag in records}

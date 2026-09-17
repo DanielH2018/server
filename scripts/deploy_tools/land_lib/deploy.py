@@ -139,23 +139,34 @@ def deploy_by_host(ln: Landing, at: str = "") -> int:
     `at` is handed to `deploy.sh --at`: the commit each run renders. Empty renders the primary
     checkout, which is what every retry after a stale tree does.
 
-    `deploy_tags.py hosts` still reads the PRIMARY checkout's inventory, `at` or not. A tag it
-    does not know yet lands under no host and falls through to one local deploy -- right for a
-    new cluster role, and for a new role on the Pi the health gate is what catches it.
+    The hosts come from the same tree the deploy renders. Under `at`, `containers_list` is read
+    at that commit (`tools.landing_hosts_at`): a PR adding a Pi role and its entry together
+    declares the role in no checkout until the tick fast-forwards, and the primary read routed
+    it to no host, so the first landing of every new Pi role ran locally without
+    `-e target=daniel-pi` and failed closed at the health gate (issue #1839). A ref that
+    cannot be read falls back to `deploy_tags.py hosts` against the primary, whose own
+    failure arm below stays the one that ends the landing. A tag under no host in either read
+    falls through to one local deploy, which is right for a new cluster role.
     """
     o, t = ln.opts, ln.tools
-    r = t.deploy_tags(o.primary, ["hosts", ln.tags_csv])
-    if r.returncode != DEPLOY_OK:
-        # deploy.sh was never invoked for any host, so nothing here overlaps with the
-        # catch-all in deploy_outcome, which really did run it (issue #1016).
-        ln.ledger.cause = Cause.HOST_LOOKUP
-        ln.die(
-            "deploy_tags.py hosts failed before any deploy.sh ran; nothing was touched; "
-            f"tags: {ln.tags_csv}",
-            1,
-            Verdict.DEPLOY_FAILED,
-        )
-    lines = [x for x in r.stdout.splitlines() if x.strip()]
+    by_host = t.landing_hosts_at(ln.resolved_tags, at, o.primary) if at else None
+    if by_host is not None:
+        lines = [
+            f"{host}\t{','.join(host_tags)}" for host, host_tags in by_host.items()
+        ]
+    else:
+        r = t.deploy_tags(o.primary, ["hosts", ln.tags_csv])
+        if r.returncode != DEPLOY_OK:
+            # deploy.sh was never invoked for any host, so nothing here overlaps with the
+            # catch-all in deploy_outcome, which really did run it (issue #1016).
+            ln.ledger.cause = Cause.HOST_LOOKUP
+            ln.die(
+                "deploy_tags.py hosts failed before any deploy.sh ran; nothing was touched; "
+                f"tags: {ln.tags_csv}",
+                1,
+                Verdict.DEPLOY_FAILED,
+            )
+        lines = [x for x in r.stdout.splitlines() if x.strip()]
     if not lines:
         return t.deploy(
             o.primary, ln.resolved_tags, None, observe=ln.note_in_flock_wait, at=at

@@ -12,7 +12,12 @@ import sys as _sys
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
-from deploy_tools.exit_codes import TICK_LOCK_CONTENTION, TICK_OK, TICK_STILL_RUNNING
+from deploy_tools.exit_codes import (
+    TICK_JOINED,
+    TICK_LOCK_CONTENTION,
+    TICK_OK,
+    TICK_STILL_RUNNING,
+)
 from deploy_tools.land_lib.landing import Landing, retry_while_locked
 from deploy_tools.land_lib.outcome import Cause, Verdict, say
 
@@ -22,7 +27,8 @@ def kick_tick(ln: Landing) -> None:
 
     For a landing that deploys its PR's merge commit itself (`deploy.sh --at`). Nothing it
     does next needs the primary checkout to be at that commit, so the tick is started only so
-    the checkout converges for whoever reads it later.
+    the checkout converges for whoever reads it later. What became of the request is booked
+    as `ledger.kick`, because the board is the only place the answer outlives the log.
 
     DECIDED: called AFTER `deploy.sh` returns, not before it. `gitops-deploy.service` wraps
     its whole unit run in the git-tree lock, and deploy.sh waits up to LOCK_WAIT (3000s) for
@@ -37,16 +43,56 @@ def kick_tick(ln: Landing) -> None:
     request landed or not. Failing a landing whose deploy succeeded, because a convenience
     request to systemd did not, would be the worse answer.
 
+    A JOINED request (exit 4) started nothing: the run in flight fetched origin before this
+    PR merged, so it does not carry the merge commit and the checkout stays behind when it
+    ends. Until 2026-09-17 that exit was 0 and read as converging (issue #1843) -- in exactly
+    the case a landing meets most often, a deployer mid-tick. Booked as `joined` here;
+    `rearm_tick` below asks again once the gate has run.
+
     No `observe` callback: `--no-wait` returns as soon as systemd has the request, so there is
     no wait for the wrapper to report and `lock` has nothing to book.
     """
     rc = ln.tools.tick(wait=False)
     if rc == TICK_OK:
+        ln.ledger.kick = "started"
         say("tick kicked, not awaited (this landing deployed the merge commit itself)")
         return
+    if rc == TICK_JOINED:
+        ln.ledger.kick = "joined"
+        say(
+            "tick kick joined a run already in flight, which fetched before this PR merged; "
+            "it is asked again after the health gate"
+        )
+        return
+    ln.ledger.kick = "failed"
     say(
         f"tick kick failed (exit {rc}); carrying on -- the deploy above rendered the merge "
         "commit, and the deployer's own timer converges the primary checkout"
+    )
+
+
+def rearm_tick(ln: Landing) -> None:
+    """Ask for the tick a second time, after the health gate, when the first request joined.
+
+    DECIDED: a second `systemctl start` after the gate, rather than a deferred one. The polkit
+    rule admits `start` on this one unit and nothing else, so a transient timer or a
+    `systemd-run --on-active` is refused, and a request made while the joined run is still
+    `activating` is coalesced into it again. The gate is the longest thing a landing does
+    after the kick -- a rollout wait plus the 180s restart window -- so it is the one point
+    where the joined run has most likely ended. A second join is booked and said, not
+    retried: the deployer's own 10-minute timer converges the checkout, and this landing's
+    deploy is already live and gated. No-op unless the first kick joined.
+    """
+    if ln.ledger.kick != "joined":
+        return
+    rc = ln.tools.tick(wait=False)
+    if rc == TICK_OK:
+        ln.ledger.kick = "rearmed"
+        say("tick re-armed after the gate; the primary checkout converges from here")
+        return
+    say(
+        f"tick re-arm did not start a run (exit {rc}); this landing did NOT converge the "
+        "primary checkout -- the deployer's timer does, within 10 minutes"
     )
 
 

@@ -37,6 +37,18 @@ def test_settled_after_a_healthy_deploy(landing, capsys):
     assert "sonarr: healthy" in capsys.readouterr().out
 
 
+def test_a_joined_kick_is_asked_again_after_the_gate_before_any_verdict(landing):
+    """Issue #1843: the gate is the wait that lets the joined run end, so the second request
+    goes out after it and before the verdict -- on the unhealthy exit as well."""
+    ln, calls = _deployed(landing, Fakes(gate=(False, ["sonarr: unhealthy"]), tick=[0]))
+    ln.ledger.kick = "joined"
+    with pytest.raises(Outcome):
+        health_verdict.health(ln)
+    names = [c[0] for c in calls]
+    assert names.index("gate") < names.index("tick")
+    assert ln.ledger.kick == "rearmed"
+
+
 def test_unhealthy_when_the_gate_fails(landing):
     ln, _ = _deployed(landing, Fakes(gate=(False, ["sonarr: unhealthy"])))
     with pytest.raises(Outcome) as exc:
