@@ -34,7 +34,7 @@
 # label would not match a podSelector on `app`.
 #
 # homepage's dashboard widget authenticates to the WebUI over the ClusterIP
-# (roles/k8s/homepage/templates/services.yaml.j2). It goes direct rather than through Traefik
+# (roles/k8s/homepage/templates/config/services.yaml.j2). It goes direct rather than through Traefik
 # because qbittorrent's public route is Authelia-gated — so this entry is the whole grant, and
 # fencing it out breaks the widget.
 apiVersion: networking.k8s.io/v1

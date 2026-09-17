@@ -26,7 +26,7 @@ from _helpers import ANSIBLE
 
 HOMEPAGE = ANSIBLE / "roles" / "k8s" / "homepage"
 CSS = HOMEPAGE / "templates" / "config" / "custom.css.j2"
-SERVICES = HOMEPAGE / "templates" / "services.yaml.j2"
+SERVICES = HOMEPAGE / "templates" / "config" / "services.yaml.j2"
 
 # (href fragment, 1-based block index) -> the upstream field that block renders.
 # The rename itself is in the CSS; this table is what the rename is renaming.

@@ -33,6 +33,8 @@ __all__ = [
     "SKIP_ROLES",
     "is_manifest_template",
     "k8s_entries",
+    "misplaced_template_lookups",
+    "non_manifest_documents",
     "role_callers",
 ]
 
@@ -100,6 +102,45 @@ def is_manifest_template(path: Path) -> bool:
     A test that reimplemented the predicate would keep passing after this one changed.
     """
     return not path.name.endswith(".sh.j2") and not path.name.startswith("Dockerfile")
+
+
+_TEMPLATE_LOOKUP = re.compile(r"""lookup\(\s*['"]template['"]\s*,\s*([^)]*)\)""")
+_TEMPLATES_PATH = re.compile(r"""['"][^'"]*/templates/([^'"]*)['"]""")
+
+
+def misplaced_template_lookups(source: str) -> list[str]:
+    """The `lookup('template', …)` targets in a manifest's source that sit at `templates/` top level.
+
+    App config a manifest embeds belongs in `templates/config/`, one level down: the validator
+    parses every top-level `templates/*.j2` as a manifest, so config sitting there is
+    schema-checked as nothing (a document with no `kind` is skipped) and placement-checked as
+    nothing. Four files sat that way until #1856 — homepage's services/docker/kubernetes.yaml.j2
+    and crowdsec's crowdsec-discord.yaml.j2.
+
+    Only a literal path is judged. A target passed as a variable (image-builder's
+    `lookup('template', src)`) resolves at task time from the caller's vars, which a text scan
+    cannot see; those roles are in SKIP_ROLES regardless.
+    """
+    misplaced = []
+    for call in _TEMPLATE_LOOKUP.finditer(source):
+        path = _TEMPLATES_PATH.search(call.group(1))
+        if path and not path.group(1).startswith("config/"):
+            misplaced.append(path.group(1))
+    return misplaced
+
+
+def non_manifest_documents(docs) -> list:
+    """The parsed documents of a rendered top-level template that are not Kubernetes objects.
+
+    A manifest renders one object per document, each carrying `kind`. A dict without one, a
+    list, or a scalar is app config parsed as a manifest — the same placement failure as
+    `misplaced_template_lookups`, seen from the render side for a file nothing embeds by a
+    literal path. An empty document (`None`) is not counted: a template that renders nothing
+    under a condition is still a manifest template.
+    """
+    return [
+        d for d in docs if d is not None and not (isinstance(d, dict) and "kind" in d)
+    ]
 
 
 def k8s_entries() -> dict[str, dict]:

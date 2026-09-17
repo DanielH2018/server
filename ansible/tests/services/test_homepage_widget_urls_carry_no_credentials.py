@@ -24,7 +24,13 @@ import re
 from _helpers import ANSIBLE as _ANSIBLE
 
 SERVICES_TEMPLATE = (
-    _ANSIBLE / "roles" / "k8s" / "homepage" / "templates" / "services.yaml.j2"
+    _ANSIBLE
+    / "roles"
+    / "k8s"
+    / "homepage"
+    / "templates"
+    / "config"
+    / "services.yaml.j2"
 )
 
 # Every `url:` value in the tile list, widget or calendar alike.

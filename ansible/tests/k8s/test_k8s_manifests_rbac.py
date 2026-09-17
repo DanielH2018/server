@@ -289,7 +289,7 @@ def test_homepage_kubernetes_widget_wiring_holds_together():
     """
     role = K8S / "homepage"
     kubernetes_config = yaml_fast.safe_load(
-        (role / "templates" / "kubernetes.yaml.j2").read_text()
+        (role / "templates" / "config" / "kubernetes.yaml.j2").read_text()
     )
     assert kubernetes_config["mode"] == "cluster"
     assert kubernetes_config["ingress"] is False

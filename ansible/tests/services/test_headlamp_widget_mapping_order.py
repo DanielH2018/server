@@ -25,7 +25,7 @@ from _helpers import ANSIBLE
 
 HOMEPAGE = ANSIBLE / "roles" / "k8s" / "homepage"
 DEFAULTS = HOMEPAGE / "defaults" / "main.yml"
-SERVICES = HOMEPAGE / "templates" / "services.yaml.j2"
+SERVICES = HOMEPAGE / "templates" / "config" / "services.yaml.j2"
 
 QUERY_VAR = "homepage_k8s_headlamp_cluster_query"
 

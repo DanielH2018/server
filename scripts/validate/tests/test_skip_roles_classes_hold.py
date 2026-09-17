@@ -30,6 +30,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from lib.k8s_roles import (
     CALLER_RENDERED_ROLES,
     K8S_ROLES,
+    misplaced_template_lookups,
+    non_manifest_documents,
     NO_MANIFEST_ROLES,
     SKIP_ROLES,
     is_manifest_template,
@@ -88,3 +90,39 @@ def test_the_predicate_can_tell_a_manifest_from_a_helper(tmp_path: Path):
     """Without this, both parametrized tests above pass for a predicate that matches nothing."""
     assert is_manifest_template(tmp_path / "deployment.yaml.j2")
     assert not is_manifest_template(tmp_path / "Dockerfile.j2")
+
+
+# The two placement rules from #1856, one on the source and one on the render. Both are what
+# lets app config sit at templates/ top level unnoticed: the validator parses it as a manifest,
+# finds no `kind`, and skips it silently.
+_EMBED = (
+    "{{ lookup('template', playbook_dir + '/roles/k8s/x/templates/%s') | indent(4) }}"
+)
+
+
+def test_a_lookup_into_templates_config_is_clean():
+    src = _EMBED % "config/settings.yaml.j2"
+    assert misplaced_template_lookups(src) == []
+
+
+def test_a_lookup_into_templates_top_level_is_flagged():
+    src = (_EMBED % "services.yaml.j2") + "\n" + (_EMBED % "config/widgets.yaml.j2")
+    assert misplaced_template_lookups(src) == ["services.yaml.j2"]
+
+
+def test_a_lookup_with_a_variable_target_is_not_judged():
+    # image-builder passes the Dockerfile path as a var; nothing literal to place.
+    assert misplaced_template_lookups("{{ lookup('template', src) | indent(4) }}") == []
+
+
+def test_a_render_of_kinded_objects_is_clean():
+    docs = [{"kind": "Deployment", "metadata": {}}, None, {"kind": "Service"}]
+    assert non_manifest_documents(docs) == []
+
+
+def test_a_render_with_no_kind_is_flagged():
+    # homepage's services.yaml.j2 rendered a list; crowdsec-discord.yaml.j2 a kind-less dict.
+    assert non_manifest_documents([[{"Services": []}], {"type": "http"}]) == [
+        [{"Services": []}],
+        {"type": "http"},
+    ]

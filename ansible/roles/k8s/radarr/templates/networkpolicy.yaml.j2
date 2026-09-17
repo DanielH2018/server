@@ -30,7 +30,7 @@
 # this breakage does not touch.
 #
 # homepage's dashboard widget reads /api/v3/queue over the ClusterIP
-# (roles/k8s/homepage/templates/services.yaml.j2). It goes direct rather than through Traefik
+# (roles/k8s/homepage/templates/config/services.yaml.j2). It goes direct rather than through Traefik
 # because radarr's public route is Authelia-gated and its monitoring IngressRoute exposes only
 # that one path — so this entry is the whole grant, and fencing it out breaks the widget.
 {% call arr_networkpolicy('radarr', container_item.port) %}
