@@ -202,15 +202,28 @@ def swallowed_verdicts(
     )
 
 
-# Kuma's `server/notification.js` logs `Cannot send notification to <name>` and moves on: a
-# failed send is not retried, so the alert it carried reached nobody (#1891). The line is
+# Kuma's `server/model/monitor.js` logs a failed send as TWO error-level lines and moves on:
+# `Cannot send notification to <name>`, then the error itself (`log.error("monitor", e)`), which
+# for an HTTP provider is the axios message `throwGeneralAxiosError` builds — `Error: Request
+# failed with status code 429 (code=ERR_BAD_REQUEST) (HTTP 429 Too Many Requests) {...body}`.
+# A failed send is not retried, so the alert it carried reached nobody (#1891). Both lines are
 # printed through Kuma's colour logger, so ANSI escapes surround the level tag and can follow
-# the name; the name runs to the first escape or the end of the line. The reason — the
-# 2026-09-15 line was a Discord HTTP 429 with `retry_after: 3` — is NOT in Loki: Kuma logs it
-# at debug level only, so this counts drops without saying why.
+# the name; the name runs to the first escape or the end of the line. #1895 filed the reason
+# as debug-only and absent from Loki; measured 2026-09-17 over 14 days it is there at ERROR
+# level, one reason line per drop (74 drops, 69 x HTTP 429 + 5 x HTTP 400), so the tile can
+# say why without raising Kuma's log level — which would write the webhook URL to Loki
+# (uptime-kuma/CLAUDE.md, the AutoKuma notification-rewrite trap).
 _NOTIFY_FAILURE_RE = re.compile(
     r"Cannot send notification to (?P<name>[^\x1b]+?)\s*(?:\x1b|$)"
 )
+# The reason line: `ERROR:` (optionally colour-reset), then `Error: <message>`. Kuma's own
+# check-failure lines are WARN and read `Pending: Request failed with status code 500`, so
+# anchoring on the ERROR tag is what keeps a flapping monitor's probes out of the reason set.
+_NOTIFY_REASON_RE = re.compile(r"ERROR:(?:\x1b\[[0-9;]*m)?\s*Error: (?P<msg>.+)$")
+# The status the provider recorded, in the form Kuma writes it: `(HTTP 429 Too Many Requests)`.
+_HTTP_STATUS_RE = re.compile(r"\(HTTP (?P<status>\d{3}[^)]*)\)")
+_URL_RE = re.compile(r"https?://\S+")
+_REASON_MAX = 60
 
 
 def parse_notify_failure_line(line: str) -> str | None:
@@ -219,29 +232,57 @@ def parse_notify_failure_line(line: str) -> str | None:
     return m["name"] if m else None
 
 
+def parse_notify_reason_line(line: str) -> str | None:
+    """The reason Kuma recorded for a dropped send, else None for any other line.
+
+    An HTTP provider's reason is reduced to its status — `HTTP 429 Too Many Requests` — rather
+    than the whole axios message: the response body Kuma appends is the provider's JSON, and the
+    message can carry the request URL, which for Discord IS the webhook secret. A non-HTTP
+    reason (an SMTP login failure) keeps the message's first %d characters with any URL
+    replaced, for the same secrecy reason. The tile's message reaches Discord and email.
+    """ % _REASON_MAX
+    m = _NOTIFY_REASON_RE.search(line)
+    if not m:
+        return None
+    status = _HTTP_STATUS_RE.search(m["msg"])
+    if status:
+        return "HTTP " + status["status"].strip()
+    return _URL_RE.sub("<url>", m["msg"])[:_REASON_MAX].strip()
+
+
 def kuma_notify_failures(
     lines: list[tuple[int, str]], window: str, truncated: bool
 ) -> tuple[bool, str]:
-    """Pure: did Kuma drop a notification send inside `window`?
+    """Pure: did Kuma drop a notification send inside `window`, and why?
 
-    `lines` is [(ts, line), ...] for the failure lines a range query returned over `window`;
-    `truncated` says the fetch hit its cap. Every failure counts — a drop is a drop whether the
-    tile in question was transitioning or resending, and Kuma's log does not say which. The
-    verdict names each notification with its drop count, so a Discord rate-limit and a dead
-    SMTP credential read differently on the tile, and the tile itself notifies BOTH channels
+    `lines` is [(ts, line), ...] for the failure AND reason lines a range query returned over
+    `window`; `truncated` says the fetch hit its cap. Every failure counts — a drop is a drop
+    whether the tile in question was transitioning or resending, and Kuma's log does not say
+    which. The verdict names each notification with its drop count and the reasons Kuma
+    recorded with theirs, so a Discord rate-limit (HTTP 429) and a webhook Discord rejected
+    (HTTP 400) read differently on the tile, and the tile itself notifies BOTH channels
     (uptime-kuma's static-monitors template) — a page for a dropped Discord POST sent only
     over the same Discord webhook is the failure it reports.
+
+    Reasons are counted as a SET beside the drops, not joined to them one to one: four drops
+    landed inside two seconds on 2026-09-09 20:20, and a nearest-timestamp join would put a
+    429 on a 400's drop and read as fact. A drop whose reason line is outside the window, or
+    that Kuma logged without one, is reported as `reason not logged` rather than assumed.
 
     The window is the whole hysteresis: a drop pages for `window` and then clears, and the
     Discord tile's transition message plus this page together say "an alert went missing
     around <time>; check the tiles' current state".
     """
     counts: dict[str, int] = {}
+    reasons: dict[str, int] = {}
     for _ts, line in lines:
         name = parse_notify_failure_line(line)
-        if name is None:
+        if name is not None:
+            counts[name] = counts.get(name, 0) + 1
             continue
-        counts[name] = counts.get(name, 0) + 1
+        reason = parse_notify_reason_line(line)
+        if reason is not None:
+            reasons[reason] = reasons.get(reason, 0) + 1
     if not counts:
         if truncated:
             return True, (
@@ -249,9 +290,16 @@ def kuma_notify_failures(
                 "line cap, older lines unread" % window
             )
         return True, "no dropped Kuma notifications in %s" % window
+    dropped = sum(counts.values())
+    unexplained = dropped - sum(reasons.values())
+    if unexplained > 0:
+        reasons["reason not logged"] = unexplained
     named = ", ".join("%s x%d" % (n, c) for n, c in sorted(counts.items()))
+    why = ", ".join(
+        "%s x%d" % (r, c) for r, c in sorted(reasons.items(), key=lambda rc: -rc[1])
+    )
     return False, (
-        "Kuma dropped %d notification send(s) in %s (%s) — Kuma does not retry a failed "
-        "send, so an alert reached nobody; check the DOWN tiles' current state"
-        % (sum(counts.values()), window, named)
+        "Kuma dropped %d notification send(s) in %s (%s) — reasons: %s — Kuma does not "
+        "retry a failed send, so an alert reached nobody; check the DOWN tiles' current state"
+        % (dropped, window, named, why)
     )

@@ -168,12 +168,19 @@ def check_swallowed_verdicts(cfg: Config) -> tuple[bool, str]:
     )
 
 
-# Kuma's own failed-send line, from its container log (#1891). `{container="uptime-kuma"}` is
-# the label Alloy gives the pod's stdout/stderr on the cluster. The filter is the fixed prefix
-# so the fetch is only the failure lines: measured 2026-09-17, 2 lines over 7 days.
-KUMA_NOTIFY_FAILURES_LOGQL = '{container="uptime-kuma"} |= "Cannot send notification"'
+# Kuma's own failed-send lines, from its container log (#1891, #1895). `{container="uptime-kuma"}`
+# is the label Alloy gives the pod's stdout/stderr on the cluster. Two lines per drop, both at
+# ERROR level: `Cannot send notification to <name>` and then the error itself, `ERROR: Error:
+# Request failed with status code 429 …` — so the second alternative is anchored on the ERROR
+# tag (with room for the colour reset between tag and message), which keeps Kuma's WARN-level
+# `Pending: Request failed with status code 500` monitor probes out of the fetch. Measured
+# 2026-09-17: 148 lines over 14 days, 74 drops and 74 reasons.
+KUMA_NOTIFY_FAILURES_LOGQL = (
+    '{container="uptime-kuma"} |~ "Cannot send notification|ERROR:.{0,8} Error: "'
+)
 # A long multi-tile outage resends every tile on its own beat count, so a burst of drops
-# clusters around a resend; 500 is far above any burst 76 tiles can produce in one window.
+# clusters around a resend; 500 is far above any burst 76 tiles can produce in one window,
+# counting the reason line each drop brings with it.
 KUMA_NOTIFY_FAILURES_LIMIT = 500
 
 
@@ -182,9 +189,9 @@ def check_kuma_notify_failures(cfg: Config) -> tuple[bool, str]:
 
     Kuma logs `Cannot send notification to <name>` and does not retry, so the transition or
     resend that line stands for reached nobody. check_discord GET-verifies that the webhook
-    exists and cannot see a dropped POST. This reads Kuma's own line out of Loki and pages on
-    the tile that notifies email as well as Discord, so a dropped Discord send is not
-    reported over the channel that dropped it.
+    exists and cannot see a dropped POST. This reads Kuma's own lines out of Loki — the drop
+    and the reason it logs right after it — and pages on the tile that notifies email as well
+    as Discord, so a dropped Discord send is not reported over the channel that dropped it.
 
     FAILS OPEN on a fetch error, on top of being in LOKI_DEPENDENT, for the reason
     check_swallowed_verdicts gives: the gate probes `/labels`, and a range query is what a

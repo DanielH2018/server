@@ -12,6 +12,7 @@ import bridge.streaks
 from verdicts.storage import (
     longhorn_offenders,
     longhorn_redundancy_verdict,
+    parse_pvc_floors,
     parse_snapshot_caps,
     pvc_fullness_verdict,
     snapshot_headroom_verdict,
@@ -137,6 +138,12 @@ def check_pvc_fullness(cfg: Config) -> tuple[bool, str]:
     """
     if not cfg.CLUSTER_PROM_URL:
         return True, "PVC fullness check disabled (no CLUSTER_PROMETHEUS_URL)"
+    floors = parse_pvc_floors(cfg.PVC_MIN_FREE)
+    if cfg.PVC_MIN_FREE.strip() and not floors:
+        return False, (
+            "PVC_MIN_FREE=%r parsed to no usable floor — the free-space floors are UNMONITORED"
+            % cfg.PVC_MIN_FREE
+        )
     claims = bridge.net.prom_scalar(
         cfg,
         "count(count by (namespace, persistentvolumeclaim)"
@@ -157,8 +164,28 @@ def check_pvc_fullness(cfg: Config) -> tuple[bool, str]:
         for labels, pct in vec
         if labels.get("persistentvolumeclaim") not in cfg.PVC_EXCLUDE
     ]
+    # The free-bytes floor (#1875) reads the absolute side of the same ratio, only when a
+    # floor is declared: the percentage arm cannot see a step-shaped peak coming, and the
+    # floor is what a claim declares its largest transient to be. Same `max by` for the same
+    # double-scrape reason. Exclusions drop here as well, so a floor on an excluded claim is
+    # reported by the verdict as unmonitored rather than silently ignored.
+    free = (
+        {
+            labels.get("persistentvolumeclaim", "?"): value
+            for labels, value in bridge.net.prom_vector(
+                cfg,
+                "max by (namespace, persistentvolumeclaim)"
+                " (kubelet_volume_stats_available_bytes)",
+                base=cfg.CLUSTER_PROM_URL,
+                source="cluster prometheus",
+            )
+            if labels.get("persistentvolumeclaim") not in cfg.PVC_EXCLUDE
+        }
+        if floors
+        else {}
+    )
     breach_msg, census_msg, summary = pvc_fullness_verdict(
-        watched, claims, cfg.PVC_MAX_PCT, cfg.PVC_MIN_CLAIMS
+        watched, claims, cfg.PVC_MAX_PCT, cfg.PVC_MIN_CLAIMS, floors, free
     )
     # The census arm rides the streak; a fullness breach does not, because it is monotonic
     # rather than flappy. Both are advanced BEFORE the breach is reported, so a cycle that is

@@ -41,6 +41,7 @@ class ClusterConfig:
     PVC_MAX_PCT: float
     PVC_MIN_CLAIMS: int
     PVC_CLAIMS_CONSECUTIVE: int
+    PVC_MIN_FREE: str
     SNAPSHOT_CAPS: str
     SNAPSHOT_CAP_WARN_RATIO: float
     SNAPSHOT_CAP_CONSECUTIVE: int
@@ -225,6 +226,13 @@ def cluster_config(
         # node's volume stats for a cycle or two, and that must not page; a fullness breach gets
         # no grace because it is monotonic rather than flappy.
         PVC_CLAIMS_CONSECUTIVE=_int("PVC_CLAIMS_CONSECUTIVE", "3"),
+        # Per-claim free-bytes floors, `<pvc>=<bytes>` comma separated, for a claim whose peak
+        # is a step rather than a slope (#1875): valheim-server went 79% -> 100% inside one
+        # updater cycle, under PVC_MAX_PCT the whole way. The value is the claim's largest
+        # transient, declared by its own role — parse_pvc_floors says what keeps it honest.
+        # Empty means no floor is declared; a non-empty string that parses to nothing is a
+        # breach, so a typo cannot read as "nothing to watch".
+        PVC_MIN_FREE=_env("PVC_MIN_FREE", ""),
         # Snapshot-space headroom on capped Longhorn volumes (check_snapshot_headroom). The caps
         # themselves, `<pvc>=<bytes>` comma separated, because nothing exports
         # `spec.snapshotMaxSize` as a metric — parse_snapshot_caps says why, and why `0` (the

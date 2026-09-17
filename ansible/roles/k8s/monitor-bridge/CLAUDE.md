@@ -842,7 +842,19 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     `kubelet_volume_stats` appeared in zero files repo-wide before this. `PVC_MAX_PCT` is **85**,
     not Root Disk's 90: a full PVC can't be relieved by deleting something elsewhere — the
     operator has to expand the volume — and on the smallest genuine claim (973 MiB) 85% leaves
-    146 MiB of headroom against 97 MiB at 90%. `PVC_EXCLUDE` drops `media-data`, the one claim
+    146 MiB of headroom against 97 MiB at 90%. **A percentage cannot warn before a step**:
+    valheim-server sat at 79% for days and reached 100% inside one 15-minute updater cycle
+    when a Steam update staged a fourth copy of the install (#1866), so `PVC_MIN_FREE` (added
+    2026-09-17, #1875) declares a per-claim free-bytes floor — `<pvc>=<bytes>`, the
+    SNAPSHOT_CAPS shape — and the check pages while a named claim's
+    `kubelet_volume_stats_available_bytes` is below it, no streak, whatever its percentage
+    reads. The value is the claim's largest transient, declared by its own role
+    (`valheim_k8s_server_update_transient_bytes`, 3 GiB against a 2.2 G copy) and pinned to
+    this one by `tests/test_check_pvc_floors.py`. A rate signal was rejected: the updater's
+    cycle is 15 min and the check runs every 300 s, so a stable window fires after the ENOSPC
+    as often as before. A named claim reporting no free bytes is a breach, and the green
+    summary names every floor held, so an arm that stopped evaluating is visible as its
+    absence. `PVC_EXCLUDE` drops `media-data`, the one claim
     backed by a `local` PV at `/srv/media` rather than by Longhorn: it IS the `/` filesystem Root
     Disk already watches, so scanning it here pages twice for one full disk. **Aggregated `max by
     (namespace, persistentvolumeclaim)`** because daniel-box's claims are scraped TWICE — k3s
@@ -1017,8 +1029,15 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     GET-verifies the webhook and cannot see a dropped POST. `check_kuma_notify_failures` reads
     Kuma's own line out of `{container="uptime-kuma"}` over `KUMA_NOTIFY_FAILURES_WINDOW_S`
     (3h) through `bridge.net.loki_lines`, and `down` names each notification with its drop
-    count. The reason is NOT in the line — Kuma logs the 429 and its `retry_after` at debug
-    level only — so this counts drops without saying why. The window is the whole hysteresis:
+    count and the reasons Kuma recorded with theirs (`reasons: HTTP 429 Too Many Requests
+    x2`). The reason is Kuma's NEXT line, also at ERROR level — #1895 filed it as debug-only,
+    and measured 2026-09-17 every one of 74 drops in 14 days had one (69 x 429, 5 x 400) —
+    so the LogQL fetches both and counts reasons as a set beside the drops rather than
+    joining them one to one; a drop with no reason in the window reads `reason not logged`.
+    An HTTP reason is reduced to its status before it reaches the tile, because the axios
+    message can carry the request URL and Discord's is the webhook secret. Raising Kuma's
+    log level is neither needed nor safe (uptime-kuma/CLAUDE.md, the debug-logging trap). The
+    window is the whole hysteresis:
     a drop pages for 3h and clears on its own, since nothing is cleared by hand. Its tile
     notifies EMAIL as well as Discord, on purpose: a page for a dropped Discord send that goes
     only over the same webhook is the failure it reports. In `LOKI_DEPENDENT`; a fetch that
