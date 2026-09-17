@@ -354,6 +354,61 @@ def alert_source_urls(base, days, limit):
     ]
 
 
+# Loki rejects a `limit` above its `max_entries_limit_per_query` with a 400 whose body reads
+# `max entries limit per query exceeded, limit > max_entries_limit_per_query (20000 > 5000)`.
+# The cap is read from that body rather than pinned here: nothing in this repo sets it (5000 is
+# Loki's built-in default), so a constant would be a guess that drifts the day loki-homelab's
+# configmap overrides it. Measured live 2026-09-17 against loki-homelab (#1790).
+_LOKI_CAP_RE = re.compile(r"max_entries_limit_per_query \((\d+) > (\d+)\)")
+
+
+def loki_entries_cap(body):
+    """The `max_entries_limit_per_query` an over-limit rejection names, or None for any other body."""
+    m = _LOKI_CAP_RE.search(body or "")
+    return int(m.group(2)) if m else None
+
+
+def fetch_alert_streams(base, pin, days, limit, notice_file=None):
+    """Fetch every alert stream at `limit`, clamping to Loki's cap when it rejects the limit.
+
+    Returns `(limit_used, [(logql, parser, rows), ...])`. A limit above the server cap used to
+    die in `json.loads` on the 400 body — a traceback naming the probe, reached by following
+    the truncation notice's own advice to raise `--limit` (#1790). The clamp restarts the whole
+    fetch at the cap so every later read of the limit (the truncation test, its notice) sees
+    the value the server actually applied; clamping the URL alone would fetch 5000 rows,
+    compare them against 20000, and print an all-clear. Any other non-JSON body propagates as
+    the SystemExit it is. The clamp notice goes to `notice_file` (stdout by default; stderr
+    under `--json`, like the truncation notice, so stdout stays parseable).
+    """
+    while True:
+        urls = alert_source_urls(base, days, limit)
+        streams = []
+        try:
+            # strict=True holds alert_source_urls to its docstring ("one per stream in
+            # ALERT_SOURCES"). A short list would otherwise drop a stream's alerts and still
+            # report success.
+            for url, (logql, parser) in zip(urls, ALERT_SOURCES, strict=True):
+                streams.append(
+                    (
+                        logql,
+                        parser,
+                        _rows_from_loki(core.fetch_parsed(url, resolve=pin)),
+                    )
+                )
+        except core.NonJsonResponse as exc:
+            cap = loki_entries_cap(exc.body)
+            if cap is None or cap >= limit:
+                raise
+            print(
+                f"(--limit {limit} is above Loki's max_entries_limit_per_query of {cap}; "
+                f"using {cap}. Narrow --days to see further back.)\n",
+                file=notice_file or _sys.stdout,
+            )
+            limit = cap
+            continue
+        return limit, streams
+
+
 def run_alerts(ns):
     """Fetch DOWN log lines from every alert stream over the window and print firing episodes.
 
@@ -364,22 +419,21 @@ def run_alerts(ns):
     also govern `--raw`, through the same keep_alert_row predicate the episode view uses.
     """
     base, pin = loki_endpoint()
-    urls = alert_source_urls(base, ns.days, ns.limit)
     if ns.dry_run:
-        for url in urls:
+        for url in alert_source_urls(base, ns.days, ns.limit):
             print(" ".join(curl_argv(url, resolve=pin)))
         return 0
     raw, rows, truncated = [], [], []
-    # strict=True holds alert_source_urls to its docstring ("one per stream in ALERT_SOURCES").
-    # A short list would otherwise drop a stream's alerts and still report success.
-    for url, (logql, parser) in zip(urls, ALERT_SOURCES, strict=True):
-        fetched = _rows_from_loki(json.loads(core.fetch(url, resolve=pin)))
+    limit, streams = fetch_alert_streams(
+        base, pin, ns.days, ns.limit, _sys.stderr if ns.json else _sys.stdout
+    )
+    for logql, parser, fetched in streams:
         # Per stream, not on the merged list: one stream hitting the cap says nothing about
         # the other, and reporting the union would cry truncation whenever the totals summed
         # past the limit.
         # `fetched and` guards `--limit 0`, which argparse accepts: an empty result satisfies
         # `0 >= 0` and the index would raise on a stream that returned nothing.
-        if fetched and len(fetched) >= ns.limit:
+        if fetched and len(fetched) >= limit:
             truncated.append((logql, fetched[0][0]))
         for ns_ts, line in fetched:
             parsed = parser(line)
@@ -393,11 +447,15 @@ def run_alerts(ns):
     # BEFORE the view, not after it. A truncated window that lists no episode prints "no DOWN
     # alerts in the last Nd", and a warning underneath that line arrives too late to stop it
     # being read as an all-clear. On stderr under `--json`, so stdout stays parseable.
+    # "Raise --limit" only when raising it can work: once the limit is the server's cap — the
+    # clamp above, or a `--limit` the operator set at it — the only remedy is a narrower window,
+    # and naming the other one sends them straight back to the rejection (#1790).
+    remedy = "Narrow --days" if limit < ns.limit else "Raise --limit or narrow --days"
     for logql, oldest_ns in truncated:
         print(
-            f"(warning: hit --limit {ns.limit} log lines on {logql} — this window is cut off "
+            f"(warning: hit --limit {limit} log lines on {logql} — this window is cut off "
             f"at its OLDEST end, so only {_fmt_utc(oldest_ns)} UTC onwards is covered. "
-            "Raise --limit or narrow --days.)\n",
+            f"{remedy}.)\n",
             file=_sys.stderr if ns.json else _sys.stdout,
         )
     if ns.raw:

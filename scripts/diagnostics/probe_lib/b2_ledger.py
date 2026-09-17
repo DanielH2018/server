@@ -223,7 +223,7 @@ def run_b2_spend(ns):
     )
     if ns.dry_run:
         return core.print_dry_run(url, resolve=pin)
-    rows = _rows_from_loki(json.loads(core.fetch(url, resolve=pin)))
+    rows = _rows_from_loki(core.fetch_parsed(url, resolve=pin))
     # Reads Loki, not B2 — nothing to record for this command itself.
     print(
         format_backup_spend(
@@ -481,7 +481,7 @@ def run_b2_deletions(ns):
         )
         return 0
 
-    rows = _rows_from_loki(json.loads(core.fetch(url, resolve=pin)))
+    rows = _rows_from_loki(core.fetch_parsed(url, resolve=pin))
     deletions = parse_backup_deletions(rows, target)
     # Every ledger day the window can have written into. A deletion is charged to the UTC day it
     # happened on, so a `--since` reaching back past midnight has already recorded into an

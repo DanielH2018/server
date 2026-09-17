@@ -7,12 +7,12 @@ first left the whole backup/drift plane with no episode history anywhere.
 """
 
 import json
-from datetime import UTC, datetime
 
 from diagnostics.probe_lib import alerts
 from diagnostics.probe_lib import cli_parser
 from diagnostics.probe_lib import metrics
 from diagnostics.probe_lib import core
+from _alert_fixtures import _query_params, _route_alert_fetch, _two_day_log
 
 
 def test_loki_query_url_with_range_adds_start_end_direction():
@@ -63,12 +63,6 @@ def _capture_fetch(monkeypatch, body='{"data":{"result":[]}}'):
     monkeypatch.setattr(core, "sops_extract", lambda key: "example.test")
     monkeypatch.setattr(core, "metallb_vip", lambda: "10.0.0.240")
     return seen
-
-
-def _query_params(url):
-    from urllib.parse import parse_qs, urlparse
-
-    return parse_qs(urlparse(url).query)
 
 
 def test_run_query_sends_the_since_window_to_loki(monkeypatch):
@@ -137,41 +131,6 @@ SYSLOG_PUSH_FAILED_TRUNCATED = (
     "2026-08-16T10:36:02.000000+00:00 daniel-box longhorn-backup-health: "
     "push failed (status=down: backups in Error state: backup-4a471c15 backup-9818b9cc"
 )
-
-
-def _fake_loki(lines):
-    return {"data": {"result": [{"values": [[str(ts), line] for ts, line in lines]}]}}
-
-
-def _route_alert_fetch(monkeypatch, per_query, respect_limit=False):
-    """Serve each alert stream its own body, keyed by the LogQL in the url.
-
-    `respect_limit` makes the fake behave the way Loki does under a cap: it keeps only the lines
-    inside the requested window, then `limit` of them from the end `direction` names. Left off,
-    every line is served whatever the url asked for — which is right for a test about filtering
-    and wrong for a test about truncation, since a fake that ignores the limit passes whichever
-    end the real query would have cut.
-    """
-    import json as _json
-
-    seen = []
-
-    def fake_fetch(url, resolve=None):
-        seen.append(url)
-        params = _query_params(url)
-        lines = per_query.get(params["query"][0], [])
-        if respect_limit:
-            start, end = int(params["start"][0]), int(params["end"][0])
-            limit = int(params["limit"][0])
-            window = [(ts, line) for ts, line in lines if start <= ts <= end]
-            backward = params.get("direction", ["backward"])[0] == "backward"
-            lines = window[-limit:] if backward else window[:limit]
-        return _json.dumps(_fake_loki(lines))
-
-    monkeypatch.setattr(core, "fetch", fake_fetch)
-    monkeypatch.setattr(core, "sops_extract", lambda key: "example.test")
-    monkeypatch.setattr(core, "metallb_vip", lambda: "10.0.0.240")
-    return seen
 
 
 def test_alerts_queries_the_host_cron_stream_as_well_as_the_bridge(monkeypatch):
@@ -387,22 +346,6 @@ def test_alerts_raw_without_a_filter_still_prints_a_line_no_parser_reads(
     ns = cli_parser._build_parser().parse_args(["alerts", "--days", "2", "--raw"])
     assert alerts.run_alerts(ns) == 0
     assert "some future shape" in capsys.readouterr().out
-
-
-def _two_day_log():
-    """40 hourly DOWN lines ending an hour ago: `old_check` for a day, then `new_check`."""
-    now_ns = int(datetime.now(UTC).timestamp() * 1e9)
-    hour = int(3600 * 1e9)
-    return sorted(
-        [
-            (now_ns - (i + 1) * hour, f"DOWN old_check - stale for {i}h")
-            for i in range(20, 40)
-        ]
-        + [
-            (now_ns - (i + 1) * hour, f"DOWN new_check - stale for {i}h")
-            for i in range(20)
-        ]
-    )
 
 
 def test_a_wider_window_lists_every_episode_the_narrower_one_shows(monkeypatch, capsys):
