@@ -44,6 +44,16 @@ REPO = Path(__file__).resolve().parents[2]
 WEIGHTS_PATH = Path(__file__).resolve().with_name("pytest_shard_weights.json")
 # The coverage ratchet over this table. `record_weights` deselects it; see the reason there.
 RATCHET_TEST = "ansible/tests/repo/test_pytest_shards_partition_the_suite.py"
+# The ratchet's node id, spelled once. `record_weights` passes it to `--deselect`, and the two
+# crons that commit with the prek chain on (docs-refresh, eval-run) put the same `--deselect`
+# in PYTEST_ADDOPTS around their commit: while the ratchet is red, only a manual `--record`
+# clears it, and until then it failed both crons' commits -- the docs stopped publishing and
+# the failure path parked the deployer (#1899). CI's sharded job sets no PYTEST_ADDOPTS, so
+# the ratchet stays enforced there. `test_the_crons_deselect_the_ratchet_they_cannot_repair`
+# pins the templates to this string.
+RATCHET_NODE_ID = (
+    f"{RATCHET_TEST}::test_the_recorded_weights_still_cover_most_of_the_suite"
+)
 
 # pytest's default `python_files`, both forms — the same pair
 # `ansible/tests/repo/test_testpaths_covers_every_test_file.py` derives its census from, and for
@@ -158,7 +168,7 @@ def record_weights(path: Path = WEIGHTS_PATH) -> dict[str, float]:
             "-p",
             "no:cacheprovider",
             "--deselect",
-            f"{RATCHET_TEST}::test_the_recorded_weights_still_cover_most_of_the_suite",
+            RATCHET_NODE_ID,
         ],
         cwd=REPO,
         capture_output=True,
