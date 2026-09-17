@@ -35,7 +35,9 @@ ALLOWED = {
     "ci": {"landing", "outcome"},
     "tick": {"landing", "outcome"},
     "deploy": {"landing", "outcome", "ci", "tick"},
-    "health_verdict": {"landing", "outcome"},
+    # `tick.rearm_tick`: the second kick request, after the gate, for a first one that joined
+    # a run in flight (issue #1843). The kick's states live in tick.py, in one place.
+    "health_verdict": {"landing", "outcome", "tick"},
     "pipeline": {
         "landing",
         "outcome",

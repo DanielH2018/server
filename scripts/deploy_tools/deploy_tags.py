@@ -53,8 +53,10 @@ from lib.render_guard import (
     HOST_VARS,
     REPO,
     containers_entries,
+    entry_platform,
     entry_tags,
     host_files,
+    hosts_for_tags,
     service_tags_at_or_none,
 )
 from deploy_tools.exit_codes import DEPLOY_BROAD
@@ -131,12 +133,8 @@ def service_records(host_vars: Path = HOST_VARS) -> list[ServiceRecord]:
     records: list[ServiceRecord] = []
     for path in host_files(host_vars):
         for entry in containers_entries(path):
-            # No host_vars file sets `platform` on a docker entry today (daniel-pi's don't
-            # carry the key at all) — k8s is the one that's always explicit, so docker is the
-            # default rather than an unlabelled third state.
-            platform = entry.get("platform", "docker")
-            for tag in entry.get("tags") or [entry["name"]]:
-                records.append(ServiceRecord(path.stem, platform, tag))
+            for tag in entry_tags(entry):
+                records.append(ServiceRecord(path.stem, entry_platform(entry), tag))
     return records
 
 
@@ -167,12 +165,7 @@ def tags_by_host(tags, host_vars: Path = HOST_VARS) -> dict[str, list[str]]:
     both, so each host's copy is deployed. A tag no host declares (a block tag, a typo) lands
     under none; `validate` is the place that refuses those.
     """
-    wanted = set(tags)
-    by_host: dict[str, set[str]] = {}
-    for host, _platform, tag in service_records(host_vars):
-        if tag in wanted:
-            by_host.setdefault(host, set()).add(tag)
-    return {host: sorted(by_host[host]) for host in sorted(by_host)}
+    return hosts_for_tags(tags, service_records(host_vars))
 
 
 def tag_platforms(tag: str, host_vars: Path = HOST_VARS) -> set[str]:

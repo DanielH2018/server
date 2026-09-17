@@ -38,6 +38,7 @@ def _filled() -> Ledger:
         tags_label="sonarr,radarr",
         lock_waited=61,
         lock_holder="42 flock deploy",
+        kick="joined",
     )
 
 
@@ -57,6 +58,7 @@ def _filled() -> Ledger:
         ("total", "400"),
         ("tags", "sonarr,radarr"),
         ("lock", "61"),
+        ("kick", "joined"),
     ],
 )
 def test_every_field_of_a_filled_ledger(field, value):
@@ -81,6 +83,7 @@ def test_the_holder_is_quoted_because_it_contains_spaces():
         ("deploy", ""),
         ("tags", "none"),
         ("lock", "0"),
+        ("kick", ""),
     ],
 )
 def test_an_unreached_stamp_leaves_its_field_empty(field, value):

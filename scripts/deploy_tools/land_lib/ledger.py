@@ -12,6 +12,14 @@ exit 0, so until they reported it the seconds landed in `deploy` and `tick` inst
 row read `lock=0`. The two sources cannot double-count: a wrapper reports only a wait that
 ended in an acquire or a join, never one that ended in contention.
 
+`kick` is what became of the tick a fast-path landing kicks after `deploy.sh --at`: `started`
+(a tick of its own, which converges the primary while the gate runs), `rearmed` (the first
+request joined a run already in flight and the second, after the gate, started one),
+`joined` (both requests joined; nothing this landing did converges the primary, the timer
+does), `failed` (systemd refused the request), and empty for a landing that kicked none. The
+joined tick fetched before the merge, so it does not carry the landing's commit, and until
+2026-09-17 that case exited 0 and read as `started` (issue #1843).
+
 `cause` is a one-token reason beside a `deploy-failed` verdict, and empty beside every other
 one. The verdict alone cannot tell "nothing was deployed" (a tag miss, a failed tick, a
 host-lookup crash) from "changes are live and a task failed after them", and the board had
@@ -46,6 +54,7 @@ class Ledger:
     tags_label: str = ""
     lock_waited: int = 0
     lock_holder: str = ""
+    kick: str = ""
 
     def __setattr__(self, name: str, value: object) -> None:
         """Coerce a `cause` outside `outcome.CAUSES` to `Cause.INVALID`; "" is no cause.
@@ -81,5 +90,5 @@ def annotation_line(ledger: Ledger, rc: int, total: float) -> str:
         f"tick={_phase(ledger.t_ci, ledger.t_tick)} "
         f"deploy={_phase(ledger.t_tick, ledger.t_deploy)} "
         f"total={int(total)} tags={ledger.tags_label or 'none'} "
-        f'lock={ledger.lock_waited} holder="{ledger.lock_holder}"'
+        f'lock={ledger.lock_waited} holder="{ledger.lock_holder}" kick={ledger.kick}'
     )

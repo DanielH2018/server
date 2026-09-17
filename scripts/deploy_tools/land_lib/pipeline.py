@@ -24,8 +24,8 @@ through every phase, so this table is the contract no signature states:
 | `ci.preflight` | `opts.primary` | -- |
 | `ci.wait_master_ci` | `merge_sha`, `opts.ci_timeout` | `ledger.t_ci` |
 | `tick.run_tick` | `opts.lock_retries`, `opts.lock_backoff` | `ledger.lock_waited`, `ledger.lock_holder`, `ledger.t_tick`, `tick_watch_abandoned` |
-| `deploy.deploy_phase` | `resolved_tags`, `needs_diff`, `merge_sha`, `tick_watch_abandoned` | `resolved_tags`, `deployed_hosts`, `deployed_at`, `ledger.tags_label`, `ledger.cause`, `ledger.t_ci`, `ledger.t_tick`, `ledger.t_deploy` |
-| `health_verdict.health` | `resolved_tags`, `deployed_at`, `plane`, `self_applied`, `remaining_setup`, `tick_watch_abandoned` | `ledger.cause` |
+| `deploy.deploy_phase` | `resolved_tags`, `needs_diff`, `merge_sha`, `tick_watch_abandoned` | `resolved_tags`, `deployed_hosts`, `deployed_at`, `ledger.tags_label`, `ledger.cause`, `ledger.kick`, `ledger.t_ci`, `ledger.t_tick`, `ledger.t_deploy` |
+| `health_verdict.health` | `resolved_tags`, `deployed_at`, `plane`, `self_applied`, `remaining_setup`, `tick_watch_abandoned`, `ledger.kick` | `ledger.cause`, `ledger.kick` |
 
 Every phase may end the landing by raising an `Outcome`, and the last one always does.
 """

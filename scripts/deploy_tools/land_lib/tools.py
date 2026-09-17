@@ -155,7 +155,8 @@ def run_tick(
     arrangement, so it is taken only when a caller is booking what it reads.
 
     `wait=False` passes `--no-wait`: the tick is started and this returns as soon as systemd
-    has the request. A landing that deploys its own merge commit (`deploy.sh --at`) needs the
+    has the request -- or exits `TICK_JOINED` having started none, because a run was already
+    in flight. A landing that deploys its own merge commit (`deploy.sh --at`) needs the
     primary checkout to converge eventually, not before it deploys, and the tick's own 10-min
     timer converges it regardless.
 
@@ -491,6 +492,11 @@ class Tools:
         gate_snapshot
     )
     declared_at: Callable[[str, Path], set[str] | None] = declared_tags_at
+    # `deploy_tags.py hosts` reads the checkout; this reads `containers_list` at the merge
+    # commit a fast-path landing deploys (issue #1839). None sends the caller to the subprocess.
+    landing_hosts_at: Callable[[Any, str, Path], dict[str, list[str]] | None] = (
+        land_tags.landing_hosts_at
+    )
     read_state: Callable[[Path, str], str | None] = read_state
     lock_holder: Callable[[], str] = lock_holder
     hostname: Callable[[], str] = socket.gethostname

@@ -27,6 +27,11 @@
 #   0   the tick ran to completion (which includes a healthy noop / deferral)
 #   1   the tick failed — the unit exited non-zero, or it could not be started
 #   2   the unit is not installed on this host (has_gitops is false here)
+#   4   `--no-wait` only: a tick was already in flight, so the request JOINED it and started
+#       nothing. That tick fetched before this request arrived, so a commit merged since is
+#       not in it, and nothing converges the checkout onto that commit until the next tick.
+#       A caller that needs its own commit fast-forwarded re-runs once the run ends; with a
+#       wait budget the wrapper watches the joined run instead and exits by its outcome.
 #   3   the tick was skipped for lock contention — the unit's `flock -E 75` fired and
 #       `SuccessExitStatus=75` makes systemd call that a success. Nothing deployed,
 #       nothing failed, and nothing alerted. Detected from the unit's ExecStopPost
@@ -113,8 +118,8 @@ started_before="$(show ExecMainStartTimestampMonotonic)"
 joined=0
 joined_after=0
 if [[ "$(show ActiveState)" == "activating" ]]; then
-  echo "A tick is already in flight (started $(show ExecMainStartTimestamp)); watching it"
-  echo "instead of starting a second one — systemd coalesces the request either way."
+  echo "A tick is already in flight (started $(show ExecMainStartTimestamp)); a second start"
+  echo "request would be coalesced into it by systemd, so none is made."
   # Read before `started_before` is overwritten below: it IS the joined run's stamp.
   joined=1
   joined_after="$(in_flight_seconds "$started_before")"
@@ -136,6 +141,16 @@ else
 fi
 
 if [[ "$WAIT_S" -eq 0 ]]; then
+  if [[ "$joined" == 1 ]]; then
+    # Exit 4, not 0: the in-flight tick fetched origin BEFORE this request, so a commit merged
+    # since is not in it and the checkout stays behind until the next tick. land.sh's kick
+    # read 0 here as "the primary converges while the gate runs" and it did not (issue #1843).
+    echo "Nothing started: the run in flight (already ${joined_after}s) fetched before this"
+    echo "request, so a commit merged since is not in it. Re-run once it ends, or wait for"
+    echo "the timer. Follow it with:"
+    echo "  journalctl -u $UNIT --since '$since' --no-pager"
+    exit 4
+  fi
   echo "Started. Read it with:"
   echo "  journalctl -u $UNIT --since '$since' --no-pager"
   exit 0

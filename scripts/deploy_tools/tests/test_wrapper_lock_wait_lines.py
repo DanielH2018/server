@@ -285,6 +285,64 @@ def test_joining_a_tick_in_flight_reports_how_long_it_ran_and_how_long_we_waited
     assert booked[0] >= 1
 
 
+# `systemctl show` answers `activating` forever: a run in flight that does not end while the
+# script looks. `start` records that it was asked, which is the thing the join must not do.
+_SYSTEMCTL_IN_FLIGHT = f"""#!/bin/bash
+case "$1" in
+  cat) exit 0 ;;
+  start) : >"$TICK_STUB_STARTED"; exit 0 ;;
+  show)
+    case "$4" in
+      ActiveState) echo activating ;;
+      ExecMainStartTimestampMonotonic) echo {_MONOTONIC_US} ;;
+      ExecMainStartTimestamp) echo "Thu 2026-09-11 10:00:00 CDT" ;;
+      *) echo "" ;;
+    esac ;;
+esac
+exit 0
+"""
+
+_SYSTEMCTL_IDLE = _SYSTEMCTL_IN_FLIGHT.replace("echo activating", "echo inactive")
+
+
+def _kick(tmp_path: Path, systemctl: str) -> tuple[subprocess.CompletedProcess, bool]:
+    """`gitops_tick.sh --no-wait` against a stub; (result, whether `start` was asked)."""
+    env = _stub_path(tmp_path, {"systemctl": systemctl, "journalctl": _JOURNALCTL})
+    started = tmp_path / "started"
+    env["TICK_STUB_STARTED"] = str(started)
+    uptime = tmp_path / "uptime"
+    uptime.write_text(_UPTIME_FIXTURE)
+    env["GITOPS_TICK_UPTIME_SOURCE"] = str(uptime)
+    result = subprocess.run(
+        [str(_TICK_SH), "--no-wait"],
+        cwd=_REPO,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    return result, started.exists()
+
+
+def test_a_no_wait_kick_that_joins_a_run_in_flight_exits_4_and_starts_nothing(tmp_path):
+    """Issue #1843: the run in flight fetched before the caller's commit merged, so exit 0
+    here told land.sh the primary was converging when nothing would converge it."""
+    result, started = _kick(tmp_path, _SYSTEMCTL_IN_FLIGHT)
+    assert result.returncode == ec.TICK_JOINED, result.stdout
+    assert not started, "the join must not issue a second `systemctl start`"
+    assert "Nothing started" in result.stdout
+    assert f"already {_IN_FLIGHT_S}s" in result.stdout
+
+
+def test_a_no_wait_kick_on_an_idle_unit_starts_one_and_exits_0(tmp_path):
+    """CLEAN half: with no run in flight the request starts a tick, as before."""
+    result, started = _kick(tmp_path, _SYSTEMCTL_IDLE)
+    assert result.returncode == ec.TICK_OK, result.stdout
+    assert started
+    assert "Started." in result.stdout
+
+
 # `-w` answering 75 is a real timeout (deploy.sh passes `-E "$LOCK_BUSY"`); `-w` answering 1
 # is any OTHER flock failure, which must not be reported as contention. Measured 2026-09-11
 # against real flock on a descriptor: a timeout with `-E 75` exits 75, without it exits 1, and
