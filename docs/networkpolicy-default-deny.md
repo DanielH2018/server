@@ -164,7 +164,10 @@ other label and so would pass that check while still breaking:
   **Superseded — this half of the bullet no longer holds.** The premise is that traefik's policy
   admits only `app: traefik`, `prometheus` and the two cni0 `/32`s. Slice 4 then gave traefik an
   open-port rule, written after this paragraph. Read live 2026-08-20, its first ingress rule is
-  `{"ports":[{"port":8000},{"port":8443}]}` with **no `from:`** — open to every source. So every
+  `{"ports":[{"port":8000},{"port":8443}]}` with **no `from:`** — open to every source. (Since
+  2026-09-18, #1974, that is two rules: :8000 keeps no `from:`, while :8443 admits only
+  `netpol_baseline_traefik_https_sources` — Cloudflare's ranges, the LAN, the WireGuard clients and
+  the pod CIDR. The control legs dial :80, so the narrowing does not touch them.) So every
   control leg dialing `traefik:80` survives the flip untouched: slices 1-4 and headlamp's probe on
   the open-port rule, slice 4.5 and the sentinel legs of slices 1-2 on the sentinel policy, and
   prowlarr's on the explicit peer this bullet describes. Slice 5 changed no probe. What remains
