@@ -34,18 +34,20 @@ EXPECTED_COPIES = frozenset(
     }
 )
 
-# Where each Ansible consumer names the files it installs. monitor-bridge's list drives its
-# staging copy, the ConfigMap and the pod's mount; the two setup roles have a copy loop and a
-# stamp pair, and `test_gitops_deploy_ship_list.py` covers the deployer's own.
-_SHIP_LISTS = {
-    "ansible/roles/k8s/monitor-bridge/files/gitops_markers.py": (
-        "ansible/roles/k8s/monitor-bridge/defaults/main.yml"
-    ),
+# The copy task that installs each setup consumer's files under /opt, by task file and task
+# name. The loop is what reaches the host: the stamp pair beside it records provenance only,
+# so a substring search over the whole task file would pass on the stamp entry alone while
+# the module never lands and the unit dies at import. monitor-bridge is separate below (its
+# module list drives the ConfigMap and the mount), and `test_gitops_deploy_ship_list.py`
+# covers the deployer's own loop.
+_COPY_TASKS = {
     "ansible/roles/setup/deploy_ui/files/gitops_markers.py": (
-        "ansible/roles/setup/deploy_ui/tasks/main.yml"
+        "ansible/roles/setup/deploy_ui/tasks/main.yml",
+        "Install the deploy-ui files",
     ),
     "ansible/roles/setup/renovate_agent/files/gitops_markers.py": (
-        "ansible/roles/setup/renovate_agent/tasks/main.yml"
+        "ansible/roles/setup/renovate_agent/tasks/main.yml",
+        "Install agent Python files",
     ),
 }
 
@@ -61,6 +63,17 @@ _DIRECTORY_LITERALS = {
         r"- name: monitor-bridge-gitops-state\n\s+hostPath:\n\s+path: (\S+)", re.M
     ),
 }
+
+# The pod's contention threshold is rendered into its env, and `_num()` reads the env before
+# the default `config_service.py` derives from `CONTENTION_PAGE_SECONDS`. The SessionStart
+# banner parks on that constant directly, so a bump to it that leaves this literal behind
+# quiets the banner while the pod still pages at the old threshold, or the reverse — an
+# operator sent looking for a page that never came. `GITOPS_BEHIND_MAX_MIN` is NOT pinned:
+# the banner's behind threshold is deliberately shorter than the pod's.
+_CONTENTION_ENV = (
+    "ansible/roles/k8s/monitor-bridge/templates/env-secret.yaml.j2",
+    re.compile(r'^  GITOPS_CONTENTION_MAX_MIN: "(\d+)"$', re.M),
+)
 
 
 def test_the_generator_knows_exactly_the_named_consumers():
@@ -88,10 +101,24 @@ def test_a_copy_carries_the_provenance_banner_and_the_source_does_not():
         ), target
 
 
-def test_every_ansible_consumer_ships_its_copy():
-    for target, ship_list in _SHIP_LISTS.items():
-        assert "gitops_markers.py" in (REPO / ship_list).read_text(), (
-            f"{ship_list} does not ship {target}"
+def _tasks_named(task_file: str, name: str) -> list[dict]:
+    """Every task called `name` in `task_file`, descending into `block:` lists."""
+
+    def walk(tasks):
+        for task in tasks:
+            if task.get("name") == name:
+                yield task
+            yield from walk(task.get("block", []))
+
+    return list(walk(yaml_fast.safe_load((REPO / task_file).read_text())))
+
+
+def test_every_setup_consumer_copy_loop_installs_the_module():
+    for target, (task_file, task_name) in _COPY_TASKS.items():
+        tasks = _tasks_named(task_file, task_name)
+        assert len(tasks) == 1, f"{task_file}: {len(tasks)} tasks named {task_name!r}"
+        assert "gitops_markers.py" in tasks[0]["loop"], (
+            f"{task_file}: the {task_name!r} loop does not install {target}"
         )
 
 
@@ -119,3 +146,12 @@ def test_every_non_python_literal_names_the_same_directory():
         found = pattern.findall((REPO / path).read_text())
         assert found, f"{path}: no state-directory literal matched"
         assert found == [STATE_DIR], f"{path}: {found}"
+
+
+def test_the_pod_pages_on_contention_at_the_threshold_the_banner_parks_on():
+    sys.path.insert(0, str(REPO / "ansible/roles/setup/gitops_deploy/files"))
+    from gitops_markers import CONTENTION_PAGE_SECONDS
+
+    path, pattern = _CONTENTION_ENV
+    found = pattern.findall((REPO / path).read_text())
+    assert found == [str(CONTENTION_PAGE_SECONDS // 60)], f"{path}: {found}"
