@@ -208,8 +208,20 @@ meaning is not obvious from its name declares a `description` in `static-monitor
 what the check reads, what a DOWN means, where to look. Twenty push tiles carry one; the
 rest are the follow-up in the issue the first batch filed.
 
-Three things the change depends on:
+Four things the change depends on:
 
+- **The Liquid body ships inside a Tera `raw` block.** AutoKuma runs every entity through
+  the Tera template engine before it parses it (`autokuma/src/entity.rs`,
+  `get_entity_from_settings` — unconditional; `files.preprocess` gates only an earlier pass
+  over the raw file). Tera reads Liquid's comment tag and its double-brace interpolations as
+  its own syntax, so the first deploy of this template on 2026-09-18 failed to parse,
+  AutoKuma logged `No notification named discord could be found` for every monitor and
+  re-synced all 108 with an empty notification list — every alert detached, behind green
+  tiles, until the wrapper deployed. Tera strips the `raw` markers and passes the content
+  verbatim. `test_the_notification_ships_this_template_as_a_webhook_body` asserts the
+  wrapper. The same parse pass also prints the failing entity's config, webhook URL
+  included, into the sidecar log and so into Loki — the debug-diff trap above, reached
+  through a WARN line.
 - **`webhookAdditionalHeaders` carries `Content-Type: application/json`.** axios posts a string
   body as `application/x-www-form-urlencoded`, and Discord rejects that with a 400.
 - **The AutoKuma id stays `discord`** so no monitor's `notification_name_list` moves, and the

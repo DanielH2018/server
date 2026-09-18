@@ -148,8 +148,15 @@ def test_the_notification_ships_this_template_as_a_webhook_body():
     config = _entities()["discord.json"]["config"]
     assert config["type"] == "webhook"
     assert config["webhookContentType"] == "custom"
-    # lookup('file') strips the trailing newline; the render is otherwise byte-identical.
-    assert config["webhookCustomBody"] == TEMPLATE.read_text().rstrip("\n")
+    # AutoKuma runs every entity through Tera before parsing it (entity.rs,
+    # get_entity_from_settings), and Tera reads Liquid's tags as its own — so the body ships
+    # inside a Tera raw block, which Tera strips. lookup('file') strips the trailing newline.
+    body = config["webhookCustomBody"]
+    assert body.startswith("{% raw %}") and body.endswith("{% endraw %}"), body[:40]
+    assert body.removeprefix("{% raw %}").removesuffix("{% endraw %}") == (
+        TEMPLATE.read_text().rstrip("\n")
+    )
+    assert "{% endraw %}" not in TEMPLATE.read_text(), "the wrapper would end early"
     assert json.loads(config["webhookAdditionalHeaders"]) == {
         "Content-Type": "application/json"
     }, "axios posts a string body as form-urlencoded unless the header says otherwise"
