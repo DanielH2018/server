@@ -104,6 +104,17 @@ services. Install without uninstall is a one-way door; this is the way back out.
    2026-08-27 — see the comments in `tasks/install.yml`, which is the list that decides.
 
 ## Notable
+- **dockerd and containerd serve their metrics on the LAN IP** (`docker-daemon`):
+  `metrics-addr` in `daemon.json` on 9323 and `[metrics] address` in
+  `/etc/containerd/config.toml` on 1338 (path `/v1/metrics`), each with a UFW allow from
+  `lan_subnet` — a host listener gets none of the bypass Docker's own iptables chain
+  gives a published port. The cluster's Prometheus scrapes them as `dockerd-pi` and
+  `containerd-pi` (`roles/k8s/claude-otel`). They exist to size a `GOMEMLIMIT` for each
+  daemon: on 2026-09-18 they took 97 and 53 major faults/s on daniel-pi, 46% of the
+  host's, each GC cycle faulting a swapped-out heap back from zram (#2003), and the
+  `GOGC=off` pairing that cuts it on the Pi Alloy needs the live heap
+  (`go_memstats_heap_alloc_bytes` floor over days) before a limit can be set. A change
+  here restarts containerd (no cascade into dockerd; live-restore keeps the containers up).
 - **`become: false` user resolution (task 3) is deliberate** — under the play's `become: true`,
   `ansible_facts.env.USER` is `root`; the user who actually runs `docker` is the unprivileged
   connecting user, so membership is resolved with `become: false`.

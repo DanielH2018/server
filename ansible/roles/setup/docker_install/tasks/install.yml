@@ -186,6 +186,48 @@
     append: true
   become: true
 
+- name: Expose containerd's metrics on the LAN IP
+  tags: [docker-daemon]
+  # containerd serves Prometheus metrics at /v1/metrics once `[metrics] address` is set;
+  # the cluster scrapes it as `containerd-pi`. Same reason as dockerd's metrics-addr below:
+  # containerd took 53 major faults/s on daniel-pi (#2003) and its live heap is what sizes
+  # a GOMEMLIMIT. The packaged config.toml carries only `disabled_plugins = ["cri"]`, so a
+  # marked block is the whole of what this role owns in it.
+  ansible.builtin.blockinfile:
+    path: /etc/containerd/config.toml
+    marker: "# {mark} ANSIBLE MANAGED BLOCK (roles/setup/docker_install)"
+    block: |
+      [metrics]
+        address = "{{ server_ip }}:1338"
+    create: true
+    mode: "0644"
+  become: true
+  register: docker_install_containerd_metrics
+
+- name: Restart containerd to serve its metrics # noqa no-handler
+  tags: [docker-daemon]
+  # docker.service only `Wants=` containerd, so this does not cascade into dockerd, and
+  # live-restore keeps the containers up. The shim binaries are not replaced here, which is
+  # what made the 2026-09-18 engine upgrade (#1961) different.
+  ansible.builtin.systemd:
+    name: containerd
+    state: restarted
+  become: true
+  when: docker_install_containerd_metrics.changed
+
+- name: Allow the LAN to reach the dockerd and containerd metrics listeners
+  tags: [docker-daemon]
+  # Host listeners, not Docker-published ports, so the UFW bypass Docker's iptables chain
+  # gets does not apply (initial_setup's network.yml defaults incoming to deny).
+  community.general.ufw:
+    rule: allow
+    port: "{{ item }}"
+    proto: tcp
+    from_ip: "{{ lan_subnet }}"
+    comment: "docker_install: {{ 'dockerd' if item == '9323' else 'containerd' }} metrics"
+  loop: ["9323", "1338"]
+  become: true
+
 - name: Configure Docker daemon (log limits + live-restore)
   tags: [docker-daemon]
   ansible.builtin.copy:
@@ -203,6 +245,15 @@
     # (10.64.0.0/10), and Docker's own 172.16/12 +
     # 192.168/16 defaults. Only NEW `docker network create` calls draw from this; the ~20
     # existing networks keep their current subnets across the restart (live-restore).
+    #
+    # metrics-addr: dockerd's own Prometheus endpoint (engine counters and the Go runtime's
+    # `go_memstats_*`), on the LAN IP so the cluster's Prometheus scrapes it as `dockerd-pi`
+    # (roles/k8s/claude-otel). It exists to size a GOMEMLIMIT: dockerd took 97 major
+    # faults/s on daniel-pi, 30% of the host's, each GC cycle faulting a swapped-out heap
+    # back from zram (#2003), and the pairing that cuts that (`GOGC=off` under a limit, as
+    # the Pi Alloy runs) needs the live heap measured first — a limit under the live set is
+    # the continuous-collection treadmill (#932). The UFW allow below is what makes the
+    # listener reachable: Docker-published ports bypass UFW, a host listener does not.
     content: |
       {
         "log-driver": "json-file",
@@ -210,6 +261,7 @@
           "max-size": "10m",
           "max-file": "3"
         },
+        "metrics-addr": "{{ server_ip }}:9323",
         "live-restore": true,
         "default-address-pools": [
           { "base": "10.200.0.0/16", "size": 24 }
