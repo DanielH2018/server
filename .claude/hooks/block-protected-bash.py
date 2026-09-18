@@ -50,6 +50,19 @@ import sys
 
 from _hook_common import emit_pretooluse_decision
 
+# Arm 3 splits the command with the dotfiles package's segmenter (#2053) -- the same
+# separator set the hand-rolled regex it replaced used, but quote- and nesting-aware, with
+# heredoc bodies lifted off the segment text. `_claude_guard` raises when the package is not
+# deployed (its DECIDED marker refuses a stale fallback); arms 1 and 2 need no segmenter and
+# keep running, and arm 3 turns the missing package into an `ask` rather than silence -- see
+# `escaping_write_reason`.
+try:
+    import _claude_guard  # noqa: F401  (bootstraps claude_guard onto sys.path)
+    from claude_guard.segment import parse as _parse
+except ImportError as _exc:
+    _parse = None
+    _PARSE_UNAVAILABLE = str(_exc)
+
 
 def _load_classify():
     """`classify()` from block-protected-edits.py, loaded by path.
@@ -212,33 +225,8 @@ _HEREDOC_INTERPRETERS = frozenset(
     {"python", "python3", "bash", "sh", "zsh", "perl", "ruby", "node", "uv"}
 )
 
-_HEREDOC_OPEN = re.compile(r"<<-?\s*[\"']?([A-Za-z_][A-Za-z0-9_-]*)")
 _CD = re.compile(r"^\s*(?:cd|pushd)\s+([^\s;&|<>()]+)\s*$")
 _ENV_ASSIGN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
-# `||` and `&&` first, so the two-character operators are not split as two one-character ones.
-_SEGMENTS = re.compile(r"\s*(?:\|\||&&|[;|&\n])\s*")
-
-
-def strip_heredoc_bodies(command):
-    """Drop every heredoc BODY, keeping the line that opens it.
-
-    This has to happen before anything scans for `>`, and `bash-write-fanout.sh` records why:
-    file content is not shell, so a Markdown blockquote line inside the body is a bare `>` and
-    the redirect scan reads a filename out of the prose. The opening line survives, so both the
-    `> file` that names a real target and the `<<EOF` that names an interpreter are still seen.
-    """
-    kept = []
-    delim = None
-    for line in command.splitlines():
-        if delim is not None:
-            if line.strip() == delim:
-                delim = None
-            continue
-        kept.append(line)
-        match = _HEREDOC_OPEN.search(line)
-        if match:
-            delim = match.group(1)
-    return "\n".join(kept)
 
 
 def _in_a_worktree(path):
@@ -279,12 +267,33 @@ def _heredoc_interpreter(segment):
     return None
 
 
+def _could_write(command):
+    """True if arm 3 could ever act on this text: a named write target, or a heredoc.
+
+    Read off the raw command, so it holds without the segmenter. Everything arm 3 denies
+    passes through `written_paths` or `_heredoc_interpreter`, and both need one of these.
+    """
+    return "<<" in command or bool(written_paths(command))
+
+
 def escaping_write_reason(command, session_cwd):
-    """A deny reason if this command writes outside the worktree the session is isolated in.
+    """(decision, reason) for a write outside the isolated worktree; (None, None) otherwise.
+
+    The decision is `deny` for an escape and `ask` where the segmenter cannot say.
 
     Walks the command a segment at a time, carrying the directory a leading `cd` or `pushd`
     moves it to — that carry is the whole point, because the incident's relative writes were
-    only outside the worktree by virtue of the `cd` in front of them.
+    only outside the worktree by virtue of the `cd` in front of them. The segments are the
+    package's (`claude_guard.segment.parse`): split on the same separators the hand-rolled
+    regex used, but a `;` inside quotes stays inside its word, so `echo 'x; cd /primary'`
+    no longer reads as a `cd` the shell never performs (#2053). Heredoc bodies come back
+    lifted off the segment text, which is what keeps a Markdown `>` in prose from being
+    read as a redirect (`bash-write-fanout.sh` records that trap).
+
+    Two decisions. A real escape is a `deny`. Text the segmenter refuses (an unbalanced
+    quote, an unclosed substitution) or a missing segmenter is an `ask` carrying the reason:
+    the package's contract is that a non-ok parse is never read as "nothing here", and a
+    deny on a typo would put the strongest decision in the repo on the weakest evidence.
 
     Two verdicts per segment, and the split is what keeps this from over-denying. When the
     segment names write targets, those targets are judged, so `cd /home/ubuntu/server &&
@@ -292,9 +301,30 @@ def escaping_write_reason(command, session_cwd):
     interpreter-heredoc case — does the effective directory decide.
     """
     if not _in_a_worktree(session_cwd):
-        return None
+        return None, None
+    if _parse is None:
+        if not _could_write(command):
+            return None, None
+        return (
+            "ask",
+            f"This session is isolated in {session_cwd}, but the worktree-escape guard "
+            f"(#1419) cannot split this command: the `claude_guard` package is not "
+            f"deployed ({_PARSE_UNAVAILABLE}). Run `chezmoi apply` on this host, or "
+            f"confirm the write lands inside the worktree.",
+        )
+    parsed = _parse(command)
+    if not parsed.ok:
+        if not _could_write(command):
+            return None, None
+        return (
+            "ask",
+            f"This session is isolated in {session_cwd}, and the worktree-escape guard "
+            f"(#1419) cannot read this command ({parsed.status}), so it cannot tell where "
+            f"the write lands. Fix the quoting, or confirm the write stays inside the "
+            f"worktree.",
+        )
     cwd = os.path.abspath(session_cwd)
-    for segment in _SEGMENTS.split(strip_heredoc_bodies(command)):
+    for segment in (seg.text for seg in parsed.segments):
         if not segment.strip():
             continue
         moved = _CD.match(segment)
@@ -303,7 +333,7 @@ def escaping_write_reason(command, session_cwd):
             if "$" in destination or destination == "-":
                 # An unresolvable destination: every later segment's directory is unknown, so
                 # stop rather than judge against a directory the command is not in.
-                return None
+                return None, None
             cwd = os.path.abspath(os.path.join(cwd, os.path.expanduser(destination)))
             continue
         targets = [p.strip("\"'") for p in written_paths(segment)]
@@ -313,7 +343,7 @@ def escaping_write_reason(command, session_cwd):
                     target if os.path.isabs(target) else os.path.join(cwd, target)
                 )
                 if _escapes(resolved):
-                    return (
+                    return "deny", (
                         f"`{os.path.abspath(resolved)}` is in a git checkout outside "
                         f"`.claude/worktrees/`, and this session is isolated in "
                         f"{session_cwd}. Write inside the worktree instead. If the edit "
@@ -323,7 +353,7 @@ def escaping_write_reason(command, session_cwd):
             continue
         interpreter = _heredoc_interpreter(segment)
         if interpreter and _escapes(cwd):
-            return (
+            return "deny", (
                 f"This command runs `{interpreter}` on a heredoc from {cwd}, a git checkout "
                 f"outside `.claude/worktrees/`, while this session is isolated in "
                 f"{session_cwd}. The heredoc names no target, so the directory it runs in "
@@ -331,7 +361,7 @@ def escaping_write_reason(command, session_cwd):
                 f"primary checkout and parked the GitOps deployer on 2026-09-06. Drop the "
                 f"`cd` and write inside the worktree. See issue #1419."
             )
-    return None
+    return None, None
 
 
 def decide(command, repo_root, session_cwd=None):
@@ -350,9 +380,9 @@ def decide(command, repo_root, session_cwd=None):
     # a wrong deny costs one re-run from the right directory while a wrong allow parks the
     # deployer for every session. The known cost is that a deliberate edit to the chezmoi
     # checkout from a server worktree is denied; the reason string names the way through.
-    escaped = escaping_write_reason(command, session_cwd or repo_root)
-    if escaped:
-        return "deny", escaped
+    decision, escaped = escaping_write_reason(command, session_cwd or repo_root)
+    if decision:
+        return decision, escaped
     reason = read_reason(command, repo_root)
     if reason:
         return "deny", reason
