@@ -62,7 +62,7 @@
       set -o pipefail;
       k3s kubectl -n {{ k8s_namespace }} create configmap terraria-stats-script
       --from-file=stats.py=/etc/rancher/k3s/terraria-stats/stats.py
-      --from-file=stats_lib.py=/etc/rancher/k3s/terraria-stats/stats_lib.py
+      {{ game_stats_lib_from_file }}
       --dry-run=client -o yaml > /etc/rancher/k3s/terraria-stats/configmap.yaml
     executable: /bin/bash
   become: true

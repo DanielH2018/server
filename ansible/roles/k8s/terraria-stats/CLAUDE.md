@@ -23,5 +23,6 @@ built into an image. See repo-root `CLAUDE.md` for shared conventions.
   `stats_lib.py` together — see tasks/main.yml).
 - The Loki fetch, cursor handling, metric rendering, the HTTP handler and the run loop live
   in `k8s/game-stats-lib`'s `stats_lib.py`, shared with valheim-stats — see that role's
-  CLAUDE.md for how it ships (staged beside this script AND added to this role's own
-  ConfigMap). `parse_line`, `StatsState` and `Store` stay here; they are the per-game part.
+  CLAUDE.md for how it ships (its include stages the copy beside this script and hands this
+  role the `--from-file` entry as `game_stats_lib_from_file`). `parse_line`, `StatsState`
+  and `Store` stay here; they are the per-game part.
