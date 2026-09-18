@@ -27,6 +27,14 @@ range goes through the same `services_from_changed_paths` mapper. Where `changed
 tag list PLUS a note about a shared role a human must still apply, `narrow` refuses instead —
 the tick has no human to read the note.
 
+`Release Staleness Drift` is the second consumer (`probe_lib/releases.py`, #1993). It asks
+the per-path question `broad_path_tags` answers, over `CENSUS_PREFIXES`, for the range from
+a service's release record to `origin/master` — so a merged inventory or macro change that
+reached a service's render is named stale until that service is re-stamped. It does NOT go
+through `narrow`: the fleet-coverage ceiling at the end of `narrow` is lock-time policy (a
+list covering most of the fleet saves none of the twenty minutes), and for a census "most of
+the fleet" is the answer, not a refusal.
+
 Run: uv run pytest scripts/deploy_tools/tests/test_deploy_tags_narrow.py
 """
 
@@ -73,8 +81,19 @@ PLAY_PREFIXES = (
 ROLE_TREES = ("ansible/roles/k8s", "ansible/roles/containers")
 SHARED_TEMPLATES = "ansible/templates/"
 INVENTORY = "ansible/inventory/"
+# The two broad-deploy trees a per-path rule exists for. `PLAY_PREFIXES` are deliberately
+# absent: `broad_path_tags` refuses them outright, and a census that counted them would mark
+# every service stale for a change to how a deploy RUNS — the shape #1672 paid for.
+CENSUS_PREFIXES = (INVENTORY, SHARED_TEMPLATES)
 
 _ROLE_PATH = re.compile(r"^ansible/roles/(?:k8s|containers)/([^/]+)/")
+# Python under the play's own tree cannot import a Jinja macro, so a macro NAME found there is
+# a string, not a consumer: `filter_plugins/toposort.py` carries `ingressroute.yml.j2` as the
+# marker it greps role templates for. Treating that hit as consumption refused every change to
+# that macro — 23 of 24 sampled deploy-plane ranges over the 600 commits to 2026-09-18 — and
+# since #1993 the same refusal marks every service on a record stale and pages (#2001). A
+# variable is different: a filter plugin can read one, so the variable scan keeps refusing.
+_FILTER_PLUGINS = "ansible/filter_plugins/"
 # Directories under the role trees that are not services, as `land_tags._NOT_SERVICES` has
 # them: `common` is the shared Docker deploy path and `archive` holds retired roles.
 _NOT_SERVICES = frozenset({"common", "archive"})
@@ -187,12 +206,17 @@ def _sort_hits(
     are dropped for the same reasons `land_tags.role_for` and `is_role_test_path` drop them.
     An inventory hit that is not `key`'s own definition refuses: see `_defines_only`. A
     `_`-prefixed inventory file is exempt on both sides — `_inventory_tags` skips it as a
-    file no host loads, so its commented-out examples are not consumers either.
+    file no host loads, so its commented-out examples are not consumers either. A macro
+    scan (`key is None`) drops a `.py` under `_FILTER_PLUGINS`, which can name a macro but
+    never render it; a play-level hit anywhere else, and every play-level hit for a
+    variable, still refuses.
     """
     roles: set[str] = set()
     templates: set[str] = set()
     for path in hits:
         if path.endswith(".md"):
+            continue
+        if key is None and path.startswith(_FILTER_PLUGINS) and path.endswith(".py"):
             continue
         if path.startswith(INVENTORY):
             if path.split("/")[-1].startswith("_"):
@@ -361,8 +385,16 @@ def _inventory_tags(
     return tags
 
 
-def _broad_path_tags(path: str, old_ref: str, ctx: Context) -> set[str]:
-    """The tags one changed broad-deploy path reaches."""
+def broad_path_tags(path: str, old_ref: str, ctx: Context) -> set[str]:
+    """The tags one changed broad-deploy path reaches between `old_ref` and `ctx.ref`.
+
+    The unit both consumers share: `narrow` calls it per path of the tick's range, and
+    `releases.compute_stale` per path of a record's range. Raises `CannotNarrow` where no
+    rule can say — and the two consumers read that refusal differently. The tick runs the
+    whole play, which re-stamps every service; the census marks every service sharing the
+    record stale, which is the set that full run would have re-stamped. The two agree by
+    construction, so a refusal never leaves a service the tick applied reading stale.
+    """
     if any(path.startswith(p) for p in PLAY_PREFIXES):
         raise CannotNarrow(f"{path} is read by every deploy")
     after = _show(ctx.ref, path, ctx.cwd)
@@ -439,16 +471,7 @@ def narrow(
         no rendered output at all, and the fast-forward IS the whole apply.
     """
     cwd = Path(cwd)
-    if declared is None:
-        declared = service_tags_at(new_ref, cwd)
-    if callers is None:
-        from lib.k8s_roles import role_callers
-
-        # `cwd`, not the module-level REPO: `narrow`'s contract is "read these two refs
-        # from this checkout", and a graph walked from another tree answers for roles this
-        # checkout may not even have.
-        callers = role_callers(cwd)
-    ctx = Context(cwd, new_ref, declared, callers, explain)
+    ctx = context_for(new_ref, cwd, declared=declared, callers=callers, explain=explain)
     broad_prefixes = _broad_deploy_prefixes()
     paths = [
         p
@@ -460,17 +483,51 @@ def narrow(
     broad = [p for p in paths if any(p.startswith(x) for x in broad_prefixes)]
     tags = _changed_half([p for p in paths if p not in set(broad)], ctx)
     for path in broad:
-        tags |= _broad_path_tags(path, old_ref, ctx)
+        tags |= broad_path_tags(path, old_ref, ctx)
     # A tag list covering most of the fleet saves none of the twenty minutes this exists to
     # save, and adds a way to miss something the whole play would have done. `manifests` is
     # the shape that reaches it: 54 roles include it, so any variable it reads fans out to
     # every caller.
-    if len(tags) * 2 > len(declared):
+    if len(tags) * 2 > len(ctx.declared):
         raise CannotNarrow(
-            f"{len(tags)} of {len(declared)} services — most of the fleet, which is not a "
+            f"{len(tags)} of {len(ctx.declared)} services — most of the fleet, which is not a "
             "narrowing"
         )
     return tags
+
+
+def context_for(
+    ref: str,
+    cwd: Path | str,
+    *,
+    declared: set[str] | None = None,
+    callers: dict[str, set[str]] | None = None,
+    explain: Callable[[str], None] = lambda _m: None,
+) -> Context:
+    """A `Context` for reading `ref` from `cwd`, with the two derived fields filled in.
+
+    Args:
+        ref: the commit the rules read consumers at — the NEW end of a range.
+        cwd: the checkout to read it from.
+        declared: the tags that exist; read at `ref` when omitted.
+        callers: the k8s role-caller graph; walked from `cwd`'s working tree when omitted.
+        explain: called with one derivation line per key.
+
+    Raises:
+        subprocess.CalledProcessError: `ref` carries no host_vars, so `declared` cannot be
+            read. A test driving a throwaway repo passes `declared` instead.
+    """
+    cwd = Path(cwd)
+    if declared is None:
+        declared = service_tags_at(ref, cwd)
+    if callers is None:
+        from lib.k8s_roles import role_callers
+
+        # `cwd`, not the module-level REPO: the contract is "read this ref from this
+        # checkout", and a graph walked from another tree answers for roles this checkout
+        # may not even have.
+        callers = role_callers(cwd)
+    return Context(cwd, ref, declared, callers, explain)
 
 
 def _broad_deploy_prefixes() -> tuple[str, ...]:

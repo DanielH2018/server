@@ -158,3 +158,50 @@ def target_problems(run, repo, namespace=None, scaled_to_zero=is_scaled_to_zero)
             "  ✗ target {} [{}] {}".format(job, inst, "— " + err if err else "down")
         )
     return bad
+
+
+# Services in a stale-release verdict named on the banner line before "(+N more)".
+_STALE_NAMED = 3
+
+
+def stale_release_problems(run):
+    """One line naming the services `Release Staleness Drift` last found stale, or nothing.
+
+    `release-staleness-check.sh` (roles/setup/k3s) logs `status=<up|down> <verdict>` under
+    its own journal tag every `k3s_release_staleness_cron_minute`, then pushes the same text
+    to Kuma. That journal entry is the one place the verdict exists on the host: reading the
+    release records here instead would re-run the git derivation the cron just paid for, and
+    the banner must not (#1993). `--since -2h` keeps a dead cron's last verdict off the
+    banner — the Kuma tile pages for the dead cron itself. A host that never runs the cron
+    (an agent node, a laptop) has no such entry and stays silent, like a host with no docker.
+
+    The verdict is `probe.py releases --stale-only`'s output, one `<service>: <reason>` per
+    line; a line that is not that shape is the check itself breaking, and is shown as such.
+
+    Args:
+        run: the subprocess runner, as in `docker_problems`.
+    """
+    argv = ["journalctl", "-t", "release-staleness-check", "-n", "1", "-o", "cat"]
+    try:
+        res = run(argv + ["--since", "-2h", "--no-pager"], 5)
+    except subprocess.TimeoutExpired, OSError:
+        return []
+    lines = res.stdout.strip().splitlines() if res.returncode == 0 else []
+    if not lines or not lines[0].startswith("status=down "):
+        return []
+    lines[0] = lines[0][len("status=down ") :]
+    verdicts = [line.partition(": ") for line in lines if line.strip()]
+    services = [name for name, sep, _reason in verdicts if sep and " " not in name]
+    if len(services) != len(verdicts):
+        return [f"  ⚠ release staleness check is broken: {lines[0][:110]}"]
+    more = (
+        f" (+{len(services) - _STALE_NAMED} more)"
+        if len(services) > _STALE_NAMED
+        else ""
+    )
+    return [
+        "  ⚠ release staleness: {}{} run manifests behind origin/master — "
+        "uv run python scripts/diagnostics/probe.py releases --stale-only".format(
+            ", ".join(services[:_STALE_NAMED]), more
+        )
+    ]

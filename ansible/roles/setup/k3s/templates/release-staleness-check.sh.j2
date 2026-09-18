@@ -16,10 +16,14 @@
 # compares each one's role paths (the service's own role, plus the entry-less shared roles that
 # supply bytes to every service's manifests -- manifests, volume-claim, image-builder,
 # arr-notification, game-stats-lib; `manifest_affecting_shared_roles()` derives the set, and the
-# deploy-time roles beside them are deliberately out of it, #1636) against origin/master. A
-# service whose role paths moved past its applied commit,
-# or with no record at all, is stale. Unlike this role's other drift checks, this one needs no
-# `kubectl` at all -- it is pure git history plus the JSON records already on disk.
+# deploy-time roles beside them are deliberately out of it, #1636) against origin/master, and
+# since #1993 also the inventory keys and shared macros that service's render reads --
+# derived per changed path by `scripts/deploy_tools/narrow_broad.py`, the same rules the
+# deployer's tick narrows a broad range with, so a merged `group_vars` or `ansible/templates/`
+# change reads stale for exactly the services the tick would apply it to. A service whose
+# role paths or read keys moved past its applied commit, or with no record at all, is stale.
+# Unlike this role's other drift checks, this one needs no `kubectl` at all -- it is pure git
+# history plus the JSON records already on disk.
 #
 # `git fetch` runs FIRST. Without it, `origin/master` is whatever this checkout last fetched, so
 # a parked deployer (a broad hold, a dead timer) would read GREEN forever instead of catching up

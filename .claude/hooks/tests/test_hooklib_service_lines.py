@@ -185,3 +185,46 @@ def test_k8s_namespace_reads_the_inventory_file(tmp_path):
 
 def test_k8s_namespace_is_none_when_the_file_is_missing(tmp_path):
     assert service_lines.k8s_namespace(str(tmp_path)) is None
+
+
+# ── the release-staleness cron's last verdict (#1993) ────────────────────────────────────
+
+_DOWN = (
+    "status=down sonarr: changed since applied: ansible/inventory/group_vars/all.yml "
+    "(lan_subnet)\nhomepage: no release record\n"
+)
+
+
+def test_stale_release_problems_names_the_services_a_down_verdict_lists():
+    (line,) = service_lines.stale_release_problems(_answers(_result(_DOWN)))
+    assert line.startswith(
+        "  ⚠ release staleness: sonarr, homepage run manifests behind"
+    )
+    assert "releases --stale-only" in line
+
+
+def test_stale_release_problems_is_silent_on_an_up_verdict():
+    up = "status=up 0 service(s) stale; every known k8s service has a current record.\n"
+    assert service_lines.stale_release_problems(_answers(_result(up))) == []
+
+
+def test_stale_release_problems_is_silent_when_the_cron_never_ran_here():
+    assert service_lines.stale_release_problems(_answers(_result(""))) == []
+    assert (
+        service_lines.stale_release_problems(_raises(FileNotFoundError("journalctl")))
+        == []
+    )
+
+
+def test_stale_release_problems_counts_the_services_past_the_first_three():
+    six = "status=down " + "\n".join(
+        f"svc{i}: changed since applied: x" for i in range(6)
+    )
+    (line,) = service_lines.stale_release_problems(_answers(_result(six)))
+    assert "svc0, svc1, svc2 (+3 more) run" in line
+
+
+def test_stale_release_problems_shows_a_broken_check_as_broken():
+    broken = "status=down probe.py releases --stale-only exited 2: no release records\n"
+    (line,) = service_lines.stale_release_problems(_answers(_result(broken)))
+    assert line.startswith("  ⚠ release staleness check is broken: probe.py releases")

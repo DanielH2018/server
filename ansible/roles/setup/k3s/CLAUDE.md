@@ -115,9 +115,9 @@ the local ledger, which is bookkeeping, not state.
   deployer's own `behind_since`, so nothing else says the cluster is still running old
   manifests. `release-staleness-check.sh` runs `probe.py releases --stale-only` every
   `k3s_release_staleness_cron_minute` and pushes the tile down while any service's applied
-  commit sits behind `origin/master` under its role paths. The full account, including why
-  it runs as `sys_user` and not root, is the `#947` bullet in
-  `roles/setup/gitops_deploy/CLAUDE.md`.
+  commit sits behind `origin/master` under its role paths, or under an inventory key or
+  shared macro its render reads (#1993). The full account, including why it runs as
+  `sys_user` and not root, is the `#947` bullet in `roles/setup/gitops_deploy/CLAUDE.md`.
 - **Cron's PATH omits `/usr/local/bin`, where k3s lives.** Every script here sets its own
   PATH; a new one that does not dies on `command -v k3s` and, if it pushes its heartbeat
   before the check, reads permanently green.

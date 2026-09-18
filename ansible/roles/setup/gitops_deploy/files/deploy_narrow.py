@@ -162,16 +162,20 @@ def _deploy_plane(narrow, config, target) -> BroadPlan:
 # derivation that is certain and leave the one that is not wide open. Forty of the fifty-four
 # k8s roles are denied, so a filtered narrowed range would mostly apply nothing and hand a
 # tag list to a human — for a change a human authored and merged, with `land.sh` already
-# waiting on this tick to apply it. And a dropped tag is a service left silently stale unless
-# a durable marker lands with it, which is the outcome the DECIDED at the fallback above
-# refuses for a missed consumer: `Release Staleness Drift` compares a service's record against
-# its own role and the shared roles, never against `inventory/` or `ansible/templates/`, so
-# nothing would name it, and the one marker shaped for the job, `manual_plane`, is rendered as
-# a setup role by every one of its five readers. What the denylist still governs on this
-# plane is who MERGES: renovate.json's `manual — k8s_autodeploy: false` rule names
-# `group_vars/all.yml` beside a denied role's own defaults (#1936), so no pin a denied role
-# reads through a shared key merges unattended. `denylisted_in` exists so the journal line
-# above can name which of a narrowed apply's tags were denied ones.
+# waiting on this tick to apply it. The third reason, that a dropped tag would be a service
+# left silently stale with nothing to name it, no longer holds on its own: since #1993
+# `Release Staleness Drift` asks `narrow_broad` the same per-path question this plan asks,
+# from each service's release record to origin/master, so a denied role whose render reads a
+# merged inventory key or macro reads STALE until it is re-stamped (`_deploy_plane_stale` in
+# scripts/diagnostics/probe_lib/releases.py). That makes a filter viable, not wanted: the
+# first two reasons stand, and `manual_plane` is still rendered as a setup role by every one
+# of its five readers, so a deferral here would still have no k8s-shaped marker. What the
+# denylist still governs on this plane is who MERGES: renovate.json's `manual —
+# k8s_autodeploy: false` rule names `group_vars/all.yml` beside a denied role's own defaults
+# (#1936), so no pin a denied role reads through a shared key merges unattended.
+# `denylisted_in` exists so the journal line above can name which of a narrowed apply's tags
+# were denied ones; the `broad_applied` marker carries the same tag list durably, and the
+# denied subset of it is that list intersected with the denylist.
 def denylisted_in(tags: list[str], denylist: frozenset[str] | set[str]) -> list[str]:
     """The tags in a narrowed list that `K8S_AUTODEPLOY_DENYLIST` names, in the list's order.
 
