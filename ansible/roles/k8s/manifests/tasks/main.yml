@@ -265,7 +265,11 @@
 # `failed_when: false` because a workload this apply creates does not exist yet on the before
 # side; the comparison below treats a non-zero rc on either side as "not rolled by the apply",
 # which restarts -- the recoverable direction, and what the `created` guard already skips.
-# Read-only, so no dry-run or check-mode guard: under both, before equals after.
+# Read-only, so no dry-run or check-mode guard: under both, before equals after. Gated on the
+# render having changed, and on nothing else: that is the only trigger an apply can roll on
+# (a rebuilt image behind a mutable tag leaves the template as it was), so an unchanged render
+# spends no kubectl calls here -- two per target per role, ~150 on a full play otherwise. The
+# consumer below carries the same condition, as the skipped-register guard requires.
 - name: Fingerprint the pod templates before the apply for {{ manifests_service }}
   tags: [deploy]
   ansible.builtin.shell:
@@ -282,6 +286,7 @@
   changed_when: false
   failed_when: false
   check_mode: false
+  when: manifests_render is changed or manifests_secret_render is changed
 
 - name: Apply manifests for {{ manifests_service }}
   tags: [deploy]
@@ -353,6 +358,7 @@
   changed_when: false
   failed_when: false
   check_mode: false
+  when: manifests_render is changed or manifests_secret_render is changed
 
 - name: Reset which workloads the apply itself rolled for {{ manifests_service }}
   tags: [deploy]
@@ -378,6 +384,7 @@
   loop: "{{ manifests_template_before.results | default([]) | zip(manifests_template_after.results | default([])) | list }}"
   loop_control:
     label: "{{ item.0.item.name }}"
+  when: manifests_render is changed or manifests_secret_render is changed
 
 - name: Reconcile secret keys against the rendered manifests for {{ manifests_service }}
   tags: [deploy]

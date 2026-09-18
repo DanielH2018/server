@@ -100,7 +100,7 @@ same resources.
   roll costs a spare pod on a `RollingUpdate` Deployment; on a `Recreate` one it deletes the
   pod the apply just created while the kubelet is mid-pull, and the drain waits out the whole
   pull before the next ReplicaSet can appear (#1988: karakeep sat `Terminating` for ten
-  minutes and failed the 300s drain). So the role hashes each restart target's
+  minutes and failed the 300s drain). So when the render changed, the role hashes each restart target's
   `.spec.template` before and after the apply; a target whose hash moved is
   `manifests_rolled_by_apply[name] == true`, and both the restart tasks and the release
   record's `rollouts[].restart` skip it. The template, not `.metadata.generation`: generation

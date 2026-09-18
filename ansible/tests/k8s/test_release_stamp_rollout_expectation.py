@@ -126,6 +126,9 @@ def test_the_template_fingerprints_bracket_the_apply_and_precede_the_stamp():
     assert before < apply < after < reset < fact < stamp, names[before : stamp + 1]
 
 
+_FINGERPRINT_GATE = "manifests_render is changed or manifests_secret_render is changed"
+
+
 def test_the_template_fingerprints_read_the_template_not_the_generation():
     """`.metadata.generation` bumps on any spec change — navidrome and terraria template
     `replicas:` — so a replicas change beside a ConfigMap change would read as rolled and skip
@@ -141,6 +144,9 @@ def test_the_template_fingerprints_read_the_template_not_the_generation():
         assert task["failed_when"] is False, (
             "a workload the apply creates has no before side"
         )
+        assert task["when"] == _FINGERPRINT_GATE, side
+    note = task_named(MAIN, "Note which workloads the apply itself rolled")
+    assert note["when"] == _FINGERPRINT_GATE, "consumer must carry the producers' gate"
     replicas = [
         p
         for p in (ANSIBLE / "roles/k8s").glob("*/templates/deployment*.j2")
