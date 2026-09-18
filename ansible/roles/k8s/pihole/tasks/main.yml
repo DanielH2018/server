@@ -15,7 +15,9 @@
     # Both instances roll_one.yml restarts, declared to the release record so `probe.py
     # health` expects each to roll after a changed render (issue #1902). `image: pihole` on
     # both: roll_one.yml also fires on manifests_image_changed, which keys on the SERVICE
-    # name, and the record's own image check would otherwise miss pihole-2. Record-only.
+    # name, and the record's own image check would otherwise miss pihole-2. The shared role
+    # also fingerprints each entry's pod template across the apply, so roll_one.yml can
+    # skip restarting an instance the apply already rolled (#1994).
     manifests_self_rollouts:
       - { name: pihole, kind: deploy, image: pihole }
       - { name: pihole-2, kind: deploy, image: pihole }
@@ -32,7 +34,9 @@
 # Deployments render into one deployment.yaml and `kubectl apply -f <dir>/` applies both at
 # once, so any change to deployment.yaml.j2 itself (a Renovate image bump, a resource tweak)
 # changes both pod templates in the same apply and the controller Recreate-cycles both
-# Deployments simultaneously — before this loop ever runs. The redundancy here genuinely
+# Deployments simultaneously — before this loop ever runs. The loop then skips its own
+# restart of each instance (the apply already rolled it, `manifests_rolled_by_apply`) and
+# only waits for the roll the apply started (#1994). The redundancy here genuinely
 # protects ConfigMap/Secret-only changes (the common case: blocklist/adlist edits, secret
 # rotation), which don't touch deployment.yaml.j2 and so aren't rolled by the controller at
 # apply time at all. Closing this gap means applying the two Deployments from separate
@@ -47,7 +51,9 @@
   # 2x180s, and never reports idempotent. Same three facts the shared role itself gates its
   # own restart on (roles/k8s/manifests/tasks/main.yml:155); registered inside the include_role
   # above, they stay in scope here because `register` sets a play-scoped fact, not one local
-  # to the included role.
+  # to the included role. The fourth fact the shared role gates on, `manifests_rolled_by_apply`,
+  # is read inside roll_one.yml on the restart task alone: the include still runs so the
+  # sibling check and the rollout wait follow a roll the apply started.
   when: manifests_render is changed or manifests_secret_render is changed or manifests_image_changed
   loop:
     - pihole
