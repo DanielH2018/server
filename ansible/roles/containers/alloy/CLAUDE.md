@@ -24,21 +24,27 @@ verdict lines to loki-homelab. See repo-root `CLAUDE.md` for shared conventions.
   `process_resident_memory_bytes{job="alloy-pi"}` over the 7 days to 2026-09-17: median
   59.3 MB, p95 70.1 MB, and a daily maximum of 75.5–82.1 MB on every one of the seven days,
   against the 96 MiB (100.7 MB) `resources()` cap and a 72 MiB GOMEMLIMIT.
-  `go_memstats_sys_bytes` read 96.3 MB at the same time. The shipper already runs within
-  ~20 MB of its cap at every day's peak, and the journal reader's own footprint is
+  `go_memstats_sys_bytes` read 96.3 MB at the same time. #1944 settled what that peak is
+  (2026-09-18): the top of the GC sawtooth, sampled 1,440 times a day. The live heap is
+  38 MB, not the 19 MiB the sizing assumed, so GOGC=50 sets a 58 MB heap goal and the Go
+  runtime's total reaches the 72 MiB GOMEMLIMIT at the top of every cycle. Nothing
+  scheduled drives it, and there is no removable cause: what fills the 38 MB is unmeasured
+  and pprof is off by decision. The compose template's GOMEMLIMIT and `resources()`
+  comments carry the numbers, and `ansible/tests/services/test_alloy_pi_gomemlimit_headroom.py`
+  takes its floor from that live heap. The journal reader's own footprint is still
   unmeasured. It is also awkward to measure: sdjournal mmaps the journal files, and here
   those sit on the 128 MB log2ram tmpfs, so the mapped window counts in this process's RSS
   (the metric above) while the physical pages stay journald's — the metric and the cgroup
   cap would disagree, and only a deployed before/after on this host settles it. A reader
-  whose cost cannot be measured without a deploy, added to a process ~20 MB under its OOM
-  line, is the case the issue's own drop rule names. The
+  whose cost cannot be measured without a deploy, added to a process whose runtime already
+  paces against its memory limit, is the case the issue's own drop rule names. The
   daemon-failure evidence the journal would have carried reaches Loki another way: when
   dockerd stops answering, `pi-recovery-health` (`roles/setup/optimize_pi`) appends the
   newest non-info `journalctl -u docker` lines to its own DOWN record, which the
-  `pi_health` source here already ships. To revisit the reader, settle #1944 first (what
-  drives the daily peak, and whether the cap or the sizing comments move), then measure
-  RSS for a week and delete `test_the_journal_is_not_shipped` in the same PR — the test is
-  the enforcement for this decision.
+  `pi_health` source here already ships. To revisit the reader, first make room for it —
+  `GOGC=25` takes ~10 MB off every peak, and the compose template says what that costs —
+  then measure RSS for a week and delete `test_the_journal_is_not_shipped` in the same PR.
+  The test is the enforcement for this decision.
 - **No healthcheck, on purpose.** The image ships no HTTP client, so a `wget` probe fails to
   EXEC and reads as `unhealthy`; Prometheus `up{job="alloy-pi"}` covers liveness from outside.
   The compose template carries the history.
