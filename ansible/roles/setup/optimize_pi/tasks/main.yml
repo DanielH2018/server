@@ -10,10 +10,14 @@
   # 2.1 MB/s. 100% (~456 MB) moves the spill into zram for ~7 MB of RAM and leaves ~180 MB
   # of capacity before the swapfile is touched again. The RAM a full device would cost
   # (~100 MB) is bounded by the same earlyoom `-m 10` guard as before: it ignores swap by
-  # design (`-s 100,100`, below), so this changes nothing about when it fires. Applying the
-  # change restarts zramswap, which swapoffs the device onto the SD swapfile with ~15 MB
-  # free — a minute-long stall of the whole host — so apply it in a quiet window, or let a
-  # reboot pick it up. The Pi memory budget review of 2026-09-18 has the host's numbers.
+  # design (`-s 100,100`, below), so this changes nothing about when it fires. A change
+  # here reboots the Pi (`notify: Reboot Pi`, the same handler gpu_mem and log2ram use),
+  # never a live `systemctl restart zramswap`: measured 2026-09-18 16:27Z, that restart
+  # swapoffs the device onto the SD swapfile with ~15 MB free, systemd's 90 s stop timeout
+  # killed the swapoff half-way, the device stayed active at the OLD size, the start half
+  # failed (`Error: setting compression algo to zstd`, the device still in use), the unit
+  # read `failed`, and 150 MB of swap sat on the SD card with memory PSI `full avg60` 42%
+  # until a reboot. The Pi memory budget review of 2026-09-18 has the host's numbers.
   tags: [gpu-mem, zram]
   ansible.builtin.set_fact:
     optimize_pi_gpu_memory_mb: 16
@@ -68,7 +72,7 @@
       line: "ALGO=zstd"
   loop_control:
     label: "{{ item.regexp }}"
-  notify: Restart ZRAM
+  notify: Reboot Pi
 
 - name: Prefer zram swap over page-cache eviction (vm.swappiness=130)
   tags: [zram]
