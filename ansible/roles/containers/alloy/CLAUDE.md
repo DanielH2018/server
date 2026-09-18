@@ -42,7 +42,8 @@ verdict lines to loki-homelab. See repo-root `CLAUDE.md` for shared conventions.
   dockerd stops answering, `pi-recovery-health` (`roles/setup/optimize_pi`) appends the
   newest non-info `journalctl -u docker` lines to its own DOWN record, which the
   `pi_health` source here already ships. To revisit the reader, first make room for it —
-  `GOGC=25` takes ~10 MB off every peak, and the compose template says what that costs —
+  `GOGC=25` takes ~10 MB off every peak, and the compose template says what that costs
+  (measured 2026-09-18: 18% more major faults, the `DECIDED:` marker at the `GOGC` line) —
   then measure RSS for a week and delete `test_the_journal_is_not_shipped` in the same PR.
   The test is the enforcement for this decision.
 - **No healthcheck, on purpose.** The image ships no HTTP client, so a `wget` probe fails to
