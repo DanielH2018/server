@@ -205,9 +205,9 @@ def test_the_resolver_reads_a_clusterip_not_a_docker_bridge_ip(monkeypatch):
         returncode, stdout, stderr = 0, "10.43.0.9\n", ""
 
     monkeypatch.setattr(
-        postflight.health_docker.subprocess,
-        "run",
-        lambda argv, **kw: (seen.append(argv), Result())[1],
+        postflight.health_docker,
+        "kubectl",
+        lambda cluster, *args, **kw: (seen.append(args), Result())[1],
     )
     assert postflight.health_docker.resolve_service_ip("sonarr") == "10.43.0.9"
     assert "docker" not in seen[0]

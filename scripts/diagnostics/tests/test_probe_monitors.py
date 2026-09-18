@@ -308,7 +308,7 @@ def test_run_kuma_drift_pi_end_to_end_reports_a_missing_pi_monitor(monkeypatch, 
     monkeypatch.setattr(core, "fetch", fake_fetch)
     monkeypatch.setattr(core, "sops_extract", lambda key: "example.test")
     monkeypatch.setattr(core, "metallb_vip", lambda: "10.0.0.240")
-    monkeypatch.setattr(monitors, "kuma_pod_age_seconds", lambda: 86400 * 3)
+    monkeypatch.setattr(monitors, "kuma_pod_age_seconds", lambda cluster: 86400 * 3)
 
     ns = cli_parser._build_parser().parse_args(["kuma-drift", "--pi", "--no-secrets"])
     assert monitors.run_kuma_drift(ns) == 1

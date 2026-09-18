@@ -111,7 +111,7 @@ scripts/docs/tests/test_gen_reference_backlog.py 1
 scripts/home_assistant/tests/test_ha_state_checks.py 2
 scripts/home_assistant/tests/test_ha_state_model.py 3
 scripts/infra_map/tests/test_gen_infra_map.py 1
-scripts/infra_map/tests/test_infra_map_live.py 10
+scripts/infra_map/tests/test_infra_map_live.py 1
 scripts/lib/tests/test_gh.py 4
 scripts/lib/tests/test_watcher.py 5
 scripts/validate/tests/test_validate_k8s_manifests.py 1

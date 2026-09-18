@@ -3,7 +3,7 @@
 Split out of probe.py, which had grown to 1349 lines across thirteen subcommands, and split
 again at 938 lines into four helper modules this one drives:
 
-  - `health_kubectl.py` — the kubectl argv builders and `pod_selector`
+  - `health_kubectl.py` — the kubectl argument builders and `pod_selector`
   - `health_rollout.py` — `format_k8s_health`, the Deployment/DaemonSet verdict
   - `health_cronjob.py` — `format_cronjob_health`, the CronJob verdict
   - `health_docker.py`  — the Pi's Docker containers and the ClusterIP lookups
@@ -36,6 +36,7 @@ printed `VERDICT: settled` for a claude-otel deploy whose health gate never ran.
 import json
 import subprocess
 from datetime import datetime, timezone
+from typing import cast
 
 # `probe_lib` is a namespace package under `scripts/`, so reaching a sibling by package name
 # needs `scripts/` on sys.path — a module gets only its importer's path otherwise, and
@@ -60,21 +61,17 @@ from diagnostics.probe_lib.health_docker import (
     resolve_ip,  # noqa: F401
 )
 from diagnostics.probe_lib.health_kubectl import (
-    DEFAULT_CLUSTER,
     WORKLOAD_KINDS,
-    cluster_of,
-    cluster_refusal,
-    k8s_cronjob_argv,
-    k8s_deploy_argv,
-    k8s_job_pods_argv,
-    k8s_jobs_argv,
-    k8s_nodes_argv,
-    k8s_pods_argv,
-    node_names,
+    k8s_cronjob_args,
+    k8s_deploy_args,
+    k8s_job_pods_args,
+    k8s_jobs_args,
+    k8s_pods_args,
     pod_selector,
 )
 from diagnostics.probe_lib.health_rollout import format_k8s_health, unrolled_reason
 
+from lib.kubectl import DEFAULT_CLUSTER, cluster_refusal, kubectl_json, served_cluster
 from lib.repo_paths import K8S_ROLES, REPO
 
 _RENDER_CONTEXT = None
@@ -261,17 +258,17 @@ def format_role_health(role, checked, now, expected_restarts=None):
     return "\n".join([head, *lines]), 0
 
 
-def _fetch_workload(name, namespace):
+def _fetch_workload(name, namespace, cluster):
     """(workload doc or None, pods doc or None) for one name, tried across WORKLOAD_KINDS.
 
     Asking for the wrong kind just returns non-zero, so the fallback costs one extra call only
     for the DaemonSets and for a name that matches nothing.
     """
     for kind in WORKLOAD_KINDS.values():
-        workload = core.json_or_none(k8s_deploy_argv(name, namespace, kind=kind))
+        workload = kubectl_json(cluster, *k8s_deploy_args(name, namespace, kind=kind))
         if workload:
-            pods = core.json_or_none(
-                k8s_pods_argv(name, namespace, pod_selector(workload))
+            pods = kubectl_json(
+                cluster, *k8s_pods_args(name, namespace, pod_selector(workload))
             )
             return workload, pods
     return None, None
@@ -332,14 +329,16 @@ def release_expected_restarts(record):
     }
 
 
-def _fetch_cronjob(name, namespace):
+def _fetch_cronjob(name, namespace, cluster):
     """(CronJob doc or None, its latest owned Job or None, that Job's pods doc or None)."""
-    cronjob = core.json_or_none(k8s_cronjob_argv(name, namespace))
-    latest_job = latest_owned_job(core.json_or_none(k8s_jobs_argv(namespace)), name)
+    cronjob = kubectl_json(cluster, *k8s_cronjob_args(name, namespace))
+    latest_job = latest_owned_job(
+        kubectl_json(cluster, *k8s_jobs_args(namespace)), name
+    )
     pods = None
     if latest_job:
         job_name = (latest_job.get("metadata") or {}).get("name")
-        pods = core.json_or_none(k8s_job_pods_argv(job_name, namespace))
+        pods = kubectl_json(cluster, *k8s_job_pods_args(job_name, namespace))
     return cronjob, latest_job, pods
 
 
@@ -377,11 +376,6 @@ def format_role_cronjob_health(role, checked, now):
 _UNSET = object()
 
 
-def served_cluster():
-    """Which cluster the local `k3s kubectl` reaches, or None when the node read failed."""
-    return cluster_of(node_names(core.json_or_none(k8s_nodes_argv())))
-
-
 def run_health(container, docker=False, cluster=DEFAULT_CLUSTER, served=_UNSET):
     """k8s workload health by default, the Pi's Docker container with --docker.
 
@@ -404,11 +398,13 @@ def run_health(container, docker=False, cluster=DEFAULT_CLUSTER, served=_UNSET):
         print(text)
         return code
 
-    # Before anything else reads the cluster: the gate names one cluster, and this is the only
-    # thing that checks the kubectl it is about to run reaches that cluster. Without it,
-    # `probe.py health` run after a `-e target=daniel-stage` deploy gated production's workload
-    # and exited 0 — a green verdict about a cluster the deploy never touched (#1663).
-    refusal = cluster_refusal(cluster, served_cluster() if served is _UNSET else served)
+    # Before anything else reads the cluster. `lib.kubectl` refuses every call that names the
+    # wrong cluster, but the gate checks first so the refusal is one line with the container
+    # name rather than an exception out of the first fetch. Without any check, `probe.py health`
+    # run after a `-e target=daniel-stage` deploy gated production's workload and exited 0 — a
+    # green verdict about a cluster the deploy never touched (#1663).
+    served_name = served_cluster() if served is _UNSET else cast("str | None", served)
+    refusal = cluster_refusal(cluster, served_name)
     if refusal:
         print(f"{container}: {refusal}")
         return 1
@@ -426,7 +422,7 @@ def run_health(container, docker=False, cluster=DEFAULT_CLUSTER, served=_UNSET):
     if targets is None:
         # Not a k8s role, so the tag is the only name available. A miss here means "this tag
         # is not a k8s workload name", which is exactly what lets --docker take over.
-        workload, pods = _fetch_workload(container, ns)
+        workload, pods = _fetch_workload(container, ns, cluster)
         text, code = format_k8s_health(
             workload, pods, container, datetime.now(timezone.utc)
         )
@@ -450,7 +446,12 @@ def run_health(container, docker=False, cluster=DEFAULT_CLUSTER, served=_UNSET):
             now = datetime.now(timezone.utc)
             deploy_applied_at = _deploy_applied_at(container)
             checked = [
-                (namespace, name, *_fetch_cronjob(name, namespace), deploy_applied_at)
+                (
+                    namespace,
+                    name,
+                    *_fetch_cronjob(name, namespace, cluster),
+                    deploy_applied_at,
+                )
                 for namespace, name in cronjob_targets
             ]
             text, code = format_role_cronjob_health(container, checked, now)
@@ -469,7 +470,7 @@ def run_health(container, docker=False, cluster=DEFAULT_CLUSTER, served=_UNSET):
 
     now = datetime.now(timezone.utc)
     checked = [
-        (namespace, kind, name, *_fetch_workload(name, namespace))
+        (namespace, kind, name, *_fetch_workload(name, namespace, cluster))
         for namespace, kind, name in targets
     ]
     text, code = format_role_health(

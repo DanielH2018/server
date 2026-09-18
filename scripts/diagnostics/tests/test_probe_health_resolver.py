@@ -170,7 +170,7 @@ def test_statefulset_is_resolvable_and_lookupable():
     """
     assert "StatefulSet" in health_kubectl.WORKLOAD_KINDS
     assert health_kubectl.WORKLOAD_KINDS["StatefulSet"] == "statefulset"
-    assert "statefulset" in health_kubectl.k8s_deploy_argv(
+    assert "statefulset" in health_kubectl.k8s_deploy_args(
         "postgres", "homelab", kind="statefulset"
     )
 
@@ -267,11 +267,11 @@ def test_pod_selector_falls_back_rather_than_matching_every_pod():
     """A workload with no selector is rejected by the k8s API, so this is unreachable — but an
     empty `-l` would query the whole namespace, which is worse than the old guess."""
     assert health_kubectl.pod_selector({}) == ""
-    assert "app=pihole-2" in health_kubectl.k8s_pods_argv("pihole-2", "homelab", "")
+    assert "app=pihole-2" in health_kubectl.k8s_pods_args("pihole-2", "homelab", "")
 
 
-def test_pods_argv_prefers_an_explicit_selector():
-    argv = health_kubectl.k8s_pods_argv("pihole-2", "homelab", "app=pihole")
+def test_pods_args_prefer_an_explicit_selector():
+    argv = health_kubectl.k8s_pods_args("pihole-2", "homelab", "app=pihole")
     assert "app=pihole" in argv and "app=pihole-2" not in argv
 
 

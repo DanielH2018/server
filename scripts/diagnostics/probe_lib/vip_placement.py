@@ -30,9 +30,8 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
-# `core.<name>` for anything the tests monkeypatch — binding those into this module's
-# globals with a `from core import ...` would take a snapshot the patch never reaches.
-from diagnostics.probe_lib import core
+from lib.kubectl import DEFAULT_CLUSTER, kubectl_argv, kubectl_json
+
 
 ETP_LOCAL = "Local"
 
@@ -211,30 +210,34 @@ def format_vip_placement(services, slices, announcers, workloads=()):
     return "\n".join(lines), 0
 
 
-def vip_placement_argv():
-    """The four reads, in order. Kept as data so `--dry-run` prints exactly what runs."""
+def vip_placement_args():
+    """The five reads, in order, as kubectl arguments.
+
+    Kept as data so `--dry-run` prints exactly what runs.
+    """
     return [
-        ["kubectl", "get", "svc", "-A", "-o", "json"],
-        ["kubectl", "get", "endpointslices", "-A", "-o", "json"],
-        ["kubectl", "get", "l2advertisements.metallb.io", "-A", "-o", "json"],
-        ["kubectl", "get", "nodes", "-o", "json"],
-        ["kubectl", "get", "deployments,statefulsets", "-A", "-o", "json"],
+        ["get", "svc", "-A", "-o", "json"],
+        ["get", "endpointslices", "-A", "-o", "json"],
+        ["get", "l2advertisements.metallb.io", "-A", "-o", "json"],
+        ["get", "nodes", "-o", "json"],
+        ["get", "deployments,statefulsets", "-A", "-o", "json"],
     ]
 
 
 def run_vip_placement(ns):
     """Assert every ETP=Local VIP is backed on the node that announces it."""
-    calls = vip_placement_argv()
+    calls = vip_placement_args()
+    cluster = getattr(ns, "cluster", DEFAULT_CLUSTER)
     if getattr(ns, "dry_run", False):
-        for argv in calls:
-            print(" ".join(argv))
+        for args in calls:
+            print(" ".join(kubectl_argv(*args)))
         return 0
 
-    def items(argv):
-        data = core.json_or_none(argv)
+    def items(args):
+        data = kubectl_json(cluster, *args)
         return (data or {}).get("items") or []
 
-    services, slices, adverts, nodes, workloads = (items(argv) for argv in calls)
+    services, slices, adverts, nodes, workloads = (items(args) for args in calls)
     text, code = format_vip_placement(
         services, slices, announcing_nodes(adverts, nodes), workloads
     )

@@ -94,9 +94,8 @@ from diagnostics.probe_lib.cli_parser import _build_parser
 from diagnostics.probe_lib.ha import run_ha, run_ha_state
 from diagnostics.probe_lib.health import (
     inspect_argv,
-    k8s_deploy_argv,
-    k8s_nodes_argv,
-    k8s_pods_argv,
+    k8s_deploy_args,
+    k8s_pods_args,
     resolve_ip,
     run_health,
 )
@@ -113,6 +112,8 @@ from diagnostics.probe_lib.readonly_rbac import run_readonly_rbac
 from diagnostics.probe_lib.releases import run_releases
 from diagnostics.probe_lib.subcommands import REGISTRY
 from diagnostics.probe_lib.vip_placement import run_vip_placement
+
+from lib.kubectl import WrongCluster, kubectl_argv, nodes_args
 
 
 def main(argv=None):
@@ -142,15 +143,19 @@ def main(argv=None):
                 ns_name = core.k8s_namespace()
                 # First, because it is what decides whether the rest runs at all.
                 print(
-                    " ".join(k8s_nodes_argv())
+                    " ".join(kubectl_argv(*nodes_args()))
                     + f"   # refuses unless this serves the {ns.cluster} cluster"
                 )
-                print(" ".join(k8s_deploy_argv(ns.container, ns_name)))
+                print(" ".join(kubectl_argv(*k8s_deploy_args(ns.container, ns_name))))
                 print(
-                    " ".join(k8s_deploy_argv(ns.container, ns_name, kind="daemonset"))
+                    " ".join(
+                        kubectl_argv(
+                            *k8s_deploy_args(ns.container, ns_name, kind="daemonset")
+                        )
+                    )
                     + "   # only if the Deployment lookup misses"
                 )
-                print(" ".join(k8s_pods_argv(ns.container, ns_name)))
+                print(" ".join(kubectl_argv(*k8s_pods_args(ns.container, ns_name))))
             return 0
         return run_health(ns.container, docker=ns.docker, cluster=ns.cluster)
     if ns.cmd == "targets" and ns.pi:
@@ -180,7 +185,14 @@ def main(argv=None):
         "releases": run_releases,
     }
     if ns.cmd in handlers:
-        return handlers[ns.cmd](ns)
+        try:
+            return handlers[ns.cmd](ns)
+        except WrongCluster as exc:
+            # Every kubectl read names the cluster it is about (`--cluster`, default prod) and
+            # lib.kubectl refuses before running when the local kubectl serves another one.
+            # One line, not a traceback: the refusal IS the answer.
+            print(f"{ns.cmd}: {exc}")
+            return 1
     # metric / loki-query default to a formatted view; --json and --dry-run fall
     # through to the raw streaming path below.
     if ns.cmd in ("metric", "loki-query") and not ns.json and not ns.dry_run:

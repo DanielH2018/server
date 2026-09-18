@@ -72,6 +72,6 @@ def test_the_controls_are_disjoint_from_the_denials():
 
 def test_can_i_asks_rbac_rather_than_attempting_the_write():
     """`create pods` must never be probed by creating a pod on a read-only cluster."""
-    argv = ph.can_i_argv("create", "pods", "homelab")
-    assert argv[:3] == ["kubectl", "auth", "can-i"]
+    argv = ph.can_i_args("create", "pods", "homelab")
+    assert argv[:2] == ["auth", "can-i"]
     assert "--quiet" in argv and "-n" in argv

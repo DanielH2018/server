@@ -19,6 +19,8 @@ from diagnostics.probe_lib import core
 from diagnostics.probe_lib.core import config_get, ha_curl_argv
 from diagnostics.probe_lib.health_docker import resolve_service_ip
 
+from lib.kubectl import DEFAULT_CLUSTER
+
 # Sonarr/Radarr speak /api/v3, Prowlarr /api/v1. The X-Api-Key comes from SOPS
 # and is fed to curl via stdin (arr_curl_config), never argv — same guard as ha.
 #
@@ -56,7 +58,7 @@ def arr_curl_config(api_key):
     return f'header = "X-Api-Key: {api_key}"\n'
 
 
-def resolve_arr_ip(app):
+def resolve_arr_ip(app, cluster=DEFAULT_CLUSTER):
     """Resolve the *arr app's k8s Service ClusterIP.
 
     resolve_ip's k8s equivalent, used instead of k8s_endpoint because sonarr/radarr/prowlarr
@@ -74,7 +76,7 @@ def resolve_arr_ip(app):
     needs a NetworkPolicy ipBlock for the node (ansible/roles/k8s/*/templates/), out of scope
     here.
     """
-    return resolve_service_ip(app)
+    return resolve_service_ip(app, cluster)
 
 
 # --- credential redaction -------------------------------------------------------------
@@ -180,7 +182,9 @@ def run_arr(ns):
             + "   # + X-Api-Key: <redacted> (via --config stdin)"
         )
         return 0
-    url = arr_url(resolve_arr_ip(ns.app), ns.app, ns.path)
+    url = arr_url(
+        resolve_arr_ip(ns.app, getattr(ns, "cluster", DEFAULT_CLUSTER)), ns.app, ns.path
+    )
     body = config_get(url, arr_curl_config(core.sops_extract(f"{ns.app}_api_key")))
     text, rc = format_arr_response(
         body, as_json=ns.json, show_secrets=getattr(ns, "show_secrets", False)

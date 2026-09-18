@@ -27,7 +27,7 @@ from diagnostics.probe_lib import core
 from datetime import datetime, timezone
 
 from diagnostics.probe_lib.core import SECRETS_PATH, prom_endpoint, prom_query_url
-from diagnostics.probe_lib.health_kubectl import k8s_pods_argv
+from diagnostics.probe_lib.health_kubectl import k8s_pods_args
 from diagnostics.probe_lib.health_rollout import seconds_since
 
 import yaml
@@ -35,6 +35,7 @@ from jinja2 import TemplateError
 
 from lib import yaml_fast
 from lib.k8s_context import resolve_vars, role_defaults
+from lib.kubectl import DEFAULT_CLUSTER, kubectl_json
 from lib.k8s_roles import HOST_VARS
 from lib.render_guard import BASE_CONTEXT, load_yaml, make_env
 from lib.repo_paths import ALL_VARS, REPO
@@ -444,7 +445,10 @@ def run_kuma_drift(ns):
         live &= pi_names
     gate_states = resolve_gate_states(declared, live, no_secrets=ns.no_secrets)
     text, code = format_kuma_drift(
-        declared, live, kuma_pod_age_seconds(), gate_states=gate_states
+        declared,
+        live,
+        kuma_pod_age_seconds(getattr(ns, "cluster", DEFAULT_CLUSTER)),
+        gate_states=gate_states,
     )
     print(text)
     if ns.no_secrets and gate_states:
@@ -455,19 +459,14 @@ def run_kuma_drift(ns):
     return code
 
 
-def kuma_pod_age_seconds():
+def kuma_pod_age_seconds(cluster=DEFAULT_CLUSTER):
     """Seconds since the uptime-kuma pod started, or None if that cannot be read."""
-    out = subprocess.run(
-        k8s_pods_argv("uptime-kuma", core.k8s_namespace()),
-        capture_output=True,
-        text=True,
+    pods_doc = kubectl_json(
+        cluster, *k8s_pods_args("uptime-kuma", core.k8s_namespace())
     )
-    if out.returncode != 0:
+    if pods_doc is None:
         return None
-    try:
-        pods = json.loads(out.stdout).get("items", [])
-    except json.JSONDecodeError:
-        return None
+    pods = pods_doc.get("items", [])
     starts = [
         seconds_since(
             (p.get("status") or {}).get("startTime"), datetime.now(timezone.utc)

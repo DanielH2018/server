@@ -298,10 +298,12 @@ history, the `homelab-ui` DNS/auth/secrecy triad and its `-m ui` suite, per-file
     nothing, leaves the verdict as it was. `--docker` inspects the Pi's
     container over ssh instead, and is the only mode that touches Docker at all.
     **It gates the PRODUCTION cluster unless you say otherwise**, whichever cluster you just
-    deployed to — the argv is a bare `k3s kubectl`. `--cluster prod|stage` names the intended
-    one and the gate refuses when the local kubectl serves a different cluster, so a staging
-    deploy can no longer read green about prod (#1663). There is no host-side kubeconfig for
-    the staging cluster, so gate a `-e target=daniel-stage` deploy from daniel-stage itself.
+    deployed to — kubectl reads whatever the local kubeconfig serves. `--cluster prod|stage`
+    names the intended one, and `scripts/lib/kubectl.py` — the one invoker every script runs
+    kubectl through — refuses when the local kubectl serves a different cluster, for every
+    subcommand and not only `health`, so a staging deploy can no longer read green about
+    prod (#1663). There is no host-side kubeconfig for the staging cluster, so gate a
+    `-e target=daniel-stage` deploy from daniel-stage itself.
     **The argument is a deploy TAG, not a workload name.** It renders the role's manifests to
     find every Deployment/DaemonSet/StatefulSet they declare, with each object's own namespace,
     and gates on all of them — `health claude-otel` checks six workloads in `observability`,

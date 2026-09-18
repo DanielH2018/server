@@ -12,8 +12,6 @@ control: prove the tool works before reading anything into what it refuses, the 
 control-first pattern the netpol probe Jobs use.
 """
 
-import subprocess
-
 # `probe_lib` is a namespace package under `scripts/`, so reaching a sibling by package name
 # needs `scripts/` on sys.path — a module gets only its importer's path otherwise, and
 # pyproject's `pythonpath` is a pytest setting. This has to sit ABOVE the imports below.
@@ -25,6 +23,8 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 # `core.<name>` for anything the tests monkeypatch — binding those into this module's
 # globals with a `from core import ...` would take a snapshot the patch never reaches.
 from diagnostics.probe_lib import core
+
+from lib.kubectl import DEFAULT_CLUSTER, kubectl, kubectl_argv
 
 # What plain `kubectl` must NEVER be able to do here. Ansible is the only write path to this
 # cluster, and every agent session's kubectl authenticates as
@@ -44,7 +44,7 @@ READONLY_DENIED = (
 READONLY_ALLOWED = (("get", "pods"), ("list", "deployments"))
 
 
-def can_i_argv(verb, resource, namespace):
+def can_i_args(verb, resource, namespace):
     """`kubectl auth can-i`, which answers from RBAC without attempting the operation.
 
     Asking RBAC rather than trying the write is deliberate: a `create pods` probe that
@@ -52,7 +52,6 @@ def can_i_argv(verb, resource, namespace):
     the only write path.
     """
     return [
-        "kubectl",
         "auth",
         "can-i",
         verb,
@@ -105,16 +104,15 @@ def format_readonly_rbac(denied_results, allowed_results):
 def run_readonly_rbac(ns):
     """Assert plain kubectl is still read-only (read-only itself: `auth can-i`, no writes)."""
     namespace = getattr(ns, "namespace", None) or core.k8s_namespace()
+    cluster = getattr(ns, "cluster", DEFAULT_CLUSTER)
 
     def permitted(verb, resource):
-        proc = subprocess.run(
-            can_i_argv(verb, resource, namespace), capture_output=True, text=True
-        )
+        proc = kubectl(cluster, *can_i_args(verb, resource, namespace))
         return proc.returncode == 0
 
     if getattr(ns, "dry_run", False):
         for verb, resource in READONLY_ALLOWED + READONLY_DENIED:
-            print(" ".join(can_i_argv(verb, resource, namespace)))
+            print(" ".join(kubectl_argv(*can_i_args(verb, resource, namespace))))
         return 0
 
     allowed = {pair: permitted(*pair) for pair in READONLY_ALLOWED}

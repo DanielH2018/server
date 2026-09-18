@@ -296,7 +296,7 @@ def _shard_run(labels):
         )
         stderr = ""
 
-    return lambda argv: Result()
+    return lambda *args: Result()
 
 
 def test_volume_shard_labels_reads_the_recurring_job_group():
@@ -328,7 +328,7 @@ def _target_run(returncode, stdout):
     Result.returncode = returncode
     Result.stdout = stdout
     Result.stderr = ""
-    return lambda argv: Result()
+    return lambda *args: Result()
 
 
 def test_backup_target_url_reads_the_cr():
