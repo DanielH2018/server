@@ -333,7 +333,7 @@ def _deploy_plane_stale(commit, services, changed, context):
     clear it -- because the full run the tick takes for that range IS the clear, and the
     only records left behind it are ones a hand deploy from an older tree wrote, which is the
     incident this module's docstring opens with. Measured over the 600 commits to
-    2026-09-18: three refusal reasons, at most 1.5s per distinct record commit.
+    2026-09-18: two refusals (a play-read key, a removed entry), at most 1.7s per record commit.
 
     `context` is built by the caller, once per `compute_stale`, because it reads host_vars
     at its ref and walks the role tree. Only called when the range changed a census path, so

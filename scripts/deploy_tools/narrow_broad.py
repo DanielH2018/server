@@ -87,6 +87,13 @@ INVENTORY = "ansible/inventory/"
 CENSUS_PREFIXES = (INVENTORY, SHARED_TEMPLATES)
 
 _ROLE_PATH = re.compile(r"^ansible/roles/(?:k8s|containers)/([^/]+)/")
+# Python under the play's own tree cannot import a Jinja macro, so a macro NAME found there is
+# a string, not a consumer: `filter_plugins/toposort.py` carries `ingressroute.yml.j2` as the
+# marker it greps role templates for. Treating that hit as consumption refused every change to
+# that macro — 23 of 24 sampled deploy-plane ranges over the 600 commits to 2026-09-18 — and
+# since #1993 the same refusal marks every service on a record stale and pages (#2001). A
+# variable is different: a filter plugin can read one, so the variable scan keeps refusing.
+_FILTER_PLUGINS = "ansible/filter_plugins/"
 # Directories under the role trees that are not services, as `land_tags._NOT_SERVICES` has
 # them: `common` is the shared Docker deploy path and `archive` holds retired roles.
 _NOT_SERVICES = frozenset({"common", "archive"})
@@ -199,12 +206,17 @@ def _sort_hits(
     are dropped for the same reasons `land_tags.role_for` and `is_role_test_path` drop them.
     An inventory hit that is not `key`'s own definition refuses: see `_defines_only`. A
     `_`-prefixed inventory file is exempt on both sides — `_inventory_tags` skips it as a
-    file no host loads, so its commented-out examples are not consumers either.
+    file no host loads, so its commented-out examples are not consumers either. A macro
+    scan (`key is None`) drops a `.py` under `_FILTER_PLUGINS`, which can name a macro but
+    never render it; a play-level hit anywhere else, and every play-level hit for a
+    variable, still refuses.
     """
     roles: set[str] = set()
     templates: set[str] = set()
     for path in hits:
         if path.endswith(".md"):
+            continue
+        if key is None and path.startswith(_FILTER_PLUGINS) and path.endswith(".py"):
             continue
         if path.startswith(INVENTORY):
             if path.split("/")[-1].startswith("_"):

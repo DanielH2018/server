@@ -5,11 +5,8 @@ nothing, on purpose) and one it refuses with `DEPLOY_BROAD`. A narrowing that fi
 everything and one that fired on nothing read identically from the passing side alone, and
 this module is the only place that tells them apart.
 
-The fixture builds a throwaway git repo with the shape the rules read — a `containers_list`,
-two `group_vars` keys with different consumer spreads, a shared macro with one importer, and
-a play-level file — and strips every `GIT_*` variable from the git calls that build it. Under
-a prek hook `GIT_DIR`/`GIT_INDEX_FILE` are exported and `cwd` loses, so an unscrubbed fixture
-writes the REAL repository's config.
+The fixture is `_narrow_fixtures.build_tree`: a throwaway git repo with the shape the rules
+read, shared with `test_deploy_tags_narrow_cmd.py`.
 
 `test_the_real_tree_still_has_macro_importers` is the non-vacuity half: the importer scan
 finds its subject by pattern, so a changed Jinja spelling would make it return an empty set
@@ -18,8 +15,6 @@ that reads as "this macro reaches nothing" rather than as a broken scan.
 Run: uv run pytest scripts/deploy_tools/tests/test_deploy_tags_narrow.py
 """
 
-import os
-import subprocess
 import sys
 from pathlib import Path
 
@@ -28,112 +23,21 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import narrow_broad
-from deploy_tools.exit_codes import DEPLOY_BROAD, DEPLOY_OK
 from lib.repo_paths import REPO
 
-# The host_vars this fixture declares. Six services, so a key two roles read stays under the
-# coverage ceiling while a key four roles read trips it.
-DECLARED = {"sonarr", "radarr", "bazarr", "lidarr", "prowlarr", "jellyfin"}
-
-
-def _repo_git(repo, *args: str) -> str:
-    """One git command in `repo`, with every inherited GIT_* variable removed."""
-    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
-    env["GIT_AUTHOR_NAME"] = env["GIT_COMMITTER_NAME"] = "t"
-    env["GIT_AUTHOR_EMAIL"] = env["GIT_COMMITTER_EMAIL"] = "t@example.invalid"
-    return subprocess.run(
-        ["git", *args], cwd=repo, env=env, check=True, capture_output=True, text=True
-    ).stdout.strip()
-
-
-class Tree:
-    """A throwaway checkout the narrowing rules can be driven against."""
-
-    def __init__(self, root: Path) -> None:
-        self.root = root
-        root.mkdir(parents=True)
-        _repo_git(root, "init", "-q", "-b", "master")
-
-    def write(self, rel: str, text: str) -> None:
-        path = self.root / rel
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(text)
-
-    def remove(self, rel: str) -> None:
-        (self.root / rel).unlink()
-
-    def commit(self, message: str) -> str:
-        _repo_git(self.root, "add", "-A")
-        _repo_git(self.root, "commit", "-q", "-m", message, "--no-gpg-sign")
-        return _repo_git(self.root, "rev-parse", "HEAD")
-
-    def narrow(self, old: str, new: str) -> set[str]:
-        """`narrow_broad.narrow` against this tree, with the real repo's tree kept out."""
-        return narrow_broad.narrow(
-            old, new, cwd=self.root, declared=DECLARED, callers={}
-        )
-
-
-HOST_VARS = """\
-containers_list:
-  - name: sonarr
-    platform: k8s
-    image: sonarr:1
-  - name: radarr
-    platform: k8s
-  - name: bazarr
-    platform: k8s
-  - name: lidarr
-    platform: k8s
-  - name: prowlarr
-    platform: k8s
-  - name: jellyfin
-    platform: k8s
-"""
-
-GROUP_VARS = """\
-# The LAN, read by two roles.
-lan_subnet: 10.0.0.0/24
-fleet_key: everywhere
-play_key: read-by-the-play
-unused_key: nobody-reads-this
-"""
+from _narrow_fixtures import (
+    DECLARED,
+    GROUP_VARS,
+    HOST_VARS,
+    Tree,
+    _refs,
+    build_tree,
+)
 
 
 @pytest.fixture
 def tree(tmp_path) -> Tree:
-    """A checkout with one consumer of each kind, committed as the base commit."""
-    t = Tree(tmp_path / "repo")
-    t.write("ansible/inventory/host_vars/daniel-box.yml", HOST_VARS)
-    t.write("ansible/inventory/group_vars/all.yml", GROUP_VARS)
-    t.write("ansible/inventory/hosts.ini", "[all]\ndaniel-box\n")
-    t.write("ansible/deploy.yml", "- hosts: all\n  vars:\n    p: '{{ play_key }}'\n")
-    # sonarr and radarr read lan_subnet; four roles read fleet_key; sonarr alone imports the
-    # macro. jellyfin reads neither, so a rule that fired on every role would show here.
-    t.write(
-        "ansible/roles/k8s/sonarr/templates/deployment.yaml.j2",
-        "{% from 'container-resources.yml.j2' import resources %}\n"
-        "net: {{ lan_subnet }}\nf: {{ fleet_key }}\n",
-    )
-    t.write(
-        "ansible/roles/k8s/radarr/templates/deployment.yaml.j2",
-        "net: {{ lan_subnet }}\nf: {{ fleet_key }}\n",
-    )
-    for role in ("bazarr", "lidarr"):
-        t.write(
-            f"ansible/roles/k8s/{role}/templates/deployment.yaml.j2",
-            "f: {{ fleet_key }}\n",
-        )
-    t.write("ansible/roles/k8s/jellyfin/templates/deployment.yaml.j2", "a: b\n")
-    t.write("ansible/templates/container-resources.yml.j2", "{% macro resources() %}\n")
-    t.write("ansible/templates/orphan.yml.j2", "{% macro orphan() %}\n")
-    t.commit("base")
-    return t
-
-
-def _refs(tree: Tree, message: str = "change") -> tuple[str, str]:
-    old = _repo_git(tree.root, "rev-parse", "HEAD")
-    return old, tree.commit(message)
+    return build_tree(tmp_path)
 
 
 # ── containers_list: an entry maps to its own tag ───────────────────────────────────────
@@ -232,6 +136,45 @@ def test_a_macro_change_narrows_to_its_importers(tree: Tree):
 def test_a_macro_nothing_imports_narrows_to_nothing(tree: Tree):
     tree.write("ansible/templates/orphan.yml.j2", "{% macro orphan(x) %}\n")
     assert tree.narrow(*_refs(tree)) == set()
+
+
+def test_a_macro_named_by_a_filter_plugin_is_clean(tree: Tree):
+    """A `.py` under `filter_plugins/` cannot render a macro; `toposort.py` names
+    `ingressroute.yml.j2` as the marker it greps role templates for (#2001)."""
+    tree.write(
+        "ansible/filter_plugins/toposort.py",
+        'MARKERS = ("traefik.io", "container-resources.yml.j2")\n',
+    )
+    tree.commit("a filter plugin names the macro")
+    tree.write(
+        "ansible/templates/container-resources.yml.j2", "{% macro resources(c) %}\n"
+    )
+    assert tree.narrow(*_refs(tree)) == {"sonarr"}
+
+
+def test_a_macro_named_by_the_play_itself_is_flagged(tree: Tree):
+    """The pair: the exemption is the filter-plugin path class, not play-level files."""
+    tree.write(
+        "ansible/deploy.yml",
+        "- hosts: all\n  vars:\n    p: '{{ play_key }}'\n    m: container-resources.yml.j2\n",
+    )
+    tree.commit("the play names the macro")
+    tree.write(
+        "ansible/templates/container-resources.yml.j2", "{% macro resources(c) %}\n"
+    )
+    with pytest.raises(narrow_broad.CannotNarrow, match="ansible/deploy.yml"):
+        tree.narrow(*_refs(tree))
+
+
+def test_a_variable_a_filter_plugin_reads_is_still_flagged(tree: Tree):
+    """The exemption is for the macro scan only: a filter plugin CAN read a variable."""
+    tree.write("ansible/filter_plugins/toposort.py", "KEY = 'unused_key'\n")
+    tree.commit("a filter plugin reads the key")
+    tree.write(
+        "ansible/inventory/group_vars/all.yml", GROUP_VARS.replace("nobody", "x")
+    )
+    with pytest.raises(narrow_broad.CannotNarrow, match="filter_plugins/toposort.py"):
+        tree.narrow(*_refs(tree))
 
 
 def test_a_macro_reaching_an_uncallable_role_names_the_macro(tree: Tree):
@@ -447,51 +390,3 @@ def test_a_key_reaching_an_uncallable_role_names_the_key(tree: Tree):
         )
     assert "no caller" in str(exc.value)
     assert "narrow: shared_key -> roles shared" in lines[-1]
-
-
-# ── the command wrapper ─────────────────────────────────────────────────────────────────
-
-
-def test_the_command_prints_the_tags_and_exits_zero(tree: Tree, capsys):
-    tree.write(
-        "ansible/inventory/group_vars/all.yml",
-        GROUP_VARS.replace("10.0.0.0/24", "10.3.0.0/24"),
-    )
-    old, new = _refs(tree)
-    rc = narrow_broad.narrow_cmd(old, new, cwd=tree.root, declared=DECLARED, callers={})
-    assert rc == DEPLOY_OK
-    out = capsys.readouterr()
-    assert out.out.strip() == "radarr,sonarr"
-    assert "lan_subnet" in out.err
-
-
-def test_the_command_prints_nothing_and_exits_zero_when_it_narrows_to_nothing(
-    tree: Tree, capsys
-):
-    tree.write(
-        "ansible/inventory/group_vars/all.yml",
-        GROUP_VARS.replace("nobody-reads-this", "still-nobody"),
-    )
-    old, new = _refs(tree)
-    rc = narrow_broad.narrow_cmd(old, new, cwd=tree.root, declared=DECLARED, callers={})
-    assert rc == DEPLOY_OK
-    assert capsys.readouterr().out == ""
-
-
-def test_the_command_exits_three_when_it_cannot_narrow(tree: Tree, capsys):
-    tree.write("ansible/inventory/hosts.ini", "[all]\ndaniel-box\ndaniel-pi\n")
-    old, new = _refs(tree)
-    rc = narrow_broad.narrow_cmd(old, new, cwd=tree.root, declared=DECLARED, callers={})
-    assert rc == DEPLOY_BROAD
-    assert "hosts.ini" in capsys.readouterr().err
-
-
-def test_the_command_exits_three_when_a_ref_cannot_be_read(tree: Tree, capsys):
-    """A ref git cannot resolve is a refusal, not a traceback the deployer logs as a crash.
-
-    `declared` is left unset on purpose: that is what sends `service_tags_at` at the ref.
-    """
-    old = _repo_git(tree.root, "rev-parse", "HEAD")
-    rc = narrow_broad.narrow_cmd(old, "0" * 40, cwd=tree.root, callers={})
-    assert rc == DEPLOY_BROAD
-    assert "could not read the range" in capsys.readouterr().err
