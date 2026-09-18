@@ -334,6 +334,9 @@ def _deploy_plane_stale(commit, services, changed, context):
     only records left behind it are ones a hand deploy from an older tree wrote, which is the
     incident this module's docstring opens with. Measured over the 600 commits to
     2026-09-18: two refusals (a play-read key, a removed entry), at most 1.7s per record commit.
+    The tick honoured that contract for a range carrying ONLY the deploy plane until
+    2026-09-18: a mixed range planned the setup half alone, and a removed Pi entry beside a
+    `roles/setup/` edit left the fleet marked here with no run to clear it (#2046).
 
     `context` is built by the caller, once per `compute_stale`, because it reads host_vars
     at its ref and walks the role tree. Only called when the range changed a census path, so

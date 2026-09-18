@@ -424,8 +424,12 @@ def broad_path_tags(path: str, old_ref: str, ctx: Context) -> set[str]:
 def _changed_half(paths: list[str], ctx: Context) -> set[str]:
     """The tags the NON-broad paths in the range reach — the mapper `changed` already uses.
 
-    A setup-plane path refuses: `handle_broad` has a separate arm for it, and a tick that
-    narrowed the deploy half while silently dropping the setup half would apply neither.
+    A setup-plane path contributes nothing here: `deploy_narrow.plan` gives the setup half
+    its own `initial_setup.yml` plan ahead of this one, so the two planes are applied side by
+    side. It refused until 2026-09-18 (#2046), when the planner was an if/else that dropped
+    the deploy half of a mixed range — refusing here only made the drop a full run nobody
+    ran. A bring-up playbook still refuses: the tick parks on those before any plan exists,
+    and a hand `deploy_tags.py narrow` over such a range must not read as applyable.
     `cs.tasks`/`cs.meta`/`cs.secrets` refuse for the opposite reason: `changed` reports them
     as work a human deploys by hand, and the full run this replaces DOES apply them. A
     rotated secret reaches a service only when that service renders again, so narrowing a
@@ -434,8 +438,8 @@ def _changed_half(paths: list[str], ctx: Context) -> set[str]:
     from deploy_logic import expand_build_couplings, services_from_changed_paths
 
     cs = services_from_changed_paths(paths)
-    if cs.broad_setup or cs.broad_manual:
-        raise CannotNarrow("the range also changes the setup plane")
+    if cs.broad_manual:
+        raise CannotNarrow("the range also changes a bring-up playbook")
     if cs.secrets:
         raise CannotNarrow(
             "the range rotates a secret, which reaches a service only on its next render"

@@ -93,20 +93,30 @@ def plan(
     config,
     target,
     setup_tags: set[str],
-) -> BroadPlan:
-    """What this broad tick applies: the setup plane's own tags, or the deploy plane's.
+    deploy_plane: bool,
+) -> list[BroadPlan]:
+    """What this broad tick applies, in order: the setup plane's tags, then the deploy plane's.
 
     Args:
         narrow: `narrow_deploy_plane`, or a test's stand-in for it.
         config: the tick's `Config`, for the checkout path.
         target: the tick's `TickTarget`, for the two commits bounding the range.
         setup_tags: `setup_tags_for(paths)`, non-empty for a setup-plane change.
+        deploy_plane: `cs.broad_deploy` — the range moved a deploy-plane path.
 
-    The setup arm is unchanged: its tags were already derived, by `setup_tags_for`.
+    A range that carries both planes gets both plans. Until 2026-09-18 this was an if/else
+    and the setup arm won: a `roles/setup/` edit landing beside a `host_vars/` edit applied
+    `initial_setup.yml` and dropped the deploy plane without a journal line (#2046) — two
+    Pi retirements that day left `Release Staleness Drift` DOWN over 56 records the full
+    `deploy.yml` a removed `containers_list` entry refuses into was meant to re-stamp. The
+    setup arm is unchanged: its tags were already derived, by `setup_tags_for`.
     """
+    plans = []
     if setup_tags:
-        return BroadPlan("ansible/initial_setup.yml", sorted(setup_tags), True)
-    return _deploy_plane(narrow, config, target)
+        plans.append(BroadPlan("ansible/initial_setup.yml", sorted(setup_tags), True))
+    if deploy_plane:
+        plans.append(_deploy_plane(narrow, config, target))
+    return plans
 
 
 def _deploy_plane(narrow, config, target) -> BroadPlan:

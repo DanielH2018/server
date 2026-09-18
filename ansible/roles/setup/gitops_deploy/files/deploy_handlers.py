@@ -148,13 +148,14 @@ def handle_broad(
     # `roles/setup/k3s/` range into `_deploy_plane` — whose refusal branch runs a full
     # `ansible/deploy.yml` for a change that reaches no container at all.
     applies = bool(setup_tags) or cs.broad_deploy
-    broad = (
-        deploy_narrow.plan(tools.narrow_deploy_plane, config, target, setup_tags)
+    plans = (
+        deploy_narrow.plan(
+            tools.narrow_deploy_plane, config, target, setup_tags, cs.broad_deploy
+        )
         if applies
-        else deploy_narrow.BroadPlan("", [], False)
+        else []
     )
     tools.run(["git", "merge", "--ff-only", origin], cwd=config.repo)
-    playbook, tags = broad.playbook, broad.tags
     # Recorded at the ff-merge, which is the moment the role becomes merged-and-unapplied —
     # not after the apply below. A mixed range whose apply FAILS returns from the except arm,
     # and a record placed after it never ran: the role sat fast-forwarded on disk with no
@@ -176,45 +177,54 @@ def handle_broad(
     # claiming the old commit while live state is half-new — undiagnosable from the repo side,
     # where every check would read green against a tree that lies. hold_sha is what stops the
     # retry loop, and it does that whether or not the tree moved.
-    try:
-        if broad.apply:
-            deploy_io.deploy_broad(
-                config.repo, playbook, tags, config.broad_deploy_timeout_s
+    #
+    # One plan per plane, setup first, SHARING one `broad_deploy_timeout_s`: the unit's
+    # TimeoutStartSec treats the broad arm as a single apply plus the flock wait, and a budget
+    # per plan would put a mixed range past that ceiling. A failure holds the plane that
+    # failed and leaves the earlier plane's marker standing — that apply happened. A busy
+    # lock on the second plane resets the ff-merge like one on the first: the setup plane
+    # is idempotent, and the next tick re-crosses the whole range.
+    deadline = time.monotonic() + config.broad_deploy_timeout_s
+    for broad in plans:
+        playbook, tags = broad.playbook, broad.tags
+        try:
+            if broad.apply:
+                deploy_io.deploy_broad(
+                    config.repo, playbook, tags, max(1.0, deadline - time.monotonic())
+                )
+        except deploy_locks.ServiceLockBusy as exc:
+            # Before the generic arm: nothing was applied, so this plane must not be held —
+            # and the reset undoes the ff-merge, so the manual_plane lines this tick just
+            # wrote describe a range that is no longer merged. Take them back with their page.
+            deploy_defer.unrecord(state, origin, recorded)
+            return deploy_defer.for_contention(tools, state, config, target, exc)
+        except Exception as exc:
+            log(f"broad apply failed ({playbook} {tags}): {exc}")
+            state.write_hold(origin)
+            state.write("hold_plane", hold_plane_marker(playbook, tags))
+            posted = deploy_alerts.discord(
+                tools,
+                config,
+                deploy_alerts.broad_failure_alert(
+                    config.hostname,
+                    playbook,
+                    tags,
+                    origin,
+                    exc,
+                    state.path("hold"),
+                    state.path("hold_plane"),
+                ),
             )
-    except deploy_locks.ServiceLockBusy as exc:
-        # Before the generic arm: nothing was applied, so this plane must not be held — and the
-        # reset undoes the ff-merge, so the manual_plane lines this tick just wrote describe a
-        # range that is no longer merged. Take them back with their page.
-        deploy_defer.unrecord(state, origin, recorded)
-        return deploy_defer.for_contention(tools, state, config, target, exc)
-    except Exception as exc:
-        log(f"broad apply failed ({playbook} {tags}): {exc}")
-        state.write_hold(origin)
-        state.write("hold_plane", hold_plane_marker(playbook, tags))
-        posted = deploy_alerts.discord(
-            tools,
-            config,
-            deploy_alerts.broad_failure_alert(
-                config.hostname,
-                playbook,
-                tags,
-                origin,
-                exc,
-                state.path("hold"),
-                state.path("hold_plane"),
-            ),
-        )
-        # Exit 0 on a delivered detailed post so systemd's OnFailure generic curl doesn't
-        # double-page; exit 1 only if the post failed, leaving OnFailure the backstop.
-        return 0 if posted else 1
+            # Exit 0 on a delivered detailed post so systemd's OnFailure generic curl doesn't
+            # double-page; exit 1 only if the post failed, leaving OnFailure the backstop.
+            return 0 if posted else 1
 
-    # Recorded BEFORE the hold is cleared: `clear_broad_hold` may keep a hold naming a
-    # DIFFERENT plane, and this apply still happened. `land.sh` reads it to tell a plane the
-    # tick applied from one it merely fast-forwarded past — `behind_since` empty cannot
-    # (issue #1537). Gated on `applies` and on nothing else: a range whose whole broad half is
-    # a role this deployer cannot apply applied nothing, so the marker saying one happened
-    # would tell `land.sh` that plane is live — #1537's failure, in reverse.
-    if applies:
+        # Recorded BEFORE the hold is cleared: `clear_broad_hold` may keep a hold naming a
+        # DIFFERENT plane, and this apply still happened. `land.sh` reads it to tell a plane
+        # the tick applied from one it merely fast-forwarded past — `behind_since` empty
+        # cannot (issue #1537). Written per plan and on nothing else: a range whose whole
+        # broad half is a role this deployer cannot apply has no plan, so no marker says an
+        # apply happened — #1537's failure, in reverse.
         state.record_broad_applied(origin, playbook, tags)
         state.clear_broad_hold(playbook, tags)
         deploy_defer.clear_applied(state, playbook, tags)

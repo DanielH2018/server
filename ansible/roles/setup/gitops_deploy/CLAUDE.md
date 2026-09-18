@@ -234,6 +234,13 @@ widen it. Each line is a summary; the section it names carries the detail.
   the `<role>` placeholder `broad_remediation` prints. A deploy-plane change (shared
   `ansible/templates/*`, `inventory/`, `common/`, `deploy.yml`) fast-forwards and applies as
   `deploy.yml`, scoped by `deploy_narrow.plan` to the services the range actually reaches.
+  **A range carrying both planes applies both, setup first** — `plan` returns one plan per
+  plane and `handle_broad` runs them in order, sharing one `BROAD_DEPLOY_TIMEOUT_S` so the
+  unit's ceiling still reads the broad arm as a single apply.
+  It was an if/else until 2026-09-18 (#2046) and the setup arm won: two Pi retirements that
+  day landed a `roles/setup/optimize_pi` edit beside a `host_vars/daniel-pi.yml` one, the
+  tick applied `initial_setup.yml` and never planned the deploy plane, and `Release
+  Staleness Drift` sat DOWN over the 56 records the full `deploy.yml` was meant to re-stamp.
   - **The deploy plane is narrowed before it is applied.** `deploy_narrow.plan` runs
     `scripts/deploy_tools/deploy_tags.py narrow <local> <origin>` as a subprocess — the
     derivation parses YAML and this unit runs under `uv run --no-project` — before the

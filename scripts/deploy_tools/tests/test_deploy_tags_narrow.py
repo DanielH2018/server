@@ -269,10 +269,19 @@ def test_a_non_broad_path_maps_the_way_changed_maps_it(tree: Tree):
     assert tree.narrow(*_refs(tree)) == {"jellyfin", "sonarr", "radarr"}
 
 
-def test_a_setup_plane_path_in_the_range_is_flagged(tree: Tree):
-    """Mixed planes: the setup half has its own arm, and this one must not claim it."""
+def test_a_setup_plane_path_in_the_range_narrows_the_deploy_half(tree: Tree):
+    """Mixed planes: the setup half gets its own plan (#2046), so it contributes no tag here
+    and does not refuse — a refusal only turned the dropped half into a full run nobody ran."""
     tree.write("ansible/roles/setup/k3s/defaults/main.yml", "k3s_x: 1\n")
-    with pytest.raises(narrow_broad.CannotNarrow, match="setup"):
+    tree.write("ansible/roles/k8s/jellyfin/templates/deployment.yaml.j2", "a: c\n")
+    assert tree.narrow(*_refs(tree)) == {"jellyfin"}
+
+
+def test_a_bring_up_playbook_in_the_range_is_flagged(tree: Tree):
+    """The tick parks on a bring-up playbook before any plan exists; a hand narrowing over
+    such a range must not read as applyable."""
+    tree.write("ansible/k3s-bringup.yml", "- hosts: all\n")
+    with pytest.raises(narrow_broad.CannotNarrow, match="bring-up"):
         tree.narrow(*_refs(tree))
 
 
