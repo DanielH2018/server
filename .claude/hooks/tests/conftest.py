@@ -39,8 +39,11 @@ padded, and only when the real package is unreachable from it.
 test this stand-in cannot help -- it runs the real subprocess invocation, so it skips
 (rather than passing on faked data) wherever the real package is absent.
 
-DECIDED: the two `STAND_IN_*` values below are a second copy, by construction -- this
-stand-in exists only because CI cannot reach the real one. They are module constants rather
+DECIDED: the three `STAND_IN_*` values below are a second copy, by construction -- this
+stand-in exists only because CI cannot reach the real one. The verb table is the large one:
+`_readonly_tables.py` derives `TIER1` from the package's `REMOTE_READONLY_VERBS` (#2052), so
+the 96 names the hook no longer carries sit here instead, where the diff test reads them and
+the hook's runtime never does. They are module constants rather
 than literals inside the `except` so that a machine WITH the real package can diff them:
 `test_claude_guard_import.py::test_the_ci_stand_in_matches_the_deployed_tables` does, and
 `prek run` executes that test on every commit from a deployed host. CI itself cannot see the
@@ -106,12 +109,28 @@ STAND_IN_SECRET_PATH_RE = re.compile(
     r"\.p12($|[^a-z])|\.pfx($|[^a-z]))",
     re.IGNORECASE,
 )
+# The deployed `REMOTE_READONLY_VERBS`, name for name; the diff test compares the sets.
+STAND_IN_REMOTE_READONLY_VERBS = frozenset(
+    """
+    true uptime uptimed whoami hostname id date uname arch pwd which type df free du ps top
+    htop vmstat iostat w who last lscpu lsblk lsof lsmod dmesg sensors nvidia-smi getent ls
+    cat head tail wc stat file tree readlink realpath basename dirname grep egrep fgrep rg
+    echo printf cut tr jq od md5sum sha1sum sha256sum cksum ss netstat ping ping6 dig host
+    nslookup traceroute tracepath journalctl apt-cache b2sum blkid column comm dpkg-query
+    findmnt fold getconf groups hexdump lastlog locale lsattr lsb_release lspci lsusb mailq
+    mpstat nl nproc rev sar seq sha512sum strings tac zcat zgrep
+    """.split()
+)
 
 
 @pytest.fixture
 def claude_guard_stand_in():
-    """The stand-in's two values, for the test that diffs them against the deployed tables."""
-    return STAND_IN_TRUSTED_SSH_HOSTS, STAND_IN_SECRET_PATH_RE
+    """The stand-in's three values, for the test that diffs them against the deployed tables."""
+    return (
+        STAND_IN_TRUSTED_SSH_HOSTS,
+        STAND_IN_SECRET_PATH_RE,
+        STAND_IN_REMOTE_READONLY_VERBS,
+    )
 
 
 try:
@@ -125,6 +144,7 @@ except ImportError:
     _fake_tables = types.ModuleType("claude_guard.tables")
     _fake_tables.TRUSTED_SSH_HOSTS = STAND_IN_TRUSTED_SSH_HOSTS
     _fake_tables.SECRET_PATH_RE = STAND_IN_SECRET_PATH_RE
+    _fake_tables.REMOTE_READONLY_VERBS = STAND_IN_REMOTE_READONLY_VERBS
     _fake_pkg.tables = _fake_tables
     sys.modules["claude_guard"] = _fake_pkg
     sys.modules["claude_guard.tables"] = _fake_tables

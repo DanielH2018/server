@@ -444,9 +444,12 @@ unresolved-import = "ignore"
 # Same collateral as above: `_readonly_tables.py` and `test_claude_guard_import.py` also lose
 # the check on `import _claude_guard`, a first-party, `extra-paths`-covered import — a typo there
 # would surface as a hook crash instead. `_claude_guard.py` imports nothing else first-party.
+# `block-protected-bash.py` (#2053) also loses it on `_hook_common`; `test_block_protected_bash.py`
+# loads the hook by path, so a typo there fails that suite at collection instead.
 include = [
   ".claude/hooks/_claude_guard.py",
   ".claude/hooks/_readonly_tables.py",
+  ".claude/hooks/block-protected-bash.py",
   ".claude/hooks/tests/test_claude_guard_import.py",
 ]
 [tool.ty.overrides.rules]

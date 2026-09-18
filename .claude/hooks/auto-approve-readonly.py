@@ -44,6 +44,7 @@ from _readonly_shell import (
 from _readonly_tables import (
     SSH_HOSTS,
     TIER1,
+    _FLAG_MUTATES,
     _JOURNAL_WRITE,
     _SSH_FLAGS,
     _SSH_GLOB,
@@ -567,17 +568,13 @@ def _crontab(argv):
     return "crontab -l" if saw_list else None
 
 
-def _ss(argv):
-    # -K/--kill closes sockets; the K may hide in a short cluster (`-xKy`). #1898.
-    return None if any(a == "--kill" or _SHORT_K.match(a) for a in argv[1:]) else "ss"
-
-
-_SHORT_K = re.compile(r"-[a-zA-Z]*K")
-
-
-def _sensors(argv):
-    # lm-sensors reads, except -s/--set which applies config back to the hardware.
-    return None if any(a in ("-s", "--set") for a in argv[1:]) else "sensors"
+def _flag_guarded(argv):
+    # ss, dmesg and sensors read except under one flag, named per verb in `_FLAG_MUTATES`
+    # as long options plus the letters that hide in a short cluster (`-xKy`, `-xCy`). #2052.
+    name = argv[0].rsplit("/", 1)[-1]
+    longs, letters = _FLAG_MUTATES[name]
+    cluster = re.compile(rf"-[a-zA-Z]*[{letters}]")
+    return None if any(a in longs or cluster.match(a) for a in argv[1:]) else name
 
 
 def _ssh(argv):
@@ -640,8 +637,9 @@ HANDLERS = {
     "apt-mark": _apt_mark,
     "pipx": _pipx,
     "crontab": _crontab,
-    "sensors": _sensors,
-    "ss": _ss,
+    "sensors": _flag_guarded,
+    "ss": _flag_guarded,
+    "dmesg": _flag_guarded,
 }
 
 

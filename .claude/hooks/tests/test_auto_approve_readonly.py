@@ -122,6 +122,9 @@ APPROVE_LOCAL = [
     ("sensors", "sensors read"),
     ("sensors -f", "sensors in fahrenheit"),
     ("ss -tlnp", "ss lists sockets"),
+    ("dmesg", "dmesg reads the ring buffer (#2052)"),
+    ("dmesg -T --level=err", "dmesg with read-only flags"),
+    ("dmesg --color=never", "dmesg --color: a long option holding a c is not -c"),
     ("ping -c 1 10.0.0.161", "ping is read-only under any argument (#1898)"),
     ("traceroute 10.0.0.161", "traceroute (#1898)"),
 ]
@@ -223,7 +226,16 @@ REJECT_LOCAL = [
     ("ss -K", "ss -K closes sockets"),
     ("ss --kill", "ss --kill closes sockets"),
     ("ss -xKy", "ss -xKy — K hidden in a short cluster kills"),
-    ("dmesg", "dmesg needs a -C guard before it can be TIER1 (#1898)"),
+    ("dmesg -C", "dmesg -C clears the ring buffer"),
+    ("dmesg --clear", "dmesg --clear clears the ring buffer"),
+    ("dmesg -c", "dmesg -c prints then clears"),
+    ("dmesg --read-clear", "dmesg --read-clear prints then clears"),
+    ("dmesg -xCy", "dmesg -xCy — C hidden in a short cluster clears"),
+    (
+        "nvidia-smi",
+        "nvidia-smi is not admitted: no NVIDIA hardware in the fleet (#2052)",
+    ),
+    ("htop", "htop is interactive and never returns under the Bash tool"),
 ]
 
 # MUST NOT auto-approve, and the verdict runs through the claude_guard tables.

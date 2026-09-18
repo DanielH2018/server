@@ -119,10 +119,71 @@ def test_the_ci_stand_in_matches_the_deployed_tables(claude_guard_stand_in):
     moves and the stand-in does not — and `prek run` executes this suite before every commit
     from such a host.
     """
-    hosts, secret_re = claude_guard_stand_in
+    hosts, secret_re, verbs = claude_guard_stand_in
     assert hosts == frozenset(_tables.TRUSTED_SSH_HOSTS)
     assert secret_re.pattern == _tables.SECRET_PATH_RE.pattern
     assert secret_re.flags == _tables.SECRET_PATH_RE.flags
+    assert verbs == frozenset(_tables.REMOTE_READONLY_VERBS)
+
+
+# The names `_readonly_tables.py` reads off `claude_guard.tables`. CI runs against conftest's
+# stand-in, so an import the stand-in lacks fails every test that touches the hook at
+# collection -- this pins the two lists together on the CI side, where the diff above skips.
+_TABLES_IMPORT = re.compile(r"^from claude_guard\.tables import (.+)$", re.MULTILINE)
+
+
+def test_the_stand_in_carries_every_name_the_hooks_import_from_the_tables(
+    claude_guard_stand_in,
+):
+    imported = set()
+    for hook in HOOKS.glob("*.py"):
+        for match in _TABLES_IMPORT.finditer(hook.read_text()):
+            imported.update(n.strip() for n in match.group(1).split(","))
+    assert {"REMOTE_READONLY_VERBS", "SECRET_PATH_RE"} <= imported  # non-vacuity
+    stand_in = {
+        "TRUSTED_SSH_HOSTS",
+        "SECRET_PATH_RE",
+        "REMOTE_READONLY_VERBS",
+    }
+    assert len(claude_guard_stand_in) == len(stand_in)
+    assert imported <= stand_in, imported - stand_in
+
+
+# --- #2052: TIER1 is derived from the package table, and states only its delta -------------
+
+
+def test_tier1_is_the_package_table_minus_the_named_delta():
+    """The derivation, spelled out: what the package lists bare, less what the server guards
+    or refuses, plus what is read-only only locally. Each exclusion set is named so a name
+    moving between them is a one-line diff with a reason beside it."""
+    tier1 = _readonly_tables.TIER1
+    assert (
+        tier1
+        == (
+            frozenset(_tables.REMOTE_READONLY_VERBS)
+            - _readonly_tables._GUARDED_LOCALLY
+            - _readonly_tables._NOT_ADMITTED
+        )
+        | _readonly_tables._LOCAL_ONLY
+    )
+    # Non-vacuity on both halves: readers the table must carry, and the delta it must not.
+    assert {"ls", "cat", "grep", "jq", "df"} <= tier1
+    assert {"cd", "false", "printenv"} <= tier1
+    assert not (
+        {"ss", "journalctl", "rg", "sensors", "dmesg", "htop", "nvidia-smi"} & tier1
+    )
+
+
+def test_every_locally_guarded_exclusion_has_a_handler():
+    """`_GUARDED_LOCALLY` is the set of package names the server admits through a guard, so
+    each must have one -- an entry there with no handler is a name silently dropped."""
+    spec = importlib.util.spec_from_file_location(
+        "aar_2052", HOOKS / "auto-approve-readonly.py"
+    )
+    assert spec and spec.loader
+    aar = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(aar)
+    assert _readonly_tables._GUARDED_LOCALLY <= set(aar.HANDLERS)
 
 
 @pytest.mark.skipif(not UV_BIN.exists(), reason="uv is not present on this machine")

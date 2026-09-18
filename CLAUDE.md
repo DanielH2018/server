@@ -342,6 +342,9 @@ history, the `homelab-ui` DNS/auth/secrecy triad and its `-m ui` suite, per-file
   the GitOps deployer on 2026-09-06 (#1419). It carries the `cd` through the command a segment
   at a time, and is inert outside a `.claude/worktrees/` session. A deny here, where a
   protected-file write only asks: a write outside the worktree is never the right call.
+  The segments are the dotfiles package's (`claude_guard.segment.parse`, #2053), so a
+  quoted `;` stays inside its word; text it cannot split — no `claude_guard` deploy on the
+  host, or an unbalanced quote — is an **ask** naming the fix, never a silent pass.
 - **nudge-land-sh** (PreToolUse, Bash) — *denies* a command that blocks on CI (`gh run watch`,
   `gh pr checks --watch`) and the third or later CI-status read in one session, naming the
   `land.sh --pr <n> --since <sha>` form instead. The first two reads are an ordinary glance and

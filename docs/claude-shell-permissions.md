@@ -100,7 +100,14 @@ replays this suite's local vectors through both copies, so they cannot drift apa
 name that morning — 29 `TIER1` readers into `REMOTE_READONLY_VERBS` (dotfiles PR #520) and
 `ping`, `ping6`, `tracepath`, `traceroute`, `uptimed` into `TIER1` — and a guarded verb moves
 only with its guard, because the replay corpus cannot see a remote fail-open (4 of 1058
-prompted records touch ssh). Measured demand is low either way: 800 of the 1064 ssh-led Bash
+prompted records touch ssh). Since #2052 that convergence is structural rather than
+hand-synced: `_readonly_tables.py` derives `TIER1` from the package's `REMOTE_READONLY_VERBS`
+and states only its delta — the names it admits through a guard instead (`journalctl`, `dmesg`,
+`ss`, `rg`, `sensors`), the ones it admits nowhere (`htop`, `nvidia-smi`, each with its reason
+beside it) and the three that are read-only only locally (`cd`, `false`, `printenv`). The CI
+stand-in in `tests/conftest.py` carries a copy of the package table for the runners that have
+no dotfiles deploy; `test_the_ci_stand_in_matches_the_deployed_tables` diffs it on every
+deployed-host commit. Measured demand is low either way: 800 of the 1064 ssh-led Bash
 decisions in the 28 days to 2026-09-18 were settled by a settings rule with no hook involved.
 
 ### `kubectl` — what actually decides

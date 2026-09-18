@@ -4,8 +4,10 @@
 The seed of the future `homelab_guard/__init__.py` — the dotfiles repo's design spec
 (`docs/specs/2026-09-06-claude-guard-design.md`, slice 5) plans a package by that name
 consolidating this repo's Bash hooks around `claude_guard.segment` and `claude_guard.tables`.
-This module carries only the narrowed slice: the import path for `claude_guard.tables`, which
-`_readonly_tables.py` reads. The rest of the consolidation is a later slice.
+This module carries the import path only. `_readonly_tables.py` reads `claude_guard.tables`
+(the ssh tables, and since #2052 the verb table `TIER1` is derived from), and
+`block-protected-bash.py` reads `claude_guard.segment` (#2053). The rest of the consolidation
+is a later slice.
 
 `claude_guard` is not on the repo's `uv` environment — it lives outside this repo, deployed by
 chezmoi to `~/.local/share/claude-guard`. Import this module before anything from
