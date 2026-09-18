@@ -40,7 +40,7 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
   - **Prometheus Reachable** (a trivial `vector(1)` instant query — the root-cause GATE for the
     prom-dependent checks. Evaluated FIRST each cycle: when Prometheus is unreachable, every
     prom-dependent check (disk/cert/memory/restarts/oom/cpu/targets/traefik5xx/traefik_404/ups/
-    host_temp/shipper_dropped/longhorn_volumes/snapshot_headroom/kubelet_plugin_readonly) is
+    host_temp/shipper_dropped/longhorn_volumes/snapshot_headroom/kubelet_plugin_readonly/pi_pressure) is
     **suppressed** — pushed `up` with a "skipped — Prometheus unreachable" msg so their push-monitor
     heartbeats stay alive — and only THIS monitor pages. Without the gate one Prometheus outage
     fires all of them at once: one root cause, one page per dependent check. A single scrape
@@ -576,24 +576,32 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     (`UPS_CHARGE_QUERY`/`UPS_RUNTIME_QUERY`/`UPS_REPLACE_QUERY`/`UPS_ON_BATTERY_QUERY`, all empty =
     disabled; `UPS_SOURCE_UP_QUERY` is the all-absent gate) so a series rename needs no code edit.
     Pure `ups_health()` and `ups_on_battery_verdict()` are unit-tested.)
-  - **Pi Pressure** (the Pi's glances API `/api/4/load` + `/api/4/mem` + `/api/4/fs` over
-    the LAN: `down` when load5/core > `PI_LOAD_MAX`, mem `available` < `PI_MEM_MIN_MB`, or
-    any filesystem device > `PI_DISK_MAX_PCT` — glances' fs list is its *container* view
-    (bind-mount paths), so entries are deduped by `device_name`, which carries the host SD
-    card's usage percent. A filling SD card is the classic slow Pi death the server-only
-    Root Disk check can't see. The 512MB
-    Zero 2 W dies by swap-thrash — 2026-06-11 fwupd episodes ran load5/core >1.7 with
-    healthcheck-timeout storms no other monitor saw.
-    **This check still owns Pi disk and memory, but the reason it polls glances has changed.**
-    It read "rather than adding a Pi node-exporter: zero Pi-side RAM cost, and a second
-    node-exporter would have broken the instance-blind `node_*` queries in the Memory/Root Disk
-    checks." The Pi HAS a node-exporter since 2026-08-24 — the collision that argument named is
-    real, and it was fixed rather than avoided: `HOST_METRIC_ORIGIN_EXCLUDE` keeps daniel-pi out
-    of both those queries (`host_metric_sel`), so they stay two-host checks and this one stays
-    the single source of truth for Pi pressure. What the exporter adds is the half glances never
-    could — retained time series, so Pi memory and SD usage can be graphed and trended instead of
-    only tripping a threshold. The RAM cost is no longer zero: node-exporter measures ~20 MiB on
-    a 456 MB box, which is why its collector set is trimmed in the role's compose template.
+  - **Pi Pressure** (the Pi's own node-exporter series on the `node-pi` scrape job, four
+    instant queries selected by `origin=PI_ORIGIN`: `down` when `node_load5` per core >
+    `PI_LOAD_MAX`, `node_memory_MemAvailable_bytes` < `PI_MEM_MIN_MB`, or any block device's
+    `node_filesystem_*` usage > `PI_DISK_MAX_PCT`. Filesystems are keyed by device rather
+    than mountpoint because the SD card is mounted twice (`/` and `/var/hdd.log`) and one full
+    card is one problem; tmpfs is excluded because log2ram's 128 MiB `/var/log` fills and
+    flushes by design. A filling SD card is the classic slow Pi death the server-only Root
+    Disk check can't see. The 512MB Zero 2 W dies by swap-thrash — 2026-06-11 fwupd episodes
+    ran load5/core >1.7 with healthcheck-timeout storms no other monitor saw.
+    **It read the Pi's glances API until 2026-09-18** (#2004), when glances retired: 66 MB
+    of anonymous memory on a 456 MB host, for facts node-exporter already exported. The
+    thresholds, the message shape and the Kuma monitor are unchanged; the source moved. What
+    changed with the source is the gating: this check is in `PROM_DEPENDENT` and in
+    `EXPORTER_DEPENDENT["node-pi"]` now, so a Prometheus outage or a dead Pi node-exporter
+    suppresses it rather than paging it a second time, and it LEFT `STARTUP_GRACE` — the two
+    sets must stay disjoint, and its source is no longer a reach-out the reboot transient
+    reaches. An absent series while Prometheus answers pages, because a Pi whose exporter
+    stopped reporting is a Pi nothing is watching. Empty `PI_ORIGIN` = disabled (stays up).
+    **This check still owns Pi disk and memory.** `HOST_METRIC_ORIGIN_EXCLUDE` keeps
+    daniel-pi out of the Memory/Root Disk queries (`host_metric_sel`), so they stay two-host
+    checks and this one stays the single source of truth for Pi pressure. Dropping the
+    exclusion was considered at the glances retirement and rejected: `MEM_MAX_PCT` (90) on a
+    456 MB box fires at 45.6 MB available, and `PI_MEM_MIN_MB` fires at 50 MB, so `check_mem`
+    would be a strictly weaker duplicate of the floor here that pages the estate-wide Memory
+    tile for a Pi fact this tile already reports. The exclusion also keeps the disk/memory
+    origin floor at 2 hosts rather than 3.
     **If you add a third node-exporter host, decide explicitly whether it belongs in the
     estate-wide Memory/Root Disk checks or in a check of its own** — that choice is what this
     bullet exists to force. Since 2026-08-29 a test forces it for ONE of the two ways a host
@@ -606,38 +614,35 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     so nothing fires — and `HWMON_TEMP_ORIGINS_MIN` is a literal 3, justified by "all three hosts
     declare non-excluded sensors". A fourth host makes that floor satisfiable by any three of
     four, so one host can go dark silently: exactly the partial blindness the arm was added for.
-    Raise the floor by hand when you add a node. Empty
-    `PI_GLANCES_URL` = disabled (stays up); the static Kuma HTTP monitor
-    `daniel-pi-glances` covers glances itself being down.
+    Raise the floor by hand when you add a node.
     **Published-port arm** (`with_pi_ports`, folded here rather than given its own monitor for
     the push-token reason recorded at `with_ha_ban`): after a Pi reboot a container can come
     back attached to no Docker network while still reporting `Up (healthy)`, because its
     healthcheck curls loopback inside its own netns. The observable harm is that its published
     port stops listening, and only a recreate restores it — autoheal's restart loop re-enters
     the same empty sandbox and structurally cannot.
-    The arm TCP-connects to each expected port and fetches glances' `/api/4/containers` **only
-    when something is already dead**, to say why: up with no `->` mapping is detached and needs
-    a recreate; up *with* a mapping is a bind or firewall fault; not up is an ordinary down.
-    **Do not invert that order.** Measured 2026-08-27 against the live Pi, `/api/4/load`,
-    `/mem` and `/fs` answer in 0.03-0.06s each while `/api/4/containers` took 4.43s and then
-    timed out at the 10s `HTTP_TIMEOUT` on the very next call — polling it every cycle would
-    leave the arm failing open most of the time, inert behind a green monitor, which is the
-    exact failure mode it exists to catch. A failed attribution fetch downgrades the diagnosis
-    to "cause unknown" and never the verdict; the port is still reported dead.
+    The arm TCP-connects from the bridge to each expected port on `PI_HOST` (the Pi's LAN
+    address, rendered from `hostvars['daniel-pi'].server_ip`) and names every dead one.
+    Until 2026-09-18 it then fetched glances' `/api/4/containers` to say WHY — detached, or
+    publishing but unreachable, or not up. Nothing the cluster can reach serves that view now
+    (docker-proxy publishes no port), so the message carries the recreate hint and
+    `ssh daniel-pi docker ps` tells the causes apart. The verdict never depended on the
+    attribution — a failed fetch already read "cause unknown" — so the arm lost a diagnosis and
+    kept its page. **The arm rides this check's gates**: a Prometheus outage or a dead Pi
+    node-exporter skips the port probes with the pressure arms. Both already page, and the
+    Kuma HTTP monitor on wg-easy still watches the one Pi port a person uses.
     `PI_PUBLISHED_PORTS` renders `name:port` pairs from daniel-pi's `containers_list` (every
     entry with a `port`), so `docker-proxy`, `autoheal` and `docker-proxy-lifecycle` — which
     publish nothing forever — fall out by construction rather than by an exclusion list.
     `udp_port` is excluded: there is no TCP-connect equivalent for UDP. `PI_PORTS_CONSECUTIVE`
     (2) rides out the seconds of closed ports a Pi deploy's container recreate causes.
-    **This arm adds no reachability coverage — it adds attribution, and that is the whole
-    case for it.** Measured 2026-08-27: Kuma HTTP-monitors glances and wg-easy (and dozzle,
-    until it retired 2026-08-29), and
-    `alloy`/`node-exporter` are Prometheus scrape targets (`job=alloy-pi`, `job=node-pi`)
+    **This arm adds no reachability coverage — it adds a named port, and that is the whole
+    case for it.** Measured 2026-08-27: Kuma HTTP-monitored glances and wg-easy (and dozzle,
+    until it retired 2026-08-29), and `alloy` is a Prometheus scrape target (`job=alloy-pi`)
     that `check_targets_down` already covers. So every publisher was already watched. What
-    nothing said was *why* a port went quiet, and on 2026-08-08 that cost a manual sweep
-    across four monitors which then missed dozzle entirely. Turning "service X is down" into
-    "these containers are up with no published ports — recreate, a restart cannot fix it" is
-    the value. Do not re-justify this arm as filling a monitoring gap; it does not.)
+    nothing said was *which* port went quiet, and on 2026-08-08 that cost a manual sweep
+    across four monitors which then missed dozzle entirely. Do not re-justify this arm as
+    filling a monitoring gap; it does not.)
   - **Home Assistant Automations** (HA's REST API `/api/states/input_datetime.ha_heartbeat` over
     `apps`, Bearer `HA_TOKEN`: an HA `time_pattern:/1min` automation stamps that helper with `now()`,
     so its `last_changed` is fresh ONLY while HA's automation *scheduler* is executing. `down` once
@@ -1132,8 +1137,8 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
 - **Startup/redeploy grace for the reach-out checks (`STARTUP_GRACE`, 2026-07-12):** the
   checks that poll a live app dependency with **no reachability gate and no per-check hysteresis**
   — **n8n Prod Workflows** (n8n), **Bazarr Health** (bazarr), **Prowlarr Indexers** (prowlarr)
-  and **SMART Data / Health** (scrutiny) (both added 2026-07-14), **Pi Pressure** (the Pi
-  glances) — get a consecutive-down grace applied in
+  and **SMART Data / Health** (scrutiny) (both added 2026-07-14) — get a consecutive-down
+  grace applied in
   `run_once` (peer mechanism to `PROM_DEPENDENT`/`LOKI_DEPENDENT`, but a *hysteresis* not a
   *suppression*). Cause: the bridge's first cycle after the **weekly Sunday 07:30 host reboot**
   runs before those heavy apps finish starting, so each un-graced `max_retries=0` monitor flipped
@@ -1207,7 +1212,7 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
   config: `N8N_URL`/`N8N_API_KEY`; arr queue
   connection config: `SONARR_URL`/`SONARR_API_KEY`/`RADARR_URL`/`RADARR_API_KEY`; GitOps
   liveness: `GITOPS_MAX_AGE_MIN`/`GITOPS_STATE_DIR`; Pi pressure:
-  `PI_GLANCES_URL`/`PI_LOAD_MAX`/`PI_MEM_MIN_MB`/`PI_DISK_MAX_PCT`/`PI_PUBLISHED_PORTS`/`PI_PORT_TIMEOUT`/`PI_PORTS_CONSECUTIVE`; HA heartbeat:
+  `PI_ORIGIN`/`PI_HOST`/`PI_LOAD_MAX`/`PI_MEM_MIN_MB`/`PI_DISK_MAX_PCT`/`PI_PUBLISHED_PORTS`/`PI_PORT_TIMEOUT`/`PI_PORTS_CONSECUTIVE`; HA heartbeat:
   `HA_URL`/`HA_TOKEN`/`HA_HEARTBEAT_MAX_AGE`/`HA_CONSECUTIVE`; speedtest:
   `SPEEDTEST_URL`/`SPEEDTEST_TOKEN`/`SPEEDTEST_DOWNLOAD_MIN_MBPS`/`SPEEDTEST_MAX_AGE_H`/`SPEEDTEST_CONSECUTIVE`;
   host-coverage floor:

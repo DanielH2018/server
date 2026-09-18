@@ -14,64 +14,49 @@ from datetime import datetime, timezone
 
 
 def pi_pressure(
-    load_json: dict | None,
-    mem_json: dict | None,
-    fs_json: list | None,
+    load5_per_core: float | None,
+    avail_bytes: float | None,
+    disk_used_pct: dict[str, float],
     load_max: float,
     mem_min_mb: float,
     disk_max_pct: float,
 ) -> tuple[bool, str]:
     """Pure: load per core, available-memory floor, or a full filesystem on the Pi.
 
-    Fed glances /api/4/load, /api/4/mem and /api/4/fs payloads. load5 (not load1)
-    matches the 5-min poll interval and rides out single-probe spikes; `available`
-    (not `free`) is what the kernel can actually reclaim — the box thrashes when THAT
-    runs out. The fs list is glances' *container* view: every entry is a bind-mount
-    path, but they're all backed by the SD card device with the HOST usage percent —
-    so filesystems are deduped by device_name (a filling SD card is the classic slow
-    Pi death the server-only Root Disk check can't see). Missing fields and an empty
-    fs list alert rather than silently passing (a glances plugin regression must
-    surface, same principle as the other checks' unreachable-source handling).
+    Fed from the Pi's own node-exporter series on the `node-pi` scrape job (glances until
+    2026-09-18, #2004). load5 (not load1) matches the 5-min poll interval and rides out
+    single-probe spikes; MemAvailable (not MemFree) is what the kernel can actually reclaim —
+    the box thrashes when THAT runs out. `disk_used_pct` is keyed by block device, the SD card
+    being the one that matters: a filling SD card is the classic slow Pi death the server-only
+    Root Disk check can't see. A missing arm alerts rather than silently passing — a renamed
+    series or a blind collector must surface, same principle as the other checks'
+    unreachable-source handling.
     """
-    cores = load_json.get("cpucore") or 0
-    load5 = load_json.get("min5")
-    avail = mem_json.get("available")
-    devices = {}
-    for fs in fs_json or []:
-        dev, pct = fs.get("device_name"), fs.get("percent")
-        if dev and pct is not None:
-            devices[dev] = max(pct, devices.get(dev, 0.0))
-    if not cores or load5 is None or avail is None or not devices:
-        return False, "glances payload missing load/mem/fs fields"
-    per_core = load5 / cores
-    avail_mb = avail / 1048576.0
+    if load5_per_core is None or avail_bytes is None or not disk_used_pct:
+        return (
+            False,
+            "node-pi series missing load/mem/fs (Pi node_exporter not reporting?)",
+        )
+    avail_mb = avail_bytes / 1048576.0
     problems = []
-    if per_core > load_max:
-        problems.append("load5 %.2f/core (> %.2f)" % (per_core, load_max))
+    if load5_per_core > load_max:
+        problems.append("load5 %.2f/core (> %.2f)" % (load5_per_core, load_max))
     if avail_mb < mem_min_mb:
         problems.append("mem available %.0fMB (< %.0fMB)" % (avail_mb, mem_min_mb))
-    for dev, pct in sorted(devices.items(), key=lambda dp: -dp[1]):
+    for dev, pct in sorted(disk_used_pct.items(), key=lambda dp: -dp[1]):
         if pct > disk_max_pct:
             problems.append("disk %s %.0f%% (> %.0f%%)" % (dev, pct, disk_max_pct))
     if problems:
         return False, "; ".join(problems)
     return True, "load5 %.2f/core, %.0fMB available, disk %.0f%%" % (
-        per_core,
+        load5_per_core,
         avail_mb,
-        max(devices.values()),
+        max(disk_used_pct.values()),
     )
 
 
-# glances reports Docker's own status string. Only these two mean the container is up and
-# therefore expected to be serving; `restarting`, `created`, `paused` and `exited` are another
-# monitor's fault and are named in the message rather than diagnosed here.
-PI_UP_STATUSES = ("running", "healthy")
-
-
-def pi_ports_verdict(
-    dead: list[tuple[str, int]], checked: int, containers_json: list | None = None
-) -> tuple[bool, str]:
-    """Pure: judge the Pi's published ports, attributing a dead one to its container.
+def pi_ports_verdict(dead: list[tuple[str, int]], checked: int) -> tuple[bool, str]:
+    """Pure: judge the Pi's published ports.
 
     After a daniel-pi reboot a container can come back attached to NO Docker network while
     still reporting `Up (healthy)` — its healthcheck curls loopback inside its own netns, so
@@ -80,53 +65,20 @@ def pi_ports_verdict(
     restart loop re-enters the same empty sandbox and can never recover it.
 
     `dead` is the list of (name, port) pairs that failed a TCP connect, `checked` how many
-    were probed. The TCP probe is the primary signal deliberately: glances' /api/4/containers
-    endpoint costs 4.4s on an idle Pi and has been measured timing out at 10s, so polling it
-    every cycle would leave the arm failing open most of the time — inert behind a green
-    monitor. A connect to a port that is either listening or not is cheap, unambiguous, and
-    is the thing the operator actually cares about.
-
-    `containers_json` is fetched ONLY when something is already dead, and is used to say WHY:
-
-    - up, and Docker reports no `->` mapping  -> detached, and a restart will not fix it
-    - up, and Docker does report a mapping    -> publishing but unreachable (bind or firewall)
-    - present but not up                      -> ordinary down, named with its status
-    - absent from the payload                 -> the container is gone
-    - None (the fetch failed, or was slow)    -> cause unknown, and the port is still dead
-
-    That last row is why the attribution fetch cannot make this arm vacuous: a failed fetch
-    downgrades the diagnosis, never the verdict.
+    were probed. A connect to a port that is either listening or not is cheap, unambiguous,
+    and is the thing the operator actually cares about. Until 2026-09-18 a dead port was
+    attributed to its container's Docker state through glances' `/api/4/containers`; glances
+    retired (#2004) and nothing the cluster can reach serves that view (docker-proxy publishes
+    no port), so the message names the port and the two causes, and `ssh daniel-pi docker ps`
+    tells them apart.
     """
     if not dead:
         return True, "%d pi port(s) listening" % checked
-    by_name = {}
-    for c in containers_json or []:
-        name = c.get("name")
-        if name:
-            by_name[name] = c
-    detached, other = [], []
-    for name, port in dead:
-        where = "%s:%d" % (name, port)
-        c = by_name.get(name)
-        if containers_json is None:
-            other.append("%s (cause unknown)" % where)
-        elif c is None:
-            other.append("%s (container absent)" % where)
-        elif (c.get("status") or "").lower() not in PI_UP_STATUSES:
-            other.append("%s (%s)" % (where, c.get("status") or "unknown status"))
-        elif not any("->" in s for s in (c.get("ports") or "").split(",")):
-            detached.append(where)
-        else:
-            other.append("%s (publishing but unreachable)" % where)
-    parts = []
-    if detached:
-        parts.append(
-            "%d pi container(s) up with no published ports, RECREATE (a restart cannot "
-            "fix it): %s" % (len(detached), ", ".join(detached))
-        )
-    if other:
-        parts.append("%d pi port(s) not listening: %s" % (len(other), ", ".join(other)))
-    return False, "; ".join(parts)
+    return False, (
+        "%d pi port(s) not listening: %s (a container up with no port mapping after a "
+        "reboot is detached and needs a RECREATE, not a restart)"
+        % (len(dead), ", ".join("%s:%d" % (name, port) for name, port in dead))
+    )
 
 
 def _hwmon_sensor_key(labels: dict) -> tuple[str, str, str]:

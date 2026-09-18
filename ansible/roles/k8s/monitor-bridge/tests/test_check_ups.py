@@ -307,4 +307,4 @@ def test_the_on_battery_arm_is_off_when_no_query_is_configured(monkeypatch, cfg)
     assert ok and "battery 100%" in msg
 
 
-# ── pi_pressure (Pi load / memory / disk headroom via the Pi's glances API) ──
+# ── pi_pressure (Pi load / memory / disk headroom off the node-pi series) ──

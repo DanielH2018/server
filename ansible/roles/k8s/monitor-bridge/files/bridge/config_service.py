@@ -235,7 +235,7 @@ def service_config(
         # while HA's automation scheduler is executing. We poll HA's /api/states over the apps
         # network (Bearer token) and go down when it's stale — catching a wedged-but-running HA
         # (HTTP :8123 up, scheduler stuck) that the container healthcheck can't see. Empty
-        # URL/token = disabled (stays up), like N8N_API_KEY/PI_GLANCES_URL. 300s = 5 missed
+        # URL/token = disabled (stays up), like N8N_API_KEY/PI_ORIGIN. 300s = 5 missed
         # 1-min beats; rides out an HA restart/deploy. Seconds (no unit suffix) — kept a plain
         # float here because parse_duration belongs to the verdict layer, not to config.
         HA_URL=_env("HA_URL", "").rstrip("/"),

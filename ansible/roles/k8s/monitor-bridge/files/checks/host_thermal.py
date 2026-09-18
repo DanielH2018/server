@@ -344,7 +344,7 @@ def check_ups(cfg: Config) -> tuple[bool, str]:
     query itself rather than as a branch here (issue #1548). The direction moved because HA is the
     workload the UPS most obviously protects: with HA primary, the alert path went down with the
     thing it was protecting, and the direct NUT series that would have covered the outage sat
-    unread. All queries empty -> disabled (stays up), like check_pi_pressure without a glances URL.
+    unread. All queries empty -> disabled (stays up), like check_pi_pressure without a PI_ORIGIN.
 
     The mains-loss arm is judged first and returns alone when it is red, because charge and runtime
     read the RUNWAY and can hold green through most of an outage. It carries its own streak key.
