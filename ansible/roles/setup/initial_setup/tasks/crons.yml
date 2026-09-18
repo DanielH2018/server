@@ -624,6 +624,7 @@
     owner: "{{ sys_user }}"
     group: "{{ sys_user }}"
     mode: "0700"
+  no_log: true  # renders docs_refresh_push_token
   become: true
 
 - name: Schedule the generated-docs refresh (box only)
@@ -693,6 +694,7 @@
     owner: "{{ sys_user }}"
     group: "{{ sys_user }}"
     mode: "0700"
+  no_log: true  # renders homelab_eval_push_token and anthropic_api_key once minted
   become: true
 
 - name: Schedule the weekly homelab eval sweep (box only)

@@ -739,6 +739,7 @@
     owner: "{{ sys_user }}"
     group: "{{ sys_user }}"
     mode: "0700"
+  no_log: true  # renders pi_sd_health_push_token
   become: true
 
 - name: Schedule the SD-card health heartbeat
@@ -768,6 +769,7 @@
     owner: "{{ sys_user }}"
     group: "{{ sys_user }}"
     mode: "0700"
+  no_log: true  # renders pi_recovery_push_token
   become: true
 
 - name: Schedule the container-recovery heartbeat

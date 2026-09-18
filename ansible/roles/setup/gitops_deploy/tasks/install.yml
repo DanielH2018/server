@@ -295,6 +295,7 @@
     mode: "0750"
     owner: root
     group: root
+  no_log: true  # renders ruleset_drift_push_token
   become: true
 
 - name: Schedule the GitHub ruleset drift check
@@ -323,6 +324,7 @@
     mode: "0750"
     owner: root
     group: root
+  no_log: true  # renders interaction_limit_push_token
   become: true
 
 - name: Schedule the GitHub interaction-limit re-arm
