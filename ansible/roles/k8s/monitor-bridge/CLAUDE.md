@@ -1055,7 +1055,12 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     joining them one to one; a drop with no reason in the window reads `reason not logged`.
     An HTTP reason is reduced to its status before it reaches the tile, because the axios
     message can carry the request URL and Discord's is the webhook secret. Raising Kuma's
-    log level is neither needed nor safe (uptime-kuma/CLAUDE.md, the debug-logging trap). The
+    log level is neither needed nor safe (uptime-kuma/CLAUDE.md, the debug-logging trap).
+    **A 400 here was an oversized push msg until #2013 (2026-09-18):** Kuma puts a push
+    monitor's msg into a Discord embed field capped at 1024 chars and never truncates, so a
+    fleet-wide list from release-staleness-check was rejected whole. `bridge.net.push` and
+    `kuma-push-lib.sh` now cap the msg at 900 chars (`PUSH_MSG_MAX`, keeping a trailing
+    `(N cycles)`), and that producer pushes names only. The
     window is the whole hysteresis:
     a drop pages for 3h and clears on its own, since nothing is cleared by hand. Its tile
     notifies EMAIL as well as Discord, on purpose: a page for a dropped Discord send that goes
@@ -1323,7 +1328,7 @@ run loop alone on 2026-09-05).
 | `bridge/config_service.py` | `ServiceConfig` — Traefik, n8n, the *arr stack, the deployer state dirs, the etcd drill, the staging backfill, Home Assistant |
 | `bridge/config_cluster.py` | `ClusterConfig` — the cluster Prometheus, the derived `PROM_ORIGIN` pin, the cAdvisor/target/workload/PVC floors, Longhorn, the restart windows |
 | `bridge/config_io.py` | `IoConfig` — B2, Cloudflare R2, the Loki ingestion and log-pattern arms, the shipper drop counters, the five Discord webhooks, SMTP |
-| `bridge/net.py` | `_get_json`, `_post_json`, `prom_scalar`, `prom_vector`, the `loki_*` queries, `push`, and the selector builders (`origin_sel`, `cadvisor_sel`, `host_metric_sel`). Read as `bridge.net.X`; the tests stub the fetch layer here. Every helper that reads a URL or the origin pin takes `cfg` FIRST; `cadvisor_sel`, `_origin_name`, `_get_json` and `_post_json` read no config and keep their signatures |
+| `bridge/net.py` | `_get_json`, `_post_json`, `prom_scalar`, `prom_vector`, the `loki_*` queries, `push` with `cap_push_msg` (the `PUSH_MSG_MAX` boundary, #2013), and the selector builders (`origin_sel`, `cadvisor_sel`, `host_metric_sel`). Read as `bridge.net.X`; the tests stub the fetch layer here. Every helper that reads a URL or the origin pin takes `cfg` FIRST; `cadvisor_sel`, `_origin_name`, `_get_json` and `_post_json` read no config and keep their signatures |
 | `bridge/streaks.py` | both streak mechanisms: `_down_streaks`/`down_streak` (the consecutive-down counter four domains share, cleared by `conftest.py`) and `_grace_streaks`/`apply_startup_grace` (the post-reboot startup grace for the reach-out checks) |
 | `bridge/common.py` | `_env`, `sanitize` — the two helpers shared verbatim with autofix-bridge's `autofix.py`, staged into that role's ConfigMap too (see its CLAUDE.md) |
 | `bridge/parsing.py` | duration/timestamp parsing, `endpoint_label`, `describe_fetch_failure` |
