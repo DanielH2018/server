@@ -118,6 +118,12 @@ the local ledger, which is bookkeeping, not state.
   commit sits behind `origin/master` under its role paths, or under an inventory key or
   shared macro its render reads (#1993). The full account, including why it runs as
   `sys_user` and not root, is the `#947` bullet in `roles/setup/gitops_deploy/CLAUDE.md`.
+  **The DOWN msg carries the stale services' names and a count, not their reasons** (#2013).
+  A refused narrowing marks the whole fleet stale, and the per-service reasons then ran to
+  ~7,500 chars; Kuma puts the msg into a Discord embed field capped at 1024 chars and never
+  truncates, so Discord rejected the DOWN with HTTP 400 on 2026-09-17 and 2026-09-18 and the
+  page reached nobody. `kuma_push` (kuma-push-lib.sh) and the bridge's `net.push` both cap
+  the msg at 900 chars as the class fix; the reasons are `probe.py releases --stale-only`.
 - **Cron's PATH omits `/usr/local/bin`, where k3s lives.** Every script here sets its own
   PATH; a new one that does not dies on `command -v k3s` and, if it pushes its heartbeat
   before the check, reads permanently green.

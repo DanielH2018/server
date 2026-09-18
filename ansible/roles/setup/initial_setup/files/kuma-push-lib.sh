@@ -85,6 +85,23 @@ kuma_push() {
   local status="$1" msg="$2" push_url="$3" kuma_host="$4" resolve_ip="$5" tag="$6"
   local -r retry_delay_s=30
   local attempt http_code curl_rc reply ctype by
+  # Kuma puts the msg into the Discord DOWN embed as a field value, whose cap is 1024 chars,
+  # and never truncates: an oversized msg makes Discord reject the whole alert with HTTP 400
+  # and Kuma does not retry, so the transition reaches nobody. release-staleness-check's
+  # fleet-wide list did exactly that on 2026-09-17 and 2026-09-18 (#2013). Same cap as
+  # monitor-bridge's `PUSH_MSG_MAX`; 900 leaves room for what Kuma adds inside the field.
+  # `${#msg}` counts bytes under cron's C locale, which only makes the cap tighter.
+  local -r msg_max=900
+  if [ "${#msg}" -gt "$msg_max" ]; then
+    # The marker's own width depends on the count it carries, so settle it in two passes.
+    local marker keep dropped=${#msg}
+    marker=" …(+${dropped} chars)"
+    keep=$((msg_max - ${#marker}))
+    dropped=$((${#msg} - keep))
+    marker=" …(+${dropped} chars)"
+    keep=$((msg_max - ${#marker}))
+    msg="${msg:0:$keep}${marker}"
+  fi
   # shellcheck disable=SC2034  # read by the sourcing script, not by this file
   KUMA_PUSH_OK=1
   # The URL embeds the push token, so it goes in via a config file on stdin rather than as an

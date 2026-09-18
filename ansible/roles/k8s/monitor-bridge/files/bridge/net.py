@@ -17,7 +17,9 @@ here rather than beside the checks because they are the query-building half of f
 read `cfg.PROM_ORIGIN`, and the gates test renders them to prove where the origin pin lands.
 """
 
+from collections.abc import Callable
 import json
+import re
 import time
 from typing import Any
 import urllib.error
@@ -315,23 +317,66 @@ def loki_reachable(cfg: Config) -> bool:
     return True
 
 
-def push(cfg: Config, token: str, ok: bool, msg: str) -> None:
+# Kuma puts a push monitor's `msg` into the Discord DOWN embed as a field value, whose cap is
+# 1024 chars, and never truncates: an oversized msg makes Discord reject the WHOLE alert with
+# HTTP 400 (`{"embeds":["0"]}`), and Kuma does not retry, so the transition reaches nobody.
+# release-staleness-check's fleet-wide list did exactly that on 2026-09-17 and 2026-09-18
+# (#2013). 900 leaves room for what Kuma adds inside the field. The same cap lives in
+# `kuma-push-lib.sh` for the cron pushers; this one is the boundary for every bridge check.
+PUSH_MSG_MAX = 900
+_CYCLES_SUFFIX_RE = re.compile(r"\s*\(\d+ cycles?\)\s*$")
+
+
+def cap_push_msg(msg: str, limit: int = PUSH_MSG_MAX) -> str:
+    """`msg` verbatim when it fits `limit`, else cut with a ` …(+N chars)` marker. Pure.
+
+    A trailing ` (N cycles)` — what `streaks.down_streak` appends to a paging message —
+    survives the cut at the end, because `probe_lib/alerts.py` strips that suffix with an
+    end-anchored regex when it reads the message back out of the log.
+    """
+    if len(msg) <= limit:
+        return msg
+    suffix = ""
+    m = _CYCLES_SUFFIX_RE.search(msg)
+    if m:
+        suffix = m.group(0).rstrip()
+        msg = msg[: m.start()]
+    # The marker's own width depends on the count it carries, so settle it in two passes.
+    dropped = len(msg)
+    for _ in range(2):
+        marker = " …(+%d chars)" % dropped
+        keep = max(0, limit - len(marker) - len(suffix))
+        dropped = len(msg) - keep
+    return msg[:keep] + " …(+%d chars)" % dropped + suffix
+
+
+def push(
+    cfg: Config,
+    token: str,
+    ok: bool,
+    msg: str,
+    fetch: Callable[[str], Any] | None = None,
+) -> None:
     """Pushes an up/down heartbeat plus message to the Kuma push monitor for `token`.
 
     A no-op, logged, when token is unset. Best-effort: an unreachable Kuma is logged and
-    swallowed rather than raised, so it never crashes the check loop.
+    swallowed rather than raised, so it never crashes the check loop. `msg` is capped at
+    `PUSH_MSG_MAX` chars first (`cap_push_msg`), so no check can hand Discord an embed it
+    rejects.
 
     Args:
         cfg: The configuration holding KUMA_URL.
         token: The Kuma push-monitor token; empty/None skips the push.
         ok: Whether the check succeeded (pushed as status "up") or not ("down").
         msg: The status message to attach to the push.
+        fetch: The GET that carries the push; `_get_json` unless a test injects one.
     """
     if not token:
         bridge.common.log("WARN: no push token set; skipping push:", msg)
         return
+    msg = cap_push_msg(msg)
     qs = urllib.parse.urlencode({"status": "up" if ok else "down", "msg": msg})
     try:
-        _get_json("%s/api/push/%s?%s" % (cfg.KUMA_URL, token, qs))
+        (fetch or _get_json)("%s/api/push/%s?%s" % (cfg.KUMA_URL, token, qs))
     except Exception as e:  # best-effort heartbeat; never crash the loop
         bridge.common.log("push failed (%s):" % msg, e)
