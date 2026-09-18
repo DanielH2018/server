@@ -124,7 +124,10 @@
   # workload's pod template, so a queued restart that never reached the workload reads as one.
   #
   # The `created` clause is the same one the restart tasks carry: a workload this apply created
-  # is not restarted (it races the initial rollout), so none is expected of it either. An
+  # is not restarted (it races the initial rollout), so none is expected of it either. So is
+  # the `manifests_rolled_by_apply` clause: a workload whose pod template the apply changed is
+  # already rolling and is not restarted (#1988), so no `restartedAt` is expected of it -- the
+  # drain and the rollout-complete half of the gate still cover the roll the apply started. An
   # extra entry's own `kind` and `image` win over the defaults, as in the extra restart task.
   #
   # `manifests_self_rollouts` is the third source (issue #1902): the workloads a role with
@@ -146,7 +149,8 @@
            ) and not (manifests_apply.stdout | default('')) is search(
              (manifests_release_target.kind | default(manifests_rollout_kind | default('deploy')) == 'daemonset')
              | ternary('daemonset.apps/', 'deployment.apps/')
-             ~ manifests_release_target.name ~ ' created'),
+             ~ manifests_release_target.name ~ ' created')
+           and not manifests_rolled_by_apply.get(manifests_release_target.name, false),
          }] }}
   loop: >-
     {{ ((manifests_rollout | default(manifests_service) | length > 0)
