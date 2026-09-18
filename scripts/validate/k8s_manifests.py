@@ -49,7 +49,6 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from lib.k8s_context import (
-    ansible_bool,
     colliding_default_keys,
     resolve_vars,
     role_defaults,
@@ -118,7 +117,6 @@ __all__ = [
     "NO_SCHEMA",
     "SHARED_TPL",
     "SKIP_ROLES",
-    "ansible_bool",
     "check_template",
     "colliding_default_keys",
     "crd_schema_error",

@@ -8,9 +8,10 @@ serve. Split from `test_k8s_manifests.py` on 2026-09-02.
 from pathlib import Path
 
 from lib import yaml_fast
+from lib.ansible_jinja_compat import ansible_bool
 from jinja2 import Environment, FileSystemLoader
 
-from validate.k8s_manifests import ansible_bool, make_lookup, register_ansible_filters
+from validate.k8s_manifests import make_lookup, register_ansible_filters
 from _helpers import ANSIBLE
 
 
@@ -69,7 +70,8 @@ def _role_defaults(role: str) -> dict:
     }
     env = Environment(loader=FileSystemLoader([str(ANSIBLE / "templates")]))
     # `bool` is an Ansible filter, not a Jinja builtin — a group_var using it (k8s_no_mutate)
-    # would fail this loop with "No filter named 'bool'". Same shim scripts/ registers.
+    # would fail this loop with "No filter named 'bool'". The same shim `lib.k8s_context`
+    # registers — its DECIDED marker says why this is not ansible-core's `to_bool`.
     env.filters["bool"] = ansible_bool
     for _ in range(5):
         pending = {k: v for k, v in values.items() if isinstance(v, str) and "{{" in v}
