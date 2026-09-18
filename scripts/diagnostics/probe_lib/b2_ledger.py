@@ -29,6 +29,8 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from diagnostics.probe_lib import core
 from diagnostics.probe_lib import longhorn
+from lib.kubectl import DEFAULT_CLUSTER
+
 from diagnostics.probe_lib.core import (
     _CHICAGO,
     _rows_from_loki,
@@ -227,7 +229,10 @@ def run_b2_spend(ns):
     # Reads Loki, not B2 — nothing to record for this command itself.
     print(
         format_backup_spend(
-            parse_backup_spend(rows), ns.since, longhorn.pvc_names(), read_b2_ledger()
+            parse_backup_spend(rows),
+            ns.since,
+            longhorn.pvc_names(getattr(ns, "cluster", DEFAULT_CLUSTER)),
+            read_b2_ledger(),
         )
     )
     return 0
@@ -471,7 +476,9 @@ def run_b2_deletions(ns):
     if ns.dry_run:
         return core.print_dry_run(url, resolve=pin)
 
-    target = ns.target_url or longhorn.backup_target_url()
+    target = ns.target_url or longhorn.backup_target_url(
+        cluster=getattr(ns, "cluster", DEFAULT_CLUSTER)
+    )
     if not target:
         # Disarmed or absent. Declining beats matching everything: the R2 deletions in the same
         # log stream would be charged to B2's cap.
@@ -520,7 +527,7 @@ def run_b2_deletions(ns):
         len(deletions) - len(fresh),
         ns.since,
         measured_at,
-        longhorn.pvc_names(),
+        longhorn.pvc_names(getattr(ns, "cluster", DEFAULT_CLUSTER)),
     )
     print(text)
     return code

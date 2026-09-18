@@ -291,20 +291,18 @@ def test_k8s_health_daemonset_missing_a_node_exits_one():
     assert "rollout incomplete" in text
 
 
-def test_k8s_health_argv_can_ask_for_a_daemonset():
-    assert "daemonset" in health_kubectl.k8s_deploy_argv(
+def test_k8s_health_args_can_ask_for_a_daemonset():
+    assert "daemonset" in health_kubectl.k8s_deploy_args(
         "alloy", "homelab", kind="daemonset"
     )
 
 
-def test_k8s_health_argv_targets_the_named_namespace():
-    assert health_kubectl.k8s_deploy_argv("freshrss", "homelab")[:4] == [
-        "k3s",
-        "kubectl",
+def test_k8s_health_args_target_the_named_namespace():
+    assert health_kubectl.k8s_deploy_args("freshrss", "homelab")[:2] == [
         "-n",
         "homelab",
     ]
-    assert "app=freshrss" in health_kubectl.k8s_pods_argv("freshrss", "homelab")
+    assert "app=freshrss" in health_kubectl.k8s_pods_args("freshrss", "homelab")
 
 
 def _module_imports(source):
@@ -324,7 +322,7 @@ def test_health_kubectl_imports_nothing_so_its_argv_shapes_need_no_cluster():
     """health_kubectl.py's docstring promises it imports no sibling and runs no command.
 
     That promise is why the ClusterIP pair stays in health_docker.py — the `# DECIDED:` marker
-    above `k8s_service_ip_argv` cites this test. A docstring nobody enforces rots into a comment
+    above `k8s_service_ip_args` cites this test. A docstring nobody enforces rots into a comment
     the first time someone moves a subprocess call in here, so assert it.
     """
     from pathlib import Path
@@ -333,8 +331,8 @@ def test_health_kubectl_imports_nothing_so_its_argv_shapes_need_no_cluster():
     # Non-vacuity: an empty or renamed module would also import nothing.
     assert {
         "WORKLOAD_KINDS",
-        "k8s_deploy_argv",
-        "k8s_pods_argv",
+        "k8s_deploy_args",
+        "k8s_pods_args",
         "pod_selector",
     } <= set(vars(health_kubectl))
 

@@ -76,9 +76,8 @@ def test_parse_ip_returns_none_when_no_ip():
     assert health_docker.parse_ip("   \n") is None
 
 
-def test_k8s_service_ip_argv_targets_the_service():
-    argv = health_docker.k8s_service_ip_argv("sonarr", "homelab")
-    assert argv[:2] == ["k3s", "kubectl"]
+def test_k8s_service_ip_args_target_the_service():
+    argv = health_docker.k8s_service_ip_args("sonarr", "homelab")
     assert argv[-1] == "jsonpath={.spec.clusterIP}"
     assert "sonarr" in argv
     assert "homelab" in argv
@@ -311,13 +310,13 @@ def test_resolve_arr_ip_uses_kubectl_not_docker(monkeypatch):
 
     calls = []
 
-    def fake_run(argv, **kwargs):
+    def fake_run(cluster, *argv, **kwargs):
         calls.append(argv)
         return FakeResult()
 
-    monkeypatch.setattr(health_docker.subprocess, "run", fake_run)
+    monkeypatch.setattr(health_docker, "kubectl", fake_run)
     assert arr.resolve_arr_ip("sonarr") == "10.43.114.186"
-    assert calls == [health_docker.k8s_service_ip_argv("sonarr", "homelab")]
+    assert calls == [tuple(health_docker.k8s_service_ip_args("sonarr", "homelab"))]
     assert "docker" not in calls[0]
 
 
@@ -330,7 +329,7 @@ def test_resolve_arr_ip_raises_on_kubectl_failure(monkeypatch):
         stderr = 'services "sonarr" not found'
 
     monkeypatch.setattr(
-        health_docker.subprocess, "run", lambda argv, **kwargs: FakeResult()
+        health_docker, "kubectl", lambda cluster, *argv, **kwargs: FakeResult()
     )
     with pytest.raises(SystemExit) as excinfo:
         arr.resolve_arr_ip("sonarr")
@@ -346,7 +345,7 @@ def test_resolve_arr_ip_raises_on_empty_cluster_ip(monkeypatch):
         stderr = ""
 
     monkeypatch.setattr(
-        health_docker.subprocess, "run", lambda argv, **kwargs: FakeResult()
+        health_docker, "kubectl", lambda cluster, *argv, **kwargs: FakeResult()
     )
     with pytest.raises(SystemExit) as excinfo:
         arr.resolve_arr_ip("sonarr")

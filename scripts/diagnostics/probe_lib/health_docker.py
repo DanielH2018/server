@@ -25,6 +25,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 # globals with a `from core import ...` would take a snapshot the patch never reaches.
 from diagnostics.probe_lib import core
 
+from lib.kubectl import DEFAULT_CLUSTER, kubectl
 from lib.repo_paths import HOST_VARS
 
 PI_HOST_VARS = HOST_VARS / "daniel-pi.yml"
@@ -56,24 +57,23 @@ def inspect_argv(container):
     return ["docker", "inspect", container]
 
 
-# DECIDED: the ClusterIP pair below stays here, not in health_kubectl.py. `k8s_service_ip_argv`
+# DECIDED: the ClusterIP pair below stays here, not in health_kubectl.py. `k8s_service_ip_args`
 # and `resolve_service_ip` are kubectl by transport but Docker by role — they are the successor
 # to `inspect_ip_argv`/`resolve_ip`, answering the same question ("reach this service directly,
 # bypassing Traefik and Authelia") for the workloads that left the Pi. Moving them would split
 # that pair across two modules and falsify health_kubectl.py's invariant: it imports no sibling
-# and runs no command, so every argv shape the gate depends on is assertable without a cluster,
-# while `resolve_service_ip` runs a subprocess and imports `core`. The module NAME is what
-# misleads a reader here, not the grouping. Enforced by test_probe_health.py::
+# and runs no command, so every argument shape the gate depends on is assertable without a
+# cluster, while `resolve_service_ip` runs a command through `lib.kubectl` and imports `core`.
+# The module NAME is what misleads a reader here, not the grouping. Enforced by
+# test_probe_health.py::
 # test_health_kubectl_imports_nothing_so_its_argv_shapes_need_no_cluster.
-def k8s_service_ip_argv(service, namespace):
-    """kubectl argv for a Service's ClusterIP.
+def k8s_service_ip_args(service, namespace):
+    """The kubectl arguments for a Service's ClusterIP.
 
     The k8s analog of inspect_ip_argv, for apps (arr) that must be reached directly
     rather than through k8s_endpoint.
     """
     return [
-        "k3s",
-        "kubectl",
         "-n",
         namespace,
         "get",
@@ -150,7 +150,7 @@ def format_health(data, container, declared=False):
     )
 
 
-def resolve_service_ip(name):
+def resolve_service_ip(name, cluster=DEFAULT_CLUSTER):
     """A workload's k8s Service ClusterIP.
 
     The k8s replacement for `docker inspect`ing a container's bridge IP. A ClusterIP is
@@ -160,7 +160,7 @@ def resolve_service_ip(name):
     in front of an API path that has no bypass rule.
     """
     ns = core.k8s_namespace()
-    out = subprocess.run(k8s_service_ip_argv(name, ns), capture_output=True, text=True)
+    out = kubectl(cluster, *k8s_service_ip_args(name, ns))
     if out.returncode != 0:
         raise SystemExit(f"kubectl get service {name} failed: {out.stderr.strip()}")
     ip = out.stdout.strip()

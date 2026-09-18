@@ -6,11 +6,8 @@ the declared skeleton this is overlaid onto.
 """
 
 import json
-import os
-import shutil
 import subprocess
 import sys as _sys
-from pathlib import Path
 from pathlib import Path as _Path
 
 # `infra_map` is a namespace package under `scripts/`, so reaching a sibling by package
@@ -20,13 +17,12 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from infra_map.constants import HOST_PLANE, LOCAL_TIMEOUT, SSH_TIMEOUT
 
-
-# Directories searched for the collector binaries, on top of whatever PATH the
-# caller happens to have. cron runs with PATH=/usr/bin:/bin, which omits
-# /usr/local/bin — where kubectl lives as a symlink to k3s. Resolving tools here
-# rather than trusting PATH is what stops an impoverished environment from
-# silently blinding half the map; see MissingToolError for the other half.
-TOOL_DIRS = ("/usr/local/bin", "/usr/bin", "/bin", "/usr/local/sbin", "/snap/bin")
+# Tool discovery lives with the kubectl invoker because kubectl is what cron blinds first:
+# its PATH omits /usr/local/bin (kubectl's home, as a symlink to k3s) and carries no
+# KUBECONFIG, so k3s falls back to the root-owned kubeconfig and returns nothing. The same
+# `find_tool` covers docker and ssh below.
+from lib import kubectl as kubectl_lib
+from lib.kubectl import MissingKubectl, WrongCluster, cluster_for_host, find_tool
 
 
 class MissingToolError(Exception):
@@ -40,44 +36,6 @@ class MissingToolError(Exception):
     """
 
 
-def find_tool(name: str) -> str | None:
-    """Resolve a binary by absolute path, searching beyond the inherited PATH."""
-    found = shutil.which(name)
-    if found:
-        return found
-    search = os.pathsep.join(TOOL_DIRS)
-    return shutil.which(name, path=search)
-
-
-# k3s ships kubectl as a symlink to itself and defaults it at this file, which is
-# root-owned 0640. An interactive shell exports KUBECONFIG to the user copy, so
-# `kubectl get` works by hand and fails under cron — the same ambient-environment
-# trap as PATH, one variable over.
-K3S_KUBECONFIG = Path("/etc/rancher/k3s/k3s.yaml")
-USER_KUBECONFIG = Path.home() / ".kube" / "config"
-
-
-def find_kubeconfig() -> Path | None:
-    """Pick a kubeconfig this process can actually read.
-
-    Returned explicitly and passed as ``--kubeconfig`` rather than left to
-    kubectl's own lookup, so the answer does not change with the caller's
-    environment. Readability is checked here, not assumed: the k3s default is
-    root-only, and discovering that at exec time yields a warning on stderr and
-    an empty result, which reads exactly like a cluster with no deployments.
-    """
-    candidates = []
-    env_path = os.environ.get("KUBECONFIG", "").strip()
-    if env_path:
-        # KUBECONFIG is a path LIST; kubectl merges the entries left to right.
-        candidates.extend(Path(p) for p in env_path.split(os.pathsep) if p)
-    candidates.extend((USER_KUBECONFIG, K3S_KUBECONFIG))
-    for candidate in candidates:
-        if os.access(candidate, os.R_OK):
-            return candidate
-    return None
-
-
 def _run(cmd: list[str], timeout: int) -> tuple[bool, str]:
     """Run *cmd*, returning ``(ok, stdout-or-error)``. Never raises."""
     try:
@@ -85,6 +43,26 @@ def _run(cmd: list[str], timeout: int) -> tuple[bool, str]:
             cmd, capture_output=True, text=True, timeout=timeout, check=False
         )
     except (subprocess.TimeoutExpired, OSError) as exc:
+        return False, str(exc)
+    if proc.returncode != 0:
+        return False, (proc.stderr or proc.stdout).strip()[:400]
+    return True, proc.stdout
+
+
+def _kubectl(
+    cluster: str, args: list[str], timeout: int, tools: kubectl_lib.Tools
+) -> tuple[bool, str]:
+    """``_run`` for kubectl: ``lib.kubectl.kubectl`` under the same ``(ok, out)`` contract.
+
+    A wrong-cluster refusal is an observation (``ok=False``, the refusal as the error), so
+    the page renders it rather than going half-blind. A missing binary or kubeconfig is a
+    broken setup and escalates to ``MissingToolError`` like the docker and ssh collectors.
+    """
+    try:
+        proc = kubectl_lib.kubectl(cluster, *args, timeout=timeout, tools=tools)
+    except MissingKubectl as exc:
+        raise MissingToolError(str(exc)) from exc
+    except (WrongCluster, subprocess.TimeoutExpired, OSError) as exc:
         return False, str(exc)
     if proc.returncode != 0:
         return False, (proc.stderr or proc.stdout).strip()[:400]
@@ -191,30 +169,20 @@ def parse_kubectl_workloads(payload: str) -> dict[tuple[str, str], dict]:
     return workloads
 
 
-def collect_k8s(host: str, local_hostname: str) -> tuple[bool, dict, str]:
+def collect_k8s(
+    host: str, local_hostname: str, tools: kubectl_lib.Tools = kubectl_lib.DEFAULT_TOOLS
+) -> tuple[bool, dict, str]:
     """Collect long-running workload state from the cluster (local kubectl only)."""
     if host != local_hostname:
         return False, {}, f"kubectl only queried locally; run this on {host}"
-    kubectl = find_tool("kubectl")
-    if kubectl is None:
-        raise MissingToolError("kubectl not found on this host")
-    kubeconfig = find_kubeconfig()
-    if kubeconfig is None:
-        raise MissingToolError(
-            f"no readable kubeconfig (tried $KUBECONFIG, {USER_KUBECONFIG}, {K3S_KUBECONFIG})"
-        )
-    ok, out = _run(
-        [
-            kubectl,
-            "--kubeconfig",
-            str(kubeconfig),
-            "get",
-            ",".join(WORKLOAD_KINDS),
-            "-A",
-            "-o",
-            "json",
-        ],
+    cluster = cluster_for_host(local_hostname)
+    if cluster is None:
+        return False, {}, f"{local_hostname} is a node of no known cluster"
+    ok, out = _kubectl(
+        cluster,
+        ["get", ",".join(WORKLOAD_KINDS), "-A", "-o", "json"],
         LOCAL_TIMEOUT,
+        tools,
     )
     if not ok:
         return False, {}, out
@@ -320,7 +288,11 @@ def parse_backup_targets(payload: str) -> list[dict]:
     return sorted(targets, key=lambda t: t["name"])
 
 
-def collect_cluster(local_hostname: str, longhorn_namespace: str) -> dict:
+def collect_cluster(
+    local_hostname: str,
+    longhorn_namespace: str,
+    tools: kubectl_lib.Tools = kubectl_lib.DEFAULT_TOOLS,
+) -> dict:
     """Collect the cluster-wide state the diagram draws from.
 
     Deployments are collected by :func:`collect_k8s`; everything here is extra
@@ -340,31 +312,26 @@ def collect_cluster(local_hostname: str, longhorn_namespace: str) -> dict:
     if HOST_PLANE.get(local_hostname) != "k8s":
         return empty
 
-    kubectl = find_tool("kubectl")
-    if kubectl is None:
-        raise MissingToolError("kubectl not found on this host")
-    kubeconfig = find_kubeconfig()
-    if kubeconfig is None:
-        raise MissingToolError(
-            f"no readable kubeconfig (tried $KUBECONFIG, {USER_KUBECONFIG}, {K3S_KUBECONFIG})"
-        )
-    base = [kubectl, "--kubeconfig", str(kubeconfig)]
+    cluster = cluster_for_host(local_hostname)
+    if cluster is None:
+        return {**empty, "error": f"{local_hostname} is a node of no known cluster"}
 
-    ok, out = _run(base + ["get", "nodes", "-o", "json"], LOCAL_TIMEOUT)
+    ok, out = _kubectl(cluster, ["get", "nodes", "-o", "json"], LOCAL_TIMEOUT, tools)
     if not ok:
         return {**empty, "error": out}
     nodes = parse_kubectl_nodes(out)
 
-    ok, out = _run(
-        base
-        + ["get", "pods", "-A", "--no-headers", "-o", f"custom-columns={POD_COLUMNS}"],
+    ok, out = _kubectl(
+        cluster,
+        ["get", "pods", "-A", "--no-headers", "-o", f"custom-columns={POD_COLUMNS}"],
         LOCAL_TIMEOUT,
+        tools,
     )
     pods = parse_pod_placement(out) if ok else []
 
-    ok, out = _run(
-        base
-        + [
+    ok, out = _kubectl(
+        cluster,
+        [
             "get",
             "volumes.longhorn.io",
             "-n",
@@ -374,11 +341,15 @@ def collect_cluster(local_hostname: str, longhorn_namespace: str) -> dict:
             "custom-columns=NAME:.metadata.name",
         ],
         LOCAL_TIMEOUT,
+        tools,
     )
     volumes = len([line for line in out.splitlines() if line.strip()]) if ok else None
 
-    ok, out = _run(
-        base + ["get", "backuptargets.longhorn.io", "-A", "-o", "json"], LOCAL_TIMEOUT
+    ok, out = _kubectl(
+        cluster,
+        ["get", "backuptargets.longhorn.io", "-A", "-o", "json"],
+        LOCAL_TIMEOUT,
+        tools,
     )
     targets = parse_backup_targets(out) if ok else []
 

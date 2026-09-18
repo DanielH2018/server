@@ -28,6 +28,13 @@ import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
+from pathlib import Path
+
+# `lib` is a sibling directory under `scripts/`; a directly-invoked script gets only its
+# own directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from lib.kubectl import CLUSTER_NODES, DEFAULT_CLUSTER, WrongCluster, kubectl
 
 Sample = tuple[float, bool]
 
@@ -132,7 +139,9 @@ def ready_count(kubectl_stdout: str) -> int:
     return sum(1 for line in kubectl_stdout.split("\n") if line.strip() == "true")
 
 
-def probe_endpoints(service: str, namespace: str, timeout: float) -> tuple[bool, int]:
+def probe_endpoints(
+    service: str, namespace: str, timeout: float, cluster: str = DEFAULT_CLUSTER
+) -> tuple[bool, int]:
     """(has a ready backend, how many) for a Service, read from its EndpointSlices.
 
     For workloads a request loop cannot reach: a NetworkPolicy that refuses node-originated
@@ -144,22 +153,20 @@ def probe_endpoints(service: str, namespace: str, timeout: float) -> tuple[bool,
     Service had a routable backend, not that a request through it succeeded.
     """
     try:
-        result = subprocess.run(
-            [
-                "kubectl",
-                "-n",
-                namespace,
-                "get",
-                "endpointslice",
-                "-l",
-                f"kubernetes.io/service-name={service}",
-                "-o",
-                f"jsonpath={_READY_JSONPATH}",
-            ],
-            capture_output=True,
-            text=True,
+        result = kubectl(
+            cluster,
+            "-n",
+            namespace,
+            "get",
+            "endpointslice",
+            "-l",
+            f"kubernetes.io/service-name={service}",
+            "-o",
+            f"jsonpath={_READY_JSONPATH}",
             timeout=timeout,
         )
+    except WrongCluster as exc:
+        raise SystemExit(f"--endpoints: {exc}") from exc
     # Two clauses rather than one tuple: `ruff format` strips the parentheses off
     # `except (A, B):`, and the unparenthesized form is a SyntaxError under the 3.12 that
     # `#!/usr/bin/env python3` resolves to on these hosts. See test_host_scripts_py312.py.
@@ -182,7 +189,9 @@ def run(args: argparse.Namespace) -> tuple[GapReport, int]:
     while time.monotonic() - started < args.seconds:
         at = time.monotonic() - started
         if args.endpoints:
-            ok, n = probe_endpoints(args.endpoints, args.namespace, args.timeout)
+            ok, n = probe_endpoints(
+                args.endpoints, args.namespace, args.timeout, args.cluster
+            )
             peak = max(peak, n)
             detail = f"ready={n}"
         elif args.dns:
@@ -216,6 +225,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--server", default="10.0.0.243", help="DNS server for --dns")
     parser.add_argument(
         "--namespace", default="homelab", help="namespace for --endpoints"
+    )
+    parser.add_argument(
+        "--cluster",
+        choices=sorted(CLUSTER_NODES),
+        default=DEFAULT_CLUSTER,
+        help="which cluster --endpoints reads; refused when the local kubectl serves another",
     )
     parser.add_argument("--seconds", type=float, default=180.0, help="how long to poll")
     parser.add_argument(

@@ -8,7 +8,7 @@ health.py keeps the gate itself. `health_rollout.py` formats a Deployment/Daemon
 `health_cronjob.py` a CronJob one, and `health_docker.py` covers the Pi's remaining Docker
 services.
 
-The ClusterIP lookups — `k8s_service_ip_argv` and `resolve_service_ip` — are kubectl but live
+The ClusterIP lookups — `k8s_service_ip_args` and `resolve_service_ip` — are kubectl but live
 in `health_docker.py` beside the bridge-IP pair they replaced. Read the `# DECIDED:` marker
 above them before moving them here: `resolve_service_ip` runs a subprocess, which the paragraph
 above rules out for this module.
@@ -25,77 +25,8 @@ WORKLOAD_KINDS = {
 }
 
 
-# ── which cluster this kubectl serves ───────────────────────────────────────────────────────
-#
-# Every argv below is a bare `k3s kubectl`, so the cluster it reaches is whatever the local
-# install serves and nothing in the call names a cluster to be wrong about. On daniel-box that
-# is always production, INCLUDING right after a `-e target=daniel-stage` deploy — so the
-# documented post-deploy gate used to return a healthy verdict about a cluster the deploy never
-# touched (#1663). `probe.py health --cluster` names the intended cluster and the gate refuses
-# when the reachable one is a different cluster: a refusal is a correct answer, a green verdict
-# about the wrong subject is not.
-#
-# Node names rather than an API-server address: the staging VM's k3s serves the same
-# `https://127.0.0.1:6443` its production counterpart does, so the address discriminates
-# nothing. Named rather than derived from the inventory at runtime — probe.py must answer
-# without parsing Ansible — and pinned to it by
-# scripts/diagnostics/tests/test_probe_health_cluster.py, which fails if a name here stops
-# appearing in ansible/inventory/hosts.ini.
-CLUSTER_NODES = {
-    "prod": frozenset({"daniel-box", "daniel-server"}),
-    "stage": frozenset({"daniel-stage"}),
-}
-DEFAULT_CLUSTER = "prod"
-
-
-def k8s_nodes_argv():
-    """kubectl argv for the cluster's nodes, as JSON — the cluster-identity read."""
-    return ["k3s", "kubectl", "get", "nodes", "-o", "json"]
-
-
-def node_names(nodes_doc):
-    """The node names in a `kubectl get nodes -o json` document."""
-    items = (nodes_doc or {}).get("items") or []
-    return [(item.get("metadata") or {}).get("name") for item in items]
-
-
-def cluster_of(names):
-    """Which cluster a node-name list belongs to, or None when no name is recognised.
-
-    Membership, not equality: a node added to either cluster must not turn the answer into
-    "unknown" and start refusing every gate. A name list spanning both clusters is impossible
-    — they are separate k3s installs — so the first match wins.
-    """
-    known = set(names or [])
-    for cluster, expected in CLUSTER_NODES.items():
-        if known & expected:
-            return cluster
-    return None
-
-
-def cluster_refusal(requested, served):
-    """A refusal message when `served` is not `requested`, else None.
-
-    `served` is what `cluster_of` made of the live node list, or None when that read failed.
-    Fails closed on None: a kubectl that cannot answer who its nodes are cannot support a
-    claim about which cluster it just checked either.
-    """
-    if served == requested:
-        return None
-    if served is None:
-        return (
-            f"cannot confirm this kubectl serves the {requested} cluster — `kubectl get nodes` "
-            "returned no recognised node. Refusing rather than gating an unknown cluster."
-        )
-    return (
-        f"this kubectl serves the {served} cluster, not {requested} — refusing. The gate reads "
-        "whatever the local `k3s kubectl` resolves to, so run it on a node of the cluster you "
-        f"deployed to. There is no host-side kubeconfig for {requested} from here (#1663)."
-    )
-
-
-def k8s_deploy_argv(service, namespace, kind="deploy"):
-    """kubectl argv to fetch a Deployment/DaemonSet/StatefulSet as JSON.
+def k8s_deploy_args(service, namespace, kind="deploy"):
+    """The kubectl arguments that fetch a Deployment/DaemonSet/StatefulSet as JSON.
 
     Args:
         service: The workload name.
@@ -103,8 +34,6 @@ def k8s_deploy_argv(service, namespace, kind="deploy"):
         kind: The workload kind to fetch (``deploy``, ``daemonset`` or ``statefulset``).
     """
     return [
-        "k3s",
-        "kubectl",
         "-n",
         namespace,
         "get",
@@ -115,15 +44,13 @@ def k8s_deploy_argv(service, namespace, kind="deploy"):
     ]
 
 
-def k8s_pods_argv(service, namespace, selector=None):
-    """kubectl argv for a workload's pods.
+def k8s_pods_args(service, namespace, selector=None):
+    """The kubectl arguments for a workload's pods.
 
     `selector` overrides the `app=<service>` guess — pass `pod_selector(workload)` whenever the
     workload document is in hand.
     """
     return [
-        "k3s",
-        "kubectl",
         "-n",
         namespace,
         "get",
@@ -135,13 +62,13 @@ def k8s_pods_argv(service, namespace, selector=None):
     ]
 
 
-def k8s_cronjob_argv(name, namespace):
-    """kubectl argv to fetch a CronJob as JSON."""
-    return ["k3s", "kubectl", "-n", namespace, "get", "cronjob", name, "-o", "json"]
+def k8s_cronjob_args(name, namespace):
+    """The kubectl arguments that fetch a CronJob as JSON."""
+    return ["-n", namespace, "get", "cronjob", name, "-o", "json"]
 
 
-def k8s_jobs_argv(namespace):
-    """kubectl argv for every Job in a namespace, as JSON.
+def k8s_jobs_args(namespace):
+    """The kubectl arguments for every Job in a namespace, as JSON.
 
     Not filtered server-side: a CronJob's Jobs carry no label naming their owner, only an
     `ownerReferences` entry, and kubectl has no field selector for that. The namespaces this
@@ -149,19 +76,17 @@ def k8s_jobs_argv(namespace):
     by each CronJob's `successfulJobsHistoryLimit` — so filtering client-side in
     latest_owned_job costs nothing worth avoiding.
     """
-    return ["k3s", "kubectl", "-n", namespace, "get", "jobs", "-o", "json"]
+    return ["-n", namespace, "get", "jobs", "-o", "json"]
 
 
-def k8s_job_pods_argv(job_name, namespace):
-    """kubectl argv for one Job's pods, as JSON.
+def k8s_job_pods_args(job_name, namespace):
+    """The kubectl arguments for one Job's pods, as JSON.
 
     `batch.kubernetes.io/job-name`, not the deprecated bare `job-name` — the same choice
     `roles/k8s/cronjob-gate/tasks/main.yml` documents and makes, for the same reason: if the
     legacy label is ever dropped, the other selector silently matches nothing.
     """
     return [
-        "k3s",
-        "kubectl",
         "-n",
         namespace,
         "get",
