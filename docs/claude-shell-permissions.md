@@ -87,6 +87,21 @@ local stage. Retiring the repo shim would re-prompt `ssh <host> <cmd> |
 head` in Manual mode. Whether one of them retires is the dotfiles survey's re-planned slice 5
 (`docs/plans/2026-09-17-claude-guard-slice-5-survey.md` in the dotfiles repo), not this repo's.
 
+**Decided 2026-09-18: both hooks stay** (#1864, #1898; the `# DECIDED:` marker sits on
+`classify_remote` in `auto-approve-readonly.py`). They differ in behaviour, not only cost. This
+repo's shim reaches `git`, `sed`, `awk`, `find`, `sort`, `apt`, `dpkg`, `crontab` and `pipx`
+over ssh through per-command guards the package does not carry, and it walks a local pipeline;
+the judge does neither, and retiring the shim would re-prompt those shapes in Manual mode. The
+overlap is bounded: 800 of the 1064 ssh-led Bash decisions in the 28 days to 2026-09-18 were
+settled by a settings rule with no hook involved. The verb tables converged on every guard-free
+name that day — 29 `TIER1` readers into the package's `REMOTE_READONLY_VERBS` (dotfiles PR
+#520) and `ping`, `ping6`, `tracepath`, `traceroute`, `uptimed` into `TIER1` — and the same
+diff found four verbs listed bare on one side and guarded on the other (`rg --pre`, `sensors
+-s`, `nvidia-smi` in the package; `ss -K` here), all four now guarded on both. A guarded verb
+moves only with its guard, because the replay gate cannot see a remote fail-open: 4 of the
+1058 prompted-corpus records touch ssh. The path to one hook is porting the remaining guards
+into the package, tracked on #1898.
+
 ### `kubectl` — what actually decides
 **Read this before trusting the per-verb allow-list below: in a normal session that list decides
 nothing.** Sessions default to auto mode (`defaultMode: auto`) with `autoMode.classifyAllShell: true`

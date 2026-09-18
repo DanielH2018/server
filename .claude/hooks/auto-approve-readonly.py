@@ -49,6 +49,7 @@ from _readonly_shell import (
 from _readonly_tables import (
     SSH_HOSTS,
     TIER1,
+    _JOURNAL_WRITE,
     _SSH_FLAGS,
     _SSH_GLOB,
     _SSH_OPTIONS,
@@ -204,20 +205,6 @@ _SYSTEMCTL_WRITE = {
 
 def _systemctl(argv):
     return None if any(a in _SYSTEMCTL_WRITE for a in argv[1:]) else "systemctl"
-
-
-_JOURNAL_WRITE = (
-    "--rotate",
-    "--vacuum-size",
-    "--vacuum-time",
-    "--vacuum-files",
-    "--flush",
-    "--sync",
-    "--relinquish-var",
-    "--smart-relinquish-var",
-    "--update-catalog",
-    "--setup-keys",
-)
 
 
 def _journalctl(argv):
@@ -585,6 +572,14 @@ def _crontab(argv):
     return "crontab -l" if saw_list else None
 
 
+def _ss(argv):
+    # -K/--kill closes sockets; the K may hide in a short cluster (`-xKy`). #1898.
+    return None if any(a == "--kill" or _SHORT_K.match(a) for a in argv[1:]) else "ss"
+
+
+_SHORT_K = re.compile(r"-[a-zA-Z]*K")
+
+
 def _sensors(argv):
     # lm-sensors reads, except -s/--set which applies config back to the hardware.
     return None if any(a in ("-s", "--set") for a in argv[1:]) else "sensors"
@@ -651,6 +646,7 @@ HANDLERS = {
     "pipx": _pipx,
     "crontab": _crontab,
     "sensors": _sensors,
+    "ss": _ss,
 }
 
 
@@ -718,6 +714,10 @@ def classify_remote(command):
     The PermissionRequest entry point is deliberately narrower than the PreToolUse one: it can
     answer `ask` rules, so it only speaks for the traffic that needs it (`Bash(ssh:*)`) rather
     than for every read-only command.
+
+    # DECIDED (#1864, #1898): this entry point stays beside the user-level judge hook. They
+    # differ in behaviour (this side walks a local pipeline and guards git/sed/awk/find/...
+    # over ssh; the judge does neither). docs/claude-shell-permissions.md has the long form.
     """
     reason = classify(command)
     if not reason:

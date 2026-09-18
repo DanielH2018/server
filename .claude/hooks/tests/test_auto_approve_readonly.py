@@ -122,6 +122,9 @@ APPROVE_LOCAL = [
     ("crontab -u ubuntu -l", "crontab list for a user"),
     ("sensors", "sensors read"),
     ("sensors -f", "sensors in fahrenheit"),
+    ("ss -tlnp", "ss lists sockets"),
+    ("ping -c 1 10.0.0.161", "ping is read-only under any argument (#1898)"),
+    ("traceroute 10.0.0.161", "traceroute (#1898)"),
 ]
 
 # MUST auto-approve, and the verdict runs through the claude_guard tables.
@@ -218,6 +221,10 @@ REJECT_LOCAL = [
     ("crontab -u ubuntu -r", "crontab -r for a user still deletes"),
     ("sensors -s", "sensors -s applies config to hardware"),
     ("sensors --set", "sensors --set writes"),
+    ("ss -K", "ss -K closes sockets"),
+    ("ss --kill", "ss --kill closes sockets"),
+    ("ss -xKy", "ss -xKy — K hidden in a short cluster kills"),
+    ("dmesg", "dmesg needs a -C guard before it can be TIER1 (#1898)"),
 ]
 
 # MUST NOT auto-approve, and the verdict runs through the claude_guard tables.

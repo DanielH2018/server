@@ -114,11 +114,19 @@ TIER1 = {
     "locale",
     "printenv",
     "lsof",
-    "ss",
+    # `ss` is guarded in auto-approve-readonly.py (`-K`/`--kill` closes sockets), not here.
     "netstat",
     "dig",
     "host",
     "nslookup",
+    # The guard-free half of the dotfiles package's REMOTE_READONLY_VERBS that this table
+    # lacked (server #1898, measured 2026-09-18). `dmesg` and `htop` were the other two:
+    # `dmesg -C` clears the ring buffer and needs a guard, and `htop` is interactive.
+    "ping",
+    "ping6",
+    "tracepath",
+    "traceroute",
+    "uptimed",
     "apt-cache",
     "echo",
     "printf",
@@ -170,3 +178,17 @@ _SSH_SECRET = SECRET_PATH_RE
 # that _SSH_SECRET doesn't match (`/proc/self/enviro?`) can still become a secret
 # path over there. We can't see the remote filesystem, so we refuse the pattern.
 _SSH_GLOB = re.compile(r"[*?\[\]\\]")
+
+# journalctl flags that delete, rotate or reconfigure the journal; anything else reads.
+_JOURNAL_WRITE = (
+    "--rotate",
+    "--vacuum-size",
+    "--vacuum-time",
+    "--vacuum-files",
+    "--flush",
+    "--sync",
+    "--relinquish-var",
+    "--smart-relinquish-var",
+    "--update-catalog",
+    "--setup-keys",
+)
