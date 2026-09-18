@@ -205,6 +205,8 @@ class _FakeHost:
         self.posts: list[str] = []
 
     def run(self, argv, cwd=None, timeout=120):
+        if argv[0] == "gh" and "merged" in argv:
+            return 0, "[]"
         if argv[0] == "gh":
             return 0, json.dumps(
                 [

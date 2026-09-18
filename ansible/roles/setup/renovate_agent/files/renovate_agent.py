@@ -156,15 +156,15 @@ def is_registered_worktree(repo_dir: str, path: str, tools: AgentTools = TOOLS) 
 
 
 def worktree_is_reusable(
-    repo_dir: str, path: str, branch: str, tools: AgentTools = TOOLS
+    repo_dir: str, path: str, branch: str, tools: AgentTools = TOOLS, repo: str = ""
 ) -> tuple[bool, str]:
     """Whether the run worktree can be thrown away and recreated.
 
-    It cannot when the previous tick left work behind — uncommitted changes, or commits whose
-    content is not on origin/master (branch_content_is_on_master decides that, since a
-    squash merge leaves the commits themselves unreachable from master). Removing either
-    would destroy a landing that was in flight, so the tick skips instead and names the path
-    for the operator.
+    It cannot when the previous tick left work behind — uncommitted changes, or commits that
+    never landed (branch_content_is_on_master decides that, since a squash merge leaves the
+    commits themselves unreachable from master; `repo` is the GitHub slug it asks about).
+    Removing either would destroy a landing that was in flight, so the tick skips instead and
+    names the path for the operator.
 
     SCOPE (see lib.git.git_dirty, #1223): whole tree, untracked counted — an unlanded scratch
     file is exactly the kind of leftover this must not discard. Stays inline rather than
@@ -187,16 +187,16 @@ def worktree_is_reusable(
         ["git", "-C", repo_dir, "rev-list", "--count", f"origin/master..{branch}"]
     )
     if rc == 0 and out.strip() not in ("0", ""):
-        if branch_content_is_on_master(repo_dir, branch, tools):
+        if branch_content_is_on_master(repo_dir, branch, tools, repo):
             return True, ""
         return False, f"{branch} holds {out.strip()} commit(s) not on origin/master"
     return True, ""
 
 
 def branch_content_is_on_master(
-    repo_dir: str, branch: str, tools: AgentTools = TOOLS
+    repo_dir: str, branch: str, tools: AgentTools = TOOLS, repo: str = ""
 ) -> bool:
-    """Whether merging `branch` into origin/master would change nothing.
+    """Whether `branch` has already landed, by content or by the forge's record.
 
     Ancestry alone cannot see a squash merge: the landing keeps the content and discards the
     commits that carried it, so `rev-list origin/master..<branch>` counts them forever. The
@@ -204,13 +204,18 @@ def branch_content_is_on_master(
     refused its own tree every day while its content sat on master as PR #1812 (#2014).
     `git merge-tree --write-tree` asks about content instead: when the tree it would produce
     is origin/master's own tree, the branch has nothing master lacks and the worktree can be
-    recreated. Inlined from scripts/dev/prune_worktrees.py's merge_tree_says_contained for the
-    reason in worktree_is_reusable's docstring — this file ships with no path to scripts/.
+    recreated. Once master has drifted into a conflict on a file the branch touched, that
+    exits non-zero — the very tree #2014 found was already in that state — so the forge is
+    asked last whether it merged a PR from exactly this tip (`repo`, the `owner/name` slug,
+    is what `gh` needs; empty means no forge check). Inlined from
+    scripts/dev/prune_worktrees.py's merge_tree_says_contained and pr_head_says_merged for
+    the reason in worktree_is_reusable's docstring — this file ships with no path to scripts/.
 
-    DECIDED: no verdict reads as NOT contained. A non-zero exit (a conflict with master's
-    drift, or a git older than 2.38), empty merge-tree output and an unreadable master tree
-    all refuse, because a wrong yes here deletes work. A revert-only branch is refused for the
-    same reason: merging it changes master's tree, so it still holds something master lacks.
+    DECIDED: no verdict reads as NOT contained. A non-zero merge-tree exit, empty output, an
+    unreadable master tree, and a `gh` that fails or names no PR at this tip all refuse,
+    because a wrong yes here deletes work. A revert-only branch is refused for the same
+    reason: merging it changes master's tree, so it still holds something master lacks. The
+    forge match is on the head SHA, never on the branch name: the name is reused every tick.
     """
     rc, master_tree = tools.run(
         ["git", "-C", repo_dir, "rev-parse", "origin/master^{tree}"]
@@ -221,10 +226,45 @@ def branch_content_is_on_master(
         ["git", "-C", repo_dir, "merge-tree", "--write-tree", "origin/master", branch],
         timeout=300,
     )
+    lines = [line.strip() for line in merged.splitlines() if line.strip()]
+    if rc == 0 and lines and lines[0] == master_tree.strip():
+        return True
+    return branch_tip_was_merged(repo_dir, branch, repo, tools)
+
+
+def branch_tip_was_merged(
+    repo_dir: str, branch: str, repo: str, tools: AgentTools = TOOLS
+) -> bool:
+    """Whether the forge merged a PR whose head was exactly `branch`'s current tip."""
+    if not repo:
+        return False
+    rc, tip = tools.run(["git", "-C", repo_dir, "rev-parse", branch])
+    if rc != 0 or not tip.strip():
+        return False
+    rc, out = tools.run(
+        [
+            "gh",
+            "pr",
+            "list",
+            "--repo",
+            repo,
+            "--state",
+            "merged",
+            "--head",
+            branch,
+            "--json",
+            "headRefOid",
+        ]
+    )
     if rc != 0:
         return False
-    lines = [line.strip() for line in merged.splitlines() if line.strip()]
-    return bool(lines) and lines[0] == master_tree.strip()
+    try:
+        prs = json.loads(out or "[]")
+    except json.JSONDecodeError:
+        return False
+    if not isinstance(prs, list):
+        return False
+    return any(isinstance(p, dict) and p.get("headRefOid") == tip.strip() for p in prs)
 
 
 def _process_start_time(pid: int) -> str:
@@ -361,7 +401,7 @@ def main(tools: AgentTools = TOOLS, config_path: str = CONFIG) -> int:
             tools.discord_post(webhook, render_skip(gate, host), USER_AGENT, log=log)
         return 0
 
-    reusable, why = worktree_is_reusable(repo_dir, path, branch, tools)
+    reusable, why = worktree_is_reusable(repo_dir, path, branch, tools, cfg["REPO"])
     if not reusable:
         # The previous tick left work in flight, so leave the tree alone — removing it is how
         # unlanded work is lost. But it IS a unit failure: the tree stays blocked until a person

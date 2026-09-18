@@ -11,6 +11,7 @@ attribute — see that class's docstring and `ansible/tests/repo/monkeypatch_all
 Run: uv run pytest ansible/roles/setup/renovate_agent/tests/test_prepare_worktree.py
 """
 
+import json
 import os
 import pathlib
 import re
@@ -263,27 +264,82 @@ class TestReusabilityAsksAboutContentNotAncestry:
         assert why == "worktree-renovate-auto holds 1 commit(s) not on origin/master"
 
 
+class _ForgeAndGit:
+    """Answers the git and gh calls branch_content_is_on_master makes, recording them.
+
+    `merge_tree` is what `git merge-tree` returns; `merged_heads` the head SHAs `gh pr list
+    --state merged` reports, or None for a failed gh. The branch tip is always "feedbeef".
+    """
+
+    def __init__(
+        self, merge_tree: tuple[int, str], merged_heads: list[str] | None = None
+    ) -> None:
+        self.merge_tree = merge_tree
+        self.merged_heads = merged_heads
+        self.calls: list[list[str]] = []
+
+    def __call__(self, argv, cwd=None, timeout=120):
+        self.calls.append(argv)
+        if "rev-parse" in argv:
+            return 0, "0123abcd\n" if argv[-1].endswith("^{tree}") else "feedbeef\n"
+        if "merge-tree" in argv:
+            return self.merge_tree
+        if argv[0] == "gh":
+            if self.merged_heads is None:
+                return 1, "gh: auth required"
+            return 0, json.dumps([{"headRefOid": h} for h in self.merged_heads])
+        raise AssertionError(f"unexpected call {argv}")
+
+
 class TestContainmentFailsClosed:
-    """No verdict from git must read as NOT contained: a wrong yes here deletes work."""
-
-    def _tools(self, merge_tree: tuple[int, str]) -> renovate_agent.AgentTools:
-        def fake_run(argv, cwd=None, timeout=120):
-            if "rev-parse" in argv:
-                return 0, "0123abcd\n"
-            if "merge-tree" in argv:
-                return merge_tree
-            raise AssertionError(f"unexpected call {argv}")
-
-        return _tools(fake_run)
+    """No verdict from git or the forge must read as NOT contained: a wrong yes deletes work."""
 
     def test_master_tree_as_the_merge_result_is_contained(self) -> None:
-        tools = self._tools((0, "0123abcd\n"))
-        assert renovate_agent.branch_content_is_on_master("/r", "b", tools)
+        tools = _tools(_ForgeAndGit((0, "0123abcd\n")))
+        assert renovate_agent.branch_content_is_on_master("/r", "b", tools, "o/r")
 
-    def test_a_conflicting_merge_tree_is_not_contained(self) -> None:
-        tools = self._tools((1, "0123abcd\nCONFLICT (content): a.txt\n"))
-        assert not renovate_agent.branch_content_is_on_master("/r", "b", tools)
+    def test_a_conflicting_merge_tree_with_no_merged_pr_is_not_contained(self) -> None:
+        run = _ForgeAndGit(
+            (1, "0123abcd\nCONFLICT (content): a.txt\n"), merged_heads=[]
+        )
+        assert not renovate_agent.branch_content_is_on_master(
+            "/r", "b", _tools(run), "o/r"
+        )
 
     def test_empty_merge_tree_output_is_not_contained(self) -> None:
-        tools = self._tools((0, ""))
-        assert not renovate_agent.branch_content_is_on_master("/r", "b", tools)
+        run = _ForgeAndGit((0, ""), merged_heads=[])
+        assert not renovate_agent.branch_content_is_on_master(
+            "/r", "b", _tools(run), "o/r"
+        )
+
+
+class TestTheForgeSettlesADriftedSquash:
+    """The live tree #2014 found was already past merge-tree: master had drifted into a
+    conflict on base-pin-history.tsv, so `merge-tree` exits 1. Only the forge knows it merged
+    PR #1812 from that tip. Matching is on the head SHA — the branch name is reused every tick.
+    """
+
+    _CONFLICT = (1, "0123abcd\nCONFLICT (content): a.txt\n")
+
+    def test_a_merged_pr_at_this_tip_is_contained(self) -> None:
+        run = _ForgeAndGit(self._CONFLICT, merged_heads=["feedbeef"])
+        assert renovate_agent.branch_content_is_on_master("/r", "b", _tools(run), "o/r")
+        gh = next(c for c in run.calls if c[0] == "gh")
+        assert gh[gh.index("--repo") + 1] == "o/r" and gh[gh.index("--head") + 1] == "b"
+
+    def test_a_merged_pr_from_an_older_tip_is_not_contained(self) -> None:
+        run = _ForgeAndGit(self._CONFLICT, merged_heads=["00000000"])
+        assert not renovate_agent.branch_content_is_on_master(
+            "/r", "b", _tools(run), "o/r"
+        )
+
+    def test_a_failed_gh_is_not_contained(self) -> None:
+        run = _ForgeAndGit(self._CONFLICT, merged_heads=None)
+        assert not renovate_agent.branch_content_is_on_master(
+            "/r", "b", _tools(run), "o/r"
+        )
+
+    def test_no_repo_slug_never_asks_the_forge(self) -> None:
+        run = _ForgeAndGit(self._CONFLICT, merged_heads=["feedbeef"])
+        assert not renovate_agent.branch_content_is_on_master("/r", "b", _tools(run))
+        assert not any(c[0] == "gh" for c in run.calls)

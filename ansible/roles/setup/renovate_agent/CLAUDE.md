@@ -142,9 +142,13 @@ as PR #1812 (#2014). `branch_content_is_on_master` settles it the way
 `scripts/dev/prune_worktrees.py` does: `git merge-tree --write-tree origin/master <branch>`
 producing master's own tree means the branch has nothing master lacks. A revert-only branch
 is still refused (merging it changes master's tree), and no verdict — a conflict with master's
-drift, empty output — reads as not contained. The pruner's fourth layer, asking the forge
-which head it merged, is deliberately not ported: a drifted conflict now pages through
-`OnFailure` instead of skipping silently, which is the point of the non-zero exit.
+drift, empty output — reads as not contained by `merge-tree`. That conflict case is the
+pruner's fourth layer and is ported too (`branch_tip_was_merged`): `gh pr list --state
+merged --head <branch> --json headRefOid` must name the branch's exact tip. Ported rather
+than left to the page because the very tree #2014 found was already past `merge-tree` —
+master had drifted into a conflict on `n8n-images/base-pin-history.tsv` — so without it the
+fix would have paged daily and still needed the operator's `reset --hard`. The match is on
+the head SHA, never the branch name: the name is reused every tick.
 
 ## The digest measures effect, not completion
 
@@ -170,13 +174,15 @@ unit's `ExecStartPost` beat, and the `Renovate Agent — Alive` push tile in
 `roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2`. The beat fires only when the
 wrapper exited 0, so the tile reports silence and the `OnFailure` alert reports failure.
 
-**A skip that needs a person exits non-zero, so it does not beat.** The beat is
+**A worktree-blocked skip exits non-zero, so it does not beat.** The beat is
 `ExecStartPost`, which runs after ANY exit 0 — a `down` pushed from inside the wrapper on a
-`return 0` path is overwritten by the `up` that follows it. So a worktree-blocked skip
-returns `EXIT_WORKTREE_BLOCKED` instead: no beat, `OnFailure` pages, and the tile expires by
-deadman if nobody clears the tree. Until 2026-09-18 that path returned 0, and the tile stayed
-green through five daily skips (#2014). The quiet no-open-PRs skip is the healthy steady
-state and still exits 0. `test_agent_logic.py::TestSkipExitCodes` pins both.
+`return 0` path is overwritten by the `up` that follows it. So that skip returns
+`EXIT_WORKTREE_BLOCKED` instead: no beat, `OnFailure` pages, and the tile expires by deadman
+if nobody clears the tree. Until 2026-09-18 that path returned 0, and the tile stayed green
+through five daily skips (#2014). The two other skips still exit 0: the quiet no-open-PRs
+skip is the healthy steady state, and the GitOps-hold skip is alarmed by the deployer's own
+`GitOps Status` tile, which this one need not duplicate.
+`test_agent_logic.py::TestSkipExitCodes` pins the blocked and the quiet case.
 
 **A crash also pushes its own `down`, carrying the exception text** (`report_crash`, called
 from the `__main__` guard). Silence plus an `OnFailure` page was not enough: the tile went
