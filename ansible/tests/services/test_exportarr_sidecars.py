@@ -104,6 +104,26 @@ def test_the_sidecar_has_no_readiness_probe():
             )
 
 
+def test_the_sidecar_cpu_limit_covers_a_scrape_burst():
+    """The cap is sized against the CFS quota per period, not the average rate (#2017).
+
+    The sidecar does its work in one burst per scrape, so a limit that looks like 500x the
+    24h mean can still throttle every scrape: at 100m sonarr's sidecar hit the quota in
+    ~48% of periods. 500m is the smallest shared value whose 50ms-per-period quota covers
+    sonarr's measured 25-86ms burst; the comment in the macro carries the measurement.
+    """
+    for role, _, doc in _docs():
+        if doc.get("kind") != "Deployment":
+            continue
+        for container in doc["spec"]["template"]["spec"].get("containers", []):
+            if container.get("name") != "exportarr":
+                continue
+            assert container["resources"]["limits"]["cpu"] == "500m", (
+                f"{role}'s exportarr cpu limit moved -- re-measure the CFS throttle ratio "
+                "before changing it; a mean-based justification is how 100m shipped"
+            )
+
+
 def test_every_arr_service_exposes_the_metrics_port():
     """Not needed by the scrape (Prometheus dials the pod), but needed by everything else.
 
