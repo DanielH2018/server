@@ -535,6 +535,60 @@
     state: started
   become: true
 
+# 9. APT TIMERS (the largest scheduled burst on the box, pinned to the quiet hour)
+- name: Create the drop-in directories for the apt timers
+  tags: [apt-timers]
+  ansible.builtin.file:
+    path: "/etc/systemd/system/{{ item.unit }}.d"
+    state: directory
+    mode: "0755"
+  loop: "{{ optimize_pi_apt_timers }}"
+  loop_control:
+    label: "{{ item.unit }}"
+  become: true
+
+- name: Pin the apt timers to the quiet hour, once a day
+  tags: [apt-timers]
+  # Ubuntu's apt-daily.timer is `*-*-* 6,18:00` with RandomizedDelaySec=12h, so it fires
+  # twice a day at any hour, and apt-daily-upgrade.timer is 06:00 plus up to an hour. On
+  # 2026-09-18 the 15:05Z firing ran `apt-get -d dist-upgrade` for four minutes at 57 MB RSS:
+  # memory PSI `full avg10` 45%, load 9.9, an RCU stall in the journal — on a 456 MB host
+  # that keeps 10-25 MB free, the shape of the 2026-08-29 incident (#2007). The engine
+  # packages are held (docker_install), so the download half serves the rest of the system.
+  # 04:20 and 05:20 sit in the one window nothing else here uses: the midnight cluster
+  # (log2ram-daily 23:55, logrotate, dpkg-db-backup, sysstat-summary 00:07) is over, man-db
+  # runs 01-03, and the next thing is the 06:00 hour. The order stays update, then upgrade.
+  # The empty `OnCalendar=` clears the packaged schedule; without it systemd keeps both.
+  ansible.builtin.copy:
+    dest: "/etc/systemd/system/{{ item.unit }}.d/quiet-hour.conf"
+    content: |
+      # Managed by Ansible (roles/setup/optimize_pi); see that role's tasks/main.yml.
+      [Timer]
+      OnCalendar=
+      OnCalendar=*-*-* {{ item.at }}
+      RandomizedDelaySec=10min
+    mode: "0644"
+    owner: root
+    group: root
+  loop: "{{ optimize_pi_apt_timers }}"
+  loop_control:
+    label: "{{ item.unit }} at {{ item.at }}"
+  become: true
+  register: optimize_pi_apt_timer_dropins
+
+- name: Reload systemd and restart the apt timers so the pinned schedule is read # noqa no-handler
+  tags: [apt-timers]
+  # Restarting a timer reschedules it; it does not start the service.
+  ansible.builtin.systemd:
+    name: "{{ item.unit }}"
+    state: restarted
+    daemon_reload: true
+  loop: "{{ optimize_pi_apt_timers }}"
+  loop_control:
+    label: "{{ item.unit }}"
+  become: true
+  when: optimize_pi_apt_timer_dropins.changed
+
 # The Kuma-push helper both health crons below source is no longer installed here. It moved to
 # the initial_setup role as /usr/local/lib/kuma-push-lib.sh once the cluster's own health crons
 # needed the same six-line curl; initial_setup runs on every host and runs earlier in
