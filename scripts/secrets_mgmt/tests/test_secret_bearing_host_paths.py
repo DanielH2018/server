@@ -39,7 +39,12 @@ from secrets_mgmt.secret_bearing_host_paths import (
 # the derivation has to cover, so a narrowing cannot survive by keeping one of them:
 #   * secret-rotation-audit.sh — the incident the module's docstring records (roles/setup/)
 #   * ups-secondary-health.sh  — setup/nut_host, a role initial_setup.yml alone applies (it sat at
-#     roles/nut_host/ until 2026-09-17, which is the "not just k8s" shape this used to pin)
+#     roles/nut_host/ until 2026-09-17, which is the "not just k8s" shape this used to pin).
+#     Matched on a COMMENT mention: the script renders nothing and reads the endpoint out of
+#     /etc/nut/upsmon.conf at runtime. Kept deliberately — the census errs toward denying, and
+#     narrowing the matcher to Jinja expressions would drop a read-deny and this anchor with it
+#     (#2041). The no_log census (ansible/tests/repo/) matches Jinja-only because a false hit
+#     there demands a task change, not a prompt.
 #   * qbittorrent-prefs-check.sh — a name that is not `*_push_token`, so the census cannot
 #     silently narrow to push-token-shaped matches and still pass
 #   * secret-rotate.sh — the path #1183 narrowed. It used to be reported for `email` as well
