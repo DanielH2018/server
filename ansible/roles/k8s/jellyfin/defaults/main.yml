@@ -134,7 +134,7 @@ jellyfin_k8s_anisync_md5: "0d398377b33c27840c021779497c72dc"
 # `10.11/v1.10.11.23` and `12.0/v12.0.2.8`, two lines maintained in parallel. Take the 10.11
 # line while jellyfin_k8s_image is a 10.11 build; a 12.0 asset declares a targetAbi the loader
 # rejects, silently, exactly as the ani-sync note above describes.
-jellyfin_k8s_introskipper_version: "1.10.11.23"
+jellyfin_k8s_introskipper_version: "1.10.11.24"
 # The zip carries ONLY IntroSkipper.dll — no meta.json, unlike the ani-sync release. The init
 # container writes one from the fields below, so Jellyfin reads the plugin's real GUID and name
 # instead of falling back to a manifest it derives from the directory name (that fallback sets
@@ -146,7 +146,7 @@ jellyfin_k8s_introskipper_guid: "c83d86bb-a1e0-4c35-a113-e2101cf4ee6b"
 # publishes an MD5 there, and this pins the sha256 GitHub itself reports for the asset
 # (`gh release view --repo intro-skipper/intro-skipper 10.11/v1.10.11.23 --json assets`), the
 # same stronger digest headlamp_k8s_plugins uses. Verified against the actual download.
-jellyfin_k8s_introskipper_url: "https://github.com/intro-skipper/intro-skipper/releases/download/10.11/v1.10.11.23/intro-skipper-v1.10.11.23.zip"
+jellyfin_k8s_introskipper_url: "https://github.com/intro-skipper/intro-skipper/releases/download/10.11/v1.10.11.24/intro-skipper-v1.10.11.24.zip"
 jellyfin_k8s_introskipper_sha256: "e882339c4f32ad07cc2975b6aa2adefc5e273c48d04bd0504c4e4960ccadba0a"
 
 # ── Webhook (playback / library events out to HTTP endpoints) ───────────────────────────────
