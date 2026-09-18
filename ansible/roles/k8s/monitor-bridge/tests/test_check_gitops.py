@@ -9,15 +9,12 @@ remediation than a held service deploy, so the message says which it is.
 """
 
 import time
-from pathlib import Path
 
 from dataclasses import replace
 
 import pytest
 
 import checks.gitops
-
-_REPO = Path(__file__).resolve().parents[5]
 
 
 @pytest.mark.parametrize(
@@ -283,21 +280,6 @@ def test_check_gitops_status_reads_the_manual_plane_file(tmp_path, cfg):
     assert "k3s" in msg
 
 
-def test_the_clear_command_matches_the_one_the_deployer_prescribes():
-    """Three surfaces print this command, and they live in three trees that cannot import
-    one another.
-
-    A monitor prescribing a stale one is worse than no monitor: an operator follows it, the
-    marker stays, and the tile pages again six hours later.
-    """
-    import sys
-
-    sys.path.insert(0, str(_REPO / "ansible/roles/setup/gitops_deploy/files"))
-    import deploy_remediation
-
-    assert checks.gitops.MANUAL_PLANE_CLEAR in deploy_remediation.MANUAL_PLANE_CLEAR_CMD
-
-
 # ── consecutive ticks deferred on a busy service lock (issue #1847) ───────────────────────────
 _CONTENTION = "abc123def4567890 sonarr 1000.0 1900.0 2"
 
@@ -363,12 +345,3 @@ def test_check_gitops_status_reads_the_contention_file(tmp_path, cfg):
     ok, msg = checks.gitops.check_gitops_status(cfg)
     assert not ok
     assert "service lock all" in msg
-
-
-def test_the_contention_clear_command_matches_the_one_the_deployer_prescribes():
-    import sys
-
-    sys.path.insert(0, str(_REPO / "ansible/roles/setup/gitops_deploy/files"))
-    import deploy_remediation
-
-    assert checks.gitops.CONTENTION_CLEAR == deploy_remediation.CONTENTION_CLEAR_CMD

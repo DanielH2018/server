@@ -22,6 +22,7 @@
   loop:
     - renovate_agent.py
     - agent_logic.py
+    - gitops_markers.py
   become: true
 
 - name: Install the shared host_lib helper beside the agent
@@ -111,5 +112,7 @@
         src: ansible/roles/setup/renovate_agent/files/renovate_agent.py
       - live: /opt/renovate-agent/agent_logic.py
         src: ansible/roles/setup/renovate_agent/files/agent_logic.py
+      - live: /opt/renovate-agent/gitops_markers.py
+        src: ansible/roles/setup/renovate_agent/files/gitops_markers.py
       - live: /opt/renovate-agent/host_lib.py
         src: ansible/roles/setup/common/files/host_lib.py

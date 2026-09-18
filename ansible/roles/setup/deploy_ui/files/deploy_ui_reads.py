@@ -1,7 +1,8 @@
 """Readers behind the four panels of the deploy UI. Pure parsers, stdlib only.
 
 The daemon runs under `uv run --no-project` on the host interpreter, outside the repo venv,
-so nothing here imports from `scripts/` or `/opt/gitops-deploy`. `land.py`, `probe.py` and
+so nothing here imports from `scripts/` or `/opt/gitops-deploy` — `gitops_markers`, the
+deployer's own marker table, is a generated copy beside this file. `land.py`, `probe.py` and
 `gh` are reached as subprocesses by `deploy_ui.App`; this module turns their text into rows.
 """
 
@@ -11,13 +12,17 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-MARKERS = (
-    "hold_sha",
-    "hold_plane",
-    "last_run",
-    "behind_since",
-    "staging_gate_override",
+import gitops_markers
+
+# The five markers the panels show, by basename — `gitops_markers` is the deployer's own table,
+# copied into this `files/` (its header says how it is kept fresh). The basenames are also the
+# keys `/api/state` serves, which is what the page reads.
+MARKERS = tuple(
+    gitops_markers.MARKERS[m]
+    for m in ("hold", "hold_plane", "last_run", "behind", "staging_override")
 )
+_OVERRIDE = gitops_markers.MARKERS["staging_override"]
+
 _RUN_RE = re.compile(r"\b(land\.py|deploy\.sh|ansible-playbook)\b")
 _PR_RE = re.compile(r"--pr\s+(\d+)")
 _TAGS_RE = re.compile(r"--tags[= ]+(\S+)")
@@ -234,7 +239,7 @@ def read_state(state_dir: Path) -> dict[str, str]:
         except FileNotFoundError:
             st[name] = ""
             continue
-        st[name] = "set" if name == "staging_gate_override" else text.strip()
+        st[name] = "set" if name == _OVERRIDE else text.strip()
     return st
 
 

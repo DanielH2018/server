@@ -30,6 +30,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from agent_logic import OpenPR, decide, delta, parse_run, render_digest, render_skip
+from gitops_markers import MARKERS, STATE_DIR
 from host_lib import atomic_write, discord_post, parse_env_file
 
 # The env override exists so the I/O shell can be exercised end-to-end against a throwaway
@@ -40,9 +41,10 @@ USER_AGENT = "renovate-agent"
 # Distinct from the 1 a failed session returns, so the OnFailure page reads which it was.
 EXIT_WORKTREE_BLOCKED = 2
 
-# Written by gitops_deploy.py. Read, never written, here.
-HOLD_FILE = "/var/lib/gitops-deploy/hold_sha"
-HOLD_PLANE_FILE = "/var/lib/gitops-deploy/hold_plane"
+# Written by gitops_deploy.py. Read, never written, here; the directory and basenames come
+# from `gitops_markers`, the deployer's own table copied beside this file.
+HOLD_FILE = os.path.join(STATE_DIR, MARKERS["hold"])
+HOLD_PLANE_FILE = os.path.join(STATE_DIR, MARKERS["hold_plane"])
 
 
 def log(msg: str) -> None:

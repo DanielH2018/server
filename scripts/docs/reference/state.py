@@ -59,6 +59,7 @@ from lib import yaml_fast
 
 from docs.reference import crons as crons_mod
 from lib.git import git
+from lib.gitops_markers import MARKERS, STATE_DIR
 from lib.repo_paths import REPO, ROLES
 
 LATE_MULTIPLIER = 2
@@ -104,20 +105,20 @@ def _epoch_marker(state_dir: Path, filename: str, outcome_ok: str) -> LoopRun:
     return LoopRun(dt.datetime.fromtimestamp(epoch, dt.timezone.utc), outcome_ok)
 
 
-def gitops_deploy_run(state_dir: Path = Path("/var/lib/gitops-deploy")) -> LoopRun:
+def gitops_deploy_run(state_dir: Path = Path(STATE_DIR)) -> LoopRun:
     """The 10-minute GitOps deploy tick.
 
     Cadence: OnUnitActiveSec in gitops-deploy.timer.j2, from gitops_deploy_tick_interval
     (roles/setup/gitops_deploy/defaults/main.yml:37 = 10min).
     """
-    base = _epoch_marker(state_dir, "last_run", "ticked, no hold")
+    base = _epoch_marker(state_dir, MARKERS["last_run"], "ticked, no hold")
     if base.last_run is None:
         return base
-    hold_sha_path = state_dir / "hold_sha"
+    hold_sha_path = state_dir / MARKERS["hold"]
     if not hold_sha_path.is_file():
         return base
     sha = hold_sha_path.read_text().strip()[:8] or "unknown"
-    plane_path = state_dir / "hold_plane"
+    plane_path = state_dir / MARKERS["hold_plane"]
     plane = (
         plane_path.read_text().strip() if plane_path.is_file() else "a service deploy"
     )
