@@ -29,7 +29,9 @@ Stop conditions, which are outcomes and not failures:
   middleware answers before the backend, traefik's outage leaves the host probes green), so
   the review its denial asks for is a person, and your gated land is not that person. Do not
   merge it, do not land it. Name it in the summary with the command an interactive session
-  runs: `./scripts/deploy_tools/land.sh --pr <n> --since <sha> --arm-merge --await-merge`.
+  runs: `./scripts/deploy_tools/land.sh --pr <n> --since <sha> --arm-merge --await-merge`,
+  where `<sha>` is `origin/master` at the moment that session merges — leave it as the
+  placeholder, since any SHA you write now is stale by then.
 
 For every PR you leave open for a reason other than "ran out of budget" or the
 `k8s_autodeploy: false` rule above, file a finding:
