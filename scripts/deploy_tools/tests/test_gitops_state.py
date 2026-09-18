@@ -41,7 +41,17 @@ def tree_lock(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def run(tree_lock: Path):
+def journal() -> list[tuple[str, gitops_state.ManualPlaneEntry | None]]:
+    """Every (role, dropped line) a clear recorded, in place of the real `logger` line.
+
+    `run` injects it into every test: a real line from a test run would read as an
+    operator's clear (`cleared=true role=k3s`) to the next investigator of this host.
+    """
+    return []
+
+
+@pytest.fixture
+def run(tree_lock: Path, journal):
     """`run(state_dir, *argv)` -> the command's exit code, against the injected lock."""
 
     def _run(state_dir: Path, *args: str) -> int:
@@ -49,6 +59,7 @@ def run(tree_lock: Path):
             ["--state-dir", str(state_dir), *args],
             lock_path=str(tree_lock),
             lock_wait_s=0.05,
+            journal=lambda role, dropped: journal.append((role, dropped)),
         )
 
     return _run
@@ -154,6 +165,80 @@ def test_the_role_is_resolved_through_the_deployers_own_tag_map(marker):
     reader's head.
     """
     assert gitops_state.marker_key("k3s") == "k3s"
+
+
+# ── the journal line a clear leaves (issue #2022) ─────────────────────────────────────────
+def test_a_clear_journals_the_role_and_the_line_it_dropped_and_a_no_op_says_so(
+    marker, run, journal
+):
+    """`k3s` was cleared by hand on 2026-09-18 with its apply still owed, and nothing said
+    who, when, or which merged SHA that silenced: the marker's own truncation is the only
+    write the command made. The journal call is the evidence that write does not leave.
+    """
+    assert run(marker.parent, "clear-manual-plane", "k3s") == 0
+    ((role, dropped),) = journal
+    assert role == "k3s"
+    assert (dropped.origin, dropped.playbook, dropped.at) == (
+        "abc123def4567890",
+        "ansible/k3s-bringup.yml",
+        1000.0,
+    )
+    assert run(marker.parent, "clear-manual-plane", "k3s") == 0
+    assert journal[1] == ("k3s", None), "a second run drops nothing and still says so"
+
+
+def test_a_refused_clear_journals_nothing(marker, tree_lock, run, journal):
+    """The rejecting half: a line claiming a clear that never happened is worse than none."""
+    with gitops_state.tree_lock(str(tree_lock)):
+        assert run(marker.parent, "clear-manual-plane", "k3s") == 1
+    assert journal == []
+
+
+def test_the_journal_line_is_logfmt_under_the_gitops_state_tag(monkeypatch):
+    """`journalctl -t gitops-state` is the verify-by, and the fields are what an
+    investigator matches against an apply: the role, who, from where, and the dropped
+    line's origin and playbook."""
+    monkeypatch.setenv("SUDO_USER", "daniel")
+    argvs: list[list[str]] = []
+    entry = gitops_state.ManualPlaneEntry(
+        "abc123def4567890", "ansible/k3s-bringup.yml", "k3s", 1000.0
+    )
+    gitops_state.journal_clear("k3s", entry, run=lambda argv, **kw: argvs.append(argv))
+    (argv,) = argvs
+    assert argv[:3] == ["logger", "-t", "gitops-state"]
+    fields = argv[3].split()
+    for field in (
+        "event=clear-manual-plane",
+        "role=k3s",
+        "cleared=true",
+        "user=daniel",
+        f"cwd={os.getcwd()}",
+        "origin=abc123def4567890",
+        "playbook=ansible/k3s-bringup.yml",
+        "pending_since=1000",
+    ):
+        assert field in fields
+    gitops_state.journal_clear("k3s", None, run=lambda argv, **kw: argvs.append(argv))
+    assert "cleared=false" in argvs[1][3].split()
+    assert "origin=" not in argvs[1][3]
+
+
+def test_a_failing_logger_does_not_change_the_clears_exit_code(marker, tree_lock):
+    """The clear already happened by the time the journal line is written."""
+
+    def no_logger(argv, **kw):
+        raise FileNotFoundError("logger")
+
+    rc = gitops_state.main(
+        ["--state-dir", str(marker.parent), "clear-manual-plane", "k3s"],
+        lock_path=str(tree_lock),
+        lock_wait_s=0.05,
+        journal=lambda role, dropped: gitops_state.journal_clear(
+            role, dropped, run=no_logger
+        ),
+    )
+    assert rc == 0
+    assert marker.read_text().splitlines() == [COMMON]
 
 
 # ── clear-contention (issue #1847) ────────────────────────────────────────────────────────

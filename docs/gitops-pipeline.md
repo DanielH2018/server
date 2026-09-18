@@ -194,6 +194,10 @@ ansible-playbook ansible/k3s-bringup.yml --tags k3s
 uv run python scripts/deploy_tools/gitops_state.py clear-manual-plane k3s
 ```
 
+The clear writes one line to the journal, `journalctl -t gitops-state`, naming the role, the
+user who ran it, and the origin SHA of the line it dropped. A clear with no apply behind it
+leaves that trace and nothing else.
+
 The deployer clears a line itself when a tick applies that role's own playbook and tag
 (`DeployerState.clear_manual_plane_applied`). No role reaches that today, since the tick runs
 neither `k3s-bringup.yml` nor a playbook for `common`; it is what a role promoted into
