@@ -252,8 +252,8 @@ def test_the_pod_logql_names_the_pi_peer_backup_container():
     # read from the template rather than trusted: a rename there would leave the selector
     # matching nothing and the check permanently green for this pusher.
     names = re.findall(r"^\s+- name: (\S+)\n\s+image:", _CRONJOB.read_text(), re.M)
-    assert names == ["pull"], names
-    assert '{container="pull"}' in checks.logs.SWALLOWED_VERDICTS_POD_LOGQL
+    assert names == ["pi-peer-backup"], names
+    assert '{container="pi-peer-backup"}' in checks.logs.SWALLOWED_VERDICTS_POD_LOGQL
     assert '!= "push failed transiently"' in checks.logs.SWALLOWED_VERDICTS_POD_LOGQL
 
 

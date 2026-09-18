@@ -44,7 +44,7 @@ GATE_RUN=0
 # pi-peer-backup: status=<up|down> <msg>` and kuma-push-lib.sh's `push failed (http=<code>
 # rc=<rc>[ by=kuma]) (status=<up|down>: <msg>)` — because there is no `logger` in this pod and
 # the only reader of push outcomes, monitor-bridge's swallowed-verdicts check, parses that
-# prefix (`verdicts/logs.py`). Alloy labels this container's stdout `{container="pull"}`, not
+# prefix (`verdicts/logs.py`). Alloy labels this container's stdout `{container="pi-peer-backup"}`, not
 # `{job="syslog"}`, and the check reads that stream too (#1943); until 2026-09-18 it logged
 # `kuma push failed (...)` here, so a push Kuma rejected — a token no live tile holds — was
 # invisible. `by=kuma` is a fixed word derived from the content type, never the body.

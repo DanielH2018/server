@@ -135,11 +135,14 @@ def with_log_errors(cfg: Config, ok: bool, msg: str) -> tuple[bool, str]:
 SWALLOWED_VERDICTS_LOGQL = '{job="syslog"} |~ `: (status=(up|down)|push failed \\()` != "push failed transiently"'
 # The one pusher that is a pod, not a host cron: pi-peer-backup's CronJob container (#1943).
 # It has no `logger`, so it echoes its lines in the syslog shape above and Alloy lands them
-# under the pod labels (`job="k8s"`, `container="pull"`), where the selector above cannot see
-# them. A second, narrow selector rather than `job=~"syslog|k8s"`: the line cap below was
-# sized against the syslog stream alone, and every pod log in the cluster would count toward
-# it. The container name is the CronJob's (`pi-peer-backup/templates/cronjob.yaml.j2`).
-SWALLOWED_VERDICTS_POD_LOGQL = '{container="pull"} |~ `: (status=(up|down)|push failed \\()` != "push failed transiently"'
+# under the pod labels (`job="k8s"`, `container="pi-peer-backup"`), where the selector above
+# cannot see them. A second, narrow selector rather than `job=~"syslog|k8s"`: the line cap
+# below was sized against the syslog stream alone, and every pod log in the cluster would
+# count toward it. The container name is the CronJob's (`pi-peer-backup/templates/
+# cronjob.yaml.j2`), and it is the workload's own name rather than a generic one: `container`
+# is the only label here that ties the stream to that pod, so any other workload naming a
+# container the same would be read as this pusher (#1976).
+SWALLOWED_VERDICTS_POD_LOGQL = '{container="pi-peer-backup"} |~ `: (status=(up|down)|push failed \\()` != "push failed transiently"'
 # ~9x the population measured 2026-09-17 (529 lines / 3h) — see bridge.net.loki_lines.
 SWALLOWED_VERDICTS_LIMIT = 5000
 

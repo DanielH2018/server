@@ -29,7 +29,7 @@ spec:
             fsGroup: {{ pgid }}
           priorityClassName: homelab-best-effort
           containers:
-            - name: pull
+            - name: pi-peer-backup
               image: {{ pi_peer_backup_k8s_image }}
               # Built in-cluster to a mutable :latest; explicit for the reason terraria's
               # deployment records.
