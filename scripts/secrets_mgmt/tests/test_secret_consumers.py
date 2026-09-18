@@ -69,6 +69,12 @@ def test_consumer_tags_autofix_bridge_token():
     )
 
 
+def test_consumer_tags_registry_gc_token():
+    # Same shape as autofix-bridge above: k8s/registry renders the pusher, the tile is static
+    # in uptime-kuma, and both deploy from daniel-box in one run (#1937).
+    assert consumer_tags("registry_gc_push_token") == ("registry", "uptime-kuma")
+
+
 def test_every_auto_tier_token_resolves_a_consumer_or_is_known_manual():
     # Registry-driven guard: a new single-host `auto` push token must resolve a consumer_tag
     # (so the unattended weekly `rotate --commit --deploy` cron actually rotates it) or sit in

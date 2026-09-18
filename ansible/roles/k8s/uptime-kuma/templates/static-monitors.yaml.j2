@@ -258,6 +258,18 @@ stringData:
     {"type": "push", "name": "Kubelet CSI Mount Read-Only", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_kubelet_readonly_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
   daniel-box-disk.json: |
     {"type": "push", "name": "daniel-box Disk", "interval": 1200, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ daniel_box_disk_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
+{# The weekly registry garbage collection (k8s/registry role, registry-gc.sh). The script has
+   pushed to `registry_gc_push_token` since it shipped, but the secret and this tile only exist
+   since 2026-09-18 (#1937), so every earlier run logged `registry_gc_push_token not set` and
+   only the off-site healthchecks.io `registry-gc` dead-man saw it. INTERVAL IS DERIVED FROM THE
+   CRONTAB: `20 4 * * 0` (registry_k8s_gc_cron_* in the registry defaults), a 604800s period,
+   plus one hour — the same grace the dead-man carries (docs/healthchecks-io-deadman.md) and
+   comfortably over registry_k8s_gc_deadline_s (1200s) plus the scale-up wait. Gated on the
+   token like the tiles below: an ungated tile sits red from creation until the secret exists. #}
+{% if registry_gc_push_token | default('') %}
+  registry-gc.json: |
+    {"type": "push", "name": "Registry GC", "interval": 608400, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ registry_gc_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+{% endif %}
 {# The host half of the shutdown chain. Its producer is nut_host's root cron, whose cadence and
    this deadline both derive from nut_host_watchdog_interval_minutes, so a schedule change cannot
    leave the tile graced against the old one. Gated on the token like its siblings: an ungated

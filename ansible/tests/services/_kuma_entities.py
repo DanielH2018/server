@@ -50,6 +50,7 @@ STUBS = {
     "cloudflare_ddns_direct_push_token": "t" * 32,
     "longhorn_backup_push_token": "t" * 32,
     "daniel_box_disk_push_token": "t" * 32,
+    "registry_gc_push_token": "t" * 32,
     "claude_otel_push_token": "t" * 32,
     "monitor_bridge_configarr_push_token": "t" * 32,
     "monitor_bridge_janitorr_push_token": "t" * 32,

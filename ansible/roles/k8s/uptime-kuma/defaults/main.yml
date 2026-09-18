@@ -221,6 +221,8 @@ kuma_status_page_groups:
       - "^monitor-bridge-(longhorn-volumes|pvc-fullness|kubelet-readonly)$"
       - "^monitor-bridge-snapshot-headroom$"
       - "^monitor-bridge-(b2-reachable|b2-storage|r2-usage)$"
+      # The registry PVC's only space reclaim (#1937): a storage tile, not an automation one.
+      - "^registry-gc$"
       - "^etcd-"
   - name: Hosts & Power
     match:

@@ -133,6 +133,13 @@ def with_log_errors(cfg: Config, ok: bool, msg: str) -> tuple[bool, str]:
 # and the one the Pi's promtail gives its health.log (alerts.py's `SYSLOG_ALERT_LOGQL` reads the
 # same stream).
 SWALLOWED_VERDICTS_LOGQL = '{job="syslog"} |~ `: (status=(up|down)|push failed \\()` != "push failed transiently"'
+# The one pusher that is a pod, not a host cron: pi-peer-backup's CronJob container (#1943).
+# It has no `logger`, so it echoes its lines in the syslog shape above and Alloy lands them
+# under the pod labels (`job="k8s"`, `container="pull"`), where the selector above cannot see
+# them. A second, narrow selector rather than `job=~"syslog|k8s"`: the line cap below was
+# sized against the syslog stream alone, and every pod log in the cluster would count toward
+# it. The container name is the CronJob's (`pi-peer-backup/templates/cronjob.yaml.j2`).
+SWALLOWED_VERDICTS_POD_LOGQL = '{container="pull"} |~ `: (status=(up|down)|push failed \\()` != "push failed transiently"'
 # ~9x the population measured 2026-09-17 (529 lines / 3h) — see bridge.net.loki_lines.
 SWALLOWED_VERDICTS_LIMIT = 5000
 
@@ -161,11 +168,23 @@ def check_swallowed_verdicts(cfg: Config) -> tuple[bool, str]:
             "swallowed-verdict scan unavailable (%s) — Loki Reachable owns a Loki fault"
             % e,
         )
-    return swallowed_verdicts(
-        lines,
+    # Its own try: a failure here costs the one pod pusher's coverage for a cycle, not the
+    # syslog arm's, and the message says so rather than reading clean.
+    pod_note = ""
+    try:
+        pod_lines = bridge.net.loki_lines(
+            cfg, SWALLOWED_VERDICTS_POD_LOGQL, window_s, SWALLOWED_VERDICTS_LIMIT
+        )
+    except Exception as e:
+        pod_lines = []
+        pod_note = " (pod-stream fetch unavailable: %s)" % e
+    # The verdict keeps the newest line per tag by timestamp, so the merge needs no ordering.
+    ok, msg = swallowed_verdicts(
+        lines + pod_lines,
         "%dh" % (window_s // 3600) if window_s % 3600 == 0 else "%ds" % window_s,
-        truncated=len(lines) >= SWALLOWED_VERDICTS_LIMIT,
+        truncated=max(len(lines), len(pod_lines)) >= SWALLOWED_VERDICTS_LIMIT,
     )
+    return ok, msg + pod_note
 
 
 # Kuma's own failed-send lines, from its container log (#1891, #1895). `{container="uptime-kuma"}`

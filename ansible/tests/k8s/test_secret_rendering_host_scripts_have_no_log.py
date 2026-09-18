@@ -36,6 +36,9 @@ KNOWN_SECRET_SCRIPTS = frozenset(
         ("crowdsec", "crowdsec-appsec-verify.sh.j2"),
         ("janitorr", "janitorr-health.sh.j2"),
         ("configarr", "configarr-health.sh.j2"),
+        # Invisible to this census until 2026-09-18: its token was referenced nowhere but the
+        # script, so no registry name matched the body (#1937).
+        ("registry", "registry-gc.sh.j2"),
     }
 )
 

@@ -169,6 +169,12 @@ def consumer_tags(name: str) -> tuple[str, ...]:
         # arr_autoblock_* through the arr-autoblock -> autofix-bridge rename for Kuma history
         # continuity; the consumer is the autofix-bridge deploy tag.)
         pusher = "autofix-bridge"
+    elif name == "registry_gc_push_token":
+        # The k8s/registry role renders the weekly GC cron's script on daniel-box and the tile
+        # is a static entity in k8s/uptime-kuma: two deploy-plane tags, one host, one playbook
+        # run (#1937). Unrouted, the fall-through below drops an auto-tier token out of
+        # unattended rotation while the audit still reports it registered.
+        pusher = "registry"
     else:
         # anything else unrecognised -> manual
         return ()

@@ -21,6 +21,10 @@ registry round trip. See repo-root `CLAUDE.md` for shared conventions.
 - A weekly garbage collection (`gc-job.yaml.j2`, Sunday 04:20) takes the registry
   offline for up to 20 minutes — nothing else reclaims space, and every rebuild pushing
   the same `latest` tag orphans the previous manifest.
+- The GC run reports twice: the `Registry GC` Kuma push tile (`registry_gc_push_token`,
+  static in `k8s/uptime-kuma`, deadline one hour past the weekly period) and the off-site
+  healthchecks.io `registry-gc` dead-man. The token existed nowhere but the script until
+  2026-09-18 (#1937), so before that only the dead-man saw a run.
 - **The four job manifests stage in `/etc/rancher/k3s/manifests/registry-jobs/`, not in this
   role's own manifest directory** (#1669). `k8s/manifests` prunes every file in
   `manifests/registry/` that `manifests_files` does not name, which deleted all four on every

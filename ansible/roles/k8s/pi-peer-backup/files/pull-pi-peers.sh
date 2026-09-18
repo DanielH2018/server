@@ -40,15 +40,39 @@ install -m 0400 /ssh/id "$HOME/.ssh/id"
 GATE_RUN=0
 [[ "${HOSTNAME:-}" == pi-peer-backup-deploy-gate-* ]] && GATE_RUN=1
 
+# The verdict and a failed push are written in the host crons' syslog shape — `<ts> <host>
+# pi-peer-backup: status=<up|down> <msg>` and kuma-push-lib.sh's `push failed (http=<code>
+# rc=<rc>[ by=kuma]) (status=<up|down>: <msg>)` — because there is no `logger` in this pod and
+# the only reader of push outcomes, monitor-bridge's swallowed-verdicts check, parses that
+# prefix (`verdicts/logs.py`). Alloy labels this container's stdout `{container="pull"}`, not
+# `{job="syslog"}`, and the check reads that stream too (#1943); until 2026-09-18 it logged
+# `kuma push failed (...)` here, so a push Kuma rejected — a token no live tile holds — was
+# invisible. `by=kuma` is a fixed word derived from the content type, never the body.
+# busybox `date` has no `-Is`, hence the explicit format.
+report() { # line
+  echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) ${HOSTNAME:-pi-peer-backup} pi-peer-backup: $1"
+}
+
 push() { # status msg
   if [[ "$GATE_RUN" -eq 1 ]]; then
     echo "deploy-gate run — not pushing Kuma/Healthchecks ($1: $2)"
     return
   fi
 
-  curl -fsS -m 10 --get "$KUMA_PUSH_URL" \
-    --data-urlencode "status=$1" --data-urlencode "msg=$2" >/dev/null \
-    || echo "kuma push failed ($1: $2)" >&2
+  report "status=$1 $2"
+  local reply http_code curl_rc ctype by
+  reply=$(curl -sS -m 10 --get "$KUMA_PUSH_URL" \
+    --data-urlencode "status=$1" --data-urlencode "msg=$2" \
+    -o /dev/null -w '%{http_code} %{content_type}') && curl_rc=0 || curl_rc=$?
+  http_code=${reply%% *}
+  ctype=""
+  case "$reply" in *" "*) ctype=${reply#* } ;; esac
+  by=""
+  case "$ctype" in application/json*) by=" by=kuma" ;; esac
+  case "$curl_rc/$http_code" in
+    0/2??) ;;
+    *) report "push failed (http=${http_code} rc=${curl_rc}${by}) (status=$1: $2)" >&2 ;;
+  esac
 
   # Kuma resolves to a Service in this cluster, so a cluster outage silences the push above and
   # the monitor waiting for it — nothing alerts. hc-ping.com is off-site and alerts on the
