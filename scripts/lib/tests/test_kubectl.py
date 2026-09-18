@@ -40,6 +40,7 @@ class _FakeCluster:
     def __init__(self, kubeconfig):
         self.nodes = PROD_NODES
         self.argvs = []
+        self.timeouts = []
         self.stdout = "{}"
         self.returncode = 0
         self.tools = kubectl_lib.Tools(
@@ -50,6 +51,7 @@ class _FakeCluster:
 
     def _run(self, argv, timeout):
         self.argvs.append(argv)
+        self.timeouts.append(timeout)
         if argv[-4:] == ["get", "nodes", "-o", "json"]:
             return subprocess.CompletedProcess(argv, 0, json.dumps(self.nodes), "")
         return subprocess.CompletedProcess(argv, self.returncode, self.stdout, "boom")
@@ -164,6 +166,25 @@ def test_the_identity_read_happens_once_per_process(cluster):
     node_reads = [a for a in cluster.argvs if a[-4:] == ["get", "nodes", "-o", "json"]]
     assert len(node_reads) == 1
     assert len(cluster.argvs) == 4
+
+
+def test_the_identity_read_has_its_own_budget_not_the_callers(cluster):
+    """measure_rollout_gap polls at a 2s budget mid-rollout; `get nodes` must not share it."""
+    cluster.kubectl("prod", "get", "pods", timeout=2.0)
+    identity_timeout, call_timeout = cluster.timeouts
+    assert identity_timeout == kubectl_lib.IDENTITY_TIMEOUT
+    assert call_timeout == 2.0
+
+
+def test_a_failed_identity_read_is_not_cached(cluster):
+    """One slow API-server moment must not become a process-long refusal."""
+    cluster.nodes = {"items": [{"metadata": {"name": "elsewhere"}}]}
+    with pytest.raises(kubectl_lib.WrongCluster, match="cannot confirm"):
+        cluster.kubectl("prod", "get", "pods")
+    cluster.nodes = PROD_NODES
+    assert cluster.kubectl("prod", "get", "pods").returncode == 0
+    node_reads = [a for a in cluster.argvs if a[-4:] == ["get", "nodes", "-o", "json"]]
+    assert len(node_reads) == 2
 
 
 def test_a_missing_binary_or_kubeconfig_is_a_setup_error():
@@ -282,6 +303,12 @@ def test_no_script_outside_the_invoker_builds_a_kubectl_argv():
     argv, which is the thing this module exists to make unnecessary — and any such call
     runs against an unnamed cluster. `"k3s"` is not matched: it is also a role name in a
     path (`roles/setup/k3s`), and `k3s kubectl` cannot be spelled without the second word.
+
+    What this cannot see: a module that imports an argument builder (`k8s_pods_args`) and
+    runs it through its own `subprocess.run` never spells the literal — `monitors.py` was
+    found that way, by an ImportError rather than by the grep. `KNOWN_CALLERS` below is the
+    half that catches a caller leaving the invoker; a new caller that never joined it is the
+    reviewer's to notice.
     """
     offenders = [
         path.relative_to(SCRIPTS).as_posix()

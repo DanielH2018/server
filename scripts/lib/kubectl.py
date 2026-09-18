@@ -137,23 +137,22 @@ def find_tool(name: str) -> str | None:
     return shutil.which(name, path=os.pathsep.join(TOOL_DIRS))
 
 
-def find_kubeconfig(
-    user: Path = USER_KUBECONFIG, k3s: Path = K3S_KUBECONFIG
-) -> Path | None:
+def find_kubeconfig(user: Path | None = None, k3s: Path | None = None) -> Path | None:
     """Pick a kubeconfig this process can actually read.
 
     Returned explicitly and passed as ``--kubeconfig`` rather than left to kubectl's own
     lookup, so the answer does not change with the caller's environment. Readability is
     checked here, not assumed: the k3s default is root-only, and discovering that at exec time
     yields a warning on stderr and an empty result, which reads exactly like a cluster with
-    no deployments.
+    no deployments. `user` and `k3s` override the two default paths, for a test; the
+    module constants are read at call time otherwise.
     """
     candidates = []
     env_path = os.environ.get("KUBECONFIG", "").strip()
     if env_path:
         # KUBECONFIG is a path LIST; kubectl merges the entries left to right.
         candidates.extend(Path(p) for p in env_path.split(os.pathsep) if p)
-    candidates.extend((user, k3s))
+    candidates.extend((user or USER_KUBECONFIG, k3s or K3S_KUBECONFIG))
     for candidate in candidates:
         if os.access(candidate, os.R_OK):
             return candidate
@@ -239,28 +238,37 @@ def _resolve(tools: Tools) -> tuple[str, Path]:
 
 
 # One identity read per (tools, binary, kubeconfig) per process. probe.py runs several kubectl
-# calls per subcommand; the check must cost one `get nodes`, not one per call.
-_SERVED: dict[tuple[Tools, str, str], str | None] = {}
+# calls per subcommand; the check must cost one `get nodes`, not one per call. Only a
+# recognised answer is cached: a read that failed or timed out is retried on the next call,
+# so one slow API-server moment does not turn into a process-long refusal.
+_SERVED: dict[tuple[Tools, str, str], str] = {}
+
+# The identity read's own budget. It is a different question from the caller's query and must
+# not inherit the caller's timeout: measure_rollout_gap polls at a 2s budget while a rollout
+# is in flight, which is exactly when `get nodes` is slowest.
+IDENTITY_TIMEOUT = 30.0
 
 
-def served_cluster(
-    timeout: float | None = 30.0, tools: Tools = DEFAULT_TOOLS
-) -> str | None:
+def served_cluster(tools: Tools = DEFAULT_TOOLS) -> str | None:
     """Which cluster the discovered kubectl reaches, or None when the node read failed."""
     binary, kubeconfig = _resolve(tools)
     key = (tools, binary, str(kubeconfig))
-    if key not in _SERVED:
-        proc = tools.run(
-            kubectl_argv(*nodes_args(), binary=binary, kubeconfig=kubeconfig), timeout
-        )
-        served = None
-        if proc.returncode == 0:
-            try:
-                served = cluster_of(node_names(json.loads(proc.stdout)))
-            except json.JSONDecodeError:
-                served = None
+    if key in _SERVED:
+        return _SERVED[key]
+    argv = kubectl_argv(*nodes_args(), binary=binary, kubeconfig=kubeconfig)
+    try:
+        proc = tools.run(argv, IDENTITY_TIMEOUT)
+    except subprocess.TimeoutExpired, OSError:
+        return None
+    if proc.returncode != 0:
+        return None
+    try:
+        served = cluster_of(node_names(json.loads(proc.stdout)))
+    except json.JSONDecodeError:
+        return None
+    if served is not None:
         _SERVED[key] = served
-    return _SERVED[key]
+    return served
 
 
 def forget_served_cluster() -> None:
@@ -286,7 +294,7 @@ def kubectl(
     """
     if cluster not in CLUSTER_NODES:
         raise ValueError(f"unknown cluster {cluster!r}; one of {sorted(CLUSTER_NODES)}")
-    refusal = cluster_refusal(cluster, served_cluster(timeout=timeout, tools=tools))
+    refusal = cluster_refusal(cluster, served_cluster(tools=tools))
     if refusal:
         raise WrongCluster(refusal)
     binary, kubeconfig = _resolve(tools)
