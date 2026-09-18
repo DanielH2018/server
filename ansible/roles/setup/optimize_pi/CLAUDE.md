@@ -191,13 +191,15 @@ See repo-root `CLAUDE.md` for conventions.
     shared template for order, a present fallback, and the absence of `rotate`.
 
 ## Notable
-- **Handlers live in the playbook, not this role:** `Reboot Pi`, `Restart ZRAM`,
-  `Restart Watchdog`, `Restart earlyoom`, `Restart systemd-journald` are defined in
-  `initial_setup.yml`. The role only `notify:`s them.
-  Adding a new `notify:` here requires a matching handler in that playbook.
-- **ZRAM restart caveat:** the `Restart ZRAM` handler swapoffs the device, faulting
-  everything stored in it back into RAM/file-swap — on a loaded box this grinds for a
-  few minutes (and may trip the Pi Pressure monitor once). Harmless, but prefer quiet
-  hours for zram config changes.
-- GPU/watchdog/Log2Ram changes `notify: Reboot Pi` — expect a reboot when they change.
+- **Handlers live in the playbook, not this role:** `Reboot Pi`, `Restart Watchdog`,
+  `Restart earlyoom`, `Restart systemd-journald` are defined in `initial_setup.yml`. The
+  role only `notify:`s them. Adding a new `notify:` here requires a matching handler in
+  that playbook.
+- **A zram config change reboots the Pi; it is never restarted live.** The `Restart ZRAM`
+  handler that used to do this swapoffs the device onto the SD swapfile, and on this box
+  that takes longer than systemd's 90 s stop timeout: on 2026-09-18 the swapoff was
+  killed half-way, the device stayed active at the old size, the start half failed with
+  the device still in use, the unit read `failed`, and 150 MB of swap sat on the SD card
+  at memory PSI `full avg60` 42% until a reboot. The task comment carries the numbers.
+- GPU/watchdog/Log2Ram/zram changes `notify: Reboot Pi` — expect a reboot when they change.
 - Vars are set inline in the role (`optimize_pi_gpu_memory_mb`, `optimize_pi_zram_percentage`).
