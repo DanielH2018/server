@@ -13,9 +13,17 @@
 # first means no shim is live when dpkg swaps it; the forced recreate afterwards gives every
 # container the new socket.
 #
-# The Compose projects are the ones deploy.yml renders under ~/server/containers/<name>, read
-# as the connecting user (become: false) the way deploy.yml runs them. A project that was
-# never deployed to this host fails the stop task before anything is upgraded.
+# The Compose projects are the ones deploy.yml renders under ~/server/containers/<name>,
+# owned 0600 by the connecting user, so the compose tasks run as that user (become: false)
+# the way deploy.yml runs them. A project that was never deployed to this host fails the stop
+# task before anything is upgraded.
+
+- name: Refuse to move the engine where the Compose projects cannot be reached
+  ansible.builtin.assert:
+    that: has_repo_checkout
+    fail_msg: >-
+      This host has no ~/server checkout, so nothing here can stop or recreate its Compose
+      projects -- and an engine upgrade under running containers is #1961.
 
 - name: Refresh the apt cache
   ansible.builtin.apt:
@@ -23,40 +31,13 @@
     force_apt_get: true
   become: true
 
-- name: Simulate the engine upgrade to learn whether one is pending
-  # --ignore-hold, or the simulation reports the held packages as kept back and nothing as
-  # upgraded. The summary line reads `N upgraded, ...`; only `0 upgraded` means no-op.
-  ansible.builtin.command:
-    argv: "{{ ['apt-get', '--simulate', '--ignore-hold', 'install', '--only-upgrade'] + docker_engine_packages }}"
-  become: true
-  changed_when: false
-  register: docker_install_engine_upgrade_sim
-
-- name: Record whether the engine has an upgrade pending
-  ansible.builtin.set_fact:
-    docker_install_engine_upgrade_pending: "{{ '0 upgraded,' not in docker_install_engine_upgrade_sim.stdout }}"
-
-- name: Report an engine that is already current
-  ansible.builtin.debug:
-    msg: "Docker engine packages are at their candidate versions; nothing stopped, nothing upgraded."
-  when: not docker_install_engine_upgrade_pending
-
-- name: Stop every Compose project before the engine moves
-  # Reverse list order, so a dependent stops before what it depends on.
-  community.docker.docker_compose_v2:
-    project_src: "/home/{{ sys_user }}/server/containers/{{ item.name }}"
-    state: stopped
-  loop: "{{ containers_list | filter_by_platform('docker') | reverse }}"
-  loop_control:
-    label: "{{ item.name }}"
-  become: false
-  when:
-    - docker_install_engine_upgrade_pending
-    - has_repo_checkout
-
 - name: Upgrade the held engine packages
+  # The hold is released before the containers stop, because the pending check needs it
+  # released: it is the apt module's own check mode, whose `changed` is the module's verdict
+  # on whether `state: latest` would install anything. A held package reads as current.
+  # `always:` re-holds on every exit, so a no-op run, a failed apt run and a good one all
+  # leave the engine held.
   become: true
-  when: docker_install_engine_upgrade_pending
   block:
     - name: Release the hold for the upgrade
       ansible.builtin.dpkg_selections:
@@ -64,14 +45,43 @@
         selection: install
       loop: "{{ docker_engine_packages }}"
 
+    - name: Ask apt whether an engine upgrade is pending
+      ansible.builtin.apt:
+        name: "{{ docker_engine_packages }}"
+        state: latest
+        only_upgrade: true
+      check_mode: true
+      register: docker_install_engine_upgrade_probe
+
+    - name: Record whether the engine has an upgrade pending
+      ansible.builtin.set_fact:
+        docker_install_engine_upgrade_pending: "{{ docker_install_engine_upgrade_probe.changed }}"
+
+    - name: Report an engine that is already current
+      ansible.builtin.debug:
+        msg: "Docker engine packages are at their candidate versions; nothing stopped, nothing upgraded."
+      when: not docker_install_engine_upgrade_pending
+
+    - name: Stop every Compose project before the engine moves
+      # Reverse list order, so a dependent stops before what it depends on.
+      community.docker.docker_compose_v2:
+        project_src: "/home/{{ sys_user }}/server/containers/{{ item.name }}"
+        state: stopped
+      loop: "{{ containers_list | default([]) | filter_by_platform('docker') | reverse }}"
+      loop_control:
+        label: "{{ item.name }}"
+      become: false
+      when:
+        - docker_install_engine_upgrade_pending
+        - has_repo_checkout
+
     - name: Upgrade the engine packages
       ansible.builtin.apt:
         name: "{{ docker_engine_packages }}"
         state: latest
         only_upgrade: true
+      when: docker_install_engine_upgrade_pending
   always:
-    # Re-held whether the upgrade succeeded or not: a failed apt run must not leave the engine
-    # exposed to the next dist-upgrade.
     - name: Hold the engine packages again
       ansible.builtin.dpkg_selections:
         name: "{{ item }}"
@@ -97,7 +107,7 @@
     state: present
     recreate: always
     remove_orphans: true
-  loop: "{{ containers_list | filter_by_platform('docker') }}"
+  loop: "{{ containers_list | default([]) | filter_by_platform('docker') }}"
   loop_control:
     label: "{{ item.name }}"
   become: false

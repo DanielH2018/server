@@ -39,9 +39,11 @@ recovery cron (#1910) restarts a stopped container; it cannot recreate one.
 ```
 uv run ansible-playbook ansible/initial_setup.yml --tags docker-engine-upgrade -e target=daniel-pi
 ```
-It refreshes the cache, simulates the upgrade with `--ignore-hold` and no-ops when nothing
-is pending; otherwise it stops every Compose project in `containers_list` (reverse order),
-unholds → `state: latest` → re-holds (in `always:`, so a failed apt run leaves the hold in
+It refuses a host with no `~/server` checkout (nothing could stop or recreate the projects),
+refreshes the cache, unholds, and asks the apt module in check mode whether `state: latest`
+would change anything — the module's own verdict, not a parse of `apt-get -s`. Nothing
+pending: re-hold and report. Otherwise it stops every Compose project in `containers_list`
+(reverse order), upgrades, re-holds (in `always:`, so a failed apt run leaves the hold in
 place), starts `docker.socket`/`docker.service`, and brings every project back with
 `recreate: always` — the recreate the incident needed by hand, so docker-proxy gets the new
 socket. Expect the Pi's containers, wg-easy included, to be down for the length of the apt

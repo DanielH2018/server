@@ -76,10 +76,13 @@
 # The Docker engine must not move under running containers -- and it sits here, BEFORE the
 # dist-upgrade, because docker_install runs after this role in initial_setup.yml, so a hold
 # set there would land one full upgrade too late.
-- name: Read the installed packages (Docker hosts)
+- name: Check whether the Docker engine is installed (Docker hosts)
   tags: [apt-upgrade]
-  ansible.builtin.package_facts:
-    manager: apt
+  # A stat, not package_facts: building the apt cache is the kind of memory spike the Pi
+  # comment above warns about, and it would sit right in front of the heavy apt it guards.
+  ansible.builtin.stat:
+    path: /usr/bin/dockerd
+  register: initial_setup_dockerd_binary
   when: has_docker
 
 - name: Hold the Docker engine packages (Docker hosts)
@@ -92,8 +95,8 @@
   # across a dockerd restart; it does nothing for a shim binary swapped under them. The cost
   # is that a Docker security fix waits for `--tags docker-engine-upgrade`, which stops the
   # containers, upgrades, re-holds and recreates them -- see docker_install's CLAUDE.md.
-  # Only packages dpkg knows are held (dpkg_selections fails on an unknown name), so a fresh
-  # host passes through here and docker_install holds them the moment it installs them.
+  # Guarded on the binary because dpkg_selections fails on a name dpkg has never seen: a
+  # fresh host passes through here and docker_install holds them the moment it installs them.
   ansible.builtin.dpkg_selections:
     name: "{{ item }}"
     selection: hold
@@ -101,7 +104,7 @@
   become: true
   when:
     - has_docker
-    - item in ansible_facts.packages
+    - initial_setup_dockerd_binary.stat.exists
 
 - name: Update and upgrade system packages
   tags: [apt-upgrade]
