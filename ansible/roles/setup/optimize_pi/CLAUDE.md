@@ -13,7 +13,7 @@ See repo-root `CLAUDE.md` for conventions.
   the play's `hosts:` defaults to the local hostname, so `--limit daniel-pi` from the
   server intersects to zero hosts and silently does nothing.
 - **Granular tags** (one section without the whole role): `gpu-mem`, `zram`, `log2ram`,
-  `watchdog`, `debloat`, `earlyoom`, `sd-health`, `recovery-health`, `pi-dns`. The shared prep
+  `watchdog`, `debloat`, `earlyoom`, `apt-timers`, `sd-health`, `recovery-health`, `pi-dns`. The shared prep
   tasks are dual-tagged (`Set variables` →
   `[gpu-mem, zram]`; the config.txt path detection → `[gpu-mem, watchdog]`) so
   tag-scoped runs still get the facts they consume. `log2ram` also covers the log
@@ -85,12 +85,20 @@ See repo-root `CLAUDE.md` for conventions.
    2026-08-29 autoheal create-failure hit a box with no escape hatch at all. `dbus-daemon` is
    in `--avoid` because Docker's cgroup driver is `systemd`: runc asks systemd over dbus for a
    scope on every container start, so killing it leaves nothing able to start a container.
-9. **SD-card health heartbeat** — SD cards have no SMART, so `templates/pi-sd-health.sh.j2`
+9. **apt timers pinned to the quiet hour** (`apt-timers`, `optimize_pi_apt_timers`) — a
+   drop-in per timer sets `apt-daily.timer` to 04:20 and `apt-daily-upgrade.timer` to 05:20
+   UTC, once a day, ±10 min. Ubuntu's default fires the update half twice a day at any hour
+   (`6,18:00` + 12 h random), and on this box each firing is a four-minute 60 MB burst:
+   measured 2026-09-18 at 15:05Z, memory PSI `full avg10` 45%, load 9.9, an RCU stall
+   (#2007). The drop-in clears the packaged schedule with an empty `OnCalendar=` first;
+   `ansible/tests/setup/test_pi_apt_timers_pinned.py` requires that line and the window.
+   The Pi memory budget review of 2026-09-18 has the host's numbers.
+10. **SD-card health heartbeat** — SD cards have no SMART, so `templates/pi-sd-health.sh.j2`
    (cron, */5) pushes the root fs's ext4 `errors_count` to the static "Daniel Pi SD
    Health" Kuma push monitor (uptime-kuma role) via the LAN-only Authelia bypass on
    `^/api/push/` (authelia role). Nonzero count = explicit `down`; a dead cron/host
    trips the 600s push watchdog. Token: `pi_sd_health_push_token` in `secrets.yml`.
-10. **Container-recovery heartbeat** — AutoKuma reads only the SERVER's docker socket, so the
+11. **Container-recovery heartbeat** — AutoKuma reads only the SERVER's docker socket, so the
     Pi's containers have no liveness monitor of their own. The two that die silently are
     `autoheal` (restarts unhealthy containers) and `docker-proxy` (the read-only socket
     Alloy's container-log discovery and glances both read): a dead autoheal stops recovering
@@ -132,7 +140,7 @@ See repo-root `CLAUDE.md` for conventions.
     ENFORCED by `ansible/tests/setup/test_pi_recovery_restarts_and_reports.py`, which renders and
     runs the script against a stub `docker` and a stub `journalctl`.
 
-11. **Both health crons leave a durable record** at `/var/log/pi-health/health.log`, which the
+12. **Both health crons leave a durable record** at `/var/log/pi-health/health.log`, which the
     Pi's promtail tails as its `pi-health` job under `job="syslog"`. Kuma keeps only current
     state, so without this a DOWN that clears is gone — and `probe.py alerts` reconstructs
     episodes from `{job="syslog"} |= "status=down"`. Two independent gaps kept daniel-pi out
@@ -157,7 +165,7 @@ See repo-root `CLAUDE.md` for conventions.
     on the server so AutoKuma provisions the monitor — do both close together or the fresh push
     monitor false-DOWNs until the first heartbeat lands.
 
-12. **Resolver** — a static `/etc/resolv.conf` (rendered from the SHARED
+13. **Resolver** — a static `/etc/resolv.conf` (rendered from the SHARED
     `roles/setup/common/templates/resolv.conf.j2`, the same file daniel-box uses) lists the
     cluster Pi-hole first and a public resolver behind it, and systemd-resolved is disabled.
     Before this the DHCP lease's ISP resolvers answered everything, including every internal

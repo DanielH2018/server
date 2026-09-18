@@ -18,3 +18,12 @@ optimize_pi_dns_servers:
 optimize_pi_dns_timeout: 2
 optimize_pi_dns_attempts: 1
 optimize_pi_dns_options: "timeout:{{ optimize_pi_dns_timeout }} attempts:{{ optimize_pi_dns_attempts }}"
+
+# The apt timers and the daily minute each is pinned to (tasks/main.yml, section 9). Both
+# are UTC, in the window between the midnight cluster and the 06:00 hour, update before
+# upgrade. `at` is the time half of a systemd OnCalendar (`*-*-* <at>`).
+optimize_pi_apt_timers:
+  - unit: apt-daily.timer
+    at: "04:20"
+  - unit: apt-daily-upgrade.timer
+    at: "05:20"
