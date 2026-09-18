@@ -183,6 +183,57 @@ def test_the_deliberate_upgrade_is_never_tagged():
     )
 
 
+UPGRADE_GATE = "docker_install_engine_upgrade"
+MAIN = SETUP_ROLES / "docker_install" / "tasks" / "main.yml"
+DEFAULTS = SETUP_ROLES / "docker_install" / "defaults" / "main.yml"
+
+
+def test_the_deliberate_upgrade_is_gated_by_a_variable_no_tag_reaches():
+    """`never` loses to the inherited role tag (#1998); only a variable gate survives it.
+
+    initial_setup.yml tags the whole role `docker_install`, every task in it inherits that
+    tag, and an explicitly requested tag overrides `never` -- so `--tags docker_install`
+    ran the engine upgrade. The include must carry a `when:` on a variable that defaults
+    to false.
+    """
+    includes = [
+        t
+        for t in load_tasks(INSTALL)
+        if isinstance(t.get("ansible.builtin.include_tasks"), dict)
+        and t["ansible.builtin.include_tasks"].get("file") == ENGINE_UPGRADE.name
+    ]
+    assert includes, "install.yml does not include engine-upgrade.yml"
+    assert UPGRADE_GATE in str(includes[0].get("when", "")), (
+        f"the engine-upgrade include has no `when: {UPGRADE_GATE}` gate; the role tag "
+        "inherits onto it and `--tags docker_install` runs the upgrade"
+    )
+    defaults = yaml_fast.safe_load(DEFAULTS.read_text())
+    assert defaults.get(UPGRADE_GATE) is False, (
+        f"defaults/main.yml must set {UPGRADE_GATE}: false so the gate is closed unless "
+        "the operator opens it with -e"
+    )
+
+
+def test_the_dispatcher_imports_statically_so_granular_tags_reach_their_tasks():
+    """A dynamic include is a task `--tags` judges first; an untagged one is skipped whole.
+
+    `--tags docker-daemon` reached nothing inside install.yml on 2026-09-18 (#1998).
+    Tagging the include would select every task inside it instead. import_tasks inlines
+    them, and each keeps its own tags.
+    """
+    for task in load_tasks(MAIN):
+        assert "ansible.builtin.include_tasks" not in task, (
+            f"main.yml task {task.get('name')!r} uses include_tasks; the granular tags "
+            "inside it are unreachable -- use import_tasks"
+        )
+    imported = {
+        t["ansible.builtin.import_tasks"]
+        for t in load_tasks(MAIN)
+        if "ansible.builtin.import_tasks" in t
+    }
+    assert imported == {INSTALL.name, TEARDOWN.name}, imported
+
+
 # ── The rejecting halves ──────────────────────────────────────────────────────────────────
 
 
