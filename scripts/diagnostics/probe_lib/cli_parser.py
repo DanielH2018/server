@@ -358,4 +358,12 @@ def _build_parser():
             "record at all; exit 1 if any (for a cron -- see issue #947)"
         ),
     )
+    rel.add_argument(
+        "--kuma",
+        action="store_true",
+        help=(
+            "with --stale-only: the same verdict as ONE line grouped by reason, shaped for a "
+            "Kuma push message (bridge.msgfmt); release-staleness-check.sh pushes this"
+        ),
+    )
     return p

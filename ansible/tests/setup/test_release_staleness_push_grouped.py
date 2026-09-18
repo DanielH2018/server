@@ -1,9 +1,11 @@
-"""release-staleness-check pushes the stale services' NAMES, not their reasons (#2013).
+"""release-staleness-check pushes probe.py's `--kuma` line: one line, grouped by reason (#2013).
 
 A refused narrowing marks the whole fleet stale, and the per-service reasons then ran to
 ~7,500 chars — past Discord's 1024-char embed field, so Kuma's DOWN notification was rejected
-with HTTP 400 and reached nobody. The real template is rendered and run under bash with the
-push library, `git` and `uv` stubbed; the assertion is on the msg handed to `kuma_push`.
+with HTTP 400 and reached nobody. The grouping is `bridge.msgfmt`'s and is tested beside it;
+this proves the cron asks for that shape and pushes what it gets, unedited. The real template
+is rendered and run under bash with the push library, `git` and `uv` stubbed; the assertion is
+on the msg handed to `kuma_push`.
 """
 
 import subprocess
@@ -14,10 +16,9 @@ from _helpers import ANSIBLE
 
 TEMPLATE = ANSIBLE / "roles/setup/k3s/templates/release-staleness-check.sh.j2"
 
-STALE_OUTPUT = "\n".join(
-    f"{svc}: changed since applied: ansible/inventory/host_vars/daniel-pi.yml "
-    "[every service: node-exporter was removed from containers_list]"
-    for svc in ("artifacts", "authelia", "bazarr")
+GROUPED = (
+    "3 services stale — host_vars/daniel-pi.yml [every service: node-exporter was removed "
+    "from containers_list] (artifacts, authelia, bazarr). Details: probe.py releases --stale-only"
 )
 
 
@@ -62,12 +63,12 @@ def _run(tmp_path, probe_output, probe_rc):
     return status, msg
 
 
-def test_a_stale_fleet_pushes_the_names_and_a_count(tmp_path):
-    status, msg = _run(tmp_path, STALE_OUTPUT, 1)
-    assert status == "down"
-    assert msg.startswith("3 service(s) stale: artifacts, authelia, bazarr")
-    assert "changed since applied" not in msg
-    assert "probe.py releases --stale-only" in msg
+def test_a_stale_fleet_pushes_the_grouped_line_verbatim(tmp_path):
+    assert _run(tmp_path, GROUPED, 1) == ("down", GROUPED)
+
+
+def test_the_cron_asks_probe_for_the_kuma_shape():
+    assert "releases --stale-only --kuma" in TEMPLATE.read_text()
 
 
 def test_a_clean_fleet_pushes_the_probe_line_verbatim(tmp_path):

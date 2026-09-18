@@ -86,6 +86,30 @@ def test_stale_record_is_flagged():
     assert "stale" in _row(text, "sonarr")
 
 
+def test_stale_kuma_groups_the_fleet_under_one_reason_and_strips_repo_prefixes():
+    reason = (
+        "changed since applied: ansible/inventory/host_vars/daniel-pi.yml [every service: "
+        "node-exporter was removed from containers_list in ansible/inventory/host_vars/daniel-pi.yml]"
+    )
+    stale = {f"svc-{i:02d}": reason for i in range(57)}
+    text, code = pr.format_stale_kuma(stale, missing=["pi-peer-backup"])
+    assert code == 1
+    assert text.startswith(
+        "58 services stale — 2 reasons. host_vars/daniel-pi.yml [every"
+    )
+    assert "ansible/inventory/" not in text
+    assert "changed since applied" not in text
+    assert "no release record (1: pi-peer-backup)" in text
+    assert text.endswith("Details: probe.py releases --stale-only")
+    assert len(text) < 300
+
+
+def test_stale_kuma_is_clean_with_exit_zero_when_nothing_is_stale():
+    text, code = pr.format_stale_kuma({}, missing=[])
+    assert code == 0
+    assert text.startswith("0 services stale")
+
+
 def test_clean_record_ignores_unrelated_stale_entry():
     """`stale` is keyed by service; a flag for a DIFFERENT service must not leak onto this row --
     the false-GREEN this whole feature exists to close would become a false-RED if it did."""
