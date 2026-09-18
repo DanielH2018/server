@@ -8,8 +8,11 @@ loop to auto-tag bookmarks.
 - **Deploy tag:** `--tags "karakeep"`. Route: `karakeep.<domain>`, Authelia — except
   `/api/v1/`, `/api/trpc/` and `/api/assets`, deliberately public (Bearer-token auth; the
   browser extension and mobile app can't pass 2FA, and they speak tRPC, not the REST API).
-  `/api/auth/*` (next-auth's password login) stays behind Authelia: the bypass was `/api/`
-  until #1929, which put the app password alone in front of it on the internet.
+  `/api/auth/*` (next-auth's password login) stays behind Authelia on both names: the bypass
+  was `/api/` until #1929, which put the app password alone in front of it on the internet,
+  and the `.local` monitoring route (homepage's widget, ClientIP-gated to the bridge IP and
+  the pod CIDR) carried the same `/api/` until #2018. It is now `/api/v1/users/me/stats`, the
+  one path the widget reads.
 - **Persists:** `karakeep-data` (`longhorn`, backed up, ~487M) — bookmark library, page
   snapshots, `db.db`. `karakeep-meili` (`longhorn-nobackup`, ~286M) — the search index,
   deliberately unseeded and unbacked-up: it's rebuildable from `db.db` by reindexing.
