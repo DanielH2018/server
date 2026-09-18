@@ -238,3 +238,55 @@ def test_an_inactive_unit_is_cleaned(tmp_path):
         repo, worktree, _stub_bin(tmp_path, f"{tip}\n", unit_active=False)
     )
     assert proc.stdout.strip() == f"removed: {worktree} (already gone)"
+
+
+def _stub_uv(stub_bin):
+    """A `uv` that records its argv and speaks a `kept:` verdict, so the checkout branch is provable.
+
+    The real interpreter leg would run `clean-one` for real; what these tests need is
+    evidence the chain REACHED it, and that it did not reach it for a stub directory.
+    """
+    uv = stub_bin / "uv"
+    uv.write_text(
+        f'#!/bin/sh\necho "$@" >> {stub_bin / "uv-calls"}\necho "kept: by-uv"\n'
+    )
+    uv.chmod(0o755)
+    return stub_bin
+
+
+def test_a_directory_that_is_no_longer_a_checkout_reads_as_gone(tmp_path):
+    """#1948: a worktree removed on exit leaves a `.remember/` stub where the tree was.
+
+    `-e` on that path is true, so the chain used to take the checkout branch and run the
+    script inside a tree that no longer carries one — `python: can't open file`, exit 2,
+    the leg `failed`, and the manifest never converged. The discriminator is the `.git`
+    file every linked worktree carries, not the directory. The stub goes with the tree: a
+    relaunch of the same batch id refuses on `test ! -e <worktree>`.
+    """
+    repo, worktree, tip = _scratch_with_a_gone_worktree(tmp_path)
+    (worktree / ".remember" / "logs").mkdir(parents=True)
+    stub_bin = _stub_uv(_stub_bin(tmp_path, f"{tip}\n"))
+    proc = _run_chain(repo, worktree, stub_bin)
+    assert proc.stdout.strip() == f"removed: {worktree} (already gone)"
+    assert not worktree.exists()
+    assert BRANCH not in _branches(repo)
+    assert str(worktree) not in _registrations(repo)
+    assert not (stub_bin / "uv-calls").exists()
+
+
+def test_a_directory_that_is_still_a_checkout_reaches_clean_one(tmp_path):
+    """The reject half: a live worktree is judged by `clean-one`, never by the shell chain."""
+    repo, worktree, tip = _scratch_with_a_gone_worktree(tmp_path)
+    _git(repo, "worktree", "unlock", str(worktree))
+    _git(repo, "worktree", "remove", "--force", str(worktree))
+    _git(repo, "worktree", "add", "-q", str(worktree), BRANCH)
+    stub_bin = _stub_uv(_stub_bin(tmp_path, f"{tip}\n"))
+    proc = _run_chain(repo, worktree, stub_bin)
+    assert proc.stdout.strip() == "kept: by-uv"
+    assert (stub_bin / "uv-calls").read_text().split()[-3:] == [
+        "clean-one",
+        str(worktree),
+        BRANCH,
+    ]
+    assert worktree.exists()
+    assert BRANCH in _branches(repo)

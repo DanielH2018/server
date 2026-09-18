@@ -203,6 +203,21 @@ def remote_clean_command(b: Batch, repo: str = REPO) -> str:
     and the run manifest was never deleted — the re-run-once-merged flow `clean` itself
     prints could not converge.
 
+    "Absent" is decided by the `.git` file every linked worktree carries, not by the
+    directory (#1948). An agent that removes its own worktree on exit leaves a `.remember/`
+    stub at the same path — a plugin hook writes it into the session's cwd after the tree
+    is gone — so the directory exists while the checkout does not, and a `-e` test on the
+    path sent the chain into the interpreter leg with the same exit 2. Both legs run this
+    one chain, so the local/remote split the issue described was never the difference:
+    the daniel-server batches converged because their directories were fully gone. The
+    stub is removed BEFORE the registration, and not only because `launch` refuses a
+    batch whose path exists and a batch id recurs across runs: `git worktree remove`
+    accepts a registered path whose directory is missing, but refuses one whose directory
+    is present and not a checkout, and a registration that survives keeps `branch -D`
+    refusing — the executing test reads `kept: … not deleted` with the order the other way.
+    `rm -rf` here only ever reaches a path that is not a checkout: the `.git` test that
+    gates the branch is what makes it safe.
+
     The absent-tree branch never prints `removed:` while the branch survives, which is
     Ruling 23's contract: a gone branch is `removed:`, a merged one is deleted first and
     only then `removed:`, and an unmerged one is `kept:`.
@@ -256,7 +271,8 @@ def remote_clean_command(b: Batch, repo: str = REPO) -> str:
         f"else "
         f"systemctl --user reset-failed {b.unit} 2>/dev/null; "
         f"git -C {repo} fetch --quiet origin master && "
-        f"if [ ! -e {wt} ]; then "
+        f"if [ ! -e {wt}/.git ]; then "
+        f"rm -rf {wt}; "
         f"git -C {repo} worktree unlock {wt} 2>/dev/null; "
         f"git -C {repo} worktree remove --force {wt} 2>/dev/null || true; "
         f"if ! git -C {repo} show-ref --verify --quiet refs/heads/{branch}; then "

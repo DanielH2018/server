@@ -33,7 +33,7 @@ def _clean(tools, tmp_path, run_id):
 def test_the_absent_tree_case_is_answered_before_the_interpreter_is_needed():
     """F1: the script the `uv run` leg invokes lives inside the worktree the first pass deleted."""
     cmd = remote_clean_command(B1)
-    assert cmd.index("if [ ! -e /w1 ]") < cmd.index("uv run")
+    assert cmd.index("if [ ! -e /w1/.git ]") < cmd.index("uv run")
     # The three outcomes of a gone tree, in the order the chain tests them.
     assert cmd.count('echo "removed: /w1 (already gone)"') == 2
     assert 'echo "kept: /w1 — branch worktree-fanout-1 unmerged, tree gone"' in cmd
