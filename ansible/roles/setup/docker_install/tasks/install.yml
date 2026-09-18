@@ -104,29 +104,52 @@
 
 - name: Update apt-get repo and cache
   tags: [docker-repo]
+  # Cache refresh only. This task carried `upgrade: true` until 2026-09-18 -- a second full
+  # `apt-get upgrade` on every docker_install run, after initial_setup's dist-upgrade had
+  # already run one, and a second path by which docker-ce moved under running containers
+  # (#1961). initial_setup owns the host upgrade; this role owns the engine's.
   ansible.builtin.apt:
-    upgrade: true
     update_cache: true
     force_apt_get: true
   become: true
 
 - name: Install Docker
   tags: [docker-engine]
+  # docker_engine_packages (group_vars/all.yml) lists docker-ce, -cli, containerd.io and,
+  # explicitly, docker-compose-plugin + docker-buildx-plugin: Compose v2 is the engine behind
+  # community.docker.docker_compose_v2 (our deploy module) and buildx backs its
+  # `build: always`, so they are declared rather than left to docker-ce-cli Recommends
+  # (which apt marks auto-installed and could drop under a stricter apt config).
+  # `state: present` respects the hold below on a host that already has them: the deliberate
+  # bump is engine-upgrade.yml, never this task.
   ansible.builtin.apt:
-    name: "{{ packages }}"
+    name: "{{ docker_engine_packages }}"
     state: present
-  vars:
-    packages:
-      - docker-ce
-      - docker-ce-cli
-      - containerd.io
-      # Compose v2 is the engine behind community.docker.docker_compose_v2 (our
-      # deploy module) and buildx backs its `build: always`. Declared explicitly
-      # so the dependency is reproducible and not left to docker-ce-cli Recommends
-      # (which apt marks auto-installed and could drop under a stricter apt config).
-      - docker-compose-plugin
-      - docker-buildx-plugin
   become: true
+
+- name: Hold the Docker engine packages
+  tags: [docker-engine]
+  # The same hold initial_setup's host-basics sets before its dist-upgrade, repeated here for
+  # the fresh host that had nothing to hold at that point. Held, `apt-get upgrade`,
+  # `dist-upgrade` and unattended-upgrades all leave the engine alone; the only path that
+  # moves it is the tagged upgrade below, which stops the containers first (#1961).
+  ansible.builtin.dpkg_selections:
+    name: "{{ item }}"
+    selection: hold
+  loop: "{{ docker_engine_packages }}"
+  become: true
+
+- name: Upgrade the Docker engine deliberately
+  # `never`: runs only when asked for by name --
+  #   uv run ansible-playbook ansible/initial_setup.yml --tags docker-engine-upgrade -e target=daniel-pi
+  # It stops every Compose project in containers_list, unholds, upgrades, re-holds, and brings
+  # every project back with a forced recreate, so a container that bind-mounts
+  # /var/run/docker.sock (docker-proxy) picks up the socket the restarted daemon created.
+  ansible.builtin.include_tasks:
+    file: engine-upgrade.yml
+    apply:
+      tags: [docker-engine-upgrade]
+  tags: [never, docker-engine-upgrade]
 
 - name: Remove the deprecated linuxserver docker-compose v1 wrapper
   tags: [docker-engine]

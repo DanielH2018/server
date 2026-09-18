@@ -612,6 +612,26 @@ has_gitops: true
 # "already runs Docker" guard; this gate is what stops that recurring, since relying on the
 # operator to remember --tags is what let it happen.
 has_docker: true
+# The Docker engine packages, listed once because three tasks must agree on the set:
+# docker_install installs them, initial_setup's host-basics HOLDS them before its
+# dist-upgrade, and docker_install's teardown unholds them before its purge. An upgrade of
+# docker-ce or containerd.io restarts the daemon and replaces the containerd shim under every
+# running container (the 2026-09-18 Pi incident, #1961), so on a has_docker host these move
+# only through `--tags docker-engine-upgrade`, which stops the containers first and recreates
+# them after. docker-ce-rootless-extras is not here: it arrives as a Recommends of docker-ce,
+# and upgrading it restarts nothing.
+docker_engine_packages:
+  - docker-ce
+  - docker-ce-cli
+  - containerd.io
+  - docker-compose-plugin
+  - docker-buildx-plugin
+# Whether rsyslog runs on this host. True by default -- it writes /var/log/{syslog,auth.log},
+# which promtail ships and the crowdsec node agent tails. daniel-pi overrides this false:
+# optimize_pi MASKS rsyslog there (journald is the log of record, and rsyslog's text logs
+# landed in the RAM-backed log2ram tmpfs), so initial_setup's rsyslog filter tasks skip it --
+# their `Restart rsyslog` handler fails on a masked unit (#1946).
+has_rsyslog: true
 # Whether this host runs VMs under KVM/libvirt. Default OFF and opted into per host, like
 # has_github_cli: exactly one host needs it (daniel-server, for the staging cluster), and a
 # hypervisor appearing on a node by default is a third writer of firewall state next to k3s
