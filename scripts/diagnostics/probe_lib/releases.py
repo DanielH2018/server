@@ -325,8 +325,8 @@ def _deploy_plane_stale(commit, services, changed, context):
     such a change reaches (`narrow_broad`, the DECIDED at `deploy_narrow.denylisted_in`), so
     this asks the same question per path, from the record's commit to `ref`.
 
-    A path no rule can attribute -- a key the play itself reads, a removed `containers_list`
-    entry, `hosts.ini` -- marks EVERY service sharing `commit` stale, with the refusal as the
+    A path no rule can attribute -- a key the play itself reads, `hosts.ini` -- marks EVERY
+    service sharing `commit` stale, with the refusal as the
     reason. That is the tick's own answer to the same doubt: it runs the whole play, which
     re-stamps every service, so the set this marks is exactly the set that run refreshes. It
     is not the #1672 shape -- a deploy-time change flagging the fleet with no tag able to

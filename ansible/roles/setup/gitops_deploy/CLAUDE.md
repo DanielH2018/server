@@ -572,8 +572,8 @@ widen it. Each line is a summary; the section it names carries the detail.
     `ansible/inventory/` or `ansible/templates/` since the record, `releases.py` asks
     `narrow_broad.broad_path_tags` — the per-path rule this deployer's own tick narrows a
     broad range with — which services the change reaches, and names the key or macro in the
-    reason. A path the rules refuse (a key the play reads, `hosts.ini`, a removed
-    `containers_list` entry) marks every service sharing that record stale, which is the set
+    reason. A path the rules refuse (a key the play reads, `hosts.ini`) marks every
+    service sharing that record stale, which is the set
     the tick's full run for that same range re-stamps; so a denied role the broad plane
     applied reads clean, and one it ever left behind reads stale under the change's own name.
     No clearing rule is needed: the next real apply of that service rewrites its record, so the
