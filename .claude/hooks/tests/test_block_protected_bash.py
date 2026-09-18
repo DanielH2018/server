@@ -343,6 +343,16 @@ def test_an_unreadable_command_asks_rather_than_denies(isolation):
     assert "unbalanced-quote" in reason
 
 
+def test_an_apostrophe_inside_a_heredoc_body_is_clean(isolation):
+    """The near miss for the ask above, and this repo's most common command shape: a heredoc
+    body is lifted whole, so a quote inside it is prose, not an unbalanced quote."""
+    worktree, _ = isolation
+    decision, _ = _mod.decide(
+        "python3 - <<'PYEOF'\nprint(\"don't\")\nPYEOF", worktree, session_cwd=worktree
+    )
+    assert decision is None
+
+
 def test_an_unreadable_command_with_no_writer_is_clean(isolation):
     """Arm 3 only ever acts on a redirect, an in-place editor, `tee` or a heredoc, so text
     carrying none of those cannot be an escape however badly it parses."""
