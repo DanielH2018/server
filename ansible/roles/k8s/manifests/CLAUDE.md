@@ -94,6 +94,21 @@ same resources.
   deploying more than one Deployment names the rest in `manifests_extra_rollouts` as
   `{name, image}` pairs (`freshrss`, `prowlarr`, `karakeep`, `n8n` today), where `image` is the
   `k8s/image-builder` name whose rebuild should roll it.
+- **The restart is skipped for a workload the apply itself rolled.** The two `rollout
+  restart` tasks fire on `manifests_render is changed`, which an image-pin bump satisfies —
+  and the apply already rolls that Deployment, because its pod template changed. The second
+  roll costs a spare pod on a `RollingUpdate` Deployment; on a `Recreate` one it deletes the
+  pod the apply just created while the kubelet is mid-pull, and the drain waits out the whole
+  pull before the next ReplicaSet can appear (#1988: karakeep sat `Terminating` for ten
+  minutes and failed the 300s drain). So the role hashes each restart target's
+  `.spec.template` before and after the apply; a target whose hash moved is
+  `manifests_rolled_by_apply[name] == true`, and both the restart tasks and the release
+  record's `rollouts[].restart` skip it. The template, not `.metadata.generation`: generation
+  bumps on any spec change (navidrome and terraria template `replicas:`), and a replicas change
+  beside a ConfigMap change would otherwise skip the restart the ConfigMap needs. A read that
+  fails on either side counts as "not rolled", which restarts — the recoverable direction.
+  `manifests_image_changed` is untouched by this: a rebuild behind a mutable tag leaves the
+  template byte-identical, so the restart is still the only thing that rolls it.
 - **A pod that mounts content outside this cycle needs its own restart trigger.** A
   ConfigMap/Secret a role's template builds with `lookup('file'|'template', ...)` needs
   nothing extra: the lookup's content is IN the rendered manifest, so a content change
@@ -160,7 +175,7 @@ hosts. `tree_dirty` marks a render no commit reproduces.
 `rollouts` names each workload the shared restart tasks would target — the primary
 `manifests_rollout` and every `manifests_extra_rollouts` entry — with `restart: true` where this
 apply queued one (a changed render, a changed secret render, or a rebuilt image, and not a
-workload the apply created). `probe.py health` reads it and fails a `restart: true` workload
+workload the apply created or one the apply itself rolled — `manifests_rolled_by_apply`). `probe.py health` reads it and fails a `restart: true` workload
 whose `restartedAt` is not newer than `applied_at` (#1867). The stamp is included before the
 restart tasks for that comparison to hold, and after the rebuilt-image fact so both read one
 answer; `ansible/tests/k8s/test_release_stamp_rollout_expectation.py` pins the order.

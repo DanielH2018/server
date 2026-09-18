@@ -19,6 +19,9 @@
 #   manifests_image_changed  true when k8s/image-builder rebuilt this service's image to a new
 #                            digest in this play — a rollout trigger in its own right, since a
 #                            rebuild behind a mutable tag leaves the Deployment spec unchanged
+#   manifests_rolled_by_apply  {name: bool} -- which restart targets the apply itself rolled, read
+#                            off each pod template before and after the apply. A true entry
+#                            skips the `rollout restart` for that workload (#1988)
 #
 # Named `manifests` rather than `common` so its ansible-lint variable prefix does not
 # collide with the Docker-side roles/containers/common namespace.
@@ -230,6 +233,56 @@
     volume_revert_service: "{{ manifests_service }}"
     volume_revert_sha: "{{ k8s_restore_snapshot_sha }}"
 
+# The workloads the two shared `rollout restart` tasks below target: the primary and every
+# manifests_extra_rollouts entry. Listed once so the two template fingerprints, the fact they
+# feed and the restart tasks all read one list. A self rollout (manifests_self_rollouts) is not
+# here: its restart is a private task in the owning role, which this role never issues.
+- name: List the workloads the shared restart targets for {{ manifests_service }}
+  tags: [deploy]
+  ansible.builtin.set_fact:
+    manifests_restart_targets: >-
+      {{ ((manifests_rollout | default(manifests_service) | length > 0)
+          | ternary([{'name': manifests_rollout | default(manifests_service),
+                      'kind': manifests_rollout_kind | default('deploy')}], []))
+         + (manifests_extra_rollouts | default([])) }}
+
+# Fingerprint each target's pod template on both sides of the apply. The apply below rolls a
+# workload exactly when it changes `.spec.template` -- the Deployment controller creates a new
+# ReplicaSet for a template change and for nothing else -- so a template that differs across
+# the apply is a workload the apply already rolled, and the `rollout restart` below would be
+# a SECOND roll of it. On a RollingUpdate Deployment that costs a spare pod; on a Recreate one
+# it deletes the pod the apply just created while the kubelet is still pulling its image, and
+# the drain waits out the whole pull before the next ReplicaSet can appear (#1988: karakeep
+# 0.32.0 -> 0.33.2 sat Terminating for ten minutes and failed the 300s drain).
+#
+# `.spec.template`, not `.metadata.generation` as the issue proposed. Generation bumps on ANY
+# spec change -- navidrome and terraria template `replicas:` -- so a replicas change landing
+# beside a ConfigMap change would read as "rolled" and skip the restart the ConfigMap needs.
+# The template is the signal the controller itself acts on.
+#
+# Hashed in the shell so the register carries 64 hex characters, never the template: a pod
+# template can inline an env value, and a register is printed on failure and at -v.
+# `failed_when: false` because a workload this apply creates does not exist yet on the before
+# side; the comparison below treats a non-zero rc on either side as "not rolled by the apply",
+# which restarts -- the recoverable direction, and what the `created` guard already skips.
+# Read-only, so no dry-run or check-mode guard: under both, before equals after.
+- name: Fingerprint the pod templates before the apply for {{ manifests_service }}
+  tags: [deploy]
+  ansible.builtin.shell:
+    cmd: >-
+      set -o pipefail;
+      k3s kubectl -n {{ k8s_namespace }} get {{ item.kind | default(manifests_rollout_kind | default('deploy')) }}/{{ item.name }}
+      -o jsonpath='{.spec.template}' | sha256sum
+    executable: /bin/bash
+  loop: "{{ manifests_restart_targets }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: manifests_template_before
+  become: true
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
 - name: Apply manifests for {{ manifests_service }}
   tags: [deploy]
   # TRAP: `apply` only prunes map keys (Secret/ConfigMap data entries) on objects it has a
@@ -282,6 +335,49 @@
   changed_when: >-
     not (k8s_dry_run | bool)
     and ('created' in manifests_apply.stdout or 'configured' in manifests_apply.stdout)
+
+- name: Fingerprint the pod templates after the apply for {{ manifests_service }}
+  tags: [deploy]
+  # The other half of the before-read above; same command, same loop, same failure handling.
+  ansible.builtin.shell:
+    cmd: >-
+      set -o pipefail;
+      k3s kubectl -n {{ k8s_namespace }} get {{ item.kind | default(manifests_rollout_kind | default('deploy')) }}/{{ item.name }}
+      -o jsonpath='{.spec.template}' | sha256sum
+    executable: /bin/bash
+  loop: "{{ manifests_restart_targets }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: manifests_template_after
+  become: true
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Reset which workloads the apply itself rolled for {{ manifests_service }}
+  tags: [deploy]
+  # set_fact is host-scoped and outlives this role, so without the reset the next service in
+  # the batch would read the previous one's answers -- same reason release_stamp.yml resets
+  # manifests_release_rollouts.
+  ansible.builtin.set_fact:
+    manifests_rolled_by_apply: {}
+
+- name: Note which workloads the apply itself rolled for {{ manifests_service }}
+  tags: [deploy]
+  # name -> bool, read by the two restart tasks and by release_stamp.yml, which must decide
+  # `rollouts[].restart` from the same answer or `probe.py health` fails the skipped restart
+  # as NOT ROLLED. Both reads must have succeeded for a difference to count: a read that
+  # failed on one side only (a transient kubectl error) reads as "not rolled" and restarts.
+  ansible.builtin.set_fact:
+    manifests_rolled_by_apply: >-
+      {{ manifests_rolled_by_apply | combine({
+           item.0.item.name: (
+             (item.0.rc | default(1)) == 0 and (item.1.rc | default(1)) == 0
+             and (item.0.stdout | default('')) != (item.1.stdout | default(''))
+           ) }) }}
+  loop: "{{ manifests_template_before.results | default([]) | zip(manifests_template_after.results | default([])) | list }}"
+  loop_control:
+    label: "{{ item.0.item.name }}"
 
 - name: Reconcile secret keys against the rendered manifests for {{ manifests_service }}
   tags: [deploy]
@@ -338,6 +434,12 @@
   # Skipped when this run created the Deployment: it is already running the new config, and
   # `rollout restart` on one whose pods have not appeared yet races the initial rollout.
   #
+  # Skipped when the apply itself rolled the Deployment -- its pod template changed across the
+  # apply, which is an image-pin bump, a checksum annotation, anything in the template. The
+  # restart would be a second roll of a workload already rolling, and on a Recreate Deployment
+  # it kills the new pod mid-pull (#1988). See the fingerprint tasks above the apply. A
+  # ConfigMap/Secret change leaves the template untouched, so that case still restarts.
+  #
   # The k8s_dry_run guard has to be explicit rather than falling out of the change conditions
   # below: a dry run renders into a FRESH temp dir every time, so manifests_render is always
   # `changed` and this would restart the live Deployment on every dry run.
@@ -351,6 +453,7 @@
     - not k8s_dry_run | bool
     - manifests_rollout | default(manifests_service) | length > 0
     - manifests_render is changed or manifests_secret_render is changed or manifests_image_changed
+    - not manifests_rolled_by_apply.get(manifests_rollout | default(manifests_service), false)
     # The apply-output prefix is NOT the kubectl kind: `kubectl apply` prints
     # `deployment.apps/x created` and `daemonset.apps/x created`. Deriving it from the kind
     # keeps the two in step — a mismatch here never matches, so a freshly created workload
@@ -414,6 +517,9 @@
     - not k8s_dry_run | bool
     - manifests_render is changed or manifests_secret_render is changed
       or (item.image | default(item.name)) in (k8s_rebuilt_images | default([]))
+    # Same apply-rolled-it guard as the primary rollout above — karakeep-meilisearch and
+    # freshrss-feed-cache are Recreate too.
+    - not manifests_rolled_by_apply.get(item.name, false)
     # Same apply-output-prefix derivation as the primary rollout above — see that comment.
     # `| default('')` — same guard as the primary rollout above.
     - not (manifests_apply.stdout | default('')) is search(

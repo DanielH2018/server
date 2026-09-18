@@ -59,6 +59,7 @@ BASE = dict(
     manifests_secret_render={"changed": False},
     manifests_apply={"stdout": "deployment.apps/prowlarr configured"},
     k8s_rebuilt_images=[],
+    manifests_rolled_by_apply={},
 )
 
 
@@ -106,6 +107,48 @@ def test_the_stamp_runs_after_the_image_fact_and_before_the_restarts():
     assert image < stamp < restart, names[image : restart + 1]
 
 
+def test_the_template_fingerprints_bracket_the_apply_and_precede_the_stamp():
+    """Order in main.yml: before-read -> apply -> after-read -> rolled-by-apply fact -> stamp.
+    The fact is what the record and the restart tasks read (#1988), so it must be set from a
+    read taken AFTER the apply and BEFORE the record is written; a before-read taken after the
+    apply would never see the template move."""
+    names = [str(t.get("name", "")) for t in walk_tasks(MAIN)]
+
+    def at(prefix):
+        return next(i for i, n in enumerate(names) if n.startswith(prefix))
+
+    before = at("Fingerprint the pod templates before the apply")
+    apply = at("Apply manifests")
+    after = at("Fingerprint the pod templates after the apply")
+    reset = at("Reset which workloads the apply itself rolled")
+    fact = at("Note which workloads the apply itself rolled")
+    stamp = at("Record the applied release")
+    assert before < apply < after < reset < fact < stamp, names[before : stamp + 1]
+
+
+def test_the_template_fingerprints_read_the_template_not_the_generation():
+    """`.metadata.generation` bumps on any spec change — navidrome and terraria template
+    `replicas:` — so a replicas change beside a ConfigMap change would read as rolled and skip
+    the restart the ConfigMap needs. Both reads must hash the pod template, and the same list
+    of targets the restart tasks use."""
+    for side in ("before", "after"):
+        task = task_named(MAIN, f"Fingerprint the pod templates {side} the apply")
+        cmd = task["ansible.builtin.shell"]["cmd"]
+        assert "jsonpath='{.spec.template}'" in cmd, cmd
+        assert ".metadata.generation" not in cmd
+        assert "sha256sum" in cmd, "the register must carry a hash, never the template"
+        assert task["loop"] == "{{ manifests_restart_targets }}"
+        assert task["failed_when"] is False, (
+            "a workload the apply creates has no before side"
+        )
+    replicas = [
+        p
+        for p in (ANSIBLE / "roles/k8s").glob("*/templates/deployment*.j2")
+        if re.search(r"^\s*replicas: \{\{", p.read_text(), re.MULTILINE)
+    ]
+    assert replicas, "the generation trap this test names no longer exists in the tree"
+
+
 def test_the_expectation_reads_the_same_facts_as_the_restart_task():
     """A restart condition that gains an ingredient must reach the record too."""
     restart = task_named(MAIN, "Roll the deployment after a config change")
@@ -114,11 +157,14 @@ def test_the_expectation_reads_the_same_facts_as_the_restart_task():
         "manifests_render is changed",
         "manifests_secret_render is changed",
         "' created'",
+        "manifests_rolled_by_apply.get(",
     ):
         assert ingredient in when, ingredient
         assert ingredient in FACT_EXPR, ingredient
     assert "manifests_image_changed" in when
     assert "k8s_rebuilt_images" in FACT_EXPR
+    extras = task_named(MAIN, "Roll the extra deployments")
+    assert "manifests_rolled_by_apply.get(item.name" in " ".join(extras["when"])
 
 
 def test_a_changed_render_queues_the_primary_and_every_extra():
@@ -151,6 +197,75 @@ def test_a_rebuilt_image_queues_only_the_workload_it_belongs_to():
     )
     assert rollouts["prowlarr"]["restart"] is False
     assert rollouts["flaresolverr"]["restart"] is True
+
+
+def test_a_workload_the_apply_itself_rolled_is_not_expected_to_restart():
+    """The red half of #1988's pair: an image-pin bump changes the render AND the pod
+    template, so the apply rolls prowlarr and no restart is queued for it. flaresolverr's
+    template did not move, so the same render change still restarts it."""
+    rollouts = _rollouts(
+        manifests_rolled_by_apply={"prowlarr": True, "flaresolverr": False}
+    )
+    assert rollouts["prowlarr"]["restart"] is False
+    assert rollouts["flaresolverr"]["restart"] is True
+
+
+def test_a_changed_render_with_an_unchanged_template_is_still_expected_to_restart():
+    """The green half: a ConfigMap-only change leaves every template as it was, which is
+    the case the restart exists for."""
+    rollouts = _rollouts(
+        manifests_rolled_by_apply={"prowlarr": False, "flaresolverr": False}
+    )
+    assert rollouts["prowlarr"]["restart"] is True
+    assert rollouts["flaresolverr"]["restart"] is True
+
+
+def test_a_target_the_fingerprints_never_saw_is_still_expected_to_restart():
+    """A self rollout is not in manifests_restart_targets, so the dict has no key for it;
+    the private restart that rolls it does not read the fact, so the record must not either."""
+    rollouts = _rollouts(manifests_rolled_by_apply={})
+    assert rollouts["prowlarr"]["restart"] is True
+
+
+_ROLLED_TASK = task_named(MAIN, "Note which workloads the apply itself rolled")
+_ROLLED_EXPR = _ROLLED_TASK["ansible.builtin.set_fact"]["manifests_rolled_by_apply"]
+
+
+def _rolled(before, after):
+    """Run the combine loop the way Ansible does, over zipped before/after read results."""
+    acc = {}
+    for pair in zip(before, after, strict=True):
+        acc = render_expr(_ROLLED_EXPR, manifests_rolled_by_apply=acc, item=list(pair))
+    return acc
+
+
+def _read(name, rc=0, stdout="hash-a"):
+    return {"item": {"name": name, "kind": "deploy"}, "rc": rc, "stdout": stdout}
+
+
+def test_a_template_that_moved_across_the_apply_reads_as_rolled():
+    assert _rolled([_read("prowlarr")], [_read("prowlarr", stdout="hash-b")]) == {
+        "prowlarr": True
+    }
+
+
+def test_a_template_that_held_across_the_apply_reads_as_not_rolled():
+    assert _rolled([_read("prowlarr")], [_read("prowlarr")]) == {"prowlarr": False}
+
+
+def test_a_read_that_failed_on_either_side_reads_as_not_rolled():
+    """A missing workload (created by this apply) or a transient kubectl error must fall
+    through to the restart — the recoverable direction — never to a skipped one."""
+    absent = _read("prowlarr", rc=1, stdout="hash-of-empty")
+    assert _rolled([absent], [_read("prowlarr")]) == {"prowlarr": False}
+    assert _rolled([_read("prowlarr")], [absent]) == {"prowlarr": False}
+    skipped = {"item": {"name": "prowlarr"}, "skipped": True}
+    assert _rolled([skipped], [_read("prowlarr")]) == {"prowlarr": False}
+
+
+def test_the_rolled_fact_is_reset_per_service():
+    reset = task_named(MAIN, "Reset which workloads the apply itself rolled")
+    assert reset["ansible.builtin.set_fact"]["manifests_rolled_by_apply"] == {}
 
 
 def test_a_workload_this_apply_created_is_not_expected_to_restart():
