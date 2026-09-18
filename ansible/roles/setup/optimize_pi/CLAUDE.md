@@ -13,7 +13,8 @@ See repo-root `CLAUDE.md` for conventions.
   the play's `hosts:` defaults to the local hostname, so `--limit daniel-pi` from the
   server intersects to zero hosts and silently does nothing.
 - **Granular tags** (one section without the whole role): `gpu-mem`, `zram`, `log2ram`,
-  `watchdog`, `debloat`, `earlyoom`, `apt-timers`, `sd-health`, `recovery-health`, `pi-dns`. The shared prep
+  `watchdog`, `debloat`, `earlyoom`, `apt-timers`, `node-exporter-host`, `sd-health`,
+  `recovery-health`, `pi-dns`. The shared prep
   tasks are dual-tagged (`Set variables` →
   `[gpu-mem, zram]`; the config.txt path detection → `[gpu-mem, watchdog]`) so
   tag-scoped runs still get the facts they consume. `log2ram` also covers the log
@@ -93,12 +94,25 @@ See repo-root `CLAUDE.md` for conventions.
    (#2007). The drop-in clears the packaged schedule with an empty `OnCalendar=` first;
    `ansible/tests/setup/test_pi_apt_timers_pinned.py` requires that line and the window.
    The Pi memory budget review of 2026-09-18 has the host's numbers.
-10. **SD-card health heartbeat** — SD cards have no SMART, so `templates/pi-sd-health.sh.j2`
+10. **node_exporter as a host unit** (`node-exporter-host`, `optimize_pi_node_exporter_*`) —
+    the upstream v1.12.1 arm64 tarball, checksum-pinned, unpacked under `/opt` with
+    `/usr/local/bin/node_exporter` a symlink to the pinned version (a bump moves the link,
+    which restarts `node_exporter.service`), running as the `node_exporter` system user on
+    the LAN IP's port 9100 with the collector flags the container ran, plus a UFW allow
+    from `lan_subnet`. It replaced the `node-exporter` container on 2026-09-18 (#2005;
+    the role is in `roles/containers/archive/`): one containerd shim (~5 MB) fewer on a
+    host that keeps 10-25 MB free, and the one container whose host form changes no
+    decision. `ansible/tests/setup/test_pi_node_exporter_host_unit.py` holds the unit to
+    the archived compose's collector set and the version to the cluster DaemonSet's.
+    Retiring the container is by hand (`docker rm -f node-exporter` and its
+    `containers/node-exporter/` directory) BEFORE the first apply: the container publishes
+    the same IP:port the unit binds.
+11. **SD-card health heartbeat** — SD cards have no SMART, so `templates/pi-sd-health.sh.j2`
    (cron, */5) pushes the root fs's ext4 `errors_count` to the static "Daniel Pi SD
    Health" Kuma push monitor (uptime-kuma role) via the LAN-only Authelia bypass on
    `^/api/push/` (authelia role). Nonzero count = explicit `down`; a dead cron/host
    trips the 600s push watchdog. Token: `pi_sd_health_push_token` in `secrets.yml`.
-11. **Container-recovery heartbeat** — AutoKuma reads only the SERVER's docker socket, so the
+12. **Container-recovery heartbeat** — AutoKuma reads only the SERVER's docker socket, so the
     Pi's containers have no liveness monitor of their own. The two that die silently are
     `autoheal` (restarts unhealthy containers) and `docker-proxy` (the read-only socket
     Alloy's container-log discovery and glances both read): a dead autoheal stops recovering
@@ -140,7 +154,7 @@ See repo-root `CLAUDE.md` for conventions.
     ENFORCED by `ansible/tests/setup/test_pi_recovery_restarts_and_reports.py`, which renders and
     runs the script against a stub `docker` and a stub `journalctl`.
 
-12. **Both health crons leave a durable record** at `/var/log/pi-health/health.log`, which the
+13. **Both health crons leave a durable record** at `/var/log/pi-health/health.log`, which the
     Pi's promtail tails as its `pi-health` job under `job="syslog"`. Kuma keeps only current
     state, so without this a DOWN that clears is gone — and `probe.py alerts` reconstructs
     episodes from `{job="syslog"} |= "status=down"`. Two independent gaps kept daniel-pi out
@@ -165,7 +179,7 @@ See repo-root `CLAUDE.md` for conventions.
     on the server so AutoKuma provisions the monitor — do both close together or the fresh push
     monitor false-DOWNs until the first heartbeat lands.
 
-13. **Resolver** — a static `/etc/resolv.conf` (rendered from the SHARED
+14. **Resolver** — a static `/etc/resolv.conf` (rendered from the SHARED
     `roles/setup/common/templates/resolv.conf.j2`, the same file daniel-box uses) lists the
     cluster Pi-hole first and a public resolver behind it, and systemd-resolved is disabled.
     Before this the DHCP lease's ISP resolvers answered everything, including every internal

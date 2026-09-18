@@ -369,11 +369,11 @@ def test_hosts_never_prints_the_staging_guest(capsys):
         if host in deploy_tags.HOSTS_LAND_SH_NEVER_DEPLOYS
     }
     assert staged == {"daniel-stage"}, "the staging guest no longer declares any tag"
-    assert deploy_tags.main(["hosts", "node-exporter,traefik,authelia"]) == 0
+    assert deploy_tags.main(["hosts", "wg-easy,traefik,authelia"]) == 0
     out = capsys.readouterr().out
     assert "daniel-stage" not in out
     assert out.startswith("daniel-box\t")
-    assert "daniel-pi\tnode-exporter\n" in out
+    assert "daniel-pi\twg-easy\n" in out
 
 
 def test_deploy_logic_importers_do_not_grow_sys_path_per_call():

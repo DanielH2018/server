@@ -99,24 +99,19 @@ containers_list:
     networks:
       # lifecycle-only: reaches docker-proxy-lifecycle (write proxy), not the broad nets
       - lifecycle
-  # Host metrics for the central Prometheus. Until this landed the Pi contributed no time
-  # series at all: the cluster `node` scrape job uses pod discovery, so it covers the two k3s
-  # nodes and structurally cannot reach a host that runs no kubelet. The Pi's only central
-  # signal was check_pi_pressure polling glances, which yields one binary Kuma monitor and
-  # keeps no history — nothing to graph, nothing to alert on a trend.
-  #
-  # `port` is the published metrics port, not a web UI. Nothing routes it: expose_mode is
-  # `lan` on this host, so it binds the LAN IP and Prometheus scrapes it directly.
+  # Host metrics for the central Prometheus are NOT a container here since 2026-09-18:
+  # node_exporter runs as a host unit from roles/setup/optimize_pi (section 10), on the same
+  # LAN IP and port 9100 the container published, so the cluster's `node-pi` scrape job did
+  # not move (#2005; the role is in roles/containers/archive/node-exporter). The Pi's history
+  # still holds: until node-exporter landed here the Pi contributed no time series at all —
+  # the cluster `node` scrape job uses pod discovery, so it covers the two k3s nodes and
+  # structurally cannot reach a host that runs no kubelet.
   #
   # NOTE for whoever adds the next node-exporter host: check_disk and check_mem scan every
   # origin reporting node_*, and this host is excluded from both (HOST_METRIC_ORIGIN_EXCLUDE
   # in monitor-bridge's check.py) because check_pi_pressure already owns Pi disk and memory
   # against thresholds sized for a 456 MB box.
-  - name: node-exporter
-    port: 9100
-    use_authelia: false
-    networks:
-      - proxy
+  #
   # Container logs to loki-homelab. MUST follow docker-proxy: discovery goes through that
   # read-only proxy rather than the raw Docker socket, and it needs the `proxy` network to
   # reach it.

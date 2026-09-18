@@ -1,0 +1,36 @@
+[Unit]
+Description=Prometheus node exporter (host unit; was the node-exporter container until #2005)
+Documentation=https://github.com/prometheus/node_exporter
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=node_exporter
+Group=node_exporter
+# The same collector set the container ran, minus the --path.* remaps a container needed to
+# see the host's /proc, /sys and /. The listen address is the LAN IP, as the container's
+# published port was; a UFW allow in the role admits the LAN to it.
+ExecStart=/usr/local/bin/node_exporter \
+  --web.listen-address={{ server_ip }}:9100 \
+  --collector.filesystem.mount-points-exclude=^/(dev|proc|sys|run|var/lib/docker/.+)($|/) \
+  --no-collector.arp \
+  --no-collector.netclass \
+  --no-collector.textfile \
+  --no-collector.wifi
+Restart=on-failure
+RestartSec=5
+# What the container's cap_drop ALL, read_only rootfs and resources() gave it.
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+MemoryMax=64M
+CPUQuota=50%
+
+[Install]
+WantedBy=multi-user.target
