@@ -75,7 +75,7 @@ loki.write "homelab" {
 // config.v2.json — which a shipper cannot do. Discovery gets the name from the API directly.
 //
 // Through docker-proxy, never the raw socket: the proxy is already on this host serving
-// glances (and this source — the two are its only consumers), it is read-only (POST=0,
+// this source (glances read it too until it retired 2026-09-18), it is read-only (POST=0,
 // EXEC=0), and CONTAINERS=1 covers both the container list and the log stream. Handing a
 // log shipper the bare socket would give it full control of the daemon.
 discovery.docker "pi" {

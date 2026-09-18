@@ -587,13 +587,17 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     ran load5/core >1.7 with healthcheck-timeout storms no other monitor saw.
     **It read the Pi's glances API until 2026-09-18** (#2004), when glances retired: 66 MB
     of anonymous memory on a 456 MB host, for facts node-exporter already exported. The
-    thresholds, the message shape and the Kuma monitor are unchanged; the source moved. What
-    changed with the source is the gating: this check is in `PROM_DEPENDENT` and in
-    `EXPORTER_DEPENDENT["node-pi"]` now, so a Prometheus outage or a dead Pi node-exporter
-    suppresses it rather than paging it a second time, and it LEFT `STARTUP_GRACE` — the two
-    sets must stay disjoint, and its source is no longer a reach-out the reboot transient
-    reaches. An absent series while Prometheus answers pages, because a Pi whose exporter
-    stopped reporting is a Pi nothing is watching. Empty `PI_ORIGIN` = disabled (stays up).
+    thresholds and the Kuma monitor are unchanged; the source moved, and with it the fs arm
+    gained the vfat `/boot/firmware` partition, which glances' container view never saw —
+    the same fault Root Disk watches `/boot` for on the nodes. The healthy message names
+    the fullest device (`disk /dev/mmcblk0p1 37%`) because a bare percentage reads as the
+    SD card. What changed with the source is the gating: this check is in `PROM_DEPENDENT`
+    and in `EXPORTER_DEPENDENT["node-pi"]` now, so a Prometheus outage or a dead Pi
+    node-exporter suppresses it rather than paging it a second time, and it LEFT
+    `STARTUP_GRACE` — the two sets must stay disjoint, and its source is no longer a
+    reach-out the reboot transient reaches. An absent series while Prometheus answers pages,
+    because a Pi whose exporter stopped reporting is a Pi nothing is watching. Empty
+    `PI_ORIGIN` = disabled (stays up).
     **This check still owns Pi disk and memory.** `HOST_METRIC_ORIGIN_EXCLUDE` keeps
     daniel-pi out of the Memory/Root Disk queries (`host_metric_sel`), so they stay two-host
     checks and this one stays the single source of truth for Pi pressure. Dropping the
