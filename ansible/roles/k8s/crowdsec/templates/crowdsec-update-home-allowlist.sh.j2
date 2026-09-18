@@ -93,11 +93,32 @@ PUSH_URL="https://uptime-kuma.local.{{ domain }}/api/push/{{ monitor_bridge_home
 # file rather than as an argv element, because /proc is mounted without hidepid and this runs
 # every 5 minutes — is reproduced inline below, and
 # ansible/tests/setup/test_cron_scripts_publish_via_pr.py enforces it here with no exemption.
+#
+# Amended 2026-09-18 (#1943): the curl flags stay local, but the failure line is the LIBRARY's
+# shape — `push failed (http=<code> rc=<rc>[ by=kuma]) (status=<up|down>: <msg>)` — so
+# monitor-bridge's swallowed-verdicts reader (`verdicts/logs.py`, `_SWALLOWED_RE`) sees this
+# cron the way it sees the library's callers. Until then it logged `kuma push failed (...)`,
+# which matched nothing, so a push Kuma rejected here (a token no live tile holds, #1803)
+# stayed invisible for as long as the two sides disagreed. `-f` is kept for the retry:
+# `--retry-all-errors` only counts an HTTP error as an error under `-f`, and `-w` still
+# prints the code and content type after a failed transfer (measured on curl 8.5.0:
+# `404 application/json; charset=utf-8`, exit 22). `by=kuma` is the fixed word the library
+# derives from an `application/json` content type — Kuma's own rejection — never the body.
 push() { # up|down msg
-  printf 'url = "%s"\n' "$PUSH_URL" |
-    curl -fsS --max-time 10 --retry 6 --retry-all-errors --retry-max-time 60 -G -K - \
-      --data-urlencode "status=$1" --data-urlencode "msg=$2" -o /dev/null \
-    || logger -t crowdsec-home-allowlist "kuma push failed ($1: $2)"
+  local reply http_code curl_rc ctype by
+  reply=$(
+    printf 'url = "%s"\n' "$PUSH_URL" |
+      curl -fsS --max-time 10 --retry 6 --retry-all-errors --retry-max-time 60 -G -K - \
+        --data-urlencode "status=$1" --data-urlencode "msg=$2" \
+        -o /dev/null -w '%{http_code} %{content_type}'
+  ) && curl_rc=0 || curl_rc=$?
+  [ "$curl_rc" -eq 0 ] && return 0
+  http_code=${reply%% *}
+  ctype=""
+  case "$reply" in *" "*) ctype=${reply#* } ;; esac
+  by=""
+  case "$ctype" in application/json*) by=" by=kuma" ;; esac
+  logger -t crowdsec-home-allowlist "push failed (http=${http_code} rc=${curl_rc}${by}) (status=$1: $2)"
 }
 # The `status=down` prefix is load-bearing: `probe.py alerts` reconstructs host-cron episodes
 # from `{job="syslog"} |= "status=down"` (parse_syslog_down_line), so a bare message leaves the

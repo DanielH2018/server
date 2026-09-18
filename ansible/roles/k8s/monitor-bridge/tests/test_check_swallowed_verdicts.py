@@ -6,6 +6,7 @@ input is the lone release-staleness-check http=500 of 2026-09-10 13:01; the nega
 the daniel-box-down burst of 2026-09-09, where every push failed and nothing landed.
 """
 
+import re
 from pathlib import Path
 
 import bridge.net
@@ -197,13 +198,92 @@ def test_hc_routed_tags_are_exactly_the_scripts_that_read_kuma_push_ok():
     assert readers == HC_ROUTED_TAGS, sorted(readers ^ HC_ROUTED_TAGS)
 
 
+def _patch_fetch(monkeypatch, fetch):
+    """The file's one seam onto `bridge.net.loki_lines(cfg, logql, window_s, limit)`."""
+    monkeypatch.setattr(bridge.net, "loki_lines", fetch)
+
+
+def _streams(syslog, pod):
+    """A fetch answering the syslog selector with `syslog` and the pod selector with `pod`."""
+
+    def _lines(cfg, logql, window_s, limit):
+        if logql == checks.logs.SWALLOWED_VERDICTS_LOGQL:
+            return syslog
+        if logql == checks.logs.SWALLOWED_VERDICTS_POD_LOGQL:
+            return pod
+        raise AssertionError("unexpected LogQL: %s" % logql)
+
+    return _lines
+
+
 def test_a_fetch_error_fails_open_and_names_the_owner(monkeypatch, cfg):
     # The Loki gate probes /labels, which stays fast while a range query is what a busy Loki
     # is slow at, so a raise here would page this tile for a slow Loki, not a lost verdict.
     def _raise(*a, **k):
         raise RuntimeError("loki-homelab: timed out")
 
-    monkeypatch.setattr(bridge.net, "loki_lines", _raise)
+    _patch_fetch(monkeypatch, _raise)
     ok, msg = checks.logs.check_swallowed_verdicts(cfg)
     assert ok
     assert "timed out" in msg and "Loki Reachable" in msg
+
+
+# pi-peer-backup's CronJob container, the one pusher that is a pod rather than a host cron
+# (#1943). Its script echoes the syslog shape, host = the pod name, so the reader sees it.
+_POD_H = "2026-09-10T13:05:00Z pi-peer-backup-29312345-x7k2q pi-peer-backup: "
+_POD_RUN_UP = _POD_H + "status=up pulled 2 peer file(s) from daniel-pi"
+_POD_REJECTED = _POD_H + (
+    "push failed (http=404 rc=0 by=kuma) (status=up: pulled 2 peer file(s) from daniel-pi)"
+)
+# The shape the CronJob wrote before #1943, which the reader must still not match: a line
+# it silently read as a verdict would be a second way to be green while blind.
+_POD_PRE_1943 = _POD_H + "kuma push failed (up: pulled 2 peer file(s) from daniel-pi)"
+
+_CRONJOB = (
+    Path(__file__).resolve().parents[2]
+    / "pi-peer-backup"
+    / "templates"
+    / "cronjob.yaml.j2"
+)
+
+
+def test_the_pod_logql_names_the_pi_peer_backup_container():
+    # The container name is the only thing tying the second selector to that CronJob, so it is
+    # read from the template rather than trusted: a rename there would leave the selector
+    # matching nothing and the check permanently green for this pusher.
+    names = re.findall(r"^\s+- name: (\S+)\n\s+image:", _CRONJOB.read_text(), re.M)
+    assert names == ["pull"], names
+    assert '{container="pull"}' in checks.logs.SWALLOWED_VERDICTS_POD_LOGQL
+    assert '!= "push failed transiently"' in checks.logs.SWALLOWED_VERDICTS_POD_LOGQL
+
+
+def test_a_rejected_push_from_the_pod_stream_is_flagged(monkeypatch, cfg):
+    # ACCEPT: the pod stream's lines reach the verdict alongside syslog's.
+    _patch_fetch(
+        monkeypatch,
+        _streams([(1, _SIBLING_RUN)], [(2, _POD_RUN_UP), (3, _POD_REJECTED)]),
+    )
+    ok, msg = checks.logs.check_swallowed_verdicts(cfg)
+    assert not ok
+    assert (
+        "Kuma rejected the push for pi-peer-backup on pi-peer-backup-29312345-x7k2q"
+        in msg
+    )
+
+
+def test_the_pre_1943_pod_line_is_not_read_as_anything(monkeypatch, cfg):
+    # REJECT (the pair): the old shape parses to nothing, so it neither pages nor counts as a
+    # landed sibling.
+    assert parse_push_line(_POD_PRE_1943) is None
+    _patch_fetch(monkeypatch, _streams([(1, _SIBLING_RUN)], [(2, _POD_PRE_1943)]))
+    ok, msg = checks.logs.check_swallowed_verdicts(cfg)
+    assert ok, msg
+    assert "1 tag(s) pushed" in msg
+
+
+def test_a_capped_pod_fetch_reports_truncation_too(monkeypatch, cfg):
+    cap = checks.logs.SWALLOWED_VERDICTS_LIMIT
+    _patch_fetch(monkeypatch, _streams([(1, _SIBLING_RUN)], [(2, _POD_RUN_UP)] * cap))
+    ok, msg = checks.logs.check_swallowed_verdicts(cfg)
+    assert ok
+    assert "hit its line cap" in msg

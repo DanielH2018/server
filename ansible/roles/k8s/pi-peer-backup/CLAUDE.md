@@ -31,6 +31,10 @@ replaced the retired Kopia scope for the Pi.
   (`HC_PING_URL`, slug `pi-peer-backup`) when one is configured: Kuma resolves to a
   Service in this cluster, so a cluster outage silences both the push and the monitor
   waiting for it. See `docs/healthchecks-io-deadman.md`.
+  The script writes its verdict and any failed push to stdout in the host crons' syslog
+  shape (`<ts> <pod> pi-peer-backup: status=… ` / `push failed (http=… rc=…[ by=kuma]) (…)`)
+  so monitor-bridge's Swallowed Push Verdicts check reads this pusher too, through its
+  `{container="pull"}` selector (#1943) — a Kuma-rejected push here pages within one bridge cycle.
   **What the monitor means:** "the nightly 23:30 run happened," not "some run happened
   recently." `k8s/cronjob-gate` runs a one-off Job (`pi-peer-backup-deploy-gate`) on every
   deploy of this role to prove a bumped image still starts; `files/pull-pi-peers.sh`

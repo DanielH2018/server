@@ -1029,7 +1029,13 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     burst of 602 `http=404` lines that #1803 read as this was the other kind — Traefik
     rejecting every router over a missing crowdsec middleware, #1322 — which Traefik 404
     Flood owns.) In `LOKI_DEPENDENT`. A fetch that hits the 5000-line cap says so in the
-    message rather than deciding on the newest part.)
+    message rather than deciding on the newest part. **Two pushers used to bypass the reader**
+    (#1943, fixed 2026-09-18): the crowdsec home-allowlist cron keeps its own curl but now logs
+    the library's line shape, and pi-peer-backup's CronJob — a pod with no `logger` — echoes
+    its `status=` and `push failed (` lines in the syslog prefix shape to stdout, where a
+    second, narrow selector (`SWALLOWED_VERDICTS_POD_LOGQL`, `{container="pull"}`) reads them
+    and the two fetches are merged before the verdict. Not `job=~"syslog|k8s"`: the cap was
+    sized against the syslog stream alone.)
   - **Kuma Notification Delivery** (a notification Kuma tried to send and dropped — added
     2026-09-17, #1891. Kuma logs `Cannot send notification to <name>` and does not retry, so
     the transition or resend behind that line reached nobody: twice during the qbittorrent
