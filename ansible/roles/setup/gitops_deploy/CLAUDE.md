@@ -243,7 +243,14 @@ widen it. Each line is a summary; the section it names carries the detail.
     any refusal (exit 3, a timeout, a crash) runs the full `deploy.yml` this arm always ran.
     The journal says which branch it took on every tick. The rules and what each one refuses
     are in `scripts/deploy_tools/narrow_broad.py`; the `# DECIDED:` at the fallback in
-    `deploy_narrow.py` carries why doubt runs the whole play. A failed narrowed apply writes
+    `deploy_narrow.py` carries why doubt runs the whole play. **The narrowed list is not
+    filtered through `K8S_AUTODEPLOY_DENYLIST`** (issue #1962): the denylist gates promotion
+    into the k8s auto-deploy machinery — snapshot, staging gate, rollback — and the broad
+    plane has none of it, running the plain playbook forward-only the way an operator's
+    `deploy.sh` does; a filter could only reach the narrowed path anyway, since a refused
+    range runs the whole play over every denied role. The `# DECIDED:` on
+    `deploy_narrow.denylisted_in` is the long form, and the journal names the denied tags a
+    narrowed apply includes. A failed narrowed apply writes
     `hold_plane` naming those tags, so *Which apply clears a hold* now has a third shape: a
     narrowed hold is cleared by a full run or by a narrowed run covering its tags, and not by
     a narrowed run naming a different service.

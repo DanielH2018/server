@@ -11,6 +11,11 @@ default is a refusal, so every test written before this slice keeps asserting th
 Run: uv run pytest ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_broad_narrow.py
 """
 
+import dataclasses
+
+import deploy_narrow
+import deploy_tick_types
+
 ORIGIN = "2" * 40
 # A deploy-plane path: inventory is in `_BROAD_DEPLOY_PREFIXES`, and the tick used to run
 # `ansible/deploy.yml` unscoped for it.
@@ -110,3 +115,58 @@ def test_a_crashing_narrowing_still_runs_the_whole_play(gitops_deploy, tick, cap
     assert _playbook_argv(tick)[-1:] == ["ansible/deploy.yml"]
     assert tick.merges == [ORIGIN]
     assert "cannot narrow (ValueError: invalid start byte)" in capsys.readouterr().out
+
+
+def _denylisted_plan(settings, out: str, capsys):
+    """`deploy_narrow.plan` over a deploy-plane range narrowing to `out`, with crowdsec and
+    traefik denylisted; returns the plan and what the journal said."""
+    config = dataclasses.replace(
+        settings, k8s_autodeploy_denylist=frozenset({"crowdsec", "traefik"})
+    )
+    target = deploy_tick_types.TickTarget(
+        local="1" * 40,
+        origin=ORIGIN,
+        hold=None,
+        dirty=False,
+        status="",
+        action="deploy",
+    )
+    plan = deploy_narrow.plan(lambda *_: (0, out), config, target, set())
+    return plan, capsys.readouterr().out
+
+
+def test_a_narrowed_range_applies_its_denylisted_tags_and_names_them(settings, capsys):
+    """The denylist gates k8s auto-deploy promotion, not the broad plane (issue #1962).
+
+    The `# DECIDED:` on `deploy_narrow.denylisted_in` is the reasoning; this pins the
+    behaviour it settles: every tag the range reaches is applied, denied or not, and the
+    journal says which were denied ones. A filter landing here fails this test on purpose.
+    """
+    plan, out = _denylisted_plan(settings, "crowdsec,traefik,radarr", capsys)
+    assert plan == deploy_narrow.BroadPlan(
+        "ansible/deploy.yml", ["crowdsec", "traefik", "radarr"], True
+    )
+    assert "narrow: crowdsec,traefik are denylisted for k8s auto-deploy" in out
+    assert "radarr are denylisted" not in out
+
+
+def test_a_narrowed_range_with_no_denylisted_tag_logs_no_denylist_line(
+    settings, capsys
+):
+    """The rejecting half of the line above: it fires on a denied tag, not on every apply."""
+    plan, out = _denylisted_plan(settings, "radarr,sonarr", capsys)
+    assert plan == deploy_narrow.BroadPlan(
+        "ansible/deploy.yml", ["radarr", "sonarr"], True
+    )
+    assert "denylisted for k8s auto-deploy" not in out
+
+
+def test_the_denylist_decision_is_recorded_where_the_narrowing_reads_it(gitops_src):
+    """The marker names the identifier, so a reader grepping for the denylist finds it.
+
+    Asserts the identifier and the marker, never the paragraph: a reword must not fail this,
+    and a marker moved out of the module that decides must.
+    """
+    text = (gitops_src.parent / "deploy_narrow.py").read_text()
+    assert "K8S_AUTODEPLOY_DENYLIST" in text
+    assert "# DECIDED: the broad plane ignores `K8S_AUTODEPLOY_DENYLIST`" in text
