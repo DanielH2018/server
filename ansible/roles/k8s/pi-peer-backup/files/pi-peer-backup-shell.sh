@@ -39,8 +39,16 @@ n=${#WORDS[@]}
 [[ ${WORDS[0]} == sudo && ${WORDS[1]} == rsync ]] || reject "not sudo rsync"
 [[ ${WORDS[2]} == --server && ${WORDS[3]} == --sender ]] || reject "not a sender"
 [[ ${WORDS[n - 2]} == . && ${WORDS[n - 1]} == "$SRC" ]] || reject "path is not $SRC"
+# A short-option blob is letters, then optionally `e` and the protocol capability list
+# (`e.iLsfxCIvu` in the nightly). The letters before `e` are real options and may not include
+# `s`: `-s` is --secluded-args, which makes rsync re-read the path from the protocol stream
+# and would bypass the pinned SRC below (#2015). The `s` INSIDE the capability list is a
+# capability, not an option, which is why the letters and the list are matched apart — the
+# same split rrsync makes. `e` itself is excluded from the letters so the list is where the
+# blob's first `e` is.
+short_opts='^-[A-Za-df-rt-z]*(e[0-9]*\.[A-Za-z]*)?$'
 for opt in "${WORDS[@]:4:n-6}"; do
-  [[ $opt =~ ^-[A-Za-z.]+$ || $opt =~ ^--timeout=[0-9]+$ ]] || reject "option $opt"
+  [[ $opt != - && $opt =~ $short_opts || $opt =~ ^--timeout=[0-9]+$ ]] || reject "option $opt"
 done
 
 exec sudo rsync --server --sender "${WORDS[@]:4:n-6}" . "$SRC"
