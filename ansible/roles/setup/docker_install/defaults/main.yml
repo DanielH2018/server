@@ -8,3 +8,9 @@
 docker_install_stale_crons:
   - Redeploy ical-proxy
   - Clean stale tdarr transcode cache
+
+# GOGC for dockerd and containerd, written as a systemd drop-in by install.yml. 200 halves
+# the GC cycle rate against Go's default 100, sized for daniel-pi where each cycle faults a
+# swapped-out heap back from zram (the task's comment has the measurements). Set per host
+# in host_vars if a Docker host with RAM to spare ever exists.
+docker_install_go_gc_percent: 200

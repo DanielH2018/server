@@ -30,8 +30,8 @@ See repo-root `CLAUDE.md` for conventions.
 1. **Config path detection** — picks `/boot/firmware/config.txt` (Bookworm) vs
    `/boot/config.txt` (Bullseye).
 2. **GPU memory split** — `gpu_mem=16` to reclaim RAM (headless).
-3. **ZRAM** — installs `zram-tools`; `PERCENT=75` + `ALGO=zstd` (75% is uncompressed
-   *capacity* ~343 MB; zstd's compression makes that cost ≈ what lz4 paid for 50%).
+3. **ZRAM** — installs `zram-tools`; `PERCENT=100` + `ALGO=zstd` (100% is uncompressed
+   *capacity* ~456 MB, raised from 75% on 2026-09-18 when the device was 77% full and 31 MB had spilled to the SD swapfile; the task comment has the numbers).
    **Do not shrink `PERCENT` to reclaim RAM** — the arithmetic runs the other way. Measured
    2026-08-29 from `/sys/block/zram0/mm_stat`: 275.7 MiB stored in 62.4 MiB of physical RAM,
    a **4.61:1** ratio (better than the ~3.5:1 this line assumed), with `mem_used_max` 76.6 MiB
@@ -78,7 +78,7 @@ See repo-root `CLAUDE.md` for conventions.
    **The swap threshold is deliberately non-binding (`-s 100,100`), and that reverses an
    earlier setting.** It read `-s 10`, intending "both memory AND swap exhausted = a true
    spiral". earlyoom's own help states the rule — "both memory and swap must be below
-   minimum for earlyoom to act" — and with 1.37 GB of combined swap (350 MB zram at
+   minimum for earlyoom to act" — and with 1.37 GB of combined swap (456 MB zram, 350 MB when this was measured, at
    priority 100, a 1 GB SD-card swapfile at -2) the swap half was unreachable. Measured
    2026-08-29 across four hours of earlyoom's own report lines: mem avail never left 30-34%,
    free swap never left 77-79%. **The guard was inert for its entire life**, which is why the

@@ -12,7 +12,7 @@ repo-root `CLAUDE.md` and `.claude/rules/docker.md` for conventions.
 - `uv run ansible-playbook ansible/initial_setup.yml --tags "docker_install"`.
 - **Granular tags:** `docker-repo` (APT repo + GPG + the cache refresh),
   `docker-engine` (install + hold + v1-wrapper removal), `docker-group` (user resolution +
-  membership), `docker-daemon` (daemon.json + conditional restart), `docker-networks`.
+  membership), `docker-daemon` (daemon.json and the `GOGC` drop-ins for dockerd and containerd, each with a conditional restart), `docker-networks`.
   `docker-engine-upgrade` is `never`-tagged: it runs only when named (below).
 
 ## The engine is held; `--tags docker-engine-upgrade` is how it moves
@@ -104,6 +104,13 @@ services. Install without uninstall is a one-way door; this is the way back out.
    2026-08-27 — see the comments in `tasks/install.yml`, which is the list that decides.
 
 ## Notable
+- **dockerd and containerd run with `GOGC=200`** (`docker_install_go_gc_percent`, a
+  drop-in per unit under `docker-daemon`). On daniel-pi each GC cycle faults a swapped-out
+  heap back from zram, and the two daemons took 46% of the host's major faults at Go's
+  default; the task's comment in `install.yml` carries the 2026-09-18 measurements and the
+  day-after metric that judges it. Changing the value restarts containerd then Docker —
+  live-restore keeps the containers up, so run it from a LAN session, not over the tunnel,
+  and not in the same hour as another lever from the Pi memory budget review.
 - **`become: false` user resolution (task 3) is deliberate** — under the play's `become: true`,
   `ansible_facts.env.USER` is `root`; the user who actually runs `docker` is the unprivileged
   connecting user, so membership is resolved with `become: false`.
