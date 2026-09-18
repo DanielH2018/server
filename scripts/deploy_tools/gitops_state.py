@@ -17,6 +17,8 @@ So every `clear-manual-plane` run writes one journal line, `logger -t gitops-sta
 the role, the line it dropped and who ran it: `journalctl -t gitops-state` is where a clear
 with no apply behind it leaves its trace (#2022: `k3s` was cleared by hand on 2026-09-18
 with the apply still owed, and the marker's own truncation recorded nothing).
+`clear-contention` writes no such line on purpose: it silences no page, and the tick
+rewrites that marker itself on its next undeferred run.
 
 This is not a path the deployer takes. Its own reverse is
 `DeployerState.clear_manual_plane_applied`, which fires when a tick applies the role's real
