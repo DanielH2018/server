@@ -76,6 +76,11 @@ def test_the_live_limit_has_headroom_and_a_cap_above_it() -> None:
 
 
 def test_the_shipped_triple_is_clean() -> None:
+    assert gomemlimit_problem("88MiB", "128M", 100) is None
+
+
+def test_the_2026_09_03_triple_is_clean() -> None:
+    """The GOGC=50 pairing that ran 2026-09-03 to 2026-09-18, before #1967 raised the goal."""
     assert gomemlimit_problem("72MiB", "96M", 50) is None
 
 

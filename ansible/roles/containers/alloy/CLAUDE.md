@@ -26,8 +26,10 @@ verdict lines to loki-homelab. See repo-root `CLAUDE.md` for shared conventions.
   against the 96 MiB (100.7 MB) `resources()` cap and a 72 MiB GOMEMLIMIT.
   `go_memstats_sys_bytes` read 96.3 MB at the same time. #1944 settled what that peak is
   (2026-09-18): the top of the GC sawtooth, sampled 1,440 times a day. The live heap is
-  38 MB, not the 19 MiB the sizing assumed, so GOGC=50 sets a 58 MB heap goal and the Go
-  runtime's total reaches the 72 MiB GOMEMLIMIT at the top of every cycle. Nothing
+  38 MB, not the 19 MiB the sizing assumed, so GOGC=50 set a 58 MB heap goal and the Go
+  runtime's total reached the 72 MiB GOMEMLIMIT at the top of every cycle; since #1967
+  (2026-09-18) GOGC=100 sets a 78 MB goal under an 88 MiB limit and a 128M cap, so the
+  peak is ~20 MB higher and the heap is faulted back in half as often. Nothing
   scheduled drives it, and there is no removable cause: what fills the 38 MB is unmeasured
   and pprof is off by decision. The compose template's GOMEMLIMIT and `resources()`
   comments carry the numbers, and `ansible/tests/services/test_alloy_pi_gomemlimit_headroom.py`
@@ -42,9 +44,9 @@ verdict lines to loki-homelab. See repo-root `CLAUDE.md` for shared conventions.
   dockerd stops answering, `pi-recovery-health` (`roles/setup/optimize_pi`) appends the
   newest non-info `journalctl -u docker` lines to its own DOWN record, which the
   `pi_health` source here already ships. To revisit the reader, first make room for it —
-  `GOGC=25` takes ~10 MB off every peak, and the compose template says what that costs
-  (measured 2026-09-18: no reduction in its major-fault share, the `DECIDED:` marker at the
-  `GOGC` line) —
+  a lower `GOGC` takes ~10 MB off every peak per halving, and the compose template's
+  `DECIDED:` marker at the `GOGC` line says what that costs on this host (the heap is
+  faulted back from zram once per cycle, so every halving of GOGC doubles the faults) —
   then measure RSS for a week and delete `test_the_journal_is_not_shipped` in the same PR.
   The test is the enforcement for this decision.
 - **No healthcheck, on purpose.** The image ships no HTTP client, so a `wget` probe fails to
