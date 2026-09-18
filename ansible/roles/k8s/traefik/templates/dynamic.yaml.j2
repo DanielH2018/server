@@ -34,33 +34,63 @@ spec:
     customFrameOptionsValue: SAMEORIGIN
     customRequestHeaders:
       X-Forwarded-Proto: https
+{#
+  Two limiter profiles, each rendered TWICE: once keyed on the connection's remote address
+  (the plain name) and once keyed on the client Cloudflare forwarded (`-proxied`). Which one a
+  router attaches is decided by its Host rule, not by the service:
+
+    Host(`x.{{ domain }}`)        Cloudflare-proxied. The connection is FROM a Cloudflare edge,
+                                  so the remote address is the edge and Traefik's default
+                                  keying shares one bucket between every client behind it —
+                                  a guessing loop against one route throttled every other
+                                  client on that edge, and the attacker rotated edges (#1955).
+                                  `ipStrategy.depth: 1` keys on the rightmost X-Forwarded-For
+                                  entry, which Cloudflare APPENDS (a client-supplied XFF is
+                                  left in front of it), and the entrypoint keeps XFF only from
+                                  `forwardedHeaders.trustedIPs`, so a direct client cannot
+                                  choose its key.
+    Host(`x.local.{{ domain }}`)  Direct. `*.local.` is DNS-only (a public resolver returns the
+                                  MetalLB VIP) and externalTrafficPolicy: Local preserves the
+                                  client address, so the remote address IS the client. It
+                                  sends no XFF, and Traefik's DepthStrategy returns "" for a
+                                  missing header rather than falling back to the remote
+                                  address — so depth here would pool the whole LAN into one
+                                  bucket. That is why the two hosts are separate Rules with
+                                  separate middlewares (ansible/templates/ingressroute.yml.j2)
+                                  rather than one Rule with one sourceCriterion.
+
+  Not `excludedIPs: cloudflare_ips` (the PoolStrategy): it walks XFF right-to-left skipping
+  the excluded ranges, which is depth 1 with a 22-entry dependency on the range list, and it
+  returns the same "" for a missing header. ENFORCED: ansible/tests/k8s/
+  test_rate_limit_keys_on_the_client.py fails a public Host rule attached to a plain limiter,
+  a `.local.` rule attached to a `-proxied` one, and a Rule mixing the two.
+#}
+{% for profile in [
+     {'name': 'rate-limit', 'average': 300, 'burst': 150,
+      'why': 'The default per-client budget every route carries (ingressroute.yml.j2 attaches it unconditionally).'},
+     {'name': 'rate-limit-public-livesync', 'average': 6000, 'burst': 600,
+      'why': "livesync's replication ceiling (CouchDB sync is extremely chatty — _changes, _revs_diff, _bulk_docs, per-chunk reads; the shared 300/min 429'd a phone mid-pull, 2026-08-06). Referenced by the file-provider token gate (livesync-gate-secret.yaml.j2)."},
+   ] %}
+{% for suffix in ['', '-proxied'] %}
 ---
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
-  name: rate-limit
+  # {{ profile.why }}
+  name: {{ profile.name }}{{ suffix }}
   namespace: {{ k8s_namespace }}
 spec:
   rateLimit:
-    average: 300
-    burst: 150
+    average: {{ profile.average }}
+    burst: {{ profile.burst }}
     period: 1m
----
-apiVersion: traefik.io/v1alpha1
-kind: Middleware
-metadata:
-  # livesync's replication ceiling (CouchDB sync is extremely chatty — _changes,
-  # _revs_diff, _bulk_docs, per-chunk reads; the shared 300/min 429'd a phone mid-pull,
-  # 2026-08-06). Default per-IP keying: requests arrive with real client addresses
-  # (externalTrafficPolicy: Local). Referenced by the file-provider token gate
-  # (livesync-gate-secret.yaml.j2).
-  name: rate-limit-public-livesync
-  namespace: {{ k8s_namespace }}
-spec:
-  rateLimit:
-    average: 6000
-    burst: 600
-    period: 1m
+{% if suffix %}
+    sourceCriterion:
+      ipStrategy:
+        depth: 1
+{% endif %}
+{% endfor %}
+{% endfor %}
 ---
 apiVersion: traefik.io/v1alpha1
 kind: Middleware

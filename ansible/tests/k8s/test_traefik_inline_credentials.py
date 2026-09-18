@@ -95,6 +95,7 @@ _REQUIRED_TRAEFIK_MIDDLEWARES = frozenset(
         "authelia/authelia",
         "claude-otel/authelia",
         "claude-otel/rate-limit",
+        "claude-otel/rate-limit-proxied",
         "karakeep/csp-karakeep",
         "longhorn-ui/authelia",
         "longhorn-ui/rate-limit",
@@ -102,7 +103,9 @@ _REQUIRED_TRAEFIK_MIDDLEWARES = frozenset(
         "traefik/crowdsec",
         "traefik/default-headers",
         "traefik/rate-limit",
+        "traefik/rate-limit-proxied",
         "traefik/rate-limit-public-livesync",
+        "traefik/rate-limit-public-livesync-proxied",
     }
 )
 # Floors for the other two kinds in the group — 47 IngressRoutes and 3 TLSOptions render today.

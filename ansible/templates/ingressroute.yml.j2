@@ -41,15 +41,27 @@ spec:
   entryPoints:
     - https
   routes:
+{#
+  One Rule per hostname rather than `Host(public) || Host(local)` in one, because the two
+  hosts need DIFFERENT rate-limit keying and a Rule carries one middleware list. The public
+  name is Cloudflare-proxied, so its connections come from a Cloudflare edge and the limiter
+  must key on the forwarded client (`rate-limit-proxied`); the `.local.` name is DNS-only and
+  reached direct, where the remote address is the client and a forwarded-header key would
+  pool every LAN client into one bucket. The full reasoning is with the middlewares in
+  roles/k8s/traefik/templates/dynamic.yaml.j2 (#1955). Everything but the host and that one
+  middleware is identical between the two, hence the loop.
+
+  The public Rule exists only once k8s_public_route flipped (slice-6 B4, with the CrowdSec
+  bouncer on this edge) AND the caller didn't opt out. The absent rule is the guard — not the
+  absent DNS record: the Cloudflare wildcard resolves ANY name. `public=false` is for
+  infrastructure APIs that must never face the internet whatever the flag says — the CrowdSec
+  LAPI is the standing example.
+#}
+{% for host, rate_limit in ([(hostname ~ '.' ~ domain, 'rate-limit-proxied')] if k8s_public_route and public else []) + [(hostname ~ '.local.' ~ domain, 'rate-limit')] %}
     - kind: Rule
-      # The public Host rule exists only once k8s_public_route flipped (slice-6 B4, with the
-      # CrowdSec bouncer on this edge) AND the caller didn't opt out. The absent rule is the
-      # guard — not the absent DNS record: the Cloudflare wildcard resolves ANY name.
-      # `public=false` is for infrastructure APIs that must never face the internet whatever
-      # the flag says — the CrowdSec LAPI is the standing example.
-      match: "{% if k8s_public_route and public %}Host(`{{ hostname }}.{{ domain }}`) || {% endif %}Host(`{{ hostname }}.local.{{ domain }}`)"
+      match: "Host(`{{ host }}`)"
       middlewares:
-        - name: rate-limit
+        - name: {{ rate_limit }}
 {% if authelia %}
         - name: authelia
 {% endif %}
@@ -59,6 +71,7 @@ spec:
       services:
         - name: {{ name }}
           port: {{ port }}
+{% endfor %}
 {#
   `k8s_tls_cert_resolver` is empty on a cluster with no ACME resolver, and then Traefik serves
   its own default self-signed certificate. The `tls:` key itself is NEVER conditional: without
@@ -106,7 +119,8 @@ spec:
       match: "Host(`{{ hostname }}.{{ domain }}`) && PathPrefix(`{{ prefix }}`)"
       priority: 100
       middlewares:
-        - name: rate-limit
+        # The proxied keying: this Rule matches the public name only (see the loop above).
+        - name: rate-limit-proxied
       services:
         - name: {{ name }}
           port: {{ port }}
