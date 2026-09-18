@@ -36,7 +36,6 @@ PATCHED = frozenset(
         "fetch",
         "k8s_namespace",
         "metallb_vip",
-        "pi_ip",
         "sops_extract",
     }
 )

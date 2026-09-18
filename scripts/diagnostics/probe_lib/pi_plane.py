@@ -75,10 +75,6 @@ def format_pi_targets(declared, active_targets):
     reported MISSING and fails the gate — dividing the Pi's own live set by itself (the
     `monitors` mistake `kuma-drift` exists to not repeat) would read a scrape config with a
     silently dropped job as 100% healthy.
-
-    glances is deliberately not in `declared`: it has no Prometheus job anywhere in this repo
-    (probe.py polls its own JSON API directly, at `pi <subpath>`) — that is a fact about the
-    scrape config, not a gap this check should paper over by inventing one.
     """
     live = {
         t.get("scrapePool"): t
@@ -111,11 +107,7 @@ def format_pi_targets(declared, active_targets):
     ]
     up = len(declared) - len(missing) - len(down)
     head = f"{up}/{len(declared)} daniel-pi targets up"
-    note = (
-        "  (glances is polled directly via `probe.py pi <path>`, not scraped by "
-        "Prometheus — no job declares it)"
-    )
-    text = "\n".join([head, *lines, note])
+    text = "\n".join([head, *lines])
     return text, 1 if missing or down else 0
 
 

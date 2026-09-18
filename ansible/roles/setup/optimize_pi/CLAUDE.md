@@ -115,9 +115,9 @@ See repo-root `CLAUDE.md` for conventions.
 12. **Container-recovery heartbeat** — AutoKuma reads only the SERVER's docker socket, so the
     Pi's containers have no liveness monitor of their own. The two that die silently are
     `autoheal` (restarts unhealthy containers) and `docker-proxy` (the read-only socket
-    Alloy's container-log discovery and glances both read): a dead autoheal stops recovering
+    Alloy's container-log discovery reads): a dead autoheal stops recovering
     Pi containers, and a dead docker-proxy stops this host's container logs reaching Loki
-    while Alloy keeps running with zero targets and glances keeps answering its own HTTP.
+    while Alloy keeps running with zero targets.
     `templates/pi-recovery-health.sh.j2` (cron, */5) watches **every container the host
     deploys** — `containers_list`, plus `docker-proxy-lifecycle` (and `-codeserver` under
     `has_code_server`), which are services inside the docker-proxy role's compose file rather

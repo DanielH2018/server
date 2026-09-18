@@ -85,7 +85,7 @@ flowchart TD
     monitoring --- longhorn
 
     subgraph pi["daniel-pi — Docker, LAN-only"]
-      wg[wg-easy] --- glances[Glances · autoheal]
+      wg[wg-easy] --- alloy[Alloy · autoheal]
     end
 ```
 

@@ -64,8 +64,6 @@ stringData:
   # ── daniel-pi LAN probes ───────────────────────────────────────────────────────────────
   daniel-pi-host.json: |
     {"type": "ping", "name": "Daniel Pi Host", "hostname": "{{ hostvars['daniel-pi'].server_ip }}", "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
-  daniel-pi-glances.json: |
-    {"type": "http", "name": "Daniel Pi Glances", "url": "http://{{ hostvars['daniel-pi'].server_ip }}:61208", "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
   daniel-pi-wg-easy.json: |
     {"type": "http", "name": "Daniel Pi WG Easy", "url": "http://{{ hostvars['daniel-pi'].server_ip }}:51821", "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
   # ── k3s ingress monitors ───────────────────────────────────────────────────────────────

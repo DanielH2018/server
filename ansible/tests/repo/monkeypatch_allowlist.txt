@@ -97,7 +97,7 @@ scripts/dev/tests/test_memory_survey.py 3
 scripts/dev/tests/test_prune_worktrees.py 14
 scripts/diagnostics/tests/_alert_fixtures.py 3
 scripts/diagnostics/tests/test_postflight.py 14
-scripts/diagnostics/tests/test_probe.py 7
+scripts/diagnostics/tests/test_probe.py 6
 scripts/diagnostics/tests/test_probe_alerts.py 5
 scripts/diagnostics/tests/test_probe_b2_ledger.py 7
 scripts/diagnostics/tests/test_probe_ha.py 3
