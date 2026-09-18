@@ -13,7 +13,7 @@
 #
 # Line count is `wc -l` semantics -- the number of newline characters:
 #   wc -l <path>
-.claude/hooks/auto-approve-readonly.py 753
+.claude/hooks/auto-approve-readonly.py 733
 ansible/roles/k8s/artifacts/tests/test_artifact_server.py 519
 ansible/roles/k8s/monitor-bridge/tests/test_check_service.py 598
 ansible/roles/k8s/monitor-bridge/tests/test_host_temp.py 627

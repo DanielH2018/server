@@ -77,7 +77,6 @@ def test_the_shim_census_is_non_vacuous():
     assert set(SHIM_NAMES) == {
         "ansible-lint.sh",
         "auto-approve-readonly.sh",
-        "auto-approve-remote-ssh.sh",
         "auto-mode-bridge.sh",
         "block-footguns.sh",
         "block-protected-bash.sh",

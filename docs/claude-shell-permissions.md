@@ -40,32 +40,32 @@ read-only commands to fit it. Anything that writes or executes still prompts —
   subshells `(…)`, backgrounding `&`. (Note: `awk` programs containing `>` — even as a
   numeric comparison — are conservatively rejected; use a different test or accept the prompt.)
 
-Source of truth: `.claude/hooks/auto-approve-readonly.py` holds the per-command guards and both
-entry points. `.claude/hooks/_readonly_tables.py` holds the allow-list and the ssh gate, except
+Source of truth: `.claude/hooks/auto-approve-readonly.py` holds the per-command guards and the
+PreToolUse entry point. `.claude/hooks/_readonly_tables.py` holds the allow-list and the ssh gate, except
 the trusted-host set and the secret-path pattern — those are `claude_guard.tables`'s
 `TRUSTED_SSH_HOSTS` and `SECRET_PATH_RE`, defined once in the dotfiles `claude_guard` package
 (deployed to `~/.local/share/claude-guard`) and imported through `.claude/hooks/_claude_guard.py`.
 `.claude/hooks/_readonly_shell.py` holds the token splitting and the redirect rules. Tests:
 `.claude/hooks/tests/test_auto_approve_readonly.py`, `.claude/hooks/tests/test_claude_guard_import.py`.
-The ssh case is wired separately, via `auto-approve-remote-ssh.sh` on **PermissionRequest**, because
-Claude Code evaluates `ask` rules whatever a PreToolUse hook returns, so a PreToolUse decision alone
-would never reach an ask-listed command. Registered in **this repo's** `.claude/settings.json:101`
-(`PermissionRequest`, `Bash`) — not the user-level chezmoi `settings.base.json`, contrary to what
-this section previously said.
+The ssh case on **PermissionRequest** is the user-level `guard-permission-request.sh` (the dotfiles
+`claude_guard` judge), and only that, since 2026-09-18 — the paragraph below has the history. Claude
+Code evaluates `ask` rules whatever a PreToolUse hook returns, so a PreToolUse decision alone never
+reaches an ask-listed command; this repo registers no PermissionRequest hook of its own.
 
 **As of 2026-08-16 those PermissionRequest hooks no longer fire in a normal session.** `Bash(ssh:*)`
 and `Bash(curl:*)` were removed from the `ask` tier — they were the largest single source of prompts
 and every one was approved — and it is the *ask rule* that routes a call through a PermissionRequest
 hook. Without it, ssh and curl fall through to the auto-mode classifier, which reads the whole
 command against the hosts and domains named in `autoMode.environment` and makes the narrowing a
-prefix rule never could. `allow-safe-curl.sh` / `allow-readonly-remote.sh` / `auto-approve-remote-ssh.sh`
-are retained because they still carry **Manual mode**, where no classifier runs.
+prefix rule never could. The judge's `curl_safe` / `readonly_remote_safe` / `trusted_host_safe`
+checks are retained because they still carry **Manual mode**, where no classifier runs.
 
-**Two PermissionRequest hooks judge a prompted ssh command since the dotfiles `claude_guard`
-cutover of 2026-09-17** (issue #1864). The user-level `guard-permission-request.sh` runs
-`claude_guard.judge()`, and this repo's `auto-approve-remote-ssh.sh` runs `classify_remote`;
-both read `TRUSTED_SSH_HOSTS` and `SECRET_PATH_RE` from the same package. Measured 2026-09-17
-on daniel-server, 20 runs each, payload `ssh daniel-server docker ps | head -3`:
+**Two PermissionRequest hooks judged a prompted ssh command from the dotfiles `claude_guard`
+cutover of 2026-09-17 until 2026-09-18** (issues #1864, #1898). The user-level
+`guard-permission-request.sh` ran `claude_guard.judge()`, and this repo's
+`auto-approve-remote-ssh.sh` ran `classify_remote`; both read `TRUSTED_SSH_HOSTS` and
+`SECRET_PATH_RE` from the same package. Measured 2026-09-17 on daniel-server, 20 runs each,
+payload `ssh daniel-server docker ps | head -3`:
 
 | hook | package reachable | median |
 |---|---|---|
@@ -74,33 +74,34 @@ on daniel-server, 20 runs each, payload `ssh daniel-server docker ps | head -3`:
 | `guard-permission-request.sh` (`uv python find` + `python -S -P`) | yes | 65 ms |
 | `guard-permission-request.sh` | no — exits at the `cli.py` existence check | 1 ms |
 
-So the double launch costs about 100 ms per command that reaches a prompt, and only there:
-the paragraph above says why an ssh command in a normal auto-mode session reaches no
-PermissionRequest hook at all. Two facts bound the finding further. daniel-server had no
-`~/.local/share/claude-guard` and a `~/.claude/settings.json` from the 2026-09-05 dotfiles
-when this was measured, so the judge hook was not on that host's chain; the numbers above
-come from a scratch clone of the dotfiles at `de79392` with `CLAUDE_GUARD_HOME` and
-`PYTHONPATH` pointed at it. And the two hooks are not interchangeable: on the payload above
-the judge emits nothing and the repo shim allows: `readonly_remote_safe` (`claude_guard/checks/remote.py`)
-returns no opinion unless the parse yields exactly one segment, while `classify_remote` walks each
-local stage. Retiring the repo shim would re-prompt `ssh <host> <cmd> |
-head` in Manual mode. Whether one of them retires is the dotfiles survey's re-planned slice 5
-(`docs/plans/2026-09-17-claude-guard-slice-5-survey.md` in the dotfiles repo), not this repo's.
+The cost was not the finding; the two hooks were not interchangeable. On the payload above the
+judge emitted nothing and the repo shim allowed: `readonly_remote_safe` returned no opinion
+unless the parse yielded exactly one segment, while `classify_remote` walked each local stage.
+The shim also reached `git`, `sed`, `awk`, `find`, `sort`, `apt`, `dpkg`, `crontab` and `pipx`
+over ssh through per-command guards the package did not carry. So the decision of 2026-09-18
+was "both hooks stay," pending the port.
 
-**Decided 2026-09-18: both hooks stay** (#1864, #1898; the `# DECIDED:` marker sits on
-`classify_remote` in `auto-approve-readonly.py`). They differ in behaviour, not only cost. This
-repo's shim reaches `git`, `sed`, `awk`, `find`, `sort`, `apt`, `dpkg`, `crontab` and `pipx`
-over ssh through per-command guards the package does not carry, and it walks a local pipeline;
-the judge does neither, and retiring the shim would re-prompt those shapes in Manual mode. The
-overlap is bounded: 800 of the 1064 ssh-led Bash decisions in the 28 days to 2026-09-18 were
-settled by a settings rule with no hook involved. The verb tables converged on every guard-free
-name that day — 29 `TIER1` readers into the package's `REMOTE_READONLY_VERBS` (dotfiles PR
-#520) and `ping`, `ping6`, `tracepath`, `traceroute`, `uptimed` into `TIER1` — and the same
-diff found four verbs listed bare on one side and guarded on the other (`rg --pre`, `sensors
--s`, `nvidia-smi` in the package; `ss -K` here), all four now guarded on both. A guarded verb
-moves only with its guard, because the replay gate cannot see a remote fail-open: 4 of the
-1058 prompted-corpus records touch ssh. The path to one hook is porting the remaining guards
-into the package, tracked on #1898.
+**Decided 2026-09-18, later the same day: the repo shim retired** (the `# DECIDED:` marker sits
+on `main` in `auto-approve-readonly.py`, replacing the one on `classify_remote`). dotfiles PR
+#521 moved both differences into the package: `judge_segment` tries `readonly_remote_safe` and
+`trusted_host_safe` on an `ssh`/`hl` segment of its own, so a local pipeline around the stage
+is judged stage by stage (`ssh daniel-server docker ps | head -3` → `remote-readonly-check`,
+`allow-list`), with a `2>&1` / `2>/dev/null` word stripped first; and the thirteen guards are
+`checks/remote_guards.py`. The port found the package's word splitting unsound for a program text —
+`ssh host "sed '1 w /x' f"` reaches the far shell as a write and quote-stripping read it as the
+script `1` — so `readonly_remote_safe` now splits words the way ssh and the remote shell do. The
+`_ssh` handler and the guards stay in `auto-approve-readonly.py` for the PreToolUse path
+(local commands, and ssh under Manual mode's PreToolUse allow); the package holds the copy
+that judges a PermissionRequest.
+`.claude/hooks/tests/test_claude_guard_import.py::test_every_guard_carried_on_both_sides_reaches_the_same_verdict`
+replays this suite's local vectors through both copies, so they cannot drift apart unnoticed;
+`test_no_verb_is_guarded_on_one_side_of_the_boundary_and_bare_on_the_other` reads the package's
+`REMOTE_GUARDED_VERBS` for the placement half. The verb tables converged on every guard-free
+name that morning — 29 `TIER1` readers into `REMOTE_READONLY_VERBS` (dotfiles PR #520) and
+`ping`, `ping6`, `tracepath`, `traceroute`, `uptimed` into `TIER1` — and a guarded verb moves
+only with its guard, because the replay corpus cannot see a remote fail-open (4 of 1058
+prompted records touch ssh). Measured demand is low either way: 800 of the 1064 ssh-led Bash
+decisions in the 28 days to 2026-09-18 were settled by a settings rule with no hook involved.
 
 ### `kubectl` — what actually decides
 **Read this before trusting the per-verb allow-list below: in a normal session that list decides
