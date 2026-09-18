@@ -144,10 +144,10 @@ jellyfin_k8s_introskipper_guid: "c83d86bb-a1e0-4c35-a113-e2101cf4ee6b"
 # URL and targetAbi come from the plugin's published manifest
 # (github.com/intro-skipper/manifest, 10.11/manifest.json). The checksum does NOT: upstream
 # publishes an MD5 there, and this pins the sha256 GitHub itself reports for the asset
-# (`gh release view --repo intro-skipper/intro-skipper 10.11/v1.10.11.23 --json assets`), the
+# (`gh release view --repo intro-skipper/intro-skipper 10.11/v1.10.11.24 --json assets`), the
 # same stronger digest headlamp_k8s_plugins uses. Verified against the actual download.
 jellyfin_k8s_introskipper_url: "https://github.com/intro-skipper/intro-skipper/releases/download/10.11/v1.10.11.24/intro-skipper-v1.10.11.24.zip"
-jellyfin_k8s_introskipper_sha256: "e882339c4f32ad07cc2975b6aa2adefc5e273c48d04bd0504c4e4960ccadba0a"
+jellyfin_k8s_introskipper_sha256: "719c7131455bb12461ed88cdbdec8bca02fd2ae406e7c4cbf0e18e458d8d5755"
 
 # ── Webhook (playback / library events out to HTTP endpoints) ───────────────────────────────
 # Jellyfin's own first-party plugin (owner `jellyfin` in the official manifest), added so
