@@ -131,9 +131,9 @@ Three outcomes, and the journal names which one it took on every tick:
   variable nothing reads, a macro nothing imports). The fast-forward is the whole apply, and
   `broad_applied` records `narrowed-to-nothing` in the tag slot.
 - **a refusal** -- the full `deploy.yml`, exactly as before. Anything the derivation cannot
-  map lands here: a variable the play itself reads, `hosts.ini`, a removed `containers_list`
-  entry, a tag list covering most of the fleet, or a crash in the derivation. A missed
-  consumer would be a service left silently stale; a full run is only slow.
+  map lands here: a variable the play itself reads, `hosts.ini`, a tag list covering most
+  of the fleet, or a crash in the derivation. A missed consumer would be a service left
+  silently stale; a full run is only slow.
 
 `narrow` is read-only and can be run by hand against any range. The rules it applies, and
 what each one refuses, are in `scripts/deploy_tools/narrow_broad.py`.

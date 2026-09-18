@@ -108,8 +108,8 @@ def plan(
     and the setup arm won: a `roles/setup/` edit landing beside a `host_vars/` edit applied
     `initial_setup.yml` and dropped the deploy plane without a journal line (#2046) — two
     Pi retirements that day left `Release Staleness Drift` DOWN over 56 records the full
-    `deploy.yml` a removed `containers_list` entry refuses into was meant to re-stamp. The
-    setup arm is unchanged: its tags were already derived, by `setup_tags_for`.
+    `deploy.yml` a removed `containers_list` entry refused into (until #2044) was meant to
+    re-stamp. The setup arm is unchanged: its tags were already derived, by `setup_tags_for`.
     """
     plans = []
     if setup_tags:
@@ -131,7 +131,7 @@ def _deploy_plane(narrow, config, target) -> BroadPlan:
     except Exception as exc:
         return _full_run(playbook, f"{type(exc).__name__}: {exc}")
     # DECIDED: a full run on any doubt. Every way the derivation can be unsure — a variable
-    # the play itself reads, a removed containers_list entry, a tag list covering most of
+    # the play itself reads, a tag list covering most of
     # the fleet, a crash here — lands on this branch and runs what the tick ran before.
     # `except Exception` is deliberate and the narrowest correct width: the call decodes a
     # subprocess's output, so it can raise UnicodeDecodeError as well as SubprocessError,
