@@ -53,6 +53,14 @@ DANGEROUS_MSG_PATTERNS = [
     ).split(",")
     if p.strip()
 ]
+# DECIDED: CLIENT_ERROR_PATTERNS is INERT at the pinned Sonarr 4.0.19.2979 and Radarr
+# 6.3.0.10514, and is kept as a hedge rather than retired. A download-client outage makes
+# DownloadMonitoringService.ProcessClientDownloads catch GetItems() and return no items for
+# that client; trackedDownloadStatus=='error' is written by TrackedDownload.Fail() alone,
+# whose only caller is RejectedImportService; and no phrase below is a string either app
+# writes into a queue record's errorMessage. Retiring it changes what the live blocklist
+# acts on, which the role's autonomous-role contract reserves for the operator (#1951). A
+# future *arr bump re-opens the question: re-run the issue's verify-by against the new tag.
 CLIENT_ERROR_PATTERNS = [
     p.strip().lower()
     for p in _env(
