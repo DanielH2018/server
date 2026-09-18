@@ -2,7 +2,7 @@
 # The deliberate Docker engine bump -- the only path that moves the held engine packages.
 # Reached by name only (`tags: [never, docker-engine-upgrade]` on the include in install.yml):
 #
-#   uv run ansible-playbook ansible/initial_setup.yml --tags docker-engine-upgrade -e target=daniel-pi
+#   uv run ansible-playbook ansible/initial_setup.yml --tags docker-engine-upgrade -e docker_install_engine_upgrade=true -e target=daniel-pi
 #
 # Why a stop/upgrade/recreate cycle rather than an in-place upgrade: live-restore keeps
 # containers running across a dockerd restart, but a containerd.io upgrade replaces the

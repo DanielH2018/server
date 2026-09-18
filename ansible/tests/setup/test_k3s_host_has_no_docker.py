@@ -66,10 +66,14 @@ def test_docker_install_is_gated_on_has_docker():
         )
 
     tasks = _load(ANSIBLE / "roles/setup/docker_install/tasks/main.yml")
+    # Static imports since #1998 (so the granular tags reach their tasks); the gate is the
+    # same `when:` either way, and this guard is about the gate.
     gates = {
-        t["ansible.builtin.include_tasks"]: t.get("when")
+        t.get("ansible.builtin.import_tasks", t.get("ansible.builtin.include_tasks")): (
+            t.get("when")
+        )
         for t in tasks
-        if "ansible.builtin.include_tasks" in t
+        if "ansible.builtin.import_tasks" in t or "ansible.builtin.include_tasks" in t
     }
     assert gates.get("install.yml") == "has_docker", (
         "install.yml must run only `when: has_docker` — without it a bare "

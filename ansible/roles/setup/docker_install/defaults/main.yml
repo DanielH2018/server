@@ -8,3 +8,9 @@
 docker_install_stale_crons:
   - Redeploy ical-proxy
   - Clean stale tdarr transcode cache
+
+# The gate on the deliberate engine upgrade (tasks/install.yml). Tags cannot gate it on
+# their own -- the role tag inherits onto the `never`-tagged include and overrides it
+# (#1998) -- so the upgrade needs `-e docker_install_engine_upgrade=true` as well as
+# `--tags docker-engine-upgrade`.
+docker_install_engine_upgrade: false

@@ -140,16 +140,25 @@
   become: true
 
 - name: Upgrade the Docker engine deliberately
-  # `never`: runs only when asked for by name --
-  #   uv run ansible-playbook ansible/initial_setup.yml --tags docker-engine-upgrade -e target=daniel-pi
+  # Runs only when asked for by name AND by variable --
+  #   uv run ansible-playbook ansible/initial_setup.yml --tags docker-engine-upgrade \
+  #     -e docker_install_engine_upgrade=true -e target=daniel-pi
   # It stops every Compose project in containers_list, unholds, upgrades, re-holds, and brings
   # every project back with a forced recreate, so a container that bind-mounts
   # /var/run/docker.sock (docker-proxy) picks up the socket the restarted daemon created.
+  #
+  # `never` alone did not keep it out of a role-level run (#1998): initial_setup.yml tags
+  # the whole role `docker_install`, tags inherit onto every task in it, and an explicitly
+  # requested tag overrides `never`. So `--tags docker_install` ran this include -- measured
+  # 2026-09-18 in check mode: the hold released for all five engine packages and re-set,
+  # with nothing pending that day. The variable is the gate no tag reaches; `never` stays
+  # so a bare untagged run still skips it without evaluating the `when`.
   ansible.builtin.include_tasks:
     file: engine-upgrade.yml
     apply:
       tags: [docker-engine-upgrade]
   tags: [never, docker-engine-upgrade]
+  when: docker_install_engine_upgrade | bool
 
 - name: Remove the deprecated linuxserver docker-compose v1 wrapper
   tags: [docker-engine]

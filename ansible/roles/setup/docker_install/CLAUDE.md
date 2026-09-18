@@ -13,7 +13,7 @@ repo-root `CLAUDE.md` and `.claude/rules/docker.md` for conventions.
 - **Granular tags:** `docker-repo` (APT repo + GPG + the cache refresh),
   `docker-engine` (install + hold + v1-wrapper removal), `docker-group` (user resolution +
   membership), `docker-daemon` (daemon.json + conditional restart), `docker-networks`.
-  `docker-engine-upgrade` is `never`-tagged: it runs only when named (below).
+  `docker-engine-upgrade` is `never`-tagged AND gated on `docker_install_engine_upgrade`: it runs only when named and opened with `-e` (below). `never` alone is not enough — the role tag inherits onto the include and overrides it (#1998).
 
 ## The engine is held; `--tags docker-engine-upgrade` is how it moves
 `docker_engine_packages` (`group_vars/all.yml`: docker-ce, -cli, containerd.io, the compose
@@ -37,7 +37,7 @@ recovery cron (#1910) restarts a stopped container; it cannot recreate one.
 
 **The deliberate bump** (`tasks/engine-upgrade.yml`):
 ```
-uv run ansible-playbook ansible/initial_setup.yml --tags docker-engine-upgrade -e target=daniel-pi
+uv run ansible-playbook ansible/initial_setup.yml --tags docker-engine-upgrade -e docker_install_engine_upgrade=true -e target=daniel-pi
 ```
 It refuses a host with no `~/server` checkout (nothing could stop or recreate the projects),
 refreshes the cache, unholds, and asks the apt module in check mode whether `state: latest`

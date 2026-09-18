@@ -6,11 +6,19 @@
 # docker-compose-qbittorrent.service Requires= a docker.service that no longer exists,
 # plus the redeploy/tdarr crons of retired Compose services). The role now owns both
 # directions and is included unconditionally; has_docker chooses which half runs.
+#
+# Static imports, not include_tasks. A dynamic include is itself a task that `--tags`
+# judges first, and these two carried no tags, so `--tags docker-daemon` skipped the include
+# and reached nothing inside it (measured 2026-09-18: `ok=17 changed=2`, all of them
+# optimize_pi; #1998). Tagging the include would not help either -- an include's tags
+# inherit onto every task it loads, so every granular tag would select every task. An
+# import inlines the tasks at parse time, each keeps its own tags, and the `when:` below is
+# applied to each of them.
 
 - name: Install and configure Docker
-  ansible.builtin.include_tasks: install.yml
+  ansible.builtin.import_tasks: install.yml
   when: has_docker
 
 - name: Remove Docker leftovers from a host that has retired Docker
-  ansible.builtin.include_tasks: teardown.yml
+  ansible.builtin.import_tasks: teardown.yml
   when: not has_docker
