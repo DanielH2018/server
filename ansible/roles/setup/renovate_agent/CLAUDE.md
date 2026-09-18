@@ -72,7 +72,7 @@ the caps or the schedule cannot quietly widen it.
   `renovate-prs` skill: finish the manual half of a grouped bump, merge through
   `land.sh --arm-merge`, land and verify. **Never** a PR by another author, **never** a bare
   `gh pr merge`, **never** a session in the primary checkout, **never** a worktree that still
-  holds unlanded work (the tick skips and posts the path instead), and **never a PR whose
+  holds unlanded work (the tick skips, posts the path and exits non-zero), and **never a PR whose
   title carries `k8s_autodeploy: false`** (#1939). That phrase is renovate.json's
   denylist marker, not a work order: the roles behind it (authelia, traefik, crowdsec, …) are
   denied because a failed deploy is one `probe.py health` cannot see, so the "look" the
@@ -131,8 +131,24 @@ and tests is guaranteed to leave some. Each tick recreates
 primary checkout itself, so the landing steps still deploy the right tree.
 
 **A worktree holding work is not thrown away.** If the previous tick left uncommitted changes
-or commits that never reached `origin/master`, the tick skips and posts the path. Removing it
-is how unlanded work is lost.
+or commits whose content is not on `origin/master`, the tick skips, posts the path and exits
+`EXIT_WORKTREE_BLOCKED` (2). Removing the tree is how unlanded work is lost.
+
+Content, not ancestry. The run branch is fixed (`worktree-renovate-auto`) and nothing resets
+it after a landing, and a squash merge keeps a branch's content while discarding the commits
+that carried it — so `rev-list origin/master..<branch>` counts a landed branch's commits
+forever. That refused the tree every day from 2026-09-14 while its two commits sat on master
+as PR #1812 (#2014). `branch_content_is_on_master` settles it the way
+`scripts/dev/prune_worktrees.py` does: `git merge-tree --write-tree origin/master <branch>`
+producing master's own tree means the branch has nothing master lacks. A revert-only branch
+is still refused (merging it changes master's tree), and no verdict — a conflict with master's
+drift, empty output — reads as not contained by `merge-tree`. That conflict case is the
+pruner's fourth layer and is ported too (`branch_tip_was_merged`): `gh pr list --state
+merged --head <branch> --json headRefOid` must name the branch's exact tip. Ported rather
+than left to the page because the very tree #2014 found was already past `merge-tree` —
+master had drifted into a conflict on `n8n-images/base-pin-history.tsv` — so without it the
+fix would have paged daily and still needed the operator's `reset --hard`. The match is on
+the head SHA, never the branch name: the name is reused every tick.
 
 ## The digest measures effect, not completion
 
@@ -157,6 +173,16 @@ failure mode is a session that reads green and does nothing.
 unit's `ExecStartPost` beat, and the `Renovate Agent — Alive` push tile in
 `roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2`. The beat fires only when the
 wrapper exited 0, so the tile reports silence and the `OnFailure` alert reports failure.
+
+**A worktree-blocked skip exits non-zero, so it does not beat.** The beat is
+`ExecStartPost`, which runs after ANY exit 0 — a `down` pushed from inside the wrapper on a
+`return 0` path is overwritten by the `up` that follows it. So that skip returns
+`EXIT_WORKTREE_BLOCKED` instead: no beat, `OnFailure` pages, and the tile expires by deadman
+if nobody clears the tree. Until 2026-09-18 that path returned 0, and the tile stayed green
+through five daily skips (#2014). The two other skips still exit 0: the quiet no-open-PRs
+skip is the healthy steady state, and the GitOps-hold skip is alarmed by the deployer's own
+`GitOps Status` tile, which this one need not duplicate.
+`test_agent_logic.py::TestSkipExitCodes` pins the blocked and the quiet case.
 
 **A crash also pushes its own `down`, carrying the exception text** (`report_crash`, called
 from the `__main__` guard). Silence plus an `OnFailure` page was not enough: the tile went
