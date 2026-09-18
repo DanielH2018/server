@@ -14,14 +14,9 @@ at all (six roles roll nothing by design, and a clock-based gate would fail ever
 workload this apply CREATED is not expected to restart, matching the restart tasks' own
 guard.
 
-The second half (issue #1902) covers the two roles that opt out of the shared restart and roll
-their own workloads through private tasks -- claude-otel's loop and pihole's roll_one.yml.
-They declare those workloads to the record as `manifests_self_rollouts`, and three things are
-pinned: the record decides `restart` for them from the same facts (the red-proof pair the
-issue asks for: a changed render names grafana `restart: true`, an unchanged one `false`),
-each role's declaration equals the loop its private restart iterates (a seventh workload
-added to the loop alone re-opens the gap with both halves of the pair still green), and the
-private restart runs after the include_role that writes the record.
+The two roles that opt out of the shared restart and roll their own workloads through
+private tasks (claude-otel's loop and pihole's roll_one.yml) are pinned in
+`test_self_rollouts_follow_the_apply.py`, over the same harness (`_release_expectation.py`).
 
 WHAT THE HARNESS CANNOT REACH. ansible-core 2.21's `default` filter recognises only its own
 Undefined, so every var below is passed defined, and the `| default(...)` fallbacks on
@@ -34,47 +29,13 @@ Run: uv run pytest ansible/tests/k8s/test_release_stamp_rollout_expectation.py
 
 import re
 
-from _helpers import ANSIBLE, load_tasks, render_expr, task_named, walk_tasks
-
-from _helpers import load_yaml
-
-MANIFESTS_TASKS = ANSIBLE / "roles/k8s/manifests/tasks"
-STAMP = load_tasks(MANIFESTS_TASKS / "release_stamp.yml")
-MAIN = load_tasks(MANIFESTS_TASKS / "main.yml")
-CLAUDE_OTEL = ANSIBLE / "roles/k8s/claude-otel"
-PIHOLE = ANSIBLE / "roles/k8s/pihole"
-EXPECT = task_named(STAMP, "Work out which workloads this apply must roll")
-LOOP_EXPR = EXPECT["loop"]
-FACT_EXPR = EXPECT["ansible.builtin.set_fact"]["manifests_release_rollouts"]
-
-BASE = dict(
-    manifests_service="prowlarr",
-    manifests_rollout="prowlarr",
-    manifests_rollout_kind="deploy",
-    manifests_extra_rollouts=[
-        {"name": "flaresolverr", "kind": "deploy", "image": "flaresolverr"}
-    ],
-    manifests_self_rollouts=[],
-    manifests_render={"changed": True},
-    manifests_secret_render={"changed": False},
-    manifests_apply={"stdout": "deployment.apps/prowlarr configured"},
-    k8s_rebuilt_images=[],
-    manifests_rolled_by_apply={},
+from _helpers import ANSIBLE, render_expr, task_named, walk_tasks
+from _release_expectation import (
+    FACT_EXPR,
+    MAIN,
+    STAMP,
+    rollouts as _rollouts,
 )
-
-
-def _rollouts(**over):
-    """Run the loop + set_fact the way Ansible does: one append per target, accumulating."""
-    ctx = {**BASE, **over}
-    acc = []
-    for target in render_expr(LOOP_EXPR, **ctx):
-        acc = render_expr(
-            FACT_EXPR,
-            manifests_release_rollouts=acc,
-            manifests_release_target=target,
-            **ctx,
-        )
-    return {r["name"]: r for r in acc}
 
 
 def test_the_record_carries_the_rollouts_field():
@@ -140,7 +101,10 @@ def test_the_template_fingerprints_read_the_template_not_the_generation():
         assert "jsonpath='{.spec.template}'" in cmd, cmd
         assert ".metadata.generation" not in cmd
         assert "sha256sum" in cmd, "the register must carry a hash, never the template"
-        assert task["loop"] == "{{ manifests_restart_targets }}"
+        assert task["loop"] == "{{ manifests_fingerprint_targets }}"
+        assert "-n {{ item.namespace | default(k8s_namespace) }}" in cmd, (
+            "a self rollout outside k8s_namespace (claude-otel) reads nothing otherwise"
+        )
         assert task["failed_when"] is False, (
             "a workload the apply creates has no before side"
         )
@@ -227,9 +191,14 @@ def test_a_changed_render_with_an_unchanged_template_is_still_expected_to_restar
 
 
 def test_a_target_the_fingerprints_never_saw_is_still_expected_to_restart():
-    """A self rollout is not in manifests_restart_targets, so the dict has no key for it;
-    the private restart that rolls it does not read the fact, so the record must not either."""
-    rollouts = _rollouts(manifests_rolled_by_apply={})
+    """The fingerprints run only when the render changed, so an image-only trigger leaves the
+    dict empty; every restart task reads that as "not rolled" and restarts, and the record
+    must expect the same."""
+    rollouts = _rollouts(
+        manifests_render={"changed": False},
+        k8s_rebuilt_images=["prowlarr"],
+        manifests_rolled_by_apply={},
+    )
     assert rollouts["prowlarr"]["restart"] is True
 
 
@@ -310,186 +279,3 @@ def test_roles_that_roll_nothing_still_exist_in_the_tree():
         if re.search(r"manifests_rollout:\s*(''|\"\")", p.read_text())
     }
     assert {"cloudflare-ddns", "pihole", "claude-otel"} <= opted_out, opted_out
-
-
-# --- roles that roll their own workloads (issue #1902) -------------------------------------
-
-
-def _include_role_vars(role_dir):
-    """The `vars:` a role hands to `include_role: k8s/manifests`."""
-    for task in walk_tasks(load_tasks(role_dir / "tasks/main.yml")):
-        include = task.get("ansible.builtin.include_role") or task.get("include_role")
-        if isinstance(include, dict) and include.get("name") == "k8s/manifests":
-            return task["vars"]
-    raise AssertionError(f"{role_dir.name} does not include k8s/manifests")
-
-
-def _pairs(entries):
-    return {(e["kind"], e["name"]) for e in entries}
-
-
-def _claude_otel_self_rollouts():
-    """The declaration as the play sees it: a template over the role's defaults."""
-    declared = _include_role_vars(CLAUDE_OTEL)["manifests_self_rollouts"]
-    defaults = load_yaml(CLAUDE_OTEL / "defaults/main.yml")
-    return render_expr(declared, **defaults)
-
-
-def _claude_otel_private_restart():
-    return task_named(
-        load_tasks(CLAUDE_OTEL / "tasks/main.yml"),
-        "Restart the telemetry workloads after a config change",
-    )
-
-
-def _pihole_private_restart():
-    return task_named(
-        load_tasks(PIHOLE / "tasks/main.yml"),
-        "Roll the Pi-hole instances one at a time",
-    )
-
-
-def test_a_self_rolling_role_records_only_what_it_declares():
-    """The var reaches the record and nothing else: the shared restart's loop and the drain
-    queue read `manifests_extra_rollouts`, never `manifests_self_rollouts`. Those roles opted
-    out of both, and a declaration that re-enrolled them would take both Pi-holes down at
-    once."""
-    for task in walk_tasks(MAIN):
-        text = str(task)
-        if "manifests_self_rollouts" in text:
-            assert task["name"].startswith(
-                "Check that every manifests_extra_rollouts"
-            ), task["name"]
-    assert "manifests_self_rollouts" in LOOP_EXPR
-    assert "manifests_self_rollouts" not in str(
-        task_named(MAIN, "Roll the extra deployments after")
-    )
-    assert "manifests_self_rollouts" not in str(
-        task_named(MAIN, "Queue the batch drain for the extra rollouts")
-    )
-
-
-def test_claude_otel_a_changed_render_expects_grafana_to_roll():
-    """The red half of the issue's pair: the role where 19 dead panels sat behind a 1/1 pod."""
-    rollouts = _rollouts(
-        manifests_service="claude-otel",
-        manifests_rollout="",
-        manifests_extra_rollouts=[],
-        manifests_self_rollouts=_claude_otel_self_rollouts(),
-        manifests_apply={"stdout": "deployment.apps/grafana configured"},
-    )
-    assert rollouts["grafana"] == {"name": "grafana", "kind": "deploy", "restart": True}
-    assert rollouts["otel-collector"]["kind"] == "daemonset"
-    assert all(r["restart"] for r in rollouts.values()), rollouts
-
-
-def test_claude_otel_an_unchanged_render_expects_nothing_to_roll():
-    """The green half: an idempotent re-run names the six with `restart: false`."""
-    rollouts = _rollouts(
-        manifests_service="claude-otel",
-        manifests_rollout="",
-        manifests_extra_rollouts=[],
-        manifests_self_rollouts=_claude_otel_self_rollouts(),
-        manifests_render={"changed": False},
-    )
-    assert rollouts["grafana"]["restart"] is False
-    assert not any(r["restart"] for r in rollouts.values()), rollouts
-
-
-def test_claude_otel_a_created_daemonset_is_not_expected_to_roll():
-    """The private loop's guard is `.apps/<name> created`, kind-agnostic; the record's is
-    per kind, so the DaemonSet's prefix has to resolve or the record would expect a restart
-    of a workload the loop skipped."""
-    rollouts = _rollouts(
-        manifests_service="claude-otel",
-        manifests_rollout="",
-        manifests_extra_rollouts=[],
-        manifests_self_rollouts=_claude_otel_self_rollouts(),
-        manifests_apply={"stdout": "daemonset.apps/otel-collector created"},
-    )
-    assert rollouts["otel-collector"]["restart"] is False
-    assert rollouts["grafana"]["restart"] is True
-
-
-def test_claude_otel_declares_the_same_workloads_its_private_restart_rolls():
-    """A seventh workload added to the restart loop alone re-opens the gap with the pair
-    above still green, so the declaration is held equal to the loop."""
-    declared = _pairs(_claude_otel_self_rollouts())
-    restarted = _pairs(_claude_otel_private_restart()["loop"])
-    assert declared == restarted, (declared, restarted)
-    assert ("deploy", "grafana") in declared
-
-
-def test_claude_otel_private_restart_reads_the_same_facts_as_the_record():
-    when = " ".join(_claude_otel_private_restart()["when"])
-    for ingredient in (
-        "manifests_render is changed",
-        "manifests_secret_render is changed",
-    ):
-        assert ingredient in when, ingredient
-        assert ingredient in FACT_EXPR, ingredient
-    assert " created" in when
-
-
-def test_pihole_an_image_bump_expects_both_instances_to_roll():
-    """roll_one.yml fires on `manifests_image_changed`, which is `manifests_service in
-    k8s_rebuilt_images`; the record keys on each entry's `image`, so both instances carry
-    `image: pihole` or pihole-2 reads as a miss."""
-    declared = _include_role_vars(PIHOLE)["manifests_self_rollouts"]
-    rollouts = _rollouts(
-        manifests_service="pihole",
-        manifests_rollout="",
-        manifests_extra_rollouts=[],
-        manifests_self_rollouts=declared,
-        manifests_render={"changed": False},
-        k8s_rebuilt_images=["pihole"],
-    )
-    assert {n: r["restart"] for n, r in rollouts.items()} == {
-        "pihole": True,
-        "pihole-2": True,
-    }
-    unchanged = _rollouts(
-        manifests_service="pihole",
-        manifests_rollout="",
-        manifests_extra_rollouts=[],
-        manifests_self_rollouts=declared,
-        manifests_render={"changed": False},
-    )
-    assert not any(r["restart"] for r in unchanged.values()), unchanged
-
-
-def test_pihole_declares_the_same_instances_roll_one_restarts():
-    declared = _include_role_vars(PIHOLE)["manifests_self_rollouts"]
-    restart = _pihole_private_restart()
-    assert {e["name"] for e in declared} == set(restart["loop"])
-    assert {e["kind"] for e in declared} == {"deploy"}
-    roll_one = (PIHOLE / "tasks/roll_one.yml").read_text()
-    assert "rollout restart deploy/{{ pihole_instance }}" in roll_one
-    when = str(restart["when"])
-    for ingredient in (
-        "manifests_render is changed",
-        "manifests_secret_render is changed",
-        "manifests_image_changed",
-    ):
-        assert ingredient in when, ingredient
-
-
-def test_the_private_restarts_run_after_the_record_is_written():
-    """The gate compares `applied_at` against `restartedAt`, so the include_role that writes
-    the record must precede the private restart in each role."""
-    for role_dir, restart_name in (
-        (CLAUDE_OTEL, "Restart the telemetry workloads after a config change"),
-        (PIHOLE, "Roll the Pi-hole instances one at a time"),
-    ):
-        names = [
-            str(t.get("name", ""))
-            for t in walk_tasks(load_tasks(role_dir / "tasks/main.yml"))
-        ]
-        include = next(
-            i
-            for i, t in enumerate(walk_tasks(load_tasks(role_dir / "tasks/main.yml")))
-            if (t.get("ansible.builtin.include_role") or {}).get("name")
-            == "k8s/manifests"
-        )
-        restart = next(i for i, n in enumerate(names) if n.startswith(restart_name))
-        assert include < restart, (role_dir.name, names[include], names[restart])

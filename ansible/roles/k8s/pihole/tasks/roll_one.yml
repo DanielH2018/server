@@ -39,11 +39,21 @@
       delay: 10
       until: pihole_sibling_ready.stdout == "True"
 
+    # Skipped when the apply already rolled this instance -- its pod template changed, which
+    # an image-pin bump does -- and only the restart is skipped: the sibling check above and
+    # the rollout wait below still run, so the play still follows the roll the apply started
+    # one instance at a time. A second roll here deleted the pod the apply had just created
+    # while the kubelet was mid-pull, and on these Recreate Deployments the wait below sat
+    # out the whole pull before the next ReplicaSet could appear (#1994, the self-rollout
+    # half of #1988). `manifests_rolled_by_apply` is the shared role's fingerprint verdict, keyed
+    # by workload name; a name it never fingerprinted (an image-only trigger, where the
+    # template is unchanged) reads false and restarts, as it must.
     - name: Restart Pi-hole instance {{ pihole_instance }}
       ansible.builtin.command:
         cmd: "k3s kubectl -n {{ k8s_namespace }} rollout restart deploy/{{ pihole_instance }}"
       become: true
       changed_when: true
+      when: not manifests_rolled_by_apply.get(pihole_instance, false)
 
     - name: Wait for serving Pi-hole instance {{ pihole_instance }}
       ansible.builtin.command:

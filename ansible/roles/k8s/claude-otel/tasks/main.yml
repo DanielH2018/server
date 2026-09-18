@@ -37,9 +37,15 @@
     # ...but tell the release record which workloads that private restart targets, so
     # `probe.py health` expects them to roll after a changed render (issue #1902). The same
     # list the restart loop below and the stabilisation snapshot iterate; the record decides
-    # `restart` from the same facts that loop gates on. Record-only: the shared role neither
-    # restarts nor drains these.
-    manifests_self_rollouts: "{{ claude_otel_stabilise_workloads }}"
+    # `restart` from the same facts that loop gates on. The shared role neither restarts nor
+    # drains these; it does fingerprint each one's pod template across the apply, so the loop
+    # below can skip a workload the apply already rolled (#1994). `namespace` is load-bearing
+    # for that: the fingerprints default to k8s_namespace, and these six live in
+    # k8s_observability_namespace -- without it both reads fail, every entry reads "not
+    # rolled", and an image bump rolls each workload twice, exactly as before the fix.
+    manifests_self_rollouts: >-
+      {{ claude_otel_stabilise_workloads
+         | map('combine', {'namespace': k8s_observability_namespace}) | list }}
 
 - name: Restart the telemetry workloads after a config change
   tags: [deploy]
@@ -49,7 +55,11 @@
   # collector kept serving the previous config with the deploy fully green.
   #
   # Skipped for a Deployment this run created — its pods are already on the new config, and
-  # `rollout restart` races the initial rollout.
+  # `rollout restart` races the initial rollout. Skipped too for a workload the apply itself
+  # rolled — its pod template changed, which an image-pin bump does — read from the shared
+  # role's fingerprint verdict, `manifests_rolled_by_apply` (#1994, the self-rollout half of
+  # #1988): the second roll cost a spare pod per Deployment and a full re-pull on the
+  # Recreate ones.
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n {{ k8s_observability_namespace }}
@@ -76,6 +86,7 @@
     # observed. Without the default, an unreadable register is not a wrong answer but a hard
     # failure: `object of type 'dict' has no attribute 'stdout'`, mid-loop.
     - not (manifests_apply.stdout | default('')) is search('\.apps/' ~ item.name ~ ' created')
+    - not manifests_rolled_by_apply.get(item.name, false)
 
 - name: Wait for the telemetry workloads to roll out
   tags: [deploy]

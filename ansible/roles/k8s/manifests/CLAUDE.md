@@ -100,10 +100,15 @@ same resources.
   roll costs a spare pod on a `RollingUpdate` Deployment; on a `Recreate` one it deletes the
   pod the apply just created while the kubelet is mid-pull, and the drain waits out the whole
   pull before the next ReplicaSet can appear (#1988: karakeep sat `Terminating` for ten
-  minutes and failed the 300s drain). So when the render changed, the role hashes each restart target's
-  `.spec.template` before and after the apply; a target whose hash moved is
-  `manifests_rolled_by_apply[name] == true`, and both the restart tasks and the release
-  record's `rollouts[].restart` skip it. The template, not `.metadata.generation`: generation
+  minutes and failed the 300s drain). So when the render changed, the role hashes the
+  `.spec.template` of every workload a restart could follow this apply for — the primary, every
+  `manifests_extra_rollouts` entry and every `manifests_self_rollouts` entry — before and after
+  the apply; a target whose hash moved is `manifests_rolled_by_apply[name] == true`, and the
+  two shared restart tasks, the private restarts in pihole and claude-otel (#1994) and the
+  release record's `rollouts[].restart` all skip it. A self rollout outside `k8s_namespace`
+  names its `namespace` on the entry, or the hash reads fail on both sides and it restarts
+  twice — claude-otel's six live in `observability`, so its declaration carries it.
+  The template, not `.metadata.generation`: generation
   bumps on any spec change (navidrome and terraria template `replicas:`), and a replicas change
   beside a ConfigMap change would otherwise skip the restart the ConfigMap needs. A read that
   fails on either side counts as "not rolled", which restarts — the recoverable direction.
@@ -181,14 +186,18 @@ restart tasks for that comparison to hold, and after the rebuilt-image fact so b
 answer; `ansible/tests/k8s/test_release_stamp_rollout_expectation.py` pins the order.
 
 A role that sets `manifests_rollout: ''` and restarts its workloads through a private task
-after this role returns declares them in `manifests_self_rollouts` (`[{name, kind, image?}]`),
-and the record carries them with the same `restart` decision (#1902). claude-otel passes
-`claude_otel_stabilise_workloads`; pihole names both instances with `image: pihole`, since
-`roll_one.yml` also fires on `manifests_image_changed`, which keys on the service name. The
-entry reaches `rollouts[]` only: the shared restart and the batch drain never read it, which is
-what those roles opted out of. Appending from the private task itself cannot work, because the
-record is written before that task runs. The same test file holds each role's declaration equal
-to the loop its private restart iterates.
+after this role returns declares them in `manifests_self_rollouts` (`[{name, kind, image?,
+namespace?}]`), and the record carries them with the same `restart` decision (#1902).
+claude-otel passes `claude_otel_stabilise_workloads` with `namespace:
+k8s_observability_namespace` on each entry; pihole names both instances with `image: pihole`,
+since `roll_one.yml` also fires on `manifests_image_changed`, which keys on the service name.
+The entry reaches `rollouts[]` and the pod-template fingerprints (#1994, so the private restart
+can read `manifests_rolled_by_apply` for its own workloads): the shared restart and the batch
+drain never read it, which is what those roles opted out of. Appending from the private task
+itself cannot work, because the record is written before that task runs.
+`ansible/tests/k8s/test_self_rollouts_follow_the_apply.py` holds each role's declaration equal
+to the loop its private restart iterates, and holds each private restart to the
+`manifests_rolled_by_apply` skip.
 
 **Secret manifests are recorded by name and never hashed.** They are rendered under `no_log`
 from decrypted SOPS values, and hashing adds a new read path over that output — a task result,
