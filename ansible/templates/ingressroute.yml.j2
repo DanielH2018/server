@@ -31,33 +31,45 @@
   alongside the Service it targets: Traefik will not route across namespaces with
   allowCrossNamespace off, which it deliberately is. The referenced middlewares must
   therefore also exist in that namespace.
+
+  One IngressRoute PER HOSTNAME rather than one carrying both, because the two hosts differ
+  in two things a Rule or an object carries exactly once:
+    - rate-limit keying. The public name is Cloudflare-proxied, so its connections come from
+      a Cloudflare edge and the limiter must key on the forwarded client
+      (`rate-limit-proxied`); the `.local.` name is DNS-only and reached direct, where the
+      remote address is the client and a forwarded-header key would pool every LAN client
+      into one bucket. A Rule carries one middleware list. The full reasoning is with the
+      middlewares in roles/k8s/traefik/templates/dynamic.yaml.j2 (#1955).
+    - TLS options. The public name requires Cloudflare's origin-pull client certificate
+      (`cloudflare-origin-pull`, ansible/templates/origin-pull.yml.j2, #1990); the `.local.`
+      name must not, since a LAN or WireGuard client holds none. `spec.tls.options` is per
+      IngressRoute and Traefik picks it by SNI, so one object holding both hosts would demand
+      the certificate of LAN clients too. Hence two objects, not two Rules.
+  Everything else is identical between the two, hence the loop.
+
+  The `.local.` object keeps the bare name and the public one is `<name>-public`: the local
+  object renders unconditionally, so a checkout with k8s_public_route off keeps today's
+  object names and nothing orphans under manifests_prune.
+
+  The public object exists only once k8s_public_route flipped (slice-6 B4, with the CrowdSec
+  bouncer on this edge) AND the caller didn't opt out. The absent object is the guard — not
+  the absent DNS record: the Cloudflare wildcard resolves ANY name. `public=false` is for
+  infrastructure APIs that must never face the internet whatever the flag says — the CrowdSec
+  LAPI is the standing example.
 #}
+{% for host, rate_limit, suffix, tls_option in [(hostname ~ '.local.' ~ domain, 'rate-limit', '', 'modern')] + ([(hostname ~ '.' ~ domain, 'rate-limit-proxied', '-public', 'cloudflare-origin-pull')] if k8s_public_route and public else []) %}
+{% if not loop.first %}
+---
+{% endif %}
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
-  name: {{ name }}
+  name: {{ name }}{{ suffix }}
   namespace: {{ namespace | default(k8s_namespace, true) }}
 spec:
   entryPoints:
     - https
   routes:
-{#
-  One Rule per hostname rather than `Host(public) || Host(local)` in one, because the two
-  hosts need DIFFERENT rate-limit keying and a Rule carries one middleware list. The public
-  name is Cloudflare-proxied, so its connections come from a Cloudflare edge and the limiter
-  must key on the forwarded client (`rate-limit-proxied`); the `.local.` name is DNS-only and
-  reached direct, where the remote address is the client and a forwarded-header key would
-  pool every LAN client into one bucket. The full reasoning is with the middlewares in
-  roles/k8s/traefik/templates/dynamic.yaml.j2 (#1955). Everything but the host and that one
-  middleware is identical between the two, hence the loop.
-
-  The public Rule exists only once k8s_public_route flipped (slice-6 B4, with the CrowdSec
-  bouncer on this edge) AND the caller didn't opt out. The absent rule is the guard — not the
-  absent DNS record: the Cloudflare wildcard resolves ANY name. `public=false` is for
-  infrastructure APIs that must never face the internet whatever the flag says — the CrowdSec
-  LAPI is the standing example.
-#}
-{% for host, rate_limit in ([(hostname ~ '.' ~ domain, 'rate-limit-proxied')] if k8s_public_route and public else []) + [(hostname ~ '.local.' ~ domain, 'rate-limit')] %}
     - kind: Rule
       match: "Host(`{{ host }}`)"
       middlewares:
@@ -71,7 +83,6 @@ spec:
       services:
         - name: {{ name }}
           port: {{ port }}
-{% endfor %}
 {#
   `k8s_tls_cert_resolver` is empty on a cluster with no ACME resolver, and then Traefik serves
   its own default self-signed certificate. The `tls:` key itself is NEVER conditional: without
@@ -87,7 +98,7 @@ spec:
     # global default options and never registers it under a namespaced key, so referencing
     # `default` here fails with "unknown TLS options". See the traefik role's dynamic.yaml.j2.
     options:
-      name: modern
+      name: {{ tls_option }}
 {% if k8s_tls_cert_resolver %}
     domains:
       - main: "{{ domain }}"
@@ -95,6 +106,7 @@ spec:
           - "*.{{ domain }}"
           - "*.local.{{ domain }}"
 {% endif %}
+{% endfor %}
 {% if k8s_public_route and public %}
 {% for prefix in bypass_prefixes %}
 {% set slug = prefix | trim('/') | replace('/', '-') %}
@@ -128,8 +140,11 @@ spec:
 {% if k8s_tls_cert_resolver %}
     certResolver: {{ k8s_tls_cert_resolver }}
 {% endif %}
+    # The public name's option, and it MUST match the main public object's: Traefik picks TLS
+    # options by SNI and two routers on one host naming different options fall back to the
+    # default — which requires no client certificate at all (origin-pull.yml.j2).
     options:
-      name: modern
+      name: cloudflare-origin-pull
 {% if k8s_tls_cert_resolver %}
     domains:
       - main: "{{ domain }}"

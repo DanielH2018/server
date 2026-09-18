@@ -1,3 +1,4 @@
+{% from 'origin-pull.yml.j2' import origin_pull_tlsoption with context %}
 {#
   The middlewares and TLS options carried over from the Docker instance's config.yml.j2.
 
@@ -150,6 +151,11 @@ spec:
     - TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
     - TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305
     - TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305
+---
+# The public-Host twin of `modern`: same policy plus a required Cloudflare client certificate.
+# The macro file carries the reasoning (#1990); origin-pull-secret.yaml.j2 renders the CA it
+# verifies against.
+{{ origin_pull_tlsoption(k8s_namespace) }}
 {% if traefik_k8s_manage_crowdsec %}
 ---
 # Slice-6 B1 — the CrowdSec bouncer, carried from the Docker edge's config.yml.j2 with two

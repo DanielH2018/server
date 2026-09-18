@@ -97,6 +97,13 @@ AUTHELIA_BYPASS_ROUTES = {
         "loudly — every check would silently go red while the jobs kept working. Carried over "
         "from the Docker role's hand-rolled healthchecks-ping router."
     ),
+    # The public name's twin of the route above, split off on 2026-09-18 so the public host
+    # can require Cloudflare's origin-pull client certificate (#1990) and the .local. host
+    # cannot. Same callers, same reason.
+    "healthchecks-ping-public": (
+        "Monitored jobs POST to /ping/<uuid> with no credentials, through Cloudflare. Same "
+        "silent-red failure mode as healthchecks-ping; the two are one route on two hosts."
+    ),
     # ("n8n-monitoring" retired 2026-08-16: monitor-bridge moved in-cluster on 2026-08-14 and
     # a 30-day Traefik access-log census found no other caller, so the route was deleted
     # rather than narrowed. It was the only route reaching a read-write API with neither
