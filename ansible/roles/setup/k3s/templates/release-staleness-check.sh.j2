@@ -71,20 +71,18 @@ fi
 # host — a rewrite would dirty the tree and wedge the GitOps deployer's dirty-skip, the same
 # reason secret-rotation-audit.sh uses it.
 UV=/home/{{ sys_user }}/.local/bin/uv
-OUTPUT="$(cd "$REPO_DIR" && "$UV" run --quiet --frozen python scripts/diagnostics/probe.py releases --stale-only 2>&1)"
+# --kuma: the verdict as ONE line grouped by reason (bridge.msgfmt). The per-service list ran
+# to ~7,500 chars when a refused narrowing marked the whole fleet stale, and Discord rejects an
+# embed field past 1024 chars, so the DOWN reached nobody (#2013). Names-only was the first fix;
+# grouping keeps the reason. kuma_push caps the msg as a backstop. Not the journal either:
+# `logger` cuts a line at 1 KiB, so the full list is one `--stale-only` run away.
+OUTPUT="$(cd "$REPO_DIR" && "$UV" run --quiet --frozen python scripts/diagnostics/probe.py releases --stale-only --kuma 2>&1)"
 RC=$?
 
 if [[ $RC -eq 0 ]]; then
   STATUS=up
 elif [[ $RC -eq 1 ]]; then
   STATUS=down
-  # Names only. The per-service reasons ran to ~7,500 chars when a refused narrowing marked the
-  # whole fleet stale, and Discord rejects an embed field past 1024 chars, so the DOWN reached
-  # nobody (#2013). kuma_push caps the msg as a backstop; this keeps the page readable. Not the
-  # journal either: `logger` cuts a line at 1 KiB, so the reasons are one probe.py run away.
-  STALE_NAMES="$(printf '%s\n' "$OUTPUT" | cut -d: -f1 | paste -sd, - | sed 's/,/, /g')"
-  STALE_COUNT="$(printf '%s\n' "$OUTPUT" | grep -c .)"
-  OUTPUT="${STALE_COUNT} service(s) stale: ${STALE_NAMES} — run probe.py releases --stale-only for the reasons"
 else
   # Anything else (a Python traceback, uv failing to sync) is the check itself breaking, not a
   # verdict about staleness — reported as down so it pages rather than reading as a clean fleet.

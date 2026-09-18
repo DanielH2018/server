@@ -32,6 +32,10 @@ dev = [                              # `dev` is uv's default group for `uv run`/
   # change an inference and turn master red on an unrelated PR.
   # Renovate raises the bump as its own PR, which is where the
   # new diagnostics get read.
+  "python-liquid>=2",                # renders uptime-kuma's discord-message.liquid in
+  # test_kuma_discord_template.py. Kuma itself renders it with
+  # liquidjs; the template stays in the subset both accept, and
+  # the test docstring names the one divergence found.
 ]
 
 [tool.pytest.ini_options]

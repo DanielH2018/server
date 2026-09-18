@@ -533,6 +533,41 @@ def format_stale_only(stale, missing):
     return "\n".join(lines), 1
 
 
+# The bridge pod ships `files/`, so the formatter lives there and probe.py reaches it the way
+# the tests do: by putting that directory on sys.path. Bootstrapped here rather than at the
+# top of the module because only `--kuma` needs it.
+_BRIDGE_FILES = REPO_ROOT / "ansible/roles/k8s/monitor-bridge/files"
+
+# Path prefixes a reason carries that add nothing inside a 900-char push message.
+_REASON_NOISE = re.compile(r"ansible/(?:inventory|roles(?:/k8s)?)/")
+
+
+def _kuma_reason(reason):
+    return _REASON_NOISE.sub("", reason.removeprefix("changed since applied: "))
+
+
+def format_stale_kuma(stale, missing):
+    """The `--stale-only` verdict as one line grouped by reason, for the Kuma push. Pure.
+
+    57 services carrying one identical reason are one group, not 57 lines (#2013); the group
+    lists the names once. Shares the exit code contract with `format_stale_only`.
+    """
+    items = {svc: _kuma_reason(reason) for svc, reason in stale.items()}
+    items.update(dict.fromkeys(missing, "no release record"))
+    if not items:
+        return "0 services stale; every known k8s service has a current record.", 0
+    if str(_BRIDGE_FILES) not in _sys.path:
+        _sys.path.insert(0, str(_BRIDGE_FILES))
+    from bridge import msgfmt
+
+    return (
+        msgfmt.format_down(
+            "service", "stale", items, details="probe.py releases --stale-only"
+        ),
+        1,
+    )
+
+
 def run_releases(ns):
     """Print the release records (or, with `--json`, raw JSON) and return the exit code.
 
@@ -546,7 +581,8 @@ def run_releases(ns):
     if getattr(ns, "stale_only", False):
         stale = compute_stale(records)
         missing = missing_services(records)
-        text, code = format_stale_only(stale, missing)
+        render = format_stale_kuma if getattr(ns, "kuma", False) else format_stale_only
+        text, code = render(stale, missing)
         print(text)
         return code
     merged = merged_commits(r.get("commit") for r in records)

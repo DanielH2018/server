@@ -34,7 +34,7 @@ DECLARATIONS = {
     "discord": {
         "type": "notification",
         "name": "Homelab Alerts",
-        "config": {"discordWebhookUrl": "https://hook-must-not-leak"},
+        "config": {"webhookURL": "https://hook-must-not-leak"},
     },
 }
 
