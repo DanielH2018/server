@@ -9,7 +9,7 @@
 # pod restart into a server that comes up vanilla, with the pod reporting Ready either way. The
 # versions and checksums live in defaults/main.yml, so a mod bump is a reviewed repo change that
 # rebuilds this image — the same posture terraria's build has.
-FROM alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b AS fetch
+FROM alpine:3.24@sha256:e7c4abb69531cb09e2a2bbb56fad3367ab694865c49df898c1c683185cc4376c AS fetch
 RUN apk add --no-cache curl unzip
 WORKDIR /dl
 RUN mkdir -p /out
@@ -41,5 +41,5 @@ RUN curl -sfSL -o "{{ mod.name }}.zip" "{{ mod.url }}" \
 RUN test "$(find /out -name '*.dll' | wc -l)" -ge {{ valheim_k8s_mods | length }} \
     || { echo "expected at least {{ valheim_k8s_mods | length }} plugin DLLs in /out"; ls -l /out; exit 1; }
 
-FROM alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b
+FROM alpine:3.24@sha256:e7c4abb69531cb09e2a2bbb56fad3367ab694865c49df898c1c683185cc4376c
 COPY --from=fetch /out/ /mods/
