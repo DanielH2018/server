@@ -1,0 +1,80 @@
+{#
+  Cloudflare Authenticated Origin Pulls at the k8s edge (#1990).
+
+  Cloudflare presents a per-zone client certificate on every connection it opens to the origin,
+  and the `cloudflare-origin-pull` TLSOption below requires and verifies one against Cloudflare's
+  published CA. Every router matching a public `x.<domain>` Host references it (the
+  ingressroute() macro's public object, its bypass documents, healthchecks' ping route, the
+  livesync file-provider routers), so a client that reaches the origin IP directly with a public
+  SNI fails the handshake — even from a source inside `cloudflare_ips`, which is what the #1974
+  netpol allowlist on :8443 admits. The `.local.` routers keep `modern`: a LAN or WireGuard
+  client holds no such certificate.
+
+  Two objects, one macro each, because a TLSOption resolves its Secret in ITS OWN namespace and
+  an IngressRoute resolves its TLSOption in its own — the same cross-namespace trap the `modern`
+  copies in claude-otel's and longhorn-ui's middlewares.yaml.j2 document. Every namespace with a
+  public route renders both: traefik for k8s_namespace, claude-otel for the observability
+  namespace (grafana's public name). ENFORCED by
+  ansible/tests/k8s/test_public_routes_require_cloudflare_origin_pull.py.
+
+  Two properties of Traefik make the per-host split sound rather than a bypass waiting to be
+  found, both from v3's pkg/server/router/tcp and pkg/middlewares/snicheck:
+    - TLS options are chosen by SNI, and every router on one host must name the SAME option —
+      a disagreement logs "Found different TLS options for routers on the same host" and the
+      host silently falls back to the default options, which require no certificate. Hence the
+      guard's per-host predicate rather than a per-object one.
+    - A request whose Host header maps to a different option than its SNI did (no SNI, or a
+      `.local.` SNI carrying a public Host header) is answered 421 Misdirected Request before
+      any router sees it. So the certificate cannot be dodged by handshaking as a LAN name.
+
+  The CA is `roles/k8s/traefik/files/cloudflare-origin-pull-ca.crt` (public, provenance in the
+  file's header). The Secret carries it under `tls.ca`, the key Traefik's CRD provider reads
+  first, with `ca.crt` as its fallback (`getCABlocks`, pkg/provider/kubernetes/crd/kubernetes.go
+  at v3.7.12). The bytes reach `x509.CertPool.AppendCertsFromPEM` unparsed
+  (pkg/tls/tlsmanager.go), and Go's pem.Decode cuts at the first `-----BEGIN` line, so the
+  provenance comment above the certificate in that file is skipped rather than rejected. A
+  Secret with neither key logs `Failed to extract CA from secret` and the option builds with NO
+  CA — and with RequireAndVerifyClientCert that fails every handshake on the public names, while
+  `probe.py health traefik` stays green because the pod is fine. Check the traefik log for that
+  line first if the public names go dark after a deploy.
+#}
+{% macro origin_pull_ca_secret(namespace) -%}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cloudflare-origin-pull-ca
+  namespace: {{ namespace }}
+type: Opaque
+stringData:
+  tls.ca: |
+{{ lookup('file', playbook_dir + '/roles/k8s/traefik/files/cloudflare-origin-pull-ca.crt') | indent(4, true) }}
+{%- endmacro %}
+
+{% macro origin_pull_tlsoption(namespace) -%}
+apiVersion: traefik.io/v1alpha1
+kind: TLSOption
+metadata:
+  # Referenced by name from every public-Host router. Not `default` — that name is reserved
+  # (see the `modern` TLSOption in roles/k8s/traefik/templates/dynamic.yaml.j2).
+  name: cloudflare-origin-pull
+  namespace: {{ namespace }}
+spec:
+  # `modern` plus clientAuth: the public name keeps the same protocol floor and cipher policy
+  # as the `.local.` one. test_public_routes_require_cloudflare_origin_pull.py keeps the two in
+  # step, so a cipher change to `modern` fails until it is made here too.
+  minVersion: VersionTLS12
+  cipherSuites:
+    - TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
+    - TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+    - TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
+    - TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+    - TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305
+    - TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305
+  clientAuth:
+    # The Secret origin_pull_ca_secret() renders in this same namespace.
+    secretNames:
+      - cloudflare-origin-pull-ca
+    # Require AND verify: RequireAnyClientCert would accept a self-signed certificate, which
+    # is no gate at all.
+    clientAuthType: RequireAndVerifyClientCert
+{%- endmacro %}

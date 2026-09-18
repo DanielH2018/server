@@ -19,20 +19,25 @@
 # routes carry a fixed middleware set, and this one needs a DIFFERENT set (rate-limit, no
 # authelia) plus a priority. Traefik merges routers across IngressRoute objects, so the two
 # coexist exactly as the two Docker routers do.
+{# One IngressRoute per hostname, same split and same reasons as the ingressroute() macro: the
+   public name arrives through Cloudflare, keys its limiter on the forwarded client (#1955) and
+   requires Cloudflare's origin-pull client certificate (#1990); the `.local.` name arrives
+   direct, keys on the remote address and asks for no certificate. `spec.tls.options` is per
+   object and picked by SNI, so the two hosts cannot share one. #}
+{% set ping_host = container_item.hostname | default(container_item.name) %}
+{% for host, rate_limit, suffix, tls_option in [(ping_host ~ '.local.' ~ domain, 'rate-limit', '', 'modern')] + ([(ping_host ~ '.' ~ domain, 'rate-limit-proxied', '-public', 'cloudflare-origin-pull')] if k8s_public_route else []) %}
+{% if not loop.first %}
+---
+{% endif %}
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
-  name: {{ container_item.name }}-ping
+  name: {{ container_item.name }}-ping{{ suffix }}
   namespace: {{ k8s_namespace }}
 spec:
   entryPoints:
     - https
   routes:
-{# One Rule per hostname, same split and same reason as the ingressroute() macro: the public
-   name arrives through Cloudflare and keys on the forwarded client, the `.local.` name
-   arrives direct and keys on the remote address (traefik's dynamic.yaml.j2, #1955). #}
-{% set ping_host = container_item.hostname | default(container_item.name) %}
-{% for host, rate_limit in ([(ping_host ~ '.' ~ domain, 'rate-limit-proxied')] if k8s_public_route else []) + [(ping_host ~ '.local.' ~ domain, 'rate-limit')] %}
     - kind: Rule
       # Trailing slash anchors to the /ping/ path SEGMENT (pings are /ping/<uuid>): a bare
       # PathPrefix(`/ping`) also matches sibling paths like /pingXYZ, extending this public
@@ -45,13 +50,12 @@ spec:
       services:
         - name: {{ container_item.name }}
           port: {{ container_item.port }}
-{% endfor %}
   tls:
 {% if k8s_tls_cert_resolver %}
     certResolver: {{ k8s_tls_cert_resolver }}
 {% endif %}
     options:
-      name: modern
+      name: {{ tls_option }}
 {% if k8s_tls_cert_resolver %}
     domains:
       - main: "{{ domain }}"
@@ -59,3 +63,4 @@ spec:
           - "*.{{ domain }}"
           - "*.local.{{ domain }}"
 {% endif %}
+{% endfor %}

@@ -29,8 +29,9 @@ _CREDENTIAL_FIELD = re.compile(
 )
 
 # The reference forms: `secret:` is how basicAuth/digestAuth name a Secret, `secretName` is how
-# a tls block does. Both are the fix, not the finding.
-_SECRET_REFERENCE_KEYS = frozenset({"secret", "secretName"})
+# a tls block does, `secretNames` is how a TLSOption's clientAuth names its CA Secrets. All are
+# the fix, not the finding.
+_SECRET_REFERENCE_KEYS = frozenset({"secret", "secretName", "secretNames"})
 
 # Maps whose KEYS are HTTP header names, where an auth header carries its credential inline.
 _HEADER_MAPS = frozenset({"customRequestHeaders", "customResponseHeaders"})
@@ -191,6 +192,14 @@ def test_traefik_credential_guard_accepts_the_reference_forms():
             }
         },
         {"spec": {"basicAuth": {"secret": "traefik-basic-auth"}}},
+        {
+            "spec": {
+                "clientAuth": {
+                    "secretNames": ["cloudflare-origin-pull-ca"],
+                    "clientAuthType": "RequireAndVerifyClientCert",
+                }
+            }
+        },
         {
             "spec": {
                 "headers": {

@@ -60,8 +60,11 @@ spec:
     # Cloudflare's WAF and bot rules, arrived with no trusted X-Forwarded-For, and so shared ONE
     # rate-limit bucket keyed on "" with every other origin-direct request. This list is the
     # origin lock the Docker-era DOCKER-USER chain used to be. Cloudflare Tunnel and a
-    # ClientIP() clause on the public Rule were considered and rejected in #1974; Authenticated
-    # Origin Pulls is #1990, on top of this.
+    # ClientIP() clause on the public Rule were considered and rejected in #1974. Authenticated
+    # Origin Pulls (#1990) sits on top of this: the `cloudflare-origin-pull` TLSOption
+    # (ansible/templates/origin-pull.yml.j2) requires Cloudflare's client certificate on every
+    # public Host router, so a source this list admits still fails the handshake unless the
+    # connection is Cloudflare's.
     #
     # ETP=Local preserves the source address on the VIP path, so each ipBlock matches what the
     # client really is. A WireGuard client arrives in one of two shapes, and both are listed:

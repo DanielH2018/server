@@ -55,11 +55,11 @@ REQUIRED_LIMITERS = frozenset(
 # a hand-rolled ping route, the observability-namespace route, and the file-provider pair.
 REQUIRED_PUBLIC_ROUTERS = frozenset(
     {
-        "karakeep",
+        "karakeep-public",
         "karakeep-public-api-v1",
-        "healthchecks-ping",
+        "healthchecks-ping-public",
         "n8n-public-webhook",
-        "grafana",
+        "grafana-public",
         "livesync-sync-public",
         "livesync-utils-public",
     }

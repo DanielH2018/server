@@ -50,6 +50,28 @@ Look" table's note that this role must render before anything referencing its CR
     `selfcheck=200`, and 302/200 on the LAN routes. Total edge outage 11:53Z–11:57Z.
   - Expected boot noise, not a defect: the selfcheck route has no `Host()`, so Traefik logs
     `No domain found in rule PathPrefix(...)` and falls back to the default TLSOption for it.
+- **Every public `x.<domain>` router requires Cloudflare's origin-pull client certificate
+  (#1990).** `ansible/templates/origin-pull.yml.j2` renders the `cloudflare-origin-pull`
+  TLSOption (`modern` plus `clientAuth: RequireAndVerifyClientCert`) and the
+  `cloudflare-origin-pull-ca` Secret it verifies against, from
+  `files/cloudflare-origin-pull-ca.crt` — Cloudflare's published CA, public, provenance and
+  expiry (2029-11-01) in the file header. The zone has Authenticated Origin Pulls on, so
+  Cloudflare presents the certificate on every origin connection; a direct client with a
+  public SNI fails the handshake even from inside `cloudflare_ips`, which is all the #1974
+  netpol on :8443 checks. Traefik picks TLS options by SNI, so the `ingressroute()` macro
+  renders the public and `.local.` hosts as two objects (`<name>-public` and `<name>`) and
+  only the public one names the option; a LAN or WireGuard client holds no certificate. Two
+  traps the guard (`ansible/tests/k8s/test_public_routes_require_cloudflare_origin_pull.py`)
+  exists for: every router on ONE public host must name the SAME option, or Traefik falls back
+  to the default options, which require nothing — the bypass documents and healthchecks'
+  ping twin share hosts with the main objects; and the option and its Secret resolve in the
+  ROUTE's namespace, so claude-otel carries the observability copies for grafana. A request
+  whose Host header maps to a different option than its SNI (no SNI, or a `.local.` SNI with
+  a public Host) is answered 421 before any router sees it, so the certificate cannot be
+  dodged by handshaking as a LAN name. To verify from the LAN: `curl -k --resolve
+  <svc>.<domain>:443:<VIP> https://<svc>.<domain>/` fails the handshake,
+  `https://<svc>.local.<domain>/` answers without a certificate, and the public name through
+  Cloudflare answers.
 - An initContainer runs `chmod 600 /data/acme.json` on every start: kubelet's `fsGroup`
   handling ORs group bits into every file on the volume at mount time, which flips
   Traefik's own `0600` back to `0660` and makes it refuse to load the ACME account.

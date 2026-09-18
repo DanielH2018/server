@@ -30,6 +30,9 @@
       - prometheus-ingressroute.yaml
     manifests_secret_files:
       - grafana-secret.yaml
+      # Public CA in a Secret — see the template. The `cloudflare-origin-pull` TLSOption in
+      # middlewares.yaml reads it.
+      - origin-pull-secret.yaml
       - scrape-credentials-secret.yaml
     # The shared role waits on ONE Deployment in {{ k8s_namespace }}; this role has three,
     # in a different namespace. Skip its wait and roll our own below.

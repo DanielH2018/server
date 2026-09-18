@@ -56,11 +56,13 @@ def test_the_route_renders_when_navidrome_has_a_pod():
     is the documented way to bring the workload back, and it must bring the route with it.
     """
     docs = [d for d in yaml_fast.safe_load_all(_render_route(1)) if d]
-    assert len(docs) == 1, docs
-    route = docs[0]
-    assert route["kind"] == "IngressRoute"
-    assert route["metadata"]["name"] == "navidrome"
-    assert route["spec"]["routes"], "an IngressRoute with no routes matches nothing"
+    # One object per host since #1990: the `.local.` route and its public twin.
+    assert [d["metadata"]["name"] for d in docs] == ["navidrome", "navidrome-public"], (
+        docs
+    )
+    for route in docs:
+        assert route["kind"] == "IngressRoute"
+        assert route["spec"]["routes"], "an IngressRoute with no routes matches nothing"
 
 
 def test_the_route_is_absent_while_navidrome_is_parked():

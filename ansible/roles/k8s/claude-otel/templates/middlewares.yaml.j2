@@ -1,3 +1,4 @@
+{% from 'origin-pull.yml.j2' import origin_pull_tlsoption with context %}
 ---
 # Local copies of the Middlewares every protected route uses. They are duplicated rather
 # than referenced across namespaces because Traefik's `allowCrossNamespace` stays off — with
@@ -74,3 +75,8 @@ spec:
     - TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
     - TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305
     - TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305
+---
+# Same per-namespace resolution for the public-Host option: grafana's public name renders in
+# this namespace, so the `cloudflare-origin-pull` its route names must exist here, with the CA
+# Secret it verifies against (origin-pull-secret.yaml.j2). See ansible/templates/origin-pull.yml.j2.
+{{ origin_pull_tlsoption(k8s_observability_namespace) }}

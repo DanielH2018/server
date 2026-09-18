@@ -109,10 +109,18 @@ def test_a_named_resolver_still_requests_the_wildcard_sans():
 
 
 def test_the_tls_options_are_named_on_both_branches():
-    """`options` is not part of the resolver; losing it silently drops the modern TLS profile."""
+    """`options` is not part of the resolver; losing it silently drops the TLS profile.
+
+    Which profile — `modern` on the `.local.` object, `cloudflare-origin-pull` on the public
+    one — is test_public_routes_require_cloudflare_origin_pull.py's concern; this guard only
+    asks that one is named whatever the resolver.
+    """
     for resolver in ("cloudflare", ""):
         for tls in _tls_blocks(_CALLS["ingressroute"], resolver):
-            assert tls.get("options", {}).get("name") == "modern", (
+            assert tls.get("options", {}).get("name") in {
+                "modern",
+                "cloudflare-origin-pull",
+            }, (
                 f"a route rendered with {RESOLVER_VAR}={resolver!r} has "
                 f"options={tls.get('options')!r}. The profile applies regardless of how the "
                 f"certificate was obtained, so it belongs outside the resolver's conditional."
