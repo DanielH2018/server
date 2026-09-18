@@ -39,6 +39,13 @@ karakeep_k8s_tagger_image: ghcr.io/astral-sh/uv:python3.14-bookworm-slim@sha256:
 # entry; a reason naming only one would miss the other two.
 k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
 k8s_autodeploy_reason: "three reasons: (1) stateful — meilisearch migrates its index in place on a bump, non-atomically; (2) probe-less time-tagger sub-deployment; (3) migrating state — Recreate + RWO volume-claim PVC. COUPLING NOTE for a future promotion: karakeep-meili is deliberately excluded from the snapshot, so reverting karakeep-data alone desyncs the search index until a manual reindex"  # noqa var-naming[no-role-prefix]
+# The pre-apply Longhorn snapshot k8s/manifests takes via k8s/volume-snapshot. Declared
+# regardless of k8s_autodeploy — it protects a manual deploy too, and an app bump runs
+# karakeep's own one-way DB migration on db.db at boot (0.32.0 -> 0.33.2 did, 2026-09-18).
+# The CLAUDE.md said this pair covered karakeep-data from 2026-09-03; nothing declared it until
+# now, so the weekly backup was the only recovery point. karakeep-meili stays out on purpose:
+# it is rebuilt by reindexing, and the COUPLING NOTE above records the desync a revert causes.
+k8s_autodeploy_snapshot_pvcs: [karakeep-data]  # noqa var-naming[no-role-prefix]
 
 karakeep_k8s_cpu_limit: "2"
 karakeep_k8s_mem_limit: 2048Mi
