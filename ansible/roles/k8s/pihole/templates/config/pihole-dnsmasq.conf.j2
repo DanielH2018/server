@@ -28,7 +28,16 @@
    record discloses an RFC1918 address and the existence of the naming scheme, nothing more.
    ACME is unaffected either way — issuance uses the DNS-01 TXT challenge, not this A record. #}
 address=/local.{{ domain }}/{{ pihole_wildcard_ip | default(k3s_metallb_ingress_vip) }}
-address=/local.{{ domain }}/::
+{# DECIDED (2026-09-18, #2010): `local=` here, not `address=/local.<domain>/::`. Both keep an
+   AAAA for a `.local.` name from being forwarded upstream, which is the property that
+   matters — since dnsmasq 2.86 an `address=` carrying only an IPv4 sends every OTHER record
+   type upstream, past the public resolvers this file exists to keep LAN names away from.
+   The `::` form answered that AAAA with a NULL address, which is a
+   routable-looking answer to a client that prefers IPv6: Happy Eyeballs clients stall on it
+   briefly, and grpc-go retried `[::]:443` forever (2026-08-10, the otel-collector forwarder).
+   `local=` answers it NODATA instead, the shape dnsmasq's own manual prescribes:
+   "--address=/example.com/1.2.3.4 --local=/example.com/" restores the pre-2.86 NoData. #}
+local=/local.{{ domain }}/
 
 # k3s-hosted services answer with the cluster's MetalLB ingress VIP instead of the wildcard
 # above. dnsmasq resolves the most specific `address=` match, so these override
