@@ -186,26 +186,37 @@
     append: true
   become: true
 
-- name: Expose containerd's metrics on the LAN IP
-  tags: [docker-daemon]
+- name: Expose containerd's metrics on the LAN IP and keep its shims on the default GC
+  tags: [docker-daemon, docker-go-runtime, docker-go-runtime-containerd]
   # containerd serves Prometheus metrics at /v1/metrics once `[metrics] address` is set;
   # the cluster scrapes it as `containerd-pi`. Same reason as dockerd's metrics-addr below:
   # containerd took 53 major faults/s on daniel-pi (#2003) and its live heap is what sizes
   # a GOMEMLIMIT. The packaged config.toml carries only `disabled_plugins = ["cri"]`, so a
   # marked block is the whole of what this role owns in it.
+  #
+  # The shim-manager `env` is appended to every shim's environment AFTER the daemon's own
+  # (pkg/shim/util.go), and Go keeps the last value of a duplicate key, so it undoes the
+  # `GOGC=off` / `GOMEMLIMIT` the containerd.service drop-in (go-runtime.yml) would
+  # otherwise hand every shim and, through it, every runc. It carries the go-runtime tags
+  # so that a `--tags docker-go-runtime-containerd` run cannot land the drop-in without
+  # it. The file has no `version =` key; containerd 2.3.5 reads it as version 1 and its
+  # migration passes a dotted plugin name through unchanged -- `containerd config dump`
+  # on daniel-pi shows the section under version 4.
   ansible.builtin.blockinfile:
     path: /etc/containerd/config.toml
     marker: "# {mark} ANSIBLE MANAGED BLOCK (roles/setup/docker_install)"
     block: |
       [metrics]
         address = "{{ server_ip }}:1338"
+      [plugins.'io.containerd.shim.v1.manager']
+        env = ["GOGC=100", "GOMEMLIMIT=off"]
     create: true
     mode: "0644"
   become: true
   register: docker_install_containerd_metrics
 
-- name: Restart containerd to serve its metrics # noqa no-handler
-  tags: [docker-daemon]
+- name: Restart containerd to read its config.toml block # noqa no-handler
+  tags: [docker-daemon, docker-go-runtime, docker-go-runtime-containerd]
   # docker.service only `Wants=` containerd, so this does not cascade into dockerd, and
   # live-restore keeps the containers up. The shim binaries are not replaced here, which is
   # what made the 2026-09-18 engine upgrade (#1961) different.
@@ -280,6 +291,26 @@
     state: restarted
   become: true
   when: docker_install_daemon_config.changed
+
+# One Go daemon per import, each with its own tag, so the pairing can land on one daemon a
+# day and the day-after `rate(node_vmstat_pswpin{job="node-pi"}[1d])` reading is
+# attributable (#2003). A role-level or `--tags docker-go-runtime` run applies both at
+# once, which is the intended end state; the stagger is measurement discipline, not a
+# constraint the tasks enforce. Static imports for the reason main.yml gives: an include
+# is a task `--tags` judges first.
+- name: Pair dockerd's Go runtime with a memory limit
+  ansible.builtin.import_tasks: go-runtime.yml
+  vars:
+    go_runtime_unit: docker
+    go_runtime_daemon: dockerd
+  tags: [docker-go-runtime, docker-go-runtime-dockerd]
+
+- name: Pair containerd's Go runtime with a memory limit
+  ansible.builtin.import_tasks: go-runtime.yml
+  vars:
+    go_runtime_unit: containerd
+    go_runtime_daemon: containerd
+  tags: [docker-go-runtime, docker-go-runtime-containerd]
 
 - name: Create Docker networks
   tags: [docker-networks]

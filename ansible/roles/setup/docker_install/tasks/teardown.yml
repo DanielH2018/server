@@ -120,3 +120,15 @@
     purge: true
     autoremove: true
   become: true
+
+- name: Remove the Go runtime drop-ins the install direction wrote
+  tags: [docker-teardown]
+  # go-runtime.yml writes /etc/systemd/system/{docker,containerd}.service.d/20-go-runtime.conf;
+  # the purge above takes /etc/docker and the units, not /etc/systemd/system, and a
+  # drop-in left for a unit that no longer exists is what this role's both-directions
+  # rule exists to reap. The directories are this role's -- daniel-pi had neither before.
+  ansible.builtin.file:
+    path: "/etc/systemd/system/{{ item }}.service.d"
+    state: absent
+  loop: [docker, containerd]
+  become: true

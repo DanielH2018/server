@@ -14,3 +14,27 @@ docker_install_stale_crons:
 # (#1998) -- so the upgrade needs `-e docker_install_engine_upgrade=true` as well as
 # `--tags docker-engine-upgrade`.
 docker_install_engine_upgrade: false
+
+# GOMEMLIMIT for each Go daemon, paired with GOGC=off in a systemd drop-in
+# (tasks/go-runtime.yml, tags `docker-go-runtime-dockerd` / `docker-go-runtime-containerd`).
+# With GOGC off the limit is the only thing that starts a collection, so the distance from
+# the daemon's live set plus the runtime's non-heap classes up to the limit is one cycle's
+# allocation. Measured 2026-09-18 on daniel-pi over the first 4.3 h of the `dockerd-pi` and
+# `containerd-pi` scrapes (roles/k8s/claude-otel): live heap 11-14 MB each
+# (`go_memstats_heap_alloc_bytes` floor 10.7 / 10.4 MB, `go_memstats_next_gc_bytes` up to
+# 28.0 / 27.3 MB under the default GOGC=100), non-heap runtime 10.3 / 8.2 MB, allocation
+# 114 / 97 KB/s, 0.70 / 0.68 GC cycles a minute -- ABOVE the two-minute forced-cycle floor,
+# so today the heap goal is the trigger, not the timer. 64 MiB leaves ~40 MB of slack for
+# dockerd (a cycle every ~350 s) and ~42 MB for containerd (every ~430 s), the cadence the
+# Pi Alloy runs at (#1967), against ~85 s today. The issue's own "live + 50% + non-heap"
+# recipe would give 31 / 28 MiB, 7 MB of slack, and a cycle every ~60 s -- more often than
+# now; a percentage of a 14 MB heap is not slack. The guard that holds these above the
+# floor is ansible/tests/setup/test_docker_daemons_gomemlimit_headroom.py; its docstring
+# carries the re-measure queries.
+#
+# An empty value removes that daemon's drop-in and restarts it back to the runtime's
+# defaults. Two scalars rather than one dict: Ansible replaces a dict on override, so a
+# host_vars entry emptying one daemon's key would have dropped the other's as well.
+# Sized for daniel-pi; every Docker host is the Pi.
+docker_install_gomemlimit_dockerd: 64MiB
+docker_install_gomemlimit_containerd: 64MiB
