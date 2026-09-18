@@ -7,7 +7,7 @@ allowed-tools: Bash, Read, Edit, Write, Grep, Glob
 Renovate opens PRs here that are **deliberately incomplete**. Ten package rules carry
 `automerge: false` and a group name ending in a parenthetical — `(manual — finish the targetAbi
 + MD5, raise jellyfin with it)`, `(manual — finish the per-arch sha256 from checksums.txt)`,
-`(manual — append each resolved version to base-pin-history.tsv; lockstep: app + task runners)`.
+`(manual — append each resolved version to base-pin-history.tsv; lockstep: app + task runners; k8s_autodeploy: false)`.
 That parenthetical is a **work order**, not a label. Merging such a PR on green CI ships half a
 bump.
 
@@ -91,7 +91,7 @@ For each PR read the file list and the diff — `gh pr diff <n> --name-only`, th
 |---|---|---|
 | `uv.lock` | lock file maintenance | merge; nothing to deploy |
 | `ansible/roles/k8s/*/defaults/main.yml` | k8s image pin | merge, land with the role's tag |
-| same, title carries `(manual — k8s_autodeploy: false, …)` | k8s image pin the tick cannot apply | nothing to finish; merge through `land.sh`, which deploys it from the merge commit — a bare merge leaves it to the drift monitor (#1886). **An interactive session's job only**: the unattended `renovate_agent` leaves this class open and names the `land.sh` command in its digest, because the denial reason is that a failed deploy here (authelia, traefik, crowdsec) is one `probe.py health` cannot see, so a person is the review (#1939) |
+| same, title carries `(manual — k8s_autodeploy: false, …)` | k8s image pin the tick cannot apply | nothing to finish; merge through `land.sh`, which deploys it from the merge commit — a bare merge leaves it to the drift monitor (#1886). **An interactive session's job only**: the unattended `renovate_agent` leaves this class open and names the `land.sh` command in its digest, because the denial reason is that a failed deploy here (authelia, traefik, crowdsec) is one `probe.py health` cannot see, so a person is the review (#1939). A title whose parenthetical ENDS with `; k8s_autodeploy: false` after its own work order (`crowdsec bouncer plugin`, `meilisearch`, `karakeep time-tagger pip deps`, `n8n`) is a per-package rule on a denied role (#1963): the work order in front of the marker decides the handling — *When to stop and say so* below — and the marker only says who may land it |
 | `ansible/inventory/group_vars/all.yml`, same title | a cross-role image pin (`crowdsec_k8s_image`, read by crowdsec, traefik and authelia) | same as the row above, with one difference in who applies it: an inventory change is the deployer's broad plane, so after the merge the TICK narrows the changed key to every role reading it and applies them — `land.sh` waits on that tick rather than running `deploy.sh` itself (#1936) |
 | `ansible/roles/setup/*/defaults/main.yml` | host plane | often `manual —`; check the rule |
 | `ansible/roles/k8s/*/templates/Dockerfile*.j2` | in-cluster-built image | merge, land, then verify the pod took the rebuild |
@@ -99,7 +99,7 @@ For each PR read the file list and the diff — `gh pr diff <n> --name-only`, th
 | anything else | read the rule | see below |
 
 **The title's parenthetical is the fastest tell.** A title reading `Update n8n (manual — append
-each resolved version to base-pin-history.tsv; lockstep: app + task runners)` names its group,
+each resolved version to base-pin-history.tsv; lockstep: app + task runners; k8s_autodeploy: false)` names its group,
 and the group name is the work order — here, resolve each new digest to its
 `org.opencontainers.image.version` label and append a row to
 `ansible/roles/k8s/n8n-images/base-pin-history.tsv`, whose header carries the commands. A digest
@@ -269,6 +269,8 @@ closing summary so the count is visible over time.
 
 - The rule's parenthetical names work you cannot verify — an upgrade plan (`k3s control plane`),
   a DB format migration (`meilisearch`), a WAF component needing a deliberate redeploy
-  (`crowdsec bouncer plugin`). Report what the rule asks for and leave the PR open.
+  (`crowdsec bouncer plugin`). Report what the rule asks for and leave the PR open. The
+  `; k8s_autodeploy: false` those two also carry does not change this: it is the marker that
+  keeps the unattended `renovate_agent` off them (#1963), not a second work order.
 - The new version's release notes name a breaking change. Renovate does not read them; you do.
 - A landing hits a genuine hold — `CLAUDE.md` → *When to wait* governs, not this skill.

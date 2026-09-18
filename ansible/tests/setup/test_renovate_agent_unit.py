@@ -249,8 +249,11 @@ RENOVATE = ANSIBLE.parent / "renovate.json"
 
 # The tell is read out of renovate.json, not typed here: the manual rule's groupName is what
 # Renovate puts in the PR title, and a rename there that the prompt did not follow is exactly
-# the drift this guard exists to catch (issue #1939).
-_MANUAL_TELL = re.compile(r"\(manual — (?P<tell>k8s_autodeploy: [a-z]+)")
+# the drift this guard exists to catch (issue #1939). The denylist rule leads its parenthetical
+# with the tell; a per-package rule whose pin a denied role owns ends its own with it (the
+# crowdsec bouncer plugin, issue #1963), so the tell is collected from anywhere inside a
+# `(manual …)` parenthetical and every rule must spell it the same way.
+_MANUAL_TELL = re.compile(r"\(manual[^)]*?(?P<tell>k8s_autodeploy: [a-z]+)")
 
 
 def denylist_marker(rules: list[dict]) -> str:
@@ -311,3 +314,33 @@ def test_the_marker_is_read_from_the_rule_not_typed_here() -> None:
     """A groupName without the tell leaves nothing to assert, and must say so."""
     with pytest.raises(AssertionError, match="expected one denylist groupName tell"):
         denylist_marker([{"groupName": "k8s image {{depName}}"}])
+
+
+def test_a_rule_spelling_the_tell_differently_fails_rather_than_passing_one_of_them() -> (
+    None
+):
+    """Two spellings are two markers, and the prompt can name only one of them."""
+    with pytest.raises(AssertionError, match="expected one denylist groupName tell"):
+        denylist_marker(
+            [
+                {
+                    "groupName": "k8s image {{depName}} (manual — k8s_autodeploy: false, …)"
+                },
+                {"groupName": "plugin (manual — finish it; k8s_autodeploy: off)"},
+            ]
+        )
+
+
+def test_the_tell_is_read_from_the_end_of_a_per_package_parenthetical() -> None:
+    """A per-package rule ends its parenthetical with the tell; both rules must yield one."""
+    assert (
+        denylist_marker(
+            [
+                {
+                    "groupName": "k8s image {{depName}} (manual — k8s_autodeploy: false, …)"
+                },
+                {"groupName": "plugin (manual — finish it; k8s_autodeploy: false)"},
+            ]
+        )
+        == "k8s_autodeploy: false"
+    )
