@@ -1,16 +1,21 @@
-"""Guard: the Pi Alloy's GOMEMLIMIT sits above the runtime's measured total, below the cap.
+"""Guard: the Pi Alloy's GOMEMLIMIT sits above the heap GOGC asks for, below the cap.
 
-GOMEMLIMIT bounds the Go runtime's TOTAL memory (`go_memstats_sys_bytes`), not the live heap.
-A limit below that total does not save memory; it makes the runtime collect continuously,
-bounded only by the GC CPU limiter at 50% of GOMAXPROCS. That is how the first Alloy on
-daniel-pi ran for 7 days: GOMEMLIMIT=48MiB against a 58.7 MB runtime total, 2 GC cycles a
-second for 1.6 log lines a second, 0.28 of a core steady (#932), the largest load on the host
-and the contention behind #930.
+GOMEMLIMIT bounds the Go runtime's TOTAL memory (heap, stacks, GC metadata), not the live
+heap. A limit below what GOGC would grow the heap to takes over the heap goal, and a limit
+near the live set itself makes the runtime collect continuously, bounded only by the GC CPU
+limiter at 50% of GOMAXPROCS. That is how the first Alloy on daniel-pi ran for 7 days:
+GOMEMLIMIT=48MiB against a heap that needed more, 2 GC cycles a second for 1.6 log lines a
+second, 0.28 of a core steady (#932), the largest load on the host and the contention
+behind #930.
 
-The floor here is that measured total plus headroom. Lowering the limit back under it "to
-save RAM" is a one-line edit that renders, lints and deploys green, and reads as thrift.
-The ceiling is the compose memory cap: a limit at or above it is no ceiling at all, and the
-container is OOM-killed before the runtime collects.
+The floor here is the heap goal GOGC sets on the measured live heap, plus the runtime's
+non-heap classes. It is NOT `go_memstats_sys_bytes`, which the 2026-09-03 sizing used: that
+metric never shrinks, counts pages already handed back to the kernel, and read 96.3 MB on
+2026-09-17 — above the limit and the cap alike — while collection ran at 0.7 cycles a
+minute (#1944). Lowering the limit back under the floor "to save RAM" is a one-line edit
+that renders, lints and deploys green, and reads as thrift. The ceiling is the compose
+memory cap: a limit at or above it is no ceiling at all, and the container is OOM-killed
+before the runtime collects.
 """
 
 import re
@@ -19,10 +24,14 @@ from _helpers import REPO
 
 _COMPOSE = REPO / "ansible/roles/containers/alloy/templates/docker-compose.yml.j2"
 
-# `go_memstats_sys_bytes` on 2026-09-03 was 58.7 MB. Anything at or under it is the
-# continuous-collection state above.
-MEASURED_RUNTIME_TOTAL_MIB = 59
-HEADROOM_MIB = 8
+# The post-GC floor of `go_memstats_heap_alloc_bytes{job="alloy-pi"}`: 38.3-38.5 MB on every
+# day from 2026-09-06 to 2026-09-17, after a three-day climb from 29 MB. Re-measure with
+# `min_over_time(go_memstats_heap_alloc_bytes{job="alloy-pi"}[1d])` on a process older than
+# three days, never on a fresh one (22 MB in its first hour).
+MEASURED_LIVE_HEAP_MIB = 37
+# `go_memstats_sys_bytes` − `go_memstats_heap_sys_bytes`: stacks, GC metadata, mspan/mcache
+# and the profiling buckets. 8.3 MB on 2026-09-18.
+NON_HEAP_RUNTIME_MIB = 8
 
 _UNITS_MIB = {"MiB": 1, "M": 1, "GiB": 1024, "G": 1024}
 
@@ -33,48 +42,60 @@ def _mib(quantity: str) -> int:
     return int(match.group(1)) * _UNITS_MIB[match.group(2)]
 
 
-def gomemlimit_problem(gomemlimit: str, mem_cap: str) -> str | None:
-    """The failure message for a (GOMEMLIMIT, compose memory cap) pair, else None."""
+def gomemlimit_problem(gomemlimit: str, mem_cap: str, gogc: int) -> str | None:
+    """The failure message for a (GOMEMLIMIT, compose memory cap, GOGC) triple, else None."""
     limit = _mib(gomemlimit)
-    floor = MEASURED_RUNTIME_TOTAL_MIB + HEADROOM_MIB
+    heap_goal = MEASURED_LIVE_HEAP_MIB * (100 + gogc) // 100
+    floor = heap_goal + NON_HEAP_RUNTIME_MIB
     if limit < floor:
         return (
-            f"GOMEMLIMIT={gomemlimit} is under the {floor} MiB floor (runtime total "
-            f"{MEASURED_RUNTIME_TOTAL_MIB} MiB + {HEADROOM_MIB} headroom); the runtime "
-            "collects continuously at the GC CPU limiter"
+            f"GOMEMLIMIT={gomemlimit} is under the {floor} MiB floor (live heap "
+            f"{MEASURED_LIVE_HEAP_MIB} MiB at GOGC={gogc} is a {heap_goal} MiB goal, plus "
+            f"{NON_HEAP_RUNTIME_MIB} non-heap); the limit sets the heap goal, not GOGC"
         )
     if limit >= _mib(mem_cap):
         return f"GOMEMLIMIT={gomemlimit} is not below the {mem_cap} memory cap; OOM before GC"
     return None
 
 
-def _live_values() -> tuple[str, str]:
+def _live_values() -> tuple[str, str, int]:
     text = _COMPOSE.read_text()
     limit = re.search(r"^\s*- GOMEMLIMIT=(\S+)", text, re.MULTILINE)
+    gogc = re.search(r"^\s*- GOGC=(\d+)", text, re.MULTILINE)
     cap = re.search(r"resources\('[\d.]+', '(\w+)'", text)
-    assert limit and cap, "the alloy compose lost its GOMEMLIMIT or resources() line"
-    return limit.group(1), cap.group(1)
+    assert limit and gogc and cap, (
+        "the alloy compose lost its GOMEMLIMIT, GOGC or resources() line"
+    )
+    return limit.group(1), cap.group(1), int(gogc.group(1))
 
 
 def test_the_live_limit_has_headroom_and_a_cap_above_it() -> None:
-    gomemlimit, mem_cap = _live_values()
-    problem = gomemlimit_problem(gomemlimit, mem_cap)
+    gomemlimit, mem_cap, gogc = _live_values()
+    problem = gomemlimit_problem(gomemlimit, mem_cap, gogc)
     assert problem is None, problem
 
 
-def test_the_shipped_pair_is_clean() -> None:
-    assert gomemlimit_problem("72MiB", "96M") is None
+def test_the_shipped_triple_is_clean() -> None:
+    assert gomemlimit_problem("72MiB", "96M", 50) is None
 
 
 def test_the_2026_09_02_value_is_flagged() -> None:
-    """The limit Alloy first shipped with, sized from RSS rather than the runtime total."""
-    assert gomemlimit_problem("48MiB", "96M") == (
-        "GOMEMLIMIT=48MiB is under the 67 MiB floor (runtime total 59 MiB + 8 headroom); "
-        "the runtime collects continuously at the GC CPU limiter"
+    """The limit Alloy first shipped with, sized from RSS rather than the heap goal."""
+    assert gomemlimit_problem("48MiB", "96M", 50) == (
+        "GOMEMLIMIT=48MiB is under the 63 MiB floor (live heap 37 MiB at GOGC=50 is a "
+        "55 MiB goal, plus 8 non-heap); the limit sets the heap goal, not GOGC"
+    )
+
+
+def test_the_default_gogc_moves_the_floor_past_the_limit() -> None:
+    """Dropping the GOGC line restores Go's default 100%, and 72MiB no longer clears it."""
+    assert gomemlimit_problem("72MiB", "96M", 100) == (
+        "GOMEMLIMIT=72MiB is under the 82 MiB floor (live heap 37 MiB at GOGC=100 is a "
+        "74 MiB goal, plus 8 non-heap); the limit sets the heap goal, not GOGC"
     )
 
 
 def test_a_limit_at_the_cap_is_flagged() -> None:
-    assert gomemlimit_problem("96MiB", "96M") == (
+    assert gomemlimit_problem("96MiB", "96M", 50) == (
         "GOMEMLIMIT=96MiB is not below the 96M memory cap; OOM before GC"
     )

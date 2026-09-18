@@ -89,15 +89,30 @@ services:
       # second, and 0.27-0.29 of a core steady for 7 days — the limiter's 50% of one processor,
       # and the largest single load on the host (#932, the host contention behind #930).
       #
-      # 72MiB leaves ~20 MiB over the measured total, so the limit is the spike ceiling it was
-      # meant to be and GOGC drives steady-state collection. Sized 2026-09-03 from
-      # `go_memstats_sys_bytes` = 58.7 MB, `go_memstats_heap_alloc_bytes` ≈ 19-37 MB across a
-      # cycle, allocation rate 152 KB/s.
+      # Sized 2026-09-03 as ~20 MiB over a 58.7 MB `go_memstats_sys_bytes`. The live heap it
+      # was sized against was a first-day reading: the post-GC floor of
+      # `go_memstats_heap_alloc_bytes` climbed 29 → 38.5 MB over the three days after that
+      # restart and has held at 38.3-38.5 MB every day since (measured 2026-09-18 over 16 days;
+      # a fresh process starts at 22 MB, and the cluster's Alloy DaemonSet floors at 27 MB).
+      # That is warm-up to a plateau, not a leak, and what is in the 38 MB is unmeasured —
+      # pprof is off by decision (#1130). With GOGC=50 below, the heap goal is 58 MB; the
+      # runtime's non-heap classes add 8 MB; `heap_sys` reaches 70 MB, so the total the limit
+      # governs (`sys_bytes` − `heap_released_bytes`) reaches 72-74 MB at the top of every
+      # cycle — the limit itself. It is not a spike ceiling 20 MiB clear of steady state. What
+      # it does at that point is force the scavenger to hand idle heap pages back to the kernel
+      # (7 MB released), which is cheap: collection stays GOGC-paced at 0.7 cycles a minute and
+      # 0.05 of a core (#1944). The continuous-collection state above needs the limit under
+      # the live set plus GC slack, which is why the guard in
+      # ansible/tests/services/test_alloy_pi_gomemlimit_headroom.py takes the floor from the
+      # measured live heap and GOGC, not from `sys_bytes` — that metric never shrinks and read
+      # 96.3 MB on 2026-09-17, above this limit and this container's cap alike.
       - GOMEMLIMIT=72MiB
-      # Collect when the heap grows 50% past its live size, not the default 100%. Live heap is
-      # ~19 MiB, so this holds RSS near the 41 MiB it had under the old limit, and at 152 KB/s
-      # of allocation a cycle comes every ~60s instead of twice a second. CPU is not cheaper
-      # than RAM on this host after all: the 1c9592c1 shape spent 0.28 cores to save ~10 MiB.
+      # Collect when the heap grows 50% past its live size, not the default 100%. At the 38 MB
+      # live heap above that is a 58 MB goal, reached every ~85s at the measured 133 KB/s of
+      # allocation, instead of twice a second. CPU is not cheaper than RAM on this host after
+      # all: the 1c9592c1 shape spent 0.28 cores to save ~10 MiB. This is also the lever if
+      # the process ever needs to be smaller: GOGC=25 would take ~10 MB off every peak for a
+      # cycle every ~40s, still a fraction of a core at this allocation rate.
       - GOGC=50
       # One GC-visible processor. Alloy defaults GOMAXPROCS to the 4 cores on this Pi and
       # spawns a worker set to match, which is pure contention for a job this small on a box
@@ -142,6 +157,27 @@ services:
     # 96M is the containment cap, 24 MiB over the 72 MiB GOMEMLIMIT above so a spike is
     # collected rather than OOM-killed. Startup under the 0.30 CPU cap takes minutes on this host (the
     # binary is large and arm64 decompression is slow); it is not a hang.
+    #
+    # `process_resident_memory_bytes{job="alloy-pi"}` peaks at 75-82 MB on every day, and that
+    # is the top of the GC sawtooth, not an event: the 58 MB heap goal plus 8 MB of runtime
+    # plus up to 23 MB of the binary's own text pages (`RssFile`, file-backed) read at the
+    # moment of a scrape. Measured 2026-09-18 over 7 days at the 60s scrape: the samples above
+    # 70 MB fall in every one of the 24 hours (10-39 per hour), in 435 runs of median length
+    # one sample and at most three; the container-log rate is 1.6-1.7 lines/s in every hour;
+    # and no cron or timer on the host fires where the daily maxima fall (#1944). The reading
+    # is noisy the other way too — 22 MB one scrape and 70 MB the next — because this host
+    # swaps by design (`vm.swappiness=130` to zram, roles/setup/optimize_pi) and every GC
+    # cycle faults the swapped heap back in: 66-127 major faults/s, a third of the host's.
+    # Do not size from RSS or `max_over_time` of it; the cgroup is what the cap governs.
+    #
+    # The cgroup reached this cap 1,846 times in the first half hour after the 2026-09-18
+    # 00:39Z start — the binary's pages being charged and reclaimed as it was read — and not
+    # once in the 40 minutes after; `oom_kill` 0. Anonymous memory peaks around 66 MB, file
+    # pages are reclaimable, and Docker's default `memory.swap.max` equals the cap, so an
+    # OOM kill needs anon plus swap past 192 MiB. "~20 MB under its OOM line" was the RSS
+    # reading against the cap, and the two are not the same quantity.
+    # DECIDED: the cap stays at 96M with the settings above. Raising it buys nothing the
+    # process asks for and costs a 456 MB host that already holds 320 MB in swap.
     {{ resources('0.30', '96M', '0.02', '24M') }}
 
 {{ external_networks() }}
