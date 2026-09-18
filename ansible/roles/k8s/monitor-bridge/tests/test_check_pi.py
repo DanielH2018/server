@@ -24,7 +24,7 @@ DISK_OK = {"/dev/mmcblk0p2": 3.3, "/dev/mmcblk0p1": 12.0}
 def test_pi_pressure_ok():
     ok, msg = checks.host_edge.pi_pressure(0.2, 150 * MB, DISK_OK, 1.5, 50, 90)
     assert ok
-    assert "0.20/core" in msg and "150MB" in msg and "disk 12%" in msg
+    assert "0.20/core" in msg and "150MB" in msg and "disk /dev/mmcblk0p1 12%" in msg
 
 
 def test_pi_pressure_high_load_alerts():

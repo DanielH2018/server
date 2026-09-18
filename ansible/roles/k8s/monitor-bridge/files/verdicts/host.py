@@ -48,10 +48,14 @@ def pi_pressure(
             problems.append("disk %s %.0f%% (> %.0f%%)" % (dev, pct, disk_max_pct))
     if problems:
         return False, "; ".join(problems)
-    return True, "load5 %.2f/core, %.0fMB available, disk %.0f%%" % (
+    # The fullest device is named on the healthy path too: the Pi's vfat /boot/firmware sits
+    # at 37% while the SD root reads 8%, and a bare "disk 37%" reads as the card.
+    fullest, pct = max(disk_used_pct.items(), key=lambda dp: dp[1])
+    return True, "load5 %.2f/core, %.0fMB available, disk %s %.0f%%" % (
         load5_per_core,
         avail_mb,
-        max(disk_used_pct.values()),
+        fullest,
+        pct,
     )
 
 
