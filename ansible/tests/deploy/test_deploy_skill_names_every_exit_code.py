@@ -37,7 +37,7 @@ DEPLOY_SH_CODES = frozenset(
 # The table cannot lose rows to a rename of the module's constants, so the members are
 # named here as well: a census that reads its own subject by pattern must know what it
 # expects to find.
-KNOWN_CODES = frozenset({2, 3, 4, 20, 64, 75, 76, 77, 78})
+KNOWN_CODES = frozenset({2, 3, 4, 20, 64, 75, 76, 77, 78, 79})
 
 _TABLE_ROW = re.compile(r"^\|\s*(\d+)\s*\|", re.MULTILINE)
 

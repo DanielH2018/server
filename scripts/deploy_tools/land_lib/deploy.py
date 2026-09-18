@@ -17,6 +17,7 @@ from deploy_tools.exit_codes import (
     DEPLOY_BROAD,
     DEPLOY_LOCK_BUSY,
     DEPLOY_LOCK_UNAVAILABLE,
+    DEPLOY_LOCK_PLAN_FAILED,
     DEPLOY_NO_HOSTS,
     DEPLOY_OK,
     DEPLOY_PLAYBOOK_FAILED,
@@ -249,6 +250,17 @@ def deploy_outcome(ln: Landing, rc: int) -> None:
             Verdict.DEPLOY_FAILED,
             1,
             f"PR #{pr} — the playbook matched no host, so nothing deployed; tags: {tags}",
+        )
+    if rc == DEPLOY_LOCK_PLAN_FAILED:
+        # `deploy_locks.py plan` did not print the service locks, so the wrapper took none
+        # and started no playbook. Its own arm, ahead of the generic `exit {rc}` line below,
+        # because "nothing deployed" is the fact the operator acts on (issue #2054).
+        ln.ledger.cause = Cause.DEPLOY_EXIT_LOCK_PLAN_FAILED
+        ln.finish(
+            Verdict.DEPLOY_FAILED,
+            1,
+            f"PR #{pr} — deploy_locks.py plan gave the wrapper no lock list, so nothing "
+            f"deployed; tags: {tags}",
         )
     if rc == DEPLOY_PLAYBOOK_FAILED:
         # The playbook RAN and a task failed: everything before it is live (issue #840).

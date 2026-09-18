@@ -76,9 +76,9 @@
 #     Meaningless combined with --check or --dry-run (both already return immediately without
 #     touching the lock) — refused with a nonzero exit rather than silently ignored.
 #
-# Exit codes. 0 is a finished deploy; 78, 77, 76, 75, 4, 3 and 2 each mean NOTHING was deployed
-# and each is a resume point (see the table in the repo CLAUDE.md); 20 means the playbook RAN and
-# a task failed, so whatever applied before it is live. Nothing else is returned — ansible-playbook's
+# Exit codes. 0 is a finished deploy; 79, 78, 77, 76, 75, 4, 3 and 2 each mean NOTHING was
+# deployed and each is a resume point (see the table in the repo CLAUDE.md); 20 means the playbook
+# RAN and a task failed, so whatever applied before it is live. Nothing else is returned — ansible-playbook's
 # own status collides with 2/3/4 and is collapsed onto 20, see PLAYBOOK_FAILED below.
 
 set -u
@@ -98,11 +98,13 @@ python3 -c 'import os; [os.set_blocking(f, True) for f in (0, 1, 3)]' 3>&2 2>/de
 # concurrency tests take this lock for real, and taking the production one would queue a live
 # gitops tick behind a test -- and be queued behind one.
 LOCK="${HOMELAB_DEPLOY_TREE_LOCK:-/var/lock/server-git-tree.lock}"
-# Where the per-service locks live. One `server-deploy-<tag>.lock` per deploy tag, plus
-# `server-deploy-all.lock` for a run that names no tag. These are what serialize the CLUSTER
+# The per-service locks -- one per deploy tag, plus `all` -- are what serialize the CLUSTER
 # work, which is nearly all of a deploy's wall clock; the tree lock above is held only for the
-# snapshot. Overridable so the bash-level tests can take real flocks on a tmp_path.
-LOCK_DIR="${HOMELAB_DEPLOY_LOCK_DIR:-/var/lock}"
+# snapshot. This script does not name them: `deploy_locks.py plan` prints each lock's path and
+# mode in the order to take them, and `take_service_locks` below takes what it printed. The
+# directory they live in is read back off that plan for the messages; HOMELAB_DEPLOY_LOCK_DIR
+# moves it, and the Python reads that variable, so the bash-level tests can flock a tmp_path.
+DEPLOY_LOCKS=ansible/roles/setup/gitops_deploy/files/deploy_locks.py
 # Where a run's detached snapshot worktree is created. Overridable for the same reason.
 SNAPSHOT_ROOT="${HOMELAB_DEPLOY_SNAPSHOT_ROOT:-/tmp/homelab-deploy-snapshots}"
 # Covers gitops-deploy's worst-case hold of 2940s (STAGING_GATE_TIMEOUT_S 600 +
@@ -149,6 +151,13 @@ SNAPSHOT_FAILED=77
 # live (issue #1814; the trigger that day was a comma in the snapshot path, issue #1813). A
 # resume point like the codes above: the fault clears, and a retry is the right response.
 NO_HOSTS_MATCHED=78
+# `deploy_locks.py plan` did not print the service locks, so this run had nothing to take and
+# NOTHING was deployed. Never a fallback to an ordering of the wrapper's own: the plan is the
+# one implementation of the lock names and their order, and a second one is exactly what a
+# deadlock between a hand deploy and a tick is made of (issue #2054). The remedy is the helper
+# itself -- run it by hand -- so this is its own code rather than 77's, whose remedy is the
+# snapshot root or `deploy_tags.py list`.
+LOCK_PLAN_FAILED=79
 # How long `deploy_tags.py list` may take under the tree lock. A full run enumerates its
 # service locks from the snapshot while the tree lock is held, and ADR-0017's "the hold is
 # seconds" rests on that call staying fast -- a cold `uv sync` inside it would otherwise hold
@@ -156,6 +165,12 @@ NO_HOSTS_MATCHED=78
 # 0.9s. 120s is two orders of magnitude over that and still well inside the deployer's
 # TimeoutStartSec. Overridable so the bash-level tests can prove the bound fires.
 TAG_LIST_TIMEOUT="${HOMELAB_DEPLOY_TAG_LIST_TIMEOUT:-120}"
+# How long `deploy_locks.py plan` may take. It runs with no lock held -- the tree lock is
+# already released by then, and the service locks are what it names -- so a slow start-up
+# costs this run alone; the bound exists so a hung interpreter refuses (exit 79) rather than
+# sitting on the terminal. The module is stdlib-only, so the cost is `uv run` itself: the same
+# warm-venv ~1s `deploy_tags.py list` measured. Overridable so a test can prove the bound.
+LOCK_PLAN_TIMEOUT="${HOMELAB_DEPLOY_LOCK_PLAN_TIMEOUT:-120}"
 # How many dead snapshots one locked run removes, for the same reason: the reaper runs under
 # the tree lock, and `git worktree remove` on a full checkout is ~0.3s each, so a root left
 # with hundreds of dead directories (a reboot mid-fleet, a runaway --detach loop) would turn
@@ -402,6 +417,11 @@ recap_names_a_host() {
 # Bounded by TAG_LIST_TIMEOUT because it runs under the tree lock. Read into a variable rather
 # than through `< <(...)`: a process substitution's exit status is unreadable, and the timeout
 # has to be told apart from a list that failed to print, since the two have different remedies.
+#
+# Collected in the order printed, and NOT sorted here: `deploy_locks.py plan` sorts and dedups
+# the list when it names the locks, and it is the only thing that may. A `sort` of the
+# wrapper's own is how `pihole` and `pi-peer-backup` came to lock in one order here and the
+# other in the deployer, until `LC_ALL=C` was pinned and a test kept it pinned (issue #2054).
 full_run_tags=()
 tag_list_timed_out=0
 enumerate_full_run_tags() {
@@ -422,7 +442,7 @@ enumerate_full_run_tags() {
     while read -r tag; do
         [[ -n "$tag" ]] || continue
         full_run_tags+=("$tag")
-    done < <(printf '%s\n' "$listed" | LC_ALL=C sort -u)
+    done <<<"$listed"
     [[ ${#full_run_tags[@]} -gt 0 ]]
 }
 
@@ -449,13 +469,72 @@ say_snapshot_failed() {
 
 # ── the per-service locks ─────────────────────────────────────────────────────────────────
 #
-# DECIDED: the lock order is `server-deploy-all.lock` first -- shared for a scoped run,
-# exclusive for a full one -- then each tag's own lock in sorted order. Sorted order is what
-# makes two overlapping scoped runs deadlock-free; taking `all` before any tag is what makes a
-# full run and a scoped run deadlock-free. Across the two deploy paths: this wrapper takes the
-# tree lock, snapshots, RELEASES the tree lock and only then takes service locks, while the
-# GitOps deployer takes the tree lock and holds it across its service locks. There is no cycle
-# because this wrapper never re-takes the tree lock after releasing it. (ADR-0017)
+# DECIDED: the lock order is whatever `deploy_locks.py plan` prints, taken top to bottom, and
+# this wrapper neither names a lock nor sorts a tag. The deployer walks the same `plan()` for
+# its own locks, so the two orders are one function rather than two agreeing ones -- `all`
+# first (shared for a scoped run, exclusive for a full one), then each tag in code-point
+# order, for the reasons the marker of the same name in deploy_locks.py gives. Across the two
+# deploy paths: this wrapper takes the tree lock, snapshots, RELEASES the tree lock and only
+# then takes service locks, while the GitOps deployer takes the tree lock and holds it across
+# its service locks. There is no cycle because this wrapper never re-takes the tree lock after
+# releasing it. (ADR-0017)
+
+# What `read_lock_plan` fills: one entry per lock, parallel arrays, in acquisition order.
+lock_plan_names=()
+lock_plan_modes=()
+lock_plan_paths=()
+# Where the planned locks live, for the messages below. Set from the plan's first path.
+LOCK_DIR=""
+
+# Ask deploy_locks.py which locks this run takes. Sets the arrays above; returns non-zero,
+# having said why, when the plan did not arrive -- and then NOTHING may be taken, because a
+# list this wrapper made up for itself is a second implementation of the order.
+#
+# Bounded by LOCK_PLAN_TIMEOUT for the reason TAG_LIST_TIMEOUT bounds the enumeration, and
+# read into a variable for the same reason: the exit status of the helper has to be seen.
+read_lock_plan() {
+    local planned status line name mode path
+    lock_plan_names=()
+    lock_plan_modes=()
+    lock_plan_paths=()
+    planned=$(timeout "$LOCK_PLAN_TIMEOUT" uv run python "$DEPLOY_LOCKS" plan "$@")
+    status=$?
+    if [[ "$status" != 0 ]]; then
+        if [[ "$status" == 124 ]]; then
+            echo "deploy: '$DEPLOY_LOCKS plan' took longer than ${LOCK_PLAN_TIMEOUT}s, so" >&2
+            echo "  this run has no lock list and nothing was deployed. Nothing was held" >&2
+            echo "  while it ran. A cold 'uv sync' is the usual cause; run" >&2
+            echo "  'uv run python $DEPLOY_LOCKS plan <tag>' once by hand, then retry." >&2
+        else
+            echo "deploy: '$DEPLOY_LOCKS plan' exited $status, so this run has no lock" >&2
+            echo "  list and nothing was deployed. The wrapper takes only the locks that" >&2
+            echo "  helper names -- never a list of its own. Run" >&2
+            echo "  'uv run python $DEPLOY_LOCKS plan <tag>' by hand to see why." >&2
+        fi
+        return "$LOCK_PLAN_FAILED"
+    fi
+    while IFS=$'\t' read -r name mode path; do
+        [[ -n "$name" && -n "$path" ]] || continue
+        case "$mode" in
+            shared | exclusive) ;;
+            *)
+                echo "deploy: '$DEPLOY_LOCKS plan' printed a lock mode this wrapper does" >&2
+                echo "  not know ('$mode' for $name), so nothing was taken and nothing was deployed." >&2
+                return "$LOCK_PLAN_FAILED"
+                ;;
+        esac
+        lock_plan_names+=("$name")
+        lock_plan_modes+=("$mode")
+        lock_plan_paths+=("$path")
+    done <<<"$planned"
+    if [[ ${#lock_plan_paths[@]} -eq 0 ]]; then
+        echo "deploy: '$DEPLOY_LOCKS plan' printed no locks, so nothing was taken and" >&2
+        echo "  nothing was deployed. Run 'uv run python $DEPLOY_LOCKS plan <tag>' by hand" >&2
+        echo "  to see why." >&2
+        return "$LOCK_PLAN_FAILED"
+    fi
+    LOCK_DIR=$(dirname "${lock_plan_paths[0]}")
+}
 
 # The descriptors this run holds service locks on. Held for the life of the shell that runs the
 # playbook; on --detach the background subshell inherits them and the parent's copies close.
@@ -498,27 +577,24 @@ take_service_lock() {
     fi
 }
 
-# Take every service lock this run needs, in the order the DECIDED note above fixes.
+# Take every service lock this run needs: read the plan, then take it as printed.
 take_service_locks() {
-    local tag
+    local i
     if [[ ${#split_tags[@]} -gt 0 ]]; then
-        # Shared on `all`: scoped runs do not exclude each other, but a full run does.
-        take_service_lock all "$LOCK_DIR/server-deploy-all.lock" shared || return $?
-        while read -r tag; do
-            [[ -n "$tag" ]] || continue
-            take_service_lock "$tag" "$LOCK_DIR/server-deploy-${tag//[^A-Za-z0-9_.-]/_}.lock" \
-                exclusive || return $?
-        done < <(printf '%s\n' "${split_tags[@]}" | LC_ALL=C sort -u)
-        return 0
+        # A scoped run: the plan shares `all`, so scoped runs do not exclude each other while
+        # a full run still excludes them.
+        read_lock_plan "${split_tags[@]}" || return $?
+    else
+        # A run with no tags deploys everything, so it excludes every scoped run through
+        # `all` AND takes each declared tag's own lock. The second half is redundant against
+        # a scoped run, which also takes `all`; it is what stops a full run from starting
+        # while some other actor holds a single tag's lock without `all`. `--exclusive-all`
+        # is what tells the plan this list means the whole playbook rather than a scope.
+        read_lock_plan --exclusive-all "${full_run_tags[@]}" || return $?
     fi
-    # A run with no tags deploys everything, so it excludes every scoped run through `all`
-    # AND takes each declared tag's own lock. The second half is redundant against a scoped
-    # run, which also takes `all`; it is what stops a full run from starting while some other
-    # actor holds a single tag's lock without `all`.
-    take_service_lock all "$LOCK_DIR/server-deploy-all.lock" exclusive || return $?
-    for tag in "${full_run_tags[@]}"; do
-        take_service_lock "$tag" "$LOCK_DIR/server-deploy-${tag//[^A-Za-z0-9_.-]/_}.lock" \
-            exclusive || return $?
+    for i in "${!lock_plan_paths[@]}"; do
+        take_service_lock "${lock_plan_names[$i]}" "${lock_plan_paths[$i]}" \
+            "${lock_plan_modes[$i]}" || return $?
     done
 }
 
@@ -970,6 +1046,9 @@ if [[ "$detach" == 1 ]]; then
         elif [[ "$service_lock_status" == "$LOCK_UNAVAILABLE" ]]; then
             # take_service_lock already said which file it could not open.
             exit "$LOCK_UNAVAILABLE"
+        elif [[ "$service_lock_status" == "$LOCK_PLAN_FAILED" ]]; then
+            # read_lock_plan already said why there was no plan.
+            exit "$LOCK_PLAN_FAILED"
         else
             say_lock_unavailable "$service_lock_status" "$LOCK_DIR"
             exit "$LOCK_UNAVAILABLE"
@@ -1148,9 +1227,13 @@ fi
 # A SERVICE lock, not the tree lock. Its own message: "could not take the tree lock" would send
 # an operator to the tick and the rotate cron, and neither of those takes a service lock.
 if [[ "$service_lock_status" != 0 ]]; then
-    # take_service_lock already named the file it could not open; say nothing over it.
+    # take_service_lock already named the file it could not open, and read_lock_plan already
+    # said why there was no plan; say nothing over either.
     if [[ "$service_lock_status" == "$LOCK_UNAVAILABLE" ]]; then
         exit "$LOCK_UNAVAILABLE"
+    fi
+    if [[ "$service_lock_status" == "$LOCK_PLAN_FAILED" ]]; then
+        exit "$LOCK_PLAN_FAILED"
     fi
     if [[ "$service_lock_status" != "$LOCK_BUSY" ]]; then
         say_lock_unavailable "$service_lock_status" "$LOCK_DIR"

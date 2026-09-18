@@ -443,14 +443,31 @@ def test_content_length_non_numeric_is_flagged():
 DEPLOY_SH = pathlib.Path(__file__).resolve().parents[5] / "scripts/deploy.sh"
 
 
-def test_lock_names_agree_with_deploy_sh_is_clean():
+def test_lock_names_agree_with_deploy_locks_is_clean(monkeypatch):
     """The daemon runs outside the venv and cannot import the lock names, so this is
     the literal-agreement guard: the tree lock path and the service-lock shape the page
-    watches are the ones deploy.sh takes."""
-    text = DEPLOY_SH.read_text()
-    assert f'"${{HOMELAB_DEPLOY_TREE_LOCK:-/var/lock/{deploy_ui.TREE_LOCK}}}"' in text
-    assert 'LOCK_DIR="${HOMELAB_DEPLOY_LOCK_DIR:-/var/lock}"' in text
-    assert str(deploy_ui.Config.__dataclass_fields__["lock_dir"].default) == "/var/lock"
-    prefix, suffix = deploy_ui.SERVICE_LOCK_GLOB.split("*")
-    assert f'"$LOCK_DIR/{prefix}all{suffix}"' in text
-    assert f'"$LOCK_DIR/{prefix}${{tag//[^A-Za-z0-9_.-]/_}}{suffix}"' in text
+    watches are the ones `deploy_locks.py` names -- the one module that names them, for
+    the deployer and, through `deploy_locks.py plan`, for deploy.sh (issue #2054)."""
+    import deploy_locks
+
+    monkeypatch.delenv("HOMELAB_DEPLOY_LOCK_DIR", raising=False)
+    assert deploy_locks.TREE_LOCK == f"/var/lock/{deploy_ui.TREE_LOCK}"
+    assert f'"${{HOMELAB_DEPLOY_TREE_LOCK:-{deploy_locks.TREE_LOCK}}}"' in (
+        DEPLOY_SH.read_text()
+    )
+    lock_dir = deploy_ui.Config.__dataclass_fields__["lock_dir"].default
+    assert str(lock_dir) == deploy_locks.lock_dir() == "/var/lock"
+    for name in (deploy_locks.SERVICE_LOCK_ALL, "sonarr", "pi-peer-backup"):
+        path = pathlib.PurePath(deploy_locks.lock_path(name))
+        assert path.parent == lock_dir
+        assert path.match(deploy_ui.SERVICE_LOCK_GLOB), (name, path)
+
+
+def test_the_service_lock_glob_does_not_match_the_tree_lock_is_flagged():
+    """The reject half: a glob loose enough to take the tree lock for a service lock would
+    show the tick as a deploy of a service called `git-tree`."""
+    import deploy_locks
+
+    assert not pathlib.PurePath(deploy_locks.TREE_LOCK).match(
+        deploy_ui.SERVICE_LOCK_GLOB
+    )

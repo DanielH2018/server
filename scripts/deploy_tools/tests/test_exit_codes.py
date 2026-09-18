@@ -31,6 +31,7 @@ def test_the_no_verdict_set_is_exactly_the_refusals_by_name():
         ec.DEPLOY_LOCK_UNAVAILABLE,
         ec.DEPLOY_SNAPSHOT_FAILED,
         ec.DEPLOY_NO_HOSTS,
+        ec.DEPLOY_LOCK_PLAN_FAILED,
     }
 
 
@@ -44,6 +45,7 @@ def test_the_no_verdict_set_is_exactly_the_refusals_by_name():
         "DEPLOY_LOCK_UNAVAILABLE",
         "DEPLOY_SNAPSHOT_FAILED",
         "DEPLOY_NO_HOSTS",
+        "DEPLOY_LOCK_PLAN_FAILED",
     ],
 )
 def test_each_named_refusal_is_in_the_no_verdict_set(name):

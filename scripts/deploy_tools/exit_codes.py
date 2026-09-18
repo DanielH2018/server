@@ -23,7 +23,7 @@ Typical usage example:
 # -- scripts/deploy.sh ------------------------------------------------------------------
 # The wrapper's own contract, read off `scripts/deploy.sh` (its header comment and the
 # `exit` sites). `DEPLOY_SH_NO_VERDICT` below is the set that means NOTHING was deployed --
-# 2, 3, 4, 75, 76, 77 and 78 -- and every member is a resume point. Read the frozenset rather
+# 2, 3, 4, 75, 76, 77, 78 and 79 -- and every member is a resume point. Read the frozenset rather
 # than this sentence: it enumerated five of them until 77 was added. 20 is the inverse -- the
 # playbook RAN and a task failed, so whatever applied before it is live. ansible-playbook's own
 # 2/3/4 are collapsed onto 20 by the wrapper for exactly that reason;
@@ -48,6 +48,12 @@ DEPLOY_SNAPSHOT_FAILED = 77
 # was deployed, and unlike 77 the fault is in the inventory or the host pattern, not the
 # snapshot (issue #1814).
 DEPLOY_NO_HOSTS = 78
+# `deploy_locks.py plan` did not print the service locks -- it exited non-zero, timed out, or
+# printed nothing -- so the wrapper had nothing to take and deployed nothing. It refuses rather
+# than fall back to a lock order of its own: the plan is the ONE implementation of the lock
+# names and their order, and a second one is what a deadlock between a hand deploy and a tick
+# is made of (issue #2054). Its own code because the remedy is the helper itself.
+DEPLOY_LOCK_PLAN_FAILED = 79
 
 # The subset that means staging (or a landing) never formed an opinion, because deploy.sh
 # refused before it applied anything.
@@ -60,6 +66,7 @@ DEPLOY_SH_NO_VERDICT = frozenset(
         DEPLOY_LOCK_UNAVAILABLE,
         DEPLOY_SNAPSHOT_FAILED,
         DEPLOY_NO_HOSTS,
+        DEPLOY_LOCK_PLAN_FAILED,
     }
 )
 

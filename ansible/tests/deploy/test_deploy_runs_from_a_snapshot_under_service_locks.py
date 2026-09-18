@@ -272,15 +272,20 @@ def test_a_separately_budgeted_wait_is_flagged():
 def test_the_service_lock_helper_takes_the_all_lock_before_any_service():
     """The ordering both sides depend on, asserted where the deployer fixes it.
 
-    `all` first, then sorted names. Reversing either half reintroduces a lock cycle between a
-    full run and a scoped one.
+    `all` first, then sorted names, and `service_locks` walks `plan` rather than restating
+    it -- `deploy.sh` reads the same `plan` off the CLI, so a second statement of the order
+    anywhere is what issue #2054 removed. Reversing either half reintroduces a lock cycle
+    between a full run and a scoped one.
     """
     source = _DEPLOY_LOCKS.read_text()
-    helper = _functions(source)["service_locks"]
-    body = ast.unparse(helper)
+    body = ast.unparse(_functions(source)["plan"])
     all_at = body.index("SERVICE_LOCK_ALL")
-    sorted_at = body.index("for name in names")
-    assert all_at < sorted_at, "service_locks no longer takes the `all` lock first"
+    tags_at = body.index("for name in names")
+    assert all_at < tags_at, "plan no longer puts the `all` lock first"
     assert re.search(r"names\s*=\s*sorted\(set\(services\)\)", body), (
-        "service_locks no longer takes the per-service locks in sorted order"
+        "plan no longer orders the per-service locks by code point"
+    )
+    taker = ast.unparse(_functions(source)["service_locks"])
+    assert "in plan(" in taker and "sorted(" not in taker, (
+        "service_locks orders the locks itself instead of walking plan()"
     )

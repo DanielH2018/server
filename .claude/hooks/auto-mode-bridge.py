@@ -55,6 +55,13 @@ MAX_RETRIES_PER_SESSION = 2
 # wrapper's own contract, kept in the same words CLAUDE.md uses so the two don't drift into
 # two stories.
 _DEPLOY_EXITS = {
+    79: (
+        "deploy.sh exit 79: `deploy_locks.py plan` did not print this run's service locks, so "
+        "the wrapper had nothing to take and NOTHING was deployed. It never falls back to a lock "
+        "order of its own. Run `uv run python "
+        "ansible/roles/setup/gitops_deploy/files/deploy_locks.py plan <tag>` by hand to see "
+        "why, fix that, then re-run; nothing was held while it ran."
+    ),
     78: (
         "deploy.sh exit 78: the playbook matched NO host, so NOTHING was deployed. ansible "
         "exits 0 for a run where no play matched, so the wrapper reads the PLAY RECAP itself. "

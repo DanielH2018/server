@@ -153,6 +153,15 @@ def test_a_mapping_failure_dies_with_its_own_verdict(landing):
         ),
         (20, "deploy-failed", 1, "some changes are live", "playbook-failed"),
         (75, "lock-busy", 75, "lock stayed busy", ""),
+        # 79: the wrapper got no lock list, took nothing and ran nothing (issue #2054). Its
+        # own arm, so the verdict says "nothing deployed" rather than the bare exit below.
+        (
+            79,
+            "deploy-failed",
+            1,
+            "no lock list, so nothing deployed",
+            "deploy-exit-79",
+        ),
         # 3, 4 and 64 keep the exact labels the board already groups by; anything outside
         # deploy.sh's own contract buckets, so the `cause` vocabulary stays closed.
         (3, "deploy-failed", 1, "exit 3", "deploy-exit-3"),

@@ -132,7 +132,9 @@ Its non-zero exits arrive as a bare `Exit code N`. Every member of `DEPLOY_SH_NO
 than a playbook failure (retry a busy lock, `git pull` a stale tree — never
 `--skip-staleness-check` — deploy by hand on a broad change, check `--list-services` on a tag
 miss, fix the lock file itself on 76, fix the snapshot root on 77, fix the inventory or host
-pattern on 78 — the playbook matched no host, which ansible itself exits 0 for).
+pattern on 78 — the playbook matched no host, which ansible itself exits 0 for — and run
+`deploy_locks.py plan <tag>` by hand on 79, where the wrapper got no lock list and refused
+rather than order the locks itself).
 `DEPLOY_BAD_FLAGS` (64) also ran nothing, but the fix is the command line rather than a retry.
 `DEPLOY_PLAYBOOK_FAILED` (20) is the inverse: the playbook ran, a task
 failed, and changes before it are live — not a safe re-run. The full table, why 20 collides
