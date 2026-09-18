@@ -9,6 +9,7 @@ The paragraph groups its members by meaning ("the four give-ups"); that grouping
 commentary and stays unguarded. Membership is what this pins, in both directions.
 """
 
+import ast
 import re
 
 from deploy_tools.land_lib.outcome import VERDICTS
@@ -16,6 +17,10 @@ from deploy_tools.land_lib.outcome import VERDICTS
 from _helpers import REPO
 
 LAND_SKILL = REPO / ".claude" / "skills" / "land-after-merge" / "SKILL.md"
+# land.py's module docstring is what `land.sh --help` prints; its verdict line is the copy an
+# operator at a terminal reads, pipe-separated rather than backticked.
+LAND_PY = REPO / "scripts" / "deploy_tools" / "land.py"
+_HELP_VERDICT_LINE = "Verdicts printed on stdout:"
 
 # A backticked token shaped like a verdict: lowercase words joined by hyphens, nothing else.
 # `land.sh` (a dot) and `VERDICT:` (a colon) share the paragraph and are not verdicts.
@@ -48,6 +53,26 @@ def test_the_land_skill_lists_exactly_the_verdicts_the_enum_defines():
     )
 
 
+def _help_verdicts(docstring):
+    """The pipe-separated tokens after `Verdicts printed on stdout:` in land.py's docstring."""
+    paragraphs = [
+        p for p in docstring.split("\n\n") if p.startswith(_HELP_VERDICT_LINE)
+    ]
+    assert len(paragraphs) == 1, (
+        f"land.py --help no longer has one {_HELP_VERDICT_LINE!r} paragraph"
+    )
+    listing = paragraphs[0].removeprefix(_HELP_VERDICT_LINE).rstrip(".")
+    return frozenset(token.strip() for token in listing.split("|"))
+
+
+def test_land_help_lists_exactly_the_verdicts_the_enum_defines():
+    found = _help_verdicts(ast.get_docstring(ast.parse(LAND_PY.read_text())))
+    assert found == EXPECTED, (
+        f"land.py's --help verdict line is out of step with Verdict: "
+        f"missing {sorted(EXPECTED - found)}, not in the enum {sorted(found - EXPECTED)}"
+    )
+
+
 def test_the_enum_still_has_the_members_the_prose_is_measured_against():
     assert {"settled", "deploy-failed", "tip-outran-retries"} <= EXPECTED, (
         "Verdict lost a member this test names; the paragraph check above is measured "
@@ -70,6 +95,13 @@ def test_a_dotted_or_capitalised_token_is_not_verdict_shaped():
         _verdict_tokens("`land.sh` prints a `VERDICT:` line; `--tags` too")
         == frozenset()
     )
+
+
+def test_a_help_line_naming_a_verdict_the_enum_lacks_is_flagged():
+    docstring = "Usage.\n\nVerdicts printed on stdout: settled | ci-purple.\n\nMore."
+    found = _help_verdicts(docstring)
+    assert found == {"settled", "ci-purple"}
+    assert found != EXPECTED
 
 
 def test_the_locator_picks_the_paragraph_with_the_most_members():

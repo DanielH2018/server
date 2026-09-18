@@ -7,6 +7,9 @@ arrives, and until this file nothing read it: 77 and 78 each landed as a new row
 the sentence above the table counted "seven" no-verdict codes while the table held nine rows,
 because 64 (bad flags) also deploys nothing and belongs to neither count.
 
+`docs/deploying.md` carries a second table, headed "resume points" and so without 20; it had
+lost 76 by the time this guard was written.
+
 The remedy column is prose and stays unguarded. What is checkable is the code set, and that
 the docs name `DEPLOY_SH_NO_VERDICT` rather than a numeral that rots on the next code.
 """
@@ -20,6 +23,7 @@ from deploy_tools.exit_codes import DEPLOY_OK, DEPLOY_SH_NO_VERDICT
 from _helpers import REPO
 
 DEPLOY_SKILL = REPO / ".claude" / "skills" / "deploy" / "SKILL.md"
+DEPLOYING_DOC = REPO / "docs" / "deploying.md"
 CLAUDE_MD = REPO / "CLAUDE.md"
 
 # Only the wrapper's own contract; the module also names the tick's, await_ci's, land.sh's,
@@ -50,15 +54,27 @@ def test_the_module_still_defines_the_codes_the_table_is_measured_against():
     )
 
 
-def test_the_deploy_skill_table_lists_exactly_the_codes_deploy_sh_exits_with():
-    found = _table_codes(DEPLOY_SKILL.read_text())
-    assert found == DEPLOY_SH_CODES, (
-        f"deploy/SKILL.md's exit table is out of step with exit_codes.py: "
-        f"missing {sorted(DEPLOY_SH_CODES - found)}, undefined {sorted(found - DEPLOY_SH_CODES)}"
+# docs/deploying.md's table is headed "resume points" and leaves 20 to the skill on purpose;
+# it had lost 76 by the time this guard was written, which is the drift it now catches.
+@pytest.mark.parametrize(
+    ("doc", "expected"),
+    [
+        (DEPLOY_SKILL, DEPLOY_SH_CODES),
+        (DEPLOYING_DOC, DEPLOY_SH_CODES - {exit_codes.DEPLOY_PLAYBOOK_FAILED}),
+    ],
+    ids=lambda arg: arg.name if hasattr(arg, "name") else "",
+)
+def test_each_exit_table_lists_exactly_the_codes_deploy_sh_exits_with(doc, expected):
+    found = _table_codes(doc.read_text())
+    assert found == expected, (
+        f"{doc.name}'s exit table is out of step with exit_codes.py: "
+        f"missing {sorted(expected - found)}, undefined {sorted(found - expected)}"
     )
 
 
-@pytest.mark.parametrize("doc", [DEPLOY_SKILL, CLAUDE_MD], ids=lambda p: p.name)
+@pytest.mark.parametrize(
+    "doc", [DEPLOY_SKILL, DEPLOYING_DOC, CLAUDE_MD], ids=lambda p: p.name
+)
 def test_the_operator_docs_name_the_no_verdict_constant_rather_than_counting_it(doc):
     """A count of the no-verdict codes was wrong in both files within two added codes.
 
