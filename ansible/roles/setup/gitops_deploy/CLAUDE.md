@@ -391,15 +391,13 @@ widen it. Each line is a summary; the section it names carries the detail.
     other session's landing 4 from `deploy.sh` until a hand pulls the primary checkout — where
     a pending role blocks nobody. They are independent faults, so specificity does not order
     them and urgency does. The pod reads
-    it off the same `:ro` state mount as `behind_since`, and parses it itself — it cannot
-    import this tree, so `tests/test_check_gitops.py` asserts its clear-command literal
-    matches `deploy_remediation.MANUAL_PLANE_CLEAR_CMD`.
+    it off the same `:ro` state mount as `behind_since`, and parses it with
+    `gitops_markers.parse_manual_plane` — its own copy of the deployer's module, since it
+    cannot import this tree (*One marker module, copied* below).
     The SessionStart banner reads the marker too, through `lib.deployer_park`, and names a
     pending role from the moment it is recorded rather than after six hours (issue #1774): the
     monitor pages, where the banner only tells the sessions that did not land the change.
-    That makes three parsers of one marker, and
-    `ansible/tests/deploy/test_manual_plane_parsers_agree.py` is the price — it feeds all
-    three the same marker, garbled lines included.
+    Both parse it with the same function from the same generated copy.
 - **Secrets-only pushes** (`ansible/vars/secrets.yml` changed with no service template — a
   rotation pushed from another machine) are fast-forwarded but **not** redeployed: the new
   value only reaches a container on its next deploy, so the deployer alerts (once per SHA,
@@ -506,7 +504,7 @@ widen it. Each line is a summary; the section it names carries the detail.
     secondary cause, an operator who rendered locally before pushing (`git push` it). It includes
     the read exception's type and message when the declarations couldn't be read at all. The disarm
     itself is stateless: it is recomputed every tick, so it self-clears the moment the config is
-    re-rendered. Only the page is throttled, on `STALE_DENYLIST_FILE`. The regex is deliberately
+    re-rendered. Only the page is throttled, on the `stale_denylist_alerted` marker. The regex is deliberately
     biased toward denied — unanimity is required across every match, an absent or unparseable
     declaration counts as denied, and a shared role skips the check entirely — so a parsing bug
     here almost always produces a spurious disarm rather than a permitted deploy. The one gap is
@@ -719,7 +717,7 @@ Three layers, and which one a function belongs in is decided by what it touches.
 | decisions (pure) | `deploy_changes`, `deploy_git`, `deploy_health`, `deploy_inventory`, `deploy_k8s`, `deploy_remediation`, `deploy_staging` | every branch the tick takes, as functions over plain values |
 | what a phase hands the next | `deploy_tick_types` | `TickTarget`, `TickPlan` and `RetryableFetchError`, no behaviour |
 | transport | `deploy_io`, `deploy_alerts` | subprocess, docker, every message body, and the alert queue's own I/O |
-| transport leaves | `deploy_config`, `deploy_state`, `deploy_failtext` | the config file, the state directory, and the text a failed run's alert quotes |
+| transport leaves | `gitops_markers`, `deploy_config`, `deploy_state`, `deploy_failtext` | the marker table and parsers (copied into every other reader — *One marker module, copied* below), the config file, the state directory, and the text a failed run's alert quotes |
 | the seam | `deploy_toolbox` | `DeployTools`, one frozen object holding every boundary the tick crosses, and `default_tools(CONFIG)` which binds the CI gate to the parsed config |
 | the phases | `deploy_phases`, `deploy_handlers`, `deploy_defer`, `deploy_staging_io` | `assess` and `plan_tick`; one `handle_*` per terminal branch; `deploy_staging_io` holds the staging gate's I/O shell (`consult_staging`, `record_staging_tick`, `consume_staging_override`), which `handle_k8s` alone calls; `deploy_defer` owns what the broad arm does with the half it will not apply — park it, or record it in `manual_plane` |
 | the tick | `gitops_deploy` | the config constants, `STATE`, `tick_config()`, `main()` sequencing the phases, and `entrypoint()` |
@@ -786,15 +784,34 @@ that file by name: `STAGING_SUBSET` is read there for real, while the
 reads and nothing else does; both timeouts are parsed and validated in `load_config`, and a
 test pins the literals to `Config`'s defaults.
 
+**One marker module, copied.** `files/gitops_markers.py` holds the state directory, the
+`MARKERS` table and the parsers for the `behind_since`, `manual_plane` and `contention_since`
+line formats, plus the two clear commands every surface prints. It is the one hand-edited
+source; `deploy_state` imports it. Four other trees read those files and none can import this
+`files/` — monitor-bridge ships its own `files/` into a pod, deploy-ui and renovate-agent
+run from their own `/opt` directories, and `scripts/lib/deployer_park.py` is imported by the
+SessionStart hook with only `scripts/` on `sys.path` — so until issue #2063 each restated the
+directory and basenames, and three parsed the same lines independently, held together by two
+`test_*_parsers_agree.py` guards. Now `scripts/dev/gen_gitops_markers.py` writes a verbatim
+copy under a `generated_from:` header into each of them (`COPIES` there is the list), and
+`ansible/tests/deploy/test_gitops_markers_copies.py` fails when a committed copy differs from
+what the generator writes, when a consumer role's ship list lacks its copy, or when the
+source grows an import (a copy runs in a pod, a hook and three `/opt` directories, so only
+the stdlib is common ground). To change a basename or a line format: edit the source, run
+the generator, commit every copy in the same PR. The shell and manifest literals that cannot
+import anything — `gitops_tick.sh`, `deploy-ui.service.j2`, monitor-bridge's hostPath — are
+pinned to `STATE_DIR` by the same test.
+
 **State is one object.** `deploy_state.DeployerState` wraps the marker files — the
 fifteen dedupe and status markers plus the pending-alert queue, the staging tick ledger and
 the staging override — and holds the hold-marker writes (`write_hold`, `clear_broad_hold`,
 `clear_service_hold`) and `record_behind`. A caller names a marker (`state.path("hold")`)
 rather than carrying a path, which is what lets `state_dir` repoint the whole state directory
-by replacing one object. `gitops_deploy.STATE` is the instance and the eighteen path literals
-stay declared there
-(`tests/conftest.py`'s `state_dir` repoints them, and one Ansible default is pinned against
-`STAGING_TICK_LEDGER`'s literal). `read()` returns None for a missing AND an empty marker —
+by replacing one object. `gitops_deploy.STATE` is the instance, and `gitops_markers.MARKERS` is the only
+table of basenames — the 22 module-level path literals `gitops_deploy.py` used to declare
+beside it had no production reader and went with issue #2051 (`tests/conftest.py`'s
+`state_dir` now repoints the one object, and `scripts/deploy_tools/tests/test_tick_ledger_report.py`
+pins the Ansible default against `MARKERS`). `read()` returns None for a missing AND an empty marker —
 a torn write is a disarmed hold, not a hold on `""` — and PROPAGATES any other `OSError`:
 an unreadable state directory must not read as "no hold", or a held host reports converged.
 `tests/test_deployer_state.py` pins all three outcomes.
@@ -1233,7 +1250,7 @@ crash is not evidence the lock was released. monitor-bridge pages once `first_se
 than `GITOPS_CONTENTION_MAX_MIN` (30, the deployer's own longest apply budget), the
 SessionStart banner names the lock past the same threshold (`lib.deployer_park`), and
 `scripts/deploy_tools/gitops_state.py clear-contention` drops the marker by hand. Three readers
-parse it; `ansible/tests/deploy/test_contention_parsers_agree.py` holds them together.
+parse it, all through `gitops_markers.parse_contention` (*One marker module, copied*).
 
 **A broad apply takes `all` EXCLUSIVELY, whatever its tags.** `deploy_io.deploy_broad` passes
 `exclusive_all=True`: `initial_setup.yml --tags <role>` names a tag, but what it reconfigures

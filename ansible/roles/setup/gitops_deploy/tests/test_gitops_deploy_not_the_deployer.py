@@ -71,7 +71,8 @@ def test_every_ambiguous_shape_is_clean(text):
 # ── main(): the refusal lands before any state is touched ─────────────────────────────────────
 def test_main_refuses_on_a_host_that_declares_no_gitops(gitops_deploy, tick, state_dir):
     deploy_alerts.write_pending(
-        gitops_deploy.PENDING_ALERTS_FILE, {"secrets:" + ORIGIN: "queued last tick"}
+        gitops_deploy.STATE.path("pending_alerts"),
+        {"secrets:" + ORIGIN: "queued last tick"},
     )
     tick.declare("containers_list: []\nhas_gitops: false\n")
     with pytest.raises(gitops_deploy.NotTheDeployerHost, match="has_gitops: false"):

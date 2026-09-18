@@ -218,8 +218,8 @@ def test_the_broad_alert_fits_discords_head_slice_with_the_action_line_intact(
         [],
         "2d25ced3" * 5,
         exc,
-        gitops_deploy.HOLD_FILE,
-        gitops_deploy.HOLD_PLANE_FILE,
+        gitops_deploy.STATE.path("hold"),
+        gitops_deploy.STATE.path("hold_plane"),
     )
     assert len(message) <= 1900
     assert "fix forward and re-run that playbook by hand" in message
@@ -234,8 +234,8 @@ def test_the_broad_alert_carries_the_failure_detail(gitops_deploy) -> None:
         ["k3s"],
         "2d25ced3" * 5,
         exc,
-        gitops_deploy.HOLD_FILE,
-        gitops_deploy.HOLD_PLANE_FILE,
+        gitops_deploy.STATE.path("hold"),
+        gitops_deploy.STATE.path("hold_plane"),
     )
     assert FATAL in message
     assert "--tags `k3s`" in message

@@ -10,28 +10,19 @@ apart in what order they name the ff-merge and the playbook.
 from __future__ import annotations
 
 from deploy_changes import ChangeSet, setup_role_playbook, setup_role_tag
+from gitops_markers import CONTENTION_CLEAR_CMD, MANUAL_PLANE_CLEAR_CMD  # noqa: F401
 
 # The branch `broad_remediation` names when a caller does not say. gitops_deploy.py reads the
 # real one from config.env and passes it; the repo-side callers (deploy_tags, land_tags) run
 # against this repo, where it is master.
 BRANCH_DEFAULT = "master"
 
-
-# What an operator runs to clear one role's `manual_plane` line after applying it by hand.
-# Here rather than beside the marker in `deploy_state.py` for the same reason every other
-# remediation string is here: `deploy_logic` re-exports this module, so `land.sh` prints the
-# same command the deployer's alert does, and `deploy_state` reaches `host_lib` — which the
-# scripts/ callers do not put on their path.
-MANUAL_PLANE_CLEAR_CMD = (
-    "uv run python scripts/deploy_tools/gitops_state.py clear-manual-plane <role>"
-)
-# What an operator runs to end a contention streak by hand once the lock's holder is gone.
-# The tick clears it itself on the next tick that is not deferred; this is for a marker an
-# operator wants gone now. monitor-bridge and `lib.deployer_park` carry copies, pinned to
-# this one by their tests.
-CONTENTION_CLEAR_CMD = (
-    "uv run python scripts/deploy_tools/gitops_state.py clear-contention"
-)
+# The two commands an operator runs against the markers — clearing one role's `manual_plane`
+# line after applying it by hand, and ending a contention streak once the lock's holder is
+# gone — live in `gitops_markers` beside the markers they act on, so monitor-bridge and the
+# SessionStart banner print the same string from their own copies of that module. Imported
+# above and re-exported because `deploy_logic` re-exports this module, and `land.sh` reads
+# them through it.
 
 
 # A rollback re-run must fit inside the unit's TimeoutStartSec alongside the forward run and

@@ -19,29 +19,37 @@ The third marker is ``contention_since``, written while consecutive ticks defer 
 service lock — an operator ``deploy.sh`` that never returned. The tick resets its tree on that
 path, so ``behind_since`` ages toward a six-hour page sized for a dirty tree while the lock's
 legitimate holder is a deploy no longer than thirty minutes (issue #1847). Same three readers
-as ``manual_plane`` below, held together by
-``ansible/tests/deploy/test_contention_parsers_agree.py``.
+as ``manual_plane`` below.
 
 The second marker is ``manual_plane``, one line per setup role the tick fast-forwarded past and
 cannot apply itself. A recorded role leaves ``behind_since`` empty, so the park half above says
-nothing while the change sits merged and unapplied — only the banner names it. THREE READERS
-parse that one: the deployer writes it, monitor-bridge pages off it, and this module banners
-it, none of them able to import the others' tree.
-``ansible/tests/deploy/test_manual_plane_parsers_agree.py`` holds the three together.
+nothing while the change sits merged and unapplied — only the banner names it.
 
-Stdlib only, and no imports from this repo: the SessionStart hook imports it before anything
-else is on ``sys.path``.
+The directory, the basenames and the line parsers come from ``lib.gitops_markers``, a
+generated copy of the deployer's own module (its header says how it is kept fresh), so this
+module and monitor-bridge read exactly the lines the deployer wrote. What stays here is the
+banner's own judgement: the thresholds, and the readers that collapse an unreadable marker to
+"no park".
+
+Stdlib plus that one generated sibling, and nothing else from this repo: the SessionStart
+hook imports it with only ``scripts/`` on ``sys.path``.
 """
 
 import os
+import sys as _sys
 import time
+from pathlib import Path as _Path
+
+# The generated sibling is reached as `lib.gitops_markers`, which needs `scripts/` on the path.
+# The SessionStart hook and every other caller already put it there; this is for a direct
+# `import lib.deployer_park` from anywhere else (the repo-root CLAUDE.md rule).
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+from lib.gitops_markers import CONTENTION_PAGE_SECONDS, MARKERS, STATE_DIR
 
 # The deployer's marker directory on the host that runs the tick (daniel-box). Mode 0750 owned
 # by `ubuntu`, so a session running as that user reads it; on any other host it is absent and
 # every reader here degrades to "no park".
-GITOPS_STATE_DIR = "/var/lib/gitops-deploy"
-
-BEHIND_SINCE = "behind_since"
+GITOPS_STATE_DIR = STATE_DIR
 
 # How long `behind_since` may stand before it reads as a park rather than a queue. The tick
 # runs every `gitops_deploy_tick_interval` (10 min), so 45 minutes is four ticks that all
@@ -81,7 +89,7 @@ def read_behind_marker(state_dir: str = GITOPS_STATE_DIR) -> str | None:
     `read_state`: every caller here only ever asks "is this a park?", and the answer to that
     for a marker nobody can read is no.
     """
-    return _read(state_dir, BEHIND_SINCE)
+    return _read(state_dir, MARKERS["behind"])
 
 
 def park_note(marker: str | None, now: float | None = None) -> str:
@@ -107,87 +115,24 @@ def park_note(marker: str | None, now: float | None = None) -> str:
     )
 
 
-# The deployer's `manual_plane` marker: one line per setup role it fast-forwarded past and
-# cannot apply itself, `"<origin_sha> <playbook-or-none> <role> <unix_ts>"`.
-MANUAL_PLANE = "manual_plane"
-
-# What an operator runs to clear one pending role once the role is applied by hand. The
-# deployer's own copy is `deploy_remediation.MANUAL_PLANE_CLEAR_CMD`; this module is stdlib
-# only and cannot import that tree, so
-# `ansible/tests/deploy/test_manual_plane_parsers_agree.py` asserts the two agree.
-MANUAL_PLANE_CLEAR_CMD = (
-    "uv run python scripts/deploy_tools/gitops_state.py clear-manual-plane <role>"
-)
-
-
-def manual_plane_pending(marker: str | None) -> list[tuple[str, str, float]]:
-    """Every pending role in the marker as `(role, playbook, first_seen)`, oldest line first.
-
-    A line this cannot parse is SKIPPED rather than guessed at, the way `park_age` treats a
-    garbled `behind_since`: the banner names a role and a command to clear it, and neither can
-    be derived from a torn line. `DeployerState.manual_plane_pending` and monitor-bridge's
-    `checks.gitops._parse_manual_plane` skip the same lines for the same reason — that
-    agreement is a test, not a coincidence.
-
-    `playbook` is the literal marker field, which the deployer writes as `none` when no
-    playbook applies the role.
-    """
-    pending = []
-    for line in (marker or "").splitlines():
-        parts = line.split()
-        if len(parts) != 4:
-            continue
-        try:
-            at = float(parts[3])
-        except ValueError:
-            continue
-        pending.append((parts[2], parts[1], at))
-    return pending
-
-
 def read_manual_plane_marker(state_dir: str = GITOPS_STATE_DIR) -> str | None:
     """The host's `manual_plane` marker text, or None when it cannot be read.
 
     Absent and unreadable collapse to the same answer, for the reason `read_behind_marker`
     gives: every caller here only asks "is a role pending?", and for a marker nobody can read
-    the answer is no.
+    the answer is no. `gitops_markers.parse_manual_plane` turns the text into entries.
     """
-    return _read(state_dir, MANUAL_PLANE)
+    return _read(state_dir, MARKERS["manual_plane"])
 
 
-# The deployer's `contention_since` marker: one line,
-# `"<origin_sha> <lock> <unix_ts_first_seen> <unix_ts_last_seen> <count>"`, while consecutive
-# ticks defer on one busy service lock.
-CONTENTION = "contention_since"
-
-# How long a streak may run before the banner names it. The same number monitor-bridge pages
-# on (`GITOPS_CONTENTION_MAX_MIN`, 30): the deployer's longest apply budget,
-# `gitops_deploy_broad_timeout_s` = 1800 s, so a holder past it has outlived every legitimate
-# deploy. `ansible/tests/deploy/test_contention_parsers_agree.py` pins the two together.
-CONTENTION_PARK_SECONDS = 30 * 60
-
-# What an operator runs to drop the marker once the holder is gone. The deployer's own copy is
-# `deploy_remediation.CONTENTION_CLEAR_CMD`; the agreement test asserts the two match.
-CONTENTION_CLEAR_CMD = (
-    "uv run python scripts/deploy_tools/gitops_state.py clear-contention"
-)
-
-
-def contention_pending(marker: str | None) -> tuple[str, float, int] | None:
-    """The streak as `(lock, first_seen, count)`, or None for an absent or garbled marker.
-
-    Garbage reads as no streak, the way `park_age` treats a torn `behind_since`: the banner
-    would name a lock nobody can find.
-    """
-    parts = (marker or "").split()
-    if len(parts) != 5:
-        return None
-    try:
-        return parts[1], float(parts[2]), int(parts[4])
-    except ValueError:
-        return None
+# How long a contention streak may run before the banner names it: the same number
+# monitor-bridge pages on, which is why it is the shared module's and not this one's.
+CONTENTION_PARK_SECONDS = CONTENTION_PAGE_SECONDS
 
 
 def read_contention_marker(state_dir: str = GITOPS_STATE_DIR) -> str | None:
-    """The host's `contention_since` marker text, or None when it cannot be read."""
-    return _read(state_dir, CONTENTION)
+    """The host's `contention_since` marker text, or None when it cannot be read.
+
+    `gitops_markers.parse_contention` turns the text into the streak.
+    """
+    return _read(state_dir, MARKERS["contention"])

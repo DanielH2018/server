@@ -22,6 +22,7 @@
         - deploy_ui.py
         - deploy_ui_reads.py
         - deploy_ui_writes.py
+        - gitops_markers.py
         - deploy_ui.html
       become: true
       notify: Restart deploy-ui
@@ -75,5 +76,7 @@
             src: ansible/roles/setup/deploy_ui/files/deploy_ui_reads.py
           - live: "{{ deploy_ui_dir }}/deploy_ui_writes.py"
             src: ansible/roles/setup/deploy_ui/files/deploy_ui_writes.py
+          - live: "{{ deploy_ui_dir }}/gitops_markers.py"
+            src: ansible/roles/setup/deploy_ui/files/gitops_markers.py
           - live: "{{ deploy_ui_dir }}/deploy_ui.html"
             src: ansible/roles/setup/deploy_ui/files/deploy_ui.html

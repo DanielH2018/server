@@ -28,7 +28,8 @@ from deploy_staleness import (
     main,
     unscoped_reason,
 )
-from lib.deployer_park import BEHIND_PARK_SECONDS, BEHIND_SINCE
+from lib.deployer_park import BEHIND_PARK_SECONDS
+from lib.gitops_markers import MARKERS
 
 
 def _git(repo: Path, *args: str) -> str:
@@ -238,7 +239,7 @@ def _behind_marker(tmp_path: Path, age_s: float, now: float = 2_000_000_000.0) -
     """A deployer state directory whose `behind_since` is `age_s` seconds old."""
     state = tmp_path / "gitops-state"
     state.mkdir()
-    (state / BEHIND_SINCE).write_text(f"abc123 {now - age_s}\n")
+    (state / MARKERS["behind"]).write_text(f"abc123 {now - age_s}\n")
     return state
 
 

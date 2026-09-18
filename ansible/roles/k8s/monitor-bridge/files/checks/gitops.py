@@ -1,6 +1,8 @@
 """The GitOps deployer checks for monitor-bridge: Alive, and Status with its four marker arms.
 
-Both read `/var/lib/gitops-deploy` off a hostPath the pod is pinned to. `gitops_status` is a
+Both read the deployer's state directory off a hostPath the pod is pinned to; the basenames
+and the line parsers come from `gitops_markers`, the deployer's own module copied into this
+`files/` (its header says how it is kept fresh). `gitops_status` is a
 verdict that reads `cfg` itself — its thresholds default to `None` and resolve inside the
 body, because a default argument is evaluated at import and there is no `Config` then — so it
 lives here beside its only caller rather than in `verdicts/service.py`, where `gitops_alive`
@@ -15,72 +17,16 @@ import os
 import time
 
 from bridge.config import Config
-from verdicts.service import gitops_alive
-
-
-def _parse_behind(marker: str | None) -> tuple[str, float | None]:
-    """Split the deployer's "<origin_sha> <unix_ts_first_seen>" marker.
-
-    Returns (sha, since) with since=None when absent or unparseable — an unreadable marker must read
-    as "not behind" rather than page forever on garbage.
-    """
-    if not marker:
-        return "", None
-    parts = marker.split()
-    if len(parts) != 2:
-        return "", None
-    try:
-        return parts[0], float(parts[1])
-    except ValueError:
-        return "", None
-
-
-# What an operator runs to clear one pending role, with `<role>` filled in. The deployer's
-# own copy is `deploy_remediation.MANUAL_PLANE_CLEAR_CMD`; this pod cannot import that tree,
-# so `tests/test_check_gitops.py` asserts the two agree.
-MANUAL_PLANE_CLEAR = (
-    "uv run python scripts/deploy_tools/gitops_state.py clear-manual-plane"
+from gitops_markers import (
+    CONTENTION_CLEAR_CMD,
+    MANUAL_PLANE_CLEAR_CMD,
+    MARKERS,
+    STATE_DIR,
+    parse_behind,
+    parse_contention,
+    parse_manual_plane,
 )
-
-
-def _parse_manual_plane(marker: str | None) -> list[tuple[str, float]]:
-    """Split the deployer's `manual_plane` marker into (role, first_seen) pairs.
-
-    One line per pending role, `"<origin_sha> <playbook> <role> <unix_ts>"`. A line this
-    cannot parse is skipped, for the same reason `_parse_behind` treats a garbled marker as
-    "not behind": a page raised off garbage names no role and cannot be cleared.
-    """
-    pending = []
-    for line in (marker or "").splitlines():
-        parts = line.split()
-        if len(parts) != 4:
-            continue
-        try:
-            pending.append((parts[2], float(parts[3])))
-        except ValueError:
-            continue
-    return pending
-
-
-# What an operator runs to end a contention streak by hand, once the holder is gone. The
-# deployer's own copy is `deploy_remediation.CONTENTION_CLEAR_CMD`; this pod cannot import
-# that tree, so `tests/test_check_gitops.py` asserts the two agree.
-CONTENTION_CLEAR = "uv run python scripts/deploy_tools/gitops_state.py clear-contention"
-
-
-def _parse_contention(marker: str | None) -> tuple[str, float | None, int]:
-    """Split the deployer's `contention_since` marker into (lock, first_seen, count).
-
-    `"<origin_sha> <lock> <unix_ts_first_seen> <unix_ts_last_seen> <count>"`, one line. A
-    marker this cannot parse reads as no streak, for the reason `_parse_behind` gives.
-    """
-    parts = (marker or "").split()
-    if len(parts) != 5:
-        return "", None, 0
-    try:
-        return parts[1], float(parts[2]), int(parts[4])
-    except ValueError:
-        return "", None, 0
+from verdicts.service import gitops_alive
 
 
 def gitops_status(
@@ -157,8 +103,14 @@ def gitops_status(
         if hold_plane:
             return False, (
                 "broad apply held at %s — %s failed, plane unapplied; fix forward and "
-                "re-run it, then rm hold_sha + hold_plane in /var/lib/gitops-deploy"
-                % (hold_sha[:8], hold_plane)
+                "re-run it, then rm %s + %s in %s"
+                % (
+                    hold_sha[:8],
+                    hold_plane,
+                    MARKERS["hold"],
+                    MARKERS["hold_plane"],
+                    STATE_DIR,
+                )
             )
         return False, "deploy held at %s — revert the offending PR" % hold_sha[:8]
     if diverged_sha:
@@ -166,25 +118,26 @@ def gitops_status(
             "local diverged from origin at %s — deployer can't fast-forward, new commits "
             "aren't deploying; reconcile the host tree" % diverged_sha[:8]
         )
-    lock, first_seen, count = _parse_contention(contention_since)
-    if first_seen is not None:
-        age_s = (time.time() if now is None else now) - first_seen
+    streak = parse_contention(contention_since)
+    if streak is not None:
+        age_s = (time.time() if now is None else now) - streak.first_seen
         if age_s > max_contention_s:
             return False, (
                 "%d consecutive tick(s) deferred on service lock %s for %.0f min (> %.0f min) "
                 "— a deploy.sh holding /var/lock/server-deploy-%s.lock has outlived any "
                 "legitimate deploy; find it (fuser), end it, then `%s`"
                 % (
-                    count,
-                    lock,
+                    streak.count,
+                    streak.lock,
                     age_s / 60,
                     max_contention_s / 60,
-                    lock,
-                    CONTENTION_CLEAR,
+                    streak.lock,
+                    CONTENTION_CLEAR_CMD,
                 )
             )
-    sha, since = _parse_behind(behind_since)
-    if since is not None:
+    behind = parse_behind(behind_since)
+    if behind is not None:
+        sha, since = behind
         age_s = (time.time() if now is None else now) - since
         if age_s > max_behind_s:
             return False, (
@@ -192,21 +145,21 @@ def gitops_status(
                 "— deploy deferred (broad change / dirty tree); run the manual deploy on the "
                 "host" % (age_s / 3600, sha[:8], max_behind_s / 3600)
             )
-    pending = _parse_manual_plane(manual_plane)
+    pending = parse_manual_plane(manual_plane)
     if pending:
-        oldest = min(at for _, at in pending)
+        oldest = min(e.at for e in pending)
         age_s = (time.time() if now is None else now) - oldest
         if age_s > max_behind_s:
-            roles = ", ".join(sorted({role for role, _ in pending}))
+            roles = ", ".join(sorted({e.role for e in pending}))
             return False, (
                 "%s unapplied for %.0fh (> %.0fh) — the tick cannot apply %s; apply by hand, "
-                "then `%s <role>`"
+                "then `%s`"
                 % (
                     roles,
                     age_s / 3600,
                     max_behind_s / 3600,
                     "it" if len(pending) == 1 else "them",
-                    MANUAL_PLANE_CLEAR,
+                    MANUAL_PLANE_CLEAR_CMD,
                 )
             )
     return True, "no held deploy"
@@ -219,7 +172,7 @@ def check_gitops_alive(cfg: Config) -> tuple[bool, str]:
     Returns (ok, msg).
     """
     try:
-        with open(os.path.join(cfg.GITOPS_STATE_DIR, "last_run")) as fh:
+        with open(os.path.join(cfg.GITOPS_STATE_DIR, MARKERS["last_run"])) as fh:
             ts = float(fh.read().strip())
     except FileNotFoundError:
         return False, "no last_run marker (deployer never completed a tick?)"
@@ -239,10 +192,10 @@ def _read_gitops_marker(cfg: Config, name: str) -> str | None:
 def check_gitops_status(cfg: Config) -> tuple[bool, str]:
     return gitops_status(
         cfg,
-        _read_gitops_marker(cfg, "hold_sha"),
-        _read_gitops_marker(cfg, "diverged_sha"),
-        _read_gitops_marker(cfg, "behind_since"),
-        hold_plane=_read_gitops_marker(cfg, "hold_plane"),
-        manual_plane=_read_gitops_marker(cfg, "manual_plane"),
-        contention_since=_read_gitops_marker(cfg, "contention_since"),
+        _read_gitops_marker(cfg, MARKERS["hold"]),
+        _read_gitops_marker(cfg, MARKERS["diverged"]),
+        _read_gitops_marker(cfg, MARKERS["behind"]),
+        hold_plane=_read_gitops_marker(cfg, MARKERS["hold_plane"]),
+        manual_plane=_read_gitops_marker(cfg, MARKERS["manual_plane"]),
+        contention_since=_read_gitops_marker(cfg, MARKERS["contention"]),
     )

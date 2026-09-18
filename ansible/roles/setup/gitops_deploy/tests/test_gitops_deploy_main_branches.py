@@ -60,7 +60,8 @@ def test_drain_pending_runs_ahead_of_the_noop_short_circuit(
     # The ff-merged channels never re-reach their alert code on a later tick, so a queued alert
     # is only recoverable at the top of EVERY tick, before local == origin returns.
     deploy_alerts.write_pending(
-        gitops_deploy.PENDING_ALERTS_FILE, {"secrets:" + ORIGIN: "queued last tick"}
+        gitops_deploy.STATE.path("pending_alerts"),
+        {"secrets:" + ORIGIN: "queued last tick"},
     )
     tick.origin = tick.local
     gitops_deploy.main(tick.tools)

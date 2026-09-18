@@ -8,8 +8,12 @@ shim as a process has no other way to aim a landing away from the live checkout.
 
 import argparse
 import os
+import sys as _sys
 from dataclasses import dataclass
 from pathlib import Path
+
+_sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
+from lib.gitops_markers import STATE_DIR
 
 PRIMARY_CHECKOUT = Path("/home/ubuntu/server")
 MERGE_POLL_S = 30
@@ -50,7 +54,7 @@ class Options:
     # the tip wait moved the tip again and the retry's own deploy exited 4.
     stale_retries: int = 3
     primary: Path = PRIMARY_CHECKOUT
-    deployer_state: Path = Path("/var/lib/gitops-deploy")
+    deployer_state: Path = Path(STATE_DIR)
 
 
 def parse_args(argv: list[str] | None, description: str) -> Options:

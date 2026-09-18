@@ -21,6 +21,7 @@ monitor_bridge_modules:
   - cli.py
   - check.py
   - registry.py
+  - gitops_markers.py
   - gates.py
   - bridge/types.py
   - bridge/config.py

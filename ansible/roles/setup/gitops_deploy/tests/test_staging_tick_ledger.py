@@ -52,7 +52,7 @@ def test_an_unknown_word_records_nothing_rather_than_guessing() -> None:
 
 
 def _ledger(gitops_deploy: ModuleType) -> list[dict]:
-    path = gitops_deploy.STAGING_TICK_LEDGER
+    path = gitops_deploy.STATE.path("staging_ticks")
     try:
         with open(path) as handle:
             return [json.loads(line) for line in handle if line.strip()]

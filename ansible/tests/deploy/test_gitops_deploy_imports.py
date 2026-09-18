@@ -43,6 +43,10 @@ ALLOWED: dict[str, set[str] | None] = {
     # nothing else. It must NOT import `deploy_toolbox`, which imports IT for the
     # `narrow_deploy_plane` default.
     "deploy_narrow": {"deploy_config"},
+    # The state directory, the marker table and the line parsers. Import-free by construction:
+    # a copy of it ships into every other tree that reads the markers (its header says how),
+    # so an import here would have to be satisfiable in a monitor-bridge pod.
+    "gitops_markers": set(),
     "deploy_config": set(),
     "deploy_failtext": set(),
     "deploy_git": set(),
@@ -53,7 +57,7 @@ ALLOWED: dict[str, set[str] | None] = {
     # names, and keeping this module free of the deployer's config is what lets a test drive
     # it directly.
     "deploy_locks": set(),
-    "deploy_remediation": {"deploy_changes"},
+    "deploy_remediation": {"deploy_changes", "gitops_markers"},
     # The broad arm's two deferral shapes — park, or record in `manual_plane`. It reaches the
     # alert transport, so it sits with `deploy_handlers` rather than among the pure modules.
     "deploy_defer": {
@@ -76,7 +80,7 @@ ALLOWED: dict[str, set[str] | None] = {
         "deploy_toolbox",
     },
     # The marker files, plus the two pure hold-marker decisions `clear_broad_hold` makes.
-    "deploy_state": {"deploy_config", "deploy_git"},
+    "deploy_state": {"deploy_config", "deploy_git", "gitops_markers"},
     "deploy_io": {
         "deploy_config",
         "deploy_failtext",
