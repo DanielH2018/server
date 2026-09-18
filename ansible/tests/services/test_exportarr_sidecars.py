@@ -111,17 +111,28 @@ def test_the_sidecar_cpu_limit_covers_a_scrape_burst():
     24h mean can still throttle every scrape: at 100m sonarr's sidecar hit the quota in
     ~48% of periods. 500m is the smallest shared value whose 50ms-per-period quota covers
     sonarr's measured 25-86ms burst; the comment in the macro carries the measurement.
+
+    Census first (#2036): the loop `continue`s past every container not named `exportarr`,
+    so a renamed container or an empty render would otherwise pass with zero assertions.
     """
+    limits = {}
     for role, _, doc in _docs():
         if doc.get("kind") != "Deployment":
             continue
         for container in doc["spec"]["template"]["spec"].get("containers", []):
             if container.get("name") != "exportarr":
                 continue
-            assert container["resources"]["limits"]["cpu"] == "500m", (
-                f"{role}'s exportarr cpu limit moved -- re-measure the CFS throttle ratio "
-                "before changing it; a mean-based justification is how 100m shipped"
-            )
+            limits[role] = container["resources"]["limits"]["cpu"]
+
+    assert set(limits) == set(ARRS), (
+        f"rendered no exportarr sidecar for {sorted(set(ARRS) - set(limits))} — this guard "
+        "would pass vacuously"
+    )
+    for role, cpu in limits.items():
+        assert cpu == "500m", (
+            f"{role}'s exportarr cpu limit moved -- re-measure the CFS throttle ratio "
+            "before changing it; a mean-based justification is how 100m shipped"
+        )
 
 
 def test_every_arr_service_exposes_the_metrics_port():
