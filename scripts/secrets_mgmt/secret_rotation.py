@@ -20,10 +20,13 @@ Four subcommands:
            env var holds the full push URL incl. token).
   rotate — rotate `auto`-tier secrets coming due (locally-generated push tokens — no
            external coupling). Dry-run by default; --commit writes new values via
-           `sops set` and records the new date. The unattended path picks up anything
-           due within ROTATE_LEAD_DAYS so a token rotates the weekly-cron run BEFORE
-           it goes overdue (see the constant's comment); coming-due-only-by-default
-           means rotations stay staggered.
+           `sops set` and records the new date. What is due is decided the way `audit`
+           decides it — registry dates advanced to git's — on a copy of the registry,
+           so a hand-rotated token whose date nobody advanced is not rotated twice and
+           the dates written back are only those of the secrets this run rotated. The
+           unattended path picks up anything due within ROTATE_LEAD_DAYS so a token
+           rotates the weekly-cron run BEFORE it goes overdue (see the constant's
+           comment); coming-due-only-by-default means rotations stay staggered.
 
 This file is the CLI. The logic each subcommand runs on lives beside it, in modules that
 import nothing from here: `secret_classify` (tier by name), `secret_registry` (seeding, sync, due dates,
@@ -51,6 +54,7 @@ Tiers (and default rotation cadence):
 """
 
 import argparse
+import copy
 import os
 import secrets as pysecrets
 import subprocess
@@ -268,14 +272,27 @@ def unattended_due(rows: list, rotate_all: bool = False) -> list:
 def cmd_rotate(args, tools: RotationTools) -> int:
     """Rotate `args.name`, or every coming-due auto-tier secret, and optionally redeploy.
 
-    Dry-run by default; `--commit` writes new values via `sops set`. Exits 2 when
+    Dry-run by default; `--commit` writes new values via `sops set`. Due-ness is judged from
+    the registry dates advanced to git's (skipped with `--no-derive`). Exits 2 when
     `args.name` names a non-auto-tier secret, 3 when a `sops set` fails or times out partway
     through the batch, 1 when `--deploy` is given and the redeploy fails (the new tokens are written but
     their consumers are not), 0 otherwise.
     """
     reg = tools.load_registry()
     now = tools.today()
-    res = audit(reg, now, tools.tier_days)
+    # Decide what is due from the same dates `audit` reads: the registry, advanced to the
+    # date git shows each ciphertext last changed. A token rotated by hand and committed
+    # without its `last_rotated` moved would otherwise read as due here and be rotated
+    # again (#2020). The advance lands on a COPY: `save_registry` below writes `reg`, and
+    # the only dates that may move on disk are those of the secrets this run rotates —
+    # git stays the source of truth for the rest, exactly as it does for `audit`.
+    selection = copy.deepcopy(reg)
+    if not args.no_derive:
+        for name, old, new in advance_last_rotated(
+            selection, derived_rotation_dates(tools)
+        ):
+            print("  rotated in git, date advanced: %-30s %s -> %s" % (name, old, new))
+    res = audit(selection, now, tools.tier_days)
     if args.name:
         if is_record(reg, args.name):
             print(record_refusal(args.name), file=sys.stderr)
@@ -416,6 +433,12 @@ def main(argv=None) -> int:
     pr.add_argument("--name", help="rotate one named auto secret")
     pr.add_argument(
         "--deploy", action="store_true", help="redeploy consumers after rotating"
+    )
+    pr.add_argument(
+        "--no-derive",
+        action="store_true",
+        help="trust last_rotated as recorded when picking what is due; skip reading "
+        "rotation dates out of git",
     )
     pr.set_defaults(func=cmd_rotate)
     args = p.parse_args(argv)
