@@ -117,8 +117,13 @@
   ansible.builtin.template:
     src: ups-secondary-health.sh.j2
     dest: /usr/local/bin/ups-secondary-health.sh
-    # DECIDED: 0700, not 0755 — the script renders nut_monitor_password inline, and its cron
-    # below runs as root, so root:root 0700 reaches its only caller.
+    # DECIDED: 0700 root:root, not 0755 — the cron below is its only caller and runs as root.
+    # The script renders NO credential: it reads the upsmon endpoint out of /etc/nut/upsmon.conf
+    # at runtime with a field-scoped awk, and names nut_monitor_password only in a comment saying
+    # why that read is field-scoped. The 0700 is still ENFORCED, because
+    # scripts/secrets_mgmt/secret_bearing_host_paths.py matches that comment mention and its
+    # census errs toward denying (a false deny costs a prompt, a false permit costs a token) —
+    # test_secret_bearing_host_paths.py pins this path for exactly that reason (#2041).
     owner: root
     group: root
     mode: "0700"
