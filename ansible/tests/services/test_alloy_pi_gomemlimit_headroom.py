@@ -42,15 +42,33 @@ def _mib(quantity: str) -> int:
     return int(match.group(1)) * _UNITS_MIB[match.group(2)]
 
 
-def gomemlimit_problem(gomemlimit: str, mem_cap: str, gogc: int) -> str | None:
-    """The failure message for a (GOMEMLIMIT, compose memory cap, GOGC) triple, else None."""
+# With GOGC=off the limit is the only trigger, so the slack between the live set and the
+# limit is the whole cycle. Less than GOGC=50's half-heap of slack would give a shorter cycle
+# than the 2026-09-03 shape the marker at the GOGC line replaced, which is the direction of
+# the treadmill above. The forced two-minute cycle GOGC=off removes is why it is off at all.
+MIN_SLACK_PERCENT_WHEN_OFF = 50
+
+
+def gomemlimit_problem(gomemlimit: str, mem_cap: str, gogc: int | str) -> str | None:
+    """The failure message for a (GOMEMLIMIT, compose memory cap, GOGC) triple, else None.
+
+    `gogc` is the percentage, or the string "off"; anything else is a malformed compose.
+    """
     limit = _mib(gomemlimit)
-    heap_goal = MEASURED_LIVE_HEAP_MIB * (100 + gogc) // 100
+    if gogc == "off":
+        heap_goal = MEASURED_LIVE_HEAP_MIB * (100 + MIN_SLACK_PERCENT_WHEN_OFF) // 100
+        how = f"GOGC=off needs at least {MIN_SLACK_PERCENT_WHEN_OFF}% slack, a {heap_goal} MiB goal"
+    else:
+        assert isinstance(gogc, int), (
+            f"GOGC must be a percentage or 'off', not {gogc!r}"
+        )
+        heap_goal = MEASURED_LIVE_HEAP_MIB * (100 + gogc) // 100
+        how = f"at GOGC={gogc} is a {heap_goal} MiB goal"
     floor = heap_goal + NON_HEAP_RUNTIME_MIB
     if limit < floor:
         return (
             f"GOMEMLIMIT={gomemlimit} is under the {floor} MiB floor (live heap "
-            f"{MEASURED_LIVE_HEAP_MIB} MiB at GOGC={gogc} is a {heap_goal} MiB goal, plus "
+            f"{MEASURED_LIVE_HEAP_MIB} MiB {how}, plus "
             f"{NON_HEAP_RUNTIME_MIB} non-heap); the limit sets the heap goal, not GOGC"
         )
     if limit >= _mib(mem_cap):
@@ -58,15 +76,16 @@ def gomemlimit_problem(gomemlimit: str, mem_cap: str, gogc: int) -> str | None:
     return None
 
 
-def _live_values() -> tuple[str, str, int]:
+def _live_values() -> tuple[str, str, int | str]:
     text = _COMPOSE.read_text()
     limit = re.search(r"^\s*- GOMEMLIMIT=(\S+)", text, re.MULTILINE)
-    gogc = re.search(r"^\s*- GOGC=(\d+)", text, re.MULTILINE)
+    gogc = re.search(r"^\s*- GOGC=(\d+|off)", text, re.MULTILINE)
     cap = re.search(r"resources\('[\d.]+', '(\w+)'", text)
     assert limit and gogc and cap, (
         "the alloy compose lost its GOMEMLIMIT, GOGC or resources() line"
     )
-    return limit.group(1), cap.group(1), int(gogc.group(1))
+    raw = gogc.group(1)
+    return limit.group(1), cap.group(1), raw if raw == "off" else int(raw)
 
 
 def test_the_live_limit_has_headroom_and_a_cap_above_it() -> None:
@@ -76,6 +95,20 @@ def test_the_live_limit_has_headroom_and_a_cap_above_it() -> None:
 
 
 def test_the_shipped_triple_is_clean() -> None:
+    assert gomemlimit_problem("104MiB", "128M", "off") is None
+
+
+def test_a_limit_with_too_little_slack_for_gogc_off_is_flagged() -> None:
+    """With GOGC off the limit is the only trigger; 60MiB leaves under half a heap of slack."""
+    assert gomemlimit_problem("60MiB", "128M", "off") == (
+        "GOMEMLIMIT=60MiB is under the 63 MiB floor (live heap 37 MiB GOGC=off needs at "
+        "least 50% slack, a 55 MiB goal, plus 8 non-heap); the limit sets the heap goal, "
+        "not GOGC"
+    )
+
+
+def test_the_2026_09_03_triple_is_clean() -> None:
+    """The GOGC=50 pairing that ran 2026-09-03 to 2026-09-18, before #1967 raised the goal."""
     assert gomemlimit_problem("72MiB", "96M", 50) is None
 
 

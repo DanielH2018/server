@@ -95,43 +95,63 @@ services:
       # restart and has held at 38.3-38.5 MB every day since (measured 2026-09-18 over 16 days;
       # a fresh process starts at 22 MB, and the cluster's Alloy DaemonSet floors at 27 MB).
       # That is warm-up to a plateau, not a leak, and what is in the 38 MB is unmeasured —
-      # pprof is off by decision (#1130). With GOGC=50 below, the heap goal is 58 MB; the
-      # runtime's non-heap classes add 8 MB; `heap_sys` reaches 70 MB, so the total the limit
-      # governs (`sys_bytes` − `heap_released_bytes`) reaches 72-74 MB at the top of every
-      # cycle — the limit itself. It is not a spike ceiling 20 MiB clear of steady state. What
-      # it does at that point is force the scavenger to hand idle heap pages back to the kernel
-      # (7 MB released), which is cheap: collection stays GOGC-paced at 0.7 cycles a minute and
-      # 0.05 of a core (#1944). The continuous-collection state above needs the limit under
-      # the live set plus GC slack, which is why the guard in
+      # pprof is off by decision (#1130). With GOGC=off below, this limit is what starts a
+      # collection, and the distance from the live set plus the runtime's non-heap classes
+      # (38 + 8 MB) up to it is one cycle's worth of allocation — ~50 MB, ~350 s at the
+      # measured 145 KB/s. The 72 MiB limit under GOGC=50 was reached at the top of every
+      # cycle too (#1944): what a limit that is reached does is force the scavenger to hand
+      # idle heap pages back to the kernel, which is cheap. The continuous-collection state
+      # above needs the limit under the live set plus GC slack, which is why the guard in
       # ansible/tests/services/test_alloy_pi_gomemlimit_headroom.py takes the floor from the
-      # measured live heap and GOGC, not from `sys_bytes` — that metric never shrinks and read
-      # 96.3 MB on 2026-09-17, above this limit and this container's cap alike.
-      - GOMEMLIMIT=72MiB
-      # Collect when the heap grows 50% past its live size, not the default 100%. At the 38 MB
-      # live heap above that is a 58 MB goal, reached every ~85s at the measured 133 KB/s of
-      # allocation, instead of twice a second. CPU is not cheaper than RAM on this host after
-      # all: the 1c9592c1 shape spent 0.28 cores to save ~10 MiB. This is also the lever if
-      # the process ever needs to be smaller: GOGC=25 would take ~10 MB off every peak for a
-      # cycle every ~40s, still a fraction of a core at this allocation rate.
+      # measured live heap, not from `sys_bytes` — that metric never shrinks and read 96.3 MB
+      # on 2026-09-17, above the old limit and the old cap alike. With GOGC off the guard
+      # requires at least the slack GOGC=50 gave, half the live heap, so a "thrifty" edit
+      # here cannot shorten the cycle below the 2026-09-03 shape.
+      - GOMEMLIMIT=104MiB
+      # GOGC=off: the memory limit above is the only thing that starts a collection. CPU is
+      # not cheaper than RAM on this host after all: the 1c9592c1 shape spent 0.28 cores to
+      # save ~10 MiB, and GOGC=50 (2026-09-03 to 2026-09-18) ran a 58 MB goal at 0.52 cycles
+      # a minute.
       #
-      # DECIDED: GOGC stays at 50, and the major faults this process takes are accepted
-      # (#1967). This host swaps by design (`vm.swappiness=130` to zram, roles/setup/optimize_pi),
-      # global reclaim swaps this heap out between cycles, and the mark phase faults it back in:
-      # 28,423 major faults on this cgroup in 300 s (95/s), a third of the host's 84,938,
-      # measured 2026-09-18 at 0.52 cycles a minute. GOGC=25 was deployed the same day and
-      # measured the same way after a 16-minute warm-up: 1.0 cycles a minute, 33,667 faults in
-      # 300 s (112/s) of the host's 100,479 — 33.5% of the host in both windows, at the same
-      # host pressure (memory PSI `full avg300` 4.0-4.6%). Both counts rose 18% together, which
-      # is the host getting busier, not the setting. Marking twice as often halves the faults
-      # per cycle (6,700 against 10,800) and doubles the cycles, and one 300 s window per arm
-      # cannot separate those; what it does show is no reduction, so GOGC is not the lever
-      # for this. Pinning the heap instead (`memswap_limit`
-      # equal to the cap) would hold 40-60 MB resident that zram keeps in about 12 MB at its
-      # measured 4.61:1, on a host with 10-25 MB free. What the faults cost is zram
-      # decompression: this container's memory PSI `full` totalled 0.8% over 75 minutes.
-      # Revisit against the 95/s above, with the Pi's memory budget as the subject, not this
-      # role.
-      - GOGC=50
+      # DECIDED: GOGC=off under GOMEMLIMIT, to cut how often this heap is faulted back in,
+      # and the faults that remain are accepted (#1967). This host swaps by design
+      # (`vm.swappiness=130` to zram, roles/setup/optimize_pi), global reclaim swaps this
+      # heap out between cycles, and the mark phase faults it back in. Measured 2026-09-18 at
+      # GOGC=50: 28,423 major faults on this cgroup in 300 s (95/s), a third of the host's
+      # 84,938, 0.52 cycles a minute — 10,800 faults a cycle against a 9,500-page heap, so by
+      # the next cycle the whole heap is cold. GOGC=25 the same day, after a 16-minute
+      # warm-up: 1.0 cycles a minute, 33,667 in 300 s of the host's 100,479 — the same 33.5%
+      # share, at the same host pressure (memory PSI `full avg300` 4.0-4.6%), so no
+      # reduction; 6,700 faults a cycle, half the heap. The rate is cycles × the part of the
+      # heap that went cold, and below one cycle every ~2 minutes that part is all of it, so
+      # fewer cycles means proportionally fewer faults.
+      #
+      # GOGC alone cannot get there. The Go runtime's sysmon forces a cycle whenever two
+      # minutes pass without one (`forcegcperiod`), so at this allocation rate (145 KB/s)
+      # every GOGC from 50 up sits on that floor: GOGC=100 measured 0.44 cycles a minute
+      # under an 88 MiB limit and 0.43 under 104 MiB, against the 0.23 its 78 MB goal
+      # implies, and cut the faults 20% (24,410 in a clean 300 s window, 81/s, 26.9% of the
+      # host's 90,912) rather than the 50% halving the cycles would. The time trigger is
+      # skipped when GOGC is off (`gcTrigger.test` returns false for `gcTriggerTime` at
+      # `gcPercent < 0`), and then the limit is the trigger: the ~50 MB between the live set
+      # plus runtime (~47 MB) and 104 MiB is one cycle's allocation. Measured 2026-09-18 in
+      # a clean 600 s window 23 minutes after the start: 0.18 cycles a minute (one per
+      # ~330 s, runtime peak 97 MiB), 43,288 faults (72/s), 26.9% of the host's 161,051 — a
+      # 24% cut against the 95/s and 33.5% of GOGC=50, not the two-thirds the cycle count
+      # alone predicts. Per cycle that is ~23,800 faults, over twice the heap, so most of
+      # this process's faults are not the mark at all: they are its 60-second work (the
+      # discovery pass, the scrape, the batch push, the tail) re-faulting a working set that
+      # goes cold between rounds, and no GC setting reaches those. The heap above the live
+      # set is exactly the part that sits cold, so it costs RAM as compressed swap only:
+      # `memory.swap.current` read 60-71 MB in that window against 25-56 MB before, ~3 MB at
+      # zram's measured 4.61:1. Pinning the heap instead (`memswap_limit` equal to the cap)
+      # would hold 40-60 MB resident for the ~12 MB zram keeps it in, on a host with
+      # 10-25 MB free. Judged the day after by
+      # `rate(node_vmstat_pswpin{job="node-pi"}[1d])` against the 136-181/s of 2026-09-03 →
+      # 09-17; the Pi memory budget review of 2026-09-18
+      # (~/.claude/artifacts/pi-memory-budget-review_2026-09-18.md) has the whole host's
+      # numbers.
+      - GOGC=off
       # One GC-visible processor. Alloy defaults GOMAXPROCS to the 4 cores on this Pi and
       # spawns a worker set to match, which is pure contention for a job this small on a box
       # that already showed RCU stalls from fork rate.
@@ -172,12 +192,13 @@ services:
 
       # Watchtower
       - "com.centurylinklabs.watchtower.depends-on=docker-proxy"
-    # 96M is the containment cap, 24 MiB over the 72 MiB GOMEMLIMIT above so a spike is
-    # collected rather than OOM-killed. Startup under the 0.30 CPU cap takes minutes on this host (the
-    # binary is large and arm64 decompression is slow); it is not a hang.
+    # 128M is the containment cap, 24 MiB over the 104 MiB GOMEMLIMIT above so a spike is
+    # collected rather than OOM-killed (96M was 24 MiB over the 72 MiB limit it paired with).
+    # Startup under the 0.30 CPU cap takes minutes on this host (the binary is large and
+    # arm64 decompression is slow); it is not a hang.
     #
-    # `process_resident_memory_bytes{job="alloy-pi"}` peaks at 75-82 MB on every day, and that
-    # is the top of the GC sawtooth, not an event: the 58 MB heap goal plus 8 MB of runtime
+    # `process_resident_memory_bytes{job="alloy-pi"}` peaked at 75-82 MB on every day under
+    # GOGC=50, and that is the top of the GC sawtooth, not an event: the 58 MB heap goal plus 8 MB of runtime
     # plus up to 23 MB of the binary's own text pages (`RssFile`, file-backed) read at the
     # moment of a scrape. Measured 2026-09-18 over 7 days at the 60s scrape: the samples above
     # 70 MB fall in every one of the 24 hours (10-39 per hour), in 435 runs of median length
@@ -192,10 +213,14 @@ services:
     # 00:39Z start — the binary's pages being charged and reclaimed as it was read — and not
     # once in the 40 minutes after; `oom_kill` 0. Anonymous memory peaks around 66 MB, file
     # pages are reclaimable, and Docker's default `memory.swap.max` equals the cap, so an
-    # OOM kill needs anon plus swap past 192 MiB. "~20 MB under its OOM line" was the RSS
-    # reading against the cap, and the two are not the same quantity.
-    # DECIDED: the cap stays at 96M with the settings above. Raising it buys nothing the
-    # process asks for and costs a 456 MB host that already holds 320 MB in swap.
-    {{ resources('0.30', '96M', '0.02', '24M') }}
+    # OOM kill needs anon plus swap past twice the cap. "~20 MB under its OOM line" was the
+    # RSS reading against the cap, and the two are not the same quantity.
+    # DECIDED: the cap is 128M because GOGC=100 above asks for it — the 78 MB heap goal plus
+    # 8 MB of runtime plus the binary's text pages clears 96M — and for no other reason. The
+    # 2026-09-18 marker here read "raising it buys nothing the process asks for and costs a
+    # 456 MB host that already holds 320 MB in swap"; that held for the GOGC=50 pairing and
+    # the cost side still does, which is why the extra is taken as compressed swap (see the
+    # GOGC marker) rather than resident pages. The cap governs the cgroup; it reserves nothing.
+    {{ resources('0.30', '128M', '0.02', '24M') }}
 
 {{ external_networks() }}

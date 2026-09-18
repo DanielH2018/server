@@ -1,14 +1,23 @@
 ---
 - name: Set variables
   # Dual-tagged: vars are consumed by the gpu_mem task AND the zram task.
-  # zram 75% of RAM is the device's UNCOMPRESSED capacity (~343 MB), not its RAM
-  # cost — with zstd (~3.5:1 on typical anon pages) a full device costs ~98 MB
-  # physical, about what lz4 paid for the old 50% device. Net: +115 MB swap
-  # capacity before the SD-card swapfile gets touched, for free.
+  # The zram percentage is the device's UNCOMPRESSED capacity, not its RAM cost: zram holds
+  # only what is swapped, at the measured 4.61:1 (`mm_stat`, 2026-09-18: 274 MB stored in
+  # 59 MB). 75% (~343 MB) was sized 2026-08 for +115 MB of capacity over the old 50% device.
+  # Measured 2026-09-18 it was 77% full with 31 MB spilled to the SD-card swapfile at
+  # priority -2, and ~44 of the host's ~300 swap-ins a second were reading that spill — the
+  # slow faults, on the card whose page cache the same reclaim is already thrashing at
+  # 2.1 MB/s. 100% (~456 MB) moves the spill into zram for ~7 MB of RAM and leaves ~180 MB
+  # of capacity before the swapfile is touched again. The RAM a full device would cost
+  # (~100 MB) is bounded by the same earlyoom `-m 10` guard as before: it ignores swap by
+  # design (`-s 100,100`, below), so this changes nothing about when it fires. Applying the
+  # change restarts zramswap, which swapoffs the device onto the SD swapfile with ~15 MB
+  # free — a minute-long stall of the whole host — so apply it in a quiet window, or let a
+  # reboot pick it up. The Pi memory budget review of 2026-09-18 has the host's numbers.
   tags: [gpu-mem, zram]
   ansible.builtin.set_fact:
     optimize_pi_gpu_memory_mb: 16
-    optimize_pi_zram_percentage: 75
+    optimize_pi_zram_percentage: 100
 
 # 1. DYNAMIC CONFIG PATH DETECTION (Bookworm vs Bullseye)
 - name: Check if /boot/firmware/config.txt exists (Bookworm)
@@ -53,7 +62,7 @@
     - regexp: "^PERCENT="
       line: "PERCENT={{ optimize_pi_zram_percentage }}"
     # zstd is ~3.5:1 vs lz4's ~2.5:1 on this workload — the better ratio is what makes the
-    # 75% device size affordable. zstd costs more CPU per page than lz4, but the A53 cores
+    # device size affordable. zstd costs more CPU per page than lz4, but the A53 cores
     # idle ~95% here; the SD-card swapfile this avoids is FAR slower.
     - regexp: "^#?ALGO="
       line: "ALGO=zstd"
