@@ -29,9 +29,11 @@ verdict lines to loki-homelab. See repo-root `CLAUDE.md` for shared conventions.
   38 MB, not the 19 MiB the sizing assumed, so GOGC=50 set a 58 MB heap goal and the Go
   runtime's total reached the 72 MiB GOMEMLIMIT at the top of every cycle; since #1967
   (2026-09-18) GOGC is off and a 104 MiB limit under a 128M cap is the only collection
-  trigger, so the peak is ~20 MB higher and the heap is faulted back in about a third as
-  often — the Go runtime's forced two-minute cycle, which no GOGC value escapes, is what
-  GOGC=off removes. Nothing
+  trigger, so the peak is ~20 MB higher and collection runs a third as often (0.18 cycles
+  a minute) — the Go runtime's forced two-minute cycle, which no GOGC value escapes, is
+  what GOGC=off removes. That cut the container's major faults 24% (72/s from 95/s); the
+  rest are its 60-second work re-faulting a cold working set, which no GC setting reaches.
+  Nothing
   scheduled drives it, and there is no removable cause: what fills the 38 MB is unmeasured
   and pprof is off by decision. The compose template's GOMEMLIMIT and `resources()`
   comments carry the numbers, and `ansible/tests/services/test_alloy_pi_gomemlimit_headroom.py`
