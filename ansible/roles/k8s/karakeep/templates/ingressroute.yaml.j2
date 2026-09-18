@@ -19,12 +19,20 @@
 {#
   Homepage's karakeep widget (daniel-server, session-less API-key caller; pod CIDR added when homepage itself moved in-cluster, E3) — same story as
   speedtest: the no-auth bridge route it used died in the slice-7 teardown.
+
+  The prefix is the ONE path the widget reads: homepage's karakeep widget renders
+  `{url}/api/v1/{endpoint}` with a single `users/me/stats` endpoint
+  (src/widgets/karakeep/widget.js in gethomepage/homepage). It was `/api/` until #2018, which
+  also matched next-auth's `/api/auth/*` — the password login #1929 put back behind Authelia
+  on the public name stayed open to every pod on the `.local` one. Widen it only with the
+  widget source in hand, and never past `/api/v1/`:
+  ansible/tests/services/test_karakeep_public_bypass.py refuses a prefix that reaches next-auth.
 #}
 {{ monitoring_route(
     container_item.name,
     container_item.hostname | default(container_item.name),
     container_item.port,
-    '/api/',
+    '/api/v1/users/me/stats',
     extra_client_cidrs=['10.42.0.0/16']
   )
 }}

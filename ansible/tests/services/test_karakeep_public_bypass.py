@@ -8,7 +8,7 @@ login, which the app does not throttle) and the cookie-authenticated children be
 the internet the app password was the only gate. The fix is an allow-list of the key-gated
 prefixes; this guard keeps `/api/auth/` out of it however the list is next edited.
 
-Two invariants, each a predicate with a passing and a rejecting input, then applied to the
+Three invariants, each a predicate with a passing and a rejecting input, then applied to the
 rendered routes behind a non-vacuity assertion:
 
 - **No bypass prefix covers `/api/auth/`.** Traefik's `PathPrefix` is a plain string prefix,
@@ -16,6 +16,10 @@ rendered routes behind a non-vacuity assertion:
 - **The bypass still covers what the clients call.** Narrowing to `/api/v1/` alone — the fix
   the issue prescribed — would gate the extension's tRPC calls and the mobile upload, which
   fail silently behind Authelia's 302.
+- **No monitoring prefix covers `/api/auth/` either.** The `.local` `karakeep-monitoring`
+  route (homepage's widget; ClientIP-gated to the bridge IP and the pod CIDR, no Authelia)
+  carried `/api/` after #1929 closed the public name, so the password form stayed open to
+  every pod (#2018). The first invariant reads the public routes only and never saw it.
 
 Run: uv run pytest ansible/tests/services/test_karakeep_public_bypass.py
 """
@@ -63,21 +67,46 @@ def test_the_issue_prescribed_narrowing_loses_the_clients():
 # --- applied to the tree ------------------------------------------------------------
 
 
-@pytest.fixture(scope="module")
-def bypass_prefixes() -> dict[str, str]:
-    """IngressRoute name -> its PathPrefix, for every karakeep route carrying no forward-auth."""
+# The ClientIP-gated .local route the third invariant must find. A rename or a template move
+# would otherwise leave that fixture empty, and `not covering` over nothing passes.
+MONITORING_ROUTE = "karakeep-monitoring"
+
+
+def _no_forward_auth_prefixes(*, client_ip_gated: bool) -> dict[str, str]:
+    """IngressRoute name -> its PathPrefix, for every karakeep route carrying no forward-auth.
+
+    `client_ip_gated` splits the two shapes: the public bypass has neither authelia nor a
+    source restriction; the monitoring route has a ClientIP() clause instead of authelia.
+    """
     found: dict[str, str] = {}
     for role, _tpl, doc in rendered_docs():
         if role != "karakeep" or doc.get("kind") != "IngressRoute":
             continue
         for route in doc["spec"]["routes"]:
             middlewares = {m["name"] for m in route.get("middlewares", [])}
-            # The ClientIP-gated monitoring route is LAN/pod-only; the bypass is the
-            # public-host route with neither authelia nor a source restriction.
-            if "authelia" in middlewares or "ClientIP(" in route["match"]:
+            if "authelia" in middlewares:
+                continue
+            if ("ClientIP(" in route["match"]) != client_ip_gated:
                 continue
             found[doc["metadata"]["name"]] = _PREFIX.search(route["match"]).group(1)
+    return found
+
+
+@pytest.fixture(scope="module")
+def bypass_prefixes() -> dict[str, str]:
+    """The public-host routes with neither authelia nor a source restriction."""
+    found = _no_forward_auth_prefixes(client_ip_gated=False)
     assert found, "no forward-auth-free karakeep route rendered — the bypass is gone"
+    return found
+
+
+@pytest.fixture(scope="module")
+def monitoring_prefixes() -> dict[str, str]:
+    """The .local routes gated by ClientIP() alone."""
+    found = _no_forward_auth_prefixes(client_ip_gated=True)
+    assert MONITORING_ROUTE in found, (
+        f"{MONITORING_ROUTE} did not render as a ClientIP-gated route; found {sorted(found)}"
+    )
     return found
 
 
@@ -86,6 +115,13 @@ def test_no_bypass_prefix_reaches_next_auth(bypass_prefixes):
         n: p for n, p in bypass_prefixes.items() if prefix_covers(p, NEXT_AUTH_PATH)
     }
     assert not covering, f"public karakeep route(s) reach next-auth: {covering}"
+
+
+def test_no_monitoring_prefix_reaches_next_auth(monitoring_prefixes):
+    covering = {
+        n: p for n, p in monitoring_prefixes.items() if prefix_covers(p, NEXT_AUTH_PATH)
+    }
+    assert not covering, f".local karakeep route(s) reach next-auth: {covering}"
 
 
 def test_the_bypass_still_covers_every_client_path(bypass_prefixes):
