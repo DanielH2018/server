@@ -10,6 +10,7 @@ Run: uv run pytest .claude/hooks
 """
 
 import importlib
+import importlib.util
 import json
 import os
 import re
@@ -173,3 +174,92 @@ def test_readonly_tables_ssh_objects_are_claude_guards_own():
     """
     assert _readonly_tables.SSH_HOSTS == frozenset(_tables.TRUSTED_SSH_HOSTS)
     assert _readonly_tables._SSH_SECRET is _tables.SECRET_PATH_RE
+
+
+# --- #1982: a verb guarded on one side of the boundary is never bare on the other ----------------
+
+# The verbs `claude_guard/checks/remote.py` guards before its bare-table lookup: the
+# `_*_MUTATE` regexes, `_nvidia_smi_readonly`, and the ip/docker/systemctl sub-tables. A
+# literal, because the package exports no such set. A guard the package adds that this list
+# lacks is drift in the fail-closed direction (the package got stricter), so it is harmless.
+PACKAGE_GUARDED_VERBS = frozenset(
+    {
+        "journalctl",
+        "dmesg",
+        "ss",
+        "rg",
+        "sensors",
+        "nvidia-smi",
+        "ip",
+        "docker",
+        "systemctl",
+    }
+)
+
+
+def boundary_violations(handlers, tier1, remote_verbs, package_guarded):
+    """Names guarded on one side and listed bare on the other, each tagged with its side.
+
+    Four instances were found in one sweep on 2026-09-18 (`rg --pre`, `sensors -s` and
+    `nvidia-smi` bare in the package; `ss -K` bare in TIER1), fixed by hand, and pinned as
+    static lists. This is the derived form.
+    """
+    server_guards_package_bare = set(handlers) & (
+        set(remote_verbs) - set(package_guarded)
+    )
+    package_guards_server_bare = set(package_guarded) & set(tier1)
+    return sorted(
+        f"server guards, package lists bare: {v}" for v in server_guards_package_bare
+    ) + sorted(
+        f"package guards, TIER1 lists bare: {v}" for v in package_guards_server_bare
+    )
+
+
+def test_boundary_check_is_flagged_on_a_guard_missing_from_either_side():
+    out = boundary_violations(
+        handlers={"sed", "rg"},
+        tier1={"ls", "ss"},
+        remote_verbs={"rg", "ls"},
+        package_guarded={"ss"},
+    )
+    assert out == [
+        "server guards, package lists bare: rg",
+        "package guards, TIER1 lists bare: ss",
+    ]
+
+
+@pytest.mark.skipif(
+    not _CLAUDE_GUARD_DIR.is_dir(),
+    reason="the deployed claude_guard package is not present, so there is no boundary to check",
+)
+def test_no_verb_is_guarded_on_one_side_of_the_boundary_and_bare_on_the_other():
+    """The live check, on a deployed host only; CI's stand-in carries no verb tables.
+
+    A verb this repo reaches through a `HANDLERS` guard must not sit bare in the package's
+    `REMOTE_READONLY_VERBS`, and a verb the package guards must not sit in `TIER1`, whose
+    contract is "read-only under ANY argument". The replay corpus cannot see a remote
+    fail-open (4 of 1058 prompted records touch ssh), so this assertion is the evidence.
+    Placement only: a verb guarded on BOTH sides with different guards is #1898's move.
+    """
+    spec = importlib.util.spec_from_file_location(
+        "aar_1982", HOOKS / "auto-approve-readonly.py"
+    )
+    assert spec and spec.loader
+    aar = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(aar)
+    # Non-vacuity: the literal names verbs the package really lists, so an empty result
+    # below cannot come from a renamed table.
+    assert {
+        "journalctl",
+        "rg",
+        "sensors",
+    } <= PACKAGE_GUARDED_VERBS & _tables.REMOTE_READONLY_VERBS
+    assert (
+        boundary_violations(
+            aar.HANDLERS,
+            _readonly_tables.TIER1,
+            _tables.REMOTE_READONLY_VERBS,
+            PACKAGE_GUARDED_VERBS,
+        )
+        == []
+    )
