@@ -110,7 +110,11 @@ def plan(
 
 
 def _deploy_plane(narrow, config, target) -> BroadPlan:
-    """The deploy plane: a narrowed `--tags`, nothing at all, or the whole play."""
+    """The deploy plane: a narrowed `--tags`, nothing at all, or the whole play.
+
+    Whichever it is, `config.k8s_autodeploy_denylist` does not subtract from it — see
+    `denylisted_in` and the DECIDED marker on it.
+    """
     playbook = "ansible/deploy.yml"
     try:
         rc, out = narrow(config.repo, target.local, target.origin, NARROW_TIMEOUT_S)
@@ -135,7 +139,45 @@ def _deploy_plane(narrow, config, target) -> BroadPlan:
         log("narrow: the range moves no rendered output — merged, applying nothing")
         return BroadPlan(playbook, [NARROWED_TO_NOTHING], False)
     log(f"narrow: applying {playbook} --tags {','.join(tags)}")
+    denied = denylisted_in(tags, config.k8s_autodeploy_denylist)
+    if denied:
+        log(
+            f"narrow: {','.join(denied)} are denylisted for k8s auto-deploy and are applied "
+            "here regardless — the broad plane runs the plain playbook forward-only, with "
+            "no snapshot, staging gate or rollback for the denylist to withhold"
+        )
     return BroadPlan(playbook, tags, True)
+
+
+# DECIDED: the broad plane ignores `K8S_AUTODEPLOY_DENYLIST` (issue #1962). The denylist gates
+# PROMOTION into the k8s auto-deploy machinery — `split_k8s_auto_deploy` — whose pre-apply
+# snapshot, staging gate and automatic rollback are what a role declares `k8s_autodeploy:
+# false` to stay out of: a probe-less workload the rollout gate cannot see, migrating state a
+# revert would corrupt, a platform role whose rollback needs the access it just broke. The
+# broad plane has none of that machinery. It runs the plain playbook forward-only and holds
+# the SHA on failure, which is what an operator's `deploy.sh --tags <role>` does for the same
+# role, and it has applied every denied role that way on every unscoped run since 2026-08-29.
+# Three things made a filter the wrong shape. It could only gate the NARROWED path: a refused
+# range still runs the whole play, over all forty denied roles, so the filter would gate the
+# derivation that is certain and leave the one that is not wide open. Forty of the fifty-four
+# k8s roles are denied, so a filtered narrowed range would mostly apply nothing and hand a
+# tag list to a human — for a change a human authored and merged, with `land.sh` already
+# waiting on this tick to apply it. And a dropped tag is a service left silently stale unless
+# a durable marker lands with it, which is the outcome the DECIDED at the fallback above
+# refuses for a missed consumer: `Release Staleness Drift` compares a service's record against
+# its own role and the shared roles, never against `inventory/` or `ansible/templates/`, so
+# nothing would name it, and the one marker shaped for the job, `manual_plane`, is rendered as
+# a setup role by every one of its five readers. What the denylist still governs on this
+# plane is who MERGES: renovate.json's `manual — k8s_autodeploy: false` rule names
+# `group_vars/all.yml` beside a denied role's own defaults (#1936), so no pin a denied role
+# reads through a shared key merges unattended. `denylisted_in` exists so the journal line
+# above can name which of a narrowed apply's tags were denied ones.
+def denylisted_in(tags: list[str], denylist: frozenset[str] | set[str]) -> list[str]:
+    """The tags in a narrowed list that `K8S_AUTODEPLOY_DENYLIST` names, in the list's order.
+
+    Named in the journal and nowhere else; nothing drops them. The DECIDED above says why.
+    """
+    return [t for t in tags if t in denylist]
 
 
 def _full_run(playbook: str, reason: str) -> BroadPlan:
