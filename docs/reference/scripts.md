@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/scripts.py
-generated_at: 2026-09-18 12:39 UTC
-generated_sha: c49d5c4a4
+generated_at: 2026-09-18 18:17 UTC
+generated_sha: 633b9be9a
 ---
 
 !!! warning "Generated file — do not edit"
@@ -143,10 +143,10 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/infra_map/inventory.py` | Declared state: what ``containers_list`` and the role trees say should run. | imported by gen_infra_map.py, model.py | `test_gen_infra_map.py` *(indirect)* |
 | `scripts/lib/invocation_sites.py` | Where a `scripts/...` path can be executed from, read once for two different questions. | imported by script_classify.py | `test_invocation_sites.py` |
 | `scripts/dev/findings_lib/issue_model.py` | The finding vocabulary and the pure reads over a gh issue: no gh, no shell, no argv. | imported by _findings_fakes.py, backlog.py, claim.py, claim_cli.py, cli.py, findings.py, gh_calls.py, plans.py, verify.py | `test_findings.py` *(indirect)* |
-| `scripts/lib/k8s_context.py` | Ansible's variable semantics, reproduced for the k8s manifest render guard. | imported by k8s_manifests.py | `test_k8s_context.py` |
+| `scripts/lib/k8s_context.py` | Ansible's variable semantics, reproduced for the k8s manifest render guard. | imported by k8s_manifests.py, monitors.py | `test_k8s_context.py` |
 | `scripts/lib/k8s_net_rules.py` | The two semantic rules on rendered manifests that no schema can make. | imported by k8s_manifests.py | `test_k8s_net_rules.py` |
 | `scripts/lib/k8s_pvc.py` | PersistentVolumeClaim names a rendered manifest declares, and the ones it references. | imported by k8s_manifests.py | `test_k8s_pvc.py` |
-| `scripts/lib/k8s_roles.py` | Which roles under ``ansible/roles/k8s/`` the manifest validator renders, and which it skips. | imported by k8s_manifests.py, land_tags.py, narrow_broad.py, postflight.py | `test_k8s_role_callers.py` *(indirect)* |
+| `scripts/lib/k8s_roles.py` | Which roles under ``ansible/roles/k8s/`` the manifest validator renders, and which it skips. | imported by k8s_manifests.py, land_tags.py, monitors.py, narrow_broad.py, postflight.py | `test_k8s_role_callers.py` *(indirect)* |
 | `scripts/lib/k8s_schema.py` | Schema validation for a rendered k8s object: the core OpenAPI check and the vendored CRDs. | imported by k8s_manifests.py | `test_k8s_schema.py` |
 | `scripts/lib/k8s_yaml.py` | YAML parsing for rendered k8s manifests: the strict loaders and the ``lookup()`` stub. | imported by k8s_manifests.py, k8s_pvc.py | `test_k8s_yaml.py` |
 | `scripts/deploy_tools/land_reach.py` | Which hosts a self-applied setup-role change still owes a hand, beyond the tick's own host. | imported by land_tags.py, tools.py | `test_land_reach.py` |
@@ -162,7 +162,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/diagnostics/probe_lib/metrics.py` | `probe.py metric` and `probe.py loki-query` -- Prometheus and Loki queries. | imported by probe.py, subcommands.py | `test_probe.py` *(indirect)* |
 | `scripts/infra_map/model.py` | Reconciliation: overlay live state onto the declared skeleton. | imported by gen_infra_map.py | `test_gen_infra_map.py` *(indirect)* |
 | `scripts/diagnostics/probe_lib/monitors.py` | `probe.py monitors` and `probe.py kuma-drift` -- what is down, and what is missing. | imported by postflight.py, probe.py, subcommands.py | `test_probe_monitors.py` *(indirect)* |
-| `scripts/deploy_tools/narrow_broad.py` | Which service tags a deploy-plane change actually reaches, or a refusal to guess. | imported by deploy_tags.py | `test_deploy_tags_narrow.py` *(indirect)* |
+| `scripts/deploy_tools/narrow_broad.py` | Which service tags a deploy-plane change actually reaches, or a refusal to guess. | imported by _narrow_fixtures.py, deploy_tags.py, releases.py | `test_deploy_tags_narrow.py` *(indirect)* |
 | `scripts/deploy_tools/land_lib/options.py` | Everything the command line sets, plus the budgets a test shortens. | imported by _land_fakes.py, land.py, landing.py | `test_land_options.py` *(indirect)* |
 | `scripts/deploy_tools/land_lib/outcome.py` | The words a landing ends with: the verdict set, the cause set, the Outcome, and say(). | imported by ci.py, classify.py, deploy.py, health_verdict.py, landing.py, ledger.py, merge.py, pipeline.py, tick.py | `test_land_outcome.py` *(indirect)* |
 | `scripts/diagnostics/probe_lib/pi_plane.py` | `probe.py targets --pi` and `probe.py pi containers` — first-command triage for daniel-pi. | imported by probe.py, subcommands.py | `test_probe_pi_plane.py` *(indirect)* |
@@ -172,7 +172,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/lib/release_bin_groups.py` | Resolve which source files a `release_bin.yml` group deploys. | imported by cron_targets.py | `test_release_bin_groups_have_no_secrets.py` *(indirect)* |
 | `scripts/diagnostics/probe_lib/releases.py` | `probe.py releases` -- which commit produced the manifests each k8s service is running. | imported by health.py, probe.py, subcommands.py | `test_probe_releases.py` *(indirect)* |
 | `scripts/infra_map/render.py` | Rendering: turn the reconciled model into one self-contained HTML page. | imported by gen_infra_map.py | `test_infra_map_render.py` *(indirect)* |
-| `scripts/lib/render_guard.py` | Shared helpers for the render-guard scripts and other Ansible-inventory readers. | imported by catalog_backup.py, catalog_facts.py, cert_expiry.py, compose_templates.py, config_templates.py, deploy_tags.py, hosts.py, k8s_context.py, k8s_manifests.py, k8s_roles.py, k8s_yaml.py, land_tags.py, narrow_broad.py, networking.py, service_catalog.py, setup_templates.py, shell_lint.py, shell_templates.py, unit_templates.py | `test_render_guard.py` |
+| `scripts/lib/render_guard.py` | Shared helpers for the render-guard scripts and other Ansible-inventory readers. | imported by catalog_backup.py, catalog_facts.py, cert_expiry.py, compose_templates.py, config_templates.py, deploy_tags.py, hosts.py, k8s_context.py, k8s_manifests.py, k8s_roles.py, k8s_yaml.py, land_tags.py, monitors.py, narrow_broad.py, networking.py, service_catalog.py, setup_templates.py, shell_lint.py, shell_templates.py, unit_templates.py | `test_render_guard.py` |
 | `scripts/lib/repo_paths.py` | The repo path anchors a script under ``scripts/`` reads the Ansible tree through. | imported by await_ci.py, build_docs.py, catalog_model.py, cert_expiry.py, constants.py, core.py, cron_checks.py, cron_targets.py, crons.py, decisions.py, deploy_detach_notify.py, deploy_staleness.py, deploy_tags.py, docs_provenance.py, fact_cache_guard.py, fragment_readers.py, freshness.py, gen_doc_fragments.py, gen_hosts_block.py, gitops_state.py, grafana_dashboards.py, ha.py, health.py, health_docker.py, hosts.py, invocation_sites.py, k8s_autodeploy_counts.py, k8s_context.py, k8s_pvc.py, k8s_roles.py, k8s_schema.py, land_reach.py, land_tags.py, memory_survey.py, monitors.py, narrow_broad.py, networking.py, pi_plane.py, prune_worktrees.py, releases.py, render_guard.py, review_metrics.py, rotation_tools.py, route_facts.py, script_classify.py, scripts.py, secret_bearing_host_paths.py, secrets.py, setup_templates.py, shell_templates.py, staging_egress_probe.py, staging_gate.py, state.py, validate_ha_config.py | `test_doc_freshness.py` *(indirect)* |
 | `scripts/secrets_mgmt/rotation_tools.py` | Every process boundary `secret_rotation.py` crosses, as one injectable object. | imported by _rotation_fakes.py, consumers.py, git_dates.py, secret_registry.py, secret_rotation.py, secrets.py | `test_rotation_tools.py` |
 | `scripts/docs/route_facts.py` | Shared route facts for the reference generators. | imported by catalog_facts.py, catalog_render.py, cert_expiry.py, networking.py | `test_route_facts.py` |
