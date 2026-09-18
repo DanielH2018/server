@@ -174,8 +174,11 @@ what stops two deploys of the same service racing. A `-e target=daniel-pi` deplo
 
 Because the snapshot is of `HEAD`, **an uncommitted edit is not deployed** — commit first.
 
-Seven of its non-zero exits mean **nothing was deployed**, and each is a resume point rather
-than a failure. The eighth, 20, is the inverse: the playbook ran and changes are live.
+Every member of `DEPLOY_SH_NO_VERDICT` (`scripts/deploy_tools/exit_codes.py`) means
+**nothing was deployed**, and each is a resume point rather than a failure. 64 also ran
+nothing, but is a bad command line rather than a resume point. 20 is the inverse: the
+playbook ran and changes are live. The table is pinned to that module by
+`ansible/tests/deploy/test_deploy_skill_names_every_exit_code.py`.
 
 | Exit | Meaning | What to do |
 |---|---|---|

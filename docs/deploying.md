@@ -39,12 +39,16 @@ want none of the above.
 
 ## Exit codes are resume points
 
-Each of these means **nothing was deployed**. None is a playbook failure.
+Each of these means **nothing was deployed**. None is a playbook failure. The table is
+pinned to `DEPLOY_SH_NO_VERDICT` in `scripts/deploy_tools/exit_codes.py` by
+`ansible/tests/deploy/test_deploy_skill_names_every_exit_code.py`; 20, the one code that
+means the playbook ran, is in the `deploy` skill's table.
 
 | Code | Means | Do |
 |---|---|---|
 | 78 | The playbook matched no host — ansible exits 0 for that, so the wrapper reads the `PLAY RECAP` itself | Read the `[WARNING]` lines: an inventory that failed to parse, or a host pattern that matched nothing. Fix it, then retry |
 | 77 | The snapshot worktree could not be created, or a full run could not list its deploy tags from it — the message says which; a list that took longer than `TAG_LIST_TIMEOUT` under the tree lock is the second | Check `/tmp/homelab-deploy-snapshots/` is writable and `git worktree add --detach` works. For the list, run `uv run python scripts/deploy_tools/deploy_tags.py list` once by hand, then retry |
+| 76 | `flock` failed on the lock file itself — a bad descriptor, or a lock file the deploy user cannot open — not contention | `ls -l /var/lock/server-git-tree.lock`; retrying alone changes nothing |
 | 75 | A lock stayed busy — the tree lock, or one of this run's services' | Retry |
 | 4 | The commit being deployed — `HEAD`, or `--at <sha>` — is behind `origin/master` on a path the deploy reaches | Pull, then retry. Never `--skip-staleness-check` |
 | 3 | The change is broad and maps to no single service | Run the playbook the change's plane needs |
