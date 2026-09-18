@@ -127,12 +127,14 @@ Before it takes the lock it clears an Ansible fact cache pinning another worktre
 pruned worktree used to fail EVERY deploy at Gathering Facts for the full 7200s TTL — with an
 error naming a module rather than the cache, after the ~9-minute wait on the lock.
 
-Its non-zero exits arrive as a bare `Exit code N`. Seven of them mean **nothing was
-deployed** — a resume point rather than a playbook failure (retry a busy lock, `git pull` a
-stale tree — never `--skip-staleness-check` — deploy by hand on a broad change, check
-`--list-services` on a tag miss, fix the lock file itself on 76, fix the snapshot root on 77,
-fix the inventory or host pattern on 78 — the playbook matched no host, which ansible itself
-exits 0 for). The eighth, 20, is the inverse: the playbook ran, a task
+Its non-zero exits arrive as a bare `Exit code N`. Every member of `DEPLOY_SH_NO_VERDICT`
+(`scripts/deploy_tools/exit_codes.py`) means **nothing was deployed** — a resume point rather
+than a playbook failure (retry a busy lock, `git pull` a stale tree — never
+`--skip-staleness-check` — deploy by hand on a broad change, check `--list-services` on a tag
+miss, fix the lock file itself on 76, fix the snapshot root on 77, fix the inventory or host
+pattern on 78 — the playbook matched no host, which ansible itself exits 0 for).
+`DEPLOY_BAD_FLAGS` (64) also ran nothing, but the fix is the command line rather than a retry.
+`DEPLOY_PLAYBOOK_FAILED` (20) is the inverse: the playbook ran, a task
 failed, and changes before it are live — not a safe re-run. The full table, why 20 collides
 with ansible's own exit codes, the Pi's `-e target=`, config-only runs, the GitOps tick, and
 initial setup are all in the **`deploy` skill**.
