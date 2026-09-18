@@ -1,0 +1,137 @@
+[
+  {
+    "date": "2026-09-18",
+    "domain": "security",
+    "agent": "security-review (opus, effort medium)",
+    "status": "covered",
+    "reviewed": [
+      "ansible/roles/k8s/authelia/templates/config-secret.yaml.j2",
+      "ansible/templates/ingressroute.yml.j2",
+      "ansible/templates/origin-pull.yml.j2",
+      "ansible/roles/k8s/traefik/templates/rbac.yaml.j2",
+      "ansible/roles/k8s/headlamp/templates/rbac.yaml.j2",
+      "ansible/roles/k8s/n8n/templates/networkpolicy.yaml.j2",
+      "ansible/roles/k8s/karakeep/templates/ingressroute.yaml.j2",
+      "ansible/roles/k8s/pi-peer-backup",
+      "ansible/roles/k8s/homelab-mcp/files",
+      "ansible/roles/k8s/autofix-bridge/files/autofix.py",
+      "ansible/roles/setup/initial_setup/tasks/crons.yml",
+      "ansible/roles/setup/optimize_pi/tasks/main.yml",
+      "ansible/roles/setup/gitops_deploy/tasks/install.yml",
+      "ansible/roles/k8s/*/templates (privileged, hostPath, hostNetwork sweep)",
+      "ansible/roles/containers/{alloy,docker-proxy}/templates"
+    ],
+    "findings": [
+      "#2016",
+      "#2018", "#2015"
+    ],
+    "leads": [
+      "pi/sudoers-scope-for-ubuntu-after-pi-peer-backup-forced-command"
+    ],
+    "notes": "Five 2026-09-17 leads resolved: pi-peer-backup key restricted (FIXED), homelab-mcp cert-expiry gated (FIXED), autofix-bridge errorMessage exemption retired (FIXED), karakeep public /api narrowed (FIXED; residual on the .local monitoring route), push-token no_log STILL OPEN and wider (setup plane). n8n 5678 netpol FIXED (#1926). Not audited (budget): sshd/ufw/fail2ban under initial_setup/tasks/access.yml, netpol-baseline defaults, wg-easy k8s, loki/crowdsec node-agent hostPaths."
+  },
+  {
+    "date": "2026-09-18",
+    "domain": "network",
+    "agent": "homelab-network-diagnostician (sonnet)",
+    "status": "clean",
+    "reviewed": [
+      "ansible/roles/k8s/traefik/templates/static-config.yaml.j2",
+      "ansible/roles/k8s/traefik/templates/dashboard-ingressroute.yaml.j2",
+      "ansible/templates/ingressroute.yml.j2",
+      "ansible/roles/setup/k3s/templates/metallb-pool.yaml.j2",
+      "ansible/roles/k8s/terraria/templates/deployment.yaml.j2",
+      "live: node conditions/taints, etcd voter, 6 ETP-Local VIP announcer vs backing pod, cert expiry (2026-10-31), DDNS vs WAN, origin-pull TLS alert 116 on public SNI, pihole AAAA NODATA"
+    ],
+    "findings": [],
+    "leads": [],
+    "notes": "Control plane healthy; origin-pull (24fd0c8f2) verified live; pihole fix e7f2ca2ee verified deployed. One informational note: terraria LoadBalancer VIP idle at replicas 0 by design."
+  },
+  {
+    "date": "2026-09-18",
+    "domain": "backup-observability",
+    "agent": "homelab-backup-observability-reviewer (opus, effort medium)",
+    "status": "covered",
+    "reviewed": [
+      "ansible/roles/k8s/monitor-bridge/files/bridge/net.py",
+      "ansible/roles/k8s/monitor-bridge/files/registry.py",
+      "ansible/roles/setup/initial_setup/files/kuma-push-lib.sh",
+      "ansible/roles/setup/k3s/templates/release-staleness-check.sh.j2",
+      "ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2",
+      "scripts/diagnostics/probe_lib/monitors.py",
+      "ansible/roles/setup/k3s/defaults/main.yml (longhorn tiers)",
+      "ansible/roles/setup/initial_setup/templates/eval-run.sh.j2",
+      "live: Kuma 91/93, kuma-drift, alerts 7d, B2/R2 spend and storage, Longhorn health, Prometheus window 21.4d, disks all hosts, scrutiny, UPS both hosts, Pi SD/zram, Loki ingestion"
+    ],
+    "findings": [
+      "#2013",
+      "#2019"
+    ],
+    "leads": [
+      "daniel-box/root-fs-250gb-burst-writer-under-var-lib-rancher"
+    ],
+    "notes": "Homelab Evals hole from 09-04 closed: tile Jinja-gated on an unset SOPS secret by design. Old 3.3 GiB/day daniel-server growth memory does not hold (-2.2 GB/day over 14d)."
+  },
+  {
+    "date": "2026-09-18",
+    "domain": "cicd",
+    "agent": "homelab-cicd-reviewer (opus, effort medium)",
+    "status": "covered",
+    "reviewed": [
+      "ansible/roles/setup/renovate_agent/files/renovate_agent.py",
+      "ansible/roles/setup/renovate_agent/templates/renovate-agent.service.j2",
+      "ansible/roles/setup/gitops_deploy/files/deploy_state.py",
+      "ansible/roles/setup/gitops_deploy/files/deploy_alerts.py",
+      "ansible/roles/setup/gitops_deploy/files/deploy_remediation.py",
+      "scripts/secrets_mgmt/secret_rotation.py",
+      ".github/workflows/ci.yml",
+      "renovate.json",
+      "live: deployer tick/markers, releases --stale-only, master CI, open Renovate PRs, rotation audit, denylist sync, renovate-agent journal 5d"
+    ],
+    "findings": [
+      "#2014",
+      "#2020",
+      "#2021", "#2022"
+    ],
+    "leads": [
+      "gitops_deploy/manual-plane-k3s-cleared-by-hand-was-k3s-bringup-applied-first"
+    ],
+    "notes": "#1998 not observed. Deployer parked on 721ce79f by design (initial_setup.yml in _BROAD_MANUAL_PREFIXES); remediation printed."
+  },
+  {
+    "date": "2026-09-18",
+    "domain": "container",
+    "agent": "homelab-container-reviewer (sonnet)",
+    "status": "covered",
+    "reviewed": [
+      "ansible/templates/exportarr.yml.j2",
+      "ansible/roles/k8s/{sonarr,radarr,prowlarr,jellyfin,qbittorrent,tdarr,configarr,janitorr,karakeep,navidrome}/templates",
+      "ansible/roles/containers/{alloy,autoheal,docker-proxy,glances,node-exporter,wg-easy}/templates",
+      "ansible/tests/k8s (readiness/resources/security_context/probe: 93 passed)",
+      "live: pods/restarts/OOM/PVCs/CFS throttling 24h, Pi docker ps, qbittorrent netns sidecar"
+    ],
+    "findings": [
+      "#2017"
+    ],
+    "leads": [],
+    "notes": "qbittorrent netns remediation confirmed live (restartable wireguard init container). Pi register items #2003-#2007 not re-derived."
+  },
+  {
+    "date": "2026-09-18",
+    "domain": "docs",
+    "agent": "homelab-docs-freshness-reviewer (sonnet)",
+    "status": "clean",
+    "reviewed": [
+      ".claude/skills/*/SKILL.md (18/18)",
+      ".claude/agents/*.md (8/8)",
+      ".claude/rules/*.md",
+      "docs/*.md (30/30) + docs/reference/topology.md",
+      "docs/adr/*.md (19/19)",
+      "CLAUDE.md",
+      "ansible/roles/*/*/CLAUDE.md (path-citation sweep over all; content read on 15 roles changed since 2026-09-04)"
+    ],
+    "findings": [],
+    "leads": [],
+    "notes": "~266 path citations resolved. Last run's SKILL.md and docs/*.md holes closed. Residual uncertainty: configarr/janitorr CLAUDE.md vs the bec8990a8/4c89084a4 refactor not traced per-file."
+  }
+]
