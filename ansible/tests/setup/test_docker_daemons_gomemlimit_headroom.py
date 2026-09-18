@@ -99,11 +99,11 @@ def test_headroom_rule_is_flagged_on_a_limit_over_the_footprint_cap():
     assert "over 128 MiB" in (gomemlimit_problem("dockerd", "256MiB") or "")
 
 
-def test_committed_limits_clear_the_floor_and_the_cap():
-    limits = load_yaml(_DEFAULTS)["docker_install_gomemlimit"]
-    assert set(limits) == set(MEASURED), "one limit per measured daemon"
-    problems = [p for d, v in limits.items() if (p := gomemlimit_problem(d, v))]
-    assert not problems, "\n".join(problems)
+@pytest.mark.parametrize("daemon", sorted(MEASURED))
+def test_committed_limit_clears_the_floor_and_the_cap(daemon):
+    # One scalar per daemon: a dict would be replaced whole by a host_vars override.
+    limit = load_yaml(_DEFAULTS)[f"docker_install_gomemlimit_{daemon}"]
+    assert gomemlimit_problem(daemon, limit) is None
 
 
 def test_each_daemon_has_its_own_tag_and_the_shim_override_rides_with_containerds():
@@ -137,6 +137,10 @@ def test_go_runtime_drop_in_pairs_gogc_off_with_the_limit_and_can_be_removed():
     content = written["ansible.builtin.copy"]["content"]
     assert "Environment=GOGC=off" in content
     assert "Environment=GOMEMLIMIT={{ docker_install_go_runtime_limit }}" in content
+    lookup = next(t for t in tasks if "ansible.builtin.set_fact" in t)[
+        "ansible.builtin.set_fact"
+    ]
+    assert "docker_install_gomemlimit_" in lookup["docker_install_go_runtime_limit"]
     removed = next(
         t
         for t in tasks

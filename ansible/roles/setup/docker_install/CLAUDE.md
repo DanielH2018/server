@@ -115,7 +115,7 @@ services. Install without uninstall is a one-way door; this is the way back out.
   host's, each GC cycle faulting a swapped-out heap back from zram (#2003). A change
   here restarts containerd (no cascade into dockerd; live-restore keeps the containers up).
 - **Each daemon runs `GOGC=off` under a `GOMEMLIMIT`** (`tasks/go-runtime.yml`, one
-  systemd drop-in per unit, sized at `docker_install_gomemlimit` in `defaults/main.yml`
+  systemd drop-in per unit, sized at `docker_install_gomemlimit_<daemon>` in `defaults/main.yml`
   with the 2026-09-18 measurement beside it: live heap 11–14 MB each, 114 / 97 KB/s of
   allocation, 0.7 GC cycles a minute — above the two-minute forced-cycle floor, so the
   heap goal was the trigger). 64 MiB gives each a cycle every ~350–430 s, the cadence the
@@ -137,7 +137,7 @@ services. Install without uninstall is a one-way door; this is the way back out.
   docker-go-runtime-dockerd -e target=daniel-pi` (then `…-containerd`), each judged the
   next day by `rate(node_vmstat_pswpin{job="node-pi"}[1d])` against the 136–181/s of
   2026-09-03 → 09-17 and by the daemon's own `go_gc_duration_seconds_count` rate. An
-  empty value in `docker_install_gomemlimit` removes that daemon's drop-in and restarts
+  empty `docker_install_gomemlimit_<daemon>` removes that daemon's drop-in and restarts
   it; `teardown.yml` removes both directories when a host retires Docker.
 - **`become: false` user resolution (task 3) is deliberate** — under the play's `become: true`,
   `ansible_facts.env.USER` is `root`; the user who actually runs `docker` is the unprivileged

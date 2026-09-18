@@ -33,7 +33,8 @@ docker_install_engine_upgrade: false
 # carries the re-measure queries.
 #
 # An empty value removes that daemon's drop-in and restarts it back to the runtime's
-# defaults. Sized for daniel-pi; every Docker host is the Pi.
-docker_install_gomemlimit:
-  dockerd: 64MiB
-  containerd: 64MiB
+# defaults. Two scalars rather than one dict: Ansible replaces a dict on override, so a
+# host_vars entry emptying one daemon's key would have dropped the other's as well.
+# Sized for daniel-pi; every Docker host is the Pi.
+docker_install_gomemlimit_dockerd: 64MiB
+docker_install_gomemlimit_containerd: 64MiB

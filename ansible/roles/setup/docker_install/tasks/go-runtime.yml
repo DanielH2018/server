@@ -1,7 +1,7 @@
 ---
 # Pair one Go daemon's runtime with a memory limit: `GOGC=off` under `GOMEMLIMIT`, in a
 # systemd drop-in. Imported once per daemon from install.yml with `go_runtime_unit`
-# (the systemd unit) and `go_runtime_daemon` (the key in `docker_install_gomemlimit`),
+# (the systemd unit) and `go_runtime_daemon` (the suffix of `docker_install_gomemlimit_<daemon>`),
 # so each daemon has its own tag and can be applied, and judged, on its own day.
 #
 # Why a limit and not a GOGC percentage: this host swaps by design (`vm.swappiness=130`
@@ -12,7 +12,7 @@
 # forced two-minute cycle imposes; `GOGC=off` skips that timer, and then the limit is the
 # only trigger. The whole argument, with the measurements, is the `DECIDED:` marker at the
 # GOGC line of roles/containers/alloy/templates/docker-compose.yml.j2; the sizing for these
-# two daemons is at `docker_install_gomemlimit` in defaults/main.yml.
+# two daemons is at `docker_install_gomemlimit_<daemon>` in defaults/main.yml.
 #
 # THE ENVIRONMENT IS INHERITED BY EVERY CHILD PROCESS, and a child with `GOGC=off` grows its
 # heap to the same 64 MiB before it ever collects. containerd spawns one shim per container
@@ -28,8 +28,8 @@
 # reach the container through DNAT and never touch the proxy -- so they allocate ~nothing
 # and a heap that never grows never reaches the limit. The day-after check reads their
 # `VmRSS` (1.8 MB each on 2026-09-18) as well as the daemon's; if they ever grow toward
-# the limit, `"userland-proxy": false` in daemon.json removes them, and an empty value in
-# `docker_install_gomemlimit` removes the drop-in. A shim or proxy started BEFORE the
+# the limit, `"userland-proxy": false` in daemon.json removes them, and an empty
+# `docker_install_gomemlimit_dockerd` removes the drop-in. A shim or proxy started BEFORE the
 # drop-in keeps the environment it was born with until its container is recreated.
 #
 # Reverse: an empty (or missing) value for this daemon removes the drop-in; teardown.yml
@@ -37,7 +37,7 @@
 
 - name: Look up the memory limit for {{ go_runtime_daemon }}
   ansible.builtin.set_fact:
-    docker_install_go_runtime_limit: "{{ docker_install_gomemlimit[go_runtime_daemon] | default('', true) }}"
+    docker_install_go_runtime_limit: "{{ lookup('vars', 'docker_install_gomemlimit_' ~ go_runtime_daemon, default='') | default('', true) }}"
 
 - name: Create the systemd drop-in directory for {{ go_runtime_unit }}
   # copy: does not create parents, and neither the package nor systemd makes a `.d/` for
