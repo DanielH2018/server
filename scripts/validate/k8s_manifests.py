@@ -86,7 +86,7 @@ from lib.k8s_schema import (
     normalise_octal,
     schema_error,
 )
-from lib.k8s_yaml import make_lookup, yaml_error
+from lib.k8s_yaml import _to_json, make_lookup, yaml_error
 from lib.render_guard import (
     ALL_VARS,
     ANSIBLE,
@@ -176,6 +176,9 @@ def register_ansible_filters(env):
     env.filters["bool"] = to_bool
     env.filters["filter_by_platform"] = filter_by_platform
     env.filters["hash"] = _ansible_hash
+    # uptime-kuma embeds files/discord-message.liquid into a JSON Secret value with `to_json`;
+    # the looked-up-template env in make_lookup registers the same shim.
+    env.filters["to_json"] = _to_json
     return env
 
 

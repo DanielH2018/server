@@ -10,6 +10,7 @@ import json
 
 from lib import yaml_fast
 from jinja2 import Environment, FileSystemLoader
+from validate.k8s_manifests import make_lookup, register_ansible_filters
 from _helpers import ANSIBLE
 
 
@@ -88,6 +89,11 @@ def _entities() -> dict[str, dict]:
         trim_blocks=True,
         keep_trailing_newline=True,
     )
-    rendered = env.get_template(TEMPLATE.name).render(**{**ROLE_DEFAULTS, **STUBS})
+    ctx = {**ROLE_DEFAULTS, **STUBS, "playbook_dir": str(ANSIBLE)}
+    # The real lookup, because discord.json embeds files/discord-message.liquid with
+    # lookup('file') | to_json and a stub would let a broken embed through.
+    env.globals["lookup"] = make_lookup(ctx)
+    register_ansible_filters(env)
+    rendered = env.get_template(TEMPLATE.name).render(**ctx)
     doc = yaml_fast.safe_load(rendered)
     return {name: json.loads(body) for name, body in doc["stringData"].items()}

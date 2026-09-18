@@ -673,6 +673,31 @@ wheels = [
 ]
 
 [[package]]
+name = "python-liquid"
+version = "2.3.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "babel" },
+    { name = "importlib-resources" },
+    { name = "markupsafe" },
+    { name = "python-dateutil" },
+    { name = "pytz" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/0f/03/66f47583db72f8c5360a7e90424c7821041569e1939f930cd094f5845335/python_liquid-2.3.1.tar.gz", hash = "sha256:884586b7884bb804767fa4f03d3eb4dfaa9979a7f445152aa016402d220dd97b", size = 95610, upload-time = "2026-08-08T07:48:44.952Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f8/b0/70b1b7347bd6d0474b6a11a46d8e601540cd16596e4a20f0731344c3ede0/python_liquid-2.3.1-py3-none-any.whl", hash = "sha256:b935e4e3b29a9b8176909539bc5803a84fd88afed02792de989ccea06956999f", size = 141549, upload-time = "2026-08-08T07:48:43.402Z" },
+]
+
+[[package]]
+name = "pytz"
+version = "2026.3.post1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/fb/48/fb042503b6ca6cd271261dc559fd6432f7d8c713153e9ec5c591af4dfc1c/pytz-2026.3.post1.tar.gz", hash = "sha256:2211d3fcf9a797d3405cac96ac7f61d80e6a644f72a3309607282fe8a2010c5d", size = 319745, upload-time = "2026-07-25T15:12:07.385Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/0f/7b/39c34ca613b0b198cb866466651b26b045e2009864c5183c979a3b83f383/pytz-2026.3.post1-py2.py3-none-any.whl", hash = "sha256:dd95840dd199baea12d9cc096a1d452caa6596a1c1e4b5f3dbd1541855d5e815", size = 508283, upload-time = "2026-07-25T15:12:05.782Z" },
+]
+
+[[package]]
 name = "pywin32"
 version = "312"
 source = { registry = "https://pypi.org/simple" }
@@ -868,6 +893,7 @@ dev = [
     { name = "mkdocs-material" },
     { name = "pytest" },
     { name = "pytest-xdist" },
+    { name = "python-liquid" },
     { name = "pyyaml" },
     { name = "requests" },
     { name = "ruff" },
@@ -890,6 +916,7 @@ dev = [
     { name = "mkdocs-material", specifier = ">=9.5" },
     { name = "pytest", specifier = ">=8" },
     { name = "pytest-xdist" },
+    { name = "python-liquid", specifier = ">=2" },
     { name = "pyyaml" },
     { name = "requests" },
     { name = "ruff", specifier = ">=0.10" },

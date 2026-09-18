@@ -41,12 +41,23 @@ stringData:
   #
   # The value must be false. Kuma reads the flag before forcing it (`applyExisting ||
   # false`) and a true would attach the notification to every existing monitor.
+  #
+  # Kuma's `webhook` provider, not its `discord` one, since 2026-09-18. Both POST to the same
+  # Discord webhook; the difference is who writes the body. The discord provider's own custom
+  # template (`discordMessageFormat: custom`) sends plain `content` and drops the embed, while
+  # the webhook provider with `webhookContentType: custom` renders `webhookCustomBody` through
+  # the same liquidjs engine and posts the result verbatim — so the body is the embed we
+  # author, in files/discord-message.liquid, one template every monitor shares. The header is
+  # load-bearing: axios sends a string body as application/x-www-form-urlencoded and Discord
+  # rejects that. The AutoKuma id stays `discord` so no monitor's notification_name_list moves,
+  # and the name stays "Homelab Alerts" because monitor-bridge's Kuma Notification Delivery
+  # check reads it out of Kuma's `Cannot send notification to <name>` line.
   discord.json: |
     {
       "type": "notification",
       "name": "Homelab Alerts",
       "active": true,
-      "config": {"type": "discord", "applyExisting": false, "discordWebhookUrl": "{{ monitor_discord_webhook_url }}", "discordUsername": "Uptime Kuma"}
+      "config": {"type": "webhook", "applyExisting": false, "webhookURL": "{{ monitor_discord_webhook_url }}", "webhookContentType": "custom", "webhookAdditionalHeaders": "{\"Content-Type\": \"application/json\"}", "webhookCustomBody": {{ lookup('file', playbook_dir + '/roles/k8s/uptime-kuma/files/discord-message.liquid') | to_json }}}
     }
   # Fans out to BOTH channels: the Discord dead-man's-switch below, plus the critical tier
   # (both backup targets, disks, SMART, SD, cert expiry, UPS) — a *degraded* Discord loses
@@ -197,11 +208,11 @@ stringData:
   # against kubernetes-cadvisor, cluster-scoped and grouped by pod — fresh k3s-named
   # monitors on the Docker-era tokens.
   k3s-container-restarts.json: |
-    {"type": "push", "name": "k3s Container Restarts", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_restarts_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "k3s Container Restarts", "description": "cAdvisor via monitor-bridge: a container restarted more than RESTART_MAX times in 15m. The message names it. `kubectl -n homelab describe pod` for the last state.", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_restarts_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   k3s-container-oom.json: |
-    {"type": "push", "name": "k3s Container OOM", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_oom_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "k3s Container OOM", "description": "cAdvisor via monitor-bridge: a container was OOM-killed in the last hour. The message names it; the tile clears one hour after the kill, so read the Discord alert, not the tile, for the evidence.", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_oom_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   k3s-cpu-throttling.json: |
-    {"type": "push", "name": "k3s CPU Throttling", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_cpu_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "k3s CPU Throttling", "description": "cAdvisor via monitor-bridge: a container pinned at its CPU limit for 3 cycles (~15m). Raise the limit in its role or accept it; short bursts never page.", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_cpu_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   # 600s like its monitor-bridge siblings, NOT the app's 6-hour test cadence. The producer is
   # the bridge's 5-minute loop re-reading the newest row, not the speedtest run itself, so the
   # deadline tracks the bridge's period. A dead bridge is what push silence means here; a dead
@@ -234,7 +245,7 @@ stringData:
   # below and to Root Disk — email is attached for the same reason redundancy has it: the fix is
   # an operator expanding a volume.
   monitor-bridge-pvc-fullness.json: |
-    {"type": "push", "name": "k3s PVC Fullness", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_pvc_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
+    {"type": "push", "name": "k3s PVC Fullness", "description": "kubelet volume stats via monitor-bridge: a Longhorn PVC over 85%, or a named claim under its declared free-bytes floor. A PVC cannot borrow space — expand the volume in its role.", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_pvc_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
   # The snapshot-space axis of the same layer: how close a capped Longhorn volume is to its
   # spec.snapshotMaxSize (#1627). Snapshots live in the backend rather than in the claim's
   # filesystem, so PVC Fullness above cannot see one filling; a reached cap makes Longhorn refuse
@@ -359,7 +370,7 @@ stringData:
 {% endif %}
 {% if manifest_prune_push_token | default('') %}
   manifest-prune-check.json: |
-    {"type": "push", "name": "Manifest Prune Drift", "interval": 90000, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ manifest_prune_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "Manifest Prune Drift", "description": "Deployed-artifact drift on the primary node: a live cluster object no staged manifest declares (`kubectl apply` removes nothing it stopped declaring), a copy:-deployed setup file that differs from its source, or a template:-rendered setup script whose source changed since it was rendered. The message names the arm and the object.", "interval": 90000, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ manifest_prune_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
 {% endif %}
 {# Issue #947: the durable signal for a deferred k8s role change gitops_deploy.py's `cs.k8s`
    branch ff-merges with only a one-shot Discord page. `probe.py releases --stale-only` reads the
@@ -370,7 +381,7 @@ stringData:
    -- the same margin the */10 heartbeats keep against their 600s cron. Move both together. #}
 {% if release_staleness_push_token | default('') %}
   release-staleness-check.json: |
-    {"type": "push", "name": "Release Staleness Drift", "interval": 3600, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ release_staleness_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "Release Staleness Drift", "description": "A k8s service's role paths, shared roles or inventory keys changed on origin/master after its last applied commit, so what runs is not what master says. Redeploy the named services with `./scripts/deploy.sh --tags <svc>`; `probe.py releases --stale-only` prints every reason.", "interval": 3600, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ release_staleness_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
 {% endif %}
 {# The same two drift arms, on the hosts the monitor above cannot see: manifest-prune-check is
    installed only on k3s server nodes, so daniel-server rendered the whole UPS shutdown chain
@@ -422,11 +433,11 @@ stringData:
   # apply prunes the keys (baseline exists since the kubectl-replace reset) and the live
   # monitors were kuma-cli-deleted at the same cutover.
   monitor-bridge-disk.json: |
-    {"type": "push", "name": "Root Disk", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_disk_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
+    {"type": "push", "name": "Root Disk", "description": "node-exporter via monitor-bridge: `/`, `/boot` or `/boot/efi` over DISK_MAX_PCT on a cluster node, or one node's exporter missing from the census. `df -h` on the named host.", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_disk_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
   monitor-bridge-cert.json: |
     {"type": "push", "name": "TLS Cert Expiry", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_cert_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
   monitor-bridge-mem.json: |
-    {"type": "push", "name": "Memory", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_mem_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "Memory", "description": "node-exporter via monitor-bridge: host memory pressure on a cluster node, a Claude Code cgroup stalling or OOM-killing, or one node missing from the census. The message names host and cgroup.", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_mem_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   monitor-bridge-prometheus.json: |
     {"type": "push", "name": "Prometheus Reachable", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_prometheus_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   monitor-bridge-targets.json: |
@@ -450,9 +461,9 @@ stringData:
   monitor-bridge-prowlarr-indexers.json: |
     {"type": "push", "name": "Prowlarr Indexers", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_prowlarr_indexers_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   gitops-deploy-alive.json: |
-    {"type": "push", "name": "GitOps Deploy — Alive", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_gitops_alive_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "GitOps Deploy — Alive", "description": "The pull-based deployer on daniel-box has not ticked in GITOPS_MAX_AGE_MIN. Check `systemctl status gitops-deploy.timer` and the SessionStart banner's parked state.", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_gitops_alive_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   gitops-deploy-status.json: |
-    {"type": "push", "name": "GitOps Deploy — Status", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_gitops_status_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "GitOps Deploy — Status", "description": "The deployer is parked: a held SHA after a failed health gate, a diverged tree, a busy service lock, or a tree behind origin for 6h. The message names which. `gitops_state.py` clears a marker once the cause is fixed.", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_gitops_status_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   # Pushed every bridge cycle like its neighbours, so the standard interval applies — the
   # RATCHET is hourly, but the CHECK reading its heartbeat runs every cycle, and it is the check
   # that beats. The staleness window lives in bridge_config.py (STAGING_BACKFILL_MAX_AGE_S, 150
@@ -472,7 +483,7 @@ stringData:
   # in the monitor-bridge role's files/bridge/config_host.py, not
   # max_retries here — a held cycle still pushes `up`, so the tile stays green through the grace.
   host-temperature.json: |
-    {"type": "push", "name": "Host Temperature", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_host_temp_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "Host Temperature", "description": "hwmon via monitor-bridge: a board or CPU sensor over 90% of its declared, rated or fallback limit for an hour, the Pi's undervoltage alarm, or kernel CPU thermal throttling for 15m. The message names the sensor and which limit set the bar.", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_host_temp_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   # Host flip 1 (2026-08-14): pushed once nightly by the k8s/pi-peer-backup CronJob
   # (23:30), not every bridge cycle — the window is 2.5 days (two missed runs + slack,
   # the same tolerance the retired pi_peers check applied). Same token.
@@ -511,7 +522,7 @@ stringData:
   monitor-bridge-b2-reachable.json: |
     {"type": "push", "name": "B2 Reachable", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_b2_reachable_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
   monitor-bridge-k8s-workloads.json: |
-    {"type": "push", "name": "k3s Workload Health", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_k8s_workloads_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "k3s Workload Health", "description": "kube-state-metrics via monitor-bridge: a Deployment or DaemonSet with unavailable replicas (held 3 cycles for a rollout), a crash loop, a stalled rollout, zero available replicas, or a deregistered `devic.es/dri`. The message names the workload. `probe.py health <svc>` for the rollout state; roles/k8s/monitor-bridge/CLAUDE.md.", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_k8s_workloads_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   monitor-bridge-r2-usage.json: |
     {"type": "push", "name": "R2 Free Tier Headroom", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_r2_usage_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
   monitor-bridge-b2-storage.json: |
@@ -523,11 +534,11 @@ stringData:
   monitor-bridge-scrutiny.json: |
     {"type": "push", "name": "SMART Data / Health", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_scrutiny_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
   monitor-bridge-ups.json: |
-    {"type": "push", "name": "UPS Battery Health", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_ups_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
+    {"type": "push", "name": "UPS Battery Health", "description": "NUT via monitor-bridge: mains lost, charge under 50%, runtime under 5 min, or the UPS asking for a battery replacement. Mains loss is judged first and alone.", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_ups_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
   monitor-bridge-pi.json: |
-    {"type": "push", "name": "Pi Pressure", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_pi_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "Pi Pressure", "description": "daniel-pi's node-exporter via monitor-bridge: load per core, free memory, SD card or boot partition fullness, or a published container port not listening after a reboot. A dead port needs a container recreate, not a restart.", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_pi_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   monitor-bridge-ha.json: |
-    {"type": "push", "name": "Home Assistant Automations", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_ha_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "Home Assistant Automations", "description": "HA's scheduler heartbeat helper is stale (HA up, automations not running) or HA banned an IP in the last hour — a ban of a cluster gateway locks out everything behind it. Read /config/ip_bans.yaml on a ban.", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_ha_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   # Host flip 2 (2026-08-14): pushed once daily by renovate-notify's ExecStartPost on
   # daniel-box (13:00 timer), not every bridge cycle — 36h window = one missed run +
   # slack, the same tolerance the retired renovate_alive check applied. Same token.
@@ -546,9 +557,9 @@ stringData:
     {"type": "push", "name": "Renovate Agent — Alive", "interval": 100800, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ renovate_agent_kuma_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
 {% endif %}
   monitor-bridge-loki.json: |
-    {"type": "push", "name": "Loki Log Ingestion", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_loki_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "Loki Log Ingestion", "description": "One of Loki's three stream arms went silent: the file-tailed syslog/authlog union, the container stream, or daniel-pi's Alloy. Loki itself answers; the shipper does not.", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_loki_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   monitor-bridge-promtail-dropped.json: |
-    {"type": "push", "name": "Log Shipper Dropped Entries", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_promtail_dropped_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "Log Shipper Dropped Entries", "description": "Alloy dropped entries client-side or Loki discarded them server-side, over 3000 in an hour. `too_far_behind` after a shipper restart is a re-tail, not loss; anything else is throughput or limits.", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_promtail_dropped_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
 {# Minted 2026-09-17 for #1869. kuma-push-lib.sh logs a lost push and returns 0 by design, so
    a host cron's DOWN verdict that never reached its tile was reported only by that tile's
    heartbeat deadline — the one-period-plus-an-hour margin the DECIDED marker above the drift
@@ -559,7 +570,7 @@ stringData:
    a push Kuma itself rejected (`by=kuma` on the line, #1803): a token no monitor here holds
    has no tile to go red, so it pages here whatever its status and company. #}
   monitor-bridge-swallowed-verdicts.json: |
-    {"type": "push", "name": "Swallowed Push Verdicts", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_swallowed_verdicts_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "Swallowed Push Verdicts", "description": "A host cron pushed status=down and the push failed while a sibling cron's push landed, so the verdict was lost rather than the network. The message names the cron; run it by hand and read its logger lines.", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_swallowed_verdicts_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
 {# Minted 2026-09-17 for #1891. Kuma logs `Cannot send notification to <name>` and does not
    retry, so the transition or resend behind that line reached nobody — twice during the
    qbittorrent lockout (2026-09-10 18:00, 2026-09-15 14:50), both Discord HTTP 429s. The
@@ -568,11 +579,11 @@ stringData:
    notifies EMAIL as well as Discord on purpose: a page for a dropped Discord send that goes
    only over the Discord webhook is the failure it reports. #}
   monitor-bridge-kuma-notify-failures.json: |
-    {"type": "push", "name": "Kuma Notification Delivery", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_kuma_notify_failures_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
+    {"type": "push", "name": "Kuma Notification Delivery", "description": "Kuma tried to send a notification and dropped it (`Cannot send notification to`), usually a Discord 429 or 400. Kuma does not retry, so the alert behind it reached nobody — read the tile list for what fired in that window. Also emails.", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_kuma_notify_failures_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
   monitor-bridge-loki-reachable.json: |
     {"type": "push", "name": "Loki Reachable", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_loki_reachable_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   monitor-bridge-discord.json: |
-    {"type": "push", "name": "Discord Delivery", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_discord_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
+    {"type": "push", "name": "Discord Delivery", "description": "One of the five Discord webhooks (Kuma, CrowdSec, gitops-deploy, *arr, healthchecks) no longer resolves, or the Gmail SMTP backstop login failed. Rotate the named webhook in SOPS and redeploy its consumer.", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_discord_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
   arr-autoblock.json: |
     {"type": "push", "name": "Arr Auto-Block", "interval": 600, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ arr_autoblock_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
 {# Deadman for the status-page-sync CronJob in this role — the job that owns the /status/

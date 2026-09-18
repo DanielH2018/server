@@ -188,6 +188,47 @@ it writes the Discord webhook and the SMTP password into Loki. Both sides' sourc
 pinned versions answered it with nothing logged.
 `test_notification_configs_declare_apply_existing` guards the key.
 
+## One Discord template for every monitor, fed by `description` and tags
+
+The `discord` notification is Kuma's **webhook** provider, not its `discord` one (since
+2026-09-18). Both POST to the same Discord webhook; the difference is who writes the body.
+The discord provider's own custom template (`discordMessageFormat: custom`) sends plain
+`content` and drops the embed. The webhook provider with `webhookContentType: custom` renders
+`webhookCustomBody` through the same liquidjs engine (`server/notification-providers/
+notification-provider.js`, `renderTemplate`) and posts the result verbatim, so the body is
+the embed we author. That body is `files/discord-message.liquid`, embedded into `discord.json`
+with `lookup('file') | to_json`. The template belongs to the notification, and every monitor
+attaches to that one notification, so one file covers all of them.
+
+What the template reads, per monitor: `heartbeatJSON.msg` (the producer's text — for a
+push tile, what the bridge or the cron pushed), `monitorJSON.description` (markdown; Kuma
+also renders it at the top of the monitor's own page, the one place its UI renders
+formatting), and tags named `severity` and `runbook`, omitted when absent. A tile whose
+meaning is not obvious from its name declares a `description` in `static-monitors.yaml.j2`:
+what the check reads, what a DOWN means, where to look. Twenty push tiles carry one; the
+rest are the follow-up in the issue the first batch filed.
+
+Three things the change depends on:
+
+- **`webhookAdditionalHeaders` carries `Content-Type: application/json`.** axios posts a string
+  body as `application/x-www-form-urlencoded`, and Discord rejects that with a 400.
+- **The AutoKuma id stays `discord`** so no monitor's `notification_name_list` moves, and the
+  name stays `Homelab Alerts` because monitor-bridge's Kuma Notification Delivery check reads
+  it out of Kuma's `Cannot send notification to <name>` line.
+- **A Liquid error drops every alert at once.** A parse error throws inside `send()`, Kuma logs
+  `Cannot send notification` and does not retry. Kuma Notification Delivery pages on that line,
+  and `ansible/tests/services/test_kuma_discord_template.py` renders the file for a DOWN, an
+  UP and the Test button's null context before it can deploy. The Test button on its own
+  proves nothing: it renders with `heartbeatJSON` null and Liquid renders a missing key as
+  empty text.
+
+The test's engine is python-liquid; Kuma's is liquidjs. The template stays in the subset both
+accept — `assign x = a == b` is the one divergence found, which is why `down` is set through
+an `if` — and the pinned liquidjs rendered the same three contexts to the same payloads on
+2026-09-18. The text inside the message is the producer's job: `bridge/msgfmt.py` in
+monitor-bridge is the grammar for a multi-item DOWN (group by reason, names once), and
+`probe.py releases --stale-only --kuma` is its first cron-side caller.
+
 ## The status page's groups are synced by a CronJob, not by AutoKuma
 
 `kuma-status-page-sync` (`templates/status-page-sync-cronjob.yaml.j2`, every 15 min) owns the
