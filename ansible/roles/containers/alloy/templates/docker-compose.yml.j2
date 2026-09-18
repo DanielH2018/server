@@ -113,7 +113,7 @@ services:
       # all: the 1c9592c1 shape spent 0.28 cores to save ~10 MiB. This is also the lever if
       # the process ever needs to be smaller: GOGC=25 would take ~10 MB off every peak for a
       # cycle every ~40s, still a fraction of a core at this allocation rate.
-      - GOGC=50
+      - GOGC=25
       # One GC-visible processor. Alloy defaults GOMAXPROCS to the 4 cores on this Pi and
       # spawns a worker set to match, which is pure contention for a job this small on a box
       # that already showed RCU stalls from fork rate.
