@@ -1,0 +1,90 @@
+---
+# Pair one Go daemon's runtime with a memory limit: `GOGC=off` under `GOMEMLIMIT`, in a
+# systemd drop-in. Imported once per daemon from install.yml with `go_runtime_unit`
+# (the systemd unit) and `go_runtime_daemon` (the key in `docker_install_gomemlimit`),
+# so each daemon has its own tag and can be applied, and judged, on its own day.
+#
+# Why a limit and not a GOGC percentage: this host swaps by design (`vm.swappiness=130`
+# to zram, roles/setup/optimize_pi), global reclaim swaps a Go heap out between GC cycles,
+# and the next mark phase faults it back. dockerd and containerd took 97 and 53 major
+# faults/s on daniel-pi on 2026-09-18, 46% of the host's 330/s (#2003). Fewer cycles is
+# fewer faults, and GOGC alone cannot get below the ~0.5 cycles a minute the runtime's
+# forced two-minute cycle imposes; `GOGC=off` skips that timer, and then the limit is the
+# only trigger. The whole argument, with the measurements, is the `DECIDED:` marker at the
+# GOGC line of roles/containers/alloy/templates/docker-compose.yml.j2; the sizing for these
+# two daemons is at `docker_install_gomemlimit` in defaults/main.yml.
+#
+# THE ENVIRONMENT IS INHERITED BY EVERY CHILD PROCESS, and a child with `GOGC=off` grows its
+# heap to the same 64 MiB before it ever collects. containerd spawns one shim per container
+# with `append(os.Environ(), ...)` (pkg/shim/util.go in v2.3.5), and the shim spawns runc
+# the same way; that is why the config.toml block in install.yml sets
+# `[plugins.'io.containerd.shim.v1.manager'] env = ["GOGC=100", "GOMEMLIMIT=off"]` --
+# containerd appends it after the inherited environment, and Go keeps the LAST value of a
+# duplicate key (os/exec, `Cmd.Env`), so every shim spawned after this lands runs the
+# runtime's defaults. dockerd has no such override: the userland `docker-proxy` it starts
+# per published port (moby's daemon/libnetwork/portmapper/proxy_linux.go builds the Cmd
+# with no Env) inherits the pairing. Accepted for daniel-pi, where those four proxies
+# carry only loopback- and hairpin-origin traffic to wg-easy's ports -- external clients
+# reach the container through DNAT and never touch the proxy -- so they allocate ~nothing
+# and a heap that never grows never reaches the limit. The day-after check reads their
+# `VmRSS` (1.8 MB each on 2026-09-18) as well as the daemon's; if they ever grow toward
+# the limit, `"userland-proxy": false` in daemon.json removes them, and an empty value in
+# `docker_install_gomemlimit` removes the drop-in. A shim or proxy started BEFORE the
+# drop-in keeps the environment it was born with until its container is recreated.
+#
+# Reverse: an empty (or missing) value for this daemon removes the drop-in; teardown.yml
+# removes both directories when a host retires Docker.
+
+- name: Look up the memory limit for {{ go_runtime_daemon }}
+  ansible.builtin.set_fact:
+    docker_install_go_runtime_limit: "{{ docker_install_gomemlimit[go_runtime_daemon] | default('', true) }}"
+
+- name: Create the systemd drop-in directory for {{ go_runtime_unit }}
+  # copy: does not create parents, and neither the package nor systemd makes a `.d/` for
+  # a unit that has no drop-ins -- daniel-pi had neither on 2026-09-18.
+  ansible.builtin.file:
+    path: "/etc/systemd/system/{{ go_runtime_unit }}.service.d"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  when: docker_install_go_runtime_limit | length > 0
+
+- name: Pair the Go runtime with its memory limit for {{ go_runtime_daemon }}
+  ansible.builtin.copy:
+    dest: "/etc/systemd/system/{{ go_runtime_unit }}.service.d/20-go-runtime.conf"
+    content: |
+      # Managed by Ansible (roles/setup/docker_install, tasks/go-runtime.yml) -- edits here
+      # are overwritten. GOGC=off makes GOMEMLIMIT the only GC trigger; the sizing and the
+      # child-process caveat are in that task file and the role's defaults.
+      [Service]
+      Environment=GOGC=off
+      Environment=GOMEMLIMIT={{ docker_install_go_runtime_limit }}
+    mode: "0644"
+    owner: root
+    group: root
+  become: true
+  when: docker_install_go_runtime_limit | length > 0
+  register: docker_install_go_runtime_written
+
+- name: Remove the Go runtime drop-in for {{ go_runtime_daemon }}
+  ansible.builtin.file:
+    path: "/etc/systemd/system/{{ go_runtime_unit }}.service.d/20-go-runtime.conf"
+    state: absent
+  become: true
+  when: docker_install_go_runtime_limit | length == 0
+  register: docker_install_go_runtime_removed
+
+- name: Reload systemd and restart {{ go_runtime_unit }} # noqa no-handler
+  # A drop-in is read at unit load, so the reload is what makes the restart pick it up.
+  # dockerd: live-restore keeps the containers up (install.yml's daemon.json task restarts
+  # it the same way). containerd: docker.service only `Wants=` it, so no cascade, and the
+  # running shims stay up.
+  ansible.builtin.systemd:
+    name: "{{ go_runtime_unit }}"
+    daemon_reload: true
+    state: restarted
+  become: true
+  when: docker_install_go_runtime_written.changed | default(false)
+        or docker_install_go_runtime_removed.changed | default(false)
