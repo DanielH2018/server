@@ -5,6 +5,7 @@ When a Claude Code session opens in this repo, this prints anything already brok
 work doesn't start blind:
   * containers that are unhealthy or stuck restarting (fast, local `docker ps`)
   * Prometheus scrape targets that are down (fleet-wide, via scripts/diagnostics/probe.py)
+  * services the release-staleness cron last found running manifests behind origin/master
   * this branch sitting behind origin/master's last-fetched ref (local-only, no `git fetch`)
   * a dirty primary checkout, or a GitOps deployer parked behind origin — the two states that
     stop every deploy in the fleet and that a worktree session cannot look at for itself,
@@ -39,14 +40,12 @@ import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Three sections of the banner live in `.claude/hooks/hooklib/` (its own docstrings cover
-# `hooklib`-not-`lib`): the worktree lines, and the docker and scrape-target lines. This file
-# sat at its 600-line cap with no headroom for either split. Wrapped like `lib.deployer_park`
+# Four sections of the banner live in `.claude/hooks/hooklib/` (its own docstrings cover
+# `hooklib`-not-`lib`): the worktree, docker, scrape-target and stale-release lines. This file
+# sat at its 600-line cap with no headroom for any split. Wrapped like `lib.deployer_park`
 # below (issue #1566), in its own try so a failure names the package that broke rather than
-# deployer_park's unrelated line.
-#
-# `SyntaxError` is caught alongside `ImportError` because these modules use PEP 758 syntax
-# and this file is run by `session-health.sh`, which sends stderr to /dev/null and exits 0.
+# deployer_park's unrelated line. `SyntaxError` is caught alongside `ImportError` because
+# these modules use PEP 758 syntax and `session-health.sh` sends stderr to /dev/null, exits 0.
 # An uncaught SyntaxError at import would take the WHOLE banner out silently, which is the
 # #1566 failure class — nothing at module scope may be able to stop the banner. A SyntaxError
 # is not an ImportError, so the narrower catch left that hole open.
@@ -394,10 +393,11 @@ def docker_problems():
 
 
 def target_problems():
-    """`hooklib.service_lines.target_problems`, bound to this file's `_run` and REPO."""
+    """hooklib's scrape-target and stale-release lines, bound to this file's `_run` and REPO."""
     if service_lines is None:
         return []
-    return service_lines.target_problems(_run, REPO)
+    lines = service_lines.target_problems(_run, REPO)
+    return lines + service_lines.stale_release_problems(_run)
 
 
 def master_moved_problems():

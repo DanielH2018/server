@@ -15,7 +15,9 @@ those bytes. `unmerged` means the commit is not an ancestor of origin/master -- 
 running code that never landed. `stale` means origin/master has moved past the applied commit
 under the service's own role, or one of the shared roles every service's manifests depend on
 (`manifest_affecting_shared_roles()` -- `manifests` and the other entry-less roles that supply
-bytes to what is applied). `stale` is what makes a deferred k8s change visible: the
+bytes to what is applied), or under an inventory key or shared macro the service's render
+reads (`_deploy_plane_stale`, which asks `narrow_broad` the same per-path question the
+deployer's tick asks -- #1993). `stale` is what makes a deferred k8s change visible: the
 gitops deployer ff-merges a non-auto-deployable k8s role change and pages Discord once, and
 every other monitored marker then reads clean while the cluster still runs the old manifests
 (issue #947). All three flags are normal mid-slice and alarming a week later, which is why they
@@ -28,6 +30,7 @@ has a record, 1 otherwise.
 """
 
 import json
+import re
 import subprocess
 from pathlib import Path
 
@@ -294,8 +297,86 @@ def _changed_files(commit, paths, repo_root, ref, deploy_time_roles=frozenset())
     return sorted(p for p in changed if _is_real_change(p, deploy_time_roles))
 
 
-def compute_stale(records, repo_root=REPO_ROOT, ref="origin/master", shared_roles=None):
-    """{service: reason} for every record whose own or shared role paths changed since `ref`.
+# The derivation line `narrow_broad` emits per key, macro or containers_list entry:
+# `narrow: <subject> -> <tag,tag> via <path>`. The subject is what names WHY a service is
+# stale ("group_vars/all.yml (lan_subnet)" rather than the file alone), and this is the one
+# place it is available -- the rules return tags, not the key that reached them.
+_NARROW_LINE = re.compile(r"^narrow: (\S+) -> (\S*) via (\S+)$")
+
+
+def _narrow_broad():
+    """Import `scripts/deploy_tools/narrow_broad` lazily.
+
+    For the reason `_deploy_tags` gives: it parses host_vars YAML and walks the role tree
+    on import, which only `releases` needs.
+    """
+    from deploy_tools import narrow_broad
+
+    return narrow_broad
+
+
+def _deploy_plane_stale(commit, services, changed, context):
+    """{service: [hit, ...]} for `changed`, the deploy-plane paths moved since `commit`.
+
+    The gap this closes (#1993). `role_paths_for` covers a service's own role and the shared
+    roles, so a change under `ansible/inventory/` or `ansible/templates/` moved nothing this
+    reader read: a denied role whose render reads a changed key sat behind a clean monitor
+    until something unrelated redeployed it. The deployer's tick already derives which tags
+    such a change reaches (`narrow_broad`, the DECIDED at `deploy_narrow.denylisted_in`), so
+    this asks the same question per path, from the record's commit to `ref`.
+
+    A path no rule can attribute -- a key the play itself reads, a removed `containers_list`
+    entry, `hosts.ini` -- marks EVERY service sharing `commit` stale, with the refusal as the
+    reason. That is the tick's own answer to the same doubt: it runs the whole play, which
+    re-stamps every service, so the set this marks is exactly the set that run refreshes. It
+    is not the #1672 shape -- a deploy-time change flagging the fleet with no tag able to
+    clear it -- because the full run the tick takes for that range IS the clear, and the
+    only records left behind it are ones a hand deploy from an older tree wrote, which is the
+    incident this module's docstring opens with. Measured over the 600 commits to
+    2026-09-18: three refusal reasons, at most 1.5s per distinct record commit.
+
+    `context` is built by the caller, once per `compute_stale`, because it reads host_vars
+    at its ref and walks the role tree. Only called when the range changed a census path, so
+    a repo with no host_vars at all still reads clean for a role-only range.
+    """
+    nb = _narrow_broad()
+    hits = {svc: [] for svc in services}
+    for path in changed:
+        subjects = {}
+
+        def explain(message, _subjects=subjects):
+            m = _NARROW_LINE.match(message)
+            if m:
+                for tag in m.group(2).split(","):
+                    _subjects.setdefault(tag, []).append(m.group(1))
+
+        ctx = context._replace(explain=explain)
+        try:
+            tags = nb.broad_path_tags(path, commit, ctx)
+        except nb.CannotNarrow as exc:
+            for svc in services:
+                hits[svc].append(f"{path} [every service: {exc}]")
+            continue
+        for svc in services:
+            if svc in tags:
+                why = ", ".join(subjects.get(svc, [])) or "reached"
+                hits[svc].append(f"{path} ({why})")
+    return {svc: paths for svc, paths in hits.items() if paths}
+
+
+def compute_stale(
+    records,
+    repo_root=REPO_ROOT,
+    ref="origin/master",
+    shared_roles=None,
+    declared=None,
+    callers=None,
+):
+    """{service: reason} for every record whose own, shared or deploy-plane paths changed since `ref`.
+
+    `declared` and `callers` are `narrow_broad.context_for`'s two derived fields, read from
+    `repo_root` at `ref` when omitted. They are parameters so a test can drive a throwaway
+    repo that declares no host_vars; production never passes them.
 
     One `git log` per distinct commit, not per service -- a full deploy stamps ~54 records
     sharing one commit, and grouping first keeps this from being 54 subprocess calls for what a
@@ -315,6 +396,7 @@ def compute_stale(records, repo_root=REPO_ROOT, ref="origin/master", shared_role
         by_commit.setdefault(commit, []).append(service)
 
     stale = {}
+    context = None
     for commit, services in by_commit.items():
         paths = sorted(
             {p for svc in services for p in role_paths_for(svc, shared_roles)}
@@ -324,11 +406,24 @@ def compute_stale(records, repo_root=REPO_ROOT, ref="origin/master", shared_role
             for svc in services:
                 stale[svc] = "commit unknown to this checkout"
             continue
-        if not changed:
-            continue
+        # The context is built on the first commit whose range changed a census path, and
+        # never for a range that changed none: reading it costs a host_vars parse at `ref`
+        # and a walk of the role tree, and a repo with no host_vars (the role-only test
+        # repos) would fail the read for a question nobody asked.
+        plane_changed = _changed_files(
+            commit, _narrow_broad().CENSUS_PREFIXES, repo_root, ref
+        )
+        plane = {}
+        if plane_changed:
+            if context is None:
+                context = _narrow_broad().context_for(
+                    ref, repo_root, declared=declared, callers=callers
+                )
+            plane = _deploy_plane_stale(commit, services, plane_changed, context)
         for svc in services:
             svc_paths = role_paths_for(svc, shared_roles)
             hits = [p for p in changed if any(p.startswith(rp) for rp in svc_paths)]
+            hits += plane.get(svc, [])
             if hits:
                 more = f" (+{len(hits) - 3} more)" if len(hits) > 3 else ""
                 stale[svc] = f"changed since applied: {', '.join(hits[:3])}{more}"
@@ -419,8 +514,9 @@ def format_records(records, merged, service=None, stale=None):
     lines.append(
         f"{len(records)} service(s); {unclean} carrying a flag. dirty = no commit reproduces "
         "those bytes; unmerged = not an ancestor of origin/master; stale = origin/master has "
-        "moved past this record under the service's own or a shared role (`probe.py releases "
-        "--stale-only` for the reasons)."
+        "moved past this record under the service's own or a shared role, or an inventory "
+        "key or shared macro its render reads (`probe.py releases --stale-only` for the "
+        "reasons)."
     )
     return "\n".join(lines), (1 if unclean else 0)
 

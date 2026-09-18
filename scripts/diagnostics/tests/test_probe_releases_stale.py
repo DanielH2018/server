@@ -298,3 +298,121 @@ def test_is_real_change_is_flagged_for_the_paths_the_narrowing_must_not_touch():
         "ansible/roles/k8s/manifests/tasks/release_stamp.yml",
     ):
         assert pr._is_real_change(path, deploy_time) is True, path
+
+
+# ── the deploy plane: an inventory key or shared macro a service's render reads (#1993) ──
+
+_DECLARED = {"sonarr", "jellyfin"}
+
+
+def _deploy_plane_repo(tmp_path):
+    """sonarr reads `lan_subnet` and imports the shared macro; jellyfin reads neither."""
+    repo = tmp_path / "repo"
+    _init_repo(repo)
+    base = _commit(
+        repo,
+        {
+            "ansible/inventory/group_vars/all.yml": "lan_subnet: 10.0.0.0/24\n",
+            "ansible/inventory/hosts.ini": "[all]\ndaniel-box\n",
+            "ansible/templates/container-resources.yml.j2": "{% macro resources() %}\n",
+            "ansible/roles/k8s/sonarr/templates/deployment.yaml.j2": (
+                "{% from 'container-resources.yml.j2' import resources %}\n"
+                "net: {{ lan_subnet }}\n"
+            ),
+            "ansible/roles/k8s/jellyfin/templates/deployment.yaml.j2": "a: b\n",
+        },
+        "baseline",
+    )
+    return repo, base
+
+
+def _stale(repo, records):
+    return pr.compute_stale(
+        records, repo_root=repo, shared_roles=set(), declared=_DECLARED, callers={}
+    )
+
+
+def test_an_inventory_key_a_service_reads_is_flagged(tmp_path):
+    """Without the deploy-plane census, a key change reads clean for the service whose
+    render it moved -- the gap #1993 names."""
+    repo, base = _deploy_plane_repo(tmp_path)
+    tip = _commit(
+        repo,
+        {"ansible/inventory/group_vars/all.yml": "lan_subnet: 10.0.1.0/24\n"},
+        "the LAN moves",
+    )
+    _set_origin_master(repo, tip)
+
+    stale = _stale(repo, [_record("sonarr", commit=base)])
+    assert "sonarr" in stale
+    assert "group_vars/all.yml (lan_subnet)" in stale["sonarr"], stale
+
+
+def test_an_inventory_key_a_service_does_not_read_is_clean(tmp_path):
+    repo, base = _deploy_plane_repo(tmp_path)
+    tip = _commit(
+        repo,
+        {"ansible/inventory/group_vars/all.yml": "lan_subnet: 10.0.1.0/24\n"},
+        "the LAN moves",
+    )
+    _set_origin_master(repo, tip)
+
+    stale = _stale(
+        repo, [_record("jellyfin", commit=base), _record("sonarr", commit=tip)]
+    )
+    assert stale == {}, "jellyfin reads no changed key; sonarr's record is the tip"
+
+
+def test_a_shared_macro_change_is_flagged_for_its_importer_only(tmp_path):
+    repo, base = _deploy_plane_repo(tmp_path)
+    tip = _commit(
+        repo,
+        {"ansible/templates/container-resources.yml.j2": "{% macro resources() %}v2\n"},
+        "the macro changes",
+    )
+    _set_origin_master(repo, tip)
+
+    stale = _stale(
+        repo, [_record("sonarr", commit=base), _record("jellyfin", commit=base)]
+    )
+    assert set(stale) == {"sonarr"}, stale
+    assert "container-resources.yml.j2" in stale["sonarr"]
+
+
+def test_a_deploy_plane_path_no_rule_attributes_flags_every_service_on_the_record(
+    tmp_path,
+):
+    """`hosts.ini` is a refusal for the tick, which runs the whole play and re-stamps every
+    service; the census marks that same set stale, naming the refusal."""
+    repo, base = _deploy_plane_repo(tmp_path)
+    tip = _commit(
+        repo,
+        {"ansible/inventory/hosts.ini": "[all]\ndaniel-box\ndaniel-stage\n"},
+        "a host",
+    )
+    _set_origin_master(repo, tip)
+
+    stale = _stale(
+        repo, [_record("sonarr", commit=base), _record("jellyfin", commit=base)]
+    )
+    assert set(stale) == {"sonarr", "jellyfin"}, stale
+    assert "hosts.ini [every service:" in stale["jellyfin"]
+
+
+def test_a_role_only_range_never_reads_host_vars(tmp_path):
+    """The context is built only when a census path changed: this repo has no host_vars, so
+    reading `declared` at the tip would raise, and nothing here passes it."""
+    repo = tmp_path / "repo"
+    _init_repo(repo)
+    base = _commit(
+        repo, {"ansible/roles/k8s/sonarr/templates/deployment.yaml.j2": "v1\n"}, "v1"
+    )
+    tip = _commit(
+        repo, {"ansible/roles/k8s/sonarr/templates/deployment.yaml.j2": "v2\n"}, "v2"
+    )
+    _set_origin_master(repo, tip)
+
+    stale = pr.compute_stale(
+        [_record("sonarr", commit=base)], repo_root=repo, shared_roles=set()
+    )
+    assert "sonarr" in stale

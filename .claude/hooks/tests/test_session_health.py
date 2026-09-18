@@ -290,11 +290,12 @@ def test_the_hook_can_import_prune_worktrees_when_run_as_a_subprocess(fenced_cal
         + proc.stdout
     )
     # docker_problems() and target_problems() run unconditionally on every call to main(),
-    # so docker/sops/curl are always exercised — unlike gh, which only fires per worktree on
-    # disk and so isn't asserted here. A stub silently dropped from PATH is indistinguishable
-    # from a passing run without this: the real binaries would just run underneath it.
+    # so docker/sops/curl/journalctl are always exercised — unlike gh, which only fires per
+    # worktree on disk and so isn't asserted here. A stub silently dropped from PATH is
+    # indistinguishable from a passing run without this: the real binaries would just run
+    # underneath it.
     recorded = fenced_calls.read_text()
-    for binary in ("docker", "sops", "curl"):
+    for binary in ("docker", "sops", "curl", "journalctl"):
         assert binary in recorded, (
             f"the real `{binary}` ran instead of the stub — the PATH fence did not hold.\n"
             f"recorded calls:\n{recorded}"

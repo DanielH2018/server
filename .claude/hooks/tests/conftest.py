@@ -4,7 +4,8 @@
 as a real subprocess (deliberately -- see that test's own docstring), which means `main()`
 runs for real and reaches whatever it reaches: `gh pr list` once per stale worktree
 candidate (an authenticated GitHub API call), `sops -d` to decrypt `ansible/vars/secrets.yml`
-for the `domain` key, `docker ps` x2, and `curl` against the live Prometheus endpoint.
+for the `domain` key, `docker ps` x2, `curl` against the live Prometheus endpoint, and
+`journalctl` for the release-staleness cron's last verdict (#1993).
 `test_main_runs_targets_even_when_docker_down` used to hand-roll its own monkeypatches
 instead of going through `_run_main`, so `stale_worktree_lines` ran for real too and made the
 same 5 `gh` calls. Measured 2026-09-04. None of that is what either test is checking.
@@ -62,12 +63,12 @@ _STUB_TEMPLATE = """#!/bin/sh
 printf '%s\\n' "{name} $*" >> "$FENCE_CALLS"
 """
 
-_FENCED_BINARIES = ("gh", "sops", "docker", "curl")
+_FENCED_BINARIES = ("gh", "sops", "docker", "curl", "journalctl")
 
 
 @pytest.fixture(autouse=True)
 def _fence_external_binaries(tmp_path_factory, monkeypatch):
-    """Put no-op recording stand-ins for gh/sops/docker/curl first on PATH.
+    """Put no-op recording stand-ins for `_FENCED_BINARIES` first on PATH.
 
     Returns the file every stub appends its argv to, one line per call as
     `<binary> <args...>`.
@@ -86,7 +87,7 @@ def _fence_external_binaries(tmp_path_factory, monkeypatch):
 
 @pytest.fixture
 def fenced_calls(_fence_external_binaries):
-    """The file the stubbed gh/sops/docker/curl append to, one line per call."""
+    """The file the stubbed `_FENCED_BINARIES` append to, one line per call."""
     return _fence_external_binaries
 
 

@@ -557,6 +557,14 @@ widen it. Each line is a summary; the section it names carries the detail.
     runs, never what it applies, and their change is live for the next deploy the moment this
     deployer fast-forwards the primary checkout, so no stamp goes stale. Sweeping them in marked
     all 53 services stale for a `volume-snapshot` change that rendered no manifest (#1636).
+    The deploy plane is in the census too (#1993): for each changed path under
+    `ansible/inventory/` or `ansible/templates/` since the record, `releases.py` asks
+    `narrow_broad.broad_path_tags` — the per-path rule this deployer's own tick narrows a
+    broad range with — which services the change reaches, and names the key or macro in the
+    reason. A path the rules refuse (a key the play reads, `hosts.ini`, a removed
+    `containers_list` entry) marks every service sharing that record stale, which is the set
+    the tick's full run for that same range re-stamps; so a denied role the broad plane
+    applied reads clean, and one it ever left behind reads stale under the change's own name.
     No clearing rule is needed: the next real apply of that service rewrites its record, so the
     flag is derived from state rather than a marker this deployer would have to remember to
     clear.
