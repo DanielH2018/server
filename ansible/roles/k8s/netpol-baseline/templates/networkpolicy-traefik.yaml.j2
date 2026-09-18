@@ -28,14 +28,7 @@ spec:
    applied) and False to Ansible's `when:` (every probe task skipped) -- enforcement with no
    probe, from the exact override an operator reaches for mid-incident. #}
 {% if netpol_baseline_enforced | bool %}
-    # The front door. Open to every source on purpose: these ports already take LAN, WireGuard
-    # and Cloudflare traffic, and ETP=Local preserves the client IP, so an ipBlock list here
-    # would have to enumerate the internet. :80 in particular must stay open for the
-    # http->https redirect entrypoint (static-config.yaml.j2, entryPoint.to: ":443") -- every
-    # client that arrives on plain HTTP hits that redirect before reaching :443. It also keeps
-    # all four netpol probe control legs working -- each dials traefik:80 to prove the probe
-    # itself has a network. (uptime-kuma's monitors do NOT depend on :80: they're https:// and
-    # so traverse :443, or for the Pi services dial daniel-pi directly, bypassing traefik.)
+    # The front door, in two rules because the two ports admit different sources.
     #
     # THE PORT NUMBERS HERE ARE POD PORTS, NOT SERVICE PORTS. A NetworkPolicy matches the
     # destination port on the POD, after kube-proxy has already DNAT'd the Service port to the
@@ -46,9 +39,57 @@ spec:
     # failed with "cannot reach traefik:80" while the same route answered 200 from the LAN,
     # because external traffic arrives over the VIP path rather than the ClusterIP.
     # Every other service in this slice maps its ports 1:1, which is why only this file was hit.
+    #
+    # :8000 stays open to every source. It is the http->https redirect entrypoint
+    # (static-config.yaml.j2, entryPoint.to: ":443") -- every client that arrives on plain HTTP
+    # hits that redirect before reaching :8443 -- and all four netpol probe control legs dial
+    # traefik:80 to prove the probe itself has a network. (uptime-kuma's monitors do NOT depend
+    # on :80: they're https:// and so traverse :8443, or for the Pi services dial daniel-pi
+    # directly, bypassing traefik.) Nothing on :8000 reaches a backend, so an origin-direct
+    # client gets a redirect to a port the next rule fences.
     - ports:
         - port: 8000
           protocol: TCP
+    # :8443 admits only netpol_baseline_traefik_https_sources (defaults/main.yml): Cloudflare's
+    # published ranges, the LAN, the WireGuard client range, and the pod CIDR. Until 2026-09-18
+    # this port was open to every source, with the reasoning that an ipBlock list "would have to
+    # enumerate the internet". That was the wrong frame (#1974): the only source that is
+    # supposed to reach a public `Host(x.<domain>)` Rule is Cloudflare's edge, and its ranges are
+    # already enumerated in `cloudflare_ips` for forwardedHeaders.trustedIPs. An origin-direct
+    # client -- anyone who resolves the origin IP and sends the public Host header -- skipped
+    # Cloudflare's WAF and bot rules, arrived with no trusted X-Forwarded-For, and so shared ONE
+    # rate-limit bucket keyed on "" with every other origin-direct request. This list is the
+    # origin lock the Docker-era DOCKER-USER chain used to be. Cloudflare Tunnel and a
+    # ClientIP() clause on the public Rule were considered and rejected in #1974; Authenticated
+    # Origin Pulls is #1990, on top of this.
+    #
+    # ETP=Local preserves the source address on the VIP path, so each ipBlock matches what the
+    # client really is. The LAN range covers the WireGuard clients as well: wg-easy on daniel-pi
+    # runs its default PostUp, which masquerades `wg_client_subnet` to the Pi's LAN address
+    # (docker-compose.yml.j2 sets no WG_POST_UP); the wg_client_subnet entry is the un-NAT'd
+    # shape, kept so a PostUp change does not lock WireGuard out.
+    #
+    # The pod CIDR here is the WHOLE /16 on purpose, which docs/networkpolicy-default-deny.md
+    # ("Correction carried into this design") forbids for the baseline. There a /16 readmits
+    # every pod to a fenced workload and cancels the default-deny. Here every pod is a legitimate
+    # caller: traefik is the ingress, and an in-cluster caller of a `.local.` route (the Kuma
+    # prober, monitor-bridge, homepage's widgets) reaches the VIP as its own 10.42.x.y address.
+    # This port admitted every pod before this rule existed, so in-cluster reachability is
+    # unchanged and the rule is a strict narrowing. Both cni0 gateways and both flannel.1
+    # addresses sit inside the /16, so host-originated callers (the three host crons that dial
+    # traefik, a cross-node hop) need no separate /32 grant.
+    #
+    # Seven of the Cloudflare entries are IPv6. kube-router buckets ipBlocks per address family
+    # (evalIPBlockPeer in pkg/controllers/netpol/policy.go, v2.6) and installs an ipset only for
+    # a family the node runs, so on this single-stack v4 cluster the v6 entries are inert rather
+    # than a broken ipset. They stay so the list equals `cloudflare_ips` exactly, which is what
+    # cloudflare-ip-drift.sh compares against upstream.
+    - from:
+{% for cidr in netpol_baseline_traefik_https_sources %}
+        - ipBlock:
+            cidr: {{ cidr }}
+{% endfor %}
+      ports:
         - port: 8443
           protocol: TCP
     # :8080 is the port worth fencing. prometheus moved to the observability namespace in

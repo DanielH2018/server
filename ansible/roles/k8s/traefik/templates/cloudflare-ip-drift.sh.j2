@@ -7,6 +7,9 @@
 # consumer of the real client IP silently reads Cloudflare's edge instead. That breaks CrowdSec
 # decisions (bans land on a Cloudflare IP, not the attacker), the Authelia remote_ip log, and
 # Home Assistant's use_x_forwarded_for trust chain — with no error anywhere.
+# Since 2026-09-18 (#1974) the same list is also the ipBlock allow-list on traefik's :8443 in
+# netpol-baseline's networkpolicy-traefik.yaml.j2, so a range change needs a netpol-baseline
+# deploy as well as traefik's: an added range that is not in the policy is DENIED, not just untrusted.
 #
 # It ALERTS on drift, it never auto-applies a fetched list. Cloudflare changes these ranges on a
 # multi-year cadence, so daily is a safety net, not a control loop.
@@ -85,5 +88,5 @@ fi
 # direction — real clients on it stop being trusted). "stale" = in ours but no longer published.
 ADDED=$(comm -23 <(printf '%s\n' "$LIVE") <(printf '%s\n' "$EXPECTED") | tr '\n' ' ')
 STALE=$(comm -13 <(printf '%s\n' "$LIVE") <(printf '%s\n' "$EXPECTED") | tr '\n' ' ')
-push down "cloudflare_ips DRIFTED from upstream — added:[${ADDED}] stale:[${STALE}] — update cloudflare_ips in group_vars/all.yml + redeploy traefik"
+push down "cloudflare_ips DRIFTED from upstream — added:[${ADDED}] stale:[${STALE}] — update cloudflare_ips in group_vars/all.yml + redeploy traefik AND netpol-baseline"
 exit 1
