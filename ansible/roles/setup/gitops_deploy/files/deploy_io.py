@@ -286,18 +286,18 @@ def stale_composes(repo: str, hostname: str) -> list[str] | None:
     The stale-compose trap (see deploy_inventory.stale_rendered_services for the incident
     history). None — not [] — when the inventory or the tree cannot be read: an unreadable
     checkout is not evidence that nothing is stale, and the caller stays silent rather than
-    clearing its alert marker on it.
+    clearing its alert marker on it. A MISSING `containers/` is [] — nothing is rendered,
+    so nothing is stale — and the caller clears a Docker-era marker on it (#2021).
     """
     containers_dir = os.path.join(repo, "containers")
-    hostvars = os.path.join(
-        repo, "ansible", "inventory", "host_vars", f"{hostname}.yml"
-    )
+    hostvars = os.path.join(repo, "ansible/inventory/host_vars", f"{hostname}.yml")
     try:
         with open(hostvars) as fh:
             declared = declared_services(fh.read())
+        names = os.listdir(containers_dir) if os.path.isdir(containers_dir) else []
         rendered = [
             d
-            for d in os.listdir(containers_dir)
+            for d in names
             if os.path.isfile(os.path.join(containers_dir, d, "docker-compose.yml"))
         ]
     except OSError:

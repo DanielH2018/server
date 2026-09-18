@@ -312,7 +312,11 @@ widen it. Each line is a summary; the section it names carries the detail.
     role's real playbook and tag through the tick (`DeployerState.clear_manual_plane_applied`,
     which no role reaches today because the tick runs neither playbook), an operator running
     `uv run python scripts/deploy_tools/gitops_state.py clear-manual-plane <role>`, and nothing
-    else. Parking was the signal only because nothing else was, and it charged every other
+    else. The operator's clear writes one `logger -t gitops-state` line naming the role, the
+    user, the cwd and the dropped line's origin SHA, so `journalctl -t gitops-state` says who
+    cleared what and lets a later reader match it against an apply (#2022: `k3s` was cleared
+    by hand with its apply still owed, and the marker's truncation was the only write).
+    Parking was the signal only because nothing else was, and it charged every other
     session: ten park episodes over the seven days to 2026-09-11 spanned 30 ticks, the longest
     about forty minutes, and every landing behind one exits 4 from `deploy.sh` until a hand
     pulls the primary checkout.

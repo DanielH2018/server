@@ -13,6 +13,10 @@ pending role is six hours old, and `land.sh` prints the same clear command.
 
 **The apply comes first, this second.** Clearing a role nobody applied silences the only
 durable signal that it is unapplied, which is the state the marker exists to make visible.
+So every `clear-manual-plane` run writes one journal line, `logger -t gitops-state`, naming
+the role, the line it dropped and who ran it: `journalctl -t gitops-state` is where a clear
+with no apply behind it leaves its trace (#2022: `k3s` was cleared by hand on 2026-09-18
+with the apply still owed, and the marker's own truncation recorded nothing).
 
 This is not a path the deployer takes. Its own reverse is
 `DeployerState.clear_manual_plane_applied`, which fires when a tick applies the role's real
@@ -32,9 +36,12 @@ Run: uv run pytest scripts/deploy_tools/tests/test_gitops_state.py
 import argparse
 import contextlib
 import fcntl
+import getpass
 import os
+import subprocess
 import sys
 import time
+from collections.abc import Callable
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
@@ -52,7 +59,7 @@ _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 _sys.path.insert(0, str(HOST_LIB_FILES))
 
 from deploy_changes import setup_role_tag
-from deploy_state import STATE_DIR, DeployerState
+from deploy_state import STATE_DIR, DeployerState, ManualPlaneEntry
 
 # The tree lock every writer of this host's checkout takes: `deploy.sh`'s own `LOCK=`, and the
 # deployer unit's `flock` ExecStart.
@@ -127,21 +134,81 @@ def marker_key(role: str) -> str:
     return setup_role_tag(role)
 
 
+# The syslog tag the journal line carries: `journalctl -t gitops-state` reads it back, and
+# the Alloy shipper tails it into Loki with the rest of /var/log/syslog.
+JOURNAL_TAG = "gitops-state"
+
+# What `clear_manual_plane` calls with the role and the line it dropped (None for a no-op).
+Journal = Callable[[str, "ManualPlaneEntry | None"], None]
+
+
+def operator() -> str:
+    """Who is running this, through `sudo -u ubuntu` when that is how they reached the uid."""
+    return os.environ.get("SUDO_USER") or getpass.getuser()
+
+
+def journal_clear(
+    role: str,
+    dropped: ManualPlaneEntry | None,
+    run: Callable[..., object] = subprocess.run,
+) -> None:
+    """Write the one line that says an operator cleared `role`, who, and from where.
+
+    logfmt like `deploy.sh`'s `emit_deploy_annotation`, and fire-and-forget the same way:
+    `logger` missing, or the syslog socket refusing, changes nothing about the exit code. The
+    clear already happened by the time this runs; a line saying so must not make it read as
+    failed. `dropped` is the marker line the clear removed, or None for a no-op clear, which
+    is still evidence that someone tried. Its origin SHA and playbook are what an
+    investigator needs to match the clear against the apply that did or did not follow.
+
+    Args:
+      run: what executes `logger`; `subprocess.run` outside a test.
+    """
+    fields = [
+        "event=clear-manual-plane",
+        f"role={role}",
+        f"cleared={'true' if dropped else 'false'}",
+        f"user={operator()}",
+        f"cwd={os.getcwd()}",
+    ]
+    if dropped:
+        fields.append(f"origin={dropped.origin}")
+        fields.append(f"playbook={dropped.playbook}")
+        fields.append(f"pending_since={dropped.at:.0f}")
+    try:
+        run(
+            ["logger", "-t", JOURNAL_TAG, " ".join(fields)],
+            check=False,
+            stderr=subprocess.DEVNULL,
+            timeout=5,
+        )
+    except OSError, subprocess.SubprocessError:
+        pass
+
+
 def clear_manual_plane(
     state: DeployerState,
     role: str,
     lock_path: str | None = None,
     lock_wait_s: float | None = None,
+    journal: Journal | None = None,
 ) -> int:
     """Drop `role`'s pending line. Exit 0 whether or not there was one to drop.
 
     Args:
       lock_path: the tree lock to serialise the rewrite against. None reads `TREE_LOCK`.
       lock_wait_s: how long to wait for it. None reads `LOCK_WAIT_S`.
+      journal: what records the clear, called once with the role and the line it dropped
+        (None for a no-op). None means `journal_clear`, the real `logger` line.
     """
     key = marker_key(role)
     try:
         with tree_lock(TREE_LOCK if lock_path is None else lock_path, lock_wait_s):
+            # Read the line before dropping it: the journal names what was cleared, not
+            # just that something was. Same lock, so it is the line the clear removes.
+            dropped = next(
+                (e for e in state.manual_plane_pending() if e.role == key), None
+            )
             cleared = state.clear_manual_plane(key)
     except LockBusy as busy:
         print(
@@ -165,6 +232,9 @@ def clear_manual_plane(
             file=sys.stderr,
         )
         return 1
+    # After the lock is released and only once the rewrite happened: a refusal above writes
+    # no line, because a line claiming a clear that never happened is worse than none.
+    (journal_clear if journal is None else journal)(key, dropped if cleared else None)
     if not cleared:
         print(
             f"{role} is not pending in {state.path('manual_plane')} — nothing to clear"
@@ -220,6 +290,7 @@ def main(
     argv: list[str] | None = None,
     lock_path: str | None = None,
     lock_wait_s: float | None = None,
+    journal: Journal | None = None,
 ) -> int:
     """Parse `argv` and run the subcommand it names.
 
@@ -227,6 +298,8 @@ def main(
       lock_path: the tree lock the rewrite serialises against. None reads `TREE_LOCK`; a test
         passes its own, because taking the host's real lock would block a running deploy.
       lock_wait_s: how long to wait for it. None reads `LOCK_WAIT_S`.
+      journal: what records a `clear-manual-plane`. None reads `journal_clear`; a test passes
+        its own, because a real `logger` line from a test reads as an operator's clear.
     """
     parser = argparse.ArgumentParser(
         description=__doc__,
@@ -255,7 +328,7 @@ def main(
         # argparse refuses any other value, so this catches a subcommand added to the parser
         # and not to this dispatch — which would otherwise run the clear with its arguments.
         parser.error(f"no handler for {args.command}")
-    return clear_manual_plane(state, args.role, lock_path, lock_wait_s)
+    return clear_manual_plane(state, args.role, lock_path, lock_wait_s, journal)
 
 
 if __name__ == "__main__":
