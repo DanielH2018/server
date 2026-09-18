@@ -61,11 +61,8 @@ _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 _sys.path.insert(0, str(HOST_LIB_FILES))
 
 from deploy_changes import setup_role_tag
+from deploy_locks import TREE_LOCK
 from deploy_state import STATE_DIR, DeployerState, ManualPlaneEntry
-
-# The tree lock every writer of this host's checkout takes: `deploy.sh`'s own `LOCK=`, and the
-# deployer unit's `flock` ExecStart.
-TREE_LOCK = "/var/lock/server-git-tree.lock"
 
 # Seconds to wait for it. Every other waiter on this lock waits 3000 (the census in the
 # deployer's test_gitops_deploy_timeout_budgets.py), because those are unattended jobs that
@@ -198,7 +195,8 @@ def clear_manual_plane(
     """Drop `role`'s pending line. Exit 0 whether or not there was one to drop.
 
     Args:
-      lock_path: the tree lock to serialise the rewrite against. None reads `TREE_LOCK`.
+      lock_path: the tree lock to serialise the rewrite against. None reads
+        `deploy_locks.TREE_LOCK`, the path every writer of this host's checkout takes.
       lock_wait_s: how long to wait for it. None reads `LOCK_WAIT_S`.
       journal: what records the clear, called once with the role and the line it dropped
         (None for a no-op). None means `journal_clear`, the real `logger` line.

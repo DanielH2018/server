@@ -1227,7 +1227,10 @@ unchanged: it still holds the tree lock across its whole run, so an operator dep
 mid-tick still waits, for its snapshot alone. This unit takes the per-service locks too, inside
 that hold, which is what keeps a tick and an operator deploy off the same rollout. The lock
 order is `all` first, then each service in sorted order, and the `# DECIDED:` marker in
-`files/deploy_locks.py` says why the two orders cannot deadlock.
+`files/deploy_locks.py` says why the two orders cannot deadlock. There is one statement of
+that order: `deploy.sh` runs `deploy_locks.py plan <tag>...` and takes the locks it prints,
+top to bottom, and refuses (exit 79) rather than order them itself when the plan does not
+arrive (issue #2054).
 
 **A busy service lock is contention, not a failed deploy.** `deploy_locks` raises its own
 `ServiceLockBusy`, each of the three deploy handlers catches it AHEAD of its failure arm, and

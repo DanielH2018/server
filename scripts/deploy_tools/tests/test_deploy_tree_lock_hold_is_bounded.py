@@ -14,7 +14,13 @@ Run: uv run pytest scripts/deploy_tools/tests/test_deploy_tree_lock_hold_is_boun
 import subprocess
 from pathlib import Path
 
-from _deploy_sh_fakes import FAKE_RECAP, FLOCK_STUB, deploy_sh_env, make_snapshot_repo
+from _deploy_sh_fakes import (
+    FAKE_RECAP,
+    FLOCK_STUB,
+    UV_DEPLOY_LOCKS_ARM,
+    deploy_sh_env,
+    make_snapshot_repo,
+)
 
 _REPO = Path(__file__).resolve().parents[3]
 _DEPLOY_SH = _REPO / "scripts" / "deploy.sh"
@@ -27,9 +33,10 @@ _UV_STUB = """#!/bin/bash
 case "$*" in
   *ansible-playbook*) {recap}; exit 0 ;;
   *deploy_tags.py\\ list*) {list} ;;
+{locks}
   *) exit 0 ;;
 esac
-""".replace("{recap}", FAKE_RECAP)
+""".replace("{recap}", FAKE_RECAP).replace("{locks}", UV_DEPLOY_LOCKS_ARM)
 
 
 def _run(

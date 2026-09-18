@@ -129,8 +129,11 @@ full of dead directories cannot turn "seconds" into the deployer's whole `Timeou
 
 ## Governs
 
-The `# DECIDED:` markers recording the lock order at each of the two deploy paths
-(`scripts/deploy.sh`, `ansible/roles/setup/gitops_deploy/files/deploy_locks.py`), and the one
-in `scripts/deploy.sh` recording that a snapshot's owner is an advisory lock rather than the
-pid in its name. The anchors are the markers' own text: a line number is wrong the moment
-anything above it moves, and these three moved twice while this record was being written.
+The `# DECIDED:` marker recording the lock order in
+`ansible/roles/setup/gitops_deploy/files/deploy_locks.py`, the one in `scripts/deploy.sh`
+recording that the wrapper takes that order off `deploy_locks.py plan` rather than carry a
+copy of it (issue #2054 — the shell's own copy agreed with the deployer's only through a test,
+and a disagreement is a deadlock), and the one in `scripts/deploy.sh` recording that a
+snapshot's owner is an advisory lock rather than the pid in its name. The anchors are the
+markers' own text: a line number is wrong the moment anything above it moves, and these three
+moved twice while this record was being written.
