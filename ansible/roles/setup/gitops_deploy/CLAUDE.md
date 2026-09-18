@@ -506,7 +506,7 @@ widen it. Each line is a summary; the section it names carries the detail.
     secondary cause, an operator who rendered locally before pushing (`git push` it). It includes
     the read exception's type and message when the declarations couldn't be read at all. The disarm
     itself is stateless: it is recomputed every tick, so it self-clears the moment the config is
-    re-rendered. Only the page is throttled, on `STALE_DENYLIST_FILE`. The regex is deliberately
+    re-rendered. Only the page is throttled, on the `stale_denylist_alerted` marker. The regex is deliberately
     biased toward denied — unanimity is required across every match, an absent or unparseable
     declaration counts as denied, and a shared role skips the check entirely — so a parsing bug
     here almost always produces a spurious disarm rather than a permitted deploy. The one gap is
@@ -791,10 +791,11 @@ fifteen dedupe and status markers plus the pending-alert queue, the staging tick
 the staging override — and holds the hold-marker writes (`write_hold`, `clear_broad_hold`,
 `clear_service_hold`) and `record_behind`. A caller names a marker (`state.path("hold")`)
 rather than carrying a path, which is what lets `state_dir` repoint the whole state directory
-by replacing one object. `gitops_deploy.STATE` is the instance and the eighteen path literals
-stay declared there
-(`tests/conftest.py`'s `state_dir` repoints them, and one Ansible default is pinned against
-`STAGING_TICK_LEDGER`'s literal). `read()` returns None for a missing AND an empty marker —
+by replacing one object. `gitops_deploy.STATE` is the instance, and `MARKERS` is the only
+table of basenames — the 22 module-level path literals `gitops_deploy.py` used to declare
+beside it had no production reader and went with issue #2051 (`tests/conftest.py`'s
+`state_dir` now repoints the one object, and `scripts/deploy_tools/tests/test_tick_ledger_report.py`
+pins the Ansible default against `MARKERS`). `read()` returns None for a missing AND an empty marker —
 a torn write is a disarmed hold, not a hold on `""` — and PROPAGATES any other `OSError`:
 an unreadable state directory must not read as "no hold", or a held host reports converged.
 `tests/test_deployer_state.py` pins all three outcomes.

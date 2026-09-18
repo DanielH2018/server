@@ -63,15 +63,14 @@ def test_every_outcome_a_tick_can_emit_is_one_the_backfill_defines():
 
 
 def test_the_tick_ledger_constant_matches_the_ansible_default():
-    """The deployer needs a module-level literal (the state_dir guard requires it), so the path
-    exists in two places. Read the YAML rather than restating it in a third."""
+    """The deployer writes the ledger through `DeployerState`, and the backfill unit is
+    handed the path by the Ansible default, so the two are declared in two trees. Read the
+    YAML rather than restating it in a third."""
+    import deploy_state
+
     defaults = yaml_fast.safe_load((ROLE / "defaults/main.yml").read_text())
-    literal = next(
-        line.split('"')[1]
-        for line in (ROLE / "files/gitops_deploy.py").read_text().splitlines()
-        if line.startswith("STAGING_TICK_LEDGER = ")
-    )
-    assert literal == defaults["gitops_deploy_staging_tick_ledger"]
+    live = deploy_state.DeployerState(deploy_state.STATE_DIR)
+    assert live.path("staging_ticks") == defaults["gitops_deploy_staging_tick_ledger"]
 
 
 def test_the_two_ledgers_are_different_files():

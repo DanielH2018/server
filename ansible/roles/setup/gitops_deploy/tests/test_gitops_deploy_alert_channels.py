@@ -21,6 +21,7 @@ import pathlib
 import pytest
 
 import deploy_alerts
+import deploy_state
 from deploy_changes import ChangeSet
 from deploy_remediation import k8s_remediation
 from deploy_toolbox import DeployTools
@@ -263,16 +264,16 @@ def test_a_git_failure_here_logs_and_leaves_the_marker(
 
 
 # ── the state_dir fixture covers every state path the module names ────────────────────────────
-def test_state_dir_repoints_every_state_path_in_the_module(
-    gitops_deploy, gitops_tree, state_dir
-):
-    """The fixture patches module constants whose value starts with the state prefix.
+def test_state_dir_repoints_every_state_path_in_the_module(gitops_deploy, gitops_tree):
+    """No literal naming the state directory may exist in `gitops_deploy.py` at all.
 
-    A path built any other way (an f-string, os.path.join) would keep pointing at the host and the
-    test writing through it would pass against /var/lib. Every string literal naming the prefix must
-    therefore be a module-level constant, and after the fixture none may remain.
+    Every marker path is reached through `STATE`, which the fixture replaces. A path built any
+    other way (a literal, an f-string, `os.path.join`) would keep pointing at the host and the
+    test writing through it would pass against /var/lib. The 22 module-level constants that
+    used to carry the paths were the last such literals (issue #2051); this guard is what
+    keeps them from coming back.
     """
-    prefix = "/var/lib/gitops-deploy"
+    prefix = deploy_state.STATE_DIR
     literals = {
         node.value
         for node in ast.walk(gitops_tree)
@@ -280,25 +281,19 @@ def test_state_dir_repoints_every_state_path_in_the_module(
         and isinstance(node.value, str)
         and prefix in node.value
     }
-    module_level = {
-        node.value.value
-        for node in gitops_tree.body
-        if isinstance(node, ast.Assign) and isinstance(node.value, ast.Constant)
-    }
-    assert literals and literals <= module_level, (
-        f"state paths not assigned at module level: {sorted(literals - module_level)}"
-    )
+    assert not literals, f"state paths named outside DeployerState: {sorted(literals)}"
     live = {
         name: value
         for name, value in vars(gitops_deploy).items()
         if isinstance(value, str) and value.startswith(prefix)
     }
-    assert not live, f"state_dir left these on the host: {live}"
+    assert not live, f"state paths bound at module level: {live}"
 
 
-@pytest.mark.parametrize("name", ["LAST_RUN", "PENDING_ALERTS_FILE", "HOLD_FILE"])
-def test_state_dir_keeps_each_markers_basename(gitops_deploy, state_dir, name):
-    assert getattr(gitops_deploy, name).startswith(str(state_dir) + "/")
+@pytest.mark.parametrize("marker", ["last_run", "pending_alerts", "hold"])
+def test_state_dir_keeps_each_markers_basename(gitops_deploy, state_dir, marker):
+    expected = deploy_state.DeployerState.MARKERS[marker]
+    assert gitops_deploy.STATE.path(marker) == str(state_dir / expected)
 
 
 def test_an_ancestor_fast_forward_leaves_behind_since_naming_the_real_tip(

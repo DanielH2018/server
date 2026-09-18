@@ -1,10 +1,11 @@
 """`DeployerState` reads the same files, at the same paths, with the same three outcomes.
 
-Fifteen marker files were read through a bare `_read_marker(path)` helper and fifteen module
-constants. `deploy_io.DeployerState` wraps them. Nothing about the on-disk layout changed, so
-what this module pins is that nothing about it changed:
+Marker files were read through a bare `_read_marker(path)` helper and a module constant each.
+`deploy_io.DeployerState` wraps them, and since issue #2051 `MARKERS` is the only table of
+them. Nothing about the on-disk layout changed, so what this module pins is that nothing
+about it changed:
 
-- the derived paths still equal the literals `gitops_deploy.py` declares, one for one;
+- the table is exactly the 22 named pairs below, and each resolves under the host directory;
 - a MISSING file, an EMPTY file and an UNREADABLE directory are still told apart the way the
   old helper told them apart — the first two read as None, the third RAISES.
 
@@ -33,43 +34,46 @@ def state(tmp_path: pathlib.Path) -> deploy_io.DeployerState:
 
 
 # ── the paths did not move ────────────────────────────────────────────────────────────────
-def test_every_marker_resolves_to_the_constant_gitops_deploy_declares(gitops_deploy):
-    """The two representations of the same twenty-two paths, asserted equal by name.
+# The 22 markers by name, as `MARKERS` key -> basename on disk. A frozenset of pairs rather
+# than a count: a renamed basename or a swapped pair fails naming the marker, where a count
+# would pass either. Add a pair here when a marker is added, and nowhere else (issue #2051 —
+# these were 22 module-level constants in gitops_deploy.py with no production reader).
+EXPECTED_MARKERS = frozenset(
+    {
+        ("hold", "hold_sha"),
+        ("hold_plane", "hold_plane"),
+        ("broad_applied", "broad_applied"),
+        ("manual_plane", "manual_plane"),
+        ("contention", "contention_since"),
+        ("last_run", "last_run"),
+        ("diverged", "diverged_sha"),
+        ("behind", "behind_since"),
+        ("stale_composes", "stale_composes_alerted"),
+        ("broad_alerted", "broad_alerted_sha"),
+        ("secrets_alerted", "secrets_alerted_sha"),
+        ("tasks_alerted", "tasks_alerted_sha"),
+        ("meta_alerted", "meta_alerted_sha"),
+        ("k8s_alerted", "k8s_alerted_sha"),
+        ("stale_denylist_alerted", "stale_denylist_alerted_sha"),
+        ("denylist_rendered", "denylist_rendered_sha"),
+        ("ci_alerted", "ci_alerted_sha"),
+        ("staging_alerted", "staging_alerted_sha"),
+        ("dirty_alerted", "dirty_alerted_date"),
+        ("pending_alerts", "pending_alerts.json"),
+        ("staging_ticks", "staging-ticks.jsonl"),
+        ("staging_override", "staging_gate_override"),
+    }
+)
 
-    A named mapping rather than a count: a marker that lost its constant has to fail with its
-    own name in the message, and a count would also pass if two were swapped.
-    """
+
+def test_the_marker_table_is_exactly_the_named_census():
+    assert frozenset(deploy_io.DeployerState.MARKERS.items()) == EXPECTED_MARKERS
+
+
+def test_every_marker_resolves_under_the_host_state_directory():
     live = deploy_io.DeployerState(deploy_io.STATE_DIR)
-    for marker, constant in (
-        ("hold", "HOLD_FILE"),
-        ("hold_plane", "HOLD_PLANE_FILE"),
-        ("broad_applied", "BROAD_APPLIED_FILE"),
-        ("manual_plane", "MANUAL_PLANE_FILE"),
-        ("contention", "CONTENTION_FILE"),
-        ("last_run", "LAST_RUN"),
-        ("diverged", "DIVERGED_FILE"),
-        ("behind", "BEHIND_FILE"),
-        ("stale_composes", "STALE_COMPOSE_FILE"),
-        ("broad_alerted", "BROAD_FILE"),
-        ("secrets_alerted", "SECRETS_ALERT_FILE"),
-        ("tasks_alerted", "TASKS_ALERT_FILE"),
-        ("meta_alerted", "META_ALERT_FILE"),
-        ("k8s_alerted", "K8S_ALERT_FILE"),
-        ("stale_denylist_alerted", "STALE_DENYLIST_FILE"),
-        ("denylist_rendered", "DENYLIST_RENDER_FILE"),
-        ("ci_alerted", "CI_ALERT_FILE"),
-        ("staging_alerted", "STAGING_ALERT_FILE"),
-        ("dirty_alerted", "DIRTY_ALERT_FILE"),
-        ("pending_alerts", "PENDING_ALERTS_FILE"),
-        ("staging_ticks", "STAGING_TICK_LEDGER"),
-        ("staging_override", "STAGING_OVERRIDE_FILE"),
-    ):
-        assert live.path(marker) == getattr(gitops_deploy, constant), marker
-
-
-def test_the_marker_table_covers_every_constant_and_no_more():
-    """Non-vacuity for the loop above: it names twenty-two markers, and so must the table."""
-    assert len(deploy_io.DeployerState.MARKERS) == 22
+    for marker, basename in EXPECTED_MARKERS:
+        assert live.path(marker) == f"{deploy_io.STATE_DIR}/{basename}", marker
 
 
 def test_an_unknown_marker_is_a_typo_not_a_new_file(state):

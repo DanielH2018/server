@@ -165,7 +165,7 @@ def test_deliver_caps_the_queue_and_logs_each_drop(
     """
     limit = deploy_health.PENDING_ALERTS_MAX
     full = {f"tasks:{i:040x}": f"alert {i}" for i in range(limit)}
-    deploy_alerts.write_pending(gitops_deploy.PENDING_ALERTS_FILE, full)
+    deploy_alerts.write_pending(gitops_deploy.STATE.path("pending_alerts"), full)
     tools, _at_send = _sender(state_dir, False)
 
     deploy_alerts.deliver(
@@ -191,7 +191,8 @@ def test_drain_pending_clears_exactly_what_it_delivered(
     gitops_deploy, monkeypatch, state_dir, settings
 ):
     deploy_alerts.write_pending(
-        gitops_deploy.PENDING_ALERTS_FILE, {"secrets:a": "first", "tasks:b": "second"}
+        gitops_deploy.STATE.path("pending_alerts"),
+        {"secrets:a": "first", "tasks:b": "second"},
     )
     tools = DeployTools(discord_post=lambda _webhook, content: content == "first")
     deploy_alerts.drain_pending(tools, gitops_deploy.STATE, settings)
