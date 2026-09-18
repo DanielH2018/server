@@ -93,7 +93,10 @@ The `rotate --commit` weekly cron is autonomous and state-changing — its autho
 General shape: rotate/regenerate the credential **in the app**, `sops set
 ansible/vars/secrets.yml '["<name>"]' '"<new>"'`, update the registry date (`sync` won't,
 since the value already existed — set `last_rotated` by hand or re-run after editing), then
-redeploy the app **and** every consumer (for example, Homepage, monitor-bridge, configarr). Examples:
+redeploy the app **and** every consumer (for example, Homepage, monitor-bridge, configarr). A
+date left behind is not fatal: `audit` and `rotate` both advance it to the commit that changed
+the ciphertext before deciding what is due, so an undated hand rotation of an `auto` token is
+not rotated again by the weekly cron. Examples:
 - `*_api_key` (sonarr/radarr/jellyfin/prowlarr): Settings → General → regenerate API key.
   **Bazarr is a consumer of `sonarr_api_key` and `radarr_api_key` that no deploy reaches.** It
   stores both in its own config on the `bazarr-config` PVC, entered through its UI, so there is

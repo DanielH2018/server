@@ -3,9 +3,10 @@
 The logic each subcommand runs on is tested beside it: test_secret_classify.py,
 test_secret_registry.py, test_secret_consumers.py, test_secret_git_dates.py, and
 test_rotation_tools.py for the process boundaries. What is left here is the CLI's own
-behaviour — the Kuma summary line, the unattended pick-up window, and the two ways
-`cmd_rotate` can fail partway through a batch (a crash and a hang). The push-token shape check its audit arm calls
-is tested beside that module, in test_secret_sops_io.py.
+behaviour — the Kuma summary line, the unattended pick-up window, the two ways
+`cmd_rotate` can fail partway through a batch (a crash and a hang), and that `rotate` picks
+what is due from the same git-advanced dates `audit` reads. The push-token shape check its
+audit arm calls is tested beside that module, in test_secret_sops_io.py.
 
 Run: uv run pytest scripts/secrets_mgmt/tests/test_secret_rotation.py
 """
@@ -102,7 +103,9 @@ def test_rotate_commit_sends_new_token_on_stdin_not_argv():
         )
     )
 
-    args = SimpleNamespace(name=name, all=False, commit=True, deploy=False)
+    args = SimpleNamespace(
+        name=name, all=False, commit=True, deploy=False, no_derive=False
+    )
     assert sr.cmd_rotate(args, tools) == 0
     assert "save_registry" in named_calls(recorded), (
         "the new date was never written back"
@@ -154,7 +157,9 @@ def test_rotate_records_the_names_a_failed_batch_already_wrote():
     # `RotationTools` is frozen, so a per-test boundary is a `replace`, never a setattr.
     tools = replace(tools, sops_set=failing_sops_set)
 
-    args = SimpleNamespace(name=None, all=True, commit=True, deploy=True)
+    args = SimpleNamespace(
+        name=None, all=True, commit=True, deploy=True, no_derive=False
+    )
     assert sr.cmd_rotate(args, tools) == 3
     # Most-overdue first, so the failure lands on the second of two — the half that proves
     # earlier names were already written. A runner that failed the FIRST call would leave that
@@ -195,7 +200,9 @@ def test_rotate_reports_the_names_already_written_when_a_sops_set_hangs(capsys):
 
     tools = replace(tools, sops_set=hanging_sops_set)
 
-    args = SimpleNamespace(name=None, all=True, commit=True, deploy=True)
+    args = SimpleNamespace(
+        name=None, all=True, commit=True, deploy=True, no_derive=False
+    )
     assert sr.cmd_rotate(args, tools) == 3
     assert attempted == [first, second]
 
@@ -236,7 +243,9 @@ def test_rotate_refuses_a_record_key_by_name_with_the_reason(capsys):
     tools, recorded = build_tools(
         Fakes(registry=_record_registry(name, source="record"))
     )
-    args = SimpleNamespace(name=name, all=False, commit=True, deploy=False)
+    args = SimpleNamespace(
+        name=name, all=False, commit=True, deploy=False, no_derive=False
+    )
     assert sr.cmd_rotate(args, tools) == 2
     err = capsys.readouterr().err
     assert name in err and "source: record" in err and "Rotate it in the app" in err
@@ -248,7 +257,9 @@ def test_rotate_writes_the_same_auto_key_when_it_is_not_a_record():
     """The accepting half: identical fixture minus `source: record` is rotated."""
     name = "app_owned_push_token"
     tools, recorded = build_tools(Fakes(registry=_record_registry(name)))
-    args = SimpleNamespace(name=name, all=False, commit=True, deploy=False)
+    args = SimpleNamespace(
+        name=name, all=False, commit=True, deploy=False, no_derive=False
+    )
     assert sr.cmd_rotate(args, tools) == 0
     assert len(process_calls(recorded)) == 1
 
@@ -259,7 +270,9 @@ def test_unattended_rotate_skips_a_record_key_and_says_so(capsys):
     tools, recorded = build_tools(  # field stands between it and `sops set`
         Fakes(registry=_record_registry(name, source="record"))
     )
-    args = SimpleNamespace(name=None, all=True, commit=True, deploy=False)
+    args = SimpleNamespace(
+        name=None, all=True, commit=True, deploy=False, no_derive=False
+    )
     assert sr.cmd_rotate(args, tools) == 0
     assert process_calls(recorded) == []
     assert (
@@ -270,6 +283,84 @@ def test_unattended_rotate_skips_a_record_key_and_says_so(capsys):
 def test_unattended_rotate_still_writes_the_same_key_without_the_record_field():
     name = "monitor_bridge_test_token"
     tools, recorded = build_tools(Fakes(registry=_record_registry(name)))
-    args = SimpleNamespace(name=None, all=True, commit=True, deploy=False)
+    args = SimpleNamespace(
+        name=None, all=True, commit=True, deploy=False, no_derive=False
+    )
     assert sr.cmd_rotate(args, tools) == 0
     assert len(process_calls(recorded)) == 1
+
+
+# ── rotate judges due-ness from git-advanced dates, as audit does (issue #2020) ─────────
+#
+# `sync` leaves an existing `last_rotated` alone, so a token rotated by hand and committed
+# without its date moved reads as overdue from the registry alone. `audit` closes that gap by
+# advancing the date to git's; until #2020, `rotate` selected from the raw dates and would have
+# rotated such a token a second time. Both names carry the `monitor_bridge_` prefix so that
+# `consumer_tags` resolves them and the batch filter is not what keeps one out of the run.
+HAND_ROTATED = "monitor_bridge_hand_rotated_token"
+STALE = "monitor_bridge_stale_token"
+
+
+def _two_token_fixture() -> Fakes:
+    # Both recorded 2026-01-01: overdue at TODAY (2026-09-01) under the 180-day auto tier.
+    # Git shows HAND_ROTATED's ciphertext changed on 2026-08-01 — a hand rotation nobody
+    # dated — while STALE's has not changed since the oldest revision, so git agrees with
+    # the registry there and the entry is genuinely overdue.
+    return Fakes(
+        registry=_reg(
+            (HAND_ROTATED, "auto", "2026-01-01"), (STALE, "auto", "2026-01-01")
+        ),
+        history=[
+            ("c", "2026-08-01", {HAND_ROTATED: "ENC[new]", STALE: "ENC[same]"}),
+            ("b", "2026-05-01", {HAND_ROTATED: "ENC[old]", STALE: "ENC[same]"}),
+            ("a", "2026-01-01", {HAND_ROTATED: "ENC[old]", STALE: "ENC[same]"}),
+        ],
+    )
+
+
+def test_rotate_skips_the_entry_git_shows_rotated_and_still_takes_the_overdue_one(
+    capsys,
+):
+    tools, _recorded = build_tools(_two_token_fixture())
+    args = SimpleNamespace(
+        name=None, all=False, commit=False, deploy=False, no_derive=False
+    )
+    assert sr.cmd_rotate(args, tools) == 0
+    out = capsys.readouterr().out
+    assert "DRY-RUN would rotate %-40s" % STALE in out, out
+    assert "DRY-RUN would rotate %-40s" % HAND_ROTATED not in out, out
+    assert "date advanced: %-30s 2026-01-01 -> 2026-08-01" % HAND_ROTATED in out
+
+
+def test_rotate_no_derive_trusts_the_recorded_date(capsys):
+    """The flag's own red proof: the same fixture with the derive off selects both."""
+    tools, _recorded = build_tools(_two_token_fixture())
+    args = SimpleNamespace(
+        name=None, all=False, commit=False, deploy=False, no_derive=True
+    )
+    assert sr.cmd_rotate(args, tools) == 0
+    out = capsys.readouterr().out
+    assert "DRY-RUN would rotate %-40s" % HAND_ROTATED in out, out
+    assert "DRY-RUN would rotate %-40s" % STALE in out, out
+    assert "date advanced" not in out
+
+
+def test_rotate_commit_writes_back_only_the_dates_it_rotated():
+    """The derive lands on a copy: git stays the source of truth for what this run skips.
+
+    `audit` never saves the registry, so its in-memory advance is invisible on disk.
+    `rotate --commit` does save it, and the weekly cron commits what it writes — so an
+    advance applied to the saved registry would bake git's dates into
+    `secret_rotation.yml` for secrets the run never touched.
+    """
+    tools, recorded = build_tools(_two_token_fixture())
+    args = SimpleNamespace(
+        name=None, all=False, commit=True, deploy=False, no_derive=False
+    )
+    assert sr.cmd_rotate(args, tools) == 0
+    saved = [c[1][0] for c in recorded if c[0] == "save_registry"]
+    assert len(saved) == 1
+    assert saved[0]["entries"][STALE]["last_rotated"] == "2026-09-01"  # rotated today
+    assert saved[0]["entries"][HAND_ROTATED]["last_rotated"] == "2026-01-01", (
+        "the git-derived date must not reach the registry on disk"
+    )
