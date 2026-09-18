@@ -32,7 +32,7 @@ import sys
 from pathlib import Path
 
 import pytest
-from _helpers import REPO
+from _helpers import REPO, command_of, load_tasks, walk_tasks
 
 sys.path.insert(0, str(REPO / "scripts"))
 
@@ -56,6 +56,10 @@ def from_file_configmap_roles(roles_dir: Path = K8S_ROLES) -> set[str]:
     Derived from the tree rather than listed, so a role that starts doing this joins the
     census the day it appears — the same shape `test_script_configmaps_apply_server_side.py`
     uses for its own (narrower — one exact task name) version of this predicate.
+
+    Reads the command each task runs, not the file's text: `game-stats-lib/tasks/stage.yml`
+    documents the `kubectl create configmap` command its CALLERS run, and a text scan counted
+    that helper role — which stages nothing and renders no workload — as one of them.
     """
     found = set()
     for role_dir in sorted(roles_dir.iterdir()):
@@ -63,7 +67,10 @@ def from_file_configmap_roles(roles_dir: Path = K8S_ROLES) -> set[str]:
         if not tasks_dir.is_dir():
             continue
         for task_file in tasks_dir.glob("*.yml"):
-            if "create configmap" in task_file.read_text():
+            if any(
+                "create configmap" in command_of(task)
+                for task in walk_tasks(load_tasks(task_file))
+            ):
                 found.add(role_dir.name)
                 break
     return found

@@ -18,13 +18,18 @@ own entry script by a ConfigMap, not on a host with a repo checkout — a direct
 script gets only its own directory on `sys.path`, so a copy has to be staged beside each
 consumer. `tasks/stage.yml` is that shared step (the same shape
 `roles/setup/common/tasks/install_host_lib.yml` uses for `host_lib.py`, adapted for
-ConfigMap staging rather than a host `/opt` install): a caller `import_tasks`s it with
-`game_stats_lib_dest_dir` set to its own staging directory, then ALSO adds
-`--from-file=stats_lib.py=...` to its own `kubectl create configmap` command — the node-local
-copy alone is not enough, since what actually reaches the pod is the ConfigMap.
+ConfigMap staging rather than a host `/opt` install), and it owns both halves of the
+shipment: a caller `import_tasks`s it with `game_stats_lib_dest_dir` set to its own staging
+directory, and the include copies the file there AND sets `game_stats_lib_from_file` to the
+`--from-file=stats_lib.py=<dir>/stats_lib.py` argument for that copy. The caller
+interpolates that fact into its own `kubectl create configmap` command and never spells
+`stats_lib.py` itself — the node-local copy alone is not enough, since what actually
+reaches the pod is the ConfigMap, and until #2055 a caller could stage the file and forget
+the entry.
 
-`ansible/tests/k8s/test_game_stats_lib_sibling_copies.py` is the census enforcing both halves
-for every role whose `files/` imports `stats_lib`.
+`ansible/tests/k8s/test_game_stats_lib_ships_through_the_include.py` is the guard: the fact
+names exactly the file the copy stages, every role whose `files/` imports `stats_lib`
+includes this file, and every caller's ship list interpolates the fact.
 
 ## Editing
 Logic + its own tests: `files/stats_lib.py` / `tests/test_stats_lib.py` (`uv run pytest

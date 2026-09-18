@@ -36,13 +36,20 @@
 # Callers pass:
 #   game_stats_lib_dest_dir   the staging directory the caller's own script also lands in
 #
-# Callers must ALSO add `stats_lib.py` to their own ConfigMap ship list (the
-# `--from-file=stats_lib.py=...` argument) — this task only stages the file on the node,
-# same as install_host_lib.yml only installs it on the host; getting it into the pod is the
-# caller's own configmap-creation step. ENFORCED by
-# ansible/tests/k8s/test_game_stats_lib_sibling_copies.py, which asserts every role whose
-# files/ scripts `import stats_lib` includes this task file AND ships `stats_lib.py` in its
-# own ConfigMap creation command.
+# Sets, for the caller's own `kubectl create configmap` command:
+#   game_stats_lib_from_file  the `--from-file=stats_lib.py=<dest>` argument that ships the
+#                             staged copy into the caller's ConfigMap. The ConfigMap key and
+#                             the copy's basename are spelled ONCE, here, so a consumer never
+#                             names stats_lib.py itself: it interpolates this fact into its
+#                             ship list and cannot stage the file without also mounting it.
+#                             A per-host fact, overwritten by the next consumer's import in
+#                             the same play — correct only because every import sits directly
+#                             above its own consumer's render, the same way
+#                             `game_stats_lib_stage` is read for the checksum.
+#
+# ENFORCED by ansible/tests/k8s/test_game_stats_lib_ships_through_the_include.py: every role
+# whose files/ scripts `import stats_lib` imports this file, and its ConfigMap ship list
+# interpolates `game_stats_lib_from_file` rather than spelling `stats_lib.py` by hand.
 
 - name: Stage the shared stats_lib module in {{ game_stats_lib_dest_dir }}
   ansible.builtin.copy:
@@ -53,3 +60,7 @@
     group: root
   become: true
   register: game_stats_lib_stage
+
+- name: Name the staged stats_lib copy for the caller's ConfigMap ship list
+  ansible.builtin.set_fact:
+    game_stats_lib_from_file: "--from-file=stats_lib.py={{ game_stats_lib_dest_dir }}/stats_lib.py"
