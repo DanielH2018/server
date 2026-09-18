@@ -12,9 +12,10 @@ The grammar, one line:
     <count> <unit>s <state> — <n> reasons. <reason> (<k>: a, b, c, +N). <reason> (…). Details: <cmd>
 
 The headline stands alone in the first 60 chars, because Kuma's cell and the Discord field
-both truncate from the right. Groups are ordered largest first. Over `limit`, names are
-elided before anything else — the count is kept, the reasons are kept — and only then does
-the hard cut apply. `probe.py releases --stale-only --kuma` renders through this module too
+both truncate from the right. Groups are ordered largest first. Over `limit`, the names
+shown per group shrink from five to one — every reason and every count survives that — and
+only when one name per reason still does not fit is the line cut from the right with a
+`…(+N chars)` marker, which does lose trailing reasons. `probe.py releases --stale-only --kuma` renders through this module too
 (a `sys.path` bootstrap onto this role's `files/`), so the cron and the pod agree on the shape.
 
 Pure: no I/O, no bridge imports, so `probe.py` can load it without the pod's config.

@@ -35,11 +35,16 @@ def test_a_single_item_names_it_inline():
 def test_over_the_limit_names_are_elided_before_reasons():
     reasons = {f"r{i}": f"reason number {i} " + "x" * 40 for i in range(6)}
     items = {f"{r}-{j}": text for r, text in reasons.items() for j in range(20)}
-    msg = msgfmt.format_down("target", "down", items, limit=600)
-    assert len(msg) <= 600
+    # Walk the ladder one rung at a time: a limit one short of the two-names line must
+    # produce the one-name line, with every reason still present and no hard cut.
+    two = msgfmt.format_down("target", "down", items, limit=520)
+    assert two.count("+18)") == 6, two
+    one = msgfmt.format_down("target", "down", items, limit=len(two) - 1)
+    assert len(one) < len(two)
     for text in reasons.values():
-        assert text in msg, "elision dropped a reason before dropping names"
-    assert "+15)" not in msg, "names should have been elided below five per reason"
+        assert text in one, "elision dropped a reason before dropping names"
+    assert one.count("+19)") == 6, one
+    assert not one.endswith(" chars)"), "elision should have fit without the hard cut"
 
 
 def test_past_what_elision_can_recover_the_cut_carries_a_marker_within_the_limit():

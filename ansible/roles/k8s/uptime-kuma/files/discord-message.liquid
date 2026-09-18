@@ -11,8 +11,9 @@ arrives through `monitorJSON.description` (markdown, shown under the title) and 
 
 Context: `monitorJSON` (name, description, type, url, hostname, tags[]), `heartbeatJSON`
 (status 0 down / 1 up, msg, time, localDateTime, timezone, lastDownTime on recovery),
-`hostnameOrURL`. The Test button renders with both objects null, so every path must still
-produce valid JSON. ansible/tests/services/test_kuma_discord_template.py renders all three
+`hostnameOrURL`. The Test button and a certificate-expiry warning render with both objects
+null (monitor.js passes the cert message alone), so that branch posts the bare `msg` — the
+same plain content the default discord provider sends for those two cases. ansible/tests/services/test_kuma_discord_template.py renders all three
 cases with the pinned liquidjs and parses the result.
 {%- endcomment -%}
 {%- assign down = false -%}{%- if heartbeatJSON.status == 0 -%}{%- assign down = true -%}{%- endif -%}
