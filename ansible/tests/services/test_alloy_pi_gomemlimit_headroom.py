@@ -76,7 +76,7 @@ def test_the_live_limit_has_headroom_and_a_cap_above_it() -> None:
 
 
 def test_the_shipped_triple_is_clean() -> None:
-    assert gomemlimit_problem("88MiB", "128M", 100) is None
+    assert gomemlimit_problem("104MiB", "128M", 100) is None
 
 
 def test_the_2026_09_03_triple_is_clean() -> None:

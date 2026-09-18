@@ -96,17 +96,21 @@ services:
       # a fresh process starts at 22 MB, and the cluster's Alloy DaemonSet floors at 27 MB).
       # That is warm-up to a plateau, not a leak, and what is in the 38 MB is unmeasured —
       # pprof is off by decision (#1130). With GOGC=100 below, the heap goal is 78 MB; the
-      # runtime's non-heap classes add 8 MB, so the total the limit governs (`sys_bytes` −
-      # `heap_released_bytes`) reaches 86-88 MB at the top of every cycle — the limit itself,
-      # as the 72 MiB limit was against the 58 MB goal of GOGC=50 (#1944). It is not a spike
-      # ceiling clear of steady state. What it does at that point is force the scavenger to
-      # hand idle heap pages back to the kernel (7 MB released at the old pairing), which is
-      # cheap: collection stays GOGC-paced and under 0.05 of a core. The continuous-collection
+      # runtime's non-heap classes add 8 MB and `heap_sys` runs ~7 MB over the goal, so the
+      # total the limit governs (`sys_bytes` − `heap_released_bytes`) peaks around 92 MB.
+      # The limit sits ABOVE that on purpose. At 88 MiB it was the pacer: measured
+      # 2026-09-18 in the first half hour, 0.44 cycles a minute against the 0.23 the goal and
+      # the 145 KB/s allocation rate imply, and the fault rate fell 20% where halving the
+      # cycles predicts 50% (the GOGC marker below has the numbers). The 72 MiB limit paced
+      # the 58 MB goal of GOGC=50 the same way (#1944); with the limit as pacer GOGC is not
+      # the setting that decides the cycle. What a limit that is reached does is force the
+      # scavenger to hand idle heap pages back to the kernel, which is cheap, and it stays the
+      # ceiling a spike collects under rather than the cadence. The continuous-collection
       # state above needs the limit under the live set plus GC slack, which is why the guard in
       # ansible/tests/services/test_alloy_pi_gomemlimit_headroom.py takes the floor from the
       # measured live heap and GOGC, not from `sys_bytes` — that metric never shrinks and read
       # 96.3 MB on 2026-09-17, above the old limit and the old cap alike.
-      - GOMEMLIMIT=88MiB
+      - GOMEMLIMIT=104MiB
       # Go's default: collect when the heap has doubled its live size. At the 38 MB live heap
       # above that is a 78 MB goal. CPU is not cheaper than RAM on this host after all: the
       # 1c9592c1 shape spent 0.28 cores to save ~10 MiB, and GOGC=50 (2026-09-03 to
@@ -126,10 +130,13 @@ services:
       # larger goal adds is exactly the part that sits cold, so it costs RAM as compressed swap
       # only: ~5 MB at zram's measured 4.61:1. Pinning the heap instead (`memswap_limit` equal
       # to the cap) would hold 40-60 MB resident for the ~12 MB zram keeps it in, on a host
-      # with 10-25 MB free. Judged the day after by `rate(node_vmstat_pswpin{job="node-pi"}[1d])`
-      # against the 136-181/s of 2026-09-03 → 09-17; the Pi memory budget review of
-      # 2026-09-18 (~/.claude/artifacts/pi-memory-budget-review_2026-09-18.md) has the whole
-      # host's numbers.
+      # with 10-25 MB free. First measured at GOGC=100 under an 88 MiB limit, in a clean
+      # 300 s window 26 minutes after the start: 24,410 faults (81/s), 26.9% of the host's
+      # 90,912 — a 20% cut, at 0.44 cycles a minute, because that limit paced the cycle
+      # (the GOMEMLIMIT comment above). Judged the day after by
+      # `rate(node_vmstat_pswpin{job="node-pi"}[1d])` against the 136-181/s of 2026-09-03 →
+      # 09-17; the Pi memory budget review of 2026-09-18
+      # (~/.claude/artifacts/pi-memory-budget-review_2026-09-18.md) has the whole host's numbers.
       - GOGC=100
       # One GC-visible processor. Alloy defaults GOMAXPROCS to the 4 cores on this Pi and
       # spawns a worker set to match, which is pure contention for a job this small on a box
@@ -171,7 +178,7 @@ services:
 
       # Watchtower
       - "com.centurylinklabs.watchtower.depends-on=docker-proxy"
-    # 128M is the containment cap, 40 MiB over the 88 MiB GOMEMLIMIT above so a spike is
+    # 128M is the containment cap, 24 MiB over the 104 MiB GOMEMLIMIT above so a spike is
     # collected rather than OOM-killed (96M was 24 MiB over the 72 MiB limit it paired with).
     # Startup under the 0.30 CPU cap takes minutes on this host (the binary is large and
     # arm64 decompression is slow); it is not a hang.
