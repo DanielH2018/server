@@ -34,7 +34,7 @@ _DEFAULT_TIMEOUT_S = 10
 
 # The jobs the census must find. A Pi job renamed or moved out of the static block would
 # otherwise leave `_pi_jobs()` empty and the loop below vacuously green.
-KNOWN_PI_JOBS = frozenset({"node-pi", "alloy-pi"})
+KNOWN_PI_JOBS = frozenset({"node-pi", "alloy-pi", "dockerd-pi", "containerd-pi"})
 
 _DURATION = re.compile(r"^(\d+)(ms|s|m|h)$")
 _UNIT_S = {"ms": 0.001, "s": 1, "m": 60, "h": 3600}
