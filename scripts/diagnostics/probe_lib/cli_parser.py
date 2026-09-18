@@ -252,11 +252,12 @@ def _build_parser():
         action="store_true",
         help="print the kubectl calls without making them",
     )
-    pi = sub.add_parser("pi", help="Pi glances API")
+    pi = sub.add_parser("pi", help="daniel-pi container view over one ssh")
     pi.add_argument(
         "subpath",
-        help="glances API path (e.g. fs, quicklook, mem, cpu), or `containers` for a "
-        "one-ssh docker inspect view of every container on the host",
+        choices=["containers"],
+        help="`containers`: a one-ssh docker inspect view of every container on the host "
+        "(the glances API this took until 2026-09-18 retired with glances, #2004)",
     )
     ct = sub.add_parser(
         "cert",

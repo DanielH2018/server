@@ -26,7 +26,7 @@ Subcommands:
     loki-query '<logql>'     Loki range query [--limit N] [--json] (cluster loki-homelab)
     alerts                   monitor-bridge DOWN history as episodes [--days N --check X --raw --json]
     scrutiny                 Disk SMART summary              (cluster scrutiny, both nodes)
-    pi <subpath>             Pi glances API, e.g. `pi fs`    (daniel-pi.lan:61208)
+    pi containers            every Pi container: state, health, networks (one ssh)
     cert <host[:port]>       Served TLS cert subj/dates [--sni NAME]
     health <service>         k8s rollout + recent-restart rollup (exit 0 = healthy)
                              [--docker inspects the Pi's container instead]
@@ -121,9 +121,9 @@ def main(argv=None):
     `health` and the handler-table subcommands answer directly from an API or from
     `docker inspect`/kubectl. `metric`/`loki-query` without `--json`/`--dry-run` use the
     formatted view; every other subcommand falls through to the streaming `curl` pipeline
-    built by `plan()`. `targets --pi` and `pi containers` are checked ahead of that fallback:
-    plain `targets` and every other `pi <subpath>` still stream, so only the Pi-scoped variants
-    need a real handler.
+    built by `plan()`. `targets --pi` and `pi` are checked ahead of that fallback: plain
+    `targets` still streams, and `pi` has no streaming form since its glances API retired
+    (#2004), so only these need a real handler.
     """
     argv = list(sys.argv[1:] if argv is None else argv)
     # Handled on raw argv, ahead of `_build_parser().parse_args`: the subparsers below are
@@ -155,7 +155,7 @@ def main(argv=None):
         return run_health(ns.container, docker=ns.docker, cluster=ns.cluster)
     if ns.cmd == "targets" and ns.pi:
         return run_pi_targets(ns)
-    if ns.cmd == "pi" and ns.subpath == "containers":
+    if ns.cmd == "pi":
         return run_pi_containers(ns)
     # Subcommands that answer from an API rather than streaming a shell pipeline. Each one is
     # `run_X(ns) -> int`, so the table is the whole dispatch — adding a subcommand is a parser

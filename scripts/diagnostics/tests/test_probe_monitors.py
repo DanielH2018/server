@@ -241,7 +241,7 @@ def test_every_interval_in_the_real_template_resolves_through_the_real_variables
 def test_pi_monitor_names_finds_at_least_the_known_daniel_pi_monitors():
     names = monitors.pi_monitor_names(REAL_STATIC_MONITORS_TEXT)
     # A frozenset a caller can name, not just a count — see CLAUDE.md's non-vacuity rule.
-    assert {"Daniel Pi Host", "Daniel Pi Glances", "Daniel Pi Recovery"} <= names
+    assert {"Daniel Pi Host", "Daniel Pi WG Easy", "Daniel Pi Recovery"} <= names
     assert len(names) >= 3
 
 

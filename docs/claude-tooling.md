@@ -12,7 +12,7 @@ Read-only homelab diagnostics, allow-listed (no prompt). It resolves the live co
 
 ```
 uv run python scripts/diagnostics/probe.py <targets | metric '<promql>' | loki-query '<logql>' |
-  alerts | monitors | kuma-drift | releases | scrutiny | pi <path> | cert <host> | health <svc> |
+  alerts | monitors | kuma-drift | releases | scrutiny | pi containers | cert <host> | health <svc> |
   ha <state|automation|get> …>
 ```
 
@@ -100,9 +100,7 @@ equivalent of the four cluster checks above, backed by `probe_lib/pi_plane.py`.
   set (`node-pi`, `alloy-pi`) is parsed from `k8s_pi_client_ip` static targets in claude-otel's
   `prometheus.yaml.j2` rather than hand-listed, so a renamed or added job needs no change here.
   A declared job absent from the live set is reported MISSING and fails the gate — dividing the
-  Pi's own live set by itself would repeat `monitors`' N/N-up mistake. glances carries no
-  Prometheus job anywhere in this repo (it is polled directly at `pi <path>`), and the output
-  says so rather than inventing one.
+  Pi's own live set by itself would repeat `monitors`' N/N-up mistake.
 - **`kuma-drift --pi`** — the same declared-vs-live reconciliation, scoped to daniel-pi's own
   monitors. The scope comes from each monitor's YAML `stringData` key in
   `static-monitors.yaml.j2` (`daniel-pi-host.json`, `monitor-bridge-pi.json`, …) carrying `pi`

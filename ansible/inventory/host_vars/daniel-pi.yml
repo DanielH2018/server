@@ -54,13 +54,14 @@ container_healthcheck_interval: 60s
 # image ships (its compose block carries timing and no `test:`, #1921). Templates fall back
 # to their own values (5-10s, 3) where these are unset. Detection latency worst-case =
 # 5 x (60s interval + 60s timeout)
-# = 10 min, against a 5-min Kuma monitor from outside for glances and wg-easy — the reason a
+# = 10 min, against a 5-min Kuma monitor from outside for wg-easy — the reason a
 # dead process is not the case this trades against: `restart: unless-stopped` covers that at
 # once, the healthcheck only covers a wedged-but-running one.
 container_healthcheck_timeout: 60s
 container_healthcheck_retries: 5
 containers_list:
-  # Read-only Docker socket proxy — serves Alloy's docker_sd log discovery and glances;
+  # Read-only Docker socket proxy — serves Alloy's docker_sd log discovery (glances read it too
+  # until it retired 2026-09-18);
   # the hardcoded docker-proxy-lifecycle sub-proxy (restart-only) serves autoheal.
   - name: docker-proxy
     use_authelia: false
@@ -75,11 +76,13 @@ containers_list:
     use_authelia: false
     networks:
       - proxy
-  - name: glances
-    port: 61208
-    use_authelia: false
-    networks:
-      - proxy
+  # glances retired 2026-09-18 (#2004). It held 66 MB of anonymous memory (7 MB resident,
+  # 59 MB in zram) on a 456 MB board that keeps 10-25 MB free — the largest single zram
+  # tenant — plus a containerd shim, for load/memory/disk facts node_exporter already
+  # exports on the `node-pi` scrape job. Its last reader, monitor-bridge's Pi Pressure
+  # check, reads those series now (PR #2038); its Kuma HTTP monitor went with it. Container
+  # and image removed by hand at retire time, like dozzle below. Role in
+  # roles/containers/archive/.
   # dozzle retired 2026-08-29. It was a live-tail UI for container logs, and promtail has
   # shipped this host's container logs to loki-homelab since the slice-7 work — so Grafana
   # already answers what dozzle answered, with history dozzle never had. What it still cost

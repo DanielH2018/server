@@ -1,4 +1,24 @@
-# glances — System resource monitor
+# glances — System resource monitor (RETIRED 2026-09-18)
+
+> **Archived, not deployed.** No `containers_list` entry references this role, so nothing
+> renders or deploys it. It is kept for the Compose plumbing, the way `archive/dozzle` is.
+>
+> **Why it went** (#2004). It held 66 MB of anonymous memory — 7 MB resident, 59 MB in
+> zram, the largest single zram tenant — plus a containerd shim, on a 456 MB board that
+> keeps 10-25 MB free, for load/memory/disk facts `node_exporter` already exports on the
+> cluster's `node-pi` scrape job. Its last reader, monitor-bridge's Pi Pressure check,
+> reads those series since PR #2038; the `Daniel Pi Glances` Kuma HTTP monitor and
+> `probe.py pi <path>` went with it. The Pi memory budget review of 2026-09-18 has the
+> numbers.
+>
+> **Its host artifacts were removed imperatively** at retire time — the container, its
+> image and its `containers/glances/` Compose project directory. Nothing in Ansible
+> recreates them.
+>
+> **To revive it**, restore the `containers_list` entry in `daniel-pi.yml`, move this role
+> back to `roles/containers/`, and re-add `glances` to `EXPECTED_PUBLISHERS` in
+> `ansible/tests/services/test_pi_publishing_containers.py`. The text below describes the
+> role as it was deployed.
 
 See repo-root `CLAUDE.md` for shared conventions.
 

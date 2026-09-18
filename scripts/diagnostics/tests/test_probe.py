@@ -7,8 +7,6 @@ argparse surface in `cli_parser`, and the formatters each `run_*` prints through
 builds for each streaming subcommand.
 """
 
-import re
-
 import pytest
 
 from diagnostics.probe_lib import arr
@@ -51,23 +49,6 @@ def test_scrutiny_url():
         core.scrutiny_url("https://scrutiny.example")
         == "https://scrutiny.example/api/summary"
     )
-
-
-def test_pi_url():
-    assert core.pi_url("fs") == "http://daniel-pi.lan:61208/api/4/fs"
-
-
-def test_pi_ip_reads_real_inventory():
-    # hosts.ini is plaintext, not a secret — same class of dead-path bug as
-    # test_verify_automations_path_exists below: a wrong path or regex would only ever
-    # be caught by opening the real file.
-    ip = core.pi_ip()
-    assert re.match(r"^\d+\.\d+\.\d+\.\d+$", ip), ip
-
-
-def test_pi_resolve_pins_the_lan_ip(monkeypatch):
-    monkeypatch.setattr(core, "pi_ip", lambda: "10.0.0.139")
-    assert core.pi_resolve() == "daniel-pi.lan:61208:10.0.0.139"
 
 
 def test_curl_argv():
@@ -219,6 +200,15 @@ def test_monitors_subcommand_parses():
     p = cli_parser._build_parser()
     ns = p.parse_args(["monitors"])
     assert ns.cmd == "monitors"
+
+
+def test_pi_subcommand_accepts_only_containers():
+    # `pi fs`/`pi mem` streamed the glances API until it retired (#2004); a stale habit must
+    # fail at the parser rather than reach a curl that no longer exists.
+    p = cli_parser._build_parser()
+    assert p.parse_args(["pi", "containers"]).subpath == "containers"
+    with pytest.raises(SystemExit):
+        p.parse_args(["pi", "fs"])
 
 
 def test_format_loki_prints_lines_oldest_first_across_streams():

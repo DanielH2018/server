@@ -70,33 +70,6 @@ def test_plan_scrutiny_uses_cluster_endpoint_with_vip_pin(
     ]
 
 
-def test_plan_pi_does_not_resolve_docker():
-    # Pi glances is reached by hostname, so the container resolver must NOT be consulted.
-    def boom(_):
-        raise AssertionError("pi must not resolve a container IP")
-
-    stages = curl_pipeline.plan(
-        ["pi", "fs"], boom, pi_resolve=lambda: "daniel-pi.lan:61208:10.0.0.139"
-    )
-    assert stages == [
-        core.curl_argv(
-            "http://daniel-pi.lan:61208/api/4/fs",
-            resolve="daniel-pi.lan:61208:10.0.0.139",
-        )
-    ]
-
-
-def test_plan_pi_resolves_to_a_reachable_pin_not_dns():
-    # Regression guard: this host's resolver has no answer for daniel-pi.lan (a
-    # Pi-hole-only LAN name), so plan() must always carry a --resolve pin here — a bare
-    # curl_argv() with no pin is the pre-fix shape that died `Could not resolve host`.
-    stages = curl_pipeline.plan(
-        ["pi", "fs"], None, pi_resolve=lambda: "daniel-pi.lan:61208:10.0.0.139"
-    )
-    assert "--resolve" in stages[0]
-    assert "daniel-pi.lan:61208:10.0.0.139" in stages[0]
-
-
 def test_plan_cert_defaults_port_and_sni_to_host(fake_resolve):
     stages = curl_pipeline.plan(["cert", "homepage.daniel-hunter.com"], fake_resolve)
     assert stages == cli_parser.cert_stages(

@@ -75,13 +75,6 @@ def test_format_pi_targets_flags_a_declared_job_gone_missing():
     assert "alloy-pi: MISSING" in text
 
 
-def test_format_pi_targets_notes_glances_is_not_scraped():
-    declared = {"node-pi", "alloy-pi"}
-    active = [_target("node-pi"), _target("alloy-pi")]
-    text, _ = pi_plane.format_pi_targets(declared, active)
-    assert "glances" in text.lower()
-
-
 def test_pi_containers_argv_is_a_single_ssh_call():
     argv = pi_plane.pi_containers_argv()
     assert argv[0] == "ssh"
