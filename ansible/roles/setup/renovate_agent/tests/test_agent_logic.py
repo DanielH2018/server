@@ -178,16 +178,91 @@ class TestConfigGuard:
     Discord post exists to carry the reason.
     """
 
-    def test_a_complete_config_is_clean(self, tmp_path, monkeypatch) -> None:
+    def test_a_complete_config_is_clean(self, tmp_path) -> None:
         cfg = tmp_path / "config.env"
         cfg.write_text("REPO=o/r\nREPO_DIR=/repo\nPROMPT_FILE=/p.txt\n")
-        monkeypatch.setattr(renovate_agent, "CONFIG", str(cfg))
-        monkeypatch.setattr(renovate_agent, "open_prs", lambda repo: [])
-        assert renovate_agent.main() == 0
+        assert renovate_agent.main(_tools(_FakeHost(prs=[])), str(cfg)) == 0
 
-    def test_a_missing_key_is_flagged_by_name(self, tmp_path, monkeypatch) -> None:
+    def test_a_missing_key_is_flagged_by_name(self, tmp_path) -> None:
         cfg = tmp_path / "config.env"
         cfg.write_text("REPO=o/r\n")
-        monkeypatch.setattr(renovate_agent, "CONFIG", str(cfg))
         with pytest.raises(RuntimeError, match="REPO_DIR, PROMPT_FILE"):
-            renovate_agent.main()
+            renovate_agent.main(config_path=str(cfg))
+
+
+class _FakeHost:
+    """Answers every process `main()` reaches before it would spend a session.
+
+    `prs` is what `gh pr list` returns; `ahead` is what `rev-list --count` says the run
+    branch holds beyond origin/master, and `contained` whether `merge-tree` reproduces
+    master's tree for it. The run worktree is always registered and clean.
+    """
+
+    def __init__(self, prs: list[int], ahead: int = 0, contained: bool = False) -> None:
+        self.prs = prs
+        self.ahead = ahead
+        self.contained = contained
+        self.posts: list[str] = []
+
+    def run(self, argv, cwd=None, timeout=120):
+        if argv[0] == "gh":
+            return 0, json.dumps(
+                [
+                    {"number": n, "title": f"Update dep {n}", "url": f"u/{n}"}
+                    for n in self.prs
+                ]
+            )
+        if "list" in argv and "--porcelain" in argv:
+            return (
+                0,
+                f"worktree {argv[2]}/.claude/worktrees/renovate-auto\nHEAD abc\n\n",
+            )
+        if "status" in argv:
+            return 0, ""
+        if "rev-list" in argv:
+            return 0, f"{self.ahead}\n"
+        if "rev-parse" in argv:
+            return 0, "0123abcd\n"
+        if "merge-tree" in argv:
+            return 0, "0123abcd\n" if self.contained else "89abcdef\n"
+        raise AssertionError(
+            f"main() reached a process this test does not answer: {argv}"
+        )
+
+    def discord_post(self, webhook, text, ua, log=None):
+        self.posts.append(text)
+        return True
+
+
+def _tools(host: _FakeHost) -> renovate_agent.AgentTools:
+    return renovate_agent.AgentTools(
+        run=host.run, discord_post=host.discord_post, read_file=lambda path: ""
+    )
+
+
+class TestSkipExitCodes:
+    """The Alive beat is the unit's ExecStartPost, so it fires on any exit 0 — including a
+    skip that means the tree is stuck. That laundered five daily skips behind a green tile
+    from 2026-09-14 (#2014). A blocked tree exits non-zero: no beat, and OnFailure pages. The
+    quiet no-PRs skip is the healthy steady state and keeps beating.
+    """
+
+    def _cfg(self, tmp_path) -> str:
+        (tmp_path / ".claude" / "worktrees" / "renovate-auto").mkdir(parents=True)
+        cfg = tmp_path / "config.env"
+        cfg.write_text(f"REPO=o/r\nREPO_DIR={tmp_path}\nPROMPT_FILE=/p.txt\n")
+        return str(cfg)
+
+    def test_a_worktree_blocked_skip_is_flagged(self, tmp_path) -> None:
+        host = _FakeHost(prs=[1], ahead=1, contained=False)
+
+        rc = renovate_agent.main(_tools(host), self._cfg(tmp_path))
+
+        assert rc == renovate_agent.EXIT_WORKTREE_BLOCKED != 0
+        assert any("holds 1 commit(s) not on origin/master" in p for p in host.posts)
+
+    def test_an_empty_backlog_skip_is_clean(self, tmp_path) -> None:
+        host = _FakeHost(prs=[])
+
+        assert renovate_agent.main(_tools(host), self._cfg(tmp_path)) == 0
+        assert host.posts == []
