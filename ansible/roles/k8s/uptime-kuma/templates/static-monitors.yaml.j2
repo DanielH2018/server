@@ -52,12 +52,24 @@ stringData:
   # rejects that. The AutoKuma id stays `discord` so no monitor's notification_name_list moves,
   # and the name stays "Homelab Alerts" because monitor-bridge's Kuma Notification Delivery
   # check reads it out of Kuma's `Cannot send notification to <name>` line.
+  #
+  # The Liquid body is wrapped in Tera's raw block. AutoKuma runs EVERY entity through Tera
+  # before it parses it (autokuma/src/entity.rs, get_entity_from_settings — unconditional,
+  # `files.preprocess` gates only an earlier pass), and Tera reads Liquid's comment tag and
+  # its double-brace interpolations as its own syntax (so does this Jinja file, which is why
+  # neither is spelled out here): on 2026-09-18 the parse failed, AutoKuma treated the
+  # notification as undeclared and re-synced all 108 monitors with an empty notification
+  # list. Tera strips the raw markers and passes the content verbatim, so Kuma receives the
+  # Liquid unchanged. The markers are assembled from pieces so Jinja does not read them, and
+  # the two `set` lines sit at column 0 so trim_blocks leaves no indent behind.
+{% set tera_raw = '{%' ~ ' raw ' ~ '%}' %}
+{% set tera_endraw = '{%' ~ ' endraw ' ~ '%}' %}
   discord.json: |
     {
       "type": "notification",
       "name": "Homelab Alerts",
       "active": true,
-      "config": {"type": "webhook", "applyExisting": false, "webhookURL": "{{ monitor_discord_webhook_url }}", "webhookContentType": "custom", "webhookAdditionalHeaders": "{\"Content-Type\": \"application/json\"}", "webhookCustomBody": {{ lookup('file', playbook_dir + '/roles/k8s/uptime-kuma/files/discord-message.liquid') | to_json }}}
+      "config": {"type": "webhook", "applyExisting": false, "webhookURL": "{{ monitor_discord_webhook_url }}", "webhookContentType": "custom", "webhookAdditionalHeaders": "{\"Content-Type\": \"application/json\"}", "webhookCustomBody": {{ (tera_raw ~ lookup('file', playbook_dir + '/roles/k8s/uptime-kuma/files/discord-message.liquid') ~ tera_endraw) | to_json }}}
     }
   # Fans out to BOTH channels: the Discord dead-man's-switch below, plus the critical tier
   # (both backup targets, disks, SMART, SD, cert expiry, UPS) — a *degraded* Discord loses
