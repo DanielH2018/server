@@ -1,4 +1,4 @@
----
+---so a person is the review (#1939). A title whose parenthetical ENDS with `; k8s_autodeploy: false` after its own work order (`crowdsec bouncer plugin`, `meilisearch`, `karakeep time-tagger pip deps`) is a per-package rule on a denied role (#1963): the work order in front of the marker decides the handling — *When to stop and say so* below — and the marker only says who may land it |
 name: renovate-prs
 description: Work through the repo's open Renovate PRs — triage each by class, finish the half Renovate could not do, then merge and land. Use when asked to go through / review / clear the Renovate or dependency PRs, when one has sat open for days, when a bot PR's group name says `manual — ...`, or when a green Renovate PR turns out to bump only part of a pin (a 404 asset URL, a stale checksum, a version its runtime rejects).
 allowed-tools: Bash, Read, Edit, Write, Grep, Glob
@@ -269,6 +269,8 @@ closing summary so the count is visible over time.
 
 - The rule's parenthetical names work you cannot verify — an upgrade plan (`k3s control plane`),
   a DB format migration (`meilisearch`), a WAF component needing a deliberate redeploy
-  (`crowdsec bouncer plugin`). Report what the rule asks for and leave the PR open.
+  (`crowdsec bouncer plugin`). Report what the rule asks for and leave the PR open. The
+  `; k8s_autodeploy: false` those two also carry does not change this: it is the marker that
+  keeps the unattended `renovate_agent` off them (#1963), not a second work order.
 - The new version's release notes name a breaking change. Renovate does not read them; you do.
 - A landing hits a genuine hold — `CLAUDE.md` → *When to wait* governs, not this skill.

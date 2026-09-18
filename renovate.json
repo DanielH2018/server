@@ -379,7 +379,7 @@
       "minimumReleaseAge": "3 days"
     },
     {
-      "description": "NO automerge for an image bump in a role declaring `k8s_autodeploy: false` (issue #1886). The two automerge rules above say a machine may MERGE a k8s image bump; the deployer's denylist, derived from each role's own `k8s_autodeploy` flag by ansible/filter_plugins/k8s_autodeploy.py, says a machine may not APPLY one for these roles. Merging what nothing can apply moved the work to the drift monitor: Renovate merged authelia 4.39.23 (#1831) and 4.39.24 (#1862) unattended, the tick fast-forwarded each and applied nothing, and `Release Staleness Drift` paged for the hand deploy both times. So the automerge boundary now follows the denylist: a bump here opens as a `manual —` PR that the renovate-prs skill merges through land.sh, which deploys it from the merge commit. matchFileNames is the denylist spelled as paths, one `defaults/main.yml` per denied role, and ansible/tests/deploy/test_renovate_automerge_follows_the_autodeploy_denylist.py asserts the two are equal — flip a role's flag and the guard names the line to add or drop here. inventory/group_vars/all.yml is the one path here that is not a role's defaults (issue #1936): crowdsec_k8s_image lives there because traefik's and authelia's sidecars read it too and role defaults are invisible across roles, and the per-role rule left it automerging. A merged bump there is worse than a merged bump in a denied role's defaults, not better — the deployer routes an inventory change through its broad plane, which narrows the changed key to every role reading it (crowdsec, traefik, authelia, all three denied) and applies them with no denylist check. So the merge boundary is the only gate that pin has, and the same guard asserts that every `_image:` pin in group_vars belongs to a denied role; the day an eligible role's pin is hoisted there, the guard says so and this path has to be reconsidered. No matchUpdateTypes on purpose: the digest rule above automerged a denied role's digest re-push too, the hole test_k8s_autodeploy_denylist.py recorded as unenforced for tdarr. matchDatasources narrows the rule to container images, because the CrowdSec bouncer plugin pin shares traefik's defaults/main.yml and its own manual rule below must keep its group name. POSITION is load-bearing: this rule must sit AFTER the `k8s image {{depName}}` and digest rules whose automerge it overrides, and BEFORE the per-package manual rules, which override its groupName for the pins they own.",
+      "description": "NO automerge for an image bump in a role declaring `k8s_autodeploy: false` (issue #1886). The two automerge rules above say a machine may MERGE a k8s image bump; the deployer's denylist, derived from each role's own `k8s_autodeploy` flag by ansible/filter_plugins/k8s_autodeploy.py, says a machine may not APPLY one for these roles. Merging what nothing can apply moved the work to the drift monitor: Renovate merged authelia 4.39.23 (#1831) and 4.39.24 (#1862) unattended, the tick fast-forwarded each and applied nothing, and `Release Staleness Drift` paged for the hand deploy both times. So the automerge boundary now follows the denylist: a bump here opens as a `manual —` PR that the renovate-prs skill merges through land.sh, which deploys it from the merge commit. matchFileNames is the denylist spelled as paths, one `defaults/main.yml` per denied role, and ansible/tests/deploy/test_renovate_automerge_follows_the_autodeploy_denylist.py asserts the two are equal — flip a role's flag and the guard names the line to add or drop here. inventory/group_vars/all.yml is the one path here that is not a role's defaults (issue #1936): crowdsec_k8s_image lives there because traefik's and authelia's sidecars read it too and role defaults are invisible across roles, and the per-role rule left it automerging. A merged bump there is worse than a merged bump in a denied role's defaults, not better — the deployer routes an inventory change through its broad plane, which narrows the changed key to every role reading it (crowdsec, traefik, authelia, all three denied) and applies them with no denylist check. So the merge boundary is the only gate that pin has, and the same guard asserts that every `_image:` pin in group_vars belongs to a denied role; the day an eligible role's pin is hoisted there, the guard says so and this path has to be reconsidered. No matchUpdateTypes on purpose: the digest rule above automerged a denied role's digest re-push too, the hole test_k8s_autodeploy_denylist.py recorded as unenforced for tdarr. matchDatasources narrows the rule to container images, because the CrowdSec bouncer plugin pin shares traefik's defaults/main.yml and its own manual rule below must keep its group name. POSITION is load-bearing: this rule must sit AFTER the `k8s image {{depName}}` and digest rules whose automerge it overrides, and BEFORE the per-package manual rules, which override its groupName for the pins they own. A per-package rule whose pin a denied role owns (the bouncer plugin in traefik, meilisearch and the time-tagger deps in karakeep) carries `k8s_autodeploy: false` in its own groupName, because that phrase in the PR title is what keeps the unattended renovate_agent off it (issue #1963) — the same guard asserts it is present exactly where a denied role owns the pin.",
       "matchManagers": [
         "custom.regex"
       ],
@@ -475,7 +475,7 @@
       "matchPackageNames": [
         "getmeili/meilisearch"
       ],
-      "groupName": "meilisearch (manual upgrade \u2014 DB format migration)",
+      "groupName": "meilisearch (manual upgrade \u2014 DB format migration; k8s_autodeploy: false)",
       "automerge": false
     },
     {
@@ -504,14 +504,14 @@
       "automerge": false
     },
     {
-      "description": "CrowdSec bouncer Traefik plugin \u2014 a WAF-enforcement component whose bump requires a deliberate traefik redeploy (CI can't prove the plugin loads). Own group, no automerge, so it overrides the custom.regex non-major automerge rule above and gets an operator review.",
+      "description": "CrowdSec bouncer Traefik plugin \u2014 a WAF-enforcement component whose bump requires a deliberate traefik redeploy (CI can't prove the plugin loads). Own group, no automerge, so it overrides the custom.regex non-major automerge rule above and gets an operator review. The `k8s_autodeploy: false` in the groupName is not decoration: traefik is a denied role, and that phrase in the PR title is what keeps the unattended renovate_agent from landing the redeploy (issue #1963).",
       "matchDatasources": [
         "github-releases"
       ],
       "matchPackageNames": [
         "maxlerebourg/crowdsec-bouncer-traefik-plugin"
       ],
-      "groupName": "crowdsec bouncer plugin (manual \u2014 needs traefik redeploy)",
+      "groupName": "crowdsec bouncer plugin (manual \u2014 needs traefik redeploy; k8s_autodeploy: false)",
       "automerge": false
     },
     {
@@ -558,7 +558,7 @@
         "beautifulsoup4",
         "loguru"
       ],
-      "groupName": "karakeep time-tagger pip deps (manual \u2014 track the pinned app)",
+      "groupName": "karakeep time-tagger pip deps (manual \u2014 track the pinned app; k8s_autodeploy: false)",
       "automerge": false
     },
     {
