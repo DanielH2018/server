@@ -64,10 +64,11 @@ spec:
     # Origin Pulls is #1990, on top of this.
     #
     # ETP=Local preserves the source address on the VIP path, so each ipBlock matches what the
-    # client really is. The LAN range covers the WireGuard clients as well: wg-easy on daniel-pi
-    # runs its default PostUp, which masquerades `wg_client_subnet` to the Pi's LAN address
-    # (docker-compose.yml.j2 sets no WG_POST_UP); the wg_client_subnet entry is the un-NAT'd
-    # shape, kept so a PostUp change does not lock WireGuard out.
+    # client really is. A WireGuard client arrives in one of two shapes, and both are listed:
+    # as the Pi's LAN address if wg-easy's PostUp masquerades `wg_client_subnet` (the Pi's
+    # docker-compose.yml.j2 sets no WG_POST_UP, so the image default decides), or as its own
+    # 10.8.0.x address if it routes. Neither shape was measured; listing both is what makes
+    # the measurement unnecessary.
     #
     # The pod CIDR here is the WHOLE /16 on purpose, which docs/networkpolicy-default-deny.md
     # ("Correction carried into this design") forbids for the baseline. There a /16 readmits
