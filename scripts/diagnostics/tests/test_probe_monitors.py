@@ -103,6 +103,58 @@ def test_kuma_drift_calls_a_push_monitor_pending_inside_its_own_interval():
     assert "declared, not live" not in text
 
 
+TEMPLATED_INTERVAL_SAMPLE = """\
+stringData:
+  root-disk.json: |
+    {"type": "push", "name": "Root Disk", "interval": 60, "push_token": "x"}
+  drill.json: |
+    {"type": "push", "name": "etcd Restore Drill (full)", "interval": {{ etcd_drill_full_kuma_interval_s }}, "push_token": "x"}
+  ups.json: |
+    {"type": "push", "name": "UPS Secondary", "interval": {{ nut_host_watchdog_interval_minutes | default(10) * 60 * 2 }}, "push_token": "x"}
+  orphan.json: |
+    {"type": "push", "name": "Unresolvable", "interval": {{ no_such_variable }}, "push_token": "x"}
+"""
+TEMPLATED_INTERVAL_VARS = {"etcd_drill_full_kuma_interval_s": 3024000}
+
+
+def test_parse_declared_monitors_evaluates_a_templated_interval_against_the_variables():
+    # A digits-only match read `{{ etcd_drill_full_kuma_interval_s }}` as None, so the monthly
+    # drill tile could never be pending and read as drift after every Kuma restart (#2019).
+    declared = monitors.parse_declared_monitors(
+        TEMPLATED_INTERVAL_SAMPLE, variables=TEMPLATED_INTERVAL_VARS
+    )
+    assert declared["etcd Restore Drill (full)"]["interval"] == 3024000
+    # An expression, not a name: evaluated the way Ansible would write it, filter first.
+    assert declared["UPS Secondary"]["interval"] == 1200
+    assert declared["Root Disk"]["interval"] == 60
+
+
+def test_an_unresolvable_templated_interval_reads_as_none_and_files_as_missing():
+    # Fail loud: a tile whose interval this check cannot read must not be excused as pending.
+    declared = monitors.parse_declared_monitors(
+        TEMPLATED_INTERVAL_SAMPLE, variables=TEMPLATED_INTERVAL_VARS
+    )
+    assert declared["Unresolvable"]["interval"] is None
+    text, code = monitors.format_kuma_drift(declared, {"Root Disk"}, 30)
+    assert code == 1
+    assert "Unresolvable: declared, not live" in text
+
+
+def test_kuma_drift_calls_a_templated_interval_tile_pending_inside_its_interval():
+    declared = monitors.parse_declared_monitors(
+        TEMPLATED_INTERVAL_SAMPLE, variables=TEMPLATED_INTERVAL_VARS
+    )
+    del declared["Unresolvable"]
+    # 3024000s is 35 days; a Kuma pod a day old is well inside it. Past the literal tile's own
+    # 60s+slack, so the literal one is the drift and the templated one is not — the pair that
+    # shows the templated tile is classified by its interval, not waved through.
+    text, code = monitors.format_kuma_drift(declared, set(), 86400)
+    assert code == 1
+    assert "etcd Restore Drill (full): no beat due yet (3024000s interval)" in text
+    assert "UPS Secondary: declared, not live" in text
+    assert "Root Disk: declared, not live" in text
+
+
 def test_kuma_drift_treats_every_type_as_pending_after_a_restart():
     # The first live run of this check reported 58 monitors missing 88 seconds into a rollout.
     # Kuma's exporter emits a monitor only after it beats, and that applies to http/port/dns
@@ -171,6 +223,19 @@ def test_kuma_drift_reports_drift_when_the_gate_is_set_but_the_monitor_is_absent
 
 with open(monitors.STATIC_MONITORS_PATH) as _f:
     REAL_STATIC_MONITORS_TEXT = _f.read()
+
+
+def test_every_interval_in_the_real_template_resolves_through_the_real_variables():
+    # The fixture tests above hand in their own variables; this is the proof the default
+    # loader reaches the values the template actually reads — a group_var, a role default and
+    # a nut_host default behind `| default()`. A loader that returned {} would leave every
+    # templated tile at None and the fixture tests green.
+    declared = monitors.parse_declared_monitors(REAL_STATIC_MONITORS_TEXT)
+    assert declared["etcd Restore Drill (full)"]["interval"] == 3024000
+    assert declared["Root Disk"]["interval"] == 1200  # kuma_bridge_push_interval
+    assert declared["UPS Secondary (daniel-box)"]["interval"] == 1200
+    unresolved = sorted(n for n, s in declared.items() if s["interval"] is None)
+    assert unresolved == [], f"intervals this check cannot read: {unresolved}"
 
 
 def test_pi_monitor_names_finds_at_least_the_known_daniel_pi_monitors():
