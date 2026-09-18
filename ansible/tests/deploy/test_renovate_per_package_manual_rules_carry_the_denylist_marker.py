@@ -13,8 +13,13 @@ role owns ends its parenthetical with the marker, and one whose pin no denied ro
 not, so a role promoted out of the denylist drops the marker with it. Who owns a pin is read
 from `customManagers`: a manager with a `depNameTemplate` names its package outright, so every
 file it matches owns the pin; one without derives the name from the file, so the file must
-carry the package literally (the `_image:` pins). `test_renovate_agent_unit.py` reads the
-marker out of every such groupName and pins that the prompt names the same phrase.
+carry the package literally (the `_image:` pins). Renovate's built-in `dockerfile` manager
+reads the n8n Dockerfiles with no entry in `customManagers`, so it is spelled here. A build role that renders no workload of
+its own hands the bump to the role that runs what it builds — `land.sh` widens `n8n-images`
+to `n8n-images,n8n` through `_BUILD_ROLL_COUPLINGS` in `deploy_changes.py` — so ownership
+follows that same coupling, and a pin no role owns fails rather than passing as "not denied".
+`test_renovate_agent_unit.py` reads the marker out of every such groupName and pins that the
+prompt names the same phrase.
 
 Run: uv run pytest ansible/tests/deploy/test_renovate_per_package_manual_rules_carry_the_denylist_marker.py
 """
@@ -23,8 +28,9 @@ import json
 import re
 from pathlib import Path
 
-from _autodeploy import _K8S_ROLES, _denylist
+from _autodeploy import _denylist
 from _helpers import REPO
+from deploy_changes import expand_build_couplings
 from test_renovate_automerge_follows_the_autodeploy_denylist import (
     MANUAL_GROUP_PREFIX,
     find_rule,
@@ -37,12 +43,24 @@ DENYLIST_MARKER = "k8s_autodeploy: false"
 # The per-package groups the census must find owning a denied role's pin, so a rename that
 # drops one out of the census fails as a missing member rather than passing over nothing.
 KNOWN_DENIED_PER_PACKAGE_GROUPS = frozenset(
-    {"crowdsec bouncer plugin", "meilisearch", "karakeep time-tagger pip deps"}
+    {"crowdsec bouncer plugin", "meilisearch", "karakeep time-tagger pip deps", "n8n"}
 )
 
 
-def _k8s_relative_files(roles_dir: Path = _K8S_ROLES) -> list[str]:
-    """Every file under the k8s roles tree, as the repo-relative path Renovate matches on."""
+_ROLES = REPO / "ansible" / "roles"
+
+# Renovate's built-in dockerfile manager, which `customManagers` does not list: its second
+# default pattern is what reaches `templates/Dockerfile*.j2`. Content-derived, like the
+# `_image:` manager.
+BUILTIN_MANAGERS = [{"managerFilePatterns": ["/(^|/)[Dd]ockerfile[^/]*$/"]}]
+
+
+def _role_relative_files(roles_dir: Path = _ROLES) -> list[str]:
+    """Every file under `ansible/roles/`, as the repo-relative path Renovate matches on.
+
+    Every plane, not just k8s: a setup-plane pin (sops, k3s, coredns) must map to its own
+    role so the guard can tell "eligible" from "unmappable".
+    """
     return [str(f.relative_to(REPO)) for f in roles_dir.rglob("*") if f.is_file()]
 
 
@@ -57,11 +75,16 @@ def _read(rel: str) -> str:
 
 
 def pin_owner_roles(
-    package: str, managers: list[dict], files: list[str], read=_read
+    package: str,
+    managers: list[dict],
+    files: list[str],
+    read=_read,
+    couple=expand_build_couplings,
 ) -> set[str]:
-    """The k8s roles whose files a custom manager reads `package` from."""
+    """The k8s roles whose files a custom manager reads `package` from, plus the roles a build
+    role among them rolls the result onto."""
     owners: set[str] = set()
-    for manager in managers:
+    for manager in managers + BUILTIN_MANAGERS:
         named = manager.get("depNameTemplate")
         if named is not None and named != package:
             continue
@@ -72,7 +95,7 @@ def pin_owner_roles(
                 if named is None and package not in read(rel):
                     continue
                 owners.add(Path(rel).parts[3])
-    return owners
+    return set(couple(owners))
 
 
 def per_package_manual_rules(rules: list[dict]) -> list[dict]:
@@ -101,6 +124,13 @@ def per_package_marker_problems(
             owners |= owners_by_package.get(package, set())
         denied = sorted(owners & denylist)
         carries = DENYLIST_MARKER in group
+        if not owners:
+            problems.append(
+                f"{group!r} matches {rule['matchPackageNames']} but no manager reads that "
+                "pin from a role — an unmappable pin cannot be argued as eligible; find its "
+                "reader or drop the rule"
+            )
+            continue
         if denied and not carries:
             problems.append(
                 f"{group!r} owns a pin in denied role(s) {denied} but its groupName omits "
@@ -120,7 +150,7 @@ def _renovate() -> dict:
 
 
 def _owners_by_package(config: dict) -> dict[str, set[str]]:
-    files = _k8s_relative_files()
+    files = _role_relative_files()
     return {
         package: pin_owner_roles(package, config["customManagers"], files)
         for rule in per_package_manual_rules(config["packageRules"])
@@ -167,6 +197,14 @@ def test_a_named_package_manager_maps_the_pin_to_every_file_it_matches() -> None
         "traefik"
     }
     assert pin_owner_roles("vendor/other", managers, files, read=lambda _: "") == set()
+
+
+def test_a_build_role_pin_is_owned_by_the_role_it_rolls_onto_too() -> None:
+    """n8n-images renders no workload; land.sh deploys `n8n-images,n8n`, so n8n owns the pin."""
+    files = ["ansible/roles/k8s/n8n-images/templates/Dockerfile.j2"]
+    assert pin_owner_roles(
+        "n8nio/n8n", [], files, read=lambda _: "FROM n8nio/n8n:1.0\n"
+    ) == {"n8n-images", "n8n"}
 
 
 def test_a_content_derived_manager_maps_the_pin_only_where_the_file_names_it() -> None:
@@ -218,6 +256,12 @@ def test_a_denied_owner_whose_rule_omits_the_marker_is_flagged() -> None:
         rules, {"vendor/plugin": {"traefik"}}, _DENYLIST
     )
     assert len(problems) == 1 and "['traefik']" in problems[0], problems
+
+
+def test_a_pin_no_role_owns_is_flagged() -> None:
+    rules = _rule_set("plugin (manual — finish it)")
+    problems = per_package_marker_problems(rules, {}, _DENYLIST)
+    assert len(problems) == 1 and "no manager reads" in problems[0], problems
 
 
 def test_a_promoted_owner_whose_rule_still_carries_the_marker_is_flagged() -> None:

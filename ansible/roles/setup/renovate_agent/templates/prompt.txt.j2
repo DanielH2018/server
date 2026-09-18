@@ -26,7 +26,7 @@ Stop conditions, which are outcomes and not failures:
 - A PR whose new version you cannot verify actually took effect after landing.
 - A PR whose title carries `k8s_autodeploy: false`, wherever in the parenthetical it sits —
   the denylist rule leads with it, and a per-package rule ends with it after its own work
-  order (the crowdsec bouncer plugin, meilisearch, karakeep's time-tagger deps). That phrase
+  order (the crowdsec bouncer plugin, meilisearch, karakeep's time-tagger deps, n8n). That phrase
   is not a work order for you, and neither is the one in front of it: it marks a role whose
   failed deploy the health gate cannot see (authelia's middleware answers before the backend,
   traefik's outage leaves the host probes green), so the review its denial asks for is a

@@ -81,7 +81,8 @@ the caps or the schedule cannot quietly widen it.
   `ansible/tests/setup/test_renovate_agent_unit.py` pins that the prompt names the same
   marker the rule's `groupName` carries. The denylist rule leads its parenthetical with the
   marker; a per-package rule whose pin a denied role owns ends its own with it (the crowdsec
-  bouncer plugin in traefik, meilisearch and the time-tagger deps in karakeep, #1963), because
+  bouncer plugin in traefik, meilisearch and the time-tagger deps in karakeep, n8n through the
+  n8n-images build coupling, #1963), because
   those rules override the denylist rule's groupName and the title is the only thing the
   prompt can read. `ansible/tests/deploy/test_renovate_automerge_follows_the_autodeploy_denylist.py`
   asserts the marker sits on exactly the per-package rules whose pin a denied role owns.
