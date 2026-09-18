@@ -27,9 +27,9 @@ boundary.
 
 This is NOT the fallback `_claude_guard.py` refuses to add. It never touches
 site-packages, it is built fresh in THIS pytest process and never written to disk, and it
-never reaches the hook's own runtime: `auto-approve-readonly.sh` /
-`auto-approve-remote-ssh.sh` each exec a fresh `uv run --no-sync python <script>.py`
-subprocess per command, which starts with its own `sys.modules` and never sees anything
+never reaches the hook's own runtime: `auto-approve-readonly.sh` execs a fresh
+`uv run --no-sync python <script>.py` subprocess per command, which starts with its own
+`sys.modules` and never sees anything
 this conftest did. A host missing the real deploy still gets `_claude_guard.py`'s hard
 `ImportError` the moment Claude Code actually runs the hook; only this test session is
 padded, and only when the real package is unreachable from it.

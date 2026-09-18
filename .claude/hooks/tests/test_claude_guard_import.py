@@ -48,7 +48,7 @@ _runnable = pytest.mark.skipif(
 def test_deployed_import_reaches_both_trusted_hosts():
     """Run the real invocation path: `uv run python`, hooks dir on the path via PYTHONPATH.
 
-    This is the shape `auto-approve-remote-ssh.sh` actually runs under — `cd
+    This is the shape `auto-approve-readonly.sh` actually runs under — `cd
     /home/ubuntu/server && exec uv run --no-sync --quiet python <hooks-dir>/<script>.py`,
     which puts the hooks dir at `sys.path[0]` because that is where the invoked script lives.
     `python -c` has no script file, so `sys.path[0]` is the cwd instead; PYTHONPATH is what
@@ -148,7 +148,6 @@ def test_the_hook_fails_open_when_the_deploy_is_missing(tmp_path):
             "--quiet",
             "python",
             str(HOOKS / "auto-approve-readonly.py"),
-            "--permission-request",
         ],
         cwd=REPO,
         env=env,
@@ -177,24 +176,9 @@ def test_readonly_tables_ssh_objects_are_claude_guards_own():
 
 
 # --- #1982: a verb guarded on one side of the boundary is never bare on the other ----------------
-
-# The verbs `claude_guard/checks/remote.py` guards before its bare-table lookup: the
-# `_*_MUTATE` regexes, `_nvidia_smi_readonly`, and the ip/docker/systemctl sub-tables. A
-# literal, because the package exports no such set. A guard the package adds that this list
-# lacks is drift in the fail-closed direction (the package got stricter), so it is harmless.
-PACKAGE_GUARDED_VERBS = frozenset(
-    {
-        "journalctl",
-        "dmesg",
-        "ss",
-        "rg",
-        "sensors",
-        "nvidia-smi",
-        "ip",
-        "docker",
-        "systemctl",
-    }
-)
+# The verbs `claude_guard/checks/remote.py` guards before its bare-table lookup. Read from the
+# package (`REMOTE_GUARDED_VERBS`, exported for this test by dotfiles PR #521) rather than
+# copied: the literal this used to carry went stale the moment the package added a guard.
 
 
 def boundary_violations(handlers, tier1, remote_verbs, package_guarded):
@@ -247,19 +231,115 @@ def test_no_verb_is_guarded_on_one_side_of_the_boundary_and_bare_on_the_other():
     assert spec and spec.loader
     aar = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(aar)
-    # Non-vacuity: the literal names verbs the package really lists, so an empty result
-    # below cannot come from a renamed table.
+    from claude_guard.checks.remote import REMOTE_GUARDED_VERBS
+
+    # Non-vacuity: the guarded set the package exports must still carry the three regex
+    # guards that sit on bare-listed verbs, so an empty result below cannot come from a
+    # renamed or emptied export.
     assert {
         "journalctl",
         "rg",
         "sensors",
-    } <= PACKAGE_GUARDED_VERBS & _tables.REMOTE_READONLY_VERBS
+    } <= REMOTE_GUARDED_VERBS & _tables.REMOTE_READONLY_VERBS
     assert (
         boundary_violations(
             aar.HANDLERS,
             _readonly_tables.TIER1,
             _tables.REMOTE_READONLY_VERBS,
-            PACKAGE_GUARDED_VERBS,
+            REMOTE_GUARDED_VERBS,
+        )
+        == []
+    )
+
+
+# --- #1898: a guard that exists on both sides of the boundary reaches the same verdict ----------
+# The package's `checks/remote_guards.py` is a copy of this repo's `HANDLERS` guards for the
+# verbs both reach (git, sed, awk, find, sort, uniq, apt, dpkg, crontab, pipx, ...): this
+# side keeps its copy for LOCAL commands, the package holds the one that judges an ssh
+# stage. Nothing but this replay keeps the two copies agreeing. The vectors are the local
+# tables this suite already maintains, filtered to the shared verbs.
+
+
+def shared_guard_disagreements(argv_readonly, remote_argv_readonly, shared, vectors):
+    """Vectors (argv lists) on a shared guarded verb where the two sides disagree."""
+    bad = []
+    for argv in vectors:
+        if not argv or argv[0].rsplit("/", 1)[-1] not in shared:
+            continue
+        if bool(argv_readonly(argv)) != remote_argv_readonly(argv):
+            bad.append(argv)
+    return bad
+
+
+def test_shared_guard_check_is_flagged_when_the_sides_disagree():
+    def local(argv):
+        return "git" if argv == ["git", "status"] else None
+
+    def remote(argv):
+        return argv == ["git", "push"]
+
+    bad = shared_guard_disagreements(
+        local, remote, {"git"}, [["git", "status"], ["git", "push"], ["ls"]]
+    )
+    assert bad == [["git", "status"], ["git", "push"]]
+
+
+def test_shared_guard_check_is_clean_when_the_sides_agree():
+    def both(argv):
+        return argv == ["git", "status"]
+
+    assert (
+        shared_guard_disagreements(both, both, {"git"}, [["git", "status"], ["ls"]])
+        == []
+    )
+
+
+@pytest.mark.skipif(
+    not _CLAUDE_GUARD_DIR.is_dir(),
+    reason="the deployed claude_guard package is not present, so there is no copy to agree with",
+)
+def test_every_guard_carried_on_both_sides_reaches_the_same_verdict():
+    import shlex
+
+    from claude_guard.checks.remote import remote_argv_readonly
+    from claude_guard.checks.remote_guards import GUARDS
+
+    import test_auto_approve_readonly as suite
+
+    spec = importlib.util.spec_from_file_location(
+        "aar_1898", HOOKS / "auto-approve-readonly.py"
+    )
+    assert spec and spec.loader
+    aar = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(aar)
+
+    shared = set(aar.HANDLERS) & set(GUARDS)
+    # Non-vacuity: the port carried these thirteen, so an empty intersection is a rename.
+    assert {
+        "git",
+        "sed",
+        "awk",
+        "find",
+        "sort",
+        "uniq",
+        "apt",
+        "dpkg",
+        "crontab",
+        "pipx",
+    } <= shared
+    vectors = []
+    for command, _label in suite.APPROVE_LOCAL + suite.REJECT_LOCAL:
+        if any(ch in command for ch in "|;&$`()<>\n"):
+            continue  # a single argv only; the shapes above are classify()'s, not a guard's
+        try:
+            vectors.append(shlex.split(command))
+        except ValueError:
+            continue
+    on_shared = [v for v in vectors if v and v[0] in shared]
+    assert len(on_shared) >= 40, on_shared
+    assert (
+        shared_guard_disagreements(
+            aar._argv_readonly, remote_argv_readonly, shared, vectors
         )
         == []
     )

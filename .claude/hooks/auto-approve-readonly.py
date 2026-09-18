@@ -6,11 +6,6 @@ command line is read-only: a single read-only command, or a pipeline whose every
 stage is read-only. Anything else -> no output -> normal permission flow (an
 allow-list match or an interactive prompt).
 
-With --permission-request it answers a PermissionRequest instead, and only for
-commands that reach a homelab host over ssh (see SSH_HOSTS). That entry point
-exists because ask rules -- `Bash(ssh:*)` is one -- are evaluated whatever a
-PreToolUse hook returns, so the PreToolUse decision alone never reaches them.
-
 Safety model (deny by default):
   * Substitution is rejected outright -- $(...), backticks, ${...} -- because a
     quoted-looking argument can still expand/exec at the real shell.
@@ -31,7 +26,7 @@ import re
 import shlex
 import sys
 
-from _hook_common import emit_permissionrequest_allow, emit_pretooluse_decision
+from _hook_common import emit_pretooluse_decision
 
 # DECIDED: the underscore-prefixed names below cross a module boundary on purpose. The tables
 # and the tokenizer moved out of this file byte-for-byte, changing no verdict; making them
@@ -708,41 +703,26 @@ def classify(command):
     return "read-only: " + " | ".join(reasons)
 
 
-def classify_remote(command):
-    """Return classify()'s reason if the command line is read-only AND runs over ssh.
-
-    The PermissionRequest entry point is deliberately narrower than the PreToolUse one: it can
-    answer `ask` rules, so it only speaks for the traffic that needs it (`Bash(ssh:*)`) rather
-    than for every read-only command.
-
-    # DECIDED (#1864, #1898): this entry point stays beside the user-level judge hook. They
-    # differ in behaviour (this side walks a local pipeline and guards git/sed/awk/find/...
-    # over ssh; the judge does neither). docs/claude-shell-permissions.md has the long form.
-    """
-    reason = classify(command)
-    if not reason:
-        return None
-    stages = reason.split(": ", 1)[1].split(" | ")
-    return reason if any(s.startswith("ssh ") for s in stages) else None
-
-
 def main():
     """Read the hook payload from stdin and emit an allow decision for a read-only command.
 
-    Under `--permission-request`, allows a PermissionRequest command only when
-    `classify_remote` finds an `ssh` stage in it; otherwise allows a PreToolUse command
-    whenever `classify` recognizes it as read-only. Emits nothing, and always exits 0, when
-    no rule matches.
+    Allows a PreToolUse command whenever `classify` recognizes it as read-only. Emits
+    nothing, and always exits 0, when no rule matches.
+
+    # DECIDED (#1864, #1898): this file no longer answers PermissionRequest. The
+    # `--permission-request` entry point and its `auto-approve-remote-ssh.sh` shim stayed
+    # beside the user-level judge hook for one day (2026-09-18) because they walked a local
+    # pipeline around an ssh stage and guarded git/sed/awk/find/... over ssh, and the judge
+    # did neither. Both moved into the dotfiles package that day (dotfiles PR #521:
+    # `judge_segment`'s ssh/hl arm, `checks/remote_guards.py`), so the shim retired. The
+    # `_ssh` handler above stays: it serves THIS entry point, the PreToolUse one.
+    # docs/claude-shell-permissions.md has the long form.
     """
     try:
         data = json.load(sys.stdin)
     except Exception:
         return 0
     command = ((data.get("tool_input") or {}).get("command")) or ""
-    if "--permission-request" in sys.argv[1:]:
-        if classify_remote(command):
-            emit_permissionrequest_allow()
-        return 0
     reason = classify(command)
     if reason:
         emit_pretooluse_decision("allow", reason)

@@ -40,7 +40,6 @@ assert _spec and _spec.loader, "spec_from_file_location found no loader"
 _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
 classify = _mod.classify
-classify_remote = _mod.classify_remote
 
 
 _STAND_IN = getattr(sys.modules.get("claude_guard"), "__claude_guard_stand_in__", False)
@@ -355,57 +354,6 @@ def test_ssh_tests_skip_under_the_stand_in_and_run_against_the_deploy():
     else:
         assert not hasattr(guard, "__claude_guard_stand_in__")
         assert guard.__file__
-
-
-# classify_remote answers `ask` rules, so it must speak only for the traffic that
-# needs it. A read-only command with no ssh in it is already handled at PreToolUse.
-
-REMOTE_ONLY = [
-    ("ssh daniel-server docker ps", "plain remote command"),
-    ("ssh daniel-server docker ps | head -3", "ssh as one stage of a pipeline"),
-]
-
-LOCAL_NOT_REMOTE = [
-    ("ls -la", "read-only, but purely local"),
-    ("cat a.txt | grep foo", "read-only local pipeline"),
-    ("git status", "read-only local git"),
-]
-
-
-@needs_deployed_tables
-def test_permission_request_covers_remote_commands():
-    bad = [(c, l) for c, l in REMOTE_ONLY if classify_remote(c) is None]
-    assert not bad, "Expected a PermissionRequest allow:\n" + "\n".join(
-        f"  [{l}] {c!r}" for c, l in bad
-    )
-
-
-def test_permission_request_stays_out_of_local_commands():
-    bad = [(c, l) for c, l in LOCAL_NOT_REMOTE if classify_remote(c) is not None]
-    assert not bad, "PermissionRequest spoke for a non-ssh command:\n" + "\n".join(
-        f"  [{l}] {c!r} -> {classify_remote(c)!r}" for c, l in bad
-    )
-
-
-def _widened(table):
-    return [(c, l) for c, l in table if classify_remote(c) is not None]
-
-
-def _widen_report(bad):
-    return "PermissionRequest approved a rejected command:\n" + "\n".join(
-        f"  [{l}] {c!r} -> {classify_remote(c)!r}" for c, l in bad
-    )
-
-
-# Everything classify() refuses must stay refused here -- this entry point may
-# only ever narrow it.
-def test_permission_request_never_widens_classify():
-    assert not (bad := _widened(REJECT_LOCAL)), _widen_report(bad)
-
-
-@needs_deployed_tables
-def test_permission_request_never_widens_classify_over_ssh():
-    assert not (bad := _widened(REJECT_SSH)), _widen_report(bad)
 
 
 if __name__ == "__main__":
