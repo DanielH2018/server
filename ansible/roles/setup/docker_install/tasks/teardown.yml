@@ -91,6 +91,20 @@
     - docker.service
   become: true
 
+- name: Release the hold on the Docker engine packages before purging them
+  tags: [docker-teardown]
+  # The install half holds docker_engine_packages so no upgrade moves them under running
+  # containers (#1961). apt with `-y` refuses to change a held package unless told
+  # `--allow-change-held-packages`, so the purge below fails on a host that came through the
+  # install half unless the hold is released first. Guarded on the binary like the stop above:
+  # dpkg_selections fails on a name dpkg has never seen.
+  when: docker_install_dockerd_binary.stat.exists
+  ansible.builtin.dpkg_selections:
+    name: "{{ item }}"
+    selection: install
+  loop: "{{ docker_engine_packages }}"
+  become: true
+
 - name: Purge the Docker packages
   tags: [docker-teardown]
   # containerd.io is safe to purge alongside the engine: it provides /usr/bin/containerd,
@@ -99,14 +113,9 @@
   # daniel-server 2026-08-27, where the running shim resolved under /var/lib/rancher.
   # Purge rather than remove so /etc/docker (daemon.json, live-restore) goes too;
   # autoremove drops the pulled-in extras (pigz, rootless-extras, slirp4netns).
+  # docker_engine_packages plus rootless-extras, which arrives as a Recommends and is not held.
   ansible.builtin.apt:
-    name:
-      - docker-ce
-      - docker-ce-cli
-      - docker-ce-rootless-extras
-      - containerd.io
-      - docker-compose-plugin
-      - docker-buildx-plugin
+    name: "{{ docker_engine_packages + ['docker-ce-rootless-extras'] }}"
     state: absent
     purge: true
     autoremove: true

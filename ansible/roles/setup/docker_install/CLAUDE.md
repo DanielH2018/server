@@ -10,9 +10,51 @@ repo-root `CLAUDE.md` and `.claude/rules/docker.md` for conventions.
   `tasks/main.yml` is a dispatcher: `has_docker: true` runs `install.yml` (everything below),
   `has_docker: false` runs `teardown.yml`.
 - `uv run ansible-playbook ansible/initial_setup.yml --tags "docker_install"`.
-- **Granular tags:** `docker-repo` (APT repo + GPG + the cache-refresh/upgrade task),
-  `docker-engine` (install + v1-wrapper removal), `docker-group` (user resolution +
+- **Granular tags:** `docker-repo` (APT repo + GPG + the cache refresh),
+  `docker-engine` (install + hold + v1-wrapper removal), `docker-group` (user resolution +
   membership), `docker-daemon` (daemon.json + conditional restart), `docker-networks`.
+  `docker-engine-upgrade` is `never`-tagged: it runs only when named (below).
+
+## The engine is held; `--tags docker-engine-upgrade` is how it moves
+`docker_engine_packages` (`group_vars/all.yml`: docker-ce, -cli, containerd.io, the compose
+and buildx plugins) are `apt-mark hold`-equivalent on every `has_docker` host, set by
+`ansible.builtin.dpkg_selections` in two places: [[initial_setup]]'s `host-basics.yml`
+immediately BEFORE its dist-upgrade (this role runs after that role, so a hold set only here
+would land one upgrade too late), and `install.yml` right after the install, for the fresh
+host that had nothing to hold yet. Held, `apt-get upgrade`, `dist-upgrade` and
+unattended-upgrades all leave them alone.
+
+**Why.** On 2026-09-18 `initial_setup`'s dist-upgrade replaced containerd.io 2.2.4→2.3.5
+and docker-ce 29.5.3→29.8.1 on daniel-pi with every container running (#1961). `live-restore`
+kept the containers up across the dockerd restart, but it does nothing for the containerd
+shim binary swapped under them: autoheal's shim died (`failed to create TTRPC connection`),
+ssh refused connections for ~20 minutes on the 456 MB board, and docker-proxy sat
+`unhealthy` (haproxy 503) until a hand redeploy recreated it. The 503 is a stale
+bind-mount: docker-proxy mounts `/var/run/docker.sock` as a FILE, and a `docker.socket`
+restart gives that path a new inode (measured on the Pi afterwards: the socket's ctime equals
+`docker.socket`'s `ActiveEnterTimestamp`), which a running container never sees. The
+recovery cron (#1910) restarts a stopped container; it cannot recreate one.
+
+**The deliberate bump** (`tasks/engine-upgrade.yml`):
+```
+uv run ansible-playbook ansible/initial_setup.yml --tags docker-engine-upgrade -e target=daniel-pi
+```
+It refreshes the cache, simulates the upgrade with `--ignore-hold` and no-ops when nothing
+is pending; otherwise it stops every Compose project in `containers_list` (reverse order),
+unholds → `state: latest` → re-holds (in `always:`, so a failed apt run leaves the hold in
+place), starts `docker.socket`/`docker.service`, and brings every project back with
+`recreate: always` — the recreate the incident needed by hand, so docker-proxy gets the new
+socket. Expect the Pi's containers, wg-easy included, to be down for the length of the apt
+run. Run it from a LAN session, not over the tunnel.
+
+**Cost accepted:** a Docker security fix waits for that command. The engine's upgrade
+cadence is Renovate-free (no deb datasource is wired here); check `apt list --upgradable`
+over ssh when the Renovate PRs for the Pi's images come round.
+
+**Teardown unholds first.** apt with `-y` refuses to change a held package unless told
+`--allow-change-held-packages`, so `teardown.yml` releases the hold before its purge.
+ENFORCED by `ansible/tests/setup/test_docker_engine_is_held_before_apt_upgrade.py`: the
+hold set is the install set, the hold precedes the dist-upgrade, and the teardown unholds.
 
 ## Teardown (`tasks/teardown.yml`, `has_docker: false`)
 Reaps what an imperative Docker uninstall leaves behind: any `docker-compose-*.service`
@@ -34,10 +76,13 @@ services. Install without uninstall is a one-way door; this is the way back out.
 1. **APT repo (deb822):** installs prereqs (incl. `python3-debian`, required by
    `deb822_repository`), the Docker GPG key, and the Docker repo as a `.sources` file;
    removes any legacy one-line `docker.list` (the old `apt_repository` form is deprecated).
-2. **Install:** `docker-ce`, `-cli`, `containerd.io`, **and explicitly**
-   `docker-compose-plugin` + `docker-buildx-plugin` (the engine behind
+2. **Install:** `docker_engine_packages` — `docker-ce`, `-cli`, `containerd.io`, **and
+   explicitly** `docker-compose-plugin` + `docker-buildx-plugin` (the engine behind
    `community.docker.docker_compose_v2` and its `build: always` — declared so they can't be
-   dropped as auto-installed Recommends). Removes the deprecated linuxserver compose-v1 wrapper.
+   dropped as auto-installed Recommends) — then HOLDS them (previous section). `state:
+   present`, so an installed engine is never bumped by this task. Removes the deprecated
+   linuxserver compose-v1 wrapper. The cache-refresh task before it carried `upgrade: true`
+   until 2026-09-18 — a second full host upgrade on every run of this role; it refreshes only.
 3. **docker group:** resolves the *connecting* user (not `root` under `become`) via `id -un`
    and appends them to the `docker` group.
 4. **Daemon config** (`/etc/docker/daemon.json`): json-file log limits (10m × 3) +

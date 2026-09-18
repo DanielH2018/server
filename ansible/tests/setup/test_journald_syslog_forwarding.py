@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 from lib import yaml_fast
-from _helpers import ANSIBLE, SETUP_ROLES
+from _helpers import ALL_VARS, ANSIBLE, HOST_VARS, SETUP_ROLES
 
 ROLE = SETUP_ROLES / "initial_setup"
 SYSTEM_TUNING = ROLE / "tasks" / "system-tuning.yml"
@@ -94,7 +94,12 @@ def test_journald_forwards_at_info():
 
 
 def test_raising_the_forwarding_level_requires_the_syslog_filter():
-    """The two are one change. Forwarding at info without the filter is the expensive half."""
+    """The two are one change. Forwarding at info without the filter is the expensive half.
+
+    Read statically, so it holds wherever the filter block RUNS; the block skips on a host
+    with no rsyslog (`test_the_filter_is_gated_on_has_rsyslog`), where forwarding reaches
+    nothing and the filter has nothing to pair with.
+    """
     if setting(copy_content(SYSTEM_TUNING, JOURNALD_DEST), "MaxLevelSyslog") != "info":
         pytest.skip("forwarding is not raised, so the filter is not required")
     content = copy_content(SYSTEM_TUNING, FILTER_DEST)
@@ -115,6 +120,41 @@ def test_filter_exempts_every_facility_that_bypasses_journald():
         "this exists to deliver; kern and mail reach rsyslog directly (imklog, postfix's own "
         "socket) rather than through journald, so discarding them removes lines that are "
         "present today."
+    )
+
+
+def filter_block_when(path: Path):
+    """The `when` of the task or block that renders the rsyslog filter."""
+    for task in yaml_fast.safe_load(path.read_text()) or []:
+        if not isinstance(task, dict):
+            continue
+        for inner in iter_tasks(task.get("block")):
+            copy = inner.get("ansible.builtin.copy")
+            if isinstance(copy, dict) and copy.get("dest") == FILTER_DEST:
+                return task.get("when")
+    return None
+
+
+def test_the_filter_is_gated_on_has_rsyslog():
+    """optimize_pi masks rsyslog on daniel-pi, and a masked unit fails the restart handler.
+
+    The printed remediation for PR #1942 (`initial_setup.yml -e target=daniel-pi`) applied
+    every task and then failed at `Restart rsyslog`, so the recap read failed=1 for a run
+    whose changes were all live (#1946). The gate is a declared host flag, not a live check of
+    the unit, so the play never renders config for a logger the host has retired.
+    """
+    assert filter_block_when(SYSTEM_TUNING) == "has_rsyslog", (
+        "the block rendering the rsyslog filter is not `when: has_rsyslog`, so it runs on "
+        "daniel-pi, notifies Restart rsyslog, and fails the play on the masked unit"
+    )
+    assert yaml_fast.safe_load(ALL_VARS.read_text()).get("has_rsyslog") is True, (
+        "has_rsyslog has no true default in group_vars/all.yml -- an undefined flag fails "
+        "the when on every host rather than skipping only the Pi"
+    )
+    pi = yaml_fast.safe_load((HOST_VARS / "daniel-pi.yml").read_text())
+    assert pi.get("has_rsyslog") is False, (
+        "daniel-pi does not set has_rsyslog: false, so the filter block runs on the one host "
+        "whose rsyslog is masked"
     )
 
 
@@ -153,6 +193,19 @@ def test_dropping_an_exempt_facility_is_detected(dropped: str):
         f' and ($syslogfacility-text != "{f}")' for f in sorted(kept)
     )
     assert MUST_BE_EXEMPT - exempted_facilities(crippled) == {dropped}
+
+
+def test_an_ungated_filter_block_is_detected(tmp_path: Path):
+    ungated = tmp_path / "system-tuning.yml"
+    ungated.write_text(
+        "- name: filter\n"
+        "  block:\n"
+        "    - name: render\n"
+        "      ansible.builtin.copy:\n"
+        f"        dest: {FILTER_DEST}\n"
+        "        content: stop\n"
+    )
+    assert filter_block_when(ungated) is None
 
 
 def test_reordered_handlers_are_detected():

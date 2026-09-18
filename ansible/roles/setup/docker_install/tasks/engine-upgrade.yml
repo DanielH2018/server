@@ -1,0 +1,106 @@
+---
+# The deliberate Docker engine bump -- the only path that moves the held engine packages.
+# Reached by name only (`tags: [never, docker-engine-upgrade]` on the include in install.yml):
+#
+#   uv run ansible-playbook ansible/initial_setup.yml --tags docker-engine-upgrade -e target=daniel-pi
+#
+# Why a stop/upgrade/recreate cycle rather than an in-place upgrade: live-restore keeps
+# containers running across a dockerd restart, but a containerd.io upgrade replaces the
+# containerd shim binary under every running container, and a docker.socket restart gives
+# /var/run/docker.sock a new inode that a container bind-mounting the FILE never sees. On
+# 2026-09-18 the dist-upgrade did both on daniel-pi: autoheal's shim died and docker-proxy
+# sat unhealthy (503) until a hand redeploy recreated it (#1961). Stopping the projects
+# first means no shim is live when dpkg swaps it; the forced recreate afterwards gives every
+# container the new socket.
+#
+# The Compose projects are the ones deploy.yml renders under ~/server/containers/<name>, read
+# as the connecting user (become: false) the way deploy.yml runs them. A project that was
+# never deployed to this host fails the stop task before anything is upgraded.
+
+- name: Refresh the apt cache
+  ansible.builtin.apt:
+    update_cache: true
+    force_apt_get: true
+  become: true
+
+- name: Simulate the engine upgrade to learn whether one is pending
+  # --ignore-hold, or the simulation reports the held packages as kept back and nothing as
+  # upgraded. The summary line reads `N upgraded, ...`; only `0 upgraded` means no-op.
+  ansible.builtin.command:
+    argv: "{{ ['apt-get', '--simulate', '--ignore-hold', 'install', '--only-upgrade'] + docker_engine_packages }}"
+  become: true
+  changed_when: false
+  register: docker_install_engine_upgrade_sim
+
+- name: Record whether the engine has an upgrade pending
+  ansible.builtin.set_fact:
+    docker_install_engine_upgrade_pending: "{{ '0 upgraded,' not in docker_install_engine_upgrade_sim.stdout }}"
+
+- name: Report an engine that is already current
+  ansible.builtin.debug:
+    msg: "Docker engine packages are at their candidate versions; nothing stopped, nothing upgraded."
+  when: not docker_install_engine_upgrade_pending
+
+- name: Stop every Compose project before the engine moves
+  # Reverse list order, so a dependent stops before what it depends on.
+  community.docker.docker_compose_v2:
+    project_src: "/home/{{ sys_user }}/server/containers/{{ item.name }}"
+    state: stopped
+  loop: "{{ containers_list | filter_by_platform('docker') | reverse }}"
+  loop_control:
+    label: "{{ item.name }}"
+  become: false
+  when:
+    - docker_install_engine_upgrade_pending
+    - has_repo_checkout
+
+- name: Upgrade the held engine packages
+  become: true
+  when: docker_install_engine_upgrade_pending
+  block:
+    - name: Release the hold for the upgrade
+      ansible.builtin.dpkg_selections:
+        name: "{{ item }}"
+        selection: install
+      loop: "{{ docker_engine_packages }}"
+
+    - name: Upgrade the engine packages
+      ansible.builtin.apt:
+        name: "{{ docker_engine_packages }}"
+        state: latest
+        only_upgrade: true
+  always:
+    # Re-held whether the upgrade succeeded or not: a failed apt run must not leave the engine
+    # exposed to the next dist-upgrade.
+    - name: Hold the engine packages again
+      ansible.builtin.dpkg_selections:
+        name: "{{ item }}"
+        selection: hold
+      loop: "{{ docker_engine_packages }}"
+
+- name: Start the Docker daemon on the upgraded engine
+  ansible.builtin.systemd_service:
+    name: "{{ item }}"
+    state: started
+  loop:
+    - docker.socket
+    - docker.service
+  become: true
+  when: docker_install_engine_upgrade_pending
+
+- name: Recreate every Compose project on the upgraded engine
+  # `recreate: always`, not `auto`: the compose config-hash did not change, so `auto` would
+  # only start the stopped containers -- and the one that bind-mounts the daemon socket would
+  # come back holding the old inode. This is the recreate the incident needed by hand.
+  community.docker.docker_compose_v2:
+    project_src: "/home/{{ sys_user }}/server/containers/{{ item.name }}"
+    state: present
+    recreate: always
+    remove_orphans: true
+  loop: "{{ containers_list | filter_by_platform('docker') }}"
+  loop_control:
+    label: "{{ item.name }}"
+  become: false
+  when:
+    - docker_install_engine_upgrade_pending
+    - has_repo_checkout

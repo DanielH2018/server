@@ -26,6 +26,11 @@ ansible_ssh_timeout: 30
 # No GitOps auto-deploy path to the Pi (accepted, 2026-06-30) — memory-constrained and driven
 # manually over SSH. See gitops_deploy CLAUDE.md.
 has_gitops: false
+# optimize_pi masks rsyslog here (journald is the log of record; rsyslog's text logs landed in
+# the RAM-backed log2ram tmpfs), so initial_setup must not render its rsyslog filter or
+# notify `Restart rsyslog` -- a masked unit fails that handler and the recap reads failed=1
+# for a run whose changes are all live (#1946). See group_vars/all.yml for the default.
+has_rsyslog: false
 # Disk-backed swap for the 512 MB Zero 2 W. The RAM-resident zram (optimize_pi) can't add
 # real capacity, so heavy one-shot apt/dpkg steps (apt-show-versions cache build, `upgrade: dist`,
 # AIDE init) OOM-kill mid-transaction and corrupt the package DB. Created by the initial_setup

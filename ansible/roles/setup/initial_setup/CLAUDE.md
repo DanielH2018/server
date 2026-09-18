@@ -14,7 +14,7 @@ first** and scope with `--tags` when iterating.
 ## Granular tags (run one block without the whole role)
 Every task carries a block tag (placed right under `name:`), so e.g.
 `--tags fail2ban` or `--tags "ssh,firewall"` runs just that slice:
-`pi-swap` (Pi swapfile + watchdog-stop preamble) · `apt-upgrade` (the full dist-upgrade)
+`pi-swap` (Pi swapfile + watchdog-stop preamble) · `apt-upgrade` (the Docker-engine hold, then the full dist-upgrade — [[docker_install]]'s CLAUDE.md has why the hold sits here)
 · `packages` · `tooling` (uv + CLI tools) · `unattended-upgrades` · `sudo-timestamp` · `fail2ban` · `ssh`
 · `crons` (restart / prune / log-truncate / autoremove / dpkg-purge / infra-map; the prune cron
 also answers to `prune`, the daniel-box-only infrastructure-map refresh to `infra-map`, the
@@ -241,6 +241,12 @@ can't quietly widen it.
   `/etc/rsyslog.d/49-homelab-info-filter.conf` then discards info for every facility that
   reaches rsyslog *through* journald. Deploying either alone is a defect, so
   `ansible/tests/setup/test_journald_syslog_forwarding.py` pins them together.
+  **Except where there is no rsyslog to pair with.** The filter block is `when: has_rsyslog`
+  (`group_vars/all.yml`, default true; `host_vars/daniel-pi.yml` sets it false because
+  [[optimize_pi]] masks rsyslog there). A masked unit fails the `Restart rsyslog` handler, and
+  the printed Pi remediation for PR #1942 ended `failed=1` with every change live (#1946).
+  `MaxLevelSyslog=info` stays unconditional on the Pi: with no rsyslog listening, journald's
+  forwarding reaches nothing. Same test file, `test_the_filter_is_gated_on_has_rsyslog`.
 
   **Why they differ.** journald owns `/dev/log`, so rsyslog only ever sees what journald
   forwards, and `Store` and `Syslog` are applied to their sinks independently. `MaxLevelSyslog`

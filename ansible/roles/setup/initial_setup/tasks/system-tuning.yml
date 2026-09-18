@@ -54,6 +54,12 @@
 - name: Keep the info-level forwarding out of /var/log/syslog
   become: true
   tags: [journald]
+  # Only where rsyslog runs. optimize_pi MASKS rsyslog on daniel-pi (journald is the log of
+  # record there), and a masked unit fails the `Restart rsyslog` handler this block notifies,
+  # so a Pi run ended failed=1 with every change live (#1946). MaxLevelSyslog=info above stays
+  # unconditional: with no rsyslog listening, journald's forwarding reaches nothing and costs
+  # nothing, so the pairing invariant below holds wherever there is a second logger to pair.
+  when: has_rsyslog
   # The other half of MaxLevelSyslog=info above, and it must exist wherever that does.
   # Without it every info line on the host — k3s alone was 53% of pre-cap syslog — lands in
   # /var/log/syslog, which promtail ships to Loki as {job="syslog"}. Measured floor for that:

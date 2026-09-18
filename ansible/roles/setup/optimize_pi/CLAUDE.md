@@ -54,6 +54,9 @@ See repo-root `CLAUDE.md` for conventions.
    `wlan0` DOWN), and removes the stale ~9 MB `aideinit` log (`/var/log/aide/aide.log`; the
    weekly `aide --check` logs to journald, so that file is dead RAM). Reclaimed ~17 MB
    (2026-07-06). Masks, not purges, for rsyslog/wpa — a package update can't silently re-enable them.
+   The mask is why `host_vars/daniel-pi.yml` sets `has_rsyslog: false`: [[initial_setup]]'s
+   rsyslog filter block reads that flag and skips, since its `Restart rsyslog` handler fails
+   on a masked unit (#1946). Unmasking rsyslog here means flipping that flag too.
 7. **Log RAM budget** — `/var/log` is log2ram's 128 MB RAM-backed tmpfs (was 81% full
    2026-06-11): a Pi journald drop-in (`60-homelab-pi.conf`, `SystemMaxUse=32M`) overrides
    initial_setup's server-sized 1G cap, `ACCT_LOGGING="3"` cuts pacct retention from
