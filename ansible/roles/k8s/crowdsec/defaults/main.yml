@@ -14,7 +14,9 @@ crowdsec_k8s_metrics_port: 6060
 # middleware) queries. A failed deploy could open or close traffic unpredictably fleet-wide.
 # Also Recreate + PVC (the decision DB) on its own state, which compounds the risk but isn't
 # the primary reason. crowdsec_k8s_image itself lives in group_vars/all.yml (shared with the
-# traefik sidecar and bouncer middleware), not here — this declaration covers the role.
+# traefik sidecar and bouncer middleware), not here — this declaration covers the role, and
+# renovate.json's `manual — k8s_autodeploy: false` rule names group_vars/all.yml beside this
+# file so the pin's bump opens without automerge like any denied role's (#1936).
 k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
 k8s_autodeploy_reason: "platform — LAPI/AppSec/decision engine every bouncer queries; a failed deploy can open or close traffic unpredictably fleet-wide. COUPLING NOTE for a future promotion: crowdsec-db also holds LAPI machine registrations; a revert past an agent registration leaves that agent's stored password valid but the machine unknown"  # noqa var-naming[no-role-prefix]
 

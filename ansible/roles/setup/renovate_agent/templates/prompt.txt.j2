@@ -24,11 +24,20 @@ Stop conditions, which are outcomes and not failures:
 - A `manual — ` work order you cannot finish and verify — an upgrade plan, a DB format
   migration, release notes naming a breaking change.
 - A PR whose new version you cannot verify actually took effect after landing.
+- A PR whose title carries `k8s_autodeploy: false`. That parenthetical is not a work order
+  for you: it marks a role whose failed deploy the health gate cannot see (authelia's
+  middleware answers before the backend, traefik's outage leaves the host probes green), so
+  the review its denial asks for is a person, and your gated land is not that person. Do not
+  merge it, do not land it. Name it in the summary with the command an interactive session
+  runs: `./scripts/deploy_tools/land.sh --pr <n> --since <sha> --arm-merge --await-merge`.
 
-For every PR you leave open for a reason other than "ran out of budget", file a finding:
+For every PR you leave open for a reason other than "ran out of budget" or the
+`k8s_autodeploy: false` rule above, file a finding:
 `uv run python scripts/dev/findings.py open --title … --body-file … --severity … --kind …`.
 An unfiled reason reaches nobody — this session's transcript is read only when the digest
-already says something went wrong.
+already says something went wrong. A `k8s_autodeploy: false` PR is meant to sit open until
+a person lands it, so its handoff is the digest line, never a finding re-filed every morning.
 
-Finish with a plain summary: which PRs you landed, which you left and why, and any finding
-numbers you filed. That text is posted to Discord verbatim.
+Finish with a plain summary: which PRs you landed, which you left and why (a
+`k8s_autodeploy: false` PR with its `land.sh` command), and any finding numbers you filed.
+That text is posted to Discord verbatim.

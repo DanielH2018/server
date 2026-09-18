@@ -91,7 +91,8 @@ For each PR read the file list and the diff — `gh pr diff <n> --name-only`, th
 |---|---|---|
 | `uv.lock` | lock file maintenance | merge; nothing to deploy |
 | `ansible/roles/k8s/*/defaults/main.yml` | k8s image pin | merge, land with the role's tag |
-| same, title carries `(manual — k8s_autodeploy: false, …)` | k8s image pin the tick cannot apply | nothing to finish; merge through `land.sh`, which deploys it from the merge commit — a bare merge leaves it to the drift monitor (#1886) |
+| same, title carries `(manual — k8s_autodeploy: false, …)` | k8s image pin the tick cannot apply | nothing to finish; merge through `land.sh`, which deploys it from the merge commit — a bare merge leaves it to the drift monitor (#1886). **An interactive session's job only**: the unattended `renovate_agent` leaves this class open and names the `land.sh` command in its digest, because the denial reason is that a failed deploy here (authelia, traefik, crowdsec) is one `probe.py health` cannot see, so a person is the review (#1939) |
+| `ansible/inventory/group_vars/all.yml`, same title | a cross-role image pin (`crowdsec_k8s_image`, read by crowdsec, traefik and authelia) | same as the row above, with one difference in who applies it: an inventory change is the deployer's broad plane, so after the merge the TICK narrows the changed key to every role reading it and applies them — `land.sh` waits on that tick rather than running `deploy.sh` itself (#1936) |
 | `ansible/roles/setup/*/defaults/main.yml` | host plane | often `manual —`; check the rule |
 | `ansible/roles/k8s/*/templates/Dockerfile*.j2` | in-cluster-built image | merge, land, then verify the pod took the rebuild |
 | `prek.toml`, `.github/workflows/*` | tooling | merge; CI is the only consumer |
