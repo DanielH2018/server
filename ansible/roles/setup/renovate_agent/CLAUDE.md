@@ -72,7 +72,14 @@ the caps or the schedule cannot quietly widen it.
   `renovate-prs` skill: finish the manual half of a grouped bump, merge through
   `land.sh --arm-merge`, land and verify. **Never** a PR by another author, **never** a bare
   `gh pr merge`, **never** a session in the primary checkout, **never** a worktree that still
-  holds unlanded work (the tick skips and posts the path instead).
+  holds unlanded work (the tick skips and posts the path instead), and **never a PR whose
+  title carries `k8s_autodeploy: false`** (#1939). That parenthetical is renovate.json's
+  denylist rule, not a work order: the roles behind it (authelia, traefik, crowdsec, …) are
+  denied because a failed deploy is one `probe.py health` cannot see, so the "look" the
+  denial asks for is a person and not this session's gated land. The prompt leaves such a PR
+  open and puts its `land.sh` command in the digest;
+  `ansible/tests/setup/test_renovate_agent_unit.py` pins that the prompt names the same
+  marker the rule's `groupName` carries.
 - **Mode (explicit + reversible):** `renovate_agent_enabled`, which ships `false`. It alone
   arms the timer, and setting it back stops AND disables the unit (*Arming it*;
   `test_renovate_agent_unit.py` pins both directions). There is deliberately no run-once

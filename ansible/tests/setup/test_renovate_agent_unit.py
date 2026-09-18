@@ -241,3 +241,73 @@ def test_the_deadline_straddles_the_daily_period() -> None:
     ), (
         "the deadline above assumes a once-daily OnCalendar — re-derive it if the cadence moves"
     )
+
+
+# ── the denylist exclusion: the prompt must leave a `k8s_autodeploy: false` PR to a person ──
+
+RENOVATE = ANSIBLE.parent / "renovate.json"
+
+# The tell is read out of renovate.json, not typed here: the manual rule's groupName is what
+# Renovate puts in the PR title, and a rename there that the prompt did not follow is exactly
+# the drift this guard exists to catch (issue #1939).
+_MANUAL_TELL = re.compile(r"\(manual — (?P<tell>k8s_autodeploy: [a-z]+)")
+
+
+def denylist_marker(rules: list[dict]) -> str:
+    """The `k8s_autodeploy: …` phrase the denylist rule's groupName carries into a PR title."""
+    tells = {
+        m.group("tell")
+        for r in rules
+        if (m := _MANUAL_TELL.search(str(r.get("groupName", ""))))
+    }
+    assert len(tells) == 1, (
+        f"expected one denylist groupName tell, found {sorted(tells)}"
+    )
+    return tells.pop()
+
+
+def prompt_exclusion_problems(prompt: str, marker: str) -> list[str]:
+    """Every way the prompt can fail to hand a denylisted PR to a person. Empty means it does."""
+    problems: list[str] = []
+    if marker not in prompt:
+        problems.append(
+            f"the prompt never names {marker!r}, so the agent works a denylisted PR like any "
+            "other manual work order and lands it unattended"
+        )
+    if "land.sh --pr" not in prompt:
+        problems.append(
+            "the prompt does not hand over the land.sh command, so the digest names a PR "
+            "left open with nothing a person can run"
+        )
+    return problems
+
+
+def test_the_prompt_leaves_a_denylisted_pr_to_a_person() -> None:
+    rules = __import__("json").loads(RENOVATE.read_text())["packageRules"]
+    problems = prompt_exclusion_problems(PROMPT.read_text(), denylist_marker(rules))
+    assert not problems, "\n".join(problems)
+
+
+def test_a_prompt_naming_the_marker_and_the_command_is_clean() -> None:
+    prompt = "- leave a PR titled `k8s_autodeploy: false`; report `land.sh --pr <n>`"
+    assert prompt_exclusion_problems(prompt, "k8s_autodeploy: false") == []
+
+
+@pytest.mark.parametrize(
+    ("prompt", "fragment"),
+    [
+        ("report `land.sh --pr <n>` for anything you leave", "never names"),
+        ("leave a PR titled `k8s_autodeploy: false` open", "land.sh command"),
+    ],
+)
+def test_a_prompt_missing_the_marker_or_the_command_is_flagged(
+    prompt: str, fragment: str
+) -> None:
+    problems = prompt_exclusion_problems(prompt, "k8s_autodeploy: false")
+    assert len(problems) == 1 and fragment in problems[0], problems
+
+
+def test_the_marker_is_read_from_the_rule_not_typed_here() -> None:
+    """A groupName without the tell leaves nothing to assert, and must say so."""
+    with pytest.raises(AssertionError, match="expected one denylist groupName tell"):
+        denylist_marker([{"groupName": "k8s image {{depName}}"}])
