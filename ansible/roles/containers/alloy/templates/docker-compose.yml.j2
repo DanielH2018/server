@@ -120,10 +120,12 @@ services:
       # 28,423 major faults on this cgroup in 300 s (95/s), a third of the host's 84,938,
       # measured 2026-09-18 at 0.52 cycles a minute. GOGC=25 was deployed the same day and
       # measured the same way after a 16-minute warm-up: 1.0 cycles a minute, 33,667 faults in
-      # 300 s (112/s), the same third of the host's 100,479, at the same host pressure (memory
-      # PSI `full avg300` 4.0-4.6% in both windows). Marking twice as often keeps more of the
-      # heap resident per cycle (6,700 faults a cycle against 10,800) and still faults more
-      # overall, so it is not the lever for this. Pinning the heap instead (`memswap_limit`
+      # 300 s (112/s) of the host's 100,479 — 33.5% of the host in both windows, at the same
+      # host pressure (memory PSI `full avg300` 4.0-4.6%). Both counts rose 18% together, which
+      # is the host getting busier, not the setting. Marking twice as often halves the faults
+      # per cycle (6,700 against 10,800) and doubles the cycles, and one 300 s window per arm
+      # cannot separate those; what it does show is no reduction, so GOGC is not the lever
+      # for this. Pinning the heap instead (`memswap_limit`
       # equal to the cap) would hold 40-60 MB resident that zram keeps in about 12 MB at its
       # measured 4.61:1, on a host with 10-25 MB free. What the faults cost is zram
       # decompression: this container's memory PSI `full` totalled 0.8% over 75 minutes.
