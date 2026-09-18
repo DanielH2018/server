@@ -25,10 +25,8 @@
       "#2016",
       "#2018", "#2015"
     ],
-    "leads": [
-      "pi/sudoers-scope-for-ubuntu-after-pi-peer-backup-forced-command"
-    ],
-    "notes": "Five 2026-09-17 leads resolved: pi-peer-backup key restricted (FIXED), homelab-mcp cert-expiry gated (FIXED), autofix-bridge errorMessage exemption retired (FIXED), karakeep public /api narrowed (FIXED; residual on the .local monitoring route), push-token no_log STILL OPEN and wider (setup plane). n8n 5678 netpol FIXED (#1926). Not audited (budget): sshd/ufw/fail2ban under initial_setup/tasks/access.yml, netpol-baseline defaults, wg-easy k8s, loki/crowdsec node-agent hostPaths."
+    "leads": [],
+    "notes": "Lead 'pi sudoers scope after the forced command' REFUTED as framed by a skeptic (wrapper execs sudo rsync under either rule); its residual is #2015. Five 2026-09-17 leads resolved: pi-peer-backup key restricted (FIXED), homelab-mcp cert-expiry gated (FIXED), autofix-bridge errorMessage exemption retired (FIXED), karakeep public /api narrowed (FIXED; residual on the .local monitoring route), push-token no_log STILL OPEN and wider (setup plane). n8n 5678 netpol FIXED (#1926). Not audited (budget): sshd/ufw/fail2ban under initial_setup/tasks/access.yml, netpol-baseline defaults, wg-easy k8s, loki/crowdsec node-agent hostPaths."
   },
   {
     "date": "2026-09-18",
@@ -67,10 +65,8 @@
       "#2013",
       "#2019"
     ],
-    "leads": [
-      "daniel-box/root-fs-250gb-burst-writer-under-var-lib-rancher"
-    ],
-    "notes": "Homelab Evals hole from 09-04 closed: tile Jinja-gated on an unset SOPS secret by design. Old 3.3 GiB/day daniel-server growth memory does not hold (-2.2 GB/day over 14d)."
+    "leads": [],
+    "notes": "Lead 'daniel-box / 250 GB burst writer' resolved NO FINDING by a skeptic (media library on /, qBittorrent preallocate, Sonarr bulk delete). Homelab Evals hole from 09-04 closed: tile Jinja-gated on an unset SOPS secret by design. Old 3.3 GiB/day daniel-server growth memory does not hold (-2.2 GB/day over 14d)."
   },
   {
     "date": "2026-09-18",
@@ -93,10 +89,8 @@
       "#2020",
       "#2021", "#2022"
     ],
-    "leads": [
-      "gitops_deploy/manual-plane-k3s-cleared-by-hand-was-k3s-bringup-applied-first"
-    ],
-    "notes": "#1998 not observed. Deployer parked on 721ce79f by design (initial_setup.yml in _BROAD_MANUAL_PREFIXES); remediation printed."
+    "leads": [],
+    "notes": "Lead 'manual_plane k3s cleared by hand — was the apply run first' resolved NOT-APPLIED by a skeptic and filed as #2022. #1998 not observed. Deployer parked on 721ce79f by design (initial_setup.yml in _BROAD_MANUAL_PREFIXES); remediation printed."
   },
   {
     "date": "2026-09-18",
