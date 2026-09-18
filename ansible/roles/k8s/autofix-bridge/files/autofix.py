@@ -53,24 +53,6 @@ DANGEROUS_MSG_PATTERNS = [
     ).split(",")
     if p.strip()
 ]
-# DECIDED: CLIENT_ERROR_PATTERNS is INERT at the pinned Sonarr 4.0.19.2979 and Radarr
-# 6.3.0.10514, and is kept as a hedge rather than retired. A download-client outage makes
-# DownloadMonitoringService.ProcessClientDownloads catch GetItems() and return no items for
-# that client; trackedDownloadStatus=='error' is written by TrackedDownload.Fail() alone,
-# whose only caller is RejectedImportService; and no phrase below is a string either app
-# writes into a queue record's errorMessage. Retiring it changes what the live blocklist
-# acts on, which the role's autonomous-role contract reserves for the operator (#1951). A
-# future *arr bump re-opens the question: re-run the issue's verify-by against the new tag.
-CLIENT_ERROR_PATTERNS = [
-    p.strip().lower()
-    for p in _env(
-        "CLIENT_ERROR_PATTERNS",
-        "unable to communicate,not responding,failed to connect,"
-        "connection refused,download client is unavailable",
-    ).split(",")
-    if p.strip()
-]
-
 HARD_BAD_STATUS = frozenset({"error"})
 HARD_BAD_STATE = frozenset({"importBlocked", "importFailed"})
 
@@ -91,41 +73,18 @@ def dangerous(messages, patterns):
     return any(p in m for p in pats for m in low)
 
 
-def client_comm_error(item, patterns):
-    """True if the record's top-level errorMessage names a download-client communication issue.
-
-    Client unreachable / not responding, as opposed to a bad release. Reuses the same
-    case-insensitive substring matcher as dangerous().
-
-    DECIDED: this reads errorMessage ONLY, never statusMessages[].messages, because the two
-    fields have different authors. errorMessage is DownloadClientItem.Message
-    (QueueService.cs), which the download client assigns from fixed localized strings — at
-    the pinned qBittorrent client every assignment is a GetLocalizedString() constant. A
-    statusMessage's messages come from TrackedDownload.Warn() and the import rejections,
-    and those interpolate release-controlled text: the release title ("... not found in
-    the grabbed release: {title}"), the folder name, and the download's output path ("No
-    files found are eligible for import in {path}"). Fail() (RejectedImportService, the
-    only writer of trackedDownloadStatus=='error', fired for a dangerous or executable
-    file) keeps whatever statusMessages an earlier Warn() left, so a release NAMED to
-    carry one of these phrases could exempt its own poisoned .exe from the blocklist.
-    Verified against Sonarr v4.0.19.2979 and Radarr v6.3.0.10514 (#1934).
-    """
-    err = item.get("errorMessage")
-    return bool(err) and dangerous([err], patterns)
-
-
-def is_candidate(item, patterns, client_error_patterns=()):
+def is_candidate(item, patterns):
     """Returns whether a queue item is an auto-block candidate (hard-bad or malware-signature).
 
-    EXCEPT a bare trackedDownloadStatus=='error' that looks like a transient download-client
-    communication problem (client/VPN unreachable) — blocklisting that would wrongly nuke a
-    legitimate in-progress download.
-
     - malware-signature (warning + dangerous statusMessage) -> candidate.
-    - import-step failure (trackedDownloadState in importBlocked/importFailed) -> candidate
-      (the download completed; a client outage can't produce these, so no exclusion).
-    - bare error (trackedDownloadStatus=='error') -> candidate UNLESS client_comm_error
-      matches its errorMessage (statusMessages carry release text and do not count).
+    - import-step failure (trackedDownloadState in importBlocked/importFailed) -> candidate.
+    - bare error (trackedDownloadStatus=='error') -> candidate. At the pinned Sonarr
+      4.0.19.2979 / Radarr 6.3.0.10514 only RejectedImportService writes this status (a
+      dangerous or executable file), so no outage exemption is needed: a download-client
+      outage empties the queue for that client instead of flipping its items to error. The
+      CLIENT_ERROR_PATTERNS exemption that guarded this branch was retired on 2026-09-18
+      (#1951) because none of its phrases is a string either app writes into errorMessage.
+      A future *arr bump re-opens the question: re-run #1951's verify-by against the new tag.
     - everything else (transient warning, plain importPending) -> not a candidate (fails SAFE).
     """
     status = item.get("trackedDownloadStatus")
@@ -135,7 +94,7 @@ def is_candidate(item, patterns, client_error_patterns=()):
     if state in HARD_BAD_STATE:
         return True
     if status in HARD_BAD_STATUS:
-        return not client_comm_error(item, client_error_patterns)
+        return True
     return False
 
 
@@ -305,7 +264,7 @@ def run_once(streaks):
     for app_name, base, url, key in configured:
         data = _request(url, headers={"X-Api-Key": key})
         for item in data.get("records", []):
-            if is_candidate(item, DANGEROUS_MSG_PATTERNS, CLIENT_ERROR_PATTERNS):
+            if is_candidate(item, DANGEROUS_MSG_PATTERNS):
                 candidates[item_key(app_name, item)] = (app_name, base, key, item)
 
     to_act, held = eligible(

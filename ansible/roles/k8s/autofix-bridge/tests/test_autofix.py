@@ -10,13 +10,6 @@ autofix = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(autofix)
 
 PATTERNS = ["executable file with extension", "potentially dangerous", "sample"]
-CLIENT_PATTERNS = [
-    "unable to communicate",
-    "not responding",
-    "failed to connect",
-    "connection refused",
-    "download client is unavailable",
-]
 
 
 def _item(
@@ -114,27 +107,18 @@ def test_import_pending_with_messages_is_not_a_candidate():
     )
 
 
-def test_client_comm_error_reads_errormessage_only():
-    in_error_message = _item(
-        status="error", error_message="qBittorrent is not responding"
-    )
-    assert autofix.client_comm_error(in_error_message, CLIENT_PATTERNS) is True
-
-    in_status = _item(
-        status="error", messages=["Unable to communicate with qBittorrent."]
-    )
-    assert autofix.client_comm_error(in_status, CLIENT_PATTERNS) is False
-
-
-def test_error_with_client_comm_in_errormessage_excluded():
+def test_error_with_client_outage_phrase_in_errormessage_is_a_candidate():
+    # The CLIENT_ERROR_PATTERNS exemption was retired 2026-09-18 (#1951): at the pinned
+    # Sonarr/Radarr a client outage empties the queue rather than flipping items to
+    # `error`, and no outage phrase reaches errorMessage. A bare `error` is a candidate
+    # whatever its errorMessage says; re-adding an exemption fails here.
     item = _item(status="error", error_message="qBittorrent is not responding")
-    assert autofix.is_candidate(item, PATTERNS, CLIENT_PATTERNS) is False
+    assert autofix.is_candidate(item, PATTERNS) is True
 
 
 def test_error_with_release_carried_phrase_in_statusmessage_still_candidate():
     # A release named to carry a client-error phrase reaches statusMessages[].messages
-    # through the *arr's own import rejection text, and Fail() (a dangerous file) keeps
-    # those messages while flipping the status to `error`. That text must not exempt it.
+    # through the *arr's own import rejection text (#1934). It must not exempt itself.
     item = _item(
         status="error",
         state="failedPending",
@@ -143,28 +127,12 @@ def test_error_with_release_carried_phrase_in_statusmessage_still_candidate():
             "[GRP] Show - 01 connection refused [1080p]"
         ],
     )
-    assert autofix.is_candidate(item, PATTERNS, CLIENT_PATTERNS) is True
+    assert autofix.is_candidate(item, PATTERNS) is True
 
 
 def test_error_without_client_message_still_candidate():
     item = _item(status="error", messages=["Waiting to import"])
-    assert autofix.is_candidate(item, PATTERNS, CLIENT_PATTERNS) is True
-
-
-def test_import_blocked_with_client_message_still_candidate():
-    # import-step failure wins; the exclusion only guards a bare `error` status
-    item = _item(
-        state="importBlocked", messages=["Unable to communicate with qBittorrent."]
-    )
-    assert autofix.is_candidate(item, PATTERNS, CLIENT_PATTERNS) is True
-
-
-def test_malware_signature_still_candidate_with_client_patterns():
-    item = _item(
-        status="warning",
-        messages=["Caution: Found executable file with extension: '.exe'"],
-    )
-    assert autofix.is_candidate(item, PATTERNS, CLIENT_PATTERNS) is True
+    assert autofix.is_candidate(item, PATTERNS) is True
 
 
 def test_not_eligible_until_grace_met():

@@ -29,8 +29,10 @@ quietly widen it (harness-engineering's versioned-contract pattern). The facts b
 elsewhere in this doc; this is the governed summary a change here must satisfy.
 - **Scope / exclusions:** *arr queue remediation, host disk hygiene, fake-remux replacement — and
   nothing else. **Never** `docker prune -a`, **never** volumes, **never** a delete before the
-  replacement is ffprobe-verified genuine, **never** a legit in-progress download (VPN/client-outage
-  patterns are held out).
+  replacement is ffprobe-verified genuine, **never** a legit in-progress download. The sidecar acts
+  on a bare `trackedDownloadStatus=error`, which at the pinned Sonarr 4.0.19.2979 / Radarr
+  6.3.0.10514 only `RejectedImportService` writes (a dangerous file); a client/VPN outage empties
+  the queue instead, so an in-progress download never reaches that status.
 - **Mode (per actuator, explicit + reversible):** sidecar `DRY_RUN` (live) · fake-remux
   `FAKE_REMUX_REPLACE_MODE` (off/shadow/live; template default
   `shadow`, but **host_vars runs it `live`** — see the reconciler bullet below).
@@ -52,20 +54,15 @@ elsewhere in this doc; this is the governed summary a change here must satisfy.
    (non-root, `read_only` + tmpfs `/tmp`, `cap_drop:[ALL]`, `no-new-privileges`). **LIVE
    (`DRY_RUN=false`)** since 2026-07-06 — it actually blocklists+removes+re-searches. Blast-radius
    valves: `GRACE_CYCLES=3` (an item must stay a candidate ~15 min first), `MAX_ACTIONS_PER_CYCLE=5`
-   (a mass-flag = systemic cause → act on NONE + alert), `DANGEROUS_MSG_PATTERNS` (the poisoned-`.exe`
-   class), and `CLIENT_ERROR_PATTERNS` — meant to EXCLUDE a download-client/VPN outage so a
-   legit in-progress download isn't wrongly blocklisted (see [[qbittorrent-bind-wg0]]). That
-   exclusion reads the queue record's `errorMessage` only, the field the download client
-   authors; `statusMessages` carry the release title and output path, so a release named to
-   contain one of the phrases must not exempt itself (`client_comm_error`'s `DECIDED:`, #1934).
-   **The exclusion is inert at the pinned Sonarr 4.0.19.2979 and Radarr 6.3.0.10514.** A
-   client outage returns no queue items rather than items at `error`
-   (`DownloadMonitoringService.ProcessClientDownloads` catches `GetItems()` and records a client
-   failure), `trackedDownloadStatus=error` is written only by `RejectedImportService` (a
-   dangerous file with the indexer's FailDownloads set), and none of the five phrases is a
-   string either app writes into `errorMessage`. The valve stays as a hedge for a future *arr
-   version; retiring it is a live-blocklist change the operator makes under this contract, not
-   a fan-out PR (#1951, the `DECIDED:` at `CLIENT_ERROR_PATTERNS` in `files/autofix.py`). Flip
+   (a mass-flag = systemic cause → act on NONE + alert), and `DANGEROUS_MSG_PATTERNS` (the
+   poisoned-`.exe` class). A fourth valve, `CLIENT_ERROR_PATTERNS`, exempted a bare `error` whose
+   `errorMessage` named a download-client outage; it was **retired 2026-09-18 (#1951)** because
+   it was inert at the pinned Sonarr 4.0.19.2979 and Radarr 6.3.0.10514: a client outage returns
+   no queue items rather than items at `error` (`DownloadMonitoringService.ProcessClientDownloads`
+   catches `GetItems()` and records a client failure), `trackedDownloadStatus=error` is written
+   only by `RejectedImportService`, and none of its five phrases was a string either app writes
+   into `errorMessage`. A future *arr bump re-opens the question: re-run #1951's verify-by
+   against the new tag before trusting the bare-`error` branch. Flip
    `DRY_RUN=true` + redeploy to return to report-only.
 2. **Host plane** — two daily/hourly crons doing work the locked-down container can't (docker
    daemon, `docker exec`, ffprobe), each reporting via a `{ts,ok,msg}` state file monitor-bridge
