@@ -162,21 +162,29 @@ def check_swallowed_verdicts(cfg: Config) -> tuple[bool, str]:
         lines = bridge.net.loki_lines(
             cfg, SWALLOWED_VERDICTS_LOGQL, window_s, SWALLOWED_VERDICTS_LIMIT
         )
-        pod_lines = bridge.net.loki_lines(
-            cfg, SWALLOWED_VERDICTS_POD_LOGQL, window_s, SWALLOWED_VERDICTS_LIMIT
-        )
     except Exception as e:
         return (
             True,
             "swallowed-verdict scan unavailable (%s) — Loki Reachable owns a Loki fault"
             % e,
         )
+    # Its own try: a failure here costs the one pod pusher's coverage for a cycle, not the
+    # syslog arm's, and the message says so rather than reading clean.
+    pod_note = ""
+    try:
+        pod_lines = bridge.net.loki_lines(
+            cfg, SWALLOWED_VERDICTS_POD_LOGQL, window_s, SWALLOWED_VERDICTS_LIMIT
+        )
+    except Exception as e:
+        pod_lines = []
+        pod_note = " (pod-stream fetch unavailable: %s)" % e
     # The verdict keeps the newest line per tag by timestamp, so the merge needs no ordering.
-    return swallowed_verdicts(
+    ok, msg = swallowed_verdicts(
         lines + pod_lines,
         "%dh" % (window_s // 3600) if window_s % 3600 == 0 else "%ds" % window_s,
         truncated=max(len(lines), len(pod_lines)) >= SWALLOWED_VERDICTS_LIMIT,
     )
+    return ok, msg + pod_note
 
 
 # Kuma's own failed-send lines, from its container log (#1891, #1895). `{container="uptime-kuma"}`

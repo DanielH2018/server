@@ -287,3 +287,18 @@ def test_a_capped_pod_fetch_reports_truncation_too(monkeypatch, cfg):
     ok, msg = checks.logs.check_swallowed_verdicts(cfg)
     assert ok
     assert "hit its line cap" in msg
+
+
+def test_a_failed_pod_fetch_keeps_the_syslog_verdict_and_says_so(monkeypatch, cfg):
+    # The syslog arm caught setup-drift-check and release-staleness-check on its own; a slow
+    # or failing pod query must not fail that arm open with it.
+    def _fetch(cfg, logql, window_s, limit):
+        if logql == checks.logs.SWALLOWED_VERDICTS_POD_LOGQL:
+            raise RuntimeError("loki-homelab: pod query timed out")
+        return [(1, _RUN_DOWN), (2, _SWALLOWED_DOWN), (3, _SIBLING_RUN)]
+
+    _patch_fetch(monkeypatch, _fetch)
+    ok, msg = checks.logs.check_swallowed_verdicts(cfg)
+    assert not ok
+    assert "release-staleness-check on daniel-box (http=500 rc=0)" in msg
+    assert "pod-stream fetch unavailable: loki-homelab: pod query timed out" in msg
