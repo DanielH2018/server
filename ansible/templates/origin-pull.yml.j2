@@ -29,7 +29,14 @@
 
   The CA is `roles/k8s/traefik/files/cloudflare-origin-pull-ca.crt` (public, provenance in the
   file's header). The Secret carries it under `tls.ca`, the key Traefik's CRD provider reads
-  first (`ca.crt` is its fallback).
+  first, with `ca.crt` as its fallback (`getCABlocks`, pkg/provider/kubernetes/crd/kubernetes.go
+  at v3.7.12). The bytes reach `x509.CertPool.AppendCertsFromPEM` unparsed
+  (pkg/tls/tlsmanager.go), and Go's pem.Decode cuts at the first `-----BEGIN` line, so the
+  provenance comment above the certificate in that file is skipped rather than rejected. A
+  Secret with neither key logs `Failed to extract CA from secret` and the option builds with NO
+  CA — and with RequireAndVerifyClientCert that fails every handshake on the public names, while
+  `probe.py health traefik` stays green because the pod is fine. Check the traefik log for that
+  line first if the public names go dark after a deploy.
 #}
 {% macro origin_pull_ca_secret(namespace) -%}
 apiVersion: v1
