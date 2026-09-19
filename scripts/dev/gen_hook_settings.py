@@ -33,14 +33,14 @@ The opener is the only delimiter: a block runs from its `# gen-hooks:` line to t
 that is not a `#   key: value` continuation. In a Python hook the block sits between the
 shebang and the module docstring, as a comment, so the docstring stays the docstring.
 
-THE CENSUS is every executable `*.sh` and `*.py` directly under `.claude/hooks/`, the same
-rule the dotfiles generator applies through its `executable_` prefix: a registration's
-`command` is run directly, so only a file with the exec bit can be one, and a file without
-it is a module a sibling imports or hands to `uv run python`. Non-recursive, so `tests/` and
-`hooklib/` are out. The five Python modules that carry the bit are run through a shim too
-and never exec'd, so they declare `library`; `auto-approve-readonly.py` sits at its
-module-length cap (ansible/tests/repo/module_length_allowlist.txt) and could not take a
-two-line block, which is why the bit rather than the suffix decides.
+THE CENSUS is every `*.sh` and `*.py` directly under `.claude/hooks/`, by suffix and not by
+the exec bit, non-recursive. The bit is the property with the recorded history of drifting:
+`uv-python.sh` shipped 100644 in #361, which is the incident `test_hook_scripts_executable.py`
+exists for, and a new hook committed the same way would be exactly the file a bit-based
+census skips. It is also incoherent on the Python modules here (five of the twelve are
+100755, all twelve are run by a `.sh` shim through `uv run python`, none is ever exec'd).
+`tests/` and `hooklib/` are one level down and are reached by import, never by a
+registration.
 
 THE SPLICE rewrites the whole file through `json.loads` / `json.dumps(indent=2)` with only
 the `hooks` value replaced. That round trip is byte-identical to the committed file (measured
@@ -52,7 +52,6 @@ begin/end marker comment, so there is nothing to splice between. A sibling
 
 import argparse
 import json
-import os
 import re
 import sys
 from dataclasses import dataclass, field
@@ -229,11 +228,11 @@ def parse_hook_file(file: str, text: str) -> Parsed:
 
 
 def hook_files(hooks_dir: Path = HOOKS_DIR) -> dict[str, str]:
-    """The census: `{basename: text}` for every executable *.sh / *.py in `hooks_dir`."""
+    """The census: `{basename: text}` for every *.sh / *.py directly under `hooks_dir`."""
     return {
         p.name: p.read_text()
         for p in sorted(hooks_dir.iterdir())
-        if p.is_file() and p.suffix in (".sh", ".py") and os.access(p, os.X_OK)
+        if p.is_file() and p.suffix in (".sh", ".py")
     }
 
 

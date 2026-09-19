@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# gen-hooks: library
+#   reason: imported by auto-approve-readonly.py
 """Allow-list tables for the auto-approve-readonly Bash classifier.
 
 Data only: the program names that are read-only under any arguments, and the ssh flags,

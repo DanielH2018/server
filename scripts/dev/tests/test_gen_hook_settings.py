@@ -20,8 +20,8 @@ import pytest
 
 import gen_hook_settings as g
 
-# Named members of the live census. A `.sh` here is registered; an executable `.py` is a
-# library (run by its `.sh` shim through `uv run python`, never registered itself).
+# Named members of the live census. A `.sh` here is registered; a `.py` is a library (run
+# by its `.sh` shim through `uv run python`, or imported by a sibling, never registered).
 KNOWN_REGISTERED = frozenset(
     {
         "auto-approve-readonly.sh",
@@ -39,10 +39,11 @@ KNOWN_REGISTERED = frozenset(
 )
 KNOWN_LIBRARIES = frozenset(
     {
-        "block-footguns.py",
-        "block-protected-edits.py",
-        "log-instructions.py",
-        "nudge-land-sh.py",
+        "_claude_guard.py",
+        "_hook_common.py",
+        "_readonly_shell.py",
+        "_readonly_tables.py",
+        "auto-approve-readonly.py",
         "session-health.py",
     }
 )
@@ -173,20 +174,20 @@ def test_census_is_clean_when_every_file_declares_something():
     assert libraries == {"lib.py": "run by x.sh"}
 
 
-def test_hook_files_reads_executable_sh_and_py_one_level_only(tmp_path: Path):
-    """A file without the exec bit cannot be a hook command, so it is not a candidate;
-    `tests/` and `hooklib/` sit one level down and are reached by import, never by a
-    registration; a README beside the hooks is not a hook either."""
-    for name, text in (("a.sh", DECLARED), ("b.py", LIBRARY), ("c.sh", DECLARED)):
-        (tmp_path / name).write_text(text)
-        (tmp_path / name).chmod(0o755)
-    (tmp_path / "_helper.py").write_text("x = 1\n")
+def test_hook_files_reads_sh_and_py_one_level_only_regardless_of_the_exec_bit(
+    tmp_path: Path,
+):
+    """A hook committed without its exec bit is still a hook file (#361), so the bit does not
+    decide; `tests/` and `hooklib/` sit one level down and are reached by import, never by
+    a registration; a README beside the hooks is not a hook either."""
+    (tmp_path / "a.sh").write_text(DECLARED)
+    (tmp_path / "a.sh").chmod(0o755)
+    (tmp_path / "forgot-chmod.sh").write_text(DECLARED)
+    (tmp_path / "_helper.py").write_text(LIBRARY)
     (tmp_path / "README.md").write_text("not a hook\n")
-    (tmp_path / "README.md").chmod(0o755)
     (tmp_path / "hooklib").mkdir()
     (tmp_path / "hooklib" / "d.py").write_text("x = 1\n")
-    (tmp_path / "hooklib" / "d.py").chmod(0o755)
-    assert set(g.hook_files(tmp_path)) == {"a.sh", "b.py", "c.sh"}
+    assert set(g.hook_files(tmp_path)) == {"a.sh", "forgot-chmod.sh", "_helper.py"}
 
 
 # --- render ------------------------------------------------------------------------------
@@ -256,7 +257,6 @@ def test_check_goes_red_on_an_undeclared_hook_file(tmp_path: Path, capsys):
     hooks = tmp_path / "hooks"
     shutil.copytree(g.HOOKS_DIR, hooks)
     (hooks / "orphan.sh").write_text("#!/bin/bash\necho nothing declared\n")
-    (hooks / "orphan.sh").chmod(0o755)
     settings = tmp_path / "settings.json"
     settings.write_text(g.SETTINGS.read_text())
     assert g.main(["--check"], hooks_dir=hooks, settings=settings) == 1
