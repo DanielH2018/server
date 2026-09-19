@@ -1,8 +1,31 @@
 """The closed citation grammar: a backticked span is support, rejected, or not a citation."""
 
+import subprocess
+
 import pytest
 
-from facts.citations import FORMS, REJECT_REASONS, Citation, Rejected, parse_citations
+from facts.citations import (
+    FORMS,
+    REJECT_REASONS,
+    Citation,
+    Rejected,
+    Section,
+    parse_citations,
+    repo_docs,
+    sections,
+)
+
+_DOC = """intro `scripts/lib/git.py`
+
+## Alpha
+alpha text `scripts/lib/gh.py`
+
+### Alpha child
+child text
+
+## Beta
+beta text
+"""
 
 
 def _one(text):
@@ -105,3 +128,62 @@ def test_form_census():
 @pytest.mark.parametrize("raw", ["scripts/lib/kubectl.py:run", "probe.py kuma-drift"])
 def test_every_citation_round_trips_its_raw(raw):
     assert _one(f"`{raw}`").raw == raw
+
+
+_DOC = """intro `scripts/lib/git.py`
+
+## Alpha
+alpha text `scripts/lib/gh.py`
+
+### Alpha child
+child text
+
+## Beta
+beta text
+"""
+
+
+def test_sections_are_keyed_by_doc_and_heading():
+    got = sections("CLAUDE.md", _DOC)
+    assert [s.key for s in got] == [
+        "CLAUDE.md#",
+        "CLAUDE.md#Alpha",
+        "CLAUDE.md#Alpha child",
+        "CLAUDE.md#Beta",
+    ]
+
+
+def test_a_section_body_runs_to_the_next_heading_of_same_or_higher_level():
+    alpha = sections("CLAUDE.md", _DOC)[1]
+    assert "alpha text" in alpha.body
+    assert "child text" in alpha.body  # a child heading is inside its parent
+    assert "beta text" not in alpha.body
+
+
+def test_a_child_section_holds_only_its_own_text():
+    child = sections("CLAUDE.md", _DOC)[2]
+    assert child == Section("CLAUDE.md#Alpha child", "Alpha child", "child text\n\n")
+
+
+def test_repo_docs_lists_every_tracked_claude_md(tmp_path):
+    env = {
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "HOME": str(tmp_path),
+        "PATH": "/usr/bin:/bin",
+    }
+    subprocess.run(
+        ["git", "init", "-q", "-b", "master", str(tmp_path)], check=True, env=env
+    )
+    (tmp_path / "CLAUDE.md").write_text("# root\n")
+    (tmp_path / "role").mkdir()
+    (tmp_path / "role" / "CLAUDE.md").write_text("# role\n")
+    (tmp_path / "role" / "README.md").write_text("not a store\n")
+    (tmp_path / "untracked").mkdir()
+    (tmp_path / "untracked" / "CLAUDE.md").write_text("# not added\n")
+    subprocess.run(
+        ["git", "add", "CLAUDE.md", "role"], cwd=tmp_path, check=True, env=env
+    )
+    assert repo_docs(tmp_path) == [
+        tmp_path / "CLAUDE.md",
+        tmp_path / "role" / "CLAUDE.md",
+    ]

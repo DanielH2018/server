@@ -11,8 +11,11 @@ change here plus a paired test, never an ad-hoc regex in a caller. Long form:
 ``docs/superpowers/specs/2026-09-19-fact-support-invalidation-design.md``.
 """
 
+import os
 import re
+import subprocess
 from dataclasses import dataclass
+from pathlib import Path
 
 FORMS = frozenset({"path", "symbol", "yaml", "test", "marker", "probe"})
 REJECT_REASONS = frozenset({"file:line"})
@@ -75,3 +78,62 @@ def parse_citations(text: str) -> tuple[list[Citation], list[Rejected]]:
                 )
                 break
     return cites, rejects
+
+
+@dataclass(frozen=True)
+class Section:
+    """A logical unit of documentation: a heading and everything until the next same-or-higher heading."""
+
+    key: str
+    """<doc path>#<heading text>; "<doc path>#" for text before the first heading."""
+
+    heading: str
+    """The heading text, or empty string for preamble."""
+
+    body: str
+    """Text under the heading, including everything down to the next heading of the same or higher level."""
+
+
+_HEADING = re.compile(r"^(#{1,6})\s+(.+?)\s*$", re.MULTILINE)
+
+
+def sections(doc_path: str, text: str) -> list[Section]:
+    """Split ``text`` at its headings; a section runs to the next heading of the same or higher level.
+
+    The key ``<doc>#<heading>`` is the unit ``facts.lock`` is keyed by, so a renamed heading
+    is a new unit and the old lock row surfaces as a missing section — which is the right
+    verdict, since nobody can tell a rename from a deletion by reading the text.
+    """
+    heads = list(_HEADING.finditer(text))
+    out: list[Section] = []
+    if not heads or heads[0].start() > 0:
+        end = heads[0].start() if heads else len(text)
+        out.append(Section(f"{doc_path}#", "", text[:end]))
+    for i, h in enumerate(heads):
+        level = len(h.group(1))
+        end = len(text)
+        for later in heads[i + 1 :]:
+            if len(later.group(1)) <= level:
+                end = later.start()
+                break
+        body = text[h.end() : end].lstrip("\n")
+        out.append(Section(f"{doc_path}#{h.group(2)}", h.group(2), body))
+    return out
+
+
+def repo_docs(repo: Path) -> list[Path]:
+    """Every TRACKED ``CLAUDE.md`` under ``repo`` — the repo store, and nothing else.
+
+    ``git ls-files`` rather than ``rglob``: a worktree session has other sessions' full
+    checkouts under ``.claude/worktrees/``, and a walk would grade this commit against them.
+    """
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    listed = subprocess.run(
+        ["git", "ls-files", "-z", "--", "CLAUDE.md", "**/CLAUDE.md"],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    return [repo / p for p in sorted(listed.split("\0")) if p]
