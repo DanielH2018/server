@@ -189,31 +189,6 @@ def scrutiny_url(base):
 PI_HOST = "daniel-pi"
 
 
-def pi_url(subpath):
-    return f"http://daniel-pi.lan:61208/api/4/{subpath}"
-
-
-def pi_ip():
-    """daniel-pi's LAN IP, read from inventory.
-
-    Plaintext, not a secret — same reason as metallb_vip(): this host's resolver has no
-    answer for daniel-pi.lan (a Pi-hole-only LAN name), so `getent hosts daniel-pi.lan`
-    exits 2 here and curl needs a --resolve pin instead of DNS.
-    """
-    with open(HOSTS_INI_PATH) as f:
-        for line in f:
-            if line.startswith("daniel-pi ") or line.startswith("daniel-pi\t"):
-                m = re.search(r"ansible_host=(\S+)", line)
-                if m:
-                    return m.group(1)
-    raise SystemExit(f"daniel-pi ansible_host not found in {HOSTS_INI_PATH}")
-
-
-def pi_resolve():
-    """curl --resolve pin for pi_url()'s daniel-pi.lan:61208."""
-    return f"daniel-pi.lan:61208:{pi_ip()}"
-
-
 def curl_argv(url, timeout=DEFAULT_TIMEOUT, resolve=None):
     argv = ["curl", "-sS", "--max-time", str(timeout)]
     if resolve:
@@ -279,23 +254,6 @@ def fetch_json(url, resolve=None):
     except json.JSONDecodeError:
         print(body.strip())
         return None, 1
-
-
-def json_or_none(argv):
-    """Run `argv` and return its stdout parsed as JSON, or None on failure.
-
-    None covers a non-zero exit or unparseable output. The kubectl-argv analog of
-    fetch_json: callers that need to tell "ran but returned nothing" from "found
-    nothing" use this rather than raising, since a missing workload/Service/EndpointSlice
-    is an expected result, not a failure.
-    """
-    out = subprocess.run(argv, capture_output=True, text=True)
-    if out.returncode != 0:
-        return None
-    try:
-        return json.loads(out.stdout)
-    except json.JSONDecodeError:
-        return None
 
 
 def k8s_namespace():

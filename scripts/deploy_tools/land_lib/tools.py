@@ -43,6 +43,12 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 # to be reachable too. It is under the shim (land.py's dir is sys.path[0]) and under pytest
 # (pythonpath lists it); this insert makes an interpreter-only import work as well.
 _sys.path.insert(1, str(_Path(__file__).resolve().parents[1]))  # scripts/deploy_tools
+from lib.repo_paths import GITOPS_DEPLOY_FILES
+
+# The deployer's own modules import each other bare (`import deploy_locks`), so the directory
+# has to be on the path for the one constant this module reads from it.
+_sys.path.insert(2, str(GITOPS_DEPLOY_FILES))
+from deploy_locks import TREE_LOCK as LOCK
 from deploy_tools import await_ci, land_reach, land_tags
 from deploy_tools.deploy_detach_notify import GateResult
 from deploy_tools.deploy_detach_notify import gate as health_gate
@@ -53,7 +59,6 @@ from lib.git import git
 
 # scripts/deploy_tools -- where land.py, gitops_tick.sh and the imported helpers live.
 HERE = _Path(__file__).resolve().parents[1]
-LOCK = "/var/lock/server-git-tree.lock"
 # What `uv run` reads to find an existing venv instead of building one where it stands.
 UV_PROJECT_ENVIRONMENT = "UV_PROJECT_ENVIRONMENT"
 # `uv run` here resolves the venv from cwd, which is PRIMARY at every call site.

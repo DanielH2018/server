@@ -11,10 +11,8 @@ Run: uv run pytest scripts/deploy_tools/tests/test_land_tags_landing_hosts_at.py
 
 import os
 import subprocess
-import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import land_tags
 from lib.render_guard import HOST_VARS_IN_TREE

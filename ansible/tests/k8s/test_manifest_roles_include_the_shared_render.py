@@ -17,12 +17,10 @@ of their own would be the caller's under another name.
 Run: uv run pytest ansible/tests/k8s/test_manifest_roles_include_the_shared_render.py
 """
 
-import sys
 from pathlib import Path
 
-from _helpers import K8S_ROLES, REPO, load_tasks, walk_tasks
+from _helpers import K8S_ROLES, load_tasks, walk_tasks
 
-sys.path.insert(0, str(REPO / "scripts"))
 
 from lib.k8s_roles import CALLER_RENDERED_ROLES, is_manifest_template
 

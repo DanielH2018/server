@@ -1,6 +1,7 @@
 {% from 'container-resources.yml.j2' import container_resources with context %}
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
 {% from 'pvc.yml.j2' import pvc with context %}
+{% from 'workload-shell.yml.j2' import spec_shell, pod_shell with context %}
 {#
   Histogram-bucket trim for the two control-plane jobs, invoked at COLUMN 0 (it carries its own
   8-space indent, matching `relabel_configs:` in the job blocks below).
@@ -407,6 +408,30 @@ data:
             labels:
               origin: daniel-pi
               instance: daniel-pi
+      # The Pi's Docker engine and its containerd, each serving its own Go runtime metrics
+      # (`go_memstats_*`, `go_gc_duration_seconds`). They took 97 and 53 major faults/s on
+      # the Pi, 46% of the host's, each GC cycle faulting a swapped-out heap back from zram
+      # (#2003); the live heap (`go_memstats_heap_alloc_bytes` floor) is what sizes the
+      # GOMEMLIMIT that cuts it. dockerd binds `metrics-addr`, containerd `[metrics]
+      # address` — both in roles/setup/docker_install, with the UFW allows. containerd's
+      # path is /v1/metrics, not /metrics.
+      - job_name: dockerd-pi
+        scrape_interval: 1m
+        scrape_timeout: 30s
+        static_configs:
+          - targets: ['{{ k8s_pi_client_ip }}:9323']
+            labels:
+              origin: daniel-pi
+              instance: daniel-pi
+      - job_name: containerd-pi
+        scrape_interval: 1m
+        scrape_timeout: 30s
+        metrics_path: /v1/metrics
+        static_configs:
+          - targets: ['{{ k8s_pi_client_ip }}:1338']
+            labels:
+              origin: daniel-pi
+              instance: daniel-pi
       # daniel-box's HOST resolver (roles/setup/k3s, `node-dns`). Every DNS lookup on the
       # control-plane node passes through this CoreDNS, and `/etc/resolv.conf` names it and
       # NOTHING else — the public fallback deliberately does not sit behind it, because a
@@ -806,10 +831,9 @@ metadata:
   name: prometheus
   namespace: {{ k8s_observability_namespace }}
 spec:
-  revisionHistoryLimit: 3
+  # ReadWriteOnce PVC — see the note on the loki Deployment.
+{{ spec_shell('Recreate') }}
   replicas: 1
-  strategy:
-    type: Recreate  # ReadWriteOnce PVC — see the note on the loki Deployment
   selector:
     matchLabels:
       app: prometheus
@@ -822,16 +846,10 @@ spec:
       # Without this the pod runs as the namespace `default` SA, whose token cannot list nodes —
       # kubernetes_sd_configs then discovers zero targets and the cadvisor job silently reports
       # no series rather than erroring.
-      serviceAccountName: prometheus
       # Tier 1: monitor-bridge (itself homelab-critical) reads this Prometheus every cycle for
       # its disk, memory, OOM, restart and PVC verdicts — see `DECIDED: claude-otel tiers` in
       # this role's CLAUDE.md.
-      priorityClassName: homelab-critical
-      enableServiceLinks: false
-      securityContext:
-        runAsUser: 65534
-        runAsGroup: 65534
-        fsGroup: 65534
+{{ pod_shell('homelab-critical', service_account='prometheus', run_as_user=65534, run_as_group=65534, fs_group=65534) }}
       containers:
         - name: prometheus
           image: {{ claude_otel_prometheus_image }}

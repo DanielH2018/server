@@ -13,13 +13,9 @@ it is that a future role joins the class unnoticed.
 Run: uv run pytest ansible/tests/deploy/test_build_roll_couplings.py
 """
 
-import sys
 from pathlib import Path
 from _helpers import REPO
 
-sys.path.insert(
-    0, str(REPO / "ansible" / "roles" / "setup" / "gitops_deploy" / "files")
-)
 
 from deploy_logic import (
     _BUILD_ROLL_COUPLINGS,

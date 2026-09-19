@@ -1,5 +1,6 @@
 {% from 'container-resources.yml.j2' import container_resources with context %}
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
+{% from 'workload-shell.yml.j2' import spec_shell, pod_shell with context %}
 ---
 # kube-state-metrics — the ONLY source of workload-readiness metrics in this cluster.
 #
@@ -71,7 +72,7 @@ metadata:
   name: kube-state-metrics
   namespace: {{ k8s_observability_namespace }}
 spec:
-  revisionHistoryLimit: 3
+{{ spec_shell('RollingUpdate') }}
   replicas: 1
   selector:
     matchLabels:
@@ -82,15 +83,9 @@ spec:
         app: kube-state-metrics
         netpol-baseline: enforced
     spec:
-      serviceAccountName: kube-state-metrics
       # Tier 4, with prometheus.yaml.j2 the one exception — see `DECIDED: claude-otel tiers`
       # in this role's CLAUDE.md.
-      priorityClassName: homelab-best-effort
-      enableServiceLinks: false
-      securityContext:
-        runAsUser: 65534
-        runAsGroup: 65534
-        runAsNonRoot: true
+{{ pod_shell('homelab-best-effort', service_account='kube-state-metrics', run_as_user=65534, run_as_group=65534, non_root=true) }}
       containers:
         - name: kube-state-metrics
           image: {{ claude_otel_kube_state_metrics_image }}

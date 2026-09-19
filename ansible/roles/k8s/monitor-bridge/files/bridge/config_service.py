@@ -11,6 +11,8 @@ Composed into `Config` by `bridge/config.py`; imports nothing from it.
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
+from gitops_markers import CONTENTION_PAGE_SECONDS
+
 
 @dataclass(frozen=True)
 class ServiceConfig:
@@ -229,13 +231,18 @@ def service_config(
         # gives one wait: a holder still on the lock 30 min after the first tick gave up has
         # outlived every legitimate deploy. The behind arm above would page the same fault,
         # but only after six hours sized for a dirty tree.
-        GITOPS_CONTENTION_MAX_S=_num("GITOPS_CONTENTION_MAX_MIN", "30") * 60,
+        # The default is the shared module's figure, the same one the SessionStart banner
+        # names a streak at, so the banner and this page cannot disagree about a lock.
+        GITOPS_CONTENTION_MAX_S=_num(
+            "GITOPS_CONTENTION_MAX_MIN", str(CONTENTION_PAGE_SECONDS // 60)
+        )
+        * 60,
         # HA automation-engine heartbeat: an HA time_pattern automation stamps
         # input_datetime.ha_heartbeat with now() every minute, so its last_changed is fresh ONLY
         # while HA's automation scheduler is executing. We poll HA's /api/states over the apps
         # network (Bearer token) and go down when it's stale — catching a wedged-but-running HA
         # (HTTP :8123 up, scheduler stuck) that the container healthcheck can't see. Empty
-        # URL/token = disabled (stays up), like N8N_API_KEY/PI_GLANCES_URL. 300s = 5 missed
+        # URL/token = disabled (stays up), like N8N_API_KEY/PI_ORIGIN. 300s = 5 missed
         # 1-min beats; rides out an HA restart/deploy. Seconds (no unit suffix) — kept a plain
         # float here because parse_duration belongs to the verdict layer, not to config.
         HA_URL=_env("HA_URL", "").rstrip("/"),

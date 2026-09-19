@@ -4,15 +4,21 @@ A pure-stdlib Python exporter (`files/stats.py`), mounted from a ConfigMap rathe
 built into an image. See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
-- **Deploy tag:** `--tags "terraria-stats"`.
-- **No route** — its `:9420` Prometheus exporter is scraped in-cluster by the
-  `claude-otel` `terraria-stats` job.
-- **Claim:** 1Gi, `k8s/volume-claim`-seeded. Holds the all-time playtime SQLite DB —
-  irreplaceable, since Loki's ~28-day backfill window can't fully reconstruct it — on
-  the **daily** backup tier.
-- **`k8s_autodeploy: false`** — grouped operationally with the hand-operated Terraria
-  server, not deployed unattended; also independently matches the migrating-state shape
-  (`Recreate` + an RWO PVC). Reason is in `defaults/main.yml`.
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
+- **Deploy tag:** `--tags "terraria-stats"`
+- **Image:** `python` (`terraria_stats_k8s_image`)
+- **Route:** none (no `templates/ingressroute.yaml.j2`)
+- **Claim:** `terraria-stats-data` (weekly -> B2 (default target))
+- **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — games — companion to the
+  hand-operated terraria server. ALSO Recreate + RWO volume-claim PVC holding irreplaceable
+  stats — two independent reasons
+<!-- /generated_from -->
+
+- **Its `:9420` Prometheus exporter** is scraped in-cluster by the `claude-otel`
+  `terraria-stats` job.
+- **`terraria-stats-data`** is 1Gi, `k8s/volume-claim`-seeded, on the **weekly** B2 backup tier.
+  It holds the all-time playtime SQLite DB — irreplaceable, since Loki's ~28-day backfill
+  window can't fully reconstruct it.
 
 ## Notable
 - Stock `python:3.14-alpine`, not an `image-builder` build: `stats.py` has no
@@ -23,5 +29,6 @@ built into an image. See repo-root `CLAUDE.md` for shared conventions.
   `stats_lib.py` together — see tasks/main.yml).
 - The Loki fetch, cursor handling, metric rendering, the HTTP handler and the run loop live
   in `k8s/game-stats-lib`'s `stats_lib.py`, shared with valheim-stats — see that role's
-  CLAUDE.md for how it ships (staged beside this script AND added to this role's own
-  ConfigMap). `parse_line`, `StatsState` and `Store` stay here; they are the per-game part.
+  CLAUDE.md for how it ships (its include stages the copy beside this script and hands this
+  role the `--from-file` entry as `game_stats_lib_from_file`). `parse_line`, `StatsState`
+  and `Store` stay here; they are the per-game part.

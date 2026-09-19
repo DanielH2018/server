@@ -1,5 +1,6 @@
 {% from 'container-resources.yml.j2' import container_resources with context %}
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
+{% from 'workload-shell.yml.j2' import spec_shell, pod_shell with context %}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -7,12 +8,10 @@ metadata:
   name: terraria
   namespace: {{ k8s_namespace }}
 spec:
-  revisionHistoryLimit: 3
-  replicas: {{ terraria_k8s_replicas }}
   # RWO config PVC on single-replica Longhorn — a rolling update deadlocks on the volume,
   # and two servers writing one world would be worse than the deadlock.
-  strategy:
-    type: Recreate
+{{ spec_shell('Recreate') }}
+  replicas: {{ terraria_k8s_replicas }}
   selector:
     matchLabels:
       app: terraria
@@ -30,8 +29,6 @@ spec:
       # unit; this pin only ever moves together with the L2Advertisement nodeSelector.
       nodeSelector:
         kubernetes.io/hostname: {{ k8s_primary_node }}
-      enableServiceLinks: false
-      automountServiceAccountToken: false
       # Runs as 1000, which is what lets the capability set below be empty. The volume is
       # uid-1000-owned from the cutover seed and measured 1000:1000 on 2026-08-31, so the server
       # now writes its own data as its owner rather than overriding the permission check to reach
@@ -44,12 +41,7 @@ spec:
       # volume's group and OR in group-write at every mount, which fixes them declaratively where
       # a one-shot chown would drift back. Same mechanism valheim-stats documents on its own
       # Longhorn claim.
-      securityContext:
-        runAsUser: {{ puid }}
-        runAsGroup: {{ pgid }}
-        runAsNonRoot: true
-        fsGroup: {{ pgid }}
-      priorityClassName: homelab-standard
+{{ pod_shell('homelab-standard', run_as_user=puid, run_as_group=pgid, fs_group=pgid, non_root=true) }}
       containers:
         - name: terraria
           image: {{ terraria_k8s_image }}

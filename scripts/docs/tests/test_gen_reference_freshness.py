@@ -1,10 +1,5 @@
 """docs.reference.freshness: the ranking and the table, from synthetic PageFreshness rows."""
 
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-
 from docs.reference import freshness as g
 from lib.doc_freshness import PageFreshness
 

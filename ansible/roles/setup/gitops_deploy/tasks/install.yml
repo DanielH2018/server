@@ -27,6 +27,7 @@
     - deploy_io.py
     - deploy_config.py
     - deploy_state.py
+    - gitops_markers.py
     - deploy_failtext.py
     - deploy_alerts.py
     - deploy_changes.py
@@ -217,6 +218,8 @@
         src: ansible/roles/setup/gitops_deploy/files/deploy_config.py
       - live: /opt/gitops-deploy/deploy_state.py
         src: ansible/roles/setup/gitops_deploy/files/deploy_state.py
+      - live: /opt/gitops-deploy/gitops_markers.py
+        src: ansible/roles/setup/gitops_deploy/files/gitops_markers.py
       - live: /opt/gitops-deploy/deploy_failtext.py
         src: ansible/roles/setup/gitops_deploy/files/deploy_failtext.py
       - live: /opt/gitops-deploy/deploy_alerts.py
@@ -295,6 +298,7 @@
     mode: "0750"
     owner: root
     group: root
+  no_log: true  # renders ruleset_drift_push_token
   become: true
 
 - name: Schedule the GitHub ruleset drift check
@@ -323,6 +327,7 @@
     mode: "0750"
     owner: root
     group: root
+  no_log: true  # renders interaction_limit_push_token
   become: true
 
 - name: Schedule the GitHub interaction-limit re-arm

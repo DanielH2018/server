@@ -4,8 +4,17 @@ Eclipse Mosquitto, the broker every Zigbee device event and HA automation trigge
 web UI, no route — infra role.
 
 ## At a glance
-- **Deploy tag:** `--tags "mosquitto"`. Must deploy **before** `zigbee2mqtt`
-  (`containers_list` orders it right after, with a comment saying so — z2m resolves the broker
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
+- **Deploy tag:** `--tags "mosquitto"`
+- **Image:** `eclipse-mosquitto` (`mosquitto_k8s_image`)
+- **Route:** none (no `templates/ingressroute.yaml.j2`)
+- **Claim:** `mosquitto-data` (no backup (StorageClass longhorn-nobackup))
+- **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — dependency edges — MQTT broker for
+  zigbee2mqtt/home-assistant; no intra-tick ordering. ALSO Recreate + its own PVC — two
+  independent reasons
+<!-- /generated_from -->
+
+- **Must deploy before `zigbee2mqtt`** (`containers_list` orders it right after, with a comment saying so — z2m resolves the broker
   by bare Service name).
 - **LAN address:** a MetalLB LoadBalancer Service pinned to `mqtt_k8s_vip` (`group_vars`, so
   daniel-server's Docker-side clients can render the same value), asserted after apply.
@@ -14,10 +23,8 @@ web UI, no route — infra role.
   transaction.
 - **Secrets:** `mqtt_username`/`mqtt_password_hash` (SOPS keys), rendered into a password file
   alongside the broker config in one Secret.
-- **`k8s_autodeploy: false`** for two independent reasons: it's a dependency edge the deployer
-  models no intra-tick ordering for (zigbee2mqtt and Home Assistant both need it up), and it's
-  `Recreate` + its own PVC, so a bad image swap can migrate broker state before the gate
-  observes a fault.
+- **Why `Recreate` + its own PVC matters for the denylist:** a bad image swap can migrate
+  broker state before the gate observes a fault.
 
 ## Editing
 - Broker/password config: `templates/config-secret.yaml.j2`.

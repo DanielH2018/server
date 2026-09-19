@@ -23,12 +23,10 @@ together with `self_applied`, and only their combination decides between `nothin
 Run: uv run pytest scripts/deploy_tools/tests/test_land_role_tests_reach_no_cluster.py
 """
 
-import sys
 from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import land_tags
 from _land_fakes import MERGE_SHA

@@ -27,6 +27,7 @@ from typing import ClassVar
 
 import deploy_ui_reads as reads
 import deploy_ui_writes as writes
+from gitops_markers import STATE_DIR
 
 # The locks the in-flight panel reads. The tree lock is held for the snapshot only (ADR-0017),
 # so for nearly all of a deploy the running thing is a `server-deploy-<tag>.lock` holder --
@@ -53,7 +54,7 @@ class Config:
         e = os.environ.get
         return cls(
             repo=Path(e("DEPLOY_UI_REPO", "/home/ubuntu/server")),
-            state_dir=Path(e("DEPLOY_UI_STATE", "/var/lib/gitops-deploy")),
+            state_dir=Path(e("DEPLOY_UI_STATE", STATE_DIR)),
             log_dir=Path(
                 e("DEPLOY_UI_LOGS", str(Path.home() / ".local/state/deploy-ui"))
             ),

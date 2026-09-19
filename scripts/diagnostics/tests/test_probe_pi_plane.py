@@ -13,13 +13,16 @@ from diagnostics.probe_lib import core, pi_plane
 PROMETHEUS_TEMPLATE_TEXT = pi_plane.PROMETHEUS_TEMPLATE_PATH.read_text()
 
 
-def test_declared_pi_job_names_finds_exactly_the_known_two():
-    # Only two exist in the repo today (node-pi, alloy-pi) — glances has no Prometheus job
+def test_declared_pi_job_names_finds_exactly_the_known_four():
+    # node-pi and alloy-pi, plus dockerd-pi and containerd-pi since #2003 (the two daemons'
+    # own Go runtime metrics, to size their GOMEMLIMITs) — glances has no Prometheus job
     # anywhere, so forcing a bigger set here would fabricate one. A named frozenset, not a
     # bare count, so a future rename shows up as a specific missing/extra name.
     assert pi_plane.declared_pi_job_names(PROMETHEUS_TEMPLATE_TEXT) == {
         "node-pi",
         "alloy-pi",
+        "dockerd-pi",
+        "containerd-pi",
     }
 
 
@@ -70,13 +73,6 @@ def test_format_pi_targets_flags_a_declared_job_gone_missing():
     text, code = pi_plane.format_pi_targets(declared, active)
     assert code == 1
     assert "alloy-pi: MISSING" in text
-
-
-def test_format_pi_targets_notes_glances_is_not_scraped():
-    declared = {"node-pi", "alloy-pi"}
-    active = [_target("node-pi"), _target("alloy-pi")]
-    text, _ = pi_plane.format_pi_targets(declared, active)
-    assert "glances" in text.lower()
 
 
 def test_pi_containers_argv_is_a_single_ssh_call():

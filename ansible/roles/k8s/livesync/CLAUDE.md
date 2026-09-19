@@ -3,16 +3,24 @@
 CouchDB backend for the Obsidian Self-hosted LiveSync plugin. See repo-root `CLAUDE.md`.
 
 ## At a glance
-- **Image:** `couchdb:3.5.2` (pinned + Renovate-managed, watchtower opts out)
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
+- **Deploy tag:** `--tags "livesync"`
+- **Image:** `couchdb` (`livesync_k8s_image`)
+- **Route:** none (no `templates/ingressroute.yaml.j2`)
+- **Claim:** `livesync-data` (no backup (StorageClass longhorn-nobackup))
+- **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — state coupled outside the volume —
+  reverting the CouchDB B-tree to a snapshot desynchronises it from connected Obsidian clients'
+  already-synced revisions, inviting a conflict storm an un-reverted rollback would not cause;
+  the pre-apply snapshot and revert work fine and are not the blocker
+<!-- /generated_from -->
+
 - **Host: daniel-box (k8s), since 2026-08-06 — slice 2.** The Docker role this config came from
   is gone; `local.ini.j2` now lives in this role's `templates/`, rendered into the ConfigMap.
   Edit CouchDB config HERE; deploy with `--tags livesync` from daniel-box.
-- **Port:** 5984 · **URL:** `livesync.<domain>` (forwards to the cluster via `bridge_hostname`)
-- **Authelia:** **no** — CouchDB enforces its own auth (`require_valid_user = true`);
-  the LiveSync client uses basic auth and can't pass Authelia 2FA
-- **Networks:** apps
+- **Port:** 5984
+- **No Authelia because** CouchDB enforces its own auth (`require_valid_user = true`); the
+  LiveSync client uses basic auth and can't pass Authelia 2FA
 - **Depends on:** traefik
-- **Config in:** `ansible/inventory/host_vars/daniel-box.yml` → `containers_list`
 
 ## Notable
 - `templates/config/local.ini.j2` sets `require_valid_user` and smoosh auto-compaction ratios

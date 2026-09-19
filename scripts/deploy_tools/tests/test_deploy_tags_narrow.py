@@ -15,12 +15,8 @@ that reads as "this macro reaches nothing" rather than as a broken scan.
 Run: uv run pytest scripts/deploy_tools/tests/test_deploy_tags_narrow.py
 """
 
-import sys
-from pathlib import Path
-
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import narrow_broad
 from lib.repo_paths import REPO
@@ -59,14 +55,62 @@ def test_an_added_containers_list_entry_narrows_to_its_tag(tree: Tree):
     assert tree.narrow(*_refs(tree)) == {"jellyfin-new"}
 
 
-def test_a_removed_containers_list_entry_is_flagged(tree: Tree):
-    """A removal has no tag that undoes it — only the whole play reconciles the host."""
+def test_a_removed_containers_list_entry_narrows_to_nothing_of_its_own(tree: Tree):
+    """No tag undoes a removal, and no whole-play run does either — the play never visits
+    the removed entry's role — so a removal reaches only the list's readers (#2046)."""
     tree.write(
         "ansible/inventory/host_vars/daniel-box.yml",
         HOST_VARS.replace("  - name: bazarr\n    platform: k8s\n", ""),
     )
-    with pytest.raises(narrow_broad.CannotNarrow, match="removed"):
-        tree.narrow(*_refs(tree))
+    assert tree.narrow(*_refs(tree)) == set()
+
+
+# ── containers_list: a role that renders the LIST is reached by any change to it ──────────
+
+
+def _reader(tree: Tree, role: str, line: str) -> None:
+    tree.write(f"ansible/roles/k8s/{role}/templates/configmap.yaml.j2", line + "\n")
+    tree.commit(f"{role} reads the list")
+
+
+def test_a_role_reading_another_hosts_list_through_hostvars_is_reached(tree: Tree):
+    """The #2044 shape: monitor-bridge derives PI_PUBLISHED_PORTS from daniel-pi's list."""
+    _reader(tree, "prowlarr", "ports: {{ hostvars['daniel-pi'].containers_list }}")
+    tree.write(
+        "ansible/inventory/host_vars/daniel-pi.yml",
+        "containers_list:\n  - name: alloy\n",
+    )
+    # alloy is the new entry's own tag; prowlarr is the reader.
+    assert tree.narrow(*_refs(tree)) == {"alloy", "prowlarr"}
+
+
+def test_a_role_reading_the_list_bare_is_reached_by_a_removal(tree: Tree):
+    _reader(tree, "prowlarr", "names: {{ containers_list | map(attribute='name') }}")
+    tree.write(
+        "ansible/inventory/host_vars/daniel-box.yml",
+        HOST_VARS.replace("  - name: bazarr\n    platform: k8s\n", ""),
+    )
+    assert tree.narrow(*_refs(tree)) == {"prowlarr"}
+
+
+@pytest.mark.parametrize(
+    "prose",
+    [
+        "# three roles carry a hostname in containers_list",
+        "{# the Service is not the containers_list entry name\n   {{ containers_list }} #}",
+        'reason: "not a containers_list entry, so a bump matches no tag"',
+    ],
+    ids=["yaml-comment", "jinja-comment", "quoted-prose"],
+)
+def test_prose_naming_the_list_is_not_a_reader(tree: Tree, prose: str):
+    """The rejecting half: headers, defaults and docs mention the name far more often than
+    a template reads it. Counting them reached 59 of 62 services on the real tree."""
+    _reader(tree, "prowlarr", prose)
+    tree.write(
+        "ansible/inventory/host_vars/daniel-box.yml",
+        HOST_VARS.replace("image: sonarr:1", "image: sonarr:2"),
+    )
+    assert tree.narrow(*_refs(tree)) == {"sonarr"}
 
 
 # ── a plain inventory key maps to the roles that read it ────────────────────────────────
@@ -269,10 +313,19 @@ def test_a_non_broad_path_maps_the_way_changed_maps_it(tree: Tree):
     assert tree.narrow(*_refs(tree)) == {"jellyfin", "sonarr", "radarr"}
 
 
-def test_a_setup_plane_path_in_the_range_is_flagged(tree: Tree):
-    """Mixed planes: the setup half has its own arm, and this one must not claim it."""
+def test_a_setup_plane_path_in_the_range_narrows_the_deploy_half(tree: Tree):
+    """Mixed planes: the setup half gets its own plan (#2046), so it contributes no tag here
+    and does not refuse — a refusal only turned the dropped half into a full run nobody ran."""
     tree.write("ansible/roles/setup/k3s/defaults/main.yml", "k3s_x: 1\n")
-    with pytest.raises(narrow_broad.CannotNarrow, match="setup"):
+    tree.write("ansible/roles/k8s/jellyfin/templates/deployment.yaml.j2", "a: c\n")
+    assert tree.narrow(*_refs(tree)) == {"jellyfin"}
+
+
+def test_a_bring_up_playbook_in_the_range_is_flagged(tree: Tree):
+    """The tick parks on a bring-up playbook before any plan exists; a hand narrowing over
+    such a range must not read as applyable."""
+    tree.write("ansible/k3s-bringup.yml", "- hosts: all\n")
+    with pytest.raises(narrow_broad.CannotNarrow, match="bring-up"):
         tree.narrow(*_refs(tree))
 
 

@@ -72,6 +72,19 @@ def test_whitespace_around_the_opt_out_is_tolerated(tmp_path):
     assert rf.reachability(role, gv) == rf.LAN
 
 
+def test_a_monitoring_route_only_role_is_lan_whatever_the_flag_says(tmp_path):
+    """`monitoring_route()` ignores k8s_public_route, and a comment naming the other macro
+    is not a call (ical-proxy's template says "not ingressroute()" in a `{# #}` block)."""
+    role = _role(
+        tmp_path,
+        "ical-proxy",
+        "{# monitoring_route, not ingressroute(): LAN-only #}\n"
+        "{{ monitoring_route(a, b, c, '/calendar') }}\n",
+    )
+    gv = _group_vars(tmp_path, "k8s_public_route: true\n")
+    assert rf.reachability(role, gv) == rf.LAN
+
+
 def test_route_cell_names_the_public_name_first(tmp_path):
     """It is the one that works from anywhere, so it is the one to reach for."""
     assert (

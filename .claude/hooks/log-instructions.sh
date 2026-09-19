@@ -1,4 +1,8 @@
 #!/bin/bash
+# gen-hooks: register
+#   event: InstructionsLoaded
+#   timeout: 10
+#   order: 10
 # InstructionsLoaded hook — observability only. Appends one line per CLAUDE.md /
 # .claude/rules file as it loads (which file, and why: session_start vs
 # path_glob_match vs nested_traversal, plus the trigger file) to

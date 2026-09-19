@@ -3,14 +3,6 @@
 from datetime import UTC, datetime
 from urllib.parse import parse_qs, urlparse
 
-# `probe_lib` is a namespace package under `scripts/`, so reaching it by package name needs
-# `scripts/` on sys.path — pyproject's `pythonpath` is a pytest setting, and the bootstrap
-# guard reads this module as a script. Copied from probe_lib/alerts.py.
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
-
 from diagnostics.probe_lib import core
 
 

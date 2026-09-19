@@ -18,3 +18,20 @@ optimize_pi_dns_servers:
 optimize_pi_dns_timeout: 2
 optimize_pi_dns_attempts: 1
 optimize_pi_dns_options: "timeout:{{ optimize_pi_dns_timeout }} attempts:{{ optimize_pi_dns_attempts }}"
+
+# The apt timers and the daily minute each is pinned to (tasks/main.yml, section 9). Both
+# are UTC, in the window between the midnight cluster and the 06:00 hour, update before
+# upgrade. `at` is the time half of a systemd OnCalendar (`*-*-* <at>`).
+optimize_pi_apt_timers:
+  - unit: apt-daily.timer
+    at: "04:20"
+  - unit: apt-daily-upgrade.timer
+    at: "05:20"
+
+# node_exporter as a host unit (tasks/main.yml, section 10). The same version the cluster's
+# DaemonSet pins (roles/k8s/node-exporter/defaults/main.yml) and the container ran; noble's
+# prometheus-node-exporter package is 1.7.0, five minors behind, so the upstream tarball keeps
+# the pin. The checksum is the linux-arm64 line of the release's sha256sums.txt. Renovate does
+# not track this; bump it by hand alongside the cluster's.
+optimize_pi_node_exporter_version: "1.12.1"
+optimize_pi_node_exporter_sha256: "ad35b605f9954b9f1ffddf5ba054bdc5a98d790b9eae5291e1eeb83f1ecbd0e7"

@@ -20,7 +20,13 @@ from pathlib import Path
 
 import pytest
 
-from _deploy_sh_fakes import FAKE_RECAP, FLOCK_STUB, deploy_sh_env, make_snapshot_repo
+from _deploy_sh_fakes import (
+    FAKE_RECAP,
+    FLOCK_STUB,
+    UV_DEPLOY_LOCKS_ARM,
+    deploy_sh_env,
+    make_snapshot_repo,
+)
 
 _REPO = Path(__file__).resolve().parents[3]
 _DEPLOY_SH = _REPO / "scripts" / "deploy.sh"
@@ -29,16 +35,17 @@ _DEPLOY_SH = _REPO / "scripts" / "deploy.sh"
 # that disjointness IS the fix, so it is asserted rather than assumed.
 _PLAYBOOK_FAILED = 20
 _NO_HOSTS_MATCHED = 78
-_WRAPPER_REFUSALS = (2, 3, 4, 75, 76, 77, _NO_HOSTS_MATCHED)
+_WRAPPER_REFUSALS = (2, 3, 4, 75, 76, 77, _NO_HOSTS_MATCHED, 79)
 
 _UV_STUB = """#!/bin/bash
 # Only the playbook run carries the exit code under test; the wrapper's own helper calls
 # (fact_cache_guard, deploy_tags) must succeed or the script never reaches it.
 case "$*" in
   *ansible-playbook*) {recap}; exit {ansible_exit} ;;
+{locks}
   *) exit 0 ;;
 esac
-"""
+""".replace("{locks}", UV_DEPLOY_LOCKS_ARM)
 
 # What ansible prints when no play matched a host: the banner, and nothing under it. It exits
 # 0 for this, which is the whole reason the wrapper reads the recap (issue #1814).

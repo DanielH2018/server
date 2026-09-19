@@ -39,7 +39,6 @@ GITOPS_SRC = FILES / "gitops_deploy.py"
 IO_SRC = FILES / "deploy_io.py"
 HANDLERS_SRC = FILES / "deploy_handlers.py"
 STAGING_IO_SRC = FILES / "deploy_staging_io.py"
-STATE_PREFIX = "/var/lib/gitops-deploy/"
 # What the `tick` fixture arms the staging gate over. The production literal stays in
 # gitops_deploy.py, where scripts/docs/gen_doc_fragments.py reads it; this is only what puts the
 # scripted k8s service in scope so the real consult_staging has something to gate.
@@ -85,23 +84,16 @@ def gitops_deploy() -> ModuleType:
 def state_dir(
     gitops_deploy: ModuleType, monkeypatch, tmp_path: pathlib.Path
 ) -> pathlib.Path:
-    """tmp_path, with every module constant naming a /var/lib/gitops-deploy path repointed
-    into it under the same basename, so a test reads what a tick wrote (`last_run`,
-    `pending_alerts.json`, the per-channel `*_alerted_sha` markers) without touching the host."""
-    markers = {
-        name: value
-        for name, value in vars(gitops_deploy).items()
-        if isinstance(value, str) and value.startswith(STATE_PREFIX)
-    }
-    assert "LAST_RUN" in markers and "PENDING_ALERTS_FILE" in markers
-    for name, value in markers.items():
-        monkeypatch.setattr(
-            gitops_deploy, name, str(tmp_path / value.removeprefix(STATE_PREFIX))
-        )
-    # The constants above are the literals the module declares; STATE is what its code reads and
-    # writes them through, so it has to be repointed too or a test would write to /var/lib.
-    # DeployerState derives the same basenames, which test_deployer_state.py pins against the
-    # constants.
+    """tmp_path, with the deployer's state directory repointed into it, so a test reads what a
+    tick wrote (`last_run`, `pending_alerts.json`, the per-channel `*_alerted_sha` markers)
+    under the same basenames without touching the host.
+
+    One object carries every marker path — `STATE` is what the deployer reads and writes
+    through, and `DeployerState.MARKERS` is the only table of basenames — so replacing that
+    object is the whole repoint. `test_state_dir_repoints_every_state_path_in_the_module`
+    keeps it whole: a path literal for the state directory anywhere in `gitops_deploy.py`
+    would escape this fixture and write to /var/lib during a test run.
+    """
     monkeypatch.setattr(gitops_deploy, "STATE", deploy_io.DeployerState(tmp_path))
     return tmp_path
 
@@ -222,7 +214,9 @@ def tick(gitops_deploy: ModuleType, monkeypatch, state_dir, tmp_path) -> Scripte
     """
     repo = tmp_path / "repo"
     repo.mkdir()
-    scripted = ScriptedTick(repo, pathlib.Path(gitops_deploy.STAGING_OVERRIDE_FILE))
+    scripted = ScriptedTick(
+        repo, pathlib.Path(gitops_deploy.STATE.path("staging_override"))
+    )
     monkeypatch.setattr(gitops_deploy, "REPO", str(repo))
     monkeypatch.setattr(deploy_io, "run", scripted.run)
     monkeypatch.setattr(gitops_deploy, "STAGING_GATE", True)

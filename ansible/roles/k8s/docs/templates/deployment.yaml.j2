@@ -1,5 +1,6 @@
 {% from 'container-resources.yml.j2' import container_resources with context %}
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
+{% from 'workload-shell.yml.j2' import spec_shell, pod_shell with context %}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -7,7 +8,7 @@ metadata:
   name: docs
   namespace: {{ k8s_namespace }}
 spec:
-  revisionHistoryLimit: 3
+{{ spec_shell('RollingUpdate') }}
   replicas: 1
   selector:
     matchLabels:
@@ -18,22 +19,14 @@ spec:
         app: docs
         netpol-baseline: enforced
     spec:
-      enableServiceLinks: false
+      # best-effort: a read-only documentation viewer should lose an eviction race to every
+      # workload that serves state.
+{{ pod_shell('homelab-best-effort', run_as_user=puid, run_as_group=pgid, fs_group=pgid, non_root=true) }}
       # hostPath is node-local, so the pod MUST land where the built site is. Unpinned, it
       # schedules onto the other node and serves an empty tree — which reads as "the build
       # is broken" rather than as a scheduling mistake.
       nodeSelector:
         kubernetes.io/hostname: {{ docs_k8s_node }}
-      securityContext:
-        runAsUser: {{ puid }}
-        runAsGroup: {{ pgid }}
-        fsGroup: {{ pgid }}
-        runAsNonRoot: true
-      automountServiceAccountToken: false
-      # best-effort: a read-only documentation viewer should lose an eviction race to every
-      # workload that serves state. Set explicitly — omitting it leaves the pod at Kubernetes'
-      # default priority of 0, which is BELOW homelab-best-effort (1000).
-      priorityClassName: homelab-best-effort
       containers:
         - name: docs
           image: {{ docs_k8s_image }}

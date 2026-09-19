@@ -13,16 +13,15 @@ followed -- was already fixed by the time it was filed; the tests/ fall-through 
 
 Each narrowing has a reject half. The reject here is `tasks/teardown.yml`: a change to the
 half of the dispatcher that runs where `has_gitops` is false must still name daniel-server
-and daniel-pi, and it does so through the "unknown stays wide" fallback, which this file
-pins so a later narrowing of `tasks/` cannot silence it.
+and daniel-pi. It did so through the "unknown stays wide" fallback until #2073, and now
+through the `not has_gitops` gate on the include that pulls it in; this file pins the
+answer either way, so a later narrowing of `tasks/` cannot silence it.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_land_reach_role_tests.py
 """
 
-import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import land_reach
 import land_tags
@@ -33,6 +32,7 @@ _ROLE = "gitops_deploy"
 _FILES = "ansible/roles/setup/gitops_deploy/files/deploy_state.py"
 _TESTS = "ansible/roles/setup/gitops_deploy/tests/test_deployer_state.py"
 _TEARDOWN = "ansible/roles/setup/gitops_deploy/tasks/teardown.yml"
+_INSTALL = "ansible/roles/setup/gitops_deploy/tasks/install.yml"
 # PR #1884's file list, verbatim (`gh pr view 1884 --json files`), minus the paths outside
 # the setup plane -- those derive tags or nothing and never reach this note.
 _PR_1884_SETUP_PATHS = [
@@ -52,7 +52,7 @@ _PR_1884_SETUP_PATHS = [
 
 def test_the_paths_under_test_still_exist():
     """Non-vacuity: every case below reads green over a renamed file or role."""
-    named = (_FILES, _TESTS, _TEARDOWN, *_PR_1884_SETUP_PATHS)
+    named = (_FILES, _TESTS, _TEARDOWN, _INSTALL, *_PR_1884_SETUP_PATHS)
     missing = [p for p in named if not (REPO_ROOT / p).exists()]
     assert not missing, f"paths moved, so these cases check nothing: {missing}"
     main = (REPO_ROOT / "ansible/roles/setup/gitops_deploy/tasks/main.yml").read_text()
@@ -80,9 +80,13 @@ def test_a_shipped_file_still_reaches_the_gitops_host_only():
 
 def test_the_teardown_half_still_reaches_the_other_hosts():
     """The reject half: `tasks/` is NOT dropped (`is_role_test_path`'s docstring says why),
-    and the file that runs where `has_gitops` is false must keep naming those hosts."""
-    hosts = land_reach.setup_file_hosts(_ROLE, _TEARDOWN)
-    assert {"daniel-server", "daniel-pi"} <= hosts
+    and the file that runs where `has_gitops` is false must keep naming those hosts. Since
+    #2073 a `tasks/` path reads the include chain above it, so each half of the dispatcher
+    names exactly the hosts its `include_tasks` gate admits."""
+    assert land_reach.setup_file_hosts(_ROLE, _TEARDOWN) == frozenset(
+        {"daniel-server", "daniel-pi"}
+    )
+    assert land_reach.setup_file_hosts(_ROLE, _INSTALL) == frozenset({"daniel-box"})
 
 
 def test_pr_1884_owes_no_host_beyond_the_tick():

@@ -11,6 +11,32 @@ here is a hand apply. `daniel-box` is the server; `daniel-server` joined as an a
 (`setup/hypervisor`), whose `host_vars` turn the backup targets and the health crons off (`k3s_manage_backup_targets`,
 `k3s_manage_health_crons`), because both would push to prod's Kuma and B2.
 
+## At a glance
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates or playbook entry. -->
+- **Applied by:** `k3s-bringup.yml --tags "k3s"`; `k3s-bringup.yml --tags "k3s_agent"`
+- **Crons (12):**
+  - `Longhorn backup health` — `{{ k3s_longhorn_backup_health_cron_minute }} * * * *`
+  - `Longhorn filesystem trim` — `{{ k3s_longhorn_trim_cron_minute }} {{
+    k3s_longhorn_trim_cron_hour }} * * *`
+  - `B2 deletion accounting` — `{{ k3s_b2_deletion_accounting_cron_minute }} {{
+    k3s_b2_deletion_accounting_cron_hour }} * * *`
+  - `B2 backup budget listing` — `{{ k3s_b2_budget_cron_minute }} {{ k3s_b2_budget_cron_hour }}
+    * * *`
+  - `Longhorn restore drill` — `{{ k3s_longhorn_restore_drill_cron.split()[0] }} {{
+    k3s_longhorn_restore_drill_cron.split()[1] }} {{ k3s_longhorn_restore_drill_cron.split()[2]
+    }} * *`
+  - `daniel-box disk health` — `{{ k3s_disk_health_cron_minute }} * * * *`
+  - `remember log rotation health` — `{{ k3s_remember_logs_cron_minute }} * * * *`
+  - `Manifest prune drift check` — `{{ k3s_manifest_prune_cron_minute }} {{
+    k3s_manifest_prune_cron_hour }} * * *`
+  - `Release staleness drift check` — `{{ k3s_release_staleness_cron_minute }} * * * *`
+  - `Live object drift check` — `{{ k3s_live_drift_cron_minute }} {{ k3s_live_drift_cron_hour
+    }} * * *`
+  - `Off-box etcd snapshot` — `{{ k3s_etcd_s3_cron_minute }} {{ k3s_etcd_s3_cron_hour }} * * *`
+  - `etcd restore drill` — `{{ k3s_etcd_restore_drill_cron.split()[0] }} {{
+    k3s_etcd_restore_drill_cron.split()[1] }} * * {{ k3s_etcd_restore_drill_cron.split()[4] }}`
+<!-- /generated_from -->
+
 ## Layout
 
 `tasks/main.yml` is a list of `import_tasks`, one per topic, split on 2026-08-15 when the
@@ -118,6 +144,12 @@ the local ledger, which is bookkeeping, not state.
   commit sits behind `origin/master` under its role paths, or under an inventory key or
   shared macro its render reads (#1993). The full account, including why it runs as
   `sys_user` and not root, is the `#947` bullet in `roles/setup/gitops_deploy/CLAUDE.md`.
+  **The DOWN msg carries the stale services' names and a count, not their reasons** (#2013).
+  A refused narrowing marks the whole fleet stale, and the per-service reasons then ran to
+  ~7,500 chars; Kuma puts the msg into a Discord embed field capped at 1024 chars and never
+  truncates, so Discord rejected the DOWN with HTTP 400 on 2026-09-17 and 2026-09-18 and the
+  page reached nobody. `kuma_push` (kuma-push-lib.sh) and the bridge's `net.push` both cap
+  the msg at 900 chars as the class fix; the reasons are `probe.py releases --stale-only`.
 - **Cron's PATH omits `/usr/local/bin`, where k3s lives.** Every script here sets its own
   PATH; a new one that does not dies on `command -v k3s` and, if it pushes its heartbeat
   before the check, reads permanently green.

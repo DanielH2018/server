@@ -1,5 +1,6 @@
 {% from 'container-resources.yml.j2' import container_resources with context %}
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
+{% from 'workload-shell.yml.j2' import spec_shell, pod_shell with context %}
 {# The config trees configmap.yaml.j2 builds, keyed the same way: the ConfigMap and the
    subdirectory of /config it lands in ('root' is /config itself). The three subdirectories
    are swept by pattern before the install; the root is not (see the init container). #}
@@ -21,12 +22,10 @@ metadata:
   name: home-assistant
   namespace: {{ k8s_namespace }}
 spec:
-  revisionHistoryLimit: 3
-  replicas: 1
   # Recreate is load-bearing (slice-5 D5): the PVC is RWO, and two HAs against one MQTT
   # broker and one recorder lineage must never coexist.
-  strategy:
-    type: Recreate
+{{ spec_shell('Recreate') }}
+  replicas: 1
   selector:
     matchLabels:
       app: home-assistant
@@ -36,7 +35,7 @@ spec:
         app: home-assistant
         netpol-baseline: enforced
     spec:
-      enableServiceLinks: false
+{{ pod_shell('homelab-automation') }}
       # No pod-level runAsUser/fsGroup: the LSIO image starts as root and s6 drops to
       # PUID/PGID itself, chowning /config on the way — same contract as under Docker.
       initContainers:
@@ -91,8 +90,6 @@ spec:
             - name: home-assistant-config
               mountPath: /config
 {{ container_resources(cpu_limit='250m', mem_limit='128Mi', cpu_request='10m', mem_request='16Mi') }}
-      automountServiceAccountToken: false
-      priorityClassName: homelab-automation
       containers:
         - name: home-assistant
           image: {{ home_assistant_k8s_image }}

@@ -4,14 +4,23 @@ Zigbee2MQTT 2.x bridging the network-attached SLZB-06M coordinator into MQTT/Hom
 See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
-- **Image:** `ghcr.io/koenkk/zigbee2mqtt:2.12.0` (pinned → Renovate-managed, not Watchtower)
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
+- **Deploy tag:** `--tags "zigbee2mqtt"`
+- **Images:** `ghcr.io/koenkk/zigbee2mqtt` (`zigbee2mqtt_k8s_image`), `alpine`
+  (`zigbee2mqtt_k8s_init_image`)
+- **Route:** `zigbee2mqtt.<domain>` · `zigbee2mqtt.local.<domain>`, Authelia one_factor
+- **Claim:** `zigbee2mqtt-data` (daily -> R2)
+- **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — state coupled outside the volume —
+  the SLZB-06M coordinator's NVRAM holds the network key and frame counters, so reverting
+  zigbee2mqtt-data to a snapshot desynchronises it from the coordinator and can silence paired
+  devices; the pre-apply snapshot and revert work fine and are not the blocker
+<!-- /generated_from -->
+
 - **Host: daniel-box (k8s), since 2026-08-09 — slice 5, B2.** The Docker role this config came
   from is gone; this role's Secret renders `templates/config/configuration.yaml.j2`. Edit Z2M
   config HERE, deploy with `--tags zigbee2mqtt` from daniel-box.
-- **Port:** 8080 · **URL:** `zigbee2mqtt.<domain>` (Authelia: yes; forwards to the cluster via
-  `bridge_hostname`) · reaches the coordinator at `tcp://{{ slzb_ip }}:6638`, broker at the
+- **Port:** 8080 · reaches the coordinator at `tcp://{{ slzb_ip }}:6638`, broker at the
   in-cluster `mosquitto` Service name
-- **Config in:** `ansible/inventory/host_vars/daniel-box.yml` → `containers_list`
 
 ## Notable
 - **Network coordinator, not USB.** The SLZB-06M is reached as `serial.port: tcp://<ip>:6638`,

@@ -19,7 +19,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from diagnostics.probe_lib.arr import ARR_PORTS
-from diagnostics.probe_lib.health_kubectl import CLUSTER_NODES, DEFAULT_CLUSTER
+from lib.kubectl import CLUSTER_NODES, DEFAULT_CLUSTER
 from diagnostics.probe_lib.longhorn import LONGHORN_PREFIX
 
 
@@ -71,6 +71,14 @@ def _build_parser():
         action="store_true",
         help="list every subcommand with its description and exit "
         "(handled before subcommand parsing, so it needs no subcommand)",
+    )
+    p.add_argument(
+        "--cluster",
+        choices=sorted(CLUSTER_NODES),
+        default=DEFAULT_CLUSTER,
+        help="which cluster every kubectl read is about (default: prod). A subcommand that "
+        "reads the cluster refuses rather than answering when the local kubectl serves a "
+        "different one (#1663). `health` also takes it after the subcommand.",
     )
     sub = p.add_subparsers(dest="cmd", required=True)
 
@@ -252,11 +260,12 @@ def _build_parser():
         action="store_true",
         help="print the kubectl calls without making them",
     )
-    pi = sub.add_parser("pi", help="Pi glances API")
+    pi = sub.add_parser("pi", help="daniel-pi container view over one ssh")
     pi.add_argument(
         "subpath",
-        help="glances API path (e.g. fs, quicklook, mem, cpu), or `containers` for a "
-        "one-ssh docker inspect view of every container on the host",
+        choices=["containers"],
+        help="`containers`: a one-ssh docker inspect view of every container on the host "
+        "(the glances API this took until 2026-09-18 retired with glances, #2004)",
     )
     ct = sub.add_parser(
         "cert",
@@ -277,7 +286,9 @@ def _build_parser():
     hl.add_argument(
         "--cluster",
         choices=sorted(CLUSTER_NODES),
-        default=DEFAULT_CLUSTER,
+        # SUPPRESS, not DEFAULT_CLUSTER: a subparser default overwrites the value the root
+        # parser already stored, so `probe.py --cluster stage health x` would read prod.
+        default=argparse.SUPPRESS,
         help="which cluster the verdict is about (default: prod). The gate refuses rather "
         "than answering when the local kubectl serves a different one (#1663). Ignored "
         "with --docker, which reaches the Pi over ssh.",
@@ -355,6 +366,14 @@ def _build_parser():
         help=(
             "one line per service whose role paths moved past its applied commit, or with no "
             "record at all; exit 1 if any (for a cron -- see issue #947)"
+        ),
+    )
+    rel.add_argument(
+        "--kuma",
+        action="store_true",
+        help=(
+            "with --stale-only: the same verdict as ONE line grouped by reason, shaped for a "
+            "Kuma push message (bridge.msgfmt); release-staleness-check.sh pushes this"
         ),
     )
     return p

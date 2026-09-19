@@ -17,7 +17,7 @@ in the same folders. UI edits are captured back into version control by re-runni
     python3 scripts/grafana/export_grafana_dashboards.py
 
 Run on daniel-box against the cluster grafana (observability/grafana — the live one
-since E1); API calls exec into the pod via ``sudo k3s kubectl`` and build the admin auth
+since E1); API calls exec into the pod via a privileged ``kubectl`` and build the admin auth
 header in-pod from ``GF_SECURITY_ADMIN_PASSWORD``, so the password never leaves the pod
 and special characters never have to survive URL/shell quoting. Idempotent; overwrites
 the JSON in the role.
@@ -26,7 +26,14 @@ the JSON in the role.
 import json
 import os
 import re
-import subprocess
+import sys
+from pathlib import Path
+
+# `lib` is a sibling directory under `scripts/`; a directly-invoked script gets only its
+# own directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from lib.kubectl import DEFAULT_CLUSTER, kubectl
 
 OUTDIR = "ansible/roles/k8s/claude-otel/files/dashboards"
 
@@ -57,27 +64,22 @@ def gapi(path):
     Since E1 the live Grafana is the cluster one (observability/grafana); its route is
     Authelia-gated, so API calls exec into the pod instead. The admin password never
     leaves the pod: the auth header is built in-pod from GF_SECURITY_ADMIN_PASSWORD
-    (the grafana-admin Secret). Run on daniel-box; needs sudo because the plain
+    (the grafana-admin Secret). Run on daniel-box; `privileged` because the plain
     kubeconfig is the readonly SA, which cannot exec.
     """
-    out = subprocess.run(
-        [
-            "sudo",
-            "k3s",
-            "kubectl",
-            "-n",
-            "observability",
-            "exec",
-            "deploy/grafana",
-            "--",
-            "sh",
-            "-c",
-            # busybox base64 has no -w0; tr strips the wrap instead.
-            'wget -qO- --header="Authorization: Basic $(printf %%s "admin:$GF_SECURITY_ADMIN_PASSWORD" | base64 | tr -d \'\\n\')" "http://localhost:3000%s"'
-            % path,
-        ],
-        capture_output=True,
-        text=True,
+    out = kubectl(
+        DEFAULT_CLUSTER,
+        "-n",
+        "observability",
+        "exec",
+        "deploy/grafana",
+        "--",
+        "sh",
+        "-c",
+        # busybox base64 has no -w0; tr strips the wrap instead.
+        'wget -qO- --header="Authorization: Basic $(printf %%s "admin:$GF_SECURITY_ADMIN_PASSWORD" | base64 | tr -d \'\\n\')" "http://localhost:3000%s"'
+        % path,
+        privileged=True,
         timeout=30,
     ).stdout
     return json.loads(out)

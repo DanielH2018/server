@@ -222,13 +222,13 @@ def test_a_scaled_to_zero_vip_with_an_endpoint_still_reads_ok():
 
 def test_the_probe_only_reads():
     """Every call is a `get`. This runs against a cluster Ansible alone may write."""
-    argvs = ph.vip_placement_argv()
-    assert {argv[2] for argv in argvs} == {
+    reads = ph.vip_placement_args()
+    assert {args[1] for args in reads} == {
         "svc",
         "endpointslices",
         "l2advertisements.metallb.io",
         "nodes",
         "deployments,statefulsets",
     }, "a dropped read would leave this loop passing over fewer calls"
-    for argv in argvs:
-        assert argv[:2] == ["kubectl", "get"]
+    for args in reads:
+        assert args[0] == "get"

@@ -1,4 +1,9 @@
 #!/bin/bash
+# gen-hooks: register
+#   event: PostToolUse
+#   matcher: Edit|Write
+#   timeout: 30
+#   order: 10
 # PostToolUse hook: run ansible-lint after editing Ansible YAML files
 
 # Read hook input from stdin

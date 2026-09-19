@@ -102,6 +102,49 @@ def test_the_setup_plane_never_consults_the_narrowing(gitops_deploy, tick):
     ]
 
 
+def test_a_mixed_range_applies_the_setup_plane_and_then_the_deploy_plane(
+    gitops_deploy, tick
+):
+    """Both planes in one range, both applied, setup first (#2046).
+
+    Until 2026-09-18 the planner was an if/else and the setup arm won: the deploy half of a
+    mixed range was never planned, so a removed Pi `containers_list` entry's full-run
+    fallback — the re-stamp `Release Staleness Drift` relies on — never ran.
+    """
+    tick.paths = ["ansible/roles/setup/gitops_deploy/tasks/main.yml", GROUP_VARS]
+    tick.narrow = (3, "")
+    assert gitops_deploy.main(tick.tools) == 0
+    assert [argv[-3:] for argv in tick.playbooks] == [
+        ["ansible/initial_setup.yml", "--tags", "gitops_deploy"],
+        ["--frozen", "ansible-playbook", "ansible/deploy.yml"],
+    ]
+    assert tick.merges == [ORIGIN]
+    assert gitops_deploy.STATE.broad_applied == f"{ORIGIN} ansible/deploy.yml"
+
+
+def test_a_mixed_range_whose_deploy_half_fails_keeps_the_setup_apply_recorded(
+    gitops_deploy, tick, state_dir
+):
+    """The hold names the plane that failed; the plane that applied stays recorded."""
+    tick.paths = ["ansible/roles/setup/gitops_deploy/tasks/main.yml", GROUP_VARS]
+    tick.narrow = (0, "sonarr")
+    tick.playbook_outcomes = [None, RuntimeError("boom")]
+    assert gitops_deploy.main(tick.tools) == 0
+    assert (state_dir / "hold_plane").read_text() == "ansible/deploy.yml sonarr"
+    assert (
+        gitops_deploy.STATE.broad_applied
+        == f"{ORIGIN} ansible/initial_setup.yml gitops_deploy"
+    )
+
+
+def test_a_setup_only_range_plans_no_deploy_plane(gitops_deploy, tick):
+    """The rejecting half: no deploy-plane path means no `deploy.yml`, narrowed or full."""
+    tick.paths = ["ansible/roles/setup/gitops_deploy/tasks/main.yml"]
+    tick.narrow = (3, "")
+    assert gitops_deploy.main(tick.tools) == 0
+    assert [argv[-1] for argv in tick.playbooks] == ["gitops_deploy"]
+
+
 def test_a_crashing_narrowing_still_runs_the_whole_play(gitops_deploy, tick, capsys):
     """The `# DECIDED:` marker says a crash here lands on the fallback, so prove it can.
 
@@ -131,7 +174,7 @@ def _denylisted_plan(settings, out: str, capsys):
         status="",
         action="deploy",
     )
-    plan = deploy_narrow.plan(lambda *_: (0, out), config, target, set())
+    plan = deploy_narrow.plan(lambda *_: (0, out), config, target, set(), True)
     return plan, capsys.readouterr().out
 
 
@@ -143,9 +186,11 @@ def test_a_narrowed_range_applies_its_denylisted_tags_and_names_them(settings, c
     journal says which were denied ones. A filter landing here fails this test on purpose.
     """
     plan, out = _denylisted_plan(settings, "crowdsec,traefik,radarr", capsys)
-    assert plan == deploy_narrow.BroadPlan(
-        "ansible/deploy.yml", ["crowdsec", "traefik", "radarr"], True
-    )
+    assert plan == [
+        deploy_narrow.BroadPlan(
+            "ansible/deploy.yml", ["crowdsec", "traefik", "radarr"], True
+        )
+    ]
     assert "narrow: crowdsec,traefik are denylisted for k8s auto-deploy" in out
     assert "radarr are denylisted" not in out
 
@@ -155,9 +200,9 @@ def test_a_narrowed_range_with_no_denylisted_tag_logs_no_denylist_line(
 ):
     """The rejecting half of the line above: it fires on a denied tag, not on every apply."""
     plan, out = _denylisted_plan(settings, "radarr,sonarr", capsys)
-    assert plan == deploy_narrow.BroadPlan(
-        "ansible/deploy.yml", ["radarr", "sonarr"], True
-    )
+    assert plan == [
+        deploy_narrow.BroadPlan("ansible/deploy.yml", ["radarr", "sonarr"], True)
+    ]
     assert "denylisted for k8s auto-deploy" not in out
 
 

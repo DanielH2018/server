@@ -21,7 +21,7 @@ on the cluster nodes:
 - Role under `ansible/roles/k8s/<service>/`, entry has `platform: k8s` in
   `host_vars/daniel-box.yml` → **k3s workload** (this is nearly everything).
 - Role under `ansible/roles/containers/<service>/`, entry in `host_vars/daniel-pi.yml` →
-  **Docker on the Pi** (docker-proxy, wg-easy, glances, autoheal).
+  **Docker on the Pi** (docker-proxy, wg-easy, alloy, autoheal).
 
 `daniel-server` and `daniel-box` have had **no Docker since 2026-08-14** — never verify a
 deploy there with a `docker` command; it doesn't exist on those hosts.
@@ -174,13 +174,17 @@ what stops two deploys of the same service racing. A `-e target=daniel-pi` deplo
 
 Because the snapshot is of `HEAD`, **an uncommitted edit is not deployed** — commit first.
 
-Seven of its non-zero exits mean **nothing was deployed**, and each is a resume point rather
-than a failure. The eighth, 20, is the inverse: the playbook ran and changes are live.
+Every member of `DEPLOY_SH_NO_VERDICT` (`scripts/deploy_tools/exit_codes.py`) means
+**nothing was deployed**, and each is a resume point rather than a failure. 64 also ran
+nothing, but is a bad command line rather than a resume point. 20 is the inverse: the
+playbook ran and changes are live. The table is pinned to that module by
+`ansible/tests/deploy/test_deploy_skill_names_every_exit_code.py`.
 
 | Exit | Meaning | What to do |
 |---|---|---|
+| 79 | `deploy_locks.py plan` did not print this run's service locks — it exited non-zero, timed out, or printed nothing — so the wrapper had nothing to take; it never falls back to an order of its own | run `uv run python ansible/roles/setup/gitops_deploy/files/deploy_locks.py plan <tag>` by hand, fix what it says, then retry; nothing was held while it ran |
 | 78 | the playbook matched no host — the `PLAY RECAP` names none, and ansible exits 0 for that | read the `[WARNING]` lines: an inventory that failed to parse, or a host pattern that matched nothing; fix it and retry |
-| 77 | the snapshot worktree could not be created, or a full run could not list its deploy tags from it (the message says which; a list that took longer than `TAG_LIST_TIMEOUT` under the tree lock is the second) | check `/tmp/homelab-deploy-snapshots/` is writable and `git worktree add --detach` works; for the list, run `uv run python scripts/deploy_tools/deploy_tags.py list` once by hand, then retry |
+| 77 | the snapshot worktree could not be created, or a full run could not list its deploy tags from it (the message says which; a list that took longer than `TAG_LIST_TIMEOUT` under the tree lock is the second) | the message carries the failing command's own stderr (the `fatal:` line from `git worktree add --detach`, or `mkdir`'s) — fix what it names, under `/tmp/homelab-deploy-snapshots/`; for the list, run `uv run python scripts/deploy_tools/deploy_tags.py list` once by hand, then retry |
 | 76 | flock failed on the lock file itself — not contention | `ls -l /var/lock/server-git-tree.lock`; retrying alone changes nothing |
 | 75 | a lock stayed busy — the tree lock, or one of this run's services' | retry |
 | 64 | the flags contradict each other, or `--at` named no commit (or none at all) | fix the command line; nothing ran |

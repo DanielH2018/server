@@ -83,10 +83,17 @@
               # that default is `cpu: "2"` (group_vars/all.yml) -- 400x this container's own
               # request, on the fleet's only container that was inheriting it.
               #
-              # 100m is sized against observed usage, not against the request: measured
-              # 2026-08-25 over 30m, all three sidecars sat at ~0.0002 cores (0.2 millicores),
-              # so this is ~500x steady state. A cap set nearer the 5m request would throttle
-              # a scrape and turn a resource fix into a metrics gap.
-              cpu: 100m
+              # DECIDED: size this cap against the CFS quota per PERIOD, never against the
+              # average rate. The average is misleading here: the sidecar idles between scrapes
+              # and does all of its work in one burst every 60s, so a 24h mean of ~0.5
+              # millicores hides a burst that a per-period quota throttles. 100m is 10ms of
+              # CPU per 100ms period; sonarr's scrape costs 25-86ms of CPU (24h mean x 60s,
+              # and the 5m peak, measured 2026-09-18), so it spilled across 4-7 periods and
+              # was throttled in ~48% of them: 0.08-0.34s of throttled time per scrape,
+              # against a scrape_duration of 0.53s vs 0.015-0.03s for radarr and prowlarr.
+              # (Issue #2017.) 500m is 50ms per period -- most sonarr scrapes fit in one, and
+              # radarr/prowlarr (throttled 1-5% at 100m) never hit it. One shared value keeps
+              # the three from drifting; it is a limit, so an idle sidecar costs nothing more.
+              cpu: 500m
               memory: 64Mi
 {%- endmacro %}

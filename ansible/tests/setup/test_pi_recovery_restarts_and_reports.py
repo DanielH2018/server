@@ -39,7 +39,7 @@ EXPECTED_WATCH_SET = {*PI_CONTAINERS, "docker-proxy-lifecycle"}
 # The container #1910 was filed on: a compose sub-service, not a containers_list entry, so
 # iterating the list alone would miss it.
 MUST_WATCH = frozenset(
-    {"autoheal", "docker-proxy", "docker-proxy-lifecycle", "glances", "wg-easy"}
+    {"autoheal", "docker-proxy", "docker-proxy-lifecycle", "wg-easy"}
 )
 
 ALL = sorted(EXPECTED_WATCH_SET)
@@ -249,14 +249,14 @@ def test_one_container_mid_recreate_does_not_blame_the_daemon(tmp_path):
     """REJECT: a deploy's recreate window reads `inspect failed` for ONE container while the
     daemon answers for the rest — that is not a daemon failure, and the journal is not read.
     """
-    running = [c for c in ALL if c != "glances"]
+    running = [c for c in ALL if c != "wg-easy"]
     status, msg, _, _ = run(
-        SCRIPT, tmp_path, running=running, gone="glances", journal=DAEMON_JOURNAL
+        SCRIPT, tmp_path, running=running, gone="wg-easy", journal=DAEMON_JOURNAL
     )
 
     assert status == "down"
-    assert "glances [inspect failed]" in msg, msg
-    assert "restart FAILED: glances" in msg, msg
+    assert "wg-easy [inspect failed]" in msg, msg
+    assert "restart FAILED: wg-easy" in msg, msg
     assert "dockerd:" not in msg, msg
     assert journalctl_calls(tmp_path) == [], "journal read for one missing container"
 

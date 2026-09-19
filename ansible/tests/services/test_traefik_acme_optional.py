@@ -14,17 +14,12 @@ Every rule here is a pair — one input it must accept, one it must reject — b
 has only ever been observed passing carries no evidence it can fail.
 """
 
-import sys
-
 import pytest
-from _helpers import REPO
 
-_REPO = REPO
-sys.path.insert(0, str(_REPO / "scripts"))
 
-from lib import yaml_fast  # noqa: E402
+from lib import yaml_fast
 
-from validate.k8s_manifests import (  # noqa: E402 — needs the path insert above
+from validate.k8s_manifests import (
     ALL_VARS,
     ANSIBLE,
     BASE_CONTEXT,

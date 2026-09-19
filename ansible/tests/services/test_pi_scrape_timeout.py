@@ -20,7 +20,6 @@ import pytest
 from _helpers import ANSIBLE as _ANSIBLE
 from _helpers import REPO as _REPO
 
-_sys.path.insert(0, str(_ANSIBLE / "tests"))
 _sys.path.insert(0, str(_REPO / "scripts" / "validate"))
 
 from lib import yaml_fast
@@ -34,7 +33,7 @@ _DEFAULT_TIMEOUT_S = 10
 
 # The jobs the census must find. A Pi job renamed or moved out of the static block would
 # otherwise leave `_pi_jobs()` empty and the loop below vacuously green.
-KNOWN_PI_JOBS = frozenset({"node-pi", "alloy-pi"})
+KNOWN_PI_JOBS = frozenset({"node-pi", "alloy-pi", "dockerd-pi", "containerd-pi"})
 
 _DURATION = re.compile(r"^(\d+)(ms|s|m|h)$")
 _UNIT_S = {"ms": 0.001, "s": 1, "m": 60, "h": 3600}

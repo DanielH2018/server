@@ -22,6 +22,7 @@ from pathlib import Path
 from _deploy_sh_fakes import (
     FAKE_RECAP,
     FLOCK_STUB,
+    UV_DEPLOY_LOCKS_ARM,
     deploy_sh_env,
     git_free_env,
     make_snapshot_repo,
@@ -49,9 +50,10 @@ case "$*" in
       shift
     done
     exit 0 ;;
+{locks}
   *) exit 0 ;;
 esac
-""".replace("{recap}", FAKE_RECAP)
+""".replace("{recap}", FAKE_RECAP).replace("{locks}", UV_DEPLOY_LOCKS_ARM)
 
 # `logger` is absent from most test environments, and deploy.sh swallows that with `|| true`,
 # so the annotation is unobservable without a stub. Prefixed, because it shares the call log.

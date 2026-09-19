@@ -36,6 +36,14 @@ What this still cannot catch: an insert built from control flow the evaluator do
 function call other than `Path`/`str`, an f-string, string concatenation, an `if`-chosen path).
 Those fall through to `None` and are reported as `unresolvable`, not silently passed -- see
 `test_no_import_bootstrap_is_unresolvable` below, which currently expects zero.
+
+Scope: every `scripts/**/*.py` that something other than pytest can run. A module pytest alone
+invokes -- `test_*.py`, `conftest.py`, and any module under a `tests/` directory, fixture
+modules included -- is Guard 3's (`test_test_module_bootstraps_present.py`), which REFUSES an
+insert `pythonpath` already supplies where this guard would mandate it. `is_pytest_only` is the
+one predicate both read, so the two stay complementary by construction: until #2099 this guard
+skipped only `test_*.py`/`conftest.py` and Guard 3 collected only those, so seven
+`tests/_*.py` fixture modules sat in this census and kept an insert #2061 deleted everywhere else.
 """
 
 import ast
@@ -51,6 +59,20 @@ PYTHONPATH_DIRS = [
     (REPO / p).resolve()
     for p in _PYPROJECT["tool"]["pytest"]["ini_options"]["pythonpath"]
 ]
+
+
+def is_pytest_only(rel: Path) -> bool:
+    """Whether pytest is the only thing that runs the module at repo-relative path `rel`.
+
+    A `test_*.py`, a `conftest.py`, or anything under a `tests/` directory -- a fixture module a
+    `test_*.py` imports has no other invoker either. Guard 2 skips exactly what this accepts and
+    Guard 3 collects exactly what this accepts, so no module is judged by both or by neither.
+    """
+    return (
+        rel.name.startswith("test_")
+        or rel.name == "conftest.py"
+        or "tests" in rel.parts
+    )
 
 
 @lru_cache(maxsize=None)
@@ -269,7 +291,7 @@ def find_bootstrap_gaps(
     missing: list[tuple[Path, int, str, set[Path]]] = []
     unresolvable: list[tuple[Path, int, str]] = []
     for file in sorted(SCRIPTS.rglob("*.py")):
-        if file.name.startswith("test_") or file.name == "conftest.py":
+        if is_pytest_only(file.relative_to(REPO)):
             continue
         tree = _parsed(file)
         own_dir = file.parent.resolve()
@@ -359,6 +381,17 @@ def test_the_import_index_is_not_empty():
     assert "lib" in index and (SCRIPTS in index["lib"]), index.get("lib")
     assert "docs_provenance" in index, index
     assert "k8s_autodeploy" in index, index
+
+
+def test_a_fixture_module_under_tests_is_pytest_only_and_a_library_beside_it_is_not():
+    """The census boundary this guard shares with Guard 3, pinned on both sides: a
+    `tests/_*.py` fixture module is skipped here (#2099), a `.py` beside the `tests/`
+    directory is not, whatever its name."""
+    assert is_pytest_only(Path("scripts/deploy_tools/tests/_land_fakes.py"))
+    assert is_pytest_only(Path("scripts/conftest.py"))
+    assert is_pytest_only(Path("ansible/tests/_k8s_render.py"))
+    assert not is_pytest_only(Path("scripts/deploy_tools/_fakes.py"))
+    assert not is_pytest_only(Path("scripts/lib/render_guard.py"))
 
 
 def test_known_deferred_bootstraps_are_satisfied():

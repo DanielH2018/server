@@ -22,6 +22,20 @@ Copy the shape from a close sibling rather than writing one from scratch:
 | a plain web app | `ansible/roles/k8s/freshrss` |
 | on the media volume | `ansible/roles/k8s/sonarr` |
 
+**The pod-spec shell comes from two shared macros, not from the sibling's copy.** A
+Deployment template calls `spec_shell(strategy)` under `spec:` and `pod_shell(priority_class,
+…)` under `spec.template.spec:`, both from `ansible/templates/workload-shell.yml.j2`; a
+DaemonSet calls `pod_shell` only. Both required arguments are decisions, and the file's
+docstring says what each one costs: `strategy` is `Recreate` (a downtime gap every deploy,
+allowlisted with its reason in `ansible/tests/k8s/test_deploy_strategy.py`) or
+`RollingUpdate`; `priority_class` is one of the tiers in
+`roles/setup/k3s/templates/priorityclass.yaml.j2`. The pod-level `securityContext` goes
+through the macro's `run_as_user`/`fs_group`/`non_root` arguments — a pod that needs sysctls
+or supplementalGroups writes the whole block itself and passes none of them. ENFORCED by
+`ansible/tests/k8s/test_workload_shell_uses_the_macros.py`, which refuses an owned field
+written out by hand. The container-level `securityContext` is `hardened_security_context`
+from `security-context.yml.j2`, as before.
+
 **Name every `volumes[].name` for the workload or component that owns it** — `sonarr-config`,
 never `config` — so a mount reads unambiguously in a diff or a `kubectl describe`. ENFORCED by
 `ansible/tests/k8s/test_volume_names_descriptive.py`, which also catches the half-finished rename
@@ -47,6 +61,16 @@ k8s_autodeploy_reason: "deploys no workload of its own — …"  # noqa var-nami
 
 A `false` declaration also needs the extra command in step 4.
 
+**Every deployed role has a `CLAUDE.md` that opens with `## At a glance`, and the block under
+that heading is generated.** Write the heading and the prose; then run
+`uv run python scripts/docs/gen_role_glance.py`, which writes the deploy tag, image
+repositories, route, claims and auto-deploy stance between two `generated_from` markers and
+leaves everything below them alone. `scripts/docs/tests/test_gen_role_glance.py` fails CI
+while the committed block differs from what the generator writes, so re-run it after any
+later change to the role's defaults, templates or `containers_list` entry. Put the reasoning
+— why a claim is unbacked, what a route bypasses — in the bullets below the block, not in
+the sources it reads.
+
 ## 2. The inventory entry — ordering is automatic, position is not
 
 Add the service to `containers_list` in `ansible/inventory/host_vars/daniel-box.yml` with
@@ -61,6 +85,12 @@ two edges that used to require hand positioning are derived automatically —
 If the new entry needs an ordering constraint no template carries — something like
 crowdsec's LAPI-credential edge onto traefik — declare it with `depends_on: [<name>]` on the
 entry rather than moving it in the list.
+
+`use_authelia: true` needs `auth_tier: one_factor | two_factor` beside it — the Authelia
+policy for the service's LAN name, which the authelia role renders into its access_control
+rules. An entry that attaches the middleware without a tier fails `validate/k8s_manifests.py`
+and the deploy. Pick `two_factor` for anything that acts on a stolen password alone (a shell,
+a deploy trigger, a volume delete) and say why in the comment above the entry.
 
 ## 3. Secrets
 

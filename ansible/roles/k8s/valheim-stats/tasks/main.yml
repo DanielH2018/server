@@ -57,7 +57,7 @@
       set -o pipefail;
       k3s kubectl -n {{ k8s_namespace }} create configmap valheim-stats-script
       --from-file=valheim_stats.py=/etc/rancher/k3s/valheim-stats/valheim_stats.py
-      --from-file=stats_lib.py=/etc/rancher/k3s/valheim-stats/stats_lib.py
+      {{ game_stats_lib_from_file }}
       --dry-run=client -o yaml > /etc/rancher/k3s/valheim-stats/configmap.yaml
     executable: /bin/bash
   become: true

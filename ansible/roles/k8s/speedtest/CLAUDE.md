@@ -4,12 +4,18 @@
 repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
-- **Deploy tag:** `--tags "speedtest"`.
-- **Route:** `speedtest.<domain>`, behind Authelia.
-- **Claim:** `speedtest-config`, `longhorn-nobackup`, 1Gi. `/config` holds a real
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
+- **Deploy tag:** `--tags "speedtest"`
+- **Image:** `lscr.io/linuxserver/speedtest-tracker` (`speedtest_k8s_image`)
+- **Route:** `speedtest.<domain>` · `speedtest.local.<domain>`, Authelia one_factor
+- **Claim:** `speedtest-config` (no backup (StorageClass longhorn-nobackup))
+- **Auto-deploy:** eligible (`k8s_autodeploy: true`)
+<!-- /generated_from -->
+
+- **`speedtest-config` is `longhorn-nobackup`**, 1Gi. `/config` holds a real
   `database.sqlite`, but its Laravel `APP_KEY` lives in SOPS so a rebuilt instance still
   works — losing the volume loses history, not function.
-- **`k8s_autodeploy: true`**, promoted in slice 7b: `Recreate` + an RWO PVC seeded
+- **Auto-deploy since slice 7b:** `Recreate` + an RWO PVC seeded
   through `k8s/volume-claim` is now protected by a pre-apply Longhorn snapshot and
   revert (`k8s_autodeploy_snapshot_pvcs: [speedtest-config]`).
 - **REQUIRED one-time post-deploy step (#996):** log in at `speedtest.<domain>`, open

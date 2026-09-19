@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# gen-hooks: library
+#   reason: run by log-instructions.sh through `uv run python`
 """Record which CLAUDE.md / .claude/rules file loaded into context, and why.
 
 One line per file as it loads, carrying the file and its `load_reason`: session_start,

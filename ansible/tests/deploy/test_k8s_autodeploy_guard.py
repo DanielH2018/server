@@ -76,6 +76,7 @@ from _autodeploy import (
 )
 from _autodeploy_claims import (
     _claim_name_refs,
+    _deployment_strategy_is_recreate,
     _migrating_state,
     _rendered_pvc_claims,
 )
@@ -263,6 +264,22 @@ def test_a_commented_out_seed_volume_include_does_not_credit_a_claim(
     resolved, unresolved = _rendered_pvc_claims(role)
     assert resolved == set()
     assert unresolved == []
+
+
+def test_recreate_is_read_off_the_spec_shell_call(tmp_path: Path) -> None:
+    """The strategy reaches a template through `spec_shell('Recreate')`, not a literal, since
+    2026-09-19 — a scan that matched only the literal read every Deployment as rolling and
+    left `test_auto_deployable_migrating_state_roles_declare_snapshot_pvcs` with nothing to
+    check."""
+    role = tmp_path / "widget"
+    (role / "templates").mkdir(parents=True)
+    tpl = role / "templates" / "deployment.yaml.j2"
+    tpl.write_text("spec:\n{{ spec_shell('Recreate') }}\n  replicas: 1\n")
+    assert _deployment_strategy_is_recreate(role)
+    tpl.write_text("spec:\n{{ spec_shell('RollingUpdate') }}\n  replicas: 1\n")
+    assert not _deployment_strategy_is_recreate(role)
+    tpl.write_text("spec:\n  # was {{ spec_shell('Recreate') }} once\n  replicas: 1\n")
+    assert not _deployment_strategy_is_recreate(role)
 
 
 def test_an_unresolvable_claim_var_is_reported_not_dropped(tmp_path: Path) -> None:

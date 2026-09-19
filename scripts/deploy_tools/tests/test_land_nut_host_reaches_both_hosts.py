@@ -12,11 +12,6 @@ sibling in the old position. This file pins what the landing now says for that P
 Run: uv run pytest scripts/deploy_tools/tests/test_land_nut_host_reaches_both_hosts.py
 """
 
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
 import land_reach
 import land_tags
 

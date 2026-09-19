@@ -1,6 +1,7 @@
 {% from 'container-resources.yml.j2' import container_resources with context %}
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
 {% from 'pod-affinity.yml.j2' import node_affinity_preference with context %}
+{% from 'workload-shell.yml.j2' import spec_shell, pod_shell with context %}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -8,11 +9,9 @@ metadata:
   name: uptime-kuma
   namespace: {{ k8s_namespace }}
 spec:
-  revisionHistoryLimit: 3
-  replicas: 1
   # Two RWO PVCs on single-replica Longhorn — a rolling update deadlocks on the volumes.
-  strategy:
-    type: Recreate
+{{ spec_shell('Recreate') }}
+  replicas: 1
   selector:
     matchLabels:
       app: uptime-kuma
@@ -22,7 +21,7 @@ spec:
         app: uptime-kuma
         netpol-baseline: enforced
     spec:
-      enableServiceLinks: false
+{{ pod_shell('homelab-best-effort') }}
       # The pod is the first cluster workload probing `-k8s` LAN names. CoreDNS forwards to
       # the node's resolver, which deliberately uses public DNS (the A1 bootstrap posture),
       # and the PUBLIC wildcard *.local.<domain> answers the Docker edge .161 — so every
@@ -48,8 +47,6 @@ spec:
             - "{{ extra }}.local.{{ domain }}"
 {% endfor %}
 {% endfor %}
-      automountServiceAccountToken: false
-      priorityClassName: homelab-best-effort
       # Preference, never a pin: daniel-box carries the storage- and VIP-pinned workloads and runs the hotter of the two nodes, so latency-insensitive services default here.
       # Weighted so the pod still schedules if daniel-server is cordoned or full.
 {{ node_affinity_preference('daniel-server') }}
@@ -144,6 +141,20 @@ spec:
             # once with `-e autokuma_k8s_on_delete=keep`, checked, and then redeployed at the
             # committed default. Only `keep` is safe to pass that way — it is the value that
             # cannot destroy history.
+            #
+            # DECIDED: `delete` stays, with the blast radius it has (#2076, 2026-09-19). An
+            # entity that fails to PARSE counts as removed, and a monitor whose reference
+            # (notification_name_list, tag_names, parent_name) does not resolve fails to parse
+            # too — so one bad shared entity deletes every monitor that names it, with its
+            # history. It did, twice: 107 monitors on 2026-09-18 (a notification Tera could
+            # not parse) and 23 on 2026-09-19 (tags referenced by display name, not id).
+            # Automatic pruning is kept because a retired declaration otherwise outlives its
+            # file forever (monitors 300/301 after E7), and history here is in the no-backup
+            # tier by design. What holds the line instead is guards on the declarations:
+            # every reference resolves to a declared entity id, no Tera syntax reaches an
+            # entity value outside a raw block, and applyExisting is declared —
+            # ansible/tests/services/test_kuma_static_monitors.py and
+            # test_kuma_tags_and_descriptions.py. Full account in this role's CLAUDE.md.
             - name: AUTOKUMA__ON_DELETE
               value: {{ autokuma_k8s_on_delete }}
           # Per-container, not pod-level: the uptime-kuma container in this same pod

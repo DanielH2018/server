@@ -30,6 +30,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from agent_logic import OpenPR, decide, delta, parse_run, render_digest, render_skip
+from gitops_markers import MARKERS, STATE_DIR
 from host_lib import atomic_write, discord_post, parse_env_file
 
 # The env override exists so the I/O shell can be exercised end-to-end against a throwaway
@@ -37,10 +38,13 @@ from host_lib import atomic_write, discord_post, parse_env_file
 # it, and the first armed tick would be its first execution.
 CONFIG = os.environ.get("RENOVATE_AGENT_CONFIG", "/etc/renovate-agent/config.env")
 USER_AGENT = "renovate-agent"
+# Distinct from the 1 a failed session returns, so the OnFailure page reads which it was.
+EXIT_WORKTREE_BLOCKED = 2
 
-# Written by gitops_deploy.py. Read, never written, here.
-HOLD_FILE = "/var/lib/gitops-deploy/hold_sha"
-HOLD_PLANE_FILE = "/var/lib/gitops-deploy/hold_plane"
+# Written by gitops_deploy.py. Read, never written, here; the directory and basenames come
+# from `gitops_markers`, the deployer's own table copied beside this file.
+HOLD_FILE = os.path.join(STATE_DIR, MARKERS["hold"])
+HOLD_PLANE_FILE = os.path.join(STATE_DIR, MARKERS["hold_plane"])
 
 
 def log(msg: str) -> None:
@@ -73,13 +77,13 @@ def run(argv: list[str], cwd: str | None = None, timeout: int = 120) -> tuple[in
     return p.returncode, (p.stdout or "") + (p.stderr or "")
 
 
-def open_prs(repo: str) -> list[OpenPR]:
+def open_prs(repo: str, tools: AgentTools | None = None) -> list[OpenPR]:
     """The open Renovate PRs, newest first. An empty list on any gh failure is NOT a census.
 
     Raising rather than returning [] matters: a failed `gh` call that read as "no open PRs"
     would make the tick skip quietly, which is indistinguishable from the healthy steady state.
     """
-    rc, out = run(
+    rc, out = (tools or TOOLS).run(
         [
             "gh",
             "pr",
@@ -114,13 +118,15 @@ class AgentTools:
     production, so `main()` passes nothing.
 
     `open_prs` and `run_session` stay out: their argv is what the suite asserts on, and a field
-    there would replace the builder rather than the process. Same reasoning as
+    there would replace the builder rather than the process. `open_prs` runs its `gh` through
+    `run` instead, so a fake answers the census without hiding the argv. Same reasoning as
     `deploy_toolbox.DeployTools`, which this mirrors.
     """
 
     run: Callable[..., tuple[int, str]] = run
     discord_post: Callable[..., bool] = discord_post
     rmtree: Callable[..., None] = shutil.rmtree
+    read_file: Callable[[str], str] = read_file
 
 
 TOOLS = AgentTools()
@@ -152,13 +158,15 @@ def is_registered_worktree(repo_dir: str, path: str, tools: AgentTools = TOOLS) 
 
 
 def worktree_is_reusable(
-    repo_dir: str, path: str, branch: str, tools: AgentTools = TOOLS
+    repo_dir: str, path: str, branch: str, tools: AgentTools = TOOLS, repo: str = ""
 ) -> tuple[bool, str]:
     """Whether the run worktree can be thrown away and recreated.
 
     It cannot when the previous tick left work behind — uncommitted changes, or commits that
-    never reached origin/master. Removing either would destroy a landing that was in flight,
-    so the tick skips instead and names the path for the operator.
+    never landed (branch_content_is_on_master decides that, since a squash merge leaves the
+    commits themselves unreachable from master; `repo` is the GitHub slug it asks about).
+    Removing either would destroy a landing that was in flight, so the tick skips instead and
+    names the path for the operator.
 
     SCOPE (see lib.git.git_dirty, #1223): whole tree, untracked counted — an unlanded scratch
     file is exactly the kind of leftover this must not discard. Stays inline rather than
@@ -181,8 +189,84 @@ def worktree_is_reusable(
         ["git", "-C", repo_dir, "rev-list", "--count", f"origin/master..{branch}"]
     )
     if rc == 0 and out.strip() not in ("0", ""):
+        if branch_content_is_on_master(repo_dir, branch, tools, repo):
+            return True, ""
         return False, f"{branch} holds {out.strip()} commit(s) not on origin/master"
     return True, ""
+
+
+def branch_content_is_on_master(
+    repo_dir: str, branch: str, tools: AgentTools = TOOLS, repo: str = ""
+) -> bool:
+    """Whether `branch` has already landed, by content or by the forge's record.
+
+    Ancestry alone cannot see a squash merge: the landing keeps the content and discards the
+    commits that carried it, so `rev-list origin/master..<branch>` counts them forever. The
+    run worktree's fixed branch is never reset after a landing, so from 2026-09-14 the tick
+    refused its own tree every day while its content sat on master as PR #1812 (#2014).
+    `git merge-tree --write-tree` asks about content instead: when the tree it would produce
+    is origin/master's own tree, the branch has nothing master lacks and the worktree can be
+    recreated. Once master has drifted into a conflict on a file the branch touched, that
+    exits non-zero — the very tree #2014 found was already in that state — so the forge is
+    asked last whether it merged a PR from exactly this tip (`repo`, the `owner/name` slug,
+    is what `gh` needs; empty means no forge check). Inlined from
+    scripts/dev/prune_worktrees.py's merge_tree_says_contained and pr_head_says_merged for
+    the reason in worktree_is_reusable's docstring — this file ships with no path to scripts/.
+
+    DECIDED: no verdict reads as NOT contained. A non-zero merge-tree exit, empty output, an
+    unreadable master tree, and a `gh` that fails or names no PR at this tip all refuse,
+    because a wrong yes here deletes work. A revert-only branch is refused for the same
+    reason: merging it changes master's tree, so it still holds something master lacks. The
+    forge match is on the head SHA, never on the branch name: the name is reused every tick.
+    """
+    rc, master_tree = tools.run(
+        ["git", "-C", repo_dir, "rev-parse", "origin/master^{tree}"]
+    )
+    if rc != 0 or not master_tree.strip():
+        return False
+    rc, merged = tools.run(
+        ["git", "-C", repo_dir, "merge-tree", "--write-tree", "origin/master", branch],
+        timeout=300,
+    )
+    lines = [line.strip() for line in merged.splitlines() if line.strip()]
+    if rc == 0 and lines and lines[0] == master_tree.strip():
+        return True
+    return branch_tip_was_merged(repo_dir, branch, repo, tools)
+
+
+def branch_tip_was_merged(
+    repo_dir: str, branch: str, repo: str, tools: AgentTools = TOOLS
+) -> bool:
+    """Whether the forge merged a PR whose head was exactly `branch`'s current tip."""
+    if not repo:
+        return False
+    rc, tip = tools.run(["git", "-C", repo_dir, "rev-parse", branch])
+    if rc != 0 or not tip.strip():
+        return False
+    rc, out = tools.run(
+        [
+            "gh",
+            "pr",
+            "list",
+            "--repo",
+            repo,
+            "--state",
+            "merged",
+            "--head",
+            branch,
+            "--json",
+            "headRefOid",
+        ]
+    )
+    if rc != 0:
+        return False
+    try:
+        prs = json.loads(out or "[]")
+    except json.JSONDecodeError:
+        return False
+    if not isinstance(prs, list):
+        return False
+    return any(isinstance(p, dict) and p.get("headRefOid") == tip.strip() for p in prs)
 
 
 def _process_start_time(pid: int) -> str:
@@ -296,11 +380,11 @@ def run_session(cfg: dict[str, str], cwd: str, log_path: str) -> tuple[str, int,
     return p.stdout or "", p.returncode, False
 
 
-def main() -> int:
-    cfg = parse_env_file(CONFIG)
+def main(tools: AgentTools = TOOLS, config_path: str = CONFIG) -> int:
+    cfg = parse_env_file(config_path)
     missing = [k for k in ("REPO", "REPO_DIR", "PROMPT_FILE") if not cfg.get(k)]
     if missing:
-        raise RuntimeError(f"{CONFIG} is missing {', '.join(missing)}")
+        raise RuntimeError(f"{config_path} is missing {', '.join(missing)}")
     host = os.uname().nodename
     webhook = cfg.get("DISCORD_WEBHOOK", "")
     state_dir = cfg.get("STATE_DIR", "/var/lib/renovate-agent")
@@ -311,32 +395,35 @@ def main() -> int:
     )
     log_path = os.path.join(state_dir, "last_session.json")
 
-    before = open_prs(cfg["REPO"])
-    gate = decide(before, read_file(HOLD_FILE), read_file(HOLD_PLANE_FILE))
+    before = open_prs(cfg["REPO"], tools)
+    gate = decide(before, tools.read_file(HOLD_FILE), tools.read_file(HOLD_PLANE_FILE))
     if not gate.run:
         log(f"skipping: {gate.reason}")
         if not gate.quiet:
-            discord_post(webhook, render_skip(gate, host), USER_AGENT, log=log)
+            tools.discord_post(webhook, render_skip(gate, host), USER_AGENT, log=log)
         return 0
 
-    reusable, why = worktree_is_reusable(repo_dir, path, branch)
+    reusable, why = worktree_is_reusable(repo_dir, path, branch, tools, cfg["REPO"])
     if not reusable:
-        # Not a failure: the previous tick left work in flight. Say so and leave it alone —
-        # removing the worktree is how unlanded work is lost.
+        # The previous tick left work in flight, so leave the tree alone — removing it is how
+        # unlanded work is lost. But it IS a unit failure: the tree stays blocked until a person
+        # clears it, and this skip repeated for five days behind a green Alive tile before
+        # #2014, because exit 0 let ExecStartPost beat. A `down` pushed here would be laundered
+        # by that same beat, so the exit code carries it: no beat, and OnFailure pages.
         msg = f"renovate-agent: skipped on {host} — {why}. Clear it, then the next tick runs."
         log(msg)
-        discord_post(webhook, msg, USER_AGENT, log=log)
-        return 0
+        tools.discord_post(webhook, msg, USER_AGENT, log=log)
+        return EXIT_WORKTREE_BLOCKED
 
     log(f"{gate.reason}; preparing {path}")
-    prepare_worktree(repo_dir, path, branch)
+    prepare_worktree(repo_dir, path, branch, tools)
     stdout, rc, timed_out = run_session(cfg, path, log_path)
     outcome = parse_run(stdout, rc, timed_out)
 
-    after = open_prs(cfg["REPO"])
+    after = open_prs(cfg["REPO"], tools)
     moved = delta(before, after)
     log(f"resolved={moved.resolved} remaining={moved.remaining} ok={outcome.ok}")
-    discord_post(
+    tools.discord_post(
         webhook, render_digest(outcome, moved, host, log_path), USER_AGENT, log=log
     )
 

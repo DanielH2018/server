@@ -61,7 +61,7 @@ def monitor_index():
     return {
         autokuma_id: name
         for autokuma_id, (name, entity_type) in declarations().items()
-        if entity_type != "notification"
+        if entity_type not in ("notification", "tag")
     }
 
 

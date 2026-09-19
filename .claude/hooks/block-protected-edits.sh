@@ -1,4 +1,9 @@
 #!/bin/bash
+# gen-hooks: register
+#   event: PreToolUse
+#   matcher: Edit|Write|MultiEdit|NotebookEdit
+#   timeout: 10
+#   order: 60
 # PreToolUse(Edit|Write|...) hook — deny direct edits to generated containers/ files
 # and to SOPS-encrypted files. Routed through uv so the project-pinned interpreter
 # runs (not the system python3); --no-sync skips the env reconcile to stay fast on

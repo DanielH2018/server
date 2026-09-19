@@ -134,7 +134,7 @@ SUBCOMMANDS = [
     ),
     (
         "pi",
-        "Pi glances API (`pi containers` for a one-ssh docker inspect view)",
+        "daniel-pi container view (`pi containers`, one ssh + docker inspect)",
         "pi_plane",
         run_pi_containers,
     ),

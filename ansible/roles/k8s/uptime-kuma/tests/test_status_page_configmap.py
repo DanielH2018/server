@@ -6,16 +6,13 @@ with declarations in hand, which is the only way the index path is exercised at 
 """
 
 import json
-import sys as _sys
 from pathlib import Path as _Path
 
 import yaml
+from validate.k8s_manifests import make_env, make_lookup, register_ansible_filters
 
 ROLE = _Path(__file__).resolve().parents[1]
 REPO = ROLE.parents[3]
-_sys.path.insert(0, str(REPO / "scripts"))
-
-from validate.k8s_manifests import make_env, make_lookup, register_ansible_filters  # noqa: E402
 
 SHARED_TEMPLATES = REPO / "ansible" / "templates"
 
@@ -34,7 +31,7 @@ DECLARATIONS = {
     "discord": {
         "type": "notification",
         "name": "Homelab Alerts",
-        "config": {"discordWebhookUrl": "https://hook-must-not-leak"},
+        "config": {"webhookURL": "https://hook-must-not-leak"},
     },
 }
 

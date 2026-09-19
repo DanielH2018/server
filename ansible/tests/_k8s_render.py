@@ -8,19 +8,12 @@ Rendering goes through validate.k8s_manifests' own machinery rather than a secon
 what a test considers a manifest cannot drift from what that validator does.
 """
 
-import sys
-
-from _helpers import REPO
-
-_REPO = REPO
-sys.path.insert(0, str(_REPO / "scripts"))
-
-from lib import yaml_fast  # noqa: E402
-
-from validate.k8s_manifests import (  # noqa: E402 — needs the path insert above
+from lib import yaml_fast
+from validate.k8s_manifests import (
     ALL_VARS,
     ANSIBLE,
     BASE_CONTEXT,
+    HOST_VARS,
     K8S_ROLES,
     SHARED_TPL,
     SKIP_ROLES,
@@ -41,7 +34,15 @@ def _render_all():
     Raises on a render failure rather than skipping it — a template that stopped rendering
     would otherwise quietly drop out of every guard built on this.
     """
-    base = {**BASE_CONTEXT, **load_yaml(ALL_VARS), "playbook_dir": str(ANSIBLE)}
+    # daniel-box's host_vars layer over group_vars, as in the validator's main(): a template
+    # that reads `containers_list` itself (authelia's access_control rules) would otherwise
+    # iterate a StubUndefined as empty and hand every guard a Secret with the rules missing.
+    base = {
+        **BASE_CONTEXT,
+        **load_yaml(ALL_VARS),
+        **load_yaml(HOST_VARS),
+        "playbook_dir": str(ANSIBLE),
+    }
     base = resolve_vars(base, base)
     entries = k8s_entries()
 

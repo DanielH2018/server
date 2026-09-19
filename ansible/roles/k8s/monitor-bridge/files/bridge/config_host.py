@@ -55,7 +55,8 @@ class HostConfig:
     UPS_CHARGE_MIN_PCT: float
     UPS_RUNTIME_MIN_S: float
     UPS_CONSECUTIVE: int
-    PI_GLANCES_URL: str
+    PI_ORIGIN: str
+    PI_HOST: str
     PI_LOAD_MAX: float
     PI_MEM_MIN_MB: float
     PI_DISK_MAX_PCT: float
@@ -70,7 +71,7 @@ class HostConfig:
     HOST_ORIGINS_MIN: int
     HOST_ORIGINS_CONSECUTIVE: int
     # The cgroups whose `claude_cgroup_*` textfile series MUST be reporting for the arm folded
-    # into check_mem to mean anything. Empty disables the whole arm, like PI_GLANCES_URL.
+    # into check_mem to mean anything. Empty disables the whole arm, like PI_ORIGIN.
     CLAUDE_CGROUPS: tuple[str, ...]
     CLAUDE_CGROUP_STALL_WINDOW: str
     CLAUDE_CGROUP_STALL_MAX_PCT: float
@@ -316,7 +317,7 @@ def host_config(
         # health + imminent-cutoff floor — PLUS the UPS's own replace-battery self-test verdict
         # (UPS_REPLACE_QUERY), the earliest signal, which can trip while charge/runtime still
         # read fine, PLUS sustained mains loss (UPS_ON_BATTERY_QUERY). Queries are env-driven
-        # (all empty = disabled, like PI_GLANCES_URL) so a series rename needs no code edit.
+        # (all empty = disabled, like PI_ORIGIN) so a series rename needs no code edit.
         # Prom-dependent: both sources being down leaves ALL series absent -> up (Scrape Targets
         # owns source liveness; the nut pod liveness probe owns NUT-server death), so this never
         # double-pages those; a PARTIAL drop (one arm gone) pages instead of silently monitoring
@@ -380,15 +381,18 @@ def host_config(
         # Pi pressure: the 512MB Zero 2 W dies by swap-thrash, not by clean failures —
         # 2026-06-11 (fwupd): hourly load5/core >1.7 episodes with healthcheck-timeout storms
         # that no other monitor saw (containers stayed "restarting", never down long enough).
-        # Polled from the glances API already running on the Pi (zero added Pi footprint); the
-        # separate static Kuma HTTP monitor covers glances itself being down.
-        PI_GLANCES_URL=_env("PI_GLANCES_URL", "").rstrip("/"),
+        # Read from the Pi's node-exporter series on Prometheus, selected by origin (the
+        # `node-pi` scrape job); glances served it until 2026-09-18 (#2004). Empty = disabled.
+        PI_ORIGIN=_env("PI_ORIGIN", ""),
+        # The Pi's LAN address, for the published-port arm's TCP connects. Empty = the arm is
+        # skipped. Separate from PI_ORIGIN because an origin label is not an address.
+        PI_HOST=_env("PI_HOST", ""),
         PI_LOAD_MAX=_num("PI_LOAD_MAX", "1.5"),  # load5 per core
         PI_MEM_MIN_MB=_num("PI_MEM_MIN_MB", "50"),
         PI_DISK_MAX_PCT=_num("PI_DISK_MAX_PCT", "90"),
         # `name:port` pairs for the Pi containers that publish a port, rendered from daniel-pi's
         # containers_list (every entry with a `port`) so the set cannot drift from the inventory.
-        # Empty = the port arm is disabled, like PI_GLANCES_URL disables the whole check.
+        # Empty = the port arm is disabled, like PI_ORIGIN disables the whole check.
         PI_PUBLISHED_PORTS=_published_ports(_env("PI_PUBLISHED_PORTS", "")),
         PI_PORT_TIMEOUT=_num("PI_PORT_TIMEOUT", "3"),
         # A Pi deploy recreates containers, so their ports are genuinely closed for a few
@@ -465,7 +469,7 @@ def host_config(
         # into. Series from any other cgroup are still judged — the queries below filter by metric,
         # not by cgroup — so user-1000-slice is covered when it exists and absent without paging
         # when it does not.
-        # Empty disables the arm entirely, like PI_GLANCES_URL and PI_PUBLISHED_PORTS; the live
+        # Empty disables the arm entirely, like PI_ORIGIN and PI_PUBLISHED_PORTS; the live
         # value is set in templates/env-secret.yaml.j2, beside the host it describes.
         CLAUDE_CGROUPS=tuple(
             c.strip() for c in _env("CLAUDE_CGROUPS", "").split(",") if c.strip()

@@ -4,21 +4,29 @@ Scrutiny's web UI plus a collector DaemonSet and an InfluxDB backend that holds 
 SMART trend history. See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
-- **Deploy tag:** `--tags "scrutiny"`.
-- **Route:** `scrutiny.<domain>`, behind Authelia. The bypass is **GET/HEAD only**, on
-  three paths — `/api/summary`, `/api/health`, `/api/device/<wwn>/details` — from the LAN
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
+- **Deploy tag:** `--tags "scrutiny"`
+- **Images:** `ghcr.io/analogj/scrutiny` (`scrutiny_k8s_web_image`), `ghcr.io/analogj/scrutiny`
+  (`scrutiny_k8s_collector_image`), `influxdb` (`scrutiny_k8s_influxdb_image`)
+- **Route:** `scrutiny.<domain>` · `scrutiny.local.<domain>`, Authelia one_factor
+- **Claims:** `scrutiny-influxdb-data` (no backup (listed in k3s_longhorn_nobackup_volumes)),
+  `scrutiny-web-config` (weekly -> B2 (default target))
+- **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — stateful / manual-upgrade — rolling
+  branch tag on a stateful monitor, deliberately manual. ALSO Recreate + RWO volume-claim PVC
+  (migrating-state shape) — two independent reasons
+<!-- /generated_from -->
+
+- **The Authelia bypass is GET/HEAD only**, on three paths — `/api/summary`, `/api/health`, `/api/device/<wwn>/details` — from the LAN
   and the pod CIDR, configured in the authelia role, not here. It exists for `probe.py
   scrutiny` and the Kuma monitor `k3s Scrutiny`, the only two callers that cross the
   route. Every writer addresses the ClusterIP `http://scrutiny:8080` instead and never
   meets Authelia: the collector DaemonSet (`COLLECTOR_API_ENDPOINT`), monitor-bridge
   (`SCRUTINY_URL`) and homelab-mcp. Scrutiny's web app has no auth of its own, so a wider
   bypass would hand the LAN `DELETE /api/device/:uuid` and `POST /api/settings`.
-- **Claims:** `scrutiny-influxdb-data` (2Gi, `longhorn`, backed up — the SMART history is
-  the point of the tool) and `scrutiny-web-config` (1Gi, `longhorn`, the SQLite config
-  DB: device metadata, notification settings).
-- **`k8s_autodeploy: false`** — rolling upstream branch-tag images (`master-web`,
-  `master-collector`) on a stateful monitor, deliberately manual; also `Recreate` + an
-  RWO PVC seeded through `k8s/volume-claim`. Reason is in `defaults/main.yml`.
+- **`scrutiny-influxdb-data`** (2Gi, `longhorn`, backed up — the SMART history is the point
+  of the tool) and **`scrutiny-web-config`** (1Gi, `longhorn`, the SQLite config DB: device
+  metadata, notification settings), seeded through `k8s/volume-claim`.
+- **The rolling branch tags** are `master-web` and `master-collector`.
 
 ## Notable
 - **`networkpolicy-influxdb.yaml.j2` ships in THIS role, not in netpol-baseline** (#1620).

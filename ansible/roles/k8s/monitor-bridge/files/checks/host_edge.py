@@ -13,7 +13,6 @@ enforcement: bridge/config.py's header.
 """
 
 import socket
-import urllib.parse
 from collections.abc import Callable
 
 from bridge.config import Config
@@ -47,40 +46,34 @@ def with_pi_ports(
     a new Kuma monitor costs a new push token in SOPS. This monitor already owns "the Pi is
     unhealthy", and a service that stopped listening is that.
 
-    # DECIDED: TCP connect is the primary signal, glances only the attribution. Measured
-    # 2026-08-27 against the live Pi: /api/4/load, /mem and /fs answer in 0.03-0.06s each,
-    # while /api/4/containers took 4.43s and then TIMED OUT at the 10s HTTP_TIMEOUT on the
-    # very next call. Polling it every cycle would have left the arm failing open most of the
-    # time — inert behind a green monitor, which is the failure mode this arm exists to
-    # catch in the first place. It is also a heavy query to run every cycle against a 456 MB
-    # Zero 2 W whose pressure this same check reports.
-    # DECIDED: the message leads with the container names when the arm fires, because
+    # DECIDED: TCP connect is the whole signal. Until 2026-09-18 a dead port was attributed
+    # to its container's Docker state through glances' /api/4/containers, fetched only after
+    # the connect failed — measured 2026-08-27 that endpoint took 4.43s and then TIMED OUT at
+    # the 10s HTTP_TIMEOUT on the very next call, so polling it every cycle would have left
+    # the arm failing open most of the time. glances retired (#2004) and nothing the cluster
+    # can reach serves that view (docker-proxy publishes no port), so the verdict names the
+    # port and both causes and the operator reads `docker ps` on the Pi. The verdict never
+    # depended on the attribution, so the arm loses a diagnosis and keeps its page.
+    # DECIDED: the message leads with the dead ports when the arm fires, because
     # "pi_pressure DOWN" otherwise pages someone to look at load and memory when the fault is
     # neither. Same shape as with_ha_ban putting the ban first.
     # DECIDED: a down_streak, unlike with_ha_ban's arm. A Pi deploy recreates containers, so
     # their ports are legitimately closed for a few seconds and a single cycle can read dead.
     # A detached container persists until someone recreates it, so it survives the grace.
-    # DECIDED: an attribution fetch that fails downgrades the DIAGNOSIS, never the verdict —
-    # pi_ports_verdict renders "cause unknown" and the port is still reported dead. Failing
-    # open there would reintroduce exactly the inertness the first DECIDED avoids.
+    # DECIDED: this arm rides inside a PROM_DEPENDENT check since 2026-09-18, so a Prometheus
+    # outage or a dead Pi node_exporter skips the port probes with the pressure arms. Both
+    # cases already page (Prometheus Reachable / Scrape Targets), and the Kuma HTTP monitor
+    # on wg-easy still watches the one Pi port a person uses. A monitor of its own would
+    # cost a push token in SOPS, the reason the arm was folded in here to begin with.
     """
-    if not cfg.PI_PUBLISHED_PORTS:
-        return ok, msg
-    host = urllib.parse.urlsplit(cfg.PI_GLANCES_URL).hostname
-    if not host:
+    if not cfg.PI_PUBLISHED_PORTS or not cfg.PI_HOST:
         return ok, msg
     dead = [
         (name, port)
         for name, port in cfg.PI_PUBLISHED_PORTS
-        if not tcp_open(host, port, cfg.PI_PORT_TIMEOUT)
+        if not tcp_open(cfg.PI_HOST, port, cfg.PI_PORT_TIMEOUT)
     ]
-    containers = None
-    if dead:
-        try:
-            containers = bridge.net._get_json(cfg.PI_GLANCES_URL + "/api/4/containers")
-        except Exception:
-            containers = None
-    arm_ok, arm_msg = pi_ports_verdict(dead, len(cfg.PI_PUBLISHED_PORTS), containers)
+    arm_ok, arm_msg = pi_ports_verdict(dead, len(cfg.PI_PUBLISHED_PORTS))
     if arm_ok:
         bridge.streaks._down_streaks["pi_ports"] = 0
         return ok, "%s, %s" % (msg, arm_msg)
@@ -102,16 +95,38 @@ def check_pi_pressure(
 ) -> tuple[bool, str]:
     """Swap-thrash / overload early warning for the memory-constrained Pi.
 
-    Empty PI_GLANCES_URL -> disabled (stays up), like check_n8n without an API key.
-    An unreachable glances raises -> the loop renders it down with the error.
+    Reads the Pi's node-exporter series off Prometheus, selected by `origin=PI_ORIGIN` (the
+    `node-pi` scrape job). Empty PI_ORIGIN -> disabled (stays up), like check_n8n without an
+    API key. An unreachable Prometheus raises, which the `prometheus` gate suppresses before
+    it reaches here; a series that is absent while Prometheus answers pages, because a Pi
+    whose exporter stopped reporting is a Pi nothing is watching.
+
+    Filesystems are keyed by block device rather than mountpoint — the SD card is mounted
+    twice (`/` and `/var/hdd.log`) and one full device is one problem. tmpfs is excluded:
+    log2ram's 128 MiB `/var/log` fills and flushes by design.
     """
-    if not cfg.PI_GLANCES_URL:
-        return True, "pi monitoring disabled (no glances URL)"
-    load = bridge.net._get_json(cfg.PI_GLANCES_URL + "/api/4/load")
-    mem = bridge.net._get_json(cfg.PI_GLANCES_URL + "/api/4/mem")
-    fs = bridge.net._get_json(cfg.PI_GLANCES_URL + "/api/4/fs")
+    if not cfg.PI_ORIGIN:
+        return True, "pi monitoring disabled (no PI_ORIGIN)"
+    sel = 'origin="%s"' % cfg.PI_ORIGIN
+    load5 = bridge.net.prom_scalar(cfg, "node_load5{%s}" % sel)
+    cores = bridge.net.prom_scalar(
+        cfg, 'count(node_cpu_seconds_total{%s,mode="idle"})' % sel
+    )
+    avail = bridge.net.prom_scalar(cfg, "node_memory_MemAvailable_bytes{%s}" % sel)
+    fs_sel = '%s,fstype!="tmpfs"' % sel
+    disk = bridge.net.prom_vector(
+        cfg,
+        "max by (device) (100 * (1 - node_filesystem_avail_bytes{%s}"
+        " / node_filesystem_size_bytes{%s}))" % (fs_sel, fs_sel),
+    )
+    per_core = load5 / cores if load5 is not None and cores else None
     ok, msg = pi_pressure(
-        load, mem, fs, cfg.PI_LOAD_MAX, cfg.PI_MEM_MIN_MB, cfg.PI_DISK_MAX_PCT
+        per_core,
+        avail,
+        {labels.get("device", "?"): pct for labels, pct in disk},
+        cfg.PI_LOAD_MAX,
+        cfg.PI_MEM_MIN_MB,
+        cfg.PI_DISK_MAX_PCT,
     )
     return with_pi_ports(cfg, ok, msg, tcp_open)
 

@@ -21,17 +21,12 @@ What this suite does NOT prove: that either pod reaches Ready with CrowdSec off.
 here starts a container. That evidence comes from the staging bring-up.
 """
 
-import sys
-
 import pytest
-from _helpers import REPO
 
-_REPO = REPO
-sys.path.insert(0, str(_REPO / "scripts"))
 
-from lib import yaml_fast  # noqa: E402
+from lib import yaml_fast
 
-from validate.k8s_manifests import (  # noqa: E402 — needs the path insert above
+from validate.k8s_manifests import (
     ALL_VARS,
     ANSIBLE,
     BASE_CONTEXT,

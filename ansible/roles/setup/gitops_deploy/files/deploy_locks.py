@@ -7,21 +7,37 @@ for a run that names no tag (ADR-0017). `scripts/deploy.sh` takes the same locks
 names, which is what makes an operator deploy and this unit exclude each other on a service
 rather than on the whole tree.
 
+THIS MODULE IS THE ONLY PLACE THAT NAMES AND ORDERS THEM. The wrapper does not build a lock
+name or sort a tag list of its own: it runs `deploy_locks.py plan <tag>...` and takes the locks
+it prints, in the order printed. Until 2026-09-18 the shell carried its own copy of both, and
+the two agreed only because a test compared them -- `sort` and Python's `sorted` disagree on
+`pihole` against `pi-peer-backup` unless the shell pins `LC_ALL=C`, and a disagreement there
+is a deadlock between a hand deploy and a tick (issue #2054).
+
 A leaf: it imports nothing from the rest of the deployer, so a test can drive it directly.
 
-Stdlib only: the unit runs under `uv run --no-project` and the host is still on Python 3.12.
+Stdlib only: the unit runs it under `uv run --no-project`, and `scripts/deploy.sh` runs the
+CLI below through the repo's own `uv run python`.
 
 Typical usage example:
 
     with locked_budget({"sonarr", "radarr"}, 900) as budget:
         run(argv, cwd=repo, timeout=budget)
+
+    $ deploy_locks.py plan sonarr radarr
+    all    shared    /var/lock/server-deploy-all.lock
+    radarr    exclusive    /var/lock/server-deploy-radarr.lock
+    sonarr    exclusive    /var/lock/server-deploy-sonarr.lock
 """
 
 import contextlib
 import fcntl
 import os
+import re
+import sys
 import time
 from collections.abc import Iterable
+from typing import NamedTuple
 
 # DECIDED: the lock order is `server-deploy-all.lock` first -- shared when the run names
 # services, exclusive when it names none -- then each service's own lock in sorted order.
@@ -31,8 +47,17 @@ from collections.abc import Iterable
 # `scripts/deploy.sh` takes the tree lock, snapshots, RELEASES it, and only then takes these --
 # and never re-takes the tree lock -- so the two orders cannot form a cycle. (ADR-0017)
 
+# The tree lock (ADR-0011): what the deployer unit's `flock` ExecStart, `deploy.sh` and the
+# `gitops_state.py` rewrite all take. Named here so the Python readers share one literal;
+# `deploy.sh` cannot import it and carries its own default, pinned to this one by
+# `ansible/tests/deploy/test_deploy_sh_takes_the_locks_deploy_locks_plans.py`.
+TREE_LOCK = "/var/lock/server-git-tree.lock"
 # The lock a run with no tags takes exclusively, and every scoped run takes shared.
 SERVICE_LOCK_ALL = "all"
+# What a lock file may be called. A character outside this set becomes `_`, the substitution
+# `deploy.sh` made on its side before the naming moved here; a deploy tag is a containers_list
+# key and never needs it, but a name that reached the filesystem unsanitised could carry a `/`.
+_UNSAFE_NAME_CHARS = re.compile(r"[^A-Za-z0-9_.-]")
 # How often a blocked acquire retries. `fcntl.flock` has no timeout of its own, and
 # `signal.alarm` would interrupt whatever else this process happens to be in the middle of.
 SERVICE_LOCK_POLL_S = 0.5
@@ -74,11 +99,49 @@ def lock_dir() -> str:
     return os.environ.get("HOMELAB_DEPLOY_LOCK_DIR", "/var/lock")
 
 
-def _take(name: str, mode: int, deadline: float) -> tuple[str, int]:
+def lock_path(name: str) -> str:
+    """The lock file for one service tag, or for SERVICE_LOCK_ALL. The one naming site."""
+    return os.path.join(
+        lock_dir(), f"server-deploy-{_UNSAFE_NAME_CHARS.sub('_', name)}.lock"
+    )
+
+
+class PlannedLock(NamedTuple):
+    """One lock a deploy takes: its name, where it lives, and whether it is taken exclusively."""
+
+    name: str
+    path: str
+    exclusive: bool
+
+
+def plan(services: Iterable[str], exclusive_all: bool = False) -> list[PlannedLock]:
+    """Every lock a deploy of `services` takes, in the order it takes them.
+
+    The DECIDED note above is the whole rule: `all` first, then each tag once, in code-point
+    order. `service_locks` walks this list rather than restating it, and `deploy.sh` reads it
+    off the `plan` subcommand, so there is one ordering for a deploy to disagree with.
+
+    Args:
+        services: the tags the deploy names. Empty means the whole playbook, which takes
+            `all` exclusively whatever `exclusive_all` says.
+        exclusive_all: take `all` exclusively even with tags -- a broad-plane apply, or the
+            wrapper's full run, whose tag list is every declared service.
+    """
+    names = sorted(set(services))
+    shared_all = bool(names) and not exclusive_all
+    planned = [
+        PlannedLock(SERVICE_LOCK_ALL, lock_path(SERVICE_LOCK_ALL), not shared_all)
+    ]
+    planned.extend(PlannedLock(name, lock_path(name), True) for name in names)
+    return planned
+
+
+def _take(name: str, path: str, mode: int, deadline: float) -> tuple[str, int]:
     """Flock one service lock and return its name and open descriptor.
 
     Args:
         name: the service tag, or SERVICE_LOCK_ALL.
+        path: the lock file, as `plan` named it.
         mode: fcntl.LOCK_EX or fcntl.LOCK_SH.
         deadline: the `time.monotonic()` value to give up at.
 
@@ -86,7 +149,6 @@ def _take(name: str, mode: int, deadline: float) -> tuple[str, int]:
         ServiceLockBusy: the lock stayed busy past `deadline`.
         OSError: the lock file could not be opened.
     """
-    path = os.path.join(lock_dir(), f"server-deploy-{name}.lock")
     fd = os.open(path, os.O_WRONLY | os.O_CREAT, 0o666)
     started = time.monotonic()
     while True:
@@ -127,19 +189,12 @@ def service_locks(
     Raises:
         ServiceLockBusy: a lock stayed busy past `timeout`. Nothing was deployed.
     """
-    names = sorted(set(services))
     deadline = time.monotonic() + timeout
     held: list[tuple[str, int]] = []
     try:
-        held.append(
-            _take(
-                SERVICE_LOCK_ALL,
-                fcntl.LOCK_SH if names and not exclusive_all else fcntl.LOCK_EX,
-                deadline,
-            )
-        )
-        for name in names:
-            held.append(_take(name, fcntl.LOCK_EX, deadline))
+        for planned in plan(services, exclusive_all):
+            mode = fcntl.LOCK_EX if planned.exclusive else fcntl.LOCK_SH
+            held.append(_take(planned.name, planned.path, mode, deadline))
         yield [name for name, _ in held]
     finally:
         for _, fd in held:
@@ -171,3 +226,46 @@ def locked_budget(services: Iterable[str], timeout: float, exclusive_all: bool =
     deadline = time.monotonic() + timeout
     with service_locks(services, timeout, exclusive_all):
         yield max(MIN_RUN_BUDGET_S, deadline - time.monotonic())
+
+
+# -- the CLI `deploy.sh` reads its locks from ---------------------------------------------
+
+USAGE = """usage: deploy_locks.py plan [--exclusive-all] TAG [TAG ...]
+
+Print every lock a deploy of the named tags takes, one per line, in the order to take them:
+NAME<TAB>shared|exclusive<TAB>PATH. `--exclusive-all` is the wrapper's full run, whose tag
+list is every declared service and which must exclude every scoped run through `all`.
+"""
+
+
+def main(argv: list[str]) -> int:
+    """`plan` for the shell. Exit 2 on a usage error, printing nothing a caller could act on.
+
+    A run with no tags is refused rather than planned as a scoped run over nothing: the
+    wrapper enumerates a full run's tags itself and hands them over, so an empty argv here is
+    a wrapper bug, and a plan of `all` alone would let it deploy everything under one lock.
+    """
+    if not argv or argv[0] != "plan":
+        sys.stderr.write(USAGE)
+        return 2
+    exclusive_all = False
+    tags = []
+    for arg in argv[1:]:
+        if arg == "--exclusive-all":
+            exclusive_all = True
+        elif arg.startswith("-"):
+            sys.stderr.write(f"deploy_locks.py: unknown option {arg}\n{USAGE}")
+            return 2
+        elif arg:
+            tags.append(arg)
+    if not tags:
+        sys.stderr.write(f"deploy_locks.py: plan needs at least one tag\n{USAGE}")
+        return 2
+    for planned in plan(tags, exclusive_all):
+        mode = "exclusive" if planned.exclusive else "shared"
+        sys.stdout.write(f"{planned.name}\t{mode}\t{planned.path}\n")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

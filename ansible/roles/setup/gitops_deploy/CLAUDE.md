@@ -10,6 +10,19 @@ health-gated redeploy too (closing the loop so live config matches master), not 
 `tasks/` and the role `CLAUDE.md` are deliberately NOT auto-deployed (structural/docs — deploy
 those manually).
 
+## At a glance
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates or playbook entry. -->
+- **Applied by:** `initial_setup.yml --tags "gitops_deploy"`
+- **Crons (2):**
+  - `GitHub ruleset drift` — `{{ gitops_deploy_ruleset_drift_cron_minute }} {{
+    gitops_deploy_ruleset_drift_cron_hour }} * * *`
+  - `GitHub interaction limit` — `{{ gitops_deploy_interaction_limit_cron_minute }} {{
+    gitops_deploy_interaction_limit_cron_hour }} * * *`
+- **Timers (2):** `gitops-deploy.timer` (`OnBootSec=10min`, `OnUnitActiveSec={{
+  gitops_deploy_tick_interval }}`), `staging-backfill.timer` (`OnBootSec=20min`,
+  `OnUnitActiveSec=1h`)
+<!-- /generated_from -->
+
 ## A host with `has_gitops: false` is reaped, and the code refuses on its own
 
 `tasks/main.yml` dispatches on `has_gitops`: `install.yml` on the deployer, `teardown.yml`
@@ -234,6 +247,13 @@ widen it. Each line is a summary; the section it names carries the detail.
   the `<role>` placeholder `broad_remediation` prints. A deploy-plane change (shared
   `ansible/templates/*`, `inventory/`, `common/`, `deploy.yml`) fast-forwards and applies as
   `deploy.yml`, scoped by `deploy_narrow.plan` to the services the range actually reaches.
+  **A range carrying both planes applies both, setup first** — `plan` returns one plan per
+  plane and `handle_broad` runs them in order, sharing one `BROAD_DEPLOY_TIMEOUT_S` so the
+  unit's ceiling still reads the broad arm as a single apply.
+  It was an if/else until 2026-09-18 (#2046) and the setup arm won: two Pi retirements that
+  day landed a `roles/setup/optimize_pi` edit beside a `host_vars/daniel-pi.yml` one, the
+  tick applied `initial_setup.yml` and never planned the deploy plane, and `Release
+  Staleness Drift` sat DOWN over the 56 records the full `deploy.yml` was meant to re-stamp.
   - **The deploy plane is narrowed before it is applied.** `deploy_narrow.plan` runs
     `scripts/deploy_tools/deploy_tags.py narrow <local> <origin>` as a subprocess — the
     derivation parses YAML and this unit runs under `uv run --no-project` — before the
@@ -312,7 +332,11 @@ widen it. Each line is a summary; the section it names carries the detail.
     role's real playbook and tag through the tick (`DeployerState.clear_manual_plane_applied`,
     which no role reaches today because the tick runs neither playbook), an operator running
     `uv run python scripts/deploy_tools/gitops_state.py clear-manual-plane <role>`, and nothing
-    else. Parking was the signal only because nothing else was, and it charged every other
+    else. The operator's clear writes one `logger -t gitops-state` line naming the role, the
+    user, the cwd and the dropped line's origin SHA, so `journalctl -t gitops-state` says who
+    cleared what and lets a later reader match it against an apply (#2022: `k3s` was cleared
+    by hand with its apply still owed, and the marker's truncation was the only write).
+    Parking was the signal only because nothing else was, and it charged every other
     session: ten park episodes over the seven days to 2026-09-11 spanned 30 ticks, the longest
     about forty minutes, and every landing behind one exits 4 from `deploy.sh` until a hand
     pulls the primary checkout.
@@ -380,15 +404,13 @@ widen it. Each line is a summary; the section it names carries the detail.
     other session's landing 4 from `deploy.sh` until a hand pulls the primary checkout — where
     a pending role blocks nobody. They are independent faults, so specificity does not order
     them and urgency does. The pod reads
-    it off the same `:ro` state mount as `behind_since`, and parses it itself — it cannot
-    import this tree, so `tests/test_check_gitops.py` asserts its clear-command literal
-    matches `deploy_remediation.MANUAL_PLANE_CLEAR_CMD`.
+    it off the same `:ro` state mount as `behind_since`, and parses it with
+    `gitops_markers.parse_manual_plane` — its own copy of the deployer's module, since it
+    cannot import this tree (*One marker module, copied* below).
     The SessionStart banner reads the marker too, through `lib.deployer_park`, and names a
     pending role from the moment it is recorded rather than after six hours (issue #1774): the
     monitor pages, where the banner only tells the sessions that did not land the change.
-    That makes three parsers of one marker, and
-    `ansible/tests/deploy/test_manual_plane_parsers_agree.py` is the price — it feeds all
-    three the same marker, garbled lines included.
+    Both parse it with the same function from the same generated copy.
 - **Secrets-only pushes** (`ansible/vars/secrets.yml` changed with no service template — a
   rotation pushed from another machine) are fast-forwarded but **not** redeployed: the new
   value only reaches a container on its next deploy, so the deployer alerts (once per SHA,
@@ -495,7 +517,7 @@ widen it. Each line is a summary; the section it names carries the detail.
     secondary cause, an operator who rendered locally before pushing (`git push` it). It includes
     the read exception's type and message when the declarations couldn't be read at all. The disarm
     itself is stateless: it is recomputed every tick, so it self-clears the moment the config is
-    re-rendered. Only the page is throttled, on `STALE_DENYLIST_FILE`. The regex is deliberately
+    re-rendered. Only the page is throttled, on the `stale_denylist_alerted` marker. The regex is deliberately
     biased toward denied — unanimity is required across every match, an absent or unparseable
     declaration counts as denied, and a shared role skips the check entirely — so a parsing bug
     here almost always produces a spurious disarm rather than a permitted deploy. The one gap is
@@ -561,8 +583,8 @@ widen it. Each line is a summary; the section it names carries the detail.
     `ansible/inventory/` or `ansible/templates/` since the record, `releases.py` asks
     `narrow_broad.broad_path_tags` — the per-path rule this deployer's own tick narrows a
     broad range with — which services the change reaches, and names the key or macro in the
-    reason. A path the rules refuse (a key the play reads, `hosts.ini`, a removed
-    `containers_list` entry) marks every service sharing that record stale, which is the set
+    reason. A path the rules refuse (a key the play reads, `hosts.ini`) marks every
+    service sharing that record stale, which is the set
     the tick's full run for that same range re-stamps; so a denied role the broad plane
     applied reads clean, and one it ever left behind reads stale under the change's own name.
     No clearing rule is needed: the next real apply of that service rewrites its record, so the
@@ -708,7 +730,7 @@ Three layers, and which one a function belongs in is decided by what it touches.
 | decisions (pure) | `deploy_changes`, `deploy_git`, `deploy_health`, `deploy_inventory`, `deploy_k8s`, `deploy_remediation`, `deploy_staging` | every branch the tick takes, as functions over plain values |
 | what a phase hands the next | `deploy_tick_types` | `TickTarget`, `TickPlan` and `RetryableFetchError`, no behaviour |
 | transport | `deploy_io`, `deploy_alerts` | subprocess, docker, every message body, and the alert queue's own I/O |
-| transport leaves | `deploy_config`, `deploy_state`, `deploy_failtext` | the config file, the state directory, and the text a failed run's alert quotes |
+| transport leaves | `gitops_markers`, `deploy_config`, `deploy_state`, `deploy_failtext` | the marker table and parsers (copied into every other reader — *One marker module, copied* below), the config file, the state directory, and the text a failed run's alert quotes |
 | the seam | `deploy_toolbox` | `DeployTools`, one frozen object holding every boundary the tick crosses, and `default_tools(CONFIG)` which binds the CI gate to the parsed config |
 | the phases | `deploy_phases`, `deploy_handlers`, `deploy_defer`, `deploy_staging_io` | `assess` and `plan_tick`; one `handle_*` per terminal branch; `deploy_staging_io` holds the staging gate's I/O shell (`consult_staging`, `record_staging_tick`, `consume_staging_override`), which `handle_k8s` alone calls; `deploy_defer` owns what the broad arm does with the half it will not apply — park it, or record it in `manual_plane` |
 | the tick | `gitops_deploy` | the config constants, `STATE`, `tick_config()`, `main()` sequencing the phases, and `entrypoint()` |
@@ -775,15 +797,34 @@ that file by name: `STAGING_SUBSET` is read there for real, while the
 reads and nothing else does; both timeouts are parsed and validated in `load_config`, and a
 test pins the literals to `Config`'s defaults.
 
+**One marker module, copied.** `files/gitops_markers.py` holds the state directory, the
+`MARKERS` table and the parsers for the `behind_since`, `manual_plane` and `contention_since`
+line formats, plus the two clear commands every surface prints. It is the one hand-edited
+source; `deploy_state` imports it. Four other trees read those files and none can import this
+`files/` — monitor-bridge ships its own `files/` into a pod, deploy-ui and renovate-agent
+run from their own `/opt` directories, and `scripts/lib/deployer_park.py` is imported by the
+SessionStart hook with only `scripts/` on `sys.path` — so until issue #2063 each restated the
+directory and basenames, and three parsed the same lines independently, held together by two
+`test_*_parsers_agree.py` guards. Now `scripts/dev/gen_gitops_markers.py` writes a verbatim
+copy under a `generated_from:` header into each of them (`COPIES` there is the list), and
+`ansible/tests/deploy/test_gitops_markers_copies.py` fails when a committed copy differs from
+what the generator writes, when a consumer role's ship list lacks its copy, or when the
+source grows an import (a copy runs in a pod, a hook and three `/opt` directories, so only
+the stdlib is common ground). To change a basename or a line format: edit the source, run
+the generator, commit every copy in the same PR. The shell and manifest literals that cannot
+import anything — `gitops_tick.sh`, `deploy-ui.service.j2`, monitor-bridge's hostPath — are
+pinned to `STATE_DIR` by the same test.
+
 **State is one object.** `deploy_state.DeployerState` wraps the marker files — the
 fifteen dedupe and status markers plus the pending-alert queue, the staging tick ledger and
 the staging override — and holds the hold-marker writes (`write_hold`, `clear_broad_hold`,
 `clear_service_hold`) and `record_behind`. A caller names a marker (`state.path("hold")`)
 rather than carrying a path, which is what lets `state_dir` repoint the whole state directory
-by replacing one object. `gitops_deploy.STATE` is the instance and the eighteen path literals
-stay declared there
-(`tests/conftest.py`'s `state_dir` repoints them, and one Ansible default is pinned against
-`STAGING_TICK_LEDGER`'s literal). `read()` returns None for a missing AND an empty marker —
+by replacing one object. `gitops_deploy.STATE` is the instance, and `gitops_markers.MARKERS` is the only
+table of basenames — the 22 module-level path literals `gitops_deploy.py` used to declare
+beside it had no production reader and went with issue #2051 (`tests/conftest.py`'s
+`state_dir` now repoints the one object, and `scripts/deploy_tools/tests/test_tick_ledger_report.py`
+pins the Ansible default against `MARKERS`). `read()` returns None for a missing AND an empty marker —
 a torn write is a disarmed hold, not a hold on `""` — and PROPAGATES any other `OSError`:
 an unreadable state directory must not read as "no hold", or a held host reports converged.
 `tests/test_deployer_state.py` pins all three outcomes.
@@ -1199,7 +1240,10 @@ unchanged: it still holds the tree lock across its whole run, so an operator dep
 mid-tick still waits, for its snapshot alone. This unit takes the per-service locks too, inside
 that hold, which is what keeps a tick and an operator deploy off the same rollout. The lock
 order is `all` first, then each service in sorted order, and the `# DECIDED:` marker in
-`files/deploy_locks.py` says why the two orders cannot deadlock.
+`files/deploy_locks.py` says why the two orders cannot deadlock. There is one statement of
+that order: `deploy.sh` runs `deploy_locks.py plan <tag>...` and takes the locks it prints,
+top to bottom, and refuses (exit 79) rather than order them itself when the plan does not
+arrive (issue #2054).
 
 **A busy service lock is contention, not a failed deploy.** `deploy_locks` raises its own
 `ServiceLockBusy`, each of the three deploy handlers catches it AHEAD of its failure arm, and
@@ -1222,7 +1266,7 @@ crash is not evidence the lock was released. monitor-bridge pages once `first_se
 than `GITOPS_CONTENTION_MAX_MIN` (30, the deployer's own longest apply budget), the
 SessionStart banner names the lock past the same threshold (`lib.deployer_park`), and
 `scripts/deploy_tools/gitops_state.py clear-contention` drops the marker by hand. Three readers
-parse it; `ansible/tests/deploy/test_contention_parsers_agree.py` holds them together.
+parse it, all through `gitops_markers.parse_contention` (*One marker module, copied*).
 
 **A broad apply takes `all` EXCLUSIVELY, whatever its tags.** `deploy_io.deploy_broad` passes
 `exclusive_all=True`: `initial_setup.yml --tags <role>` names a tag, but what it reconfigures

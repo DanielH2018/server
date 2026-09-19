@@ -32,6 +32,10 @@ dev = [                              # `dev` is uv's default group for `uv run`/
   # change an inference and turn master red on an unrelated PR.
   # Renovate raises the bump as its own PR, which is where the
   # new diagnostics get read.
+  "python-liquid>=2",                # renders uptime-kuma's discord-message.liquid in
+  # test_kuma_discord_template.py. Kuma itself renders it with
+  # liquidjs; the template stays in the subset both accept, and
+  # the test docstring names the one divergence found.
 ]
 
 [tool.pytest.ini_options]
@@ -166,6 +170,8 @@ pythonpath = [
   "scripts/deploy_tools/tests",
   "scripts/dev",
   "scripts/docs",
+  # its tests share _catalog_fixtures.py, as scripts/deploy_tools/tests share _land_fakes.py
+  "scripts/docs/tests",
   "scripts/grafana",
   "scripts/home_assistant",
   "scripts/infra_map",
@@ -327,6 +333,7 @@ extra-paths = [
   "ansible/roles/setup/renovate_agent/files",
   "ansible/roles/k8s/home-assistant/files",
   "scripts/deploy_tools/tests",
+  "scripts/docs/tests",
 ]
 
 [tool.ty.src]
@@ -440,9 +447,12 @@ unresolved-import = "ignore"
 # Same collateral as above: `_readonly_tables.py` and `test_claude_guard_import.py` also lose
 # the check on `import _claude_guard`, a first-party, `extra-paths`-covered import — a typo there
 # would surface as a hook crash instead. `_claude_guard.py` imports nothing else first-party.
+# `block-protected-bash.py` (#2053) also loses it on `_hook_common`; `test_block_protected_bash.py`
+# loads the hook by path, so a typo there fails that suite at collection instead.
 include = [
   ".claude/hooks/_claude_guard.py",
   ".claude/hooks/_readonly_tables.py",
+  ".claude/hooks/block-protected-bash.py",
   ".claude/hooks/tests/test_claude_guard_import.py",
 ]
 [tool.ty.overrides.rules]

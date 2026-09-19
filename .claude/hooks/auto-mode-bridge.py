@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# gen-hooks: library
+#   reason: run by auto-mode-bridge.sh through `uv run python`
 """Two narrow bridges between auto mode and this repo, on two events one script serves.
 
 `PermissionDenied` — fires only in auto mode, only when the classifier denied the call.
@@ -55,6 +57,13 @@ MAX_RETRIES_PER_SESSION = 2
 # wrapper's own contract, kept in the same words CLAUDE.md uses so the two don't drift into
 # two stories.
 _DEPLOY_EXITS = {
+    79: (
+        "deploy.sh exit 79: `deploy_locks.py plan` did not print this run's service locks, so "
+        "the wrapper had nothing to take and NOTHING was deployed. It never falls back to a lock "
+        "order of its own. Run `uv run python "
+        "ansible/roles/setup/gitops_deploy/files/deploy_locks.py plan <tag>` by hand to see "
+        "why, fix that, then re-run; nothing was held while it ran."
+    ),
     78: (
         "deploy.sh exit 78: the playbook matched NO host, so NOTHING was deployed. ansible "
         "exits 0 for a run where no play matched, so the wrapper reads the PLAY RECAP itself. "
@@ -64,8 +73,8 @@ _DEPLOY_EXITS = {
     77: (
         "deploy.sh exit 77: the snapshot worktree could not be created, so NOTHING was "
         "deployed. The playbook renders from a detached worktree of HEAD under "
-        "/tmp/homelab-deploy-snapshots — check that directory is writable and that "
-        "`git worktree add --detach` works here; retrying alone changes nothing."
+        "/tmp/homelab-deploy-snapshots; the message carries the failing command's own "
+        "stderr (the `fatal:` line), so fix what it names — retrying alone changes nothing."
     ),
     76: (
         "deploy.sh exit 76: flock failed on the lock file ITSELF, so NOTHING was deployed. "

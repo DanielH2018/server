@@ -11,18 +11,11 @@ stopped discriminating fails here rather than in an alert nobody trusts.
 
 import re
 import subprocess
-import sys
 from pathlib import Path
 
 import pytest
-
-_real_run = subprocess.run
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
-import staging_gate as sg  # noqa: E402 — needs the path insert above
-
-from staging_gate import (  # noqa: E402 — needs the path insert above
+import staging_gate as sg
+from staging_gate import (
     DEPLOY_SH_NO_VERDICT,
     NO_VERDICT,
     PASS,
@@ -35,6 +28,7 @@ from staging_gate import (  # noqa: E402 — needs the path insert above
     verdict_name,
 )
 
+_real_run = subprocess.run
 _REPO = Path(__file__).resolve().parents[3]
 
 

@@ -19,12 +19,8 @@ combination is the issue's own Verify-by.
 Run: uv run pytest scripts/deploy_tools/tests/test_land_doc_change_reaches_a_verdict.py
 """
 
-import sys
-from pathlib import Path
-
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import land_tags
 from _land_fakes import MERGE_SHA

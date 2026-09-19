@@ -21,6 +21,7 @@ monitor_bridge_modules:
   - cli.py
   - check.py
   - registry.py
+  - gitops_markers.py
   - gates.py
   - bridge/types.py
   - bridge/config.py
@@ -30,6 +31,7 @@ monitor_bridge_modules:
   - bridge/config_io.py
   - bridge/net.py
   - bridge/streaks.py
+  - bridge/msgfmt.py
   - checks/logs.py
   - checks/storage.py
   - checks/b2.py

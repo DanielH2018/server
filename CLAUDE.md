@@ -7,7 +7,7 @@ Docker + k3s homelab managed with Ansible. ~50 containerized services deployed a
 - `daniel-box` — k3s server / control-plane node (Traefik edge, Authelia+OIDC, Pi-hole DNS, Longhorn storage, most workloads since 2026-08 migration). Ansible runs on this host.
 - `daniel-server` — k3s agent node (Intel XE graphics, LVM storage, UPS hardware + the
   `nut_host` shutdown chain; Docker uninstalled 2026-08-14 — the migration's end state)
-- `daniel-pi` — Raspberry Pi, the **only** remaining Docker host (LAN-only: wg-easy, glances,
+- `daniel-pi` — Raspberry Pi, the **only** remaining Docker host (LAN-only: wg-easy, alloy,
   autoheal, docker-proxy). Driven remotely over SSH with `-e target=daniel-pi`.
 
 **Key technologies:** k3s (Kubernetes), Ansible, Docker Compose (Pi only), Traefik (reverse proxy), Cloudflare DNS, Authelia (SSO), SOPS/age (secret encryption), Longhorn (storage), CrowdSec (WAF)
@@ -34,6 +34,12 @@ docs/             # Runbooks, design specs, security notes
 > carries its own aliased insert (`_sys.path.insert(0, _Path(__file__).resolve().parents[1])`);
 > copy that from a sibling. It goes on the module that needs it, never on a shared one — a
 > single bootstrap in an imported module only works for whoever imports it first.
+> A module under a `tests/` directory carries none of this — a `test_*.py`, a `conftest.py`
+> or a `_*.py` fixture module a test imports: pytest is its only invoker, and `pythonpath`
+> lists `scripts/` and every subdirectory but `validate` and `diagnostics`. A test under
+> those two inserts its own package directory; any other insert `pythonpath` already
+> supplies is dead weight, and `scripts/tests/test_test_module_bootstraps_present.py`
+> refuses it.
 > The subdirectories have **no `__init__.py`** on purpose: they resolve as PEP 420 namespace
 > packages, and adding one would change how pytest names the test modules under them.
 > Verify a moved or new entry point by RUNNING it (`uv run python scripts/<dir>/<name>.py
@@ -41,9 +47,9 @@ docs/             # Runbooks, design specs, security notes
 
 > **`containers/` is not a directory in this repo** — it is untracked and rendered by Ansible onto the *target host* at `/home/<user>/server/containers/<svc>/docker-compose.yml`. Post-migration it exists only on `daniel-pi`; neither cluster node has one. It is still read-only: edits are overwritten on the next deploy, so always modify `ansible/roles/containers/*/templates/` instead. (The `block-protected-edits` hook enforces this.)
 
-> **`roles/containers/` is now only the Pi.** Every role there is a Docker service live on `daniel-pi` — `alloy`, `autoheal`, `docker-proxy`, `glances`, `node-exporter`, `wg-easy` — plus the shared `common` deploy path and `archive/`. (`containers_list` in `ansible/inventory/host_vars/daniel-pi.yml` is the source of truth for which are deployed.) A service's config lives in the role that deploys it, on both trees: **if a k3s workload reads it, it is under `roles/k8s/<name>/`**, not across the tree boundary. (Until 2026-08-14 eleven roles here were config-only sources for a k8s counterpart; they moved into it. To revive one as a Docker service, take its Compose plumbing from git history.)
+> **`roles/containers/` is now only the Pi.** Every role there is a Docker service live on `daniel-pi` — `alloy`, `autoheal`, `docker-proxy`, `wg-easy` — plus the shared `common` deploy path and `archive/`. (`containers_list` in `ansible/inventory/host_vars/daniel-pi.yml` is the source of truth for which are deployed.) A service's config lives in the role that deploys it, on both trees: **if a k3s workload reads it, it is under `roles/k8s/<name>/`**, not across the tree boundary. (Until 2026-08-14 eleven roles here were config-only sources for a k8s counterpart; they moved into it. To revive one as a Docker service, take its Compose plumbing from git history.)
 >
-> **Where a k8s role's non-manifest config goes.** `roles/k8s/<name>/templates/` is for **manifests only** — `validate/k8s_manifests.py` renders every `*.j2` there and parses it as YAML. App config a manifest embeds via `lookup()` goes one level down in **`templates/config/`** (CouchDB's `local.ini`, HA's `secrets.yaml.j2`, homepage's `custom.css` — none of them YAML manifests), and files a manifest carries verbatim with `lookup('file')` go in `files/` (HA's `configuration.yaml` and everything beside it). Two shapes are exempt and may sit in `templates/` directly, both skipped by name (`is_manifest_template` in `scripts/lib/k8s_roles.py`): `Dockerfile*`, consumed by buildctl, and `*.sh.j2`, which `validate/shell_templates.py` renders and lints instead. ENFORCED both ways: the validator fails a `lookup('template')` naming a `templates/` path outside `config/`, and a top-level template that renders a document with no `kind`.
+> **Where a k8s role's non-manifest config goes.** `roles/k8s/<name>/templates/` is for **manifests only**. App config a manifest embeds via `lookup('template')` goes in **`templates/config/`** (CouchDB's `local.ini`, HA's `secrets.yaml.j2`); a file it carries verbatim with `lookup('file')` goes in `files/` (HA's `configuration.yaml`). `scripts/validate/k8s_manifests.py` enforces both directions — it fails a `lookup('template')` naming a `templates/` path outside `config/`, and a top-level template that renders a document with no `kind` — and `is_manifest_template` in `scripts/lib/k8s_roles.py` names the two shapes it exempts (`Dockerfile*`, `*.sh.j2`).
 
 ## Where to Look (task → start here)
 Route to the source of truth by what you're doing, before reading linearly:
@@ -63,8 +69,9 @@ Route to the source of truth by what you're doing, before reading linearly:
 | A Bash or `kubectl` command keeps prompting, or you need the full permission tables | `## Shell Commands — Shape Them to Auto-Approve` below (summary) · `docs/claude-shell-permissions.md` (full detail) |
 | Editing HA automations / lighting / fans | `ansible/roles/k8s/home-assistant/CLAUDE.md` (config and workload both live there; it routes to `docs/` for per-topic behaviour) · `/ha-edit-automation` |
 | Reviewing the homelab for gaps | `/homelab-review` skill (per-domain reviewer agents) |
-| Answering "what runs here / where / behind what" | `docs/reference/` — generated from the tree by the `docs-refresh` cron, browsable at `docs.local.<domain>`. Services, hosts, secret rotation, scheduled jobs, networking. **Never hand-edit a generated page** (ENFORCED by `.claude/hooks/block-protected-edits.py` for `Edit|Write`, and by `block-protected-bash.py` for a `sed -i`/`tee`/heredoc write). Change the generator (`scripts/docs/build_docs.py` lists them). The hook decides by the `generated_from:` provenance banner rather than the path, so `reference/topology.md` — hand-written prose, the one page there nobody generates — stays editable. |
-| CI fails on `test_every_committed_fragment_matches_what_the_generator_writes_now` | You changed a tunable a docs fragment reads. *Generated docs fragments* below has the regenerate command, which tunables those are, and why this one gate is not left to the cron. |
+| Answering "what runs here / where / behind what" | `docs/reference/` — generated from the tree by the `docs-refresh` cron, browsable at `docs.local.<domain>`. Services, hosts, secret rotation, scheduled jobs, networking. **Never hand-edit a generated page** — `.claude/hooks/block-protected-edits.py` (and `block-protected-bash.py` for a `sed -i`/`tee`/heredoc write) denies any write to a file carrying a `generated_from:` banner. Change the generator instead (`scripts/docs/build_docs.py` lists them). |
+| CI fails on `test_every_committed_fragment_matches_what_the_generator_writes_now` | You changed a tunable a docs fragment reads. *Generated docs fragments* below has the regenerate command, the generator whose `FRAGMENTS` names the tunables, and why this one gate is not left to the cron. |
+| CI fails on `test_every_deployed_role_block_matches_what_the_generator_writes_now` | You changed a role's defaults, templates, tasks, playbook entry or `containers_list` entry (k8s, setup or the Pi's compose roles), or hand-edited its generated `## At a glance` block. Run `uv run python scripts/docs/gen_role_glance.py` and commit; the reasoning goes in the bullets below the block. |
 | Chasing a reliability / monitoring "gap" | The role's `CLAUDE.md` + monitor-bridge `files/registry.py` (the check registry) **first** — mature setup, most are handled |
 | Checking that a service's UI actually renders, not just that its pod is Ready | The `homelab-ui` MCP server — see `## Claude Tooling in This Repo` below, and `docs/claude-tooling.md` for the full reference. `probe.py health` cannot see a broken UI behind a healthy pod. **Grafana is the exception** — it still serves a login page behind Authelia, so drive it with `uv run pytest -m ui -k grafana` rather than by hand. That tier logs in through Authelia's OIDC provider and types no credential; the admin form stays on as break-glass. OIDC login is LAN-only: `root_url` pins the callback to `grafana.local.<domain>`. |
 | A config edit won't restart the pod (k3s) | A ConfigMap/Secret change alone doesn't roll a Deployment. The general mechanism is the central rollout-restart in `ansible/roles/k8s/manifests/CLAUDE.md`, which fires when a role's rendered manifests change. A role whose pod depends on a file the manifests *don't* carry adds its own `checksum/<thing>` pod annotation instead — e.g. `checksum/check-script` in `roles/k8s/monitor-bridge/templates/deployment.yaml.j2`. |
@@ -127,12 +134,16 @@ Before it takes the lock it clears an Ansible fact cache pinning another worktre
 pruned worktree used to fail EVERY deploy at Gathering Facts for the full 7200s TTL — with an
 error naming a module rather than the cache, after the ~9-minute wait on the lock.
 
-Its non-zero exits arrive as a bare `Exit code N`. Seven of them mean **nothing was
-deployed** — a resume point rather than a playbook failure (retry a busy lock, `git pull` a
-stale tree — never `--skip-staleness-check` — deploy by hand on a broad change, check
-`--list-services` on a tag miss, fix the lock file itself on 76, fix the snapshot root on 77,
-fix the inventory or host pattern on 78 — the playbook matched no host, which ansible itself
-exits 0 for). The eighth, 20, is the inverse: the playbook ran, a task
+Its non-zero exits arrive as a bare `Exit code N`. Every member of `DEPLOY_SH_NO_VERDICT`
+(`scripts/deploy_tools/exit_codes.py`) means **nothing was deployed** — a resume point rather
+than a playbook failure (retry a busy lock, `git pull` a stale tree — never
+`--skip-staleness-check` — deploy by hand on a broad change, check `--list-services` on a tag
+miss, fix the lock file itself on 76, fix what the captured stderr names on 77, fix the inventory or host
+pattern on 78 — the playbook matched no host, which ansible itself exits 0 for — and run
+`deploy_locks.py plan <tag>` by hand on 79, where the wrapper got no lock list and refused
+rather than order the locks itself).
+`DEPLOY_BAD_FLAGS` (64) also ran nothing, but the fix is the command line rather than a retry.
+`DEPLOY_PLAYBOOK_FAILED` (20) is the inverse: the playbook ran, a task
 failed, and changes before it are live — not a safe re-run. The full table, why 20 collides
 with ansible's own exit codes, the Pi's `-e target=`, config-only runs, the GitOps tick, and
 initial setup are all in the **`deploy` skill**.
@@ -182,7 +193,7 @@ does not route to the tick and does not cost the fast path.
 SHA is bad* — `_CI_NO_VERDICT_CONCLUSIONS` in `deploy_logic.py` is the list, and a commit whose
 merge was immediately followed by another reads `cancelled` permanently. If you ever check by
 hand, check that way. (ENFORCED: `ansible/tests/deploy/test_ci_cancelled_is_not_a_verdict.py` requires
-this paragraph to stay in CLAUDE.md rather than move to the skill.)
+this file to keep naming `_CI_NO_VERDICT_CONCLUSIONS` and `cancelled`.)
 
 **Verify the change, not just the workload.** The `VERDICT:` line gates the rollout and the
 180s restart window. It cannot see whether *your change* took effect: an Authelia 302 fires
@@ -298,10 +309,12 @@ history, the `homelab-ui` DNS/auth/secrecy triad and its `-m ui` suite, per-file
     nothing, leaves the verdict as it was. `--docker` inspects the Pi's
     container over ssh instead, and is the only mode that touches Docker at all.
     **It gates the PRODUCTION cluster unless you say otherwise**, whichever cluster you just
-    deployed to — the argv is a bare `k3s kubectl`. `--cluster prod|stage` names the intended
-    one and the gate refuses when the local kubectl serves a different cluster, so a staging
-    deploy can no longer read green about prod (#1663). There is no host-side kubeconfig for
-    the staging cluster, so gate a `-e target=daniel-stage` deploy from daniel-stage itself.
+    deployed to — kubectl reads whatever the local kubeconfig serves. `--cluster prod|stage`
+    names the intended one, and `scripts/lib/kubectl.py` — the one invoker every script runs
+    kubectl through — refuses when the local kubectl serves a different cluster, for every
+    subcommand and not only `health`, so a staging deploy can no longer read green about
+    prod (#1663). There is no host-side kubeconfig for the staging cluster, so gate a
+    `-e target=daniel-stage` deploy from daniel-stage itself.
     **The argument is a deploy TAG, not a workload name.** It renders the role's manifests to
     find every Deployment/DaemonSet/StatefulSet they declare, with each object's own namespace,
     and gates on all of them — `health claude-otel` checks six workloads in `observability`,
@@ -331,14 +344,16 @@ history, the `homelab-ui` DNS/auth/secrecy triad and its `-m ui` suite, per-file
   becomes an **ask** carrying `classify()`'s reason — never a deny, because the path extraction
   is a heuristic over command text and a wrong extraction must not block work. It also **denies**
   a content-printing read (`cat`, `head`, `grep` without `-o`/`-c`/`-l`) of a deployed host
-  script that renders a credential inline; that set is derived from the tree by
-  `scripts/secrets_mgmt/secret_bearing_host_paths.py`, not listed — run it to see the current
-  set rather than trusting a count written here. A third arm **denies** a Bash write that
+  script that renders a credential inline; `scripts/secrets_mgmt/secret_bearing_host_paths.py`
+  derives that set from the tree. A third arm **denies** a Bash write that
   leaves an isolated session's worktree — `isolation-guard.sh` covers `Edit|Write` only, so
   `cd /home/ubuntu/server && python3 - <<'EOF'` escaped into the primary checkout and parked
   the GitOps deployer on 2026-09-06 (#1419). It carries the `cd` through the command a segment
   at a time, and is inert outside a `.claude/worktrees/` session. A deny here, where a
   protected-file write only asks: a write outside the worktree is never the right call.
+  The segments are the dotfiles package's (`claude_guard.segment.parse`, #2053), so a
+  quoted `;` stays inside its word; text it cannot split — no `claude_guard` deploy on the
+  host, or an unbalanced quote — is an **ask** naming the fix, never a silent pass.
 - **nudge-land-sh** (PreToolUse, Bash) — *denies* a command that blocks on CI (`gh run watch`,
   `gh pr checks --watch`) and the third or later CI-status read in one session, naming the
   `land.sh --pr <n> --since <sha>` form instead. The first two reads are an ordinary glance and
@@ -349,8 +364,7 @@ history, the `homelab-ui` DNS/auth/secrecy triad and its `-m ui` suite, per-file
   recorded incident: `grep -Z`/`-z` (this host's grep is ugrep, where those mean `--fuzzy` and
   `--decompress`, not the NUL flags — use `--null`/`--null-data`) and a bare `git stash
   pop`/`apply` (the stash stack is per-repository, so it can take another session's WIP) are
-  two of them. Read `.claude/hooks/block-footguns.py`'s own docstring for the current full
-  list — enumerating it here is exactly what drifted before.
+  two of them; the docstring of `.claude/hooks/block-footguns.py` is the full list.
 - **validate-compose** (PostToolUse) — re-renders all compose templates after you edit a
   `docker-compose.yml.j2`, an `ansible/templates/*.j2` macro, or `host_vars`/`group_vars/all.yml`;
   fails on malformed YAML (catches Jinja indent bugs `ansible-lint` misses) and on an
@@ -359,10 +373,9 @@ history, the `homelab-ui` DNS/auth/secrecy triad and its `-m ui` suite, per-file
   `environment:` is not flagged). Editing a `tasks/main.yml` costs ~1.6 s to `ansible-lint`,
   an order of magnitude more than any other file type — that is coverage, not a stuck hook.
 - **auto-mode-bridge** (PermissionDenied + PostToolUseFailure, both Bash) — retries a denied
-  `gitops_tick.sh` (classifier variance, ~1 run in 7), and decodes the `deploy.sh` exits in its
-  own `_DEPLOY_EXITS` — read that dict rather than a list here, which is what drifted before.
-  Every code in it means *nothing was deployed* except 20, where the playbook ran and a task
-  failed. All of them reach Claude as a bare `Exit code N`.
+  `gitops_tick.sh` (classifier variance, ~1 run in 7), and decodes a `deploy.sh` exit into the
+  meaning *Common Commands* above gives it (`test_auto_mode_bridge.py` pins its `_DEPLOY_EXITS`
+  table to `exit_codes.py`).
 - **session-health** (SessionStart) — on opening a session here, prints a banner of any unhealthy/
   restarting containers + down Prometheus targets (silent when all-green; read-only, timeout-bounded).
   It also names a **dirty primary checkout**, a **GitOps deployer parked behind origin**, and a
@@ -396,11 +409,10 @@ feedback + MLD discipline):
   memory file or a commit message is a decision every future reviewer re-derives; one written as a
   comment where the code makes the trade-off is one they trip over before they spend an hour on it.
   Write the marker, then the reasoning, and point at the long form rather than at a line number
-  that will drift — this file cited `gitops_deploy.py:1053` for the live example until the marker
-  moved 239 lines to 1292, so cite the marker text instead: `grep -rn 'DECIDED: `origin\[:8\]`'
-  ansible/roles/setup/gitops_deploy/files/` finds it wherever it lands, and reads `a fixed slice
-  while volume-snapshot names with --short=8, a MINIMUM width … Full analysis in this role's
-  CLAUDE.md.` Reviewer briefs grep for it
+  that drifts. Cite a marker by its text, not its line: `grep -rn 'DECIDED: `origin\[:8\]`'
+  ansible/roles/setup/gitops_deploy/files/` finds the live example wherever it lands, and it
+  reads `a fixed slice while volume-snapshot names with --short=8, a MINIMUM width … Full
+  analysis in this role's CLAUDE.md.` Reviewer briefs grep for it
   (`.claude/skills/homelab-review/SKILL.md`, step 3), so the marker is what carries the decision to
   the agent that would otherwise re-open it. It is a prior, not a verdict: contradict one with new
   evidence at a cited `file:line` and name the marker you are contradicting.
@@ -501,12 +513,20 @@ The prose stays hand-written; the tunables beside it are re-read from the tree.
 
 **Changing one of those tunables fails CI until you regenerate.** Run
 `uv run python scripts/docs/gen_doc_fragments.py` and commit what it writes, in the same PR.
-The generator reads the Longhorn tier defaults and the deadman cron variables in
-`roles/setup/k3s/defaults/main.yml`, `_BROAD_*_PREFIXES` in `deploy_changes.py`,
-`STAGING_SUBSET` in `gitops_deploy.py`, `TIER_DAYS` plus the registry in
-`secret_rotation.py`/`secret_rotation.yml`, the fail2ban jail template, and the MetalLB VIPs
-and wg-easy ports in `group_vars`/`host_vars`. `FRAGMENTS` in the generator is the current
-list; read it rather than trusting this one.
+`FRAGMENTS` in that generator lists every tunable it reads.
+
+**A role `CLAUDE.md`'s `## At a glance` block is generated the same way, in place.**
+`scripts/docs/gen_role_glance.py` writes one field set per role shape between two
+`generated_from` markers under that heading: a deployed k8s role's deploy tag, image
+repositories, route, claims with the Longhorn backup tier of each, and auto-deploy stance; a
+setup role's applying playbook and tag, crons and timers; a Pi compose role's deploy tag,
+image repositories, `containers_list` facts, `meta/deps.yml` ordering and
+`common_config_changed` wiring. The prose below the markers stays hand-written. Changing a
+role's defaults, templates, tasks, playbook entry or `containers_list` entry — or, for a
+claim's tier, its StorageClass or the k3s role's `k3s_longhorn_*_volumes` lists — fails
+`scripts/docs/tests/test_gen_role_glance.py` until you re-run the generator and commit the
+block. The docs-refresh cron does not run it: the cron stages only the two generated trees,
+and a write under `ansible/roles/` would leave the primary checkout dirty.
 
 **Why this one gate is not left to the cron**, when a stale `docs/reference/` page is. A
 reference page carries a `generated_at` banner, so a stale one announces itself on the page.
@@ -538,17 +558,12 @@ uv run pytest scripts         # just one suite
 ```
 
 - **Bare `python3` cannot parse this repo.** `requires-python = ">=3.14"`, and files across the
-  tree use PEP 758 syntax — unparenthesized `except OSError, yaml.YAMLError:` — among them
-  `ansible/filter_plugins/toposort.py`, `scripts/diagnostics/probe_lib/health.py` and
-  `ansible/roles/k8s/monitor-bridge/files/checks/service.py`. Derive the current set with
-  `grep -rlE '^\s*except [A-Za-z_.]+, [A-Za-z_.]+:' --include='*.py' .` rather than trusting a
-  count written here; a count and two of the three files this line used to name went stale when
-  those modules were split. Ubuntu's `/usr/bin/python3` is 3.12, so a
-  bare `pytest` reports a `SyntaxError` naming a repo file, which reads as a repo bug. ENFORCED
-  by `.claude/hooks/uv-python.sh`, a PreToolUse hook that rewrites a bare
-  `python`/`python3`/`pytest`/`ansible-playbook`/`*.py` invocation into `uv run …`. It rewrites
-  rather than pins a PATH, because `uv run` resolves the venv from the caller's working
-  directory and a pinned `/home/ubuntu/server/.venv/bin` would cross worktrees.
+  tree use PEP 758 syntax — unparenthesized `except OSError, yaml.YAMLError:`. Ubuntu's
+  `/usr/bin/python3` is 3.12, so a bare `pytest` reports a `SyntaxError` naming a repo file,
+  which reads as a repo bug. ENFORCED by `.claude/hooks/uv-python.sh`, a PreToolUse hook that
+  rewrites a bare `python`/`python3`/`pytest`/`ansible-playbook`/`*.py` invocation into
+  `uv run …`. It rewrites rather than pins a PATH, because `uv run` resolves the venv from the
+  caller's working directory and a pinned `/home/ubuntu/server/.venv/bin` would cross worktrees.
 - **What runs is defined once** in `pyproject.toml` `[tool.pytest.ini_options]` `testpaths` —
   consumed by both `uv run pytest` and the prek `pytest` hook. It deliberately excludes the
   vendored `ansible/collections/**` third-party tests.
@@ -610,9 +625,7 @@ uv run pytest scripts         # just one suite
   failure downgrade the diagnosis rather than the verdict.
 - **Test-placement gotcha:** pytest tests must NOT live under `ansible/filter_plugins/` —
   Ansible's plugin loader imports every `.py` there at deploy time and would choke on the
-  `pytest` import. `test_toposort.py` lives in `ansible/tests/` and imports its target via the
-  `pythonpath` setting in `pyproject.toml`. ENFORCED, SCOPED:
-  `ansible/tests/repo/test_testpaths_covers_every_test_file.py::test_every_suite_file_sits_in_a_tests_directory`
+  `pytest` import. `test_every_suite_file_sits_in_a_tests_directory` (in the guard above)
   refuses a test file beside the plugin. A `filter_plugins/tests/` subdirectory would pass it
   and still load, because `PluginLoader._get_paths_with_context` globs two levels of
   subdirectories.

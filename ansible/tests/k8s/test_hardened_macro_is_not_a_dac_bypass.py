@@ -17,10 +17,8 @@ synthetic cases below are what show the rule can go red.
 """
 
 import re
-import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from _helpers import K8S_ROLES, REPO
 

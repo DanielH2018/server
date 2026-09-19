@@ -6,6 +6,14 @@ nightly into a Longhorn PVC; the 03:30 daily-backup group carries it to B2. This
 replaced the retired Kopia scope for the Pi.
 
 ## At a glance
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
+- **Deploy tag:** `--tags "pi-peer-backup"`
+- **Image:** `<k8s_registry_pull_host>/pi-peer-backup` (`pi_peer_backup_k8s_image`)
+- **Route:** none (no `templates/ingressroute.yaml.j2`)
+- **Claim:** `pi-peer-backup-data` (weekly -> B2 (default target))
+- **Auto-deploy:** eligible (`k8s_autodeploy: true`)
+<!-- /generated_from -->
+
 - **Shape:** CronJob 23:30 (America/Chicago), built image (alpine + rsync/ssh/curl + the
   script), any node (post-re-plumb registry pulls work everywhere).
 - **Auth:** dedicated ed25519 key (`pi_peer_backup_ssh_key` in SOPS; public half
@@ -15,12 +23,15 @@ replaced the retired Kopia scope for the Pi.
   `restrict,command="/usr/local/bin/pi-peer-backup-shell <src dir>"`; the wrapper
   (`files/pi-peer-backup-shell.sh`, root-owned on the Pi) re-derives one
   `sudo rsync --server --sender` of `pi_peer_backup_src_dir` from `SSH_ORIGINAL_COMMAND` and
-  refuses a login, a receiver, another path or any long option but `--timeout=N`. It
+  refuses a login, a receiver, another path, any long option but `--timeout=N`, and `-s`
+  (`--secluded-args`, which re-reads the path from the protocol stream and would bypass the
+  pinned directory, #2015) — matched in the letters BEFORE the blob's `e`, since the `s` in
+  the capability list after it (`e.iLsfxCIvu`) is a capability, the split rrsync makes. It
   validates the request structurally rather than pinning the argv, because rsync's
   short-option blob is version-negotiated and moves with the alpine base image. Until
   2026-09-17 the key carried no options, so reading the Secret was a shell as a NOPASSWD-sudo
   user on the Pi (#1927). `ansible/tests/services/test_pi_peer_backup_forced_command.py` runs
-  the wrapper against the captured request and five refusals.
+  the wrapper against the captured request and eight refusals.
 - **sudo rsync** on the Pi is required (files are root-owned); the ubuntu user there
   has NOPASSWD sudo. The wrapper's exec'd argv stays `sudo rsync …`, so it works under a
   rule scoped to rsync as well as under `ALL`.

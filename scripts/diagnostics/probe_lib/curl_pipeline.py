@@ -36,8 +36,6 @@ from diagnostics.probe_lib.core import (
     k8s_endpoint,
     loki_labels_url,
     loki_query_url,
-    pi_resolve,
-    pi_url,
     prom_query_url,
     prom_targets_url,
     scrutiny_url,
@@ -45,13 +43,12 @@ from diagnostics.probe_lib.core import (
 )
 
 
-def plan(args, resolve_ip, k8s_endpoint=k8s_endpoint, pi_resolve=pi_resolve):
+def plan(args, resolve_ip, k8s_endpoint=k8s_endpoint):
     """Return the command pipeline (list of argv stages) for the parsed args.
 
-    `resolve_ip(container) -> ip`, `k8s_endpoint(hostname) -> (base, pin)`, and
-    `pi_resolve() -> pin` are injected so all routing/URL logic is testable without
-    Docker, SOPS, or the network. Most commands are a single stage; `cert` is a
-    two-stage openssl pipeline.
+    `resolve_ip(container) -> ip` and `k8s_endpoint(hostname) -> (base, pin)` are injected
+    so all routing/URL logic is testable without Docker, SOPS, or the network. Most commands
+    are a single stage; `cert` is a two-stage openssl pipeline.
     """
     ns = _build_parser().parse_args(args)
     cmd = ns.cmd
@@ -76,10 +73,6 @@ def plan(args, resolve_ip, k8s_endpoint=k8s_endpoint, pi_resolve=pi_resolve):
     if cmd == "scrutiny":
         base, pin = k8s_endpoint("scrutiny")
         return [curl_argv(scrutiny_url(base), resolve=pin)]
-    if cmd == "pi":
-        # daniel-pi.lan is a Pi-hole-only LAN name; this host's resolver bypasses it (same
-        # trap as every other cluster/LAN name here), so pin it like k8s_endpoint does.
-        return [curl_argv(pi_url(ns.subpath), resolve=pi_resolve())]
     if cmd == "cert":
         host, _, port = ns.target.partition(":")
         port = int(port) if port else 443

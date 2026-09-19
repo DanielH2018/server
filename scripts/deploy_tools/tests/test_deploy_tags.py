@@ -165,14 +165,14 @@ def test_changed_prints_tags_for_a_service_and_k8s_change(capsys, monkeypatch):
         deploy_tags,
         "_git_diff_paths",
         lambda ref: [
-            "ansible/roles/containers/glances/templates/docker-compose.yml.j2",
+            "ansible/roles/containers/wg-easy/templates/docker-compose.yml.j2",
             "ansible/roles/k8s/jellyfin/templates/deployment.yaml.j2",
         ],
     )
     assert deploy_tags.main(["changed"]) == 0
     captured = capsys.readouterr()
-    assert captured.out.strip() == "glances,jellyfin"
-    assert "glances, jellyfin" in captured.err
+    assert captured.out.strip() == "jellyfin,wg-easy"
+    assert "jellyfin, wg-easy" in captured.err
 
 
 def test_split_shared_roles_separates_an_undeclared_role(host_vars):
@@ -369,11 +369,11 @@ def test_hosts_never_prints_the_staging_guest(capsys):
         if host in deploy_tags.HOSTS_LAND_SH_NEVER_DEPLOYS
     }
     assert staged == {"daniel-stage"}, "the staging guest no longer declares any tag"
-    assert deploy_tags.main(["hosts", "node-exporter,traefik,authelia"]) == 0
+    assert deploy_tags.main(["hosts", "wg-easy,traefik,authelia"]) == 0
     out = capsys.readouterr().out
     assert "daniel-stage" not in out
     assert out.startswith("daniel-box\t")
-    assert "daniel-pi\tnode-exporter\n" in out
+    assert "daniel-pi\twg-easy\n" in out
 
 
 def test_deploy_logic_importers_do_not_grow_sys_path_per_call():

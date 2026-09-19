@@ -4,11 +4,17 @@ Small Flask app that merges several ICS calendars into one feed for the Homepage
 calendar widget. See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
-- **Image:** built from `templates/Dockerfile.j2` (Flask app in `files/app.py`)
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
+- **Deploy tag:** `--tags "ical-proxy"`
+- **Image:** `<k8s_registry_pull_host>/ical-proxy` (`ical_proxy_k8s_image`)
+- **Route:** `ical-proxy.local.<domain>` (LAN only), no Authelia
+- **Claims:** none (no PVC)
+- **Auto-deploy:** eligible (`k8s_autodeploy: true`)
+<!-- /generated_from -->
+
+- **Built in-cluster** from `templates/Dockerfile.j2` (Flask app in `files/app.py`)
 - **Host:** daniel-box (k8s), since 2026-08-10 — slice-7 Phase C
-- **Internal only, no public route** — the cluster route guards it by ClientIP so only
-  Homepage reads the unauthenticated private feeds
-- **Config in:** `ansible/inventory/host_vars/daniel-box.yml` → `containers_list`
+- **The route guards by ClientIP** so only Homepage reads the unauthenticated private feeds
 
 ## Notable
 - Aggregates Google + Obsidian ICS URLs (`calendar_1/2/4` from secrets), refreshing every

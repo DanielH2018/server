@@ -4,6 +4,13 @@
 checkout. It serves the page and API `roles/k8s/deploy-ui` routes to, and runs `land.sh`,
 `deploy.sh`, `probe.py releases` and `gh` exactly as the operator would from a terminal.
 
+## At a glance
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates or playbook entry. -->
+- **Applied by:** `initial_setup.yml --tags "deploy_ui"`
+- **Crons / timers:** none (no `ansible.builtin.cron` task in `tasks/`, no
+  `templates/*.timer.j2`)
+<!-- /generated_from -->
+
 ## Trust
 
 The daemon does no authentication. Two gates stand in front of it; removing either is a
@@ -12,9 +19,9 @@ visible decision:
 - ufw admits `deploy_ui_port` from `deploy_ui_allowed_sources` only (the pod CIDR and every
   node IP, because flannel masquerades pod→LAN traffic to the sending node).
   ENFORCED: `ansible/tests/setup/test_deploy_ui_firewall_sources.py`.
-- Authelia `two_factor` gates `deploy.local` (`roles/k8s/authelia/templates/config-secret.yaml.j2`).
-  ENFORCED: `ansible/tests/k8s/test_deploy_ui_is_two_factor.py`.
-  The `roles/k8s/deploy-ui` route role ships the guard that pins that.
+- Authelia `two_factor` gates `deploy.local`: `auth_tier: two_factor` on the `deploy-ui`
+  containers_list entry, rendered into the authelia role's access_control rules.
+  ENFORCED: `ansible/tests/services/test_authelia_access_tiers.py`.
 
 DECIDED: a pod inside the cluster reaches the daemon without Authelia. Accepted 2026-09-10 —
 a hostile pod already has kubectl-adjacent reach. Nothing stops it at the network layer:

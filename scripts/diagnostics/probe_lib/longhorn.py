@@ -17,7 +17,6 @@ b2_ledger imports this module back by module object, so no helper module may imp
 """
 
 import json
-import subprocess
 
 # `probe_lib` is a namespace package under `scripts/`, so reaching a sibling by package name
 # needs `scripts/` on sys.path — a module gets only its importer's path otherwise, and
@@ -56,6 +55,8 @@ from diagnostics.probe_lib.longhorn_cluster import (
     volume_shard_labels,
 )
 
+from lib.kubectl import DEFAULT_CLUSTER, kubectl, kubectl_argv
+
 
 def run_b2_budget(ns):
     """Project each weekly shard's Class C spend against B2's free-tier daily cap.
@@ -90,12 +91,13 @@ def run_b2_budget(ns):
     # so writing them down here is what turns an unrepeatable measurement into one an after-the-
     # fact accounting pass can use.
     ledger.write_prune_snapshot(vols)
+    cluster = getattr(ns, "cluster", DEFAULT_CLUSTER)
     text, code = format_backup_budget(
         vols,
-        volume_shard_labels(),
-        pvc_names(),
+        volume_shard_labels(cluster),
+        pvc_names(cluster),
         ns.retain,
-        volume_owned_backup_counts(),
+        volume_owned_backup_counts(cluster),
     )
     print(text)
     return code
@@ -141,8 +143,7 @@ def run_b2_longhorn(ns):
 
 def run_longhorn_blocks(ns):
     """Census live Volume CRs by tier and backup block size (read-only, spends no B2)."""
-    argv = [
-        "kubectl",
+    args = [
         "-n",
         "longhorn-system",
         "get",
@@ -151,9 +152,9 @@ def run_longhorn_blocks(ns):
         "json",
     ]
     if getattr(ns, "dry_run", False):
-        print(" ".join(argv))
+        print(" ".join(kubectl_argv(*args)))
         return 0
-    proc = subprocess.run(argv, capture_output=True, text=True)
+    proc = kubectl(getattr(ns, "cluster", DEFAULT_CLUSTER), *args)
     if proc.returncode != 0:
         print(f"cannot list Longhorn volumes: {proc.stderr.strip()}")
         return 2

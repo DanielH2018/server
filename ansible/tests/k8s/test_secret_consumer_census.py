@@ -14,24 +14,18 @@ census that finds everything and one that finds nothing look identical from the 
 Run: uv run pytest ansible/tests/k8s/test_secret_consumer_census.py
 """
 
-import sys as _sys
-
 from functools import cache
+
 import pytest
-from _helpers import REPO
 
-_REPO = REPO
-_sys.path.insert(0, str(_REPO / "scripts"))
-
-# Both need the path insert above, hence the E402. The census is pure over the tree and lives
-# in `consumers`; `sops_names` reads the encrypted store's plaintext KEYS and so stays with
-# the other process boundaries in `rotation_tools`.
-from secrets_mgmt.consumers import (  # noqa: E402
+# The census is pure over the tree and lives in `consumers`; `sops_names` reads the encrypted
+# store's plaintext KEYS and so stays with the other process boundaries in `rotation_tools`.
+from secrets_mgmt.consumers import (
     consumer_commands,
     consumer_tags,
     tree_consumers,
 )
-from secrets_mgmt.rotation_tools import sops_names  # noqa: E402
+from secrets_mgmt.rotation_tools import sops_names
 
 
 # The incident this file exists for, kept as the accept case. Verified by hand on 2026-08-29

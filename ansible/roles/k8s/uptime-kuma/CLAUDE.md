@@ -4,13 +4,23 @@ Uptime Kuma plus an AutoKuma sidecar that creates monitors and notifications fro
 role's rendered declarations. See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
-- **Deploy tag:** `--tags "uptime-kuma"`.
-- **Route:** `uptime-kuma.<domain>`, behind Authelia.
-- **Claims:** `uptime-kuma-data` and `autokuma-data`, both in the no-backup tier — monitors and
-  notifications regenerate from the rendered static-monitors Secret; status history is kept
-  nowhere.
-- **`k8s_autodeploy: false`** (observability — the alerting spine; a broken deploy cannot page
-  about being broken).
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
+- **Deploy tag:** `--tags "uptime-kuma"`
+- **Images:** `louislam/uptime-kuma` (`uptime_kuma_k8s_image`), `ghcr.io/bigboot/autokuma`
+  (`autokuma_k8s_image`), `ghcr.io/bigboot/kuma` (`kuma_cli_k8s_image`), `python`
+  (`kuma_status_page_sync_image`)
+- **Route:** `uptime-kuma.<domain>` · `uptime-kuma.local.<domain>`, Authelia one_factor
+- **Claims:** `uptime-kuma-data` (no backup (listed in k3s_longhorn_nobackup_volumes)),
+  `autokuma-data` (no backup (listed in k3s_longhorn_nobackup_volumes))
+- **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — observability — the alerting spine; a
+  broken deploy cannot page about being broken. ALSO Recreate + RWO volume-claim PVC
+  (migrating-state shape) — two independent reasons. COUPLING NOTE for a future promotion: two
+  PVCs (uptime-kuma-data, autokuma-data) that must revert together; a partial revert desyncs
+  AutoKuma's entity-ID map from Kuma's DB, the same shape as the recorded KD5 migration finding
+<!-- /generated_from -->
+
+- **Both claims are in the no-backup tier** — monitors and notifications regenerate from the
+  rendered static-monitors Secret; status history is kept nowhere.
 
 ## Traps
 
@@ -187,6 +197,90 @@ for AutoKuma's debug diff to find it — that prints the whole entity, so for th
 it writes the Discord webhook and the SMTP password into Loki. Both sides' source at their
 pinned versions answered it with nothing logged.
 `test_notification_configs_declare_apply_existing` guards the key.
+
+## One Discord template for every monitor, fed by `description` and tags
+
+The `discord` notification is Kuma's **webhook** provider, not its `discord` one (since
+2026-09-18). Both POST to the same Discord webhook; the difference is who writes the body.
+The discord provider's own custom template (`discordMessageFormat: custom`) sends plain
+`content` and drops the embed. The webhook provider with `webhookContentType: custom` renders
+`webhookCustomBody` through the same liquidjs engine (`server/notification-providers/
+notification-provider.js`, `renderTemplate`) and posts the result verbatim, so the body is
+the embed we author. That body is `files/discord-message.liquid`, embedded into `discord.json`
+with `lookup('file') | to_json`. The template belongs to the notification, and every monitor
+attaches to that one notification, so one file covers all of them.
+
+What the template reads, per monitor: `heartbeatJSON.msg` (the producer's text — for a
+push tile, what the bridge or the cron pushed), `monitorJSON.description` (markdown; Kuma
+also renders it at the top of the monitor's own page, the one place its UI renders
+formatting), and tags named `severity` and `runbook`, omitted when absent. A tile whose
+meaning is not obvious from its name declares a `description` in `static-monitors.yaml.j2`:
+what the check reads, what a DOWN means, where to look. Every push tile carries one since
+2026-09-19 (#2065); an http tile's URL says what it probes, so those do not.
+
+**Email is the same convention, a second template.** `email.json` renders
+`files/email-message.liquid` as `customBody` (plain text — the break-glass tier has to read
+in any client, so `htmlBody` stays off) and `[Homelab] {{ status }} {{ name }}` as
+`customSubject`, through the same context (#2067).
+`ansible/tests/services/test_kuma_email_template.py` renders it the same three ways.
+
+**The two tags are entities this Secret declares** — `tag-severity.json` and
+`tag-runbook.json` (#2066). A monitor names one in `tag_names` **by the entity's AutoKuma id**
+— the filename minus `.json`, `tag-severity` — not by the `name` Kuma displays; AutoKuma
+resolves that id to the tag it created. PR #2089 got this wrong, the 23 tagged monitors
+failed to resolve, and `ON_DELETE=delete` removed them at 00:31 on 2026-09-19 — the second
+wipe in two days, same mechanism as #2076. The templates read the DISPLAY name
+(`where: "name", "severity"`), which is the tag's `name` field. `severity: critical` is exactly the email tier
+(`test_severity_critical_is_exactly_the_email_tier`), and a `runbook` value is a page the docs
+site serves (`test_every_runbook_tag_points_at_a_page_the_docs_site_serves`). The tag
+reference is the same NameNotFound hazard as the notification reference: a monitor naming a
+tag the Secret no longer declares fails to parse and, under `ON_DELETE=delete`, is deleted
+(#2076). `test_every_tag_a_monitor_names_is_a_declared_tag_entity` refuses the typo; it cannot
+refuse a deliberate removal of a tag entity while monitors still name it, so remove the
+references first and the entity a deploy later. Every reader that classifies entities by
+type — the three guards in `test_kuma_static_monitors.py`, `test_status_page_groups.py`,
+`status-page-sync-configmap.yaml.j2`'s `index.json` loop and `probe_lib/monitors.py` — skips
+`tag` alongside `notification`.
+
+Four things the change depends on:
+
+- **The Liquid body ships inside a Tera `raw` block.** AutoKuma runs every entity through
+  the Tera template engine before it parses it (`autokuma/src/entity.rs`,
+  `get_entity_from_settings` — unconditional; `files.preprocess` gates only an earlier pass
+  over the raw file). Tera reads Liquid's comment tag and its double-brace interpolations as
+  its own syntax, so the first deploy of this template on 2026-09-18 failed to parse,
+  AutoKuma logged `No notification named discord could be found` for every monitor and
+  re-synced all 108 with an empty notification list — every alert detached, behind green
+  tiles, until the wrapper deployed. Tera strips the `raw` markers and passes the content
+  verbatim. `test_the_notification_ships_this_template_as_a_webhook_body` asserts the
+  wrapper, and `test_kuma_entities_parse_for_autokuma.py` walks every string in every
+  rendered entity and refuses a Tera delimiter outside a raw block, so the next Liquid
+  value cannot repeat it. The same parse pass also prints the failing entity's config,
+  webhook URL included, into the sidecar log and so into Loki — the debug-diff trap above,
+  reached through a WARN line.
+  **`ON_DELETE=delete` stays** (decided 2026-09-19, #2076; the `DECIDED:` marker sits at
+  the variable in `templates/deployment.yaml.j2`). An unparseable or unresolvable entity is
+  a removed one to AutoKuma, so the guards on the declarations are what stand between a
+  typo and a fleet wipe: references resolve to declared ids, no Tera outside raw,
+  `applyExisting` declared.
+- **`webhookAdditionalHeaders` carries `Content-Type: application/json`.** axios posts a string
+  body as `application/x-www-form-urlencoded`, and Discord rejects that with a 400.
+- **The AutoKuma id stays `discord`** so no monitor's `notification_name_list` moves, and the
+  name stays `Homelab Alerts` because monitor-bridge's Kuma Notification Delivery check reads
+  it out of Kuma's `Cannot send notification to <name>` line.
+- **A Liquid error drops every alert at once.** A parse error throws inside `send()`, Kuma logs
+  `Cannot send notification` and does not retry. Kuma Notification Delivery pages on that line,
+  and `ansible/tests/services/test_kuma_discord_template.py` renders the file for a DOWN, an
+  UP and the Test button's null context before it can deploy. The Test button on its own
+  proves nothing: it renders with `heartbeatJSON` null and Liquid renders a missing key as
+  empty text.
+
+The test's engine is python-liquid; Kuma's is liquidjs. The template stays in the subset both
+accept — `assign x = a == b` is the one divergence found, which is why `down` is set through
+an `if` — and the pinned liquidjs rendered the same three contexts to the same payloads on
+2026-09-18. The text inside the message is the producer's job: `bridge/msgfmt.py` in
+monitor-bridge is the grammar for a multi-item DOWN (group by reason, names once), and
+`probe.py releases --stale-only --kuma` is its first cron-side caller.
 
 ## The status page's groups are synced by a CronJob, not by AutoKuma
 

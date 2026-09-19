@@ -4,8 +4,17 @@ Jellyfin, transcoding on the Intel GPU the `dri-device-plugin` role advertises. 
 shared `media-data` library and owns its own config volume.
 
 ## At a glance
-- **Image:** `lscr.io/linuxserver/jellyfin` (`jellyfin_k8s_image`), pinned in lockstep with the
-  `targetAbi` of **every** installed plugin — `jellyfin-ani-sync`, Intro Skipper, Webhook,
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
+- **Deploy tag:** `--tags "jellyfin"`
+- **Images:** `lscr.io/linuxserver/jellyfin` (`jellyfin_k8s_image`), `python`
+  (`jellyfin_k8s_plugin_init_image`)
+- **Route:** `jellyfin.<domain>` · `jellyfin.local.<domain>`, no Authelia
+- **Claims:** `jellyfin-config` (weekly -> B2 (default target)), `media-data` (not Longhorn
+  (media-local))
+- **Auto-deploy:** eligible (`k8s_autodeploy: true`)
+<!-- /generated_from -->
+
+- **The image is pinned in lockstep with the `targetAbi` of every installed plugin** — `jellyfin-ani-sync`, Intro Skipper, Webhook,
   Merge Versions and Media Cleaner. Raise a plugin and the image together,
   never one alone
   (`ansible/tests/services/test_anisync_pin_matches_server.py`,
@@ -34,14 +43,12 @@ shared `media-data` library and owns its own config volume.
   automated cleanup rules silently: Jellyfin's loader rejects an ABI-mismatched plugin **without
   logging a failure**, so the pod stays healthy and the rollout stays green (the #1648 silence).
   SSO-Auth was the other blocker and is gone — see below.
-- **Deploy tag:** `--tags "jellyfin"`. `use_authelia: false` — **no forward-auth middleware**,
-  public route. **Nothing but Jellyfin's own local accounts authenticates it.** The SSO-Auth
+- **`use_authelia: false` — no forward-auth middleware** on a public route. **Nothing but Jellyfin's own local accounts authenticates it.** The SSO-Auth
   plugin used to, and was removed on 2026-09-10 (#1674) at the operator's request, taking OIDC
   and 2FA off this route with it; authelia's `jellyfin` OIDC client was retired in the same
   change. The alternative put to the operator was `use_authelia: true`, which protects the route
   but breaks native clients that cannot complete Authelia's browser login. Re-raising that is a
   decision, not a fix — `test_sso_auth_removed.py` pins the removal on both sides.
-- **Route:** `jellyfin.<domain>`.
 - **Persists:** `jellyfin-config` (`longhorn`, backed up, 8Gi) — the library database, artwork
   and trickplay data. `media-data` (from `k8s/media-volume`) is mounted read-only, twice.
 - **GPU:** requests the `devic.es/dri` extended resource. `verify.yml` proves it is reachable

@@ -4,13 +4,22 @@ CrowdSec LAPI plus remote agents; the role registers the agent machines on the L
 applying the manifests. See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
-- **Deploy tag:** `--tags "crowdsec"`. Traefik's entry declares `depends_on: [crowdsec]`, so
-  the LAPI is up before the bouncer that needs its credential.
-- **Route:** `crowdsec-lapi.<domain>`, `use_authelia: false` — bouncers authenticate with
-  their own API keys.
-- **Claims:** `crowdsec-db` (no-backup tier: decisions expire and re-derive from logs).
-- **`k8s_autodeploy: false`** (platform — the LAPI/AppSec/decision engine every bouncer
-  queries; a failed deploy can open or close traffic unpredictably fleet-wide).
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
+- **Deploy tag:** `--tags "crowdsec"`
+- **Image:** `crowdsecurity/crowdsec` (`crowdsec_k8s_image`)
+- **Route:** `crowdsec-lapi.local.<domain>` (LAN only), no Authelia
+- **Claim:** `crowdsec-db` (no backup (listed in k3s_longhorn_nobackup_volumes))
+- **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — platform — LAPI/AppSec/decision
+  engine every bouncer queries; a failed deploy can open or close traffic unpredictably
+  fleet-wide. COUPLING NOTE for a future promotion: crowdsec-db also holds LAPI machine
+  registrations; a revert past an agent registration leaves that agent's stored password valid
+  but the machine unknown
+<!-- /generated_from -->
+
+- **Traefik's entry declares `depends_on: [crowdsec]`**, so the LAPI is up before the bouncer
+  that needs its credential.
+- **`use_authelia: false`** — bouncers authenticate with their own API keys.
+- **`crowdsec-db` is on the no-backup tier**: decisions expire and re-derive from logs.
 
 ## Traps
 

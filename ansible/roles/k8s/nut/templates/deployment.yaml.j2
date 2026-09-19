@@ -1,4 +1,5 @@
 {% from 'container-resources.yml.j2' import container_resources with context %}
+{% from 'workload-shell.yml.j2' import spec_shell, pod_shell with context %}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -6,12 +7,10 @@ metadata:
   name: nut
   namespace: {{ k8s_namespace }}
 spec:
-  revisionHistoryLimit: 3
-  replicas: 1
   # Recreate: the USB device and the loopback hostPort are both node-exclusive — a
   # rolling update would leave the new pod fighting the old one for both.
-  strategy:
-    type: Recreate
+{{ spec_shell('Recreate') }}
+  replicas: 1
   selector:
     matchLabels:
       app: nut
@@ -25,9 +24,7 @@ spec:
       # preference — it does NOT unwind with the drain's L2/VIP pins.
       nodeSelector:
         kubernetes.io/hostname: daniel-server
-      enableServiceLinks: false
-      automountServiceAccountToken: false
-      priorityClassName: homelab-critical
+{{ pod_shell('homelab-critical') }}
       containers:
         - name: nut
           image: {{ nut_k8s_image }}

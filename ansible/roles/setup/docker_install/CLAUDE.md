@@ -5,6 +5,13 @@ Docker networks every container role attaches to. **Not a container role** — a
 role under `ansible/roles/setup/`, run by `initial_setup.yml`, not `deploy.yml`. See
 repo-root `CLAUDE.md` and `.claude/rules/docker.md` for conventions.
 
+## At a glance
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates or playbook entry. -->
+- **Applied by:** `initial_setup.yml --tags "docker_install"`
+- **Crons / timers:** none (no `ansible.builtin.cron` task in `tasks/`, no
+  `templates/*.timer.j2`)
+<!-- /generated_from -->
+
 ## Where it runs
 - In `ansible/initial_setup.yml`, after [[sops_setup]] — every host, **unconditionally**.
   `tasks/main.yml` is a dispatcher: `has_docker: true` runs `install.yml` (everything below),
@@ -12,8 +19,9 @@ repo-root `CLAUDE.md` and `.claude/rules/docker.md` for conventions.
 - `uv run ansible-playbook ansible/initial_setup.yml --tags "docker_install"`.
 - **Granular tags:** `docker-repo` (APT repo + GPG + the cache refresh),
   `docker-engine` (install + hold + v1-wrapper removal), `docker-group` (user resolution +
-  membership), `docker-daemon` (daemon.json + conditional restart), `docker-networks`.
-  `docker-engine-upgrade` is `never`-tagged: it runs only when named (below).
+  membership), `docker-daemon` (daemon.json + conditional restart), `docker-networks`,
+  `docker-go-runtime` (both Go runtime drop-ins; `-dockerd` / `-containerd` select one).
+  `docker-engine-upgrade` is `never`-tagged AND gated on `docker_install_engine_upgrade`: it runs only when named and opened with `-e` (below). `never` alone is not enough — the role tag inherits onto the include and overrides it (#1998).
 
 ## The engine is held; `--tags docker-engine-upgrade` is how it moves
 `docker_engine_packages` (`group_vars/all.yml`: docker-ce, -cli, containerd.io, the compose
@@ -37,7 +45,7 @@ recovery cron (#1910) restarts a stopped container; it cannot recreate one.
 
 **The deliberate bump** (`tasks/engine-upgrade.yml`):
 ```
-uv run ansible-playbook ansible/initial_setup.yml --tags docker-engine-upgrade -e target=daniel-pi
+uv run ansible-playbook ansible/initial_setup.yml --tags docker-engine-upgrade -e docker_install_engine_upgrade=true -e target=daniel-pi
 ```
 It refuses a host with no `~/server` checkout (nothing could stop or recreate the projects),
 refreshes the cache, unholds, and asks the apt module in check mode whether `state: latest`
@@ -104,6 +112,40 @@ services. Install without uninstall is a one-way door; this is the way back out.
    2026-08-27 — see the comments in `tasks/install.yml`, which is the list that decides.
 
 ## Notable
+- **dockerd and containerd serve their metrics on the LAN IP** (`docker-daemon`):
+  `metrics-addr` in `daemon.json` on 9323 and `[metrics] address` in
+  `/etc/containerd/config.toml` on 1338 (path `/v1/metrics`), each with a UFW allow from
+  `lan_subnet` — a host listener gets none of the bypass Docker's own iptables chain
+  gives a published port. The cluster's Prometheus scrapes them as `dockerd-pi` and
+  `containerd-pi` (`roles/k8s/claude-otel`). They exist to size the `GOMEMLIMIT` below:
+  on 2026-09-18 the daemons took 97 and 53 major faults/s on daniel-pi, 46% of the
+  host's, each GC cycle faulting a swapped-out heap back from zram (#2003). A change
+  here restarts containerd (no cascade into dockerd; live-restore keeps the containers up).
+- **Each daemon runs `GOGC=off` under a `GOMEMLIMIT`** (`tasks/go-runtime.yml`, one
+  systemd drop-in per unit, sized at `docker_install_gomemlimit_<daemon>` in `defaults/main.yml`
+  with the 2026-09-18 measurement beside it: live heap 11–14 MB each, 114 / 97 KB/s of
+  allocation, 0.7 GC cycles a minute — above the two-minute forced-cycle floor, so the
+  heap goal was the trigger). 64 MiB gives each a cycle every ~350–430 s, the cadence the
+  Pi Alloy runs at; `ansible/tests/setup/test_docker_daemons_gomemlimit_headroom.py`
+  refuses a limit whose slack is under two minutes of allocation, which is what the
+  issue's "live + 50%" recipe would have been on a heap this small.
+  **The environment is inherited by every child process.** containerd's shims get
+  `os.Environ()`, so the config.toml block sets
+  `[plugins.'io.containerd.shim.v1.manager'] env = ["GOGC=100", "GOMEMLIMIT=off"]`,
+  which containerd appends after the inherited values and Go resolves last-wins; that
+  block carries the `docker-go-runtime-containerd` tag so the drop-in cannot land without
+  it. dockerd's userland `docker-proxy` processes (one per published port, four on the
+  Pi) have no such override and inherit the pairing; accepted because they carry only
+  loopback- and hairpin-origin traffic and allocate ~nothing — the day-after check reads
+  their `VmRSS` (1.8 MB each before). A shim or proxy started before the drop-in keeps
+  its old environment until its container is recreated.
+  **Applying it is by hand, one daemon per day**, so the day-after reading is
+  attributable: `uv run ansible-playbook ansible/initial_setup.yml --tags
+  docker-go-runtime-dockerd -e target=daniel-pi` (then `…-containerd`), each judged the
+  next day by `rate(node_vmstat_pswpin{job="node-pi"}[1d])` against the 136–181/s of
+  2026-09-03 → 09-17 and by the daemon's own `go_gc_duration_seconds_count` rate. An
+  empty `docker_install_gomemlimit_<daemon>` removes that daemon's drop-in and restarts
+  it; `teardown.yml` removes both directories when a host retires Docker.
 - **`become: false` user resolution (task 3) is deliberate** — under the play's `become: true`,
   `ansible_facts.env.USER` is `root`; the user who actually runs `docker` is the unprivileged
   connecting user, so membership is resolved with `become: false`.

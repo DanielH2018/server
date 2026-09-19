@@ -49,7 +49,6 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from lib.k8s_context import (
-    ansible_bool,
     colliding_default_keys,
     resolve_vars,
     role_defaults,
@@ -86,7 +85,7 @@ from lib.k8s_schema import (
     normalise_octal,
     schema_error,
 )
-from lib.k8s_yaml import make_lookup, yaml_error
+from lib.k8s_yaml import _to_json, make_lookup, yaml_error
 from lib.render_guard import (
     ALL_VARS,
     ANSIBLE,
@@ -99,6 +98,7 @@ from lib.render_guard import (
 )
 
 sys.path.insert(0, str(ANSIBLE / "filter_plugins"))
+from authelia_access import authelia_service_rules
 from toposort import filter_by_platform
 
 from ansible.plugins.filter.core import to_bool
@@ -118,7 +118,6 @@ __all__ = [
     "NO_SCHEMA",
     "SHARED_TPL",
     "SKIP_ROLES",
-    "ansible_bool",
     "check_template",
     "colliding_default_keys",
     "crd_schema_error",
@@ -175,7 +174,14 @@ def register_ansible_filters(env):
     """
     env.filters["bool"] = to_bool
     env.filters["filter_by_platform"] = filter_by_platform
+    # authelia's config Secret derives its per-service access_control rules from
+    # containers_list through the repo's filter plugin, which raises on a `use_authelia: true`
+    # entry without an `auth_tier` — the real thing, so that failure reaches this guard too.
+    env.filters["authelia_service_rules"] = authelia_service_rules
     env.filters["hash"] = _ansible_hash
+    # uptime-kuma embeds files/discord-message.liquid into a JSON Secret value with `to_json`;
+    # the looked-up-template env in make_lookup registers the same shim.
+    env.filters["to_json"] = _to_json
     return env
 
 

@@ -19,17 +19,12 @@ half: same rule, different host's variables, and it is the one that says a real 
 exercise the branch at all.
 """
 
-import sys
-
 import pytest
-from _helpers import REPO
 
-_REPO = REPO
-sys.path.insert(0, str(_REPO / "scripts"))
 
-from lib import yaml_fast  # noqa: E402
+from lib import yaml_fast
 
-from validate.k8s_manifests import (  # noqa: E402 — needs the path insert above
+from validate.k8s_manifests import (
     ALL_VARS,
     ANSIBLE,
     BASE_CONTEXT,

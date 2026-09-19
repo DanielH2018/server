@@ -18,7 +18,8 @@
 {{ web_ui_ports_block('8096') }}
 
    `web_ui_ports_block` emits a complete `ports:` block, so it is for services whose only
-   published port is the UI (glances). wg-easy, which always publishes its
+   published port is the UI (glances was the consumer until it retired 2026-09-18; none
+   remains). wg-easy, which always publishes its
    WireGuard UDP port, appends its LAN UI port with an inline conditional instead.
 #}
 {% from 'traefik.yml.j2' import labels with context %}

@@ -18,8 +18,16 @@ Typical usage example:
 """
 
 import os
+import shutil
 import subprocess
+import sys
 from pathlib import Path
+
+_REPO = Path(__file__).resolve().parents[3]
+# The module `deploy.sh` reads its service locks from, at the path the wrapper runs it by.
+# `make_snapshot_repo` copies it into every throwaway repo, so the wrapper's `uv run python
+# ansible/.../deploy_locks.py plan` resolves there the way it does in a real checkout.
+DEPLOY_LOCKS_REL = Path("ansible/roles/setup/gitops_deploy/files/deploy_locks.py")
 
 # The shared `flock` stub: drop flock's own options and its lock-file argument, then run
 # whatever is left. No real lock is taken, so no test can interleave with a live deploy.
@@ -37,6 +45,14 @@ done
 shift
 exec "$@"
 """
+
+# The `case` arm every `uv` stub carries for the wrapper's `deploy_locks.py plan` call. It
+# runs the REAL module -- `shift 2` drops `run python`, and the interpreter is the one running
+# the tests -- rather than scripting a lock list: a stub that printed its own order would make
+# the concurrency tests flock whatever the stub said, and prove nothing about the deployer's
+# names. `deploy_sh_env` sets DEPLOY_TEST_PYTHON. A test that wants a BROKEN plan writes its
+# own arm ahead of this one.
+UV_DEPLOY_LOCKS_ARM = '  *deploy_locks.py*) shift 2; exec "$DEPLOY_TEST_PYTHON" "$@" ;;'
 
 # What a stubbed `ansible-playbook` must print for `deploy.sh` to count the run as a deploy.
 # The wrapper reads the PLAY RECAP and refuses (exit 78) when it names no host -- ansible
@@ -80,6 +96,7 @@ def deploy_sh_env(tmp_path: Path, bin_dir: Path, **overrides: str) -> dict[str, 
         HOMELAB_DEPLOY_SNAPSHOT_ROOT=str(tmp_path / "snapshots"),
         HOMELAB_DEPLOY_LOCK_DIR=str(locks),
         HOMELAB_DEPLOY_TREE_LOCK=str(locks / "server-git-tree.lock"),
+        DEPLOY_TEST_PYTHON=sys.executable,
         **overrides,
     )
 
@@ -88,7 +105,9 @@ def make_snapshot_repo(path: Path) -> Path:
     """A one-commit git repo `deploy.sh` can snapshot HEAD from; returns `path`.
 
     Carries `ansible/deploy.yml` because that is the argument the wrapper hands
-    ansible-playbook. The content never matters: every test that uses this stubs `uv`.
+    ansible-playbook. The content never matters: every test that uses this stubs `uv`. Carries
+    the real `deploy_locks.py` too, because the wrapper reads its lock list from that module
+    at a checkout-relative path and the stubbed `uv` (UV_DEPLOY_LOCKS_ARM) runs it for real.
     """
     path.mkdir(parents=True, exist_ok=True)
     env = git_free_env()
@@ -101,6 +120,8 @@ def make_snapshot_repo(path: Path) -> Path:
         subprocess.run(args, cwd=path, env=env, check=True, capture_output=True)
     (path / "ansible").mkdir(exist_ok=True)
     (path / "ansible" / "deploy.yml").write_text("---\n[]\n")
+    (path / DEPLOY_LOCKS_REL).parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy(_REPO / DEPLOY_LOCKS_REL, path / DEPLOY_LOCKS_REL)
     subprocess.run(
         ("git", "add", "-A"), cwd=path, env=env, check=True, capture_output=True
     )

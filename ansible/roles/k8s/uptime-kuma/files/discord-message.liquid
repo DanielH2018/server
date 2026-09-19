@@ -1,0 +1,42 @@
+{%- comment -%}
+The Discord payload Kuma posts for every monitor on the "Homelab Alerts" notification.
+
+Kuma renders this with liquidjs (server/notification-providers/notification-provider.js,
+renderTemplate) and POSTs the result as the webhook body, so the output must be one JSON
+document. Every interpolated value goes through `json`, which emits a quoted, escaped string,
+so a heartbeat message carrying quotes or newlines cannot break the payload. It is attached
+to the notification, not the monitor: all 108 monitors share it, and a per-monitor fact
+arrives through `monitorJSON.description` (markdown, shown under the title) and tags
+(`severity`, `runbook`), which the template reads and omits when absent.
+
+Context: `monitorJSON` (name, description, type, url, hostname, tags[]), `heartbeatJSON`
+(status 0 down / 1 up, msg, time, localDateTime, timezone, lastDownTime on recovery),
+`hostnameOrURL`. The Test button and a certificate-expiry warning render with both objects
+null (monitor.js passes the cert message alone), so that branch posts the bare `msg` — the
+same plain content the default discord provider sends for those two cases. ansible/tests/services/test_kuma_discord_template.py renders all three
+cases with the pinned liquidjs and parses the result.
+{%- endcomment -%}
+{%- assign down = false -%}{%- if heartbeatJSON.status == 0 -%}{%- assign down = true -%}{%- endif -%}
+{%- assign title = monitorJSON.name | default: "Uptime Kuma test" -%}
+{%- assign severity = monitorJSON.tags | where: "name", "severity" | map: "value" | first -%}
+{%- assign runbook = monitorJSON.tags | where: "name", "runbook" | map: "value" | first -%}
+{%- if heartbeatJSON == nil -%}
+{"username": "Uptime Kuma", "content": {{ msg | json }}}
+{%- else -%}
+{"username": "Uptime Kuma",
+ "embeds": [{
+   "title": {% if down %}{{ title | prepend: "🔴 " | append: " is DOWN" | json }}{% else %}{{ title | prepend: "🟢 " | append: " recovered" | json }}{% endif %},
+   "color": {% if down %}15548997{% else %}5763719{% endif %},
+   "timestamp": {{ heartbeatJSON.time | json }},
+   "description": {{ monitorJSON.description | default: "" | json }},
+   "fields": [
+     {"name": {% if down %}"What failed"{% else %}"Status"{% endif %}, "value": {{ heartbeatJSON.msg | default: "N/A" | truncate: 1000 | json }}}
+     {%- if severity %},{"name": "Severity", "value": {{ severity | json }}, "inline": true}{% endif %},
+     {"name": "Type", "value": {{ monitorJSON.type | json }}, "inline": true}
+     {%- if hostnameOrURL != "" %},{"name": "Target", "value": {{ hostnameOrURL | json }}}{% endif %}
+     {%- if runbook %},{"name": "Runbook", "value": {{ runbook | json }}}{% endif %}
+     {%- if down == false and heartbeatJSON.lastDownTime %},{"name": "Down since", "value": {{ heartbeatJSON.lastDownTime | append: " UTC" | json }}, "inline": true}{% endif %}
+   ],
+   "footer": {"text": {{ heartbeatJSON.localDateTime | prepend: "Local time " | append: " " | append: heartbeatJSON.timezone | json }}}
+ }]}
+{%- endif -%}

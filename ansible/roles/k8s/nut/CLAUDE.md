@@ -5,8 +5,17 @@ daniel-server entirely). Pinned to daniel-server — the APC UPS is USB-attached
 the pin is physical and never unwinds.
 
 ## At a glance
-- **Image:** built in-cluster from `templates/Dockerfile.j2` (debian:bookworm-slim + nut).
-  Config is **not** baked in — the registry is unauthenticated, and `upsd.users` carries
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
+- **Deploy tag:** `--tags "nut"`
+- **Image:** `<k8s_registry_pull_host>/nut` (`nut_k8s_image`)
+- **Route:** none (no `templates/ingressroute.yaml.j2`)
+- **Claims:** none (no PVC)
+- **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — NOT probe-less (has a readinessProbe)
+  despite the denylist comment grouping — real reason: USB-passthrough + node-exclusive
+  hostPort (Recreate strategy) on the UPS shutdown-chain pod, privileged:true
+<!-- /generated_from -->
+
+- **Built in-cluster** from `templates/Dockerfile.j2` (debian:bookworm-slim + nut). Config is **not** baked in — the registry is unauthenticated, and `upsd.users` carries
   passwords. It mounts from the `nut-config` Secret; the entrypoint stages it to `/etc/nut`.
 - **Pull path:** daniel-server's containerd reaches the registry through the agent-side
   `registries.yaml` mirror (ClusterIP endpoint) — the seam this port re-plumbed.

@@ -3,8 +3,12 @@
 `strategy: Recreate` stops the old pod before starting the new one, so each deploy of that
 workload has a hard downtime gap. That is the right call for most of this fleet — sqlite
 databases, single-writer TSDBs, a Zigbee radio that accepts one client — and each template
-says so in a comment. A comment is not a gate: the next service added inherits whatever its
-author copied, and nothing notices.
+says so in a comment. A comment is not a gate. Since 2026-09-19 the field comes from
+`spec_shell` in `ansible/templates/workload-shell.yml.j2`, whose `strategy` argument has no
+default, so every Deployment states its choice at the call — the 19 that used to leave it at
+the API default now say `RollingUpdate` — and `test_workload_shell_uses_the_macros.py` refuses
+a hand-written `strategy:`. The allowlist below is where the REASON for a Recreate is
+recorded, which the call cannot carry.
 
 Two guards:
 
@@ -127,6 +131,19 @@ def _services():
             selector = doc.get("spec", {}).get("selector")
             if selector:
                 yield role, selector
+
+
+def test_every_deployment_states_a_strategy():
+    """`spec_shell`'s `strategy` has no default, and the validator's stub renders an omitted
+    argument as a stub string, which the Recreate check below would read as
+    rolling. Ansible's own renderer refuses the undefined; this is the CI-side half."""
+    offenders = [
+        f"{role}/{tpl} ({doc['metadata']['name']}): strategy.type is {value!r}"
+        for role, tpl, doc in _deployments()
+        if (value := doc.get("spec", {}).get("strategy", {}).get("type"))
+        not in {"Recreate", "RollingUpdate"}
+    ]
+    assert not offenders, "\n".join(offenders)
 
 
 def test_every_recreate_deployment_is_allowlisted_with_a_reason():

@@ -16,6 +16,7 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from deploy_ui_reads import Run
+from gitops_markers import MARKERS
 
 REQUIRED_HEADER = "X-Deploy-UI"
 
@@ -85,18 +86,18 @@ def guard_cancel(pid: int, listed: set[int]) -> str | None:
 
 def clear_hold(state_dir: Path, expected_sha: str) -> str | None:
     """Remove `hold_sha` and `hold_plane` together, only when `expected_sha` matches the live hold."""
-    sha_file = state_dir / "hold_sha"
+    sha_file = state_dir / MARKERS["hold"]
     live = sha_file.read_text().strip() if sha_file.exists() else ""
     if live != expected_sha:
         return f"hold is {live or 'clear'}, not {expected_sha}; reload and retry"
-    for name in ("hold_sha", "hold_plane"):
+    for name in (MARKERS["hold"], MARKERS["hold_plane"]):
         (state_dir / name).unlink(missing_ok=True)
     return None
 
 
 def set_override(state_dir: Path, action: str) -> str | None:
     """Set or clear the `staging_gate_override` marker; refuse any other action."""
-    p = state_dir / "staging_gate_override"
+    p = state_dir / MARKERS["staging_override"]
     if action == "set":
         p.touch()
     elif action == "clear":

@@ -5,8 +5,16 @@ Declares `media-data`, the volume nine media-stack roles mount at `/data`. They 
 route — infra role, no Deployment of its own.
 
 ## At a glance
-- **Deploy tag:** `--tags "media-volume"`. Must run **before** any role that mounts `media-data`
-  (`sonarr` in `containers_list` is ordered right after it, with a comment saying so).
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
+- **Deploy tag:** `--tags "media-volume"`
+- **Image:** `alpine` (`media_volume_probe_image`)
+- **Route:** none (no `templates/ingressroute.yaml.j2`)
+- **Claim:** `media-data` (not Longhorn (media-local))
+- **Auto-deploy:** eligible (`k8s_autodeploy: true`)
+<!-- /generated_from -->
+
+- **Must run before any role that mounts `media-data`** (`sonarr` in `containers_list` is
+  ordered right after it, with a comment saying so).
 - **Storage:** a **static local PV** (`media-local` StorageClass) at `media_volume_host_path`
   (`/srv/media`, 400Gi advisory only — no quota behind it), deliberately not a dynamic
   `local-path` PVC — see `defaults/main.yml` for the three reasons (naming, reclaim policy,

@@ -22,13 +22,11 @@ Red-proof pair on a synthetic tree under `tmp_path`; non-vacuity pins `nut_host`
 Run: uv run pytest ansible/tests/setup/test_initial_setup_roles_are_visible_to_the_deployer.py
 """
 
-import sys
 from pathlib import Path
 
-from _helpers import ANSIBLE, REPO
+from _helpers import ANSIBLE
 import yaml
 
-sys.path.insert(0, str(REPO / "scripts" / "deploy_tools"))
 import land_reach
 from deploy_changes import services_from_changed_paths, setup_tags_for
 

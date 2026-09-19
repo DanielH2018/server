@@ -13,8 +13,9 @@ WHAT THIS DERIVES. For each changed deploy-plane path, the services whose render
 can move because of it:
 
   - an inventory YAML file: the top-level keys whose value changed. `containers_list` maps
-    an entry to its own tag(s); every other key is grepped for across the role trees and the
-    shared templates, and a hit maps to that role's tag.
+    an entry to its own tag(s), plus every role whose templates read the list itself (bare
+    or through `hostvars[...]`, #2044); every other key is grepped for across the role trees
+    and the shared templates, and a hit maps to that role's tag.
   - `ansible/templates/<f>.j2`: every role whose templates import or include `<f>`,
     following a macro that another macro imports.
 
@@ -51,10 +52,11 @@ from typing import Callable, NamedTuple
 
 import yaml
 
+from deploy_tools import narrow_containers
 from deploy_tools.exit_codes import DEPLOY_BROAD, DEPLOY_OK
 from lib import yaml_fast
 from lib.git import git, git_stdout
-from lib.render_guard import entry_tags, service_tags_at
+from lib.render_guard import service_tags_at
 from lib.repo_paths import GITOPS_DEPLOY_FILES, REPO
 
 # The deployer's own `files/` — `deploy_logic` is imported from there, the same reach across
@@ -290,36 +292,40 @@ def _role_tags(roles: set[str], ctx: Context) -> set[str]:
     return tags
 
 
-def _entries(doc: dict) -> dict[str, dict]:
-    """`containers_list` keyed by service name."""
-    entries = doc.get("containers_list") or []
-    return {e["name"]: e for e in entries if isinstance(e, dict) and "name" in e}
-
-
 def _containers_list_tags(
     before: dict, after: dict, ctx: Context, path: str
 ) -> set[str]:
-    """The tags of every `containers_list` entry this range added or changed.
+    """The tags a `containers_list` change reaches: its entries' own, and the list's readers.
 
-    A REMOVED entry refuses. Removing a service is not something any `--tags` value applies:
-    the play iterates the list, so the removed entry's role is simply not visited, and the
-    workload it left behind is reconciled by nothing (the same shape as
-    `kubectl apply` leaving an orphaned object).
+    The readers are counted for every host's list at once: which host a bare read means
+    depends on the play that renders it, and one redundant redeploy is the safe direction.
+    `narrow_containers.entry_change_tags` carries why a removed entry maps to nothing.
     """
-    old, new = _entries(before), _entries(after)
-    gone = sorted(set(old) - set(new))
-    if gone:
-        raise CannotNarrow(
-            f"{', '.join(gone)} was removed from containers_list in {path}"
-        )
-    tags: set[str] = set()
-    for name, entry in sorted(new.items()):
-        if old.get(name) != entry:
-            found = set(entry_tags(entry))
-            ctx.explain(
-                f"narrow: containers_list/{name} -> {','.join(sorted(found))} via {path}"
-            )
-            tags |= found
+    own = narrow_containers.entry_change_tags(before, after, ctx.explain, path)
+    return own | _list_reader_tags(ctx, path)
+
+
+def _list_reader_tags(ctx: Context, path: str) -> set[str]:
+    """The tags of every role whose templates render `containers_list` as a whole.
+
+    A grep over the role trees and the shared templates, keeping a hit only where the name
+    sits inside Jinja code (`narrow_containers.reader_paths` says which hits are prose and
+    which are the play's own iteration, and drops both rather than refusing).
+    """
+    hits = narrow_containers.reader_paths(
+        _grep(ctx, "containers_list", word=True),
+        PLAY_PREFIXES,
+        lambda hit: _show(ctx.ref, hit, ctx.cwd),
+    )
+    found = _sort_hits(hits, "containers_list", ctx, "containers_list")
+    roles = set(found.roles)
+    for name in sorted(found.templates):
+        roles |= template_importers(name, ctx.ref, ctx.cwd, {name}, ctx.explain)
+    tags = _role_tags(roles, ctx)
+    ctx.explain(
+        f"narrow: containers_list readers -> {','.join(sorted(tags)) or '(nothing)'}"
+        f" via {path}"
+    )
     return tags
 
 
@@ -424,8 +430,12 @@ def broad_path_tags(path: str, old_ref: str, ctx: Context) -> set[str]:
 def _changed_half(paths: list[str], ctx: Context) -> set[str]:
     """The tags the NON-broad paths in the range reach — the mapper `changed` already uses.
 
-    A setup-plane path refuses: `handle_broad` has a separate arm for it, and a tick that
-    narrowed the deploy half while silently dropping the setup half would apply neither.
+    A setup-plane path contributes nothing here: `deploy_narrow.plan` gives the setup half
+    its own `initial_setup.yml` plan ahead of this one, so the two planes are applied side by
+    side. It refused until 2026-09-18 (#2046), when the planner was an if/else that dropped
+    the deploy half of a mixed range — refusing here only made the drop a full run nobody
+    ran. A bring-up playbook still refuses: the tick parks on those before any plan exists,
+    and a hand `deploy_tags.py narrow` over such a range must not read as applyable.
     `cs.tasks`/`cs.meta`/`cs.secrets` refuse for the opposite reason: `changed` reports them
     as work a human deploys by hand, and the full run this replaces DOES apply them. A
     rotated secret reaches a service only when that service renders again, so narrowing a
@@ -434,8 +444,8 @@ def _changed_half(paths: list[str], ctx: Context) -> set[str]:
     from deploy_logic import expand_build_couplings, services_from_changed_paths
 
     cs = services_from_changed_paths(paths)
-    if cs.broad_setup or cs.broad_manual:
-        raise CannotNarrow("the range also changes the setup plane")
+    if cs.broad_manual:
+        raise CannotNarrow("the range also changes a bring-up playbook")
     if cs.secrets:
         raise CannotNarrow(
             "the range rotates a secret, which reaches a service only on its next render"

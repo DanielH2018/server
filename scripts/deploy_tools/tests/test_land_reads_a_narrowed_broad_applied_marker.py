@@ -14,12 +14,8 @@ other side.
 Run: uv run pytest scripts/deploy_tools/tests/test_land_reads_a_narrowed_broad_applied_marker.py
 """
 
-import sys
-from pathlib import Path
-
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from _land_fakes import MERGE_SHA, Fakes
 from deploy_tools.land_lib import deploy

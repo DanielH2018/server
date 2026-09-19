@@ -1,5 +1,6 @@
 {% from 'container-resources.yml.j2' import container_resources with context %}
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
+{% from 'workload-shell.yml.j2' import spec_shell, pod_shell with context %}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -7,12 +8,10 @@ metadata:
   name: qbittorrent
   namespace: {{ k8s_namespace }}
 spec:
-  revisionHistoryLimit: 3
-  replicas: 1
   # The config PVC is ReadWriteOnce on single-replica Longhorn, so a rolling update deadlocks on
   # a volume the outgoing pod still holds.
-  strategy:
-    type: Recreate
+{{ spec_shell('Recreate') }}
+  replicas: 1
   selector:
     matchLabels:
       app: qbittorrent
@@ -22,7 +21,7 @@ spec:
         app: qbittorrent
         netpol-baseline: enforced
     spec:
-      enableServiceLinks: false
+{{ pod_shell('homelab-standard') }}
       securityContext:
         # The whole reason for the kubelet allow-list (D11). wg-quick attempts to set this
         # itself and aborts the tunnel when it cannot — /proc/sys is mounted read-only in a pod
@@ -119,8 +118,6 @@ spec:
             timeoutSeconds: 15
             failureThreshold: 6
 {{ container_resources(cpu_limit=qbittorrent_k8s_wg_cpu_limit, mem_limit=qbittorrent_k8s_wg_mem_limit, cpu_request=qbittorrent_k8s_wg_cpu_request, mem_request=qbittorrent_k8s_wg_mem_request) }}
-      automountServiceAccountToken: false
-      priorityClassName: homelab-standard
       containers:
         - name: qbittorrent
           image: {{ qbittorrent_k8s_image }}

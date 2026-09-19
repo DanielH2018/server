@@ -5,16 +5,21 @@ the extended resource `devic.es/dri`, so jellyfin and tdarr can request GPU tran
 without either pod running privileged. See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
-- **Image:** `ghcr.io/squat/generic-device-plugin` (`dri_device_plugin_image`),
-  digest-pinned — validated against the exact VAAPI encode path it advertises.
-- **Deploy tag:** `--tags "dri-device-plugin"`. No route — infra role.
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
+- **Deploy tag:** `--tags "dri-device-plugin"`
+- **Image:** `ghcr.io/squat/generic-device-plugin` (`dri_device_plugin_image`)
+- **Route:** none (no `templates/ingressroute.yaml.j2`)
+- **Claims:** none (no PVC)
+- **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — manifests_rollout: '' skips the
+  shared rollout gate; even a /health readinessProbe would only prove the HTTP listener, not
+  that the plugin registered its gRPC socket with the kubelet, and an unregistered plugin makes
+  jellyfin and tdarr unschedulable
+<!-- /generated_from -->
+
+- **Digest-pinned image** — validated against the exact VAAPI encode path it advertises.
 - **Namespace: `kube-system`, not the workload namespace.** An extended resource is a node
   property, so every namespace's pods can request it once advertised there.
-- **Storage:** none — no PVC, DaemonSet.
-- **Auto-deploy: denylisted.** `manifests_rollout: ''` skips the shared rollout gate, and even
-  a `/health` readinessProbe would only prove the HTTP listener, not that the plugin
-  registered its gRPC socket with the kubelet — a wedge here makes jellyfin and tdarr
-  unschedulable with no rollout gate watching for it.
+- **A DaemonSet**, one pod per node.
 
 ## Notable
 - **The one privileged workload in the media stack**, on purpose: it needs privilege to

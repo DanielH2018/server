@@ -1,5 +1,6 @@
 {% from 'container-resources.yml.j2' import container_resources with context %}
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
+{% from 'workload-shell.yml.j2' import spec_shell, pod_shell with context %}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -7,12 +8,10 @@ metadata:
   name: janitorr
   namespace: {{ k8s_namespace }}
 spec:
-  revisionHistoryLimit: 3
-  replicas: 1
   # Recreate, not RollingUpdate: two janitorrs running at once would both walk the library and
   # both act on it. Harmless while dry-run is on and not worth relying on afterwards.
-  strategy:
-    type: Recreate
+{{ spec_shell('Recreate') }}
+  replicas: 1
   selector:
     matchLabels:
       app: janitorr
@@ -22,14 +21,7 @@ spec:
         app: janitorr
         netpol-baseline: enforced
     spec:
-      enableServiceLinks: false
-      securityContext:
-        runAsUser: {{ puid }}
-        runAsGroup: {{ pgid }}
-        runAsNonRoot: true
-        fsGroup: {{ pgid }}
-      automountServiceAccountToken: false
-      priorityClassName: homelab-best-effort
+{{ pod_shell('homelab-best-effort', run_as_user=puid, run_as_group=pgid, fs_group=pgid, non_root=true) }}
       containers:
         - name: janitorr
           image: {{ janitorr_k8s_image }}

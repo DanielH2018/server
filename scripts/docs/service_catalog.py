@@ -67,6 +67,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 from catalog_backup import (
     autodeploy_eligibility,
     backup_tier,
+    claim_index,
     load_longhorn_tier_lists,
 )
 from catalog_facts import auth_tier, route_for
@@ -104,7 +105,10 @@ def build_rows(
     Returns:
         One `ServiceRow` per service, across every host in `host_vars`.
     """
-    r2_volumes, weekly_volumes = load_longhorn_tier_lists(k3s_defaults)
+    tiers = load_longhorn_tier_lists(k3s_defaults)
+    # Built once: a claim mounted by one role and declared by another (media-data) resolves
+    # through this index, and every k8s row reads it.
+    claim_classes = claim_index(k8s_roles)
     k8s_namespace = _load_yaml(all_vars).get("k8s_namespace", "homelab")
 
     rows: list[ServiceRow] = []
@@ -125,9 +129,9 @@ def build_rows(
                         entry,
                         platform,
                         k8s_namespace,
-                        r2_volumes,
-                        weekly_volumes,
+                        tiers,
                         k8s_roles,
+                        claim_classes,
                     ),
                     autodeploy=autodeploy_eligibility(
                         entry, platform, host_data, k8s_roles

@@ -4,11 +4,20 @@ Grafana Alloy on daniel-pi, shipping this host's container logs and its two heal
 verdict lines to loki-homelab. See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
-- **Image:** `grafana/alloy:v1.19.2@sha256:…` — pinned by tag AND digest, moved by hand when
-  the cluster's Alloy (`roles/k8s/loki-homelab/defaults/main.yml`) moves. Renovate does not
-  track `roles/containers/**`.
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's compose template, tasks, meta/deps.yml or containers_list entry. -->
+- **Deploy tag:** `--tags "alloy" -e target=daniel-pi`
+- **Image:** `grafana/alloy` (`alloy`)
+- **Entry:** `host_vars/daniel-pi.yml` → port `12345`, networks `proxy`, no Authelia
+- **Depends on:** nothing (no `meta/deps.yml`)
+- **Config-change wiring:** `common_config_changed: {{ alloy_config is changed }}` — a config
+  edit recreates the container
+<!-- /generated_from -->
+
+- **Pin policy:** tag AND digest in the compose template, moved by hand when the cluster's
+  Alloy (`roles/k8s/loki-homelab/defaults/main.yml`) moves. Renovate does not track
+  `roles/containers/**`.
 - **Host:** daniel-pi only (the cluster nodes run the loki-homelab DaemonSet).
-- **Port:** 12345 on the Pi's LAN IP — Prometheus scrapes it as `alloy-pi`; everything but
+- **The port is on the Pi's LAN IP** — Prometheus scrapes it as `alloy-pi`; everything but
   `/metrics` needs basic auth (`DECIDED:` marker on `ports:` in the compose template).
 - **Sources:** container logs through docker-proxy (`job="pi"`), and
   `/var/log/pi-health/*.log` (`job="syslog"`, `machine="daniel-pi"`). The label contract is

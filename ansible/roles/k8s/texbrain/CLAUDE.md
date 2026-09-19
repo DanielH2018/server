@@ -5,9 +5,16 @@ WebAssembly build of pdfTeX; git runs on isomorphic-git; files are read and writ
 the File System Access API. See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
-- **Image:** `ghcr.io/danielh2018/texbrain:latest@sha256:…`, built by the fork below
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
+- **Deploy tag:** `--tags "texbrain"`
+- **Image:** `ghcr.io/danielh2018/texbrain` (`texbrain_k8s_image`)
+- **Route:** `texbrain.<domain>` · `texbrain.local.<domain>`, Authelia one_factor
+- **Claims:** none (no PVC)
+- **Auto-deploy:** eligible (`k8s_autodeploy: true`)
+<!-- /generated_from -->
+
+- **Digest-pinned `:latest`**, built by the fork below
 - **Host:** daniel-box or daniel-server (k8s), preference only — added 2026-08-26
-- **Config in:** `ansible/inventory/host_vars/daniel-box.yml` → `containers_list`
 - **State:** none. No Secret, no PVC, no backup job — the pod serves files and holds nothing
 
 ## The image comes from a fork, and why

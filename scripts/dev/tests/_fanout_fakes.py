@@ -3,13 +3,6 @@
 import subprocess
 from dataclasses import dataclass, field
 
-# Reach the sibling package: a directly-invoked script gets only its own directory on
-# sys.path, and pyproject's `pythonpath` is a pytest setting.
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/dev
-
 from fanout_lib.transport import Tools
 
 # A syntactically real ed25519 public key line (32 zero bytes), standing in for a host's

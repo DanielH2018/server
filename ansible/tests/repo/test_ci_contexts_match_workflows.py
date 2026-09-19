@@ -15,10 +15,8 @@ Run: uv run pytest ansible/tests/repo/test_ci_contexts_match_workflows.py
 """
 
 import re
-import sys
 from _helpers import REPO
 
-sys.path.insert(0, str(REPO / "scripts" / "deploy_tools"))
 
 import await_ci
 

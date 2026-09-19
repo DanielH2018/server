@@ -6,6 +6,29 @@ role under `ansible/roles/setup/`, run by `initial_setup.yml`, not `deploy.yml`.
 `CLAUDE.md` for conventions. This is the largest and most fragile setup role — **`--check`
 first** and scope with `--tags` when iterating.
 
+## At a glance
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates or playbook entry. -->
+- **Applied by:** `initial_setup.yml --tags "initial_setup"`
+- **Crons (17):**
+  - `Weekly apt autoremove` — `0 2 * * 0`
+  - `Weekly dpkg purge orphaned configs` — `15 2 * * 0`
+  - `Daily secret rotation audit` — `0 8 * * *`
+  - `Weekly secret rotation (auto tier)` — `0 9 * * 0`
+  - `Weekly system restart` — `30 7 * * 0`
+  - `Weekly firmware update` — `0 7 * * 0`
+  - `Clean unused Docker images` — `30 6 * * *`
+  - `Clear ansible log file` — `0 6 * * 0`
+  - `Weekly git object-store repair` — `20 4 * * 0`
+  - `Refresh homelab infrastructure map` — `*/15 * * * *`
+  - `TLS cert-expiry watch` — `10 5 * * *`
+  - `Setup-plane drift check` — `50 7 * * *`
+  - `Loki read-route witness` — `23 * * * *`
+  - `Refresh generated docs` — `17 6,18 * * *`
+  - `Homelab eval sweep` — `0 2 * * 0`
+  - `Weekly rkhunter malware scan` — `0 2 * * 3`
+  - `Weekly AIDE file integrity check` — `0 3 * * 1`
+<!-- /generated_from -->
+
 ## Where it runs
 - In `ansible/initial_setup.yml`, after [[config_files]] and before [[sops_setup]] /
   [[docker_install]] — **every host** (Pi-specific tasks self-guard, see below).

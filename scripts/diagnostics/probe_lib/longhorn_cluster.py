@@ -5,28 +5,35 @@ read-only `kubectl get -o json` plus the projection the reports want from it —
 volume belongs to, how many of its backups its current job owns, its PVC name, and which URL
 a BackupTarget points at.
 
-Each takes an injectable `_run` so the projections are testable without a cluster.
+Each names the cluster it reads (production by default) and takes an injectable `_run` —
+`lib.kubectl.kubectl` minus its cluster argument — so the projections are testable without one.
 longhorn.py keeps the subcommands that drive these, and b2_ledger.py reads `pvc_names` and
 `backup_target_url` through that facade.
 """
 
 import json
-import subprocess
+
+# `probe_lib` is a namespace package under `scripts/`, so reaching `lib` needs `scripts/` on
+# sys.path — a module gets only its importer's path otherwise, and pyproject's `pythonpath` is
+# a pytest setting. This has to sit ABOVE the import below.
+import sys as _sys
+from pathlib import Path as _Path
+
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
+
+from lib.kubectl import DEFAULT_CLUSTER, kubectl
 
 
-def volume_shard_labels(_run=None):
+def volume_shard_labels(cluster=DEFAULT_CLUSTER, _run=None):
     """{longhorn volume: recurring-job group} from the live cluster."""
-    run = _run or (lambda argv: subprocess.run(argv, capture_output=True, text=True))
+    run = _run or (lambda *args: kubectl(cluster, *args))
     out = run(
-        [
-            "kubectl",
-            "-n",
-            "longhorn-system",
-            "get",
-            "volumes.longhorn.io",
-            "-o",
-            "json",
-        ]
+        "-n",
+        "longhorn-system",
+        "get",
+        "volumes.longhorn.io",
+        "-o",
+        "json",
     )
     if out.returncode != 0:
         raise SystemExit("kubectl failed: " + out.stderr.strip()[:300])
@@ -41,16 +48,14 @@ def volume_shard_labels(_run=None):
     return shards
 
 
-def volume_owned_backup_counts(_run=None):
+def volume_owned_backup_counts(cluster=DEFAULT_CLUSTER, _run=None):
     """{longhorn volume: how many of its backups its CURRENT recurring job owns}.
 
     Longhorn stamps the producing job onto `.status.labels.RecurringJob`. That is a Longhorn
     STATUS field, not a Kubernetes label, so `kubectl -l` cannot select on it.
     """
-    run = _run or (lambda argv: subprocess.run(argv, capture_output=True, text=True))
-    out = run(
-        ["kubectl", "-n", "longhorn-system", "get", "backups.longhorn.io", "-o", "json"]
-    )
+    run = _run or (lambda *args: kubectl(cluster, *args))
+    out = run("-n", "longhorn-system", "get", "backups.longhorn.io", "-o", "json")
     if out.returncode != 0:
         raise SystemExit("kubectl failed: " + out.stderr.strip()[:300])
     owners = {}
@@ -63,10 +68,10 @@ def volume_owned_backup_counts(_run=None):
     return owners
 
 
-def pvc_names(_run=None):
+def pvc_names(cluster=DEFAULT_CLUSTER, _run=None):
     """{longhorn volume: PVC name}, so the report reads in service terms."""
-    run = _run or (lambda argv: subprocess.run(argv, capture_output=True, text=True))
-    out = run(["kubectl", "get", "pv", "-o", "json"])
+    run = _run or (lambda *args: kubectl(cluster, *args))
+    out = run("get", "pv", "-o", "json")
     if out.returncode != 0:
         return {}
     return {
@@ -88,25 +93,22 @@ def pvc_names(_run=None):
 B2_BACKUP_TARGET_NAME = "default"
 
 
-def backup_target_url(name=B2_BACKUP_TARGET_NAME, _run=None):
+def backup_target_url(name=B2_BACKUP_TARGET_NAME, cluster=DEFAULT_CLUSTER, _run=None):
     """The `spec.backupTargetURL` of one BackupTarget, or "" when it is absent or disarmed.
 
     Empty is a real state, not an error: `k3s_longhorn_backup_armed: false` enforces a BLANK
     URL as the containment lever for a cap spiral. A caller that gets "" must decline to
     classify rather than fall back to matching everything.
     """
-    run = _run or (lambda argv: subprocess.run(argv, capture_output=True, text=True))
+    run = _run or (lambda *args: kubectl(cluster, *args))
     out = run(
-        [
-            "kubectl",
-            "-n",
-            "longhorn-system",
-            "get",
-            "backuptargets.longhorn.io",
-            name,
-            "-o",
-            "json",
-        ]
+        "-n",
+        "longhorn-system",
+        "get",
+        "backuptargets.longhorn.io",
+        name,
+        "-o",
+        "json",
     )
     if out.returncode != 0:
         return ""

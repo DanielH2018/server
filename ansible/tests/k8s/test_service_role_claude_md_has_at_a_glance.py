@@ -1,72 +1,66 @@
-"""Every deployed k8s service role's CLAUDE.md carries a `## At a glance` section.
+"""Every deployed k8s service role's CLAUDE.md opens `## At a glance` with the generated block.
 
-The section is the fixed-shape summary a session reads before touching a service — deploy
-tag, route, claims, autodeploy stance — and `test_k8s_roles_have_claude_md.py` only asks that
-a doc exist. 52 of the roles in `containers_list` carried the section on 2026-09-17 and five
-ordinary services did not (authelia, crowdsec, qbittorrent, uptime-kuma, claude-otel), each
-with the same facts scattered across a bold line and two later sections. Those five gained
-one in the change that added this guard.
+The section is the fixed-shape summary a session reads before touching a service. Until
+2026-09-19 every line of it was hand-typed and this guard checked only that the heading
+existed, so a doc could pin an image its defaults no longer pinned (#2058). The mechanical
+half — deploy tag, images, route, claims, auto-deploy stance — is now written by
+`scripts/docs/gen_role_glance.py` between two `generated_from` markers directly under the
+heading, and this guard asserts that structure for every deployed role. Whether the block's
+CONTENT matches the tree is `scripts/docs/tests/test_gen_role_glance.py`'s gate; keeping the
+two apart means a missing heading and a stale value fail with different messages.
 
 Scope is the deployed services: the k8s `containers_list` entries. A helper role with no entry
-(manifests, cronjob-gate, volume-claim, ...) is documented from its callers' side.
+(manifests, cronjob-gate, volume-claim, ...) is documented from its callers' side. The four
+exporter/route-only roles this guard used to exempt carry the generated block like every
+other — there is nothing to hand-restate any more, so nothing to exempt.
 
 Run: uv run pytest ansible/tests/k8s/test_service_role_claude_md_has_at_a_glance.py
 """
 
-import sys
+from _helpers import K8S_ROLES
 
-from _helpers import K8S_ROLES, REPO
-
-sys.path.insert(0, str(REPO / "scripts"))
 
 from lib.k8s_roles import k8s_entries
 
 HEADING = "## At a glance"
+BANNER = "<!-- generated_from: scripts/docs/gen_role_glance.py"
 
-# Deployed, but documented at a different shape on purpose. Each is a few paragraphs about
-# one fact, and a glance table would restate the paragraph.
-EXEMPT = frozenset(
-    {
-        "deploy-ui",  # route-only: a Service and an IngressRoute onto a host systemd unit
-        "gpu-exporter",  # a DaemonSet exporter with no route, claim or autodeploy choice
-        "nut-exporter",  # same shape, scraped by prometheus and reachable by nothing else
-        "pihole-exporter",  # same shape; its doc is about which instance is scraped
-    }
+KNOWN_SERVICES = frozenset(
+    {"sonarr", "traefik", "authelia", "home-assistant", "gpu-exporter"}
 )
-
-KNOWN_SERVICES = frozenset({"sonarr", "traefik", "authelia", "home-assistant"})
 
 
 def missing_glance(names, roles_dir=K8S_ROLES) -> list[str]:
+    """Roles whose doc lacks the heading, or whose heading is not followed by the banner."""
     return sorted(
-        name
-        for name in names
-        if name not in EXEMPT and HEADING not in _doc_text(roles_dir / name)
+        name for name in names if not _opens_with_generated_block(roles_dir / name)
     )
 
 
-def test_every_deployed_service_role_opens_with_at_a_glance():
+def _opens_with_generated_block(role_dir) -> bool:
+    doc = role_dir / "CLAUDE.md"
+    # A missing doc is test_k8s_roles_have_claude_md.py's finding; here it reads as "no heading".
+    text = doc.read_text() if doc.is_file() else ""
+    lines = text.split("\n")
+    at = next((i for i, line in enumerate(lines) if line.rstrip() == HEADING), None)
+    return at is not None and at + 1 < len(lines) and lines[at + 1].startswith(BANNER)
+
+
+def test_every_deployed_service_role_opens_with_the_generated_glance_block():
     names = set(k8s_entries())
     assert KNOWN_SERVICES <= names
     assert missing_glance(names) == []
 
 
-def test_every_exemption_is_still_a_deployed_role():
-    """A retired role must leave this list too, or the list grows names nobody can justify."""
-    assert EXEMPT <= set(k8s_entries()), sorted(EXEMPT - set(k8s_entries()))
-
-
-def test_a_doc_without_the_heading_is_flagged(tmp_path):
+def test_a_doc_without_the_heading_or_the_banner_is_flagged(tmp_path):
     for name, body in (
-        ("with", f"# with\n\n{HEADING}\n- x\n"),
-        ("without", "# without\n\n## Traps\n"),
+        ("with", f"# with\n\n{HEADING}\n{BANNER} -->\n- x\n<!-- /generated_from -->\n"),
+        ("no-heading", "# no-heading\n\n## Traps\n"),
+        ("hand-typed", f"# hand-typed\n\n{HEADING}\n- **Image:** `x:latest`\n"),
     ):
         (tmp_path / name).mkdir()
         (tmp_path / name / "CLAUDE.md").write_text(body)
-    assert missing_glance(["with", "without"], tmp_path) == ["without"]
-
-
-def _doc_text(role_dir) -> str:
-    doc = role_dir / "CLAUDE.md"
-    # A missing doc is test_k8s_roles_have_claude_md.py's finding; here it reads as "no heading".
-    return doc.read_text() if doc.is_file() else ""
+    assert missing_glance(["with", "no-heading", "hand-typed"], tmp_path) == [
+        "hand-typed",
+        "no-heading",
+    ]

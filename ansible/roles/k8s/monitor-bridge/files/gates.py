@@ -65,6 +65,10 @@ PROM_DEPENDENT = frozenset(
         # restart pages this monitor a second time for the one root cause the `prometheus`
         # gate already reports.
         "kubelet_plugin_readonly",
+        # Reads node_load5 / node_memory_MemAvailable_bytes / node_filesystem_* on the Pi's
+        # `node-pi` job since 2026-09-18 (#2004, glances retired). Its absent-series branch
+        # pages, so a Prometheus outage must suppress it for the same reason as host_temp.
+        "pi_pressure",
     }
 )
 
@@ -87,12 +91,13 @@ PROM_DEPENDENT = frozenset(
 # (node_hwmon_temp_celsius)` returns job=node for daniel-server (12) and daniel-box (7) but
 # job=node-pi for daniel-pi (2). This map is keyed by the Prometheus job, so a `node` entry alone
 # suppresses two of the three hosts and the Pi's exporter death still double-pages. node-pi maps
-# ONLY to host_temp: disk and memory exclude the Pi by origin (HOST_METRIC_ORIGIN_EXCLUDE, since
-# check_pi_pressure owns them), so they have nothing to suppress there, while the hwmon floor
-# counts all three hosts.
+# to host_temp and pi_pressure, not to disk and memory: those exclude the Pi by origin
+# (HOST_METRIC_ORIGIN_EXCLUDE, since check_pi_pressure owns them), so they have nothing to
+# suppress there, while the hwmon floor counts all three hosts and pi_pressure reads the Pi's
+# node_* series directly (since 2026-09-18, #2004) and pages when they are absent.
 EXPORTER_DEPENDENT = {
     "node": frozenset({"disk", "memory", "host_temp"}),
-    "node-pi": frozenset({"host_temp"}),
+    "node-pi": frozenset({"host_temp", "pi_pressure"}),
 }
 
 # Loki-reachability gate — the peer of the Prometheus gate for the Loki-querying checks. A single
@@ -154,8 +159,8 @@ B2_DEPENDENT = frozenset({"b2_storage"})
 # not a fix for it.
 CLUSTER_DEPENDENT = frozenset({"k8s_workloads", "cluster_targets", "pvc_fullness"})
 
-# Reach-out checks that poll a live app dependency (n8n/sonarr/radarr/prowlarr/scrutiny/the Pi
-# glances/the Cloudflare GraphQL API) with NO reachability gate above them and NO per-check
+# Reach-out checks that poll a live app dependency (n8n/sonarr/radarr/prowlarr/scrutiny/the
+# Cloudflare GraphQL API) with NO reachability gate above them and NO per-check
 # hysteresis of their own — unlike
 # check_ha_heartbeat/check_discord, whose HA_CONSECUTIVE/DISCORD_CONSECUTIVE grace rides out exactly
 # this. On the bridge's first cycle after the weekly host reboot those dependencies are still
@@ -175,7 +180,9 @@ STARTUP_GRACE = frozenset(
         # ARR_FETCH_CONSECUTIVE streak, which covers the same reboot transient for longer
         # and leaves the queue verdict ungraced. Compounding both would only delay a page.
         "bazarr",
-        "pi_pressure",
+        # pi_pressure left this set on 2026-09-18 (#2004): it reads Prometheus now, so the
+        # `prometheus` gate and EXPORTER_DEPENDENT cover its source and the two sets must
+        # stay disjoint.
         "prowlarr_indexers",
         "scrutiny",
         "r2_usage",

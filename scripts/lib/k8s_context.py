@@ -3,9 +3,10 @@
 
 Split out of ``scripts/validate/k8s_manifests.py`` on 2026-09-04; that module re-exports every
 name here, so an existing importer keeps working. These are the pieces that decide what a
-manifest renders WITH — the `bool` filter's string vocabulary, the recursive expansion Ansible
-does on a variable's value, a role's resolved defaults, and the precedence collision the
-validator asserts is empty.
+manifest renders WITH — the recursive expansion Ansible does on a variable's value, a role's
+resolved defaults, and the precedence collision the validator asserts is empty. The `bool`
+filter that expansion registers is `lib.ansible_jinja_compat.ansible_bool`, the one shim every
+render guard in `scripts/lib` shares.
 """
 
 import sys as _sys
@@ -15,26 +16,15 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 import re
 
+from lib.ansible_jinja_compat import ansible_bool
 from lib.render_guard import SHARED_TPL, load_yaml, make_env
 from lib.repo_paths import K8S_ROLES
 
 __all__ = [
-    "ansible_bool",
     "colliding_default_keys",
     "resolve_vars",
     "role_defaults",
 ]
-
-
-def ansible_bool(value) -> bool:
-    """Ansible's `bool` filter: the strings Ansible treats as true, plus ordinary truthiness.
-
-    `-e k8s_dry_run=true` reaches a play as the STRING "true", which is why the filter exists
-    at all — and why "false" must map to False here rather than to non-empty-string truthiness.
-    """
-    if isinstance(value, str):
-        return value.strip().lower() in {"true", "yes", "on", "1"}
-    return bool(value)
 
 
 # A value that is nothing but one `{{ expr }}` — no surrounding text, no second expression.
@@ -60,6 +50,15 @@ def resolve_vars(values: dict, context: dict, passes: int = 5) -> dict:
     # here as "No filter named 'bool'" — a render failure pointing at a variable that is
     # perfectly valid under Ansible. Shimmed for the same reason the compose guard shims
     # `hash` and the shell guard shims `search`; see make_env's docstring.
+    #
+    # DECIDED: the shim is `ansible_jinja_compat.ansible_bool`, not ansible-core's `to_bool`
+    # that `validate/k8s_manifests.register_ansible_filters` binds for the manifests
+    # themselves. `to_bool` would make the two paths agree by identity, but importing
+    # `ansible.plugins.filter.core` costs ~190 ms and `probe_lib/monitors.py` imports this
+    # module — `probe.py monitors` reaches no ansible-core module today (measured 2026-09-18,
+    # `python -X importtime`). The shim copies `to_bool`'s tables and fallback, and
+    # `test_ansible_bool_agrees_with_ansible_core_to_bool` pins the copy to the real filter,
+    # so the two paths agree by test rather than by identity (#2074).
     env.filters["bool"] = ansible_bool
 
     def expand(node, ctx):

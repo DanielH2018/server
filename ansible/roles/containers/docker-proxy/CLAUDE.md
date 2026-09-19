@@ -4,16 +4,25 @@ Gives other containers safe, scoped access to the Docker API instead of mounting
 raw socket. See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
-- **Image:** `lscr.io/linuxserver/socket-proxy:latest`
-- **Hosts:** daniel-pi ONLY · **No web UI**, no Authelia
-- **Networks:** proxy, monitoring (+ a `lifecycle` write proxy, + a `codeserver` read proxy)
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's compose template, tasks, meta/deps.yml or containers_list entry. -->
+- **Deploy tag:** `--tags "docker-proxy" -e target=daniel-pi`
+- **Image:** `lscr.io/linuxserver/socket-proxy` (`docker-proxy`, `docker-proxy-lifecycle`,
+  `docker-proxy-codeserver`)
+- **Entry:** `host_vars/daniel-pi.yml` → networks `proxy`, no Authelia
+- **Depends on:** nothing (no `meta/deps.yml`)
+- **Config-change wiring:** none — the compose file is the only config, and a compose change
+  recreates on its own
+<!-- /generated_from -->
+
+- **No web UI.** Nothing to route, nothing for Authelia to gate.
+- **Three services from one image:** the shared read-only proxy on the entry's networks, a
+  `lifecycle` write proxy, and a `codeserver` read proxy on their own private networks
+  (the compose template declares both).
 
 > **The daniel-server instances are gone.** Docker was uninstalled there on 2026-08-14 as the k3s
 > migration's end state, and `host_vars/daniel-server.yml` now sets `containers_list: []`. The
 > "three instances on daniel-server" this file used to describe no longer exist. The Traps section
 > below is already caveated about that retirement; this block was not, which is the drift.
-- **Depends on:** nothing (consumed by other roles)
-- **Config in:** each `ansible/inventory/host_vars/<host>.yml` → `containers_list`
 
 ## Notable
 - Read-only proxy serves monitoring consumers (e.g. AutoKuma in `uptime-kuma`, Homepage).

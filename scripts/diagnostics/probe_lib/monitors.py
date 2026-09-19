@@ -7,6 +7,7 @@ that is GONE rather than down leaves the ratio at N/N up; `kuma-drift` diffs tha
 the declared one, which is the only way a missing monitor surfaces at all.
 """
 
+import functools
 import json
 import os
 import re
@@ -26,13 +27,18 @@ from diagnostics.probe_lib import core
 from datetime import datetime, timezone
 
 from diagnostics.probe_lib.core import SECRETS_PATH, prom_endpoint, prom_query_url
-from diagnostics.probe_lib.health_kubectl import k8s_pods_argv
+from diagnostics.probe_lib.health_kubectl import k8s_pods_args
 from diagnostics.probe_lib.health_rollout import seconds_since
 
 import yaml
+from jinja2 import TemplateError
 
 from lib import yaml_fast
-from lib.repo_paths import REPO
+from lib.k8s_context import resolve_vars, role_defaults
+from lib.kubectl import DEFAULT_CLUSTER, kubectl_json
+from lib.k8s_roles import HOST_VARS
+from lib.render_guard import BASE_CONTEXT, load_yaml, make_env
+from lib.repo_paths import ALL_VARS, REPO
 
 # Kuma's own numeric status codes, from the exporter that feeds monitor_status.
 _MONITOR_STATUS_LABELS = {"0": "DOWN", "1": "UP", "2": "PENDING", "3": "MAINTENANCE"}
@@ -111,7 +117,12 @@ KUMA_EXPORT_SLACK = 120
 
 _ENTITY_NAME_RE = re.compile(r'"name":\s*"([^"]+)"')
 _ENTITY_TYPE_RE = re.compile(r'"type":\s*"([a-z]+)"')
-_ENTITY_INTERVAL_RE = re.compile(r'"interval":\s*(\d+)')
+# A literal, or the whole `{{ ... }}` an interval is templated from. Most push tiles carry
+# `{{ kuma_bridge_push_interval }}`, two carry an arithmetic expression, and the monthly etcd
+# drill carries a group_var — a digits-only match read every one of those as None, which the
+# `pending` branch of format_kuma_drift cannot absorb (#2019).
+_ENTITY_INTERVAL_RE = re.compile(r'"interval":\s*(\d+|\{\{[^{}]*\}\})')
+_INTERVAL_EXPR_RE = re.compile(r"^\{\{\s*(.+?)\s*\}\}$")
 _JINJA_IF_RE = re.compile(r"{%-?\s*if\b")
 _JINJA_ENDIF_RE = re.compile(r"{%-?\s*endif\b")
 # The condition itself, so a gated monitor can be checked against the variable rather than
@@ -120,12 +131,54 @@ _JINJA_ENDIF_RE = re.compile(r"{%-?\s*endif\b")
 _JINJA_IF_COND_RE = re.compile(r"{%-?\s*if\s+([a-zA-Z_][a-zA-Z0-9_]*)")
 
 
-def parse_declared_monitors(text):
+@functools.cache
+def monitor_vars():
+    """The variables the static-monitors template renders its intervals with.
+
+    Built the way `validate/k8s_manifests.py` builds a role's render context — inventory
+    under the uptime-kuma role's own defaults — because that is where the intervals live:
+    `kuma_bridge_push_interval` is a role default, `etcd_drill_full_kuma_interval_s` a
+    group_var, and the UPS tiles read a nut_host default through `| default(10)`. A
+    group_vars-only lookup would resolve one tile in fifty.
+    """
+    base = {**BASE_CONTEXT, **load_yaml(ALL_VARS), **load_yaml(HOST_VARS)}
+    base = resolve_vars(base, base)
+    return {**base, **role_defaults("uptime-kuma", base)}
+
+
+def interval_seconds(raw, variables):
+    """`raw` is the interval as written in the template: digits, or one `{{ expr }}`.
+
+    A templated interval is evaluated as a Jinja EXPRESSION, not rendered to text, so
+    `{{ nut_host_watchdog_interval_minutes | default(10) * 60 * 2 }}` comes back as the
+    integer Ansible would write. One that does not resolve to an integer — an undefined name,
+    a value that is not a number — reads as None, which format_kuma_drift files under
+    `missing`: an interval this check cannot read must fail loud, not excuse the tile.
+    """
+    if raw.isdigit():
+        return int(raw)
+    expr = _INTERVAL_EXPR_RE.match(raw)
+    if not expr:
+        return None
+    try:
+        value = make_env([]).compile_expression(expr.group(1))(**variables)
+        return None if value is None else int(value)
+    except ValueError, TypeError, TemplateError:
+        return None
+
+
+def parse_declared_monitors(text, variables=None):
     """Monitor declarations from the static-monitors template.
 
     Returns {name: {"type": str, "interval": int|None, "gated": bool, "gate": str|None}}.
     `gated` marks an entity inside a `{% if <token> %}` block and `gate` names the variable it
     is gated on, innermost first.
+
+    `variables` is the render context a `{{ ... }}` interval is evaluated against; it defaults
+    to the template's real one (`monitor_vars`), read lazily on the first templated interval
+    so a literal-only fixture never touches the inventory. The default is deliberate: both
+    `kuma-drift` and `postflight` call this, and an opt-in would leave whichever caller forgot
+    it reading every templated interval as None — the shape gate_states had until #1632.
 
     `gate` exists because `gated` alone was a licence to ignore. Until 2026-08-22 a gated
     monitor's absence was excused unconditionally, on the reasoning that it "renders away when
@@ -153,13 +206,20 @@ def parse_declared_monitors(text):
         kind = _ENTITY_TYPE_RE.search(line)
         if not name or not kind:
             continue
-        if kind.group(1) == "notification":  # not a monitor; never in monitor_status
+        if kind.group(1) in (
+            "notification",
+            "tag",
+        ):  # not monitors; never in monitor_status
             continue
         interval = _ENTITY_INTERVAL_RE.search(line)
+        if interval and variables is None and not interval.group(1).isdigit():
+            variables = monitor_vars()
         innermost = next((g for g in reversed(gates) if g), None)
         declared[name.group(1)] = {
             "type": kind.group(1),
-            "interval": int(interval.group(1)) if interval else None,
+            "interval": interval_seconds(interval.group(1), variables)
+            if interval
+            else None,
             "gated": bool(gates),
             "gate": innermost,
         }
@@ -388,7 +448,10 @@ def run_kuma_drift(ns):
         live &= pi_names
     gate_states = resolve_gate_states(declared, live, no_secrets=ns.no_secrets)
     text, code = format_kuma_drift(
-        declared, live, kuma_pod_age_seconds(), gate_states=gate_states
+        declared,
+        live,
+        kuma_pod_age_seconds(getattr(ns, "cluster", DEFAULT_CLUSTER)),
+        gate_states=gate_states,
     )
     print(text)
     if ns.no_secrets and gate_states:
@@ -399,19 +462,14 @@ def run_kuma_drift(ns):
     return code
 
 
-def kuma_pod_age_seconds():
+def kuma_pod_age_seconds(cluster=DEFAULT_CLUSTER):
     """Seconds since the uptime-kuma pod started, or None if that cannot be read."""
-    out = subprocess.run(
-        k8s_pods_argv("uptime-kuma", core.k8s_namespace()),
-        capture_output=True,
-        text=True,
+    pods_doc = kubectl_json(
+        cluster, *k8s_pods_args("uptime-kuma", core.k8s_namespace())
     )
-    if out.returncode != 0:
+    if pods_doc is None:
         return None
-    try:
-        pods = json.loads(out.stdout).get("items", [])
-    except json.JSONDecodeError:
-        return None
+    pods = pods_doc.get("items", [])
     starts = [
         seconds_since(
             (p.get("status") or {}).get("startTime"), datetime.now(timezone.utc)

@@ -19,7 +19,13 @@ Run: uv run pytest scripts/deploy_tools/tests/test_wrapper_lock_wait_lines.py
 import subprocess
 from pathlib import Path
 
-from _deploy_sh_fakes import FAKE_RECAP, deploy_sh_env, make_snapshot_repo, stub_bin
+from _deploy_sh_fakes import (
+    FAKE_RECAP,
+    UV_DEPLOY_LOCKS_ARM,
+    deploy_sh_env,
+    make_snapshot_repo,
+    stub_bin,
+)
 from deploy_tools import exit_codes as ec
 from deploy_tools.land_lib import tools
 
@@ -77,9 +83,10 @@ echo "   99 uv run ansible-playbook ansible/deploy.yml --tags sonarr"
 _UV = """#!/bin/bash
 case "$*" in
   *ansible-playbook*) {recap}; exit 0 ;;
+{locks}
   *) exit 0 ;;
 esac
-""".replace("{recap}", FAKE_RECAP)
+""".replace("{recap}", FAKE_RECAP).replace("{locks}", UV_DEPLOY_LOCKS_ARM)
 
 # `_UV` exits 0 for the playbook, so deploy.sh reaches `emit_deploy_annotation`, which writes
 # an `event=deploy` line through `logger`. conftest's autouse `_no_syslog` already intercepts

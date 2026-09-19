@@ -3,14 +3,14 @@
 #
 # AutoKuma only reads the SERVER's docker socket, so the Pi's containers have no liveness
 # monitor of their own. autoheal (restarts unhealthy containers) and docker-proxy (read-only
-# socket serving Alloy's container-log discovery and glances) die silently: if autoheal dies,
+# socket serving Alloy's container-log discovery) die silently: if autoheal dies,
 # unhealthy Pi containers stop self-recovering; if docker-proxy dies, Alloy's docker_sd finds
-# no targets and this host's container logs stop reaching Loki, while glances keeps serving
-# its own HTTP and Alloy keeps running with zero targets. Kuma sees wg-easy and glances from
-# outside; docker-proxy-lifecycle it does not. This cron watches EVERY container the host
-# deploys (containers_list, plus the docker-proxy role's sub-proxies, which are services
-# inside its compose file rather than list entries) and pushes `up` only while all of them
-# run, to the static "Daniel Pi Recovery" Kuma push monitor (uptime-kuma role), every 5 min.
+# no targets and this host's container logs stop reaching Loki, while Alloy keeps running
+# with zero targets. Kuma sees wg-easy from outside; docker-proxy-lifecycle it does not.
+# This cron watches EVERY container the host deploys (containers_list, plus the docker-proxy
+# role's sub-proxies, which are services inside its compose file rather than list entries)
+# and pushes `up` only while all of them run, to the static "Daniel Pi Recovery" Kuma push
+# monitor (uptime-kuma role), every 5 min.
 # Dead-man's-switch: an explicit `down` names the dead container fast, while a dead cron/host
 # stops pushing and trips the monitor's 600s heartbeat watchdog. Route + auth are the
 # SD-health heartbeat's: Traefik's .local router resolved straight to the server LAN IP,

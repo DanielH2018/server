@@ -7,13 +7,20 @@ that state — which mattered because it installs a **root-scheduled cross-host 
 else in the tree documents.
 
 ## At a glance
-- **Image:** `python:3.14-alpine` (`artifacts_k8s_image`) — serves a generated index plus the files.
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
+- **Deploy tag:** `--tags "artifacts"`
+- **Image:** `python` (`artifacts_k8s_image`)
+- **Route:** `artifacts.<domain>` · `artifacts.local.<domain>`, Authelia one_factor
+- **Claims:** none (no PVC)
+- **Auto-deploy:** eligible (`k8s_autodeploy: true`)
+<!-- /generated_from -->
+
 - **Host:** pinned to `daniel-box` (`artifacts_k8s_node`), because it bind-mounts that host's own
   artifact tree.
-- **Serves:** `artifacts_host_dir` (`~/.claude/artifacts`, daniel-box's own) and
-  `artifacts_peer_dir` (`~/.claude/artifacts-peer`, everything pulled from peers).
-- **Config in:** `ansible/inventory/host_vars/daniel-box.yml` → `containers_list`, `platform: k8s`.
-- **Deploy tag:** `--tags "artifacts"`.
+- **Serves:** a generated index plus the files under `artifacts_host_dir`
+  (`~/.claude/artifacts`, daniel-box's own) and `artifacts_peer_dir`
+  (`~/.claude/artifacts-peer`, everything pulled from peers). Stdlib only — no build, no
+  extra deps.
 
 ## The peer sync is a pull, and the direction is not arbitrary
 `tasks/main.yml` installs `/usr/local/bin/sync-artifacts.sh` and a cron

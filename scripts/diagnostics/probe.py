@@ -26,7 +26,7 @@ Subcommands:
     loki-query '<logql>'     Loki range query [--limit N] [--json] (cluster loki-homelab)
     alerts                   monitor-bridge DOWN history as episodes [--days N --check X --raw --json]
     scrutiny                 Disk SMART summary              (cluster scrutiny, both nodes)
-    pi <subpath>             Pi glances API, e.g. `pi fs`    (daniel-pi.lan:61208)
+    pi containers            every Pi container: state, health, networks (one ssh)
     cert <host[:port]>       Served TLS cert subj/dates [--sni NAME]
     health <service>         k8s rollout + recent-restart rollup (exit 0 = healthy)
                              [--docker inspects the Pi's container instead]
@@ -94,9 +94,8 @@ from diagnostics.probe_lib.cli_parser import _build_parser
 from diagnostics.probe_lib.ha import run_ha, run_ha_state
 from diagnostics.probe_lib.health import (
     inspect_argv,
-    k8s_deploy_argv,
-    k8s_nodes_argv,
-    k8s_pods_argv,
+    k8s_deploy_args,
+    k8s_pods_args,
     resolve_ip,
     run_health,
 )
@@ -114,6 +113,8 @@ from diagnostics.probe_lib.releases import run_releases
 from diagnostics.probe_lib.subcommands import REGISTRY
 from diagnostics.probe_lib.vip_placement import run_vip_placement
 
+from lib.kubectl import WrongCluster, kubectl_argv, nodes_args
+
 
 def main(argv=None):
     """Parse argv, dispatch to the matching subcommand, and return its exit code.
@@ -121,9 +122,9 @@ def main(argv=None):
     `health` and the handler-table subcommands answer directly from an API or from
     `docker inspect`/kubectl. `metric`/`loki-query` without `--json`/`--dry-run` use the
     formatted view; every other subcommand falls through to the streaming `curl` pipeline
-    built by `plan()`. `targets --pi` and `pi containers` are checked ahead of that fallback:
-    plain `targets` and every other `pi <subpath>` still stream, so only the Pi-scoped variants
-    need a real handler.
+    built by `plan()`. `targets --pi` and `pi` are checked ahead of that fallback: plain
+    `targets` still streams, and `pi` has no streaming form since its glances API retired
+    (#2004), so only these need a real handler.
     """
     argv = list(sys.argv[1:] if argv is None else argv)
     # Handled on raw argv, ahead of `_build_parser().parse_args`: the subparsers below are
@@ -142,20 +143,24 @@ def main(argv=None):
                 ns_name = core.k8s_namespace()
                 # First, because it is what decides whether the rest runs at all.
                 print(
-                    " ".join(k8s_nodes_argv())
+                    " ".join(kubectl_argv(*nodes_args()))
                     + f"   # refuses unless this serves the {ns.cluster} cluster"
                 )
-                print(" ".join(k8s_deploy_argv(ns.container, ns_name)))
+                print(" ".join(kubectl_argv(*k8s_deploy_args(ns.container, ns_name))))
                 print(
-                    " ".join(k8s_deploy_argv(ns.container, ns_name, kind="daemonset"))
+                    " ".join(
+                        kubectl_argv(
+                            *k8s_deploy_args(ns.container, ns_name, kind="daemonset")
+                        )
+                    )
                     + "   # only if the Deployment lookup misses"
                 )
-                print(" ".join(k8s_pods_argv(ns.container, ns_name)))
+                print(" ".join(kubectl_argv(*k8s_pods_args(ns.container, ns_name))))
             return 0
         return run_health(ns.container, docker=ns.docker, cluster=ns.cluster)
     if ns.cmd == "targets" and ns.pi:
         return run_pi_targets(ns)
-    if ns.cmd == "pi" and ns.subpath == "containers":
+    if ns.cmd == "pi":
         return run_pi_containers(ns)
     # Subcommands that answer from an API rather than streaming a shell pipeline. Each one is
     # `run_X(ns) -> int`, so the table is the whole dispatch — adding a subcommand is a parser
@@ -180,7 +185,14 @@ def main(argv=None):
         "releases": run_releases,
     }
     if ns.cmd in handlers:
-        return handlers[ns.cmd](ns)
+        try:
+            return handlers[ns.cmd](ns)
+        except WrongCluster as exc:
+            # Every kubectl read names the cluster it is about (`--cluster`, default prod) and
+            # lib.kubectl refuses before running when the local kubectl serves another one.
+            # One line, not a traceback: the refusal IS the answer.
+            print(f"{ns.cmd}: {exc}")
+            return 1
     # metric / loki-query default to a formatted view; --json and --dry-run fall
     # through to the raw streaming path below.
     if ns.cmd in ("metric", "loki-query") and not ns.json and not ns.dry_run:

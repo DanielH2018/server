@@ -4,16 +4,24 @@ Prowlarr, with a `flaresolverr` sidecar that solves Cloudflare challenges for th
 rendering attacker-supplied pages in a headless browser.
 
 ## At a glance
-- **Images:** `prowlarr_k8s_image` (`-lsNN` linuxserver scheme — a breaking bump can hide as a
-  routine patch bump), sidecar `prowlarr_k8s_flaresolverr_image` plus an `exportarr` metrics
-  sidecar (`prowlarr_exportarr_image`).
-- **Route:** `prowlarr.<domain>` · Authelia · port 9696
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
+- **Deploy tag:** `--tags "prowlarr"`
+- **Images:** `lscr.io/linuxserver/prowlarr` (`prowlarr_k8s_image`),
+  `ghcr.io/flaresolverr/flaresolverr` (`prowlarr_k8s_flaresolverr_image`), `alpine`
+  (`prowlarr_k8s_probe_image`), `ghcr.io/onedr0p/exportarr` (`prowlarr_exportarr_image`)
+- **Route:** `prowlarr.<domain>` · `prowlarr.local.<domain>`, Authelia one_factor
+- **Claim:** `prowlarr-config` (weekly -> B2 (default target))
+- **Auto-deploy:** eligible (`k8s_autodeploy: true`)
+<!-- /generated_from -->
+
+- **The `-lsNN` linuxserver tag scheme** means a breaking bump can hide as a routine patch
+  bump. `prowlarr_k8s_flaresolverr_image` and `prowlarr_exportarr_image` are sidecars.
+- **Port:** 9696
 - **Persists:** `prowlarr-config` PVC (`longhorn`, ~84Mi) — indexer definitions and their API
   keys — plus a separate `prowlarr-flaresolverr-config` for the disposable browser profile.
 - **Secrets:** `prowlarr_api_key` (also reused as the exportarr sidecar's credential —
   Prowlarr has no scoped read-only key to mint instead).
-- **Deploy tag:** `--tags "prowlarr"`. `k8s_autodeploy: true`, `Recreate` strategy — protected
-  by a pre-apply Longhorn snapshot (`k8s_autodeploy_snapshot_pvcs: [prowlarr-config]`) that
+- **`Recreate` strategy, auto-deployed anyway** — protected by a pre-apply Longhorn snapshot (`k8s_autodeploy_snapshot_pvcs: [prowlarr-config]`) that
   `k8s/manifests` reverts to on a failed deploy.
 
 ## Notable

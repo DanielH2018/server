@@ -12,7 +12,7 @@ Read-only homelab diagnostics, allow-listed (no prompt). It resolves the live co
 
 ```
 uv run python scripts/diagnostics/probe.py <targets | metric '<promql>' | loki-query '<logql>' |
-  alerts | monitors | kuma-drift | releases | scrutiny | pi <path> | cert <host> | health <svc> |
+  alerts | monitors | kuma-drift | releases | scrutiny | pi containers | cert <host> | health <svc> |
   ha <state|automation|get> …>
 ```
 
@@ -85,7 +85,10 @@ down leaves the ratio at N/N up (a fenced-off push tile read green for a day on 
 
 `kuma-drift` diffs that set against `static-monitors.yaml.j2` and treats a push monitor inside
 its own interval after a Kuma restart as pending, since Kuma exports a monitor only once it has
-beaten.
+beaten. It reads a templated interval (`{{ kuma_bridge_push_interval }}`, the etcd drill's
+inventory variable, the UPS tiles' arithmetic) against the role's real render context, so those tiles
+are classified by their interval like a literal one — until 2026-09-18 they parsed as None and
+could only ever read as missing (#2019).
 
 ### The Pi's own first-command triage
 
@@ -97,9 +100,7 @@ equivalent of the four cluster checks above, backed by `probe_lib/pi_plane.py`.
   set (`node-pi`, `alloy-pi`) is parsed from `k8s_pi_client_ip` static targets in claude-otel's
   `prometheus.yaml.j2` rather than hand-listed, so a renamed or added job needs no change here.
   A declared job absent from the live set is reported MISSING and fails the gate — dividing the
-  Pi's own live set by itself would repeat `monitors`' N/N-up mistake. glances carries no
-  Prometheus job anywhere in this repo (it is polled directly at `pi <path>`), and the output
-  says so rather than inventing one.
+  Pi's own live set by itself would repeat `monitors`' N/N-up mistake.
 - **`kuma-drift --pi`** — the same declared-vs-live reconciliation, scoped to daniel-pi's own
   monitors. The scope comes from each monitor's YAML `stringData` key in
   `static-monitors.yaml.j2` (`daniel-pi-host.json`, `monitor-bridge-pi.json`, …) carrying `pi`

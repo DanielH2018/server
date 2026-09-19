@@ -5,15 +5,24 @@ Radarr, part of the *arr stack. Imports by hardlinking from `/data/torrents` int
 when both paths share one mount.
 
 ## At a glance
-- **Image:** `radarr_k8s_image` (`-lsNN` linuxserver scheme — a breaking bump can hide as a
-  routine patch bump), plus an `exportarr` metrics sidecar (`radarr_exportarr_image`, pinned
-  in lockstep with sonarr and prowlarr — `test_exportarr_pins_in_lockstep.py` enforces it).
-- **Route:** `radarr.<domain>` · Authelia · port 7878
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
+- **Deploy tag:** `--tags "radarr"`
+- **Images:** `lscr.io/linuxserver/radarr` (`radarr_k8s_image`), `ghcr.io/onedr0p/exportarr`
+  (`radarr_exportarr_image`)
+- **Route:** `radarr.<domain>` · `radarr.local.<domain>`, Authelia one_factor
+- **Claims:** `radarr-config` (weekly -> B2 (default target)), `media-data` (not Longhorn
+  (media-local))
+- **Auto-deploy:** eligible (`k8s_autodeploy: true`)
+<!-- /generated_from -->
+
+- **The `-lsNN` linuxserver tag scheme** means a breaking bump can hide as a routine patch
+  bump. The `exportarr` metrics sidecar (`radarr_exportarr_image`) is pinned in lockstep with
+  sonarr and prowlarr — `test_exportarr_pins_in_lockstep.py` enforces it.
+- **Port:** 7878
 - **Persists:** `radarr-config` PVC (`longhorn`, ~30Mi) — `radarr.db` holds the library and
   absolute root-folder paths. Also mounts `media-data` (`radarr_k8s_media_claim`), shared RWX.
 - **`radarr-striptracks`** Docker mod strips unwanted audio/subtitle tracks on import.
-- **Deploy tag:** `--tags "radarr"`. `k8s_autodeploy: true`, `Recreate` strategy — protected by
-  a pre-apply Longhorn snapshot (`k8s_autodeploy_snapshot_pvcs: [radarr-config]`) that
+- **`Recreate` strategy, auto-deployed anyway** — protected by a pre-apply Longhorn snapshot (`k8s_autodeploy_snapshot_pvcs: [radarr-config]`) that
   `k8s/manifests` reverts to on a failed deploy.
 
 ## Notable

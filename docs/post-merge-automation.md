@@ -156,6 +156,16 @@ Sequence:
    Under `--at` the per-host split reads `containers_list` at the merge commit too, so a PR
    that adds a Pi role and its entry together deploys with `-e target=daniel-pi` on its first
    landing rather than after the tick has fast-forwarded the checkout (issue #1839).
+   A tag the tick's own apply already deployed on this host is not deployed again. The step
+   exists for what the tick deferred, and a deploy-plane PR whose tick ran `ansible/deploy.yml`
+   at the merge commit deferred nothing: PR #2092's landing paid a 1203s lock wait for that
+   second deploy, then failed its snapshot and read `deploy-failed` about live work (issue
+   #2094). `Landing.tick_already_deployed` is the predicate: `broad_applied` must name
+   `ansible/deploy.yml` at a commit containing the merge, the primary must carry the merge,
+   and the marker's tag slot must cover the tag (empty is the whole play; `narrowed-to-nothing`
+   covers none). It applies to the local host's tags only — the tick's apply names no
+   `-e target=`, so a Pi-declared tag still deploys — and the health verdict still gates every
+   tag.
 5. The health verdict, via `deploy_detach_notify.py --no-post`, rendered from a detached
    worktree of the same merge commit: `probe.py health` enumerates the workloads to gate by
    rendering the role's manifests from the checkout it runs in, so a role the merge commit

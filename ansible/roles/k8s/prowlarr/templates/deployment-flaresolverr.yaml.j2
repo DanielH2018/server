@@ -1,6 +1,7 @@
 {% from 'container-resources.yml.j2' import container_resources with context %}
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
 {% from 'pod-affinity.yml.j2' import node_affinity_preference with context %}
+{% from 'workload-shell.yml.j2' import spec_shell, pod_shell with context %}
 ---
 # Its own Deployment rather than a container in prowlarr's pod, deliberately: a sidecar shares the
 # pod's network namespace, and "reachable only on localhost by its own pod" would be tighter than
@@ -12,8 +13,6 @@ metadata:
   name: flaresolverr
   namespace: {{ k8s_namespace }}
 spec:
-  revisionHistoryLimit: 3
-  replicas: 1
   # No authoritative state: /config is a browser profile cache the app rebuilds on first use
   # (see the note in tasks/main.yml), so it moved to an emptyDir and the RWO constraint that
   # forced Recreate is gone. maxUnavailable 0 and maxSurge 1 are what SHOULD make this
@@ -33,11 +32,8 @@ spec:
   # for a second pod to diverge from or lose. That is an inference from how Prowlarr's indexer
   # proxy integration is used here, not a documented confirmation from FlareSolverr's own API
   # docs — recorded honestly as a waiver, not papered over.
-  strategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxSurge: 1
-      maxUnavailable: 0
+{{ spec_shell('RollingUpdate', max_surge=1, max_unavailable=0) }}
+  replicas: 1
   selector:
     matchLabels:
       app: flaresolverr
@@ -50,9 +46,7 @@ spec:
         # prometheus and both node CIDRs on top — the widening the guard exemption avoids today.
         netpol-baseline-exempt: "true"
     spec:
-      enableServiceLinks: false
-      automountServiceAccountToken: false
-      priorityClassName: homelab-standard
+{{ pod_shell('homelab-standard') }}
       # Preference, never a pin: daniel-box carries the storage- and VIP-pinned workloads and runs the hotter of the two nodes, so latency-insensitive services default here.
       # Weighted so the pod still schedules if daniel-server is cordoned or full.
 {{ node_affinity_preference('daniel-server') }}

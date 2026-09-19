@@ -179,6 +179,8 @@ still open after the 2700s merge budget), `ci-red`, `ci-timeout` (no CI verdict 
 900s budget) and `lock-busy` (a deploy lock — the tree lock, or one of the run's own
 per-service locks — stayed busy through every retry). A fifth,
 `tip-outran-retries`, is the stale-tree give-up below — a resume point rather than a failure.
+That list is pinned to the `Verdict` enum in `land_lib/outcome.py` by
+`ansible/tests/deploy/test_land_skill_names_every_verdict.py`.
 
 `nothing-to-deploy` is decided from the PR's file list right after the merge, before any CI
 wait: a PR that reaches no service tag, no plane a hand applies and nothing the tick applies

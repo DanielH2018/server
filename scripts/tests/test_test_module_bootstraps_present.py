@@ -1,8 +1,9 @@
 """Guard 3: every test module importing a repo module by bare name carries its own bootstrap.
 
-This is the test-module half of `test_script_bootstraps_present.py`, which skips exactly the
-files this one reads (`test_*.py` and `conftest.py`). The two are jointly exhaustive over the
-repo's Python.
+This is the pytest-only half of `test_script_bootstraps_present.py`, which skips exactly the
+files this one reads: `test_*.py`, `conftest.py`, and every module under a `tests/` directory,
+fixture modules included. `is_pytest_only` there is the one predicate both consult, so the two
+are jointly exhaustive over the repo's Python by construction.
 
 pytest puts a test module's OWN directory on `sys.path` and nothing else, plus the
 `pythonpath` entries in `pyproject.toml`. A test module importing anything else by bare name
@@ -20,6 +21,21 @@ resolves to a directory actually providing that name.
 A sibling's insert never counts — `_sys_path_insert_calls` reads one module's AST, so credit
 cannot leak across files in the same directory. That is the whole point of the guard, and
 `test_a_sibling_module_s_insert_does_not_count` pins it.
+
+The inverse holds too: a test module must NOT carry an insert `pythonpath` already supplies.
+`pythonpath` lists `scripts/` and every subdirectory but `validate` and `diagnostics`, so an
+insert of one of those directories, or of the module's own directory, is dead weight copied
+from a sibling — 46 of them sat in 42 test modules on 2026-09-19 (#2061). Guard 2 mandates the
+bootstrap for a directly-invoked script; this guard's `find_redundant_test_bootstraps` refuses
+it where pytest is the only invoker. The rule is redundancy, not absence: an insert of
+`scripts/diagnostics` in `test_ui_login.py` still resolves a directory `pythonpath` deliberately
+omits, and passes on that merit rather than by exclusion.
+
+A `tests/_*.py` fixture module is a pytest-only module too: nothing but a `test_*.py` imports
+it. Until #2099 it fell between the guards — Guard 2 read it as a script and mandated the
+insert, this guard never collected it — so seven of them kept the insert #2061 deleted from
+their importers. `collect_test_modules` now takes every tracked module `is_pytest_only`
+accepts under a `testpaths` entry, and the fixture modules answer to both rules above.
 """
 
 import ast
@@ -34,6 +50,7 @@ from test_script_bootstraps_present import (
     _scoped_nodes,
     _sys_path_insert_calls,
     build_import_index,
+    is_pytest_only,
 )
 
 REPO = Path(__file__).resolve().parents[2]
@@ -93,10 +110,11 @@ def repo_module_dirs() -> dict[str, set[Path]]:
 
 
 def collect_test_modules() -> list[Path]:
-    """Every `test_*.py` and `conftest.py` pytest collects under `testpaths`."""
+    """Every pytest-only module under `testpaths`: what pytest collects, plus the fixture
+    modules those collect from (`is_pytest_only` in Guard 2 is the boundary)."""
     found: set[Path] = set()
     for file in _tracked_python():
-        if not (file.name.startswith("test_") or file.name == "conftest.py"):
+        if not is_pytest_only(file.relative_to(REPO)):
             continue
         if any(base == file.parent or base in file.parents for base in TESTPATH_DIRS):
             found.add(file.resolve())
@@ -186,14 +204,54 @@ def test_no_test_module_insert_is_unresolvable():
     )
 
 
+def find_redundant_test_bootstraps(
+    files: list[Path],
+    pythonpath_dirs: list[Path],
+    pythonpath_index: dict[str, set[Path]] | None = None,
+) -> list[tuple[Path, int, Path]]:
+    """Every insert whose target is the module's own directory or a `pythonpath` entry.
+
+    Both are on `sys.path` for every collected module already, so the insert changes nothing
+    under pytest and a test module is run by nothing else. An insert the evaluator cannot
+    resolve is `test_no_test_module_insert_is_unresolvable`'s to report, not this one's.
+    """
+    if pythonpath_index is None:
+        pythonpath_index = build_import_index()
+    redundant: list[tuple[Path, int, Path]] = []
+    for file in files:
+        own_dir = file.parent.resolve()
+        for call, _scope in _sys_path_insert_calls(_parsed(file)):
+            target = _insert_target(call, file, pythonpath_index)
+            if target is None:
+                continue
+            target = target.resolve()
+            if target == own_dir or target in pythonpath_dirs:
+                redundant.append((file, call.lineno, target))
+    return redundant
+
+
+def test_no_test_module_carries_an_insert_pythonpath_already_supplies():
+    redundant = find_redundant_test_bootstraps(collect_test_modules(), PYTHONPATH_DIRS)
+    assert not redundant, (
+        "test module inserts a directory pytest already puts on sys.path (its own, or a "
+        "`pythonpath` entry in pyproject.toml) — delete the bootstrap, it is dead weight:\n"
+        + "\n".join(
+            f"  {f.relative_to(REPO)}:{lineno} inserts {target.relative_to(REPO)}"
+            for f, lineno, target in redundant
+        )
+    )
+
+
 def test_the_census_contains_the_modules_this_guard_exists_for():
     """Non-vacuity: name the members, not a count.
 
     A census that globs for its own subject returns an empty set the moment those files move,
     and an `all(...)` over nothing passes. Four of these are the modules issue #1333 is about
     — `test_ui_login.py` is the one that broke, and three siblings carry the insert it
-    borrowed. The last two pin the two other census shapes: a `scripts/tests` guard, and a
-    `conftest.py` outside `scripts/`.
+    borrowed. The next two pin two other census shapes: a `scripts/tests` guard, and a
+    `conftest.py` outside `scripts/`. The last two are fixture modules, one under `scripts/`
+    and one under `ansible/tests/` — the shape #2099 added, which a census narrowed back to
+    `test_*.py` would drop without moving the count past 200.
     """
     census = {p.relative_to(REPO).as_posix() for p in collect_test_modules()}
     required = frozenset(
@@ -204,10 +262,24 @@ def test_the_census_contains_the_modules_this_guard_exists_for():
             "scripts/diagnostics/tests/test_probe_longhorn_blocks.py",
             "scripts/tests/test_script_bootstraps_present.py",
             "ansible/tests/conftest.py",
+            "scripts/deploy_tools/tests/_land_fakes.py",
+            "ansible/tests/_k8s_render.py",
         }
     )
     assert required <= census, sorted(required - census)
     assert len(census) > 200, len(census)
+
+
+def test_the_diagnostics_inserts_are_load_bearing_not_redundant():
+    """`scripts/diagnostics` is deliberately absent from `pythonpath` (pyproject.toml), so the
+    insert `test_ui_login.py` carries is the one thing that resolves `import ui_login`. A rule
+    that flagged it would be "no insert at all", not "no redundant insert" — pin the
+    difference on a real member, so the rule cannot silently invert."""
+    ui_login = REPO / "scripts/diagnostics/tests/test_ui_login.py"
+    assert ui_login in collect_test_modules()
+    inserts = _sys_path_insert_calls(_parsed(ui_login))
+    assert inserts, "test_ui_login.py lost the insert #1333 is about"
+    assert find_redundant_test_bootstraps([ui_login], PYTHONPATH_DIRS) == []
 
 
 def _write(path: Path, body: str) -> Path:
@@ -293,3 +365,28 @@ def test_an_unevaluatable_insert_is_reported_not_credited(tmp_path):
     missing, unresolvable = find_test_bootstrap_gaps(files, [], repo_dirs, {})
     assert not missing
     assert [(f.name, top) for f, _, top in unresolvable] == [("test_x.py", "target")]
+
+
+def test_an_insert_of_a_directory_pythonpath_lacks_is_clean(tmp_path):
+    """The load-bearing shape: `pkg/` is not on pythonpath, so the insert is what resolves
+    `target`. Not redundant."""
+    files, _ = _fixture_tree(tmp_path, BOOTSTRAP + "from target import VALUE\n")
+    assert find_redundant_test_bootstraps(files, [], {}) == []
+
+
+def test_an_insert_of_a_pythonpath_directory_is_flagged(tmp_path):
+    files, _ = _fixture_tree(tmp_path, BOOTSTRAP + "from target import VALUE\n")
+    pkg = (tmp_path / "pkg").resolve()
+    flagged = find_redundant_test_bootstraps(files, [pkg], {})
+    assert [(f.name, lineno, t) for f, lineno, t in flagged] == [("test_x.py", 3, pkg)]
+
+
+def test_an_insert_of_the_module_s_own_directory_is_flagged(tmp_path):
+    """pytest puts a module's own directory on sys.path before anything else runs."""
+    module = _write(
+        tmp_path / "pkg" / "tests" / "test_x.py",
+        "import sys\nfrom pathlib import Path\n"
+        "sys.path.insert(0, str(Path(__file__).resolve().parent))\n",
+    )
+    flagged = find_redundant_test_bootstraps([module], [], {})
+    assert [t for _, _, t in flagged] == [(tmp_path / "pkg" / "tests").resolve()]

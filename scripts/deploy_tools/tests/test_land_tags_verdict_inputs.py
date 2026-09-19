@@ -16,12 +16,9 @@ Run: uv run pytest scripts/deploy_tools/tests/test_land_tags_verdict_inputs.py
 """
 
 import subprocess
-import sys
-from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import deploy_tags
 import land_tags
@@ -119,12 +116,23 @@ def test_this_repo_at_head_agrees_with_its_own_working_tree():
     The direction still catches what the assertion is for: a working tree that has LOST a tag
     HEAD declares means the reader is dropping entries, and `traefik` plus the floor below
     keep an empty or near-empty read from passing.
+
+    A RETIREMENT is the one honest way to lose a tag, and it too is committed against a HEAD
+    that still declares it (glances, #2004). It is told apart by the role's new home: a lost
+    tag whose role sits under `roles/*/archive/<tag>/` in the working tree is a retirement, and
+    any other lost tag is still the reader dropping an entry.
     """
     at_head = land_tags.service_tags_at("HEAD", deploy_tags.REPO)
     in_tree = deploy_tags.service_tags()
     assert "traefik" in at_head
     assert len(at_head) >= 50, sorted(at_head)
-    assert at_head <= in_tree, sorted(at_head - in_tree)
+    lost = at_head - in_tree
+    retired = {
+        tag
+        for tag in lost
+        if any((deploy_tags.REPO / "ansible/roles").glob(f"*/archive/{tag}/"))
+    }
+    assert lost <= retired, sorted(lost - retired)
 
 
 # ── self_applied_command: the hand-apply the tick would otherwise have done (issue #1537) ──

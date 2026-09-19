@@ -5,15 +5,25 @@ devic.es/dri`, advertised by `k8s/dri-device-plugin`). See repo-root `CLAUDE.md`
 shared conventions.
 
 ## At a glance
-- **Deploy tag:** `--tags "tdarr"`.
-- **Route:** `tdarr.<domain>`, behind Authelia.
-- **Claims:** `tdarr-server` (3Gi, `longhorn`, backed up — the 204MB library/transcode
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
+- **Deploy tag:** `--tags "tdarr"`
+- **Image:** `ghcr.io/haveagitgat/tdarr` (`tdarr_k8s_image`)
+- **Route:** `tdarr.<domain>` · `tdarr.local.<domain>`, Authelia one_factor
+- **Claims:** `tdarr-server` (weekly -> B2 (default target)), `tdarr-configs` (weekly -> B2
+  (default target)), `media-data` (not Longhorn (media-local))
+- **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — state coupled outside the volume —
+  rewrites media-data (shared RWX, not reverted) in place, an irreversible transcode the
+  snapshot/revert can't undo; ALSO non-atomic two-claim revert (tdarr-configs, tdarr-server);
+  ALSO the digest pin's 'stays manual' intent is unenforced — renovate.json automerges a digest
+  re-push after a 3-day soak with no tdarr exclusion
+<!-- /generated_from -->
+
+- **`tdarr-server`** (3Gi, `longhorn`, backed up — the 204MB library/transcode
   DB) and `tdarr-configs` (1Gi, `longhorn` — flow/plugin definitions), kept separate so
   the server DB's churn doesn't drag `logs/`/`transcode_cache/` onto Longhorn. Also
   mounts the shared `media-data` RWX volume, **read-write** — the one media consumer
   that rewrites library files in place.
-- **`k8s_autodeploy: false`.** The snapshot/revert machinery works here, but a revert
-  can't undo a completed transcode: it rewrites the untranscoded original on
+- **The snapshot/revert machinery works here, but a revert can't undo a completed transcode**: it rewrites the untranscoded original on
   `media-data`, which is not reverted. Two claims also mean a failed deploy can revert
   them to different points in time, and the digest pin's "stays manual" intent has no
   enforcement against a Renovate digest re-push. Full reasoning in `defaults/main.yml`.

@@ -535,6 +535,142 @@
     state: started
   become: true
 
+# 9. APT TIMERS (the largest scheduled burst on the box, pinned to the quiet hour)
+- name: Create the drop-in directories for the apt timers
+  tags: [apt-timers]
+  ansible.builtin.file:
+    path: "/etc/systemd/system/{{ item.unit }}.d"
+    state: directory
+    mode: "0755"
+  loop: "{{ optimize_pi_apt_timers }}"
+  loop_control:
+    label: "{{ item.unit }}"
+  become: true
+
+- name: Pin the apt timers to the quiet hour, once a day
+  tags: [apt-timers]
+  # Ubuntu's apt-daily.timer is `*-*-* 6,18:00` with RandomizedDelaySec=12h, so it fires
+  # twice a day at any hour, and apt-daily-upgrade.timer is 06:00 plus up to an hour. On
+  # 2026-09-18 the 15:05Z firing ran `apt-get -d dist-upgrade` for four minutes at 57 MB RSS:
+  # memory PSI `full avg10` 45%, load 9.9, an RCU stall in the journal — on a 456 MB host
+  # that keeps 10-25 MB free, the shape of the 2026-08-29 incident (#2007). The engine
+  # packages are held (docker_install), so the download half serves the rest of the system.
+  # 04:20 and 05:20 sit in the one window nothing else here uses: the midnight cluster
+  # (log2ram-daily 23:55, logrotate, dpkg-db-backup, sysstat-summary 00:07) is over, man-db
+  # runs 01-03, and the next thing is the 06:00 hour. The order stays update, then upgrade.
+  # The empty `OnCalendar=` clears the packaged schedule; without it systemd keeps both.
+  ansible.builtin.copy:
+    dest: "/etc/systemd/system/{{ item.unit }}.d/quiet-hour.conf"
+    content: |
+      # Managed by Ansible (roles/setup/optimize_pi); see that role's tasks/main.yml.
+      [Timer]
+      OnCalendar=
+      OnCalendar=*-*-* {{ item.at }}
+      RandomizedDelaySec=10min
+    mode: "0644"
+    owner: root
+    group: root
+  loop: "{{ optimize_pi_apt_timers }}"
+  loop_control:
+    label: "{{ item.unit }} at {{ item.at }}"
+  become: true
+  register: optimize_pi_apt_timer_dropins
+
+- name: Reload systemd and restart the apt timers so the pinned schedule is read # noqa no-handler
+  tags: [apt-timers]
+  # Restarting a timer reschedules it; it does not start the service.
+  ansible.builtin.systemd:
+    name: "{{ item.unit }}"
+    state: restarted
+    daemon_reload: true
+  loop: "{{ optimize_pi_apt_timers }}"
+  loop_control:
+    label: "{{ item.unit }}"
+  become: true
+  when: optimize_pi_apt_timer_dropins.changed
+
+# 10. NODE EXPORTER AS A HOST UNIT (one containerd shim fewer)
+# Every container on this box costs a containerd shim of ~5 MB anonymous memory on a host
+# that keeps 10-25 MB free (Pi memory budget review, 2026-09-18). node-exporter is the one
+# container whose host form changes no decision: it reads /proc and /sys, needs no Docker
+# API, and the cluster's Prometheus scrapes it on the LAN IP either way (#2005). Alloy is
+# not in this position — its container-log source needs the Docker API, and the only
+# host-side shapes are the bare socket or a LAN-published proxy, both decided against.
+- name: Create the node_exporter system user
+  tags: [node-exporter-host]
+  ansible.builtin.user:
+    name: node_exporter
+    system: true
+    shell: /usr/sbin/nologin
+    create_home: false
+  become: true
+
+- name: Download the node_exporter release tarball
+  tags: [node-exporter-host]
+  ansible.builtin.get_url:
+    url: "https://github.com/prometheus/node_exporter/releases/download/v{{ optimize_pi_node_exporter_version }}/node_exporter-{{ optimize_pi_node_exporter_version }}.linux-arm64.tar.gz"
+    dest: "/usr/local/src/node_exporter-{{ optimize_pi_node_exporter_version }}.linux-arm64.tar.gz"
+    checksum: "sha256:{{ optimize_pi_node_exporter_sha256 }}"
+    mode: "0644"
+  become: true
+
+- name: Unpack node_exporter into a versioned directory
+  tags: [node-exporter-host]
+  ansible.builtin.unarchive:
+    src: "/usr/local/src/node_exporter-{{ optimize_pi_node_exporter_version }}.linux-arm64.tar.gz"
+    dest: /opt
+    remote_src: true
+    creates: "/opt/node_exporter-{{ optimize_pi_node_exporter_version }}.linux-arm64/node_exporter"
+  become: true
+  # --check downloads nothing, so the unpack (and the symlink onto it) would fail on a
+  # missing source; the gate keeps the role's documented `--check` first usable.
+  when: not ansible_check_mode
+
+- name: Point /usr/local/bin/node_exporter at the pinned version
+  tags: [node-exporter-host]
+  # A version bump moves the symlink, which is what restarts the unit below.
+  ansible.builtin.file:
+    src: "/opt/node_exporter-{{ optimize_pi_node_exporter_version }}.linux-arm64/node_exporter"
+    dest: /usr/local/bin/node_exporter
+    state: link
+  become: true
+  register: optimize_pi_node_exporter_binary
+  when: not ansible_check_mode
+
+- name: Install the node_exporter unit
+  tags: [node-exporter-host]
+  ansible.builtin.template:
+    src: node_exporter.service.j2
+    dest: /etc/systemd/system/node_exporter.service
+    mode: "0644"
+    owner: root
+    group: root
+  become: true
+  register: optimize_pi_node_exporter_unit
+
+- name: Allow the LAN to scrape node_exporter
+  tags: [node-exporter-host]
+  # A host listener, not a Docker-published port, so the UFW bypass Docker's iptables chain
+  # gets does not apply (initial_setup's network.yml defaults incoming to deny).
+  community.general.ufw:
+    rule: allow
+    port: "9100"
+    proto: tcp
+    from_ip: "{{ lan_subnet }}"
+    comment: "optimize_pi: node_exporter"
+  become: true
+
+- name: Enable and start node_exporter
+  tags: [node-exporter-host]
+  ansible.builtin.systemd:
+    name: node_exporter.service
+    enabled: true
+    state: "{{ 'restarted' if (optimize_pi_node_exporter_binary.changed or optimize_pi_node_exporter_unit.changed) else 'started' }}"
+    daemon_reload: true
+  become: true
+  # Same check-mode gate as the unpack: on a first --check the unit file does not exist yet.
+  when: not ansible_check_mode
+
 # The Kuma-push helper both health crons below source is no longer installed here. It moved to
 # the initial_setup role as /usr/local/lib/kuma-push-lib.sh once the cluster's own health crons
 # needed the same six-line curl; initial_setup runs on every host and runs earlier in
@@ -603,6 +739,7 @@
     owner: "{{ sys_user }}"
     group: "{{ sys_user }}"
     mode: "0700"
+  no_log: true  # renders pi_sd_health_push_token
   become: true
 
 - name: Schedule the SD-card health heartbeat
@@ -632,6 +769,7 @@
     owner: "{{ sys_user }}"
     group: "{{ sys_user }}"
     mode: "0700"
+  no_log: true  # renders pi_recovery_push_token
   become: true
 
 - name: Schedule the container-recovery heartbeat

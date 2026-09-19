@@ -107,3 +107,19 @@ def test_a_role_default_with_its_own_key_space_is_clean():
         colliding_default_keys({"sonarr_port": 8989}, {"domain": "example.com"})
         == set()
     )
+
+
+# --- resolve_vars: the `bool` filter a variable value reaches for ---
+#
+# `k8s_no_mutate` in group_vars is `"{{ ... | bool }}"`; a bare Jinja env has no `bool`, so
+# expansion registers a shim. The shim is the one every render guard in scripts/lib shares —
+# a second copy that took `-e var=false` (the STRING "false") as truthy lived here until
+# issue #2050. This pair checks the string/boolean divergence the filter exists for.
+
+
+def test_resolve_vars_bool_filter_reads_the_string_false_as_false():
+    assert resolve_vars({"flag": "{{ raw | bool }}"}, {"raw": "false"})["flag"] is False
+
+
+def test_resolve_vars_bool_filter_reads_the_string_true_as_true():
+    assert resolve_vars({"flag": "{{ raw | bool }}"}, {"raw": "true"})["flag"] is True

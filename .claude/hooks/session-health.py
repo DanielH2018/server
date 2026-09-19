@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# gen-hooks: library
+#   reason: run by session-health.sh through `uv run python`
 """SessionStart health banner: surfaces what's already broken before work starts.
 
 When a Claude Code session opens in this repo, this prints anything already broken so
@@ -29,8 +31,7 @@ Design contract (mirrors the other hooks here):
     filtered out rather than reported — otherwise this would trade a false all-clear
     for the same two names on every session open forever.
 
-Wired via .claude/settings.json -> hooks.SessionStart. Stdout is injected as
-session context by Claude Code (same mechanism the remember plugin uses).
+Stdout is injected as session context by Claude Code (same mechanism the remember plugin uses).
 """
 
 import json
@@ -66,11 +67,10 @@ except (ImportError, SyntaxError) as exc:
         return []
 
 
-# The park decision itself lives in `scripts/lib/deployer_park.py`, because `deploy.sh` exit 4
-# asks the same question of the same marker and a second derivation would drift (issue #1429).
-# The marker directory and the threshold are re-exported under their original names: this
-# module's tests read `_mod.BEHIND_PARK_SECONDS`, and `GITOPS_STATE_DIR` is mode 0750 owned by
-# `ubuntu`, so a session running as that user reads it and any other host degrades to silence.
+# The park decision lives in `scripts/lib/deployer_park.py`, because `deploy.sh` exit 4 asks
+# the same question of the same marker and a second derivation would drift (issue #1429); the
+# marker parsers and clear commands come from `lib.gitops_markers`, the deployer's own module
+# copied there. `GITOPS_STATE_DIR` is mode 0750 owned by `ubuntu`: any other host reads silence.
 #
 # Wrapped, because NOTHING at module scope may be able to stop the banner (issue #1566). This
 # file is run by `session-health.sh`, which sends stderr to /dev/null and exits 0, so an
@@ -81,16 +81,18 @@ sys.path.insert(0, os.path.join(REPO, "scripts"))
 try:
     from lib.deployer_park import (
         BEHIND_PARK_SECONDS,
-        CONTENTION_CLEAR_CMD,
         CONTENTION_PARK_SECONDS,
         GITOPS_STATE_DIR,
-        MANUAL_PLANE_CLEAR_CMD,
-        contention_pending,
-        manual_plane_pending,
         park_age,
         read_behind_marker,
         read_contention_marker,
         read_manual_plane_marker,
+    )
+    from lib.gitops_markers import (
+        CONTENTION_CLEAR_CMD,
+        MANUAL_PLANE_CLEAR_CMD,
+        parse_contention,
+        parse_manual_plane,
     )
 
     DEPLOYER_PARK_IMPORT_ERROR = ""
@@ -98,10 +100,9 @@ except ImportError as exc:
     DEPLOYER_PARK_IMPORT_ERROR = str(exc)
 
     # Inert placeholders, never read: `parked_deployer_problems` returns its `⚠` line before it
-    # asks the park question. They exist so the names stay defined and singly-typed for the type
-    # checker. NOT a fallback copy of the real values — a second BEHIND_PARK_SECONDS here would
-    # be the second derivation issue #1429 removed, so these are deliberately not the real
-    # threshold or the real marker directory, and the raising stubs say so if one is ever called.
+    # asks the park question. They keep the names defined and singly-typed for the type checker.
+    # NOT a fallback copy of the real values — a second BEHIND_PARK_SECONDS here would be the
+    # second derivation issue #1429 removed — and the raising stubs say so if one is ever called.
     BEHIND_PARK_SECONDS = 0
     CONTENTION_PARK_SECONDS = 0
     GITOPS_STATE_DIR = ""
@@ -113,9 +114,9 @@ except ImportError as exc:
 
     park_age = _park_unavailable
     read_behind_marker = _park_unavailable
-    manual_plane_pending = _park_unavailable
+    parse_manual_plane = _park_unavailable
     read_manual_plane_marker = _park_unavailable
-    contention_pending = _park_unavailable
+    parse_contention = _park_unavailable
     read_contention_marker = _park_unavailable
 
 __all__ = ["BEHIND_PARK_SECONDS", "GITOPS_STATE_DIR"]
@@ -220,9 +221,8 @@ def _age_phrase(seconds):
     setup role waits on work nobody has started and is routinely days old, where a count in
     minutes is a number the reader has to divide.
     """
-    # Clamped at zero: `park_age`'s threshold hid a stamp ahead of the clock, and this line
-    # has no threshold, so a backward NTP step on the deployer would otherwise print a
-    # negative age.
+    # Clamped at zero: `park_age`'s threshold hid a stamp ahead of the clock, and this line has
+    # no threshold, so a backward NTP step on the deployer would otherwise print a negative age.
     seconds = max(0.0, seconds)
     if seconds < 2 * 3600:
         return f"{int(seconds // 60)} min"
@@ -248,16 +248,16 @@ def manual_plane_lines(marker, now):
     banner is the only place the fact reaches anyone else.
     """
     lines = []
-    for role, playbook, at in sorted(manual_plane_pending(marker), key=lambda e: e[2]):
+    for e in sorted(parse_manual_plane(marker), key=lambda e: e.at):
         how = (
-            f"apply {playbook} by hand"
-            if playbook and playbook != "none"
+            f"apply {e.playbook} by hand"
+            if e.playbook != "none"
             else "apply the role by hand"
         )
         lines.append(
-            f"  ✗ the GitOps deployer merged a change to the `{role}` setup role "
-            f"{_age_phrase(now - at)} ago and cannot apply it itself — {how}, then "
-            f"`{MANUAL_PLANE_CLEAR_CMD.replace('<role>', role)}`"
+            f"  ✗ the GitOps deployer merged a change to the `{e.role}` setup role "
+            f"{_age_phrase(now - e.at)} ago and cannot apply it itself — {how}, then "
+            f"`{MANUAL_PLANE_CLEAR_CMD.replace('<role>', e.role)}`"
         )
     return lines
 
@@ -270,10 +270,10 @@ def contention_lines(marker, now):
     names the lock and its holder's shape instead (issue #1847). Age-gated like
     `behind_park_lines`: one operator deploy holding a lock for a tick is routine.
     """
-    pending = contention_pending(marker)
-    if pending is None or now - pending[1] < CONTENTION_PARK_SECONDS:
+    pending = parse_contention(marker)
+    if pending is None or now - pending.first_seen < CONTENTION_PARK_SECONDS:
         return []
-    lock, first_seen, count = pending
+    lock, first_seen, count = pending.lock, pending.first_seen, pending.count
     age = now - first_seen
     return [
         f"  ✗ the GitOps deployer has deferred {count} consecutive tick(s) on service lock "

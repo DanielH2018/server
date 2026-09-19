@@ -3,13 +3,19 @@
 `techno-tim/littlelink-server`, a static link-page server with no config beyond its image.
 
 ## At a glance
-- **Image:** `ghcr.io/techno-tim/littlelink-server:latest@sha256:...` — digest-pinned since
-  2026-08-06 so a k8s rollout re-pull can't silently change what runs; the `:latest` tag is
-  kept alongside the digest so Renovate's `k8s-defaults` manager still tracks it.
-- **Deploy tag:** `--tags "littlelink"`.
-- **Route:** `www.<domain>` — no Authelia, public.
-- **Persists:** nothing — stateless, no PVC, `RollingUpdate` strategy.
-- **Auto-deploy:** eligible — stateless, digest-pinned, readinessProbe-backed.
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
+- **Deploy tag:** `--tags "littlelink"`
+- **Image:** `ghcr.io/techno-tim/littlelink-server` (`littlelink_k8s_image`)
+- **Route:** `www.<domain>` · `www.local.<domain>`, no Authelia
+- **Claims:** none (no PVC)
+- **Auto-deploy:** eligible (`k8s_autodeploy: true`)
+<!-- /generated_from -->
+
+- **Digest-pinned since 2026-08-06** so a k8s rollout re-pull can't silently change what
+  runs; the `:latest` tag is kept alongside the digest so Renovate's `k8s-defaults` manager
+  still tracks it.
+- **Eligible for auto-deploy because** it is stateless (`RollingUpdate`, no PVC), digest-pinned
+  and readinessProbe-backed.
 
 ## Editing
 - Image bump: `defaults/main.yml` (`littlelink_k8s_image`).

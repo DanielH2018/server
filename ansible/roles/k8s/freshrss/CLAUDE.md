@@ -3,13 +3,20 @@
 FreshRSS with a small nginx feed-cache sidecar. See repo-root `CLAUDE.md`.
 
 ## At a glance
-- **Images:** `lscr.io/linuxserver/freshrss:latest` + `nginx:alpine` (feed cache)
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
+- **Deploy tag:** `--tags "freshrss"`
+- **Images:** `lscr.io/linuxserver/freshrss` (`freshrss_k8s_image`), `nginx`
+  (`freshrss_k8s_cache_image`)
+- **Route:** `freshrss.<domain>` · `freshrss.local.<domain>`, Authelia one_factor
+- **Claim:** `freshrss-config` (weekly -> B2 (default target))
+- **Auto-deploy:** eligible (`k8s_autodeploy: true`)
+<!-- /generated_from -->
+
+- **The nginx sidecar is the feed cache.**
 - **Host: daniel-box (k8s), since 2026-08-05 — slice 2.** This role's ConfigMap embeds
   `files/nginx-feed-cache.conf`. Edit the cache conf / extensions HERE; deploy with
   `--tags freshrss` from daniel-box.
-- **Port:** 80 · **URL:** `freshrss.<domain>` (Authelia: yes; forwards to the cluster via
-  `bridge_hostname`)
-- **Config in:** `ansible/inventory/host_vars/daniel-box.yml` → `containers_list`
+- **Port:** 80
 
 ## Notable
 - Bundles FreshRSS extensions shipped in `files/`: Karakeep button, Wallabag button,

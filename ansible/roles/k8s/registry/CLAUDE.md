@@ -5,17 +5,26 @@ n8n, homelab-mcp, ical-proxy, nut, pi-peer-backup and code-server pull without a
 registry round trip. See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
-- **Deploy tag:** `--tags "registry"`.
-- **No route, no Authelia** — an infra role with no IngressRoute.
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
+- **Deploy tag:** `--tags "registry"`
+- **Images:** `registry` (`registry_k8s_image`), `gcr.io/go-containerregistry/crane`
+  (`registry_k8s_crane_image`), `alpine` (`registry_k8s_netpol_probe_image`)
+- **Route:** none (no `templates/ingressroute.yaml.j2`)
+- **Claim:** `registry-data` (no backup (StorageClass longhorn-nobackup))
+- **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — dependency edges — image-supply path
+  for n8n/homelab-mcp/ical-proxy/nut/pi-peer-backup/code-server; no intra-tick ordering. ALSO
+  Recreate + its own PVC (blob store) — two independent reasons. COUPLING NOTE for a future
+  promotion: a revert drops recently-pushed digests from the blob store while nodes that
+  already pulled them keep running until their next pull 404s
+<!-- /generated_from -->
+
 - **No `REGISTRY_AUTH`.** Network reachability to `k8s_registry_port` IS the access
   control: `templates/networkpolicy.yaml.j2` admits only two ingress rules, keyed off
   the node's own `cni0`/`flannel.1` gateway address (containerd's pulls arrive SNAT'd
   to it, so a podSelector can't admit them — only an `ipBlock` can).
-- **Claim:** `registry-data`, `longhorn-nobackup`, 10Gi. Every stored image rebuilds
-  from a Dockerfile in this repo, so backing it up would spend B2 transactions on
-  bytes a rebuild regenerates.
-- **`k8s_autodeploy: false`** — dependency edges (no intra-tick ordering against the
-  services it feeds) plus `Recreate` + its own PVC. Reason is in `defaults/main.yml`.
+- **`registry-data` is `longhorn-nobackup`**, 10Gi. Every stored image rebuilds from a
+  Dockerfile in this repo, so backing it up would spend B2 transactions on bytes a rebuild
+  regenerates.
 
 ## Notable
 - A weekly garbage collection (`gc-job.yaml.j2`, Sunday 04:20) takes the registry

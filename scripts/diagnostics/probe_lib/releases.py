@@ -325,8 +325,8 @@ def _deploy_plane_stale(commit, services, changed, context):
     such a change reaches (`narrow_broad`, the DECIDED at `deploy_narrow.denylisted_in`), so
     this asks the same question per path, from the record's commit to `ref`.
 
-    A path no rule can attribute -- a key the play itself reads, a removed `containers_list`
-    entry, `hosts.ini` -- marks EVERY service sharing `commit` stale, with the refusal as the
+    A path no rule can attribute -- a key the play itself reads, `hosts.ini` -- marks EVERY
+    service sharing `commit` stale, with the refusal as the
     reason. That is the tick's own answer to the same doubt: it runs the whole play, which
     re-stamps every service, so the set this marks is exactly the set that run refreshes. It
     is not the #1672 shape -- a deploy-time change flagging the fleet with no tag able to
@@ -334,6 +334,9 @@ def _deploy_plane_stale(commit, services, changed, context):
     only records left behind it are ones a hand deploy from an older tree wrote, which is the
     incident this module's docstring opens with. Measured over the 600 commits to
     2026-09-18: two refusals (a play-read key, a removed entry), at most 1.7s per record commit.
+    The tick honoured that contract for a range carrying ONLY the deploy plane until
+    2026-09-18: a mixed range planned the setup half alone, and a removed Pi entry beside a
+    `roles/setup/` edit left the fleet marked here with no run to clear it (#2046).
 
     `context` is built by the caller, once per `compute_stale`, because it reads host_vars
     at its ref and walks the role tree. Only called when the range changed a census path, so
@@ -530,6 +533,41 @@ def format_stale_only(stale, missing):
     return "\n".join(lines), 1
 
 
+# The bridge pod ships `files/`, so the formatter lives there and probe.py reaches it the way
+# the tests do: by putting that directory on sys.path. Bootstrapped here rather than at the
+# top of the module because only `--kuma` needs it.
+_BRIDGE_FILES = REPO_ROOT / "ansible/roles/k8s/monitor-bridge/files"
+
+# Path prefixes a reason carries that add nothing inside a 900-char push message.
+_REASON_NOISE = re.compile(r"ansible/(?:inventory|roles(?:/k8s)?)/")
+
+
+def _kuma_reason(reason):
+    return _REASON_NOISE.sub("", reason.removeprefix("changed since applied: "))
+
+
+def format_stale_kuma(stale, missing):
+    """The `--stale-only` verdict as one line grouped by reason, for the Kuma push. Pure.
+
+    57 services carrying one identical reason are one group, not 57 lines (#2013); the group
+    lists the names once. Shares the exit code contract with `format_stale_only`.
+    """
+    items = {svc: _kuma_reason(reason) for svc, reason in stale.items()}
+    items.update(dict.fromkeys(missing, "no release record"))
+    if not items:
+        return "0 services stale; every known k8s service has a current record.", 0
+    if str(_BRIDGE_FILES) not in _sys.path:
+        _sys.path.insert(0, str(_BRIDGE_FILES))
+    from bridge import msgfmt
+
+    return (
+        msgfmt.format_down(
+            "service", "stale", items, details="probe.py releases --stale-only"
+        ),
+        1,
+    )
+
+
 def run_releases(ns):
     """Print the release records (or, with `--json`, raw JSON) and return the exit code.
 
@@ -543,7 +581,8 @@ def run_releases(ns):
     if getattr(ns, "stale_only", False):
         stale = compute_stale(records)
         missing = missing_services(records)
-        text, code = format_stale_only(stale, missing)
+        render = format_stale_kuma if getattr(ns, "kuma", False) else format_stale_only
+        text, code = render(stale, missing)
         print(text)
         return code
     merged = merged_commits(r.get("commit") for r in records)

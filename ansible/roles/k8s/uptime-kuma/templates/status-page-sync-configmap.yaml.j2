@@ -27,7 +27,7 @@ data:
     {{ kuma_status_page_groups | tojson }}
   index.json: |
     {
-{% for autokuma_id, declaration in (kuma_declarations | default({})).items() if declaration.type != 'notification' %}
+{% for autokuma_id, declaration in (kuma_declarations | default({})).items() if declaration.type not in ('notification', 'tag') %}
       {{ autokuma_id | tojson }}: {{ declaration.name | tojson }}{{ "," if not loop.last }}
 {% endfor %}
     }

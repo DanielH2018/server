@@ -5,10 +5,17 @@ per-workload override under `templates/networkpolicy-*.yaml.j2` for a service th
 tighter or looser allow-list than the baseline. Deploys no workload of its own.
 
 ## At a glance
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
+- **Deploy tag:** `--tags "netpol-baseline"`
+- **Image:** `alpine` (`netpol_baseline_probe_image`)
+- **Route:** none (no `templates/ingressroute.yaml.j2`)
+- **Claims:** none (no PVC)
+- **Auto-deploy:** eligible (`k8s_autodeploy: true`)
+<!-- /generated_from -->
+
 - **Renders nothing runnable** — NetworkPolicy objects plus five probe Jobs
   (`netpol-probe*-job.yaml.j2`) that verify the policy actually fenced what it claims to.
-- **Deploy tag:** `--tags "netpol-baseline"`. `k8s_autodeploy: true` — an image-only diff
-  touches only the pinned probe image; the policies re-apply unchanged and the role hard-fails
+- **Auto-deploy-eligible because** an image-only diff touches only the pinned probe image; the policies re-apply unchanged and the role hard-fails
   if the live exempt set has drifted from `netpol_baseline_exempt_workloads`.
 - **`netpol_baseline_scope: namespace`** — the baseline selects every pod in the namespace
   EXCEPT one carrying `netpol-baseline-exempt` (a workload with its own, tighter policy). Set

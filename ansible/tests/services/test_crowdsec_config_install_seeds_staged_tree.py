@@ -21,14 +21,9 @@ What this does NOT prove: that the seed actually succeeds in the image. That evi
 restart count on a live pod after a deploy.
 """
 
-import sys
-
 import pytest
-from _helpers import REPO
 from _k8s_render import rendered_docs
 
-_REPO = REPO
-sys.path.insert(0, str(_REPO / "scripts"))
 
 # Both pods carrying the sidecar. A rename or a third pod that drops the rsync must fail this
 # rather than shrink the census to nothing and pass an all() over an empty set.

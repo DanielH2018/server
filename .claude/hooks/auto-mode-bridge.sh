@@ -1,4 +1,14 @@
 #!/bin/bash
+# gen-hooks: register
+#   event: PostToolUseFailure
+#   matcher: Bash
+#   timeout: 10
+#   order: 10
+# gen-hooks: register
+#   event: PermissionDenied
+#   matcher: Bash
+#   timeout: 10
+#   order: 10
 # PermissionDenied(Bash) + PostToolUseFailure(Bash) hook — see auto-mode-bridge.py for what
 # each event is for. Delegates to Python (exec keeps the hook's stdin JSON). No output means
 # the denial or the failure is passed through unchanged, which is the safe default for both.

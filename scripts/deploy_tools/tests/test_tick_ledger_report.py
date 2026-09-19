@@ -13,17 +13,13 @@ import sys
 
 import pytest
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 from lib import yaml_fast
 
 import backfill_staging_gate as bf
+import deploy_staging as ds
 
 REPO = pathlib.Path(__file__).resolve().parents[3]
 ROLE = REPO / "ansible/roles/setup/gitops_deploy"
-
-sys.path.insert(0, str(ROLE / "files"))
-
-import deploy_staging as ds  # noqa: E402
 
 
 def _tick(outcome: str, at: str = "2026-09-02T22:00:00-05:00") -> dict:
@@ -63,15 +59,14 @@ def test_every_outcome_a_tick_can_emit_is_one_the_backfill_defines():
 
 
 def test_the_tick_ledger_constant_matches_the_ansible_default():
-    """The deployer needs a module-level literal (the state_dir guard requires it), so the path
-    exists in two places. Read the YAML rather than restating it in a third."""
+    """The deployer writes the ledger through `DeployerState`, and the backfill unit is
+    handed the path by the Ansible default, so the two are declared in two trees. Read the
+    YAML rather than restating it in a third."""
+    import deploy_state
+
     defaults = yaml_fast.safe_load((ROLE / "defaults/main.yml").read_text())
-    literal = next(
-        line.split('"')[1]
-        for line in (ROLE / "files/gitops_deploy.py").read_text().splitlines()
-        if line.startswith("STAGING_TICK_LEDGER = ")
-    )
-    assert literal == defaults["gitops_deploy_staging_tick_ledger"]
+    live = deploy_state.DeployerState(deploy_state.STATE_DIR)
+    assert live.path("staging_ticks") == defaults["gitops_deploy_staging_tick_ledger"]
 
 
 def test_the_two_ledgers_are_different_files():
@@ -88,7 +83,6 @@ def test_what_the_deployer_writes_is_what_the_backfill_reads(tmp_path, monkeypat
     """The one end-to-end tie. Every other test here builds the row by hand, so a field the
     recorder renamed would pass all of them and only fail on the host, an hour later, silently —
     `load_tick_ledger` skips a row it cannot construct rather than raising."""
-    sys.path.insert(0, str(ROLE / "files"))
     # The recorder is the staging gate's I/O shell, which lives with the handlers rather than
     # in `deploy_staging` — that module stays import-pure so `deploy_logic` (and therefore
     # `land.sh`) can be imported without `host_lib` on the path.

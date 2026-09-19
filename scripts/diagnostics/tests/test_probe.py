@@ -7,8 +7,6 @@ argparse surface in `cli_parser`, and the formatters each `run_*` prints through
 builds for each streaming subcommand.
 """
 
-import re
-
 import pytest
 
 from diagnostics.probe_lib import arr
@@ -53,23 +51,6 @@ def test_scrutiny_url():
     )
 
 
-def test_pi_url():
-    assert core.pi_url("fs") == "http://daniel-pi.lan:61208/api/4/fs"
-
-
-def test_pi_ip_reads_real_inventory():
-    # hosts.ini is plaintext, not a secret — same class of dead-path bug as
-    # test_verify_automations_path_exists below: a wrong path or regex would only ever
-    # be caught by opening the real file.
-    ip = core.pi_ip()
-    assert re.match(r"^\d+\.\d+\.\d+\.\d+$", ip), ip
-
-
-def test_pi_resolve_pins_the_lan_ip(monkeypatch):
-    monkeypatch.setattr(core, "pi_ip", lambda: "10.0.0.139")
-    assert core.pi_resolve() == "daniel-pi.lan:61208:10.0.0.139"
-
-
 def test_curl_argv():
     assert core.curl_argv("http://x") == [
         "curl",
@@ -95,9 +76,8 @@ def test_parse_ip_returns_none_when_no_ip():
     assert health_docker.parse_ip("   \n") is None
 
 
-def test_k8s_service_ip_argv_targets_the_service():
-    argv = health_docker.k8s_service_ip_argv("sonarr", "homelab")
-    assert argv[:2] == ["k3s", "kubectl"]
+def test_k8s_service_ip_args_target_the_service():
+    argv = health_docker.k8s_service_ip_args("sonarr", "homelab")
     assert argv[-1] == "jsonpath={.spec.clusterIP}"
     assert "sonarr" in argv
     assert "homelab" in argv
@@ -221,6 +201,15 @@ def test_monitors_subcommand_parses():
     assert ns.cmd == "monitors"
 
 
+def test_pi_subcommand_accepts_only_containers():
+    # `pi fs`/`pi mem` streamed the glances API until it retired (#2004); a stale habit must
+    # fail at the parser rather than reach a curl that no longer exists.
+    p = cli_parser._build_parser()
+    assert p.parse_args(["pi", "containers"]).subpath == "containers"
+    with pytest.raises(SystemExit):
+        p.parse_args(["pi", "fs"])
+
+
 def test_format_loki_prints_lines_oldest_first_across_streams():
     data = {
         "data": {
@@ -321,13 +310,13 @@ def test_resolve_arr_ip_uses_kubectl_not_docker(monkeypatch):
 
     calls = []
 
-    def fake_run(argv, **kwargs):
+    def fake_run(cluster, *argv, **kwargs):
         calls.append(argv)
         return FakeResult()
 
-    monkeypatch.setattr(health_docker.subprocess, "run", fake_run)
+    monkeypatch.setattr(health_docker, "kubectl", fake_run)
     assert arr.resolve_arr_ip("sonarr") == "10.43.114.186"
-    assert calls == [health_docker.k8s_service_ip_argv("sonarr", "homelab")]
+    assert calls == [tuple(health_docker.k8s_service_ip_args("sonarr", "homelab"))]
     assert "docker" not in calls[0]
 
 
@@ -340,7 +329,7 @@ def test_resolve_arr_ip_raises_on_kubectl_failure(monkeypatch):
         stderr = 'services "sonarr" not found'
 
     monkeypatch.setattr(
-        health_docker.subprocess, "run", lambda argv, **kwargs: FakeResult()
+        health_docker, "kubectl", lambda cluster, *argv, **kwargs: FakeResult()
     )
     with pytest.raises(SystemExit) as excinfo:
         arr.resolve_arr_ip("sonarr")
@@ -356,7 +345,7 @@ def test_resolve_arr_ip_raises_on_empty_cluster_ip(monkeypatch):
         stderr = ""
 
     monkeypatch.setattr(
-        health_docker.subprocess, "run", lambda argv, **kwargs: FakeResult()
+        health_docker, "kubectl", lambda cluster, *argv, **kwargs: FakeResult()
     )
     with pytest.raises(SystemExit) as excinfo:
         arr.resolve_arr_ip("sonarr")

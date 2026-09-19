@@ -1,4 +1,5 @@
 {% from 'container-resources.yml.j2' import container_resources with context %}
+{% from 'workload-shell.yml.j2' import pod_shell with context %}
 ---
 # KL3: the cluster pod-log shipper, Grafana Alloy since 2026-09-02 (Promtail reached end of
 # life on 2026-03-02). A DaemonSet (not a Deployment) so a joining node adds its own pod and
@@ -51,9 +52,7 @@ spec:
         app: alloy
         netpol-baseline: enforced
     spec:
-      enableServiceLinks: false
-      serviceAccountName: alloy
-      priorityClassName: homelab-best-effort
+{{ pod_shell('homelab-best-effort', service_account='alloy') }}
       containers:
         - name: alloy
           image: {{ loki_homelab_alloy_image }}

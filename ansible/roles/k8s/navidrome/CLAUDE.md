@@ -5,14 +5,22 @@ There is nothing for it to serve yet: the media volume holds books, movies and T
 directory, so the library mount is an `emptyDir`.
 
 ## At a glance
-- **Image:** `navidrome_k8s_image`, pinned `tag@sha256`.
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
+- **Deploy tag:** `--tags "navidrome"`
+- **Image:** `ghcr.io/navidrome/navidrome` (`navidrome_k8s_image`)
+- **Route:** `navidrome.<domain>` · `navidrome.local.<domain>`, Authelia one_factor
+- **Claim:** `navidrome-data` (weekly -> B2 (default target))
+- **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — parked at replicas 0 — an
+  auto-applied image bump would never reach a pod
+<!-- /generated_from -->
+
+- **Pinned `tag@sha256`.**
 - **Host:** daniel-server preferred (`node_affinity_preference`), not pinned — schedules
   elsewhere if daniel-server is cordoned or full.
-- **Route:** `navidrome.<domain>` · Authelia — **not rendered while parked**, see below.
-- **Persists:** `navidrome-data` PVC (`navidrome_k8s_claim`), Longhorn, 2Gi — SQLite index and
-  transcoding cache, sized as headroom rather than a measurement.
-- **Deploy tag:** `--tags "navidrome"`. Denylisted from auto-deploy — parked at
-  `navidrome_k8s_replicas: 0`, so an auto-applied image bump would never reach a pod.
+- **The route is not rendered while parked**, see below.
+- **`navidrome-data`** (`navidrome_k8s_claim`), Longhorn, 2Gi — SQLite index and transcoding
+  cache, sized as headroom rather than a measurement.
+- **Parked at `navidrome_k8s_replicas: 0`**, which is what the denylist reason above means.
 
 ## Notable
 - **Parked, not scaled live.** `defaults/main.yml` sets `navidrome_k8s_replicas: 0`

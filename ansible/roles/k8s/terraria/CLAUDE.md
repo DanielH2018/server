@@ -5,8 +5,17 @@ irreplaceable data kopia still uniquely protected; the Docker role is in
 `roles/containers/archive/terraria`). See repo-root `CLAUDE.md`.
 
 ## At a glance
-- **Image:** built in-cluster (`<registry>/terraria:latest`) from `templates/Dockerfile.j2`,
-  since 2026-08-31 — a single `chown` layer whose only purpose is to let the server run as a
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
+- **Deploy tag:** `--tags "terraria"`
+- **Image:** `<k8s_registry_pull_host>/terraria` (`terraria_k8s_image`)
+- **Route:** none (no `templates/ingressroute.yaml.j2`)
+- **Claim:** `terraria-config` (weekly -> B2 (default target))
+- **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — two reasons: (1) probe-less — no
+  readinessProbe; (2) migrating state — Recreate + RWO volume-claim PVC holding irreplaceable
+  worlds
+<!-- /generated_from -->
+
+- **Built in-cluster** from `templates/Dockerfile.j2`, since 2026-08-31 — a single `chown` layer whose only purpose is to let the server run as a
   non-root uid. The **digest pin did not go away**: it is the `FROM` line of that Dockerfile,
   still `beardedio/terraria:vanilla-latest@sha256:901bc117…` (2026-08-13). Upstream publishes no
   pinned vanilla versions, so `vanilla-latest` is the only tag available and the digest is what
@@ -29,8 +38,7 @@ irreplaceable data kopia still uniquely protected; the Docker role is in
   Debian's `/root` is 0700, so the stock image CrashLoopBackOffs under `runAsUser: 1000`. The
   image is now built in-cluster from `templates/Dockerfile.j2`, a single `chown` layer over the
   pinned upstream digest. `stdin`/`tty` kept so the server console stays attachable
-- **Config in:** `ansible/inventory/host_vars/daniel-box.yml` → `containers_list`
-  (`name: terraria`, no port/hostname — not Traefik-routed) and `defaults/main.yml`
+- **Not Traefik-routed**: the `containers_list` entry carries no port or hostname.
 
 ## Notable
 - **Logs ship via the loki-homelab promtail DaemonSet** (`{container="terraria"}`,

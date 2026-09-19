@@ -74,8 +74,6 @@ from infra_map.live import (
     collect_cluster,
     collect_docker,
     collect_k8s,
-    find_kubeconfig,
-    find_tool,
     parse_backup_targets,
     parse_docker_ps,
     parse_kubectl_workloads,
@@ -92,6 +90,8 @@ from infra_map.model import (
     services_on_host,
 )
 from infra_map.render import group_services, render_html, render_svg
+
+from lib.kubectl import find_kubeconfig, find_tool
 
 # Re-exported so `gen_infra_map.<name>` keeps working for the cron entry point,
 # the tests, and anything else that treats this module as the public surface.

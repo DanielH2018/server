@@ -10,9 +10,10 @@ Run: uv run pytest scripts/infra_map/tests/test_infra_map_live.py
 """
 
 import json
-from pathlib import Path
+import subprocess
 
 import pytest
+from lib import kubectl as kubectl_lib
 from lib import yaml_fast
 
 import gen_infra_map as g
@@ -75,43 +76,77 @@ def test_parse_kubectl_workloads_reads_a_statefulset_like_a_deployment():
     assert parsed[("homelab", "db")]["ready"] == 1
 
 
-def test_collect_k8s_asks_for_every_long_running_kind(monkeypatch):
+PROD_NODES = json.dumps(
+    {"items": [{"metadata": {"name": n}} for n in ("daniel-box", "daniel-server")]}
+)
+
+
+class _FakeCluster:
+    """Discovery resolves and `get nodes` answers as prod; every other call returns `{}`.
+
+    `tools` is the `lib.kubectl.Tools` to hand the collector, `seen` the argvs it ran. The
+    collector goes through the shared invoker since #2062, so its seams are the invoker's,
+    not a private `_run`.
+    """
+
+    def __init__(self, kubeconfig, binary="/usr/local/bin/kubectl"):
+        self.seen = []
+        self.tools = kubectl_lib.Tools(
+            run=self._run,
+            find_tool=lambda name: binary,
+            find_kubeconfig=lambda: kubeconfig,
+        )
+
+    def _run(self, argv, timeout):
+        self.seen.append(argv)
+        stdout = PROD_NODES if argv[-4:] == ["get", "nodes", "-o", "json"] else "{}"
+        return subprocess.CompletedProcess(argv, 0, stdout, "")
+
+
+@pytest.fixture
+def fake_cluster(tmp_path):
+    cfg = tmp_path / "kube.yaml"
+    cfg.write_text("cfg")
+    kubectl_lib.forget_served_cluster()
+    yield _FakeCluster(cfg)
+    kubectl_lib.forget_served_cluster()
+
+
+def test_collect_k8s_asks_for_every_long_running_kind(fake_cluster):
     """The inventory excuses a role that declares none of these kinds, so the
     collector must fetch all of them or a declared kind becomes a false Missing."""
-    seen = []
-
-    def fake_run(argv, timeout):
-        seen.append(argv)
-        return True, json.dumps({"items": []})
-
-    monkeypatch.setattr(live, "find_tool", lambda name: "/usr/bin/kubectl")
-    monkeypatch.setattr(live, "find_kubeconfig", lambda: Path("/tmp/kubeconfig"))
-    monkeypatch.setattr(live, "_run", fake_run)
-    ok, workloads, err = live.collect_k8s("box", "box")
+    ok, workloads, err = live.collect_k8s(
+        "daniel-box", "daniel-box", fake_cluster.tools
+    )
     assert ok and workloads == {} and err == ""
-    requested = set(seen[0][seen[0].index("get") + 1].split(","))
+    argv = fake_cluster.seen[-1]
+    requested = set(argv[argv.index("get") + 1].split(","))
     assert requested == {k.lower() + "s" for k in g.LONG_RUNNING_KINDS}
 
 
-def test_find_tool_looks_beyond_an_impoverished_path(monkeypatch):
-    """The cron-PATH case: /usr/local/bin must be searched even when PATH omits it."""
-    kubectl = Path("/usr/local/bin/kubectl")
-    if not kubectl.exists():
-        pytest.skip("kubectl not installed at the path this guards")
-    monkeypatch.setenv("PATH", "/nonexistent")
-    assert g.find_tool("kubectl") == str(kubectl)
+def test_collect_k8s_names_the_cluster_its_host_stands_in(fake_cluster):
+    """A host in no known cluster gets no kubectl at all — there is no cluster to name."""
+    ok, workloads, err = live.collect_k8s("elsewhere", "elsewhere", fake_cluster.tools)
+    assert (ok, workloads) == (False, {}) and "no known cluster" in err
+    assert fake_cluster.seen == []
 
 
-def test_find_tool_returns_none_for_a_genuinely_absent_binary(monkeypatch):
-    monkeypatch.setenv("PATH", "/nonexistent")
-    assert g.find_tool("definitely-not-a-real-binary") is None
+def test_collect_k8s_reports_a_wrong_cluster_as_an_observation(fake_cluster):
+    """The refusal renders on the page as the error rather than blinding the map.
+
+    daniel-stage names the stage cluster, and the fake's nodes are production's.
+    """
+    ok, workloads, err = live.collect_k8s(
+        "daniel-stage", "daniel-stage", fake_cluster.tools
+    )
+    assert (ok, workloads) == (False, {}) and "not stage" in err
 
 
-def test_collect_k8s_raises_rather_than_reporting_a_clean_empty_result(monkeypatch):
+def test_collect_k8s_raises_rather_than_reporting_a_clean_empty_result(fake_cluster):
     """A missing binary is a broken setup, not 'the cluster has no deployments'."""
-    monkeypatch.setattr(live, "find_tool", lambda name: None)
+    tools = kubectl_lib.Tools(find_tool=lambda name: None)
     with pytest.raises(g.MissingToolError):
-        g.collect_k8s("box", "box")
+        g.collect_k8s("daniel-box", "daniel-box", tools)
 
 
 def test_collect_docker_raises_when_ssh_is_absent(monkeypatch):
@@ -120,56 +155,21 @@ def test_collect_docker_raises_when_ssh_is_absent(monkeypatch):
         g.collect_docker("daniel-server", "daniel-box")
 
 
-def test_find_kubeconfig_prefers_an_explicit_kubeconfig_env(monkeypatch, tmp_path):
-    explicit = tmp_path / "explicit.yaml"
-    explicit.write_text("cfg")
-    monkeypatch.setenv("KUBECONFIG", str(explicit))
-    assert g.find_kubeconfig() == explicit
-
-
-def test_find_kubeconfig_reads_kubeconfig_as_a_path_list(monkeypatch, tmp_path):
-    """KUBECONFIG is a colon-separated list; a bare Path() of it opens nothing."""
-    first, second = tmp_path / "a.yaml", tmp_path / "b.yaml"
-    second.write_text("cfg")
-    monkeypatch.setenv("KUBECONFIG", f"{first}:{second}")
-    assert g.find_kubeconfig() == second
-
-
-def test_find_kubeconfig_skips_an_unreadable_candidate(monkeypatch, tmp_path):
-    """The actual cron failure: the k3s default exists but is root-only 0640."""
-    unreadable = tmp_path / "root-only.yaml"
-    unreadable.write_text("cfg")
-    unreadable.chmod(0o000)
-    readable = tmp_path / "mine.yaml"
-    readable.write_text("cfg")
-    monkeypatch.setenv("KUBECONFIG", f"{unreadable}:{readable}")
-    assert g.find_kubeconfig() == readable
-
-
-def test_collect_k8s_raises_when_no_kubeconfig_is_readable(monkeypatch):
+def test_collect_k8s_raises_when_no_kubeconfig_is_readable(fake_cluster):
     """Must not degrade to 'declared only' — that renders as a healthy page."""
-    monkeypatch.setattr(live, "find_tool", lambda name: "/usr/local/bin/kubectl")
-    monkeypatch.setattr(live, "find_kubeconfig", lambda: None)
+    tools = kubectl_lib.Tools(
+        find_tool=lambda name: "/usr/local/bin/kubectl", find_kubeconfig=lambda: None
+    )
     with pytest.raises(g.MissingToolError):
-        g.collect_k8s("box", "box")
+        g.collect_k8s("daniel-box", "daniel-box", tools)
 
 
-def test_collect_k8s_passes_the_resolved_kubeconfig_to_kubectl(monkeypatch, tmp_path):
+def test_collect_k8s_passes_the_resolved_kubeconfig_to_kubectl(fake_cluster):
     """Explicit --kubeconfig is the point: kubectl's own lookup varies by caller."""
-    cfg = tmp_path / "kube.yaml"
-    cfg.write_text("cfg")
-    seen = {}
-
-    def fake_run(cmd, timeout):
-        seen["cmd"] = cmd
-        return True, json.dumps({"items": []})
-
-    monkeypatch.setattr(live, "find_tool", lambda name: "/usr/local/bin/kubectl")
-    monkeypatch.setattr(live, "find_kubeconfig", lambda: cfg)
-    monkeypatch.setattr(live, "_run", fake_run)
-    g.collect_k8s("box", "box")
-    assert "--kubeconfig" in seen["cmd"]
-    assert str(cfg) in seen["cmd"]
+    g.collect_k8s("daniel-box", "daniel-box", fake_cluster.tools)
+    argv = fake_cluster.seen[-1]
+    assert "--kubeconfig" in argv
+    assert argv[argv.index("--kubeconfig") + 1].endswith("kube.yaml")
 
 
 def test_refresh_cron_sets_kubeconfig():

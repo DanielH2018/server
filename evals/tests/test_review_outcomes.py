@@ -8,10 +8,8 @@ via review_metrics.validate_row rather than trusting the committed file to stay 
 """
 
 import json
-import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts" / "dev"))
 
 from review_metrics import validate_row
 

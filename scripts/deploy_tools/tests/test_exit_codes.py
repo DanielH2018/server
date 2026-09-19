@@ -11,12 +11,10 @@ and a set that quietly gained one are both invisible from a `<=` assertion alone
 Run: uv run pytest scripts/deploy_tools/tests/test_exit_codes.py
 """
 
-import sys
 from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
 
 from deploy_tools import exit_codes as ec
 
@@ -31,6 +29,7 @@ def test_the_no_verdict_set_is_exactly_the_refusals_by_name():
         ec.DEPLOY_LOCK_UNAVAILABLE,
         ec.DEPLOY_SNAPSHOT_FAILED,
         ec.DEPLOY_NO_HOSTS,
+        ec.DEPLOY_LOCK_PLAN_FAILED,
     }
 
 
@@ -44,6 +43,7 @@ def test_the_no_verdict_set_is_exactly_the_refusals_by_name():
         "DEPLOY_LOCK_UNAVAILABLE",
         "DEPLOY_SNAPSHOT_FAILED",
         "DEPLOY_NO_HOSTS",
+        "DEPLOY_LOCK_PLAN_FAILED",
     ],
 )
 def test_each_named_refusal_is_in_the_no_verdict_set(name):

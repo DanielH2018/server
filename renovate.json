@@ -433,6 +433,20 @@
       "automerge": false
     },
     {
+      "description": "The denylist marker for a denied role's BASE image (issue #2117). The rule above is scoped to the custom.regex manager over defaults/main.yml, so it never sees a `FROM` pin in a role's templates/Dockerfile*.j2 — Renovate's built-in dockerfile manager finds those. Every dockerfile-manager bump is already manual (both automerge rules are custom.regex-only, so such a PR reads `Automerge: Disabled by config`); what was missing was the TITLE marker: the unattended renovate_agent reads only the PR title to leave a denied role's bump for a person (#1939), and PR #2115 — nut's debian:bookworm-slim digest — arrived bare, so the title said land it while the role said a person lands it. matchFileNames is the denylist restricted to the roles that carry a Dockerfile, one glob per such role, and ansible/tests/deploy/test_renovate_automerge_follows_the_autodeploy_denylist.py asserts the two agree — flip a role's flag or add a Dockerfile to a denied role and the guard names the line. n8n-images is absent by design: it is eligible, and the n8n per-package rule below carries the marker through the build coupling onto n8n. `{{depName}}` groups per base image, like the rule above; two denied roles sharing one base image would land in one PR touching both roles, which no pair does today (valheim is the only denied role on alpine:3.24). `automerge: false` is stated rather than inherited so the tell survives a later change to the automerge rules' scope.",
+      "matchManagers": [
+        "dockerfile"
+      ],
+      "matchFileNames": [
+        "ansible/roles/k8s/code-server/templates/Dockerfile*.j2",
+        "ansible/roles/k8s/nut/templates/Dockerfile*.j2",
+        "ansible/roles/k8s/terraria/templates/Dockerfile*.j2",
+        "ansible/roles/k8s/valheim/templates/Dockerfile*.j2"
+      ],
+      "groupName": "k8s base image {{depName}} (manual — k8s_autodeploy: false, so the tick applies nothing; land.sh rebuilds and deploys it)",
+      "automerge": false
+    },
+    {
       "description": "LinuxServer.io images tag as <upstream-version>-lsNN (e.g. 4.0.17.2952-ls312). Regex versioning both orders these correctly and rejects non-release tags (commit hashes like 438eee94-ls46, nightlies) as invalid, so they're never offered. Optional 4th version part -> build, OS suffix (ubu2404) -> compatibility, -lsNN -> revision.",
       "matchDatasources": [
         "docker"

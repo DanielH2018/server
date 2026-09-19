@@ -4,10 +4,16 @@ The landing dashboard (gethomepage) with service tiles, widgets and bookmarks. L
 daniel-box since E3 (2026-08-12). See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
-- **Image:** `ghcr.io/gethomepage/homepage:latest`
-- **URL:** `homepage.<domain>` · **Depends on:** traefik, authelia
-- **Config in:** `ansible/inventory/host_vars/daniel-box.yml` → `containers_list`
-- **Deploy:** `uv run ansible-playbook ansible/deploy.yml --tags "homepage"`
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
+- **Deploy tag:** `--tags "homepage"`
+- **Images:** `ghcr.io/gethomepage/homepage` (`homepage_k8s_image`), `alpine`
+  (`homepage_k8s_init_image`)
+- **Route:** `homepage.<domain>` · `homepage.local.<domain>`, Authelia one_factor
+- **Claims:** none (no PVC)
+- **Auto-deploy:** eligible (`k8s_autodeploy: true`)
+<!-- /generated_from -->
+
+- **Depends on:** traefik, authelia
 
 ## Where the config lives
 All of it renders into one Secret (`config-secret.yaml.j2`), which mounts read-only:

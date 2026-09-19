@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/backlog.py
-generated_at: 2026-09-18 12:39 UTC
-generated_sha: c49d5c4a4
+generated_at: 2026-09-19 06:17 UTC
+generated_sha: f9b05e4ae
 ---
 
 !!! warning "Generated file — do not edit"
@@ -16,11 +16,7 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 
 | # | Severity | Kind | Domain | Finding | First seen | Re-observed | Claim | Verify-by |
 |---|---|---|---|---|---|---|---|---|
-| [#1873](https://github.com/DanielH2018/server/issues/1873) | medium | improvement | cicd | Drift-enforcement audit 2026-09-17: tracking issue for #1851-#1860 — *no vetted remediation* | 2026-09-17 | 0 | - | ✓ |
-| [#1962](https://github.com/DanielH2018/server/issues/1962) | medium | gap | cicd | GitOps broad-plane narrowing applies denied roles reached through a shared inventory key | 2026-09-18 | 0 | - | ✓ |
+| [#2077](https://github.com/DanielH2018/server/issues/2077) | high | gap | security | Rotate monitor_discord_webhook_url: AutoKuma printed it into Loki on 2026-09-18 | 2026-09-18 | 0 | - | - |
 | [#1469](https://github.com/DanielH2018/server/issues/1469) | low | gap | container | Restore the Valheim mods disabled by the 1.0 break | 2026-09-09 | 0 | - | ✓ |
-| [#1898](https://github.com/DanielH2018/server/issues/1898) | low | improvement | cicd | claude-guard slice 5, full: consolidate the Bash hooks around the package (policy decision first) — *no vetted remediation* | 2026-09-17 | 0 | worktree-bridge-cse_01RiSmz1nPEE4wQnfjctzH1T | ✓ |
-| [#1963](https://github.com/DanielH2018/server/issues/1963) | low | gap | cicd | renovate_agent still lands the crowdsec bouncer plugin bump, a traefik redeploy, unattended | 2026-09-18 | 0 | - | ✓ |
-| [#1967](https://github.com/DanielH2018/server/issues/1967) | low | improvement | container | alloy on daniel-pi takes a third of the host's major faults: global reclaim swaps its heap out and every GC cycle faults it back | 2026-09-18 | 0 | worktree-alloy-gogc-1967 | ✓ |
-| [#1974](https://github.com/DanielH2018/server/issues/1974) | low | gap | network | Origin-direct requests reach the public Host rules without Cloudflare and share one rate-limit bucket | 2026-09-18 | 0 | - | ✓ |
-| [#1976](https://github.com/DanielH2018/server/issues/1976) | low | improvement | backup-observability | Swallowed-verdicts pod selector keys on the generic container name `pull`, pinned against one template only | 2026-09-18 | 0 | - | ✓ |
+| [#2078](https://github.com/DanielH2018/server/issues/2078) | low | improvement | cicd | Export READONLY_BASE from claude_guard and move the dmesg guard under the shared-verdict replay | 2026-09-18 | 0 | - | ✓ |
+| [#2081](https://github.com/DanielH2018/server/issues/2081) | low | improvement | container | Apply the dockerd/containerd GOGC=off drop-ins on daniel-pi one a day and grade each the day after | 2026-09-18 | 0 | - | ✓ |

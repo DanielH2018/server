@@ -8,16 +8,13 @@ survive a restart, and the fact that it still fits inside one cron period.
 """
 
 import re
-import sys as _sys
 from pathlib import Path as _Path
 
 import yaml
+from validate.k8s_manifests import make_env, make_lookup, register_ansible_filters
 
 ROLE = _Path(__file__).resolve().parents[1]
 REPO = ROLE.parents[3]
-_sys.path.insert(0, str(REPO / "scripts"))
-
-from validate.k8s_manifests import make_env, make_lookup, register_ansible_filters  # noqa: E402
 
 SHARED_TEMPLATES = REPO / "ansible" / "templates"
 DEFAULTS = yaml.safe_load((ROLE / "defaults" / "main.yml").read_text())

@@ -1,9 +1,9 @@
 """daniel-pi: resource pressure, and the ports arm that catches a detached container.
 
-`pi_pressure` reads load, memory and disk headroom off the Pi's glances API. The ports arm is
-separate: a Pi reboot leaves containers `Up (healthy)` with an empty network, so the published
-port is dead while every container-level signal reads fine. It leads the message when it fires,
-and a failed attribution fetch downgrades the diagnosis rather than the verdict.
+`pi_pressure` reads load, memory and disk headroom off the Pi's own node-exporter series in
+Prometheus (glances until 2026-09-18, #2004). The ports arm is separate: a Pi reboot leaves
+containers `Up (healthy)` with an empty network, so the published port is dead while every
+container-level signal reads fine. It leads the message when it fires.
 """
 
 from dataclasses import replace
@@ -18,131 +18,148 @@ import checks.host_edge
 MB = 1048576
 
 
-LOAD_OK = {"min5": 0.8, "cpucore": 4}
-
-
-MEM_OK = {"available": 150 * MB}
-
-
-# Glances in its container sees its own bind-mounts (/etc/resolv.conf etc.), all backed
-# by the SD card device with the HOST fs usage percent — so entries are keyed by
-# device_name, and one device appears many times.
-FS_OK = [
-    {"device_name": "/dev/mmcblk0p2", "mnt_point": "/etc/resolv.conf", "percent": 3.3},
-    {"device_name": "/dev/mmcblk0p2", "mnt_point": "/etc/hostname", "percent": 3.3},
-]
+DISK_OK = {"/dev/mmcblk0p2": 3.3, "/dev/mmcblk0p1": 12.0}
 
 
 def test_pi_pressure_ok():
-    ok, msg = checks.host_edge.pi_pressure(LOAD_OK, MEM_OK, FS_OK, 1.5, 50, 90)
+    ok, msg = checks.host_edge.pi_pressure(0.2, 150 * MB, DISK_OK, 1.5, 50, 90)
     assert ok
-    assert "0.20/core" in msg and "150MB" in msg and "disk 3%" in msg
+    assert "0.20/core" in msg and "150MB" in msg and "disk /dev/mmcblk0p1 12%" in msg
 
 
 def test_pi_pressure_high_load_alerts():
-    # 2026-06-11 fwupd incident signature: load5 ~7.2 on 4 cores while every
-    # container healthcheck timed out (mem available still ~150MB at that instant)
-    ok, msg = checks.host_edge.pi_pressure(
-        {"min5": 7.2, "cpucore": 4}, MEM_OK, FS_OK, 1.5, 50, 90
-    )
+    ok, msg = checks.host_edge.pi_pressure(1.8, 150 * MB, DISK_OK, 1.5, 50, 90)
     assert not ok
     assert "load5 1.80/core" in msg
 
 
 def test_pi_pressure_low_mem_alerts():
-    ok, msg = checks.host_edge.pi_pressure(
-        {"min5": 0.4, "cpucore": 4}, {"available": 13 * MB}, FS_OK, 1.5, 50, 90
-    )
+    ok, msg = checks.host_edge.pi_pressure(0.2, 30 * MB, DISK_OK, 1.5, 50, 90)
     assert not ok
-    assert "13MB" in msg
+    assert "mem available 30MB" in msg
 
 
 def test_pi_pressure_full_disk_alerts_naming_device():
-    fs = [
-        {"device_name": "/dev/mmcblk0p2", "mnt_point": "/etc/hostname", "percent": 94.0}
-    ]
-    ok, msg = checks.host_edge.pi_pressure(LOAD_OK, MEM_OK, fs, 1.5, 50, 90)
+    disk = {"/dev/mmcblk0p2": 95.0, "/dev/mmcblk0p1": 12.0}
+    ok, msg = checks.host_edge.pi_pressure(0.2, 150 * MB, disk, 1.5, 50, 90)
     assert not ok
-    assert "/dev/mmcblk0p2" in msg and "94" in msg
-
-
-def test_pi_pressure_duplicate_device_entries_alert_once():
-    fs = [
-        {
-            "device_name": "/dev/mmcblk0p2",
-            "mnt_point": "/etc/resolv.conf",
-            "percent": 94.0,
-        },
-        {
-            "device_name": "/dev/mmcblk0p2",
-            "mnt_point": "/etc/hostname",
-            "percent": 94.0,
-        },
-    ]
-    ok, msg = checks.host_edge.pi_pressure(LOAD_OK, MEM_OK, fs, 1.5, 50, 90)
-    assert not ok
-    assert msg.count("/dev/mmcblk0p2") == 1
+    assert "disk /dev/mmcblk0p2 95%" in msg
+    assert "mmcblk0p1" not in msg
 
 
 def test_pi_pressure_both_breaches_named():
-    ok, msg = checks.host_edge.pi_pressure(
-        {"min5": 8.0, "cpucore": 4}, {"available": 10 * MB}, FS_OK, 1.5, 50, 90
-    )
+    ok, msg = checks.host_edge.pi_pressure(1.8, 30 * MB, DISK_OK, 1.5, 50, 90)
     assert not ok
-    assert "load5" in msg and "available" in msg
+    assert "load5" in msg and "mem available" in msg
 
 
 def test_pi_pressure_at_threshold_is_ok():
-    # strictly greater / strictly less, like the other checks' threshold semantics
-    fs = [{"device_name": "/dev/mmcblk0p2", "mnt_point": "/", "percent": 90.0}]
     ok, _ = checks.host_edge.pi_pressure(
-        {"min5": 6.0, "cpucore": 4}, {"available": 50 * MB}, fs, 1.5, 50, 90
+        1.5, 50 * MB, {"/dev/mmcblk0p2": 90.0}, 1.5, 50, 90
     )
     assert ok
 
 
 @pytest.mark.parametrize(
-    ("load", "fs"),
+    ("load", "avail", "disk"),
     [
-        pytest.param({}, FS_OK, id="missing_fields_alert"),
-        # a glances fs-plugin regression must surface, not silently pass (same principle
-        # as the load/mem missing-field handling)
-        pytest.param(LOAD_OK, [], id="empty_fs_alerts"),
-        pytest.param(
-            {"min5": 1.0, "cpucore": 0}, FS_OK, id="zero_cores_alerts_not_divides"
-        ),
+        pytest.param(None, 150 * MB, DISK_OK, id="no_load_series"),
+        pytest.param(0.2, None, DISK_OK, id="no_mem_series"),
+        # A blind filesystem collector must surface, not silently pass — the same principle
+        # as the other checks' unreachable-source handling.
+        pytest.param(0.2, 150 * MB, {}, id="no_fs_series"),
     ],
 )
-def test_pi_pressure_missing_input_alerts(load, fs):
-    ok, msg = checks.host_edge.pi_pressure(load, MEM_OK, fs, 1.5, 50, 90)
+def test_pi_pressure_missing_series_alerts(load, avail, disk):
+    ok, msg = checks.host_edge.pi_pressure(load, avail, disk, 1.5, 50, 90)
     assert not ok
     assert "missing" in msg
 
 
-def test_pi_check_disabled_without_url(cfg):
-    # PI_GLANCES_URL defaults to "" in tests -> monitoring disabled, never a false page
+# ── check_pi_pressure: the four Prometheus reads, keyed by origin ──
+
+
+LOAD5 = "node_load5"
+CORES = "count(node_cpu_seconds_total"
+AVAIL = "node_memory_MemAvailable_bytes"
+
+
+def _prom(monkeypatch, load5=0.8, cores=4.0, avail=150 * MB, disk=None):
+    """Stub prom_scalar/prom_vector by query text, recording every query issued."""
+    seen = []
+    scalars = {LOAD5: load5, CORES: cores, AVAIL: avail}
+
+    def prom_scalar(_cfg, q):
+        seen.append(q)
+        for key, value in scalars.items():
+            if q.startswith(key):
+                return value
+        raise AssertionError("unexpected scalar query %r" % q)
+
+    def prom_vector(_cfg, q):
+        seen.append(q)
+        assert "node_filesystem_avail_bytes" in q
+        rows = DISK_OK if disk is None else disk
+        return [({"device": dev}, pct) for dev, pct in rows.items()]
+
+    monkeypatch.setattr(bridge.net, "prom_scalar", prom_scalar)
+    monkeypatch.setattr(bridge.net, "prom_vector", prom_vector)
+    return seen
+
+
+def test_pi_check_disabled_without_origin(monkeypatch, cfg):
+    # PI_ORIGIN defaults to "" in tests -> monitoring disabled, never a false page, and no
+    # query is issued.
+    seen = _prom(monkeypatch)
     ok, msg = checks.host_edge.check_pi_pressure(cfg)
     assert ok
     assert "disabled" in msg.lower()
+    assert seen == []
 
 
-def test_pi_check_down_on_pressure(monkeypatch, seq, cfg):
-    cfg = replace(cfg, PI_GLANCES_URL="http://pi:61208")
-    monkeypatch.setattr(
-        bridge.net, "_get_json", seq({"min5": 7.2, "cpucore": 4}, MEM_OK, FS_OK)
-    )
+def test_pi_check_selects_every_series_by_the_pi_origin(monkeypatch, cfg):
+    # The QUERY is what keeps this a Pi check: an unpinned node_load5 returns the first host
+    # Prometheus happens to list, and a verdict test passes either way.
+    cfg = replace(cfg, PI_ORIGIN="daniel-pi")
+    seen = _prom(monkeypatch)
+    checks.host_edge.check_pi_pressure(cfg)
+    assert len(seen) == 4
+    assert all('origin="daniel-pi"' in q for q in seen), seen
+    assert any('fstype!="tmpfs"' in q for q in seen), "log2ram's tmpfs fills by design"
+
+
+def test_pi_check_down_on_pressure(monkeypatch, cfg):
+    cfg = replace(cfg, PI_ORIGIN="daniel-pi")
+    _prom(monkeypatch, load5=7.2)
     ok, msg = checks.host_edge.check_pi_pressure(cfg)
     assert not ok
-    assert "load5" in msg
+    assert "load5 1.80/core" in msg
 
 
-def test_pi_check_up_when_quiet(monkeypatch, seq, cfg):
-    cfg = replace(cfg, PI_GLANCES_URL="http://pi:61208")
-    monkeypatch.setattr(
-        bridge.net, "_get_json", seq({"min5": 0.4, "cpucore": 4}, MEM_OK, FS_OK)
-    )
-    ok, _ = checks.host_edge.check_pi_pressure(cfg)
+def test_pi_check_up_when_quiet(monkeypatch, cfg):
+    cfg = replace(cfg, PI_ORIGIN="daniel-pi")
+    _prom(monkeypatch)
+    ok, msg = checks.host_edge.check_pi_pressure(cfg)
     assert ok
+    assert "load5 0.20/core" in msg
+
+
+def test_pi_check_pages_when_the_pi_stops_reporting(monkeypatch, cfg):
+    # Prometheus answers, the node-pi series are gone: a Pi nothing is watching. The
+    # `prometheus` gate and EXPORTER_DEPENDENT are what keep this from double-paging.
+    cfg = replace(cfg, PI_ORIGIN="daniel-pi")
+    _prom(monkeypatch, load5=None, cores=None, avail=None, disk={})
+    ok, msg = checks.host_edge.check_pi_pressure(cfg)
+    assert not ok
+    assert "missing" in msg
+
+
+def test_pi_check_zero_cores_alerts_not_divides(monkeypatch, cfg):
+    cfg = replace(cfg, PI_ORIGIN="daniel-pi")
+    _prom(monkeypatch, cores=0.0)
+    ok, msg = checks.host_edge.check_pi_pressure(cfg)
+    assert not ok
+    assert "missing" in msg
 
 
 # ── pi_ports_verdict (a Pi reboot leaves containers up with no network) ──
@@ -150,198 +167,99 @@ def test_pi_check_up_when_quiet(monkeypatch, seq, cfg):
 
 PUBLISHED = (
     ("wg-easy", 51821),
-    ("glances", 61208),
-    ("dozzle", 8080),
-    ("node-exporter", 9100),
     ("alloy", 12345),
 )
 
 
-def _container(name, ports, status="healthy"):
-    return {"name": name, "status": status, "ports": ports}
-
-
-# The live payload, 2026-08-27. wg-easy publishes both TCP and UDP; glances publishes one
-# mapping alongside a merely-exposed 61209/tcp, which is why the match is on "->".
-CONTAINERS_OK = [
-    _container("glances", "61208->61208/tcp,61209/tcp"),
-    _container("alloy", "12345->12345/tcp"),
-    _container("dozzle", "8080->8080/tcp"),
-    _container("node-exporter", "9100->9100/tcp"),
-    _container("wg-easy", "51821->51821/tcp,51822->51822/udp"),
-    # The three that publish nothing forever, present so a rule that flagged them would fail
-    # here rather than page for a day.
-    _container("docker-proxy", ""),
-    _container("autoheal", ""),
-    _container("docker-proxy-lifecycle", ""),
-]
-
-
-def _without(name):
-    return [c for c in CONTAINERS_OK if c["name"] != name]
-
-
-def _with(name, **changes):
-    return [dict(c, **changes) if c["name"] == name else c for c in CONTAINERS_OK]
-
-
 def test_every_port_listening_is_clean():
-    ok, msg = checks.host_edge.pi_ports_verdict([], len(PUBLISHED))
+    ok, msg = checks.host_edge.pi_ports_verdict([], 2)
     assert ok
-    assert "5 pi port(s) listening" in msg
+    assert msg == "2 pi port(s) listening"
 
 
-def test_dead_port_on_an_up_container_reads_as_detached():
-    # The reboot signature: up, healthy, healthcheck passing on loopback, no mappings.
-    ok, msg = checks.host_edge.pi_ports_verdict(
-        [("dozzle", 8080)], 5, _with("dozzle", ports="")
-    )
+def test_dead_port_is_named_with_the_recreate_hint():
+    ok, msg = checks.host_edge.pi_ports_verdict([("alloy", 12345)], 2)
     assert not ok
-    assert "dozzle:8080" in msg and "RECREATE" in msg
-
-
-def test_exposed_but_unpublished_port_reads_as_detached():
-    # An exposed port carries no "->" and is not a published mapping — the whole basis of the
-    # diagnosis, so a container showing only exposed ports must not read as publishing.
-    ok, msg = checks.host_edge.pi_ports_verdict(
-        [("alloy", 12345)], 5, _with("alloy", ports="12345/tcp")
-    )
-    assert not ok
+    assert msg.startswith("1 pi port(s) not listening: alloy:12345")
     assert "RECREATE" in msg
 
 
-def test_dead_port_on_a_stopped_container_is_not_called_detached():
-    ok, msg = checks.host_edge.pi_ports_verdict(
-        [("dozzle", 8080)], 5, _with("dozzle", ports="", status="exited")
-    )
-    assert not ok
-    assert "dozzle:8080 (exited)" in msg
-    assert "RECREATE" not in msg
-
-
-def test_dead_port_on_an_absent_container_says_so():
-    ok, msg = checks.host_edge.pi_ports_verdict(
-        [("wg-easy", 51821)], 5, _without("wg-easy")
-    )
-    assert not ok
-    assert "container absent" in msg
-    assert "RECREATE" not in msg
-
-
-def test_dead_port_while_docker_says_publishing_is_a_separate_diagnosis():
-    # Mapping present, port unreachable: a bind-address or firewall fault, not a detached
-    # container — and telling someone to recreate would be the wrong remediation.
-    ok, msg = checks.host_edge.pi_ports_verdict([("dozzle", 8080)], 5, CONTAINERS_OK)
-    assert not ok
-    assert "publishing but unreachable" in msg
-    assert "RECREATE" not in msg
-
-
-def test_failed_attribution_fetch_downgrades_the_diagnosis_not_the_verdict():
-    # containers_json=None is the fetch having failed. The port is still dead, so the arm
-    # must still be down — failing open here is what would make it inert.
-    ok, msg = checks.host_edge.pi_ports_verdict([("dozzle", 8080)], 5, None)
-    assert not ok
-    assert "dozzle:8080 (cause unknown)" in msg
-
-
 def test_non_publishing_containers_are_never_named():
-    ok, msg = checks.host_edge.pi_ports_verdict([], 5)
+    ok, msg = checks.host_edge.pi_ports_verdict([], 2)
     assert ok
     for name in ("docker-proxy", "autoheal", "docker-proxy-lifecycle"):
         assert name not in msg
 
 
-def test_pi_check_arm_disabled_when_no_ports_configured(monkeypatch, seq, cfg):
-    cfg = replace(cfg, PI_GLANCES_URL="http://pi:61208", PI_PUBLISHED_PORTS=())
-    monkeypatch.setattr(
-        bridge.net, "_get_json", seq({"min5": 0.4, "cpucore": 4}, MEM_OK, FS_OK)
-    )
-    ok, msg = checks.host_edge.check_pi_pressure(cfg)
-    assert ok
-    assert "listening" not in msg
-
-
-def _arm_ports(cfg, monkeypatch, open_ports, containers=None, streak=0):
+def _arm_ports(cfg, monkeypatch, open_ports, streak=0, host="10.0.0.139"):
     cfg = replace(
         cfg,
-        PI_GLANCES_URL="http://10.0.0.139:61208",
+        PI_ORIGIN="daniel-pi",
+        PI_HOST=host,
         PI_PUBLISHED_PORTS=PUBLISHED,
         PI_PORTS_CONSECUTIVE=2,
     )
     bridge.streaks._down_streaks["pi_ports"] = streak
+    _prom(monkeypatch)
+    probed = []
 
     def tcp_open(host, port, timeout):
+        probed.append((host, port))
         return port in open_ports
 
-    fetched = []
-
-    def _get(url, **kwargs):
-        if url.endswith("/containers"):
-            fetched.append(url)
-            if containers is None:
-                raise OSError("docker plugin unavailable")
-            return containers
-        return {
-            "/api/4/load": {"min5": 0.4, "cpucore": 4},
-            "/api/4/mem": MEM_OK,
-            "/api/4/fs": FS_OK,
-        }[url[len("http://10.0.0.139:61208") :]]
-
-    monkeypatch.setattr(bridge.net, "_get_json", _get)
-    return cfg, fetched, tcp_open
+    return cfg, probed, tcp_open
 
 
-def test_pi_check_does_not_fetch_containers_when_every_port_is_up(monkeypatch, cfg):
-    # The whole point of the port-first design: /api/4/containers costs seconds on the Pi and
-    # has been measured timing out, so the happy path must never touch it.
-    all_ports = {p for _, p in PUBLISHED}
-    cfg, fetched, tcp_open = _arm_ports(cfg, monkeypatch, all_ports)
+def test_pi_check_arm_disabled_when_no_ports_configured(monkeypatch, cfg):
+    cfg, probed, tcp_open = _arm_ports(cfg, monkeypatch, set())
+    cfg = replace(cfg, PI_PUBLISHED_PORTS=())
     ok, msg = checks.host_edge.check_pi_pressure(cfg, tcp_open=tcp_open)
     assert ok
-    assert fetched == []
-    assert "5 pi port(s) listening" in msg
+    assert "listening" not in msg
+    assert probed == []
 
 
-def test_pi_check_detached_leads_the_message(monkeypatch, cfg):
+def test_pi_check_arm_skipped_without_a_host(monkeypatch, cfg):
+    # An origin label is not an address: with no PI_HOST there is nothing to connect to,
+    # and the pressure arms still report.
+    cfg, probed, tcp_open = _arm_ports(cfg, monkeypatch, set(), host="")
+    ok, msg = checks.host_edge.check_pi_pressure(cfg, tcp_open=tcp_open)
+    assert ok
+    assert "load5" in msg and "listening" not in msg
+    assert probed == []
+
+
+def test_pi_check_probes_every_published_port_on_the_pi_host(monkeypatch, cfg):
     all_ports = {p for _, p in PUBLISHED}
-    cfg, fetched, tcp_open = _arm_ports(
-        cfg, monkeypatch, all_ports - {8080}, _with("dozzle", ports=""), streak=1
-    )
+    cfg, probed, tcp_open = _arm_ports(cfg, monkeypatch, all_ports)
+    ok, msg = checks.host_edge.check_pi_pressure(cfg, tcp_open=tcp_open)
+    assert ok
+    assert sorted(probed) == sorted(("10.0.0.139", p) for p in all_ports)
+    assert "2 pi port(s) listening" in msg
+
+
+def test_pi_check_dead_port_leads_the_message(monkeypatch, cfg):
+    all_ports = {p for _, p in PUBLISHED}
+    cfg, _probed, tcp_open = _arm_ports(cfg, monkeypatch, all_ports - {12345}, streak=1)
     ok, msg = checks.host_edge.check_pi_pressure(cfg, tcp_open=tcp_open)
     assert not ok
-    assert fetched, "a dead port must trigger the attribution fetch"
     # The pager must see the fault, not the load figure it is not about.
-    assert msg.startswith("1 pi container(s) up with no published ports")
+    assert msg.startswith("1 pi port(s) not listening: alloy:12345")
+    assert "load5" in msg
 
 
 def test_pi_check_holds_the_first_dead_cycle_for_the_deploy_window(monkeypatch, cfg):
     # A Pi deploy recreates containers, so one cycle of dead ports is expected.
     all_ports = {p for _, p in PUBLISHED}
-    cfg, _fetched, tcp_open = _arm_ports(
-        cfg, monkeypatch, all_ports - {8080}, _with("dozzle", ports=""), streak=0
-    )
+    cfg, _probed, tcp_open = _arm_ports(cfg, monkeypatch, all_ports - {12345}, streak=0)
     ok, msg = checks.host_edge.check_pi_pressure(cfg, tcp_open=tcp_open)
     assert ok
     assert "down streak 1/2" in msg
 
 
-def test_pi_check_reports_dead_port_when_attribution_fetch_fails(monkeypatch, cfg):
-    all_ports = {p for _, p in PUBLISHED}
-    cfg, _fetched, tcp_open = _arm_ports(
-        cfg, monkeypatch, all_ports - {8080}, None, streak=1
-    )
-    ok, msg = checks.host_edge.check_pi_pressure(cfg, tcp_open=tcp_open)
-    assert not ok
-    assert "dozzle:8080 (cause unknown)" in msg
-
-
 def test_pi_check_resets_the_streak_once_ports_return(monkeypatch, cfg):
     all_ports = {p for _, p in PUBLISHED}
-    cfg, _fetched, tcp_open = _arm_ports(cfg, monkeypatch, all_ports, streak=1)
+    cfg, _probed, tcp_open = _arm_ports(cfg, monkeypatch, all_ports, streak=1)
     ok, _ = checks.host_edge.check_pi_pressure(cfg, tcp_open=tcp_open)
     assert ok
     assert bridge.streaks._down_streaks["pi_ports"] == 0
-
-
-# check_longhorn_volumes — replica redundancy on the storage layer

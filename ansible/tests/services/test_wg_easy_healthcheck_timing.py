@@ -44,7 +44,7 @@ def pi_vars() -> dict:
 
 
 def test_timing_comes_from_the_pi_host_vars(pi_vars: dict) -> None:
-    """ACCEPT: the block reads the same three tunables glances and docker-proxy read."""
+    """ACCEPT: the block reads the same three tunables docker-proxy reads."""
     hc = _render(pi_vars)["healthcheck"]
     expected = {k: pi_vars[f"container_healthcheck_{k}"] for k in TIMING_KEYS}
     assert {k: hc[k] for k in TIMING_KEYS} == expected, hc
