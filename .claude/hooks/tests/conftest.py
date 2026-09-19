@@ -39,11 +39,12 @@ padded, and only when the real package is unreachable from it.
 test this stand-in cannot help -- it runs the real subprocess invocation, so it skips
 (rather than passing on faked data) wherever the real package is absent.
 
-DECIDED: the three `STAND_IN_*` values below are a second copy, by construction -- this
+DECIDED: the `STAND_IN_*` values below are a second copy, by construction -- this
 stand-in exists only because CI cannot reach the real one. The verb table is the large one:
-`_readonly_tables.py` derives `TIER1` from the package's `REMOTE_READONLY_VERBS` (#2052), so
-the 96 names the hook no longer carries sit here instead, where the diff test reads them and
-the hook's runtime never does. They are module constants rather
+`_readonly_tables.py` derives `TIER1` from the package's `READONLY_BASE` (#2052, #2078), so
+the 89 names the hook no longer carries sit here instead, where the diff test reads them and
+the hook's runtime never does; the two remote-only names sit beside them so the diff test
+also sees the package's `REMOTE_READONLY_VERBS` move. They are module constants rather
 than literals inside the `except` so that a machine WITH the real package can diff them:
 `test_claude_guard_import.py::test_the_ci_stand_in_matches_the_deployed_tables` does, and
 `prek run` executes that test on every commit from a deployed host. CI itself cannot see the
@@ -109,32 +110,48 @@ STAND_IN_SECRET_PATH_RE = re.compile(
     r"\.p12($|[^a-z])|\.pfx($|[^a-z]))",
     re.IGNORECASE,
 )
-# The deployed `REMOTE_READONLY_VERBS`, name for name; the diff test compares the sets.
-STAND_IN_REMOTE_READONLY_VERBS = frozenset(
+# The deployed `READONLY_BASE`, name for name; the diff test compares the sets. These are the
+# names read-only under any argument on BOTH sides of the ssh boundary (#2078). The package's
+# `REMOTE_READONLY_VERBS` adds `htop` and `nvidia-smi`; `TIER1` adds `cd`, `false` and
+# `printenv`; the five flag-guarded verbs (`journalctl`, `dmesg`, `ss`, `rg`, `sensors`) are
+# in neither, each side reaching them through its own guard.
+STAND_IN_READONLY_BASE = frozenset(
     """
     true uptime uptimed whoami hostname id date uname arch pwd which type df free du ps top
-    htop vmstat iostat w who last lscpu lsblk lsof lsmod dmesg sensors nvidia-smi getent ls
-    cat head tail wc stat file tree readlink realpath basename dirname grep egrep fgrep rg
-    echo printf cut tr jq od md5sum sha1sum sha256sum cksum ss netstat ping ping6 dig host
-    nslookup traceroute tracepath journalctl apt-cache b2sum blkid column comm dpkg-query
+    vmstat iostat w who last lscpu lsblk lsof lsmod getent ls
+    cat head tail wc stat file tree readlink realpath basename dirname grep egrep fgrep
+    echo printf cut tr jq od md5sum sha1sum sha256sum cksum netstat ping ping6 dig host
+    nslookup traceroute tracepath apt-cache b2sum blkid column comm dpkg-query
     findmnt fold getconf groups hexdump lastlog locale lsattr lsb_release lspci lsusb mailq
     mpstat nl nproc rev sar seq sha512sum strings tac zcat zgrep
     """.split()
 )
+# The two remote-only names, so the stand-in composes `REMOTE_READONLY_VERBS` the way the
+# package does rather than carrying a second literal of the union.
+STAND_IN_REMOTE_ONLY = frozenset({"htop", "nvidia-smi"})
+STAND_IN_REMOTE_READONLY_VERBS = STAND_IN_READONLY_BASE | STAND_IN_REMOTE_ONLY
 
 
 @pytest.fixture
 def claude_guard_stand_in():
-    """The stand-in's three values, for the test that diffs them against the deployed tables."""
+    """The stand-in's four values, for the test that diffs them against the deployed tables."""
     return (
         STAND_IN_TRUSTED_SSH_HOSTS,
         STAND_IN_SECRET_PATH_RE,
+        STAND_IN_READONLY_BASE,
         STAND_IN_REMOTE_READONLY_VERBS,
     )
 
 
 try:
     import _claude_guard  # noqa: F401  (real bootstrap; populates sys.modules on success)
+
+    # A deployed package that predates a name the hooks read -- the dotfiles change landed
+    # but `chezmoi apply` has not run on this host -- is unreachable for this session the
+    # same way a missing one is: the hook itself fails open against it (#2078), and without
+    # this the suite dies at collection with an xdist INTERNALERROR that names no test. The
+    # stand-in feeds the tables instead, and the deployed-only tests skip on its marker.
+    from claude_guard.tables import READONLY_BASE  # noqa: F401
 except ImportError:
     _fake_pkg = types.ModuleType("claude_guard")
     _fake_pkg.__path__ = []  # marks it as a package so `claude_guard.tables` resolves
@@ -144,6 +161,7 @@ except ImportError:
     _fake_tables = types.ModuleType("claude_guard.tables")
     _fake_tables.TRUSTED_SSH_HOSTS = STAND_IN_TRUSTED_SSH_HOSTS
     _fake_tables.SECRET_PATH_RE = STAND_IN_SECRET_PATH_RE
+    _fake_tables.READONLY_BASE = STAND_IN_READONLY_BASE
     _fake_tables.REMOTE_READONLY_VERBS = STAND_IN_REMOTE_READONLY_VERBS
     _fake_pkg.tables = _fake_tables
     sys.modules["claude_guard"] = _fake_pkg
