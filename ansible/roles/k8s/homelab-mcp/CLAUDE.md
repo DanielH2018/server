@@ -26,9 +26,9 @@ routed tenant of the retired Docker edge. See repo-root `CLAUDE.md` for shared c
   router-less edge returns for every host, so it read green through the 3.5-hour outage of #1322
   (#1341). Changing that router to a PathPrefix would open more than `/health`; a test asserts it
   stays an exact Path.
-- **Auto-deploy-eligible, but the promotion cannot actually fire — the image is a
+- **Auto-deploy-eligible, but the promotion cannot actually fire** — the image is a
   registry-built `:latest` ref with no upstream version for Renovate to compare against;
-  only `templates/Dockerfile.j2`'s `FROM` line moves.** Stateless RollingUpdate Deployment.
+  only `templates/Dockerfile.j2`'s `FROM` line moves. Stateless RollingUpdate Deployment.
 - **RBAC:** `templates/rbac.yaml.j2` grants a dedicated `homelab-mcp` ServiceAccount
   `get`/`list` on pods, `pods/log`, nodes, deployments and daemonsets — no `watch`, no
   secrets, no exec. Deliberately narrower than the shell's own read-only ServiceAccount.
