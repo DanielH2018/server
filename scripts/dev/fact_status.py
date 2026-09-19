@@ -57,7 +57,7 @@ def _all_units(repo: Path) -> list[str]:
     return [
         s.key
         for d in repo_docs(repo)
-        for s in sections(d.relative_to(repo).as_posix(), d.read_text())
+        for s in sections(d.relative_to(repo).as_posix(), d.read_text(encoding="utf-8"))
     ]
 
 

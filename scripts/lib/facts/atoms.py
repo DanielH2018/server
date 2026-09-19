@@ -4,6 +4,13 @@ The hash is over the *thing the sentence is about*, at that granularity: a symbo
 docstrings stripped (a reword must not invalidate a claim about a value), a YAML key's value
 (a comment must not either), a marker line's text (moving it must not). ``None`` means the
 atom does not resolve; a probe atom is never hashed here — its shape hash needs a live run.
+
+A Python node is hashed through ``ast.unparse``, never ``ast.dump``. A dump names every AST
+field, so a CPython release that adds one (``type_params`` in 3.12) moves every recorded
+symbol and test hash at once, and the whole lock reads OUT after an interpreter upgrade that
+changed nothing about the code. ``ast.unparse`` renders source, which is the thing the
+citation is actually about. ``lock.check_lock`` carries the belt-and-braces half: a row
+recorded under another minor version is reported rather than compared.
 """
 
 import ast
@@ -125,30 +132,34 @@ def hash_atom(c: Citation, repo: Path) -> str | None:
         if c.path.endswith("/"):
             if not target.is_dir():
                 return None
+            # A symlink is skipped rather than followed: `read_bytes` on one hashes the
+            # TARGET, so a link out of the tree pulls a file the citation does not name
+            # into the directory's hash, and a link to a sibling hashes that sibling twice.
             parts = [
                 (rel, _sha((repo / rel).read_bytes()))
                 for rel in _tracked_under(repo, c.path)
+                if not (repo / rel).is_symlink()
             ]
             return _sha(json.dumps(parts).encode())
         return _sha(target.read_bytes()) if target.is_file() else None
     if not target.is_file():
         return None
     if c.form == "symbol":
-        node = _top_level(ast.parse(target.read_text()), c.selector)
-        return _sha(ast.dump(_strip_docstrings(node)).encode()) if node else None
+        node = _top_level(ast.parse(target.read_text(encoding="utf-8")), c.selector)
+        return _sha(ast.unparse(_strip_docstrings(node)).encode()) if node else None
     if c.form == "yaml":
         try:
-            value = _walk(safe_load(target.read_text()), c.selector)
+            value = _walk(safe_load(target.read_text(encoding="utf-8")), c.selector)
         except KeyError:
             return None
         return _sha(json.dumps(value, sort_keys=True, default=str).encode())
     if c.form == "test":
-        node = _test_node(ast.parse(target.read_text()), c.selector)
-        return _sha(ast.dump(_strip_docstrings(node)).encode()) if node else None
+        node = _test_node(ast.parse(target.read_text(encoding="utf-8")), c.selector)
+        return _sha(ast.unparse(_strip_docstrings(node)).encode()) if node else None
     if c.form == "marker":
         hits = [
             ln.strip()
-            for ln in target.read_text().splitlines()
+            for ln in target.read_text(encoding="utf-8").splitlines()
             if f"DECIDED: {c.selector}" in ln
         ]
         if len(hits) > 1:
@@ -164,7 +175,7 @@ def backrefs(c: Citation, repo: Path) -> frozenset[str]:
     target = repo / c.path
     if _outside_repo(target, repo) or not target.is_file():
         return frozenset()
-    src = target.read_text()
+    src = target.read_text(encoding="utf-8")
     node = _test_node(ast.parse(src), c.selector)
     if node is None:
         return frozenset()

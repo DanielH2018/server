@@ -1,5 +1,6 @@
 """One hash rule per citation form, each with the edit that must NOT move it and the edit that must."""
 
+import subprocess
 import textwrap
 
 import pytest
@@ -55,6 +56,26 @@ def test_directory_hashes_its_tracked_tree(tmp_path, monkeypatch):
     h1 = hash_atom(c, tmp_path)
     _write(tmp_path, "d/y.txt", "changed\n")
     assert h1 != hash_atom(c, tmp_path)
+
+
+def test_symlinked_member_does_not_enter_a_directory_hash(tmp_path):
+    """Reading a symlink hashes its TARGET, which the citation does not name."""
+    _write(tmp_path, "d/x.txt", "x\n")
+    _write(tmp_path, "outside.txt", "one\n")
+    (tmp_path / "d" / "link.txt").symlink_to(tmp_path / "outside.txt")
+    env = {
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "HOME": str(tmp_path),
+        "PATH": "/usr/bin:/bin",
+    }
+    subprocess.run(
+        ["git", "init", "-q", "-b", "master", str(tmp_path)], check=True, env=env
+    )
+    subprocess.run(["git", "add", "-A"], cwd=tmp_path, check=True, env=env)
+    c = Citation("path", "d/", "d/", "")
+    h1 = hash_atom(c, tmp_path)
+    _write(tmp_path, "outside.txt", "two\n")
+    assert h1 == hash_atom(c, tmp_path)
 
 
 def test_directory_without_slash_resolving_to_a_dir_is_none(tmp_path):

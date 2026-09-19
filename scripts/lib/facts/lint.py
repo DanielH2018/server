@@ -75,7 +75,7 @@ def lint_sections(repo: Path, unit_keys: set[str] | None) -> list[LintFinding]:
         )
     for doc in repo_docs(repo):
         rel = doc.relative_to(repo).as_posix()
-        for sec in sections(rel, doc.read_text()):
+        for sec in sections(rel, doc.read_text(encoding="utf-8")):
             if unit_keys is not None and sec.key not in unit_keys:
                 continue
             cites, rejects = parse_citations(sec.body)
@@ -169,7 +169,7 @@ def changed_units(repo: Path, since: str) -> set[str]:
             if old.returncode == 0
             else {}
         )
-        for s in sections(rel, doc.read_text()):
+        for s in sections(rel, doc.read_text(encoding="utf-8")):
             if before.get(s.key) != s.body:
                 changed.add(s.key)
     return changed

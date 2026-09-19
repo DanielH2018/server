@@ -7,6 +7,7 @@ import pytest
 from facts.lock import (
     FINDING_KINDS,
     LOCK_REL,
+    _PYTHON,
     build_repo_edb,
     check_lock,
     forget_units,
@@ -202,6 +203,26 @@ def test_verify_reports_the_atoms_it_skipped(tmp_path):
     assert "t/m.py:GONE" not in lock["CLAUDE.md#Gate"]["atoms"]
 
 
+def test_a_row_recorded_under_this_interpreter_is_compared(tmp_path):
+    repo = _repo(tmp_path)
+    verify_units(repo, repo / LOCK_REL, ["CLAUDE.md#Gate"], "abc1234")
+    assert read_lock(repo / LOCK_REL)["CLAUDE.md#Gate"]["python"] == _PYTHON
+    (repo / "t" / "m.py").write_text("LIMIT = 90\n")
+    assert [f.kind for f in check_lock(repo, repo / LOCK_REL)] == ["moved"]
+
+
+def test_a_row_recorded_under_another_interpreter_is_flagged_and_not_compared(tmp_path):
+    repo = _repo(tmp_path)
+    verify_units(repo, repo / LOCK_REL, ["CLAUDE.md#Gate"], "abc1234")
+    lock = read_lock(repo / LOCK_REL)
+    lock["CLAUDE.md#Gate"]["python"] = "3.9"
+    write_lock(repo / LOCK_REL, lock)
+    (repo / "t" / "m.py").write_text("LIMIT = 90\n")
+    findings = check_lock(repo, repo / LOCK_REL)
+    assert [f.kind for f in findings] == ["interpreter-moved"]
+    assert "3.9" in findings[0].detail and _PYTHON in findings[0].detail
+
+
 def test_finding_kinds_census():
     assert FINDING_KINDS == frozenset(
         {
@@ -210,6 +231,7 @@ def test_finding_kinds_census():
             "section-gone",
             "atom-no-longer-cited",
             "unrecorded-atom",
+            "interpreter-moved",
             "lock-tampered",
             "ambiguous",
         }
