@@ -102,9 +102,17 @@ The script now calls `boot_grace_active` and exits 0 while the host's uptime is 
 The guard **fails open**: an unreadable `/proc/uptime` runs the check, because a guard that
 cannot read the clock must not silence the dead-man indefinitely.
 
-It covers only the `*/10` crons. For a daily check a skipped slot is a skipped day, which is a
-worse trade than the rare boot landing inside its one-minute window — and their 1-hour graces
-already tolerate a late run.
+It covers the `*/10` crons and, since 2026-09-19, `manifest-prune-check`. For a daily cron a
+skipped slot is a skipped day, which is a worse trade than the rare boot landing inside its
+one-minute window — and their 1-hour graces already tolerate a late run. `manifest-prune-check`
+is the exception because it is no longer a cron: it runs from a `kuma-check-manifest-prune`
+systemd timer with `Persistent=true`, so a slot missed inside an outage runs at boot, exactly
+when the cluster is least ready to be judged. Its boot-grace arm exits 1 without a ping, and
+the service's `Restart=on-failure` reruns it 30 minutes later with the real verdict. The
+1-hour grace covers that 30-minute delay; `ansible/tests/setup/test_health_cron_boot_grace.py`
+lists it under `DAILY_TIMER_SCRIPTS` and keeps the arm in place. The rerun on a red verdict
+sends `/fail` again each time, which healthchecks.io collapses into one alert, and the first
+`/success` after the fix clears it within 30 minutes rather than at the next day's slot.
 
 What it does not cover: Kuma accepting pushes while failing to *deliver* notifications. The
 `Discord Delivery` tile watches the Discord leg from inside Kuma, and the email tier is the

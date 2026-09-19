@@ -700,7 +700,10 @@ one way that matters: one alerts, the other reconciles. Both run from kuma-check
 2026-09-19 ([[common]]'s `kuma_check_timer.yml`): each exits 1 on a down verdict and
 `Restart=on-failure` reruns it every 30 min until it exits 0, so a red tile clears when the
 ruleset or limit is fixed rather than at the next day's slot. Two calls an hour at worst stays
-inside GitHub's unauthenticated limit on the anonymous fallback. `teardown.yml` imports the
+inside GitHub's unauthenticated limit on the anonymous fallback. The timers are
+`Persistent=true`, so a slot missed inside an outage runs at boot; neither script carries a
+boot-grace arm, because both read GitHub rather than the cluster and a boot changes nothing
+they judge. `teardown.yml` imports the
 same names absent, which reaps the units and the crons they replaced on a non-deployer host.
 
 - **`github-ruleset-drift.sh`** compares the live master ruleset against
