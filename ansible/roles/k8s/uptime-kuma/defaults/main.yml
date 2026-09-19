@@ -177,9 +177,11 @@ kuma_status_page_sync_dump_attempt_seconds: 15
 # Job sits in `get pods` as Init:Error until two LATER failures displace it, which is how one
 # run that hit the #2076 monitor wipe read as a live fault 14h later (#2120). The Status Page
 # Sync push monitor goes DOWN after 30 min of silence and its description sends the reader to
-# the newest Job logs, so the TTL has to outlive that window with room to be read; a day does,
-# while `failedJobsHistoryLimit: 2` still caps how many sit inside it.
-kuma_status_page_sync_job_ttl_seconds: 86400
+# the newest Job logs, so the TTL has to outlive that window with room to be read. Two hours
+# does, and the render stage's output is in Loki (`{namespace="homelab", container="render"}`)
+# past that; a day kept a red row in Headlamp far longer than anyone needed it (2026-09-19).
+# `failedJobsHistoryLimit: 2` still caps how many sit inside the window.
+kuma_status_page_sync_job_ttl_seconds: 7200
 
 # Ordered. Each declared monitor lands in the FIRST group one of whose patterns matches its
 # AutoKuma id (the filename in static-monitors.yaml.j2, not the display name), and group order
