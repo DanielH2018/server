@@ -32,6 +32,7 @@ __all__ = [
     "backup_tier",
     "claim_index",
     "claim_names",
+    "claim_tiers",
     "load_longhorn_tier_lists",
 ]
 
@@ -326,6 +327,60 @@ def _classify(claim: ClaimDecl, full: str, tiers: LonghornTiers) -> str:
     return "daily -> B2 (default group)"
 
 
+def claim_tiers(
+    role_dir: Path,
+    *,
+    k8s_namespace: str,
+    tiers: LonghornTiers,
+    k8s_roles: Path = K8S_ROLES,
+    claim_classes: dict[str, str | None] | None = None,
+) -> list[tuple[str, str]]:
+    """`(claim, tier)` for every PVC a k8s role declares or references, in mount order.
+
+    Resolves each claim to a literal name and a StorageClass — its own declaration first,
+    then `claim_classes` for a claim another role declares — and classifies
+    `namespace/claim` as `_classify` describes. A claim whose name the role's own defaults
+    cannot resolve is returned as the expression written, with an "unknown" tier saying so.
+    Every claim is classified under `k8s_namespace`: the one role whose claims live elsewhere
+    (claude-otel, in the observability namespace) is on `longhorn-nobackup` by class, so the
+    namespace never reaches a list lookup for it.
+
+    This is the one derivation both readers print — `backup_tier` joins it into the
+    catalogue's column, `gen_role_glance.py` prints it beside each claim — so the two
+    cannot disagree.
+
+    Args:
+        role_dir: The k8s role directory.
+        k8s_namespace: The cluster namespace PVCs are classified under.
+        tiers: The R2, weekly and no-backup "namespace/claim" lists.
+        k8s_roles: Root directory of the k8s roles.
+        claim_classes: `claim_index(k8s_roles)`, built once by the caller; built here if
+            not given.
+    """
+    claims = _role_claims(role_dir, k8s_roles)
+    if not claims:
+        return []
+    if claim_classes is None:
+        claim_classes = claim_index(k8s_roles)
+    out: list[tuple[str, str]] = []
+    for claim in claims:
+        if not claim.resolved:
+            out.append(
+                (
+                    claim.name,
+                    UNKNOWN
+                    + f" (PVC present, claim name not statically resolvable: {claim.name})",
+                )
+            )
+            continue
+        if claim.storage_class is None:
+            claim = ClaimDecl(claim.name, claim_classes.get(claim.name), True)
+        out.append(
+            (claim.name, _classify(claim, f"{k8s_namespace}/{claim.name}", tiers))
+        )
+    return out
+
+
 def backup_tier(
     entry: dict[str, Any],
     platform: str,
@@ -336,13 +391,8 @@ def backup_tier(
 ) -> str:
     """Derive `entry`'s Longhorn backup tier(s) from its role's PVC claims.
 
-    Resolves each PVC the role declares (or references by `claimName:`) to a literal claim
-    name and a StorageClass — its own declaration first, then `claim_classes` for a claim
-    another role declares — and classifies `namespace/claim` as `_classify` describes. A
-    role with multiple PVCs in different tiers reports all of them, de-duplicated. Every
-    claim is classified under `k8s_namespace`: the one role whose claims live elsewhere
-    (claude-otel, in the observability namespace) is on `longhorn-nobackup` by class, so
-    the namespace never reaches a list lookup for it.
+    The catalogue's one-cell form of `claim_tiers`: a role with multiple PVCs in different
+    tiers reports all of them, de-duplicated.
 
     Args:
         entry: The service's `containers_list` entry.
@@ -358,23 +408,18 @@ def backup_tier(
     """
     if platform != "k8s":
         return "n/a (Docker/Pi, not Longhorn-backed)"
-    role_dir = k8s_roles / entry["name"]
-    claims = _role_claims(role_dir, k8s_roles)
-    if not claims:
+    tiers_out = [
+        tier
+        for _, tier in claim_tiers(
+            k8s_roles / entry["name"],
+            k8s_namespace=k8s_namespace,
+            tiers=tiers,
+            k8s_roles=k8s_roles,
+            claim_classes=claim_classes,
+        )
+    ]
+    if not tiers_out:
         return "no PVC (stateless)"
-    if claim_classes is None:
-        claim_classes = claim_index(k8s_roles)
-    tiers_out = []
-    for claim in claims:
-        if not claim.resolved:
-            tiers_out.append(
-                UNKNOWN
-                + f" (PVC present, claim name not statically resolvable: {claim.name})"
-            )
-            continue
-        if claim.storage_class is None:
-            claim = ClaimDecl(claim.name, claim_classes.get(claim.name), True)
-        tiers_out.append(_classify(claim, f"{k8s_namespace}/{claim.name}", tiers))
     # Multiple PVCs on one role (e.g. pihole) can land in different tiers; report all,
     # de-duplicated, rather than picking one and hiding the rest.
     seen: list[str] = []

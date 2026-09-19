@@ -17,11 +17,11 @@ instance and a different auth model.
 | WireGuard UDP | 51820 | 51822 |
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
 - **Deploy tag:** `--tags "wg-easy"`
 - **Image:** `ghcr.io/wg-easy/wg-easy` (`wg_easy_k8s_image`)
 - **Route:** `wg-easy.<domain>` · `wg-easy.local.<domain>`, Authelia one_factor
-- **Claim:** `wg-easy-config`
+- **Claim:** `wg-easy-config` (weekly -> B2 (default target))
 - **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — platform — sole remote-access path; a
   failed deploy can cut off remote recovery. ALSO Recreate + RWO Longhorn PVC (migrating-state
   shape, same class as sonarr/prowlarr) — two independent reasons. COUPLING NOTE for a future

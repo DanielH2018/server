@@ -4,11 +4,12 @@ Bazarr pulls subtitles for the media Sonarr/Radarr manage. See repo-root `CLAUDE
 shared conventions.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
 - **Deploy tag:** `--tags "bazarr"`
 - **Image:** `lscr.io/linuxserver/bazarr` (`bazarr_k8s_image`)
 - **Route:** `bazarr.<domain>` · `bazarr.local.<domain>`, Authelia one_factor
-- **Claims:** `bazarr-config`, `media-data`
+- **Claims:** `bazarr-config` (weekly -> B2 (default target)), `media-data` (not Longhorn
+  (media-local))
 - **Auto-deploy:** eligible (`k8s_autodeploy: true`)
 <!-- /generated_from -->
 

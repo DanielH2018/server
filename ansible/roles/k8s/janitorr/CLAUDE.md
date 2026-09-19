@@ -4,11 +4,11 @@ Deletes watched/old media and cleans up Sonarr/Radarr based on disk-usage rules.
 See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
 - **Deploy tag:** `--tags "janitorr"`
 - **Image:** `ghcr.io/schaka/janitorr` (`janitorr_k8s_image`)
 - **Route:** none (no `templates/ingressroute.yaml.j2`)
-- **Claim:** `media-data`
+- **Claim:** `media-data` (not Longhorn (media-local))
 - **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — probe-less — no readinessProbe on the
   Deployment; also the only role that deletes real media, so a wedge is not merely inert
 <!-- /generated_from -->

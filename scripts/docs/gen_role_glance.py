@@ -11,8 +11,8 @@ single reader in the tree, and a pytest gate keeps the committed block equal to 
 
 WHAT IT WRITES, and what it leaves alone. The block sits between two HTML-comment markers
 directly under the heading; everything after the closing marker is hand-written and untouched.
-It carries only facts with one source each. A judgement — why a claim is unbacked, what a
-route bypasses, why a pin is held back — stays in the prose below the block.
+It carries only facts with one source each. A judgement — why a claim is on the tier it is
+on, what a route bypasses, why a pin is held back — stays in the prose below the block.
 
 ONE FIELD SET PER ROLE SHAPE, not one schema (#2096). The three planes declare different
 facts in different places, and a single schema would print "none" for most fields on most
@@ -22,7 +22,11 @@ roles:
   `containers_list`): the deploy tag (`entry_tags`, the same precedence `deploy.yml` uses),
   the image REPOSITORIES and the vars that pin them, the route and its auth tier (the same
   derivation `docs/reference/services.md` prints, so the two cannot disagree), every PVC
-  claim by name, and the `k8s_autodeploy` stance with the role's own `k8s_autodeploy_reason`;
+  claim by name with its Longhorn backup tier beside it (the catalogue's `backup_tier`
+  column, per claim — `catalog_backup.claim_tiers` is the one derivation both print, so a
+  tier here is read from the claim's StorageClass and the k3s role's `k3s_longhorn_*_volumes`
+  lists, never typed), and the `k8s_autodeploy` stance with the role's own
+  `k8s_autodeploy_reason`;
 - a setup role (`roles/setup/<name>/`, every directory but the include-only `common`): the
   playbook and tag that apply it, with the `when:` that restricts it to a host, read from the
   `roles:` lists and `include_role` tasks of the bring-up playbooks; every cron it installs,
@@ -79,9 +83,14 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 from pathlib import Path
 from typing import Any
 
-from catalog_backup import autodeploy_stance, claim_names
+from catalog_backup import (
+    autodeploy_stance,
+    claim_index,
+    claim_tiers,
+    load_longhorn_tier_lists,
+)
 from catalog_facts import auth_tier, k8s_route
-from catalog_model import K8S_ROLES
+from catalog_model import K3S_DEFAULTS, K8S_ROLES
 from glance_facts import (
     CONTAINERS_ROLES,
     PI_HOST_VARS,
@@ -110,7 +119,9 @@ def begin_marker(sources: str) -> str:
     )
 
 
-BEGIN = begin_marker("defaults, templates or containers_list entry")
+BEGIN = begin_marker(
+    "defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists"
+)
 BEGIN_SETUP = begin_marker("tasks, timer templates or playbook entry")
 BEGIN_PI = begin_marker(
     "compose template, tasks, meta/deps.yml or containers_list entry"
@@ -160,8 +171,14 @@ def glance_lines(
     group_vars: dict[str, Any],
     k8s_roles: Path = K8S_ROLES,
     all_vars: Path = ALL_VARS,
+    k3s_defaults: Path = K3S_DEFAULTS,
+    claim_classes: dict[str, str | None] | None = None,
 ) -> list[str]:
-    """The block's bullet lines for one deployed k8s role, unwrapped."""
+    """The block's bullet lines for one deployed k8s role, unwrapped.
+
+    `claim_classes` is `claim_index(k8s_roles)`, built once by the caller that renders
+    every role; built here for a single-role call.
+    """
     name = entry["name"]
     defaults = load_yaml(role_dir / "defaults" / "main.yml")
     lines = [f'- **Deploy tag:** `--tags "{",".join(entry_tags(entry))}"`']
@@ -186,13 +203,21 @@ def glance_lines(
         auth = auth_tier(entry).replace("none (public/no-auth)", "no Authelia")
         lines.append(f"- **Route:** {hosts}{reach}, {auth}")
 
-    claims = claim_names(role_dir)
+    claims = claim_tiers(
+        role_dir,
+        k8s_namespace=group_vars.get("k8s_namespace", "homelab"),
+        tiers=load_longhorn_tier_lists(k3s_defaults),
+        k8s_roles=k8s_roles,
+        claim_classes=claim_classes,
+    )
     if claims:
         # A claim named by a template loop variable (pihole's `{{ inst.claim }}`) is a real
         # claim the parser cannot name; say so rather than print the expression as a name.
-        named = [c for c in claims if "{{" not in c]
-        looped = [c for c in claims if "{{" in c]
-        cells = ", ".join(f"`{claim}`" for claim in named)
+        # The tier labels are the catalogue's own, verbatim: a reader who greps
+        # `docs/reference/services.md` for one finds the same string here.
+        named = [(c, tier) for c, tier in claims if "{{" not in c]
+        looped = [c for c, _ in claims if "{{" in c]
+        cells = ", ".join(f"`{claim}` ({tier})" for claim, tier in named)
         if looped:
             exprs = ", ".join(f"`{expr}`" for expr in looped)
             cells += (
@@ -327,12 +352,14 @@ def stale_k8s_docs(
     host_vars: Path = HOST_VARS,
     k8s_roles: Path = K8S_ROLES,
     all_vars: Path = ALL_VARS,
+    k3s_defaults: Path = K3S_DEFAULTS,
 ) -> list[str]:
     """`k8s/<name>` for every deployed k8s role whose block differs from a fresh render.
 
     Raises `MissingHeading` naming the role for a deployed role whose doc has no heading.
     """
     group_vars = load_yaml(all_vars)
+    claim_classes = claim_index(k8s_roles)
     stale: list[str] = []
     for entry in k8s_service_entries(host_vars):
         name = entry["name"]
@@ -344,6 +371,8 @@ def stale_k8s_docs(
                 group_vars=group_vars,
                 k8s_roles=k8s_roles,
                 all_vars=all_vars,
+                k3s_defaults=k3s_defaults,
+                claim_classes=claim_classes,
             )
         )
         if _refresh(role_dir / "CLAUDE.md", block, write=write):

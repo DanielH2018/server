@@ -4,11 +4,11 @@ A pure-stdlib Python exporter (`files/stats.py`), mounted from a ConfigMap rathe
 built into an image. See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
 - **Deploy tag:** `--tags "terraria-stats"`
 - **Image:** `python` (`terraria_stats_k8s_image`)
 - **Route:** none (no `templates/ingressroute.yaml.j2`)
-- **Claim:** `terraria-stats-data`
+- **Claim:** `terraria-stats-data` (weekly -> B2 (default target))
 - **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — games — companion to the
   hand-operated terraria server. ALSO Recreate + RWO volume-claim PVC holding irreplaceable
   stats — two independent reasons
@@ -16,7 +16,7 @@ built into an image. See repo-root `CLAUDE.md` for shared conventions.
 
 - **Its `:9420` Prometheus exporter** is scraped in-cluster by the `claude-otel`
   `terraria-stats` job.
-- **`terraria-stats-data`** is 1Gi, `k8s/volume-claim`-seeded, on the **daily** backup tier.
+- **`terraria-stats-data`** is 1Gi, `k8s/volume-claim`-seeded, on the **weekly** B2 backup tier.
   It holds the all-time playtime SQLite DB — irreplaceable, since Loki's ~28-day backfill
   window can't fully reconstruct it.
 

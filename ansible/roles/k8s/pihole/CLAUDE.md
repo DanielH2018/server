@@ -4,12 +4,13 @@ Pi-hole plus an unbound sidecar, deployed as two independent pods for deploy-tim
 continuity. Coexisted with a Docker-era copy through the DNS cutover; that copy is retired.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
 - **Deploy tag:** `--tags "pihole"`
 - **Images:** `pihole/pihole` (`pihole_k8s_image`), `klutchell/unbound`
   (`pihole_k8s_unbound_image`)
 - **Route:** `pihole.<domain>` · `pihole.local.<domain>`, Authelia one_factor
-- **Claims:** `pihole-etc`, `pihole-etc-2`, plus the claims a template loop declares (`{{
+- **Claims:** `pihole-etc` (no backup (StorageClass longhorn-nobackup)), `pihole-etc-2` (no
+  backup (StorageClass longhorn-nobackup)), plus the claims a template loop declares (`{{
   inst.claim }}`)
 - **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — platform — LAN DNS resolver; a failed
   deploy breaks name resolution fleet-wide, and host probes stay green through that kind of

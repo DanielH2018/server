@@ -13,7 +13,7 @@ sanctioned automatic *fix*. Renamed from `arr-autoblock` (2026-07-06) to stop pr
 sidecar per fix. See repo-root `CLAUDE.md`.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
 - **Deploy tag:** `--tags "autofix-bridge"`
 - **Image:** `python` (`autofix_bridge_k8s_image`)
 - **Route:** none (no `templates/ingressroute.yaml.j2`)

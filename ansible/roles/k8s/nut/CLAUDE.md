@@ -5,7 +5,7 @@ daniel-server entirely). Pinned to daniel-server — the APC UPS is USB-attached
 the pin is physical and never unwinds.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
 - **Deploy tag:** `--tags "nut"`
 - **Image:** `<k8s_registry_pull_host>/nut` (`nut_k8s_image`)
 - **Route:** none (no `templates/ingressroute.yaml.j2`)

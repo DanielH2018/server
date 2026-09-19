@@ -9,7 +9,7 @@ Run: uv run pytest scripts/docs/tests/test_catalog_backup.py
 
 import service_catalog
 from _catalog_fixtures import make_repo, write
-from catalog_backup import LonghornTiers, backup_tier, claim_index
+from catalog_backup import LonghornTiers, backup_tier, claim_index, claim_tiers
 from catalog_model import K8S_ROLES
 
 
@@ -352,6 +352,40 @@ def test_backup_tier_claimname_reference_finds_the_class_in_the_declaring_role(
     )
     row = next(r for r in service_catalog.build_rows(**paths) if r.name == "jellyfin")
     assert row.backup_tier == "not Longhorn (media-local)"
+
+
+def test_claim_tiers_pairs_every_claim_with_its_tier_in_mount_order(tmp_path):
+    """The per-claim form `gen_role_glance.py` prints (#2105): one pair per claim, references
+    first, an unresolvable name kept as written, and no de-duplication of equal tiers."""
+    paths = make_repo(tmp_path)
+    jellyfin = paths["k8s_roles"] / "jellyfin"
+    write(
+        jellyfin / "templates" / "pvc.yaml.j2",
+        _pvc_block("jellyfin-config")
+        + "---\n"
+        + _pvc_block("jellyfin-cache")
+        + "---\n"
+        + _pvc_block("{{ inst.claim }}", "longhorn-nobackup"),
+    )
+    write(
+        jellyfin / "templates" / "deployment.yaml.j2",
+        "      claimName: jellyfin-cache\n      claimName: jellyfin-config\n",
+    )
+    tiers = LonghornTiers(weekly=frozenset({"homelab/jellyfin-config"}))
+    pairs = claim_tiers(
+        jellyfin, k8s_namespace="homelab", tiers=tiers, k8s_roles=paths["k8s_roles"]
+    )
+    assert pairs == [
+        (
+            "jellyfin-cache",
+            "unknown (claim jellyfin-cache: StorageClass not statically resolvable)",
+        ),
+        ("jellyfin-config", "weekly -> B2 (default target)"),
+        (
+            "{{ inst.claim }}",
+            "unknown (PVC present, claim name not statically resolvable: {{ inst.claim }})",
+        ),
+    ]
 
 
 def test_claim_index_reads_the_real_tree_for_each_declaration_shape():

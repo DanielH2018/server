@@ -6,11 +6,11 @@ nightly into a Longhorn PVC; the 03:30 daily-backup group carries it to B2. This
 replaced the retired Kopia scope for the Pi.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
 - **Deploy tag:** `--tags "pi-peer-backup"`
 - **Image:** `<k8s_registry_pull_host>/pi-peer-backup` (`pi_peer_backup_k8s_image`)
 - **Route:** none (no `templates/ingressroute.yaml.j2`)
-- **Claim:** `pi-peer-backup-data`
+- **Claim:** `pi-peer-backup-data` (weekly -> B2 (default target))
 - **Auto-deploy:** eligible (`k8s_autodeploy: true`)
 <!-- /generated_from -->
 

@@ -4,12 +4,13 @@ Jellyfin, transcoding on the Intel GPU the `dri-device-plugin` role advertises. 
 shared `media-data` library and owns its own config volume.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
 - **Deploy tag:** `--tags "jellyfin"`
 - **Images:** `lscr.io/linuxserver/jellyfin` (`jellyfin_k8s_image`), `python`
   (`jellyfin_k8s_plugin_init_image`)
 - **Route:** `jellyfin.<domain>` · `jellyfin.local.<domain>`, no Authelia
-- **Claims:** `jellyfin-config`, `media-data`
+- **Claims:** `jellyfin-config` (weekly -> B2 (default target)), `media-data` (not Longhorn
+  (media-local))
 - **Auto-deploy:** eligible (`k8s_autodeploy: true`)
 <!-- /generated_from -->
 

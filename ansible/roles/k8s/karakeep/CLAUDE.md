@@ -5,13 +5,14 @@ Meilisearch Deployment for search, and a `time-tagger` sidecar that calls the ap
 loop to auto-tag bookmarks.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
 - **Deploy tag:** `--tags "karakeep"`
 - **Images:** `ghcr.io/karakeep-app/karakeep` (`karakeep_k8s_image`),
   `ghcr.io/karakeep-app/karakeep-chrome` (`karakeep_k8s_chrome_image`), `getmeili/meilisearch`
   (`karakeep_k8s_meili_image`), `ghcr.io/astral-sh/uv` (`karakeep_k8s_tagger_image`)
 - **Route:** `karakeep.<domain>` · `karakeep.local.<domain>`, Authelia one_factor
-- **Claims:** `karakeep-meili`, `karakeep-data`
+- **Claims:** `karakeep-meili` (no backup (StorageClass longhorn-nobackup)), `karakeep-data`
+  (weekly -> B2 (default target))
 - **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — three reasons: (1) stateful —
   meilisearch migrates its index in place on a bump, non-atomically; (2) probe-less time-tagger
   sub-deployment; (3) migrating state — Recreate + RWO volume-claim PVC. COUPLING NOTE for a

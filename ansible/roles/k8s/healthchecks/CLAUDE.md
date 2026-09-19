@@ -4,11 +4,11 @@ healthchecks.io (self-hosted), pinged by fleet crons so a cron that stops runnin
 noticed instead of silently going quiet. See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
 - **Deploy tag:** `--tags "healthchecks"`
 - **Image:** `lscr.io/linuxserver/healthchecks` (`healthchecks_k8s_image`)
 - **Route:** `healthchecks.<domain>` · `healthchecks.local.<domain>`, Authelia one_factor
-- **Claim:** `healthchecks-config`
+- **Claim:** `healthchecks-config` (weekly -> B2 (default target))
 - **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — observability — cron
   dead-man's-switch monitor. ALSO Recreate + RWO volume-claim PVC (migrating-state shape) — two
   independent reasons. COUPLING NOTE for a future promotion: check UUIDs here are baked into

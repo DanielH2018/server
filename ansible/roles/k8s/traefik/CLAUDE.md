@@ -5,11 +5,11 @@ role depends on. See repo-root `CLAUDE.md` for shared conventions, and the "Wher
 Look" table's note that this role must render before anything referencing its CRDs.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
 - **Deploy tag:** `--tags "traefik"`
 - **Images:** `traefik` (`traefik_k8s_image`), `alpine` (`traefik_k8s_logrotate_image`)
 - **Route:** none (no `templates/ingressroute.yaml.j2`)
-- **Claim:** `traefik-acme`
+- **Claim:** `traefik-acme` (daily -> R2)
 - **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — platform — ingress edge; a failed
   deploy removes the ability to reach or fix anything else, and host probes stay green through
   that kind of outage. COUPLING NOTE for a future promotion: the traefik-acme PVC holds the

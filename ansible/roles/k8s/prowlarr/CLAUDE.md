@@ -4,13 +4,13 @@ Prowlarr, with a `flaresolverr` sidecar that solves Cloudflare challenges for th
 rendering attacker-supplied pages in a headless browser.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
 - **Deploy tag:** `--tags "prowlarr"`
 - **Images:** `lscr.io/linuxserver/prowlarr` (`prowlarr_k8s_image`),
   `ghcr.io/flaresolverr/flaresolverr` (`prowlarr_k8s_flaresolverr_image`), `alpine`
   (`prowlarr_k8s_probe_image`), `ghcr.io/onedr0p/exportarr` (`prowlarr_exportarr_image`)
 - **Route:** `prowlarr.<domain>` · `prowlarr.local.<domain>`, Authelia one_factor
-- **Claim:** `prowlarr-config`
+- **Claim:** `prowlarr-config` (weekly -> B2 (default target))
 - **Auto-deploy:** eligible (`k8s_autodeploy: true`)
 <!-- /generated_from -->
 

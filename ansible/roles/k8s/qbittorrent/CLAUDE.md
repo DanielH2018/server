@@ -4,13 +4,14 @@ qBittorrent with a `wireguard` sidecar init container that tunnels all egress th
 Mullvad. See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
 - **Deploy tag:** `--tags "qbittorrent"`
 - **Images:** `lscr.io/linuxserver/qbittorrent` (`qbittorrent_k8s_image`),
   `lscr.io/linuxserver/wireguard` (`qbittorrent_k8s_wireguard_image`), `alpine`
   (`qbittorrent_k8s_probe_image`)
 - **Route:** `qbittorrent.<domain>` · `qbittorrent.local.<domain>`, Authelia one_factor
-- **Claims:** `qbittorrent-config`, `media-data`
+- **Claims:** `qbittorrent-config` (weekly -> B2 (default target)), `media-data` (not Longhorn
+  (media-local))
 - **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — state coupled outside the volume —
   reverting qbittorrent-config to a snapshot rewinds in-flight torrent bookkeeping while the
   media-data volume it references does not move; the pre-apply snapshot and revert work fine
