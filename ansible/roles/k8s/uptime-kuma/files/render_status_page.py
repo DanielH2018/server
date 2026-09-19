@@ -51,6 +51,19 @@ def load_monitors(raw: object) -> dict[str, int]:
             f"unreadable monitor list: expected object or array, got {type(raw).__name__}"
         )
 
+    # An EMPTY list is valid and distinct from an unreadable one: it is what `kuma monitor list`
+    # answers while AutoKuma is mid-wipe (#2076 deleted all 107 monitors at 22:37 on
+    # 2026-09-18 and recreated them at 22:53; the 22:45 run landed in between). Failing is
+    # still right — the page is left alone and the beat never runs, so the push monitor goes
+    # DOWN after 30 min of silence — but the message must not send the reader to `dump`.
+    # Judged on `raw`, not `entries`: a map whose values are not objects is malformed, and
+    # the shape message below is the one that names it.
+    if not raw:
+        raise SystemExit(
+            "monitor list is empty: Kuma has no monitors (AutoKuma mid-reconcile, or a wipe "
+            "like #2076); the page is left untouched"
+        )
+
     by_name: dict[str, int] = {}
     for key, monitor in entries:
         name = monitor.get("name")
