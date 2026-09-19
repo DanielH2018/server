@@ -33,10 +33,17 @@ def test_every_tag_a_monitor_names_is_a_declared_tag_entity():
     AutoKuma's `resolve_names` raises NameNotFound, the monitor fails to parse, and under
     `ON_DELETE=delete` a monitor that fails to parse is one that was removed — the mechanism
     that deleted all 107 monitors on 2026-09-18 when the notification failed to parse (#2076).
+
+    The name a monitor gives in `tag_names` is the tag ENTITY's AutoKuma id — its filename
+    minus `.json` — not the `name` Kuma displays. PR #2089 referenced `severity` while the
+    entity was `tag-severity.json`; the 23 tagged monitors failed to resolve and were deleted
+    on 2026-09-19 00:31, the second time in two days (#2076).
     """
     entities = _entities()
-    declared = {e["name"] for e in entities.values() if e["type"] == "tag"}
-    assert declared == {"severity", "runbook"}
+    declared = {
+        n.removesuffix(".json") for n, e in entities.items() if e["type"] == "tag"
+    }
+    assert declared == {"tag-severity", "tag-runbook"}
     for name, entity in entities.items():
         for tag in entity.get("tag_names", []):
             assert tag["name"] in declared, (
@@ -51,7 +58,8 @@ def test_severity_critical_is_exactly_the_email_tier():
     critical = {
         e["name"]
         for e in _entities().values()
-        if e["type"] not in NOT_MONITORS and "critical" in _tag_values(e, "severity")
+        if e["type"] not in NOT_MONITORS
+        and "critical" in _tag_values(e, "tag-severity")
     }
     assert critical == EMAIL_TIER
 
@@ -61,7 +69,7 @@ def test_every_runbook_tag_points_at_a_page_the_docs_site_serves():
     # docs/<name>.md at /<name>/ (mkdocs, use_directory_urls: true).
     docs = ANSIBLE.parent / "docs"
     for name, entity in _entities().items():
-        for url in _tag_values(entity, "runbook"):
+        for url in _tag_values(entity, "tag-runbook"):
             prefix = "https://docs.local.example.com/"
             assert url.startswith(prefix), (
                 f"{name}: runbook is not on the docs site: {url}"

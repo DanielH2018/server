@@ -215,8 +215,12 @@ in any client, so `htmlBody` stays off) and `[Homelab] {{ status }} {{ name }}` 
 `ansible/tests/services/test_kuma_email_template.py` renders it the same three ways.
 
 **The two tags are entities this Secret declares** — `tag-severity.json` and
-`tag-runbook.json` (#2066). A monitor names one in `tag_names` and AutoKuma resolves the name
-to the id it created; `severity: critical` is exactly the email tier
+`tag-runbook.json` (#2066). A monitor names one in `tag_names` **by the entity's AutoKuma id**
+— the filename minus `.json`, `tag-severity` — not by the `name` Kuma displays; AutoKuma
+resolves that id to the tag it created. PR #2089 got this wrong, the 23 tagged monitors
+failed to resolve, and `ON_DELETE=delete` removed them at 00:31 on 2026-09-19 — the second
+wipe in two days, same mechanism as #2076. The templates read the DISPLAY name
+(`where: "name", "severity"`), which is the tag's `name` field. `severity: critical` is exactly the email tier
 (`test_severity_critical_is_exactly_the_email_tier`), and a `runbook` value is a page the docs
 site serves (`test_every_runbook_tag_points_at_a_page_the_docs_site_serves`). The tag
 reference is the same NameNotFound hazard as the notification reference: a monitor naming a
