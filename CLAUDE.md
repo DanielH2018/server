@@ -72,9 +72,10 @@ Route to the source of truth by what you're doing, before reading linearly:
 | Answering "what runs here / where / behind what" | `docs/reference/` — generated from the tree by the `docs-refresh` cron, browsable at `docs.local.<domain>`. Services, hosts, secret rotation, scheduled jobs, networking. **Never hand-edit a generated page** — `.claude/hooks/block-protected-edits.py` (and `block-protected-bash.py` for a `sed -i`/`tee`/heredoc write) denies any write to a file carrying a `generated_from:` banner. Change the generator instead (`scripts/docs/build_docs.py` lists them). |
 | CI fails on `test_every_committed_fragment_matches_what_the_generator_writes_now` | You changed a tunable a docs fragment reads. *Generated docs fragments* below has the regenerate command, the generator whose `FRAGMENTS` names the tunables, and why this one gate is not left to the cron. |
 | CI fails on `test_every_deployed_role_block_matches_what_the_generator_writes_now` | You changed a role's defaults, templates, tasks, playbook entry or `containers_list` entry (k8s, setup or the Pi's compose roles), or hand-edited its generated `## At a glance` block. Run `uv run python scripts/docs/gen_role_glance.py` and commit; the reasoning goes in the bullets below the block. |
-| Chasing a reliability / monitoring "gap" | The role's `CLAUDE.md` + monitor-bridge `files/registry.py` (the check registry) **first** — mature setup, most are handled |
+| CI fails on `test_every_recorded_atom_hashes_as_recorded` | You changed a symbol, value, test or marker that a `CLAUDE.md` section cites as support. *Fact support* below: edit the section, or `uv run python scripts/dev/fact_status.py verify '<doc>#<heading>'` and commit `docs/facts.lock`. |
+| Chasing a reliability / monitoring "gap" | The role's `CLAUDE.md` + monitor-bridge `ansible/roles/k8s/monitor-bridge/files/registry.py` (the check registry) **first** — mature setup, most are handled |
 | Checking that a service's UI actually renders, not just that its pod is Ready | The `homelab-ui` MCP server — see `## Claude Tooling in This Repo` below, and `docs/claude-tooling.md` for the full reference. `probe.py health` cannot see a broken UI behind a healthy pod. **Grafana is the exception** — it still serves a login page behind Authelia, so drive it with `uv run pytest -m ui -k grafana` rather than by hand. That tier logs in through Authelia's OIDC provider and types no credential; the admin form stays on as break-glass. OIDC login is LAN-only: `root_url` pins the callback to `grafana.local.<domain>`. |
-| A config edit won't restart the pod (k3s) | A ConfigMap/Secret change alone doesn't roll a Deployment. The general mechanism is the central rollout-restart in `ansible/roles/k8s/manifests/CLAUDE.md`, which fires when a role's rendered manifests change. A role whose pod depends on a file the manifests *don't* carry adds its own `checksum/<thing>` pod annotation instead — e.g. `checksum/check-script` in `roles/k8s/monitor-bridge/templates/deployment.yaml.j2`. |
+| A config edit won't restart the pod (k3s) | A ConfigMap/Secret change alone doesn't roll a Deployment. The general mechanism is the central rollout-restart in `ansible/roles/k8s/manifests/CLAUDE.md`, which fires when a role's rendered manifests change. A role whose pod depends on a file the manifests *don't* carry adds its own `checksum/<thing>` pod annotation instead — monitor-bridge names its `check-script`, rendered in `ansible/roles/k8s/monitor-bridge/templates/deployment.yaml.j2`. |
 | A config edit won't recreate the container (Docker) | `ansible/roles/containers/common/CLAUDE.md` (config-change wiring) |
 | A host can't decrypt secrets | `add-secret` skill → *Onboarding a host that cannot decrypt yet* |
 | Starting Claude Code sessions from a phone | `ansible/roles/setup/claude_code/CLAUDE.md` — `claude-rc.service` hosts them. `/remote-control` inside a session and `claude rc` from a shell are different features; only the second creates sessions on demand. |
@@ -194,8 +195,8 @@ SHA is bad* — `ansible/roles/setup/gitops_deploy/files/deploy_git.py:_CI_NO_VE
 is the list, and a commit whose merge was immediately followed by another reads `cancelled`
 permanently. If you ever check by hand, check that way. (ENFORCED:
 `ansible/tests/deploy/test_ci_cancelled_is_not_a_verdict.py::test_cancelled_is_declared_no_verdict`
-holds `cancelled` in that list; the identifier-presence test beside it is retired by the
-fact-support conversion.)
+holds `cancelled` in that list; the identifier-presence test beside it stays until the
+fact-support conversion retires it against this lock row.)
 
 **Verify the change, not just the workload.** The `VERDICT:` line gates the rollout and the
 180s restart window. It cannot see whether *your change* took effect: an Authelia 302 fires
@@ -539,6 +540,30 @@ it drifting. The asymmetry is the point, not an oversight.
 Two paths are safe and stay safe: the weekly secret-rotate cron commits `--no-verify`, and a
 rotation moves `last_rotated` rather than a tier count, so the fragment does not move either
 way; the docs-refresh cron regenerates before it commits, so its own hooks pass.
+
+### Fact support
+
+A `CLAUDE.md` section's status is derived from the atoms it cites, never stated. A section
+is the text under one heading up to the next heading of any level, so every citation has
+exactly one owning section, keyed `<doc>#<heading text>`. The grammar is closed —
+`scripts/lib/facts/citations.py:FORMS` — and a backticked span is support only in one of
+these shapes: a repo path (`scripts/lib/kubectl.py`, a directory with its trailing `/`), a
+Python symbol (`scripts/lib/kubectl.py:kubectl`), a YAML key
+(`ansible/roles/k8s/traefik/defaults/main.yml:traefik_k8s_https_port`), a test node
+(`scripts/lib/tests/test_kubectl.py::test_asking_for_staging_against_a_prod_kubectl_is_flagged`,
+which must carry `# fact: <doc>#<heading>` in its body), a `DECIDED:` marker cited by text
+prefix, or a `probe.py <subcommand>`. A `file:line` citation is rejected by `fact_status.py
+lint`: a line number moves under every edit above it. Cite the symbol or the marker.
+
+`docs/facts.lock` records the hashes each verified section was checked against. The tool
+writes it; a hand edit fails `test_every_recorded_atom_hashes_as_recorded` as tampered.
+`fact_status.py status` prints every section's status, `verify '<doc>#<heading>'` is the
+only path from OUT back to IN, and the `facts-lint-changed` prek hook lints the sections a
+commit edits. A section that cites atoms but has no lock row is UNVERIFIED and never fails
+anything; the ratchet is `lint --changed-since`, which the prek hook runs on the sections a
+commit edits. A section that cites nothing is a convention and is never graded. The memory
+store, the reconcile timer and the re-verifier are the spec's later slices:
+`docs/superpowers/specs/2026-09-19-fact-support-invalidation-design.md`.
 
 ## Pre-commit Hooks
 The repo uses [prek](https://prek.j178.dev) (config: `prek.toml`) with YAML linting, Ansible linting, and gitleaks (secret scanning).
