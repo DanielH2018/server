@@ -243,9 +243,16 @@ Four things the change depends on:
   re-synced all 108 with an empty notification list — every alert detached, behind green
   tiles, until the wrapper deployed. Tera strips the `raw` markers and passes the content
   verbatim. `test_the_notification_ships_this_template_as_a_webhook_body` asserts the
-  wrapper. The same parse pass also prints the failing entity's config, webhook URL
-  included, into the sidecar log and so into Loki — the debug-diff trap above, reached
-  through a WARN line.
+  wrapper, and `test_kuma_entities_parse_for_autokuma.py` walks every string in every
+  rendered entity and refuses a Tera delimiter outside a raw block, so the next Liquid
+  value cannot repeat it. The same parse pass also prints the failing entity's config,
+  webhook URL included, into the sidecar log and so into Loki — the debug-diff trap above,
+  reached through a WARN line.
+  **`ON_DELETE=delete` stays** (decided 2026-09-19, #2076; the `DECIDED:` marker sits at
+  the variable in `templates/deployment.yaml.j2`). An unparseable or unresolvable entity is
+  a removed one to AutoKuma, so the guards on the declarations are what stand between a
+  typo and a fleet wipe: references resolve to declared ids, no Tera outside raw,
+  `applyExisting` declared.
 - **`webhookAdditionalHeaders` carries `Content-Type: application/json`.** axios posts a string
   body as `application/x-www-form-urlencoded`, and Discord rejects that with a 400.
 - **The AutoKuma id stays `discord`** so no monitor's `notification_name_list` moves, and the
