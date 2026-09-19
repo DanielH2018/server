@@ -318,7 +318,7 @@ whole object and a hand-built document blanks `description`, `theme`, `published
 
 ### An `Init:Error` sync pod is retained history, not a live loop
 A failed Job's pods stay in `kubectl get pods` until `ttlSecondsAfterFinished`
-(`kuma_status_page_sync_job_ttl_seconds`, a day) reaps them. Read the pod's age before the
+(`kuma_status_page_sync_job_ttl_seconds`, two hours) reaps them. Read the pod's age before the
 error: both times this reached the operator (#1344, #2120) every run since the failure had
 completed, and the push monitor had re-beaten. The `render` stage's message names the stage
 to look at — `monitor list is empty` means Kuma answered with no monitors (AutoKuma
