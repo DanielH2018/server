@@ -32,8 +32,7 @@ registry_k8s_size: 10Gi
 # The weekly garbage collection: the gc-job manifest, the script, its state directory and the
 # cron that runs it. False for a cluster Kuma does not watch — registry-gc.sh pushes its result
 # to `uptime-kuma.local.<domain>`, so leaving it on elsewhere reports a foreign registry's
-# health to a real operator, which is what k3s_manage_health_crons and
-# traefik_k8s_manage_cloudflare_drift_check exist to prevent.
+# health to a real operator, which is what k3s_manage_health_crons exists to prevent.
 #
 # Skip-only, matching every sibling flag in this repo: turning it off on a host that already
 # has the cron installs nothing and removes nothing. A removal arm would be the one shape the

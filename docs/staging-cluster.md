@@ -440,8 +440,9 @@ against the ACME account and rate limit prod uses.
 
 What closed it is a set of per-cluster switches, each defaulting to prod's behaviour so that a
 staging cluster turns pieces **off** in its own `host_vars` rather than prod turning them on:
-`k8s_tls_cert_resolver` (#522, empty on staging), `traefik_k8s_manage_acme` and
-`traefik_k8s_manage_cloudflare_drift_check` (#523), `traefik_k8s_manage_crowdsec` and
+`k8s_tls_cert_resolver` (#522, empty on staging), `traefik_k8s_manage_acme` (#523; its sibling
+`traefik_k8s_manage_cloudflare_drift_check` retired on 2026-09-19 when the check moved into
+monitor-bridge, which staging does not run), `traefik_k8s_manage_crowdsec` and
 `authelia_k8s_manage_crowdsec` (#525), `traefik_k8s_manage_livesync_gate` (#526), and
 `traefik_k8s_watched_namespaces` (#528). Traefik itself reached staging in #527, `freshrss` in
 #529 behind `freshrss_k8s_manage_claim`, and #530 turned off the pre-apply Longhorn snapshots.

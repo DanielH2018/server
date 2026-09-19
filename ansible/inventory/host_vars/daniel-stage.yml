@@ -276,9 +276,6 @@ k8s_autodeploy_snapshot_pvcs: []
 
 traefik_k8s_manage_acme: false
 
-# The drift check pushes to prod's Kuma, same reason as k3s_manage_health_crons above.
-traefik_k8s_manage_cloudflare_drift_check: false
-
 # No WAF. The `crowdsec` role is not in the subset, so `crowdsec:8080` does not resolve —
 # the agent sidecar would crashloop and the pod would never reach Ready. Two flags rather
 # than one because the roles are gated separately on purpose (see the authelia role's
