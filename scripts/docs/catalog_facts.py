@@ -87,10 +87,15 @@ def route_for(
 
 # Auth tier — containers_list.use_authelia is read directly by the IngressRoute macro
 # (`container_item.use_authelia`) and by the docker traefik.yml.j2 macro alike, so this
-# is a direct field read, not an inference from the route template.
+# is a direct field read, not an inference from the route template. The policy beside it
+# (`auth_tier: one_factor | two_factor`) is what the authelia role renders into its
+# access_control rules, so an SSO entry reports both.
 
 
 def auth_tier(entry: dict[str, Any]) -> str:
     if "use_authelia" not in entry:
         return UNKNOWN + " (use_authelia not declared on this entry)"
-    return "Authelia" if entry["use_authelia"] else "none (public/no-auth)"
+    if not entry["use_authelia"]:
+        return "none (public/no-auth)"
+    policy = entry.get("auth_tier")
+    return f"Authelia {policy}" if policy else "Authelia"

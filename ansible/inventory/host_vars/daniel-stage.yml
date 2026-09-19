@@ -104,6 +104,7 @@ containers_list:
     hostname: "freshrss"
     port: 80
     use_authelia: true
+    auth_tier: one_factor
     # 302, and the direction matters: a 200 here would mean the forward-auth middleware stopped
     # applying, which is the failure this whole expectation mechanism exists to catch.
     staging_expect:

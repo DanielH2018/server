@@ -97,6 +97,10 @@ def test_auth_tier_true_false_and_missing(tmp_path):
           - name: authelia
             platform: k8s
             use_authelia: true
+          - name: shell
+            platform: k8s
+            use_authelia: true
+            auth_tier: two_factor
           - name: mystery
             platform: k8s
         """,
@@ -104,6 +108,7 @@ def test_auth_tier_true_false_and_missing(tmp_path):
     rows = service_catalog.build_rows(**paths)
     by_name = {r.name: r for r in rows}
     assert by_name["authelia"].auth_tier == "Authelia"
+    assert by_name["shell"].auth_tier == "Authelia two_factor"
     assert by_name["jellyfin"].auth_tier == "none (public/no-auth)"
     assert by_name["mystery"].auth_tier.startswith("unknown")
 

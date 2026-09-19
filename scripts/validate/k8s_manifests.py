@@ -98,6 +98,7 @@ from lib.render_guard import (
 )
 
 sys.path.insert(0, str(ANSIBLE / "filter_plugins"))
+from authelia_access import authelia_service_rules
 from toposort import filter_by_platform
 
 from ansible.plugins.filter.core import to_bool
@@ -173,6 +174,10 @@ def register_ansible_filters(env):
     """
     env.filters["bool"] = to_bool
     env.filters["filter_by_platform"] = filter_by_platform
+    # authelia's config Secret derives its per-service access_control rules from
+    # containers_list through the repo's filter plugin, which raises on a `use_authelia: true`
+    # entry without an `auth_tier` — the real thing, so that failure reaches this guard too.
+    env.filters["authelia_service_rules"] = authelia_service_rules
     env.filters["hash"] = _ansible_hash
     # uptime-kuma embeds files/discord-message.liquid into a JSON Secret value with `to_json`;
     # the looked-up-template env in make_lookup registers the same shim.

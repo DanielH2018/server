@@ -13,7 +13,14 @@ and rendering without them raises `UndefinedError` rather than reproducing what 
 import re
 
 from lib import yaml_fast
-from _manifest_guards import ALL_VARS, K8S, _k8s_entries, _render, _role_defaults
+from _manifest_guards import (
+    ALL_VARS,
+    BOX_VARS,
+    K8S,
+    _k8s_entries,
+    _render,
+    _role_defaults,
+)
 
 
 def _k8s_authelia_config() -> dict:
@@ -24,6 +31,7 @@ def _k8s_authelia_config() -> dict:
     rendered = _render(
         K8S / "authelia" / "templates" / "config-secret.yaml.j2",
         container_item=entry,
+        containers_list=BOX_VARS["containers_list"],
         domain="example.com",
         email="stub@example.com",
         authelia_jwt="stub",

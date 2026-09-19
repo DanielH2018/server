@@ -37,6 +37,14 @@ autofix_fake_remux_policy:
 # each role's own templates and its `use_authelia` flag — a new entry gets them for free and
 # does not need to be positioned by hand. List order is kept only as the toposort's tiebreak,
 # so today's order stays the sorted order and a diff here still reads as "nothing moved".
+#
+# Every `use_authelia: true` entry also declares `auth_tier: one_factor | two_factor` — the
+# Authelia policy its LAN name (`<hostname>.local.<domain>`) gets. The authelia role renders
+# its per-service access_control rules from these (filter_plugins/authelia_access.py), and an
+# entry that attaches the middleware without a tier fails the render, so no service rides the
+# `*.local` wildcard by omission. The public name is two_factor whatever is declared here. A
+# scoped bypass (uptime-kuma's push API, scrutiny's read-only probes) has no per-service shape
+# and stays a hand-written rule in the authelia template; the entry's tier is what its UI gets.
 containers_list:
   # crowdsec must precede traefik: the traefik pod carries a crowdsec agent sidecar that logs
   # into this engine's LAPI, and a post-deploy task in this role registers the machine
@@ -73,12 +81,14 @@ containers_list:
     hostname: "bento-pdf"
     port: 8080
     use_authelia: true
+    auth_tier: one_factor
   - name: texbrain
     platform: k8s
     # Single label, for the same wildcard-cert reason as bento-pdf above.
     hostname: "texbrain"
     port: 8080
     use_authelia: true
+    auth_tier: one_factor
   # Read-only cluster UI. use_authelia is load-bearing rather than decorative: the pod runs
   # with -unsafe-use-service-account-token, so this Middleware is the only thing between a
   # browser and the dashboard's (read-only) cluster identity.
@@ -87,23 +97,30 @@ containers_list:
     hostname: "headlamp"
     port: 4466
     use_authelia: true
+    auth_tier: one_factor
   # Route-only: the backend is deploy-ui.service on this host (roles/setup/deploy_ui), reached
-  # through a selector-less Service. use_authelia is the whole access control and the Authelia
-  # policy is two_factor — the page starts deploys and clears the deployer's hold.
+  # through a selector-less Service. use_authelia is the whole access control, and the tier is
+  # two_factor because the page starts land.sh/deploy.sh and clears the deployer's hold on a
+  # stolen password alone.
   - name: deploy-ui
     platform: k8s
     hostname: "deploy"
     port: 8790
     use_authelia: true
+    auth_tier: two_factor
   # Route-only entry: Longhorn's workloads come from the upstream manifest roles/setup/k3s
   # applies, and this role adds nothing but the IngressRoute plus the middleware copies it
   # needs inside longhorn-system. `port` is longhorn-frontend's Service port. use_authelia
-  # is the entire access control — Longhorn's UI has no login of its own.
+  # is the entire access control — Longhorn's UI has no login of its own. two_factor: the UI
+  # deletes volumes, replicas and their B2 backup chain on a stolen password alone, a heavier
+  # blast radius than code-server/n8n. It rode the one_factor wildcard from 2026-08-15 until
+  # its own rule landed.
   - name: longhorn-ui
     platform: k8s
     hostname: "longhorn"
     port: 80
     use_authelia: true
+    auth_tier: two_factor
   # Makes /dev/dri/renderD128 schedulable as `devic.es/dri` so jellyfin and tdarr can
   # request it without being privileged. No port/hostname — nothing routes to it.
   - name: dri-device-plugin
@@ -124,6 +141,7 @@ containers_list:
     hostname: "sonarr"
     port: 8989
     use_authelia: true
+    auth_tier: one_factor
   # Runs a WireGuard/Mullvad sidecar sharing the pod's netns, gating qbittorrent's start so
   # it cannot talk to a tracker before the kill-switch exists.
   - name: qbittorrent
@@ -131,11 +149,13 @@ containers_list:
     hostname: "qbittorrent"
     port: 8080
     use_authelia: true
+    auth_tier: one_factor
   - name: radarr
     platform: k8s
     hostname: "radarr"
     port: 7878
     use_authelia: true
+    auth_tier: one_factor
   # Brings a second workload with it — flaresolverr, which renders attacker-supplied
   # Cloudflare pages. An INGRESS NetworkPolicy keeps it reachable from prowlarr alone;
   # ingress is the direction actually enforced on this cluster.
@@ -144,11 +164,13 @@ containers_list:
     hostname: "prowlarr"
     port: 9696
     use_authelia: true
+    auth_tier: one_factor
   - name: bazarr
     platform: k8s
     hostname: "bazarr"
     port: 6767
     use_authelia: true
+    auth_tier: one_factor
 
   # use_authelia stays FALSE, and that is load-bearing rather than an oversight: Jellyfin's
   # clients are TV and phone apps that cannot complete a web SSO flow.
@@ -166,6 +188,7 @@ containers_list:
     hostname: "tdarr"
     port: 8265
     use_authelia: true
+    auth_tier: one_factor
 
   # A nightly reconcile that reads the two *arrs and exits, so it is a CronJob with no
   # Service and nothing to route to. Must follow sonarr and radarr: it addresses them by
@@ -187,6 +210,7 @@ containers_list:
     hostname: "grafana"
     port: 3000
     use_authelia: true
+    auth_tier: one_factor
     # Prometheus' own name, so Pi-hole answers it with the cluster VIP instead of the
     # local.<domain> wildcard pointing at daniel-server. monitor-bridge runs there and
     # cannot reach this host's ClusterIP or its loopback-pinned hostPort, so this name plus
@@ -205,6 +229,7 @@ containers_list:
     hostname: "speedtest"
     port: 80
     use_authelia: true
+    auth_tier: one_factor
   # Headless DDNS client: no web UI, no Traefik route.
   - name: cloudflare-ddns
     platform: k8s
@@ -213,6 +238,7 @@ containers_list:
     hostname: "freshrss"
     port: 80
     use_authelia: true
+    auth_tier: one_factor
   # Parked at replicas 0 — see roles/k8s/navidrome/defaults/main.yml. The entry stays in the
   # list so the Deployment, Service and route keep being reconciled; only the pod count is 0.
   - name: navidrome
@@ -220,6 +246,7 @@ containers_list:
     hostname: "navidrome"
     port: 4533
     use_authelia: true
+    auth_tier: one_factor
   # port 8000, not 80 — uWSGI serves directly, there is no nginx in front of it. Assuming
   # 80 costs a five-minute rollout timeout with a perfectly healthy app behind a probe
   # pointed at a closed port.
@@ -228,6 +255,7 @@ containers_list:
     hostname: "healthchecks"
     port: 8000
     use_authelia: true
+    auth_tier: one_factor
   # CouchDB for Obsidian LiveSync. use_authelia is false because the LiveSync client uses
   # non-interactive basic auth and cannot pass 2FA — CouchDB's own require_valid_user is
   # the gate. Its data volume is longhorn-NOBACKUP, so the backup plane ignores this PVC
@@ -254,12 +282,14 @@ containers_list:
     hostname: "homepage"
     port: 3000
     use_authelia: true
+    auth_tier: one_factor
   # UPS web UI. Reads upsd over the in-cluster `nut` Service.
   - name: peanut
     platform: k8s
     hostname: "peanut"
     port: 8080
     use_authelia: true
+    auth_tier: one_factor
   # Browses every host's ~/.claude/artifacts at one authenticated URL. Serves hostPath
   # trees, so the pod is pinned to daniel-box and daniel-server's copy is rsynced in by a
   # cron there. Answers on both the LAN and the public name — a link is the only way anyone
@@ -270,6 +300,7 @@ containers_list:
     hostname: "artifacts"
     port: 8080
     use_authelia: true
+    auth_tier: one_factor
   # MkDocs Material site over docs/, built on this host by scripts/docs/build_docs.py and served
   # from a hostPath. Sits next to artifacts because they are the same shape: nginx-class
   # static serving over a daniel-box tree, reachable on both the LAN and public names behind
@@ -279,6 +310,7 @@ containers_list:
     hostname: "docs"
     port: 8080
     use_authelia: true
+    auth_tier: one_factor
   # Read-only MCP server. No hostname/ingressroute — its bearer-token router lives in the
   # edge gate Secret (roles/k8s/traefik/templates/livesync-gate-secret.yaml.j2), matching
   # only mcp.local.<domain>, so no dnsmasq override or public router may exist for it.
@@ -294,6 +326,7 @@ containers_list:
     hostname: "karakeep"
     port: 3000
     use_authelia: true
+    auth_tier: one_factor
     # The browser extension and mobile app authenticate with Bearer API keys and cannot pass
     # 2FA, so the paths they call are public on purpose. Each prefix is one the app itself
     # key-gates (packages/api/index.ts in the pinned image): the extension and the app speak
@@ -318,11 +351,15 @@ containers_list:
   # k8s/n8n because a BuildKit rebuild is minutes every n8n redeploy would otherwise pay.
   - name: n8n-images
     platform: k8s
+  # two_factor even on the LAN (decided 2026-08-13): arbitrary workflow execution on a stolen
+  # password alone. /webhook/ below is unaffected — that route carries no forward-auth at all,
+  # and monitor-bridge's check_n8n rides the API-key route.
   - name: n8n
     platform: k8s
     hostname: "n8n"
     port: 5678
     use_authelia: true
+    auth_tier: two_factor
     # External services POST here with no session. Authelia would not fail loudly — it
     # would silently break every registered webhook while the callers keep reporting
     # success. The trailing slash keeps /webhook-test/ (dev-only) out.
@@ -341,6 +378,7 @@ containers_list:
     hostname: "zigbee2mqtt"
     port: 8080
     use_authelia: true
+    auth_tier: one_factor
 
   # use_authelia false: forward-auth breaks the companion app, so HA's own login + TOTP is
   # the gate. Reaches mosquitto by Service name.
@@ -357,6 +395,7 @@ containers_list:
     hostname: "pihole"
     port: 80
     use_authelia: true
+    auth_tier: one_factor
   # Pi-hole v6 serves no Prometheus endpoint, so this polls its admin API and exports
   # `pihole_*` — for BOTH instances, since each FTL keeps its own query database and one alone
   # reports half the house's volume. `port` is the port it DIALS on the Pi-holes, not one it
@@ -392,6 +431,7 @@ containers_list:
     port: 51821
     udp_port: 51820
     use_authelia: true
+    auth_tier: one_factor
     default_dns: "{{ dns_k8s_vip }}"
 
   - name: uptime-kuma
@@ -399,15 +439,18 @@ containers_list:
     hostname: "uptime-kuma"
     port: 3001
     use_authelia: true
+    auth_tier: one_factor
 
   # Ported WITHOUT its docker plumbing (operator decision) — no DOCKER_HOST, so the in-IDE
   # docker CLI and devcontainers are gone. Image built in-cluster from the containers
-  # role's Dockerfile, which stays the build source.
+  # role's Dockerfile, which stays the build source. two_factor even on the LAN (decided
+  # 2026-08-13): a shell as the repo user on a stolen password alone.
   - name: code-server
     platform: k8s
     hostname: "code-server"
     port: 8443
     use_authelia: true
+    auth_tier: two_factor
 
   # No port/hostname: nothing routes over HTTP. The game's TCP 7777 answers on the node IP
   # via its Service (the wg-easy pattern — the router's forward points at this device).
@@ -472,6 +515,7 @@ containers_list:
     hostname: "scrutiny"
     port: 8080
     use_authelia: true
+    auth_tier: one_factor
   # LAST on purpose, and it must NOT sit in traefik's rollout batch.
   #
   # Not for the usual "after traefik" reason — this role renders no Traefik CRDs, and a

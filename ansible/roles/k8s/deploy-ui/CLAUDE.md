@@ -14,5 +14,7 @@ Deploy the route with `./scripts/deploy.sh --tags "deploy-ui"`; the daemon it fr
 separate tag on another playbook — `uv run ansible-playbook ansible/initial_setup.yml
 --tags deploy_ui`, which `deploy.sh` does not carry.
 
-Authelia policy: `two_factor`, ENFORCED by `ansible/tests/k8s/test_deploy_ui_is_two_factor.py`.
+Authelia policy: `auth_tier: two_factor` on the containers_list entry, which the authelia role
+renders into its access_control rules. ENFORCED for every SSO entry by
+`ansible/tests/services/test_authelia_access_tiers.py`.
 Kept out of `STAGING_SUBSET`: daniel-stage has no daemon to route to.

@@ -62,6 +62,12 @@ If the new entry needs an ordering constraint no template carries — something 
 crowdsec's LAPI-credential edge onto traefik — declare it with `depends_on: [<name>]` on the
 entry rather than moving it in the list.
 
+`use_authelia: true` needs `auth_tier: one_factor | two_factor` beside it — the Authelia
+policy for the service's LAN name, which the authelia role renders into its access_control
+rules. An entry that attaches the middleware without a tier fails `validate/k8s_manifests.py`
+and the deploy. Pick `two_factor` for anything that acts on a stolen password alone (a shell,
+a deploy trigger, a volume delete) and say why in the comment above the entry.
+
 ## 3. Secrets
 
 Add to `ansible/vars/secrets.yml` (`sops ansible/vars/secrets.yml`) and reference as

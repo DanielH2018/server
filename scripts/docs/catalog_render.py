@@ -76,7 +76,7 @@ def _platform_badge(platform: str) -> str:
 def _auth_badge(tier: str) -> str:
     if tier.startswith(UNKNOWN):
         return _badge(tier, "badge-unknown")
-    if tier == "Authelia":
+    if tier.startswith("Authelia"):
         return _badge(tier, "badge-auth")
     return _badge(tier, "badge-noauth")
 
