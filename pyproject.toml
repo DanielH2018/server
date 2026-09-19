@@ -170,6 +170,8 @@ pythonpath = [
   "scripts/deploy_tools/tests",
   "scripts/dev",
   "scripts/docs",
+  # its tests share _catalog_fixtures.py, as scripts/deploy_tools/tests share _land_fakes.py
+  "scripts/docs/tests",
   "scripts/grafana",
   "scripts/home_assistant",
   "scripts/infra_map",
@@ -331,6 +333,7 @@ extra-paths = [
   "ansible/roles/setup/renovate_agent/files",
   "ansible/roles/k8s/home-assistant/files",
   "scripts/deploy_tools/tests",
+  "scripts/docs/tests",
 ]
 
 [tool.ty.src]

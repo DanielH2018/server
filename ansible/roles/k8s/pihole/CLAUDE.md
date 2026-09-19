@@ -9,7 +9,8 @@ continuity. Coexisted with a Docker-era copy through the DNS cutover; that copy 
 - **Images:** `pihole/pihole` (`pihole_k8s_image`), `klutchell/unbound`
   (`pihole_k8s_unbound_image`)
 - **Route:** `pihole.<domain>` · `pihole.local.<domain>`, Authelia one_factor
-- **Claims:** the claims a template loop declares (`{{ inst.claim }}`)
+- **Claims:** `pihole-etc`, `pihole-etc-2`, plus the claims a template loop declares (`{{
+  inst.claim }}`)
 - **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — platform — LAN DNS resolver; a failed
   deploy breaks name resolution fleet-wide, and host probes stay green through that kind of
   outage
