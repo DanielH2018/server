@@ -61,6 +61,11 @@ def _checksum(units: dict) -> str:
 
 
 def read_lock(path: Path) -> dict[str, dict]:
+    """The lock's ``units`` mapping, or ``{}`` when the file is absent or holds no body.
+
+    Comment lines are stripped before the JSON is parsed: the header names the generator, and
+    a reader who opens the file is the person most likely to hand-edit it.
+    """
     if not path.is_file():
         return {}
     body = "\n".join(
@@ -72,6 +77,11 @@ def read_lock(path: Path) -> dict[str, dict]:
 
 
 def write_lock(path: Path, units: dict[str, dict]) -> None:
+    """Write ``units`` with a checksum over them, sorted so a diff shows only what changed.
+
+    The one write path. Every caller that changes a row goes through it, which is what keeps
+    the checksum a signal that a HUMAN edited the file rather than noise from the tool.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
     doc = {"checksum": _checksum(units), "units": units}
     path.write_text(
@@ -81,6 +91,11 @@ def write_lock(path: Path, units: dict[str, dict]) -> None:
 
 
 def lock_tampered(path: Path) -> bool:
+    """Whether the lock's recorded checksum disagrees with its own units.
+
+    False for an absent file: nothing to tamper with. A hand edit that changes a hash to
+    silence a finding lands here rather than passing as a re-verification.
+    """
     if not path.is_file():
         return False
     body = "\n".join(
@@ -110,6 +125,13 @@ def _repo_citations(repo: Path) -> dict[str, list[Citation]]:
 
 
 def build_repo_edb(repo: Path, lock: dict[str, dict]) -> Edb:
+    """The repo store's ``Edb``: the tree supplies the citations and current hashes, ``lock`` the recorded ones.
+
+    Every probe atom is put in both ``live`` and ``transport_failed``, because nothing here
+    runs one — slice 5's reconcile timer supplies the shape. The effect is that a probe
+    citation reads UNKNOWN rather than dragging its section OUT. ``memory_units`` and
+    ``links`` stay empty until slice 4 adds the memory store.
+    """
     by_unit = _repo_citations(repo)
     cites: set[tuple[str, str]] = set()
     current: dict[str, str] = {}

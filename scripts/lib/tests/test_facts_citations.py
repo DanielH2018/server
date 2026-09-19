@@ -4,7 +4,7 @@ import subprocess
 
 import pytest
 
-from facts.citations import (
+from lib.facts.citations import (
     FORMS,
     REJECT_REASONS,
     Citation,

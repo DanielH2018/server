@@ -10,7 +10,7 @@ docs/superpowers/specs/2026-09-19-fact-support-invalidation-design.md
 import subprocess
 
 from _helpers import REPO
-from lib.facts.lock import LOCK_REL, check_lock, read_lock
+from lib.facts.lock import LOCK_REL, check_lock, read_lock, verify_units
 
 
 def test_every_recorded_atom_hashes_as_recorded():
@@ -45,7 +45,6 @@ def test_a_moved_atom_is_flagged(tmp_path):
     (tmp_path / "CLAUDE.md").write_text("## Gate\n`sub/m.py:LIMIT`\n")
     (tmp_path / "docs").mkdir()
     subprocess.run(["git", "add", "-A"], cwd=tmp_path, check=True, env=env)
-    from lib.facts.lock import verify_units
 
     verify_units(tmp_path, tmp_path / LOCK_REL, ["CLAUDE.md#Gate"], "abc")
     (tmp_path / "sub" / "m.py").write_text("LIMIT = 86\n")

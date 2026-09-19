@@ -4,7 +4,7 @@ import subprocess
 
 import pytest
 
-from facts.lock import (
+from lib.facts.lock import (
     FINDING_KINDS,
     LOCK_REL,
     _PYTHON,
@@ -17,7 +17,7 @@ from facts.lock import (
     verify_units,
     write_lock,
 )
-from facts.relations import derive, status_of
+from lib.facts.relations import derive, status_of
 
 DOC = """# Root
 

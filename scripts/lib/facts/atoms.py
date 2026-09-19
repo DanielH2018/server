@@ -16,7 +16,6 @@ recorded under another minor version is reported rather than compared.
 import ast
 import hashlib
 import json
-import os
 import re
 import subprocess
 from pathlib import Path
@@ -27,7 +26,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from lib.yaml_fast import safe_load
 
-from .citations import Citation
+from .citations import Citation, git_env
 
 HASHED_FORMS = frozenset({"path", "symbol", "yaml", "test", "marker"})
 _BACKREF = re.compile(r"^\s*#\s*fact:\s*(\S.*?)\s*$", re.MULTILINE)
@@ -42,11 +41,10 @@ def _sha(data: bytes) -> str:
 
 
 def _tracked_under(repo: Path, rel: str) -> list[str]:
-    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
     out = subprocess.run(
         ["git", "ls-files", "-z", "--", rel],
         cwd=repo,
-        env=env,
+        env=git_env(),
         capture_output=True,
         text=True,
         check=True,

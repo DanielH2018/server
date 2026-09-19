@@ -40,7 +40,29 @@ class Idb:
     supported_by_out: frozenset[str]
 
 
+def _transport_exempt(edb: Edb, atom: str) -> bool:
+    """Whether a missing hash for ``atom`` is a gap in the evidence rather than in the claim.
+
+    A live probe whose run did not answer has no hash for a reason that says nothing about
+    the citation. Grading its unit OUT would make a slow endpoint look like a wrong fact.
+    """
+    return atom in edb.live and atom in edb.transport_failed
+
+
 def derive(edb: Edb) -> Idb:
+    """Every derived relation, recomputed from scratch.
+
+    missing: a cited atom of a recorded unit that no longer hashes, transport aside.
+    moved: a cited atom whose recorded hash and current hash differ.
+    unrecorded: a cited atom of a recorded unit that verify never hashed.
+    one_way: a cited test atom carrying no ``# fact:`` back at its unit.
+    unknown: a unit whose live probe did not answer.
+    undeclared: a memory unit nothing cites.
+    unverified: a citing unit with no lock row at all.
+    out: a unit with a missing, moved or unrecorded atom.
+    in_: a citing unit that is none of out, unknown or unverified.
+    supported_by_out: an IN unit linked to a unit that is OUT.
+    """
     cites = edb.cites
     # A unit with no lock row at all is UNVERIFIED, not OUT: missing and unrecorded grade
     # only a unit verify has already recorded at least one atom for.
@@ -52,7 +74,7 @@ def derive(edb: Edb) -> Idb:
         for u, a in cites
         if u in recorded_units
         and a not in edb.current
-        and not (a in edb.live and a in edb.transport_failed)
+        and not _transport_exempt(edb, a)
     )
     moved = frozenset(
         (u, a)
@@ -66,7 +88,7 @@ def derive(edb: Edb) -> Idb:
         for u, a in cites
         if u in recorded_units
         and (u, a) not in edb.recorded
-        and not (a in edb.live and a in edb.transport_failed)
+        and not _transport_exempt(edb, a)
     )
     unknown = frozenset(
         u for u, a in cites if a in edb.live and a in edb.transport_failed

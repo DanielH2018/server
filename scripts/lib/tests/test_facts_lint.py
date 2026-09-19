@@ -4,8 +4,8 @@ import subprocess
 
 import pytest
 
-from facts.lint import RULES, WARN_RULES, LintFinding, changed_units, lint_sections
-from facts.lock import LOCK_REL, write_lock
+from lib.facts.lint import RULES, WARN_RULES, LintFinding, changed_units, lint_sections
+from lib.facts.lock import LOCK_REL, write_lock
 
 
 def _repo(tmp_path, doc):

@@ -5,8 +5,8 @@ import textwrap
 
 import pytest
 
-from facts.atoms import HASHED_FORMS, Ambiguous, backrefs, hash_atom
-from facts.citations import Citation
+from lib.facts.atoms import HASHED_FORMS, Ambiguous, backrefs, hash_atom
+from lib.facts.citations import Citation
 
 
 def _write(repo, rel, text):
@@ -50,7 +50,7 @@ def test_directory_hashes_its_tracked_tree(tmp_path, monkeypatch):
     _write(tmp_path, "d/x.txt", "x\n")
     _write(tmp_path, "d/y.txt", "y\n")
     monkeypatch.setattr(
-        "facts.atoms._tracked_under", lambda repo, rel: ["d/x.txt", "d/y.txt"]
+        "lib.facts.atoms._tracked_under", lambda repo, rel: ["d/x.txt", "d/y.txt"]
     )
     c = Citation("path", "d/", "d/", "")
     h1 = hash_atom(c, tmp_path)

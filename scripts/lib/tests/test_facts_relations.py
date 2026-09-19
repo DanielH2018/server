@@ -2,7 +2,7 @@
 
 from collections.abc import Mapping
 
-from facts.relations import STATUSES, Edb, derive, status_of
+from lib.facts.relations import STATUSES, Edb, derive, status_of
 
 U, A, T = "CLAUDE.md#Sec", "m.py:run", "t/test_m.py::test_run"
 

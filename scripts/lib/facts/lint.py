@@ -6,7 +6,6 @@ is a habit the spec asks writers to drop but a machine cannot judge (a number th
 not be a count, a test with no backref). ``fact_status.py lint`` exits non-zero on errors only.
 """
 
-import os
 import re
 import subprocess
 from dataclasses import dataclass
@@ -14,6 +13,7 @@ from pathlib import Path
 
 from .atoms import Ambiguous, backrefs, hash_atom
 from .citations import (
+    git_env,
     in_tree,
     parse_citations,
     repo_docs,
@@ -165,11 +165,10 @@ def changed_units(repo: Path, since: str) -> set[str]:
     empty, and every section in the repo reads as changed — the hook then lints the whole
     tree and reports a wall of errors that names nothing the commit touched.
     """
-    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
     resolved = subprocess.run(
         ["git", "rev-parse", "--verify", "--quiet", f"{since}^{{commit}}"],
         cwd=repo,
-        env=env,
+        env=git_env(),
         capture_output=True,
         text=True,
         check=False,
@@ -182,7 +181,7 @@ def changed_units(repo: Path, since: str) -> set[str]:
         old = subprocess.run(
             ["git", "show", f"{since}:{rel}"],
             cwd=repo,
-            env=env,
+            env=git_env(),
             capture_output=True,
             text=True,
             check=False,

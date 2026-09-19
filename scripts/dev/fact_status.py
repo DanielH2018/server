@@ -42,8 +42,9 @@ def cmd_status(args: argparse.Namespace) -> int:
     lock_path = repo / LOCK_REL
     edb = build_repo_edb(repo, read_lock(lock_path))
     idb = derive(edb)
-    units = sorted({u for u, _ in edb.cites} | {u for u in _all_units(repo)})
-    for u in units:
+    # Every cited unit is a section key, so unioning the cited set in adds nothing. The
+    # dedupe stays: two sections in one document can carry the same heading text.
+    for u in sorted(set(_all_units(repo))):
         print(f"{status_of(edb, idb, u)}  {u}")
     findings = check_lock(repo, lock_path)
     for f in findings:
