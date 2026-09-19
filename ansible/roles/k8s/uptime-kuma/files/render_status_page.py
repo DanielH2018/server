@@ -58,7 +58,7 @@ def load_monitors(raw: object) -> dict[str, int]:
     # DOWN after 30 min of silence — but the message must not send the reader to `dump`.
     # Judged on `raw`, not `entries`: a map whose values are not objects is malformed, and
     # the shape message below is the one that names it.
-    if not raw:
+    if isinstance(raw, (dict, list)) and not raw:
         raise SystemExit(
             "monitor list is empty: Kuma has no monitors (AutoKuma mid-reconcile, or a wipe "
             "like #2076); the page is left untouched"

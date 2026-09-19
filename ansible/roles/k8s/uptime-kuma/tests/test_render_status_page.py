@@ -176,3 +176,8 @@ def test_an_empty_monitor_list_fails_and_names_the_list_as_empty(tmp_path):
     assert "monitor list is empty" in str(excinfo.value)
     assert "unreadable" not in str(excinfo.value)
     assert not (tmp_path / "desired.json").exists()
+
+    # Only an empty MAP or ARRAY is "empty"; an empty string is still the wrong shape.
+    with pytest.raises(SystemExit) as excinfo:
+        run(tmp_path, monitors="")
+    assert "expected object or array" in str(excinfo.value)
