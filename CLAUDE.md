@@ -137,7 +137,7 @@ Its non-zero exits arrive as a bare `Exit code N`. Every member of `DEPLOY_SH_NO
 (`scripts/deploy_tools/exit_codes.py`) means **nothing was deployed** — a resume point rather
 than a playbook failure (retry a busy lock, `git pull` a stale tree — never
 `--skip-staleness-check` — deploy by hand on a broad change, check `--list-services` on a tag
-miss, fix the lock file itself on 76, fix the snapshot root on 77, fix the inventory or host
+miss, fix the lock file itself on 76, fix what the captured stderr names on 77, fix the inventory or host
 pattern on 78 — the playbook matched no host, which ansible itself exits 0 for — and run
 `deploy_locks.py plan <tag>` by hand on 79, where the wrapper got no lock list and refused
 rather than order the locks itself).

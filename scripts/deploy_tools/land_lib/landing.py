@@ -243,6 +243,47 @@ class Landing:
         applied = marker.split()[0]
         return self.git("merge-base", "--is-ancestor", sha, applied).returncode == 0
 
+    def tick_already_deployed(self, sha: str, tags: list[str]) -> bool:
+        """Did the tick's recorded deploy-plane apply already deploy `tags` on THIS host?
+
+        The question step 5 asks before paying a second deploy of a service the tick has
+        just applied. On 2026-09-19 PR #2092's tick applied the whole deploy plane at the
+        merge commit; step 5 then queued 1203s behind the next tick for a snapshot that
+        failed, and the landing read `deploy-failed` about work that was live (issue #2094).
+
+        True only when every part of the marker says so: its SHA contains `sha` (the
+        `broad_applied_covers` test), the primary checkout carries `sha` (`merge_applied`,
+        because the health gate renders from the primary when nothing was deployed `--at`),
+        the playbook is `ansible/deploy.yml` (a setup-plane apply deploys no service), and
+        its tag slot covers `tags`: empty means the whole play ran, `narrowed-to-nothing`
+        means no play ran, and a list covers the tags it is a superset of. Those are the
+        semantics `deploy_git.broad_hold_cleared_by` gives the same slot on the deployer's
+        side; land_lib does not import across that boundary, so they are restated here.
+
+        The tick applies with no `-e target=`, so the marker speaks only to the host it was
+        written on. The CALLER routes the tags by host and asks this for the local host's.
+
+        DECIDED: this reads the tag slot, which
+        `test_land_reads_a_narrowed_broad_applied_marker.py` says must stay unread -- there.
+        That rule governs a read that FAILS a landing: the slot is scoped to the range the
+        tick crossed, not to this PR, so a mismatch there is not evidence the PR went
+        unapplied. Here a mismatch falls through to the deploy the landing ran anyway, so the
+        only cost of reading it is one redundant deploy, and the only cost of NOT reading it
+        is skipping a deploy the tick never ran.
+        """
+        if not tags or not self.broad_applied_covers(sha) or not self.merge_applied():
+            return False
+        # `<sha> <playbook> [<tags>]`, as `deploy_state.record_broad_applied` writes it.
+        parts = (self.state("broad_applied") or "").split()
+        if len(parts) < 2 or parts[1] != "ansible/deploy.yml":
+            return False
+        slot = parts[2] if len(parts) > 2 else ""
+        if not slot:
+            return True
+        if slot == "narrowed-to-nothing":
+            return False
+        return set(tags).issubset(t for t in slot.split(",") if t)
+
 
 def retry_while_locked(
     ln: Landing, busy_rc: int, attempt: Callable[[], int], note: Callable[[int], str]
