@@ -135,7 +135,11 @@ def _rendered_rules():
 
 def _matches(rule, host, source):
     """Authelia's first-match test for a UI request to `/`, so a path-scoped bypass never
-    matches: `*.x` matches any host ending in `.x`, and `networks` scopes by source."""
+    matches: `*.x` matches any host ending in `.x`, and `networks` scopes by source.
+
+    The wildcard is a suffix match here, as it was in the guard this replaced. Every host the
+    tests below resolve is either named exactly by a generated rule or is one label under
+    the wildcard, so no verdict depends on whether Authelia matches deeper labels."""
     domains = rule["domain"] if isinstance(rule["domain"], list) else [rule["domain"]]
     if not any(
         host == d or (d.startswith("*.") and host.endswith(d[1:])) for d in domains

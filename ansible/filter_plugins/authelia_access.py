@@ -11,7 +11,8 @@ has no representation.
 
 from ansible.errors import AnsibleFilterError
 
-# The policies a service can declare. `bypass` is deliberately absent: a scoped bypass
+# The policies a service can declare, in the order their rules render (first match wins, so
+# the stricter tier goes first). `bypass` is deliberately absent: a scoped bypass
 # (paths, networks, methods) has no per-service shape and stays a hand-written rule in the
 # template, ahead of the generated block, while the entry's `auth_tier` names what its UI
 # traffic gets.
