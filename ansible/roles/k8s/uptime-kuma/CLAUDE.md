@@ -4,13 +4,14 @@ Uptime Kuma plus an AutoKuma sidecar that creates monitors and notifications fro
 role's rendered declarations. See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
 - **Deploy tag:** `--tags "uptime-kuma"`
 - **Images:** `louislam/uptime-kuma` (`uptime_kuma_k8s_image`), `ghcr.io/bigboot/autokuma`
   (`autokuma_k8s_image`), `ghcr.io/bigboot/kuma` (`kuma_cli_k8s_image`), `python`
   (`kuma_status_page_sync_image`)
 - **Route:** `uptime-kuma.<domain>` · `uptime-kuma.local.<domain>`, Authelia one_factor
-- **Claims:** `uptime-kuma-data`, `autokuma-data`
+- **Claims:** `uptime-kuma-data` (no backup (listed in k3s_longhorn_nobackup_volumes)),
+  `autokuma-data` (no backup (listed in k3s_longhorn_nobackup_volumes))
 - **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — observability — the alerting spine; a
   broken deploy cannot page about being broken. ALSO Recreate + RWO volume-claim PVC
   (migrating-state shape) — two independent reasons. COUPLING NOTE for a future promotion: two

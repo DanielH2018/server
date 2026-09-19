@@ -10,13 +10,14 @@ n8n with an external task-runner sidecar. See repo-root `CLAUDE.md`.
 > `containers/n8n/data` is still on disk from the migration.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
 - **Deploy tag:** `--tags "n8n"`
 - **Images:** `<k8s_registry_pull_host>/n8n` (`n8n_k8s_image`),
   `<k8s_registry_pull_host>/n8n-runners` (`n8n_k8s_runners_image`), `alpine`
   (`n8n_k8s_wait_image`)
 - **Route:** `n8n.<domain>` · `n8n.local.<domain>`, Authelia two_factor
-- **Claims:** `n8n-data`, `n8n-files`
+- **Claims:** `n8n-data` (weekly -> B2 (default target)), `n8n-files` (weekly -> B2 (default
+  target))
 - **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — two reasons: (1) probe-less
   n8n-runners sub-deployment; (2) migrating state — Recreate + RWO volume-claim PVC (n8n-data)
   holding the encryption key + credentials DB. COUPLING NOTE for a future promotion: n8n

@@ -5,12 +5,12 @@ separate from the `claude-otel` Loki (decision KL1, `docs/archive/.../slice-7-ph
 — merging would give the verbatim-prompts store this role's LAN route, which it must not have.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
 - **Deploy tag:** `--tags "loki-homelab"`
 - **Images:** `grafana/loki` (`loki_homelab_image`), `grafana/alloy`
   (`loki_homelab_alloy_image`)
 - **Route:** `loki-homelab.local.<domain>` (LAN only), no Authelia
-- **Claim:** `loki-homelab-data`
+- **Claim:** `loki-homelab-data` (no backup (StorageClass longhorn-nobackup))
 - **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — observability — log store other
   monitors read from; a broken deploy blinds them without paging. ALSO Recreate + PVC on its
   own log data

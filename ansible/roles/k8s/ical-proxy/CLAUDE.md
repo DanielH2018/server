@@ -4,7 +4,7 @@ Small Flask app that merges several ICS calendars into one feed for the Homepage
 calendar widget. See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
 - **Deploy tag:** `--tags "ical-proxy"`
 - **Image:** `<k8s_registry_pull_host>/ical-proxy` (`ical_proxy_k8s_image`)
 - **Route:** `ical-proxy.local.<domain>` (LAN only), no Authelia

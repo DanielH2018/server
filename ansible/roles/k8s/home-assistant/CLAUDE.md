@@ -5,12 +5,12 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
 (this file is the editing-gotchas reference).
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
 - **Deploy tag:** `--tags "home-assistant"`
 - **Images:** `lscr.io/linuxserver/homeassistant` (`home_assistant_k8s_image`), `alpine`
   (`home_assistant_k8s_init_image`)
 - **Route:** `home-assistant.<domain>` · `home-assistant.local.<domain>`, no Authelia
-- **Claim:** `home-assistant-config`
+- **Claim:** `home-assistant-config` (daily -> R2)
 - **Auto-deploy:** eligible (`k8s_autodeploy: true`)
 <!-- /generated_from -->
 

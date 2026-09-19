@@ -5,11 +5,11 @@ irreplaceable data kopia still uniquely protected; the Docker role is in
 `roles/containers/archive/terraria`). See repo-root `CLAUDE.md`.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
 - **Deploy tag:** `--tags "terraria"`
 - **Image:** `<k8s_registry_pull_host>/terraria` (`terraria_k8s_image`)
 - **Route:** none (no `templates/ingressroute.yaml.j2`)
-- **Claim:** `terraria-config`
+- **Claim:** `terraria-config` (weekly -> B2 (default target))
 - **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — two reasons: (1) probe-less — no
   readinessProbe; (2) migrating state — Recreate + RWO volume-claim PVC holding irreplaceable
   worlds

@@ -7,12 +7,13 @@ daniel-server, so both the archived compose role (`roles/containers/archive/valh
 that no longer exists. `k8s/terraria` is the sibling this role copies.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
 - **Deploy tag:** `--tags "valheim"`
 - **Images:** `ghcr.io/community-valheim-tools/valheim-server` (`valheim_k8s_image`),
   `<k8s_registry_pull_host>/valheim` (`valheim_k8s_mods_image`)
 - **Route:** none (no `templates/ingressroute.yaml.j2`)
-- **Claims:** `valheim-config`, `valheim-server`
+- **Claims:** `valheim-config` (weekly -> B2 (default target)), `valheim-server` (no backup
+  (StorageClass longhorn-nobackup))
 - **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — two reasons: (1) probe-less — no
   readinessProbe at all; (2) migrating state — Recreate + RWO volume-claim PVC holding worlds
 <!-- /generated_from -->

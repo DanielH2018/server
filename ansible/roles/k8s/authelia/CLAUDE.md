@@ -4,11 +4,11 @@ Authelia guards most public routes as a Traefik forward-auth middleware. See rep
 `CLAUDE.md` for shared conventions.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
 - **Deploy tag:** `--tags "authelia"`
 - **Images:** `authelia/authelia` (`authelia_k8s_image`), `redis` (`authelia_k8s_redis_image`)
 - **Route:** `auth.<domain>` · `auth.local.<domain>`, no Authelia
-- **Claim:** `authelia-config`
+- **Claim:** `authelia-config` (daily -> R2)
 - **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — platform — SSO/OIDC gate; a failed
   deploy locks out access to everything behind it, including the tools to fix it
 <!-- /generated_from -->

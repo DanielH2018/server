@@ -14,7 +14,7 @@ Sonarr parses quality/codec from the release **title** at grab time, so no codec
 can catch a title that lies — the only pre-grab lever is **release-group reputation**.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
 - **Deploy tag:** `--tags "configarr"`
 - **Image:** `ghcr.io/raydak-labs/configarr` (`configarr_k8s_image`)
 - **Route:** none (no `templates/ingressroute.yaml.j2`)

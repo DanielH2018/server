@@ -5,7 +5,7 @@ Route-only role. Longhorn itself (namespace, Deployments, Services) is installed
 middlewares it references, nothing else.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
 - **Deploy tag:** `--tags "longhorn-ui"`
 - **Route:** `longhorn.local.<domain>` (LAN only), Authelia two_factor
 - **Claims:** none (no PVC)

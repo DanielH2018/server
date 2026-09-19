@@ -5,7 +5,7 @@ the extended resource `devic.es/dri`, so jellyfin and tdarr can request GPU tran
 without either pod running privileged. See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
 - **Deploy tag:** `--tags "dri-device-plugin"`
 - **Image:** `ghcr.io/squat/generic-device-plugin` (`dri_device_plugin_image`)
 - **Route:** none (no `templates/ingressroute.yaml.j2`)

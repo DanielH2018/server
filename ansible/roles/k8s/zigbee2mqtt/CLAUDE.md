@@ -4,12 +4,12 @@ Zigbee2MQTT 2.x bridging the network-attached SLZB-06M coordinator into MQTT/Hom
 See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
 - **Deploy tag:** `--tags "zigbee2mqtt"`
 - **Images:** `ghcr.io/koenkk/zigbee2mqtt` (`zigbee2mqtt_k8s_image`), `alpine`
   (`zigbee2mqtt_k8s_init_image`)
 - **Route:** `zigbee2mqtt.<domain>` · `zigbee2mqtt.local.<domain>`, Authelia one_factor
-- **Claim:** `zigbee2mqtt-data`
+- **Claim:** `zigbee2mqtt-data` (daily -> R2)
 - **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — state coupled outside the volume —
   the SLZB-06M coordinator's NVRAM holds the network key and frame counters, so reverting
   zigbee2mqtt-data to a snapshot desynchronises it from the coordinator and can silence paired
