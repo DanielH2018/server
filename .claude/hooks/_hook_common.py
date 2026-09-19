@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# gen-hooks: library
+#   reason: imported by auto-approve-readonly.py, block-footguns.py, block-protected-bash.py, block-protected-edits.py and nudge-land-sh.py
 """Shared helpers for the PreToolUse hooks (auto-approve-readonly.py, block-protected-edits.py).
 
 Both hooks run standalone under the repo's uv python with the hooks dir as ``sys.path[0]`` (the

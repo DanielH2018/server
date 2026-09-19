@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# gen-hooks: library
+#   reason: run by nudge-land-sh.sh through `uv run python`
 """PreToolUse(Bash) guard: stop hand-polling CI when land.sh already waits for it.
 
 THE PROBLEM. `scripts/deploy_tools/land.sh` exists so that merging a PR is followed through to

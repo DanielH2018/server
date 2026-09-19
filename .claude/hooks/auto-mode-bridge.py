@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# gen-hooks: library
+#   reason: run by auto-mode-bridge.sh through `uv run python`
 """Two narrow bridges between auto mode and this repo, on two events one script serves.
 
 `PermissionDenied` — fires only in auto mode, only when the classifier denied the call.

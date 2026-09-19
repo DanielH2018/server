@@ -1,4 +1,9 @@
 #!/bin/bash
+# gen-hooks: register
+#   event: PreToolUse
+#   matcher: Bash
+#   timeout: 10
+#   order: 40
 # PreToolUse(Bash) hook — deny hand-polled CI in favour of land.sh. Routed through uv so the
 # project-pinned interpreter runs (not the system python3); --no-sync skips the env reconcile
 # to stay fast on the per-command hot path. `exec` preserves the hook's stdin JSON. No output

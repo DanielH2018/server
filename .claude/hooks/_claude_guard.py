@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# gen-hooks: library
+#   reason: imported by block-protected-bash.py and _readonly_tables.py to bootstrap the claude_guard package
 """Bootstrap that puts the deployed `claude_guard` package on `sys.path` and imports it.
 
 The seed of the future `homelab_guard/__init__.py` — the dotfiles repo's design spec

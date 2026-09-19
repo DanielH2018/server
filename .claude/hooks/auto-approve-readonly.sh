@@ -1,4 +1,9 @@
 #!/bin/bash
+# gen-hooks: register
+#   event: PreToolUse
+#   matcher: Bash
+#   timeout: 10
+#   order: 10
 # PreToolUse(Bash) hook — auto-approve provably read-only commands so they don't
 # prompt. Delegates to the Python classifier (exec keeps the hook's stdin JSON).
 # Unrecognized commands produce no output -> normal permission flow.

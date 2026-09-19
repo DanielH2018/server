@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
+# gen-hooks: library
+#   reason: run by auto-approve-readonly.sh through `uv run python`
 """Bash classifier: auto-approve provably read-only commands.
 
-Reads the hook JSON on stdin. Prints a PreToolUse "allow" decision iff the WHOLE
-command line is read-only: a single read-only command, or a pipeline whose every
-stage is read-only. Anything else -> no output -> normal permission flow (an
-allow-list match or an interactive prompt).
+Reads the hook JSON on stdin. Prints a PreToolUse "allow" decision iff the WHOLE command line is
+read-only: a single read-only command, or a pipeline whose every stage is read-only. Anything else
+-> no output -> normal permission flow (an allow-list match or an interactive prompt).
 
 Safety model (deny by default):
   * Substitution is rejected outright -- $(...), backticks, ${...} -- because a
@@ -17,8 +18,7 @@ Safety model (deny by default):
     or exec under ANY arguments (TIER1), OR pass a per-command guard that rejects
     the program's mutating forms (git, docker, sort, uniq, find, ip, systemctl,
     journalctl, rg).
-Any failed check yields no output. The hook can only ever REDUCE prompts for safe
-commands; it can never approve a write.
+The hook can only ever REDUCE prompts for safe commands; it can never approve a write.
 """
 
 import json

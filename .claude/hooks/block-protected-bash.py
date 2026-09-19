@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# gen-hooks: library
+#   reason: run by block-protected-bash.sh through `uv run python`
 """PreToolUse(Bash) guard: the two file rules that only ever watched the Edit tool.
 
 WHY A SECOND SURFACE. `block-protected-edits.py` denies edits to the generated `containers/`

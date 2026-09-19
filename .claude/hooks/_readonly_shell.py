@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# gen-hooks: library
+#   reason: imported by auto-approve-readonly.py
 """Shell-structure helpers for the auto-approve-readonly Bash classifier.
 
 The part that reads an already-tokenized command line as shell: the substitution prefixes

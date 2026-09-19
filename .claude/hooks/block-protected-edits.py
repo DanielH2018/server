@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# gen-hooks: library
+#   reason: run by block-protected-edits.sh through `uv run python`
 """PreToolUse(Edit|Write) guard: deny direct edits to files you must not edit by hand.
 
 Two classes, both always a mistake in this repo:
