@@ -11,6 +11,32 @@ here is a hand apply. `daniel-box` is the server; `daniel-server` joined as an a
 (`setup/hypervisor`), whose `host_vars` turn the backup targets and the health crons off (`k3s_manage_backup_targets`,
 `k3s_manage_health_crons`), because both would push to prod's Kuma and B2.
 
+## At a glance
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates or playbook entry. -->
+- **Applied by:** `k3s-bringup.yml --tags "k3s"`; `k3s-bringup.yml --tags "k3s_agent"`
+- **Crons (12):**
+  - `Longhorn backup health` — `{{ k3s_longhorn_backup_health_cron_minute }} * * * *`
+  - `Longhorn filesystem trim` — `{{ k3s_longhorn_trim_cron_minute }} {{
+    k3s_longhorn_trim_cron_hour }} * * *`
+  - `B2 deletion accounting` — `{{ k3s_b2_deletion_accounting_cron_minute }} {{
+    k3s_b2_deletion_accounting_cron_hour }} * * *`
+  - `B2 backup budget listing` — `{{ k3s_b2_budget_cron_minute }} {{ k3s_b2_budget_cron_hour }}
+    * * *`
+  - `Longhorn restore drill` — `{{ k3s_longhorn_restore_drill_cron.split()[0] }} {{
+    k3s_longhorn_restore_drill_cron.split()[1] }} {{ k3s_longhorn_restore_drill_cron.split()[2]
+    }} * *`
+  - `daniel-box disk health` — `{{ k3s_disk_health_cron_minute }} * * * *`
+  - `remember log rotation health` — `{{ k3s_remember_logs_cron_minute }} * * * *`
+  - `Manifest prune drift check` — `{{ k3s_manifest_prune_cron_minute }} {{
+    k3s_manifest_prune_cron_hour }} * * *`
+  - `Release staleness drift check` — `{{ k3s_release_staleness_cron_minute }} * * * *`
+  - `Live object drift check` — `{{ k3s_live_drift_cron_minute }} {{ k3s_live_drift_cron_hour
+    }} * * *`
+  - `Off-box etcd snapshot` — `{{ k3s_etcd_s3_cron_minute }} {{ k3s_etcd_s3_cron_hour }} * * *`
+  - `etcd restore drill` — `{{ k3s_etcd_restore_drill_cron.split()[0] }} {{
+    k3s_etcd_restore_drill_cron.split()[1] }} * * {{ k3s_etcd_restore_drill_cron.split()[4] }}`
+<!-- /generated_from -->
+
 ## Layout
 
 `tasks/main.yml` is a list of `import_tasks`, one per topic, split on 2026-08-15 when the

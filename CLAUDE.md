@@ -70,7 +70,7 @@ Route to the source of truth by what you're doing, before reading linearly:
 | Reviewing the homelab for gaps | `/homelab-review` skill (per-domain reviewer agents) |
 | Answering "what runs here / where / behind what" | `docs/reference/` — generated from the tree by the `docs-refresh` cron, browsable at `docs.local.<domain>`. Services, hosts, secret rotation, scheduled jobs, networking. **Never hand-edit a generated page** — `.claude/hooks/block-protected-edits.py` (and `block-protected-bash.py` for a `sed -i`/`tee`/heredoc write) denies any write to a file carrying a `generated_from:` banner. Change the generator instead (`scripts/docs/build_docs.py` lists them). |
 | CI fails on `test_every_committed_fragment_matches_what_the_generator_writes_now` | You changed a tunable a docs fragment reads. *Generated docs fragments* below has the regenerate command, the generator whose `FRAGMENTS` names the tunables, and why this one gate is not left to the cron. |
-| CI fails on `test_every_deployed_role_block_matches_what_the_generator_writes_now` | You changed a k8s role's defaults, templates or `containers_list` entry, or hand-edited its generated `## At a glance` block. Run `uv run python scripts/docs/gen_role_glance.py` and commit; the reasoning goes in the bullets below the block. |
+| CI fails on `test_every_deployed_role_block_matches_what_the_generator_writes_now` | You changed a role's defaults, templates, tasks, playbook entry or `containers_list` entry (k8s, setup or the Pi's compose roles), or hand-edited its generated `## At a glance` block. Run `uv run python scripts/docs/gen_role_glance.py` and commit; the reasoning goes in the bullets below the block. |
 | Chasing a reliability / monitoring "gap" | The role's `CLAUDE.md` + monitor-bridge `files/registry.py` (the check registry) **first** — mature setup, most are handled |
 | Checking that a service's UI actually renders, not just that its pod is Ready | The `homelab-ui` MCP server — see `## Claude Tooling in This Repo` below, and `docs/claude-tooling.md` for the full reference. `probe.py health` cannot see a broken UI behind a healthy pod. **Grafana is the exception** — it still serves a login page behind Authelia, so drive it with `uv run pytest -m ui -k grafana` rather than by hand. That tier logs in through Authelia's OIDC provider and types no credential; the admin form stays on as break-glass. OIDC login is LAN-only: `root_url` pins the callback to `grafana.local.<domain>`. |
 | A config edit won't restart the pod (k3s) | A ConfigMap/Secret change alone doesn't roll a Deployment. The general mechanism is the central rollout-restart in `ansible/roles/k8s/manifests/CLAUDE.md`, which fires when a role's rendered manifests change. A role whose pod depends on a file the manifests *don't* carry adds its own `checksum/<thing>` pod annotation instead — e.g. `checksum/check-script` in `roles/k8s/monitor-bridge/templates/deployment.yaml.j2`. |
@@ -515,12 +515,14 @@ The prose stays hand-written; the tunables beside it are re-read from the tree.
 `FRAGMENTS` in that generator lists every tunable it reads.
 
 **A role `CLAUDE.md`'s `## At a glance` block is generated the same way, in place.**
-`scripts/docs/gen_role_glance.py` writes the deploy tag, image repositories, route, claims
-and auto-deploy stance of every deployed k8s role between two `generated_from` markers under
-that heading; the prose below the markers stays hand-written. Changing a role's defaults,
-templates or `containers_list` entry fails
-`scripts/docs/tests/test_gen_role_glance.py` until you re-run the generator and commit the
-block. The docs-refresh cron does not run it: the cron stages only the two generated trees,
+`scripts/docs/gen_role_glance.py` writes one field set per role shape between two
+`generated_from` markers under that heading: a deployed k8s role's deploy tag, image
+repositories, route, claims and auto-deploy stance; a setup role's applying playbook and tag,
+crons and timers; a Pi compose role's deploy tag, image repositories, `containers_list` facts,
+`meta/deps.yml` ordering and `common_config_changed` wiring. The prose below the markers stays
+hand-written. Changing a role's defaults, templates, tasks, playbook entry or
+`containers_list` entry fails `scripts/docs/tests/test_gen_role_glance.py` until you re-run
+the generator and commit the block. The docs-refresh cron does not run it: the cron stages only the two generated trees,
 and a write under `ansible/roles/` would leave the primary checkout dirty.
 
 **Why this one gate is not left to the cron**, when a stale `docs/reference/` page is. A

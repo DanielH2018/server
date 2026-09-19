@@ -4,6 +4,15 @@ Low-level OS, hardware and resolver tuning for the Pi. **Not a container role** 
 host-setup role under `ansible/roles/setup/`, run by `initial_setup.yml`, not `deploy.yml`.
 See repo-root `CLAUDE.md` for conventions.
 
+## At a glance
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates or playbook entry. -->
+- **Applied by:** `initial_setup.yml --tags "optimize_pi"` when `inventory_hostname ==
+  'daniel-pi'`
+- **Crons (2):**
+  - `Pi SD-card health heartbeat` — `*/5 * * * *`
+  - `Pi container-recovery heartbeat` — `*/5 * * * *`
+<!-- /generated_from -->
+
 ## Where it runs
 - Invoked from `ansible/initial_setup.yml`:
   `{ role: optimize_pi, tags: ["optimize_pi"], when: inventory_hostname == 'daniel-pi' }`

@@ -5,6 +5,13 @@ Docker networks every container role attaches to. **Not a container role** — a
 role under `ansible/roles/setup/`, run by `initial_setup.yml`, not `deploy.yml`. See
 repo-root `CLAUDE.md` and `.claude/rules/docker.md` for conventions.
 
+## At a glance
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates or playbook entry. -->
+- **Applied by:** `initial_setup.yml --tags "docker_install"`
+- **Crons / timers:** none (no `ansible.builtin.cron` task in `tasks/`, no
+  `templates/*.timer.j2`)
+<!-- /generated_from -->
+
 ## Where it runs
 - In `ansible/initial_setup.yml`, after [[sops_setup]] — every host, **unconditionally**.
   `tasks/main.yml` is a dispatcher: `has_docker: true` runs `install.yml` (everything below),

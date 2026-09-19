@@ -81,7 +81,8 @@ def _host_for(task: dict) -> str:
     return "every host in the play" if not text else f"conditional ({text[:60]})"
 
 
-def _schedule(spec: dict) -> str:
+def schedule_text(spec: dict) -> str:
+    """The five-field (or `@special`) schedule one cron spec declares, Jinja printed as written."""
     if spec.get("special_time"):
         return f"@{spec['special_time']}"
     fields = [
@@ -195,7 +196,7 @@ def build_rows(roles: Path = ROLES) -> list[dict[str, str]]:
             rows.append(
                 {
                     "name": str(spec.get("name", task.get("name", "unnamed"))),
-                    "schedule": _schedule(spec),
+                    "schedule": schedule_text(spec),
                     "host": _host_for(task),
                     "user": str(spec.get("user", "root")),
                     "changes_state": _changes_state(job),

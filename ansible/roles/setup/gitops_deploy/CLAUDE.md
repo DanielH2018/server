@@ -10,6 +10,19 @@ health-gated redeploy too (closing the loop so live config matches master), not 
 `tasks/` and the role `CLAUDE.md` are deliberately NOT auto-deployed (structural/docs — deploy
 those manually).
 
+## At a glance
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates or playbook entry. -->
+- **Applied by:** `initial_setup.yml --tags "gitops_deploy"`
+- **Crons (2):**
+  - `GitHub ruleset drift` — `{{ gitops_deploy_ruleset_drift_cron_minute }} {{
+    gitops_deploy_ruleset_drift_cron_hour }} * * *`
+  - `GitHub interaction limit` — `{{ gitops_deploy_interaction_limit_cron_minute }} {{
+    gitops_deploy_interaction_limit_cron_hour }} * * *`
+- **Timers (2):** `gitops-deploy.timer` (`OnBootSec=10min`, `OnUnitActiveSec={{
+  gitops_deploy_tick_interval }}`), `staging-backfill.timer` (`OnBootSec=20min`,
+  `OnUnitActiveSec=1h`)
+<!-- /generated_from -->
+
 ## A host with `has_gitops: false` is reaped, and the code refuses on its own
 
 `tasks/main.yml` dispatches on `has_gitops`: `install.yml` on the deployer, `teardown.yml`

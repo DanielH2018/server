@@ -13,6 +13,13 @@ daniel-server carries its own cap numbers in its own host_vars. Invoked from
 uv run ansible-playbook ansible/initial_setup.yml --tags claude_code
 ```
 
+## At a glance
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates or playbook entry. -->
+- **Applied by:** `initial_setup.yml --tags "claude_code"` when `has_claude_code`
+- **Timers (2):** `claude-cgroup-metrics.timer` (`OnBootSec=30s`, `OnUnitActiveSec=30s`),
+  `claude-rc-restart.timer` (`OnCalendar={{ claude_code_rc_restart_schedule }}`)
+<!-- /generated_from -->
+
 ## The two Remote Control modes are different features
 
 - `/remote-control` **inside a running session** publishes that one session to your phone.

@@ -4,12 +4,18 @@ Watches Docker healthchecks and restarts any container reporting `unhealthy`.
 See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
-- **Image:** `willfarrell/autoheal:latest`
-- **Hosts:** daniel-pi ONLY · **No web UI**, no Authelia
-- **Networks:** lifecycle only (reaches the write-capable `docker-proxy-lifecycle`,
-  not the broad networks)
-- **Depends on:** docker-proxy
-- **Config in:** `ansible/inventory/host_vars/daniel-pi.yml` → `containers_list`
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's compose template, tasks, meta/deps.yml or containers_list entry. -->
+- **Deploy tag:** `--tags "autoheal" -e target=daniel-pi`
+- **Image:** `willfarrell/autoheal` (`autoheal`)
+- **Entry:** `host_vars/daniel-pi.yml` → networks `lifecycle`, no Authelia
+- **Depends on:** `docker-proxy` (`meta/deps.yml`)
+- **Config-change wiring:** none — the compose file is the only config, and a compose change
+  recreates on its own
+<!-- /generated_from -->
+
+- **No web UI.** Nothing to route, nothing for Authelia to gate.
+- **Why `lifecycle` is its only network:** it reaches the write-capable
+  `docker-proxy-lifecycle` there, and never joins the broad networks.
 
 > **The daniel-server instance is gone.** Docker was uninstalled there on 2026-08-14 as the k3s
 > migration's end state, and `host_vars/daniel-server.yml` now sets `containers_list: []`. This
