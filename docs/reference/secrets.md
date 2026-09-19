@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/secrets.py
-generated_at: 2026-09-19 06:17 UTC
-generated_sha: f9b05e4ae
+generated_at: 2026-09-19 18:17 UTC
+generated_sha: 8cf1ba83c
 ---
 
 !!! warning "Generated file — do not edit"
@@ -122,7 +122,7 @@ lives in a third-party system; rotate there first.
 | `gitops_deploy_discord_webhook` | 2026-08-30 | 2027-08-03 | 318 |
 | `healthchecks_discord_webhook_url` | 2026-04-17 | 2027-04-05 | 198 |
 | `karakeep_gemini_api_key` | 2026-04-17 | 2027-03-21 | 183 |
-| `monitor_discord_webhook_url` | 2026-05-29 | 2027-05-06 | 229 |
+| `monitor_discord_webhook_url` | 2026-09-19 | 2027-08-27 | 342 |
 | `mullvad_account` | 2025-11-16 | 2026-10-18 | 29 |
 | `weather_api_key` | 2026-08-30 | 2027-08-04 | 319 |
 | `wireguard_interface_private_key` | 2026-02-09 | 2027-02-06 | 140 |
