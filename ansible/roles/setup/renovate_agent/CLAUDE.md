@@ -93,6 +93,11 @@ the caps or the schedule cannot quietly widen it.
   those rules override the denylist rule's groupName and the title is the only thing the
   prompt can read. `ansible/tests/deploy/test_renovate_automerge_follows_the_autodeploy_denylist.py`
   asserts the marker sits on exactly the per-package rules whose pin a denied role owns.
+  A third rule carries it for a denied role's base image — the `FROM` in
+  `templates/Dockerfile*.j2`, which Renovate's built-in dockerfile manager finds and the
+  denylist rule's `custom.regex` scope never reaches (#2117: nut's debian digest bump #2115
+  arrived with a bare title). Its file list is the denylist restricted to the roles that
+  carry a Dockerfile, and the same guard derives it.
 - **Mode (explicit + reversible):** `renovate_agent_enabled`, which ships `false`. It alone
   arms the timer, and setting it back stops AND disables the unit (*Arming it*;
   `test_renovate_agent_unit.py` pins both directions). There is deliberately no run-once

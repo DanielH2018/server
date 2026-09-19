@@ -23,6 +23,15 @@ safe in this rule only while every `_image:` pin in group_vars belongs to denied
 census below reads each pin's Jinja readers out of the role trees and asserts they are all
 denied. A pin no role reads fails too: an unmappable pin must not pass as "not eligible".
 
+A second rule carries the same marker for a denied role's BASE image (issue #2117). The
+denylist rule is scoped to the custom.regex manager over `defaults/main.yml`, so it never sees
+a `FROM` pin in `templates/Dockerfile*.j2` — Renovate's built-in dockerfile manager finds
+those, and nut's debian digest bump (#2115) arrived with a bare title. Its `matchFileNames` is
+the denylist restricted to the roles that carry a Dockerfile, derived here the same way, with a
+named-member floor so a glob that finds nothing fails rather than agreeing with an empty rule.
+`n8n-images` is absent by design: it is eligible, and the n8n per-package rule carries the
+marker through the build coupling onto n8n.
+
 Run: uv run pytest ansible/tests/deploy/test_renovate_automerge_follows_the_autodeploy_denylist.py
 """
 
@@ -42,6 +51,17 @@ _RENOVATE = REPO / "renovate.json"
 # per-service grouping (one PR per image, the deployer's rollback unit), and the parenthetical
 # is the `manual —` tell the renovate-prs skill triages by.
 MANUAL_GROUP_PREFIX = "k8s image {{depName}} (manual — k8s_autodeploy: false"
+
+# The base-image rule's head differs from the denylist rule's so `find_rule` keeps its
+# exactly-one contract on each; the parenthetical carries the same marker.
+DOCKERFILE_MANUAL_GROUP_PREFIX = (
+    "k8s base image {{depName}} (manual — k8s_autodeploy: false"
+)
+DOCKERFILE_GLOB = "templates/Dockerfile*.j2"
+
+# The denied roles the Dockerfile census must find, so a moved or renamed template fails as a
+# missing member rather than passing over an empty glob.
+KNOWN_DENIED_DOCKERFILE_ROLES = frozenset({"code-server", "nut", "terraria", "valheim"})
 
 # The automerge rules the manual rule must FOLLOW, and the first per-package manual rule it
 # must PRECEDE — the CrowdSec bouncer plugin pin shares traefik's defaults/main.yml, and its
@@ -165,6 +185,61 @@ def manual_rule_problems(rules: list[dict], denylist: set[str]) -> list[str]:
     return problems
 
 
+def roles_with_dockerfiles(roles_dir: Path = _K8S_ROLES) -> set[str]:
+    """The k8s roles with at least one `templates/Dockerfile*.j2` — the built-in manager's reach."""
+    return {
+        role.name
+        for role in roles_dir.iterdir()
+        if role.is_dir() and any((role / "templates").glob("Dockerfile*.j2"))
+    }
+
+
+def expected_dockerfile_match_file_names(
+    denylist: set[str], dockerfile_roles: set[str]
+) -> list[str]:
+    """The base-image rule's paths: one Dockerfile glob per denied role that carries one."""
+    return [
+        f"ansible/roles/k8s/{role}/{DOCKERFILE_GLOB}"
+        for role in sorted(denylist & dockerfile_roles)
+    ]
+
+
+def dockerfile_rule_problems(
+    rules: list[dict], denylist: set[str], dockerfile_roles: set[str]
+) -> list[str]:
+    """Every way the base-image rule can disagree with the denied Dockerfile roles. Empty means none.
+
+    Pure over the parsed rules and the role census, like `manual_rule_problems`, so the red half
+    of its pair can hand it a rule with a role missing without editing renovate.json.
+    """
+    problems: list[str] = []
+    _, rule = find_rule(rules, DOCKERFILE_MANUAL_GROUP_PREFIX)
+    if rule.get("automerge") is not False:
+        problems.append("the base-image rule does not set `automerge: false`")
+    if "matchUpdateTypes" in rule:
+        problems.append(
+            "the base-image rule sets matchUpdateTypes, so an update type it does not name "
+            "(code-server's FROM is a version pin, nut's a digest) arrives with a bare title"
+        )
+    if rule.get("matchManagers") != ["dockerfile"]:
+        problems.append(
+            "the base-image rule must match the built-in `dockerfile` manager alone — the "
+            "custom.regex pins already have the denylist rule"
+        )
+    actual = set(rule.get("matchFileNames", []))
+    expected = set(expected_dockerfile_match_file_names(denylist, dockerfile_roles))
+    for path in sorted(expected - actual):
+        problems.append(
+            f"denied role's Dockerfile missing from matchFileNames — add {json.dumps(path)}"
+        )
+    for path in sorted(actual - expected):
+        problems.append(
+            "matchFileNames names a Dockerfile no denied role owns — drop "
+            f"{json.dumps(path)}"
+        )
+    return problems
+
+
 def _rules() -> list[dict]:
     return json.loads(_RENOVATE.read_text())["packageRules"]
 
@@ -210,6 +285,28 @@ def test_every_group_vars_image_pin_belongs_to_denied_roles() -> None:
     assert KNOWN_GROUP_VARS_PINS <= pins, sorted(KNOWN_GROUP_VARS_PINS - pins)
     problems = group_vars_pin_problems({p: roles_reading(p) for p in pins}, _denylist())
     assert not problems, "\n".join(problems)
+
+
+def test_the_dockerfile_census_finds_the_known_denied_roles() -> None:
+    found = roles_with_dockerfiles() & _denylist()
+    assert KNOWN_DENIED_DOCKERFILE_ROLES <= found, sorted(
+        KNOWN_DENIED_DOCKERFILE_ROLES - found
+    )
+
+
+def test_the_base_image_rule_matches_exactly_the_denied_roles_with_a_dockerfile() -> (
+    None
+):
+    problems = dockerfile_rule_problems(_rules(), _denylist(), roles_with_dockerfiles())
+    assert not problems, "\n".join(problems)
+
+
+def test_the_base_image_rule_follows_the_denylist_rule() -> None:
+    """Kept beside the rule it extends, so the two marker rules read as one boundary."""
+    rules = _rules()
+    manual_at, _ = find_rule(rules, MANUAL_GROUP_PREFIX)
+    dockerfile_at, _ = find_rule(rules, DOCKERFILE_MANUAL_GROUP_PREFIX)
+    assert dockerfile_at == manual_at + 1
 
 
 def test_the_manual_rule_is_scoped_to_container_images() -> None:
@@ -273,6 +370,93 @@ def test_a_rule_that_still_automerges_some_way_is_flagged(
         _rule_set(expected_match_file_names(_DENYLIST), **overrides), _DENYLIST
     )
     assert any(fragment in p for p in problems), problems
+
+
+_DOCKERFILE_ROLES = {"traefik", "sonarr"}
+
+
+def _dockerfile_rule_set(paths: list[str], **overrides) -> list[dict]:
+    rule = {
+        "groupName": DOCKERFILE_MANUAL_GROUP_PREFIX + ", so the tick applies nothing)",
+        "automerge": False,
+        "matchManagers": ["dockerfile"],
+        "matchFileNames": paths,
+    }
+    rule.update(overrides)
+    return [rule]
+
+
+def test_a_base_image_rule_spelling_the_denied_dockerfile_roles_is_clean() -> None:
+    paths = expected_dockerfile_match_file_names(_DENYLIST, _DOCKERFILE_ROLES)
+    assert paths == ["ansible/roles/k8s/traefik/templates/Dockerfile*.j2"]
+    assert (
+        dockerfile_rule_problems(
+            _dockerfile_rule_set(paths), _DENYLIST, _DOCKERFILE_ROLES
+        )
+        == []
+    )
+
+
+def test_a_denied_dockerfile_role_missing_from_the_base_image_rule_is_flagged() -> None:
+    problems = dockerfile_rule_problems(
+        _dockerfile_rule_set([]), _DENYLIST, _DOCKERFILE_ROLES
+    )
+    assert problems == [
+        "denied role's Dockerfile missing from matchFileNames — add "
+        '"ansible/roles/k8s/traefik/templates/Dockerfile*.j2"'
+    ]
+
+
+def test_an_eligible_dockerfile_role_still_in_the_base_image_rule_is_flagged() -> None:
+    problems = dockerfile_rule_problems(
+        _dockerfile_rule_set(
+            expected_dockerfile_match_file_names(
+                _DENYLIST | {"sonarr"}, _DOCKERFILE_ROLES
+            )
+        ),
+        _DENYLIST,
+        _DOCKERFILE_ROLES,
+    )
+    assert problems == [
+        "matchFileNames names a Dockerfile no denied role owns — drop "
+        '"ansible/roles/k8s/sonarr/templates/Dockerfile*.j2"'
+    ]
+
+
+@pytest.mark.parametrize(
+    ("overrides", "fragment"),
+    [
+        ({"automerge": True}, "automerge: false"),
+        ({"matchUpdateTypes": ["digest"]}, "matchUpdateTypes"),
+        ({"matchManagers": ["custom.regex"]}, "`dockerfile` manager"),
+    ],
+)
+def test_a_base_image_rule_that_reaches_the_wrong_pins_is_flagged(
+    overrides: dict, fragment: str
+) -> None:
+    problems = dockerfile_rule_problems(
+        _dockerfile_rule_set(
+            expected_dockerfile_match_file_names(_DENYLIST, _DOCKERFILE_ROLES),
+            **overrides,
+        ),
+        _DENYLIST,
+        _DOCKERFILE_ROLES,
+    )
+    assert any(fragment in p for p in problems), problems
+
+
+def test_the_dockerfile_census_reads_only_the_templates_directory(
+    tmp_path: Path,
+) -> None:
+    """A Dockerfile outside `templates/` is not where Ansible renders a build from."""
+    (tmp_path / "builder" / "templates").mkdir(parents=True)
+    (tmp_path / "builder" / "templates" / "Dockerfile-runners.j2").write_text(
+        "FROM a\n"
+    )
+    (tmp_path / "stray" / "files").mkdir(parents=True)
+    (tmp_path / "stray" / "files" / "Dockerfile.j2").write_text("FROM a\n")
+    (tmp_path / "plain").mkdir()
+    assert roles_with_dockerfiles(tmp_path) == {"builder"}
 
 
 def test_a_group_vars_pin_read_only_by_denied_roles_is_clean() -> None:
