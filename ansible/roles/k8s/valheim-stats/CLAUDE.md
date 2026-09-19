@@ -5,13 +5,23 @@ deliberately the same shape: tail the game console out of loki-homelab → fold 
 (the source of truth) → expose Prometheus metrics on :9420 → Grafana.
 
 ## At a glance
-- **Image:** `python:3.14-alpine` running `valheim_stats.py` from a ConfigMap (pure stdlib, no deps)
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry. -->
+- **Deploy tag:** `--tags "valheim-stats"`
+- **Image:** `python` (`valheim_stats_k8s_image`)
+- **Route:** none (no `templates/ingressroute.yaml.j2`)
+- **Claim:** `valheim-stats-data`
+- **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — games — companion to the
+  hand-operated valheim server. ALSO Recreate + its own RWO PVC holding un-seeded,
+  irreplaceable stats — two independent reasons
+<!-- /generated_from -->
+
+- **Runs `valheim_stats.py` from a ConfigMap** (pure stdlib, no deps)
 - **Reads:** `{container="valheim"}` from `loki-homelab`
 - **Storage:** `valheim-stats-data` (`longhorn`, **backed up**) — Loki keeps 31 days, so
   after that this DB is the only copy of the totals
 - **Scraped by:** claude-otel prometheus, `job_name: valheim-stats`
 - **Dashboard:** `Apps/valheim-stats.json` → "Valheim — Player Stats"
-- **Config in:** `daniel-box.yml` `containers_list` (must sort AFTER `loki-homelab`)
+- **Must sort AFTER `loki-homelab`** in `containers_list`
 
 ## What it does that terraria-stats cannot
 **Deaths.** Terraria's vanilla console emits no death events (verified in that service's

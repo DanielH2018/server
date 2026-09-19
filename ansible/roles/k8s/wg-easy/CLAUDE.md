@@ -6,8 +6,6 @@ is broken. Written 2026-08-24; the role had no `CLAUDE.md`, and the only wg-easy
 was `roles/containers/wg-easy/CLAUDE.md`, which describes the retired daniel-server **Docker**
 instance and a different auth model.
 
-**Deploy tag:** `--tags "wg-easy"`.
-
 **Do not read the two as one service.** They differ in platform, version, auth and UDP port:
 
 | | this role (k3s) | `roles/containers/wg-easy` (Docker) |
@@ -19,10 +17,21 @@ instance and a different auth model.
 | WireGuard UDP | 51820 | 51822 |
 
 ## At a glance
-- **Image:** `ghcr.io/wg-easy/wg-easy:15@sha256:…` — `:15` keeps Renovate tracking the major so a
-  v16 arrives as a deliberate PR; the digest keeps it immutable within v15.x.
-- **Config in:** `ansible/inventory/host_vars/daniel-box.yml` → `containers_list`, `platform: k8s`,
-  `use_authelia: true`, `udp_port: 51820`.
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry. -->
+- **Deploy tag:** `--tags "wg-easy"`
+- **Image:** `ghcr.io/wg-easy/wg-easy` (`wg_easy_k8s_image`)
+- **Route:** `wg-easy.<domain>` · `wg-easy.local.<domain>`, Authelia one_factor
+- **Claim:** `wg-easy-config`
+- **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — platform — sole remote-access path; a
+  failed deploy can cut off remote recovery. ALSO Recreate + RWO Longhorn PVC (migrating-state
+  shape, same class as sonarr/prowlarr) — two independent reasons. COUPLING NOTE for a future
+  promotion: the PVC holds the server keypair and peer list, but each peer's own key lives on a
+  client device outside it — a revert can un-revoke a removed peer or orphan an added one
+<!-- /generated_from -->
+
+- **Pinned `:15@sha256:…`** — `:15` keeps Renovate tracking the major so a v16 arrives as a
+  deliberate PR; the digest keeps it immutable within v15.x.
+- **`udp_port: 51820`** on the `containers_list` entry.
 
 ## The traps, all of which are written out at their own lines in the role
 

@@ -5,14 +5,20 @@ role depends on. See repo-root `CLAUDE.md` for shared conventions, and the "Wher
 Look" table's note that this role must render before anything referencing its CRDs.
 
 ## At a glance
-- **Deploy tag:** `--tags "traefik"`.
-- **No route of its own** — an infra role; the dashboard has its own IngressRoute
-  (`dashboard-ingressroute.yaml.j2`).
-- **Claim:** the `acme.json` cert store (`Recreate`, ReadWriteOnce — two Traefiks
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry. -->
+- **Deploy tag:** `--tags "traefik"`
+- **Images:** `traefik` (`traefik_k8s_image`), `alpine` (`traefik_k8s_logrotate_image`)
+- **Route:** none (no `templates/ingressroute.yaml.j2`)
+- **Claim:** `traefik-acme`
+- **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — platform — ingress edge; a failed
+  deploy removes the ability to reach or fix anything else, and host probes stay green through
+  that kind of outage. COUPLING NOTE for a future promotion: the traefik-acme PVC holds the
+  ACME account key and issued certs; reverting past a real rotation reinstates stale cert state
+<!-- /generated_from -->
+
+- **The dashboard has its own IngressRoute** (`dashboard-ingressroute.yaml.j2`).
+- **`traefik-acme` is the `acme.json` cert store** (`Recreate`, ReadWriteOnce — two Traefiks
   racing to write it would corrupt it).
-- **`k8s_autodeploy: false`** — platform: a failed deploy removes the ability to reach
-  or observe anything else, and host probes stay green straight through that kind of
-  outage. Reason is in `defaults/main.yml`.
 
 ## Notable
 - **A startupProbe, not `/ping`, is what proves this pod has routers.** `/ping` answers 200

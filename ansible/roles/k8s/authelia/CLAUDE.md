@@ -4,12 +4,18 @@ Authelia guards most public routes as a Traefik forward-auth middleware. See rep
 `CLAUDE.md` for shared conventions.
 
 ## At a glance
-- **Deploy tag:** `--tags "authelia"`.
-- **Route:** `auth.<domain>`, the portal itself — `use_authelia: false`, since it is the
-  middleware every other route calls.
-- **Claims:** `authelia-config` (daily tier, R2). Sessions live in redis, not on the claim.
-- **`k8s_autodeploy: false`** (platform — SSO/OIDC gate; a failed deploy locks out access to
-  everything behind it, including the tools to fix it).
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry. -->
+- **Deploy tag:** `--tags "authelia"`
+- **Images:** `authelia/authelia` (`authelia_k8s_image`), `redis` (`authelia_k8s_redis_image`)
+- **Route:** `auth.<domain>` · `auth.local.<domain>`, no Authelia
+- **Claim:** `authelia-config`
+- **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — platform — SSO/OIDC gate; a failed
+  deploy locks out access to everything behind it, including the tools to fix it
+<!-- /generated_from -->
+
+- **`use_authelia: false` on its own route**, since it is the middleware every other route
+  calls.
+- **`authelia-config` is on the daily R2 tier.** Sessions live in redis, not on the claim.
 
 ## Access control comes from containers_list
 

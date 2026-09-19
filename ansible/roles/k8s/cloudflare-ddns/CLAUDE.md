@@ -5,14 +5,20 @@ the other a **proxied** one behind Cloudflare's edge. See repo-root `CLAUDE.md` 
 conventions.
 
 ## At a glance
-- **Image:** `favonia/cloudflare-ddns` (`cloudflare_ddns_k8s_image`), digest-pinned; tag kept
-  alongside the digest for Renovate's k8s-defaults manager.
-- **Deploy tag:** `--tags "cloudflare-ddns"`. No route — infra role, no public UI.
-- **Storage:** none — no PVC, stateless.
-- **Auto-deploy: denylisted.** `favonia/cloudflare-ddns` is a scratch image with no HTTP
-  server, listener or shell — no readinessProbe of any kind can exist. `manifests_rollout: ''`
-  skips both the shared rollout wait and the stability soak, so nothing gates either
-  Deployment.
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry. -->
+- **Deploy tag:** `--tags "cloudflare-ddns"`
+- **Image:** `favonia/cloudflare-ddns` (`cloudflare_ddns_k8s_image`)
+- **Route:** none (no `templates/ingressroute.yaml.j2`)
+- **Claims:** none (no PVC)
+- **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — unprobeable, not merely probe-less —
+  favonia/cloudflare-ddns is a scratch image running an outbound update loop with no HTTP
+  server, no listener and no shell, so no httpGet, tcpSocket or exec readinessProbe can exist.
+  Both rendered Deployments are therefore ungated: the role sets manifests_rollout: '', which
+  skips the shared rollout wait AND the stability soak, and nothing replaces them.
+<!-- /generated_from -->
+
+- **Digest-pinned image**, with the tag kept alongside the digest for Renovate's k8s-defaults
+  manager.
 - **Secrets** (SOPS keys, not values): `cloudflare_dns_token`,
   `cloudflare_ddns_direct_push_token`, `cloudflare_ddns_proxied_push_token`.
 

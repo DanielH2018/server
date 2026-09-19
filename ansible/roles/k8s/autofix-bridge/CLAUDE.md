@@ -13,13 +13,22 @@ sanctioned automatic *fix*. Renamed from `arr-autoblock` (2026-07-06) to stop pr
 sidecar per fix. See repo-root `CLAUDE.md`.
 
 ## At a glance
-- **Image:** `python:3.14-alpine` (stdlib only — no build, no extra deps) · **No web UI**, no Authelia
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry. -->
+- **Deploy tag:** `--tags "autofix-bridge"`
+- **Image:** `python` (`autofix_bridge_k8s_image`)
+- **Route:** none (no `templates/ingressroute.yaml.j2`)
+- **Claims:** none (no PVC)
+- **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — observability — auto-remediation
+  loop; a broken deploy silently stops fixing arr issues. ALSO no readinessProbe (probe-less) —
+  two independent reasons
+<!-- /generated_from -->
+
+- **Stdlib only** (no build, no extra deps) · **No web UI**, no Authelia
 - **Host:** daniel-box — pinned there by `nodeSelector`, so the drain and cold boot of
   daniel-server cannot take the remediation loop down with it
 - **Reaches:** `sonarr:8989` / `radarr:7878` (queue read + blocklist/search writes),
   `uptime-kuma:3001` (push), and the *arr Discord webhook (egress)
 - **Depends on:** sonarr, radarr, uptime-kuma (`meta/deps.yml`)
-- **Config in:** `ansible/inventory/host_vars/daniel-box.yml` → `containers_list`
 - **Spec:** `docs/superpowers/specs/2026-07-06-autofix-bridge-disk-autoprune-design.md`
   (historical — its disk-autoprune half retired 2026-08-14, see the host plane below)
 

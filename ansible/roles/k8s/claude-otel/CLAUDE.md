@@ -12,13 +12,28 @@ listener off the LAN. Tempo's second port (otlp-grpc 4317) has no `hostPort` on 
 the collector owns 4317, and two hostPorts on one number wedge a pod in `Pending`.
 
 ## At a glance
-- **Deploy tag:** `--tags "claude-otel"`. `probe.py health claude-otel` gates all six
-  workloads in `observability`, none of them named claude-otel.
-- **Route:** `grafana.<domain>`, behind Authelia, with OIDC login on the LAN route.
-- **Claims:** `loki-data`, `prometheus-data`, `tempo-data`, `grafana-data` — each stateful
-  sub-service is `Recreate` on its own PVC; `grafana-data` is `longhorn-nobackup`.
-- **`k8s_autodeploy: false`** (observability — six sub-images across several Deployments,
-  and several independently migrating stores under one tag).
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry. -->
+- **Deploy tag:** `--tags "claude-otel"`
+- **Images:** `otel/opentelemetry-collector-contrib` (`claude_otel_collector_image`),
+  `grafana/loki` (`claude_otel_loki_image`), `prom/prometheus`
+  (`claude_otel_prometheus_image`), `grafana/grafana` (`claude_otel_grafana_image`),
+  `registry.k8s.io/kube-state-metrics/kube-state-metrics`
+  (`claude_otel_kube_state_metrics_image`), `grafana/tempo` (`claude_otel_tempo_image`)
+- **Route:** `grafana.<domain>` · `grafana.local.<domain>`, Authelia one_factor
+- **Claims:** `grafana-data`, `loki-data`, `prometheus-data`, `tempo-data`
+- **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — observability — Claude Code's own
+  telemetry stack, six sub-images across several Deployments. ALSO each stateful component
+  (loki/grafana/prometheus/tempo) is Recreate + its own PVC — compounding, not
+  single-component. COUPLING NOTE for a future promotion: UI-edited Grafana dashboards live
+  only in the PVC until an export script round-trips them to git; a revert discards unsaved
+  edits
+<!-- /generated_from -->
+
+- **`probe.py health claude-otel` gates all six workloads in `observability`**, none of them
+  named claude-otel.
+- **OIDC login on the LAN route** — see *Grafana OIDC* below.
+- **Each stateful sub-service is `Recreate` on its own PVC**; `grafana-data` is
+  `longhorn-nobackup`.
 
 ## Eviction tiers
 
@@ -291,5 +306,3 @@ Healthy output after one probe session: metric names `session_count`, `token_usa
 **verbatim**. That is the intended configuration, and it is the reason the OTLP port is
 bound to loopback rather than published. Treat Loki's retention window as holding the same
 sensitivity as the transcripts themselves.
-
-**Deploy tag:** `--tags "claude-otel"`.

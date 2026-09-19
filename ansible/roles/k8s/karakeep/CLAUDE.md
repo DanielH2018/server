@@ -5,23 +5,35 @@ Meilisearch Deployment for search, and a `time-tagger` sidecar that calls the ap
 loop to auto-tag bookmarks.
 
 ## At a glance
-- **Deploy tag:** `--tags "karakeep"`. Route: `karakeep.<domain>`, Authelia — except
-  `/api/v1/`, `/api/trpc/` and `/api/assets`, deliberately public (Bearer-token auth; the
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry. -->
+- **Deploy tag:** `--tags "karakeep"`
+- **Images:** `ghcr.io/karakeep-app/karakeep` (`karakeep_k8s_image`),
+  `ghcr.io/karakeep-app/karakeep-chrome` (`karakeep_k8s_chrome_image`), `getmeili/meilisearch`
+  (`karakeep_k8s_meili_image`), `ghcr.io/astral-sh/uv` (`karakeep_k8s_tagger_image`)
+- **Route:** `karakeep.<domain>` · `karakeep.local.<domain>`, Authelia one_factor
+- **Claims:** `karakeep-meili`, `karakeep-data`
+- **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — three reasons: (1) stateful —
+  meilisearch migrates its index in place on a bump, non-atomically; (2) probe-less time-tagger
+  sub-deployment; (3) migrating state — Recreate + RWO volume-claim PVC. COUPLING NOTE for a
+  future promotion: karakeep-meili is deliberately excluded from the snapshot, so reverting
+  karakeep-data alone desyncs the search index until a manual reindex
+<!-- /generated_from -->
+
+- **The Authelia bypass:** `/api/v1/`, `/api/trpc/` and `/api/assets`, deliberately public (Bearer-token auth; the
   browser extension and mobile app can't pass 2FA, and they speak tRPC, not the REST API).
   `/api/auth/*` (next-auth's password login) stays behind Authelia on both names: the bypass
   was `/api/` until #1929, which put the app password alone in front of it on the internet,
   and the `.local` monitoring route (homepage's widget, ClientIP-gated to the bridge IP and
   the pod CIDR) carried the same `/api/` until #2018. It is now `/api/v1/users/me/stats`, the
-  one path the widget reads.
+  one path the widget reads. Reading the block above, "Authelia" means the UI; the bypass
+  list is what a client without a browser can reach.
 - **Persists:** `karakeep-data` (`longhorn`, backed up, ~487M) — bookmark library, page
   snapshots, `db.db`. `karakeep-meili` (`longhorn-nobackup`, ~286M) — the search index,
   deliberately unseeded and unbacked-up: it's rebuildable from `db.db` by reindexing.
 - **Secrets (SOPS keys, not values):** `karakeep_meili_master_key`, `karakeep_gemini_api_key`
   (as `OPENAI_API_KEY`), `karakeep_python_api_key` (the tagger's).
-- **`k8s_autodeploy: false`** for three independent reasons: meilisearch migrates its index
-  in place non-atomically on a bump; the `time-tagger` sub-deployment renders no
-  readinessProbe, so `rollout status` proves nothing for it; and the config PVC is `Recreate` +
-  RWO. Any one alone would justify the denylist.
+- **Any one of the three denylist reasons above would justify it alone.** The probe-less
+  `time-tagger` one means `rollout status` proves nothing for that sub-deployment.
 
 ## Notable
 - **The two backend NetworkPolicies ship in THIS role, not in netpol-baseline** (#1620).

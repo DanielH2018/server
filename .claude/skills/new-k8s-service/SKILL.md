@@ -61,6 +61,16 @@ k8s_autodeploy_reason: "deploys no workload of its own — …"  # noqa var-nami
 
 A `false` declaration also needs the extra command in step 4.
 
+**Every deployed role has a `CLAUDE.md` that opens with `## At a glance`, and the block under
+that heading is generated.** Write the heading and the prose; then run
+`uv run python scripts/docs/gen_role_glance.py`, which writes the deploy tag, image
+repositories, route, claims and auto-deploy stance between two `generated_from` markers and
+leaves everything below them alone. `scripts/docs/tests/test_gen_role_glance.py` fails CI
+while the committed block differs from what the generator writes, so re-run it after any
+later change to the role's defaults, templates or `containers_list` entry. Put the reasoning
+— why a claim is unbacked, what a route bypasses — in the bullets below the block, not in
+the sources it reads.
+
 ## 2. The inventory entry — ordering is automatic, position is not
 
 Add the service to `containers_list` in `ansible/inventory/host_vars/daniel-box.yml` with

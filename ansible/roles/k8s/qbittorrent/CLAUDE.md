@@ -4,11 +4,22 @@ qBittorrent with a `wireguard` sidecar init container that tunnels all egress th
 Mullvad. See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
-- **Deploy tag:** `--tags "qbittorrent"`.
-- **Route:** `qbittorrent.<domain>`, behind Authelia.
-- **Claims:** `qbittorrent-config` (weekly tier, B2) and the shared `media-data` (mounted,
-  not owned).
-- **`k8s_autodeploy: false`** — state is coupled outside the volume, so a snapshot revert of
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry. -->
+- **Deploy tag:** `--tags "qbittorrent"`
+- **Images:** `lscr.io/linuxserver/qbittorrent` (`qbittorrent_k8s_image`),
+  `lscr.io/linuxserver/wireguard` (`qbittorrent_k8s_wireguard_image`), `alpine`
+  (`qbittorrent_k8s_probe_image`)
+- **Route:** `qbittorrent.<domain>` · `qbittorrent.local.<domain>`, Authelia one_factor
+- **Claims:** `qbittorrent-config`, `media-data`
+- **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — state coupled outside the volume —
+  reverting qbittorrent-config to a snapshot rewinds in-flight torrent bookkeeping while the
+  media-data volume it references does not move; the pre-apply snapshot and revert work fine
+  and are not the blocker
+<!-- /generated_from -->
+
+- **`qbittorrent-config` is on the weekly B2 tier**; `media-data` is the shared claim
+  (mounted, not owned).
+- **What "state coupled outside the volume" means:** a snapshot revert of
   `qbittorrent-config` cannot undo what the tracker and the `/data/torrents` tree already saw.
 
 ## Traps

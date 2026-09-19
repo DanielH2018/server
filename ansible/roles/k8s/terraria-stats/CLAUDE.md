@@ -4,15 +4,21 @@ A pure-stdlib Python exporter (`files/stats.py`), mounted from a ConfigMap rathe
 built into an image. See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
-- **Deploy tag:** `--tags "terraria-stats"`.
-- **No route** — its `:9420` Prometheus exporter is scraped in-cluster by the
-  `claude-otel` `terraria-stats` job.
-- **Claim:** 1Gi, `k8s/volume-claim`-seeded. Holds the all-time playtime SQLite DB —
-  irreplaceable, since Loki's ~28-day backfill window can't fully reconstruct it — on
-  the **daily** backup tier.
-- **`k8s_autodeploy: false`** — grouped operationally with the hand-operated Terraria
-  server, not deployed unattended; also independently matches the migrating-state shape
-  (`Recreate` + an RWO PVC). Reason is in `defaults/main.yml`.
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry. -->
+- **Deploy tag:** `--tags "terraria-stats"`
+- **Image:** `python` (`terraria_stats_k8s_image`)
+- **Route:** none (no `templates/ingressroute.yaml.j2`)
+- **Claim:** `terraria-stats-data`
+- **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — games — companion to the
+  hand-operated terraria server. ALSO Recreate + RWO volume-claim PVC holding irreplaceable
+  stats — two independent reasons
+<!-- /generated_from -->
+
+- **Its `:9420` Prometheus exporter** is scraped in-cluster by the `claude-otel`
+  `terraria-stats` job.
+- **`terraria-stats-data`** is 1Gi, `k8s/volume-claim`-seeded, on the **daily** backup tier.
+  It holds the all-time playtime SQLite DB — irreplaceable, since Loki's ~28-day backfill
+  window can't fully reconstruct it.
 
 ## Notable
 - Stock `python:3.14-alpine`, not an `image-builder` build: `stats.py` has no

@@ -4,13 +4,19 @@ Bazarr pulls subtitles for the media Sonarr/Radarr manage. See repo-root `CLAUDE
 shared conventions.
 
 ## At a glance
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry. -->
+- **Deploy tag:** `--tags "bazarr"`
 - **Image:** `lscr.io/linuxserver/bazarr` (`bazarr_k8s_image`)
-- **Deploy tag:** `--tags "bazarr"`. Route: `bazarr.<domain>` (Authelia), port 6767.
+- **Route:** `bazarr.<domain>` · `bazarr.local.<domain>`, Authelia one_factor
+- **Claims:** `bazarr-config`, `media-data`
+- **Auto-deploy:** eligible (`k8s_autodeploy: true`)
+<!-- /generated_from -->
+
+- **Port:** 6767.
 - **Storage:** `bazarr-config` PVC (`longhorn`, 1Gi) holds the database and subtitle paths.
   Also mounts the shared `media-data` claim (read/write, via subPath) for the files
   themselves.
-- **Auto-deploy:** eligible. `k8s_autodeploy: true` since slice 7b (2026-08-21) — the
-  `bazarr-config` claim is snapshotted pre-apply by `k8s/volume-snapshot` and reverted on a
+- **Auto-deploy since slice 7b (2026-08-21):** the `bazarr-config` claim is snapshotted pre-apply by `k8s/volume-snapshot` and reverted on a
   failed deploy, which is what makes the Recreate + RWO migrating-state risk safe to
   auto-promote. `media-data` itself is **not** reverted (a shared claim other roles also
   write); a revert can forget a subtitle file bazarr already wrote there, which is

@@ -7,15 +7,24 @@ daniel-server, so both the archived compose role (`roles/containers/archive/valh
 that no longer exists. `k8s/terraria` is the sibling this role copies.
 
 ## At a glance
-- **Image:** `ghcr.io/community-valheim-tools/valheim-server:1.2.0` — pinned. The upstream
-  repo was renamed from `lloesche/valheim-server-docker`; only the new ghcr package
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry. -->
+- **Deploy tag:** `--tags "valheim"`
+- **Images:** `ghcr.io/community-valheim-tools/valheim-server` (`valheim_k8s_image`),
+  `<k8s_registry_pull_host>/valheim` (`valheim_k8s_mods_image`)
+- **Route:** none (no `templates/ingressroute.yaml.j2`)
+- **Claims:** `valheim-config`, `valheim-server`
+- **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — two reasons: (1) probe-less — no
+  readinessProbe at all; (2) migrating state — Recreate + RWO volume-claim PVC holding worlds
+<!-- /generated_from -->
+
+- **Version-pinned.** The upstream repo was renamed from `lloesche/valheim-server-docker`; only the new ghcr package
   publishes semver tags (the old one is stuck on `latest`/`dev`). No rolling-tag exception
   needed, unlike terraria. **The tag pins the wrapper, not the game** — SteamCMD fetches the
   current Valheim build on every start, so the game is on the latest release either way.
 - **Mods:** BepInEx, with 12 plugins pinned in `defaults/main.yml` (2 live, 10 disabled) —
   see *Modding* below.
-- **Second image:** `localhost:5000/valheim:latest`, built in-cluster from
-  `templates/Dockerfile.j2`, holding only the plugin DLLs.
+- **The second image** is built in-cluster from `templates/Dockerfile.j2`, holding only the
+  plugin DLLs.
 - **Host:** daniel-box, by a hard `nodeSelector` — a member of the **VIP unit** with
   traefik, pihole, mosquitto and terraria. The pin and the MetalLB L2Advertisement
   nodeSelector move together or not at all; see `roles/setup/k3s/templates/metallb-pool.yaml.j2`.
@@ -34,8 +43,6 @@ that no longer exists. `k8s/terraria` is the sibling this role copies.
   monitor-bridge's `PVC_MIN_FREE` carries that value, and a test pins the two together (#1875).
 - **Auth:** none possible — raw UDP game protocol, so no Traefik, no Authelia, no CrowdSec
   HTTP chain. The join password is the only access control.
-- **Config in:** `ansible/inventory/host_vars/daniel-box.yml` → `containers_list`
-  (`name: valheim`, no port/hostname) and `defaults/main.yml`
 
 ## Notable
 - **The password did not carry over.** The Docker compose hardcoded

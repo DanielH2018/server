@@ -4,15 +4,22 @@ Deletes watched/old media and cleans up Sonarr/Radarr based on disk-usage rules.
 See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
-- **Image:** `ghcr.io/schaka/janitorr@sha256:…` — **digest-pinned + `watchtower.enable=false`**
-  (currently the `jvm-stable` build pulled 2026-06-28). `jvm-stable` is a floating non-semver
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry. -->
+- **Deploy tag:** `--tags "janitorr"`
+- **Image:** `ghcr.io/schaka/janitorr` (`janitorr_k8s_image`)
+- **Route:** none (no `templates/ingressroute.yaml.j2`)
+- **Claim:** `media-data`
+- **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — probe-less — no readinessProbe on the
+  Deployment; also the only role that deletes real media, so a wedge is not merely inert
+<!-- /generated_from -->
+
+- **Digest-pinned to a `jvm-stable` build** (pulled 2026-06-28). `jvm-stable` is a floating non-semver
   alias Renovate can't version-track, and janitorr deletes real media, so updates are deliberate.
   **Manual update:** pull `jvm-stable`, take the new digest, update the k8s role's default, redeploy.
 - **Host: daniel-box (k8s), since 2026-08-08 — slice 4, B7b.** The Docker role this config came
   from is gone; this role's Secret renders `templates/config/application.yml.j2`. Edit retention
   rules HERE; deploy with `--tags janitorr` from daniel-box.
-- **No web UI**, no Authelia (background service) · targets the cluster sonarr/radarr/jellyfin
-- **Config in:** `ansible/inventory/host_vars/daniel-box.yml` → `containers_list`
+- **No web UI** (background service) · targets the cluster sonarr/radarr/jellyfin
 
 ## Notable
 - Behaviour (retention rules, leaving-soon thresholds, dry-run flag) lives in

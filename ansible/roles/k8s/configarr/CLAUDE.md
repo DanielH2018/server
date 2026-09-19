@@ -14,7 +14,14 @@ Sonarr parses quality/codec from the release **title** at grab time, so no codec
 can catch a title that lies — the only pre-grab lever is **release-group reputation**.
 
 ## At a glance
-- **Image:** `ghcr.io/raydak-labs/configarr` (version-pinned, Renovate-managed)
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry. -->
+- **Deploy tag:** `--tags "configarr"`
+- **Image:** `ghcr.io/raydak-labs/configarr` (`configarr_k8s_image`)
+- **Route:** none (no `templates/ingressroute.yaml.j2`)
+- **Claims:** none (no PVC)
+- **Auto-deploy:** eligible (`k8s_autodeploy: true`)
+<!-- /generated_from -->
+
 - **Host: daniel-box (k8s CronJob), since 2026-08-08 — slice 4, B7a.** This role renders
   `templates/config/config.yml.j2` and copies `files/configarr_status.py`. Edit configarr
   config HERE; deploy with `--tags configarr` from daniel-box.
@@ -31,7 +38,6 @@ can catch a title that lies — the only pre-grab lever is **release-group reput
   its dead-man monitor), a `configarr-deploy-gate` run genuinely performs the reconcile, so
   counting it is correct rather than a shared-role inconsistency — see
   `ansible/roles/k8s/pi-peer-backup/CLAUDE.md` for the other side of this choice.
-- **Config in:** `ansible/inventory/host_vars/daniel-box.yml` → `containers_list`
 
 ## Scope — what configarr manages
 `delete_unmanaged_custom_formats` is left **OFF** everywhere, so Configarr never deletes CFs it

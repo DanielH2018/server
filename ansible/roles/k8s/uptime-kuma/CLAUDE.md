@@ -4,13 +4,22 @@ Uptime Kuma plus an AutoKuma sidecar that creates monitors and notifications fro
 role's rendered declarations. See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
-- **Deploy tag:** `--tags "uptime-kuma"`.
-- **Route:** `uptime-kuma.<domain>`, behind Authelia.
-- **Claims:** `uptime-kuma-data` and `autokuma-data`, both in the no-backup tier — monitors and
-  notifications regenerate from the rendered static-monitors Secret; status history is kept
-  nowhere.
-- **`k8s_autodeploy: false`** (observability — the alerting spine; a broken deploy cannot page
-  about being broken).
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry. -->
+- **Deploy tag:** `--tags "uptime-kuma"`
+- **Images:** `louislam/uptime-kuma` (`uptime_kuma_k8s_image`), `ghcr.io/bigboot/autokuma`
+  (`autokuma_k8s_image`), `ghcr.io/bigboot/kuma` (`kuma_cli_k8s_image`), `python`
+  (`kuma_status_page_sync_image`)
+- **Route:** `uptime-kuma.<domain>` · `uptime-kuma.local.<domain>`, Authelia one_factor
+- **Claims:** `uptime-kuma-data`, `autokuma-data`
+- **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — observability — the alerting spine; a
+  broken deploy cannot page about being broken. ALSO Recreate + RWO volume-claim PVC
+  (migrating-state shape) — two independent reasons. COUPLING NOTE for a future promotion: two
+  PVCs (uptime-kuma-data, autokuma-data) that must revert together; a partial revert desyncs
+  AutoKuma's entity-ID map from Kuma's DB, the same shape as the recorded KD5 migration finding
+<!-- /generated_from -->
+
+- **Both claims are in the no-backup tier** — monitors and notifications regenerate from the
+  rendered static-monitors Secret; status history is kept nowhere.
 
 ## Traps
 

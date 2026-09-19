@@ -10,9 +10,24 @@ n8n with an external task-runner sidecar. See repo-root `CLAUDE.md`.
 > `containers/n8n/data` is still on disk from the migration.
 
 ## At a glance
-- **Images:** built by `k8s/n8n-images` from its `templates/Dockerfile.j2` (`n8n`) +
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry. -->
+- **Deploy tag:** `--tags "n8n"`
+- **Images:** `<k8s_registry_pull_host>/n8n` (`n8n_k8s_image`),
+  `<k8s_registry_pull_host>/n8n-runners` (`n8n_k8s_runners_image`), `alpine`
+  (`n8n_k8s_wait_image`)
+- **Route:** `n8n.<domain>` · `n8n.local.<domain>`, Authelia two_factor
+- **Claims:** `n8n-data`, `n8n-files`
+- **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — two reasons: (1) probe-less
+  n8n-runners sub-deployment; (2) migrating state — Recreate + RWO volume-claim PVC (n8n-data)
+  holding the encryption key + credentials DB. COUPLING NOTE for a future promotion: n8n
+  declares TWO claims, n8n-data and n8n-files — a revert of one without the other desyncs which
+  workflow-referenced /files paths actually exist against the credentials/workflow state in
+  n8n-data
+<!-- /generated_from -->
+
+- **Both images are built by `k8s/n8n-images`** from its `templates/Dockerfile.j2` (`n8n`) +
   `Dockerfile-runners.j2` (`n8n-runners`)
-- **Host:** daniel-box (k8s) · **Port:** 5678 · **URL:** `n8n.<domain>` (Authelia: yes)
+- **Host:** daniel-box (k8s) · **Port:** 5678
 - **Network:** the cluster pod network. The broker binds `0.0.0.0:5679` (n8n has no
   per-interface bind option), so the `n8n-broker` NetworkPolicy in
   `templates/networkpolicy.yaml.j2` is what fences 5679 to `app: n8n-runners`. Since
