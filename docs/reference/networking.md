@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/networking.py
-generated_at: 2026-09-10 18:17 UTC
-generated_sha: f95da3c99
+generated_at: 2026-09-19 06:17 UTC
+generated_sha: f9b05e4ae
 ---
 
 !!! warning "Generated file — do not edit"
@@ -18,7 +18,7 @@ generated_sha: f95da3c99
     `domain` is SOPS-sourced with no static default, and these pages are rendered by static parsing, so the generator writes `<domain>` rather than guessing. On the docs site the routes below become links, built from the domain of the URL you are reading this on — so you get LAN links on the LAN name and public links on the public one.
 
 
-6 route(s) are LAN-only, and the rest answer on both names. The absent Host rule is what keeps a LAN-only route off the internet, not DNS — the Cloudflare wildcard resolves any name.
+9 route(s) are LAN-only, and the rest answer on both names. The absent Host rule is what keeps a LAN-only route off the internet, not DNS — the Cloudflare wildcard resolves any name.
 
 
 ## Routes
@@ -41,12 +41,12 @@ generated_sha: f95da3c99
 | healthchecks | daniel-box | <span class="fqdn" data-host="healthchecks">healthchecks.&lt;domain&gt;</span> · <span class="fqdn" data-host="healthchecks.local">healthchecks.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
 | home-assistant | daniel-box | <span class="fqdn" data-host="home-assistant">home-assistant.&lt;domain&gt;</span> · <span class="fqdn" data-host="home-assistant.local">home-assistant.local.&lt;domain&gt;</span> | LAN + public | `rate-limit` |
 | homepage | daniel-box | <span class="fqdn" data-host="homepage">homepage.&lt;domain&gt;</span> · <span class="fqdn" data-host="homepage.local">homepage.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
-| ical-proxy | daniel-box | <span class="fqdn" data-host="ical-proxy">ical-proxy.&lt;domain&gt;</span> · <span class="fqdn" data-host="ical-proxy.local">ical-proxy.local.&lt;domain&gt;</span> | LAN + public | `rate-limit` |
-| ical-proxy | daniel-stage | <span class="fqdn" data-host="ical-proxy">ical-proxy.&lt;domain&gt;</span> · <span class="fqdn" data-host="ical-proxy.local">ical-proxy.local.&lt;domain&gt;</span> | LAN + public | `rate-limit` |
+| ical-proxy | daniel-box | <span class="fqdn" data-host="ical-proxy.local">ical-proxy.local.&lt;domain&gt;</span> (LAN only) | LAN only | `rate-limit` |
+| ical-proxy | daniel-stage | <span class="fqdn" data-host="ical-proxy.local">ical-proxy.local.&lt;domain&gt;</span> (LAN only) | LAN only | `rate-limit` |
 | jellyfin | daniel-box | <span class="fqdn" data-host="jellyfin">jellyfin.&lt;domain&gt;</span> · <span class="fqdn" data-host="jellyfin.local">jellyfin.local.&lt;domain&gt;</span> | LAN + public | `rate-limit` |
 | karakeep | daniel-box | <span class="fqdn" data-host="karakeep">karakeep.&lt;domain&gt;</span> · <span class="fqdn" data-host="karakeep.local">karakeep.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia`, `csp-karakeep` |
 | littlelink | daniel-box | <span class="fqdn" data-host="www">www.&lt;domain&gt;</span> · <span class="fqdn" data-host="www.local">www.local.&lt;domain&gt;</span> | LAN + public | `rate-limit` |
-| loki-homelab | daniel-box | <span class="fqdn" data-host="loki-homelab">loki-homelab.&lt;domain&gt;</span> · <span class="fqdn" data-host="loki-homelab.local">loki-homelab.local.&lt;domain&gt;</span> | LAN + public | `rate-limit` |
+| loki-homelab | daniel-box | <span class="fqdn" data-host="loki-homelab.local">loki-homelab.local.&lt;domain&gt;</span> (LAN only) | LAN only | `rate-limit` |
 | longhorn-ui | daniel-box | <span class="fqdn" data-host="longhorn.local">longhorn.local.&lt;domain&gt;</span> (LAN only) | LAN only | `rate-limit`, `authelia` |
 | n8n | daniel-box | <span class="fqdn" data-host="n8n">n8n.&lt;domain&gt;</span> · <span class="fqdn" data-host="n8n.local">n8n.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
 | navidrome | daniel-box | <span class="fqdn" data-host="navidrome">navidrome.&lt;domain&gt;</span> · <span class="fqdn" data-host="navidrome.local">navidrome.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |

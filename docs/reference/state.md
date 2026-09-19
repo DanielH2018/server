@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/state.py
-generated_at: 2026-09-18 18:17 UTC
-generated_sha: 633b9be9a
+generated_at: 2026-09-19 06:17 UTC
+generated_sha: f9b05e4ae
 ---
 
 !!! warning "Generated file — do not edit"
@@ -19,10 +19,10 @@ generated_sha: 633b9be9a
 
 | Loop | Last run | Age | Cadence | Status | Last outcome |
 |---|---|---|---|---|---|
-| gitops-deploy | 2026-09-18T18:06:46+0000 | 10m | 10m | ok | ticked, no hold |
-| renovate-agent | 2026-09-12T12:04:20+0000 | 6d6h | 1d | late | session completed |
-| renovate-notify | 2026-09-18T13:02:54+0000 | 5h14m | 1d | ok | checked, nothing new to notify |
-| docs-refresh | 2026-09-18T12:40:00+0000 | 5h37m | 12h | ok | generators: ok |
-| secret-rotate | 2026-09-18T03:03:34+0000 | 15h13m | 7d | ok | last touched by: Wire registry-gc's Kuma tile and make the two library-bypassing pushers log a line the swallowed-verdicts reader parses |
-| longhorn-restore-drill | 2026-09-18T04:10:38+0000 | 14h6m | 1d | ok | PVC restore proven |
-| etcd-restore-drill | 2026-09-14T10:20:02+0000 | 4d7h | 7d | ok | list-only restore proven (snapshot offbox-daniel-box-1789353902.zip) |
+| gitops-deploy | 2026-09-19T06:08:25+0000 | 9m | 10m | ok | ticked, no hold |
+| renovate-agent | 2026-09-12T12:04:20+0000 | 6d18h | 1d | late | session completed |
+| renovate-notify | 2026-09-18T13:02:54+0000 | 17h14m | 1d | ok | checked, nothing new to notify |
+| docs-refresh | 2026-09-18T18:17:00+0000 | 12h | 12h | ok | generators: ok |
+| secret-rotate | 2026-09-18T03:03:34+0000 | 1d3h | 7d | ok | last touched by: Wire registry-gc's Kuma tile and make the two library-bypassing pushers log a line the swallowed-verdicts reader parses |
+| longhorn-restore-drill | 2026-09-19T04:10:47+0000 | 2h6m | 1d | ok | PVC restore proven |
+| etcd-restore-drill | 2026-09-14T10:20:02+0000 | 4d19h | 7d | ok | list-only restore proven (snapshot offbox-daniel-box-1789353902.zip) |

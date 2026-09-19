@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/hosts.py
-generated_at: 2026-09-10 18:17 UTC
-generated_sha: f95da3c99
+generated_at: 2026-09-19 06:17 UTC
+generated_sha: f9b05e4ae
 ---
 
 !!! warning "Generated file — do not edit"
@@ -37,7 +37,7 @@ Raspberry Pi, and the only remaining Docker host. LAN-only utilities.
 | LAN address | `10.0.0.139` |
 | Ansible connection | `ssh` |
 | Service exposure | lan |
-| Services declared | 6 |
+| Services declared | 4 |
 | Runs the GitOps timer | no |
 | Has Docker | yes (group default) |
 
