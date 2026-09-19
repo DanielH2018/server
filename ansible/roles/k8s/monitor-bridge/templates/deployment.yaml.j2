@@ -1,6 +1,7 @@
 {% from 'container-resources.yml.j2' import container_resources with context %}
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
 {% from 'checksum-annotation.yml.j2' import checksum_annotation with context %}
+{% from 'workload-shell.yml.j2' import spec_shell, pod_shell with context %}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -8,13 +9,11 @@ metadata:
   name: monitor-bridge
   namespace: {{ k8s_namespace }}
 spec:
-  revisionHistoryLimit: 3
-  replicas: 1
   # One evaluator at a time: the streak/hysteresis state (grace cycles, n8n failure
   # streaks) is in-process, and two pods pushing the same tokens would interleave
   # contradictory verdicts.
-  strategy:
-    type: Recreate
+{{ spec_shell('Recreate') }}
+  replicas: 1
   selector:
     matchLabels:
       app: monitor-bridge
@@ -30,20 +29,14 @@ spec:
         # split-out module rolls the pod too.
         {{ checksum_annotation('check-script', value=monitor_bridge_script_checksum) }}
     spec:
-      enableServiceLinks: false
+      # Secret-volume files are root-owned; without fsGroup the 0440 credential files
+      # below are unreadable to this non-root uid and both file-mounted checks silently
+      # self-disable ("no URL/token" — found on the twin's first cycle, 2026-08-14).
+{{ pod_shell('homelab-critical', run_as_user=puid, run_as_group=pgid, fs_group=pgid, non_root=true) }}
       # Stays off daniel-server so the drain (and its eventual cold boot) never takes the
       # alerting brain down with the thing it is alerting on.
       nodeSelector:
         kubernetes.io/hostname: {{ k8s_primary_node }}
-      securityContext:
-        runAsUser: {{ puid }}
-        runAsGroup: {{ pgid }}
-        # Secret-volume files are root-owned; without fsGroup the 0440 credential files
-        # below are unreadable to this non-root uid and both file-mounted checks silently
-        # self-disable ("no URL/token" — found on the twin's first cycle, 2026-08-14).
-        fsGroup: {{ pgid }}
-        runAsNonRoot: true
-      automountServiceAccountToken: false
       containers:
         - name: monitor-bridge
           image: {{ monitor_bridge_k8s_image }}
@@ -133,4 +126,3 @@ spec:
           hostPath:
             path: /var/lib/etcd-restore-drill
             type: DirectoryOrCreate
-      priorityClassName: homelab-critical

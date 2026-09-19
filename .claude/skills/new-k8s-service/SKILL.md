@@ -22,6 +22,20 @@ Copy the shape from a close sibling rather than writing one from scratch:
 | a plain web app | `ansible/roles/k8s/freshrss` |
 | on the media volume | `ansible/roles/k8s/sonarr` |
 
+**The pod-spec shell comes from two shared macros, not from the sibling's copy.** A
+Deployment template calls `spec_shell(strategy)` under `spec:` and `pod_shell(priority_class,
+…)` under `spec.template.spec:`, both from `ansible/templates/workload-shell.yml.j2`; a
+DaemonSet calls `pod_shell` only. Both required arguments are decisions, and the file's
+docstring says what each one costs: `strategy` is `Recreate` (a downtime gap every deploy,
+allowlisted with its reason in `ansible/tests/k8s/test_deploy_strategy.py`) or
+`RollingUpdate`; `priority_class` is one of the tiers in
+`roles/setup/k3s/templates/priorityclass.yaml.j2`. The pod-level `securityContext` goes
+through the macro's `run_as_user`/`fs_group`/`non_root` arguments — a pod that needs sysctls
+or supplementalGroups writes the whole block itself and passes none of them. ENFORCED by
+`ansible/tests/k8s/test_workload_shell_uses_the_macros.py`, which refuses an owned field
+written out by hand. The container-level `securityContext` is `hardened_security_context`
+from `security-context.yml.j2`, as before.
+
 **Name every `volumes[].name` for the workload or component that owns it** — `sonarr-config`,
 never `config` — so a mount reads unambiguously in a diff or a `kubectl describe`. ENFORCED by
 `ansible/tests/k8s/test_volume_names_descriptive.py`, which also catches the half-finished rename

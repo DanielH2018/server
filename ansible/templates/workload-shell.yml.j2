@@ -1,0 +1,125 @@
+{#
+  The pod-spec "shell" every long-running workload here shares, at its two depths.
+
+  Until 2026-09-19 each of the 69 Deployment and DaemonSet templates hand-copied these fields
+  and three field-level guards policed the copies (#2056). A copy is where a field drifts: the
+  next service inherits whatever its author copied, and nothing notices until a pod is evicted
+  ahead of the things it outranks on paper, or an app reads a Service's env vars as its own
+  configuration. Two macros, because the fields sit at two indent depths and a macro that can
+  emit at two depths is one that can emit at the wrong one (security-context.yml.j2 says the
+  same). Both emit at one fixed depth: `spec_shell` at 2 spaces, directly under a Deployment's
+  `spec:`; `pod_shell` at 6 spaces, directly under `spec.template.spec:`. A Job or CronJob pod
+  spec sits elsewhere and is NOT a caller.
+
+  ansible/tests/k8s/test_workload_shell_uses_the_macros.py is the call-site guard: every
+  Deployment template calls both, every DaemonSet template calls `pod_shell`, and none writes
+  an owned field out by hand. A macro cannot force its own call, so the rendered-fleet census
+  in test_pod_template_hygiene.py, test_deploy_strategy.py and
+  test_deployment_revision_history_limit.py stays — it is the half that tells an omission from
+  a macro call, which a grep cannot.
+
+  ── spec_shell(strategy, max_surge=none, max_unavailable=none) ── Deployments only ──
+
+    revisionHistoryLimit: 3   invariant. Unpinned, a Deployment keeps ten scaled-to-zero
+                              ReplicaSets and `kubectl get rs -A` stops being readable — 605
+                              ReplicaSets against 68 Deployments on 2026-08-28. Rollbacks here
+                              are `git revert` + redeploy, so deeper history buys nothing.
+    strategy                  REQUIRED, `Recreate` or `RollingUpdate`, no default. Recreate is
+                              a downtime gap on every deploy; RollingUpdate is two pods at once
+                              against whatever the volume and the app allow. The choice is the
+                              decision test_deploy_strategy.py records — a Recreate must sit in
+                              its `_RECREATE` allowlist with the reason — so it is made at the
+                              call, never inherited.
+    max_surge, max_unavailable
+                              the `rollingUpdate` tunables, RollingUpdate only; omitted when
+                              none, which leaves the API defaults (25% / 25%).
+
+  A DaemonSet has no ReplicaSets and no `strategy` (its `updateStrategy` is a different field
+  with different values), so it does not call this.
+
+  ── pod_shell(priority_class, service_account=none, automount=none, run_as_user=none,
+               run_as_group=none, fs_group=none, non_root=false) ──
+
+    enableServiceLinks: false invariant, every caller. Kubernetes otherwise injects legacy
+                              Docker-link env vars for every Service in the namespace —
+                              AUTHELIA_SERVICE_HOST, AUTHELIA_PORT_9091_TCP and friends — and an
+                              app that reads <NAME>_* as configuration picks them up. Authelia
+                              did, and exited before serving anything (daniel-box, 2026-08-02):
+                                the new key already exists with value 'tcp4://:9091' but the
+                                deprecated keys and the new key can't both be configured
+                              The collision needs only that a Service name match the app's
+                              env-var prefix, which is the normal case here.
+    priority_class            REQUIRED, one of the homelab tiers in
+                              roles/setup/k3s/templates/priorityclass.yaml.j2 (or a k8s
+                              system class the hygiene test's `_SYSTEM_TIER` allowlists). No
+                              default on purpose: five values are in use and none dominates,
+                              and an omitted class is priority 0 — BELOW homelab-best-effort,
+                              so the pod loses every eviction race silently (#1851).
+    service_account           emit `serviceAccountName: <value>`; omitted when none.
+    automount                 `automountServiceAccountToken`. Left at none it follows the
+                              hygiene rule: a pod that names no service_account runs as the
+                              namespace `default` SA and never uses its token, so `false` is
+                              emitted (#1852); a pod that names one gets NO line, because the
+                              ServiceAccount object may set the field and the pod's own value
+                              then means nothing. Pass true or false to write the line
+                              regardless — headlamp needs true beside its SA, since
+                              `-in-cluster` reads the API address and CA off the projected mount.
+    run_as_user, run_as_group, fs_group, non_root
+                              the pod-level `securityContext`, emitted only when at least one is
+                              given; omitted keys stay OMITTED, never defaulted, because an
+                              absent `runAsNonRoot` and an explicit false are different
+                              admission outcomes. This block is all-or-nothing: a pod whose
+                              securityContext carries anything else (sysctls, supplementalGroups)
+                              writes the whole block itself at the call site and passes none of
+                              these four — two `securityContext:` keys under one pod spec is a
+                              silent last-wins in YAML, and the rendered census would read the
+                              survivor as the intent.
+
+  What stays at the call site, beside the call: `nodeSelector` (a pin with a per-site reason
+  and its own guard, test_vip_pins.py, which reads the literal), `affinity`
+  (pod-affinity.yml.j2), `hostNetwork`/`hostPID`, `tolerations`, `hostAliases`,
+  `terminationGracePeriodSeconds`, `progressDeadlineSeconds` — one caller each, so there is
+  nothing to share. The WHY comment for a non-default argument stays above the call, where
+  the copied blocks used to sit.
+#}
+{% macro spec_shell(strategy, max_surge=none, max_unavailable=none) %}
+  revisionHistoryLimit: 3
+  strategy:
+    type: {{ strategy }}
+{% if max_surge is not none or max_unavailable is not none %}
+    rollingUpdate:
+{% if max_surge is not none %}
+      maxSurge: {{ max_surge }}
+{% endif %}
+{% if max_unavailable is not none %}
+      maxUnavailable: {{ max_unavailable }}
+{% endif %}
+{% endif %}
+{%- endmacro %}
+{% macro pod_shell(priority_class, service_account=none, automount=none, run_as_user=none, run_as_group=none, fs_group=none, non_root=false) %}
+      enableServiceLinks: false
+      priorityClassName: {{ priority_class }}
+{% if service_account is not none %}
+      serviceAccountName: {{ service_account }}
+{% endif %}
+{% if automount is not none %}
+      automountServiceAccountToken: {{ 'true' if automount else 'false' }}
+{% elif service_account is none %}
+      automountServiceAccountToken: false
+{% endif %}
+{% if run_as_user is not none or run_as_group is not none or fs_group is not none or non_root %}
+      securityContext:
+{% if non_root %}
+        runAsNonRoot: true
+{% endif %}
+{% if run_as_user is not none %}
+        runAsUser: {{ run_as_user }}
+{% endif %}
+{% if run_as_group is not none %}
+        runAsGroup: {{ run_as_group }}
+{% endif %}
+{% if fs_group is not none %}
+        fsGroup: {{ fs_group }}
+{% endif %}
+{% endif %}
+{%- endmacro %}

@@ -2,6 +2,7 @@
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
 {% from 'pod-affinity.yml.j2' import node_affinity_preference with context %}
 {% from 'checksum-annotation.yml.j2' import checksum_annotation with context %}
+{% from 'workload-shell.yml.j2' import spec_shell, pod_shell with context %}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -9,15 +10,13 @@ metadata:
   name: n8n
   namespace: {{ k8s_namespace }}
 spec:
-  revisionHistoryLimit: 3
-  replicas: 1
   # Both PVCs are ReadWriteOnce and Longhorn runs one replica, so a rolling update would
   # deadlock: the new pod waits for a volume the old pod still holds.
   #
   # Recreate is also the only safe strategy for a SQLite writer. Two n8n processes against one
   # database.sqlite is corruption, and DB_SQLITE_VACUUM_ON_STARTUP rewrites the whole file.
-  strategy:
-    type: Recreate
+{{ spec_shell('Recreate') }}
+  replicas: 1
   selector:
     matchLabels:
       app: n8n
@@ -54,9 +53,7 @@ spec:
         # rolls the pod.
         {{ checksum_annotation('image', value=(k8s_built_images | default([]) | selectattr('name', 'equalto', 'n8n') | map(attribute='digest') | first)) }}
     spec:
-      enableServiceLinks: false
-      automountServiceAccountToken: false
-      priorityClassName: homelab-best-effort
+{{ pod_shell('homelab-best-effort') }}
       # Preference, never a pin: CPU-bound workflow execution — daniel-box has 16 threads to daniel-server's 8.
       # Weighted so the pod still schedules if daniel-box is cordoned or full.
 {{ node_affinity_preference(k8s_primary_node) }}

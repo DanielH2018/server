@@ -1,5 +1,6 @@
 {% from 'container-resources.yml.j2' import container_resources with context %}
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
+{% from 'workload-shell.yml.j2' import spec_shell, pod_shell with context %}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -7,7 +8,7 @@ metadata:
   name: artifacts
   namespace: {{ k8s_namespace }}
 spec:
-  revisionHistoryLimit: 3
+{{ spec_shell('RollingUpdate') }}
   replicas: 1
   selector:
     matchLabels:
@@ -18,27 +19,17 @@ spec:
         app: artifacts
         netpol-baseline: enforced
     spec:
-      enableServiceLinks: false
+      # Artifacts are written 0660 ubuntu:ubuntu, with no other-read. Running as any other
+      # uid/gid returns an empty index instead of a permission error, which is the same
+      # failure shape as the DAC_OVERRIDE traps elsewhere in this cluster.
+      # best-effort: a read-only viewer over a hostPath should lose an eviction race to every
+      # workload that serves state.
+{{ pod_shell('homelab-best-effort', run_as_user=puid, run_as_group=pgid, fs_group=pgid, non_root=true) }}
       # hostPath is node-local, so the pod MUST land where the artifacts are. Unpinned, it
       # schedules onto the other node and every mount resolves to an empty directory — the
       # index then reads as "no artifacts" rather than as a scheduling mistake.
       nodeSelector:
         kubernetes.io/hostname: {{ artifacts_k8s_node }}
-      securityContext:
-        # Artifacts are written 0660 ubuntu:ubuntu, with no other-read. Running as any other
-        # uid/gid returns an empty index instead of a permission error, which is the same
-        # failure shape as the DAC_OVERRIDE traps elsewhere in this cluster.
-        runAsUser: {{ puid }}
-        runAsGroup: {{ pgid }}
-        fsGroup: {{ pgid }}
-        runAsNonRoot: true
-      automountServiceAccountToken: false
-      # Every other Deployment in the fleet sets one of the four homelab-* classes; this was the
-      # only one that did not, which left it at Kubernetes' default priority of 0 — BELOW
-      # homelab-best-effort (1000), so under node pressure it was evicted ahead of everything
-      # else in the cluster, silently. best-effort is the right tier for a read-only viewer over
-      # a hostPath, but it should lose that race deliberately rather than by omission.
-      priorityClassName: homelab-best-effort
       containers:
         - name: artifacts
           image: {{ artifacts_k8s_image }}

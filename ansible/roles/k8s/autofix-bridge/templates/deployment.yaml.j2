@@ -1,6 +1,7 @@
 {% from 'container-resources.yml.j2' import container_resources with context %}
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
 {% from 'checksum-annotation.yml.j2' import checksum_annotation with context %}
+{% from 'workload-shell.yml.j2' import spec_shell, pod_shell with context %}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -8,12 +9,10 @@ metadata:
   name: autofix-bridge
   namespace: {{ k8s_namespace }}
 spec:
-  revisionHistoryLimit: 3
-  replicas: 1
   # One remediation actor at a time: the candidate-grace streaks are in-process, and two
   # pods could each independently act on the same queue item.
-  strategy:
-    type: Recreate
+{{ spec_shell('Recreate') }}
+  replicas: 1
   selector:
     matchLabels:
       app: autofix-bridge
@@ -28,17 +27,11 @@ spec:
         # autofix_bridge_modules, so an edit confined to bridge/common.py rolls the pod too.
         {{ checksum_annotation('autofix-script', value=autofix_bridge_script_checksum) }}
     spec:
-      enableServiceLinks: false
+{{ pod_shell('homelab-best-effort', run_as_user=puid, run_as_group=pgid, non_root=true) }}
       # Off daniel-server for the same reason as the monitor-bridge twin: the drain and
       # its cold boot must not take the remediation loop down alongside the Docker estate.
       nodeSelector:
         kubernetes.io/hostname: {{ k8s_primary_node }}
-      securityContext:
-        runAsUser: {{ puid }}
-        runAsGroup: {{ pgid }}
-        runAsNonRoot: true
-      automountServiceAccountToken: false
-      priorityClassName: homelab-best-effort
       containers:
         - name: autofix-bridge
           image: {{ autofix_bridge_k8s_image }}

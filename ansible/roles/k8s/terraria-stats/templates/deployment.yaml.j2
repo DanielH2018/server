@@ -2,6 +2,7 @@
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
 {% from 'pod-affinity.yml.j2' import node_affinity_preference with context %}
 {% from 'checksum-annotation.yml.j2' import checksum_annotation with context %}
+{% from 'workload-shell.yml.j2' import spec_shell, pod_shell with context %}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -9,11 +10,9 @@ metadata:
   name: terraria-stats
   namespace: {{ k8s_namespace }}
 spec:
-  revisionHistoryLimit: 3
+  # ReadWriteOnce PVC — two pods can't both mount /data during a rolling update.
+{{ spec_shell('Recreate') }}
   replicas: 1
-  strategy:
-    # ReadWriteOnce PVC — two pods can't both mount /data during a rolling update.
-    type: Recreate
   selector:
     matchLabels:
       app: terraria-stats
@@ -30,13 +29,7 @@ spec:
         # imports stats_lib.py and an edit confined to that sibling must also roll the pod.
         {{ checksum_annotation('stats-script', value=terraria_stats_script_checksum) }}
     spec:
-      enableServiceLinks: false
-      securityContext:
-        runAsUser: {{ puid }}
-        runAsGroup: {{ pgid }}
-        runAsNonRoot: true
-      automountServiceAccountToken: false
-      priorityClassName: homelab-best-effort
+{{ pod_shell('homelab-best-effort', run_as_user=puid, run_as_group=pgid, non_root=true) }}
       # Preference, never a pin: daniel-box carries the storage- and VIP-pinned workloads and runs the hotter of the two nodes, so latency-insensitive services default here.
       # Weighted so the pod still schedules if daniel-server is cordoned or full.
 {{ node_affinity_preference('daniel-server') }}

@@ -1,6 +1,7 @@
 {% from 'container-resources.yml.j2' import container_resources with context %}
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
 {% from 'pvc.yml.j2' import pvc with context %}
+{% from 'workload-shell.yml.j2' import spec_shell, pod_shell with context %}
 {#
   Histogram-bucket trim for the two control-plane jobs, invoked at COLUMN 0 (it carries its own
   8-space indent, matching `relabel_configs:` in the job blocks below).
@@ -830,10 +831,9 @@ metadata:
   name: prometheus
   namespace: {{ k8s_observability_namespace }}
 spec:
-  revisionHistoryLimit: 3
+  # ReadWriteOnce PVC — see the note on the loki Deployment.
+{{ spec_shell('Recreate') }}
   replicas: 1
-  strategy:
-    type: Recreate  # ReadWriteOnce PVC — see the note on the loki Deployment
   selector:
     matchLabels:
       app: prometheus
@@ -846,16 +846,10 @@ spec:
       # Without this the pod runs as the namespace `default` SA, whose token cannot list nodes —
       # kubernetes_sd_configs then discovers zero targets and the cadvisor job silently reports
       # no series rather than erroring.
-      serviceAccountName: prometheus
       # Tier 1: monitor-bridge (itself homelab-critical) reads this Prometheus every cycle for
       # its disk, memory, OOM, restart and PVC verdicts — see `DECIDED: claude-otel tiers` in
       # this role's CLAUDE.md.
-      priorityClassName: homelab-critical
-      enableServiceLinks: false
-      securityContext:
-        runAsUser: 65534
-        runAsGroup: 65534
-        fsGroup: 65534
+{{ pod_shell('homelab-critical', service_account='prometheus', run_as_user=65534, run_as_group=65534, fs_group=65534) }}
       containers:
         - name: prometheus
           image: {{ claude_otel_prometheus_image }}

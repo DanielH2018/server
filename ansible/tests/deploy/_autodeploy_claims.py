@@ -128,17 +128,23 @@ def _rendered_pvc_claims(role: Path) -> tuple[set[str], list[str]]:
     return resolved, unresolved
 
 
+# The macro call every Deployment makes since 2026-09-19 (`spec_shell` in
+# ansible/templates/workload-shell.yml.j2), and the literal it replaced — kept so a template
+# that predates the macro, or a CronJob-shaped one outside the call-site guard, still counts.
 _STRATEGY_RECREATE = re.compile(
-    r"^\s*strategy:\s*$\n\s*type:\s*Recreate\s*$", re.MULTILINE
+    r"^\s*strategy:\s*$\n\s*type:\s*Recreate\s*$"
+    r"|\{\{\s*spec_shell\(\s*['\"]Recreate['\"]",
+    re.MULTILINE,
 )
 
 
 def _deployment_strategy_is_recreate(role: Path) -> bool:
     """Whether any template `role` renders declares `strategy: / type: Recreate`.
 
-    Comments stripped first so a `# type: Recreate` mentioned in passing (a rationale comment
-    on a RollingUpdate role explaining why it ISN'T Recreate, say) can't be credited — the same
-    discipline `_strip_comments` exists to enforce everywhere else in this file.
+    Either as `{{ spec_shell('Recreate') }}` or written out. Comments stripped first so a
+    `# type: Recreate` mentioned in passing (a rationale comment on a RollingUpdate role
+    explaining why it ISN'T Recreate, say) can't be credited — the same discipline
+    `_strip_comments` exists to enforce everywhere else in this file.
     """
     tdir = role / "templates"
     if not tdir.is_dir():

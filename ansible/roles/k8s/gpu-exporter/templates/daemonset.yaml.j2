@@ -1,5 +1,6 @@
 {% from 'container-resources.yml.j2' import container_resources with context %}
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
+{% from 'workload-shell.yml.j2' import pod_shell with context %}
 ---
 # GPU utilization per node, from the kernel's DRM sysfs (#1446).
 #
@@ -32,13 +33,11 @@ spec:
         # this role adds no NetworkPolicy of its own — see netpol-baseline/templates/networkpolicy.yaml.j2.
         netpol-baseline: enforced
     spec:
-      enableServiceLinks: false
-      automountServiceAccountToken: false
       # NOT hostNetwork, unlike node-exporter. Nothing here reads a network namespace, and a
       # pod IP keeps the 9101 listener off the nodes' LAN interfaces entirely — so no ufw
       # allow is needed, which is the step node-exporter's 9100 was down for from day one for
       # want of.
-      priorityClassName: homelab-best-effort
+{{ pod_shell('homelab-best-effort') }}
       containers:
         - name: gpu-exporter
           image: {{ gpu_exporter_k8s_image }}

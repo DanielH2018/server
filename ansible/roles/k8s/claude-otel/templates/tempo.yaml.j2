@@ -1,6 +1,7 @@
 {% from 'container-resources.yml.j2' import container_resources with context %}
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
 {% from 'pvc.yml.j2' import pvc with context %}
+{% from 'workload-shell.yml.j2' import spec_shell, pod_shell with context %}
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -64,10 +65,9 @@ metadata:
   name: tempo
   namespace: {{ k8s_observability_namespace }}
 spec:
-  revisionHistoryLimit: 3
+  # ReadWriteOnce PVC — see the note on the loki Deployment.
+{{ spec_shell('Recreate') }}
   replicas: 1
-  strategy:
-    type: Recreate  # ReadWriteOnce PVC — see the note on the loki Deployment
   selector:
     matchLabels:
       app: tempo
@@ -79,20 +79,14 @@ spec:
     spec:
       # Tier 4, with prometheus.yaml.j2 the one exception — see `DECIDED: claude-otel tiers`
       # in this role's CLAUDE.md.
-      priorityClassName: homelab-best-effort
-      enableServiceLinks: false
-      securityContext:
-        # The compose bundle needs a `tempo-init` sidecar that runs `chown -R 10001:10001
-        # /var/tempo` before Tempo starts. k8s does that natively: the kubelet applies fsGroup
-        # ownership to the volume at mount time, so the init container has no equivalent here.
-        #
-        # fsGroup ORs group bits onto everything on the volume, which bit Traefik's acme.json
-        # (it requires 0600 and refuses group-readable). Tempo wants group ownership, so this
-        # is the case fsGroup is for.
-        runAsUser: 10001
-        runAsGroup: 10001
-        fsGroup: 10001
-      automountServiceAccountToken: false
+      # The compose bundle needs a `tempo-init` sidecar that runs `chown -R 10001:10001
+      # /var/tempo` before Tempo starts. k8s does that natively: the kubelet applies fsGroup
+      # ownership to the volume at mount time, so the init container has no equivalent here.
+      #
+      # fsGroup ORs group bits onto everything on the volume, which bit Traefik's acme.json
+      # (it requires 0600 and refuses group-readable). Tempo wants group ownership, so this
+      # is the case fsGroup is for.
+{{ pod_shell('homelab-best-effort', run_as_user=10001, run_as_group=10001, fs_group=10001) }}
       containers:
         - name: tempo
           image: {{ claude_otel_tempo_image }}

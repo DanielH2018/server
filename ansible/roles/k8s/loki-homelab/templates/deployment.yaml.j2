@@ -1,6 +1,7 @@
 {% from 'container-resources.yml.j2' import container_resources with context %}
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
 {% from 'pod-affinity.yml.j2' import node_affinity_preference with context %}
+{% from 'workload-shell.yml.j2' import spec_shell, pod_shell with context %}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -8,11 +9,9 @@ metadata:
   name: loki-homelab
   namespace: {{ k8s_namespace }}
 spec:
-  revisionHistoryLimit: 3
-  replicas: 1
   # RWO PVC on single-replica Longhorn — a rolling update deadlocks on the volume.
-  strategy:
-    type: Recreate
+{{ spec_shell('Recreate') }}
+  replicas: 1
   selector:
     matchLabels:
       app: loki-homelab
@@ -22,13 +21,7 @@ spec:
         app: loki-homelab
         netpol-baseline: enforced
     spec:
-      enableServiceLinks: false
-      securityContext:
-        runAsUser: 10001
-        runAsGroup: 10001
-        fsGroup: 10001
-      automountServiceAccountToken: false
-      priorityClassName: homelab-best-effort
+{{ pod_shell('homelab-best-effort', run_as_user=10001, run_as_group=10001, fs_group=10001) }}
       # Preference, never a pin: daniel-box carries the storage- and VIP-pinned workloads and runs the hotter of the two nodes, so latency-insensitive services default here.
       # Weighted so the pod still schedules if daniel-server is cordoned or full.
 {{ node_affinity_preference('daniel-server') }}

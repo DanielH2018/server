@@ -1,5 +1,6 @@
 {% from 'container-resources.yml.j2' import container_resources with context %}
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
+{% from 'workload-shell.yml.j2' import spec_shell, pod_shell with context %}
 ---
 # Authelia's session store. Nothing else talks to it — see
 # networkpolicy-redis.yaml.j2 beside this file, which is what actually fences it — and which
@@ -16,13 +17,11 @@ metadata:
   name: authelia-redis
   namespace: {{ k8s_namespace }}
 spec:
-  revisionHistoryLimit: 3
-  replicas: 1
   # Recreate, not RollingUpdate. Two redis pods would each hold their own empty store and the
   # Service would split traffic between them, so a rolling update logs out whichever users land
   # on the new pod and then logs out the rest anyway when the old one goes.
-  strategy:
-    type: Recreate
+{{ spec_shell('Recreate') }}
+  replicas: 1
   selector:
     matchLabels:
       app: authelia-redis
@@ -32,11 +31,9 @@ spec:
         app: authelia-redis
         netpol-baseline: enforced
     spec:
-      enableServiceLinks: false
-      automountServiceAccountToken: false
       # The same class as authelia itself: an evicted redis logs the whole fleet out of SSO, so
       # it is exactly as critical as the portal in front of it.
-      priorityClassName: homelab-critical
+{{ pod_shell('homelab-critical') }}
       containers:
         - name: redis
           image: {{ authelia_k8s_redis_image }}

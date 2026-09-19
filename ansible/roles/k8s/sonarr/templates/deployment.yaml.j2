@@ -1,6 +1,7 @@
 {% from 'container-resources.yml.j2' import container_resources with context %}
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
 {% from 'exportarr.yml.j2' import exportarr with context %}
+{% from 'workload-shell.yml.j2' import spec_shell, pod_shell with context %}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -8,13 +9,11 @@ metadata:
   name: sonarr
   namespace: {{ k8s_namespace }}
 spec:
-  revisionHistoryLimit: 3
-  replicas: 1
   # The config PVC is ReadWriteOnce on single-replica Longhorn, so a rolling update deadlocks:
   # the new pod waits for a volume the old pod has not released. (The media PVC is RWX and does
   # not have this problem — this is about /config.)
-  strategy:
-    type: Recreate
+{{ spec_shell('Recreate') }}
+  replicas: 1
   selector:
     matchLabels:
       app: sonarr
@@ -24,12 +23,10 @@ spec:
         app: sonarr
         netpol-baseline: enforced
     spec:
-      enableServiceLinks: false
       # No fsGroup: volume-claim restores ownership with `tar -p --numeric-owner`, the LSIO image
       # chowns /config itself on startup, and an fsGroup here would make the kubelet recursively
       # chown the 19 G media volume on every mount.
-      automountServiceAccountToken: false
-      priorityClassName: homelab-standard
+{{ pod_shell('homelab-standard') }}
       containers:
         - name: sonarr
           image: {{ sonarr_k8s_image }}
