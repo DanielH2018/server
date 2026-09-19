@@ -10,8 +10,8 @@ U, A, T = "CLAUDE.md#Sec", "m.py:run", "t/test_m.py::test_run"
 def _edb(
     *,
     cites: frozenset[tuple[str, str]] = frozenset({(U, A)}),
-    recorded: Mapping[tuple[str, str], str] = {(U, A): "h1"},
-    current: Mapping[str, str] = {A: "h1"},
+    recorded: Mapping[tuple[str, str], str] | None = None,
+    current: Mapping[str, str] | None = None,
     live: frozenset[str] = frozenset(),
     transport_failed: frozenset[str] = frozenset(),
     backref: frozenset[tuple[str, str]] = frozenset(),
@@ -19,6 +19,10 @@ def _edb(
     memory_units: frozenset[str] = frozenset(),
     test_atoms: frozenset[str] = frozenset(),
 ) -> Edb:
+    if recorded is None:
+        recorded = {(U, A): "h1"}
+    if current is None:
+        current = {A: "h1"}
     return Edb(
         cites=cites,
         recorded=recorded,
@@ -121,6 +125,31 @@ def test_supported_by_out_is_one_level():
     i = derive(e)
     assert U in i.supported_by_out  # U links to v, v is OUT
     assert w not in i.supported_by_out  # w links to U, U is IN — no cascade
+
+
+def test_transport_failure_on_a_non_live_atom_is_out():
+    a_failed = "some-atom-that-failed-but-is-not-live"
+    e = _edb(
+        cites=frozenset({(U, a_failed)}),
+        recorded={(U, a_failed): "h1"},
+        current={},
+        transport_failed=frozenset({a_failed}),
+    )
+    i = derive(e)
+    assert (U, a_failed) in i.missing and status_of(e, i, U) == "OUT"
+
+
+def test_out_beats_unknown():
+    p = "probe.py kuma-drift"
+    e = _edb(
+        cites=frozenset({(U, A), (U, p)}),
+        recorded={(U, A): "h1", (U, p): "s1"},
+        current={A: "h2"},
+        live=frozenset({p}),
+        transport_failed=frozenset({p}),
+    )
+    i = derive(e)
+    assert U in i.out and U in i.unknown and status_of(e, i, U) == "OUT"
 
 
 def test_status_census():

@@ -39,11 +39,12 @@ class Idb:
 
 def derive(edb: Edb) -> Idb:
     cites = edb.cites
-    # A probe with no answer is neither current nor missing: it is unknown, decided below.
+    # A live probe with no answer is unknown, not missing: only live probes earn UNKNOWN.
+    # A non-live atom in transport_failed is missing/unrecorded, making the unit OUT.
     missing = frozenset(
         (u, a)
         for u, a in cites
-        if a not in edb.current and a not in edb.transport_failed
+        if a not in edb.current and not (a in edb.live and a in edb.transport_failed)
     )
     moved = frozenset(
         (u, a)
@@ -55,7 +56,8 @@ def derive(edb: Edb) -> Idb:
     unrecorded = frozenset(
         (u, a)
         for u, a in cites
-        if (u, a) not in edb.recorded and a not in edb.transport_failed
+        if (u, a) not in edb.recorded
+        and not (a in edb.live and a in edb.transport_failed)
     )
     unknown = frozenset(
         u for u, a in cites if a in edb.live and a in edb.transport_failed
