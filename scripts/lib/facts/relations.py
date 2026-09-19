@@ -95,6 +95,21 @@ def derive(edb: Edb) -> Idb:
 
 
 def status_of(edb: Edb, idb: Idb, unit: str) -> str:
+    """One unit's status, by the precedence OUT > UNVERIFIED > UNKNOWN > IN > UNDECLARED/CONVENTION.
+
+    The order is what makes a status a verdict rather than a summary: a unit can be in
+    several of these sets at once, and the worst one wins. OUT first, because a moved atom
+    is a fact that is now wrong. UNVERIFIED next, because a unit nobody has verified cannot
+    be graded. UNKNOWN next, because a live probe with no answer is a gap in the evidence,
+    not in the claim. IN last of the graded four. A unit that cites nothing is a convention
+    in the repo store, and UNDECLARED in the memory store.
+    """
+    status = _status_of(edb, idb, unit)
+    assert status in STATUSES, status
+    return status
+
+
+def _status_of(edb: Edb, idb: Idb, unit: str) -> str:
     if unit in idb.out:
         return "OUT"
     if unit in idb.unverified:

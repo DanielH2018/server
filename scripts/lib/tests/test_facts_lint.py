@@ -4,7 +4,7 @@ import subprocess
 
 import pytest
 
-from facts.lint import RULES, WARN_RULES, changed_units, lint_sections
+from facts.lint import RULES, WARN_RULES, LintFinding, changed_units, lint_sections
 from facts.lock import LOCK_REL, write_lock
 
 
@@ -149,6 +149,12 @@ def test_changed_units_refuses_an_unresolvable_ref(tmp_path):
     repo, _ = _repo(tmp_path, "## A\none\n")
     with pytest.raises(ValueError, match="cannot resolve 'origin/master'"):
         changed_units(repo, "origin/master")
+
+
+def test_a_rule_outside_the_census_is_flagged():
+    """Every LintFinding above is the clean side: the census must bind its producers too."""
+    with pytest.raises(ValueError, match="RULES"):
+        LintFinding("CLAUDE.md#A", "nope", "d", False)
 
 
 def test_rule_census():

@@ -48,6 +48,13 @@ class Finding:
     kind: str
     detail: str
 
+    def __post_init__(self) -> None:
+        # The census test asserts FINDING_KINDS holds what it holds; this asserts the
+        # producers use it. Without it a kind added at a call site and left out of the
+        # frozenset passes both, and `fact_status.py` prints a kind nothing documents.
+        if self.kind not in FINDING_KINDS:
+            raise ValueError(f"{self.kind!r} is not in FINDING_KINDS")
+
 
 def _checksum(units: dict) -> str:
     return hashlib.sha256(json.dumps(units, sort_keys=True).encode()).hexdigest()

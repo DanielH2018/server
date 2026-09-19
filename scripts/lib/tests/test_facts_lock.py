@@ -8,6 +8,7 @@ from facts.lock import (
     FINDING_KINDS,
     LOCK_REL,
     _PYTHON,
+    Finding,
     build_repo_edb,
     check_lock,
     forget_units,
@@ -221,6 +222,12 @@ def test_a_row_recorded_under_another_interpreter_is_flagged_and_not_compared(tm
     findings = check_lock(repo, repo / LOCK_REL)
     assert [f.kind for f in findings] == ["interpreter-moved"]
     assert "3.9" in findings[0].detail and _PYTHON in findings[0].detail
+
+
+def test_a_finding_kind_outside_the_census_is_flagged():
+    """Every Finding above is the clean side: the census must bind its producers too."""
+    with pytest.raises(ValueError, match="FINDING_KINDS"):
+        Finding("u", "a", "nope", "d")
 
 
 def test_finding_kinds_census():

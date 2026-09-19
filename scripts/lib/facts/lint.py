@@ -51,6 +51,12 @@ class LintFinding:
     detail: str
     warn: bool
 
+    def __post_init__(self) -> None:
+        # `_f` reads WARN_RULES to set `warn`, so a rule missing from RULES would also be
+        # missing from WARN_RULES and silently grade as an error.
+        if self.rule not in RULES:
+            raise ValueError(f"{self.rule!r} is not in RULES")
+
 
 def _f(unit: str, rule: str, detail: str) -> LintFinding:
     return LintFinding(unit, rule, detail, rule in WARN_RULES)
