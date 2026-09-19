@@ -4,10 +4,12 @@
 The tick runs on ONE host (`has_gitops`, daniel-box), and `initial_setup.yml` runs against
 one host per invocation, so a role it reaches on more hosts than that leaves the others
 unconverged after a green tick (issue #1009). `setup_role_hosts` reads the role's own gate
-in the playbook; `setup_file_hosts` reads the gate on the task that ships a changed file,
-which is what decides where a FILE lands when the role itself is ungated (PR #1241's
-shape: box-only cron templates under the ungated `initial_setup` role read as reaching every
-host). `remaining_setup_hosts_note` is the string land.sh prints and the verdict hangs on.
+in the playbook, or, for a role the playbook does not gate, the gates on its own tasks
+(issue #2073: `deploy_ui` is one `block:` under `when: has_gitops`); `setup_file_hosts`
+reads the gate on the task that ships a changed file, which is what decides where a FILE
+lands when the role reaches more hosts than the file does (PR #1241's shape: box-only cron
+templates under the ungated `initial_setup` role read as reaching every host).
+`remaining_setup_hosts_note` is the string land.sh prints and the verdict hangs on.
 
 Split out of `land_tags.py` at the module-length cap; the path-to-tag mappers stay there.
 """
@@ -113,13 +115,17 @@ def _eval_when(
         return True
 
 
+_SETUP_ROLES_DIR = ANSIBLE / "roles" / "setup"
+
+
 def setup_role_hosts(
     role: str,
     playbook: Path = _INITIAL_SETUP_YML,
     all_vars: Path = ALL_VARS,
     host_vars_dir: Path = HOST_VARS,
+    roles_dir: Path = _SETUP_ROLES_DIR,
 ) -> frozenset[str]:
-    """Which of `_HOSTS` `initial_setup.yml` applies `role` to.
+    """Which of `_HOSTS` `initial_setup.yml` runs at least one task of `role` on.
 
     THE HOLE THIS CLOSES. `self_applied()` says a setup role is the tick's to apply, but the
     tick only ever runs on ONE host -- the one `gitops_deploy` is armed on (`has_gitops`,
@@ -133,6 +139,18 @@ def setup_role_hosts(
     `roles/setup/initial_setup/files/kuma-push-lib.sh`, the tick converged, and land.sh read
     `settled` while daniel-server and daniel-pi kept running the old library.
 
+    A role with no playbook gate is read from its own tasks instead of assumed to reach
+    every host. `deploy_ui` wraps its whole `tasks/main.yml` in one `block:` under `when:
+    has_gitops`, so the play visits all three hosts and every task skips on two of them; a
+    change to its `defaults/`, `handlers/` or `tasks/main.yml` -- none of which names a
+    shipped file -- read as owing those two a hand-run, and landing PR #2071 ended
+    `needs-manual-apply` over four commands that would each run a play in which nothing
+    fires (issue #2073). The gate that decides is the union over the role's leaf tasks:
+    a host is reached when at least one task's `when:` chain -- the block and static-import
+    gates above it included -- passes there. `gitops_deploy` keeps all three this way, since
+    its `not has_gitops` branch tears the deployer down on the other two. A tasks tree that
+    cannot be read stays wide, the same asymmetry `_eval_when` applies inside one gate.
+
     Returns an empty set for a role `initial_setup.yml` does not reach at all (its playbook
     is not `ansible/initial_setup.yml`, or it is not in that playbook's `roles:` list) --
     that is `plane_note`'s `unroutable` territory, not this function's to guess at.
@@ -144,11 +162,27 @@ def setup_role_hosts(
         return frozenset()
     when = roles[role]
     if when is None:
-        return frozenset(_HOSTS)
+        chains = _task_chains(roles_dir / role, lambda task, task_file: True)
+        if not chains:
+            return frozenset(_HOSTS)
+        return _hosts_passing(chains, _HOSTS, all_vars, host_vars_dir)
     return frozenset(h for h in _HOSTS if _eval_when(when, h, all_vars, host_vars_dir))
 
 
-_SETUP_ROLES_DIR = ANSIBLE / "roles" / "setup"
+def _hosts_passing(
+    chains, hosts, all_vars: Path, host_vars_dir: Path
+) -> frozenset[str]:
+    """The hosts of `hosts` on which at least one `when:` chain in `chains` passes whole."""
+    return frozenset(
+        h
+        for h in hosts
+        if any(
+            all(_eval_when(g, h, all_vars, host_vars_dir) for g in chain)
+            for chain in chains
+        )
+    )
+
+
 # include_tasks and import_tasks read alike here: the only place they diverge is a
 # runtime-templated target (`include_tasks: "{{ var }}.yml"`), and _gates_in already skips
 # that case (`"{{" in target`) rather than following it. A static include_tasks -- the
@@ -164,26 +198,40 @@ _IMPORT_KEYS = (
 _SHIPPED_DIRS = ("templates", "files")
 
 
-def _task_gates_naming(
-    role_dir: Path, basename: str, task_file: str = "main.yml", inherited: tuple = ()
+def _task_chains(
+    role_dir: Path, keep, task_file: str = "main.yml", inherited: tuple = ()
 ) -> list[tuple] | None:
-    """Every `when:` chain (import gates, then the task's own) on a task naming `basename`.
+    """Every `when:` chain (import and block gates, then its own) on each leaf `keep` accepts.
 
-    Reads the role's `tasks/` tree through its static imports, and `block:` bodies. A
-    task names the file when the string appears anywhere in its body -- `src:`, a
-    `loop:` item, a `lookup('file', ...)` -- matched by basename, which is how every
-    `template`/`copy` task in this tree refers to what it ships. `_ships_via_loop` covers
-    the one shape that literal match cannot: a loop of bare names templated into `src:
-    "{{ item }}.j2"`, where the shipped file's basename carries the suffix the loop items
-    do not. Returns None when the task file cannot be read, so the caller falls back
-    rather than narrows.
+    Reads the role's `tasks/` tree from `task_file` through its static imports and `block:`
+    bodies. A leaf is a task that neither imports another file nor opens a block;
+    `keep(task, task_file)` is called with the leaf and the basename of the task file it
+    sits in, and every accepted leaf contributes one chain. Returns None when `task_file`
+    cannot be read, so the caller falls back rather than narrows; an unreadable file
+    further down the import tree contributes nothing, as before.
     """
     path = role_dir / "tasks" / task_file
     try:
         tasks = yaml_fast.safe_load(path.read_text()) or []
     except OSError, yaml.YAMLError:
         return None
-    return _gates_in(tasks, role_dir, basename, inherited)
+    return _gates_in(tasks, role_dir, keep, task_file, inherited)
+
+
+def _task_gates_naming(role_dir: Path, basename: str) -> list[tuple] | None:
+    """Every `when:` chain on a task naming `basename`.
+
+    A task names the file when the string appears anywhere in its body -- `src:`, a
+    `loop:` item, a `lookup('file', ...)` -- matched by basename, which is how every
+    `template`/`copy` task in this tree refers to what it ships. `_ships_via_loop` covers
+    the one shape that literal match cannot: a loop of bare names templated into `src:
+    "{{ item }}.j2"`, where the shipped file's basename carries the suffix the loop items
+    do not.
+    """
+    return _task_chains(
+        role_dir,
+        lambda task, _: basename in json.dumps(task) or _ships_via_loop(task, basename),
+    )
 
 
 def _ships_via_loop(task: dict, basename: str) -> bool:
@@ -212,7 +260,9 @@ def _ships_via_loop(task: dict, basename: str) -> bool:
     return stem != basename and stem in loop and "{{ item }}.j2" in text
 
 
-def _gates_in(tasks, role_dir: Path, basename: str, inherited: tuple) -> list[tuple]:
+def _gates_in(
+    tasks, role_dir: Path, keep, task_file: str, inherited: tuple
+) -> list[tuple]:
     found: list[tuple] = []
     for task in tasks:
         if not isinstance(task, dict):
@@ -222,12 +272,10 @@ def _gates_in(tasks, role_dir: Path, basename: str, inherited: tuple) -> list[tu
         if isinstance(target, str):
             if "{{" in target:  # a cross-role import; nothing it ships is this role's
                 continue
-            found.extend(
-                _task_gates_naming(role_dir, basename, Path(target).name, chain) or []
-            )
+            found.extend(_task_chains(role_dir, keep, Path(target).name, chain) or [])
         elif "block" in task:
-            found.extend(_gates_in(task["block"], role_dir, basename, chain))
-        elif basename in json.dumps(task) or _ships_via_loop(task, basename):
+            found.extend(_gates_in(task["block"], role_dir, keep, task_file, chain))
+        elif keep(task, task_file):
             found.append(chain)
     return found
 
@@ -252,11 +300,19 @@ def setup_file_hosts(
     an `import_tasks` `when:` above it included -- and keeps only the role's hosts that
     pass at least one shipping task's chain.
 
-    Narrows only on evidence. A path outside `templates/` or `files/`, a file no task
-    names, or a tasks tree that cannot be read all return the role-level answer, the same
-    "unknown stays wide" asymmetry `_eval_when` applies inside one gate.
+    A `tasks/<file>.yml` path reaches the hosts that run a task IN that file: the leaf
+    tasks it holds, each under the include chain that pulls the file in. PR #2071 changed
+    `gitops_deploy/tasks/install.yml`, which `tasks/main.yml` includes under `when:
+    has_gitops`, and the path read as every host (issue #2073); `tasks/teardown.yml`, the
+    `not has_gitops` half of the same dispatcher, reaches the other two the same way. A
+    task file holding only includes -- `main.yml` of a dispatcher -- has no leaf of its
+    own and returns the role-level answer, which for a dispatcher is the union.
+
+    Narrows only on evidence. A path outside `templates/`, `files/` or `tasks/`, a file no
+    task names, or a tasks tree that cannot be read all return the role-level answer, the
+    same "unknown stays wide" asymmetry `_eval_when` applies inside one gate.
     """
-    role_hosts = setup_role_hosts(role, playbook, all_vars, host_vars_dir)
+    role_hosts = setup_role_hosts(role, playbook, all_vars, host_vars_dir, roles_dir)
     if path.endswith(".md"):
         # Docs ship nowhere: no task under roles/setup/*/tasks names a .md file, and the
         # deployer's k8s branch already reads *.md as docs. PR #1079 was three box-only
@@ -276,19 +332,16 @@ def setup_file_hosts(
     prefix = ("ansible", "roles", "setup", role)
     if not role_hosts or parts[: len(prefix)] != prefix or len(parts) < 6:
         return role_hosts
-    if parts[4] not in _SHIPPED_DIRS:
+    if parts[4] == "tasks":
+        task_file = parts[-1]
+        chains = _task_chains(roles_dir / role, lambda task, f: f == task_file)
+    elif parts[4] in _SHIPPED_DIRS:
+        chains = _task_gates_naming(roles_dir / role, parts[-1])
+    else:
         return role_hosts
-    chains = _task_gates_naming(roles_dir / role, parts[-1])
     if not chains:
         return role_hosts
-    return frozenset(
-        h
-        for h in role_hosts
-        if any(
-            all(_eval_when(g, h, all_vars, host_vars_dir) for g in chain)
-            for chain in chains
-        )
-    )
+    return _hosts_passing(chains, role_hosts, all_vars, host_vars_dir)
 
 
 def _setup_apply_command(role: str, host: str) -> str:
