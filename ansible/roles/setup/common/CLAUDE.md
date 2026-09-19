@@ -12,6 +12,7 @@ the pieces several setup roles need byte-identical. A caller reaches it with
 | `tasks/install_host_lib.yml` | Copies `files/host_lib.py` beside a consumer script so `import host_lib` resolves — every consumer is a directly-invoked script with only its own directory on `sys.path`. |
 | `tasks/stamp_render.yml` | Records the source checksum of a group of rendered templates, one fragment per group, so a tag-scoped run leaves the other groups' fragments stale and the drift check reports the truth. |
 | `tasks/stamp_deployed.yml` | Records `{live, src}` pairs for `copy:`-deployed artifacts, so `manifest-prune-check.sh`'s second arm can compare live bytes against the repo in either direction. |
+| `tasks/kuma_check_timer.yml` | Schedules a Kuma-fed host check as a systemd timer plus oneshot service (`templates/kuma-check.{service,timer}.j2`) that reruns every `RestartSec` while the check is red. The contract is the exit code: the script exits 1 after it pushes `down`, 0 after `up`, and `Restart=on-failure` does the rest. `kuma_check_state: absent` is the way out, and the legacy cron is removed in both states. Guarded by `ansible/tests/setup/test_kuma_check_timer.py`, whose `KNOWN_CHECKS` names every caller. |
 | `files/host_lib.py` | `parse_env_file`, `atomic_write`, `discord_post` (the Cloudflare-1010 User-Agent, 2xx-only success). The one copy of Python shared across setup-role host scripts; tested in `tests/`. |
 | `templates/resolv.conf.j2` | The resolv.conf `k3s` (`node.yml`) and `optimize_pi` both render. |
 

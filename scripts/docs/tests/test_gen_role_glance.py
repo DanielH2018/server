@@ -132,6 +132,29 @@ def test_timer_units_reads_the_cadence_keys_in_a_fixed_order(tmp_path):
     ]
 
 
+KUMA_CHECK_TASKS = """\
+- name: Schedule the widget check
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/kuma_check_timer.yml"
+  vars:
+    kuma_check_name: widget
+    kuma_check_on_calendar: "*-*-* *:23:00"
+- name: Stamp the widget render
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_render.yml"
+  vars:
+    stamp_render_name: widget
+"""
+
+
+def test_timer_units_reads_a_kuma_check_import_and_ignores_other_common_imports(
+    tmp_path,
+):
+    role = tmp_path / "widget"
+    _write(role / "tasks" / "main.yml", KUMA_CHECK_TASKS)
+    assert f.timer_units(role) == [
+        ("kuma-check-widget.timer", ["OnCalendar=*-*-* *:23:00"])
+    ]
+
+
 def test_setup_glance_lines_names_every_source_when_a_role_has_none(tmp_path):
     role = tmp_path / "widget"
     _write(role / "tasks" / "main.yml", "- name: Nothing\n  ansible.builtin.debug:\n")

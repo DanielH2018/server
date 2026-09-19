@@ -1,0 +1,112 @@
+---
+# Schedule a Kuma-fed host check as a systemd timer that RERUNS while the check is red.
+#
+# THE PROBLEM. A check that feeds a push monitor from cron pushes `down`, and the tile stays red
+# until the cron's next slot — 1 h to 25 h later — however soon the fault is fixed, because
+# nothing pushes `up` in between. Kuma has no poll rate to raise for a push monitor, and
+# AutoKuma reverts any runtime edit to a monitor within 60 s (uptime-kuma role). The only place
+# a recovery is observable is the producer, so the producer is what reruns.
+#
+# THE SHAPE. One oneshot service and one timer per check, rendered from the shared pair in
+# roles/setup/common/templates/. The contract is the exit code: the script exits 1 after it
+# pushes `down` and 0 after `up`, and `Restart=on-failure` reruns it every `RestartSec` until
+# it exits 0. Nothing is persisted by hand; a pending restart lost to a reboot is replaced by
+# the timer's own `Persistent=true` catch-up run. Decided 2026-09-19 over a marker-file runner
+# (a third scheduler beside cron and monitor-bridge) and over moving the checks into
+# monitor-bridge (most read the host checkout, root-only files or the host's `gh` login).
+#
+# BOTH DIRECTIONS. `kuma_check_state: absent` stops and disables the timer, removes the unit
+# files and removes the legacy cron, so a host that leaves a `*_hosts` list keeps neither. The
+# present arm removes the legacy cron too: a host must never run both.
+#
+# NO TAGS IN THIS FILE, matching release_bin.yml and the stamp files. Tags union in Ansible, so
+# a tag here would also inherit the caller's and become selectable two ways. `when:` on the
+# caller's import_tasks applies to every task here, because the import is static.
+#
+# Callers pass:
+#   kuma_check_name         unit suffix, filename-safe: kuma-check-<name>.{service,timer}
+#   kuma_check_description  the units' Description=
+#   kuma_check_exec         ExecStart=, an absolute path
+#   kuma_check_user         User= of the service (root, or the cron's former owner)
+#   kuma_check_on_calendar  OnCalendar=, systemd calendar syntax (`*-*-* *:23:00` for hourly at :23)
+#   kuma_check_restart_sec  RestartSec=, how long a red check waits before it reruns
+#   kuma_check_state        present | absent
+#   kuma_check_env_file     optional EnvironmentFile=; omitted when empty
+#   kuma_check_cron_name    optional: the `ansible.builtin.cron` name this timer replaces, removed
+#                           in both states so the two never coexist
+#   kuma_check_cron_user    the legacy cron's owner; defaults to kuma_check_user
+
+- name: Render the kuma-check units for {{ kuma_check_name }}
+  when: kuma_check_state == 'present'
+  # `src` names the owning role outright. A task file imported from another role resolves a bare
+  # basename against the role that owns the file, which happens to be this one, but
+  # release_bin.yml records that trap and the explicit path does not depend on it.
+  ansible.builtin.template:
+    src: "{{ playbook_dir }}/roles/setup/common/templates/kuma-check.{{ item }}.j2"
+    dest: "/etc/systemd/system/kuma-check-{{ kuma_check_name }}.{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: [service, timer]
+  become: true
+  register: common_kuma_check_units
+
+- name: Enable and start the kuma-check timer for {{ kuma_check_name }}
+  # Under --check the template task writes nothing, so on a host that lacks the unit this task
+  # fails with "Could not find the requested service" — --check breaking the consumer, not the
+  # read. Skipping it there keeps a --check run green; a real run still starts it.
+  when: kuma_check_state == 'present' and not (ansible_check_mode and common_kuma_check_units is changed)
+  ansible.builtin.systemd:
+    name: "kuma-check-{{ kuma_check_name }}.timer"
+    enabled: true
+    state: started
+    daemon_reload: true
+  become: true
+
+- name: Restart the kuma-check timer when its units changed, for {{ kuma_check_name }}
+  # `state: started` on an already-running timer is a no-op, so a changed OnCalendar= would not
+  # take until the next boot without this. Same --check guard as the start above.
+  when: kuma_check_state == 'present' and common_kuma_check_units is changed and not ansible_check_mode
+  ansible.builtin.systemd:
+    name: "kuma-check-{{ kuma_check_name }}.timer"
+    state: restarted
+  become: true
+
+- name: Look for the kuma-check timer before stopping it, for {{ kuma_check_name }}
+  when: kuma_check_state == 'absent'
+  ansible.builtin.stat:
+    path: "/etc/systemd/system/kuma-check-{{ kuma_check_name }}.timer"
+  register: common_kuma_check_timer_file
+
+- name: Stop and disable the kuma-check timer for {{ kuma_check_name }}
+  # Guarded on the file: `systemd:` fails on a unit that does not exist, and the absent arm runs
+  # on every host outside the caller's list, most of which never had the timer.
+  when: kuma_check_state == 'absent' and common_kuma_check_timer_file.stat.exists
+  ansible.builtin.systemd:
+    name: "kuma-check-{{ kuma_check_name }}.timer"
+    enabled: false
+    state: stopped
+  become: true
+
+- name: Remove the kuma-check units for {{ kuma_check_name }}
+  when: kuma_check_state == 'absent'
+  ansible.builtin.file:
+    path: "/etc/systemd/system/kuma-check-{{ kuma_check_name }}.{{ item }}"
+    state: absent
+  loop: [service, timer]
+  become: true
+  register: common_kuma_check_units_removed
+
+- name: Reload systemd after removing the kuma-check units for {{ kuma_check_name }}
+  when: kuma_check_state == 'absent' and common_kuma_check_units_removed is changed
+  ansible.builtin.systemd:
+    daemon_reload: true
+  become: true
+
+- name: Remove the cron the kuma-check timer replaces, for {{ kuma_check_name }}
+  when: kuma_check_cron_name | default('') | length > 0
+  ansible.builtin.cron:
+    name: "{{ kuma_check_cron_name }}"
+    user: "{{ kuma_check_cron_user | default(kuma_check_user) }}"
+    state: absent
+  become: true

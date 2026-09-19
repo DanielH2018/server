@@ -55,6 +55,11 @@ EXEMPT: dict[str, str] = {
         "`upsc ups.status`, then pushes a Kuma heartbeat; the actor that powers a host off is "
         "the `nut-monitor` systemd service, not this cron"
     ),
+    "common": (
+        "`templates/kuma-check.timer.j2` is the shared unit pair `tasks/kuma_check_timer.yml` "
+        "renders for an importing role; it has no schedule or check of its own, and the role "
+        "that imports it owns the check the timer reruns and carries the contract for it"
+    ),
 }
 
 

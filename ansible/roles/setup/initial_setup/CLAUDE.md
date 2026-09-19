@@ -9,7 +9,7 @@ first** and scope with `--tags` when iterating.
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates or playbook entry. -->
 - **Applied by:** `initial_setup.yml --tags "initial_setup"`
-- **Crons (17):**
+- **Crons (16):**
   - `Weekly apt autoremove` — `0 2 * * 0`
   - `Weekly dpkg purge orphaned configs` — `15 2 * * 0`
   - `Daily secret rotation audit` — `0 8 * * *`
@@ -22,11 +22,11 @@ first** and scope with `--tags` when iterating.
   - `Refresh homelab infrastructure map` — `*/15 * * * *`
   - `TLS cert-expiry watch` — `10 5 * * *`
   - `Setup-plane drift check` — `50 7 * * *`
-  - `Loki read-route witness` — `23 * * * *`
   - `Refresh generated docs` — `17 6,18 * * *`
   - `Homelab eval sweep` — `0 2 * * 0`
   - `Weekly rkhunter malware scan` — `0 2 * * 3`
   - `Weekly AIDE file integrity check` — `0 3 * * 1`
+- **Timer:** `kuma-check-loki-read-route.timer` (`OnCalendar=*-*-* *:23:00`)
 <!-- /generated_from -->
 
 ## Where it runs
@@ -198,7 +198,17 @@ guards now point at the library plus one that both consumers still source it.
 (`group_vars/all.yml` — both prod cluster nodes) and pushes that host's own "Loki Read Route
 (<host>)" Kuma tile.
 
-**Why it is a host cron and not a monitor-bridge check.** loki-homelab's read route is guarded by
+**It is a systemd timer, `kuma-check-loki-read-route.timer`, not a cron, since 2026-09-19.**
+The `Schedule the Loki read-route witness` task imports [[common]]'s `kuma_check_timer.yml`,
+whose service is `Restart=on-failure` with `RestartSec=15min`: the script exits 1 after it
+pushes `down`, so a red tile reruns every 15 minutes until the route answers instead of
+sitting red until the next hourly slot. The timer is `Persistent=true`, so a slot missed inside
+an outage runs at boot; the script's boot-grace arm exits 1 without a push, and the restart
+carries the real verdict. `systemctl status kuma-check-loki-read-route` shows `auto-restart`
+while it is red, and `journalctl -u kuma-check-loki-read-route` holds the runs. The import
+removes the old `Loki read-route witness` cron on every host.
+
+**Why it is a host check and not a monitor-bridge check.** loki-homelab's read route is guarded by
 a ClientIP set of node-owned addresses, and its only caller is `probe.py loki-query` /
 `loki-labels` running as a host process. A pod prober arrives with a pod IP, so it either fails
 for a reason the operator never hits or has to be granted an address no real caller uses.
@@ -215,9 +225,10 @@ without `-f`, so a route Traefik refuses returns `404 page not found` with exit 
 `files/loki_route_health.py` decides — valid JSON, `status: success`, non-empty `data` — and
 `ansible/roles/setup/initial_setup/tests/test_loki_route_health.py` holds that 404 as a DOWN case.
 `ansible/tests/setup/test_loki_route_witness.py` guards the host list, the per-host tokens, the
-push deadline against the cron period, and the removal arm.
+push deadline against the timer period, the exit-code contract (a down verdict exits 1), and
+the removal arm.
 
-Both tokens are in `CROSS_HOST_PUSH_TOKENS` (`scripts/secrets_mgmt/consumers.py`): the cron is
+Both tokens are in `CROSS_HOST_PUSH_TOKENS` (`scripts/secrets_mgmt/consumers.py`): the timer is
 here, in a role with no deploy tag, and the tile deploys from `k8s/uptime-kuma`, so no single
 `rotate --deploy` can move both halves.
 
