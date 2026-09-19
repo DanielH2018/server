@@ -42,7 +42,6 @@ PLANES = ("k8s", "setup")
 # set silently, and the assertion below would pass over nothing.
 KNOWN_SECRET_SCRIPTS = frozenset(
     {
-        ("k8s", "traefik", "cloudflare-ip-drift.sh.j2"),
         ("k8s", "crowdsec", "crowdsec-update-home-allowlist.sh.j2"),
         ("k8s", "crowdsec", "crowdsec-appsec-verify.sh.j2"),
         ("k8s", "janitorr", "janitorr-health.sh.j2"),

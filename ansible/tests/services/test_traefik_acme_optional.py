@@ -140,4 +140,3 @@ def test_prod_manages_acme() -> None:
     """The flag defaults on, so no cluster loses certificate issuance by omission."""
     defaults = load_yaml(K8S_ROLES / _ROLE / "defaults" / "main.yml")
     assert defaults[_FLAG] is True
-    assert defaults["traefik_k8s_manage_cloudflare_drift_check"] is True

@@ -45,6 +45,7 @@ monitor_bridge_modules:
   - checks/service.py
   - checks/gitops.py
   - checks/notify.py
+  - checks/cloudflare_ips.py
   - bridge/common.py
   - bridge/parsing.py
   - verdicts/cluster.py

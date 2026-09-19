@@ -106,33 +106,24 @@
       pools or annotations change — delete the Service and redeploy to force reallocation.
     success_msg: "Traefik holds the reserved ingress VIP {{ k3s_metallb_ingress_vip }}"
 
-- name: Deploy the Cloudflare IP drift check
+# The Cloudflare IP drift check moved into monitor-bridge on 2026-09-19
+# (roles/k8s/monitor-bridge/files/checks/cloudflare_ips.py): it reads no host state, and the
+# bridge re-probes a failure every cycle where the daily cron here left the tile red until the
+# next 05:25. These two tasks are the way out for the host that ran it, and stay until every
+# cluster host has seen a traefik deploy after that date. Ungated on purpose: removing this
+# cron is right on any host, whichever cluster it serves.
+- name: Remove the Cloudflare IP drift cron
   tags: [cron]
-  when: traefik_k8s_manage_cloudflare_drift_check | bool
-  # The cloudflare_ips allowlist gates forwardedHeaders.trustedIPs on both entrypoints
-  # (static-config.yaml.j2). Its Docker-era watchdog retired in 84733119 with the
-  # DOCKER-USER origin lock it also guarded, leaving this half unmonitored until 2026-08-15.
-  ansible.builtin.template:
-    src: cloudflare-ip-drift.sh.j2
-    dest: /usr/local/bin/cloudflare-ip-drift.sh
-    mode: "0750"
-    owner: root
-    group: root
-  become: true
-  no_log: true  # renders the Kuma push token
-
-- name: Schedule the Cloudflare IP drift check
-  tags: [cron]
-  when: traefik_k8s_manage_cloudflare_drift_check | bool
-  # Daily, not weekly like its predecessor: the check is two curls, and the Kuma monitor's
-  # 90000s (25h) interval needs a push more often than that to stay green. Cloudflare
-  # changes these ranges on a multi-year cadence — the cadence is about the heartbeat,
-  # not about catching drift fast. Pushes "Cloudflare IP Drift" directly, no bridge hop.
   ansible.builtin.cron:
     name: "Cloudflare IP drift"
-    minute: "25"
-    hour: "5"
     user: root
-    job: "/usr/local/bin/cloudflare-ip-drift.sh"
     cron_file: cloudflare-ip-drift
+    state: absent
+  become: true
+
+- name: Remove the Cloudflare IP drift script
+  tags: [cron]
+  ansible.builtin.file:
+    path: /usr/local/bin/cloudflare-ip-drift.sh
+    state: absent
   become: true

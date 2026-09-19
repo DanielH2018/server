@@ -64,7 +64,6 @@ traefik_k8s_watched_namespaces:
   - "{{ k8s_longhorn_namespace }}"
 
 traefik_k8s_manage_acme: true
-traefik_k8s_manage_cloudflare_drift_check: true
 
 # The CrowdSec bouncer plugin, the entrypoint Middleware that invokes it, and the agent
 # sidecar that feeds the LAPI. False for a cluster that does not run the `crowdsec` role:

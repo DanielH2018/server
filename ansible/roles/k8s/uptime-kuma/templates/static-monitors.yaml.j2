@@ -519,10 +519,12 @@ stringData:
   # Cloudflare IP Drift retired alongside it and should NOT have: only the origin-lock half
   # of what it watched went away, and cloudflare_ips still gates forwardedHeaders.trustedIPs
   # on both entrypoints. Restored 2026-08-15 with the same id, name and token, fed by
-  # k8s/traefik's cloudflare-ip-drift.sh daily cron (same direct-push shape). 90000s (25h)
-  # gives a daily push one missed run of slack, matching Secret Rotation / Manifest Prune.
+  # k8s/traefik's cloudflare-ip-drift.sh daily cron until 2026-09-19, and by monitor-bridge's
+  # checks/cloudflare_ips.py since: the bridge caches a success for a day and re-probes a
+  # failure every cycle, so a red tile clears within one cycle of the list being fixed. The
+  # interval is therefore the bridge's, not the daily cron's 90000s.
   cloudflare-ip-drift.json: |
-    {"type": "push", "name": "Cloudflare IP Drift", "description": "A daily 05:25 daniel-box cron fetches the Cloudflare published IPv4 and IPv6 ranges and compares them to cloudflare_ips in group_vars/all.yml, which sets traefik trustedIPs and the netpol allow-list. DOWN means the list drifted or the fetch failed. Update cloudflare_ips and redeploy traefik and netpol-baseline.", "interval": 90000, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_cloudflare_drift_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "Cloudflare IP Drift", "description": "monitor-bridge fetches the Cloudflare published IPv4 and IPv6 ranges and compares them to cloudflare_ips in group_vars/all.yml, which sets traefik trustedIPs and the netpol allow-list. A match is re-checked daily; a failure every cycle. DOWN means the list drifted or the fetch failed. Update cloudflare_ips and redeploy traefik, netpol-baseline and monitor-bridge.", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_cloudflare_drift_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   # 90000s (25h) for the same reason as Cloudflare IP Drift directly above: fed by a DAILY cron
   # (setup/gitops_deploy's github-ruleset-drift.sh), so the interval gives one missed run of
   # slack. Watches the merge gate the deployer's CI verdict rests on — a required context

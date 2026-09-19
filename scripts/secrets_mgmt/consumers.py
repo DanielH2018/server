@@ -103,7 +103,7 @@ CROSS_HOST_PUSH_TOKENS = frozenset(
 PREFIX_EXCEPTION_CONSUMERS = {
     "monitor_bridge_appsec_push_token": "crowdsec",
     "monitor_bridge_home_allowlist_push_token": "crowdsec",
-    "monitor_bridge_cloudflare_drift_push_token": "traefik",
+    "monitor_bridge_cloudflare_drift_push_token": "monitor-bridge",
     "monitor_bridge_configarr_push_token": "configarr",
     "monitor_bridge_janitorr_push_token": "janitorr",
     "monitor_bridge_pi_peers_push_token": "pi-peer-backup",

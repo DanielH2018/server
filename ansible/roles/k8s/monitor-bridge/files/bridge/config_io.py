@@ -36,6 +36,8 @@ class IoConfig:
     R2_USAGE_MAX_PCT: float
     R2_UPLOADS_MAX: float
     R2_PROBE_INTERVAL_S: float
+    CLOUDFLARE_IPS_EXPECTED: frozenset[str]
+    CLOUDFLARE_IPS_PROBE_INTERVAL_S: float
     LOKI_STREAM: str
     LOKI_DOCKER_STREAM: str
     LOKI_PI_STREAM: str
@@ -183,6 +185,18 @@ def io_config(
         # Cloudflare's pricing page decides them, not this deployment — so they live in
         # verdicts/storage.py beside r2_classify_operations, their only reader. Moved 2026-09-04.
         R2_PROBE_INTERVAL_S=_num("R2_PROBE_INTERVAL_S", "1800"),
+        # The `cloudflare_ips` allowlist traefik trusts and netpol-baseline admits, as the env
+        # secret renders it (comma-separated CIDRs). Empty disables the drift check. Daily
+        # because Cloudflare moves these ranges on a multi-year cadence; the interval caches
+        # SUCCESSES only, so a red verdict re-probes every cycle (checks/cloudflare_ips.py).
+        CLOUDFLARE_IPS_EXPECTED=frozenset(
+            c.strip()
+            for c in _env("CLOUDFLARE_IPS_EXPECTED", "").split(",")
+            if c.strip()
+        ),
+        CLOUDFLARE_IPS_PROBE_INTERVAL_S=_num(
+            "CLOUDFLARE_IPS_PROBE_INTERVAL_S", "86400"
+        ),
         # Loki log-ingestion freshness: Loki's Kuma /ready probe stays green even when promtail
         # stops SHIPPING (DOCKER_HOST/docker-proxy break, positions-file corruption, relabel
         # regression) — a silently-dead log pipeline that quietly blinds the log dashboards and

@@ -365,6 +365,13 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
     `bucketName` filter rather than raising the thresholds.
     Empty `CF_ACCOUNT_ID`/`CF_ANALYTICS_TOKEN`/`R2_BUCKET` = disabled (stays up). Pure
     `r2_month_start()`/`r2_classify_operations()`/`r2_usage_verdict()` are unit-tested.)
+  - **Cloudflare IP Drift** (`checks/cloudflare_ips.py`: the two published range pages against
+    `CLOUDFLARE_IPS_EXPECTED`, the `cloudflare_ips` allowlist traefik trusts and netpol-baseline
+    admits. A success is cached for `CLOUDFLARE_IPS_PROBE_INTERVAL_S` (a day); drift, a page
+    with under 10 ranges, or a fetch that did not answer is DOWN and re-probed every cycle, so
+    the tile clears one cycle after `cloudflare_ips` is fixed. That is why it moved here from
+    k8s/traefik's daily root cron on 2026-09-19: the cron left a red tile until the next 05:25.
+    Empty expected list = disabled (stays up). Pure `cloudflare_ips_verdict()` is unit-tested.)
   - **SMART Data / Health** (scrutiny web API `/api/summary` over `monitoring`: every
     non-archived device must have a `collector_date` within 26 h **AND a passing `device_status`**
     (0 = SMART self-assessment + Scrutiny's attribute thresholds both OK; non-zero decodes to
@@ -1335,6 +1342,7 @@ run loop alone on 2026-09-05).
 | `checks/host_edge.py` | `check_pi_pressure` with `with_pi_ports` and `_tcp_open`, `check_speedtest`. Both entry points take the prober as `tcp_open`, defaulting to `_tcp_open`, so a test injects a fake port map instead of patching a module global |
 | `checks/b2.py` | the `b2_*` family with `check_b2_reachable` (the `B2_DEPENDENT` gate) and `check_b2_storage`, and the probe caches `_b2_probe` / `_b2_storage` |
 | `checks/r2.py` | the `r2_*` family with `check_r2_usage`, `R2_QUERY`, and `_r2_probe` |
+| `checks/cloudflare_ips.py` | `check_cloudflare_ips_drift` with `fetch_ranges`, the pure `cloudflare_ips_verdict`, and `_probe`. The `cloudflare_ips` allowlist against Cloudflare's published ranges; a daily host cron in k8s/traefik until 2026-09-19 |
 | `checks/storage.py` | `check_longhorn_volumes`, `check_pvc_fullness` — the cluster storage layer |
 | `bridge/config.py` | the `_env`/`_int`/`_num`/`_env_file` parsers, `class Config(HostConfig, ServiceConfig, ClusterConfig, IoConfig)` and `load_config(env)` which composes the four builders. Its own fields are the ones every domain needs (interval, heartbeat, the three endpoint URLs) plus the check filter and the two reads a repo test greps for by text (`K8S_EXTENDED_RESOURCES`, `PVC_EXCLUDE`) |
 | `bridge/config_host.py` | `HostConfig` — disks, certificates, memory, SMART, hwmon temperatures, the UPS, the Pi, the speedtest, the host-origin coverage floors, the Claude Code cgroup arm |
