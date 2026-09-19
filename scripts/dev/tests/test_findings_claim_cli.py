@@ -1,10 +1,7 @@
 """The claim, release, claims and reap subcommands, driven through main()."""
 
 import json
-import sys
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from _findings_fakes import (
     Fakes,

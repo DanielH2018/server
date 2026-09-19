@@ -28,13 +28,11 @@ two different ways, and only one of them needs an annotation:
 Run: uv run pytest ansible/tests/k8s/test_checksum_annotation_census.py
 """
 
-import sys
 from pathlib import Path
 
 import pytest
 from _helpers import REPO, command_of, load_tasks, walk_tasks
 
-sys.path.insert(0, str(REPO / "scripts"))
 
 from lib import yaml_fast
 

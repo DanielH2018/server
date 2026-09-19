@@ -20,7 +20,6 @@ import pytest
 from _helpers import ANSIBLE as _ANSIBLE
 from _helpers import REPO as _REPO
 
-_sys.path.insert(0, str(_ANSIBLE / "tests"))
 _sys.path.insert(0, str(_REPO / "scripts" / "validate"))
 
 from lib import yaml_fast

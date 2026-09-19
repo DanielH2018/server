@@ -19,12 +19,8 @@ and fails here.
 Run: uv run pytest scripts/deploy_tools/tests/test_land_manual_plane_is_not_gated_on_broad_applied.py
 """
 
-import sys
-from pathlib import Path
-
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import land_tags
 from _land_fakes import MERGE_SHA

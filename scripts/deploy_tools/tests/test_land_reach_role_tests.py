@@ -19,10 +19,8 @@ pins so a later narrowing of `tasks/` cannot silence it.
 Run: uv run pytest scripts/deploy_tools/tests/test_land_reach_role_tests.py
 """
 
-import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import land_reach
 import land_tags

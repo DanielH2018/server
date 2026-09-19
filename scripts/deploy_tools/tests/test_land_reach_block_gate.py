@@ -21,10 +21,8 @@ with no playbook gate, which must keep reaching every host.
 Run: uv run pytest scripts/deploy_tools/tests/test_land_reach_block_gate.py
 """
 
-import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import land_reach
 from lib import yaml_fast

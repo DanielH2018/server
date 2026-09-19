@@ -12,10 +12,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_deploy_tags_blockers.py
 """
 
 import argparse
-import sys
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import deploy_tags
 

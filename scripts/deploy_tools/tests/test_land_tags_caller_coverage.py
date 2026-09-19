@@ -12,11 +12,6 @@ Split from test_land_tags.py rather than appended to it: that module is at its l
 Run: uv run pytest scripts/deploy_tools/tests/test_land_tags_caller_coverage.py
 """
 
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
 import land_tags
 
 # The declared set these cases need, passed to each call rather than patched over

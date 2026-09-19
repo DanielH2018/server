@@ -7,11 +7,6 @@ answered it for nothing are indistinguishable from the passing side alone.
 Run: uv run pytest scripts/lib/tests/test_deployer_park.py
 """
 
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-
 from lib.deployer_park import (
     BEHIND_PARK_SECONDS,
     park_age,

@@ -8,11 +8,6 @@ proceeds -- so each case that must pass has a sibling that must fail.
 Run: uv run pytest scripts/deploy_tools/tests/test_await_ci.py
 """
 
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
 import await_ci
 
 REQUIRED = frozenset({"prek (lint + validate + tests + secrets)"})

@@ -166,11 +166,7 @@ def test_k8s_remediation_never_prescribes_a_tag_that_deploys_nothing():
     Cross-checked against scripts/deploy_tools/deploy_tags.known_tags(), the same source ./scripts/deploy.sh
     validates against, so the alert and the wrapper cannot drift apart.
     """
-    import sys
 
-    sys.path.insert(
-        0, str(pathlib.Path(__file__).resolve().parents[5] / "scripts" / "deploy_tools")
-    )
     import deploy_tags
 
     declared = deploy_tags.known_tags()

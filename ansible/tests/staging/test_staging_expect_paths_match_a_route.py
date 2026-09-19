@@ -26,13 +26,10 @@ So this is a render-time guard against an IMPOSSIBLE expectation, not a substitu
 
 import ast
 import re
-import sys
 
 import pytest
-from _helpers import REPO
 from jinja2 import Environment, StrictUndefined
 
-sys.path.insert(0, str(REPO / "scripts"))
 
 from deploy_tools.staging_expectations import (
     host_context,

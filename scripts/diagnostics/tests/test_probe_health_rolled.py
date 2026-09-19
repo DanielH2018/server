@@ -20,16 +20,12 @@ Run: uv run pytest scripts/diagnostics/tests/test_probe_health_rolled.py
 """
 
 import json
-import sys
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from _probe_health_fixtures import NOW, pods
 from diagnostics.probe_lib import health, health_rollout
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "deploy_tools"))
 import deploy_detach_notify as notify_mod
 
 APPLIED = NOW - timedelta(minutes=5)

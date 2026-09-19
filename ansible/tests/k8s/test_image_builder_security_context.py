@@ -20,16 +20,9 @@ helper whose job is to raise capabilities. Blocking it does not yield a safer bu
 a root or privileged one. This file pins the boundaries around that decision, not the decision.
 """
 
-import sys
+from lib import yaml_fast
 
-from _helpers import REPO
-
-_REPO = REPO
-sys.path.insert(0, str(_REPO / "scripts"))
-
-from lib import yaml_fast  # noqa: E402
-
-from validate.k8s_manifests import (  # noqa: E402 — needs the path insert above
+from validate.k8s_manifests import (
     ALL_VARS,
     ANSIBLE,
     BASE_CONTEXT,

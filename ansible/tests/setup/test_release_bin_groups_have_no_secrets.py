@@ -23,19 +23,16 @@ Run: uv run pytest ansible/tests/setup/test_release_bin_groups_have_no_secrets.p
 """
 
 import re
-import sys
 from pathlib import Path
 
 import pytest
 from _helpers import ANSIBLE, registry_secret_names
 
-REPO = ANSIBLE.parent
-
 # The resolver is shared with scripts/lib/cron_targets.py so the two checks
-# cannot disagree about what a group contains. pytest's `pythonpath` covers the repo root only.
-sys.path.insert(0, str(REPO / "scripts"))
+# cannot disagree about what a group contains.
+from lib import release_bin_groups
 
-from lib import release_bin_groups  # noqa: E402
+REPO = ANSIBLE.parent
 
 # The name list lives in _helpers (`registry_secret_names`, `GENERIC_SECRET_NAMES`) since the
 # no_log census in ansible/tests/k8s started reading the same registry (#1932), so the two

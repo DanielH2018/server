@@ -13,17 +13,9 @@ Run: uv run pytest ansible/tests/deploy/test_cronjob_only_roles_include_the_gate
 """
 
 from functools import cache
-import sys
 
 from _autodeploy import _K8S_ROLES
 from _autodeploy_batch import _batch_gated_names
-from _helpers import REPO
-
-# `probe_lib.health` lives under scripts/, reached by package name -- a directly-invoked
-# module gets only its own directory on sys.path, and pyproject's `pythonpath` covers
-# `ansible/tests`, not `scripts`. Mirrors the insert `_k8s_render.py` and `health.py` itself use.
-sys.path.insert(0, str(REPO / "scripts"))
-
 from diagnostics.probe_lib import health
 
 _DEFAULT_NS = "homelab"

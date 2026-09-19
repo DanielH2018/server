@@ -19,18 +19,14 @@ Checked on the RENDERED static config, not the template's text — the indirecti
 test_traefik_edge_selfcheck.py, whose `_static_config` shape this file reuses.
 """
 
-import sys
 from typing import Any
 
 import pytest
-from _helpers import REPO
 
-_REPO = REPO
-sys.path.insert(0, str(_REPO / "scripts"))
 
-from lib import yaml_fast  # noqa: E402
+from lib import yaml_fast
 
-from validate.k8s_manifests import (  # noqa: E402 — needs the path insert above
+from validate.k8s_manifests import (
     ALL_VARS,
     ANSIBLE,
     BASE_CONTEXT,

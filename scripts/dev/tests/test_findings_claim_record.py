@@ -1,10 +1,5 @@
 """The claim record: what a claim comment says, and folding a comment list forward."""
 
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-
 from _findings_fakes import foreign_comment, operator_comment
 
 from dev.findings_lib.claim import _claim_age_days

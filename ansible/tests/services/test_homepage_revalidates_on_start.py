@@ -22,12 +22,6 @@ an `all()` over nothing.
 Run: uv run pytest ansible/tests/services/test_homepage_revalidates_on_start.py
 """
 
-import sys as _sys
-
-from _helpers import ANSIBLE as _ANSIBLE
-
-_sys.path.insert(0, str(_ANSIBLE / "tests"))
-
 from _k8s_render import rendered_docs
 
 REVALIDATE_PATH = "/api/revalidate"

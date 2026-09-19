@@ -15,18 +15,13 @@ variables, rather than restated here. A test that asserted `k8s_autodeploy_snaps
 directly would keep passing if the include's `when:` stopped consulting the list.
 """
 
-import sys
-
 import pytest
 from jinja2 import Environment, StrictUndefined
-from _helpers import REPO
 
-_REPO = REPO
-sys.path.insert(0, str(_REPO / "scripts"))
 
-from lib import yaml_fast  # noqa: E402
+from lib import yaml_fast
 
-from validate.k8s_manifests import (  # noqa: E402 — needs the path insert above
+from validate.k8s_manifests import (
     ALL_VARS,
     ANSIBLE,
     BASE_CONTEXT,

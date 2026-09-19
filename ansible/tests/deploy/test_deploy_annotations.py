@@ -59,9 +59,7 @@ def test_the_expr_parses_the_fields_the_annotation_renders():
     Without the parser stage the annotation still appears, showing the raw syslog line instead
     of the service list — degraded rather than broken, and easy to miss.
     """
-    import sys
 
-    sys.path.insert(0, str(_REPO / "scripts"))
     import inject_dashboard_annotations as inject
 
     expr = _defaults()["claude_otel_deploy_annotation_expr"]

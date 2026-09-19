@@ -15,12 +15,8 @@ that reads as "this macro reaches nothing" rather than as a broken scan.
 Run: uv run pytest scripts/deploy_tools/tests/test_deploy_tags_narrow.py
 """
 
-import sys
-from pathlib import Path
-
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import narrow_broad
 from lib.repo_paths import REPO

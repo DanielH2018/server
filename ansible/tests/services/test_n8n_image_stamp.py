@@ -12,12 +12,6 @@ would satisfy "the annotation is present" while rolling nothing, so the second t
 DIFFERENT digest produces a different manifest.
 """
 
-import sys
-
-from _helpers import REPO
-
-sys.path.insert(0, str(REPO / "scripts"))
-
 from lib import yaml_fast
 
 from validate.k8s_manifests import (

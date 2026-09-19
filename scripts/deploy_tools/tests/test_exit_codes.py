@@ -11,12 +11,10 @@ and a set that quietly gained one are both invisible from a `<=` assertion alone
 Run: uv run pytest scripts/deploy_tools/tests/test_exit_codes.py
 """
 
-import sys
 from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
 
 from deploy_tools import exit_codes as ec
 
