@@ -128,7 +128,7 @@ STAND_IN_READONLY_BASE = frozenset(
 )
 # The two remote-only names, so the stand-in composes `REMOTE_READONLY_VERBS` the way the
 # package does rather than carrying a second literal of the union.
-STAND_IN_REMOTE_ONLY = frozenset({"htop", "nvidia-smi"})
+STAND_IN_REMOTE_ONLY = frozenset({"htop"})
 STAND_IN_REMOTE_READONLY_VERBS = STAND_IN_READONLY_BASE | STAND_IN_REMOTE_ONLY
 
 
