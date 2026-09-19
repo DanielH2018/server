@@ -282,6 +282,35 @@ an `if` — and the pinned liquidjs rendered the same three contexts to the same
 monitor-bridge is the grammar for a multi-item DOWN (group by reason, names once), and
 `probe.py releases --stale-only --kuma` is its first cron-side caller.
 
+## A red host-check tile reruns its producer; the interval is not the recovery time
+
+A push tile has no poll rate: Kuma marks it UP when a beat arrives and DOWN when the
+deadline passes, and its `interval` is the deadline, nothing more. Until 2026-09-19 a tile
+fed by a daily or hourly host cron therefore stayed red until that cron's next slot after
+the fault was fixed, and #1781 read the deadlines above as the cause. They are not, and the
+`DECIDED:` marker above the drift tiles in `templates/static-monitors.yaml.j2` keeps them.
+Recovery time is set on the producer, in two shapes:
+
+- **A host check is a `kuma-check-<name>` systemd timer** (`roles/setup/common`'s
+  `kuma_check_timer.yml`; `KNOWN_CHECKS` in `ansible/tests/setup/test_kuma_check_timer.py`
+  names all eight). The contract is the exit code: the script exits 1 after it pushes
+  `down` and 0 after `up`, and the oneshot service's `Restart=on-failure` reruns it every
+  `RestartSec` (15 min for the hourly checks, 30 min for the daily ones) until it exits 0. A
+  script that pushes `down` and exits 0 is a bug that test's `EXIT_CONTRACT` half catches.
+  On the host, `systemctl status kuma-check-<name>` reads `auto-restart` while the tile is
+  red, and `journalctl -u kuma-check-<name>` holds every rerun. The timers are
+  `Persistent=true`, so a slot missed inside an outage runs at boot; the checks that judge
+  the cluster (Loki read route, manifest prune, live drift) carry a boot-grace arm that exits
+  1 without a push there, and the restart carries the real verdict.
+- **A check that reads no host state lives in monitor-bridge**, which caches a success for
+  the probe interval and re-probes a failure every 300 s cycle (`checks/r2.py`,
+  `checks/cloudflare_ips.py`). Its tile runs at `kuma_bridge_push_interval` like the rest of
+  the bridge's.
+
+The deadline still does the one job it has: it bounds silence. A producer that stops
+running, or whose push is lost, is reported by the deadline as before, and the Swallowed
+Push Verdicts tile pages a lost `down` sooner where a sibling landed one.
+
 ## The status page's groups are synced by a CronJob, not by AutoKuma
 
 `kuma-status-page-sync` (`templates/status-page-sync-cronjob.yaml.j2`, every 15 min) owns the

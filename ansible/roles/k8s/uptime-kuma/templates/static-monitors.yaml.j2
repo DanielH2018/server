@@ -380,7 +380,12 @@ stringData:
    below pages that case within a cycle, and the deadline stays as the backstop. A sticky DOWN
    with a message is the tile doing its job too. Widening one to shorten those episodes would hide the finding, not
    the gap, and lengthen how long a dropped verdict stays invisible. Re-check the same way
-   before touching any of them. #}
+   before touching any of them. What DID shorten the episodes (2026-09-19, #2141-#2143) is
+   on the producer side and leaves every interval here alone: the host checks run from
+   `kuma-check-<name>` systemd timers whose script exits 1 after a `down` push, so
+   `Restart=on-failure` reruns it every 15-30 min until it exits 0, and Cloudflare IP Drift
+   moved into monitor-bridge, which re-probes a failure every cycle. A red tile clears when
+   the fault does; the deadline still bounds silence exactly as before. #}
 {# Gated on the token like its siblings, so this lands before the secret does and neither half
    sits red waiting for the other.
    INTERVAL IS DERIVED FROM THE CRONTAB, not chosen: docs-refresh runs at minute 17 of hours 6
