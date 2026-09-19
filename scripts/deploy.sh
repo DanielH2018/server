@@ -228,6 +228,11 @@ emit_deploy_annotation() {
 # The snapshot this run created, empty until `make_snapshot` succeeds, and the commit it holds.
 snapshot=""
 snapshot_sha=""
+# Why `make_snapshot` failed, in the failing command's own words, for `say_snapshot_failed`.
+# Empty until an arm fails. Until 2026-09-19 the detached add ran `>/dev/null 2>&1`, so exit
+# 77 named the snapshot root and a guess at what to check, and a run that collided with a
+# second snapshot in the same second left no evidence of what git had refused (issue #2094).
+snapshot_error=""
 # The descriptor this run holds its snapshot's owner lock on. See OWNER_LOCK below.
 snapshot_owner_fd=""
 
@@ -314,10 +319,18 @@ make_snapshot() {
     # label is joined with `+` upstream for that reason; the class is the second line of
     # defence, so a regression there cannot reach the path (issue #1813).
     dir="$SNAPSHOT_ROOT/${tag_label//[^A-Za-z0-9_.-]/_}-$stamp-$BASHPID"
-    mkdir -p "$SNAPSHOT_ROOT" || return 1
+    # Each arm records what refused it in `snapshot_error`. The assignment is a separate
+    # statement from `local`, or the status tested is `local`'s own rather than the command's.
+    if ! snapshot_error=$(mkdir -p "$SNAPSHOT_ROOT" 2>&1 >/dev/null); then
+        return 1
+    fi
     # `${at_sha:-HEAD}`: --at names the commit to render, and a landing passes its PR's merge
     # commit so the deploy no longer waits for the tick to fast-forward this checkout onto it.
-    git worktree add --detach "$dir" "${at_sha:-HEAD}" >/dev/null 2>&1 || return 1
+    # `2>&1 >/dev/null`, in that order: stderr into the substitution, THEN stdout discarded.
+    # The other order discards both, which is what the exit-77 message used to carry.
+    if ! snapshot_error=$(git worktree add --detach "$dir" "${at_sha:-HEAD}" 2>&1 >/dev/null); then
+        return 1
+    fi
     snapshot="$dir"
     snapshot_sha=$(git -C "$dir" rev-parse --short HEAD 2>/dev/null || echo unknown)
     # The owner lock, held until this run is done with the snapshot. On --detach the
@@ -327,6 +340,7 @@ make_snapshot() {
     # `-x` is flock's default and is spelled out here: it is what tells this acquire apart from
     # the tree lock's own `flock -n <fd>` probe, for a reader and for the bash tests' stubs.
     if ! exec {fd}>"$dir/$OWNER_LOCK" || ! flock -n -x "$fd"; then
+        snapshot_error="could not take the owner lock $dir/$OWNER_LOCK"
         remove_snapshot
         return 1
     fi
@@ -462,9 +476,14 @@ say_tag_enumeration_failed() {
 
 say_snapshot_failed() {
     echo "deploy: could not snapshot ${at_sha:-HEAD} into $SNAPSHOT_ROOT -- nothing was deployed." >&2
+    # The failing command's own stderr, indented under the verdict. `git worktree add` says
+    # `fatal: ...` and names the path or the lock it could not take; the message used to ask
+    # the reader to go and measure that (issue #2094).
+    if [[ -n "$snapshot_error" ]]; then
+        echo "  ${snapshot_error//$'\n'/$'\n'  }" >&2
+    fi
     echo "  The playbook renders from a detached worktree of that commit, so without one" >&2
-    echo "  there is nothing to deploy from. Check the directory is writable and that" >&2
-    echo "  'git worktree add --detach' works here; retrying alone will not fix either." >&2
+    echo "  there is nothing to deploy from; retrying alone will not fix the cause above." >&2
 }
 
 # ── the per-service locks ─────────────────────────────────────────────────────────────────
