@@ -103,16 +103,18 @@ only with its guard, because the replay corpus cannot see a remote fail-open (4 
 prompted records touch ssh). Since #2052 that convergence is structural rather than
 hand-synced, and since #2078 it runs through one shared table: the package exports
 `READONLY_BASE`, the names read-only under any argument on BOTH sides of the ssh boundary,
-and each side extends it with its own delta — `REMOTE_READONLY_VERBS` adds the two the server
-admits nowhere (`htop`, `nvidia-smi`, each with its reason beside it in
-`claude_guard/tables.py`), and `TIER1` in `_readonly_tables.py` adds the three that are
-read-only only locally (`cd`, `false`, `printenv`). #2052 derived `TIER1` from the REMOTE
-table instead, so a name the package added for the far shell widened local auto-approve on
-the next `chezmoi apply` with no edit on this side. The five verbs that read under most
-arguments but not all (`journalctl`, `dmesg`, `ss`, `rg`, `sensors`) sit in neither table:
-each side reaches them through its own guard, and since #2078 the package's are
-`remote_guards.GUARDS` entries, so the shared-verdict replay above covers them — as regex
-arms of `readonly_remote_safe` they ran before the table lookup and sat outside it. The CI
+and each side extends it with its own delta — `REMOTE_READONLY_VERBS` adds the one the server
+admits nowhere (`htop`, with its reason beside it in `claude_guard/tables.py`), and `TIER1`
+in `_readonly_tables.py` adds the three that are read-only only locally (`cd`, `false`,
+`printenv`). #2052 derived `TIER1` from the REMOTE table instead, so a name the package
+added for the far shell widened local auto-approve on the next `chezmoi apply` with no edit
+on this side. The verbs that read under most arguments but not all (`journalctl`, `dmesg`,
+`ss`, `rg`, `sensors`, and since dotfiles #559 `nvidia-smi`) sit in neither table: each
+side reaches them through its own guard, and since #2078 the package's are
+`remote_guards.GUARDS` entries, so the shared-verdict replay above covers the five this
+side also guards — as regex arms of `readonly_remote_safe` they ran before the table lookup
+and sat outside it. `nvidia-smi` has no guard on this side (no NVIDIA hardware in the
+fleet), so the replay does not exercise it. The CI
 stand-in in `tests/conftest.py` carries a copy of `READONLY_BASE` for the runners that have
 no dotfiles deploy; `test_the_ci_stand_in_matches_the_deployed_tables` diffs it on every
 deployed-host commit. Measured demand is low either way: 800 of the 1064 ssh-led Bash

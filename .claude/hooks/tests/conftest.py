@@ -112,9 +112,9 @@ STAND_IN_SECRET_PATH_RE = re.compile(
 )
 # The deployed `READONLY_BASE`, name for name; the diff test compares the sets. These are the
 # names read-only under any argument on BOTH sides of the ssh boundary (#2078). The package's
-# `REMOTE_READONLY_VERBS` adds `htop` and `nvidia-smi`; `TIER1` adds `cd`, `false` and
-# `printenv`; the five flag-guarded verbs (`journalctl`, `dmesg`, `ss`, `rg`, `sensors`) are
-# in neither, each side reaching them through its own guard.
+# `REMOTE_READONLY_VERBS` adds `htop`; `TIER1` adds `cd`, `false` and `printenv`; the
+# flag-guarded verbs (`journalctl`, `dmesg`, `ss`, `rg`, `sensors`, and `nvidia-smi` since
+# dotfiles #559) are in neither, each side reaching them through its own guard.
 STAND_IN_READONLY_BASE = frozenset(
     """
     true uptime uptimed whoami hostname id date uname arch pwd which type df free du ps top
@@ -126,9 +126,9 @@ STAND_IN_READONLY_BASE = frozenset(
     mpstat nl nproc rev sar seq sha512sum strings tac zcat zgrep
     """.split()
 )
-# The two remote-only names, so the stand-in composes `REMOTE_READONLY_VERBS` the way the
+# The remote-only name, so the stand-in composes `REMOTE_READONLY_VERBS` the way the
 # package does rather than carrying a second literal of the union.
-STAND_IN_REMOTE_ONLY = frozenset({"htop", "nvidia-smi"})
+STAND_IN_REMOTE_ONLY = frozenset({"htop"})
 STAND_IN_REMOTE_READONLY_VERBS = STAND_IN_READONLY_BASE | STAND_IN_REMOTE_ONLY
 
 
