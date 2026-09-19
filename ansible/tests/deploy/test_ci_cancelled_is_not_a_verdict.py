@@ -42,6 +42,7 @@ def test_the_other_no_verdict_conclusions_are_pending_too():
 
 
 def test_cancelled_is_declared_no_verdict():
+    # fact: CLAUDE.md#The procedure
     assert "cancelled" in _CI_NO_VERDICT_CONCLUSIONS
 
 

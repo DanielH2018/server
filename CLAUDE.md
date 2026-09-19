@@ -190,10 +190,12 @@ markers, which say nothing about a tick kicked seconds earlier. A change only a 
 does not route to the tick and does not cost the fast path.
 
 `cancelled`, `stale` and `skipped_by_concurrency` mean *no verdict for this SHA*, never *this
-SHA is bad* — `_CI_NO_VERDICT_CONCLUSIONS` in `deploy_logic.py` is the list, and a commit whose
-merge was immediately followed by another reads `cancelled` permanently. If you ever check by
-hand, check that way. (ENFORCED: `ansible/tests/deploy/test_ci_cancelled_is_not_a_verdict.py` requires
-this file to keep naming `_CI_NO_VERDICT_CONCLUSIONS` and `cancelled`.)
+SHA is bad* — `ansible/roles/setup/gitops_deploy/files/deploy_git.py:_CI_NO_VERDICT_CONCLUSIONS`
+is the list, and a commit whose merge was immediately followed by another reads `cancelled`
+permanently. If you ever check by hand, check that way. (ENFORCED:
+`ansible/tests/deploy/test_ci_cancelled_is_not_a_verdict.py::test_cancelled_is_declared_no_verdict`
+holds `cancelled` in that list; the identifier-presence test beside it is retired by the
+fact-support conversion.)
 
 **Verify the change, not just the workload.** The `VERDICT:` line gates the rollout and the
 180s restart window. It cannot see whether *your change* took effect: an Authelia 302 fires
