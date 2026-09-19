@@ -1,4 +1,9 @@
 #!/bin/bash
+# gen-hooks: register
+#   event: PreToolUse
+#   matcher: Bash
+#   timeout: 10
+#   order: 50
 # PreToolUse(Bash) hook — deny four commands that fail silently on this machine (ugrep's -Z/-z,
 # a bare `git stash pop`, a Forbidden `kubectl rollout restart`, remote git with no `cd`).
 # Routed through uv so the project-pinned interpreter runs (not the system python3); --no-sync

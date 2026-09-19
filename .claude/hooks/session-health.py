@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# gen-hooks: library
+#   reason: run by session-health.sh through `uv run python`
 """SessionStart health banner: surfaces what's already broken before work starts.
 
 When a Claude Code session opens in this repo, this prints anything already broken so
@@ -29,8 +31,7 @@ Design contract (mirrors the other hooks here):
     filtered out rather than reported — otherwise this would trade a false all-clear
     for the same two names on every session open forever.
 
-Wired via .claude/settings.json -> hooks.SessionStart. Stdout is injected as
-session context by Claude Code (same mechanism the remember plugin uses).
+Stdout is injected as session context by Claude Code (same mechanism the remember plugin uses).
 """
 
 import json
@@ -220,9 +221,8 @@ def _age_phrase(seconds):
     setup role waits on work nobody has started and is routinely days old, where a count in
     minutes is a number the reader has to divide.
     """
-    # Clamped at zero: `park_age`'s threshold hid a stamp ahead of the clock, and this line
-    # has no threshold, so a backward NTP step on the deployer would otherwise print a
-    # negative age.
+    # Clamped at zero: `park_age`'s threshold hid a stamp ahead of the clock, and this line has
+    # no threshold, so a backward NTP step on the deployer would otherwise print a negative age.
     seconds = max(0.0, seconds)
     if seconds < 2 * 3600:
         return f"{int(seconds // 60)} min"

@@ -1,4 +1,9 @@
 #!/bin/bash
+# gen-hooks: register
+#   event: PreToolUse
+#   matcher: Bash
+#   timeout: 15
+#   order: 30
 # PreToolUse(Bash) hook — the file rules block-protected-edits.sh applies to Edit|Write,
 # applied to the Bash surface auto mode actually uses. Writes to a protected file become an
 # `ask` carrying the reason; a content-printing read of a secret-bearing host script is denied.

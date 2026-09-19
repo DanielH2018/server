@@ -1,4 +1,9 @@
 #!/bin/bash
+# gen-hooks: register
+#   event: PreToolUse
+#   matcher: Bash
+#   timeout: 10
+#   order: 20
 # PreToolUse(Bash) hook: route bare python/pytest/ansible-playbook through `uv run`.
 #
 # This repo is 3.14-only (`requires-python = ">=3.14"`) and uses PEP 758 syntax —

@@ -1,4 +1,9 @@
 #!/bin/bash
+# gen-hooks: register
+#   event: PostToolUse
+#   matcher: Edit|Write
+#   timeout: 30
+#   order: 20
 # PostToolUse hook: validate compose-template rendering after editing a
 # docker-compose.yml.j2 or a shared macro it includes.
 #

@@ -373,6 +373,21 @@ pass_filenames = false
 # still escapes, but that is a short explicit list in pyproject.toml rather than a regex.
 always_run = true
 
+# The `hooks` key of .claude/settings.json is rendered from the `# gen-hooks:` block each file
+# under .claude/hooks/ carries (scripts/dev/gen_hook_settings.py). `--check` fails on a hook
+# file that declares nothing -- the exists-but-unregistered gap the two tests beside it cannot
+# see, since test_hook_scripts_executable.py reads only the registered side -- and on a
+# settings.json that drifted from the declarations. Run the generator without `--check` and
+# commit what it writes. `files` names the generator itself, the way `ruff` names
+# pyproject.toml above: a change to the render is a change to what the committed file must be.
+[[repos.hooks]]
+id = "gen-hook-settings"
+name = "Hook registrations match the .claude/hooks/ declarations"
+entry = "uv run python scripts/dev/gen_hook_settings.py --check"
+language = "system"
+pass_filenames = false
+files = "^(\\.claude/hooks/[^/]+\\.(sh|py)|\\.claude/settings\\.json|scripts/dev/gen_hook_settings\\.py)$"
+
 # Lint first-party Python for real bugs only — pyflakes (unused imports/undefined names),
 # syntax errors, bare-except, ==None/==True (ruleset in pyproject [tool.ruff.lint]; vendored
 # collections excluded there). ruff is pinned in uv.lock (dev group) so the gate is
