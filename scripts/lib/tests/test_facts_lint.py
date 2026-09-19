@@ -3,6 +3,7 @@
 import subprocess
 
 from facts.lint import RULES, WARN_RULES, changed_units, lint_sections
+from facts.lock import LOCK_REL, write_lock
 
 
 def _repo(tmp_path, doc):
@@ -146,3 +147,16 @@ def test_rule_census():
         }
     )
     assert WARN_RULES == frozenset({"count-as-fact", "one-way-test"})
+
+
+def test_hand_edited_lock_is_flagged(tmp_path):
+    """The clean side (no lock file) is already covered by every other test above."""
+    repo, _ = _repo(tmp_path, "## A\n`t/m.py:LIMIT`\n")
+    write_lock(
+        repo / LOCK_REL,
+        {"CLAUDE.md#A": {"verified_sha": "abc", "atoms": {"t/m.py:LIMIT": "h"}}},
+    )
+    p = repo / LOCK_REL
+    p.write_text(p.read_text().replace('"h"', '"hh"'))
+    found = {(f.unit, f.rule): f.warn for f in lint_sections(repo, None)}
+    assert found[("", "lock-tampered")] is False
