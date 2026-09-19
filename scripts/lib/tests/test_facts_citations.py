@@ -140,10 +140,10 @@ def test_sections_are_keyed_by_doc_and_heading():
     ]
 
 
-def test_a_section_body_runs_to_the_next_heading_of_same_or_higher_level():
+def test_a_section_body_ends_at_the_next_heading_of_any_level():
     alpha = sections("CLAUDE.md", _DOC)[1]
     assert "alpha text" in alpha.body
-    assert "child text" in alpha.body  # a child heading is inside its parent
+    assert "child text" not in alpha.body
     assert "beta text" not in alpha.body
 
 

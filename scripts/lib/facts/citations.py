@@ -82,7 +82,7 @@ def parse_citations(text: str) -> tuple[list[Citation], list[Rejected]]:
 
 @dataclass(frozen=True)
 class Section:
-    """A logical unit of documentation: a heading and everything until the next same-or-higher heading."""
+    """A logical unit of documentation: a heading and the text up to the next heading."""
 
     key: str
     """<doc path>#<heading text>; "<doc path>#" for text before the first heading."""
@@ -91,18 +91,21 @@ class Section:
     """The heading text, or empty string for preamble."""
 
     body: str
-    """Text under the heading, including everything down to the next heading of the same or higher level."""
+    """Text under the heading, up to (not including) the next heading of any level."""
 
 
 _HEADING = re.compile(r"^(#{1,6})\s+(.+?)\s*$", re.MULTILINE)
 
 
 def sections(doc_path: str, text: str) -> list[Section]:
-    """Split ``text`` at its headings; a section runs to the next heading of the same or higher level.
+    """Split ``text`` at its headings; a section's body ends at the next heading of any level.
 
-    The key ``<doc>#<heading>`` is the unit ``facts.lock`` is keyed by, so a renamed heading
-    is a new unit and the old lock row surfaces as a missing section — which is the right
-    verdict, since nobody can tell a rename from a deletion by reading the text.
+    Ownership is by leaf: an atom cited under a subheading belongs to that subheading alone,
+    never to the heading it nests under. Every atom in the document has exactly one owning
+    unit — the innermost section it appears in — so the key ``<doc>#<heading>`` names both
+    the unit ``facts.lock`` is keyed by and the section a reader actually opens for it. A
+    renamed heading is a new unit and the old lock row surfaces as a missing section — which
+    is the right verdict, since nobody can tell a rename from a deletion by reading the text.
     """
     # Mask fenced blocks to avoid matching # lines inside them, while preserving positions.
     masked = _FENCE.sub(lambda m: re.sub(r"[^\n]", " ", m.group(0)), text)
@@ -112,12 +115,7 @@ def sections(doc_path: str, text: str) -> list[Section]:
         end = heads[0].start() if heads else len(text)
         out.append(Section(f"{doc_path}#", "", text[:end]))
     for i, h in enumerate(heads):
-        level = len(h.group(1))
-        end = len(text)
-        for later in heads[i + 1 :]:
-            if len(later.group(1)) <= level:
-                end = later.start()
-                break
+        end = heads[i + 1].start() if i + 1 < len(heads) else len(text)
         body = text[h.end() : end].lstrip("\n")
         out.append(Section(f"{doc_path}#{h.group(2)}", h.group(2), body))
     return out

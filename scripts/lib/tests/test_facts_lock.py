@@ -37,10 +37,7 @@ def _repo(tmp_path):
     (tmp_path / "t").mkdir()
     (tmp_path / "t" / "m.py").write_text("LIMIT = 85\n")
     (tmp_path / "t" / "test_m.py").write_text(
-        "def test_limit():\n"
-        "    # fact: CLAUDE.md#Gate\n"
-        "    # fact: CLAUDE.md#Root\n"
-        "    assert True\n"
+        "def test_limit():\n    # fact: CLAUDE.md#Gate\n    assert True\n"
     )
     (tmp_path / "CLAUDE.md").write_text(DOC.format(repo="t/"))
     (tmp_path / "docs").mkdir()
