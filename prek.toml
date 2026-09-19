@@ -373,6 +373,19 @@ pass_filenames = false
 # still escapes, but that is a short explicit list in pyproject.toml rather than a regex.
 always_run = true
 
+# Lint the fact citations in any CLAUDE.md section this branch touched, against origin/master
+# rather than the committed docs/facts.lock (`ansible/tests/repo/test_facts_lock_units_lint_clean.py`
+# holds the converted set already in the lock; this is the ratchet for everything not yet
+# converted). `--changed-since` needs a real git history, which `--all-files` on a shallow
+# runner may not have for origin/master — see the `land-after-merge`/CI fetch-depth notes.
+[[repos.hooks]]
+id = "facts-lint-changed"
+name = "fact citations in edited CLAUDE.md sections"
+entry = "uv run python scripts/dev/fact_status.py lint --changed-since origin/master"
+language = "system"
+pass_filenames = false
+files = "(^|/)CLAUDE\\.md$"
+
 # The `hooks` key of .claude/settings.json is rendered from the `# gen-hooks:` block each file
 # under .claude/hooks/ carries (scripts/dev/gen_hook_settings.py). `--check` fails on a hook
 # file that declares nothing -- the exists-but-unregistered gap the two tests beside it cannot

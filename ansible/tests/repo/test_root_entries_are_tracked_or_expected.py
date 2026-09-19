@@ -29,6 +29,7 @@ EXPECTED_IGNORED = frozenset(
         # the prek `mkdocs-strict` hook builds here and leaves it, on purpose (prek.toml)
         ".mkdocs-strict-check",
         ".mypy_cache",
+        ".superpowers",  # SDD task specification directories
     }
 )
 
