@@ -5,11 +5,18 @@ read-only RBAC identity. Rehomed here from daniel-server (Phase E, 2026-08-13) �
 routed tenant of the retired Docker edge. See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
-- **Image:** built in-cluster by `k8s/image-builder` from `templates/Dockerfile.j2` and the
-  files below — `imagePullPolicy: Always`, rebuilt every deploy rather than pulled from a
-  vendor tag.
-- **Deploy tag:** `--tags "homelab-mcp"`. No IngressRoute — routed through the k8s edge's
-  file-provider gate Secret (`roles/k8s/traefik/templates/livesync-gate-secret.yaml.j2`)
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry. -->
+- **Deploy tag:** `--tags "homelab-mcp"`
+- **Image:** `<k8s_registry_pull_host>/homelab-mcp` (`homelab_mcp_k8s_image`)
+- **Route:** none (no `templates/ingressroute.yaml.j2`)
+- **Claims:** none (no PVC)
+- **Auto-deploy:** eligible (`k8s_autodeploy: true`)
+<!-- /generated_from -->
+
+- **Built in-cluster** by `k8s/image-builder` from `templates/Dockerfile.j2` and the files
+  below — `imagePullPolicy: Always`, rebuilt every deploy rather than pulled from a vendor
+  tag.
+- **No IngressRoute** — routed through the k8s edge's file-provider gate Secret (`roles/k8s/traefik/templates/livesync-gate-secret.yaml.j2`)
   instead, so its bearer token stays out of CRD objects the readonly kubeconfig can list.
   **Two routers there, not one.** `homelab-mcp-local` carries the bearer predicate and serves
   everything; `homelab-mcp-probe` is LAN-only, matches the single exact `Path(`/health`)`, and
@@ -19,10 +26,9 @@ routed tenant of the retired Docker edge. See repo-root `CLAUDE.md` for shared c
   router-less edge returns for every host, so it read green through the 3.5-hour outage of #1322
   (#1341). Changing that router to a PathPrefix would open more than `/health`; a test asserts it
   stays an exact Path.
-- **Storage:** none — no PVC, stateless RollingUpdate Deployment.
-- **Auto-deploy:** eligible, but the promotion cannot actually fire — the image is a
+- **Auto-deploy-eligible, but the promotion cannot actually fire — the image is a
   registry-built `:latest` ref with no upstream version for Renovate to compare against;
-  only `templates/Dockerfile.j2`'s `FROM` line moves.
+  only `templates/Dockerfile.j2`'s `FROM` line moves.** Stateless RollingUpdate Deployment.
 - **RBAC:** `templates/rbac.yaml.j2` grants a dedicated `homelab-mcp` ServiceAccount
   `get`/`list` on pods, `pods/log`, nodes, deployments and daemonsets — no `watch`, no
   secrets, no exec. Deliberately narrower than the shell's own read-only ServiceAccount.

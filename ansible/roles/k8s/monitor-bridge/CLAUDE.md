@@ -24,13 +24,22 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
 `backup-consolidation-longhorn.md`.)
 
 ## At a glance
-- **Image:** `python:3.14-alpine` (stdlib only — no build, no extra deps)
-- **Host:** daniel-box — pinned by `nodeSelector` · **No web UI**, no Authelia
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry. -->
+- **Deploy tag:** `--tags "monitor-bridge"`
+- **Image:** `python` (`monitor_bridge_k8s_image`)
+- **Route:** none (no `templates/ingressroute.yaml.j2`)
+- **Claims:** none (no PVC)
+- **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — observability — this IS the alert
+  pipeline; a broken deploy cannot page about being broken. ALSO no readinessProbe (probe-less)
+  — two independent reasons
+<!-- /generated_from -->
+
+- **Stdlib only** (no build, no extra deps) · **No web UI**
+- **Host:** daniel-box — pinned by `nodeSelector`
 - **Reaches:** prometheus, Kuma, n8n, the *arrs, scrutiny, HA and Loki over their in-cluster
   Service names (see `templates/env-secret.yaml.j2`) — no VIP, no Traefik, no gate in a
   probe's path. The LAN routes it used during the migration are gone, suffix and all.
 - **Depends on:** prometheus (`meta/deps.yml`)
-- **Config in:** `ansible/inventory/host_vars/daniel-box.yml` → `containers_list`
 
 ## Notable
 - `files/cli.py` is a **static** Python loop (config via env vars, no Jinja). Every

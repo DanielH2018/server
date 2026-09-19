@@ -4,16 +4,23 @@ healthchecks.io (self-hosted), pinged by fleet crons so a cron that stops runnin
 noticed instead of silently going quiet. See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
-- **Image:** `lscr.io/linuxserver/healthchecks` (`healthchecks_k8s_image`), digest-pinned;
-  tag kept alongside the digest for Renovate's k8s-defaults manager.
-- **Deploy tag:** `--tags "healthchecks"`. Route: `healthchecks.<domain>` (Authelia), port
-  8000.
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry. -->
+- **Deploy tag:** `--tags "healthchecks"`
+- **Image:** `lscr.io/linuxserver/healthchecks` (`healthchecks_k8s_image`)
+- **Route:** `healthchecks.<domain>` · `healthchecks.local.<domain>`, Authelia one_factor
+- **Claim:** `healthchecks-config`
+- **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — observability — cron
+  dead-man's-switch monitor. ALSO Recreate + RWO volume-claim PVC (migrating-state shape) — two
+  independent reasons. COUPLING NOTE for a future promotion: check UUIDs here are baked into
+  ping URLs in unrelated crons fleet-wide; a revert past a check's creation leaves those crons
+  pinging a dead UUID, silently dropped
+<!-- /generated_from -->
+
+- **Digest-pinned image**, with the tag kept alongside the digest for Renovate's k8s-defaults
+  manager.
+- **Port:** 8000.
 - **Storage:** `healthchecks-config` PVC (`longhorn`, 1Gi) — check definitions and ping
-  history (532K, 2 files at migration time).
-- **Auto-deploy: denylisted**, for two independent reasons: it's the observability role
-  fleet crons ping (a broken deploy stops noticing a stopped cron, with nothing else
-  watching that), and it independently matches the migrating-state shape — Recreate + a real
-  RWO PVC seeded through `k8s/volume-claim`.
+  history (532K, 2 files at migration time), seeded through `k8s/volume-claim`.
 - **Secrets** (SOPS keys, not values): `smtp_notify_app_password` (outbound mail, shared with
   Uptime Kuma and monitor-bridge), `healthchecks_password` (the seed superuser),
   `healthchecks_discord_webhook_url` (the notification channel), `healthchecks_secret_key`

@@ -5,9 +5,18 @@ it is built from (`templates/Dockerfile.j2` + `files/extensions.sh`); the invent
 `daniel-box.yml`.
 
 ## At a glance
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry. -->
+- **Deploy tag:** `--tags "code-server"`
+- **Image:** `<k8s_registry_pull_host>/code-server` (`code_server_k8s_image`)
+- **Route:** `code-server.<domain>` · `code-server.local.<domain>`, Authelia two_factor
+- **Claims:** `code-server-config`, `code-server-workspace`
+- **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — immutable registry/…:latest image
+  with no version scheme — Renovate can never generate an update PR for it, so there is no bump
+  event to auto-deploy regardless of the migrating-state PVC shape below
+<!-- /generated_from -->
+
 - **Image:** built in-cluster by k8s/image-builder from `templates/Dockerfile.j2`
-- **Host:** daniel-box (k3s) · **Port:** 8443 · **URL:** `code-server.<domain>` /
-  `code-server.local.<domain>` (Authelia: yes)
+- **Host:** daniel-box (k3s) · **Port:** 8443
 - **Ported WITHOUT docker plumbing** (operator decision 2026-08-10): no DOCKER_HOST, so the
   in-IDE docker CLI and devcontainers are gone; docker-proxy-codeserver and the `codeserver`
   net dissolved with the Docker copy (`has_code_server: false` in daniel-server host_vars).

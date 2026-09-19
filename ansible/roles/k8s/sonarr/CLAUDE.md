@@ -5,12 +5,18 @@ RWX volume with the rest of the \*arr stack. See repo-root `CLAUDE.md` for share
 conventions.
 
 ## At a glance
-- **Deploy tag:** `--tags "sonarr"`.
-- **Route:** `sonarr.<domain>`, behind Authelia.
-- **Claims:** `sonarr-config` (2Gi, `longhorn`, backed up — holds the library DB and
-  absolute root-folder paths) and the shared `media-data` (mounted, not owned).
-- **`k8s_autodeploy: true`**, promoted in slice 7b: `Recreate` + an RWO config PVC is
-  now protected by a pre-apply Longhorn snapshot and revert (`k8s_autodeploy_snapshot_pvcs:
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry. -->
+- **Deploy tag:** `--tags "sonarr"`
+- **Images:** `lscr.io/linuxserver/sonarr` (`sonarr_k8s_image`), `alpine`
+  (`sonarr_k8s_probe_image`), `ghcr.io/onedr0p/exportarr` (`sonarr_exportarr_image`)
+- **Route:** `sonarr.<domain>` · `sonarr.local.<domain>`, Authelia one_factor
+- **Claims:** `sonarr-config`, `media-data`
+- **Auto-deploy:** eligible (`k8s_autodeploy: true`)
+<!-- /generated_from -->
+
+- **`sonarr-config`** (2Gi, `longhorn`, backed up) holds the library DB and absolute
+  root-folder paths; `media-data` is the shared claim (mounted, not owned).
+- **Auto-deploy since slice 7b:** `Recreate` + an RWO config PVC is now protected by a pre-apply Longhorn snapshot and revert (`k8s_autodeploy_snapshot_pvcs:
   [sonarr-config]`). `media-data` is mounted but explicitly **not** reverted
   (`k8s_autodeploy_unreverted_claims`) — a revert can desync import/rename history from
   files left in place, recoverable by a library rescan.

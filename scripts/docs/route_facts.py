@@ -39,6 +39,10 @@ from lib.repo_paths import ALL_VARS as GROUP_VARS
 # `public=false` in a role's own macro call opts the service out of the public Host rule
 # whatever k8s_public_route says. See ansible/templates/ingressroute.yml.j2.
 _PUBLIC_FALSE_RE = re.compile(r"public\s*=\s*false")
+# Only the `ingressroute()` macro renders the public Host rule. A role whose templates call
+# `monitoring_route()` alone (ical-proxy, loki-homelab) is LAN-only by construction, and a
+# comment saying "not ingressroute()" must not read as a call — hence the `{{` anchor.
+_INGRESSROUTE_CALL_RE = re.compile(r"\{\{-?\s*ingressroute\(")
 
 LAN = "lan"
 PUBLIC = "public"
@@ -69,7 +73,7 @@ def public_route_enabled(group_vars: Path = GROUP_VARS) -> bool:
 def reachability(role_dir: Path, group_vars: Path = GROUP_VARS) -> str:
     """PUBLIC or LAN for a role that has a route. Callers check for a route first."""
     text = "\n".join(p.read_text() for p in ingressroute_templates(role_dir))
-    if _PUBLIC_FALSE_RE.search(text):
+    if not _INGRESSROUTE_CALL_RE.search(text) or _PUBLIC_FALSE_RE.search(text):
         return LAN
     return PUBLIC if public_route_enabled(group_vars) else LAN
 

@@ -4,7 +4,14 @@ A DaemonSet serving `homelab_gpu_*` on `:9101`, one pod per node. It reads
 `/sys/class/drm/card*` and turns what the kernel exposes into series. No Service, no route, no
 secret, no volume. See repo-root `CLAUDE.md` for shared conventions.
 
-**Deploy tag:** `--tags "gpu-exporter"`.
+## At a glance
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry. -->
+- **Deploy tag:** `--tags "gpu-exporter"`
+- **Image:** `python` (`gpu_exporter_k8s_image`)
+- **Route:** none (no `templates/ingressroute.yaml.j2`)
+- **Claims:** none (no PVC)
+- **Auto-deploy:** eligible (`k8s_autodeploy: true`)
+<!-- /generated_from -->
 
 ## The two nodes have different GPUs, and #1446 named the wrong one
 

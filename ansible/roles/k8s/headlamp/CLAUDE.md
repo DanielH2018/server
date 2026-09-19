@@ -4,11 +4,17 @@ Headlamp, browsing the cluster with the built-in `view` ClusterRole plus a handf
 groups it doesn't cover. See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
-- **Image:** `ghcr.io/headlamp-k8s/headlamp` (`headlamp_k8s_image`), digest-pinned.
-- **Deploy tag:** `--tags "headlamp"`. Route: `headlamp.<domain>` (Authelia).
-- **Storage:** none — no PVC, stateless RollingUpdate Deployment.
-- **Auto-deploy:** eligible (`k8s_autodeploy: true`) — stateless, readinessProbe,
-  digest-pinned image.
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry. -->
+- **Deploy tag:** `--tags "headlamp"`
+- **Images:** `ghcr.io/headlamp-k8s/headlamp` (`headlamp_k8s_image`), `alpine`
+  (`headlamp_k8s_netpol_probe_image`)
+- **Route:** `headlamp.<domain>` · `headlamp.local.<domain>`, Authelia one_factor
+- **Claims:** none (no PVC)
+- **Auto-deploy:** eligible (`k8s_autodeploy: true`)
+<!-- /generated_from -->
+
+- **Eligible for auto-deploy because** it is a stateless RollingUpdate Deployment with a
+  readinessProbe and a digest-pinned image.
 - **RBAC:** `templates/rbac.yaml.j2` grants the built-in `view` ClusterRole plus
   `headlamp_k8s_crd_api_groups` (`traefik.io`, `metallb.io`, `longhorn.io`, `helm.cattle.io`,
   `k3s.cattle.io`) — nothing aggregates a CRD group into `view` automatically, so a group

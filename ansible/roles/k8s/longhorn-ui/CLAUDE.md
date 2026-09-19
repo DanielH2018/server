@@ -5,14 +5,19 @@ Route-only role. Longhorn itself (namespace, Deployments, Services) is installed
 middlewares it references, nothing else.
 
 ## At a glance
-- **Deploy tag:** `--tags "longhorn-ui"`.
-- **Route:** `longhorn.local.<domain>` — LAN only, Authelia.
-- **Persists:** nothing — renders no Deployment of its own.
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry. -->
+- **Deploy tag:** `--tags "longhorn-ui"`
+- **Route:** `longhorn.local.<domain>` (LAN only), Authelia two_factor
+- **Claims:** none (no PVC)
+- **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — renders no Deployment — route-only
+  (IngressRoute + middlewares) in front of the Longhorn UI, which has no auth of its own; a bad
+  route change risks exposing the storage control plane
+<!-- /generated_from -->
+
 - **`manifests_rollout: ''`** — there's no Deployment to wait on, so the shared rollout gate is
   told explicitly there's nothing to roll.
-- **`k8s_autodeploy: false`** — the Longhorn UI it fronts has no auth of its own, so a bad
-  route change (auth dropped, wrong Service targeted) is a platform-class exposure risk even
-  though this role has no workload to roll back.
+- **A bad route change** (auth dropped, wrong Service targeted) is a platform-class exposure
+  risk even though this role has no workload to roll back — the denylist reason above.
 
 ## Editing
 - Route/middlewares: `templates/ingressroute.yaml.j2`, `templates/middlewares.yaml.j2`.

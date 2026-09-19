@@ -3,7 +3,14 @@
 `ekofr/pihole-exporter` polling Pi-hole's v6 admin API and serving `pihole_*` on `:9617`. One
 Deployment, one Service, no volume, no route, no secret of its own.
 
-**Deploy tag:** `--tags "pihole-exporter"`.
+## At a glance
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry. -->
+- **Deploy tag:** `--tags "pihole-exporter"`
+- **Image:** `ekofr/pihole-exporter` (`pihole_exporter_k8s_image`)
+- **Route:** none (no `templates/ingressroute.yaml.j2`)
+- **Claims:** none (no PVC)
+- **Auto-deploy:** eligible (`k8s_autodeploy: true`)
+<!-- /generated_from -->
 
 ## Why an exporter and not a native scrape
 

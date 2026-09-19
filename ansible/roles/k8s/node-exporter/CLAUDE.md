@@ -4,14 +4,21 @@ Prometheus `node_exporter` as a DaemonSet, added at the Phase F drain so daniel-
 `node_*` coverage it never had while daniel-server's LAN-published 9100 retires.
 
 ## At a glance
-- **Image:** `node_exporter_k8s_image` (Renovate-tracked pin).
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry. -->
+- **Deploy tag:** `--tags "node-exporter"`
+- **Image:** `prom/node-exporter` (`node_exporter_k8s_image`)
+- **Route:** none (no `templates/ingressroute.yaml.j2`)
+- **Claims:** none (no PVC)
+- **Auto-deploy:** eligible (`k8s_autodeploy: true`)
+<!-- /generated_from -->
+
 - **Runs on:** both k3s nodes (DaemonSet, no `nodeSelector`).
 - **`hostNetwork: true`, `hostPID: true`** — required so `node_*` describes the node
   (interfaces, `/proc`) rather than a pod netns; the standard node-exporter posture.
 - **Mounts:** `/proc`, `/sys`, `/` (as `/rootfs`), all **read-only** `hostPath` — no write
   access despite `hostNetwork`/`hostPID`.
-- **Deploy tag:** `--tags "node-exporter"`. `k8s_autodeploy: true` — stateless, no PVC,
-  readinessProbe gates the rollout, image version-pinned.
+- **Auto-deploy-eligible because** it is stateless with no PVC, a readinessProbe gates the
+  rollout, and the image is version-pinned.
 
 ## Notable
 - **CPU limit is 1 core, not the usual 200m.** node-exporter renders ~320 metric families per

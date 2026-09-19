@@ -21,7 +21,9 @@ from lib.render_guard import load_yaml as _load_yaml
 
 __all__ = [
     "autodeploy_eligibility",
+    "autodeploy_stance",
     "backup_tier",
+    "claim_names",
     "load_longhorn_tier_lists",
 ]
 
@@ -80,6 +82,19 @@ def _resolve_claim_name(expr: str, role_dir: Path) -> str | None:
     if isinstance(value, str) and "{{" not in value:
         return value
     return None
+
+
+def claim_names(role_dir: Path) -> list[str]:
+    """Every PVC claim a k8s role declares or references, resolved where its defaults allow.
+
+    An expression the role's own defaults cannot resolve is returned as written (the catalogue
+    reports those as unknown); `gen_role_glance.py` lists the names, and `backup_tier` below
+    classifies them.
+    """
+    return [
+        _resolve_claim_name(expr, role_dir) or expr
+        for expr in _pvc_claim_names(role_dir)
+    ]
 
 
 def load_longhorn_tier_lists(
@@ -156,6 +171,21 @@ def backup_tier(
 # Auto-deploy eligibility (k8s only — daniel-pi sets has_gitops: false)
 
 
+def autodeploy_stance(role_dir: Path) -> tuple[bool | None, str]:
+    """A k8s role's `k8s_autodeploy` declaration as `(stance, reason)`.
+
+    `stance` is True (eligible), False (denylisted) or None (undeclared). `reason` is the
+    role's own `k8s_autodeploy_reason` for a denylisted role, stripped, and "" otherwise.
+    """
+    defaults = _load_yaml(role_dir / "defaults" / "main.yml")
+    if "k8s_autodeploy" not in defaults:
+        return None, ""
+    if defaults["k8s_autodeploy"] is True:
+        return True, ""
+    reason = defaults.get("k8s_autodeploy_reason")
+    return False, reason.strip() if isinstance(reason, str) else ""
+
+
 def autodeploy_eligibility(
     entry: dict[str, Any],
     platform: str,
@@ -177,14 +207,9 @@ def autodeploy_eligibility(
         if host_data.get("has_gitops") is False:
             return "n/a (host has no GitOps auto-deploy path)"
         return UNKNOWN + " (docker host's has_gitops not declared)"
-    role_dir = k8s_roles / entry["name"]
-    defaults = _load_yaml(role_dir / "defaults" / "main.yml")
-    if "k8s_autodeploy" not in defaults:
+    stance, reason = autodeploy_stance(k8s_roles / entry["name"])
+    if stance is None:
         return UNKNOWN + " (role declares no k8s_autodeploy stance)"
-    value = defaults["k8s_autodeploy"]
-    if value is True:
+    if stance:
         return "eligible"
-    reason = defaults.get("k8s_autodeploy_reason")
-    if isinstance(reason, str) and reason.strip():
-        return f"denylisted ({reason.strip()})"
-    return "denylisted (no reason given)"
+    return f"denylisted ({reason or 'no reason given'})"

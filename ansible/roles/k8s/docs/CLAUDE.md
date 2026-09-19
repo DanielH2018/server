@@ -4,15 +4,19 @@ Serves the built MkDocs Material site over `docs/`, behind Traefik and Authelia,
 runbooks, design documents and generated reference pages are readable in a browser.
 
 ## At a glance
-- **Image:** `nginxinc/nginx-unprivileged:1.29-alpine` (`docs_k8s_image`) — serves static files
-  and nothing else.
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry. -->
+- **Deploy tag:** `--tags "docs"`
+- **Image:** `nginxinc/nginx-unprivileged` (`docs_k8s_image`)
+- **Route:** `docs.local.<domain>` (LAN only), Authelia one_factor
+- **Claims:** none (no PVC)
+- **Auto-deploy:** eligible (`k8s_autodeploy: true`)
+<!-- /generated_from -->
+
+- **Serves static files and nothing else** (an unprivileged nginx).
 - **Host:** pinned to `daniel-box` (`docs_k8s_node`), because it bind-mounts that host's built
   site.
 - **Serves:** `docs_host_site_dir` (`/home/<user>/docs-site`), read-only.
-- **Deploy tag:** `--tags "docs"`.
-- **Config in:** `ansible/inventory/host_vars/daniel-box.yml` → `containers_list`,
-  `platform: k8s`. **Public as well as LAN**, `use_authelia: true` — the ingressroute call
-  passes no `public`, and the macro's default is `public=true`. This said LAN-only
+- **Public as well as LAN** — the ingressroute call passes no `public`, and the macro's default is `public=true`. This said LAN-only
   (`public=false`), which was true until 2026-08-24; `templates/ingressroute.yaml.j2` carries
   the reasoning for the flip. Everything under `docs/` is served, so what is excluded from
   the build is a publishing decision — see `mkdocs.yml`'s `exclude_docs`.

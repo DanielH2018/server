@@ -5,17 +5,22 @@ it builds the `n8n` and `n8n-runners` images into the cluster registry so a futu
 role has something to run. It renders no manifest of its own.
 
 ## At a glance
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry. -->
+- **Deploy tag:** `--tags "n8n-images"`
+- **Route:** none (no `templates/ingressroute.yaml.j2`)
+- **Claims:** none (no PVC)
+- **Auto-deploy:** eligible (`k8s_autodeploy: true`)
+<!-- /generated_from -->
+
 - **Renders nothing** — two `include_role: k8s/image-builder` calls, ordered rather than
   parallel because n8n and its task runners are version-coupled.
 - **Images:** `templates/Dockerfile.j2` (`n8n`) and `templates/Dockerfile-runners.j2`
   (`n8n-runners`), each `FROM` the upstream `:stable` channel tag with a digest beside it.
   Renovate bumps the digest; the tag holds the channel.
-- **Deploy tag:** `--tags "n8n-images"`. `k8s_autodeploy: true`, but nothing can trigger the
-  promotion in practice — the role declares no `*_image:` var, so an upstream bump never
+- **Auto-deploy-eligible, but nothing can trigger the promotion in practice** — the role declares no `*_image:` var, so an upstream bump never
   produces an image-only diff under `defaults/main.yml`. A bump ships only via an
-  operator-driven rebuild: `./scripts/deploy.sh --tags n8n-images,n8n`.
-- **Config in:** `ansible/inventory/host_vars/daniel-box.yml` → `containers_list` (a separate
-  `n8n` entry follows it).
+  operator-driven rebuild: `./scripts/deploy.sh --tags n8n-images,n8n`. A separate `n8n`
+  entry follows this one in `containers_list`.
 
 ## Notable
 - The runners image `COPY`s exactly one file, `n8n-task-runners.json.j2`, staged via

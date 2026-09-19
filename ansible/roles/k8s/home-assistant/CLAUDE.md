@@ -5,8 +5,16 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
 (this file is the editing-gotchas reference).
 
 ## At a glance
-- **Image:** `lscr.io/linuxserver/homeassistant:<X.Y.Z-lsNN>` — **pinned + Renovate-managed**
-  (`watchtower.enable=false`), NOT `:latest`. HA is stateful with monthly, occasionally-breaking
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry. -->
+- **Deploy tag:** `--tags "home-assistant"`
+- **Images:** `lscr.io/linuxserver/homeassistant` (`home_assistant_k8s_image`), `alpine`
+  (`home_assistant_k8s_init_image`)
+- **Route:** `home-assistant.<domain>` · `home-assistant.local.<domain>`, no Authelia
+- **Claim:** `home-assistant-config`
+- **Auto-deploy:** eligible (`k8s_autodeploy: true`)
+<!-- /generated_from -->
+
+- **Pinned + Renovate-managed**, NOT `:latest`. HA is stateful with monthly, occasionally-breaking
   releases, so it belongs in the critical/stateful tier (like jellyfin/the *arr stack) — bump via
   Renovate PRs (the `/linuxserver/` regex tracks the tag), not watchtower's watch-all `:latest` pool.
   (LSIO is x86-64-maintained; only the 32-bit ARM variant was deprecated — fine for daniel-box.)
@@ -15,13 +23,10 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   `sanctioned_writers.yml`, the skills all anchor here): its ConfigMap ships
   `files/` into the cluster. Edit HA config HERE; deploy with
   `--tags home-assistant` from daniel-box.
-- **Port:** 8123 · **Authelia:** no · `home-assistant.<domain>` is served directly by the cluster
-  Traefik (companion app unchanged). The `bridge_hostname` forward this used to describe died with
+- **Port:** 8123 · no Authelia, so the companion app works unchanged. The `bridge_hostname` forward this used to describe died with
   the suffix retirement (`870723e8`) — the key now appears only in host_vars *comments*, nowhere as
   a live setting · MQTT via the in-cluster `mosquitto` Service · NUT via daniel-server's LAN `3493`
   (DOCKER-USER-locked)
-- **Config in:** `ansible/inventory/host_vars/daniel-box.yml` → `containers_list`
-
 
 ## Where things are documented
 This file holds the at-a-glance facts, the copy-not-template convention (the trap that
