@@ -96,7 +96,8 @@ scripts/deploy_tools/tests/test_tick_ledger_report.py 2
 scripts/dev/tests/test_memory_survey.py 3
 scripts/dev/tests/test_prune_worktrees.py 14
 scripts/diagnostics/tests/_alert_fixtures.py 3
-scripts/diagnostics/tests/test_postflight.py 14
+scripts/diagnostics/tests/test_postflight.py 12
+scripts/diagnostics/tests/test_postflight_runner.py 3
 scripts/diagnostics/tests/test_probe.py 6
 scripts/diagnostics/tests/test_probe_alerts.py 5
 scripts/diagnostics/tests/test_probe_b2_ledger.py 7

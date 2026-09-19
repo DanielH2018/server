@@ -16,6 +16,7 @@ almost none of these.
 
 import argparse
 import json
+import socket
 import subprocess
 import sys
 from pathlib import Path as _Path
@@ -33,6 +34,7 @@ from diagnostics.probe_lib import health_docker
 from diagnostics.probe_lib import ha
 from diagnostics.probe_lib import monitors
 from lib import k8s_roles
+from lib.kubectl import cluster_for_host
 
 TIMEOUT = 10
 
@@ -41,6 +43,27 @@ OK, FAIL, SKIP = "OK", "FAIL", "SKIP"
 
 class Skip(Exception):
     """This host doesn't run the service, so the README item doesn't apply to it."""
+
+
+def host_cluster():
+    """The cluster this host is a node of, named for every kubectl read below.
+
+    Derived from the hostname rather than taken as a flag: postflight is a host script, so the
+    cluster it should read about is the one it stands in. Until 2026-09-19 both kubectl reads
+    took `lib.kubectl`'s default (`prod`), which was correct on daniel-box and raised
+    `WrongCluster` out of the check on daniel-stage — the shape #1663 fixed in probe.py.
+
+    Raises:
+        Skip: the host is a node of no known cluster (the Pi), so there is nothing here to
+            read with kubectl and the check does not apply.
+    """
+    hostname = socket.gethostname()
+    cluster = cluster_for_host(hostname)
+    if cluster is None:
+        raise Skip(
+            f"{hostname} is a node of no known cluster — no kubectl to read from here"
+        )
+    return cluster
 
 
 def get(url, header=None, timeout=TIMEOUT, resolve=None):
@@ -83,7 +106,7 @@ def service_ip(name):
     was fixed for exactly this on 2026-08-07; postflight kept the old resolver.
     """
     try:
-        return health_docker.resolve_service_ip(name)
+        return health_docker.resolve_service_ip(name, host_cluster())
     except SystemExit as exc:
         raise Skip(str(exc)) from exc
 
@@ -213,7 +236,7 @@ def check_kuma_drift():
     text, code = monitors.format_kuma_drift(
         declared,
         live,
-        monitors.kuma_pod_age_seconds(),
+        monitors.kuma_pod_age_seconds(host_cluster()),
         gate_states=monitors.resolve_gate_states(declared, live),
     )
     return (FAIL if code else OK), text.replace("\n", "; ").strip()
