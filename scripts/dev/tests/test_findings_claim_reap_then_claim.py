@@ -10,11 +10,6 @@ indistinguishable from a fixture where every claim is stale.
 Run: uv run pytest scripts/dev/tests/test_findings_claim_reap_then_claim.py
 """
 
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-
 from _findings_fakes import Fakes, build_tools, facts, make_issue
 
 from dev.findings import main

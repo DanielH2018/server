@@ -13,18 +13,11 @@ in renovate.json. Duplication that a test keeps in lockstep beats a single copy 
 """
 
 import re
-import sys
-from pathlib import Path
 
 import yaml
 from _helpers import REPO
-
-_REPO = REPO
-sys.path.insert(0, str(Path(__file__).parent))
-
-from lib import yaml_fast  # noqa: E402
-
-from _k8s_render import rendered_docs  # noqa: E402
+from _k8s_render import rendered_docs
+from lib import yaml_fast
 
 ARRS = ("sonarr", "radarr", "prowlarr")
 METRICS_PORT = 9707
@@ -169,7 +162,7 @@ def test_the_secret_is_staged_through_the_no_log_path():
     """A Secret listed in manifests_files instead of manifests_secret_files renders 0644 and
     prints its decrypted contents in the play recap."""
     for arr in ARRS:
-        tasks = (_REPO / f"ansible/roles/k8s/{arr}/tasks/main.yml").read_text()
+        tasks = (REPO / f"ansible/roles/k8s/{arr}/tasks/main.yml").read_text()
         assert "manifests_secret_files:" in tasks, (
             f"{arr} renders a Secret but declares no manifests_secret_files"
         )
@@ -187,7 +180,7 @@ def test_the_image_pins_stay_in_lockstep():
     """
     pins = {}
     for arr in ARRS:
-        text = (_REPO / f"ansible/roles/k8s/{arr}/defaults/main.yml").read_text()
+        text = (REPO / f"ansible/roles/k8s/{arr}/defaults/main.yml").read_text()
         match = re.search(rf"^{arr}_exportarr_image:\s*(\S+)", text, re.M)
         assert match, f"{arr} has no {arr}_exportarr_image pin in its own defaults"
         pins[arr] = match.group(1)
@@ -247,7 +240,7 @@ def test_prometheus_scrapes_the_sidecars_by_port_not_by_app_label():
     not error, it just yields a target that returns HTML and a job that is permanently down.
     """
     prom = (
-        _REPO / "ansible/roles/k8s/claude-otel/templates/prometheus.yaml.j2"
+        REPO / "ansible/roles/k8s/claude-otel/templates/prometheus.yaml.j2"
     ).read_text()
     job = prom.split("- job_name: exportarr", 1)
     assert len(job) == 2, "claude-otel declares no `exportarr` scrape job"

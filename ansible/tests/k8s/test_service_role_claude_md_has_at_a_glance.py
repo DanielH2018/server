@@ -17,11 +17,8 @@ other — there is nothing to hand-restate any more, so nothing to exempt.
 Run: uv run pytest ansible/tests/k8s/test_service_role_claude_md_has_at_a_glance.py
 """
 
-import sys
+from _helpers import K8S_ROLES
 
-from _helpers import K8S_ROLES, REPO
-
-sys.path.insert(0, str(REPO / "scripts"))
 
 from lib.k8s_roles import k8s_entries
 

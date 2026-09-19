@@ -11,10 +11,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_prune_releases.py
 """
 
 import os
-import sys
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from prune_releases import resolve_current, select_prunable
 

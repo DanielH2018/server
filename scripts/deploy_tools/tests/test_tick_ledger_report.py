@@ -13,17 +13,13 @@ import sys
 
 import pytest
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 from lib import yaml_fast
 
 import backfill_staging_gate as bf
+import deploy_staging as ds
 
 REPO = pathlib.Path(__file__).resolve().parents[3]
 ROLE = REPO / "ansible/roles/setup/gitops_deploy"
-
-sys.path.insert(0, str(ROLE / "files"))
-
-import deploy_staging as ds  # noqa: E402
 
 
 def _tick(outcome: str, at: str = "2026-09-02T22:00:00-05:00") -> dict:
@@ -87,7 +83,6 @@ def test_what_the_deployer_writes_is_what_the_backfill_reads(tmp_path, monkeypat
     """The one end-to-end tie. Every other test here builds the row by hand, so a field the
     recorder renamed would pass all of them and only fail on the host, an hour later, silently —
     `load_tick_ledger` skips a row it cannot construct rather than raising."""
-    sys.path.insert(0, str(ROLE / "files"))
     # The recorder is the staging gate's I/O shell, which lives with the handlers rather than
     # in `deploy_staging` — that module stays import-pure so `deploy_logic` (and therefore
     # `land.sh`) can be imported without `host_lib` on the path.

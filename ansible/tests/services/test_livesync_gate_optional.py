@@ -17,17 +17,12 @@ names `/etc/traefik-file/livesync-gate.yml`, which only the Secret's volume supp
 one without the other leaves Traefik reading a path nothing mounts.
 """
 
-import sys
-
 import pytest
-from _helpers import REPO
 
-_REPO = REPO
-sys.path.insert(0, str(_REPO / "scripts"))
 
-from lib import yaml_fast  # noqa: E402
+from lib import yaml_fast
 
-from validate.k8s_manifests import (  # noqa: E402 — needs the path insert above
+from validate.k8s_manifests import (
     ALL_VARS,
     ANSIBLE,
     BASE_CONTEXT,

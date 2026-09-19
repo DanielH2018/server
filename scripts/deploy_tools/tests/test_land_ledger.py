@@ -7,12 +7,8 @@ own until this file existed.
 Run: uv run pytest scripts/deploy_tools/tests/test_land_ledger.py
 """
 
-import sys
-from pathlib import Path
-
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.land_lib.ledger import Ledger, annotation_line
 from deploy_tools.land_lib.outcome import CAUSES, Cause, cause_for_deploy_exit
 

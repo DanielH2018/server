@@ -5,11 +5,9 @@ stale are indistinguishable from the passing side of a single test.
 """
 
 import os
-import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from _findings_fakes import foreign_comment, operator_comment
 

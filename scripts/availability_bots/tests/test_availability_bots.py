@@ -13,12 +13,6 @@ Run: uv run pytest scripts/availability_bots/tests/test_availability_bots.py
 import importlib.util
 import logging
 import os
-import sys
-
-# scripts/availability_bots isn't on pyproject's `pythonpath` (only its parents are), so pytest's
-# own directory-on-sys.path only reaches this file's `tests/` dir. Add the bots' own directory
-# so the bare `import common` below and the by-path bot loads still resolve after the split.
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import common
 

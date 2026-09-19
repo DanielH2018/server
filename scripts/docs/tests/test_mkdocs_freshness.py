@@ -1,10 +1,7 @@
 """_mkdocs_freshness: the footer's text, and which pages get one."""
 
-import sys
-from pathlib import Path
 from types import SimpleNamespace
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import _mkdocs_freshness as hook
 from lib.doc_freshness import PageFreshness

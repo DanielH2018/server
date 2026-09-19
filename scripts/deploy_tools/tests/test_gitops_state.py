@@ -9,12 +9,10 @@ Run: uv run pytest scripts/deploy_tools/tests/test_gitops_state.py
 
 import fcntl
 import os
-import sys
 from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from deploy_tools import gitops_state
 

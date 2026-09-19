@@ -12,14 +12,11 @@ That failure is invisible standalone — the run that can't see it is the one th
 
 import os
 import subprocess
-import sys
 import time
 from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from deploy_staleness import (
     STALE_EXIT,

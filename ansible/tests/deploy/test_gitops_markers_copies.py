@@ -16,12 +16,10 @@ Run: uv run pytest ansible/tests/deploy/test_gitops_markers_copies.py
 """
 
 import re
-import sys
 
 from _helpers import REPO
 from lib import yaml_fast
 
-sys.path.insert(0, str(REPO / "scripts"))
 
 from dev.gen_gitops_markers import COPIES, SOURCE, render
 
@@ -139,7 +137,6 @@ def test_the_source_is_import_free():
 
 
 def test_every_non_python_literal_names_the_same_directory():
-    sys.path.insert(0, str(REPO / "ansible/roles/setup/gitops_deploy/files"))
     from gitops_markers import STATE_DIR
 
     for path, pattern in _DIRECTORY_LITERALS.items():
@@ -149,7 +146,6 @@ def test_every_non_python_literal_names_the_same_directory():
 
 
 def test_the_pod_pages_on_contention_at_the_threshold_the_banner_parks_on():
-    sys.path.insert(0, str(REPO / "ansible/roles/setup/gitops_deploy/files"))
     from gitops_markers import CONTENTION_PAGE_SECONDS
 
     path, pattern = _CONTENTION_ENV

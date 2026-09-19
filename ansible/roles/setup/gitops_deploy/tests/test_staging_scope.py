@@ -11,11 +11,6 @@ manifest are the same alert otherwise, and an operator who cannot tell them apar
 reflex.
 """
 
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "files"))
-
 from deploy_staging import staging_scope, staging_verdict_summary
 
 SUBSET = {"traefik", "authelia", "freshrss", "node-exporter", "registry", "ical-proxy"}

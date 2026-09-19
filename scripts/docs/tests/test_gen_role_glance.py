@@ -5,13 +5,9 @@ generator_writes_now` fails the moment a role's defaults, templates or `containe
 move without the block being regenerated, which is the drift #2058 was filed on.
 """
 
-import sys
-from pathlib import Path
-
 import pytest
 import yaml
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import gen_role_glance as g
 

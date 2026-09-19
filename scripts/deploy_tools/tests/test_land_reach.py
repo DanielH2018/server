@@ -10,13 +10,10 @@ Run: uv run pytest scripts/deploy_tools/tests/test_land_reach.py
 
 import json
 import re
-import sys
-from pathlib import Path
 
 import pytest
 import yaml
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from lib import yaml_fast
 

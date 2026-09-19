@@ -22,11 +22,6 @@ to catch.
 Run: uv run pytest scripts/deploy_tools/tests/test_land_tags_shared_mapper_agreement.py
 """
 
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
 import land_tags
 from deploy_logic import services_from_changed_paths
 

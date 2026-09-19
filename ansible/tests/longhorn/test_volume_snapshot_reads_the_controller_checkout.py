@@ -17,17 +17,11 @@ rendered-expression test sees a `chdir` that is correct on its face. What is wro
 command runs, which is only visible in the task's own keywords.
 """
 
-import sys
-
 import pytest
 from _helpers import REPO
+from lib import yaml_fast
 
-_REPO = REPO
-sys.path.insert(0, str(_REPO / "ansible" / "tests"))
-
-from lib import yaml_fast  # noqa: E402
-
-_ROLE = _REPO / "ansible" / "roles" / "k8s" / "volume-snapshot"
+_ROLE = REPO / "ansible" / "roles" / "k8s" / "volume-snapshot"
 _CONTROLLER = "localhost"
 
 

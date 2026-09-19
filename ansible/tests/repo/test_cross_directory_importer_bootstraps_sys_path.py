@@ -8,7 +8,9 @@ therefore carries its own `_sys.path.insert(0, ...)` ABOVE the import. 37 module
 on 2026-09-17 and nothing checked it; the suite is exactly the thing that cannot see it.
 
 Scope: tracked `scripts/**/*.py` outside any `tests/` directory. A test module reaches its
-subject through `pythonpath`, which is what pytest is for.
+subject through `pythonpath`, which is what pytest is for — and so must NOT carry the insert:
+`scripts/tests/test_test_module_bootstraps_present.py` refuses one whose target `pythonpath`
+already lists (#2061).
 
 Run: uv run pytest ansible/tests/repo/test_cross_directory_importer_bootstraps_sys_path.py
 """

@@ -22,8 +22,7 @@ from jinja2 import Environment
 from _helpers import REPO
 from lib import yaml_fast
 
-_REPO = REPO
-_ROLE = _REPO / "ansible" / "roles" / "setup" / "hypervisor"
+_ROLE = REPO / "ansible" / "roles" / "setup" / "hypervisor"
 _TEMPLATE = _ROLE / "templates" / "staging-gate-dispatch.sh.j2"
 _DEFAULTS = _ROLE / "defaults" / "main.yml"
 
@@ -207,9 +206,7 @@ def test_the_refusal_codes_map_to_no_verdict_in_the_caller():
     A refusal that classified as REJECTED would fail a merge because someone sent a malformed
     request, which is the opposite of what the three-outcome vocabulary is for.
     """
-    import sys
 
-    sys.path.insert(0, str(_REPO / "scripts" / "deploy_tools"))
     import staging_gate
 
     for code in (_PREP_FAILED, _REFUSED):

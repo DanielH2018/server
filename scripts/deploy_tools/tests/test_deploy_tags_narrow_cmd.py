@@ -9,12 +9,8 @@ the reason on stderr for every refusal. The checkout is `_narrow_fixtures.build_
 Run: uv run pytest scripts/deploy_tools/tests/test_deploy_tags_narrow_cmd.py
 """
 
-import sys
-from pathlib import Path
-
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import narrow_broad
 from deploy_tools.exit_codes import DEPLOY_BROAD, DEPLOY_OK

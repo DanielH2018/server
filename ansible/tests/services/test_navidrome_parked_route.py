@@ -9,15 +9,11 @@ Both halves are tested because either alone is only half a retirement: rendering
 the live IngressRoute serving, since `kubectl apply` only adds and updates.
 """
 
-import sys
-
-from _helpers import ANSIBLE, REPO
+from _helpers import ANSIBLE
 from lib import yaml_fast
 
-_REPO = REPO
-sys.path.insert(0, str(_REPO / "scripts"))
 
-from validate.k8s_manifests import (  # noqa: E402 — needs the path insert above
+from validate.k8s_manifests import (
     ALL_VARS,
     BASE_CONTEXT,
     SHARED_TPL,
