@@ -130,19 +130,6 @@ def test_every_citation_round_trips_its_raw(raw):
     assert _one(f"`{raw}`").raw == raw
 
 
-_DOC = """intro `scripts/lib/git.py`
-
-## Alpha
-alpha text `scripts/lib/gh.py`
-
-### Alpha child
-child text
-
-## Beta
-beta text
-"""
-
-
 def test_sections_are_keyed_by_doc_and_heading():
     got = sections("CLAUDE.md", _DOC)
     assert [s.key for s in got] == [
@@ -163,6 +150,19 @@ def test_a_section_body_runs_to_the_next_heading_of_same_or_higher_level():
 def test_a_child_section_holds_only_its_own_text():
     child = sections("CLAUDE.md", _DOC)[2]
     assert child == Section("CLAUDE.md#Alpha child", "Alpha child", "child text\n\n")
+
+
+def test_a_hash_line_inside_a_fence_is_not_a_heading():
+    doc = """## A
+fenced code block:
+```bash
+# not a heading
+```
+## B
+"""
+    got = sections("CLAUDE.md", doc)
+    assert [s.key for s in got] == ["CLAUDE.md#A", "CLAUDE.md#B"]
+    assert "# not a heading" in got[0].body
 
 
 def test_repo_docs_lists_every_tracked_claude_md(tmp_path):

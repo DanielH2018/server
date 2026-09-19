@@ -104,7 +104,9 @@ def sections(doc_path: str, text: str) -> list[Section]:
     is a new unit and the old lock row surfaces as a missing section — which is the right
     verdict, since nobody can tell a rename from a deletion by reading the text.
     """
-    heads = list(_HEADING.finditer(text))
+    # Mask fenced blocks to avoid matching # lines inside them, while preserving positions.
+    masked = _FENCE.sub(lambda m: re.sub(r"[^\n]", " ", m.group(0)), text)
+    heads = list(_HEADING.finditer(masked))
     out: list[Section] = []
     if not heads or heads[0].start() > 0:
         end = heads[0].start() if heads else len(text)
