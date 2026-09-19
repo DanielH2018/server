@@ -2,7 +2,7 @@
 
 import subprocess
 
-from fact_status import main
+from fact_status import _USAGE, main
 
 
 def _repo(tmp_path):
@@ -84,6 +84,42 @@ def test_verify_unknown_unit_is_usage_error(tmp_path, capsys):
     repo = _repo(tmp_path)
     assert main(["verify", "--repo", str(repo), "CLAUDE.md#Nope"]) == 2
     assert "no section" in capsys.readouterr().err
+
+
+def test_forget_then_status_is_clean(tmp_path, capsys):
+    repo = _repo(tmp_path)
+    main(["verify", "--repo", str(repo), "CLAUDE.md#Gate"])
+    (repo / "CLAUDE.md").write_text(
+        "## The gate\n`t/m.py:LIMIT` bounds it.\n\n## Style\nwhy, not what.\n"
+    )
+    main(["verify", "--repo", str(repo), "CLAUDE.md#The gate"])
+    capsys.readouterr()
+    assert main(["status", "--repo", str(repo)]) == 1
+    assert "section-gone" in capsys.readouterr().out
+    assert main(["forget", "--repo", str(repo), "CLAUDE.md#Gate"]) == 0
+    assert main(["status", "--repo", str(repo)]) == 0
+
+
+def test_forget_unknown_unit_is_usage_error(tmp_path, capsys):
+    repo = _repo(tmp_path)
+    assert main(["forget", "--repo", str(repo), "CLAUDE.md#Nope"]) == _USAGE
+    assert "no lock row" in capsys.readouterr().err
+
+
+def test_verify_reports_skipped_atoms(tmp_path, capsys):
+    repo = _repo(tmp_path)
+    (repo / "CLAUDE.md").write_text(
+        "## Gate\n`t/m.py:LIMIT` bounds it, `t/m.py:GONE` does not exist.\n"
+    )
+    assert main(["verify", "--repo", str(repo), "CLAUDE.md#Gate"]) == 0
+    assert "skipped 1 unresolved: t/m.py:GONE" in capsys.readouterr().out
+
+
+def test_verify_warns_on_a_dirty_tree(tmp_path, capsys):
+    repo = _repo(tmp_path)
+    (repo / "t" / "m.py").write_text("LIMIT = 85\nOTHER = 1\nEXTRA = 2\n")
+    assert main(["verify", "--repo", str(repo), "CLAUDE.md#Gate"]) == 0
+    assert "working tree is dirty" in capsys.readouterr().err
 
 
 def test_lint_changed_since_scopes_to_edited_sections(tmp_path, capsys):

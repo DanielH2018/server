@@ -3,8 +3,11 @@
 
 ``status`` derives every CLAUDE.md section's status from the tree and ``docs/facts.lock``
 and exits 1 when any section is OUT. ``verify`` re-hashes the named sections' atoms into
-the lock at HEAD — the only path from OUT back to IN. ``lint`` reports citations that cannot
-be support. Repo store only until slice 4 adds ``--store memory``.
+the lock at HEAD — the only path from OUT back to IN. ``forget`` drops a lock row whose
+section no longer exists, which is the way out of a ``section-gone`` finding: a renamed
+heading is a new unit, and the old row cannot be hand-deleted without tripping the lock's
+own checksum. ``lint`` reports citations that cannot be support. Repo store only until
+slice 4 adds ``--store memory``.
 
 Spec: docs/superpowers/specs/2026-09-19-fact-support-invalidation-design.md
 """
@@ -19,7 +22,14 @@ from pathlib import Path
 
 from lib.facts.citations import repo_docs, sections
 from lib.facts.lint import changed_units, lint_sections
-from lib.facts.lock import LOCK_REL, build_repo_edb, check_lock, read_lock, verify_units
+from lib.facts.lock import (
+    LOCK_REL,
+    build_repo_edb,
+    check_lock,
+    forget_units,
+    read_lock,
+    verify_units,
+)
 from lib.facts.relations import derive, status_of
 from lib.git import git_stdout
 from lib.repo_paths import REPO
@@ -61,10 +71,32 @@ def cmd_verify(args: argparse.Namespace) -> int:
             file=_sys.stderr,
         )
         return _USAGE
+    if git_stdout("status", "--porcelain", cwd=repo):
+        print(
+            "working tree is dirty; verified_sha names HEAD, not this state",
+            file=_sys.stderr,
+        )
     head = git_stdout("rev-parse", "--short=9", "HEAD", cwd=repo)
-    lock = verify_units(repo, repo / LOCK_REL, args.units, head)
+    lock, skipped = verify_units(repo, repo / LOCK_REL, args.units, head)
     for u in args.units:
         print(f"verified {u} at {head}: {len(lock[u]['atoms'])} atoms")
+    if skipped:
+        print(f"skipped {len(skipped)} unresolved: {', '.join(skipped)}")
+    return 0
+
+
+def cmd_forget(args: argparse.Namespace) -> int:
+    repo = Path(args.repo)
+    try:
+        forget_units(repo / LOCK_REL, args.units)
+    except KeyError as missing:
+        print(
+            f"no lock row for {missing.args[0]!r}; `fact_status.py status` lists the keys",
+            file=_sys.stderr,
+        )
+        return _USAGE
+    for u in args.units:
+        print(f"forgot {u}")
     return 0
 
 
@@ -99,6 +131,10 @@ def main(argv: list[str] | None = None) -> int:
     _add_common(v)
     v.add_argument("units", nargs="+")
     v.set_defaults(fn=cmd_verify)
+    fg = sub.add_parser("forget")
+    _add_common(fg)
+    fg.add_argument("units", nargs="+")
+    fg.set_defaults(fn=cmd_forget)
     ln = sub.add_parser("lint")
     _add_common(ln)
     ln.add_argument("--changed-since", default=None)

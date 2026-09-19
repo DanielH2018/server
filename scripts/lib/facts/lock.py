@@ -12,7 +12,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from .atoms import Ambiguous, backrefs, hash_atom
+from .atoms import HASHED_FORMS, Ambiguous, backrefs, hash_atom
 from .citations import (
     Citation,
     in_tree,
@@ -30,6 +30,7 @@ FINDING_KINDS = frozenset(
         "missing",
         "section-gone",
         "atom-no-longer-cited",
+        "unrecorded-atom",
         "lock-tampered",
         "ambiguous",
     }
@@ -156,7 +157,7 @@ def check_lock(repo: Path, lock_path: Path) -> list[Finding]:
                     unit,
                     "",
                     "section-gone",
-                    "no section with this heading; rename the lock row with `fact_status.py verify` or delete it",
+                    "no section with this heading; re-verify under the new heading with `fact_status.py verify`, then drop this row with `fact_status.py forget`",
                 )
             )
             continue
@@ -197,21 +198,59 @@ def check_lock(repo: Path, lock_path: Path) -> list[Finding]:
                         f"recorded {recorded_hash[:8]}, now {now[:8]}",
                     )
                 )
+        # A citation ADDED to an already-verified section. `status` grades the unit OUT for
+        # it (relations.unrecorded), but until now nothing in CI did: the guard walked the
+        # recorded atoms alone, so a new fact could be added to a locked section and land
+        # unsupported behind a green master.
+        recorded_atoms = rec.get("atoms", {})
+        for atom, c in sorted(cited.items()):
+            if atom in recorded_atoms or c.form not in HASHED_FORMS:
+                continue
+            findings.append(
+                Finding(
+                    unit,
+                    atom,
+                    "unrecorded-atom",
+                    "the section cites it and the lock has no hash for it; re-run `fact_status.py verify` on the section",
+                )
+            )
     return findings
 
 
 def verify_units(
     repo: Path, lock_path: Path, unit_keys: list[str], head_sha: str
-) -> dict[str, dict]:
-    """Re-hash every hashable atom the named sections cite and write the lock. Raises ``KeyError`` on an unknown unit."""
+) -> tuple[dict[str, dict], list[str]]:
+    """Re-hash every hashable atom the named sections cite, write the lock, and name what it skipped.
+
+    Returns the whole lock and the sorted citations that did NOT resolve, so the caller can
+    say so: a section can otherwise read `verified` while the atom the author cared about
+    was silently dropped. Raises ``KeyError`` on an unknown unit.
+    """
     by_unit = _repo_citations(repo)
     lock = read_lock(lock_path)
+    skipped: set[str] = set()
     for key in unit_keys:
         atoms: dict[str, str] = {}
         for c in by_unit[key]:
             h = hash_atom(c, repo)
             if h is not None:
                 atoms[c.raw] = h
+            elif c.form in HASHED_FORMS:
+                skipped.add(c.raw)
         lock[key] = {"verified_sha": head_sha, "atoms": atoms}
+    write_lock(lock_path, lock)
+    return lock, sorted(skipped)
+
+
+def forget_units(lock_path: Path, keys: list[str]) -> dict[str, dict]:
+    """Drop the named rows and rewrite the lock. Raises ``KeyError`` on a key with no row.
+
+    The way out of a `section-gone` finding. Renaming a heading makes a new unit and strands
+    the old row, and hand-editing the lock is what its checksum exists to catch — so the tool
+    has to own the deletion as well as the write.
+    """
+    lock = read_lock(lock_path)
+    for key in keys:
+        del lock[key]
     write_lock(lock_path, lock)
     return lock

@@ -2,12 +2,14 @@
 
 import subprocess
 
+import pytest
 
 from facts.lock import (
     FINDING_KINDS,
     LOCK_REL,
     build_repo_edb,
     check_lock,
+    forget_units,
     lock_tampered,
     read_lock,
     verify_units,
@@ -152,6 +154,54 @@ def test_unverified_section_with_citations_is_unverified(tmp_path):
     assert status_of(edb, derive(edb), "CLAUDE.md#Gate") == "UNVERIFIED"
 
 
+def test_new_citation_on_a_locked_unit_is_flagged(tmp_path):
+    """The clean twin is ``test_verify_then_check_is_clean``."""
+    repo = _repo(tmp_path)
+    verify_units(repo, repo / LOCK_REL, ["CLAUDE.md#Gate"], "abc1234")
+    (repo / "t" / "other.py").write_text("CAP = 3\n")
+    (repo / "CLAUDE.md").write_text(
+        DOC.format(repo="t/").replace(
+            "bounds it", "bounds it, `t/other.py:CAP` caps it"
+        )
+    )
+    assert {(f.atom, f.kind) for f in check_lock(repo, repo / LOCK_REL)} == {
+        ("t/other.py:CAP", "unrecorded-atom")
+    }
+
+
+def test_ambiguous_marker_is_flagged(tmp_path):
+    repo = _repo(tmp_path)
+    (repo / "t" / "m.py").write_text("LIMIT = 85\n# DECIDED: keep the cap\n")
+    (repo / "CLAUDE.md").write_text(
+        DOC.format(repo="t/").replace("bounds it", "bounds it, `t/m.py:DECIDED: keep`")
+    )
+    verify_units(repo, repo / LOCK_REL, ["CLAUDE.md#Gate"], "abc1234")
+    (repo / "t" / "m.py").write_text(
+        "LIMIT = 85\n# DECIDED: keep the cap\n# DECIDED: keep the floor\n"
+    )
+    assert [f.kind for f in check_lock(repo, repo / LOCK_REL)] == ["ambiguous"]
+
+
+def test_forget_removes_the_row_and_rechecksums(tmp_path):
+    repo = _repo(tmp_path)
+    verify_units(repo, repo / LOCK_REL, ["CLAUDE.md#Gate"], "abc1234")
+    assert forget_units(repo / LOCK_REL, ["CLAUDE.md#Gate"]) == {}
+    assert read_lock(repo / LOCK_REL) == {}
+    assert not lock_tampered(repo / LOCK_REL)
+    with pytest.raises(KeyError):
+        forget_units(repo / LOCK_REL, ["CLAUDE.md#Gate"])
+
+
+def test_verify_reports_the_atoms_it_skipped(tmp_path):
+    repo = _repo(tmp_path)
+    (repo / "CLAUDE.md").write_text(
+        DOC.format(repo="t/").replace("bounds it", "bounds it, `t/m.py:GONE` too")
+    )
+    lock, skipped = verify_units(repo, repo / LOCK_REL, ["CLAUDE.md#Gate"], "abc1234")
+    assert skipped == ["t/m.py:GONE"]
+    assert "t/m.py:GONE" not in lock["CLAUDE.md#Gate"]["atoms"]
+
+
 def test_finding_kinds_census():
     assert FINDING_KINDS == frozenset(
         {
@@ -159,6 +209,7 @@ def test_finding_kinds_census():
             "missing",
             "section-gone",
             "atom-no-longer-cited",
+            "unrecorded-atom",
             "lock-tampered",
             "ambiguous",
         }
