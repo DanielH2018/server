@@ -2,6 +2,8 @@
 
 import subprocess
 
+import pytest
+
 from facts.lint import RULES, WARN_RULES, changed_units, lint_sections
 from facts.lock import LOCK_REL, write_lock
 
@@ -141,6 +143,12 @@ def test_changed_units_names_only_edited_sections(tmp_path):
     )
     (repo / "CLAUDE.md").write_text("## A\none\n\n## B\ntwo changed\n")
     assert changed_units(repo, "HEAD") == {"CLAUDE.md#B"}
+
+
+def test_changed_units_refuses_an_unresolvable_ref(tmp_path):
+    repo, _ = _repo(tmp_path, "## A\none\n")
+    with pytest.raises(ValueError, match="cannot resolve 'origin/master'"):
+        changed_units(repo, "origin/master")
 
 
 def test_rule_census():

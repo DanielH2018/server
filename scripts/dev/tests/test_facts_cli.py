@@ -132,6 +132,15 @@ def test_lint_changed_since_scopes_to_edited_sections(tmp_path, capsys):
     assert "CLAUDE.md#Style" in out and "CLAUDE.md#Gate" not in out
 
 
+def test_lint_with_unresolvable_ref_is_usage_error(tmp_path, capsys):
+    repo = _repo(tmp_path)
+    assert (
+        main(["lint", "--repo", str(repo), "--changed-since", "origin/master"])
+        == _USAGE
+    )
+    assert "cannot resolve 'origin/master'" in capsys.readouterr().err
+
+
 def test_lint_warning_only_exits_zero(tmp_path):
     repo = _repo(tmp_path)
     (repo / "CLAUDE.md").write_text("## Gate\n`t/m.py:LIMIT` bounds 13 entries.\n")

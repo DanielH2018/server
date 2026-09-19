@@ -151,8 +151,25 @@ def lint_sections(repo: Path, unit_keys: set[str] | None) -> list[LintFinding]:
 
 
 def changed_units(repo: Path, since: str) -> set[str]:
-    """The sections whose text differs between ``since`` and the working tree."""
+    """The sections whose text differs between ``since`` and the working tree.
+
+    Raises ``ValueError`` when ``since`` names no commit. This is the prek hook's ratchet and
+    it runs against ``origin/master``, which a shallow or freshly cloned checkout may not
+    have: without the check, ``git show`` fails per document, every ``before`` map comes back
+    empty, and every section in the repo reads as changed — the hook then lints the whole
+    tree and reports a wall of errors that names nothing the commit touched.
+    """
     env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    resolved = subprocess.run(
+        ["git", "rev-parse", "--verify", "--quiet", f"{since}^{{commit}}"],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if resolved.returncode != 0:
+        raise ValueError(f"cannot resolve {since!r}")
     changed: set[str] = set()
     for doc in repo_docs(repo):
         rel = doc.relative_to(repo).as_posix()

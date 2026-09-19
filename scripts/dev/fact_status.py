@@ -102,7 +102,11 @@ def cmd_forget(args: argparse.Namespace) -> int:
 
 def cmd_lint(args: argparse.Namespace) -> int:
     repo = Path(args.repo)
-    keys = changed_units(repo, args.changed_since) if args.changed_since else None
+    try:
+        keys = changed_units(repo, args.changed_since) if args.changed_since else None
+    except ValueError as unresolvable:
+        print(unresolvable, file=_sys.stderr)
+        return _USAGE
     findings = lint_sections(repo, keys)
     for f in findings:
         print(f"{'warn ' if f.warn else 'ERROR'} {f.rule:<20} {f.unit}: {f.detail}")
