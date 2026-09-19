@@ -109,3 +109,33 @@ def test_both_retry_windows_fit_inside_the_job_deadline():
 def test_the_deadline_stays_inside_one_cron_period():
     assert DEFAULTS["kuma_status_page_sync_schedule"] == "*/15 * * * *"
     assert DEFAULTS["kuma_status_page_sync_deadline_seconds"] < CRON_PERIOD_SECONDS
+
+
+# The Status Page Sync push monitor's interval in static-monitors.yaml.j2: DOWN fires after
+# this much silence, and its description sends the reader to the newest Job's logs.
+PUSH_MONITOR_SILENCE_SECONDS = 1800
+
+
+def test_a_finished_job_is_reaped_after_its_logs_have_outlived_the_down_window():
+    """A failed Job used to sit in `get pods` as Init:Error until two later failures displaced
+    it — 14h on 2026-09-19, for a run that hit the #2076 wipe (#2120). The TTL must keep the
+    logs past the push monitor's silence window, and must not keep them for days."""
+    doc = yaml.safe_load(render())
+    ttl = doc["spec"]["jobTemplate"]["spec"]["ttlSecondsAfterFinished"]
+    assert ttl == DEFAULTS["kuma_status_page_sync_job_ttl_seconds"]
+    assert ttl > PUSH_MONITOR_SILENCE_SECONDS * 2
+    assert ttl <= 2 * 24 * 3600
+
+
+def test_a_longer_ttl_moves_the_rendered_value():
+    """The rejecting half: a literal in the template would not move with the default."""
+    longer = render(
+        kuma_status_page_sync_job_ttl_seconds=(
+            DEFAULTS["kuma_status_page_sync_job_ttl_seconds"] + 1
+        )
+    )
+    doc = yaml.safe_load(longer)
+    assert (
+        doc["spec"]["jobTemplate"]["spec"]["ttlSecondsAfterFinished"]
+        == DEFAULTS["kuma_status_page_sync_job_ttl_seconds"] + 1
+    )

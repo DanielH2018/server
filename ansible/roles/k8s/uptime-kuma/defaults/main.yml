@@ -173,6 +173,13 @@ kuma_status_page_sync_dump_budget_seconds: 350
 # loop exits with its own `kuma read failed` diagnostic rather than being killed mid-attempt
 # by the deadline — a deadline kill reports DeadlineExceeded and says nothing about Kuma.
 kuma_status_page_sync_dump_attempt_seconds: 15
+# How long a finished Job — and so its pods and logs — stays visible. Without a TTL a failed
+# Job sits in `get pods` as Init:Error until two LATER failures displace it, which is how one
+# run that hit the #2076 monitor wipe read as a live fault 14h later (#2120). The Status Page
+# Sync push monitor goes DOWN after 30 min of silence and its description sends the reader to
+# the newest Job logs, so the TTL has to outlive that window with room to be read; a day does,
+# while `failedJobsHistoryLimit: 2` still caps how many sit inside it.
+kuma_status_page_sync_job_ttl_seconds: 86400
 
 # Ordered. Each declared monitor lands in the FIRST group one of whose patterns matches its
 # AutoKuma id (the filename in static-monitors.yaml.j2, not the display name), and group order

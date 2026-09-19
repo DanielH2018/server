@@ -316,6 +316,15 @@ It also starts from the LIVE page and replaces one key, because `saveStatusPage`
 whole object and a hand-built document blanks `description`, `theme`, `published` and
 `domainNameList`.
 
+### An `Init:Error` sync pod is retained history, not a live loop
+A failed Job's pods stay in `kubectl get pods` until `ttlSecondsAfterFinished`
+(`kuma_status_page_sync_job_ttl_seconds`, a day) reaps them. Read the pod's age before the
+error: both times this reached the operator (#1344, #2120) every run since the failure had
+completed, and the push monitor had re-beaten. The `render` stage's message names the stage
+to look at — `monitor list is empty` means Kuma answered with no monitors (AutoKuma
+mid-reconcile, or a wipe like #2076), `unreadable monitor list` means the dump wrote a shape
+the renderer does not know.
+
 ### A path-only route loses to a long enough Host() rule
 Traefik ranks routers by rule length. `Homelab Edge (all-clear)` probes the edge self-check
 path, whose rule `PathPrefix(`/.well-known/traefik-edge-selfcheck`)` is 48 characters — and

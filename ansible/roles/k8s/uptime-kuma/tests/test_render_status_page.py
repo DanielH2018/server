@@ -163,3 +163,21 @@ def test_server_echoed_monitor_fields_do_not_count_as_a_change(tmp_path):
         for monitor in group["monitorList"]:
             monitor.update({"type": "http", "sendUrl": 0})
     assert run(tmp_path, page=page) is None
+
+
+def test_an_empty_monitor_list_fails_and_names_the_list_as_empty(tmp_path):
+    """A valid empty map is what `kuma monitor list` returns mid-wipe (#2076, 2026-09-18 22:45).
+
+    The stage must still fail — the page is left alone and the beat never runs — but the
+    message has to say EMPTY, because "unreadable" sent the reader to the dump stage.
+    """
+    with pytest.raises(SystemExit) as excinfo:
+        run(tmp_path, monitors={})
+    assert "monitor list is empty" in str(excinfo.value)
+    assert "unreadable" not in str(excinfo.value)
+    assert not (tmp_path / "desired.json").exists()
+
+    # Only an empty MAP or ARRAY is "empty"; an empty string is still the wrong shape.
+    with pytest.raises(SystemExit) as excinfo:
+        run(tmp_path, monitors="")
+    assert "expected object or array" in str(excinfo.value)
