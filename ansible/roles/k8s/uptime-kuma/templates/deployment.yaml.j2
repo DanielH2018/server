@@ -141,6 +141,20 @@ spec:
             # once with `-e autokuma_k8s_on_delete=keep`, checked, and then redeployed at the
             # committed default. Only `keep` is safe to pass that way — it is the value that
             # cannot destroy history.
+            #
+            # DECIDED: `delete` stays, with the blast radius it has (#2076, 2026-09-19). An
+            # entity that fails to PARSE counts as removed, and a monitor whose reference
+            # (notification_name_list, tag_names, parent_name) does not resolve fails to parse
+            # too — so one bad shared entity deletes every monitor that names it, with its
+            # history. It did, twice: 107 monitors on 2026-09-18 (a notification Tera could
+            # not parse) and 23 on 2026-09-19 (tags referenced by display name, not id).
+            # Automatic pruning is kept because a retired declaration otherwise outlives its
+            # file forever (monitors 300/301 after E7), and history here is in the no-backup
+            # tier by design. What holds the line instead is guards on the declarations:
+            # every reference resolves to a declared entity id, no Tera syntax reaches an
+            # entity value outside a raw block, and applyExisting is declared —
+            # ansible/tests/services/test_kuma_static_monitors.py and
+            # test_kuma_tags_and_descriptions.py. Full account in this role's CLAUDE.md.
             - name: AUTOKUMA__ON_DELETE
               value: {{ autokuma_k8s_on_delete }}
           # Per-container, not pod-level: the uptime-kuma container in this same pod
