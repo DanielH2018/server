@@ -17,13 +17,6 @@ from functools import partial
 
 import yaml
 
-# Reach the modules under test: pytest prepends only this file's OWN directory, and
-# pyproject's `pythonpath` is a pytest setting the bootstrap guard does not accept.
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
-
 # Package-qualified, as `_land_fakes.py` reaches `land_lib.tools`: a bare `import
 # rotation_tools` binds a SECOND module object in a pytest session, since the module under
 # test reaches the same file as `secrets_mgmt.rotation_tools`.

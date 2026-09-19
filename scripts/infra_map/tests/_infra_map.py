@@ -5,13 +5,6 @@ with defaults, so a test states only the field it is about. Nothing here needs a
 a cluster, or ssh.
 """
 
-import sys as _sys
-from pathlib import Path as _Path
-
-# The module under test lives one directory up; pytest resolves it through `pythonpath`,
-# and this bootstrap keeps the import honest outside pytest (the bootstrap guard checks).
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
-
 import gen_infra_map as g
 
 
