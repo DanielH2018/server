@@ -11,19 +11,24 @@ server-side claim below is history, kept because the two instances still share o
 the port split only makes sense read together.
 
 ## At a glance
-- **Image:** `ghcr.io/wg-easy/wg-easy:14@sha256:5f264…` — **pinned to the v14 tag + digest** (the
-  bcrypt `PASSWORD_HASH` auth model). The `:14` keeps Renovate tracking the major (so it can offer a
-  v15 bump as a deliberate PR); the digest keeps it immutable within v14.x. The k8s instance has
-  since taken v15 through its setup wizard; this one stays on v14, and a v15 bump here is a manual
-  migration (the wizard is the only import path — see `roles/k8s/wg-easy/defaults/main.yml`), not a
-  redeploy.
-- **Host:** daniel-pi
-- **UI port:** 51821 · **URL:** `http://<pi-lan-ip>:51821`
-- **WireGuard UDP port:** `udp_port` — **51822 here, 51820 on the k8s instance**
-  (both sit behind one public IP/router, so the listen ports must differ).
-- **Networks:** proxy
-- **Depends on:** traefik, authelia (`meta/deps.yml`)
-- **Config in:** `ansible/inventory/host_vars/daniel-pi.yml` → `containers_list`
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's compose template, tasks, meta/deps.yml or containers_list entry. -->
+- **Deploy tag:** `--tags "wg-easy" -e target=daniel-pi`
+- **Image:** `ghcr.io/wg-easy/wg-easy` (`wg-easy`)
+- **Entry:** `host_vars/daniel-pi.yml` → port `51821`, UDP port `51822`, networks `proxy`, no
+  Authelia
+- **Depends on:** `traefik`, `authelia` (`meta/deps.yml`)
+- **Config-change wiring:** none — the compose file is the only config, and a compose change
+  recreates on its own
+<!-- /generated_from -->
+
+- **Pin policy:** **the v14 tag + digest** in the compose template (the bcrypt `PASSWORD_HASH`
+  auth model). The `:14` keeps the major visible (a v15 bump is a deliberate PR); the digest keeps
+  it immutable within v14.x. The k8s instance has since taken v15 through its setup wizard; this
+  one stays on v14, and a v15 bump here is a manual migration (the wizard is the only import path
+  — see `roles/k8s/wg-easy/defaults/main.yml`), not a redeploy.
+- **URL:** `http://<pi-lan-ip>:51821` (the entry's `port`).
+- **Why the UDP port is 51822:** the k8s instance listens on 51820, and both sit behind one
+  public IP/router, so the listen ports must differ.
 
 ## Notable
 - **Exposure is host-driven** via `expose.yml.j2` + `expose_mode`. The Pi runs `expose_mode: lan`:

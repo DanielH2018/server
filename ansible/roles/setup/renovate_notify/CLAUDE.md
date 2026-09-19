@@ -28,6 +28,13 @@ a real Discord post. That is deliberate: activation is fully IaC and posts the c
 once. It also means a deploy of this role is never silent, unlike its sibling, which has no
 run-once handler because its run costs money and changes the fleet.
 
+## At a glance
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates or playbook entry. -->
+- **Applied by:** `initial_setup.yml --tags "renovate_notify"` when `inventory_hostname ==
+  renovate_notify_host`
+- **Timer:** `renovate-notify.timer` (`OnCalendar=*-*-* 13:00:00`)
+<!-- /generated_from -->
+
 ## What it watches, and why each arm exists
 
 Three signals, all read from the same repo, each blind to what the others see:

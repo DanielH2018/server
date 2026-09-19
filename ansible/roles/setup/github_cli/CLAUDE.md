@@ -6,6 +6,13 @@ PRIVATE dotfiles repo and the deployer can call the GitHub API authenticated. Ap
 `initial_setup.yml` (`--tags github_cli`) where `has_github_cli` is set, before
 `chezmoi_setup`.
 
+## At a glance
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates or playbook entry. -->
+- **Applied by:** `initial_setup.yml --tags "github_cli"` when `has_github_cli`
+- **Crons / timers:** none (no `ansible.builtin.cron` task in `tasks/`, no
+  `templates/*.timer.j2`)
+<!-- /generated_from -->
+
 - **The login itself is interactive and stays a hand step.** The role checks `gh auth status`
   at the end and reports when a login is still required; it cannot perform one. Until it is
   done, `chezmoi_setup` fails at the clone and `gitops_deploy`'s CI gate runs anonymous

@@ -11,6 +11,14 @@ Makes a host able to run VMs. Deploys the staging cluster's substrate; see
 - **Exit criterion:** `virsh --connect qemu:///system version` succeeds as `ubuntu`. The
   role asserts it rather than leaving it to the operator.
 
+## At a glance
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates or playbook entry. -->
+- **Applied by:** `initial_setup.yml --tags "hypervisor"`
+- **Crons (1):**
+  - `Full etcd restore drill in a throwaway guest` — `{{ etcd_drill_full_cron.split()[0] }} {{
+    etcd_drill_full_cron.split()[1] }} {{ etcd_drill_full_cron.split()[2] }} * *`
+<!-- /generated_from -->
+
 ## The staging guest
 
 `guest.yml` builds and starts `daniel-stage`: 8 GiB, 4 vCPU, a 100 GB qcow2 converted from

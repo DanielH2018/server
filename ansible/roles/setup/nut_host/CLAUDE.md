@@ -6,6 +6,14 @@ when the primary declares FSD. The primary `upsd`/`upsmon` is the `k8s/nut` pod,
 `ups_host`; `ansible/roles/k8s/nut/CLAUDE.md` owns the chain end to end and this file covers
 only what runs on the host. Repo-root `CLAUDE.md` has the conventions.
 
+## At a glance
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates or playbook entry. -->
+- **Applied by:** `initial_setup.yml --tags "nut_host"` when `inventory_hostname == ups_host or
+  nut_host_secondary_armed | bool`
+- **Crons (1):**
+  - `UPS secondary watchdog` — `*/{{ nut_host_watchdog_interval_minutes }} * * * *`
+<!-- /generated_from -->
+
 ## Where it runs
 - A setup-plane role: `ansible/initial_setup.yml` includes it, `deploy.yml` does not, and
   `deploy.sh --tags nut_host` exits 2 having deployed nothing. Apply it with

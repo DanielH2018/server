@@ -5,6 +5,13 @@ host's own age keypair so it can decrypt `ansible/vars/secrets.yml`. **Not a con
 role** — a host-setup role under `ansible/roles/setup/`, run by `initial_setup.yml`, not
 `deploy.yml`. See repo-root `CLAUDE.md` (§ Secrets Management) for the bigger picture.
 
+## At a glance
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates or playbook entry. -->
+- **Applied by:** `bootstrap.yml --tags "sops_setup"`; `initial_setup.yml --tags "sops_setup"`
+- **Crons / timers:** none (no `ansible.builtin.cron` task in `tasks/`, no
+  `templates/*.timer.j2`)
+<!-- /generated_from -->
+
 ## Where it runs
 - In `ansible/initial_setup.yml`, after [[config_files]] / [[initial_setup]] — every host.
 - `uv run ansible-playbook ansible/initial_setup.yml --tags "sops_setup"`.

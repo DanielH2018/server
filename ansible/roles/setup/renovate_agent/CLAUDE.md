@@ -13,6 +13,13 @@ Runs on `renovate_agent_host` (`inventory/group_vars/all.yml`, daniel-box). Invo
 uv run ansible-playbook ansible/initial_setup.yml --tags renovate_agent
 ```
 
+## At a glance
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates or playbook entry. -->
+- **Applied by:** `initial_setup.yml --tags "renovate_agent"` when `inventory_hostname ==
+  renovate_agent_host`
+- **Timer:** `renovate-agent.timer` (`OnCalendar={{ renovate_agent_oncalendar }}`)
+<!-- /generated_from -->
+
 ## Arming it
 
 The role installs the script, config, prompt and units on every run.

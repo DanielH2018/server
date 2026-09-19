@@ -4,6 +4,13 @@
 checkout. It serves the page and API `roles/k8s/deploy-ui` routes to, and runs `land.sh`,
 `deploy.sh`, `probe.py releases` and `gh` exactly as the operator would from a terminal.
 
+## At a glance
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates or playbook entry. -->
+- **Applied by:** `initial_setup.yml --tags "deploy_ui"`
+- **Crons / timers:** none (no `ansible.builtin.cron` task in `tasks/`, no
+  `templates/*.timer.j2`)
+<!-- /generated_from -->
+
 ## Trust
 
 The daemon does no authentication. Two gates stand in front of it; removing either is a
