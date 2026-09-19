@@ -203,6 +203,9 @@ def check_lock(repo: Path, lock_path: Path) -> list[Finding]:
         # running CPython. Report the move and skip the comparison rather than grade every
         # atom in the unit OUT for an upgrade that changed nothing about the code. A row with
         # no recorded version recorded nothing, so nothing moved.
+        # DECIDED: this skips the whole unit, not only the hash comparison. `unrecorded-atom`
+        # would still be valid here — set membership does not depend on the interpreter — but
+        # its remedy is the same `verify` run, and one actionable finding beats several.
         recorded_python = rec.get("python")
         if recorded_python is not None and recorded_python != _PYTHON:
             findings.append(
@@ -264,7 +267,7 @@ def check_lock(repo: Path, lock_path: Path) -> list[Finding]:
                     unit,
                     atom,
                     "unrecorded-atom",
-                    "the section cites it and the lock has no hash for it; re-run `fact_status.py verify` on the section",
+                    "the section cites it and the lock has no hash for it; re-run `fact_status.py verify` on the section, or fix the citation if verify reports it skipped",
                 )
             )
     return findings
