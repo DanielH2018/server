@@ -74,10 +74,12 @@ def _synthetic_setup_inventory(tmp_path):
 def test_setup_role_hosts_reads_the_when_gate_per_host(_synthetic_setup_inventory):
     """The derivation itself, pinned against a synthetic tree rather than live vars that can
     be armed/disarmed (nut_host_secondary_armed, has_gitops) for reasons unrelated to this
-    logic."""
+    logic. The gateless role is read against a roles dir with no tasks tree, so this pins
+    the playbook-level read alone; the tasks-level read has its own pair in
+    test_land_reach_block_gate.py."""
     playbook, all_vars, host_vars_dir = _synthetic_setup_inventory
     assert land_reach.setup_role_hosts(
-        "config_files", playbook, all_vars, host_vars_dir
+        "config_files", playbook, all_vars, host_vars_dir, playbook.parent / "roles"
     ) == frozenset({"daniel-box", "daniel-server", "daniel-pi"})
     assert land_reach.setup_role_hosts(
         "gitops_deploy", playbook, all_vars, host_vars_dir
