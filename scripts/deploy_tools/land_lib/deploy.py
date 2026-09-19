@@ -168,31 +168,51 @@ def deploy_by_host(ln: Landing, at: str = "") -> int:
                 Verdict.DEPLOY_FAILED,
             )
         lines = [x for x in r.stdout.splitlines() if x.strip()]
+    local = t.hostname()
     if not lines:
+        if _skip_tick_applied(ln, local, ln.resolved_tags):
+            return 0
         return t.deploy(
             o.primary, ln.resolved_tags, None, observe=ln.note_in_flock_wait, at=at
         )
-    local = t.hostname()
     for line in lines:
         host, _, host_tags = line.partition("\t")
         if host in ln.deployed_hosts:
             continue
+        tags = [x for x in host_tags.split(",") if x]
         target = None if host == local else host
         if target:
             say(
                 f"{host_tags}: declared on {host}, deploying there with -e target={host}"
             )
-        rc = t.deploy(
-            o.primary,
-            [x for x in host_tags.split(",") if x],
-            target,
-            observe=ln.note_in_flock_wait,
-            at=at,
-        )
+        # Only the local host's tags: the tick's broad apply names no `-e target=`, so its
+        # marker says nothing about what the Pi runs (issue #929 is the shape of the bug).
+        elif _skip_tick_applied(ln, host, tags):
+            ln.deployed_hosts.add(host)
+            continue
+        rc = t.deploy(o.primary, tags, target, observe=ln.note_in_flock_wait, at=at)
         if rc != DEPLOY_OK:
             return rc
         ln.deployed_hosts.add(host)
     return 0
+
+
+def _skip_tick_applied(ln: Landing, host: str, tags: list[str]) -> bool:
+    """Say so and return True when the tick's own apply already deployed `tags` on `host`.
+
+    Step 5 exists for what the tick DEFERRED. A deploy-plane PR whose tick applied the whole
+    play at the merge commit deferred nothing, and the deploy this step would run is the
+    same render again -- paid for with a second wait on the tree lock, and on 2026-09-19
+    with an exit 77 that graded live work `deploy-failed` (issue #2094). Step 6 still gates
+    the tags and still reads the deployer's markers; only the `deploy.sh` run is skipped.
+    """
+    if not ln.tick_already_deployed(ln.merge_sha, tags):
+        return False
+    say(
+        f"{','.join(tags)}: the tick already applied these on {host} "
+        f"({ln.state('broad_applied')}); not deploying them again"
+    )
+    return True
 
 
 def deploy_with_lock_retry(ln: Landing, at: str = "") -> int:

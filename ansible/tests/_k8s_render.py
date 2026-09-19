@@ -8,16 +8,8 @@ Rendering goes through validate.k8s_manifests' own machinery rather than a secon
 what a test considers a manifest cannot drift from what that validator does.
 """
 
-import sys
-
-from _helpers import REPO
-
-_REPO = REPO
-sys.path.insert(0, str(_REPO / "scripts"))
-
-from lib import yaml_fast  # noqa: E402
-
-from validate.k8s_manifests import (  # noqa: E402 — needs the path insert above
+from lib import yaml_fast
+from validate.k8s_manifests import (
     ALL_VARS,
     ANSIBLE,
     BASE_CONTEXT,

@@ -3,12 +3,12 @@
 FreshRSS with a small nginx feed-cache sidecar. See repo-root `CLAUDE.md`.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
 - **Deploy tag:** `--tags "freshrss"`
 - **Images:** `lscr.io/linuxserver/freshrss` (`freshrss_k8s_image`), `nginx`
   (`freshrss_k8s_cache_image`)
 - **Route:** `freshrss.<domain>` · `freshrss.local.<domain>`, Authelia one_factor
-- **Claim:** `freshrss-config`
+- **Claim:** `freshrss-config` (weekly -> B2 (default target))
 - **Auto-deploy:** eligible (`k8s_autodeploy: true`)
 <!-- /generated_from -->
 

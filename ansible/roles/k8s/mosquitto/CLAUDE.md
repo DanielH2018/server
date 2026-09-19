@@ -4,11 +4,11 @@ Eclipse Mosquitto, the broker every Zigbee device event and HA automation trigge
 web UI, no route — infra role.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
 - **Deploy tag:** `--tags "mosquitto"`
 - **Image:** `eclipse-mosquitto` (`mosquitto_k8s_image`)
 - **Route:** none (no `templates/ingressroute.yaml.j2`)
-- **Claim:** `mosquitto-data`
+- **Claim:** `mosquitto-data` (no backup (StorageClass longhorn-nobackup))
 - **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — dependency edges — MQTT broker for
   zigbee2mqtt/home-assistant; no intra-tick ordering. ALSO Recreate + its own PVC — two
   independent reasons

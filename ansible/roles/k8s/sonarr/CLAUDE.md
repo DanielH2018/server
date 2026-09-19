@@ -5,12 +5,13 @@ RWX volume with the rest of the \*arr stack. See repo-root `CLAUDE.md` for share
 conventions.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
 - **Deploy tag:** `--tags "sonarr"`
 - **Images:** `lscr.io/linuxserver/sonarr` (`sonarr_k8s_image`), `alpine`
   (`sonarr_k8s_probe_image`), `ghcr.io/onedr0p/exportarr` (`sonarr_exportarr_image`)
 - **Route:** `sonarr.<domain>` · `sonarr.local.<domain>`, Authelia one_factor
-- **Claims:** `sonarr-config`, `media-data`
+- **Claims:** `sonarr-config` (weekly -> B2 (default target)), `media-data` (not Longhorn
+  (media-local))
 - **Auto-deploy:** eligible (`k8s_autodeploy: true`)
 <!-- /generated_from -->
 

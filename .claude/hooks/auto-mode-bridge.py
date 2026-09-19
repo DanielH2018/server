@@ -73,8 +73,8 @@ _DEPLOY_EXITS = {
     77: (
         "deploy.sh exit 77: the snapshot worktree could not be created, so NOTHING was "
         "deployed. The playbook renders from a detached worktree of HEAD under "
-        "/tmp/homelab-deploy-snapshots — check that directory is writable and that "
-        "`git worktree add --detach` works here; retrying alone changes nothing."
+        "/tmp/homelab-deploy-snapshots; the message carries the failing command's own "
+        "stderr (the `fatal:` line), so fix what it names — retrying alone changes nothing."
     ),
     76: (
         "deploy.sh exit 76: flock failed on the lock file ITSELF, so NOTHING was deployed. "

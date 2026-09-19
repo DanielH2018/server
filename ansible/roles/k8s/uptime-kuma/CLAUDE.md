@@ -4,13 +4,14 @@ Uptime Kuma plus an AutoKuma sidecar that creates monitors and notifications fro
 role's rendered declarations. See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
 - **Deploy tag:** `--tags "uptime-kuma"`
 - **Images:** `louislam/uptime-kuma` (`uptime_kuma_k8s_image`), `ghcr.io/bigboot/autokuma`
   (`autokuma_k8s_image`), `ghcr.io/bigboot/kuma` (`kuma_cli_k8s_image`), `python`
   (`kuma_status_page_sync_image`)
 - **Route:** `uptime-kuma.<domain>` · `uptime-kuma.local.<domain>`, Authelia one_factor
-- **Claims:** `uptime-kuma-data`, `autokuma-data`
+- **Claims:** `uptime-kuma-data` (no backup (listed in k3s_longhorn_nobackup_volumes)),
+  `autokuma-data` (no backup (listed in k3s_longhorn_nobackup_volumes))
 - **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — observability — the alerting spine; a
   broken deploy cannot page about being broken. ALSO Recreate + RWO volume-claim PVC
   (migrating-state shape) — two independent reasons. COUPLING NOTE for a future promotion: two
@@ -314,6 +315,15 @@ SQLite — the same Longhorn volume, and the same shape, as the notification-rew
 It also starts from the LIVE page and replaces one key, because `saveStatusPage` writes the
 whole object and a hand-built document blanks `description`, `theme`, `published` and
 `domainNameList`.
+
+### An `Init:Error` sync pod is retained history, not a live loop
+A failed Job's pods stay in `kubectl get pods` until `ttlSecondsAfterFinished`
+(`kuma_status_page_sync_job_ttl_seconds`, a day) reaps them. Read the pod's age before the
+error: both times this reached the operator (#1344, #2120) every run since the failure had
+completed, and the push monitor had re-beaten. The `render` stage's message names the stage
+to look at — `monitor list is empty` means Kuma answered with no monitors (AutoKuma
+mid-reconcile, or a wipe like #2076), `unreadable monitor list` means the dump wrote a shape
+the renderer does not know.
 
 ### A path-only route loses to a long enough Host() rule
 Traefik ranks routers by rule length. `Homelab Edge (all-clear)` probes the edge self-check

@@ -4,12 +4,13 @@ Scrutiny's web UI plus a collector DaemonSet and an InfluxDB backend that holds 
 SMART trend history. See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
 - **Deploy tag:** `--tags "scrutiny"`
 - **Images:** `ghcr.io/analogj/scrutiny` (`scrutiny_k8s_web_image`), `ghcr.io/analogj/scrutiny`
   (`scrutiny_k8s_collector_image`), `influxdb` (`scrutiny_k8s_influxdb_image`)
 - **Route:** `scrutiny.<domain>` · `scrutiny.local.<domain>`, Authelia one_factor
-- **Claims:** `scrutiny-influxdb-data`, `scrutiny-web-config`
+- **Claims:** `scrutiny-influxdb-data` (no backup (listed in k3s_longhorn_nobackup_volumes)),
+  `scrutiny-web-config` (weekly -> B2 (default target))
 - **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — stateful / manual-upgrade — rolling
   branch tag on a stateful monitor, deliberately manual. ALSO Recreate + RWO volume-claim PVC
   (migrating-state shape) — two independent reasons

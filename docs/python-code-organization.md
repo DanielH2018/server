@@ -107,8 +107,11 @@ from lib.repo_paths import REPO
 The bootstrap goes on the module that needs it, never on a shared module, because a single
 insert in an imported module only works for whoever imports it first.
 `scripts/tests/test_script_bootstraps_present.py` resolves the AST of every `scripts/**`
-module and evaluates what each insert actually puts on the path, so a missing or wrong
-bootstrap fails CI. It does not cover `ansible/roles/**/files/`; those modules resolve their
+module outside a `tests/` directory and evaluates what each insert actually puts on the
+path, so a missing or wrong bootstrap fails CI. A module under `tests/` — a `test_*.py` or a
+`_*.py` fixture beside it — has pytest as its only invoker, so
+`scripts/tests/test_test_module_bootstraps_present.py` refuses the insert there instead
+(#2061, #2099). It does not cover `ansible/roles/**/files/`; those modules resolve their
 siblings by bare name from `sys.path[0]`, which is correct by construction on the host.
 
 `pythonpath` in `pyproject.toml` is a pytest setting and nothing else reads it. ty resolves the

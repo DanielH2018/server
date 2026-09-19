@@ -1,8 +1,9 @@
 """Guard 3: every test module importing a repo module by bare name carries its own bootstrap.
 
-This is the test-module half of `test_script_bootstraps_present.py`, which skips exactly the
-files this one reads (`test_*.py` and `conftest.py`). The two are jointly exhaustive over the
-repo's Python.
+This is the pytest-only half of `test_script_bootstraps_present.py`, which skips exactly the
+files this one reads: `test_*.py`, `conftest.py`, and every module under a `tests/` directory,
+fixture modules included. `is_pytest_only` there is the one predicate both consult, so the two
+are jointly exhaustive over the repo's Python by construction.
 
 pytest puts a test module's OWN directory on `sys.path` and nothing else, plus the
 `pythonpath` entries in `pyproject.toml`. A test module importing anything else by bare name
@@ -29,6 +30,12 @@ bootstrap for a directly-invoked script; this guard's `find_redundant_test_boots
 it where pytest is the only invoker. The rule is redundancy, not absence: an insert of
 `scripts/diagnostics` in `test_ui_login.py` still resolves a directory `pythonpath` deliberately
 omits, and passes on that merit rather than by exclusion.
+
+A `tests/_*.py` fixture module is a pytest-only module too: nothing but a `test_*.py` imports
+it. Until #2099 it fell between the guards — Guard 2 read it as a script and mandated the
+insert, this guard never collected it — so seven of them kept the insert #2061 deleted from
+their importers. `collect_test_modules` now takes every tracked module `is_pytest_only`
+accepts under a `testpaths` entry, and the fixture modules answer to both rules above.
 """
 
 import ast
@@ -43,6 +50,7 @@ from test_script_bootstraps_present import (
     _scoped_nodes,
     _sys_path_insert_calls,
     build_import_index,
+    is_pytest_only,
 )
 
 REPO = Path(__file__).resolve().parents[2]
@@ -102,10 +110,11 @@ def repo_module_dirs() -> dict[str, set[Path]]:
 
 
 def collect_test_modules() -> list[Path]:
-    """Every `test_*.py` and `conftest.py` pytest collects under `testpaths`."""
+    """Every pytest-only module under `testpaths`: what pytest collects, plus the fixture
+    modules those collect from (`is_pytest_only` in Guard 2 is the boundary)."""
     found: set[Path] = set()
     for file in _tracked_python():
-        if not (file.name.startswith("test_") or file.name == "conftest.py"):
+        if not is_pytest_only(file.relative_to(REPO)):
             continue
         if any(base == file.parent or base in file.parents for base in TESTPATH_DIRS):
             found.add(file.resolve())
@@ -239,8 +248,10 @@ def test_the_census_contains_the_modules_this_guard_exists_for():
     A census that globs for its own subject returns an empty set the moment those files move,
     and an `all(...)` over nothing passes. Four of these are the modules issue #1333 is about
     — `test_ui_login.py` is the one that broke, and three siblings carry the insert it
-    borrowed. The last two pin the two other census shapes: a `scripts/tests` guard, and a
-    `conftest.py` outside `scripts/`.
+    borrowed. The next two pin two other census shapes: a `scripts/tests` guard, and a
+    `conftest.py` outside `scripts/`. The last two are fixture modules, one under `scripts/`
+    and one under `ansible/tests/` — the shape #2099 added, which a census narrowed back to
+    `test_*.py` would drop without moving the count past 200.
     """
     census = {p.relative_to(REPO).as_posix() for p in collect_test_modules()}
     required = frozenset(
@@ -251,6 +262,8 @@ def test_the_census_contains_the_modules_this_guard_exists_for():
             "scripts/diagnostics/tests/test_probe_longhorn_blocks.py",
             "scripts/tests/test_script_bootstraps_present.py",
             "ansible/tests/conftest.py",
+            "scripts/deploy_tools/tests/_land_fakes.py",
+            "ansible/tests/_k8s_render.py",
         }
     )
     assert required <= census, sorted(required - census)

@@ -12,7 +12,7 @@ listener off the LAN. Tempo's second port (otlp-grpc 4317) has no `hostPort` on 
 the collector owns 4317, and two hostPorts on one number wedge a pod in `Pending`.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
 - **Deploy tag:** `--tags "claude-otel"`
 - **Images:** `otel/opentelemetry-collector-contrib` (`claude_otel_collector_image`),
   `grafana/loki` (`claude_otel_loki_image`), `prom/prometheus`
@@ -20,7 +20,9 @@ the collector owns 4317, and two hostPorts on one number wedge a pod in `Pending
   `registry.k8s.io/kube-state-metrics/kube-state-metrics`
   (`claude_otel_kube_state_metrics_image`), `grafana/tempo` (`claude_otel_tempo_image`)
 - **Route:** `grafana.<domain>` · `grafana.local.<domain>`, Authelia one_factor
-- **Claims:** `grafana-data`, `loki-data`, `prometheus-data`, `tempo-data`
+- **Claims:** `grafana-data` (no backup (StorageClass longhorn-nobackup)), `loki-data` (no
+  backup (StorageClass longhorn-nobackup)), `prometheus-data` (no backup (StorageClass
+  longhorn-nobackup)), `tempo-data` (no backup (StorageClass longhorn-nobackup))
 - **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — observability — Claude Code's own
   telemetry stack, six sub-images across several Deployments. ALSO each stateful component
   (loki/grafana/prometheus/tempo) is Recreate + its own PVC — compounding, not

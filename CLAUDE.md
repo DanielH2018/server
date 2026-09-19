@@ -34,7 +34,8 @@ docs/             # Runbooks, design specs, security notes
 > carries its own aliased insert (`_sys.path.insert(0, _Path(__file__).resolve().parents[1])`);
 > copy that from a sibling. It goes on the module that needs it, never on a shared one — a
 > single bootstrap in an imported module only works for whoever imports it first.
-> A `test_*.py` module carries none of this: pytest is its only invoker, and `pythonpath`
+> A module under a `tests/` directory carries none of this — a `test_*.py`, a `conftest.py`
+> or a `_*.py` fixture module a test imports: pytest is its only invoker, and `pythonpath`
 > lists `scripts/` and every subdirectory but `validate` and `diagnostics`. A test under
 > those two inserts its own package directory; any other insert `pythonpath` already
 > supplies is dead weight, and `scripts/tests/test_test_module_bootstraps_present.py`
@@ -137,7 +138,7 @@ Its non-zero exits arrive as a bare `Exit code N`. Every member of `DEPLOY_SH_NO
 (`scripts/deploy_tools/exit_codes.py`) means **nothing was deployed** — a resume point rather
 than a playbook failure (retry a busy lock, `git pull` a stale tree — never
 `--skip-staleness-check` — deploy by hand on a broad change, check `--list-services` on a tag
-miss, fix the lock file itself on 76, fix the snapshot root on 77, fix the inventory or host
+miss, fix the lock file itself on 76, fix what the captured stderr names on 77, fix the inventory or host
 pattern on 78 — the playbook matched no host, which ansible itself exits 0 for — and run
 `deploy_locks.py plan <tag>` by hand on 79, where the wrapper got no lock list and refused
 rather than order the locks itself).
@@ -517,12 +518,14 @@ The prose stays hand-written; the tunables beside it are re-read from the tree.
 **A role `CLAUDE.md`'s `## At a glance` block is generated the same way, in place.**
 `scripts/docs/gen_role_glance.py` writes one field set per role shape between two
 `generated_from` markers under that heading: a deployed k8s role's deploy tag, image
-repositories, route, claims and auto-deploy stance; a setup role's applying playbook and tag,
-crons and timers; a Pi compose role's deploy tag, image repositories, `containers_list` facts,
-`meta/deps.yml` ordering and `common_config_changed` wiring. The prose below the markers stays
-hand-written. Changing a role's defaults, templates, tasks, playbook entry or
-`containers_list` entry fails `scripts/docs/tests/test_gen_role_glance.py` until you re-run
-the generator and commit the block. The docs-refresh cron does not run it: the cron stages only the two generated trees,
+repositories, route, claims with the Longhorn backup tier of each, and auto-deploy stance; a
+setup role's applying playbook and tag, crons and timers; a Pi compose role's deploy tag,
+image repositories, `containers_list` facts, `meta/deps.yml` ordering and
+`common_config_changed` wiring. The prose below the markers stays hand-written. Changing a
+role's defaults, templates, tasks, playbook entry or `containers_list` entry — or, for a
+claim's tier, its StorageClass or the k3s role's `k3s_longhorn_*_volumes` lists — fails
+`scripts/docs/tests/test_gen_role_glance.py` until you re-run the generator and commit the
+block. The docs-refresh cron does not run it: the cron stages only the two generated trees,
 and a write under `ansible/roles/` would leave the primary checkout dirty.
 
 **Why this one gate is not left to the cron**, when a stale `docs/reference/` page is. A
