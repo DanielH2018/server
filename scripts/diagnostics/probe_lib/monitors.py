@@ -206,7 +206,10 @@ def parse_declared_monitors(text, variables=None):
         kind = _ENTITY_TYPE_RE.search(line)
         if not name or not kind:
             continue
-        if kind.group(1) == "notification":  # not a monitor; never in monitor_status
+        if kind.group(1) in (
+            "notification",
+            "tag",
+        ):  # not monitors; never in monitor_status
             continue
         interval = _ENTITY_INTERVAL_RE.search(line)
         if interval and variables is None and not interval.group(1).isdigit():

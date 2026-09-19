@@ -20,6 +20,10 @@ import re
 from _helpers import ANSIBLE
 from _kuma_entities import ROLE_DEFAULTS, TEMPLATE, _entities
 
+# Entity types the Secret declares that are not monitors: the two notifications and the two
+# tags the notification templates read. Every guard below that iterates monitors skips these.
+NOT_MONITORS = frozenset({"notification", "tag"})
+
 
 def test_every_entity_parses_and_declares_a_type():
     entities = _entities()
@@ -35,7 +39,7 @@ def test_every_monitor_is_linked_to_the_discord_notification():
     # The silent-failure mode: an unlinked monitor is created and never pages. Notifications
     # themselves are the link's target, not carriers of one.
     for name, entity in _entities().items():
-        if entity["type"] == "notification":
+        if entity["type"] in NOT_MONITORS:
             continue
         assert "discord" in entity.get("notification_name_list", []), (
             f"{name}: monitor has no discord notification link — it would never page"
@@ -287,7 +291,7 @@ def test_email_tier_membership_is_exactly_declared():
     named = {
         e["name"]
         for e in _entities().values()
-        if e["type"] != "notification"
+        if e["type"] not in NOT_MONITORS
         and "email" in e.get("notification_name_list", [])
     }
     assert named == EMAIL_TIER

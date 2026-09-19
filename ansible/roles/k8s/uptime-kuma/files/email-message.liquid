@@ -1,0 +1,38 @@
+{%- comment -%}
+The plain-text body Kuma mails for every monitor on the "Homelab Alerts (Email)" notification.
+
+Same liquidjs context as discord-message.liquid (renderTemplate in
+server/notification-providers/notification-provider.js), rendered by smtp.js as `customBody`
+with `htmlBody` off: the email tier is the break-glass channel and has to read in any client.
+The Test button and a certificate-expiry warning arrive with both objects null, so the
+first branch prints the bare message. Wrapped in a Tera raw block at embed time, like the
+Discord body (see static-monitors.yaml.j2).
+{%- endcomment -%}
+{%- assign severity = monitorJSON.tags | where: "name", "severity" | map: "value" | first -%}
+{%- assign runbook = monitorJSON.tags | where: "name", "runbook" | map: "value" | first -%}
+{%- if heartbeatJSON == nil -%}
+{{ msg }}
+{%- else -%}
+{{ status }}: {{ monitorJSON.name }}
+
+{% if heartbeatJSON.status == 0 %}What failed{% else %}Status{% endif %}: {{ heartbeatJSON.msg | default: "N/A" }}
+{%- if monitorJSON.description and monitorJSON.description != "" %}
+
+{{ monitorJSON.description }}
+{%- endif %}
+{%- if severity %}
+
+Severity: {{ severity }}
+{%- endif %}
+{%- if hostnameOrURL != "" %}
+Target: {{ hostnameOrURL }}
+{%- endif %}
+{%- if runbook %}
+Runbook: {{ runbook }}
+{%- endif %}
+{%- if heartbeatJSON.status == 1 and heartbeatJSON.lastDownTime %}
+Down since: {{ heartbeatJSON.lastDownTime }} UTC
+{%- endif %}
+
+Local time {{ heartbeatJSON.localDateTime }} {{ heartbeatJSON.timezone }} · type {{ monitorJSON.type }}
+{%- endif -%}
