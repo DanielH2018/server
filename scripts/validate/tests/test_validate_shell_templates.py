@@ -16,6 +16,41 @@ from lib import ansible_jinja_compat as ajc
 from lib import shell_lint as sl
 
 
+# The inputs `to_bool`'s tables name, the inputs `convert_bool.boolean` accepts and `to_bool`
+# does not (the #2074 rows), and the fallback and unhashable shapes outside both.
+_BOOL_INPUTS = [
+    True,
+    False,
+    1,
+    0,
+    "true",
+    "false",
+    "TRUE",
+    "Off",
+    "yes",
+    "no",
+    "on",
+    "off",
+    "1",
+    "0",
+    "",
+    "maybe",
+    "t",
+    "y",
+    "f",
+    "n",
+    2,
+    -1,
+    " True ",
+    1.0,
+    2.0,
+    0.0,
+    None,
+    [],
+    {},
+]
+
+
 @pytest.mark.parametrize(
     ("value", "expected"),
     [
@@ -32,13 +67,40 @@ from lib import shell_lint as sl
         (1, True),
         (0, False),
         ("", False),
-        # Ansible's non-strict boolean() returns False for anything unrecognised rather than
-        # raising — the branch that matters, since plain Jinja would call it True.
+        # `to_bool` returns False for anything outside its tables rather than raising — the
+        # branch that matters, since plain Jinja would call a non-empty string True.
         ("maybe", False),
+        # The rejecting half of #2074: `convert_bool.boolean` accepts these, the `bool` FILTER
+        # does not, and the shim mirrored the wrong one until then.
+        ("t", False),
+        ("y", False),
+        (2, False),
+        (-1, False),
+        (" True ", False),
     ],
 )
 def test_ansible_bool_filter_mirrors_ansible_semantics(value, expected: bool):
     assert ajc.ansible_bool(value) is expected
+
+
+def test_ansible_bool_tables_are_to_bool_tables():
+    """The shim copies the tables rather than importing them (the 190 ms `DECIDED:` in
+    `lib/k8s_context.py`), so this is the pin that fails when ansible-core moves them."""
+    from ansible.plugins.filter import core
+
+    assert ajc.BOOLEANS_TRUE == core._valid_bool_true
+    assert ajc.BOOLEANS_FALSE == core._valid_bool_false
+
+
+@pytest.mark.parametrize("value", _BOOL_INPUTS, ids=repr)
+def test_ansible_bool_agrees_with_ansible_core_to_bool(value):
+    """The real filter is the oracle — a hand-written expected table restates the shim.
+
+    Fails on the day ansible-core 2.23 removes the `== 1` fallback, which is the signal to
+    drop the shim's copy of it."""
+    from ansible.plugins.filter.core import to_bool
+
+    assert ajc.ansible_bool(value) is to_bool(value)
 
 
 def test_shellcheck_batch_attributes_findings_to_the_file_that_has_them(tmp_path):

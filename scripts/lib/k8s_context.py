@@ -56,8 +56,9 @@ def resolve_vars(values: dict, context: dict, passes: int = 5) -> dict:
     # themselves. `to_bool` would make the two paths agree by identity, but importing
     # `ansible.plugins.filter.core` costs ~190 ms and `probe_lib/monitors.py` imports this
     # module — `probe.py monitors` reaches no ansible-core module today (measured 2026-09-18,
-    # `python -X importtime`). The two disagree only on inputs `to_bool` already deprecates
-    # (`t`, `y`, `2`, `' True '`; removed in ansible-core 2.23), which no variable value uses.
+    # `python -X importtime`). The shim copies `to_bool`'s tables and fallback, and
+    # `test_ansible_bool_agrees_with_ansible_core_to_bool` pins the copy to the real filter,
+    # so the two paths agree by test rather than by identity (#2074).
     env.filters["bool"] = ansible_bool
 
     def expand(node, ctx):
