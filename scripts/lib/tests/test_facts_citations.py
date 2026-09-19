@@ -14,7 +14,7 @@ from lib.facts.citations import (
     parse_citations,
     repo_docs,
     sections,
-    top_level_dirs,
+    tracked_files,
 )
 
 _DOC = """intro `scripts/lib/git.py`
@@ -179,38 +179,63 @@ def _init(tmp_path):
     return env
 
 
-def test_top_level_dirs_lists_tracked_roots(tmp_path):
+def test_tracked_files_lists_only_tracked(tmp_path):
     env = _init(tmp_path)
-    for rel in ("a/x.txt", "b/y.txt", "c/z.txt"):
-        (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
-        (tmp_path / rel).write_text("x\n")
-    (tmp_path / "README.md").write_text("root file\n")
-    subprocess.run(
-        ["git", "add", "a", "b", "README.md"], cwd=tmp_path, check=True, env=env
-    )
-    assert top_level_dirs(tmp_path) == frozenset({"a", "b"})
+    (tmp_path / "a").mkdir()
+    (tmp_path / "a" / "x.txt").write_text("x\n")
+    (tmp_path / "a" / "untracked.txt").write_text("y\n")
+    subprocess.run(["git", "add", "a/x.txt"], cwd=tmp_path, check=True, env=env)
+    assert tracked_files(tmp_path) == frozenset({"a/x.txt"})
 
 
-def test_in_tree_is_clean():
-    roots = frozenset({"a"})
-    assert in_tree(Citation("path", "a/x.txt", "a/x.txt", ""), roots)
-    assert in_tree(Citation("path", "a/sub/", "a/sub/", ""), roots)
-    assert in_tree(Citation("symbol", "a/m.py:run", "a/m.py", "run"), roots)
+def test_in_tree_tracked_file_is_clean(tmp_path):
+    env = _init(tmp_path)
+    (tmp_path / "a").mkdir()
+    (tmp_path / "a" / "x.txt").write_text("x\n")
+    subprocess.run(["git", "add", "a/x.txt"], cwd=tmp_path, check=True, env=env)
+    tracked = tracked_files(tmp_path)
+    assert in_tree(Citation("path", "a/x.txt", "a/x.txt", ""), tracked)
 
 
-def test_in_tree_is_flagged():
-    roots = frozenset({"a"})
+def test_in_tree_directory_with_a_tracked_member_is_clean(tmp_path):
+    env = _init(tmp_path)
+    (tmp_path / "a" / "sub").mkdir(parents=True)
+    (tmp_path / "a" / "sub" / "y.txt").write_text("y\n")
+    subprocess.run(["git", "add", "a"], cwd=tmp_path, check=True, env=env)
+    tracked = tracked_files(tmp_path)
+    assert in_tree(Citation("path", "a/sub/", "a/sub/", ""), tracked)
+
+
+def test_in_tree_untracked_file_is_flagged(tmp_path):
+    _init(tmp_path)
+    (tmp_path / "a").mkdir()
+    (tmp_path / "a" / "x.txt").write_text("x\n")
+    # Never `git add`ed: it exists on disk but not in the index.
+    tracked = tracked_files(tmp_path)
+    assert not in_tree(Citation("path", "a/x.txt", "a/x.txt", ""), tracked)
+
+
+def test_in_tree_gitignored_file_is_flagged(tmp_path):
+    env = _init(tmp_path)
+    (tmp_path / ".gitignore").write_text("a/ignored.md\n")
+    (tmp_path / "a").mkdir()
+    (tmp_path / "a" / "ignored.md").write_text("spec\n")
+    subprocess.run(["git", "add", ".gitignore"], cwd=tmp_path, check=True, env=env)
+    tracked = tracked_files(tmp_path)
+    assert not in_tree(Citation("path", "a/ignored.md", "a/ignored.md", ""), tracked)
+
+
+def test_in_tree_out_of_tree_token_is_flagged():
+    tracked = frozenset({"ansible/roles/k8s/traefik/defaults/main.yml"})
     out_of_tree = [
         Citation("path", "origin/master", "origin/master", ""),
-        Citation("path", "defaults/main.yml", "defaults/main.yml", ""),
         Citation("path", "10.42.0.0/16", "10.42.0.0/16", ""),
-        Citation("path", "../CLAUDE.md", "../CLAUDE.md", ""),
     ]
-    assert [c.raw for c in out_of_tree if in_tree(c, roots)] == []
+    assert [c.raw for c in out_of_tree if in_tree(c, tracked)] == []
 
 
 def test_probe_is_always_in_tree():
-    # A probe citation carries no path at all, so the root test cannot apply to it.
+    # A probe citation carries no path at all, so the tracked-set test cannot apply to it.
     assert in_tree(
         Citation("probe", "probe.py kuma-drift", "", "kuma-drift"), frozenset()
     )

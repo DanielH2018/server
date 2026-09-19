@@ -574,11 +574,14 @@ form.
 A `file:line` citation is rejected: a line number moves under every edit above it. Cite the
 symbol or the marker instead.
 
-A citation is support only when its first path segment is a top-level directory of the repo
-(`ansible/`, `scripts/`, `docs/`, `.claude/`), so a doc-relative `defaults/main.yml` is prose
-rather than broken support, and so is a slashed token that names nothing here at all. The
-roots are read from `git ls-files`, not listed. A rejected form stays rejected whatever its
-prefix: a line number is a claim about this tree however it is spelled.
+A citation is support only when it names a **tracked** file, or a directory holding a
+tracked file — so an untracked or gitignored path is prose, not broken support, the same as
+a doc-relative `defaults/main.yml` or a slashed token that names nothing here at all. A
+verdict must not depend on which checkout runs it, and a citation resolving only on the
+machine that happens to have the file on disk (a gitignored spec, an uncommitted draft) is
+exactly the failure this rules out. The tracked set is read from `git ls-files`, not listed.
+A rejected form stays rejected whatever its prefix: a line number is a claim about this tree
+however it is spelled.
 
 `docs/facts.lock` records the hashes each verified section was checked against. The tool
 writes it; a hand edit fails `test_every_recorded_atom_hashes_as_recorded` as tampered.

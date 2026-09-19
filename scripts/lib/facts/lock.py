@@ -20,7 +20,7 @@ from .citations import (
     parse_citations,
     repo_docs,
     sections,
-    top_level_dirs,
+    tracked_files,
 )
 from .relations import Edb
 
@@ -110,17 +110,17 @@ def lock_tampered(path: Path) -> bool:
 def _repo_citations(repo: Path) -> dict[str, list[Citation]]:
     """Every section's IN-TREE citations, keyed by unit.
 
-    The roots are read once per call: an out-of-tree span (``origin/master``, a doc-relative
-    ``defaults/main.yml``) parses as a path citation but is not support, so it never reaches
-    the lock and never grades a section.
+    The tracked set is read once per call: an out-of-tree span (``origin/master``, an
+    untracked or gitignored file) parses as a path citation but is not support, so it never
+    reaches the lock and never grades a section.
     """
-    roots = top_level_dirs(repo)
+    tracked = tracked_files(repo)
     out: dict[str, list[Citation]] = {}
     for doc in repo_docs(repo):
         rel = doc.relative_to(repo).as_posix()
         for sec in sections(rel, doc.read_text(encoding="utf-8")):
             cites, _ = parse_citations(sec.body)
-            out[sec.key] = [c for c in cites if in_tree(c, roots)]
+            out[sec.key] = [c for c in cites if in_tree(c, tracked)]
     return out
 
 

@@ -148,14 +148,12 @@ def repo_docs(repo: Path) -> list[Path]:
     return [repo / p for p in sorted(listed.split("\0")) if p]
 
 
-def top_level_dirs(repo: Path) -> frozenset[str]:
-    """Every first path segment of the TRACKED tree that names a directory.
+def tracked_files(repo: Path) -> frozenset[str]:
+    """Every path ``git ls-files`` lists, repo-relative with forward slashes.
 
-    This is what separates a claim about this tree from a slashed token that merely looks
-    like one. The path grammar cannot tell them apart on its own: ``origin/master``,
-    ``10.42.0.0/16``, ``America/Chicago``, ``application/json`` and a doc-relative
-    ``defaults/main.yml`` all parse as paths. Deriving the roots from ``git ls-files``
-    rather than listing them keeps the filter true after a top-level directory is added.
+    This is the one call every support check runs against: a citation names support only
+    when it names something in this set, so an untracked or gitignored file reads the same
+    on every checkout, never just the one that happens to have it on disk.
     """
     listed = subprocess.run(
         ["git", "ls-files", "-z"],
@@ -165,16 +163,22 @@ def top_level_dirs(repo: Path) -> frozenset[str]:
         text=True,
         check=True,
     ).stdout
-    return frozenset(sorted(p.split("/", 1)[0] for p in listed.split("\0") if "/" in p))
+    return frozenset(p for p in listed.split("\0") if p)
 
 
-def in_tree(c: Citation, roots: frozenset[str]) -> bool:
-    """Whether ``c`` is support at all: a probe, or a path whose first segment is a repo root.
+def in_tree(c: Citation, tracked: frozenset[str]) -> bool:
+    """Whether ``c`` is support at all: a probe, or a path naming a tracked file or directory.
 
-    An out-of-tree citation is prose, not a broken fact — neither an error nor a warning.
-    A rejected form stays rejected whatever its prefix: a line number is a claim about THIS
-    tree however it is spelled.
+    A citation is support only when it names a tracked file or a directory holding one, so an
+    untracked or gitignored file is prose, not a broken fact — neither an error nor a warning.
+    A directory citation missing its trailing slash (``d/sub`` rather than ``d/sub/``) still
+    counts here, so the ``dir-without-slash`` lint rule sees it and can flag the missing
+    slash; ``git ls-files`` never lists a bare directory, so this is the one non-exact match
+    the non-slash branch needs. A rejected form stays rejected whatever its prefix: a line
+    number is a claim about THIS tree however it is spelled.
     """
     if c.form == "probe":
         return True
-    return c.path.split("/")[0] in roots
+    if c.path.endswith("/"):
+        return any(p.startswith(c.path) for p in tracked)
+    return c.path in tracked or any(p.startswith(c.path + "/") for p in tracked)

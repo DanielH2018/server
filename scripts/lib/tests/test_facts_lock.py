@@ -49,6 +49,16 @@ def _repo(tmp_path):
     return tmp_path
 
 
+def _git_add(repo, *paths):
+    """Track ``paths`` in ``repo`` — a fixture step for a file added after ``_repo``'s commit."""
+    env = {
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "HOME": str(repo),
+        "PATH": "/usr/bin:/bin",
+    }
+    subprocess.run(["git", "add", *paths], cwd=repo, check=True, env=env)
+
+
 def test_lock_round_trips_and_is_absent_as_empty(tmp_path):
     p = tmp_path / "facts.lock"
     assert read_lock(p) == {}
@@ -161,6 +171,7 @@ def test_new_citation_on_a_locked_unit_is_flagged(tmp_path):
     repo = _repo(tmp_path)
     verify_units(repo, repo / LOCK_REL, ["CLAUDE.md#Gate"], "abc1234")
     (repo / "t" / "other.py").write_text("CAP = 3\n")
+    _git_add(repo, "t/other.py")
     (repo / "CLAUDE.md").write_text(
         DOC.format(repo="t/").replace(
             "bounds it", "bounds it, `t/other.py:CAP` caps it"

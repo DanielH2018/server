@@ -18,7 +18,7 @@ from .citations import (
     parse_citations,
     repo_docs,
     sections,
-    top_level_dirs,
+    tracked_files,
 )
 from .lock import LOCK_REL, lock_tampered
 
@@ -70,7 +70,7 @@ def lint_sections(repo: Path, unit_keys: set[str] | None) -> list[LintFinding]:
     same as a verified one, which is what makes ``lint --changed-since`` a ratchet.
     """
     out: list[LintFinding] = []
-    roots = top_level_dirs(repo)
+    tracked = tracked_files(repo)
     if lock_tampered(repo / LOCK_REL):
         out.append(
             _f(
@@ -85,11 +85,11 @@ def lint_sections(repo: Path, unit_keys: set[str] | None) -> list[LintFinding]:
             if unit_keys is not None and sec.key not in unit_keys:
                 continue
             cites, rejects = parse_citations(sec.body)
-            # Out-of-tree spans are prose, not broken support: `origin/master` and a
-            # doc-relative `defaults/main.yml` parse as paths and name nothing here. A
-            # REJECTED form is not filtered — a line number is a claim about this tree
-            # whatever its prefix — so the rejects list below is the unfiltered one.
-            cites = [c for c in cites if in_tree(c, roots)]
+            # Out-of-tree spans are prose, not broken support: `origin/master` and an
+            # untracked or gitignored file parse as paths and name nothing this checkout
+            # tracks. A REJECTED form is not filtered — a line number is a claim about this
+            # tree whatever its prefix — so the rejects list below is the unfiltered one.
+            cites = [c for c in cites if in_tree(c, tracked)]
             out.extend(
                 _f(
                     sec.key,

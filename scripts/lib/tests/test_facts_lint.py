@@ -58,16 +58,20 @@ def test_file_line_is_flagged(tmp_path):
 
 
 def test_dir_without_slash_is_flagged(tmp_path):
-    repo, _ = _repo(tmp_path, "## A\nsee `d/sub`\n")
+    repo, env = _repo(tmp_path, "## A\nsee `d/sub`\n")
     (repo / "d" / "sub").mkdir()
+    (repo / "d" / "sub" / "g.txt").write_text("g\n")
+    subprocess.run(["git", "add", "d/sub"], cwd=repo, check=True, env=env)
     assert ("CLAUDE.md#A", "dir-without-slash") in {
         (f.unit, f.rule) for f in lint_sections(repo, None)
     }
 
 
 def test_dir_with_slash_is_clean(tmp_path):
-    repo, _ = _repo(tmp_path, "## A\nsee `d/sub/`\n")
+    repo, env = _repo(tmp_path, "## A\nsee `d/sub/`\n")
     (repo / "d" / "sub").mkdir()
+    (repo / "d" / "sub" / "g.txt").write_text("g\n")
+    subprocess.run(["git", "add", "d/sub"], cwd=repo, check=True, env=env)
     assert not lint_sections(repo, None)
 
 
