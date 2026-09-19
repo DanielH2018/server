@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/decisions.py
-generated_at: 2026-09-19 06:17 UTC
-generated_sha: f9b05e4ae
+generated_at: 2026-09-19 18:17 UTC
+generated_sha: 8cf1ba83c
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: f9b05e4ae
 
 # Decisions
 
-348 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per CLAUDE.md's "Review & Memory Hygiene" section — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep.
+347 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per CLAUDE.md's "Review & Memory Hygiene" section — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep.
 
 !!! warning "Possible duplicates"
     Two markers below have a near-identical first sentence once case and whitespace are normalised — usually the same trade-off decided twice, or a marker copied and never specialised. Worth a look, not a verdict.
@@ -394,7 +394,6 @@ generated_sha: f9b05e4ae
 | Marker | File | Decided |
 |---|---|---|
 | no fallback to a stale local copy when the deploy is missing. slice-3 ledger's #484 half-deploy (~/.claude/artifacts/claude-guard-slice3/sdd-ledger/ progress.md) is why: a machine mid-deploy can have the new hook code without yet having the dotfiles package behind it, and a private fallback copy would keep serving a permission decision that looks current but was pinned at whatever the fallback last held — nobody sees that it fell behind. Crashing here is what the allow-side hook's contract requires: `SSH_HOSTS`/`_SSH_SECRET` gate an auto-approve, and a hook that cannot import its own tables must not approve anything at all. This module raises; `_readonly_tables.py`, the module every allow-side entry point imports, turns that into the shims' own fail-open shape (one stderr line, exit 0, no stdout). `test_the_hook_fails_open_when_the_deploy_is_missing` measures that end to end. | `.claude/hooks/_claude_guard.py:20` | 2026-09-17 |
-| derive a LOCAL table from a REMOTE one. `REMOTE_READONLY_VERBS` widens local auto-approve on the next `chezmoi apply` with no edit here — the coupling a package-exported `READONLY_BASE` would avoid, and the dotfiles follow-up #2052 files. Accepted because the alternative was the hand-synced copy, whose drift no test could see; the boundary test above sees a guarded name arrive, and the CI stand-in's diff test (`test_the_ci_stand_in_matches_the_deployed_tables`) sees any change to the set at all. | `.claude/hooks/_readonly_tables.py:54` | 2026-09-18 |
 | the underscore-prefixed names below cross a module boundary on purpose. and the tokenizer moved out of this file byte-for-byte, changing no verdict; making them public would have turned that move into a rewrite of a security boundary. The underscore still carries what it did before — internal to this classifier, not an API another hook may import. Conventions for a new module: docs/python-code-organization.md. | `.claude/hooks/auto-approve-readonly.py:31` | 2026-09-04 |
 | fail-open, not fail-closed, on all three ways this shim can break — a broken guard must not brick every tool call. `uv` missing or the .py missing already write their own line to stderr; only the `cd` arm was silent, so it now matches them. See issue #1014. | `.claude/hooks/block-footguns.sh:12` | 2026-09-03 |
 | arm 3 runs FIRST, and denies where arm 1 only asks. sed -i s/a/b/ ansible/vars/secrets.yml` matches both, and an `ask` there would let the escape be approved on the strength of a prompt about the wrong thing. The asymmetry arm 1's docstring argues does not apply here: a heuristic that wrongly asks costs a prompt, but a write outside an isolated session's worktree is never the right call, so a wrong deny costs one re-run from the right directory while a wrong allow parks the deployer for every session. The known cost is that a deliberate edit to the chezmoi checkout from a server worktree is denied; the reason string names the way through. | `.claude/hooks/block-protected-bash.py:377` | 2026-09-06 |
@@ -402,7 +401,7 @@ generated_sha: f9b05e4ae
 | fail-open, not fail-closed, on all three ways this shim can break — a broken guard must not brick every tool call. `uv` missing or the .py missing already write their own line to stderr; only the `cd` arm was silent, so it now matches them. See issue #1014. | `.claude/hooks/block-protected-edits.sh:12` | 2026-09-03 |
 | fail-open, not fail-closed, on all three ways this shim can break — a broken guard must not brick every tool call. `uv` missing or the .py missing already write their own line to stderr; only the `cd` arm was silent, so it now matches them. See issue #1014. | `.claude/hooks/nudge-land-sh.sh:11` | 2026-09-03 |
 | not age-gated, unlike `behind_park_lines` and monitor-bridge's `gitops_status`. | `.claude/hooks/session-health.py:240` | 2026-09-11 |
-| the three `STAND_IN_*` values below are a second copy, by construction -- this | `.claude/hooks/tests/conftest.py:42` | 2026-09-18 |
+| the `STAND_IN_*` values below are a second copy, by construction -- this | `.claude/hooks/tests/conftest.py:42` | 2026-09-19 |
 | ` marker documenting the fail-open trade-off is present (so a future | `.claude/hooks/tests/test_hook_shim_fail_open.py:10` | 2026-09-03 |
 | ` block, which records the fail-open trade-off once for the whole class. | `.claude/hooks/tests/test_hook_shim_fail_open.py:32` | 2026-09-05 |
 | " in text | `.claude/hooks/tests/test_hook_shim_fail_open.py:114` | 2026-09-03 |
