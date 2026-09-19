@@ -308,7 +308,7 @@ def _copy_role(name: str, roles: Path) -> Path:
         if not (src / sub).is_dir():
             continue
         (dst / sub).mkdir(parents=True)
-        for path in (src / sub).glob("*.y*"):
+        for path in (src / sub).glob("*"):
             (dst / sub / path.name).write_text(path.read_text())
     if (src / "CLAUDE.md").is_file():
         (dst / "CLAUDE.md").write_text((src / "CLAUDE.md").read_text())
