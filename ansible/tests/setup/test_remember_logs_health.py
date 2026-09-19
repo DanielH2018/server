@@ -126,15 +126,22 @@ def test_script_measures_state_not_the_plugins_breadcrumb():
     )
 
 
-def test_cron_runs_as_the_store_owner_not_root():
+def test_timer_runs_as_the_store_owner_not_root():
     """The prune must not run as root.
 
     The stores are {{ sys_user }}-owned under /home/{{ sys_user }}; a root prune would be free to
-    delete outside them if the search root were ever wrong.
+    delete outside them if the search root were ever wrong. The heartbeat is a kuma-check timer
+    since 2026-09-19, so the owner is the import's `kuma_check_user`.
     """
     block = HEALTH_CRONS.split("Schedule the remember log-rotation heartbeat", 1)
     assert len(block) == 2, (
-        "remember log-rotation cron task not found in health-crons.yml"
+        "remember log-rotation schedule task not found in health-crons.yml"
     )
     task = block[1].split("- name:", 1)[0]
-    assert 'user: "{{ sys_user }}"' in task, "prune cron must run as sys_user, not root"
+    assert "common/tasks/kuma_check_timer.yml" in task
+    assert 'kuma_check_user: "{{ sys_user }}"' in task, (
+        "prune timer must run as sys_user, not root"
+    )
+    assert "k3s_remember_logs_cron_minute" in task, (
+        "the timer's OnCalendar= must derive from the same minute the deadline test reads"
+    )

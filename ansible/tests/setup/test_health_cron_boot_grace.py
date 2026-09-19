@@ -25,7 +25,9 @@ GRACE_S = K3S_DEFAULTS["k3s_health_cron_boot_grace_s"]
 
 # The */10 crons the grace is derived against, and the daily ones it deliberately does not cover.
 FREQUENT_SCRIPTS = ("longhorn-backup-health.sh.j2", "disk-health.sh.j2")
-DAILY_SCRIPTS = ("manifest-prune-check.sh.j2", "etcd-snapshot-offbox.sh.j2")
+DAILY_SCRIPTS = ("etcd-snapshot-offbox.sh.j2",)
+# Daily checks on a kuma-check timer: the guard IS wired there, with a different skip shape.
+DAILY_TIMER_SCRIPTS = ("manifest-prune-check.sh.j2",)
 
 # Worst boot-to-Ready measured on 2026-08-30: 07:39:48 boot -> 07:45:06 last pod Ready.
 WORST_BOOT_TO_READY_S = 318
@@ -132,4 +134,21 @@ def test_the_daily_crons_do_not():
         text = (ANSIBLE / "roles/setup/k3s/templates" / name).read_text()
         assert "boot_grace_active" not in text, (
             f"{name} runs daily — a boot skip costs a whole day of coverage"
+        )
+
+
+def test_the_daily_timer_checks_exit_without_a_verdict_inside_the_grace():
+    # The exception to the rule above, and why: a daily check on a kuma-check TIMER
+    # (roles/setup/common/tasks/kuma_check_timer.yml) is Persistent, so a slot missed in an
+    # outage runs seconds after boot. Skipping there costs 30 minutes (Restart=on-failure), not
+    # a day — so the guard is wired, and its skip path exits 1 with no push and no hc ping.
+    for name in DAILY_TIMER_SCRIPTS:
+        text = (ANSIBLE / "roles/setup/k3s/templates" / name).read_text()
+        guard = text.index("if boot_grace_active {{ k3s_health_cron_boot_grace_s }}")
+        skip_block = text[guard : text.index("\nfi\n", guard)]
+        assert "exit 1" in skip_block, (
+            f"{name}: the boot skip must exit 1 so the timer reruns"
+        )
+        assert "kuma_push" not in skip_block and "hc-ping" not in skip_block, (
+            f"{name}: the skip path must push no verdict for a run that did not happen"
         )

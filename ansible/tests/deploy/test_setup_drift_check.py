@@ -372,6 +372,17 @@ def test_every_reader_task_is_gated_on_that_allowlist():
     named = [t for t in tasks if "setup_drift" in str(t.get("tags", ""))]
     assert named, "the setup-drift tasks lost their tag family"
     for task in named:
+        if str(task.get("ansible.builtin.import_tasks", "")).endswith(
+            "common/tasks/kuma_check_timer.yml"
+        ):
+            # The schedule is a kuma-check timer import, which runs on EVERY host so its
+            # absent arm can remove the timer from one dropped off the list; the gate is the
+            # state expression instead of a `when`.
+            state = str(task["vars"]["kuma_check_state"])
+            assert "inventory_hostname in setup_drift_check_hosts" in state, (
+                f"'{task['name']}' does not follow setup_drift_check_hosts"
+            )
+            continue
         assert task.get("when") == "inventory_hostname in setup_drift_check_hosts", (
             f"'{task['name']}' is not gated on setup_drift_check_hosts"
         )

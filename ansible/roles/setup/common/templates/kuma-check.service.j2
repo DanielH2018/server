@@ -20,6 +20,9 @@ User={{ kuma_check_user }}
 {% if kuma_check_env_file | default('') %}
 EnvironmentFile={{ kuma_check_env_file }}
 {% endif %}
+{% for assignment in kuma_check_environment | default([]) %}
+Environment={{ assignment }}
+{% endfor %}
 ExecStart={{ kuma_check_exec }}
 # Only Restart=always and Restart=on-success are refused for Type=oneshot (systemd 255).
 Restart=on-failure

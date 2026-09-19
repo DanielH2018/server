@@ -51,21 +51,34 @@
     state: absent
   become: true
 
-- name: Remove the GitHub ruleset drift cron
-  ansible.builtin.cron:
-    name: "GitHub ruleset drift"
-    user: root
-    state: absent
-    cron_file: github-ruleset-drift
-  become: true
+# The two GitHub checks are kuma-check timers (install.yml); the shared task file's absent arm
+# stops the timer, removes its units and removes the cron the timer replaced, so a host that
+# ran the cron before 2026-09-19 is reaped the same way.
+- name: Remove the GitHub ruleset drift timer
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/kuma_check_timer.yml"
+  vars:
+    kuma_check_state: absent
+    kuma_check_name: github-ruleset-drift
+    kuma_check_description: GitHub ruleset drift check (Kuma push)
+    kuma_check_exec: /usr/local/bin/github-ruleset-drift.sh
+    kuma_check_user: root
+    kuma_check_on_calendar: "*-*-* 06:40:00"
+    kuma_check_restart_sec: 30min
+    kuma_check_cron_name: "GitHub ruleset drift"
+    kuma_check_cron_file: github-ruleset-drift
 
-- name: Remove the GitHub interaction-limit cron
-  ansible.builtin.cron:
-    name: "GitHub interaction limit"
-    user: root
-    state: absent
-    cron_file: github-interaction-limit
-  become: true
+- name: Remove the GitHub interaction-limit timer
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/kuma_check_timer.yml"
+  vars:
+    kuma_check_state: absent
+    kuma_check_name: github-interaction-limit
+    kuma_check_description: GitHub interaction-limit re-arm (Kuma push)
+    kuma_check_exec: /usr/local/bin/github-interaction-limit.sh
+    kuma_check_user: root
+    kuma_check_on_calendar: "*-*-* 06:50:00"
+    kuma_check_restart_sec: 30min
+    kuma_check_cron_name: "GitHub interaction limit"
+    kuma_check_cron_file: github-interaction-limit
 
 - name: Remove the GitHub drift-check scripts
   ansible.builtin.file:

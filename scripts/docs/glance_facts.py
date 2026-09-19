@@ -210,6 +210,8 @@ def timer_units(role_dir: Path) -> list[tuple[str, list[str]]]:
             ):
                 continue
             variables = task.get("vars") or {}
+            if variables.get("kuma_check_state") == "absent":
+                continue  # a teardown arm removes the timer; it installs nothing
             name = variables.get("kuma_check_name", "unnamed")
             cadence = variables.get("kuma_check_on_calendar")
             units.append(

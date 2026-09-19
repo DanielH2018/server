@@ -132,3 +132,7 @@ fi
 logger -t remember-logs-health "status=${STATUS} ${MSG}"
 
 kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" remember-logs-health
+
+# The exit code is the timer's contract (roles/setup/common/tasks/kuma_check_timer.yml): 1 after
+# a down push so Restart=on-failure reruns the check until rotation resumes, 0 after up.
+[[ "$STATUS" == up ]] || exit 1

@@ -623,9 +623,9 @@ def test_the_audit_grace_is_shorter_than_the_gap_to_the_first_audit():
     sticky DOWN not appearing until Tuesday. That is M-1 narrowed to a day, not closed.
     """
     crons = (TEMPLATES.parent / "tasks/crons.yml").read_text()
-    assert 'hour: "8"' in crons and 'hour: "9"' in crons, (
-        "the cron schedule moved; re-derive the grace period against the new times"
-    )
+    assert (
+        'kuma_check_on_calendar: "*-*-* 08:00:00"' in crons and 'hour: "9"' in crons
+    ), "the schedule moved; re-derive the grace period against the new times"
     text = ROTATION_AUDIT.read_text()
     seconds = [int(m) for m in re.findall(r"-gt (\d{4,})", text)]
     assert seconds, "no age threshold found in the stray-branch arm"

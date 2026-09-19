@@ -13,14 +13,14 @@ those manually).
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates or playbook entry. -->
 - **Applied by:** `initial_setup.yml --tags "gitops_deploy"`
-- **Crons (2):**
-  - `GitHub ruleset drift` — `{{ gitops_deploy_ruleset_drift_cron_minute }} {{
-    gitops_deploy_ruleset_drift_cron_hour }} * * *`
-  - `GitHub interaction limit` — `{{ gitops_deploy_interaction_limit_cron_minute }} {{
-    gitops_deploy_interaction_limit_cron_hour }} * * *`
-- **Timers (2):** `gitops-deploy.timer` (`OnBootSec=10min`, `OnUnitActiveSec={{
+- **Timers (4):** `gitops-deploy.timer` (`OnBootSec=10min`, `OnUnitActiveSec={{
   gitops_deploy_tick_interval }}`), `staging-backfill.timer` (`OnBootSec=20min`,
-  `OnUnitActiveSec=1h`)
+  `OnUnitActiveSec=1h`), `kuma-check-github-ruleset-drift.timer` (`OnCalendar=*-*-* {{ '%02d' |
+  format(gitops_deploy_ruleset_drift_cron_hour | int) }}:{{ '%02d' |
+  format(gitops_deploy_ruleset_drift_cron_minute | int) }}:00`),
+  `kuma-check-github-interaction-limit.timer` (`OnCalendar=*-*-* {{ '%02d' |
+  format(gitops_deploy_interaction_limit_cron_hour | int) }}:{{ '%02d' |
+  format(gitops_deploy_interaction_limit_cron_minute | int) }}:00`)
 <!-- /generated_from -->
 
 ## A host with `has_gitops: false` is reaped, and the code refuses on its own
@@ -696,7 +696,12 @@ widen it. Each line is a summary; the section it names carries the detail.
 
 Both are daily root crons on the deploy host, each pushing its own Kuma tile through
 `kuma-push-lib.sh`, and both authenticate with the deploy user's `gh auth token`. They differ in
-one way that matters: one alerts, the other reconciles.
+one way that matters: one alerts, the other reconciles. Both run from kuma-check timers since
+2026-09-19 ([[common]]'s `kuma_check_timer.yml`): each exits 1 on a down verdict and
+`Restart=on-failure` reruns it every 30 min until it exits 0, so a red tile clears when the
+ruleset or limit is fixed rather than at the next day's slot. Two calls an hour at worst stays
+inside GitHub's unauthenticated limit on the anonymous fallback. `teardown.yml` imports the
+same names absent, which reaps the units and the crons they replaced on a non-deployer host.
 
 - **`github-ruleset-drift.sh`** compares the live master ruleset against
   `gitops_deploy_expected_ruleset_contexts`, and checks that the branch-protection ruleset

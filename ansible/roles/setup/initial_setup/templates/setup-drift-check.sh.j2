@@ -98,3 +98,7 @@ fi
 logger -p daemon.notice -t setup-drift-check "status=${STATUS} ${MSG}"
 
 kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" setup-drift-check
+
+# The exit code is the timer's contract (roles/setup/common/tasks/kuma_check_timer.yml): 1 after
+# a down push so Restart=on-failure reruns the check until the plane is re-applied, 0 after up.
+[[ "$STATUS" == up ]] || exit 1

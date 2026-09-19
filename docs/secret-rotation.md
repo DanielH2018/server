@@ -2,7 +2,7 @@
 
 Secrets in `ansible/vars/secrets.yml` are tracked for rotation by a plaintext registry
 (`ansible/secret_rotation.yml`) and the tool `scripts/secrets_mgmt/secret_rotation.py`. A daily server
-cron (`secret-rotation-audit.sh`, initial_setup) pushes the **"Secret Rotation"** Uptime
+timer (`secret-rotation-audit.sh`, initial_setup) pushes the **"Secret Rotation"** Uptime
 Kuma monitor — it goes **down** when any secret is past its per-tier window, or when a
 secret exists in `secrets.yml` but not the registry.
 
