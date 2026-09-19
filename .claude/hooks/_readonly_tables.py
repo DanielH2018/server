@@ -58,8 +58,10 @@ except ImportError as exc:
 # Deliberately excludes commands with a write/exec mode: env (`env CMD`), less/more (`!cmd`
 # escape), command/xargs/timeout/nice/... (exec wrappers), sed/awk (-i, system()),
 # tee/dd/xxd/mount/stty (write), sort/uniq/find/ip/... (guarded in auto-approve-readonly.py).
-# The package's own remote-only names (`htop`, `nvidia-smi`) never reach here: they sit
-# outside `READONLY_BASE`, each with its reason beside it in `claude_guard/tables.py`.
+# The package's own remote-only name (`htop`) never reaches here: it sits outside
+# `READONLY_BASE`, with its reason beside it in `claude_guard/tables.py`. Neither does
+# `nvidia-smi`, a `remote_guards.GUARDS` entry since dotfiles #559 with no handler on this
+# side — no host in the fleet has NVIDIA hardware.
 
 # Names read-only locally that the package keeps out of its remote table: `cd` and `false`
 # are meaningless over ssh, and `printenv` prints every exported variable of the REMOTE
