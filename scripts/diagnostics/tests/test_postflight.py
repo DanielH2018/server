@@ -10,6 +10,7 @@ Run: uv run pytest scripts/diagnostics/tests/test_postflight.py
 
 import json
 import os
+import socket
 import sys
 
 import pytest
@@ -23,8 +24,19 @@ import postflight
 
 @pytest.fixture(autouse=True)
 def stub_host(monkeypatch):
-    """Every workload resolves, and every secret decrypts to a placeholder."""
-    monkeypatch.setattr(postflight, "service_ip", lambda name: "10.0.0.1")
+    """Every workload resolves, and every secret decrypts to a placeholder.
+
+    The host is daniel-box, the node postflight runs on: `host_cluster()` derives the cluster
+    from the hostname, and a CI runner's is in no known cluster. Returns the (name, cluster)
+    pairs the ClusterIP resolver was asked for.
+    """
+    resolved = []
+    monkeypatch.setattr(socket, "gethostname", lambda: "daniel-box")
+    monkeypatch.setattr(
+        postflight.health_docker,
+        "resolve_service_ip",
+        lambda name, cluster: (resolved.append((name, cluster)), "10.0.0.1")[1],
+    )
     monkeypatch.setattr(postflight, "secret", lambda name: (f"<{name}>", ""))
     # check_ha_token reaches HA via core.ha_base(), which decrypts the domain from
     # SOPS — stub it so no test needs the age key (CI has none). Same for the cluster
@@ -35,10 +47,13 @@ def stub_host(monkeypatch):
         "k8s_endpoint",
         lambda h: (f"https://{h}.test", f"{h}.test:443:10.0.0.240"),
     )
+    return resolved
 
 
 # Collection-time aliases: @parametrize is evaluated at import, before a test body runs.
 OK_, FAIL_ = postflight.OK, postflight.FAIL
+# The unstubbed resolver, taken before the autouse fixture replaces it.
+real_resolve_service_ip = postflight.health_docker.resolve_service_ip
 
 
 def respond(monkeypatch, status, body=""):
@@ -55,11 +70,6 @@ def respond(monkeypatch, status, body=""):
 def only_checks(monkeypatch, checks):
     """Run `main()` over `checks` alone, so a test isn't at the mercy of the real registry."""
     monkeypatch.setattr(postflight, "CHECKS", checks)
-
-
-def stub_curl(monkeypatch, run):
-    """Replace the subprocess `get()` shells out to."""
-    monkeypatch.setattr(postflight.subprocess, "run", run)
 
 
 def missing_secret(monkeypatch, name, err=""):
@@ -209,9 +219,49 @@ def test_the_resolver_reads_a_clusterip_not_a_docker_bridge_ip(monkeypatch):
         "kubectl",
         lambda cluster, *args, **kw: (seen.append(args), Result())[1],
     )
-    assert postflight.health_docker.resolve_service_ip("sonarr") == "10.43.0.9"
+    assert real_resolve_service_ip("sonarr") == "10.43.0.9"
     assert "docker" not in seen[0]
     assert "service" in seen[0]
+
+
+def on_host(monkeypatch, hostname):
+    """Run the checks as if on `hostname`, over the fixture's daniel-box."""
+    monkeypatch.setattr(socket, "gethostname", lambda: hostname)
+
+
+def test_the_service_ip_read_names_the_cluster_this_host_stands_in(
+    monkeypatch, stub_host
+):
+    """#2069: the read took lib.kubectl's `prod` default whichever node ran postflight.
+
+    The invoker refuses on a mismatch, so on daniel-stage the check raised `WrongCluster`
+    rather than reading about the wrong cluster — but postflight never named its own. The
+    rejecting half is the pre-fix shape: a stage node handing `prod` to the resolver.
+    """
+    on_host(monkeypatch, "daniel-stage")
+    assert postflight.service_ip("sonarr") == "10.0.0.1"
+    assert stub_host == [("sonarr", "stage")]
+
+
+def test_the_kuma_pod_age_read_names_the_cluster_this_host_stands_in(monkeypatch):
+    """The drift check's other kubectl read takes the same derived cluster."""
+    on_host(monkeypatch, "daniel-stage")
+    seen = []
+    _drift_over(monkeypatch, {}, set(), pod_age=lambda c: (seen.append(c), 99999)[1])
+    assert seen == ["stage"]
+
+
+def test_the_drift_check_skips_on_a_host_in_no_known_cluster(monkeypatch):
+    """The Pi is a node of neither cluster, so the pod-age read has nothing to ask.
+
+    `Skip`, which the runner renders as a SKIP line, rather than a `MissingKubectl` it would
+    count as the check's own failure. test_postflight_runner.py has the end-to-end line.
+    """
+    on_host(monkeypatch, "daniel-pi")
+    with pytest.raises(
+        postflight.Skip, match="daniel-pi is a node of no known cluster"
+    ):
+        _drift_over(monkeypatch, {}, set())
 
 
 def test_jellyfin_key_mismatch_fails(monkeypatch):
@@ -287,8 +337,11 @@ def test_kuma_drift_reads_its_constants_from_the_module_that_holds_them(monkeypa
     assert isinstance(detail, str)
 
 
-def _drift_over(monkeypatch, declared, live):
-    """Drive check_kuma_drift with `declared` against a live set, returning (status, detail)."""
+def _drift_over(monkeypatch, declared, live, pod_age=lambda cluster: 99999):
+    """Drive check_kuma_drift with `declared` against a live set, returning (status, detail).
+
+    `pod_age` stands in for `monitors.kuma_pod_age_seconds`, so it takes the cluster.
+    """
     body = json.dumps(
         {
             "data": {
@@ -299,7 +352,7 @@ def _drift_over(monkeypatch, declared, live):
         }
     )
     respond(monkeypatch, 200, body)
-    monkeypatch.setattr(postflight.monitors, "kuma_pod_age_seconds", lambda: 99999)
+    monkeypatch.setattr(postflight.monitors, "kuma_pod_age_seconds", pod_age)
     # STATIC_MONITORS_PATH is left alone: the real declaration file is tracked, and the parse
     # is patched anyway, so the only thing it supplies here is bytes to read.
     monkeypatch.setattr(
@@ -394,107 +447,3 @@ def test_a_forward_auth_redirect_skips_rather_than_blaming_the_key(monkeypatch):
     assert status == postflight.SKIP
     assert "forward-auth" in detail
     assert "doesn't match" not in detail
-
-
-# The three tests below pass `main([])` rather than `main()`, and the empty list is
-# load-bearing: with no argument argparse falls back to `sys.argv[1:]`, which under pytest is
-# PYTEST'S OWN flags. Any invocation carrying a flag postflight does not define exits 2 before
-# the check under test runs. That made `pytest_shard.py --record` impossible for the whole
-# repo — it runs the suite as `-n0 -vv --durations=0`, so these three failed, and
-# `record_weights` refuses to write weights from a suite that did not pass.
-def test_a_workload_with_no_service_skips_not_fails(monkeypatch):
-    def absent(name):
-        raise postflight.Skip(f"{name} has no ClusterIP (does the Service exist?)")
-
-    monkeypatch.setattr(postflight, "service_ip", absent)
-    only_checks(
-        monkeypatch, [("9.3", "sonarr", lambda: postflight.check_arr_key("sonarr"))]
-    )
-    assert postflight.main([]) == 0
-
-
-def test_one_failure_exits_nonzero(monkeypatch):
-    only_checks(monkeypatch, [("9.1", "x", lambda: (postflight.FAIL, "broken"))])
-    assert postflight.main([]) == 1
-
-
-def test_check_raising_does_not_abort_the_run(monkeypatch):
-    """One check blowing up must not hide the checks after it."""
-
-    def boom():
-        raise ValueError("bad json")
-
-    only_checks(
-        monkeypatch, [("9.1", "x", boom), ("9.2", "y", lambda: (postflight.OK, "fine"))]
-    )
-    assert postflight.main([]) == 1
-
-
-def test_get_parses_status_and_body(monkeypatch):
-    class Result:
-        returncode = 0
-        stdout = '{"a": 1}\n200'
-        stderr = ""
-
-    stub_curl(monkeypatch, lambda *a, **kw: Result())
-    assert postflight.get("http://x") == (200, '{"a": 1}')
-
-
-def test_get_reports_curl_failure_as_status_zero(monkeypatch):
-    class Result:
-        returncode = 7
-        stdout = ""
-        stderr = "connection refused"
-
-    stub_curl(monkeypatch, lambda *a, **kw: Result())
-    assert postflight.get("http://x") == (0, "connection refused")
-
-
-def test_credentials_never_reach_argv(monkeypatch):
-    """The auth header goes in on stdin — a secret in argv would land in `ps`."""
-    seen = {}
-
-    class Result:
-        returncode = 0
-        stdout = "\n200"
-        stderr = ""
-
-    def fake_run(argv, input=None, **kw):
-        seen["argv"] = argv
-        seen["input"] = input
-        return Result()
-
-    stub_curl(monkeypatch, fake_run)
-    postflight.get("http://x", 'header = "X-Api-Key: hunter2"\n')
-    assert "hunter2" not in " ".join(seen["argv"])
-    assert "hunter2" in seen["input"]
-
-
-# ── `--help` must not run the sweep (#1685) ──────────────────────────────────────────
-# The rejecting half of the pair: before the parser existed, `--help` ran every check —
-# several SOPS decrypts and ~15 authenticated requests to production — and exited 0, which
-# reads as a passing `--help`. The accepting half is below it: the no-argument invocation is
-# still what the parser accepts, so it cannot have swallowed the interface.
-
-
-def test_help_exits_zero_without_running_a_single_check(capsys, monkeypatch):
-    # Pin the colour setting rather than inheriting it. Python 3.14's argparse colourises help
-    # when FORCE_COLOR is set, TTY or not, and it wraps `usage: ` and the program name in
-    # SEPARATE escape runs — so the phrase below survives in CI (which sets neither variable)
-    # and is split on any host whose shell exports FORCE_COLOR. Stating the dependency here is
-    # what stops this passing remotely and failing locally (#1727).
-    monkeypatch.delenv("FORCE_COLOR", raising=False)
-    monkeypatch.setenv("NO_COLOR", "1")
-    with pytest.raises(SystemExit) as exc:
-        postflight.main(["--help"])
-    assert exc.value.code == 0
-    out = capsys.readouterr().out
-    assert "usage: postflight.py" in out
-    # A check that ran would have printed its own `[OK  ] §9.x ...` report line first. The
-    # help text itself cites §9, so the status bracket is what distinguishes them.
-    assert not [status for status in ("[OK", "[FAIL", "[SKIP") if status in out]
-
-
-def test_no_arguments_is_still_the_whole_interface():
-    """The parse must not exit, or the no-argument sweep would stop working."""
-    assert vars(postflight.build_parser().parse_args([])) == {}
