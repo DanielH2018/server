@@ -11,6 +11,26 @@ Authelia guards most public routes as a Traefik forward-auth middleware. See rep
 - **`k8s_autodeploy: false`** (platform — SSO/OIDC gate; a failed deploy locks out access to
   everything behind it, including the tools to fix it).
 
+## Access control comes from containers_list
+
+A service's policy is the `auth_tier: one_factor | two_factor` beside its `use_authelia: true`
+in `inventory/host_vars/<host>.yml`, not a rule in this role. `templates/config-secret.yaml.j2`
+renders one rule per tier from those entries through `filter_plugins/authelia_access.py`,
+domains sorted so a reorder of the list does not roll this pod. The template still hand-writes
+four rules: the two scoped bypasses (uptime-kuma's push API, scrutiny's read-only probes —
+paths, networks and methods have no per-service shape) ahead of the generated block, and the
+two wildcards after it. The generated rules name only the LAN name; the public
+`<host>.<domain>` name stays `two_factor` from the `*.<domain>` wildcard whatever the entry
+declares, and the generated `one_factor` rule carries the wildcard's RFC1918 `networks` so a
+service's effective policy did not change when it gained a rule of its own (#2057).
+
+**A `use_authelia: true` entry without `auth_tier` fails the render** — in
+`validate/k8s_manifests.py`, in the test render and in a real deploy alike — so a new service
+cannot ride the wildcard by omission. To change a service's tier, change its entry; the
+reasoning for a `two_factor` goes in the comment above that entry.
+`ansible/tests/services/test_authelia_access_tiers.py` checks every SSO entry's rendered
+policy against its declaration.
+
 ## OIDC clients
 
 Three relying parties, all in `templates/config-secret.yaml.j2` behind
