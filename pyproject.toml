@@ -446,10 +446,13 @@ unresolved-import = "ignore"
 # would surface as a hook crash instead. `_claude_guard.py` imports nothing else first-party.
 # `block-protected-bash.py` (#2053) also loses it on `_hook_common`; `test_block_protected_bash.py`
 # loads the hook by path, so a typo there fails that suite at collection instead.
+# `tests/conftest.py` (#2078) probes `claude_guard.tables` for a name the hooks read before it
+# decides between the real package and its stand-in; it imports nothing else first-party.
 include = [
   ".claude/hooks/_claude_guard.py",
   ".claude/hooks/_readonly_tables.py",
   ".claude/hooks/block-protected-bash.py",
+  ".claude/hooks/tests/conftest.py",
   ".claude/hooks/tests/test_claude_guard_import.py",
 ]
 [tool.ty.overrides.rules]

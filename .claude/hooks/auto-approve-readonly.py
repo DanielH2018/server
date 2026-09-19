@@ -211,14 +211,10 @@ def _journalctl(argv):
 
 
 def _rg(argv):
-    for a in argv[1:]:
-        if (
-            a in ("--pre", "--hostname-bin")
-            or a.startswith("--pre=")
-            or a.startswith("--hostname-bin=")
-        ):
-            return None  # --pre runs an arbitrary preprocessor command
-    return "rg"
+    # --pre runs an arbitrary preprocessor per file, --hostname-bin an arbitrary binary.
+    # Same shape as the package's `rg_readonly`, which the shared-verdict replay compares.
+    exec_flags = ("--pre", "--hostname-bin")
+    return None if any(a.split("=", 1)[0] in exec_flags for a in argv[1:]) else "rg"
 
 
 _DOCKER_READ = {
@@ -569,12 +565,14 @@ def _crontab(argv):
 
 
 def _flag_guarded(argv):
-    # ss, dmesg and sensors read except under one flag, named per verb in `_FLAG_MUTATES`
-    # as long options plus the letters that hide in a short cluster (`-xKy`, `-xCy`). #2052.
+    # ss, dmesg and sensors read except under a few flags, named per verb in `_FLAG_MUTATES`
+    # as long options (matched before any `=`) plus the letters that hide in a short cluster
+    # (`-xKy`, `-xCy`). #2052, and the package's copy is `remote_guards._flag_guarded` (#2078).
     name = argv[0].rsplit("/", 1)[-1]
     longs, letters = _FLAG_MUTATES[name]
     cluster = re.compile(rf"-[a-zA-Z]*[{letters}]")
-    return None if any(a in longs or cluster.match(a) for a in argv[1:]) else name
+    mutates = any(a.split("=", 1)[0] in longs or cluster.match(a) for a in argv[1:])
+    return None if mutates else name
 
 
 def _ssh(argv):

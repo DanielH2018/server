@@ -25,8 +25,13 @@ import sys
 # crash rather than a classifier declining to run. Raising stays the library behaviour of
 # `_claude_guard` itself (conftest.py and test_claude_guard_import.py rely on it); the exit
 # belongs here, on the module every allow-side entry point imports.
+#
+# The `from claude_guard.tables import` sits inside the same `try`: a deployed package that
+# predates a name this module reads (the host has the new hook but `chezmoi apply` has not
+# run) is the same missing-deploy state, and raises the same ImportError (#2078).
 try:
     import _claude_guard  # noqa: F401  (bootstraps claude_guard onto sys.path)
+    from claude_guard.tables import READONLY_BASE, SECRET_PATH_RE, TRUSTED_SSH_HOSTS
 except ImportError as exc:
     print(
         f"_readonly_tables: classifier did not run ({exc}) — command falls through to the "
@@ -34,57 +39,34 @@ except ImportError as exc:
         file=sys.stderr,
     )
     sys.exit(0)
-from claude_guard.tables import REMOTE_READONLY_VERBS, SECRET_PATH_RE, TRUSTED_SSH_HOSTS
 
 
 # Programs that cannot write or exec under ANY arguments.
 #
-# Derived from the dotfiles package's `REMOTE_READONLY_VERBS`, not copied: until 2026-09-18
-# this was a 92-name literal sharing 89 names with the package's 96, converged by hand once
-# (server #1979, dotfiles #520) with nothing to catch the two drifting apart again (#2052).
-# Now the shared names have one home and this file states only the delta, each name with
-# its reason. `boundary_violations()` in tests/test_claude_guard_import.py still checks the
+# `READONLY_BASE` is the dotfiles package's table of names read-only under any argument on
+# BOTH sides of the ssh boundary; the package's `REMOTE_READONLY_VERBS` and this `TIER1`
+# each extend it with what is read-only on their side only. Until 2026-09-18 this was a
+# 92-name literal sharing 89 names with the package's 96, converged by hand once (#1979,
+# dotfiles #520) with nothing to catch the two drifting apart again (#2052); until #2078 it
+# was derived from `REMOTE_READONLY_VERBS` itself, so a name the package added for the far
+# shell widened local auto-approve on the next `chezmoi apply` with no edit here. Now the
+# shared names have one home and this file states only its local delta.
+# `boundary_violations()` in tests/test_claude_guard_import.py still checks the
 # guarded-vs-bare axis: a verb the package guards that lands here bare, or the reverse, goes
 # red under `prek run` on a deployed host.
 #
 # Deliberately excludes commands with a write/exec mode: env (`env CMD`), less/more (`!cmd`
 # escape), command/xargs/timeout/nice/... (exec wrappers), sed/awk (-i, system()),
 # tee/dd/xxd/mount/stty (write), sort/uniq/find/ip/... (guarded in auto-approve-readonly.py).
-#
-# DECIDED: derive a LOCAL table from a REMOTE one. A name the package adds to
-# `REMOTE_READONLY_VERBS` widens local auto-approve on the next `chezmoi apply` with no edit
-# here — the coupling a package-exported `READONLY_BASE` would avoid, and the dotfiles
-# follow-up #2052 files. Accepted because the alternative was the hand-synced copy, whose
-# drift no test could see; the boundary test above sees a guarded name arrive, and the CI
-# stand-in's diff test (`test_the_ci_stand_in_matches_the_deployed_tables`) sees any change
-# to the set at all.
-
-# Package names the server admits only through a `HANDLERS` guard in auto-approve-readonly.py
-# (the package guards them too, in checks/remote.py). TIER1's contract is "read-only under
-# ANY argument", which none of these meets: journalctl `--vacuum-*`/`--rotate`, dmesg
-# `-C`/`--clear`, ss `-K`/`--kill`, rg `--pre`/`--hostname-bin`, sensors `-s`/`--set`.
-_GUARDED_LOCALLY = frozenset({"journalctl", "dmesg", "ss", "rg", "sensors"})
-
-# Package names the server admits nowhere, bare or guarded.
-_NOT_ADMITTED = frozenset(
-    {
-        # Interactive: it never returns under the Bash tool, so it only ever times out.
-        "htop",
-        # No NVIDIA hardware in the fleet (daniel-server is Intel XE; every `nvidia` in the
-        # tree reads "on a future AMD/NVIDIA host"). A guard for a binary no host has is dead
-        # code; port the package's `_nvidia_smi_readonly` when a host gains one (#2052).
-        "nvidia-smi",
-    }
-)
+# The package's own remote-only names (`htop`, `nvidia-smi`) never reach here: they sit
+# outside `READONLY_BASE`, each with its reason beside it in `claude_guard/tables.py`.
 
 # Names read-only locally that the package keeps out of its remote table: `cd` and `false`
 # are meaningless over ssh, and `printenv` prints every exported variable of the REMOTE
 # shell — locally the transcript already runs under this environment.
 _LOCAL_ONLY = frozenset({"cd", "false", "printenv"})
 
-TIER1 = (
-    frozenset(REMOTE_READONLY_VERBS) - _GUARDED_LOCALLY - _NOT_ADMITTED
-) | _LOCAL_ONLY
+TIER1 = frozenset(READONLY_BASE) | _LOCAL_ONLY
 
 
 # Homelab hosts whose read-only commands may auto-approve. Anything else falls
@@ -123,15 +105,22 @@ _SSH_SECRET = SECRET_PATH_RE
 # path over there. We can't see the remote filesystem, so we refuse the pattern.
 _SSH_GLOB = re.compile(r"[*?\[\]\\]")
 
-# Verbs that read except under one flag, for auto-approve-readonly.py's `_flag_guarded`:
-# the long options, and the letters that mean the same inside a short cluster (`-xKy`).
+# Verbs that read except under a few flags, for auto-approve-readonly.py's `_flag_guarded`:
+# the long options (matched on the name, before any `=`), and the letters that mean the
+# same inside a short cluster (`-xKy`). The package's `_FLAG_MUTATES` in
+# `checks/remote_guards.py` is the same table, and the shared-verdict replay in
+# tests/test_claude_guard_import.py keeps the two agreeing (#2078).
 _FLAG_MUTATES = {
     "ss": (("--kill",), "K"),  # -K/--kill closes sockets (#1898)
     "sensors": (("--set",), "s"),  # -s/--set writes config back to the hardware
-    # -C/--clear clears the ring buffer, -c/--read-clear prints then clears. Mirrors the
-    # package's `_DMESG_MUTATE` exactly (#2052); `-n`/`-D`/`-E` set the console log level
-    # too, but need CAP_SYSLOG, which the `sudo` deny withholds (#2078 for the replay).
-    "dmesg": (("--clear", "--read-clear"), "Cc"),
+    # -C/--clear clears the ring buffer, -c/--read-clear prints then clears. -n/--console-level,
+    # -D/--console-off and -E/--console-on change what the kernel logs to the console; they
+    # need CAP_SYSLOG, which the `sudo` deny withholds here, so the exposure on this fleet
+    # is nil — but the guard is the verb's write surface, not this fleet's (#2078).
+    "dmesg": (
+        ("--clear", "--read-clear", "--console-level", "--console-off", "--console-on"),
+        "CcnDE",
+    ),
 }
 
 # journalctl flags that delete, rotate or reconfigure the journal; anything else reads.
