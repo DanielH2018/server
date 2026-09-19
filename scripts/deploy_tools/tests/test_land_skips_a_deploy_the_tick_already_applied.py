@@ -11,10 +11,15 @@ bug otherwise). Step 6 is untouched -- the gate still runs over every tag.
 Run: uv run pytest scripts/deploy_tools/tests/test_land_skips_a_deploy_the_tick_already_applied.py
 """
 
+from pathlib import Path
+
 import pytest
 
 from _land_fakes import MERGE_SHA, PRIMARY, Fakes
 from deploy_tools.land_lib import deploy
+
+_REPO = Path(__file__).resolve().parents[3]
+_DEPLOY_NARROW = _REPO / "ansible/roles/setup/gitops_deploy/files/deploy_narrow.py"
 
 APPLIED_AT = "f" * 40
 # What `deploy_tags.py hosts` answers; the fake returns it whatever the tags asked about.
@@ -119,3 +124,15 @@ def test_the_skip_holds_across_the_whole_deploy_phase(landing):
     assert _deploys(calls) == []
     assert ln.resolved_tags == ["sonarr"]
     assert ln.ledger.t_deploy is not None
+
+
+def test_the_predicate_reads_the_marker_the_deployer_writes():
+    """The two literals `tick_already_deployed` compares against are the deployer's own.
+
+    land_lib does not import across the deployer's `files/` boundary, and the markers the
+    tests above build use the same spellings, so a rename on the deployer's side would leave
+    both halves green while the skip silently stopped firing. This is what breaks instead.
+    """
+    src = _DEPLOY_NARROW.read_text()
+    assert 'playbook = "ansible/deploy.yml"' in src
+    assert 'NARROWED_TO_NOTHING = "narrowed-to-nothing"' in src

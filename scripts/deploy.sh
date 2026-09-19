@@ -140,8 +140,9 @@ LOCK_UNAVAILABLE=76
 PLAYBOOK_FAILED=20
 # The snapshot worktree could not be created, so there was no tree to render from and NOTHING
 # was deployed. Its own code rather than 76's, because the remedy differs: 76 is the lock file,
-# this is the snapshot root or the git object store. Both are environment faults a retry alone
-# does not clear, which is why neither collapses onto the contention code.
+# this is the snapshot root or the git object store, and the message carries the failing
+# command's own stderr (`snapshot_error`) to say which. Both are environment faults a retry
+# alone does not clear, which is why neither collapses onto the contention code.
 SNAPSHOT_FAILED=77
 # The playbook reached PLAY RECAP naming no host, so NOTHING was deployed -- and ansible exits
 # 0 for that, because no play matched and so no task failed. A run asked to deploy a tag that
