@@ -10,9 +10,11 @@ from facts.citations import (
     Citation,
     Rejected,
     Section,
+    in_tree,
     parse_citations,
     repo_docs,
     sections,
+    top_level_dirs,
 )
 
 _DOC = """intro `scripts/lib/git.py`
@@ -163,6 +165,55 @@ fenced code block:
     got = sections("CLAUDE.md", doc)
     assert [s.key for s in got] == ["CLAUDE.md#A", "CLAUDE.md#B"]
     assert "# not a heading" in got[0].body
+
+
+def _init(tmp_path):
+    env = {
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "HOME": str(tmp_path),
+        "PATH": "/usr/bin:/bin",
+    }
+    subprocess.run(
+        ["git", "init", "-q", "-b", "master", str(tmp_path)], check=True, env=env
+    )
+    return env
+
+
+def test_top_level_dirs_lists_tracked_roots(tmp_path):
+    env = _init(tmp_path)
+    for rel in ("a/x.txt", "b/y.txt", "c/z.txt"):
+        (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / rel).write_text("x\n")
+    (tmp_path / "README.md").write_text("root file\n")
+    subprocess.run(
+        ["git", "add", "a", "b", "README.md"], cwd=tmp_path, check=True, env=env
+    )
+    assert top_level_dirs(tmp_path) == frozenset({"a", "b"})
+
+
+def test_in_tree_is_clean():
+    roots = frozenset({"a"})
+    assert in_tree(Citation("path", "a/x.txt", "a/x.txt", ""), roots)
+    assert in_tree(Citation("path", "a/sub/", "a/sub/", ""), roots)
+    assert in_tree(Citation("symbol", "a/m.py:run", "a/m.py", "run"), roots)
+
+
+def test_in_tree_is_flagged():
+    roots = frozenset({"a"})
+    out_of_tree = [
+        Citation("path", "origin/master", "origin/master", ""),
+        Citation("path", "defaults/main.yml", "defaults/main.yml", ""),
+        Citation("path", "10.42.0.0/16", "10.42.0.0/16", ""),
+        Citation("path", "../CLAUDE.md", "../CLAUDE.md", ""),
+    ]
+    assert [c.raw for c in out_of_tree if in_tree(c, roots)] == []
+
+
+def test_probe_is_always_in_tree():
+    # A probe citation carries no path at all, so the root test cannot apply to it.
+    assert in_tree(
+        Citation("probe", "probe.py kuma-drift", "", "kuma-drift"), frozenset()
+    )
 
 
 def test_repo_docs_lists_every_tracked_claude_md(tmp_path):

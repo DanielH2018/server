@@ -75,6 +75,23 @@ def test_verify_then_check_is_clean(tmp_path):
     assert check_lock(repo, repo / LOCK_REL) == []
 
 
+def test_out_of_tree_citation_is_not_in_the_edb(tmp_path):
+    repo = _repo(tmp_path)
+    (repo / "CLAUDE.md").write_text(
+        DOC.format(repo="t/").replace(
+            "bounds it", "bounds it on `origin/master`, see `defaults/main.yml`"
+        )
+    )
+    verify_units(repo, repo / LOCK_REL, ["CLAUDE.md#Gate"], "abc1234")
+    assert set(read_lock(repo / LOCK_REL)["CLAUDE.md#Gate"]["atoms"]) == {
+        "t/m.py:LIMIT",
+        "t/test_m.py::test_limit",
+    }
+    edb = build_repo_edb(repo, read_lock(repo / LOCK_REL))
+    assert not {a for _u, a in edb.cites if "origin" in a or "defaults" in a}
+    assert check_lock(repo, repo / LOCK_REL) == []
+
+
 def test_moved_atom_is_flagged(tmp_path):
     repo = _repo(tmp_path)
     verify_units(repo, repo / LOCK_REL, ["CLAUDE.md#Gate"], "abc1234")

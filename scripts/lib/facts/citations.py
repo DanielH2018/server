@@ -121,19 +121,60 @@ def sections(doc_path: str, text: str) -> list[Section]:
     return out
 
 
+def git_env() -> dict[str, str]:
+    """The environment every git call in this package runs under.
+
+    ``GIT_*`` is stripped so ``cwd`` alone decides which tree is read: under a git hook
+    ``GIT_DIR`` and ``GIT_WORK_TREE`` both point at the hook's own repository, and ``git -C``
+    does not override them.
+    """
+    return {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+
+
 def repo_docs(repo: Path) -> list[Path]:
     """Every TRACKED ``CLAUDE.md`` under ``repo`` — the repo store, and nothing else.
 
     ``git ls-files`` rather than ``rglob``: a worktree session has other sessions' full
     checkouts under ``.claude/worktrees/``, and a walk would grade this commit against them.
     """
-    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
     listed = subprocess.run(
         ["git", "ls-files", "-z", "--", "CLAUDE.md", "**/CLAUDE.md"],
         cwd=repo,
-        env=env,
+        env=git_env(),
         capture_output=True,
         text=True,
         check=True,
     ).stdout
     return [repo / p for p in sorted(listed.split("\0")) if p]
+
+
+def top_level_dirs(repo: Path) -> frozenset[str]:
+    """Every first path segment of the TRACKED tree that names a directory.
+
+    This is what separates a claim about this tree from a slashed token that merely looks
+    like one. The path grammar cannot tell them apart on its own: ``origin/master``,
+    ``10.42.0.0/16``, ``America/Chicago``, ``application/json`` and a doc-relative
+    ``defaults/main.yml`` all parse as paths. Deriving the roots from ``git ls-files``
+    rather than listing them keeps the filter true after a top-level directory is added.
+    """
+    listed = subprocess.run(
+        ["git", "ls-files", "-z"],
+        cwd=repo,
+        env=git_env(),
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    return frozenset(sorted(p.split("/", 1)[0] for p in listed.split("\0") if "/" in p))
+
+
+def in_tree(c: Citation, roots: frozenset[str]) -> bool:
+    """Whether ``c`` is support at all: a probe, or a path whose first segment is a repo root.
+
+    An out-of-tree citation is prose, not a broken fact — neither an error nor a warning.
+    A rejected form stays rejected whatever its prefix: a line number is a claim about THIS
+    tree however it is spelled.
+    """
+    if c.form == "probe":
+        return True
+    return c.path.split("/")[0] in roots

@@ -13,7 +13,14 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .atoms import Ambiguous, backrefs, hash_atom
-from .citations import Citation, parse_citations, repo_docs, sections
+from .citations import (
+    Citation,
+    in_tree,
+    parse_citations,
+    repo_docs,
+    sections,
+    top_level_dirs,
+)
 from .relations import Edb
 
 LOCK_REL = "docs/facts.lock"
@@ -70,13 +77,19 @@ def lock_tampered(path: Path) -> bool:
 
 
 def _repo_citations(repo: Path) -> dict[str, list[Citation]]:
-    """Every section's citations, keyed by unit."""
+    """Every section's IN-TREE citations, keyed by unit.
+
+    The roots are read once per call: an out-of-tree span (``origin/master``, a doc-relative
+    ``defaults/main.yml``) parses as a path citation but is not support, so it never reaches
+    the lock and never grades a section.
+    """
+    roots = top_level_dirs(repo)
     out: dict[str, list[Citation]] = {}
     for doc in repo_docs(repo):
         rel = doc.relative_to(repo).as_posix()
-        for sec in sections(rel, doc.read_text()):
+        for sec in sections(rel, doc.read_text(encoding="utf-8")):
             cites, _ = parse_citations(sec.body)
-            out[sec.key] = cites
+            out[sec.key] = [c for c in cites if in_tree(c, roots)]
     return out
 
 

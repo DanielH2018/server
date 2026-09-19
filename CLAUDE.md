@@ -555,6 +555,12 @@ which must carry `# fact: <doc>#<heading>` in its body), a `DECIDED:` marker cit
 prefix, or a `probe.py <subcommand>`. A `file:line` citation is rejected by `fact_status.py
 lint`: a line number moves under every edit above it. Cite the symbol or the marker.
 
+A citation is support only when its first path segment is a top-level directory of the repo
+(`ansible/`, `scripts/`, `docs/`, `.claude/`), so a doc-relative `defaults/main.yml` is prose
+rather than broken support, and so is a slashed token that names nothing here at all. The
+roots are read from `git ls-files`, not listed. A rejected form stays rejected whatever its
+prefix: a line number is a claim about this tree however it is spelled.
+
 `docs/facts.lock` records the hashes each verified section was checked against. The tool
 writes it; a hand edit fails `test_every_recorded_atom_hashes_as_recorded` as tampered.
 `fact_status.py status` prints every section's status, `verify '<doc>#<heading>'` is the

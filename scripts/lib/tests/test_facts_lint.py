@@ -39,6 +39,16 @@ def test_clean_section_has_no_findings(tmp_path):
     )
 
 
+def test_out_of_tree_citation_is_ignored(tmp_path):
+    """A slashed token that names no repo root is prose: neither an error nor a warning."""
+    assert (
+        _rules(
+            tmp_path, "## A\nrebase onto `origin/master`, then `defaults/main.yml`\n"
+        )
+        == set()
+    )
+
+
 def test_file_line_is_flagged(tmp_path):
     assert ("CLAUDE.md#A", "rejected-form") in _rules(
         tmp_path, "## A\nsee `t/m.py:1`\n"

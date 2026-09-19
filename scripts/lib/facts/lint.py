@@ -13,7 +13,13 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .atoms import Ambiguous, backrefs, hash_atom
-from .citations import parse_citations, repo_docs, sections
+from .citations import (
+    in_tree,
+    parse_citations,
+    repo_docs,
+    sections,
+    top_level_dirs,
+)
 from .lock import LOCK_REL, lock_tampered
 
 RULES = frozenset(
@@ -51,7 +57,14 @@ def _f(unit: str, rule: str, detail: str) -> LintFinding:
 
 
 def lint_sections(repo: Path, unit_keys: set[str] | None) -> list[LintFinding]:
+    """Every ``RULES`` finding in the named sections, or in every section when ``unit_keys`` is None.
+
+    Errors and warnings come back in one list; the caller splits them on ``LintFinding.warn``.
+    Unlike ``lock.check_lock`` this reads no lock row: a never-verified section is linted the
+    same as a verified one, which is what makes ``lint --changed-since`` a ratchet.
+    """
     out: list[LintFinding] = []
+    roots = top_level_dirs(repo)
     if lock_tampered(repo / LOCK_REL):
         out.append(
             _f(
@@ -66,6 +79,11 @@ def lint_sections(repo: Path, unit_keys: set[str] | None) -> list[LintFinding]:
             if unit_keys is not None and sec.key not in unit_keys:
                 continue
             cites, rejects = parse_citations(sec.body)
+            # Out-of-tree spans are prose, not broken support: `origin/master` and a
+            # doc-relative `defaults/main.yml` parse as paths and name nothing here. A
+            # REJECTED form is not filtered — a line number is a claim about this tree
+            # whatever its prefix — so the rejects list below is the unfiltered one.
+            cites = [c for c in cites if in_tree(c, roots)]
             out.extend(
                 _f(
                     sec.key,
