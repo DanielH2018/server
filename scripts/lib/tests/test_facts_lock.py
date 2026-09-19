@@ -129,10 +129,10 @@ def test_repo_edb_gives_statuses(tmp_path):
     assert not idb.one_way
 
 
-def test_unverified_section_with_citations_is_out(tmp_path):
+def test_unverified_section_with_citations_is_unverified(tmp_path):
     repo = _repo(tmp_path)
     edb = build_repo_edb(repo, {})
-    assert status_of(edb, derive(edb), "CLAUDE.md#Gate") == "OUT"
+    assert status_of(edb, derive(edb), "CLAUDE.md#Gate") == "UNVERIFIED"
 
 
 def test_finding_kinds_census():

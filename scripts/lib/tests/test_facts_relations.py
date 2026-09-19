@@ -54,9 +54,26 @@ def test_missing_atom_is_out():
 
 
 def test_unrecorded_citation_is_out():
+    other = "m.py:other"
+    e = _edb(
+        cites=frozenset({(U, A), (U, other)}),
+        recorded={(U, A): "h1"},
+        current={A: "h1", other: "h9"},
+    )
+    i = derive(e)
+    assert (U, other) in i.unrecorded and status_of(e, i, U) == "OUT"
+
+
+def test_never_verified_unit_is_unverified():
     e = _edb(recorded={})
     i = derive(e)
-    assert (U, A) in i.unrecorded and status_of(e, i, U) == "OUT"
+    assert U not in i.out and status_of(e, i, U) == "UNVERIFIED"
+
+
+def test_missing_atom_on_a_never_verified_unit_is_unverified_not_out():
+    e = _edb(recorded={}, current={})
+    i = derive(e)
+    assert U not in i.out and status_of(e, i, U) == "UNVERIFIED"
 
 
 def test_probe_transport_failure_is_unknown_not_out():
@@ -153,4 +170,6 @@ def test_out_beats_unknown():
 
 
 def test_status_census():
-    assert STATUSES == frozenset({"IN", "OUT", "UNKNOWN", "UNDECLARED", "CONVENTION"})
+    assert STATUSES == frozenset(
+        {"IN", "OUT", "UNKNOWN", "UNVERIFIED", "UNDECLARED", "CONVENTION"}
+    )

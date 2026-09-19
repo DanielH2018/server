@@ -3,12 +3,14 @@
 Recomputed from scratch on every call. The domain is a few hundred units and atoms, so
 incremental maintenance would buy nothing and add a source of non-determinism. Nothing here
 reads a file — ``lock.build_repo_edb`` and (slice 4) the memory reader build the ``Edb``.
+Lint owns an unresolved atom in a never-verified section; status grades only what verify
+recorded.
 """
 
 from collections.abc import Mapping
 from dataclasses import dataclass
 
-STATUSES = frozenset({"IN", "OUT", "UNKNOWN", "UNDECLARED", "CONVENTION"})
+STATUSES = frozenset({"IN", "OUT", "UNKNOWN", "UNVERIFIED", "UNDECLARED", "CONVENTION"})
 
 
 @dataclass(frozen=True)
@@ -32,6 +34,7 @@ class Idb:
     one_way: frozenset[tuple[str, str]]
     unknown: frozenset[str]
     undeclared: frozenset[str]
+    unverified: frozenset[str]
     out: frozenset[str]
     in_: frozenset[str]
     supported_by_out: frozenset[str]
@@ -39,12 +42,17 @@ class Idb:
 
 def derive(edb: Edb) -> Idb:
     cites = edb.cites
+    # A unit with no lock row at all is UNVERIFIED, not OUT: missing and unrecorded grade
+    # only a unit verify has already recorded at least one atom for.
+    recorded_units = frozenset(u for u, _a in edb.recorded)
     # A live probe with no answer is unknown, not missing: only live probes earn UNKNOWN.
     # A non-live atom in transport_failed is missing/unrecorded, making the unit OUT.
     missing = frozenset(
         (u, a)
         for u, a in cites
-        if a not in edb.current and not (a in edb.live and a in edb.transport_failed)
+        if u in recorded_units
+        and a not in edb.current
+        and not (a in edb.live and a in edb.transport_failed)
     )
     moved = frozenset(
         (u, a)
@@ -56,7 +64,8 @@ def derive(edb: Edb) -> Idb:
     unrecorded = frozenset(
         (u, a)
         for u, a in cites
-        if (u, a) not in edb.recorded
+        if u in recorded_units
+        and (u, a) not in edb.recorded
         and not (a in edb.live and a in edb.transport_failed)
     )
     unknown = frozenset(
@@ -67,8 +76,9 @@ def derive(edb: Edb) -> Idb:
     )
     cited_units = frozenset(u for u, _ in cites)
     undeclared = edb.memory_units - cited_units
+    unverified = cited_units - recorded_units
     out = frozenset(u for u, _ in missing | moved | unrecorded)
-    in_ = cited_units - out - unknown
+    in_ = cited_units - out - unknown - unverified
     supported_by_out = frozenset(u for u, f in edb.links if u in in_ and f in out)
     return Idb(
         missing,
@@ -77,6 +87,7 @@ def derive(edb: Edb) -> Idb:
         one_way,
         unknown,
         undeclared,
+        unverified,
         out,
         in_,
         supported_by_out,
@@ -86,6 +97,8 @@ def derive(edb: Edb) -> Idb:
 def status_of(edb: Edb, idb: Idb, unit: str) -> str:
     if unit in idb.out:
         return "OUT"
+    if unit in idb.unverified:
+        return "UNVERIFIED"
     if unit in idb.unknown:
         return "UNKNOWN"
     if unit in idb.in_:

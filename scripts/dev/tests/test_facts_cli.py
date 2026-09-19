@@ -15,7 +15,7 @@ def _repo(tmp_path):
         ["git", "init", "-q", "-b", "master", str(tmp_path)], check=True, env=env
     )
     (tmp_path / "t").mkdir()
-    (tmp_path / "t" / "m.py").write_text("LIMIT = 85\n")
+    (tmp_path / "t" / "m.py").write_text("LIMIT = 85\nOTHER = 1\n")
     (tmp_path / "CLAUDE.md").write_text(
         "## Gate\n`t/m.py:LIMIT` bounds it.\n\n## Style\nwhy, not what.\n"
     )
@@ -44,10 +44,22 @@ def _repo(tmp_path):
 def test_status_lists_every_section_with_its_status(tmp_path, capsys):
     repo = _repo(tmp_path)
     assert (
-        main(["status", "--repo", str(repo)]) == 1
-    )  # Gate is OUT: cited, nothing recorded
+        main(["status", "--repo", str(repo)]) == 0
+    )  # Gate is UNVERIFIED: cited, no lock row at all
     out = capsys.readouterr().out
-    assert "OUT  CLAUDE.md#Gate" in out and "CONVENTION  CLAUDE.md#Style" in out
+    assert "UNVERIFIED  CLAUDE.md#Gate" in out and "CONVENTION  CLAUDE.md#Style" in out
+
+
+def test_new_citation_after_verify_is_out(tmp_path, capsys):
+    repo = _repo(tmp_path)
+    main(["verify", "--repo", str(repo), "CLAUDE.md#Gate"])
+    capsys.readouterr()
+    (repo / "CLAUDE.md").write_text(
+        "## Gate\n`t/m.py:LIMIT` bounds it. `t/m.py:OTHER` too.\n\n## Style\nwhy, not what.\n"
+    )
+    assert main(["status", "--repo", str(repo)]) == 1
+    out = capsys.readouterr().out
+    assert "OUT  CLAUDE.md#Gate" in out
 
 
 def test_verify_then_status_is_clean(tmp_path, capsys):
