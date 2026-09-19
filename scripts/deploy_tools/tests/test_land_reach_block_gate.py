@@ -99,7 +99,10 @@ def test_a_file_shipped_inside_the_gated_block_reaches_the_gitops_host_only():
 
 def test_an_ungated_shipping_task_still_reaches_every_host():
     """The reject half, so a later narrowing of `_gates_in` cannot go quiet: no block, no
-    when, no playbook gate -- all three hosts."""
+    when, no playbook gate -- all three hosts. The role-level read must agree: the live
+    `initial_setup` role has ungated leaves, and a role-level answer that narrowed it would
+    silently bring issue #1009 back for every file it ships."""
+    assert land_reach.setup_role_hosts("initial_setup") == frozenset(land_reach._HOSTS)
     assert land_reach.setup_file_hosts("initial_setup", _UNGATED) == frozenset(
         land_reach._HOSTS
     )

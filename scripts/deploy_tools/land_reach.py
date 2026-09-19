@@ -14,6 +14,7 @@ templates under the ungated `initial_setup` role read as reaching every host).
 Split out of `land_tags.py` at the module-length cap; the path-to-tag mappers stay there.
 """
 
+import functools
 import json
 import sys
 from pathlib import Path
@@ -76,11 +77,26 @@ def _host_vars(
     The same precedence Ansible resolves a `when:` variable through (a host_vars key always
     wins over the group default). Defaults to this repo's group_vars/all.yml and host_vars/.
     """
-    merged = dict(yaml_fast.safe_load(all_vars.read_text()) or {})
+    merged = dict(_vars_file(all_vars))
     hv = host_vars_dir / f"{host}.yml"
     if hv.exists():
-        merged.update(yaml_fast.safe_load(hv.read_text()) or {})
+        merged.update(_vars_file(hv))
     return merged
+
+
+def _vars_file(path: Path) -> dict:
+    """`path` parsed once per content: the cache key carries its mtime, so a rewrite misses.
+
+    `_eval_when` reads the merged vars per gate per host, and group_vars/all.yml is the
+    largest YAML in the tree; without this, a 40-path setup-role note re-parsed it several
+    hundred times.
+    """
+    return _parse_vars_file(path, path.stat().st_mtime_ns)
+
+
+@functools.lru_cache(maxsize=32)
+def _parse_vars_file(path: Path, _mtime_ns: int) -> dict:
+    return yaml_fast.safe_load(path.read_text()) or {}
 
 
 def _eval_when(
@@ -172,13 +188,23 @@ def setup_role_hosts(
 def _hosts_passing(
     chains, hosts, all_vars: Path, host_vars_dir: Path
 ) -> frozenset[str]:
-    """The hosts of `hosts` on which at least one `when:` chain in `chains` passes whole."""
+    """The hosts of `hosts` on which at least one `when:` chain in `chains` passes whole.
+
+    An empty chain -- an ungated leaf -- passes everywhere, so its presence settles every
+    host before a single gate is read. The rest are deduplicated first: every leaf under
+    deploy_ui's one block carries the same `("has_gitops",)`, and `_eval_when` re-parses
+    group_vars/all.yml per gate per host, which put a 40-path `initial_setup` note at 4.7s
+    against 0.24s before the role-level read existed.
+    """
+    if () in chains:
+        return frozenset(hosts)
+    distinct = {json.dumps(chain, sort_keys=True): chain for chain in chains}.values()
     return frozenset(
         h
         for h in hosts
         if any(
             all(_eval_when(g, h, all_vars, host_vars_dir) for g in chain)
-            for chain in chains
+            for chain in distinct
         )
     )
 
