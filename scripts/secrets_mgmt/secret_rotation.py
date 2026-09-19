@@ -172,9 +172,11 @@ def cmd_audit(args, tools: RotationTools) -> int:
     """Print each secret's rotation status, push the summary to Kuma, and gate on drift.
 
     Exits 2 when `--push` is given without SECRET_ROTATION_KUMA set, 1 when `--check` is
-    given and the registry is out of sync with secrets.yml, 0 otherwise — overdue secrets
-    and malformed push tokens are reported but never fail this exit code; those are the
-    daily Kuma push's concern, not a CI gate's.
+    given and the registry is out of sync with secrets.yml, and 1 when `--push` pushed
+    `down` — the daily audit runs under a systemd timer whose `Restart=on-failure` reruns it
+    every 30 min until it exits 0 (roles/setup/common/tasks/kuma_check_timer.yml). Without
+    `--push`, overdue secrets and malformed push tokens are reported but never fail this exit
+    code; those are the daily Kuma push's concern, not a CI gate's.
     """
     reg = tools.load_registry()
     # Registry drift: warn by default (so a forgotten `sync` is visible); --check fails on it.
@@ -244,6 +246,8 @@ def cmd_audit(args, tools: RotationTools) -> int:
             and not extra_down
         )
         tools.kuma_push(url, ok, summary)
+        if not ok:
+            return 1
     # --check: a CI/PR gate that the registry is in sync with secrets.yml. Fails ONLY on drift,
     # NOT on overdue (a time-based runtime state the daily Kuma push owns — blocking an unrelated
     # commit on a due-for-rotation secret would be wrong), and NOT on push-token shape (see the

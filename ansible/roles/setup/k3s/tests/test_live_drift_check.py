@@ -204,6 +204,19 @@ def test_other_longhorn_kinds_stay_foreign():
 # ── verdict ──────────────────────────────────────────────────────────────────────────────
 
 
+def test_boot_grace_holds_the_run_just_after_boot():
+    # 12s of uptime is the 2026-08-30 case: the check must push nothing and exit 1 so the
+    # kuma-check timer reruns it once the cluster is up.
+    assert ldc.boot_grace_active(12.0, 420) is True
+
+
+def test_boot_grace_lets_the_run_proceed_once_passed_and_fails_open():
+    assert ldc.boot_grace_active(421.0, 420) is False
+    # An unreadable clock or an unset grace must run the check, not silence it forever.
+    assert ldc.boot_grace_active(None, 420) is False
+    assert ldc.boot_grace_active(12.0, 0) is False
+
+
 def test_a_clean_run_is_zero():
     code, message = ldc.verdict([], [], [], server_side=2)
     assert code == 0

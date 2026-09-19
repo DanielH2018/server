@@ -68,14 +68,20 @@
   tags: [crons]
   # 08:00 — after the Sunday 07:30 reboot + 07:15 CrowdSec-hub jobs settle; clear of the
   # 06:xx redeploy window. Pushes the "Secret Rotation" Kuma monitor (uptime-kuma role).
-  when: has_gitops
-  ansible.builtin.cron:
-    name: "Daily secret rotation audit"
-    minute: "0"
-    hour: "8"
-    job: "/usr/local/bin/secret-rotation-audit.sh"
-    user: "{{ sys_user }}"
-  become: true
+  #
+  # A systemd timer since 2026-09-19 (roles/setup/common/tasks/kuma_check_timer.yml): a red
+  # verdict reruns every 30 min until it clears rather than sitting on the tile for a day. The
+  # state follows has_gitops so a host that loses the flag loses the timer and the old cron.
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/kuma_check_timer.yml"
+  vars:
+    kuma_check_state: "{{ 'present' if has_gitops else 'absent' }}"
+    kuma_check_name: secret-rotation-audit
+    kuma_check_description: Daily secret rotation audit (Kuma push)
+    kuma_check_exec: /usr/local/bin/secret-rotation-audit.sh
+    kuma_check_user: "{{ sys_user }}"
+    kuma_check_on_calendar: "*-*-* 08:00:00"
+    kuma_check_restart_sec: 30min
+    kuma_check_cron_name: "Daily secret rotation audit"
 
 - name: Deploy the weekly secret-rotation wrapper (gitops host only)
   tags: [crons]
@@ -447,18 +453,25 @@
 
 - name: Schedule the setup-plane drift check
   tags: [crons, setup_drift]
-  when: inventory_hostname in setup_drift_check_hosts
   # Daily rather than hourly: the setup plane changes only when someone runs a play by hand, so
   # a shorter period would re-read the same answer all day. 07:50 sits after the Sunday 07:30
   # reboot has settled and before the 08:00 secret-rotation audit. Root, because the
   # deployed-code arm compares live artifacts under /usr/local that are not all world-readable.
-  ansible.builtin.cron:
-    name: "Setup-plane drift check"
-    minute: "50"
-    hour: "7"
-    job: "/usr/local/bin/setup-drift-check.sh"
-    user: root
-  become: true
+  #
+  # A systemd timer since 2026-09-19 (roles/setup/common/tasks/kuma_check_timer.yml): a red
+  # verdict reruns every 30 min until it clears rather than sitting on the tile for a day. The
+  # state follows setup_drift_check_hosts so a host dropped from the list loses the timer and
+  # the old cron.
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/kuma_check_timer.yml"
+  vars:
+    kuma_check_state: "{{ 'present' if inventory_hostname in setup_drift_check_hosts else 'absent' }}"
+    kuma_check_name: setup-drift
+    kuma_check_description: Setup-plane drift check (Kuma push)
+    kuma_check_exec: /usr/local/bin/setup-drift-check.sh
+    kuma_check_user: root
+    kuma_check_on_calendar: "*-*-* 07:50:00"
+    kuma_check_restart_sec: 30min
+    kuma_check_cron_name: "Setup-plane drift check"
 
 - name: Record the rendered setup-drift check
   tags: [crons, setup_drift]

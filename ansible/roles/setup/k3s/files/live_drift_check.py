@@ -347,6 +347,28 @@ def push(status: str, message: str) -> None:
         print(f"kuma push failed: {exc}", file=sys.stderr)
 
 
+def boot_grace_active(uptime_s: float | None, grace_s: int) -> bool:
+    """True when the host booted less than `grace_s` ago, so this run should push nothing.
+
+    The Python twin of kuma-push-lib.sh's `boot_grace_active`. A `Persistent=true` catch-up
+    run lands seconds after boot, while k3s is still starting, and would push a false down.
+    The caller exits 1 without a verdict instead, and the timer's Restart=on-failure reruns
+    it once the grace has passed. Fails open: an unreadable clock (`uptime_s` None) or a zero
+    grace runs the check.
+    """
+    if uptime_s is None or grace_s <= 0:
+        return False
+    return uptime_s < grace_s
+
+
+def host_uptime_s() -> float | None:
+    try:
+        with open("/proc/uptime", encoding="ascii") as f:
+            return float(f.read().split()[0])
+    except OSError, ValueError, IndexError:
+        return None
+
+
 def main() -> int:
     """Fetch every in-scope object, compare it to its last-applied baseline, and push to Kuma.
 
@@ -355,7 +377,17 @@ def main() -> int:
     Kuma. Returns `verdict`'s exit code: 0 clean, 2 on a read failure (fail closed — a check
     that can't read the cluster must not report it clean), otherwise the drift/unannotated
     verdict.
+
+    Exits 1 without pushing when the host is inside BOOT_GRACE_S seconds of boot (set by the
+    timer unit); the timer's Restart=on-failure reruns it once the cluster is up.
     """
+    grace_s = int(os.environ.get("BOOT_GRACE_S", "0") or 0)
+    if boot_grace_active(host_uptime_s(), grace_s):
+        print(
+            f"boot grace: uptime under {grace_s}s — no verdict, the timer reruns this",
+            file=sys.stderr,
+        )
+        return 1
     drifted: list[tuple[str, str, str, list]] = []
     unannotated: list[str] = []
     errors: list[str] = []

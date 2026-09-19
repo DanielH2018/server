@@ -9,10 +9,9 @@ first** and scope with `--tags` when iterating.
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates or playbook entry. -->
 - **Applied by:** `initial_setup.yml --tags "initial_setup"`
-- **Crons (16):**
+- **Crons (14):**
   - `Weekly apt autoremove` — `0 2 * * 0`
   - `Weekly dpkg purge orphaned configs` — `15 2 * * 0`
-  - `Daily secret rotation audit` — `0 8 * * *`
   - `Weekly secret rotation (auto tier)` — `0 9 * * 0`
   - `Weekly system restart` — `30 7 * * 0`
   - `Weekly firmware update` — `0 7 * * 0`
@@ -21,12 +20,13 @@ first** and scope with `--tags` when iterating.
   - `Weekly git object-store repair` — `20 4 * * 0`
   - `Refresh homelab infrastructure map` — `*/15 * * * *`
   - `TLS cert-expiry watch` — `10 5 * * *`
-  - `Setup-plane drift check` — `50 7 * * *`
   - `Refresh generated docs` — `17 6,18 * * *`
   - `Homelab eval sweep` — `0 2 * * 0`
   - `Weekly rkhunter malware scan` — `0 2 * * 3`
   - `Weekly AIDE file integrity check` — `0 3 * * 1`
-- **Timer:** `kuma-check-loki-read-route.timer` (`OnCalendar=*-*-* *:23:00`)
+- **Timers (3):** `kuma-check-secret-rotation-audit.timer` (`OnCalendar=*-*-* 08:00:00`),
+  `kuma-check-setup-drift.timer` (`OnCalendar=*-*-* 07:50:00`),
+  `kuma-check-loki-read-route.timer` (`OnCalendar=*-*-* *:23:00`)
 <!-- /generated_from -->
 
 ## Where it runs
@@ -154,6 +154,14 @@ invariant when adding tasks, or tag-scoped runs die on undefined variables.
 `setup_drift_check_hosts` (`group_vars/all.yml`): is the `copy:`-deployed code here identical to
 its repo source, and has any `template:`-rendered setup script's SOURCE changed since this host
 rendered it?
+
+It runs from `kuma-check-setup-drift.timer` since 2026-09-19, and so does the daily
+secret-rotation audit (`kuma-check-secret-rotation-audit.timer`, gitops host only): both
+import [[common]]'s `kuma_check_timer.yml`, exit 1 after a down push, and rerun every 30 min
+under `Restart=on-failure` until they exit 0. For the audit that includes the exec'd
+`secret_rotation.py audit --push`, which returns 1 when it pushed `down`. Each import's
+`kuma_check_state` follows the host gate, so a host dropped from the list, or one without
+`has_gitops`, loses the timer and the cron it replaced.
 
 **Why it exists separately from `manifest-prune-check.sh`.** That check answers the same two
 questions plus an orphaned-cluster-object arm, but it is installed by

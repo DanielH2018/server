@@ -362,13 +362,20 @@
   # stores it prunes are {{ sys_user }}-owned under /home/{{ sys_user }}, and a root prune would
   # be free to delete outside them if the search path were ever wrong. It reads the shared
   # kuma-push.env through the 0640 root:{{ sys_user }} group bit, same as disk-health.
-  ansible.builtin.cron:
-    name: "remember log rotation health"
-    minute: "{{ k3s_remember_logs_cron_minute }}"
-    user: "{{ sys_user }}"
-    job: "/usr/local/bin/remember-logs-health.sh"
-    cron_file: remember-logs-health
-  become: true
+  #
+  # A systemd timer since 2026-09-19 (roles/setup/common/tasks/kuma_check_timer.yml): a red
+  # verdict reruns every 15 min until it clears rather than sitting on the tile for an hour.
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/kuma_check_timer.yml"
+  vars:
+    kuma_check_state: present
+    kuma_check_name: remember-logs
+    kuma_check_description: remember log rotation health (Kuma push)
+    kuma_check_exec: /usr/local/bin/remember-logs-health.sh
+    kuma_check_user: "{{ sys_user }}"
+    kuma_check_on_calendar: "*-*-* *:{{ k3s_remember_logs_cron_minute }}:00"
+    kuma_check_restart_sec: 15min
+    kuma_check_cron_name: "remember log rotation health"
+    kuma_check_cron_file: remember-logs-health
 
 - name: Deploy the manifest-prune drift check as a versioned release
   tags: [manifest-prune]
@@ -392,14 +399,19 @@
 
 - name: Schedule the manifest-prune drift check
   tags: [manifest-prune]
-  ansible.builtin.cron:
-    name: "Manifest prune drift check"
-    minute: "{{ k3s_manifest_prune_cron_minute }}"
-    hour: "{{ k3s_manifest_prune_cron_hour }}"
-    user: root
-    job: "/usr/local/bin/manifest-prune-check.sh"
-    cron_file: manifest-prune-check
-  become: true
+  # A systemd timer since 2026-09-19 (roles/setup/common/tasks/kuma_check_timer.yml): a red
+  # verdict reruns every 30 min until it clears rather than sitting on the tile for a day.
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/kuma_check_timer.yml"
+  vars:
+    kuma_check_state: present
+    kuma_check_name: manifest-prune
+    kuma_check_description: Manifest prune drift check (Kuma push)
+    kuma_check_exec: /usr/local/bin/manifest-prune-check.sh
+    kuma_check_user: root
+    kuma_check_on_calendar: "*-*-* {{ '%02d' | format(k3s_manifest_prune_cron_hour | int) }}:{{ '%02d' | format(k3s_manifest_prune_cron_minute | int) }}:00"
+    kuma_check_restart_sec: 30min
+    kuma_check_cron_name: "Manifest prune drift check"
+    kuma_check_cron_file: manifest-prune-check
 
 - name: Deploy the release-staleness drift check as a versioned release
   tags: [release-staleness]
@@ -463,22 +475,32 @@
 
 - name: Schedule the live-object drift check
   tags: [live-drift]
-  # KUBECONFIG is set explicitly because cron inherits neither it nor a useful PATH — without
-  # it kubectl talks to no cluster and every kind returns an error, which the check reports as
-  # exit 2 rather than as a clean run. `set -a` around the env file exports its assignments;
-  # sourcing alone would leave PUSH_TOKEN unset in the script's environment.
-  ansible.builtin.cron:
-    name: "Live object drift check"
-    minute: "{{ k3s_live_drift_cron_minute }}"
-    hour: "{{ k3s_live_drift_cron_hour }}"
-    user: "{{ sys_user }}"
-    job: >-
-      set -a; . /etc/rancher/k3s/live-drift-check.env; set +a;
-      KUBECONFIG=/home/{{ sys_user }}/.kube/config
+  # KUBECONFIG is set explicitly because systemd supplies neither it nor a useful PATH, as cron
+  # did not — without it kubectl talks to no cluster and every kind returns an error, which the
+  # check reports as exit 2 rather than as a clean run. The env file carries the push token;
+  # EnvironmentFile= exports it the way the cron's `set -a` did.
+  #
+  # A systemd timer since 2026-09-19 (roles/setup/common/tasks/kuma_check_timer.yml): a red
+  # verdict reruns every 30 min until it clears rather than sitting on the tile for a day.
+  # BOOT_GRACE_S makes a Persistent catch-up run at boot exit 1 without a push, so the restart
+  # carries the real verdict once the cluster is up.
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/kuma_check_timer.yml"
+  vars:
+    kuma_check_state: present
+    kuma_check_name: live-drift
+    kuma_check_description: Live object drift check (Kuma push)
+    kuma_check_exec: >-
       /usr/local/bin/uv run --no-project --no-python-downloads
       --python {{ host_python_version }} /usr/local/bin/live-drift-check.py
-    cron_file: live-drift-check
-  become: true
+    kuma_check_user: "{{ sys_user }}"
+    kuma_check_env_file: /etc/rancher/k3s/live-drift-check.env
+    kuma_check_environment:
+      - "KUBECONFIG=/home/{{ sys_user }}/.kube/config"
+      - "BOOT_GRACE_S={{ k3s_health_cron_boot_grace_s }}"
+    kuma_check_on_calendar: "*-*-* {{ '%02d' | format(k3s_live_drift_cron_hour | int) }}:{{ '%02d' | format(k3s_live_drift_cron_minute | int) }}:00"
+    kuma_check_restart_sec: 30min
+    kuma_check_cron_name: "Live object drift check"
+    kuma_check_cron_file: live-drift-check
 
 - name: Deploy the off-box etcd snapshot credentials
   tags: [etcd-snapshot]

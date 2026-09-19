@@ -53,6 +53,40 @@ def test_audit_summary_clean_when_nothing_overdue():
     )
 
 
+def _audit_push_args():
+    return SimpleNamespace(
+        push=True, check=False, no_derive=True, extra_down=None, all=False
+    )
+
+
+def test_audit_push_exits_nonzero_after_pushing_down(monkeypatch):
+    # The daily audit runs under a kuma-check timer whose Restart=on-failure reruns it while
+    # red, so a pushed `down` has to reach systemd as a non-zero exit.
+    monkeypatch.setenv("SECRET_ROTATION_KUMA", "https://kuma.example/api/push/x")
+    tools, recorded = build_tools(
+        Fakes(
+            registry=_reg(("stale_push_token", "auto", "2025-01-01")),
+            names=["stale_push_token"],
+        )
+    )
+    assert sr.cmd_audit(_audit_push_args(), tools) == 1
+    (push,) = [c for c in recorded if c[0] == "kuma_push"]
+    assert push[1][1] is False, "the push itself must say down"
+
+
+def test_audit_push_exits_zero_after_pushing_up(monkeypatch):
+    monkeypatch.setenv("SECRET_ROTATION_KUMA", "https://kuma.example/api/push/x")
+    tools, recorded = build_tools(
+        Fakes(
+            registry=_reg(("fresh_push_token", "auto", "2026-09-01")),
+            names=["fresh_push_token"],
+        )
+    )
+    assert sr.cmd_audit(_audit_push_args(), tools) == 0
+    (push,) = [c for c in recorded if c[0] == "kuma_push"]
+    assert push[1][1] is True
+
+
 def test_audit_summary_caps_the_overdue_name_list():
     today = dt.date(2026, 6, 11)
     reg = _reg(*[("t%02d_push_token" % i, "auto", "2025-01-01") for i in range(8)])

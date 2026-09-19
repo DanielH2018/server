@@ -32,9 +32,14 @@
 #   kuma_check_restart_sec  RestartSec=, how long a red check waits before it reruns
 #   kuma_check_state        present | absent
 #   kuma_check_env_file     optional EnvironmentFile=; omitted when empty
+#   kuma_check_environment  optional list of `NAME=value` strings, one Environment= line each,
+#                           for what cron used to set inline (KUBECONFIG, a grace) and the env
+#                           file must not carry
 #   kuma_check_cron_name    optional: the `ansible.builtin.cron` name this timer replaces, removed
 #                           in both states so the two never coexist
 #   kuma_check_cron_user    the legacy cron's owner; defaults to kuma_check_user
+#   kuma_check_cron_file    the legacy cron's `cron_file:` when it had one; a /etc/cron.d entry
+#                           is only found again through the same file name
 
 - name: Render the kuma-check units for {{ kuma_check_name }}
   when: kuma_check_state == 'present'
@@ -108,5 +113,6 @@
   ansible.builtin.cron:
     name: "{{ kuma_check_cron_name }}"
     user: "{{ kuma_check_cron_user | default(kuma_check_user) }}"
+    cron_file: "{{ kuma_check_cron_file | default(omit) }}"
     state: absent
   become: true

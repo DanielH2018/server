@@ -14,7 +14,7 @@ here is a hand apply. `daniel-box` is the server; `daniel-server` joined as an a
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates or playbook entry. -->
 - **Applied by:** `k3s-bringup.yml --tags "k3s"`; `k3s-bringup.yml --tags "k3s_agent"`
-- **Crons (12):**
+- **Crons (9):**
   - `Longhorn backup health` — `{{ k3s_longhorn_backup_health_cron_minute }} * * * *`
   - `Longhorn filesystem trim` — `{{ k3s_longhorn_trim_cron_minute }} {{
     k3s_longhorn_trim_cron_hour }} * * *`
@@ -26,15 +26,16 @@ here is a hand apply. `daniel-box` is the server; `daniel-server` joined as an a
     k3s_longhorn_restore_drill_cron.split()[1] }} {{ k3s_longhorn_restore_drill_cron.split()[2]
     }} * *`
   - `daniel-box disk health` — `{{ k3s_disk_health_cron_minute }} * * * *`
-  - `remember log rotation health` — `{{ k3s_remember_logs_cron_minute }} * * * *`
-  - `Manifest prune drift check` — `{{ k3s_manifest_prune_cron_minute }} {{
-    k3s_manifest_prune_cron_hour }} * * *`
   - `Release staleness drift check` — `{{ k3s_release_staleness_cron_minute }} * * * *`
-  - `Live object drift check` — `{{ k3s_live_drift_cron_minute }} {{ k3s_live_drift_cron_hour
-    }} * * *`
   - `Off-box etcd snapshot` — `{{ k3s_etcd_s3_cron_minute }} {{ k3s_etcd_s3_cron_hour }} * * *`
   - `etcd restore drill` — `{{ k3s_etcd_restore_drill_cron.split()[0] }} {{
     k3s_etcd_restore_drill_cron.split()[1] }} * * {{ k3s_etcd_restore_drill_cron.split()[4] }}`
+- **Timers (3):** `kuma-check-remember-logs.timer` (`OnCalendar=*-*-* *:{{
+  k3s_remember_logs_cron_minute }}:00`), `kuma-check-manifest-prune.timer` (`OnCalendar=*-*-*
+  {{ '%02d' | format(k3s_manifest_prune_cron_hour | int) }}:{{ '%02d' |
+  format(k3s_manifest_prune_cron_minute | int) }}:00`), `kuma-check-live-drift.timer`
+  (`OnCalendar=*-*-* {{ '%02d' | format(k3s_live_drift_cron_hour | int) }}:{{ '%02d' |
+  format(k3s_live_drift_cron_minute | int) }}:00`)
 <!-- /generated_from -->
 
 ## Layout
@@ -120,6 +121,17 @@ check`, `Live object drift check`, `B2 deletion accounting`, `B2 backup budget l
 the `--list-only` etcd drill — read the cluster or the bucket and write nothing to either.
 The heartbeats push a Kuma tile through `kuma-push-lib.sh`; the B2 accounting pair appends to
 the local ledger, which is bookkeeping, not state.
+
+Three of those heartbeats are kuma-check timers rather than crons since 2026-09-19:
+`remember log rotation health`, `Manifest prune drift check` and `Live object drift check`
+import [[common]]'s `kuma_check_timer.yml`. Each script exits 1 after it pushes `down`, and
+the service's `Restart=on-failure` reruns it (15 min for the hourly check, 30 min for the
+daily ones) until it exits 0, so a red tile clears when the fault does rather than at the
+next slot. The timers are `Persistent=true`; the two daily checks carry the boot grace so a
+catch-up run at boot exits 1 without a verdict and the restart carries the real one.
+`systemctl status kuma-check-<name>` shows `auto-restart` while red. Manifest prune's
+healthchecks.io `/fail` ping repeats on every rerun; healthchecks notifies on a status change,
+so a check already down is not paged again.
 
 ## Notable
 

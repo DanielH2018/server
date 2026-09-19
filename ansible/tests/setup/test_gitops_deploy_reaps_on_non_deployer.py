@@ -70,21 +70,29 @@ def test_the_teardown_stops_both_timers_before_removing_them():
     assert stop["when"] == "item.stat.exists"
 
 
-def test_the_teardown_reaps_both_crons_by_cron_file():
-    installed = {
-        t["ansible.builtin.cron"]["cron_file"]
-        for t in load_tasks(ROLE / "install.yml")
-        if "ansible.builtin.cron" in t
-    }
-    assert installed == {"github-ruleset-drift", "github-interaction-limit"}
+def _kuma_check_imports(tasks_file, state: str) -> dict[str, str]:
+    """`kuma_check_name` -> `kuma_check_cron_file` for every kuma-check import in `state`."""
+    found = {}
+    for t in load_tasks(ROLE / tasks_file):
+        target = t.get("ansible.builtin.import_tasks") or ""
+        if not target.endswith("common/tasks/kuma_check_timer.yml"):
+            continue
+        variables = t["vars"]
+        if variables["kuma_check_state"] == state:
+            found[variables["kuma_check_name"]] = variables["kuma_check_cron_file"]
+    return found
 
-    removed = {
-        t["ansible.builtin.cron"]["cron_file"]
-        for t in load_tasks(ROLE / "teardown.yml")
-        if "ansible.builtin.cron" in t
-        and t["ansible.builtin.cron"].get("state") == "absent"
+
+def test_the_teardown_reaps_both_timers_and_their_legacy_crons():
+    # The GitHub checks are kuma-check timers since 2026-09-19. The install imports them
+    # present; the teardown imports the same names absent, and the shared task file's absent
+    # arm removes the units AND the cron each replaced, by the same cron_file.
+    installed = _kuma_check_imports("install.yml", "present")
+    assert installed == {
+        "github-ruleset-drift": "github-ruleset-drift",
+        "github-interaction-limit": "github-interaction-limit",
     }
-    assert removed == installed
+    assert _kuma_check_imports("teardown.yml", "absent") == installed
 
 
 def _directories_install_creates() -> set[str]:

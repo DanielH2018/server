@@ -23,6 +23,7 @@ Run: uv run pytest ansible/tests/setup/test_kuma_check_timer.py
 """
 
 import re
+from pathlib import Path
 
 import jinja2
 import pytest
@@ -36,7 +37,24 @@ TASKS = COMMON / "tasks" / "kuma_check_timer.yml"
 # Every check wired through the task file, by `kuma_check_name`. A census read by glob returns
 # an empty set the moment the include moves, so the members are named here and the test says
 # which one went missing.
-KNOWN_CHECKS = frozenset({"loki-read-route"})
+KNOWN_CHECKS = frozenset(
+    {
+        "loki-read-route",
+        "remember-logs",
+        "manifest-prune",
+        "live-drift",
+        "setup-drift",
+        "secret-rotation-audit",
+        "github-ruleset-drift",
+        "github-interaction-limit",
+    }
+)
+
+# The line a shell producer ends on. The oracle for the textual guard below: the Loki witness
+# test drives its script and proves the line does what it says; this pins that every other
+# shell producer wired through the task file carries the same line, so a producer converted
+# without it cannot read as done.
+EXIT_CONTRACT = '[[ "$STATUS" == up ]] || exit 1'
 
 BASE_VARS = {
     "kuma_check_name": "widget",
@@ -94,6 +112,17 @@ def test_environment_file_is_emitted_only_when_given(service: str) -> None:
     assert not directive(service, "EnvironmentFile")
     with_env = _render(SERVICE, kuma_check_env_file="/etc/homelab/widget.env")
     assert directive(with_env, "EnvironmentFile") == ["/etc/homelab/widget.env"]
+
+
+def test_environment_lines_are_emitted_one_per_assignment(service: str) -> None:
+    assert not directive(service, "Environment")
+    with_env = _render(
+        SERVICE, kuma_check_environment=["KUBECONFIG=/x/config", "BOOT_GRACE_S=420"]
+    )
+    assert directive(with_env, "Environment") == [
+        "KUBECONFIG=/x/config",
+        "BOOT_GRACE_S=420",
+    ]
 
 
 def test_timer_is_persistent_and_names_its_service(timer: str) -> None:
@@ -164,6 +193,8 @@ def _wired_checks() -> dict[str, dict]:
             ):
                 continue
             variables = task.get("vars") or {}
+            if variables.get("kuma_check_state") == "absent":
+                continue  # a teardown arm, not a wiring
             found[str(variables.get("kuma_check_name"))] = variables
     return found
 
@@ -180,3 +211,59 @@ def test_every_known_check_is_wired_with_the_full_contract() -> None:
         assert "kuma_check_state" in variables, (
             f"{name}: no kuma_check_state, so the host that leaves the list keeps the timer"
         )
+        if variables.get("kuma_check_cron_name"):
+            assert "kuma_check_cron_user" in variables or "kuma_check_user" in variables
+
+
+def _shell_template_for(exec_path: str) -> Path | None:
+    """The `.sh.j2` under any setup role that renders to `exec_path`, or None for a non-shell exec."""
+    name = Path(exec_path.split()[0]).name
+    if not name.endswith(".sh"):
+        return None
+    hits = list(SETUP_ROLES.glob(f"*/templates/{name}.j2"))
+    assert len(hits) == 1, (
+        f"{name}.j2: expected one template under setup roles, found {hits}"
+    )
+    return hits[0]
+
+
+# Shell producers that exit explicitly per branch instead of ending on EXIT_CONTRACT, and the
+# test that drives each one and asserts `rc == 1` on a down verdict. A member here without
+# that assertion is exactly the inert shape the contract line exists to rule out.
+EXPLICIT_EXIT_PRODUCERS = {
+    "github-ruleset-drift": "test_github_ruleset_drift.py",
+    "github-interaction-limit": "test_github_interaction_limit.py",
+}
+# The audit script ends in `exec` of the Python CLI, whose `--push` exit is tested in
+# scripts/secrets_mgmt/tests; its own arms must never exit 0 after a down push.
+EXEC_PRODUCERS = frozenset({"secret-rotation-audit"})
+
+
+def test_every_wired_shell_producer_exits_nonzero_after_a_down_push() -> None:
+    """A producer converted without the exit contract reruns nothing and reads as done."""
+    checked = 0
+    for name, variables in _wired_checks().items():
+        template = _shell_template_for(str(variables["kuma_check_exec"]))
+        if template is None:
+            continue
+        text = template.read_text()
+        if name in EXPLICIT_EXIT_PRODUCERS:
+            harness = (
+                Path(__file__).parent / EXPLICIT_EXIT_PRODUCERS[name]
+            ).read_text()
+            assert "assert rc == 1" in harness and "assert rc == 0" in harness, (
+                f"{name}: its harness no longer asserts both exit codes"
+            )
+        elif name in EXEC_PRODUCERS:
+            assert not re.search(r"^\s*exit 0\b", text, re.M), (
+                f"{name}: an `exit 0` after a down push would end the reruns"
+            )
+            assert "audit --push" in text
+        else:
+            assert text.rstrip().endswith(EXIT_CONTRACT), (
+                f"{name}: {template.name} must end on the exit contract, after the final push"
+            )
+        checked += 1
+    assert checked >= 7, (
+        f"only {checked} shell producers checked; the census has shrunk"
+    )
