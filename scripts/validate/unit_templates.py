@@ -115,16 +115,39 @@ def owning_role_defaults(template: Path) -> Path:
     return template.parent.parent / "defaults" / "main.yml"
 
 
+# Values a CALLER passes to a shared template, keyed by template basename. `roles/setup/common`
+# is never run as a role, so it has no defaults to layer in, and its unit pair takes every
+# directive value from the importing role's `vars:` (`tasks/kuma_check_timer.yml`). A bare
+# STUB in `OnCalendar=` is a parse failure, so the pair renders with one caller's shape here.
+CALLER_CONTEXT: dict[str, dict] = {
+    "kuma-check.service.j2": {
+        "kuma_check_name": "example",
+        "kuma_check_description": "Example Kuma check",
+        "kuma_check_exec": "/usr/local/bin/example.sh",
+        "kuma_check_user": "root",
+        "kuma_check_restart_sec": "15min",
+    },
+    "kuma-check.timer.j2": {
+        "kuma_check_name": "example",
+        "kuma_check_description": "Example Kuma check",
+        "kuma_check_on_calendar": "*-*-* *:23:00",
+    },
+}
+
+
 def render_context(template: Path) -> dict:
     """StubUndefined base context, plus the owning role's real defaults layered on top.
 
     Role defaults come last so a role's own value wins over the generic BASE_CONTEXT/all.yml
     fallback on a name collision (none exist today, by Ansible's role-prefix naming convention).
+    A shared template with no owning defaults takes its caller-passed values from
+    `CALLER_CONTEXT` instead.
     """
     return {
         **BASE_CONTEXT,
         **load_yaml(ALL_VARS),
         **load_yaml(owning_role_defaults(template)),
+        **CALLER_CONTEXT.get(template.name, {}),
     }
 
 

@@ -186,7 +186,13 @@ def cron_jobs(role_dir: Path) -> list[tuple[str, str]]:
 
 
 def timer_units(role_dir: Path) -> list[tuple[str, list[str]]]:
-    """`(unit, ["OnCalendar=…", …])` for every `templates/*.timer.j2` a role ships."""
+    """`(unit, ["OnCalendar=…", …])` for every timer a role installs.
+
+    Two sources: a `templates/*.timer.j2` the role ships, and an import of the shared
+    `roles/setup/common/tasks/kuma_check_timer.yml`, whose `kuma_check_name` and
+    `kuma_check_on_calendar` vars name the unit and its cadence. The second is read from
+    `tasks/` because the template lives in `common`, not in the importing role.
+    """
     units: list[tuple[str, list[str]]] = []
     for tmpl in sorted((role_dir / "templates").glob("*.timer.j2")):
         keys: list[str] = []
@@ -196,6 +202,22 @@ def timer_units(role_dir: Path) -> list[tuple[str, list[str]]]:
                 keys.append(f"{m.group(1)}={m.group(2)}")
         keys.sort(key=lambda k: _TIMER_KEYS.index(k.split("=", 1)[0]))
         units.append((tmpl.name.removesuffix(".j2"), keys))
+    for tasks_file in sorted((role_dir / "tasks").glob("*.yml")):
+        for task in _walk_tasks(load_yaml_list(tasks_file)):
+            target = task.get("ansible.builtin.import_tasks")
+            if not isinstance(target, str) or not target.endswith(
+                "common/tasks/kuma_check_timer.yml"
+            ):
+                continue
+            variables = task.get("vars") or {}
+            name = variables.get("kuma_check_name", "unnamed")
+            cadence = variables.get("kuma_check_on_calendar")
+            units.append(
+                (
+                    f"kuma-check-{name}.timer",
+                    [f"OnCalendar={cadence}"] if cadence is not None else [],
+                )
+            )
     return units
 
 

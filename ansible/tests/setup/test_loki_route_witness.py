@@ -19,6 +19,10 @@ hour, forever.
 Run: uv run pytest ansible/tests/setup/test_loki_route_witness.py
 """
 
+import os
+import subprocess
+
+import jinja2
 from _helpers import ANSIBLE
 from lib import yaml_fast
 
@@ -50,20 +54,25 @@ MONITORS = (
 ).read_text()
 
 CRON_NAME = "Loki read-route witness"
-# The monitor interval declared for both tiles, and the cron period it has to cover.
+# The monitor interval declared for both tiles, and the timer period it has to cover.
 MONITOR_INTERVAL_S = 7200
 HOURLY_S = 3600
+REAL_LIB = "/usr/local/lib/kuma-push-lib.sh"
+REAL_ENV = "/etc/homelab/loki-route-kuma-push.env"
 
 
-def _cron_task(state: str) -> dict:
-    """The scheduling task, or the removal one. `state` is `present` (implicit) or `absent`."""
+def _timer_import() -> dict:
+    """The import of kuma_check_timer.yml that schedules the witness; its vars are the schedule."""
     for task in _flatten(CRON_TASKS):
-        cron = task.get("ansible.builtin.cron") or task.get("cron") or {}
-        if cron.get("name") != CRON_NAME:
-            continue
-        if cron.get("state", "present") == state:
+        target = task.get("ansible.builtin.import_tasks") or ""
+        if (
+            target.endswith("common/tasks/kuma_check_timer.yml")
+            and (task.get("vars") or {}).get("kuma_check_cron_name") == CRON_NAME
+        ):
             return task
-    raise AssertionError(f"no `{CRON_NAME}` cron task with state={state}")
+    raise AssertionError(
+        f"no kuma_check_timer.yml import replaces the `{CRON_NAME}` cron"
+    )
 
 
 def _flatten(tasks):
@@ -99,20 +108,110 @@ def test_both_tiles_are_declared_and_gated_on_their_own_token():
     )
 
 
-def test_the_push_deadline_exceeds_the_cron_period():
+def test_the_push_deadline_exceeds_the_timer_period():
     """A deadline shorter than the producer's period fires DOWN with nothing wrong."""
-    cron = _cron_task("present")["ansible.builtin.cron"]
-    assert "hour" not in cron, (
-        "this test reads the cron as hourly; give it a period if that changes"
+    on_calendar = _timer_import()["vars"]["kuma_check_on_calendar"]
+    assert on_calendar.startswith("*-*-* *:"), (
+        "this test reads the timer as hourly; give it a period if that changes"
     )
     assert MONITOR_INTERVAL_S >= 2 * HOURLY_S
     assert f'"interval": {MONITOR_INTERVAL_S}' in MONITORS
 
 
-def test_a_host_dropped_from_the_list_loses_the_cron():
+def test_a_host_dropped_from_the_list_loses_the_timer_and_the_cron():
     """The way out. Without it a retired witness pushes a monitor that no longer exists."""
-    task = _cron_task("absent")
-    assert task["ansible.builtin.cron"]["state"] == "absent"
+    variables = _timer_import()["vars"]
+    assert "loki_route_witness_hosts" in variables["kuma_check_state"], (
+        "kuma_check_state must follow the witness list, or a dropped host keeps the timer"
+    )
+    assert variables["kuma_check_cron_name"] == CRON_NAME, (
+        "the import must name the cron it replaces, or a host runs both"
+    )
+
+
+def _run_witness(tmp_path, route_rc: int) -> tuple[int, str]:
+    """Render the witness and run it with the reader stubbed to exit `route_rc`.
+
+    Only absolute paths are repointed: the push lib (a recording stub), the token env file,
+    and the two `uv` binaries, whose stub answers the reader invocation with `route_rc` and
+    prints a body for anything else. Returns (exit code, pushed status).
+    """
+    body = (
+        jinja2.Environment(undefined=jinja2.StrictUndefined, trim_blocks=True)
+        .from_string(SCRIPT)
+        .render(
+            domain="example.test",
+            k3s_metallb_ingress_vip="10.0.0.240",
+            sys_user="ubuntu",
+            host_python_version="3.12",
+            loki_route_witness_boot_grace_s=0,
+        )
+    )
+    for needle in (
+        REAL_LIB,
+        REAL_ENV,
+        "/home/ubuntu/.local/bin/uv",
+        "/usr/local/bin/uv",
+    ):
+        assert needle in body, (
+            f"{needle} is no longer in the witness; this harness repoints it"
+        )
+
+    pushed = tmp_path / "pushed"
+    lib = tmp_path / "kuma-push-lib.sh"
+    lib.write_text(
+        'kuma_push() { printf \'%s\\n\' "$1" > "$KUMA_PUSH_OUT"; return 0; }\n'
+        "boot_grace_active() { return 1; }\n"
+    )
+    env_file = tmp_path / "push.env"
+    env_file.write_text("LOKI_ROUTE_WITNESS_PUSH_TOKEN=stubtoken\n")
+    uv = tmp_path / "uv"
+    uv.write_text(
+        "#!/usr/bin/env bash\n"
+        'case "$*" in *loki_route_health.py*) echo verdict; exit "$STUB_ROUTE_RC" ;;'
+        " *) echo body ;; esac\n"
+    )
+    uv.chmod(0o755)
+    binstub = tmp_path / "bin"
+    binstub.mkdir()
+    (binstub / "logger").write_text("#!/bin/sh\nexit 0\n")
+    (binstub / "logger").chmod(0o755)
+
+    body = (
+        body.replace(REAL_LIB, str(lib))
+        .replace(REAL_ENV, str(env_file))
+        .replace("/home/ubuntu/.local/bin/uv", str(uv))
+        .replace("/usr/local/bin/uv", str(uv))
+    )
+    script = tmp_path / "loki-read-route-health.sh"
+    script.write_text(body)
+    script.chmod(0o755)
+    result = subprocess.run(
+        [str(script)],
+        env={
+            **os.environ,
+            "PATH": f"{binstub}:{os.environ['PATH']}",
+            "KUMA_PUSH_OUT": str(pushed),
+            "STUB_ROUTE_RC": str(route_rc),
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return result.returncode, pushed.read_text().strip()
+
+
+def test_a_down_verdict_exits_nonzero_so_the_timer_reruns_it(tmp_path):
+    """The kuma-check timer's contract: exit 1 after a down push, and Restart=on-failure reruns."""
+    code, status = _run_witness(tmp_path, route_rc=1)
+    assert status == "down"
+    assert code == 1
+
+
+def test_an_up_verdict_exits_zero_so_the_timer_rests(tmp_path):
+    code, status = _run_witness(tmp_path, route_rc=0)
+    assert status == "up"
+    assert code == 0
 
 
 def test_the_verdict_reads_the_body_rather_than_the_exit_code():

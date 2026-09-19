@@ -1,0 +1,182 @@
+"""The shared kuma-check timer pair reruns a host check while its last verdict was DOWN.
+
+A cron-fed push monitor that pushes `down` stays red until the producer's next slot, however
+soon the fault is fixed. `roles/setup/common/tasks/kuma_check_timer.yml` replaces such a cron
+with a systemd timer and oneshot service whose contract is the exit code: the script exits 1
+after it pushes `down`, and `Restart=on-failure` reruns it every `RestartSec` until it exits 0.
+
+Four properties, each invisible at deploy time because Ansible reports the units as applied
+either way:
+
+1. The service restarts on failure and only on failure. `Restart=always` is refused for a
+   oneshot, and `on-success` would loop a green check forever.
+2. The timer is `Persistent=true` (decided 2026-09-19): a daily slot missed inside an outage
+   runs at boot instead of leaving the tile red for a day, and the restart bounds the
+   boot-time false `down` that costs.
+3. No `OnFailure=` alert unit. A `down` verdict is now a unit failure by contract, and the
+   Discord alert units page on a unit that broke.
+4. Both directions are wired: `kuma_check_state: absent` stops and disables the timer and
+   removes the units and the legacy cron. A one-way door is the reverse-state bug this repo
+   keeps paying for.
+
+Run: uv run pytest ansible/tests/setup/test_kuma_check_timer.py
+"""
+
+import re
+
+import jinja2
+import pytest
+from _helpers import SETUP_ROLES, leaf_tasks, load_tasks
+
+COMMON = SETUP_ROLES / "common"
+SERVICE = COMMON / "templates" / "kuma-check.service.j2"
+TIMER = COMMON / "templates" / "kuma-check.timer.j2"
+TASKS = COMMON / "tasks" / "kuma_check_timer.yml"
+
+# Every check wired through the task file, by `kuma_check_name`. A census read by glob returns
+# an empty set the moment the include moves, so the members are named here and the test says
+# which one went missing.
+KNOWN_CHECKS = frozenset({"loki-read-route"})
+
+BASE_VARS = {
+    "kuma_check_name": "widget",
+    "kuma_check_description": "Widget check",
+    "kuma_check_exec": "/usr/local/bin/widget.sh",
+    "kuma_check_user": "ubuntu",
+    "kuma_check_on_calendar": "*-*-* *:23:00",
+    "kuma_check_restart_sec": "15min",
+}
+
+
+def directive(unit_text: str, key: str) -> list[str]:
+    folded = re.sub(r"\\\n\s*", " ", unit_text)
+    return [
+        line.split("=", 1)[1].strip()
+        for line in folded.splitlines()
+        if line.strip().startswith(f"{key}=")
+    ]
+
+
+def _render(template, **overrides) -> str:
+    env = jinja2.Environment(undefined=jinja2.StrictUndefined, trim_blocks=True)
+    return env.from_string(template.read_text()).render({**BASE_VARS, **overrides})
+
+
+@pytest.fixture(scope="module")
+def service() -> str:
+    return _render(SERVICE)
+
+
+@pytest.fixture(scope="module")
+def timer() -> str:
+    return _render(TIMER)
+
+
+def test_service_restarts_on_failure_only(service: str) -> None:
+    assert directive(service, "Type") == ["oneshot"]
+    assert directive(service, "Restart") == ["on-failure"], (
+        "Restart=on-failure is the whole mechanism: a check that exits 1 after pushing down "
+        "reruns until it exits 0. always/on-success are refused for a oneshot"
+    )
+    assert directive(service, "RestartSec") == ["15min"]
+    assert directive(service, "User") == ["ubuntu"]
+    assert directive(service, "ExecStart") == ["/usr/local/bin/widget.sh"]
+
+
+def test_service_carries_no_alert_unit(service: str) -> None:
+    assert not directive(service, "OnFailure"), (
+        "a down verdict is a unit failure by contract; an OnFailure= alert would page Discord "
+        "on every red verdict the tile already carries"
+    )
+
+
+def test_environment_file_is_emitted_only_when_given(service: str) -> None:
+    assert not directive(service, "EnvironmentFile")
+    with_env = _render(SERVICE, kuma_check_env_file="/etc/homelab/widget.env")
+    assert directive(with_env, "EnvironmentFile") == ["/etc/homelab/widget.env"]
+
+
+def test_timer_is_persistent_and_names_its_service(timer: str) -> None:
+    assert directive(timer, "OnCalendar") == ["*-*-* *:23:00"]
+    assert directive(timer, "Persistent") == ["true"], (
+        "decided 2026-09-19: a slot missed inside an outage runs at boot rather than leaving "
+        "the tile red until the next slot; the restart bounds the boot-time false down"
+    )
+    assert directive(timer, "Unit") == ["kuma-check-widget.service"]
+    assert directive(timer, "WantedBy") == ["timers.target"]
+
+
+def _systemd_tasks() -> list[dict]:
+    return [
+        t
+        for t in leaf_tasks(load_tasks(TASKS))
+        if "ansible.builtin.systemd" in t or "ansible.builtin.systemd_service" in t
+    ]
+
+
+def _systemd_spec(task: dict) -> dict:
+    return (
+        task.get("ansible.builtin.systemd") or task["ansible.builtin.systemd_service"]
+    )
+
+
+def test_task_file_wires_both_directions() -> None:
+    """The way in enables and starts the timer; the way out stops, disables and removes it."""
+    specs = [_systemd_spec(t) for t in _systemd_tasks()]
+    assert any(
+        s.get("enabled") is True and s.get("state") == "started" for s in specs
+    ), "no task enables and starts the timer"
+    assert any(
+        s.get("enabled") is False and s.get("state") == "stopped" for s in specs
+    ), (
+        "no task stops and disables the timer: kuma_check_state: absent is a one-way door"
+    )
+    files_absent = [
+        t
+        for t in leaf_tasks(load_tasks(TASKS))
+        if (t.get("ansible.builtin.file") or {}).get("state") == "absent"
+    ]
+    assert files_absent, "the absent arm leaves the unit files on the host"
+    crons_absent = [
+        t
+        for t in leaf_tasks(load_tasks(TASKS))
+        if (t.get("ansible.builtin.cron") or {}).get("state") == "absent"
+    ]
+    assert crons_absent, "the legacy cron is never removed, so a host runs both"
+
+
+def test_task_file_carries_no_tags() -> None:
+    """Tags union: a tag here would make the pair selectable by a tag the caller never chose."""
+    for task in leaf_tasks(load_tasks(TASKS)):
+        assert "tags" not in task, f"{task.get('name')!r} carries tags"
+
+
+def _wired_checks() -> dict[str, dict]:
+    """`kuma_check_name` -> the import task's vars, for every setup role that imports the file."""
+    found: dict[str, dict] = {}
+    for tasks_file in SETUP_ROLES.glob("*/tasks/*.yml"):
+        for task in leaf_tasks(load_tasks(tasks_file)):
+            target = task.get("ansible.builtin.import_tasks") or task.get(
+                "ansible.builtin.include_tasks"
+            )
+            if not isinstance(target, str) or not target.endswith(
+                "common/tasks/kuma_check_timer.yml"
+            ):
+                continue
+            variables = task.get("vars") or {}
+            found[str(variables.get("kuma_check_name"))] = variables
+    return found
+
+
+def test_every_known_check_is_wired_with_the_full_contract() -> None:
+    wired = _wired_checks()
+    missing = KNOWN_CHECKS - wired.keys()
+    assert not missing, (
+        f"checks no longer wired through kuma_check_timer.yml: {sorted(missing)}"
+    )
+    for name, variables in wired.items():
+        for key in BASE_VARS:
+            assert key in variables, f"{name}: import passes no {key}"
+        assert "kuma_check_state" in variables, (
+            f"{name}: no kuma_check_state, so the host that leaves the list keeps the timer"
+        )

@@ -1,0 +1,16 @@
+# {{ kuma_check_description }} (timer) — managed by Ansible
+# (roles/setup/common/tasks/kuma_check_timer.yml); edits overwritten.
+[Unit]
+Description={{ kuma_check_description }} (timer)
+
+[Timer]
+OnCalendar={{ kuma_check_on_calendar }}
+# Persistent=true, decided 2026-09-19. Cron skips a slot that falls inside an outage, and the
+# tile then stays red until the next slot because nothing pushed a fresh verdict. A stamped
+# timer runs the check once at boot instead. That run can land before k3s and Kuma are ready
+# and push a false down; the service's Restart=on-failure bounds that to one RestartSec.
+Persistent=true
+Unit=kuma-check-{{ kuma_check_name }}.service
+
+[Install]
+WantedBy=timers.target

@@ -114,8 +114,10 @@ def test_discover_templates_finds_the_known_set():
         "gitops-deploy.timer.j2",
         "renovate-agent.timer.j2",
         "node_exporter.service.j2",
+        "kuma-check.service.j2",
+        "kuma-check.timer.j2",
     } <= names
-    assert len(names) == 21
+    assert len(names) == 23
 
 
 def test_discover_templates_excludes_archive():

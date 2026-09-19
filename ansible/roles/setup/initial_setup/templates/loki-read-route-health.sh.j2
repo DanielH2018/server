@@ -49,10 +49,12 @@ if [[ -z "$LOKI_ROUTE_WITNESS_PUSH_TOKEN" ]]; then
 fi
 PUSH_URL="https://${KUMA_HOST}/api/push/${LOKI_ROUTE_WITNESS_PUSH_TOKEN}"
 
-# One cron slot, so the dead-man's own period covers a boot that lands on it. Without this a
-# reboot at the top of the hour reports the route down while k3s is still starting.
+# A boot that lands on the slot reports the route down while k3s is still starting. Exit 1
+# without a verdict instead: the timer's Restart=on-failure reruns this in RestartSec, which is
+# what carries the real verdict. The lib's log line still names the dead-man grace, which also
+# covers the gap.
 if boot_grace_active {{ loki_route_witness_boot_grace_s }} loki-read-route-health; then
-  exit 0
+  exit 1
 fi
 
 REPO_DIR=/home/{{ sys_user }}/server
@@ -78,3 +80,9 @@ fi
 logger -p daemon.notice -t loki-read-route-health "status=${STATUS} ${MSG}"
 
 kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" loki-read-route-health
+
+# The exit code is the timer's contract (roles/setup/common/tasks/kuma_check_timer.yml): 1 after
+# a down push so Restart=on-failure reruns the check until the route answers, 0 after up. It
+# comes after the push and reads STATUS, not the push outcome the lib exports: a dropped push
+# of an up verdict is not a reason to rerun the check.
+[[ "$STATUS" == up ]] || exit 1
