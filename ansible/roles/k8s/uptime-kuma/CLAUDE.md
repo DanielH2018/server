@@ -205,8 +205,28 @@ push tile, what the bridge or the cron pushed), `monitorJSON.description` (markd
 also renders it at the top of the monitor's own page, the one place its UI renders
 formatting), and tags named `severity` and `runbook`, omitted when absent. A tile whose
 meaning is not obvious from its name declares a `description` in `static-monitors.yaml.j2`:
-what the check reads, what a DOWN means, where to look. Twenty push tiles carry one; the
-rest are the follow-up in the issue the first batch filed.
+what the check reads, what a DOWN means, where to look. Every push tile carries one since
+2026-09-19 (#2065); an http tile's URL says what it probes, so those do not.
+
+**Email is the same convention, a second template.** `email.json` renders
+`files/email-message.liquid` as `customBody` (plain text — the break-glass tier has to read
+in any client, so `htmlBody` stays off) and `[Homelab] {{ status }} {{ name }}` as
+`customSubject`, through the same context (#2067).
+`ansible/tests/services/test_kuma_email_template.py` renders it the same three ways.
+
+**The two tags are entities this Secret declares** — `tag-severity.json` and
+`tag-runbook.json` (#2066). A monitor names one in `tag_names` and AutoKuma resolves the name
+to the id it created; `severity: critical` is exactly the email tier
+(`test_severity_critical_is_exactly_the_email_tier`), and a `runbook` value is a page the docs
+site serves (`test_every_runbook_tag_points_at_a_page_the_docs_site_serves`). The tag
+reference is the same NameNotFound hazard as the notification reference: a monitor naming a
+tag the Secret no longer declares fails to parse and, under `ON_DELETE=delete`, is deleted
+(#2076). `test_every_tag_a_monitor_names_is_a_declared_tag_entity` refuses the typo; it cannot
+refuse a deliberate removal of a tag entity while monitors still name it, so remove the
+references first and the entity a deploy later. Every reader that classifies entities by
+type — the three guards in `test_kuma_static_monitors.py`, `test_status_page_groups.py`,
+`status-page-sync-configmap.yaml.j2`'s `index.json` loop and `probe_lib/monitors.py` — skips
+`tag` alongside `notification`.
 
 Four things the change depends on:
 
