@@ -1,5 +1,6 @@
 {% from 'container-resources.yml.j2' import container_resources with context %}
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
+{% from 'workload-shell.yml.j2' import spec_shell, pod_shell with context %}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -7,7 +8,9 @@ metadata:
   name: valheim
   namespace: {{ k8s_namespace }}
 spec:
-  revisionHistoryLimit: 3
+  # Same reasoning as terraria: RWO claims on single-replica Longhorn deadlock a rolling
+  # update, and two servers writing one world would be worse than the deadlock.
+{{ spec_shell('Recreate') }}
   replicas: 1
   # 30 min, because the Deployment's own default (600s) is the deadline that actually binds
   # on a first boot — NOT manifests_rollout_timeout. Measured 2026-08-13: the first rollout
@@ -15,10 +18,6 @@ spec:
   # ProgressDeadlineExceeded, failing the play while the pod carried on fine underneath.
   # Between the image pull and the ~1.8 G SteamCMD download, first boot needs the room.
   progressDeadlineSeconds: 1800
-  # Same reasoning as terraria: RWO claims on single-replica Longhorn deadlock a rolling
-  # update, and two servers writing one world would be worse than the deadlock.
-  strategy:
-    type: Recreate
   selector:
     matchLabels:
       app: valheim
@@ -41,11 +40,7 @@ spec:
       # have black-holed the game port with the pod itself reporting healthy.
       nodeSelector:
         kubernetes.io/hostname: {{ k8s_primary_node }}
-      enableServiceLinks: false
-      # No serviceAccountName and the server never talks to the API, so the default-SA token
-      # would only ever sit unused in the pod.
-      automountServiceAccountToken: false
-      priorityClassName: homelab-standard
+{{ pod_shell('homelab-standard') }}
       # Places the pinned BepInEx plugins before the server starts. Runs as root, like the
       # server container: /config and /opt/valheim are root-owned (PUID/PGID default to 0), and
       # root writing root-owned files needs no DAC_OVERRIDE.

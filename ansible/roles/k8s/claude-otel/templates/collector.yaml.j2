@@ -1,5 +1,6 @@
 {% from 'container-resources.yml.j2' import container_resources with context %}
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
+{% from 'workload-shell.yml.j2' import pod_shell with context %}
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -92,9 +93,7 @@ spec:
     spec:
       # Tier 4, with prometheus.yaml.j2 the one exception — see `DECIDED: claude-otel tiers`
       # in this role's CLAUDE.md.
-      priorityClassName: homelab-best-effort
-      enableServiceLinks: false
-      automountServiceAccountToken: false
+{{ pod_shell('homelab-best-effort') }}
       containers:
         - name: otel-collector
           image: {{ claude_otel_collector_image }}

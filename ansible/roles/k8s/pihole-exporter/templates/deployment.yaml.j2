@@ -1,6 +1,7 @@
 {% from 'container-resources.yml.j2' import container_resources with context %}
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
 {% from 'pod-affinity.yml.j2' import node_affinity_preference with context %}
+{% from 'workload-shell.yml.j2' import spec_shell, pod_shell with context %}
 ---
 # Turns Pi-hole's v6 admin API into Prometheus series. Pi-hole itself serves no exposition
 # endpoint — `/metrics` on the pihole Service is a 404 and `/api/*` is a 401 — so an exporter is
@@ -17,7 +18,7 @@ metadata:
   name: pihole-exporter
   namespace: {{ k8s_namespace }}
 spec:
-  revisionHistoryLimit: 3
+{{ spec_shell('RollingUpdate') }}
   replicas: 1
   selector:
     matchLabels:
@@ -28,14 +29,8 @@ spec:
         app: pihole-exporter
         netpol-baseline: enforced
     spec:
-      enableServiceLinks: false
-      securityContext:
-        runAsUser: {{ puid }}
-        runAsGroup: {{ pgid }}
-        runAsNonRoot: true
-      automountServiceAccountToken: false
       # Dashboards, not resolution. DNS keeps working when this pod does not.
-      priorityClassName: homelab-best-effort
+{{ pod_shell('homelab-best-effort', run_as_user=puid, run_as_group=pgid, non_root=true) }}
       # Preference, never a pin. Both Pi-holes are pinned to the primary node, but this pod
       # reaches them over ClusterIPs, so either node costs the same one hop.
 {{ node_affinity_preference('daniel-server') }}

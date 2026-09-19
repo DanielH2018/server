@@ -1,6 +1,7 @@
 {% from 'container-resources.yml.j2' import container_resources with context %}
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
 {% from 'pod-affinity.yml.j2' import node_affinity_preference with context %}
+{% from 'workload-shell.yml.j2' import spec_shell, pod_shell with context %}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -8,12 +9,10 @@ metadata:
   name: speedtest
   namespace: {{ k8s_namespace }}
 spec:
-  revisionHistoryLimit: 3
-  replicas: 1
   # The PVC is ReadWriteOnce and Longhorn runs one replica, so a rolling update would deadlock:
   # the new pod waits for a volume the old pod still holds.
-  strategy:
-    type: Recreate
+{{ spec_shell('Recreate') }}
+  replicas: 1
   selector:
     matchLabels:
       app: speedtest
@@ -23,15 +22,11 @@ spec:
         app: speedtest
         netpol-baseline: enforced
     spec:
-      # No legacy Docker-link env vars for every Service in the namespace. Harmless clutter
-      # here, fatal for Authelia — see that role's deployment for the failure it causes.
-      enableServiceLinks: false
       # No fsGroup on purpose. volume-claim restores the source's ownership with
       # `tar -p --numeric-owner`, and this LSIO image starts as root and chowns /config to
       # PUID/PGID itself. An fsGroup would recursively rewrite group ownership at mount time,
       # fighting both.
-      automountServiceAccountToken: false
-      priorityClassName: homelab-best-effort
+{{ pod_shell('homelab-best-effort') }}
       # Preference, never a pin: daniel-box carries the storage- and VIP-pinned workloads and runs the hotter of the two nodes, so latency-insensitive services default here.
       # Weighted so the pod still schedules if daniel-server is cordoned or full.
 {{ node_affinity_preference('daniel-server') }}

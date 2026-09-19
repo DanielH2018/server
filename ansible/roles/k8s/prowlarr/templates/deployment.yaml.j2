@@ -2,6 +2,7 @@
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
 {% from 'pod-affinity.yml.j2' import node_affinity_preference with context %}
 {% from 'exportarr.yml.j2' import exportarr with context %}
+{% from 'workload-shell.yml.j2' import spec_shell, pod_shell with context %}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -9,12 +10,10 @@ metadata:
   name: prowlarr
   namespace: {{ k8s_namespace }}
 spec:
-  revisionHistoryLimit: 3
-  replicas: 1
   # The config PVC is ReadWriteOnce on single-replica Longhorn, so a rolling update deadlocks:
   # the new pod waits for a volume the old pod has not released.
-  strategy:
-    type: Recreate
+{{ spec_shell('Recreate') }}
+  replicas: 1
   selector:
     matchLabels:
       app: prowlarr
@@ -24,7 +23,6 @@ spec:
         app: prowlarr
         netpol-baseline: enforced
     spec:
-      enableServiceLinks: false
       # No fsGroup: volume-claim restores ownership with `tar -p --numeric-owner` and the LSIO
       # image chowns /config itself on startup.
       #
@@ -32,8 +30,7 @@ spec:
       # \*arrs and trackers and never touches a file on disk. Mounting the media volume "for
       # consistency" would hand the fleet's most externally-connected service write access to the
       # library for nothing.
-      automountServiceAccountToken: false
-      priorityClassName: homelab-standard
+{{ pod_shell('homelab-standard') }}
       # Preference, never a pin: daniel-box carries the storage- and VIP-pinned workloads and runs the hotter of the two nodes, so latency-insensitive services default here.
       # Weighted so the pod still schedules if daniel-server is cordoned or full.
 {{ node_affinity_preference('daniel-server') }}

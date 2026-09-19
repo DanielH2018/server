@@ -1,6 +1,7 @@
 {% from 'container-resources.yml.j2' import container_resources with context %}
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
 {% from 'pod-affinity.yml.j2' import node_affinity_preference with context %}
+{% from 'workload-shell.yml.j2' import spec_shell, pod_shell with context %}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -8,7 +9,7 @@ metadata:
   name: homelab-mcp
   namespace: {{ k8s_namespace }}
 spec:
-  revisionHistoryLimit: 3
+{{ spec_shell('RollingUpdate') }}
   replicas: 1
   selector:
     matchLabels:
@@ -19,17 +20,11 @@ spec:
         app: homelab-mcp
         netpol-baseline: enforced
     spec:
-      enableServiceLinks: false
       # Same posture as the compose template: uid 1000, read-only root, all caps dropped,
       # /tmp the only writable path.
       # The pod's own read-only cluster identity (rbac.yaml) — get/list on workload
       # shapes + pods/log, the exact surface of the Phase G cluster-API tools.
-      serviceAccountName: homelab-mcp
-      securityContext:
-        runAsUser: 1000
-        runAsGroup: 1000
-        runAsNonRoot: true
-      priorityClassName: homelab-best-effort
+{{ pod_shell('homelab-best-effort', service_account='homelab-mcp', run_as_user=1000, run_as_group=1000, non_root=true) }}
       # Preference, never a pin: daniel-box carries the storage- and VIP-pinned workloads and runs the hotter of the two nodes, so latency-insensitive services default here.
       # Weighted so the pod still schedules if daniel-server is cordoned or full.
 {{ node_affinity_preference('daniel-server') }}

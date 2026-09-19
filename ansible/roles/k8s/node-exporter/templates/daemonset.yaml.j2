@@ -1,5 +1,6 @@
 {% from 'container-resources.yml.j2' import container_resources with context %}
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
+{% from 'workload-shell.yml.j2' import pod_shell with context %}
 ---
 apiVersion: apps/v1
 kind: DaemonSet
@@ -16,8 +17,7 @@ spec:
         app: node-exporter
         netpol-baseline: enforced
     spec:
-      enableServiceLinks: false
-      automountServiceAccountToken: false
+{{ pod_shell('homelab-best-effort') }}
       # Host networking + PID so node_* describes the NODE (network interfaces, /proc)
       # rather than a pod netns — the standard node-exporter posture. The 9100 listener
       # this opens on each node is host-firewalled by ufw's default-deny INPUT except
@@ -29,7 +29,6 @@ spec:
       # landed 2026-08-14.)
       hostNetwork: true
       hostPID: true
-      priorityClassName: homelab-best-effort
       containers:
         - name: node-exporter
           image: {{ node_exporter_k8s_image }}

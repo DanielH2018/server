@@ -7,6 +7,14 @@ as its own configuration. A grep for the field name cannot tell a template that 
 one that sets it inside a macro, and it counts the `automountServiceAccountToken: true` on a
 ServiceAccount OBJECT as if it were the pod's — so these guards read the parsed pod spec.
 
+Since 2026-09-19 every Deployment and DaemonSet takes these fields from `pod_shell` in
+`ansible/templates/workload-shell.yml.j2`, and `test_workload_shell_uses_the_macros.py`
+refuses a hand-written copy (#2056). This census is the other half: a macro cannot force its
+own call, and a template that skips it renders without the fields, which only the parsed pod
+spec can see. The macro encodes the automount rule below structurally (no service_account →
+`false`; one named → no line), so an offence here on a Deployment or DaemonSet is a call
+that overrides it.
+
     priorityClassName        every long-running pod template names one of the four homelab
                              tiers (#1851). Jobs and CronJobs are out of scope on purpose:
                              each is a probe or a GC pass that completes in seconds, and a

@@ -1,5 +1,6 @@
 {% from 'container-resources.yml.j2' import container_resources with context %}
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
+{% from 'workload-shell.yml.j2' import spec_shell, pod_shell with context %}
 ---
 {% for inst in [{'name': 'pihole', 'claim': pihole_k8s_claim},
                 {'name': 'pihole-2', 'claim': pihole_k8s_claim_2}] %}
@@ -9,11 +10,9 @@ metadata:
   name: {{ inst.name }}
   namespace: {{ k8s_namespace }}
 spec:
-  revisionHistoryLimit: 3
-  replicas: 1
   # ReadWriteOnce PVC on single-replica Longhorn — a rolling update would deadlock on the volume.
-  strategy:
-    type: Recreate
+{{ spec_shell('Recreate') }}
+  replicas: 1
   selector:
     matchLabels:
       app: pihole
@@ -42,9 +41,7 @@ spec:
       nodeSelector:
         kubernetes.io/hostname: {{ k8s_primary_node }}
       # Edge/auth/DNS eviction ordering — see setup/k3s templates/priorityclass.yaml.j2.
-      priorityClassName: homelab-critical
-      enableServiceLinks: false
-      automountServiceAccountToken: false
+{{ pod_shell('homelab-critical') }}
       containers:
         # Both containers share the pod network namespace: FTL binds :53/:80, unbound sits on
         # 127.0.0.1:{{ pihole_k8s_unbound_port }} (the ConfigMap moves it off :53). There is
