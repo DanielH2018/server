@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/crons.py
-generated_at: 2026-09-17 18:46 UTC
-generated_sha: 5c838445
+generated_at: 2026-09-20 06:17 UTC
+generated_sha: 1d12c2d91
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 5c838445
 
 # Scheduled jobs
 
-48 cron entrie(s) installed across the roles.
+39 cron entrie(s) installed across the roles.
 
 !!! warning "The state column is a heuristic"
     It is judged from the command text, and nothing in a cron task declares its own blast radius. A job that runs a wrapper script reads as "read the script" rather than being guessed at. Treat it as a pointer, not an authority.
@@ -24,20 +24,13 @@ generated_sha: 5c838445
 | Claude Code telemetry health | `{{ claude_otel_health_cron_minute }} * * * *` | every host in the play | `{{ sys_user }}` | read the script | `ansible/roles/k8s/claude-otel/tasks/main.yml` |
 | Clean unused Docker images | `30 6 * * *` | conditional (has_docker) | `{{ ansible_facts.user_id }}` | yes (prune) | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
 | Clear ansible log file | `0 6 * * 0` | conditional (has_repo_checkout) | `root` | yes (truncate) | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
-| Cloudflare IP drift | `25 5 * * *` | conditional (traefik_k8s_manage_cloudflare_drift_check | bool) | `root` | read the script | `ansible/roles/k8s/traefik/tasks/main.yml` |
 | CrowdSec AppSec verify | `*/15 * * * *` | every host in the play | `root` | read the script | `ansible/roles/k8s/crowdsec/tasks/main.yml` |
 | CrowdSec home allowlist | `*/5 * * * *` | every host in the play | `root` | read the script | `ansible/roles/k8s/crowdsec/tasks/main.yml` |
-| Daily secret rotation audit | `0 8 * * *` | the gitops host | `{{ sys_user }}` | read the script | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
 | Full etcd restore drill in a throwaway guest | `{{ etcd_drill_full_cron.split()[0] }} {{ etcd_drill_full_cron.split()[1] }} {{ etcd_drill_full_cron.split()[2] }} * *` | every host in the play | `root` | no (read-only by its command) | `ansible/roles/setup/hypervisor/tasks/etcd_drill.yml` |
-| GitHub interaction limit | `{{ gitops_deploy_interaction_limit_cron_minute }} {{ gitops_deploy_interaction_limit_cron_hour }} * * *` | every host in the play | `root` | read the script | `ansible/roles/setup/gitops_deploy/tasks/install.yml` |
-| GitHub ruleset drift | `{{ gitops_deploy_ruleset_drift_cron_minute }} {{ gitops_deploy_ruleset_drift_cron_hour }} * * *` | every host in the play | `root` | read the script | `ansible/roles/setup/gitops_deploy/tasks/install.yml` |
 | Homelab eval sweep | `0 2 * * 0` | daniel-box | `{{ sys_user }}` | read the script | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
-| Live object drift check | `{{ k3s_live_drift_cron_minute }} {{ k3s_live_drift_cron_hour }} * * *` | every host in the play | `{{ sys_user }}` | no (read-only by its command) | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
-| Loki read-route witness | `23 * * * *` | conditional (inventory_hostname in loki_route_witness_hosts) | `{{ sys_user }}` | read the script | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
 | Longhorn backup health | `{{ k3s_longhorn_backup_health_cron_minute }} * * * *` | every host in the play | `{{ sys_user }}` | yes (backup) | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
 | Longhorn filesystem trim | `{{ k3s_longhorn_trim_cron_minute }} {{ k3s_longhorn_trim_cron_hour }} * * *` | every host in the play | `{{ sys_user }}` | read the script | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
 | Longhorn restore drill | `{{ k3s_longhorn_restore_drill_cron.split()[0] }} {{ k3s_longhorn_restore_drill_cron.split()[1] }} {{ k3s_longhorn_restore_drill_cron.split()[2] }} * *` | every host in the play | `root` | read the script | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
-| Manifest prune drift check | `{{ k3s_manifest_prune_cron_minute }} {{ k3s_manifest_prune_cron_hour }} * * *` | every host in the play | `root` | yes (prune) | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
 | Off-box etcd snapshot | `{{ k3s_etcd_s3_cron_minute }} {{ k3s_etcd_s3_cron_hour }} * * *` | every host in the play | `root` | yes (snapshot) | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
 | Pi SD-card health heartbeat | `*/5 * * * *` | every host in the play | `{{ sys_user }}` | read the script | `ansible/roles/setup/optimize_pi/tasks/main.yml` |
 | Pi container-recovery heartbeat | `*/5 * * * *` | every host in the play | `{{ sys_user }}` | read the script | `ansible/roles/setup/optimize_pi/tasks/main.yml` |
@@ -45,7 +38,6 @@ generated_sha: 5c838445
 | Refresh generated docs | `17 6,18 * * *` | daniel-box | `{{ sys_user }}` | read the script | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
 | Refresh homelab infrastructure map | `*/15 * * * *` | daniel-box | `{{ sys_user }}` | no (read-only by its command) | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
 | Release staleness drift check | `{{ k3s_release_staleness_cron_minute }} * * * *` | every host in the play | `{{ sys_user }}` | read the script | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
-| Setup-plane drift check | `50 7 * * *` | conditional (inventory_hostname in setup_drift_check_hosts) | `root` | read the script | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
 | Sync peer Claude artifacts | `{{ artifacts_sync_minute }} * * * *` | conditional (not k8s_dry_run | bool) | `{{ sys_user }}` | read the script | `ansible/roles/k8s/artifacts/tasks/main.yml` |
 | TLS cert-expiry watch | `10 5 * * *` | daniel-box | `{{ sys_user }}` | no (read-only by its command) | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
 | UPS secondary watchdog | `*/{{ nut_host_watchdog_interval_minutes }} * * * *` | conditional (nut_host_watchdog_armed | bool) | `root` | read the script | `ansible/roles/setup/nut_host/tasks/main.yml` |
@@ -66,7 +58,6 @@ generated_sha: 5c838445
 | janitorr error health | `{{ janitorr_k8s_health_cron_minute }} * * * *` | every host in the play | `{{ sys_user }}` | read the script | `ansible/roles/k8s/janitorr/tasks/main.yml` |
 | mkv attachment repair | `{{ fake_remux_mkv_attachment_cron_minute }} * * * *` | every host in the play | `{{ sys_user }}` | no (read-only by its command) | `ansible/roles/setup/fake_remux/tasks/main.yml` |
 | qbittorrent prefs drift check | `{{ qbittorrent_k8s_prefs_check_cron_minute }} {{ qbittorrent_k8s_prefs_check_cron_hour }} * * *` | every host in the play | `{{ sys_user }}` | read the script | `ansible/roles/k8s/qbittorrent/tasks/main.yml` |
-| remember log rotation health | `{{ k3s_remember_logs_cron_minute }} * * * *` | every host in the play | `{{ sys_user }}` | read the script | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
 
 ## Schedule format
 
