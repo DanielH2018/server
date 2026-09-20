@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/freshness.py
-generated_at: 2026-09-19 18:17 UTC
-generated_sha: 8cf1ba83c
+generated_at: 2026-09-20 06:17 UTC
+generated_sha: 1d12c2d91
 ---
 
 !!! warning "Generated file — do not edit"
@@ -17,28 +17,25 @@ generated_sha: 8cf1ba83c
 | Page | Changed | Sources named | Moved since | Most recently moved |
 |---|---|---|---|---|
 | [gitops-argo-flux-evaluation.md](../gitops-argo-flux-evaluation.md) | 2026-09-02 | 13 | 11 | `scripts/validate/k8s_manifests.py` (2026-09-19) |
+| [python-code-organization.md](../python-code-organization.md) | 2026-09-18 | 67 | 10 | `pyproject.toml` (2026-09-19) |
 | [networkpolicy-slice-answers.md](../networkpolicy-slice-answers.md) | 2026-09-03 | 18 | 9 | `ansible/inventory/host_vars/daniel-box.yml` (2026-09-19) |
-| [staging-phase-c.md](../staging-phase-c.md) | 2026-09-05 | 16 | 9 | `scripts/deploy.sh` (2026-09-19) |
+| [staging-phase-c.md](../staging-phase-c.md) | 2026-09-05 | 16 | 9 | `docs/staging-cluster.md` (2026-09-19) |
+| [break-glass.md](../break-glass.md) | 2026-09-17 | 17 | 8 | `ansible/vars/secrets.yml` (2026-09-19) |
 | [issue-claiming-and-fanout.md](../issue-claiming-and-fanout.md) | 2026-09-17 | 19 | 8 | `.claude/hooks/session-health.py` (2026-09-19) |
 | [b2-transaction-cap-monitoring-gaps.md](../b2-transaction-cap-monitoring-gaps.md) | 2026-09-02 | 8 | 7 | `scripts/deploy.sh` (2026-09-19) |
 | [k3s-upgrade.md](../k3s-upgrade.md) | 2026-09-10 | 11 | 7 | `scripts/deploy.sh` (2026-09-19) |
-| [break-glass.md](../break-glass.md) | 2026-09-17 | 17 | 7 | `ansible/vars/secrets.yml` (2026-09-19) |
-| [python-code-organization.md](../python-code-organization.md) | 2026-09-18 | 67 | 7 | `pyproject.toml` (2026-09-19) |
-| [healthchecks-io-deadman.md](../healthchecks-io-deadman.md) | 2026-09-17 | 15 | 6 | `ansible/vars/secrets.yml` (2026-09-19) |
-| [longhorn-backup-tiering.md](../longhorn-backup-tiering.md) | 2026-09-03 | 10 | 5 | `ansible/roles/k8s/navidrome/templates/deployment.yaml.j2` (2026-09-18) |
-| [adr/0001-mkdocs-site-with-generated-reference.md](../adr/0001-mkdocs-site-with-generated-reference.md) | 2026-09-02 | 4 | 4 | `scripts/infra_map/gen_infra_map.py` (2026-09-18) |
+| [longhorn-backup-tiering.md](../longhorn-backup-tiering.md) | 2026-09-03 | 10 | 5 | `ansible/roles/setup/k3s/tasks/health-crons.yml` (2026-09-19) |
+| [adr/0001-mkdocs-site-with-generated-reference.md](../adr/0001-mkdocs-site-with-generated-reference.md) | 2026-09-02 | 4 | 4 | `CLAUDE.md` (2026-09-19) |
 | [longhorn-upgrade.md](../longhorn-upgrade.md) | 2026-09-02 | 7 | 4 | `renovate.json` (2026-09-19) |
 | [uptime-robot-monitors.md](../uptime-robot-monitors.md) | 2026-09-02 | 4 | 4 | `ansible/inventory/host_vars/daniel-box.yml` (2026-09-19) |
-| [kopia-disaster-recovery.md](../kopia-disaster-recovery.md) | 2026-09-09 | 12 | 4 | `ansible/vars/secrets.yml` (2026-09-19) |
+| [kopia-disaster-recovery.md](../kopia-disaster-recovery.md) | 2026-09-09 | 12 | 4 | `CLAUDE.md` (2026-09-19) |
 | [k3s-etcd-restore.md](../k3s-etcd-restore.md) | 2026-09-11 | 7 | 4 | `ansible/vars/secrets.yml` (2026-09-19) |
-| [staging-cluster.md](../staging-cluster.md) | 2026-09-18 | 31 | 4 | `scripts/deploy.sh` (2026-09-19) |
+| [claude-tooling.md](../claude-tooling.md) | 2026-09-18 | 26 | 4 | `CLAUDE.md` (2026-09-19) |
 | [adr/0003-sops-with-age-for-secrets-at-rest.md](../adr/0003-sops-with-age-for-secrets-at-rest.md) | 2026-08-24 | 4 | 3 | `ansible/vars/secrets.yml` (2026-09-19) |
 | [longhorn-disaster-recovery.md](../longhorn-disaster-recovery.md) | 2026-09-09 | 13 | 3 | `ansible/vars/secrets.yml` (2026-09-19) |
-| [secret-rotation.md](../secret-rotation.md) | 2026-09-18 | 9 | 3 | `ansible/vars/secrets.yml` (2026-09-19) |
 | [adr/0015-d2-for-hand-authored-diagrams.md](../adr/0015-d2-for-hand-authored-diagrams.md) | 2026-09-01 | 2 | 2 | `scripts/docs/build_docs.py` (2026-09-05) |
 | [adr/0010-pull-based-gitops-over-argo-and-flux.md](../adr/0010-pull-based-gitops-over-argo-and-flux.md) | 2026-09-02 | 3 | 2 | `scripts/validate/k8s_manifests.py` (2026-09-19) |
 | [anilist-integration.md](../anilist-integration.md) | 2026-09-06 | 3 | 2 | `ansible/roles/k8s/manifests/tasks/main.yml` (2026-09-18) |
-| [claude-tooling.md](../claude-tooling.md) | 2026-09-18 | 26 | 2 | `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2` (2026-09-19) |
 | [failure-classes.md](../failure-classes.md) | 2026-09-18 | 15 | 2 | `docs/reference/backlog.md` (2026-09-19) |
 | [gitops-pipeline.md](../gitops-pipeline.md) | 2026-09-18 | 13 | 2 | `ansible/roles/setup/gitops_deploy/CLAUDE.md` (2026-09-19) |
 | [email-to-rss.md](../email-to-rss.md) | 2026-08-15 | 1 | 1 | `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2` (2026-09-19) |
@@ -52,10 +49,10 @@ generated_sha: 8cf1ba83c
 | [adr/0013-daniel-pi-stays-on-docker.md](../adr/0013-daniel-pi-stays-on-docker.md) | 2026-09-02 | 1 | 1 | `ansible/inventory/host_vars/daniel-pi.yml` (2026-09-18) |
 | [security-tools.md](../security-tools.md) | 2026-09-02 | 3 | 1 | `ansible/initial_setup.yml` (2026-09-18) |
 | [wireguard-private-homelab-access.md](../wireguard-private-homelab-access.md) | 2026-09-03 | 2 | 1 | `ansible/inventory/host_vars/daniel-box.yml` (2026-09-19) |
-| [adr/0014-kopia-retired-longhorn-owns-the-b2-credentials.md](../adr/0014-kopia-retired-longhorn-owns-the-b2-credentials.md) | 2026-09-09 | 3 | 1 | `docs/secret-rotation.md` (2026-09-18) |
-| [b2-api-drain-scoping.md](../b2-api-drain-scoping.md) | 2026-09-09 | 5 | 1 | `scripts/secrets_mgmt/secret_rotation.py` (2026-09-18) |
+| [adr/0014-kopia-retired-longhorn-owns-the-b2-credentials.md](../adr/0014-kopia-retired-longhorn-owns-the-b2-credentials.md) | 2026-09-09 | 3 | 1 | `docs/secret-rotation.md` (2026-09-19) |
+| [b2-api-drain-scoping.md](../b2-api-drain-scoping.md) | 2026-09-09 | 5 | 1 | `scripts/secrets_mgmt/secret_rotation.py` (2026-09-19) |
 | [adr/0011-one-lock-serialises-every-deploy-path.md](../adr/0011-one-lock-serialises-every-deploy-path.md) | 2026-09-12 | 3 | 1 | `scripts/deploy.sh` (2026-09-19) |
-| [adr/0016-code-scanning-stays-on-default-setup.md](../adr/0016-code-scanning-stays-on-default-setup.md) | 2026-09-17 | 10 | 1 | `scripts/secrets_mgmt/secret_rotation.py` (2026-09-18) |
+| [adr/0016-code-scanning-stays-on-default-setup.md](../adr/0016-code-scanning-stays-on-default-setup.md) | 2026-09-17 | 10 | 1 | `scripts/secrets_mgmt/secret_rotation.py` (2026-09-19) |
 | [adr/0017-the-tree-lock-guards-the-tree-not-the-cluster.md](../adr/0017-the-tree-lock-guards-the-tree-not-the-cluster.md) | 2026-09-18 | 4 | 1 | `scripts/deploy.sh` (2026-09-19) |
 | [deploying.md](../deploying.md) | 2026-09-18 | 7 | 1 | `scripts/deploy.sh` (2026-09-19) |
 | [adr/0004-authelia-is-the-single-sign-on-layer.md](../adr/0004-authelia-is-the-single-sign-on-layer.md) | 2026-09-02 | 0 | 0 | — |
@@ -63,4 +60,7 @@ generated_sha: 8cf1ba83c
 | [adr/index.md](../adr/index.md) | 2026-09-12 | 1 | 0 | — |
 | [networkpolicy-default-deny.md](../networkpolicy-default-deny.md) | 2026-09-18 | 10 | 0 | — |
 | [claude-shell-permissions.md](../claude-shell-permissions.md) | 2026-09-19 | 10 | 0 | — |
+| [healthchecks-io-deadman.md](../healthchecks-io-deadman.md) | 2026-09-19 | 15 | 0 | — |
 | [post-merge-automation.md](../post-merge-automation.md) | 2026-09-19 | 29 | 0 | — |
+| [secret-rotation.md](../secret-rotation.md) | 2026-09-19 | 9 | 0 | — |
+| [staging-cluster.md](../staging-cluster.md) | 2026-09-19 | 31 | 0 | — |
