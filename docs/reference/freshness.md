@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/freshness.py
-generated_at: 2026-09-20 06:17 UTC
-generated_sha: 1d12c2d91
+generated_at: 2026-09-20 18:17 UTC
+generated_sha: e731cda1e
 ---
 
 !!! warning "Generated file — do not edit"
@@ -20,8 +20,8 @@ generated_sha: 1d12c2d91
 | [python-code-organization.md](../python-code-organization.md) | 2026-09-18 | 67 | 10 | `pyproject.toml` (2026-09-19) |
 | [networkpolicy-slice-answers.md](../networkpolicy-slice-answers.md) | 2026-09-03 | 18 | 9 | `ansible/inventory/host_vars/daniel-box.yml` (2026-09-19) |
 | [staging-phase-c.md](../staging-phase-c.md) | 2026-09-05 | 16 | 9 | `docs/staging-cluster.md` (2026-09-19) |
-| [break-glass.md](../break-glass.md) | 2026-09-17 | 17 | 8 | `ansible/vars/secrets.yml` (2026-09-19) |
-| [issue-claiming-and-fanout.md](../issue-claiming-and-fanout.md) | 2026-09-17 | 19 | 8 | `.claude/hooks/session-health.py` (2026-09-19) |
+| [break-glass.md](../break-glass.md) | 2026-09-17 | 17 | 8 | `docs/reference/secrets.md` (2026-09-20) |
+| [issue-claiming-and-fanout.md](../issue-claiming-and-fanout.md) | 2026-09-17 | 19 | 8 | `docs/reference/backlog.md` (2026-09-20) |
 | [b2-transaction-cap-monitoring-gaps.md](../b2-transaction-cap-monitoring-gaps.md) | 2026-09-02 | 8 | 7 | `scripts/deploy.sh` (2026-09-19) |
 | [k3s-upgrade.md](../k3s-upgrade.md) | 2026-09-10 | 11 | 7 | `scripts/deploy.sh` (2026-09-19) |
 | [longhorn-backup-tiering.md](../longhorn-backup-tiering.md) | 2026-09-03 | 10 | 5 | `ansible/roles/setup/k3s/tasks/health-crons.yml` (2026-09-19) |
@@ -36,7 +36,7 @@ generated_sha: 1d12c2d91
 | [adr/0015-d2-for-hand-authored-diagrams.md](../adr/0015-d2-for-hand-authored-diagrams.md) | 2026-09-01 | 2 | 2 | `scripts/docs/build_docs.py` (2026-09-05) |
 | [adr/0010-pull-based-gitops-over-argo-and-flux.md](../adr/0010-pull-based-gitops-over-argo-and-flux.md) | 2026-09-02 | 3 | 2 | `scripts/validate/k8s_manifests.py` (2026-09-19) |
 | [anilist-integration.md](../anilist-integration.md) | 2026-09-06 | 3 | 2 | `ansible/roles/k8s/manifests/tasks/main.yml` (2026-09-18) |
-| [failure-classes.md](../failure-classes.md) | 2026-09-18 | 15 | 2 | `docs/reference/backlog.md` (2026-09-19) |
+| [failure-classes.md](../failure-classes.md) | 2026-09-18 | 15 | 2 | `docs/reference/backlog.md` (2026-09-20) |
 | [gitops-pipeline.md](../gitops-pipeline.md) | 2026-09-18 | 13 | 2 | `ansible/roles/setup/gitops_deploy/CLAUDE.md` (2026-09-19) |
 | [email-to-rss.md](../email-to-rss.md) | 2026-08-15 | 1 | 1 | `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2` (2026-09-19) |
 | [adr/0002-k3s-over-docker-compose-for-the-cluster-nodes.md](../adr/0002-k3s-over-docker-compose-for-the-cluster-nodes.md) | 2026-08-24 | 1 | 1 | `scripts/diagnostics/probe.py` (2026-09-18) |
