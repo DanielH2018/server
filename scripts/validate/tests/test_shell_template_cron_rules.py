@@ -434,3 +434,52 @@ def test_the_real_tree_has_no_kubeconfig_violation():
         if err:
             offenders.append(tpl.name)
     assert offenders == [], offenders
+
+
+UV_PINNED = (
+    "#!/bin/bash\n"
+    "OUT=$(/usr/local/bin/uv run --no-project --no-python-downloads --python 3.14.6 /opt/x/x.py)\n"
+)
+UV_EXPORT = 'export UV_PYTHON_INSTALL_DIR="/home/ubuntu/.local/share/uv/python"\n'
+
+
+def test_uv_interpreter_flags_a_root_cron_with_no_install_dir(tmp_path):
+    # The crowdsec remote-allowlist cron's first run, 2026-09-21 13:15: root's uv found no
+    # interpreter under /root and --no-python-downloads forbade fetching one.
+    tpl = _cron_role(tmp_path, user="root")
+    err = cc.cron_uv_interpreter_error(tpl, UV_PINNED, roles=tmp_path)
+    assert err is not None
+    assert "UV_PYTHON_INSTALL_DIR" in err
+
+
+def test_uv_interpreter_passes_a_root_cron_that_exports_it_first(tmp_path):
+    tpl = _cron_role(tmp_path, user="root")
+    rendered = "#!/bin/bash\n" + UV_EXPORT + UV_PINNED
+    assert cc.cron_uv_interpreter_error(tpl, rendered, roles=tmp_path) is None
+
+
+def test_uv_interpreter_flags_an_export_that_comes_after_the_uv_run(tmp_path):
+    tpl = _cron_role(tmp_path, user="root")
+    rendered = UV_PINNED + UV_EXPORT
+    assert cc.cron_uv_interpreter_error(tpl, rendered, roles=tmp_path) is not None
+
+
+def test_uv_interpreter_passes_the_connection_user(tmp_path):
+    # The interpreter lives under that user's HOME, so its own uv finds it unaided.
+    tpl = _cron_role(tmp_path, user="ubuntu")
+    assert cc.cron_uv_interpreter_error(tpl, UV_PINNED, roles=tmp_path) is None
+
+
+def test_the_real_tree_has_no_uv_interpreter_violation():
+    offenders = []
+    root_crons = set()
+    for tpl, _task_file, cron, _env in ct.iter_cron_targets():
+        if str(cron.get("user", "")) == "root":
+            root_crons.add(tpl.name)
+        if not tpl.exists():
+            continue
+        if cc.cron_uv_interpreter_error(tpl, tpl.read_text()):
+            offenders.append(tpl.name)
+    assert offenders == [], offenders
+    # Non-vacuity: the rule must be examining the root cron it was written for.
+    assert "crowdsec-update-remote-allowlist.sh.j2" in root_crons

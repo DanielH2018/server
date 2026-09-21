@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
-"""The two cron-environment rules a rendered shell template must satisfy.
+"""The three cron-environment rules a rendered shell template must satisfy.
 
 cron inherits neither PATH nor KUBECONFIG, and the two omissions fail differently. A missing
 PATH means `k3s` does not resolve, so the script dies loudly. A missing KUBECONFIG resolves
 the binary and then reports an EMPTY cluster — zero pods, zero volumes, nothing wrong — so a
 health check built on it goes green while seeing nothing at all. One check cannot cover both.
 
-Both rules take a rendered script plus the cron resolution from
+A third, `cron_uv_interpreter_error`, covers the HOME a root cron does not share with the
+user whose uv installed the pinned interpreter. All three take a rendered script plus the
+cron resolution from
 `scripts/lib/cron_targets.py`, and return an error string or None.
 `scripts/validate/shell_templates.py` runs them over every template it renders.
 """
 
+import re
 import sys
 from pathlib import Path
 
@@ -120,5 +123,49 @@ def cron_kubeconfig_error(
             "reports an EMPTY cluster rather than failing. Set KUBECONFIG in the script, in "
             "the cron job: line, or via env: yes on the cron task — or schedule it as root "
             "(see crowdsec-appsec-verify.sh.j2)."
+        )
+    return None
+
+
+UV_PINNED_NO_DOWNLOADS = re.compile(r"uv run\b[^\n]*--no-python-downloads")
+UV_INSTALL_DIR_EXPORT = re.compile(r"^\s*export UV_PYTHON_INSTALL_DIR=", re.MULTILINE)
+
+
+def cron_uv_interpreter_error(
+    template: Path, rendered: str, roles: Path = ROLES
+) -> str | None:
+    """Return an error string if a ROOT cron target pins the uv interpreter it cannot find.
+
+    None if this template is fine. The mirror image of `cron_kubeconfig_error`: there root is
+    exempt, here root is the only user at risk. `initial_setup` installs the pinned interpreter
+    `become: false`, under the connection user's `~/.local/share/uv/python`, and root's uv looks
+    under /root. With `--no-python-downloads` (which every host invocation carries) the run fails
+    on its first line — `A managed Python download is available for Python 3.14.6, but Python
+    downloads are set to 'never'` — which is what the crowdsec remote-allowlist cron did on its
+    first run, 2026-09-21. The export must precede the `uv run` it exists to fix; the k3s
+    reap-orphan shims are the pattern.
+    """
+    code = strip_comments(rendered)
+    pinned = UV_PINNED_NO_DOWNLOADS.search(code)
+    if not pinned:
+        return None
+    for tpl, task_file, cron_task, _job_env in iter_cron_targets(roles):
+        if tpl != template:
+            continue
+        if str(cron_task.get("user", "")).strip() != CRON_ROOT_USER:
+            return None
+        export = UV_INSTALL_DIR_EXPORT.search(code)
+        if export and export.start() < pinned.start():
+            return None
+        try:
+            rel_task_file = task_file.relative_to(REPO)
+        except ValueError:
+            rel_task_file = task_file
+        return (
+            f"runs `uv run --no-python-downloads` as root ({rel_task_file}) without first "
+            "exporting UV_PYTHON_INSTALL_DIR — the pinned interpreter lives under the "
+            "connection user's HOME, so root's uv finds none and may not fetch one. Add "
+            '`export UV_PYTHON_INSTALL_DIR="/home/{{ sys_user }}/.local/share/uv/python"` '
+            "above the uv run line (see longhorn-reap-orphan-backups.sh.j2)."
         )
     return None

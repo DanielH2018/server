@@ -25,6 +25,12 @@ push() { # up|down msg
   kuma_push "$1" "$2" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" crowdsec-remote-allowlist
 }
 
+# This cron is root (it execs into the engine pod), and the pinned interpreter is installed
+# `become: false` under {{ sys_user }}'s HOME — so root's uv finds no interpreter and
+# --no-python-downloads forbids fetching one. Observed on the first run, 2026-09-21 13:15:
+# `A managed Python download is available for Python 3.14.6, but Python downloads are set to
+# 'never'`. The k3s reap shims carry the same export for the same reason.
+export UV_PYTHON_INSTALL_DIR="/home/{{ sys_user }}/.local/share/uv/python"
 # The pinned-interpreter form every host cron uses (janitorr-health.sh.j2 is the sibling);
 # ansible/tests/setup/test_host_python_invocations.py holds all three flags.
 OUTPUT=$(/usr/local/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} /opt/crowdsec-remote-allowlist/remote_allowlist.py 2>&1)
