@@ -32,6 +32,7 @@ has a record, 1 otherwise.
 import json
 import re
 import subprocess
+import time
 from pathlib import Path
 
 # `probe_lib` is a namespace package under `scripts/`, so reaching a sibling by package name
@@ -50,6 +51,14 @@ RELEASE_DIR = Path("/var/lib/homelab/k8s-releases.d")
 
 from lib.git import git as _lib_git  # noqa: E402
 from lib.repo_paths import REPO as REPO_ROOT  # noqa: E402
+
+# The renderers live in releases_format.py (this module hit the 600-line cap); re-exported so
+# `run_releases`, probe.py and the tests keep one name for each.
+from diagnostics.probe_lib.releases_format import (  # noqa: E402
+    format_records,
+    format_stale_kuma,
+    format_stale_only,
+)
 
 
 def _git(*args, cwd, **kwargs):
@@ -367,6 +376,49 @@ def _deploy_plane_stale(commit, services, changed, context):
     return {svc: paths for svc, paths in hits.items() if paths}
 
 
+def _drift_started(commit, hits, repo_root, ref, _memo=None):
+    """Committer time (epoch seconds) of the OLDEST commit in `commit..ref` touching `hits`.
+
+    Oldest, because the grace window bounds how long a service has run old manifests, and
+    that clock starts at the first un-applied change. The newest would let every fresh commit
+    on a busy path -- `roles/k8s/manifests/` is an offending path for the whole fleet --
+    reset the clock on drift that is already days old.
+
+    `hits` are the reason strings `compute_stale` built -- a path, optionally followed by a
+    deploy-plane annotation -- so the path is the first token. Committer time rather than
+    author time: a squash merge keeps the author's clock, and the moment a grace period
+    counts from is when the change reached master. None when git cannot answer, which the
+    caller treats as old: a range it cannot date is not evidence the change is fresh.
+
+    `_memo` is keyed on the range and paths: a refused narrowing hands every service on a
+    commit the same hit, and without it a fleet-wide DOWN would pay one `git log` per
+    service, against the one-call-per-commit budget `compute_stale`'s docstring promises.
+    """
+    paths = tuple(sorted({hit.split(" ", 1)[0] for hit in hits}))
+    key = (commit, ref, paths)
+    if _memo is not None and key in _memo:
+        return _memo[key]
+    try:
+        result = _git(
+            "log",
+            "--format=%ct",
+            f"{commit}..{ref}",
+            "--",
+            *paths,
+            cwd=repo_root,
+            timeout=15,
+            check=True,
+        )
+        # `git log` prints newest first, and `-n` is applied before `--reverse`, so the
+        # oldest is the last line rather than anything a `-1` could select.
+        started = int(result.stdout.split()[-1])
+    except OSError, subprocess.SubprocessError, ValueError, IndexError:
+        started = None
+    if _memo is not None:
+        _memo[key] = started
+    return started
+
+
 def compute_stale(
     records,
     repo_root=REPO_ROOT,
@@ -374,12 +426,24 @@ def compute_stale(
     shared_roles=None,
     declared=None,
     callers=None,
+    grace_seconds=0,
+    now=None,
+    pending=None,
 ):
     """{service: reason} for every record whose own, shared or deploy-plane paths changed since `ref`.
 
     `declared` and `callers` are `narrow_broad.context_for`'s two derived fields, read from
     `repo_root` at `ref` when omitted. They are parameters so a test can drive a throwaway
     repo that declares no host_vars; production never passes them.
+
+    `grace_seconds` is the window a merge gets before its drift counts. The monitor pushed
+    DOWN on the first */30 run after ANY merge, which caught code-server at 13:00 on
+    2026-09-21 while its own landing had been building the image since 12:50. A service
+    whose OLDEST offending commit reached `ref` less than `grace_seconds` ago is left out of
+    the result and written to `pending` ({service: seconds since that commit}) when the
+    caller passes a dict (`_drift_started` says why oldest). A range git cannot date stays
+    stale. `now` is epoch seconds, for the tests. The default of 0 keeps every caller that
+    never asked for a grace on the old contract.
 
     One `git log` per distinct commit, not per service -- a full deploy stamps ~54 records
     sharing one commit, and grouping first keeps this from being 54 subprocess calls for what a
@@ -399,6 +463,7 @@ def compute_stale(
         by_commit.setdefault(commit, []).append(service)
 
     stale = {}
+    dated = {}
     context = None
     for commit, services in by_commit.items():
         paths = sorted(
@@ -427,9 +492,18 @@ def compute_stale(
             svc_paths = role_paths_for(svc, shared_roles)
             hits = [p for p in changed if any(p.startswith(rp) for rp in svc_paths)]
             hits += plane.get(svc, [])
-            if hits:
-                more = f" (+{len(hits) - 3} more)" if len(hits) > 3 else ""
-                stale[svc] = f"changed since applied: {', '.join(hits[:3])}{more}"
+            if not hits:
+                continue
+            if grace_seconds > 0:
+                started = _drift_started(commit, hits, repo_root, ref, _memo=dated)
+                if started is not None:
+                    age = (now if now is not None else time.time()) - started
+                    if age < grace_seconds:
+                        if pending is not None:
+                            pending[svc] = int(age)
+                        continue
+            more = f" (+{len(hits) - 3} more)" if len(hits) > 3 else ""
+            stale[svc] = f"changed since applied: {', '.join(hits[:3])}{more}"
     return stale
 
 
@@ -468,106 +542,6 @@ def missing_services(records, host_vars=None, k8s_roles_dir=None):
     return sorted(known - present)
 
 
-def format_records(records, merged, service=None, stale=None):
-    """Render the release table. Pure: returns (text, exit_code)."""
-    if not records:
-        return (
-            "no release records found in {}\n"
-            "Nothing has been deployed since the release stamp shipped -- deploy any k8s "
-            "service to write the first one.".format(RELEASE_DIR),
-            2,
-        )
-    if service:
-        records = [r for r in records if r.get("service") == service]
-        if not records:
-            return f"no release record for {service!r}", 2
-        return json.dumps(records[0], indent=2), 0
-
-    stale = stale or {}
-    lines = [
-        f"{'SERVICE':<24} {'COMMIT':<10} {'APPLIED (UTC)':<21} {'FILES':>5}  FLAGS"
-    ]
-    unclean = 0
-    for rec in records:
-        if "error" in rec:
-            lines.append(
-                f"{rec['service']:<24} {'-':<10} {'-':<21} {'-':>5}  UNREADABLE"
-            )
-            unclean += 1
-            continue
-        flags = []
-        if rec.get("tree_dirty"):
-            flags.append("dirty")
-        if rec.get("commit") not in merged:
-            flags.append("unmerged")
-        if rec.get("service") in stale:
-            flags.append("stale")
-        if flags:
-            unclean += 1
-        lines.append(
-            "{:<24} {:<10} {:<21} {:>5}  {}".format(
-                rec.get("service", "?"),
-                rec.get("commit_short", "?"),
-                rec.get("applied_at", "?"),
-                len(rec.get("manifests", {})),
-                ",".join(flags) or "-",
-            )
-        )
-    lines.append("")
-    lines.append(
-        f"{len(records)} service(s); {unclean} carrying a flag. dirty = no commit reproduces "
-        "those bytes; unmerged = not an ancestor of origin/master; stale = origin/master has "
-        "moved past this record under the service's own or a shared role, or an inventory "
-        "key or shared macro its render reads (`probe.py releases --stale-only` for the "
-        "reasons)."
-    )
-    return "\n".join(lines), (1 if unclean else 0)
-
-
-def format_stale_only(stale, missing):
-    """Render the cron-facing view: one line per stale or record-less service. Pure."""
-    lines = [f"{svc}: {reason}" for svc, reason in sorted(stale.items())]
-    lines += [f"{svc}: no release record" for svc in missing]
-    if not lines:
-        return "0 service(s) stale; every known k8s service has a current record.", 0
-    return "\n".join(lines), 1
-
-
-# The bridge pod ships `files/`, so the formatter lives there and probe.py reaches it the way
-# the tests do: by putting that directory on sys.path. Bootstrapped here rather than at the
-# top of the module because only `--kuma` needs it.
-_BRIDGE_FILES = REPO_ROOT / "ansible/roles/k8s/monitor-bridge/files"
-
-# Path prefixes a reason carries that add nothing inside a 900-char push message.
-_REASON_NOISE = re.compile(r"ansible/(?:inventory|roles(?:/k8s)?)/")
-
-
-def _kuma_reason(reason):
-    return _REASON_NOISE.sub("", reason.removeprefix("changed since applied: "))
-
-
-def format_stale_kuma(stale, missing):
-    """The `--stale-only` verdict as one line grouped by reason, for the Kuma push. Pure.
-
-    57 services carrying one identical reason are one group, not 57 lines (#2013); the group
-    lists the names once. Shares the exit code contract with `format_stale_only`.
-    """
-    items = {svc: _kuma_reason(reason) for svc, reason in stale.items()}
-    items.update(dict.fromkeys(missing, "no release record"))
-    if not items:
-        return "0 services stale; every known k8s service has a current record.", 0
-    if str(_BRIDGE_FILES) not in _sys.path:
-        _sys.path.insert(0, str(_BRIDGE_FILES))
-    from bridge import msgfmt
-
-    return (
-        msgfmt.format_down(
-            "service", "stale", items, details="probe.py releases --stale-only"
-        ),
-        1,
-    )
-
-
 def run_releases(ns):
     """Print the release records (or, with `--json`, raw JSON) and return the exit code.
 
@@ -579,10 +553,14 @@ def run_releases(ns):
         print(json.dumps(records, indent=2))
         return 0
     if getattr(ns, "stale_only", False):
-        stale = compute_stale(records)
+        grace_seconds = int(getattr(ns, "grace_minutes", 0) or 0) * 60
+        pending = {}
+        stale = compute_stale(records, grace_seconds=grace_seconds, pending=pending)
         missing = missing_services(records)
         render = format_stale_kuma if getattr(ns, "kuma", False) else format_stale_only
-        text, code = render(stale, missing)
+        text, code = render(
+            stale, missing, pending=pending, grace_seconds=grace_seconds
+        )
         print(text)
         return code
     merged = merged_commits(r.get("commit") for r in records)
@@ -594,6 +572,8 @@ def run_releases(ns):
         if not service and not getattr(ns, "previous", False)
         else {}
     )
-    text, code = format_records(records, merged, service=service, stale=stale)
+    text, code = format_records(
+        records, merged, service=service, stale=stale, release_dir=RELEASE_DIR
+    )
     print(text)
     return code

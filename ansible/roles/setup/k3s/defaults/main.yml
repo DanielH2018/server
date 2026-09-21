@@ -860,6 +860,13 @@ k3s_manifest_prune_cron_minute: "15"
 # a deferred change can land at any point in the day, and a daily window would leave it unwatched
 # for up to 24h. 30 minutes catches it within three gitops ticks.
 k3s_release_staleness_cron_minute: "*/30"
+# A merge younger than this is named in the push message but not counted stale. The check
+# graded drift from the moment a commit reached origin/master, so it paged for a merge whose
+# own landing was mid-deploy: code-server's image bump merged 12:48 on 2026-09-21, its build
+# ran from 12:50, and the 13:00 run pushed DOWN. Two cron periods, per the schedule rule for
+# grace periods: a merge landing right after a run gets a full deploy window (a code-server
+# image build alone is 20-30 min, after the CI wait) before the run after next grades it.
+k3s_release_staleness_grace_minutes: 60
 
 # ── Off-box etcd snapshots (templates/etcd-snapshot-offbox.sh.j2) ────────────────────────────
 # k3s already takes scheduled etcd snapshots — 00:00 and 12:00, 5 retained — but they land in

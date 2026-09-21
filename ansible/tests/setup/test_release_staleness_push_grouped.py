@@ -27,13 +27,17 @@ def _run(tmp_path, probe_output, probe_rc):
         jinja2.Environment(undefined=jinja2.StrictUndefined)
         .from_string(TEMPLATE.read_text())
         .render(
-            domain="example.test", k3s_metallb_ingress_vip="10.0.0.240", sys_user="u"
+            domain="example.test",
+            k3s_metallb_ingress_vip="10.0.0.240",
+            sys_user="u",
+            k3s_release_staleness_grace_minutes=60,
         )
     )
     for literal in (
         "/usr/local/lib/kuma-push-lib.sh",
         "/etc/rancher/k3s/kuma-push.env",
         "/home/u/.local/bin/uv",
+        "--grace-minutes 60",
     ):
         assert literal in body, f"{TEMPLATE.name} no longer references {literal}"
 

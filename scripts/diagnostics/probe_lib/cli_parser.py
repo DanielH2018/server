@@ -376,4 +376,15 @@ def _build_parser():
             "Kuma push message (bridge.msgfmt); release-staleness-check.sh pushes this"
         ),
     )
+    rel.add_argument(
+        "--grace-minutes",
+        type=int,
+        default=0,
+        metavar="N",
+        help=(
+            "with --stale-only: a service whose newest offending commit reached origin/master "
+            "less than N minutes ago is named but not counted stale, so a merge gets its "
+            "landing's deploy window before the monitor pages (default 0: no grace)"
+        ),
+    )
     return p
