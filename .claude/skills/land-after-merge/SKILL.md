@@ -349,7 +349,7 @@ was tried and reverted for exactly that PR (`plane_note`'s own docstring in `lan
 endpoint the deployer reads, so its verdict and the tick's agree by construction. Hand-polling
 cost 835 polls across 213 wait episodes before it existed.
 
-It also owns the rule that used to live in `CLAUDE.md`: `cancelled`, `stale` and
+It owns the rule `CLAUDE.md` keeps only a one-line pointer to: `cancelled`, `stale` and
 `skipped_by_concurrency` mean *no verdict for this SHA*, never *this SHA is bad* —
 `_CI_NO_VERDICT_CONCLUSIONS` in `deploy_logic.py` is the list, and a commit whose merge was
 immediately followed by another reads `cancelled` permanently. `await_ci.py` follows the tip in

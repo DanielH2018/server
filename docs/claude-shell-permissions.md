@@ -203,3 +203,28 @@ The tiers below describe the **Manual-mode fallback**, not what happens in a nor
 
 Hand-running an auto-approved *write* verb creates drift from the Ansible source of truth; prefer
 `uv run ansible-playbook … --tags <svc>`. The write tier exists for iteration, not for deploys.
+
+## `git diff` on a SOPS path — why a pipe is denied and a flag is not
+
+`.gitattributes:1` sets `diff=sops` on `ansible/vars/secrets.yml`, so `git diff`, `git show`
+and `git log -p` decrypt the file before printing it. The plaintext lands in the terminal, the
+scrollback and any agent transcript that captured the command. The repo-root `CLAUDE.md`
+carries the rule (`--stat` / `--name-only` to see THAT it changed, `sops` to see WHAT); this
+is the record of how the rule got its shape.
+
+- **2026-08-24** — a reviewer ran the bare `git diff` during the homelab review (finding L-5),
+  and the value it printed had to be rotated.
+- **Until 2026-08-27** the `CLAUDE.md` remedy piped the diff through `grep -E '^[-+][a-z_]+:'`,
+  without `-o`. Without `-o` grep prints the whole matching line — key *and* plaintext value —
+  and that line leaked a freshly minted push token into a session transcript before the token
+  was rotated.
+- **Until 2026-08-29** the remedy was the `-o` form of that pipe. The user-level deny hook
+  matched the `git diff` half regardless of what followed the pipe, so for a while the remedy
+  the file named was denied by the rule printing it.
+- **Since 2026-09-17** that deny lives in `claude_guard.deny`, behind
+  `~/.claude/hooks/guard-pre-tool-use.sh` (it was `block-dangerous-bash.sh` before that). It
+  denies every `git diff`/`show`/`log -p` naming a SOPS path unless a content-free flag is
+  present.
+
+The generalisation: a filter that leaks everything when mistyped is the wrong shape for the
+job, and a flag that emits no content cannot leak however it is typed.

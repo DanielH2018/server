@@ -7,9 +7,12 @@ paths:
 
 # Ansible Rules
 
-The core conventions (idempotency, prefer specific built-in modules over `shell`/`command`,
-meaningful task names, `ansible-lint` before committing, where new vars go) live in CLAUDE.md. This
-file only adds the path-specific detail not spelled out there:
-
+- All tasks must be **idempotent** — rerunning should be side-effect-free
+- Use specific modules (`ansible.builtin.apt`, `ansible.builtin.copy`, etc.) over `shell`/`command`
+- Give all tasks meaningful names
+- Use `ansible-lint` before committing playbooks
+- Jinja2 templating (`{{ var }}`) for all variables
+- Global vars go in `ansible/inventory/group_vars/all.yml`; per-host overrides in
+  `ansible/inventory/host_vars/`.
 - Put `no_log: true` on any task that handles a secret or credential, and never print secret values.
 - Dry-run with `--check` before applying changes that touch production state.
