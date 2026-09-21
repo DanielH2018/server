@@ -10,6 +10,8 @@ and `cert_stages` into `probe_lib/cli_parser.py`.
 Run: uv run pytest scripts/diagnostics/tests/test_probe_curl_pipeline.py
 """
 
+import pytest
+
 from diagnostics.probe_lib import cli_parser, core, curl_pipeline
 
 
@@ -117,3 +119,100 @@ def test_no_cluster_route_carries_the_retired_k8s_suffix(
 
     assert asked, "expected plan() to route these subcommands through k8s_endpoint"
     assert not [h for h in asked if h.endswith("-k8s")]
+
+
+# --- Two Loki stores (#2210) ------------------------------------------------------------------
+#
+# `{service_name="claude-code"}` lives only in claude-otel's Loki; `loki-homelab` returned a
+# well-formed empty result for it that read as "the OTEL stream is gone". The default store
+# stays `homelab` so every existing call is unchanged; `--loki claude-otel` reaches the other
+# by its pinned ClusterIP, and the one selector with a known home is refused at the wrong one.
+
+
+def _fake_cluster_ip():
+    return "10.43.0.99"
+
+
+def test_plan_loki_query_default_store_is_homelab(fake_resolve, fake_k8s_endpoint):
+    stages = curl_pipeline.plan(
+        ["loki-query", '{job="x"}'], fake_resolve, fake_k8s_endpoint, _fake_cluster_ip
+    )
+    assert stages[0][-1].startswith(
+        "https://loki-homelab.example/loki/api/v1/query_range?"
+    )
+    assert "--resolve" in stages[0]
+
+
+def test_plan_loki_query_claude_otel_store_uses_cluster_ip_without_pin(
+    fake_resolve, fake_k8s_endpoint
+):
+    stages = curl_pipeline.plan(
+        ["loki-query", '{service_name="claude-code"}', "--loki", "claude-otel"],
+        fake_resolve,
+        fake_k8s_endpoint,
+        _fake_cluster_ip,
+    )
+    assert stages == [
+        core.curl_argv(
+            core.loki_query_url(
+                "http://10.43.0.99:3100", '{service_name="claude-code"}', 100
+            )
+        )
+    ]
+
+
+def test_plan_loki_labels_claude_otel_store_uses_cluster_ip_without_pin(
+    fake_resolve, fake_k8s_endpoint
+):
+    stages = curl_pipeline.plan(
+        ["loki-labels", "--loki", "claude-otel"],
+        fake_resolve,
+        fake_k8s_endpoint,
+        _fake_cluster_ip,
+    )
+    assert stages == [core.curl_argv("http://10.43.0.99:3100/loki/api/v1/labels")]
+
+
+def test_plan_refuses_claude_code_selector_at_homelab_store(
+    fake_resolve, fake_k8s_endpoint
+):
+    with pytest.raises(SystemExit, match="--loki claude-otel"):
+        curl_pipeline.plan(
+            ["loki-query", '{service_name="claude-code"} | event_name="tool_decision"'],
+            fake_resolve,
+            fake_k8s_endpoint,
+            _fake_cluster_ip,
+        )
+
+
+@pytest.mark.parametrize(
+    "logql, store",
+    [
+        ('{service_name="claude-code"}', "homelab"),
+        ('{service_name = "claude-code"}', "homelab"),
+        ('{service_name=~"claude-code"}', "homelab"),
+    ],
+)
+def test_wrong_loki_store_is_flagged(logql, store):
+    assert core.wrong_loki_store(logql, store)
+
+
+@pytest.mark.parametrize(
+    "logql, store",
+    [
+        ('{service_name="claude-code"}', "claude-otel"),
+        ('{job="syslog"}', "homelab"),
+        # loki-homelab carries its own `service_name` label (k8s workload names).
+        ('{service_name="crowdsec"}', "homelab"),
+        ('{service_name=~".+"}', "homelab"),
+    ],
+)
+def test_wrong_loki_store_is_clean(logql, store):
+    assert core.wrong_loki_store(logql, store) is None
+
+
+def test_claude_otel_loki_ip_reads_the_role_default():
+    # The role template pins `clusterIP: {{ claude_otel_loki_cluster_ip }}`; a parse that
+    # silently returned nothing would build `http://:3100`.
+    ip = core.claude_otel_loki_ip()
+    assert ip.startswith("10.43."), ip

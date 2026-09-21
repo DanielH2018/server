@@ -33,22 +33,28 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 from diagnostics.probe_lib.cli_parser import cert_stages, _build_parser
 from diagnostics.probe_lib.core import (
     curl_argv,
+    claude_otel_loki_ip,
     k8s_endpoint,
+    loki_endpoint,
     loki_labels_url,
     loki_query_url,
     prom_query_url,
     prom_targets_url,
     scrutiny_url,
     since_window_ns,
+    wrong_loki_store,
 )
 
 
-def plan(args, resolve_ip, k8s_endpoint=k8s_endpoint):
+def plan(
+    args, resolve_ip, k8s_endpoint=k8s_endpoint, claude_otel_loki_ip=claude_otel_loki_ip
+):
     """Return the command pipeline (list of argv stages) for the parsed args.
 
-    `resolve_ip(container) -> ip` and `k8s_endpoint(hostname) -> (base, pin)` are injected
-    so all routing/URL logic is testable without Docker, SOPS, or the network. Most commands
-    are a single stage; `cert` is a two-stage openssl pipeline.
+    `resolve_ip(container) -> ip`, `k8s_endpoint(hostname) -> (base, pin)` and
+    `claude_otel_loki_ip() -> ip` are injected so all routing/URL logic is testable without
+    Docker, SOPS, or the network. Most commands are a single stage; `cert` is a two-stage
+    openssl pipeline.
     """
     ns = _build_parser().parse_args(args)
     cmd = ns.cmd
@@ -59,10 +65,13 @@ def plan(args, resolve_ip, k8s_endpoint=k8s_endpoint):
         base, pin = k8s_endpoint("prometheus")
         return [curl_argv(prom_targets_url(base), resolve=pin)]
     if cmd == "loki-labels":
-        base, pin = k8s_endpoint("loki-homelab")
+        base, pin = loki_endpoint(ns.loki, k8s_endpoint, claude_otel_loki_ip)
         return [curl_argv(loki_labels_url(base), resolve=pin)]
     if cmd == "loki-query":
-        base, pin = k8s_endpoint("loki-homelab")
+        refusal = wrong_loki_store(ns.logql, ns.loki)
+        if refusal:
+            raise SystemExit(refusal)
+        base, pin = loki_endpoint(ns.loki, k8s_endpoint, claude_otel_loki_ip)
         start, end = since_window_ns(getattr(ns, "since", None))
         return [
             curl_argv(
