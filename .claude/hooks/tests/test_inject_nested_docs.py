@@ -17,7 +17,9 @@ import importlib.util
 import io
 import json
 import os
+import subprocess
 import sys
+import uuid
 
 import pytest
 
@@ -277,3 +279,46 @@ def test_the_real_rules_globs_match_their_own_examples():
     assert ".claude/rules/ansible.md" in _mod.docs_for(
         root, "ansible/roles/k8s/traefik/templates/deployment.yaml.j2"
     )
+
+
+# ── the real entry point ─────────────────────────────────────────────────────────────
+
+_UV = "/home/ubuntu/.local/bin/uv"
+
+
+@pytest.mark.skipif(not os.path.exists(_UV), reason=f"{_UV} is not installed here")
+def test_the_shim_injects_on_the_real_hook_path():
+    """Run the .sh with a real payload, the way Claude Code does.
+
+    The in-process tests above cannot see the failure this hook is most exposed to: any
+    byte on stdout before the JSON — a uv reconcile line, an import-time print — makes the
+    harness read the whole output as plain text and inject nothing. The shim's own
+    `readlink -f "$0"` keeps it on this checkout's `.py`, so the row it appends lands in
+    this checkout's gitignored `.claude/logs/instructions.log`.
+    """
+    session = f"e2e-{uuid.uuid4().hex}"
+    payload = {
+        "tool_name": "Bash",
+        "session_id": session,
+        "cwd": _REPO,
+        "tool_input": {"command": f"sed -n 1,5p {KNOWN_ROLE}/files/registry.py"},
+    }
+    run = subprocess.run(
+        [os.path.join(_HERE, "inject-nested-docs.sh")],
+        input=json.dumps(payload),
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    assert run.returncode == 0, run.stderr
+    out = json.loads(run.stdout)["hookSpecificOutput"]
+    assert out["hookEventName"] == "PreToolUse"
+    assert "permissionDecision" not in out
+    assert f"{KNOWN_ROLE}/CLAUDE.md" in out["additionalContext"]
+    log = os.path.join(_HERE, "..", "logs", "instructions.log")
+    with open(log, encoding="utf-8") as fh:
+        rows = fh.read().splitlines()
+    assert any(f"[{session[:8]}]" in r and "bash_path_match" in r for r in rows), rows[
+        -3:
+    ]
