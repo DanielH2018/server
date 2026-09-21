@@ -149,7 +149,22 @@ the per-volume map and each exclusion's rationale:
    concluding anything about the backup: stop, blank the target
    (`k3s_longhorn_backup_armed: false` + deploy), and resume after the 00:00 UTC reset.
 4. **Restore volumes BEFORE any `deploy.yml`** — deploying first would provision fresh
-   empty PVCs under the same names. Restore from the target that holds each volume (the
+   empty PVCs under the same names. Before the first restore, run the gates: both targets
+   armed and available, a `BackupVolume` on each (the sync happened), and no backed-up PVC
+   name already bound to an empty volume. They run as one script, in order, and the exit code
+   names the first gate that refused (#2216, the shape `docs/k3s-upgrade.md` set):
+
+   ```bash
+   uv run python scripts/deploy_tools/longhorn_dr_gates.py
+   ```
+
+   Exit 0 means all three passed; exit 1–3 is the gate that failed, and the script prints
+   what it found. Exit 3 on a cluster that already carries the volumes is the right answer:
+   this runbook is for a cluster that has lost them. The B2 cap is not something the script
+   can see — a cap denial reads as step 3's `volume.cfg` message, and the gates stop on the
+   sync rather than on the cap.
+
+   Restore from the target that holds each volume (the
    table above); in the Longhorn UI the backups are listed per target, so the four R2
    volumes do not appear under `default`. In the UI (or per-backup `Volume` CRs with
    `spec.fromBackup`): restore each backed-up volume under its original PV name, then use

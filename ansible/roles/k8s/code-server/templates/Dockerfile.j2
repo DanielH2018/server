@@ -40,7 +40,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 #    tracks the version; `sha256sum -c` is what turns a stale hash into a failed build rather
 #    than a silently different node.
 RUN curl -fsSL -o /tmp/node.tar.xz \
-        "https://nodejs.org/dist/v{{ code_server_k8s_node_version }}/node-v{{ code_server_k8s_node_version }}-linux-x64.tar.xz" \
+        "{{ code_server_k8s_node_url }}" \
     && echo "{{ code_server_k8s_node_sha256 }}  /tmp/node.tar.xz" | sha256sum -c - \
     && tar -xJf /tmp/node.tar.xz -C /usr/local --strip-components=1 --no-same-owner \
         --exclude='*/CHANGELOG.md' --exclude='*/LICENSE' --exclude='*/README.md' \

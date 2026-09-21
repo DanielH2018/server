@@ -220,6 +220,31 @@ k3s etcd-snapshot list --s3 \
 `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` come from the env file, so no key ever goes on the
 command line.
 
+## The gates — before stopping k3s
+
+Two conditions decide whether the snapshot you are about to restore is a backup at all, and
+both are recorded on daniel-box by crons rather than checked by hand. They run as one script,
+in order, and the exit code names the first gate that refused (#2216, the shape
+`docs/k3s-upgrade.md` set):
+
+```bash
+uv run python scripts/deploy_tools/k3s_etcd_restore_gates.py
+```
+
+Exit 0 means both passed; exit 1 or 2 is the gate that failed, and the script prints what it
+found. Run it on daniel-box, before `systemctl stop k3s`.
+
+1. **The off-box listing leg is proven.** The weekly `--list-only` drill's stamp
+   (`/var/lib/etcd-restore-drill/last-success-list-only`) must say `mode=list-only` and be
+   younger than eight days — the credentials, bucket and folder worked, and the listing
+   returned real snapshots. A stale stamp means the drill has been failing; find out why
+   before trusting the bucket.
+2. **The cluster token has an off-box baseline.** `/var/lib/homelab/etcd-token.sha256` must
+   exist — see *Baseline the drift stamp when you take the copy* above. The stamp is root-only,
+   so the gate checks that it exists; whether the live token still matches it is the daily
+   cron's verdict, on the **Off-box etcd Snapshot** tile. A missing stamp means no baseline was
+   ever taken, and every snapshot since 2026-08-20 is undecryptable without that copy.
+
 ## Restoring
 
 Single-server cluster, so this is a `--cluster-reset` restore on daniel-box. **It rolls the whole
