@@ -8,6 +8,8 @@
 
 from __future__ import annotations
 
+import json
+import urllib.request
 from collections.abc import Callable, Mapping
 
 # ── CI gate ───────────────────────────────────────────────────────────────────────────────────
@@ -60,6 +62,47 @@ def github_auth_headers(token: str | None) -> dict[str, str]:
     if not token:
         return {}
     return {"Authorization": f"Bearer {token}"}
+
+
+def github_get(
+    repo: str,
+    path: str,
+    *,
+    user_agent: str,
+    environ: Mapping[str, str],
+    run: Callable,
+    timeout: float = 15,
+) -> dict:
+    """GET `https://api.github.com/repos/<repo>/<path>` and return the parsed JSON body.
+
+    The one request shape the deployer's CI gate and `await_ci.py` share, so the two cannot
+    drift on the headers or the token lookup (issue #2136). What a failure MEANS stays with
+    the caller: the gate maps every error to `pending`, a landing lets it raise.
+
+    Args:
+        repo: the `owner/name` slug.
+        path: the part after `/repos/<repo>/`, query string included.
+        user_agent: names the caller in GitHub's logs.
+        environ: where `github_token` looks for `GH_TOKEN` / `GITHUB_TOKEN`.
+        run: the `subprocess.run` `github_token` falls back to for `gh auth token`.
+        timeout: seconds for the whole request.
+
+    Raises:
+        urllib.error.URLError: the API could not be reached, or answered non-2xx
+            (`HTTPError` is a subclass).
+        TimeoutError, OSError: the socket failed.
+        ValueError: the body was not JSON.
+    """
+    req = urllib.request.Request(
+        f"https://api.github.com/repos/{repo}/{path}",
+        headers={
+            "Accept": "application/vnd.github+json",
+            "User-Agent": user_agent,
+            **github_auth_headers(github_token(environ, run)),
+        },
+    )
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        return json.load(resp)
 
 
 def ci_verdict(check_runs: list[dict], required: frozenset[str] | set[str]) -> str:

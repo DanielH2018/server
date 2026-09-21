@@ -57,6 +57,7 @@ from deploy_git import (  # noqa: F401
     dirty_alert_slot,
     dirty_summary,
     github_auth_headers,
+    github_get,
     github_token,
     hold_plane_marker,
     is_diverged,

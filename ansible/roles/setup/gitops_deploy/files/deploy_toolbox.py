@@ -26,7 +26,6 @@ per tick and collect its errors where `CONFIG.validate()` never sees them.
 Stdlib only, like the rest of the deployer.
 """
 
-import json
 import os
 import subprocess
 import time
@@ -40,7 +39,7 @@ from functools import partial
 import deploy_io
 import deploy_narrow
 from deploy_config import Config, log
-from deploy_git import ci_verdict, github_auth_headers, github_token
+from deploy_git import ci_verdict, github_get, github_token
 from host_lib import discord_post
 
 
@@ -83,18 +82,14 @@ def fetch_ci_verdict(
     """
     if not require_ci:
         return "pass"
-    url = f"https://api.github.com/repos/{repo}/commits/{sha}/check-runs?per_page=100"
-    req = urllib.request.Request(
-        url,
-        headers={
-            "Accept": "application/vnd.github+json",
-            "User-Agent": "gitops-deploy",
-            **github_auth_headers(github_token(os.environ, subprocess.run)),
-        },
-    )
     try:
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            payload = json.load(resp)
+        payload = github_get(
+            repo,
+            f"commits/{sha}/check-runs?per_page=100",
+            user_agent="gitops-deploy",
+            environ=os.environ,
+            run=subprocess.run,
+        )
     except (urllib.error.URLError, TimeoutError, ValueError, OSError) as e:
         log(f"CI status unavailable for {sha[:8]} ({e}) — deferring this tick")
         return "pending"
