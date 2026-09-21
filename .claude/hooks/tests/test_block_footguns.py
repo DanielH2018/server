@@ -334,7 +334,43 @@ def test_an_unrelated_gh_api_patch_is_clean():
     assert _mod.problem("gh api -X PATCH repos/o/r -f description=hi") is None
 
 
-# --- 8. a leading shell keyword must not slip any rule ----------------------------------------
+# --- 8. gh issue create by hand ------------------------------------------------------------------
+
+
+def test_a_hand_gh_issue_create_is_denied():
+    assert "findings.py open" in _mod.problem("gh issue create --title x --body y")
+
+
+def test_a_gh_issue_create_with_a_global_flag_is_denied():
+    """`gh --repo o/r issue create` is the same command; `invokes` skips the global flag."""
+    assert _mod.problem("gh --repo DanielH2018/server issue create --title x")
+
+
+def test_a_gh_issue_create_later_in_a_pipeline_is_denied():
+    assert _mod.problem("git fetch && gh issue create --title x")
+
+
+def test_findings_py_open_is_clean():
+    """The sanctioned path: `findings.py open` is not `gh issue create` on the command line."""
+    assert (
+        _mod.problem(
+            "uv run python scripts/dev/findings.py open --title 'x' --body 'y' --file a.py"
+        )
+        is None
+    )
+
+
+def test_other_gh_issue_subcommands_are_clean():
+    assert _mod.problem("gh issue list --label claude --json number") is None
+    assert _mod.problem("gh issue comment 2119 --body 'Worked by x'") is None
+
+
+def test_the_words_as_a_search_argument_are_clean():
+    """Argv match, not substring: the subcommand run must be adjacent after `gh`."""
+    assert _mod.problem("gh issue list --search 'gh issue create'") is None
+
+
+# --- 9. a leading shell keyword must not slip any rule ----------------------------------------
 #
 # Rules 5 and 6 called `strip_shell_keywords` from the day they were written; rules 1-4 predate
 # it and decided on `stage[0]` directly. Measured 2026-08-30, before the strip moved into

@@ -446,15 +446,36 @@ def current_claim(issue: dict) -> str | None:
     return held
 
 
+# The repository this register lives in, as GitHub spells it in a qualified closing
+# reference. A PR body may write `Closes DanielH2018/server#2078` rather than `Closes #2078`
+# -- an agent filing a cross-repo companion PR tends to qualify both for symmetry -- and
+# GitHub honours that form the same as the bare one.
+PR_REPO = "DanielH2018/server"
+
 # GitHub closes an issue on any of these, not just `Closes`. Matching `closes` alone would
 # let `next` offer an issue whose fix is already open as a PR, which is the exact duplicated
-# work `next` exists to prevent.
-_PR_REF_RE = re.compile(r"(?i)\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#(\d+)\b")
+# work `next` exists to prevent. The optional `owner/repo` group is captured rather than
+# pinned to `PR_REPO` in the pattern, so `pr_refs` can tell a same-repo reference (withheld)
+# from one aimed at another repository (ignored): `Closes DanielH2018/dotfiles#558` must not
+# withhold server issue #558 (#2119).
+_PR_REF_RE = re.compile(
+    r"(?i)\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+(?:([\w.-]+/[\w.-]+))?#(\d+)\b"
+)
 
 
-def pr_refs(bodies: list[str]) -> set[int]:
-    """Issue numbers the given PR bodies say they close."""
-    return {int(m) for body in bodies for m in _PR_REF_RE.findall(body or "")}
+def pr_refs(bodies: list[str], repo: str = PR_REPO) -> set[int]:
+    """Issue numbers the given PR bodies say they close, in `repo`.
+
+    A bare `#n` counts, and so does `owner/repo#n` when the qualifier names `repo` -- compared
+    case-insensitively, the way GitHub resolves a slug. The full `owner/repo` is compared, not
+    the repository name alone, so a fork's `SomeoneElse/server#n` does not withhold anything.
+    """
+    return {
+        int(number)
+        for body in bodies
+        for qualifier, number in _PR_REF_RE.findall(body or "")
+        if not qualifier or qualifier.lower() == repo.lower()
+    }
 
 
 def _prefixed(names: set[str], prefix: str) -> str | None:

@@ -121,6 +121,25 @@ def test_pr_refs_ignores_a_bare_issue_mention():
     assert pr_refs(["see #4", "closes issue 5"]) == set()
 
 
+def test_pr_refs_withholds_a_same_repo_qualified_reference():
+    """#2119: `Closes DanielH2018/server#2078` closes #2078 on merge, and `next` offered it."""
+    assert pr_refs(
+        ["Closes DanielH2018/server#2078", "fixes danielh2018/SERVER#7"]
+    ) == {
+        2078,
+        7,
+    }
+
+
+def test_pr_refs_ignores_a_reference_into_another_repository():
+    """The rejecting half: a companion PR's `Closes DanielH2018/dotfiles#558` is not #558 here,
+    and neither is a fork's `SomeoneElse/server#558` -- the whole slug is compared."""
+    assert (
+        pr_refs(["Closes DanielH2018/dotfiles#558", "Fixes SomeoneElse/server#558"])
+        == set()
+    )
+
+
 # --- main(["next", ...]): the handler's own plumbing, not just pickable() -----------------
 
 
