@@ -45,6 +45,8 @@ _RELEASE = re.compile(r"^\d+\.\d+\.\d+$")
 # The network-resolving forms the old step used. Any one of them back in the Dockerfile means a
 # version is decided at build time again.
 FLOATING_FORMS = (
+    "deb.nodesource.com",
+    "| bash",
     "extensionquery",
     "/api/${publisher}",
 )
@@ -128,6 +130,16 @@ def test_the_cli_is_pinned_to_the_extension_release() -> None:
         f"CLI pinned to {cli} but the Anthropic.claude-code extension to {extension['version']} — "
         "the extension drives the CLI, so the two move together"
     )
+
+
+def test_node_is_pinned_with_a_checksum() -> None:
+    defaults = _defaults()
+    version = str(defaults["code_server_k8s_node_version"])
+    assert _RELEASE.match(version), f"node version {version!r} is not an exact release"
+    assert _SHA256.match(str(defaults["code_server_k8s_node_sha256"]))
+    rendered = _rendered_dockerfile()
+    assert f"node-v{version}-linux-x64.tar.xz" in rendered
+    assert "sha256sum -c" in rendered
 
 
 def test_no_build_step_resolves_a_version_from_the_network() -> None:

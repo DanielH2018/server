@@ -32,11 +32,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && ln -s /usr/bin/python3 /usr/bin/python
 
-# 2. Node.js via NodeSource's setup script. Still resolved at build time: the script installs
-#    whatever 22.x NodeSource serves that day.
-RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
-    && apt-get install -y --no-install-recommends nodejs \
-    && rm -rf /var/lib/apt/lists/*
+# 2. Node.js from the official tarball, checksum-verified, into /usr/local (node + npm + npx).
+#    This replaced NodeSource's `setup_22.x` script piped to bash on 2026-09-21: that script
+#    resolved whatever NodeSource served on build day and ran as root straight off the network.
+#    Version and sha256 live in defaults/main.yml (code_server_k8s_node_*), where Renovate
+#    tracks the version; `sha256sum -c` is what turns a stale hash into a failed build rather
+#    than a silently different node.
+RUN curl -fsSL -o /tmp/node.tar.xz \
+        "https://nodejs.org/dist/v{{ code_server_k8s_node_version }}/node-v{{ code_server_k8s_node_version }}-linux-x64.tar.xz" \
+    && echo "{{ code_server_k8s_node_sha256 }}  /tmp/node.tar.xz" | sha256sum -c - \
+    && tar -xJf /tmp/node.tar.xz -C /usr/local --strip-components=1 --no-same-owner \
+        --exclude='*/CHANGELOG.md' --exclude='*/LICENSE' --exclude='*/README.md' \
+    && rm /tmp/node.tar.xz \
+    && node --version && npm --version
 
 # 3. Python virtual environment outside /config so it survives volume mounts, with its
 #    packages and its ownership settled in the SAME layer. `chown -R` rewrites every file,

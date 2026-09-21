@@ -425,6 +425,18 @@
     },
     {
       "customType": "regex",
+      "description": "The Node.js release the code-server image unpacks from nodejs.org (`code_server_k8s_node_version` in the role's defaults, #2149). Replaced NodeSource's setup_22.x script piped to bash, which resolved whatever NodeSource served on build day. The paired code_server_k8s_node_sha256 is the tarball's line in SHASUMS256.txt, which no regex manager can compute — so no automerge (packageRule below), the same manual-finish class as the uv installer. Majors (22 -> 24) stay manual per the default rules anyway.",
+      "managerFilePatterns": [
+        "/(^|/)ansible/roles/k8s/code-server/defaults/main\\.yml$/"
+      ],
+      "matchStrings": [
+        "code_server_k8s_node_version:\\s*\"(?<currentValue>[\\d.]+)\""
+      ],
+      "depNameTemplate": "node",
+      "datasourceTemplate": "node-version"
+    },
+    {
+      "customType": "regex",
       "description": "Container images in k8s role defaults (ansible/roles/k8s/*/defaults/main.yml) AND in inventory/group_vars/all.yml. The cluster has no compose template to read, so these vars ARE the source of truth for what every pod runs \u2014 and until this manager existed none of them was tracked, so the whole cluster fleet aged with no update signal. group_vars/all.yml was added 2026-08-14: crowdsec_k8s_image had been hoisted out of its role defaults into group_vars, which put it outside this manager's patterns AND outside the coverage test's glob (scripts/tests/test_renovate_managers.py globbed roles/k8s/*/defaults/main.yml only) \u2014 so the WAF core, the one image whose staleness is a security problem, was the single pin neither could see. ansible/roles/setup/*/defaults/main.yml was added 2026-08-27: the same one-directory-short escape, this time for k3s_longhorn_restore_drill_image (busybox:stable) \u2014 an `_image:` pin one directory over from the *_version: pins the control-plane manager below already tracks in this same file. It is a mutable tag, so what Renovate can offer here is a digest bump (as with n8n's `stable` channel tag elsewhere in this file), not a version bump \u2014 that is enough signal to notice an upstream busybox re-push; the drill's own timeout/health assertions are the check that a bump didn't break it. ansible/migrate_volume_block_size.yml was added 2026-09-21 (#2150): its `mig_image:` pin (busybox, version tag plus digest) sits in a playbook rather than a defaults file, the same escape one directory further out, and a data-migration pod is not the place for a channel tag nothing tracks.",
       "managerFilePatterns": [
         "/^ansible/roles/k8s/[^/]+/defaults/main\\.yml$/",
@@ -750,7 +762,7 @@
       "automerge": false
     },
     {
-      "description": "code-server's build pins — the venv's pip packages and the Claude Code CLI on npm (#2149). One group, no automerge: the image is built, so a merged bump ships only when land.sh rebuilds it, and code-server is `k8s_autodeploy: false` (the marker in the group name is what keeps the unattended renovate_agent off the PR, #1963). matchDatasources keeps this off the role's docker pins, which the denylist rule above owns.",
+      "description": "code-server's build pins — the venv's pip packages, the Claude Code CLI on npm and the Node.js release (#2149). One group, no automerge: the image is built, so a merged bump ships only when land.sh rebuilds it, and code-server is `k8s_autodeploy: false` (the marker in the group name is what keeps the unattended renovate_agent off the PR, #1963). A node bump is also a manual finish — code_server_k8s_node_sha256 comes from that release's SHASUMS256.txt. matchDatasources keeps this off the role's docker pins, which the denylist rule above owns.",
       "matchManagers": [
         "custom.regex"
       ],
@@ -760,7 +772,8 @@
       ],
       "matchDatasources": [
         "pypi",
-        "npm"
+        "npm",
+        "node-version"
       ],
       "groupName": "code-server build pins (manual — built image, finish code_server_k8s_node_sha256 on a node bump; k8s_autodeploy: false)",
       "automerge": false

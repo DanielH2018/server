@@ -26,8 +26,8 @@ it is built from (`templates/Dockerfile.j2` + `files/extensions.sh`); the invent
 - Extensions are downloaded at build time (Open VSX + MS Marketplace) into `/opt/vsix`;
   `extensions.sh` installs them into /config on container start. **Every build input is
   pinned** (2026-09-21, #2149): the base image by digest, each extension by version + sha256
-  in `code_server_k8s_extensions` (`defaults/main.yml`, with the bump recipe), and the pip
-  and npm packages by exact version. Renovate has
+  in `code_server_k8s_extensions` (`defaults/main.yml`, with the bump recipe), Node by a
+  checksummed official tarball, and the pip and npm packages by exact version. Renovate has
   no datasource for a VS Code extension, so those bump by hand — the base-image PR is the
   natural moment. `ansible/tests/services/test_code_server_build_is_pinned.py` refuses a
   floating input.

@@ -101,3 +101,11 @@ code_server_k8s_extensions:
     version: 2.1.278
     url: https://marketplace.visualstudio.com/_apis/public/gallery/publishers/Anthropic/vsextensions/claude-code/2.1.278/vspackage?targetPlatform=linux-x64
     sha256: 12e1de8156325bcf8845c2ab6cc996ff1c3a536d3cf325fede3ff914e3fb7845
+
+# Node.js, installed from the official linux-x64 tarball rather than NodeSource's `setup_22.x`
+# script piped to bash, which resolved whatever NodeSource served on build day (#2149). The
+# sha256 is the tarball's line in https://nodejs.org/dist/v<version>/SHASUMS256.txt. Renovate
+# tracks the version (regex manager in renovate.json, `node-version` datasource); the hash is
+# the manual finish on its PR, the same class as `initial_setup_uv_version`.
+code_server_k8s_node_version: "22.23.2"
+code_server_k8s_node_sha256: d60acfe00a2932254bb0ad20e01b0d74397a0875595de719654b214f4b03f307
