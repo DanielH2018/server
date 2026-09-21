@@ -31,18 +31,24 @@ registry, so git stays the source of truth.
 SOPS binds each value's ciphertext to its key path, so renaming a key re-encrypts it even
 though the plaintext never changes. `ciphertext_rotation_dates` compares stored ciphertext,
 so a plain rename reads as a fresh rotation and resets that secret's clock — which is how a
-genuinely overdue credential goes green without anyone touching it. Rename in four steps,
-and do not run `sync` between them:
+genuinely overdue credential goes green without anyone touching it. Rename in four steps:
 
-1. Record what git says the secret's date is now:
+1. Read what git says the secret's date is now:
    `uv run python scripts/secrets_mgmt/secret_rotation.py audit | grep '<old name>'`.
 2. Rename in the store: `EDITOR="sed -i s/^<old>/<new>/" sops ansible/vars/secrets.yml`.
 3. Add `"<new name>": "<old name>"` to `RENAMED_FROM` in
-   `scripts/secrets_mgmt/git_dates.py`, and rename the registry row in
-   `ansible/secret_rotation.yml` by hand, carrying `last_rotated` over as the date from
-   step 1. A bare `sync` here instead would seed a new row with a fictional backdate and
-   mark the old one stale.
-4. Prove it: `secret_rotation.py --check` (registry drift) and `audit` (the date held).
+   `scripts/secrets_mgmt/git_dates.py`.
+4. Carry the date over:
+   `uv run python scripts/secrets_mgmt/secret_rotation.py record --key <new name> --last-rotated <date from step 1>`.
+   `record` moves the old name's registry row to the new name, tier and all, and sets its
+   `last_rotated`. A `sync` run before it does no harm: `record` still takes the old row over
+   the seeded one, and its fictional backdate goes with it.
+
+Prove it with `secret_rotation.py audit --check` (registry drift) and `audit` (the date
+held). `scripts/secrets_mgmt/tests/test_departed_secrets_are_accounted_for.py` is the
+gate behind step 3: every key the store's git history holds and the store no longer does
+must be a `RENAMED_FROM` source or sit in `RETIRED` beside it, so a rename that skips the
+table fails CI rather than resetting the clock. A key dropped outright goes in `RETIRED`.
 
 Rename every consumer of the variable in the same commit. Every value is unchanged, so a
 deploy cannot detect a half-done rename — the template render is the only signal, and it
@@ -92,7 +98,8 @@ The `rotate --commit` weekly cron is autonomous and state-changing — its autho
 
 General shape: rotate/regenerate the credential **in the app**, `sops set
 ansible/vars/secrets.yml '["<name>"]' '"<new>"'`, update the registry date (`sync` won't,
-since the value already existed — set `last_rotated` by hand or re-run after editing), then
+since the value already existed — `secret_rotation.py record --key <name> --last-rotated
+<date>` sets it), then
 redeploy the app **and** every consumer (for example, Homepage, monitor-bridge, configarr). A
 date left behind is not fatal: `audit` and `rotate` both advance it to the commit that changed
 the ciphertext before deciding what is due, so an undated hand rotation of an `auto` token is

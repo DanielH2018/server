@@ -466,7 +466,10 @@ Several sessions work this repo at once, each in its own `.claude/worktrees/<nam
   `docs/adr/0014-kopia-retired-longhorn-owns-the-b2-credentials.md`. **A SOPS rename re-encrypts
   the value** — sops binds each ciphertext to its key path — so the rename commit reads as a
   rotation unless the new name is recorded in `RENAMED_FROM` (`scripts/secrets_mgmt/git_dates.py`)
-  and its `last_rotated` carried over by hand. Rename that way, or the clock silently resets.
+  and its `last_rotated` carried over with `secret_rotation.py record --key <new> --last-rotated
+  <date>`. Rename that way, or the clock silently resets; a key dropped outright goes in
+  `RETIRED` beside the table, and `test_departed_secrets_are_accounted_for.py` fails on a
+  departed key in neither.
 - **`git diff ansible/vars/secrets.yml` prints plaintext credentials.** `.gitattributes:1` sets
   `diff=sops`, so git decrypts the file before diffing it. The committed blob stays properly
   encrypted — this is a review-hygiene trap, not a repo defect, and the driver is worth keeping

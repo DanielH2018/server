@@ -398,3 +398,62 @@ def test_rotate_commit_writes_back_only_the_dates_it_rotated():
     assert saved[0]["entries"][HAND_ROTATED]["last_rotated"] == "2026-01-01", (
         "the git-derived date must not reach the registry on disk"
     )
+
+
+# ── record: the carry-over that used to be a hand edit ─────────────────────
+
+
+def _record_args(key: str, last_rotated: str):
+    return SimpleNamespace(key=key, last_rotated=dt.date.fromisoformat(last_rotated))
+
+
+def test_record_moves_the_date_backward_and_saves(capsys):
+    """The rename carry-over replaces a fresher seed with the true older date.
+
+    `advance_last_rotated` may only clear an overdue; this must be allowed to create one,
+    or a renamed credential keeps the fictional freshness `sync` seeded it with.
+    """
+    tools, recorded = build_tools(
+        Fakes(registry=_reg(("tok", "assisted", "2026-08-01")))
+    )
+    assert sr.cmd_record(_record_args("tok", "2026-01-15"), tools) == 0
+    saved = [c[1][0] for c in recorded if c[0] == "save_registry"]
+    assert len(saved) == 1
+    assert saved[0]["entries"]["tok"]["last_rotated"] == "2026-01-15"
+    assert (
+        "record: tok last_rotated 2026-08-01 -> 2026-01-15" in capsys.readouterr().out
+    )
+
+
+def test_record_moves_a_renamed_row_to_its_new_name(capsys):
+    """A RENAMED_FROM target the registry lacks takes over its source's row, tier and all.
+
+    Whether or not a `sync` already seeded the new name: the source row carries the
+    operator's tier override, so it is the one that survives.
+    """
+    reg = _reg(("kopia_b2_key_id", "pinned", "2026-05-29"))
+    reg["entries"]["kopia_b2_key_id"]["source"] = "record"
+    tools, recorded = build_tools(Fakes(registry=reg))
+    assert sr.cmd_record(_record_args("longhorn_b2_key_id", "2026-05-29"), tools) == 0
+    saved = [c[1][0] for c in recorded if c[0] == "save_registry"][0]
+    assert "kopia_b2_key_id" not in saved["entries"]
+    assert saved["entries"]["longhorn_b2_key_id"] == {
+        "tier": "pinned",
+        "last_rotated": "2026-05-29",
+        "source": "record",
+    }
+    assert "(row moved from kopia_b2_key_id)" in capsys.readouterr().out
+
+
+def test_record_refuses_a_key_the_registry_lacks(capsys):
+    tools, recorded = build_tools(Fakes(registry=_reg(("tok", "auto", "2026-08-01"))))
+    assert sr.cmd_record(_record_args("other", "2026-01-15"), tools) == 2
+    assert "save_registry" not in named_calls(recorded)
+    assert "other is not in the registry" in capsys.readouterr().err
+
+
+def test_record_refuses_a_date_after_today(capsys):
+    tools, recorded = build_tools(Fakes(registry=_reg(("tok", "auto", "2026-08-01"))))
+    assert sr.cmd_record(_record_args("tok", "2026-09-02"), tools) == 2
+    assert "save_registry" not in named_calls(recorded)
+    assert "after today" in capsys.readouterr().err

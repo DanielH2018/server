@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Secret rotation registry: audit + staggered rotation for ansible/vars/secrets.yml.
 
-Four subcommands:
+Five subcommands:
   consumers — list every role that references one secret, measured from the tree, with the
            exact commands that make a rotation take effect. Answers the question a rotation
            poses and `audit` does not: who is still holding the old value? Setup-plane roles
@@ -27,6 +27,11 @@ Four subcommands:
            unattended path picks up anything due within ROTATE_LEAD_DAYS so a token
            rotates the weekly-cron run BEFORE it goes overdue (see the constant's
            comment); coming-due-only-by-default means rotations stay staggered.
+  record — set one row's `last_rotated` to a date only the operator knows, and save. The
+           carry-over after a SOPS rename (`git` cannot date a renamed key past its rename)
+           and the date of an app-side rotation nothing in the tree performed. `sync` never
+           touches an existing row's date and `audit` advances dates in memory only, so
+           without this the registry could be moved only by hand.
 
 This file is the CLI. The logic each subcommand runs on lives beside it, in modules that
 import nothing from here: `secret_classify` (tier by name), `secret_registry` (seeding, sync, due dates,
@@ -55,6 +60,7 @@ Tiers (and default rotation cadence):
 
 import argparse
 import copy
+import datetime as dt
 import os
 import secrets as pysecrets
 import subprocess
@@ -66,7 +72,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from secrets_mgmt.consumers import consumer_commands, consumer_tags, tree_consumers
-from secrets_mgmt.git_dates import advance_last_rotated, derived_rotation_dates
+from secrets_mgmt.git_dates import (
+    RENAMED_FROM,
+    advance_last_rotated,
+    derived_rotation_dates,
+)
 from secrets_mgmt.secret_registry import (
     audit,
     is_record,
@@ -398,8 +408,60 @@ def cmd_rotate(args, tools: RotationTools) -> int:
     return 0
 
 
+def cmd_record(args, tools: RotationTools) -> int:
+    """Set `args.key`'s `last_rotated` to `args.last_rotated` and save the registry.
+
+    Moves the date in EITHER direction, unlike `advance_last_rotated`: that overlays git
+    evidence on a seed and may only clear an overdue, where here the operator is the
+    evidence, and the rename carry-over moves the date BACKWARD on purpose — git dates a
+    renamed key to its rename commit at best, and `sync` would seed it fresher still.
+
+    A key the registry lacks is refused (exit 2) unless it is a `RENAMED_FROM` target whose
+    source row exists: then the row moves to the new name, keeping its tier and `source`,
+    so a rename is three commands and no YAML edit. A date after today is refused (exit 2).
+    Not the `source: record` field — that marks a value SOPS only records; this records a
+    DATE, for any row.
+    """
+    reg = tools.load_registry()
+    entries = reg.setdefault("entries", {})
+    if args.last_rotated > tools.today():
+        print(
+            "refusing: %s is after today (%s)" % (args.last_rotated, tools.today()),
+            file=sys.stderr,
+        )
+        return 2
+    moved_from = None
+    was = RENAMED_FROM.get(args.key)
+    if was is not None and was in entries:
+        # A `sync` run before this would have seeded the new name too; the source row is
+        # the one carrying the operator's tier and `source`, so it wins.
+        entries[args.key] = entries.pop(was)
+        moved_from = was
+    if args.key not in entries:
+        print(
+            "refusing: %s is not in the registry — run `secret_rotation.py sync` first, or "
+            "add it to RENAMED_FROM (scripts/secrets_mgmt/git_dates.py) if this is a rename"
+            % args.key,
+            file=sys.stderr,
+        )
+        return 2
+    old = entries[args.key].get("last_rotated")
+    entries[args.key]["last_rotated"] = args.last_rotated.isoformat()
+    tools.save_registry(reg)
+    print(
+        "record: %s last_rotated %s -> %s%s"
+        % (
+            args.key,
+            old,
+            args.last_rotated.isoformat(),
+            " (row moved from %s)" % moved_from if moved_from else "",
+        )
+    )
+    return 0
+
+
 def main(argv=None) -> int:
-    """Dispatch to the `sync`/`consumers`/`audit`/`rotate` subcommand and return its exit code."""
+    """Dispatch to the `sync`/`consumers`/`audit`/`rotate`/`record` subcommand and return its exit code."""
     p = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
@@ -445,6 +507,22 @@ def main(argv=None) -> int:
         "rotation dates out of git",
     )
     pr.set_defaults(func=cmd_rotate)
+    prec = sub.add_parser(
+        "record",
+        help="set one row's last_rotated to a date only the operator knows (a rename's "
+        "carry-over, an app-side rotation) — unrelated to the `source: record` field",
+    )
+    prec.add_argument(
+        "--key", required=True, help="secret name, as it appears in secrets.yml"
+    )
+    prec.add_argument(
+        "--last-rotated",
+        required=True,
+        type=dt.date.fromisoformat,
+        metavar="YYYY-MM-DD",
+        help="the date the credential was last rotated; may be earlier than what is recorded",
+    )
+    prec.set_defaults(func=cmd_record)
     args = p.parse_args(argv)
     # One `RotationTools` per run, built here and threaded down: every git call, sops call,
     # registry read or write, Kuma push and clock read a subcommand makes goes through it.
