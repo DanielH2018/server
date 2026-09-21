@@ -237,7 +237,18 @@ instances of this discipline:
 
   The container reads the current key from its mounted config, so only the **new** value ever
   reaches a command line. Run these on daniel-box, and **not from a Claude Code session** — a
-  bash-input is transcribed, and a transcribed key is the exposure this file exists to prevent:
+  bash-input is transcribed, and a transcribed key is the exposure this file exists to prevent.
+
+  The conditions above are gates, and they run as one script before the first command below:
+  the registry row is still `pinned`, a hand-taken Longhorn snapshot of `authelia-config` is
+  younger than two hours, Authelia has an available replica, and this shell is a plain one on
+  daniel-box. The exit code names the first gate that refused (#2216, the shape
+  `docs/k3s-upgrade.md` set); exit 4 from a Claude Code session is the expected reading, and
+  the three state gates still print their verdicts before it:
+
+  ```bash
+  uv run python scripts/deploy_tools/pinned_rotation_gates.py
+  ```
 
   ```bash
   NEW=$(openssl rand -hex 32)

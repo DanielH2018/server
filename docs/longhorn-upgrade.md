@@ -14,20 +14,31 @@ would deploy the same manifest while leaving the repo as a stale source of truth
 Upstream's own instruction is *"Always back up volumes before upgrading. If anything goes wrong,
 you can restore the volume using the backup."* With no downgrade path, that is the whole safety net.
 
+Each condition is a stop, not a checklist item. They run as one script, in order, and the exit
+code names the first gate that refused (#2216, the shape `docs/k3s-upgrade.md` set):
+
 ```bash
-# 1. The backup target must be armed and reachable
-kubectl -n longhorn-system get backuptarget default \
-  -o jsonpath='{.spec.backupTargetURL}{"  avail="}{.status.available}'
-
-# 2. A restore must actually succeed. A green backup job is not proof — on 2026-08-15 a B2
-#    Class-B cap denial surfaced as "cannot find volume.cfg in backupstore", which reads as
-#    data loss. Run the drill.
-
-# 3. Every volume accounted for: no volume in an unknown state, or you cannot tell
-#    upgrade damage from what was already broken.
-kubectl -n longhorn-system get volumes.longhorn.io \
-  -o custom-columns='NAME:.metadata.name,STATE:.status.state,ROBUST:.status.robustness'
+uv run python scripts/deploy_tools/longhorn_upgrade_gates.py
 ```
+
+Exit 0 means all four passed. Exit 1–4 is the gate that failed, and the script prints what it
+found. Exit 69 means the cluster could not be asked. Run it on daniel-box: gate 2 reads the
+restore drill's stamp, which exists only there.
+
+1. **The backup target is armed and available.** `default` must carry a URL, and every target
+   that carries one must report `available` — an armed target that is not available cannot
+   list what it holds, let alone restore it.
+2. **A restore has succeeded recently.** A green backup job is not proof — on 2026-08-15 a B2
+   Class-B cap denial surfaced as `cannot find volume.cfg in backupstore`, which reads as data
+   loss. The nightly drill's `last-success` stamp must be younger than
+   `k3s_longhorn_restore_drill_max_age_days`, the same window monitor-bridge's check 7 pages
+   on. A stale stamp means: fix the drill first, or run it by hand
+   (`sudo /usr/local/bin/longhorn-restore-drill.sh`).
+3. **Every volume accounted for.** Attached or detached, and healthy (an idle volume reports
+   `unknown`). A volume mid-attach, `degraded` or `faulted` before the hop cannot be told apart
+   from upgrade damage after it.
+4. **Every engine on one image.** The previous hop's engine image must hold zero references
+   before the next hop starts — see step 4 of the procedure below for why.
 
 ## Per-hop procedure
 

@@ -9,11 +9,11 @@ Run: uv run pytest scripts/deploy_tools/tests/test_k3s_upgrade_gates.py
 """
 
 import io
-import json
 import subprocess
 from pathlib import Path
 
 import pytest
+from _gates_fakes import fake_tools
 from deploy_tools import k3s_upgrade_gates as gates
 from lib import kubectl
 from lib.gitops_markers import MARKERS
@@ -53,21 +53,12 @@ def _tools(
     volumes=HEALTHY_VOLUMES, backups=SETTLED_BACKUPS, nodes=BOTH_READY
 ) -> kubectl.Tools:
     """A `Tools` whose kubectl answers the three reads from the given documents."""
-    answers = {
-        gates.VOLUMES_ARGS: volumes,
-        gates.BACKUPS_ARGS: backups,
-        gates.NODES_ARGS: nodes,
-    }
-
-    def run(argv, timeout):
-        args = tuple(argv[argv.index("--kubeconfig") + 2 :])
-        doc = answers[args]
-        return subprocess.CompletedProcess(argv, 0, json.dumps(doc), "")
-
-    return kubectl.Tools(
-        run=run,
-        find_tool=lambda name: "/usr/local/bin/kubectl",
-        find_kubeconfig=lambda: Path("/tmp/kubeconfig"),
+    return fake_tools(
+        {
+            gates.VOLUMES_ARGS: volumes,
+            gates.BACKUPS_ARGS: backups,
+            gates.NODES_ARGS: nodes,
+        }
     )
 
 

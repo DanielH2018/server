@@ -34,67 +34,47 @@ Usage:
 
 import os
 import sys
-from collections.abc import Callable
-from dataclasses import dataclass
 from pathlib import Path as _Path
 
 # Reach `lib`: a directly-invoked script gets only its own directory on sys.path, and
 # pyproject's `pythonpath` is a pytest setting.
 sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
-from lib.gitops_markers import MARKERS, STATE_DIR
-from lib.kubectl import (
-    CLUSTER_NODES,
-    DEFAULT_TOOLS,
-    MissingKubectl,
-    Tools,
-    WrongCluster,
-    kubectl_json,
+from deploy_tools import runbook_gates
+from deploy_tools.runbook_gates import (
+    EX_UNAVAILABLE,
+    LONGHORN_NS,
+    VOLUMES_ARGS,
+    Gate,
+    Unreadable,
+    cluster_doc,
+    items as _items,
+    name_of as _name,
+    unsafe_volumes,
 )
+from lib.gitops_markers import MARKERS, STATE_DIR
+from lib.kubectl import CLUSTER_NODES, DEFAULT_TOOLS, Tools
 
 CLUSTER = "prod"
-EX_UNAVAILABLE = 69
-
-# Allow-lists, not deny-lists: a Longhorn state this file has not heard of (a rename, a new
-# value after a Longhorn bump) must stop the upgrade, not pass it. `healthy` is a volume with
-# every replica; `unknown` is what an idle, detached volume reports. `degraded` and `faulted`
-# are the ones the runbook names.
-SAFE_ROBUSTNESS = frozenset({"healthy", "unknown"})
+RUNBOOK = "docs/k3s-upgrade.md"
 
 # Backup states a restart cannot abort. `New`, `Pending` and `InProgress` are in flight; the
 # empty string is a Backup CR the controller has not picked up yet.
 SETTLED_BACKUP = frozenset({"Completed", "Error", "Unknown"})
 
-VOLUMES_ARGS = ("-n", "longhorn-system", "get", "volumes.longhorn.io", "-o", "json")
-BACKUPS_ARGS = ("-n", "longhorn-system", "get", "backups.longhorn.io", "-o", "json")
+BACKUPS_ARGS = ("-n", LONGHORN_NS, "get", "backups.longhorn.io", "-o", "json")
 NODES_ARGS = ("get", "nodes", "-o", "json")
 
-
-def _items(doc) -> list[dict]:
-    return list((doc or {}).get("items") or [])
-
-
-def _name(item: dict) -> str:
-    return str((item.get("metadata") or {}).get("name", "?"))
+# Re-exported for the test module and for anyone reading this script as the runbook's API.
+__all__ = ["EX_UNAVAILABLE", "Unreadable", "unsafe_volumes"]
 
 
 # ── the gates, as pure verdicts over what kubectl answered ──────────────────────────────────
 #
 # Each returns the list of offenders — empty means the gate passes. `None` from kubectl_json
 # (a failed read) is an offender too, so a direct call can never pass on a read that failed;
-# the runner maps that case to `EX_UNAVAILABLE` before it gets here.
-
-
-def unsafe_volumes(doc) -> list[str]:
-    """`name (robustness)` for every volume whose robustness is not in `SAFE_ROBUSTNESS`."""
-    if doc is None:
-        return ["<could not list volumes.longhorn.io>"]
-    found = []
-    for item in _items(doc):
-        robustness = str((item.get("status") or {}).get("robustness", ""))
-        if robustness not in SAFE_ROBUSTNESS:
-            found.append(f"{_name(item)} ({robustness or 'no robustness reported'})")
-    return found
+# the runner maps that case to `EX_UNAVAILABLE` before it gets here. Gate 1's verdict,
+# `unsafe_volumes`, is the shared one in `runbook_gates`.
 
 
 def in_flight_backups(doc) -> list[str]:
@@ -158,22 +138,8 @@ def nodes_not_ready(doc, expected=CLUSTER_NODES[CLUSTER]) -> list[str]:
 # ── the runner ──────────────────────────────────────────────────────────────────────────────
 
 
-@dataclass(frozen=True)
-class Gate:
-    number: int
-    title: str
-    check: Callable[[Tools, str], list[str]]
-
-
-class Unreadable(RuntimeError):
-    """A cluster list returned nothing parseable — the gate could not look, so it is not graded."""
-
-
 def _doc(tools: Tools, args: tuple[str, ...]):
-    doc = kubectl_json(CLUSTER, *args, tools=tools)
-    if doc is None:
-        raise Unreadable(f"`kubectl {' '.join(args)}` returned no document")
-    return doc
+    return cluster_doc(CLUSTER, tools, args)
 
 
 def _gate_volumes(tools: Tools, state_dir: str) -> list[str]:
@@ -208,35 +174,11 @@ def run_gates(
 ) -> int:
     """Run every gate in order, print one line per gate, and return the exit code."""
     state_dir = state_dir or os.environ.get("GITOPS_STATE_DIR") or STATE_DIR
-    for gate in GATES:
-        try:
-            offenders = gate.check(tools, state_dir)
-        except (WrongCluster, MissingKubectl, Unreadable) as exc:
-            print(
-                f"gate {gate.number} ({gate.title}): cannot ask the cluster — {exc}",
-                file=out,
-            )
-            return EX_UNAVAILABLE
-        if offenders:
-            print(f"gate {gate.number} FAILED — {gate.title}:", file=out)
-            for offender in offenders:
-                print(f"  {offender}", file=out)
-            print(
-                f"stop: gate {gate.number} is a stop condition (docs/k3s-upgrade.md)",
-                file=out,
-            )
-            return gate.number
-        print(f"gate {gate.number} ok — {gate.title}", file=out)
-    print("all 4 gates passed", file=out)
-    return 0
+    return runbook_gates.run_gates(GATES, RUNBOOK, tools, state_dir, out=out)
 
 
 def main(argv: list[str] | None = None) -> int:
-    argv = sys.argv[1:] if argv is None else argv
-    if argv:
-        print(__doc__, file=sys.stderr)
-        return 64
-    return run_gates()
+    return runbook_gates.cli(__doc__, argv, run_gates)
 
 
 if __name__ == "__main__":
