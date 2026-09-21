@@ -10,7 +10,6 @@ on a deliberate disarm, which is how a monitor gets ignored.
 from dataclasses import replace
 
 import re
-import time
 from pathlib import Path
 
 import check
@@ -20,6 +19,8 @@ from verdicts.service import staging_backfill_alive
 import registry
 
 _REPO = Path(__file__).resolve().parents[5]
+# The heartbeat is stamped against this epoch and the check reads the same one (#2158).
+BACKFILL_NOW = 1_780_000_000.0
 _TIMER = _REPO / "ansible/roles/setup/gitops_deploy/templates/staging-backfill.timer.j2"
 _UNIT = (
     _REPO / "ansible/roles/setup/gitops_deploy/templates/staging-backfill.service.j2"
@@ -32,7 +33,7 @@ def _state(cfg, tmp_path, monkeypatch, armed=True, age_s=None):
         (tmp_path / "staging-backfill-armed").write_text("")
     if age_s is not None:
         (tmp_path / "staging-backfill-last-run").write_text(
-            "%d\n" % int(time.time() - age_s)
+            "%d\n" % int(BACKFILL_NOW - age_s)
         )
     return replace(cfg, GITOPS_STATE_DIR=str(tmp_path))
 
@@ -77,14 +78,14 @@ def test_a_disarmed_ratchet_is_up_and_says_why():
 
 def test_reader_passes_on_a_recent_heartbeat(tmp_path, monkeypatch, cfg):
     cfg = _state(cfg, tmp_path, monkeypatch, armed=True, age_s=45 * 60)
-    ok, msg = checks.service.check_staging_backfill_alive(cfg)
+    ok, msg = checks.service.check_staging_backfill_alive(cfg, now=BACKFILL_NOW)
     assert ok is True
     assert "45m ago" in msg
 
 
 def test_reader_fails_on_a_stale_heartbeat(tmp_path, monkeypatch, cfg):
     cfg = _state(cfg, tmp_path, monkeypatch, armed=True, age_s=5 * 3600)
-    ok, _msg = checks.service.check_staging_backfill_alive(cfg)
+    ok, _msg = checks.service.check_staging_backfill_alive(cfg, now=BACKFILL_NOW)
     assert ok is False
 
 
@@ -92,7 +93,7 @@ def test_reader_fails_closed_on_an_unparseable_heartbeat(tmp_path, monkeypatch, 
     """A heartbeat written by something that is not the unit is not evidence the unit ran."""
     cfg = _state(cfg, tmp_path, monkeypatch, armed=True)
     (tmp_path / "staging-backfill-last-run").write_text("recently\n")
-    ok, msg = checks.service.check_staging_backfill_alive(cfg)
+    ok, msg = checks.service.check_staging_backfill_alive(cfg, now=BACKFILL_NOW)
     assert ok is False
     assert "unparseable" in msg
 
@@ -100,7 +101,7 @@ def test_reader_fails_closed_on_an_unparseable_heartbeat(tmp_path, monkeypatch, 
 def test_reader_ignores_a_stale_heartbeat_once_disarmed(tmp_path, monkeypatch, cfg):
     """The marker is read FIRST. A disarm leaves the last heartbeat on disk, ageing forever."""
     cfg = _state(cfg, tmp_path, monkeypatch, armed=False, age_s=30 * 86400)
-    ok, msg = checks.service.check_staging_backfill_alive(cfg)
+    ok, msg = checks.service.check_staging_backfill_alive(cfg, now=BACKFILL_NOW)
     assert ok is True
     assert "disarmed" in msg
 

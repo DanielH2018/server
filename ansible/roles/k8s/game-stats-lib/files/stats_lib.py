@@ -159,10 +159,12 @@ class PollState:
         self.last_poll_ok = 0.0
 
 
-def make_handler(poll_state, render_metrics_fn, health_max_age):
+def make_handler(poll_state, render_metrics_fn, health_max_age, clock=time.time):
     """Builds a BaseHTTPRequestHandler serving /metrics and /healthz.
 
-    `render_metrics_fn(state, now) -> str` is the per-game exposition renderer.
+    `render_metrics_fn(state, now) -> str` is the per-game exposition renderer. `clock` is
+    what the handler reads for `now` on every request; a test passes a constant so the
+    /healthz staleness verdict is a fixed distance from `last_poll_ok`.
     """
 
     class Handler(BaseHTTPRequestHandler):
@@ -176,13 +178,13 @@ def make_handler(poll_state, render_metrics_fn, health_max_age):
             """Routes the request path to /metrics, /healthz, or a 404."""
             if self.path == "/metrics":
                 with poll_state.lock:
-                    body = render_metrics_fn(poll_state.value, time.time()).encode()
+                    body = render_metrics_fn(poll_state.value, clock()).encode()
                 self.send_response(200)
                 self.send_header("Content-Type", "text/plain; version=0.0.4")
                 self.end_headers()
                 self.wfile.write(body)
             elif self.path == "/healthz":
-                fresh = (time.time() - poll_state.last_poll_ok) < health_max_age
+                fresh = (clock() - poll_state.last_poll_ok) < health_max_age
                 self.send_response(200 if fresh else 503)
                 self.end_headers()
                 self.wfile.write(b"ok\n" if fresh else b"stale\n")

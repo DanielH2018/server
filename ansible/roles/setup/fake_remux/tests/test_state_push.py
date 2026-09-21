@@ -1,10 +1,13 @@
 import json
 import pathlib
 import sys
-import time
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "files"))
 from state_push import main, read_state, verdict
+
+# The good state file is stamped at this epoch and `main` measures its age from the same one,
+# so the `up` line does not depend on how fast the suite runs (#2158).
+NOW = 1_780_000_000
 
 HOUR = 3600.0
 
@@ -63,7 +66,7 @@ def test_state_without_a_timestamp_is_a_failure(tmp_path):
 
 def test_main_emits_one_line_per_triple(tmp_path, capsys):
     good = tmp_path / "a.json"
-    good.write_text(json.dumps({"ts": int(time.time()), "ok": True, "msg": "fine"}))
+    good.write_text(json.dumps({"ts": NOW, "ok": True, "msg": "fine"}))
     main(
         [
             "state_push.py",
@@ -73,7 +76,8 @@ def test_main_emits_one_line_per_triple(tmp_path, capsys):
             "replace",
             str(tmp_path / "missing.json"),
             "1.2",
-        ]
+        ],
+        now=NOW,
     )
     lines = capsys.readouterr().out.strip().split("\n")
     assert len(lines) == 2

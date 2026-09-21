@@ -16,6 +16,9 @@ from dev.findings_lib.issue_model import claim_comment, release_comment
 from dev.prune_worktrees import Worktree, _memoised_merged
 
 WT = "worktree-issue-1132"
+# Every age_days assertion dates its comments against this instant and hands the same one to
+# `claim_states`, so "5 days" is exactly 5 whatever the wall clock reads (#2158).
+NOW = datetime(2026, 9, 21, 12, 0, 0, tzinfo=UTC)
 PATH = "/home/ubuntu/server/.claude/worktrees/issue-1132"
 
 
@@ -128,10 +131,10 @@ def test_age_days_computed_from_createdAt():
     """
 
     # Create a comment with createdAt timestamp from 5 days ago.
-    five_days_ago = (datetime.now(UTC) - timedelta(days=5)).isoformat()
+    five_days_ago = (NOW - timedelta(days=5)).isoformat()
 
     issues = [{"number": 1132, "comments": [_claimed(created=five_days_ago)]}]
-    rows = claim_states(issues, [_tree()], dirty=_always, merged=_never)
+    rows = claim_states(issues, [_tree()], dirty=_always, merged=_never, now=NOW)
     assert len(rows) == 1
     assert rows[0].age_days == 5
 
@@ -144,9 +147,9 @@ def test_age_days_from_currently_open_episode_after_claim_release_reclaim():
     """
 
     # First claim (5 days ago), then release (3 days ago), then reclaim (1 day ago).
-    five_days_ago = (datetime.now(UTC) - timedelta(days=5)).isoformat()
-    three_days_ago = (datetime.now(UTC) - timedelta(days=3)).isoformat()
-    one_day_ago = (datetime.now(UTC) - timedelta(days=1)).isoformat()
+    five_days_ago = (NOW - timedelta(days=5)).isoformat()
+    three_days_ago = (NOW - timedelta(days=3)).isoformat()
+    one_day_ago = (NOW - timedelta(days=1)).isoformat()
 
     issues = [
         {
@@ -158,7 +161,9 @@ def test_age_days_from_currently_open_episode_after_claim_release_reclaim():
             ],
         }
     ]
-    rows = claim_states(issues, [_tree(branch=WT)], dirty=_always, merged=_never)
+    rows = claim_states(
+        issues, [_tree(branch=WT)], dirty=_always, merged=_never, now=NOW
+    )
     assert len(rows) == 1
     # The age should come from the reclaim (1 day ago), not the first claim (5 days ago).
     assert rows[0].age_days == 1
@@ -168,7 +173,7 @@ def test_age_days_returns_none_for_naive_datetime():
     """Verify age_days returns None when createdAt is a naive datetime.
 
     A date-only string like "2026-09-01" parses as a naive datetime. The subtraction
-    against datetime.now(UTC) would raise TypeError, which is caught and treated as
+    against an aware `now` would raise TypeError, which is caught and treated as
     None.
     """
     # A date-only string (naive datetime).
@@ -237,8 +242,8 @@ def test_the_age_of_a_claim_ignores_a_foreign_comment_between_its_episodes():
     episode `_claim_age_days` is measuring — so the row would age the claim from a later
     comment than the one the register thinks is current, or report no age at all.
     """
-    five_days_ago = (datetime.now(UTC) - timedelta(days=5)).isoformat()
-    two_days_ago = (datetime.now(UTC) - timedelta(days=2)).isoformat()
+    five_days_ago = (NOW - timedelta(days=5)).isoformat()
+    two_days_ago = (NOW - timedelta(days=2)).isoformat()
     issues = [
         {
             "number": 1132,
@@ -250,7 +255,7 @@ def test_the_age_of_a_claim_ignores_a_foreign_comment_between_its_episodes():
             ],
         }
     ]
-    rows = claim_states(issues, [_tree()], dirty=_always, merged=_never)
+    rows = claim_states(issues, [_tree()], dirty=_always, merged=_never, now=NOW)
     assert [r.worktree for r in rows] == [WT]
     assert rows[0].age_days == 5
 

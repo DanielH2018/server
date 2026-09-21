@@ -8,13 +8,16 @@ and is_diverged stays false. daniel-server ran a 12-commit-old tree for hours th
 remediation than a held service deploy, so the message says which it is.
 """
 
-import time
-
 from dataclasses import replace
 
 import pytest
 
 import checks.gitops
+
+# The last_run marker is written against this epoch and the check reads the same one, so
+# "fresh" and "stale" are exact distances from the 90m default rather than a race with the
+# suite's own runtime (#2158).
+GITOPS_NOW = 1_780_000_000.0
 
 
 @pytest.mark.parametrize(
@@ -75,9 +78,9 @@ def _gw(tmp_path, name, content):
 @pytest.mark.parametrize(
     ("content_fn", "ok", "must_contain"),
     [
-        pytest.param(lambda: str(time.time()), True, (), id="fresh_file"),
+        pytest.param(lambda: str(GITOPS_NOW), True, (), id="fresh_file"),
         # 100m old > default 90m
-        pytest.param(lambda: str(time.time() - 100 * 60), False, (), id="stale_file"),
+        pytest.param(lambda: str(GITOPS_NOW - 100 * 60), False, (), id="stale_file"),
         pytest.param(None, False, ("no last_run",), id="missing_file"),
         pytest.param(lambda: "not-a-float", False, ("unparseable",), id="unparseable"),
     ],
@@ -86,7 +89,7 @@ def test_check_gitops_alive(tmp_path, monkeypatch, content_fn, ok, must_contain,
     cfg = replace(cfg, GITOPS_STATE_DIR=str(tmp_path))
     if content_fn is not None:
         _gw(tmp_path, "last_run", content_fn())
-    result_ok, msg = checks.gitops.check_gitops_alive(cfg)
+    result_ok, msg = checks.gitops.check_gitops_alive(cfg, now=GITOPS_NOW)
     assert result_ok is ok
     for s in must_contain:
         assert s in msg

@@ -18,6 +18,7 @@ import checks.service
 _REPO = Path(__file__).resolve().parents[5]
 
 N8N_NOW = datetime(2026, 6, 8, 12, 0, 0, tzinfo=timezone.utc)
+N8N_ISO = N8N_NOW.isoformat()  # check_n8n gets the same instant, not wall time (#2158)
 
 
 def _n8n_ago(minutes):
@@ -130,7 +131,7 @@ def test_n8n_naive_timestamp_treated_as_utc():
 
 def test_n8n_disabled_without_key(cfg):
     # N8N_API_KEY defaults to "" in tests -> monitoring disabled, never a false page
-    ok, msg = checks.service.check_n8n(cfg)
+    ok, msg = checks.service.check_n8n(cfg, now=N8N_NOW)
     assert ok
     assert "disabled" in msg.lower()
 
@@ -142,14 +143,13 @@ def test_n8n_check_down_after_consecutive_failures(monkeypatch, seq, cfg):
     wf = {"data": [{"id": "1", "name": "Prod Flow", "active": True}]}
 
     def cycle(eid):
-        now_iso = datetime.now(timezone.utc).isoformat()
         ex = {
             "data": [
-                {"id": eid, "workflowId": "1", "status": "error", "stoppedAt": now_iso}
+                {"id": eid, "workflowId": "1", "status": "error", "stoppedAt": N8N_ISO}
             ]
         }
         monkeypatch.setattr(bridge.net, "_get_json", seq(wf, ex))
-        return checks.service.check_n8n(cfg)
+        return checks.service.check_n8n(cfg, now=N8N_NOW)
 
     assert cycle("e1")[0]  # streak 1 -> up
     assert cycle("e2")[0]  # streak 2 -> up
@@ -163,7 +163,7 @@ def test_n8n_check_ok_when_no_failures(monkeypatch, seq, cfg):
     wf = {"data": [{"id": "1", "name": "Prod Flow", "active": True}]}
     ex = {"data": []}
     monkeypatch.setattr(bridge.net, "_get_json", seq(wf, ex))
-    ok, msg = checks.service.check_n8n(cfg)
+    ok, msg = checks.service.check_n8n(cfg, now=N8N_NOW)
     assert ok
     assert "no active-workflow failures" in msg
 
@@ -173,14 +173,13 @@ def test_n8n_check_single_failure_does_not_page(monkeypatch, seq, cfg):
     cfg = replace(cfg, N8N_API_KEY="x")
     monkeypatch.setattr(checks.service, "_n8n_streaks", {})
     wf = {"data": [{"id": "1", "name": "Prod Flow", "active": True}]}
-    now_iso = datetime.now(timezone.utc).isoformat()
     ex = {
         "data": [
-            {"id": "e1", "workflowId": "1", "status": "error", "stoppedAt": now_iso}
+            {"id": "e1", "workflowId": "1", "status": "error", "stoppedAt": N8N_ISO}
         ]
     }
     monkeypatch.setattr(bridge.net, "_get_json", seq(wf, ex))
-    ok, _ = checks.service.check_n8n(cfg)
+    ok, _ = checks.service.check_n8n(cfg, now=N8N_NOW)
     assert ok
 
 

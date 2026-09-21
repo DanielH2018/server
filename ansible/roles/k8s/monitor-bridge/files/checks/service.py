@@ -40,7 +40,7 @@ _n8n_streaks = {}
 # checks: each returns (ok, msg)
 
 
-def check_n8n(cfg: Config) -> tuple[bool, str]:
+def check_n8n(cfg: Config, now: datetime | None = None) -> tuple[bool, str]:
     """Consecutive failures of active ("Prod") n8n workflows (streak accumulated across cycles).
 
     Polls the n8n public API on the internal network (X-N8N-API-KEY header, no Authelia). n8n
@@ -63,7 +63,7 @@ def check_n8n(cfg: Config) -> tuple[bool, str]:
         workflows,
         executions,
         _n8n_streaks,
-        datetime.now(timezone.utc),
+        now if now is not None else datetime.now(timezone.utc),
         parse_duration(cfg.N8N_FAIL_WINDOW),
     )
     return n8n_verdict(
@@ -255,7 +255,9 @@ def check_prowlarr_indexers(cfg: Config) -> tuple[bool, str]:
     )
 
 
-def check_staging_backfill_alive(cfg: Config) -> tuple[bool, str]:
+def check_staging_backfill_alive(
+    cfg: Config, now: float | None = None
+) -> tuple[bool, str]:
     """Is the staging-gate backfill ratchet still running at all?
 
     `OnFailure=staging-backfill-alert.service` covers "ran and failed" and nothing else. A timer
@@ -279,7 +281,9 @@ def check_staging_backfill_alive(cfg: Config) -> tuple[bool, str]:
         path = os.path.join(cfg.GITOPS_STATE_DIR, "staging-backfill-last-run")
         try:
             with open(path) as fh:
-                age_s = time.time() - float(fh.read().strip())
+                age_s = (now if now is not None else time.time()) - float(
+                    fh.read().strip()
+                )
         except FileNotFoundError:
             age_s = None
         except PermissionError:
@@ -292,7 +296,7 @@ def check_staging_backfill_alive(cfg: Config) -> tuple[bool, str]:
     return staging_backfill_alive(armed, age_s, cfg.STAGING_BACKFILL_MAX_AGE_S)
 
 
-def check_etcd_restore_drill(cfg: Config) -> tuple[bool, str]:
+def check_etcd_restore_drill(cfg: Config, now: float | None = None) -> tuple[bool, str]:
     """Is the off-box etcd snapshot still PROVABLY restorable?
 
     The snapshot half has been taken, uploaded and alarmed since 2026-08-16. Until 2026-08-28
@@ -343,7 +347,7 @@ def check_etcd_restore_drill(cfg: Config) -> tuple[bool, str]:
     if epoch is None:
         return False, "etcd drill stamp has no readable epoch"
 
-    age_s = time.time() - epoch
+    age_s = (now if now is not None else time.time()) - epoch
     if age_s > cfg.ETCD_DRILL_MAX_AGE_S:
         return (
             False,
@@ -379,7 +383,7 @@ def with_ha_ban(cfg: Config, ok: bool, msg: str) -> tuple[bool, str]:
     return False, "%s | %s" % (ban_msg, msg)
 
 
-def check_ha_heartbeat(cfg: Config) -> tuple[bool, str]:
+def check_ha_heartbeat(cfg: Config, now: datetime | None = None) -> tuple[bool, str]:
     """Poll HA's automation-driven heartbeat over the apps network (Bearer token).
 
     Empty HA_URL/HA_TOKEN -> disabled (stays up), like check_n8n.
@@ -400,7 +404,7 @@ def check_ha_heartbeat(cfg: Config) -> tuple[bool, str]:
             cfg.HA_URL + "/api/states/" + cfg.HA_HEARTBEAT_ENTITY,
             headers={"Authorization": "Bearer " + cfg.HA_TOKEN},
         )
-        ok, msg = ha_heartbeat_fresh(state, cfg.HA_HEARTBEAT_MAX_AGE_S)
+        ok, msg = ha_heartbeat_fresh(state, cfg.HA_HEARTBEAT_MAX_AGE_S, now=now)
     except (
         Exception
     ) as e:  # unreachable/auth -> route through the streak, don't page yet

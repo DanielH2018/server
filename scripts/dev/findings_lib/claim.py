@@ -160,8 +160,13 @@ def claim_states(
     trees: list[Worktree],
     dirty: Callable[[str], bool],
     merged: Callable[[Worktree], bool],
+    now: datetime | None = None,
 ) -> list[ClaimState]:
-    """One `ClaimState` per issue that is currently claimed, in issue order."""
+    """One `ClaimState` per issue that is currently claimed, in issue order.
+
+    `now` dates `age_days`; None reads the clock. A test passes a fixed datetime so an
+    exact day count cannot straddle a midnight while the suite runs.
+    """
     states = []
     for issue in issues:
         held = current_claim(issue)
@@ -170,13 +175,13 @@ def claim_states(
         live, reason = claim_is_live(held, trees, dirty, merged)
         states.append(
             ClaimState(
-                issue["number"], held, live, reason, _claim_age_days(issue, held)
+                issue["number"], held, live, reason, _claim_age_days(issue, held, now)
             )
         )
     return states
 
 
-def _claim_age_days(issue: dict, held: str) -> int | None:
+def _claim_age_days(issue: dict, held: str, now: datetime | None = None) -> int | None:
     """Whole days since the comment that opened the currently open episode of ``held``'s claim, or None.
 
     Folds the comment list forward like `current_claim` does, finding the LAST transition
@@ -231,4 +236,4 @@ def _claim_age_days(issue: dict, held: str) -> int | None:
     if when.tzinfo is None:
         return None
 
-    return (datetime.now(UTC) - when).days
+    return ((now if now is not None else datetime.now(UTC)) - when).days

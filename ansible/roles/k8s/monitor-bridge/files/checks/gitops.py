@@ -165,7 +165,7 @@ def gitops_status(
     return True, "no held deploy"
 
 
-def check_gitops_alive(cfg: Config) -> tuple[bool, str]:
+def check_gitops_alive(cfg: Config, now: float | None = None) -> tuple[bool, str]:
     """Checks that the GitOps deployer's last_run marker is fresh.
 
     Down when the marker is missing (the deployer never completed a tick) or unparseable.
@@ -178,7 +178,9 @@ def check_gitops_alive(cfg: Config) -> tuple[bool, str]:
         return False, "no last_run marker (deployer never completed a tick?)"
     except ValueError:
         return False, "last_run marker unparseable"
-    return gitops_alive(time.time() - ts, cfg.GITOPS_MAX_AGE_S)
+    return gitops_alive(
+        (now if now is not None else time.time()) - ts, cfg.GITOPS_MAX_AGE_S
+    )
 
 
 def _read_gitops_marker(cfg: Config, name: str) -> str | None:

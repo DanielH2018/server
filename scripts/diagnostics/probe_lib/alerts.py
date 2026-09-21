@@ -346,8 +346,11 @@ def format_alert_episodes(episodes, days):
     return "\n".join(lines)
 
 
-def alert_source_urls(base, days, limit):
+def alert_source_urls(base, days, limit, now=None):
     """The Loki URLs `alerts` fetches, one per stream in ALERT_SOURCES.
+
+    `now` is the epoch the window ends at; None reads the clock. A test passes a fixed one
+    so its fixture rows sit at a known distance from the window edge.
 
     `direction=backward` decides WHICH END a hit `--limit` throws away, and the answer has to be
     the oldest. Loki applies the limit in the direction it walks, so `forward` returned the
@@ -356,7 +359,7 @@ def alert_source_urls(base, days, limit):
     Nothing needed forward — alert_episodes sorts each check's samples itself and run_alerts
     sorts the raw rows before printing them.
     """
-    end_s = datetime.now(UTC).timestamp()
+    end_s = now if now is not None else datetime.now(UTC).timestamp()
     start_s = end_s - days * 86400
     return [
         loki_query_url(
@@ -385,7 +388,7 @@ def loki_entries_cap(body):
     return int(m.group(2)) if m else None
 
 
-def fetch_alert_streams(base, pin, days, limit, notice_file=None):
+def fetch_alert_streams(base, pin, days, limit, notice_file=None, now=None):
     """Fetch every alert stream at `limit`, clamping to Loki's cap when it rejects the limit.
 
     Returns `(limit_used, [(logql, parser, rows), ...])`. A limit above the server cap used to
@@ -398,7 +401,7 @@ def fetch_alert_streams(base, pin, days, limit, notice_file=None):
     under `--json`, like the truncation notice, so stdout stays parseable).
     """
     while True:
-        urls = alert_source_urls(base, days, limit)
+        urls = alert_source_urls(base, days, limit, now)
         streams = []
         try:
             # strict=True holds alert_source_urls to its docstring ("one per stream in
@@ -426,7 +429,7 @@ def fetch_alert_streams(base, pin, days, limit, notice_file=None):
         return limit, streams
 
 
-def run_alerts(ns):
+def run_alerts(ns, now=None):
     """Fetch DOWN log lines from every alert stream over the window and print firing episodes.
 
     Both streams are queried and their rows merged before episodes are built, so one episode
@@ -437,12 +440,12 @@ def run_alerts(ns):
     """
     base, pin = loki_endpoint()
     if ns.dry_run:
-        for url in alert_source_urls(base, ns.days, ns.limit):
+        for url in alert_source_urls(base, ns.days, ns.limit, now):
             print(" ".join(curl_argv(url, resolve=pin)))
         return 0
     raw, rows, truncated = [], [], []
     limit, streams = fetch_alert_streams(
-        base, pin, ns.days, ns.limit, _sys.stderr if ns.json else _sys.stdout
+        base, pin, ns.days, ns.limit, _sys.stderr if ns.json else _sys.stdout, now
     )
     for logql, parser, fetched in streams:
         # Per stream, not on the merged list: one stream hitting the cap says nothing about

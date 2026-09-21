@@ -6,6 +6,7 @@ import pytest
 
 from _alert_fixtures import (
     LOKI_OVER_CAP_BODY,
+    NOW,
     _query_params,
     _route_alert_fetch,
     _two_day_log,
@@ -25,7 +26,7 @@ def test_a_limit_over_lokis_cap_is_clamped_and_named_rather_than_a_traceback(
     ns = cli_parser._build_parser().parse_args(
         ["alerts", "--days", "2", "--limit", "20000"]
     )
-    assert alerts.run_alerts(ns) == 0
+    assert alerts.run_alerts(ns, now=NOW) == 0
     out = capsys.readouterr().out
     assert "--limit 20000 is above Loki's max_entries_limit_per_query of 10" in out
     # Every stream was re-fetched at the cap, not just the one that was refused.
@@ -46,7 +47,7 @@ def test_a_clamped_fetch_still_reports_truncation_at_the_clamped_limit(
     ns = cli_parser._build_parser().parse_args(
         ["alerts", "--days", "2", "--limit", "20000", "--check", "nothing_matches"]
     )
-    assert alerts.run_alerts(ns) == 0
+    assert alerts.run_alerts(ns, now=NOW) == 0
     out = capsys.readouterr().out
     assert "hit --limit 10 log lines" in out
     assert "Narrow --days." in out
@@ -73,7 +74,7 @@ def test_a_clamp_notice_stays_off_stdout_under_json(monkeypatch, capsys):
     ns = cli_parser._build_parser().parse_args(
         ["alerts", "--days", "2", "--limit", "20000", "--json"]
     )
-    assert alerts.run_alerts(ns) == 0
+    assert alerts.run_alerts(ns, now=NOW) == 0
     captured = capsys.readouterr()
     assert json.loads(captured.out)
     assert "max_entries_limit_per_query of 10" in captured.err
