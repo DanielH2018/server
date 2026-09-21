@@ -2,7 +2,7 @@
 
 Successor to the daniel-server peer-pull host cron (host flip 1, 2026-08-14). The Pi's
 wg-easy peer configs (wg0.conf/wg0.json — client private keys, un-rebuildable) rsync
-nightly into a Longhorn PVC; the 03:30 daily-backup group carries it to B2. This
+nightly into a Longhorn PVC; the Saturday weekly shard (weekly-backup-d6) carries it to B2. This
 replaced the retired Kopia scope for the Pi.
 
 ## At a glance
@@ -14,7 +14,7 @@ replaced the retired Kopia scope for the Pi.
 - **Auto-deploy:** eligible (`k8s_autodeploy: true`)
 <!-- /generated_from -->
 
-- **Shape:** CronJob 23:30 (America/Chicago), built image (alpine + rsync/ssh/curl + the
+- **Shape:** CronJob 23:00 (America/Chicago), built image (alpine + rsync/ssh/curl + the
   script), any node (post-re-plumb registry pulls work everywhere).
 - **Auth:** dedicated ed25519 key (`pi_peer_backup_ssh_key` in SOPS; public half
   authorized on the Pi by this role). Host key pinned at deploy over Ansible's own
@@ -46,7 +46,7 @@ replaced the retired Kopia scope for the Pi.
   shape (`<ts> <pod> pi-peer-backup: status=… ` / `push failed (http=… rc=…[ by=kuma]) (…)`)
   so monitor-bridge's Swallowed Push Verdicts check reads this pusher too, through its
   `{container="pi-peer-backup"}` selector (#1943) — a Kuma-rejected push here pages within one bridge cycle.
-  **What the monitor means:** "the nightly 23:30 run happened," not "some run happened
+  **What the monitor means:** "the nightly 23:00 run happened," not "some run happened
   recently." `k8s/cronjob-gate` runs a one-off Job (`pi-peer-backup-deploy-gate`) on every
   deploy of this role to prove a bumped image still starts; `files/pull-pi-peers.sh`
   recognizes that Job by its pod's hostname prefix and skips both pushes for it, so a routine
@@ -54,7 +54,7 @@ replaced the retired Kopia scope for the Pi.
   instead of the backup itself. `configarr` — the other `k8s/cronjob-gate` caller — takes the
   OPPOSITE position: its health reader counts a gate run like any other finished Job, because a
   configarr gate run genuinely performs the reconcile, where this role's gate run is a dead-man
-  push about a specific 23:30 firing. See `ansible/roles/k8s/configarr/CLAUDE.md`.
+  push about a specific 23:00 firing. See `ansible/roles/k8s/configarr/CLAUDE.md`.
 - **Manual run/proof:** `kubectl -n homelab create job ppb-manual --from=cronjob/pi-peer-backup`
   (this bypasses the gate-run hostname check, so a manual proof run DOES push — same as a
   scheduled run).

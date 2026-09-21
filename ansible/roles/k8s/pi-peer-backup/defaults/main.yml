@@ -8,9 +8,16 @@ k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
 k8s_autodeploy_reason: "CronJob gated at deploy time by k8s/cronjob-gate, which proves the new image RUNS but deliberately does not enforce a successful run; concurrencyPolicy Forbid and a retention-free rsync mirror, so the gate's one-off run is idempotent and a briefly unreachable Pi is reported rather than fatal. NOTHING CAN TRIGGER THIS PROMOTION: the only pin, pi_peer_backup_k8s_image, is a registry-built image listed in REGISTRY_BUILT_IMAGES (scripts/tests/test_renovate_managers.py) — no upstream ref for Renovate to compare against and no version for it to offer — so what moves is the FROM in templates/Dockerfile.j2, which is not the defaults/main.yml path split_k8s_auto_deploy promotes. The promotion is correct and harmless, not active."  # noqa var-naming[no-role-prefix]
 
 pi_peer_backup_k8s_claim: pi-peer-backup-data
-# 23:30 local, same slot the daniel-server host cron held (clear of the 03:30 Longhorn
-# nightly, which snapshots the PVC this fills).
-pi_peer_backup_k8s_schedule: "30 23 * * *"
+# 23:00 local. The Longhorn jobs that touch this PVC fire in UTC — the 03:30 daily tick, the
+# 04:10 restore drill and the 04:30 weekly shard (weekly-backup-d6, Saturday) — and this
+# CronJob follows `tz`, so the UTC slot it lands on moves with DST: 04:00 under CDT, 05:00
+# under CST. Both are clear of all three. It ran at 23:30 local until 2026-09-21, the slot the
+# daniel-server host cron held, which was clear of the daily tick but under CDT is exactly
+# 04:30 UTC: on 2026-09-19 the pod's CSI attach landed 1.5 s before weekly-backup-d6 looked at
+# the volume, the recurring job refused it ("invalid state for recurring job: attaching") and
+# the shard finished green with the volume skipped. test_pi_peer_backup_schedule_clears_the_
+# longhorn_slots.py holds the slot clear under both offsets.
+pi_peer_backup_k8s_schedule: "0 23 * * *"
 
 # The one directory the pull key may read. Named once because two places must agree on it:
 # the CronJob's PI_SRC and the forced command sshd pins the key to (files/pi-peer-backup-shell.sh
