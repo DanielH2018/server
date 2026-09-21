@@ -14,6 +14,7 @@ import importlib.util
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -30,17 +31,26 @@ sys.path.insert(0, str(HOOKS))  # _readonly_tables imports _claude_guard by bare
 import _readonly_tables  # noqa: E402
 import claude_guard.tables as _tables  # noqa: E402
 
-# Same hardcoded path and reasoning as test_auto_approve_remote_ssh.py:40-46: `uv` missing
-# is one reason to skip. The other is the real deploy target itself: this test spawns a
-# SEPARATE subprocess, which starts its own sys.modules and never sees conftest.py's
-# in-process stand-in, so on a host that genuinely lacks the dotfiles deploy it can only ever
-# fail, not prove anything — the same reasoning as the e2e wrapper tests below.
-UV_BIN = Path("/home/ubuntu/.local/bin/uv")
+# The `uv` that is running this suite: `uv run` exports its own path as `UV`, and PATH is
+# the fallback for a bare `pytest`. Resolved at import, before leakguard swaps PATH for a
+# stub directory at each test's setup. It was `/home/ubuntu/.local/bin/uv` until #2159,
+# which was a fact about one host rather than about the tree.
+UV_BIN = os.environ.get("UV") or shutil.which("uv") or ""
 _CLAUDE_GUARD_DIR = Path("~/.local/share/claude-guard").expanduser()
 
+_no_uv = pytest.mark.skipif(not UV_BIN, reason="no `uv` on PATH to spawn")
+
+# The subprocess tests spawn a SEPARATE interpreter, which starts its own sys.modules and
+# never sees conftest.py's in-process stand-in, so on a host that genuinely lacks the
+# dotfiles deploy this one can only ever fail, not prove anything — the same reasoning as
+# the e2e wrapper tests below. A skip with the state named, not an xfail: against the
+# stand-in the in-process diffs below would compare a copy to itself and PASS, which a
+# strict xfail reports as a failure and a lax one hides.
 _runnable = pytest.mark.skipif(
-    not (UV_BIN.exists() and _CLAUDE_GUARD_DIR.is_dir()),
-    reason="uv or the deployed claude_guard package is not present on this machine",
+    not UV_BIN or not _CLAUDE_GUARD_DIR.is_dir(),
+    reason="no `uv` on PATH to spawn"
+    if not UV_BIN
+    else f"the deployed claude_guard package is not present at {_CLAUDE_GUARD_DIR}",
 )
 
 # The tests that compare against the deployed package skip on what fed the tables, not on
@@ -73,7 +83,7 @@ def test_deployed_import_reaches_both_trusted_hosts():
     env["PYTHONPATH"] = str(HOOKS)
     proc = subprocess.run(
         [
-            str(UV_BIN),
+            UV_BIN,
             "run",
             "--no-sync",
             "--quiet",
@@ -197,7 +207,7 @@ def test_the_flag_guarded_verbs_reach_the_classifier_through_a_handler():
     assert {"journalctl", "dmesg", "ss", "rg", "sensors"} <= set(aar.HANDLERS)
 
 
-@pytest.mark.skipif(not UV_BIN.exists(), reason="uv is not present on this machine")
+@_no_uv
 def test_the_hook_fails_open_when_the_deploy_is_missing(tmp_path):
     """The shims' contract, one layer down: no package -> one stderr line, exit 0, no stdout.
 
@@ -214,7 +224,7 @@ def test_the_hook_fails_open_when_the_deploy_is_missing(tmp_path):
     )
     proc = subprocess.run(
         [
-            str(UV_BIN),
+            UV_BIN,
             "run",
             "--no-sync",
             "--quiet",
@@ -235,7 +245,7 @@ def test_the_hook_fails_open_when_the_deploy_is_missing(tmp_path):
     assert "Traceback" not in proc.stderr
 
 
-@pytest.mark.skipif(not UV_BIN.exists(), reason="uv is not present on this machine")
+@_no_uv
 def test_the_hook_fails_open_when_the_deploy_predates_a_name_it_reads(tmp_path):
     """A deployed package without `READONLY_BASE` -- the host has the new hook and the old
     package -- fails open the same way a missing one does, naming the missing name (#2078).
@@ -256,7 +266,7 @@ def test_the_hook_fails_open_when_the_deploy_predates_a_name_it_reads(tmp_path):
     payload = json.dumps({"tool_name": "Bash", "tool_input": {"command": "ls"}})
     proc = subprocess.run(
         [
-            str(UV_BIN),
+            UV_BIN,
             "run",
             "--no-sync",
             "--quiet",

@@ -17,6 +17,7 @@ import importlib.util
 import io
 import json
 import os
+import shutil
 import subprocess
 import sys
 import uuid
@@ -283,10 +284,11 @@ def test_the_real_rules_globs_match_their_own_examples():
 
 # ── the real entry point ─────────────────────────────────────────────────────────────
 
-_UV = "/home/ubuntu/.local/bin/uv"
+# The `uv` running this suite (`uv run` exports its path as `UV`), PATH as the fallback.
+_UV = os.environ.get("UV") or shutil.which("uv")
 
 
-@pytest.mark.skipif(not os.path.exists(_UV), reason=f"{_UV} is not installed here")
+@pytest.mark.skipif(_UV is None, reason="no `uv` on PATH to spawn")
 def test_the_shim_injects_on_the_real_hook_path():
     """Run the .sh with a real payload, the way Claude Code does.
 

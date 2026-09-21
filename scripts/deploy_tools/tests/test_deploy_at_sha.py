@@ -16,7 +16,6 @@ Run: uv run pytest scripts/deploy_tools/tests/test_deploy_at_sha.py
 """
 
 import subprocess
-import time
 from pathlib import Path
 
 from _deploy_sh_fakes import (
@@ -24,9 +23,11 @@ from _deploy_sh_fakes import (
     FLOCK_STUB,
     UV_DEPLOY_LOCKS_ARM,
     deploy_sh_env,
+    detached_pid,
     git_free_env,
     make_snapshot_repo,
 )
+from _process_waits import wait_for_exit
 
 _REPO = Path(__file__).resolve().parents[3]
 _DEPLOY_SH = _REPO / "scripts" / "deploy.sh"
@@ -274,9 +275,9 @@ def test_the_detach_notifier_gates_the_snapshot_that_was_deployed(tmp_path):
         first,
     )
     assert result.returncode == 0, result.stderr
-    deadline = time.monotonic() + 30
-    while not notified.exists() and time.monotonic() < deadline:
-        time.sleep(0.1)
+    assert wait_for_exit(detached_pid(result.stdout)), (
+        "the detached subshell never finished"
+    )
     assert notified.exists(), "the backgrounded notifier never ran"
     assert notified.read_text().strip() == first
     assert notified.read_text().strip() != second

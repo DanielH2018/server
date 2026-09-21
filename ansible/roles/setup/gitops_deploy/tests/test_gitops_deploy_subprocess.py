@@ -8,12 +8,14 @@ main() is exercised in test_gitops_deploy_main_branches.py.
 # ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_subprocess.py
 
 import os
+import select
 import subprocess
 import time
 
 import pytest
 
 import deploy_io
+from _process_waits import wait_for_exit
 
 # The checkout the play would run from; every argv assertion below is about --tags, not cwd.
 REPO = "/tmp/gitops-test-repo"
@@ -88,23 +90,20 @@ def test_deploy_k8s_treats_a_whitespace_only_restore_sha_as_absent(monkeypatch) 
 # that outlives a naive kill-the-direct-child-only fix, so the test fails against the OLD run()
 # and passes only once the whole process group is killed.
 _GRANDCHILD_SHAPE = """#!/bin/sh
-sh -c 'echo $$ > "{pidfile}"; sleep 30' &
+sh -c 'echo $$ > "{pidfifo}"; sleep 300' &
 wait
 """
 
 
-def _pid_is_alive(pid: int) -> bool:
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    return True
-
-
 def test_run_timeout_kills_the_whole_process_group(tmp_path) -> None:
-    pidfile = tmp_path / "grandchild.pid"
+    # The grandchild announces its pid down a fifo. Opened O_RDWR here, before the script
+    # starts: a write end this test holds keeps the pipe from reading as closed while the
+    # grandchild has not opened it yet, so `select` fires on the pid line and on nothing else.
+    pidfifo = tmp_path / "grandchild.pid"
+    os.mkfifo(pidfifo)
+    pidfd = os.open(pidfifo, os.O_RDWR)
     script = tmp_path / "parent.sh"
-    script.write_text(_GRANDCHILD_SHAPE.format(pidfile=pidfile))
+    script.write_text(_GRANDCHILD_SHAPE.format(pidfifo=pidfifo))
     script.chmod(0o755)
 
     start = time.monotonic()
@@ -121,22 +120,18 @@ def test_run_timeout_kills_the_whole_process_group(tmp_path) -> None:
         f"around the deadline regardless of whether the fix is applied"
     )
 
-    deadline = time.monotonic() + 2
-    grandchild_pid = None
-    while grandchild_pid is None and time.monotonic() < deadline:
-        if pidfile.exists():
-            grandchild_pid = int(pidfile.read_text().strip())
-        else:
-            time.sleep(0.05)
-    assert grandchild_pid is not None, "the grandchild never started"
+    try:
+        readable, _, _ = select.select([pidfd], [], [], 60)
+        assert readable, "the grandchild never started"
+        grandchild_pid = int(os.read(pidfd, 64).split()[0])
+    finally:
+        os.close(pidfd)
 
-    # SIGKILL is instant but reaping is not: once its own parent (the script) is also killed,
-    # the grandchild is reparented and reaped by the nearest subreaper — poll briefly instead
-    # of asserting the instant killpg returns.
-    deadline = time.monotonic() + 3
-    while _pid_is_alive(grandchild_pid) and time.monotonic() < deadline:
-        time.sleep(0.05)
-    assert not _pid_is_alive(grandchild_pid), (
+    # A pidfd reads as terminated the moment the grandchild exits, before anything reaps it,
+    # so the wait is on the kill itself rather than on the reparent-and-reap that follows.
+    # The deadline must stay well under the grandchild's own `sleep 300`: a grandchild the
+    # buggy run() left alive has to be seen alive, not caught exiting on its own.
+    assert wait_for_exit(grandchild_pid, timeout=30), (
         f"grandchild pid {grandchild_pid} outlived the timeout — only the direct child was "
         f"killed, not its process group"
     )
