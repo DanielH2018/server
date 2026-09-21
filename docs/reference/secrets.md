@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/secrets.py
-generated_at: 2026-09-21 06:17 UTC
-generated_sha: a2cead23f
+generated_at: 2026-09-21 18:17 UTC
+generated_sha: 80b72a462
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: a2cead23f
 
 # Secrets
 
-176 secret(s) in the rotation registry (`ansible/secret_rotation.yml`).
+177 secret(s) in the rotation registry (`ansible/secret_rotation.yml`).
 
 !!! note "Names and dates only"
     This page is generated from the plaintext rotation registry. No secret VALUE is read here, and the generator never opens the encrypted store or invokes the decryption tool — a test enforces that.
@@ -137,6 +137,7 @@ rotated unattended by the weekly secret-rotate cron.
 | `claude_otel_push_token` | 2026-08-28 | 2027-02-14 | 146 |
 | `cloudflare_ddns_direct_push_token` | 2026-08-30 | 2027-02-26 | 158 |
 | `cloudflare_ddns_proxied_push_token` | 2026-08-30 | 2027-02-16 | 148 |
+| `crowdsec_remote_allowlist_push_token` | 2026-06-05 | 2026-11-18 | 58 |
 | `daniel_box_disk_push_token` | 2026-08-28 | 2027-02-16 | 148 |
 | `docs_refresh_push_token` | 2026-08-06 | 2027-01-19 | 120 |
 | `etcd_drill_full_push_token` | 2026-07-21 | 2027-01-13 | 114 |
