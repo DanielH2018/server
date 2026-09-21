@@ -1,13 +1,16 @@
 """Lint for the fact stores: the forms the spec excludes, and the atoms that do not resolve.
 
 Two severities. An error is a citation that cannot be support (a rejected form, an atom that
-does not resolve, an ambiguous marker) or a support record someone edited by hand. A warning
-is a habit the spec asks writers to drop but a machine cannot judge (a number that may or may
-not be a count, a test with no backref). ``fact_status.py lint`` exits non-zero on errors only.
+does not resolve, an ambiguous marker), a support record someone edited by hand, or a document
+shape the section parser reads as something the author did not mean (two sections under one
+heading text, a fence with no closing marker). A warning is a habit the spec asks writers to
+drop but a machine cannot judge (a number that may or may not be a count, a test with no
+backref). ``fact_status.py lint`` exits non-zero on errors only.
 """
 
 import re
 import subprocess
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -32,9 +35,13 @@ RULES = frozenset(
         "lock-tampered",
         "count-as-fact",
         "date-as-verification",
+        "duplicate-heading",
+        "unbalanced-fence",
     }
 )
 WARN_RULES = frozenset({"count-as-fact", "one-way-test"})
+
+_FENCE_MARK = re.compile(r"```")
 
 _COUNT = re.compile(
     r"\b(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+"
@@ -81,9 +88,36 @@ def lint_sections(repo: Path, unit_keys: set[str] | None) -> list[LintFinding]:
         )
     for doc in repo_docs(repo):
         rel = doc.relative_to(repo).as_posix()
-        for sec in sections(rel, doc.read_text(encoding="utf-8")):
+        secs = sections(rel, doc.read_text(encoding="utf-8"))
+        # Two sections with one heading text share one key, so the lock holds one row for
+        # both and every keyed reader (`lock.repo_citations`, `changed_units`) keeps the
+        # last one: the first section's atoms are never graded. Nothing downstream can
+        # tell the two apart, so the document is what has to change.
+        for key, n in Counter(s.key for s in secs).items():
+            if n > 1 and (unit_keys is None or key in unit_keys):
+                out.append(
+                    _f(
+                        key,
+                        "duplicate-heading",
+                        f"{n} sections in {rel} carry this heading and collapse onto one lock row; rename one",
+                    )
+                )
+        for sec in secs:
             if unit_keys is not None and sec.key not in unit_keys:
                 continue
+            # `citations._FENCE` pairs markers left to right, so an unclosed fence leaves its
+            # stray marker unmasked and everything after it live: a `#` line inside it
+            # becomes a heading and an example citation becomes support. A balanced
+            # document leaves an even count in every section body, so the section holding
+            # the odd one is where the stray marker is.
+            if len(_FENCE_MARK.findall(sec.body)) % 2:
+                out.append(
+                    _f(
+                        sec.key,
+                        "unbalanced-fence",
+                        "an unclosed ``` fence; the text after it is read as prose, not as an example",
+                    )
+                )
             cites, rejects = parse_citations(sec.body)
             # Out-of-tree spans are prose, not broken support: `origin/master` and an
             # untracked or gitignored file parse as paths and name nothing this checkout

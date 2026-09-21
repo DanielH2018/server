@@ -121,6 +121,34 @@ def test_date_as_verification_is_flagged(tmp_path):
     assert [(f.rule, f.warn) for f in found] == [("date-as-verification", False)]
 
 
+def test_duplicate_heading_is_flagged_once_per_key(tmp_path):
+    found = lint_sections(
+        _repo(tmp_path, "## A\n`t/m.py:LIMIT`\n\n## B\ntwo\n\n## A\nthree\n")[0], None
+    )
+    assert [(f.unit, f.rule, f.warn) for f in found] == [
+        ("CLAUDE.md#A", "duplicate-heading", False)
+    ]
+
+
+def test_distinct_headings_are_clean(tmp_path):
+    assert _rules(tmp_path, "## A\none\n\n## B\ntwo\n\n### A child\nthree\n") == set()
+
+
+def test_unbalanced_fence_is_flagged_in_the_section_holding_it(tmp_path):
+    doc = "## A\n```\n`t/m.py:NOPE`\n```\n\n## B\n```text\n`t/m.py:NOPE`\n"
+    found = lint_sections(_repo(tmp_path, doc)[0], None)
+    assert {(f.unit, f.rule) for f in found} == {
+        ("CLAUDE.md#B", "unbalanced-fence"),
+        # The rule's reason, observed: the unclosed example is graded as support.
+        ("CLAUDE.md#B", "unresolved-atom"),
+    }
+
+
+def test_balanced_fences_are_clean(tmp_path):
+    doc = "## A\n```\n`t/m.py:NOPE`\n```\ntext\n```bash\n# not a heading\n```\n"
+    assert _rules(tmp_path, doc) == set()
+
+
 def test_only_named_units_are_linted(tmp_path):
     repo, _ = _repo(tmp_path, "## A\n`t/m.py:1`\n\n## B\n`t/m.py:2`\n")
     assert {f.unit for f in lint_sections(repo, {"CLAUDE.md#B"})} == {"CLAUDE.md#B"}
@@ -172,6 +200,8 @@ def test_rule_census():
             "lock-tampered",
             "count-as-fact",
             "date-as-verification",
+            "duplicate-heading",
+            "unbalanced-fence",
         }
     )
     assert WARN_RULES == frozenset({"count-as-fact", "one-way-test"})

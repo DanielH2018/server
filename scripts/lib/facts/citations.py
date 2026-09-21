@@ -95,6 +95,7 @@ class Section:
 
 
 _HEADING = re.compile(r"^(#{1,6})\s+(.+?)\s*$", re.MULTILINE)
+_CLOSER = re.compile(r"\s+#+$")
 
 
 def sections(doc_path: str, text: str) -> list[Section]:
@@ -106,6 +107,9 @@ def sections(doc_path: str, text: str) -> list[Section]:
     the unit ``facts.lock`` is keyed by and the section a reader actually opens for it. A
     renamed heading is a new unit and the old lock row surfaces as a missing section — which
     is the right verdict, since nobody can tell a rename from a deletion by reading the text.
+
+    A trailing ATX closer (``## Title ##``) is not heading text, the same as in Markdown:
+    the key is ``<doc>#Title`` whether or not the author closed the heading.
     """
     # Mask fenced blocks to avoid matching # lines inside them, while preserving positions.
     masked = _FENCE.sub(lambda m: re.sub(r"[^\n]", " ", m.group(0)), text)
@@ -117,7 +121,8 @@ def sections(doc_path: str, text: str) -> list[Section]:
     for i, h in enumerate(heads):
         end = heads[i + 1].start() if i + 1 < len(heads) else len(text)
         body = text[h.end() : end].lstrip("\n")
-        out.append(Section(f"{doc_path}#{h.group(2)}", h.group(2), body))
+        heading = _CLOSER.sub("", h.group(2))
+        out.append(Section(f"{doc_path}#{heading}", heading, body))
     return out
 
 

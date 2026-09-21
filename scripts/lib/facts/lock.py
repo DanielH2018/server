@@ -107,12 +107,20 @@ def lock_tampered(path: Path) -> bool:
     return doc.get("checksum") != _checksum(doc.get("units", {}))
 
 
-def _repo_citations(repo: Path) -> dict[str, list[Citation]]:
+Citations = dict[str, list[Citation]]
+"""Every section's in-tree citations keyed by unit — one parse of the docs, shared by the readers below."""
+
+
+def repo_citations(repo: Path) -> Citations:
     """Every section's IN-TREE citations, keyed by unit.
 
     The tracked set is read once per call: an out-of-tree span (``origin/master``, an
     untracked or gitignored file) parses as a path citation but is not support, so it never
     reaches the lock and never grades a section.
+
+    Every reader below takes the result as an optional ``by_unit`` and parses for itself
+    when it is not given: ``fact_status.py status`` calls two of them and lists the units,
+    so passing one parse through is what keeps it from reading every document three times.
     """
     tracked = tracked_files(repo)
     out: dict[str, list[Citation]] = {}
@@ -124,7 +132,9 @@ def _repo_citations(repo: Path) -> dict[str, list[Citation]]:
     return out
 
 
-def build_repo_edb(repo: Path, lock: dict[str, dict]) -> Edb:
+def build_repo_edb(
+    repo: Path, lock: dict[str, dict], by_unit: Citations | None = None
+) -> Edb:
     """The repo store's ``Edb``: the tree supplies the citations and current hashes, ``lock`` the recorded ones.
 
     Every probe atom is put in both ``live`` and ``transport_failed``, because nothing here
@@ -132,7 +142,8 @@ def build_repo_edb(repo: Path, lock: dict[str, dict]) -> Edb:
     citation reads UNKNOWN rather than dragging its section OUT. ``memory_units`` and
     ``links`` stay empty until slice 4 adds the memory store.
     """
-    by_unit = _repo_citations(repo)
+    if by_unit is None:
+        by_unit = repo_citations(repo)
     cites: set[tuple[str, str]] = set()
     current: dict[str, str] = {}
     live: set[str] = set()
@@ -173,7 +184,9 @@ def build_repo_edb(repo: Path, lock: dict[str, dict]) -> Edb:
     )
 
 
-def check_lock(repo: Path, lock_path: Path) -> list[Finding]:
+def check_lock(
+    repo: Path, lock_path: Path, by_unit: Citations | None = None
+) -> list[Finding]:
     """Findings for every recorded atom that no longer hashes as recorded, is gone, or is no longer cited."""
     if lock_tampered(lock_path):
         return [
@@ -185,7 +198,8 @@ def check_lock(repo: Path, lock_path: Path) -> list[Finding]:
             )
         ]
     lock = read_lock(lock_path)
-    by_unit = _repo_citations(repo)
+    if by_unit is None:
+        by_unit = repo_citations(repo)
     findings: list[Finding] = []
     for unit, rec in sorted(lock.items()):
         if unit not in by_unit:
@@ -274,7 +288,11 @@ def check_lock(repo: Path, lock_path: Path) -> list[Finding]:
 
 
 def verify_units(
-    repo: Path, lock_path: Path, unit_keys: list[str], head_sha: str
+    repo: Path,
+    lock_path: Path,
+    unit_keys: list[str],
+    head_sha: str,
+    by_unit: Citations | None = None,
 ) -> tuple[dict[str, dict], list[str]]:
     """Re-hash every hashable atom the named sections cite, write the lock, and name what it skipped.
 
@@ -282,7 +300,8 @@ def verify_units(
     say so: a section can otherwise read `verified` while the atom the author cared about
     was silently dropped. Raises ``KeyError`` on an unknown unit.
     """
-    by_unit = _repo_citations(repo)
+    if by_unit is None:
+        by_unit = repo_citations(repo)
     lock = read_lock(lock_path)
     skipped: set[str] = set()
     for key in unit_keys:

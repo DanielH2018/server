@@ -20,7 +20,6 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 import argparse
 from pathlib import Path
 
-from lib.facts.citations import repo_docs, sections
 from lib.facts.lint import changed_units, lint_sections
 from lib.facts.lock import (
     LOCK_REL,
@@ -28,6 +27,7 @@ from lib.facts.lock import (
     check_lock,
     forget_units,
     read_lock,
+    repo_citations,
     verify_units,
 )
 from lib.facts.relations import derive, status_of
@@ -40,13 +40,15 @@ _USAGE = 2
 def cmd_status(args: argparse.Namespace) -> int:
     repo = Path(args.repo)
     lock_path = repo / LOCK_REL
-    edb = build_repo_edb(repo, read_lock(lock_path))
+    # One parse of the docs feeds the status, the lock check and the unit list. Every cited
+    # unit is a section key, so unioning the cited set in adds nothing; two sections with
+    # one heading text share a key here, and the `duplicate-heading` lint names them.
+    by_unit = repo_citations(repo)
+    edb = build_repo_edb(repo, read_lock(lock_path), by_unit)
     idb = derive(edb)
-    # Every cited unit is a section key, so unioning the cited set in adds nothing. The
-    # dedupe stays: two sections in one document can carry the same heading text.
-    for u in sorted(set(_all_units(repo))):
+    for u in sorted(by_unit):
         print(f"{status_of(edb, idb, u)}  {u}")
-    findings = check_lock(repo, lock_path)
+    findings = check_lock(repo, lock_path, by_unit)
     for f in findings:
         print(f"  {f.kind}: {f.unit} {f.atom} — {f.detail}")
     for u, a in sorted(idb.one_way):
@@ -54,18 +56,10 @@ def cmd_status(args: argparse.Namespace) -> int:
     return 1 if idb.out or findings else 0
 
 
-def _all_units(repo: Path) -> list[str]:
-    return [
-        s.key
-        for d in repo_docs(repo)
-        for s in sections(d.relative_to(repo).as_posix(), d.read_text(encoding="utf-8"))
-    ]
-
-
 def cmd_verify(args: argparse.Namespace) -> int:
     repo = Path(args.repo)
-    known = set(_all_units(repo))
-    unknown = [u for u in args.units if u not in known]
+    by_unit = repo_citations(repo)
+    unknown = [u for u in args.units if u not in by_unit]
     if unknown:
         print(
             f"no section named {unknown}; `fact_status.py status` lists the keys",
@@ -78,7 +72,7 @@ def cmd_verify(args: argparse.Namespace) -> int:
             file=_sys.stderr,
         )
     head = git_stdout("rev-parse", "--short=9", "HEAD", cwd=repo)
-    lock, skipped = verify_units(repo, repo / LOCK_REL, args.units, head)
+    lock, skipped = verify_units(repo, repo / LOCK_REL, args.units, head, by_unit)
     for u in args.units:
         print(f"verified {u} at {head}: {len(lock[u]['atoms'])} atoms")
     if skipped:

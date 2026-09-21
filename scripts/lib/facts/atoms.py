@@ -68,6 +68,22 @@ def _strip_docstrings(node: ast.AST) -> ast.AST:
     return node
 
 
+def _binds(target: ast.expr, name: str) -> bool:
+    """Whether an assignment target names ``name``, directly or inside an unpacking.
+
+    ``A, B = 1, 2`` binds both; the atom for either is the whole statement, since that is
+    the smallest node ``ast.unparse`` renders and the value one name gets is not separable
+    from the tuple the other reads.
+    """
+    if isinstance(target, ast.Name):
+        return target.id == name
+    if isinstance(target, ast.Starred):
+        return _binds(target.value, name)
+    if isinstance(target, (ast.Tuple, ast.List)):
+        return any(_binds(e, name) for e in target.elts)
+    return False
+
+
 def _top_level(tree: ast.Module, name: str) -> ast.AST | None:
     for n in tree.body:
         if (
@@ -75,9 +91,7 @@ def _top_level(tree: ast.Module, name: str) -> ast.AST | None:
             and n.name == name
         ):
             return n
-        if isinstance(n, ast.Assign) and any(
-            isinstance(t, ast.Name) and t.id == name for t in n.targets
-        ):
+        if isinstance(n, ast.Assign) and any(_binds(t, name) for t in n.targets):
             return n
         if (
             isinstance(n, ast.AnnAssign)
@@ -105,11 +119,19 @@ def _test_node(tree: ast.Module, selector: str) -> ast.AST | None:
 
 
 def _walk(value, key: str):
+    """Follow a dotted selector; a digit part indexes a list or names an int key in a mapping.
+
+    YAML reads an unquoted ``1:`` as the int 1, so a mapping keyed by port or by year is
+    unreachable through the str the selector carries. The str key is tried first: a mapping
+    holding both ``"1"`` and ``1`` is legal YAML, and the spelled form wins.
+    """
     for part in key.split("."):
-        if isinstance(value, list) and part.isdigit() and int(part) < len(value):
-            value = value[int(part)]
-        elif isinstance(value, dict) and part in value:
+        if isinstance(value, dict) and part in value:
             value = value[part]
+        elif isinstance(value, dict) and part.isdigit() and int(part) in value:
+            value = value[int(part)]
+        elif isinstance(value, list) and part.isdigit() and int(part) < len(value):
+            value = value[int(part)]
         else:
             raise KeyError(key)
     return value

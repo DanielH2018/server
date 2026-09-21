@@ -14,6 +14,7 @@ from lib.facts.lock import (
     forget_units,
     lock_tampered,
     read_lock,
+    repo_citations,
     verify_units,
     write_lock,
 )
@@ -254,3 +255,21 @@ def test_finding_kinds_census():
             "ambiguous",
         }
     )
+
+
+def test_a_reader_given_the_parsed_citations_reads_them_not_the_tree(tmp_path):
+    """The seam `fact_status.py status` uses to parse the docs once for all three readers.
+
+    A `by_unit` naming no section is the red-proof: every reader that still parsed for
+    itself would find the tree's sections and report nothing wrong.
+    """
+    repo = _repo(tmp_path)
+    verify_units(repo, repo / LOCK_REL, ["CLAUDE.md#Gate"], "abc1234")
+    assert check_lock(repo, repo / LOCK_REL) == []
+    assert [f.kind for f in check_lock(repo, repo / LOCK_REL, {})] == ["section-gone"]
+    assert build_repo_edb(repo, read_lock(repo / LOCK_REL), {}).cites == frozenset()
+    with pytest.raises(KeyError):
+        verify_units(repo, repo / LOCK_REL, ["CLAUDE.md#Gate"], "abc1234", {})
+    parsed = repo_citations(repo)
+    assert check_lock(repo, repo / LOCK_REL, parsed) == []
+    assert {u for u, _ in build_repo_edb(repo, {}, parsed).cites} == {"CLAUDE.md#Gate"}

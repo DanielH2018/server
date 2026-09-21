@@ -154,6 +154,16 @@ def test_a_child_section_holds_only_its_own_text():
     assert child == Section("CLAUDE.md#Alpha child", "Alpha child", "child text\n\n")
 
 
+def test_a_trailing_atx_closer_is_not_part_of_the_heading():
+    got = sections("CLAUDE.md", "## Alpha ##\ntext\n\n## Beta #\n\n## Issue #3\n")
+    assert [s.key for s in got] == [
+        "CLAUDE.md#Alpha",
+        "CLAUDE.md#Beta",
+        "CLAUDE.md#Issue #3",
+    ]
+    assert got[0].heading == "Alpha" and got[0].body == "text\n\n"
+
+
 def test_a_hash_line_inside_a_fence_is_not_a_heading():
     doc = """## A
 fenced code block:

@@ -113,6 +113,21 @@ def test_symbol_class_and_missing(tmp_path):
     assert hash_atom(Citation("symbol", "m.py:nope", "m.py", "nope"), tmp_path) is None
 
 
+def test_symbol_bound_by_tuple_unpacking_resolves_to_the_statement(tmp_path):
+    _write(tmp_path, "m.py", "LOW, HIGH = 1, 2\n")
+    c = Citation("symbol", "m.py:HIGH", "m.py", "HIGH")
+    h1 = hash_atom(c, tmp_path)
+    assert h1 is not None
+    _write(tmp_path, "m.py", "LOW, HIGH = 1, 3\n")
+    assert h1 != hash_atom(c, tmp_path)
+
+
+def test_symbol_bound_by_unpacking_still_misses_an_unbound_name(tmp_path):
+    _write(tmp_path, "m.py", "LOW, (MID, *REST) = 1, (2, 3)\n")
+    assert hash_atom(Citation("symbol", "m.py:REST", "m.py", "REST"), tmp_path)
+    assert hash_atom(Citation("symbol", "m.py:TOP", "m.py", "TOP"), tmp_path) is None
+
+
 def test_yaml_value_change_is_flagged_and_comment_is_clean(tmp_path):
     _write(tmp_path, "d.yml", "a:\n  b: 1  # note\nlist:\n  - name: x\n")
     c = Citation("yaml", "d.yml:a.b", "d.yml", "a.b")
@@ -132,6 +147,22 @@ def test_yaml_list_index_and_missing_key(tmp_path):
         hash_atom(
             Citation("yaml", "d.yml:list.1.name", "d.yml", "list.1.name"), tmp_path
         )
+        is None
+    )
+
+
+def test_yaml_int_keyed_mapping_resolves_and_the_spelled_key_wins(tmp_path):
+    _write(tmp_path, "d.yml", "ports:\n  8080: web\n  '1': spelled\n  1: bare\n")
+    assert hash_atom(
+        Citation("yaml", "d.yml:ports.8080", "d.yml", "ports.8080"), tmp_path
+    )
+    spelled = hash_atom(Citation("yaml", "d.yml:ports.1", "d.yml", "ports.1"), tmp_path)
+    _write(tmp_path, "d.yml", "ports:\n  8080: web\n  '1': spelled\n  1: other\n")
+    assert spelled == hash_atom(
+        Citation("yaml", "d.yml:ports.1", "d.yml", "ports.1"), tmp_path
+    )
+    assert (
+        hash_atom(Citation("yaml", "d.yml:ports.9", "d.yml", "ports.9"), tmp_path)
         is None
     )
 
