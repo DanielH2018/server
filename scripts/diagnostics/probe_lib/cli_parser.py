@@ -123,7 +123,11 @@ def _build_parser():
     lq = sub.add_parser("loki-query", help="Loki range query")
     lq.add_argument("logql")
     lq.add_argument(
-        "--loki", choices=LOKI_STORES, default="homelab", help=LOKI_STORE_HELP
+        "--loki",
+        choices=LOKI_STORES,
+        default=None,
+        help=LOKI_STORE_HELP
+        + "; unset, `homelab` unless the query is the claude-code selector",
     )
     lq.add_argument("--limit", type=int, default=100)
     lq.add_argument(

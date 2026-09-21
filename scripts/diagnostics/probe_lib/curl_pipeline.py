@@ -42,7 +42,7 @@ from diagnostics.probe_lib.core import (
     prom_targets_url,
     scrutiny_url,
     since_window_ns,
-    wrong_loki_store,
+    pick_loki_store,
 )
 
 
@@ -68,10 +68,10 @@ def plan(
         base, pin = loki_endpoint(ns.loki, k8s_endpoint, claude_otel_loki_ip)
         return [curl_argv(loki_labels_url(base), resolve=pin)]
     if cmd == "loki-query":
-        refusal = wrong_loki_store(ns.logql, ns.loki)
-        if refusal:
-            raise SystemExit(refusal)
-        base, pin = loki_endpoint(ns.loki, k8s_endpoint, claude_otel_loki_ip)
+        store, note = pick_loki_store(ns.logql, ns.loki)
+        if note:
+            print(note, file=_sys.stderr)
+        base, pin = loki_endpoint(store, k8s_endpoint, claude_otel_loki_ip)
         start, end = since_window_ns(getattr(ns, "since", None))
         return [
             curl_argv(

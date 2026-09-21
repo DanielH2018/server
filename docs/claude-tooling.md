@@ -436,9 +436,11 @@ installed globally rather than vendored per-repo.
 The events land in **claude-otel's Loki** (`observability` namespace, Service `loki`), not in
 `loki-homelab`. `probe.py loki-query` asks `loki-homelab` by default, and until #2210 a
 `{service_name="claude-code"}` query there returned a well-formed empty result that read as
-"the OTEL stream is gone" while 1.07M lines sat in the other store. To re-measure a
-`tool_decision` figure, pass `--loki claude-otel` (or use `otelq logs`, which only ever asks
-that store); the default store refuses that selector outright rather than answering empty.
+"the OTEL stream is gone" while 1.07M lines sat in the other store. A query whose
+selector is `service_name="claude-code"` routes to claude-otel's Loki on its own, with a
+stderr line saying so; `--loki claude-otel` asks that store for any query, and an explicit
+`--loki homelab` with that selector is refused rather than answered empty. `otelq logs` only
+ever asks the claude-otel store.
 
 ### `/audit-permissions` breaks whenever Loki is not on the node you run it from
 

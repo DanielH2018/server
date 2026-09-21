@@ -22,7 +22,7 @@ from diagnostics.probe_lib.core import (
     prom_endpoint,
     prom_query_url,
     since_window_ns,
-    wrong_loki_store,
+    pick_loki_store,
 )
 
 
@@ -177,10 +177,10 @@ def run_query(ns):
         url = prom_query_url(base, ns.promql)
         formatter = format_metric
     else:
-        refusal = wrong_loki_store(ns.logql, ns.loki)
-        if refusal:
-            raise SystemExit(refusal)
-        base, pin = loki_endpoint(ns.loki)
+        store, note = pick_loki_store(ns.logql, ns.loki)
+        if note:
+            print(note, file=_sys.stderr)
+        base, pin = loki_endpoint(store)
         # `metric` shares this function and its subparser declares no --since, so read the
         # attribute defensively. No `direction`: Loki's default `backward` is what makes
         # --limit return the NEWEST N lines, which format_loki then sorts oldest-first.

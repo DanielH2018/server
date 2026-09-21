@@ -173,12 +173,26 @@ def test_plan_loki_labels_claude_otel_store_uses_cluster_ip_without_pin(
     assert stages == [core.curl_argv("http://10.43.0.99:3100/loki/api/v1/labels")]
 
 
-def test_plan_refuses_claude_code_selector_at_homelab_store(
+def test_plan_routes_bare_claude_code_selector_to_claude_otel(
+    fake_resolve, fake_k8s_endpoint, capsys
+):
+    # The issue's own verify-by command, with no --loki: it must return lines, not a refusal.
+    stages = curl_pipeline.plan(
+        ["loki-query", '{service_name="claude-code"} | event_name="tool_decision"'],
+        fake_resolve,
+        fake_k8s_endpoint,
+        _fake_cluster_ip,
+    )
+    assert stages[0][-1].startswith("http://10.43.0.99:3100/loki/api/v1/query_range?")
+    assert "claude-otel" in capsys.readouterr().err
+
+
+def test_plan_refuses_claude_code_selector_at_explicit_homelab_store(
     fake_resolve, fake_k8s_endpoint
 ):
     with pytest.raises(SystemExit, match="--loki claude-otel"):
         curl_pipeline.plan(
-            ["loki-query", '{service_name="claude-code"} | event_name="tool_decision"'],
+            ["loki-query", '{service_name="claude-code"}', "--loki", "homelab"],
             fake_resolve,
             fake_k8s_endpoint,
             _fake_cluster_ip,
@@ -186,29 +200,32 @@ def test_plan_refuses_claude_code_selector_at_homelab_store(
 
 
 @pytest.mark.parametrize(
-    "logql, store",
+    "logql",
     [
-        ('{service_name="claude-code"}', "homelab"),
-        ('{service_name = "claude-code"}', "homelab"),
-        ('{service_name=~"claude-code"}', "homelab"),
+        '{service_name="claude-code"}',
+        '{service_name = "claude-code"}',
+        '{service_name=~"claude-code"}',
     ],
 )
-def test_wrong_loki_store_is_flagged(logql, store):
-    assert core.wrong_loki_store(logql, store)
+def test_pick_loki_store_is_flagged(logql):
+    assert core.pick_loki_store(logql, None)[0] == "claude-otel"
+    with pytest.raises(SystemExit):
+        core.pick_loki_store(logql, "homelab")
 
 
 @pytest.mark.parametrize(
-    "logql, store",
+    "logql",
     [
-        ('{service_name="claude-code"}', "claude-otel"),
-        ('{job="syslog"}', "homelab"),
+        '{job="syslog"}',
         # loki-homelab carries its own `service_name` label (k8s workload names).
-        ('{service_name="crowdsec"}', "homelab"),
-        ('{service_name=~".+"}', "homelab"),
+        '{service_name="crowdsec"}',
+        '{service_name=~".+"}',
     ],
 )
-def test_wrong_loki_store_is_clean(logql, store):
-    assert core.wrong_loki_store(logql, store) is None
+def test_pick_loki_store_is_clean(logql):
+    assert core.pick_loki_store(logql, None) == ("homelab", None)
+    assert core.pick_loki_store(logql, "homelab") == ("homelab", None)
+    assert core.pick_loki_store(logql, "claude-otel") == ("claude-otel", None)
 
 
 def test_claude_otel_loki_ip_reads_the_role_default():

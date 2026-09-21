@@ -107,19 +107,32 @@ LOKI_STORE_HELP = (
 _CLAUDE_CODE_SELECTOR_RE = re.compile(r'service_name\s*=~?\s*"claude-code"')
 
 
-def wrong_loki_store(logql, store):
-    """The refusal for a LogQL query sent to a store that cannot hold its stream, or None.
+def pick_loki_store(logql, requested):
+    """(store, note) for a LogQL query: which Loki answers it, and a stderr line saying so.
 
-    Pure. Only the claude-code selector is judged: it has exactly one home, and asking the
-    other store returns a well-formed empty result rather than an error (#2210).
+    Pure. `requested` is the `--loki` value, None when unset. Only the claude-code selector
+    is judged: it has exactly one home, and asking the other store returns a well-formed
+    empty result rather than an error (#2210). Unset, that selector routes to claude-otel
+    with a note; every other query keeps the homelab default with no note.
+
+    Raises:
+        SystemExit: `--loki homelab` was asked for explicitly with the claude-code selector.
     """
-    if store == "homelab" and _CLAUDE_CODE_SELECTOR_RE.search(logql):
-        return (
-            'loki-query: `service_name="claude-code"` is claude-otel\'s stream, and this '
-            "query is going to loki-homelab, which never holds it. An empty answer here "
+    claude_code = bool(_CLAUDE_CODE_SELECTOR_RE.search(logql))
+    if requested is None:
+        if claude_code:
+            return "claude-otel", (
+                'loki-query: `service_name="claude-code"` lives only in claude-otel\'s Loki; '
+                "asking that store (pass --loki to choose)."
+            )
+        return "homelab", None
+    if requested == "homelab" and claude_code:
+        raise SystemExit(
+            'loki-query: `service_name="claude-code"` is claude-otel\'s stream, and '
+            "--loki homelab names the store that never holds it. An empty answer here "
             "means nothing. Re-run with --loki claude-otel, or use `otelq logs '<logql>'`."
         )
-    return None
+    return requested, None
 
 
 def loki_endpoint(
