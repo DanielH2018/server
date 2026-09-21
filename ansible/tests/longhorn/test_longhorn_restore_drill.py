@@ -123,9 +123,9 @@ def test_rotation_selects_by_attempt_not_by_success() -> None:
         "the attempt stamp must be written BEFORE the restore, or a failing volume starves "
         "the rotation"
     )
-    assert code.index('cp "$STAMP"') > code.index('"$BYTES" -ge "$MIN_BYTES"'), (
-        "the per-volume success stamp must be written only after the assertions pass"
-    )
+    assert code.index('>"${SUCCESS_DIR}/${PVC}"') > code.index(
+        '"$BYTES" -ge "$MIN_BYTES"'
+    ), "the per-volume success stamp must be written only after the assertions pass"
 
 
 def test_drill_carries_the_source_block_size() -> None:
