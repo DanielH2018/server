@@ -81,6 +81,7 @@ def test_the_shim_census_is_non_vacuous():
         "block-footguns.sh",
         "block-protected-bash.sh",
         "block-protected-edits.sh",
+        "inject-nested-docs.sh",
         "nudge-land-sh.sh",
     }
     assert ISSUE_1014_SHIMS <= set(SHIM_NAMES)
