@@ -14,6 +14,7 @@ This is for the authenticated CLI on this machine. It does not take a token: `gh
 import json
 import os
 import subprocess
+from pathlib import Path
 from typing import Any
 
 
@@ -21,16 +22,19 @@ def gh(
     *args: str,
     check: bool = True,
     timeout: float | None = 60.0,
+    cwd: str | Path | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Run ``gh <args>`` and return the completed process.
 
     ``check=True`` raises ``CalledProcessError`` with ``gh``'s stderr attached, which is the
     message a caller wants to show ("not logged in", "HTTP 404"). Pass ``check=False`` to read
-    ``returncode`` yourself.
+    ``returncode`` yourself. ``cwd`` is for a call that resolves the repository from the
+    working tree (``gh pr list --head`` with no ``--repo``); most calls need none.
     """
     env = dict(os.environ, GH_PROMPT_DISABLED="1", GH_NO_UPDATE_NOTIFIER="1")
     return subprocess.run(
         ["gh", *args],
+        cwd=cwd,
         env=env,
         capture_output=True,
         text=True,

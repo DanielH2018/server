@@ -38,7 +38,6 @@ A prune also repairs the shared object store the removed worktrees leave litter 
 
 import argparse
 import json
-import subprocess
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -47,6 +46,7 @@ from pathlib import Path
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from lib.gh import gh
 from lib.git import git, git_dirty, git_stdout, repair_object_store
 from lib.repo_paths import REPO
 
@@ -133,44 +133,25 @@ def is_merged(repo: str, head: str, branch: str = "") -> bool:
     All four failures are closed: an unknown reads as NOT merged, because this decides what
     to DELETE.
     """
-    ancestor = subprocess.run(
-        ["git", "merge-base", "--is-ancestor", head, "origin/master"],
-        cwd=repo,
-        capture_output=True,
-        check=False,
+    ancestor = git(
+        "merge-base", "--is-ancestor", head, "origin/master", cwd=repo, check=False
     )
     if ancestor.returncode == 0:
         return True
-    cherry = subprocess.run(
-        ["git", "cherry", "origin/master", head],
-        cwd=repo,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    cherry = git("cherry", "origin/master", head, cwd=repo, check=False)
     # A failed `git cherry` prints nothing, and empty output otherwise means "merged" — so
     # the return code has to gate this, or an unknown ref would read as safe to delete.
     if cherry.returncode != 0:
         return False
     if cherry_says_landed(cherry.stdout, empty_means=True):
         return True
-    master_tree = subprocess.run(
-        ["git", "rev-parse", "origin/master^{tree}"],
-        cwd=repo,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    master_tree = git("rev-parse", "origin/master^{tree}", cwd=repo, check=False)
     if master_tree.returncode != 0:
         return False
     # Exit is non-zero on a conflict, and on a git too old for --write-tree (added in 2.38).
     # Both mean "no verdict", which must read as not merged.
-    merged_tree = subprocess.run(
-        ["git", "merge-tree", "--write-tree", "origin/master", head],
-        cwd=repo,
-        capture_output=True,
-        text=True,
-        check=False,
+    merged_tree = git(
+        "merge-tree", "--write-tree", "origin/master", head, cwd=repo, check=False
     )
     if merged_tree.returncode == 0 and merge_tree_says_contained(
         merged_tree.stdout, master_tree.stdout
@@ -187,21 +168,16 @@ def is_merged(repo: str, head: str, branch: str = "") -> bool:
     # reaches it. No `gh`, no auth, or no answer all mean no verdict, which reads as not merged.
     if not branch:
         return False
-    pr_list = subprocess.run(
-        [
-            "gh",
-            "pr",
-            "list",
-            "--state",
-            "merged",
-            "--head",
-            branch,
-            "--json",
-            "headRefOid",
-        ],
+    pr_list = gh(
+        "pr",
+        "list",
+        "--state",
+        "merged",
+        "--head",
+        branch,
+        "--json",
+        "headRefOid",
         cwd=repo,
-        capture_output=True,
-        text=True,
         check=False,
     )
     if pr_list.returncode != 0:
@@ -245,19 +221,8 @@ def remove(repo: str, tree: Worktree) -> tuple[bool, str]:
     removed.
     """
     if tree.locked:
-        subprocess.run(
-            ["git", "worktree", "unlock", tree.path],
-            cwd=repo,
-            capture_output=True,
-            check=False,
-        )
-    result = subprocess.run(
-        ["git", "worktree", "remove", tree.path],
-        cwd=repo,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+        git("worktree", "unlock", tree.path, cwd=repo, check=False)
+    result = git("worktree", "remove", tree.path, cwd=repo, check=False)
     return result.returncode == 0, result.stderr.strip()
 
 

@@ -53,6 +53,7 @@ from fanout_lib import signing as signing_mod
 from fanout_lib import status as status_mod
 from fanout_lib.brief import REQUIRED_LABEL, Issue, render_brief
 from fanout_lib.collisions import refuse_shared_files
+from lib.git import git
 from fanout_lib.placement import NoHeadroom, place
 from fanout_lib.transport import (
     HOSTS,
@@ -430,12 +431,7 @@ def cmd_clean_one(
     if list_worktrees is None:
 
         def list_worktrees():
-            return subprocess.run(
-                ["git", "-C", REPO, "worktree", "list", "--porcelain"],
-                capture_output=True,
-                text=True,
-                check=True,
-            ).stdout
+            return git("worktree", "list", "--porcelain", cwd=REPO).stdout
 
     # Resolved paths, not exact string equality: a worktree launched through one spelling
     # of REPO (a symlink, say) is still the tree `git worktree list` names by its target.

@@ -17,10 +17,14 @@ import sys as _sys
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+# `scripts/lib` sits two levels up from this package, one above the `scripts/dev` insert
+# above; `lib.git` / `lib.gh` are the one way this tree runs git and gh (issue #2136).
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from fanout_lib import signing
 from fanout_lib.brief import Issue
 from fanout_lib.placement import READ_COMMAND, HostReading, parse_reading
+from lib.gh import gh
 
 HOSTS = ("daniel-box", "daniel-server")
 REPO = "/home/ubuntu/server"
@@ -154,12 +158,8 @@ def gh_issue(number: int) -> Issue:
         subprocess.TimeoutExpired: `gh` did not answer within GH_TIMEOUT_S. Unbounded, one
             hung fetch mid-loop would strand every batch already launched.
     """
-    out = subprocess.run(
-        ["gh", "issue", "view", str(number), "--json", ISSUE_FIELDS],
-        capture_output=True,
-        text=True,
-        check=True,
-        timeout=GH_TIMEOUT_S,
+    out = gh(
+        "issue", "view", str(number), "--json", ISSUE_FIELDS, timeout=GH_TIMEOUT_S
     ).stdout
     return issue_from_view(json.loads(out))
 
@@ -177,22 +177,18 @@ def merged_pr_url(branch: str) -> str:
     PR", so the caller keeps the batch unresolved rather than calling it landed.
     """
     try:
-        out = subprocess.run(
-            [
-                "gh",
-                "pr",
-                "list",
-                "--state",
-                "merged",
-                "--head",
-                branch,
-                "--json",
-                "url",
-                "--limit",
-                "1",
-            ],
-            capture_output=True,
-            text=True,
+        out = gh(
+            "pr",
+            "list",
+            "--state",
+            "merged",
+            "--head",
+            branch,
+            "--json",
+            "url",
+            "--limit",
+            "1",
+            check=False,
             timeout=GH_TIMEOUT_S,
         )
     except subprocess.TimeoutExpired:

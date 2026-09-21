@@ -40,6 +40,12 @@ import sys
 import tomllib
 from pathlib import Path, PurePosixPath
 
+# Reach `scripts/lib`: a directly-invoked script gets only its own directory on sys.path,
+# and pyproject's `pythonpath` is a pytest setting.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from lib.git import git
+
 REPO = Path(__file__).resolve().parents[2]
 WEIGHTS_PATH = Path(__file__).resolve().with_name("pytest_shard_weights.json")
 # The coverage ratchet over this table. `record_weights` deselects it; see the reason there.
@@ -90,13 +96,7 @@ def census(repo: Path = REPO) -> list[str]:
     written but not yet `git add`ed is in no shard; CI only ever sees committed files, so this
     bites in a local `--summary` and never on the runner.
     """
-    listed = subprocess.run(
-        ["git", "ls-files", "-z"],
-        cwd=repo,
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout
+    listed = git("ls-files", "-z", cwd=repo).stdout
     roots = [PurePosixPath(p) for p in testpaths()]
     return sorted(
         rel

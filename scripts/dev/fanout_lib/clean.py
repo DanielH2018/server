@@ -16,9 +16,13 @@ import sys as _sys
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+# `scripts/lib` sits two levels up from this package, one above the `scripts/dev` insert
+# above; `lib.git` / `lib.gh` are the one way this tree runs git and gh (issue #2136).
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from fanout_lib.manifest import Batch
 from fanout_lib.transport import REPO
+from lib.git import git
 from prune_worktrees import REMOVABLE, Worktree, classify, is_dirty, is_merged, remove
 
 
@@ -27,20 +31,12 @@ def unlock(repo: str, path: str) -> None:
 
     A tree that is already unlocked makes this a harmless no-op.
     """
-    subprocess.run(
-        ["git", "-C", repo, "worktree", "unlock", path],
-        capture_output=True,
-        check=False,
-    )
+    git("worktree", "unlock", path, cwd=repo, check=False)
 
 
 def lock(repo: str, path: str, reason: str) -> None:
     """Lock `path` in `repo`'s worktree admin with `reason`, ignoring the git call's exit status."""
-    subprocess.run(
-        ["git", "-C", repo, "worktree", "lock", "--reason", reason, path],
-        capture_output=True,
-        check=False,
-    )
+    git("worktree", "lock", "--reason", reason, path, cwd=repo, check=False)
 
 
 def clean_one(
@@ -123,12 +119,7 @@ def _clean_missing_tree(
     if not ok:
         return "kept", err
     if tree.branch and merged:
-        deleted = subprocess.run(
-            ["git", "-C", repo, "branch", "-D", tree.branch],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
+        deleted = git("branch", "-D", tree.branch, cwd=repo, check=False)
         if deleted.returncode != 0:
             first_line = next(
                 (ln for ln in deleted.stderr.splitlines() if ln.strip()),
