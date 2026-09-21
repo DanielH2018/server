@@ -9,7 +9,10 @@ package = false                      # virtual project: manage deps/lock, do not
 [dependency-groups]
 dev = [                              # `dev` is uv's default group for `uv run`/`uv sync`
   "pytest>=8",
-  "ansible-core>=2.18",             # test_toposort imports ansible.errors; also runs deploys via `uv run ansible-playbook`
+  "ansible-core==2.21.4",           # test_toposort imports ansible.errors; also runs deploys via `uv run ansible-playbook`.
+  # Pinned exactly, not `>=`: the hosts install the same literal as a uv tool
+  # (initial_setup/tasks/host-basics.yml) and a lockstep test holds the two
+  # equal, so this is the one place the deploy-side ansible version is chosen (#2148).
   "pyyaml",                         # validate.compose_templates
   "jinja2>=3",                      # validate.compose_templates
   "requests",                       # community.docker modules (docker_container_info dependency check)

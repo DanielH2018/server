@@ -24,22 +24,27 @@
 - name: Download the chezmoi installer
   tags: [chezmoi]
   # Fetched to a user-owned directory rather than /tmp: this script is executed, and /tmp
-  # is world-writable. get_url's default force: false means an existing copy is not
-  # re-fetched, so this is quiet on re-runs.
+  # is world-writable. The script at the pinned release's tag, not get.chezmoi.io, which
+  # serves whatever master holds; the checksum re-fetches a copy on the host that hashes
+  # differently and fails a fetch that does, so a re-run is quiet until the pin moves.
   ansible.builtin.get_url:
-    url: https://get.chezmoi.io
+    url: "{{ chezmoi_setup_installer_url }}"
     dest: /home/{{ sys_user }}/.local/share/installers/chezmoi-install.sh
     mode: "0755"
+    checksum: "sha256:{{ chezmoi_setup_installer_sha256 }}"
   become: false
 
 - name: Install the chezmoi binary
   tags: [chezmoi]
   # Pinned to ~/.local/bin to match daniel-server. `creates` makes it run-once; upgrading
-  # chezmoi is a deliberate act, not a side effect of every play.
+  # chezmoi is a deliberate act, not a side effect of every play. `-t` names the release,
+  # because the script's default is the newest one at run time -- so a fresh host would get
+  # a chezmoi the other hosts were never provisioned with.
   ansible.builtin.command:
     cmd: >-
       /home/{{ sys_user }}/.local/share/installers/chezmoi-install.sh
       -b /home/{{ sys_user }}/.local/bin
+      -t {{ chezmoi_setup_version }}
   args:
     creates: /home/{{ sys_user }}/.local/bin/chezmoi
   become: false

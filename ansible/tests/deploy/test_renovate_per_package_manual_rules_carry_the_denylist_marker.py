@@ -52,7 +52,12 @@ _ROLES = REPO / "ansible" / "roles"
 # Renovate's built-in dockerfile manager, which `customManagers` does not list: its second
 # default pattern is what reaches `templates/Dockerfile*.j2`. Content-derived, like the
 # `_image:` manager.
-BUILTIN_MANAGERS = [{"managerFilePatterns": ["/(^|/)[Dd]ockerfile[^/]*$/"]}]
+BUILTIN_MANAGERS = [
+    {
+        "managerFilePatterns": ["/(^|/)[Dd]ockerfile[^/]*$/"],
+        "datasourceTemplate": "docker",
+    }
+]
 
 
 def _role_relative_files(roles_dir: Path = _ROLES) -> list[str]:
@@ -80,13 +85,23 @@ def pin_owner_roles(
     files: list[str],
     read=_read,
     couple=expand_build_couplings,
+    datasources: set[str] | None = None,
 ) -> set[str]:
     """The k8s roles whose files a custom manager reads `package` from, plus the roles a build
-    role among them rolls the result onto."""
+    role among them rolls the result onto.
+
+    `datasources` is the rule's `matchDatasources`: a manager whose datasource the rule never
+    matches cannot own its pin, whatever its files say. Without it, a github-releases rule for
+    `astral-sh/uv` read as karakeep's, because the docker `_image:` manager's file names
+    `ghcr.io/astral-sh/uv` -- a different package in a different datasource (#2148). None
+    means the rule matches every datasource.
+    """
     owners: set[str] = set()
     for manager in managers + BUILTIN_MANAGERS:
         named = manager.get("depNameTemplate")
         if named is not None and named != package:
+            continue
+        if datasources and manager.get("datasourceTemplate") not in datasources:
             continue
         for pattern in map(_file_pattern, manager.get("managerFilePatterns", [])):
             for rel in files:
@@ -152,7 +167,12 @@ def _renovate() -> dict:
 def _owners_by_package(config: dict) -> dict[str, set[str]]:
     files = _role_relative_files()
     return {
-        package: pin_owner_roles(package, config["customManagers"], files)
+        package: pin_owner_roles(
+            package,
+            config["customManagers"],
+            files,
+            datasources=set(rule.get("matchDatasources", [])) or None,
+        )
         for rule in per_package_manual_rules(config["packageRules"])
         for package in rule["matchPackageNames"]
     }
@@ -220,6 +240,31 @@ def test_a_content_derived_manager_maps_the_pin_only_where_the_file_names_it() -
     assert pin_owner_roles("getmeili/meilisearch", managers, files, read=text.get) == {
         "karakeep"
     }
+
+
+def test_a_manager_in_another_datasource_does_not_own_the_pin() -> None:
+    """karakeep's `_image:` file names ghcr.io/astral-sh/uv; a github-releases rule for
+    astral-sh/uv is initial_setup's alone."""
+    managers = [
+        {"managerFilePatterns": [_DEFAULTS_PATTERN], "datasourceTemplate": "docker"},
+        {
+            "managerFilePatterns": ["/host-basics\\.yml$/"],
+            "depNameTemplate": "astral-sh/uv",
+            "datasourceTemplate": "github-releases",
+        },
+    ]
+    files = [
+        "ansible/roles/k8s/karakeep/defaults/main.yml",
+        "ansible/roles/setup/initial_setup/tasks/host-basics.yml",
+    ]
+    read = lambda _: "tagger_image: ghcr.io/astral-sh/uv:3.14\n"
+    assert pin_owner_roles("astral-sh/uv", managers, files, read=read) == {
+        "karakeep",
+        "initial_setup",
+    }
+    assert pin_owner_roles(
+        "astral-sh/uv", managers, files, read=read, datasources={"github-releases"}
+    ) == {"initial_setup"}
 
 
 # --- the red-proof pair: the checker must accept an agreeing rule and reject a drifted one ---

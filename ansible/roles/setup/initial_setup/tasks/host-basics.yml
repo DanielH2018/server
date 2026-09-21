@@ -176,17 +176,85 @@
   become: false
   changed_when: false
   register: initial_setup_user_home
+  # Read-only, so it runs under --check too. Skipped, its stdout is empty and every consumer
+  # renders a path under `/.local` -- the get_url below failed a --check that way (#2148).
+  check_mode: false
+
+- name: Pin the uv release this host installs
+  tags: [tooling]
+  # ONE copy of the version, here rather than in group_vars, for the reason the Vale pin below
+  # gives: Renovate's uv manager reads this file (github-releases, astral-sh/uv, no automerge)
+  # and a version in group_vars/all.yml would land in the k8s image group instead. The sha256
+  # is the versioned installer's, and a bump finishes it by hand:
+  #   curl -fsSL "https://astral.sh/uv/<ver>/install.sh" | sha256sum
+  # That script embeds the sha256 of every release artifact it downloads and verifies the
+  # tarball against it, so pinning the script's hash pins the binary too.
+  ansible.builtin.set_fact:
+    initial_setup_uv_version: "0.12.5"
+    initial_setup_uv_installer_sha256: 504511fbbbd811aeaba6738abc79408956b6c7da0ca35437b3dcc24a41efc111
+  when: inventory_hostname in dev_tooling_hosts
+
+- name: Create the connecting user's installers directory
+  tags: [tooling]
+  # Fetched to a user-owned directory rather than /tmp: the script is executed, and /tmp is
+  # world-writable. Same directory chezmoi_setup uses for its installer.
+  ansible.builtin.file:
+    path: "{{ initial_setup_user_home.stdout }}/.local/share/installers"
+    state: directory
+    mode: "0755"
+  become: false
+  when: inventory_hostname in dev_tooling_hosts
+
+- name: Download the pinned uv installer
+  tags: [tooling]
+  # The versioned URL, not astral.sh/uv/install.sh: that one installs the newest release at
+  # run time, so two hosts provisioned a month apart got different uv (#2148 -- daniel-box
+  # 0.12.1 and daniel-server 0.12.5 on 2026-09-21). The checksum re-fetches a copy on the
+  # host that hashes differently and fails a fetch that does.
+  ansible.builtin.get_url:
+    url: "https://astral.sh/uv/{{ initial_setup_uv_version }}/install.sh"
+    dest: "{{ initial_setup_user_home.stdout }}/.local/share/installers/uv-install.sh"
+    mode: "0755"
+    checksum: "sha256:{{ initial_setup_uv_installer_sha256 }}"
+  become: false
+  when: inventory_hostname in dev_tooling_hosts
+
+- name: Read the uv version this host already has
+  tags: [tooling]
+  # `creates:` would be wrong here -- any uv satisfies it, so a version bump would never
+  # install. The absolute path, for the reason the Vale read below gives.
+  ansible.builtin.command: "{{ initial_setup_user_home.stdout }}/.local/bin/uv --version"
+  register: initial_setup_uv_installed
+  changed_when: false
+  failed_when: false
+  become: false
+  when: inventory_hostname in dev_tooling_hosts
 
 - name: Install uv (per-user; PEP 668-safe on 24.04+)
   tags: [tooling]
   # 24.04 / Python 3.12 marks the system environment externally-managed (PEP 668), so a
   # global `pip install` errors. uv is a standalone binary (no system Python needed),
-  # installed per-user into ~/.local/bin via the official script. Run as the connecting
-  # user (not the play's become: true) so it lands in the repo owner's home.
-  ansible.builtin.shell:
-    cmd: set -o pipefail && curl -LsSf https://astral.sh/uv/install.sh | sh
-    creates: "{{ initial_setup_user_home.stdout }}/.local/bin/uv"
-    executable: /bin/bash
+  # installed per-user into ~/.local/bin via the pinned script above. Run as the connecting
+  # user (not the play's become: true) so it lands in the repo owner's home. The script
+  # replaces an older uv in place, so this is also how a pin bump reaches a host.
+  ansible.builtin.command:
+    cmd: "{{ initial_setup_user_home.stdout }}/.local/share/installers/uv-install.sh"
+  changed_when: true
+  become: false
+  when:
+    - inventory_hostname in dev_tooling_hosts
+    - (initial_setup_uv_installed.stdout | default('')).split()[1:2] != [initial_setup_uv_version]
+
+- name: Read the uv tools this host already has
+  tags: [tooling]
+  # `uv tool list` prints one `<name> v<version>` line per tool, which is what the install
+  # below compares its pins against. `creates:` on the tool directory used to guard the
+  # install, and any version satisfied it -- so a pin here would never have reached a host
+  # that already had the tool (#2148).
+  ansible.builtin.command: "{{ initial_setup_user_home.stdout }}/.local/bin/uv tool list"
+  register: initial_setup_uv_tools
+  changed_when: false
+  failed_when: false
   become: false
   when: inventory_hostname in dev_tooling_hosts
 
@@ -194,18 +262,26 @@
   tags: [tooling]
   # uv manages global CLI tools in isolated venvs (~/.local/share/uv/tools), exposing
   # shims in ~/.local/bin — the pipx replacement. Pinned to Python 3.14 to match the
-  # repo's .python-version (the test/validate `uv run` hooks); ansible-core also backs
-  # those hooks (via pyproject.toml), but as a CLI tool here it is what runs deploys.
-  # Per-user, so `prek install` (below) finds prek on ~/.local/bin.
+  # repo's .python-version (the test/validate `uv run` hooks). Per-user, so `prek install`
+  # (below) finds prek on ~/.local/bin.
+  #
+  # Every tool is pinned, and each pin has a twin elsewhere in the tree that
+  # ansible/tests/repo/test_host_tool_pins_match_their_twins.py holds it equal to:
+  #   ansible-core  == pyproject.toml's dev-group pin -- the ansible that runs deploys is the
+  #                    one the tests and `uv run ansible-playbook` resolve. On 2026-09-21 the
+  #                    two hosts ran 2.21.0 and 2.21.2 against a 2.21.4 lock (#2148).
+  #   ansible-lint  == prek.toml's ansible/ansible-lint rev (the hook's own version).
+  #   prek          == ci.yml's `pip install prek==` pin.
+  # Renovate rewrites each pin here in the same PR as its twin (renovate.json groups them).
   ansible.builtin.command: "{{ initial_setup_user_home.stdout }}/.local/bin/uv tool install --python 3.14 {{ item }}"
-  args:
-    creates: "{{ initial_setup_user_home.stdout }}/.local/share/uv/tools/{{ item }}"
   loop:
-    - ansible-core
-    - ansible-lint
-    - prek
+    - ansible-core==2.21.4
+    - ansible-lint==26.8.0
+    - prek==0.5.3
   become: false
-  when: inventory_hostname in dev_tooling_hosts
+  when:
+    - inventory_hostname in dev_tooling_hosts
+    - (item | replace('==', ' v')) not in (initial_setup_uv_tools.stdout_lines | default([]))
 
 - name: Install the pinned host Python
   tags: [tooling]

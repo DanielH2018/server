@@ -7,7 +7,13 @@ This page is what an operator follows instead.
 
 The pin is `k3s_version` in `ansible/roles/setup/k3s/defaults/main.yml`. It covers both nodes:
 `server.yml` installs daniel-box, `agent.yml` installs daniel-server, and both pass it to the same
-`get.k3s.io` installer as `INSTALL_K3S_VERSION`.
+installer as `INSTALL_K3S_VERSION`. The installer is `install.sh` from that same release tag,
+fetched with `checksum:` against `k3s_install_script_sha256` in the same file — so a bump has a
+second literal to finish, and a wrong one fails the download rather than the install:
+
+```bash
+curl -fsSL "https://raw.githubusercontent.com/k3s-io/k3s/<new tag>/install.sh" | sha256sum
+```
 
 ## Sequence at a glance
 

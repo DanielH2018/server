@@ -40,7 +40,7 @@
     ]
   },
   "lockFileMaintenance": {
-    "description": "pyproject.toml uses unbounded ranges (ansible-core >=2.18 etc.), so Renovate sees nothing to bump while uv.lock keeps exact pins frozen forever \u2014 silence \u2260 up-to-date. A daily lock refresh PR rides the same CI gate (one PR at a time — Renovate reuses the open one rather than opening a second, so the daily window costs no extra CI while it sits unmerged). NO automerge: >= ranges mean a refresh can contain major jumps (ansible-core 3.x one day); those deserve a deliberate look.",
+    "description": "pyproject.toml uses unbounded ranges (pytest>=8, jinja2>=3, mkdocs-material>=9.5 etc.; ansible-core is pinned exactly since #2148), so Renovate sees nothing to bump while uv.lock keeps exact pins frozen forever \u2014 silence \u2260 up-to-date. A daily lock refresh PR rides the same CI gate (one PR at a time — Renovate reuses the open one rather than opening a second, so the daily window costs no extra CI while it sits unmerged). NO automerge: >= ranges mean a refresh can contain major jumps (ansible-core 3.x one day); those deserve a deliberate look.",
     "enabled": true,
     "schedule": [
       "before 6am"
@@ -87,15 +87,40 @@
     },
     {
       "customType": "regex",
-      "description": "Pinned prek version in the CI workflow (`pip install prek==X`). The pin keeps the hook toolchain reproducible; track it on PyPI so the pin doesn't age silently.",
+      "description": "Pinned prek version in the CI workflow (`pip install prek==X`) and, since #2148, the copy the hosts install as a uv tool (`- prek==X` in initial_setup's host-basics.yml). The pin keeps the hook toolchain reproducible; track it on PyPI so the pin doesn't age silently. One manager for both files, so the two copies land in one `{{depName}}` PR (the file-scoped rule below names host-basics.yml); ansible/tests/repo/test_host_tool_pins_match_their_twins.py fails when they disagree anyway.",
       "managerFilePatterns": [
-        "/(^|/)\\.github/workflows/ci\\.yml$/"
+        "/(^|/)\\.github/workflows/ci\\.yml$/",
+        "/(^|/)ansible/roles/setup/initial_setup/tasks/host-basics\\.yml$/"
       ],
       "matchStrings": [
-        "pip install prek==(?<currentValue>[\\d.]+)"
+        "pip install prek==(?<currentValue>[\\d.]+)",
+        "- prek==(?<currentValue>[\\d.]+)"
       ],
       "depNameTemplate": "prek",
       "datasourceTemplate": "pypi"
+    },
+    {
+      "customType": "regex",
+      "description": "The ansible-core and ansible-lint versions the hosts install as uv tools (`- ansible-core==X`, `- ansible-lint==X` in initial_setup's host-basics.yml, #2148). Before the pins, `uv tool install ansible-core` took whatever PyPI served on provisioning day, and the two hosts ran 2.21.0 and 2.21.2 against a 2.21.4 uv.lock. Each pin has a twin: ansible-core's is pyproject.toml's `ansible-core==` (the built-in pep621 manager reads it), ansible-lint's is prek.toml's `ansible/ansible-lint` rev (the prek.toml manager above). The two lockstep packageRules below put each pair in ONE PR, and test_host_tool_pins_match_their_twins.py refuses a half-update.",
+      "managerFilePatterns": [
+        "/(^|/)ansible/roles/setup/initial_setup/tasks/host-basics\\.yml$/"
+      ],
+      "matchStrings": [
+        "- (?<depName>ansible-core|ansible-lint)==(?<currentValue>[\\d.]+)"
+      ],
+      "datasourceTemplate": "pypi"
+    },
+    {
+      "customType": "regex",
+      "description": "The uv release the hosts install (`initial_setup_uv_version` in initial_setup's host-basics.yml, #2148). The role fetched `astral.sh/uv/install.sh`, which installs the newest release at run time, so daniel-box and daniel-server were provisioned onto 0.12.1 and 0.12.5. It now fetches the versioned installer with a sha256 -- and that installer embeds and verifies the sha256 of the release tarball, so the one hash pins the binary. The hash is a MANUAL finish on the bump PR (packageRule below, no automerge), the same class as the SOPS binary.",
+      "managerFilePatterns": [
+        "/(^|/)ansible/roles/setup/initial_setup/tasks/host-basics\\.yml$/"
+      ],
+      "matchStrings": [
+        "initial_setup_uv_version:\\s*\"(?<currentValue>[\\d.]+)\""
+      ],
+      "depNameTemplate": "astral-sh/uv",
+      "datasourceTemplate": "github-releases"
     },
     {
       "customType": "regex",
@@ -147,6 +172,70 @@
       ],
       "depNameTemplate": "getsops/sops",
       "datasourceTemplate": "github-releases"
+    },
+    {
+      "customType": "regex",
+      "description": "chezmoi release pin in chezmoi_setup/defaults/main.yml (#2147). The role fetched get.chezmoi.io, which serves master's installer, and the installer picked the newest release at run time — two floating inputs behind a script that runs as the connecting user. Both are now pinned to chezmoi_setup_version, and the installer carries a sha256 no regex manager can compute, so no automerge (packageRule below): Renovate opens the version bump, the operator hashes the tag's assets/scripts/install.sh and finishes the pin. Same manual-finish class as the SOPS binary above.",
+      "managerFilePatterns": [
+        "/(^|/)ansible/roles/setup/chezmoi_setup/defaults/main\\.yml$/"
+      ],
+      "matchStrings": [
+        "chezmoi_setup_version:\\s*\"(?<currentValue>v[^\"]+)\""
+      ],
+      "depNameTemplate": "twpayne/chezmoi",
+      "datasourceTemplate": "github-releases"
+    },
+    {
+      "customType": "regex",
+      "description": "The Pi's Docker engine pins in docker_install/defaults/main.yml (#2153). FOUR managers on one file, one per upstream project, because the five held apt packages carry four independent versions: docker-ce and docker-ce-cli share Moby's, and containerd.io, docker-compose-plugin and docker-buildx-plugin each have their own. There is no deb datasource here; the apt version string is `<upstream>-1~ubuntu.<release>~<codename>` with a `5:` epoch on the two Moby packages, and the role templates that suffix itself, so the upstream release IS the whole floating part and github-releases resolves it. extractVersionTemplate strips the tag's `v`. NEVER automerged (packageRule below, one group for all four): a merged bump moves nothing on the Pi by itself, and applying it is the `docker-engine-upgrade` play, which stops every Compose project (#1961) -- the PR is the work order.",
+      "managerFilePatterns": [
+        "/(^|/)ansible/roles/setup/docker_install/defaults/main\\.yml$/"
+      ],
+      "matchStrings": [
+        "docker_install_engine_version:\\s*\"(?<currentValue>[\\d.]+)\""
+      ],
+      "depNameTemplate": "moby/moby",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v(?<version>.+)$"
+    },
+    {
+      "customType": "regex",
+      "description": "containerd.io pin on the Pi -- the second of the four docker_install managers; the moby/moby one above has the reasoning.",
+      "managerFilePatterns": [
+        "/(^|/)ansible/roles/setup/docker_install/defaults/main\\.yml$/"
+      ],
+      "matchStrings": [
+        "docker_install_containerd_version:\\s*\"(?<currentValue>[\\d.]+)\""
+      ],
+      "depNameTemplate": "containerd/containerd",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v(?<version>.+)$"
+    },
+    {
+      "customType": "regex",
+      "description": "docker-compose-plugin pin on the Pi -- the third of the four docker_install managers; the moby/moby one above has the reasoning.",
+      "managerFilePatterns": [
+        "/(^|/)ansible/roles/setup/docker_install/defaults/main\\.yml$/"
+      ],
+      "matchStrings": [
+        "docker_install_compose_plugin_version:\\s*\"(?<currentValue>[\\d.]+)\""
+      ],
+      "depNameTemplate": "docker/compose",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v(?<version>.+)$"
+    },
+    {
+      "customType": "regex",
+      "description": "docker-buildx-plugin pin on the Pi -- the fourth of the four docker_install managers; the moby/moby one above has the reasoning.",
+      "managerFilePatterns": [
+        "/(^|/)ansible/roles/setup/docker_install/defaults/main\\.yml$/"
+      ],
+      "matchStrings": [
+        "docker_install_buildx_plugin_version:\\s*\"(?<currentValue>[\\d.]+)\""
+      ],
+      "depNameTemplate": "docker/buildx",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v(?<version>.+)$"
     },
     {
       "customType": "regex",
@@ -490,6 +579,33 @@
       "groupName": "shellcheck-py (lockstep: prek.toml + pyproject.toml)"
     },
     {
+      "description": "ansible-core is pinned TWICE by design (#2148) — pyproject.toml `ansible-core==` (pep621, the env `uv run ansible-playbook` and the tests resolve) and host-basics.yml `- ansible-core==` (custom.regex, the uv tool that runs deploys on the hosts) — and ansible/tests/repo/test_host_tool_pins_match_their_twins.py holds them equal. One group = one PR touching both files. NO automerge: the galaxy collections group above is manual for its lockstep with ansible-core, and a merged bump reaches a host only on its next `initial_setup.yml --tags tooling` run, which is the operator's to schedule. No matchManagers filter, on purpose: it must catch the built-in pep621 manager's copy as well as the regex one.",
+      "matchPackageNames": [
+        "ansible-core"
+      ],
+      "groupName": "ansible-core (manual — lockstep: pyproject.toml + host-basics.yml; rerun --tags tooling on the hosts)",
+      "automerge": false
+    },
+    {
+      "description": "ansible-lint is pinned TWICE by design (#2148) — prek.toml rev (github-releases, the hook env) and host-basics.yml `- ansible-lint==` (pypi, the uv tool on the hosts) — and test_host_tool_pins_match_their_twins.py holds them equal. One group = one PR touching both files; overrides the prek-hooks group above for this package, the shellcheck-py rule's shape.",
+      "matchPackageNames": [
+        "ansible/ansible-lint",
+        "ansible-lint"
+      ],
+      "groupName": "ansible-lint (lockstep: prek.toml + host-basics.yml)"
+    },
+    {
+      "description": "uv (astral-sh/uv) — the versioned installer's sha256 in host-basics.yml is a manual finish, so NO automerge; own group so it overrides the `{{depName}}` file-scoped rule and the non-major automerge rule above.",
+      "matchDatasources": [
+        "github-releases"
+      ],
+      "matchPackageNames": [
+        "astral-sh/uv"
+      ],
+      "groupName": "uv (manual — finish the installer sha256 from astral.sh/uv/<ver>/install.sh)",
+      "automerge": false
+    },
+    {
       "description": "Meilisearch (karakeep's search index) changes its on-disk DB format between MINOR versions and refuses to boot on an old database; the dumpless-upgrade flag is still experimental with a documented corruption risk, so upgrades are manual (snapshot first, then flag or dump/restore). Own PR + no automerge \u2014 and kept out of the non-major group so it can't block that bundle's automerge.",
       "matchDatasources": [
         "docker"
@@ -548,7 +664,32 @@
       "automerge": false
     },
     {
-      "description": "k3s control plane, MetalLB and Longhorn (roles/setup/k3s/defaults). NEVER automerged, for three different reasons that all land in the same place: Longhorn does not support arbitrary version skips (the file header says so) and its upgrade rewrites the storage layer under every PVC; MetalLB owns the LoadBalancer VIPs, so a bad one takes the edge and DNS offline together; and a k3s bump reinstalls the control plane on a single-server cluster. None of that is provable by CI \u2014 the PR is a SIGNAL to plan an upgrade, and the operator drives it. Same manual-finish class as the SOPS and crowdsec-plugin rules above.",
+      "description": "chezmoi (twpayne/chezmoi) \u2014 the installer script's sha256 in chezmoi_setup/defaults/main.yml is a manual finish, so NO automerge; own group so it overrides the custom.regex non-major automerge rule above.",
+      "matchDatasources": [
+        "github-releases"
+      ],
+      "matchPackageNames": [
+        "twpayne/chezmoi"
+      ],
+      "groupName": "chezmoi (manual \u2014 finish the installer sha256 from the tag's install.sh)",
+      "automerge": false
+    },
+    {
+      "description": "The Pi's Docker engine (moby/moby, containerd/containerd, docker/compose, docker/buildx) \u2014 one group, NO automerge. Merging moves nothing: docker_install refuses to move an installed engine, and the apply is the docker-engine-upgrade play, which stops every Compose project on the Pi (#1961). The PR is the work order; the operator merges it and runs the play from a LAN session.",
+      "matchDatasources": [
+        "github-releases"
+      ],
+      "matchPackageNames": [
+        "moby/moby",
+        "containerd/containerd",
+        "docker/compose",
+        "docker/buildx"
+      ],
+      "groupName": "docker engine on the Pi (manual \u2014 merge, then run docker-engine-upgrade; it stops every Compose project)",
+      "automerge": false
+    },
+    {
+      "description": "k3s control plane, MetalLB and Longhorn (roles/setup/k3s/defaults). NEVER automerged, for three different reasons that all land in the same place: Longhorn does not support arbitrary version skips (the file header says so) and its upgrade rewrites the storage layer under every PVC; MetalLB owns the LoadBalancer VIPs, so a bad one takes the edge and DNS offline together; and a k3s bump reinstalls the control plane on a single-server cluster. None of that is provable by CI \u2014 the PR is a SIGNAL to plan an upgrade, and the operator drives it. Same manual-finish class as the SOPS and crowdsec-plugin rules above. A k3s bump also finishes k3s_install_script_sha256 in the same file: the installer is fetched from the release tag (#2147), so the hash of its install.sh moves with the tag.",
       "matchDatasources": [
         "github-releases"
       ],

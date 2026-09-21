@@ -9,6 +9,38 @@ docker_install_stale_crons:
   - Redeploy ical-proxy
   - Clean stale tdarr transcode cache
 
+# The engine versions this role installs (#2153). Before these, a fresh install took whatever
+# download.docker.com served that day and the deliberate upgrade moved to whatever it served
+# on the day it ran, so the Pi's engine was a function of the calendar. Four upstream
+# versions, not one: docker-ce and docker-ce-cli share the Moby version, and the other three
+# packages each carry their own. Renovate tracks each on github-releases (moby/moby,
+# containerd/containerd, docker/compose, docker/buildx) in ONE manual group -- merging a bump
+# moves nothing on the Pi by itself; tasks/install.yml refuses to move an installed engine
+# and engine-upgrade.yml is the path that applies it (it stops every Compose project first,
+# #1961). Pinned 2026-09-21 to what daniel-pi already ran, so the first run with these is a
+# no-op.
+docker_install_engine_version: "29.8.1"
+docker_install_containerd_version: "2.3.5"
+docker_install_compose_plugin_version: "5.5.1"
+docker_install_buildx_plugin_version: "0.37.1"
+
+# Docker's apt versions are `<upstream>-1~ubuntu.<release>~<codename>` for every package, and
+# the two Moby packages carry a `5:` epoch on top. Keys are exactly docker_engine_packages
+# (group_vars/all.yml, the hold list); ansible/tests/setup/test_docker_engine_is_held_before_apt_upgrade.py
+# refuses a package on one list and not the other, so nothing is installed the hold never sees.
+docker_install_apt_suffix: "-1~ubuntu.{{ ansible_facts.distribution_version }}~{{ ansible_facts.distribution_release }}"
+docker_install_package_versions:
+  docker-ce: "5:{{ docker_install_engine_version }}"
+  docker-ce-cli: "5:{{ docker_install_engine_version }}"
+  containerd.io: "{{ docker_install_containerd_version }}"
+  docker-compose-plugin: "{{ docker_install_compose_plugin_version }}"
+  docker-buildx-plugin: "{{ docker_install_buildx_plugin_version }}"
+# The `name=version` specs apt receives: `docker-ce=5:29.8.1-1~ubuntu.24.04~noble`.
+docker_install_package_specs: >-
+  {{ docker_install_package_versions | dict2items
+     | map(attribute='key') | zip(docker_install_package_versions | dict2items | map(attribute='value'))
+     | map('join', '=') | map('regex_replace', '$', docker_install_apt_suffix) | list }}
+
 # The gate on the deliberate engine upgrade (tasks/install.yml). Tags cannot gate it on
 # their own -- the role tag inherits onto the `never`-tagged include and overrides it
 # (#1998) -- so the upgrade needs `-e docker_install_engine_upgrade=true` as well as

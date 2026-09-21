@@ -19,12 +19,18 @@
   # Explicit mode, never a umask-inheriting `command`: initial_setup sets UMASK 027 earlier
   # in this play, and a 0640 keyring is unreadable by apt's unprivileged _apt user, which
   # reports the repo as unsigned. See docker_install for the failure that taught us this.
+  #
+  # The checksum is the bytes of the keyring as published 2026-09-21. Unlike docker_install
+  # there is no fingerprint check after this task, so the checksum is the ONLY thing standing
+  # between a swapped key and apt trusting it. A keyring GitHub re-publishes fails here as a
+  # mismatch: verify the new fingerprint against cli.github.com, then update the hash.
   ansible.builtin.get_url:
     url: https://cli.github.com/packages/githubcli-archive-keyring.gpg
     dest: /etc/apt/keyrings/githubcli-archive-keyring.gpg
     mode: "0644"
     owner: root
     group: root
+    checksum: sha256:6084d5d7bd8e288441e0e94fc6275570895da18e6751f70f057485dc2d1a811b
   become: true
 
 - name: Add the GitHub CLI APT repository

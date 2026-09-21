@@ -907,7 +907,7 @@ dev = [
 [package.metadata.requires-dev]
 dev = [
     { name = "actionlint-py" },
-    { name = "ansible-core", specifier = ">=2.18" },
+    { name = "ansible-core", specifier = "==2.21.4" },
     { name = "docker" },
     { name = "flask" },
     { name = "jinja2", specifier = ">=3" },

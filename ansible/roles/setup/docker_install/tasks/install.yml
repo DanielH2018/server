@@ -40,12 +40,18 @@
   #
   # force defaults to false, so an existing key is not re-fetched every run; the fingerprint
   # check below still runs every play, and now validates the exact file apt consumes.
+  #
+  # The checksum is the bytes of the armored key as published 2026-09-21; the fingerprint check
+  # below is the stronger control (it proves WHOSE key this is), and the checksum is the one
+  # that fires before apt ever reads the file. A key Docker re-publishes (a new subkey, a
+  # re-armor) fails here as a mismatch: re-verify the fingerprint, then update the hash.
   ansible.builtin.get_url:
     url: https://download.docker.com/linux/ubuntu/gpg
     dest: /etc/apt/keyrings/docker.asc
     mode: "0644"
     owner: root
     group: root
+    checksum: sha256:1500c1f56fa9e26b9b8f42452a553675796ade0807cdce11975eb98170b3a570
   become: true
 
 - name: Verify the Docker GPG key fingerprint
@@ -113,19 +119,50 @@
     force_apt_get: true
   become: true
 
+- name: Read the installed docker-ce version
+  tags: [docker-engine]
+  # The install below names exact versions, and `apt-get install pkg=ver` moves a HELD package
+  # (the hold binds upgrade/dist-upgrade, not an explicit install). So on a host that already
+  # has an engine this task decides whether the install runs at all: it does not, whatever the
+  # pin says. dpkg-query exits 1 with nothing on stdout where docker-ce is not installed.
+  ansible.builtin.command:
+    cmd: dpkg-query -W -f '${Version}' docker-ce
+  register: docker_install_installed_engine
+  changed_when: false
+  failed_when: false
+  # Read-only, so it runs under --check too; skipped, the two consumers below would read an
+  # undefined stdout and fail several tasks later with an error naming neither.
+  check_mode: false
+
 - name: Install Docker
   tags: [docker-engine]
-  # docker_engine_packages (group_vars/all.yml) lists docker-ce, -cli, containerd.io and,
-  # explicitly, docker-compose-plugin + docker-buildx-plugin: Compose v2 is the engine behind
-  # community.docker.docker_compose_v2 (our deploy module) and buildx backs its
-  # `build: always`, so they are declared rather than left to docker-ce-cli Recommends
+  # docker_install_package_specs (defaults/main.yml) is docker_engine_packages
+  # (group_vars/all.yml) -- docker-ce, -cli, containerd.io and, explicitly,
+  # docker-compose-plugin + docker-buildx-plugin -- each at its pinned version. Compose v2 is
+  # the engine behind community.docker.docker_compose_v2 (our deploy module) and buildx backs
+  # its `build: always`, so they are declared rather than left to docker-ce-cli Recommends
   # (which apt marks auto-installed and could drop under a stricter apt config).
-  # `state: present` respects the hold below on a host that already has them: the deliberate
-  # bump is engine-upgrade.yml, never this task.
+  # Fresh hosts only (the `when`): an installed engine is never moved by this task, whatever
+  # the pin says -- the deliberate bump is engine-upgrade.yml, which stops the containers first.
   ansible.builtin.apt:
-    name: "{{ docker_engine_packages }}"
+    name: "{{ docker_install_package_specs }}"
     state: present
   become: true
+  when: docker_install_installed_engine.stdout | length == 0
+
+- name: Report an installed engine that is behind its pin
+  tags: [docker-engine]
+  # Not a failure: the pin moved (a merged Renovate bump) and this host has not had the
+  # deliberate upgrade yet. That upgrade is the operator's call, because it stops every
+  # Compose project; this task only stops the gap being invisible behind a green run.
+  ansible.builtin.debug:
+    msg: >-
+      docker-ce is {{ docker_install_installed_engine.stdout }} and the pin is
+      {{ docker_install_package_versions['docker-ce'] }}{{ docker_install_apt_suffix }}.
+      Nothing moved. To apply the pin, run the docker-engine-upgrade play (comment below).
+  when:
+    - docker_install_installed_engine.stdout | length > 0
+    - docker_install_installed_engine.stdout != docker_install_package_versions['docker-ce'] ~ docker_install_apt_suffix
 
 - name: Hold the Docker engine packages
   tags: [docker-engine]

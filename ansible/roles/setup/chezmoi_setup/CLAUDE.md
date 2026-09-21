@@ -13,6 +13,12 @@ Installs the chezmoi binary into `~/.local/bin`, seeds `~/.config/chezmoi/chezmo
   `templates/*.timer.j2`)
 <!-- /generated_from -->
 
+- **The release and its installer are pinned** (`chezmoi_setup_version`,
+  `chezmoi_setup_installer_sha256` in `defaults/main.yml`, #2147). `get.chezmoi.io` serves
+  master's installer and the installer defaults to the newest release, so a fresh host used to
+  get whichever chezmoi the day served. Renovate raises the version bump with no automerge;
+  the sha256 of the tag's `assets/scripts/install.sh` is the manual finish. The bump changes
+  nothing on a host that already has the binary — the install task is `creates:`-guarded.
 - **Every task is `become: false`.** chezmoi manages a USER's home, and the play runs escalated
   for the OS hardening; inheriting `become` deploys the dotfiles into `/root`.
 - **The home directory is `/home/{{ sys_user }}`, not `ansible_env.HOME`.** Facts are
